@@ -25,6 +25,9 @@ import {
   Building2,
   UserCheck,
   Briefcase,
+  UserPlus,
+  ArrowLeft,
+  KeyRound,
 } from 'lucide-react';
 
 interface LoginPageProps {
@@ -32,43 +35,134 @@ interface LoginPageProps {
   onGetStarted: () => void;
 }
 
-export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
-  const { loginWithEmail, loginWithGoogle, loginWithDemo, isLoading, error, clearError } = useAuth();
+type AuthMode = 'login' | 'signup' | 'forgot';
 
+export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
+  const { loginWithDemo, isLoading, error, setError, clearError } = useAuth();
+
+  const [mode, setMode] = useState<AuthMode>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [name, setName] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
+  const [localLoading, setLocalLoading] = useState(false);
+  const [localError, setLocalError] = useState<string | null>(null);
   const [showSuccess, setShowSuccess] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
   const [activeDemo, setActiveDemo] = useState<string | null>(null);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const combinedLoading = isLoading || localLoading;
+  const displayError = localError || error;
+
+  // ── Email/Password Sign In ──
+  const handleEmailSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
+    setLocalError(null);
+    setLocalLoading(true);
+
     try {
-      await loginWithEmail(email, password, rememberMe);
-      setShowSuccess(true);
+      const { signInWithEmail } = await import('@/lib/auth');
+      const { user, error: authError } = await signInWithEmail(email, password);
+      if (authError) {
+        setLocalError(authError);
+        return;
+      }
+      if (user) {
+        setSuccessMessage('Login successful! Redirecting...');
+        setShowSuccess(true);
+      }
     } catch {
-      // Error is handled in context
+      setLocalError('An unexpected error occurred. Please try again.');
+    } finally {
+      setLocalLoading(false);
     }
   };
 
+  // ── Email Sign Up ──
+  const handleSignUp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLocalError(null);
+    setLocalLoading(true);
+
+    if (password.length < 6) {
+      setLocalError('Password must be at least 6 characters.');
+      setLocalLoading(false);
+      return;
+    }
+
+    try {
+      const { signUpWithEmail } = await import('@/lib/auth');
+      const { user, error: authError } = await signUpWithEmail(email, password, name);
+      if (authError) {
+        setLocalError(authError);
+        return;
+      }
+      if (user) {
+        setSuccessMessage('Account created! Redirecting to dashboard...');
+        setShowSuccess(true);
+      }
+    } catch {
+      setLocalError('An unexpected error occurred. Please try again.');
+    } finally {
+      setLocalLoading(false);
+    }
+  };
+
+  // ── Google Sign In (redirect) ──
   const handleGoogleSignIn = async () => {
+    setLocalError(null);
+    setLocalLoading(true);
     try {
-      await loginWithGoogle();
-      setShowSuccess(true);
+      const { signInWithGoogle } = await import('@/lib/auth');
+      await signInWithGoogle();
+      // This will redirect the page, so we won't reach here
     } catch {
-      // Error handled in context
+      setLocalError('Google sign-in failed. Please try again.');
+      setLocalLoading(false);
     }
   };
 
-  const handleDemoLogin = async (role: string) => {
-    setActiveDemo(role);
+  // ── Forgot Password ──
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLocalError(null);
+    setLocalLoading(true);
+
     try {
-      await loginWithDemo(role);
+      const { resetPassword } = await import('@/lib/auth');
+      const { error: resetError } = await resetPassword(email);
+      if (resetError) {
+        setLocalError(resetError);
+        return;
+      }
+      setSuccessMessage('Password reset email sent! Check your inbox.');
       setShowSuccess(true);
     } catch {
-      setActiveDemo(null);
+      setLocalError('Failed to send reset email. Please try again.');
+    } finally {
+      setLocalLoading(false);
     }
+  };
+
+  // ── Demo Login ──
+  const handleDemoLogin = (role: string) => {
+    setActiveDemo(role);
+    loginWithDemo(role);
+    setSuccessMessage('Logged in as demo user!');
+    setShowSuccess(true);
+    setTimeout(() => setActiveDemo(null), 1000);
+  };
+
+  const clearErrors = () => {
+    setLocalError(null);
+    clearError();
+  };
+
+  const switchMode = (newMode: AuthMode) => {
+    setMode(newMode);
+    clearErrors();
+    setShowSuccess(false);
   };
 
   const leftBenefits = [
@@ -77,6 +171,18 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
     { icon: FileText, title: 'One-Click Filing', desc: 'GSTR-1/3B prepared automatically' },
     { icon: CheckCircle2, title: 'Audit Ready', desc: 'Complete compliance trail' },
   ];
+
+  const modeTitles: Record<AuthMode, string> = {
+    login: 'Sign in to your account',
+    signup: 'Create your account',
+    forgot: 'Reset your password',
+  };
+
+  const modeSubtitles: Record<AuthMode, string> = {
+    login: 'Enter your credentials to access your workspace',
+    signup: 'Start your free trial — no credit card required',
+    forgot: 'We\'ll send you a link to reset your password',
+  };
 
   return (
     <div className="min-h-screen flex">
@@ -179,7 +285,7 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
         </div>
       </div>
 
-      {/* Right Side - Login Form */}
+      {/* Right Side - Auth Form */}
       <div className="w-full lg:w-1/2 flex items-center justify-center p-6 sm:p-8 lg:p-12 bg-white">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -197,15 +303,23 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
 
           {/* Header */}
           <div className="mb-8">
-            <h2 className="text-2xl font-bold text-slate-900 tracking-tight">Sign in to your account</h2>
-            <p className="text-sm text-slate-500 mt-1.5">
-              Enter your credentials to access your workspace
-            </p>
+            {/* Back button for non-login modes */}
+            {mode !== 'login' && (
+              <button
+                onClick={() => switchMode('login')}
+                className="flex items-center gap-1 text-sm text-slate-500 hover:text-slate-700 mb-4 transition-colors"
+              >
+                <ArrowLeft className="h-4 w-4" />
+                Back to sign in
+              </button>
+            )}
+            <h2 className="text-2xl font-bold text-slate-900 tracking-tight">{modeTitles[mode]}</h2>
+            <p className="text-sm text-slate-500 mt-1.5">{modeSubtitles[mode]}</p>
           </div>
 
           {/* Error State */}
           <AnimatePresence>
-            {error && (
+            {displayError && (
               <motion.div
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: 'auto' }}
@@ -214,8 +328,8 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
               >
                 <AlertCircle className="h-5 w-5 text-red-500 mt-0.5 shrink-0" />
                 <div>
-                  <p className="text-sm font-medium text-red-800">{error}</p>
-                  <button onClick={clearError} className="text-xs text-red-600 hover:text-red-800 mt-1 underline">
+                  <p className="text-sm font-medium text-red-800">{displayError}</p>
+                  <button onClick={clearErrors} className="text-xs text-red-600 hover:text-red-800 mt-1 underline">
                     Dismiss
                   </button>
                 </div>
@@ -232,161 +346,241 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
                 exit={{ opacity: 0 }}
                 className="mb-6 rounded-lg bg-emerald-50 border border-emerald-200 p-4 flex items-center gap-3"
               >
-                <div className="h-10 w-10 rounded-full bg-emerald-100 flex items-center justify-center">
+                <div className="h-10 w-10 rounded-full bg-emerald-100 flex items-center justify-center shrink-0">
                   <CheckCircle2 className="h-5 w-5 text-emerald-600" />
                 </div>
                 <div>
-                  <p className="text-sm font-semibold text-emerald-800">Login successful!</p>
-                  <p className="text-xs text-emerald-600">Redirecting to dashboard...</p>
+                  <p className="text-sm font-semibold text-emerald-800">{successMessage}</p>
                 </div>
               </motion.div>
             )}
           </AnimatePresence>
 
-          {/* Google Sign In */}
-          <Button
-            variant="outline"
-            onClick={handleGoogleSignIn}
-            disabled={isLoading}
-            className="w-full h-11 border-slate-200 hover:bg-slate-50 text-slate-700 font-medium gap-2.5 mb-4"
-          >
-            {isLoading ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Chrome className="h-4 w-4" />
-            )}
-            Continue with Google
-          </Button>
-
-          {/* Divider */}
-          <div className="relative my-6">
-            <Separator />
-            <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-white px-3 text-xs text-slate-400">
-              or sign in with email
-            </span>
-          </div>
-
-          {/* Email/Password Form */}
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="email" className="text-sm font-medium text-slate-700">Email</Label>
-              <div className="relative">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="you@company.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="h-11 pl-10 border-slate-200 focus:border-emerald-500 focus:ring-emerald-500/20"
-                  required
-                  disabled={isLoading}
-                />
+          {/* ═══ FORGOT PASSWORD MODE ═══ */}
+          {mode === 'forgot' && (
+            <form onSubmit={handleForgotPassword} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="forgot-email" className="text-sm font-medium text-slate-700">Email address</Label>
+                <div className="relative">
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                  <Input
+                    id="forgot-email"
+                    type="email"
+                    placeholder="you@company.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="h-11 pl-10 border-slate-200 focus:border-emerald-500 focus:ring-emerald-500/20"
+                    required
+                    disabled={combinedLoading}
+                  />
+                </div>
               </div>
-            </div>
-
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label htmlFor="password" className="text-sm font-medium text-slate-700">Password</Label>
-                <button type="button" className="text-xs text-emerald-600 hover:text-emerald-700 font-medium">
-                  Forgot password?
-                </button>
-              </div>
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                <Input
-                  id="password"
-                  type={showPassword ? 'text' : 'password'}
-                  placeholder="Enter your password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="h-11 pl-10 pr-10 border-slate-200 focus:border-emerald-500 focus:ring-emerald-500/20"
-                  required
-                  disabled={isLoading}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
-                >
-                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <Checkbox
-                id="remember"
-                checked={rememberMe}
-                onCheckedChange={(checked) => setRememberMe(checked === true)}
-                className="data-[state=checked]:bg-emerald-600 data-[state=checked]:border-emerald-600"
-              />
-              <Label htmlFor="remember" className="text-sm text-slate-600 cursor-pointer">
-                Remember me for 30 days
-              </Label>
-            </div>
-
-            <Button
-              type="submit"
-              disabled={isLoading}
-              className="w-full h-11 bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-600/20 font-semibold"
-            >
-              {isLoading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Signing in...
-                </>
-              ) : (
-                <>
-                  Sign In
-                  <ArrowRight className="ml-2 h-4 w-4" />
-                </>
-              )}
-            </Button>
-          </form>
-
-          {/* Divider */}
-          <div className="relative my-6">
-            <Separator />
-            <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-white px-3 text-xs text-slate-400">
-              quick demo access
-            </span>
-          </div>
-
-          {/* Demo Logins */}
-          <div className="grid grid-cols-3 gap-2 mb-6">
-            {[
-              { role: 'admin', label: 'Admin', icon: Building2, desc: 'Full access' },
-              { role: 'manager', label: 'Manager', icon: UserCheck, desc: 'Review & approve' },
-              { role: 'staff', label: 'Staff', icon: Briefcase, desc: 'Process invoices' },
-            ].map((demo) => (
               <Button
-                key={demo.role}
-                variant="outline"
-                size="sm"
-                onClick={() => handleDemoLogin(demo.role)}
-                disabled={isLoading}
-                className={`h-auto py-2.5 flex-col gap-0.5 border-slate-200 hover:border-emerald-300 hover:bg-emerald-50 text-slate-600 ${
-                  activeDemo === demo.role ? 'border-emerald-400 bg-emerald-50 text-emerald-700' : ''
-                }`}
+                type="submit"
+                disabled={combinedLoading}
+                className="w-full h-11 bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-600/20 font-semibold"
               >
-                {activeDemo === demo.role ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin text-emerald-600" />
+                {combinedLoading ? (
+                  <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Sending reset link...</>
                 ) : (
-                  <demo.icon className="h-3.5 w-3.5" />
+                  <><KeyRound className="mr-2 h-4 w-4" />Send Reset Link</>
                 )}
-                <span className="text-[11px] font-semibold">{demo.label}</span>
               </Button>
-            ))}
-          </div>
+            </form>
+          )}
 
-          {/* Create Account */}
-          <p className="text-center text-sm text-slate-500">
-            Don&apos;t have an account?{' '}
-            <button onClick={onGetStarted} className="text-emerald-600 hover:text-emerald-700 font-semibold">
-              Create account
-            </button>
-          </p>
+          {/* ═══ LOGIN & SIGNUP MODE ═══ */}
+          {mode !== 'forgot' && (
+            <>
+              {/* Google Sign In */}
+              <Button
+                variant="outline"
+                onClick={handleGoogleSignIn}
+                disabled={combinedLoading}
+                className="w-full h-11 border-slate-200 hover:bg-slate-50 text-slate-700 font-medium gap-2.5 mb-4"
+              >
+                {combinedLoading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Chrome className="h-4 w-4" />
+                )}
+                Continue with Google
+              </Button>
+
+              {/* Divider */}
+              <div className="relative my-6">
+                <Separator />
+                <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-white px-3 text-xs text-slate-400">
+                  or {mode === 'login' ? 'sign in' : 'sign up'} with email
+                </span>
+              </div>
+
+              {/* Email Form */}
+              <form onSubmit={mode === 'login' ? handleEmailSignIn : handleSignUp} className="space-y-4">
+                {/* Name field (signup only) */}
+                {mode === 'signup' && (
+                  <div className="space-y-2">
+                    <Label htmlFor="name" className="text-sm font-medium text-slate-700">Full Name</Label>
+                    <div className="relative">
+                      <UserPlus className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                      <Input
+                        id="name"
+                        type="text"
+                        placeholder="Rajesh Kumar"
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        className="h-11 pl-10 border-slate-200 focus:border-emerald-500 focus:ring-emerald-500/20"
+                        required
+                        disabled={combinedLoading}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                <div className="space-y-2">
+                  <Label htmlFor="email" className="text-sm font-medium text-slate-700">Email</Label>
+                  <div className="relative">
+                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                    <Input
+                      id="email"
+                      type="email"
+                      placeholder="you@company.com"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      className="h-11 pl-10 border-slate-200 focus:border-emerald-500 focus:ring-emerald-500/20"
+                      required
+                      disabled={combinedLoading}
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="password" className="text-sm font-medium text-slate-700">Password</Label>
+                    {mode === 'login' && (
+                      <button
+                        type="button"
+                        onClick={() => switchMode('forgot')}
+                        className="text-xs text-emerald-600 hover:text-emerald-700 font-medium"
+                      >
+                        Forgot password?
+                      </button>
+                    )}
+                  </div>
+                  <div className="relative">
+                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                    <Input
+                      id="password"
+                      type={showPassword ? 'text' : 'password'}
+                      placeholder={mode === 'signup' ? 'Min 6 characters' : 'Enter your password'}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      className="h-11 pl-10 pr-10 border-slate-200 focus:border-emerald-500 focus:ring-emerald-500/20"
+                      required
+                      disabled={combinedLoading}
+                      minLength={6}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
+                    >
+                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                {mode === 'login' && (
+                  <div className="flex items-center gap-2">
+                    <Checkbox
+                      id="remember"
+                      checked={rememberMe}
+                      onCheckedChange={(checked) => setRememberMe(checked === true)}
+                      className="data-[state=checked]:bg-emerald-600 data-[state=checked]:border-emerald-600"
+                    />
+                    <Label htmlFor="remember" className="text-sm text-slate-600 cursor-pointer">
+                      Remember me for 30 days
+                    </Label>
+                  </div>
+                )}
+
+                <Button
+                  type="submit"
+                  disabled={combinedLoading}
+                  className="w-full h-11 bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-600/20 font-semibold"
+                >
+                  {combinedLoading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      {mode === 'login' ? 'Signing in...' : 'Creating account...'}
+                    </>
+                  ) : (
+                    <>
+                      {mode === 'login' ? 'Sign In' : 'Create Account'}
+                      <ArrowRight className="ml-2 h-4 w-4" />
+                    </>
+                  )}
+                </Button>
+              </form>
+            </>
+          )}
+
+          {/* Mode switch links */}
+          {mode === 'login' && (
+            <>
+              {/* Divider */}
+              <div className="relative my-6">
+                <Separator />
+                <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-white px-3 text-xs text-slate-400">
+                  quick demo access
+                </span>
+              </div>
+
+              {/* Demo Logins */}
+              <div className="grid grid-cols-3 gap-2 mb-6">
+                {[
+                  { role: 'admin', label: 'Admin', icon: Building2 },
+                  { role: 'manager', label: 'Manager', icon: UserCheck },
+                  { role: 'staff', label: 'Staff', icon: Briefcase },
+                ].map((demo) => (
+                  <Button
+                    key={demo.role}
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleDemoLogin(demo.role)}
+                    disabled={combinedLoading}
+                    className={`h-auto py-2.5 flex-col gap-0.5 border-slate-200 hover:border-emerald-300 hover:bg-emerald-50 text-slate-600 ${
+                      activeDemo === demo.role ? 'border-emerald-400 bg-emerald-50 text-emerald-700' : ''
+                    }`}
+                  >
+                    {activeDemo === demo.role ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin text-emerald-600" />
+                    ) : (
+                      <demo.icon className="h-3.5 w-3.5" />
+                    )}
+                    <span className="text-[11px] font-semibold">{demo.label}</span>
+                  </Button>
+                ))}
+              </div>
+
+              {/* Create Account link */}
+              <p className="text-center text-sm text-slate-500">
+                Don&apos;t have an account?{' '}
+                <button onClick={() => switchMode('signup')} className="text-emerald-600 hover:text-emerald-700 font-semibold">
+                  Create account
+                </button>
+              </p>
+            </>
+          )}
+
+          {mode === 'signup' && (
+            <p className="text-center text-sm text-slate-500 mt-4">
+              Already have an account?{' '}
+              <button onClick={() => switchMode('login')} className="text-emerald-600 hover:text-emerald-700 font-semibold">
+                Sign in
+              </button>
+            </p>
+          )}
 
           {/* Back link */}
           <button

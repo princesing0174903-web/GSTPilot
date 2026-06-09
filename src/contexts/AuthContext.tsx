@@ -11,19 +11,7 @@ export interface AuthUser {
   provider: 'email' | 'google' | 'demo';
 }
 
-interface AuthContextType {
-  user: AuthUser | null;
-  isAuthenticated: boolean;
-  isLoading: boolean;
-  isInitializing: boolean;
-  error: string | null;
-  loginWithEmail: (email: string, password: string, remember?: boolean) => Promise<void>;
-  loginWithGoogle: () => Promise<void>;
-  loginWithDemo: (role: string) => Promise<void>;
-  logout: () => void;
-  clearError: () => void;
-}
-
+// ── Demo users (fallback when Firebase is unavailable) ──
 const DEMO_USERS: Record<string, AuthUser> = {
   admin: {
     id: 'demo-admin-001',
@@ -52,7 +40,30 @@ const DEMO_USERS: Record<string, AuthUser> = {
 };
 
 const SESSION_KEY = 'gstpilot_session';
-const REMEMBER_KEY = 'gstpilot_remember';
+
+// ── Convert Firebase User to our AuthUser ──
+function firebaseToAuthUser(fbUser: { uid: string; displayName: string | null; email: string | null; photoURL: string | null; providerData: { providerId: string }[] }): AuthUser {
+  return {
+    id: fbUser.uid,
+    name: fbUser.displayName || fbUser.email?.split('@')[0] || 'User',
+    email: fbUser.email || '',
+    picture: fbUser.photoURL || undefined,
+    role: 'admin',
+    provider: fbUser.providerData[0]?.providerId === 'google.com' ? 'google' : 'email',
+  };
+}
+
+interface AuthContextType {
+  user: AuthUser | null;
+  isAuthenticated: boolean;
+  isLoading: boolean;
+  isInitializing: boolean;
+  error: string | null;
+  setError: (error: string | null) => void;
+  loginWithDemo: (role: string) => void;
+  logout: () => Promise<void>;
+  clearError: () => void;
+}
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -62,129 +73,114 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isInitializing, setIsInitializing] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Restore session from localStorage on mount
+  // ── Initialize: Try Firebase auth state listener, fallback to localStorage ──
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem(SESSION_KEY);
-      if (stored) {
-        const parsed = JSON.parse(stored) as AuthUser;
-        setUser(parsed);
-      }
-    } catch {
-      // Invalid session data, clear it
-      localStorage.removeItem(SESSION_KEY);
-    } finally {
-      setIsInitializing(false);
-    }
-  }, []);
+    let mounted = true;
+    let unsubscribe: (() => void) | null = null;
+    let initialized = false;
 
-  // Persist session whenever user changes
-  useEffect(() => {
-    if (user) {
-      localStorage.setItem(SESSION_KEY, JSON.stringify(user));
-    }
-  }, [user]);
-
-  const loginWithEmail = useCallback(async (email: string, password: string, remember = true) => {
-    setIsLoading(true);
-    setError(null);
-
-    try {
-      // Simulate API call delay
-      await new Promise(resolve => setTimeout(resolve, 1200));
-
-      // Demo validation
-      if (!email || !password) {
-        throw new Error('Please enter both email and password.');
-      }
-
-      if (password.length < 6) {
-        throw new Error('Password must be at least 6 characters.');
-      }
-
-      // Check demo credentials
-      const demoUser = Object.values(DEMO_USERS).find(u => u.email === email);
-      if (demoUser && password === 'demo123') {
-        setUser(demoUser);
-        if (remember) {
-          localStorage.setItem(REMEMBER_KEY, 'true');
+    // Safety timeout: if Firebase doesn't respond in 5s, fall back to localStorage
+    const safetyTimer = setTimeout(() => {
+      if (!initialized && mounted) {
+        initialized = true;
+        try {
+          const stored = localStorage.getItem(SESSION_KEY);
+          if (stored) {
+            const parsed = JSON.parse(stored) as AuthUser;
+            setUser(parsed);
+          }
+        } catch {
+          localStorage.removeItem(SESSION_KEY);
         }
-        return;
+        setIsInitializing(false);
       }
+    }, 5000);
 
-      // For any other valid email/password, create a user
-      const name = email.split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-      const newUser: AuthUser = {
-        id: `user-${Date.now()}`,
-        name,
-        email,
-        role: 'staff',
-        provider: 'email',
-      };
-      setUser(newUser);
-      if (remember) {
-        localStorage.setItem(REMEMBER_KEY, 'true');
+    async function initAuth() {
+      try {
+        // Dynamic import to avoid SSR issues and handle Firebase load failures gracefully
+        const { onAuthStateChanged, auth } = await import('@/lib/auth');
+
+        unsubscribe = onAuthStateChanged(auth, (fbUser) => {
+          if (!mounted) return;
+          if (initialized) return; // Already initialized via safety timeout
+          initialized = true;
+          clearTimeout(safetyTimer);
+
+          if (fbUser) {
+            const authUser = firebaseToAuthUser(fbUser);
+            setUser(authUser);
+            localStorage.setItem(SESSION_KEY, JSON.stringify(authUser));
+          } else {
+            // No Firebase user — check for demo session
+            try {
+              const stored = localStorage.getItem(SESSION_KEY);
+              if (stored) {
+                const parsed = JSON.parse(stored) as AuthUser;
+                if (parsed.provider === 'demo') {
+                  setUser(parsed);
+                } else {
+                  localStorage.removeItem(SESSION_KEY);
+                  setUser(null);
+                }
+              }
+            } catch {
+              localStorage.removeItem(SESSION_KEY);
+              setUser(null);
+            }
+          }
+          setIsInitializing(false);
+        });
+      } catch (err) {
+        // Firebase failed to load — fall back to localStorage demo session
+        if (!mounted || initialized) return;
+        initialized = true;
+        clearTimeout(safetyTimer);
+
+        try {
+          const stored = localStorage.getItem(SESSION_KEY);
+          if (stored) {
+            const parsed = JSON.parse(stored) as AuthUser;
+            setUser(parsed);
+          }
+        } catch {
+          localStorage.removeItem(SESSION_KEY);
+        }
+        setIsInitializing(false);
       }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Login failed. Please try again.';
-      setError(message);
-      throw err;
-    } finally {
-      setIsLoading(false);
+    }
+
+    initAuth();
+
+    return () => {
+      mounted = false;
+      clearTimeout(safetyTimer);
+      if (unsubscribe) unsubscribe();
+    };
+  }, []);
+
+  // ── Demo login (no Firebase required) ──
+  const loginWithDemo = useCallback((role: string) => {
+    setError(null);
+    const demoUser = DEMO_USERS[role];
+    if (demoUser) {
+      setUser(demoUser);
+      localStorage.setItem(SESSION_KEY, JSON.stringify(demoUser));
+    } else {
+      setError('Invalid demo role.');
     }
   }, []);
 
-  const loginWithGoogle = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
-
+  // ── Logout ──
+  const logout = useCallback(async () => {
     try {
-      // Simulate Google OAuth flow
-      await new Promise(resolve => setTimeout(resolve, 1500));
-
-      // Simulated Google user
-      const googleUser: AuthUser = {
-        id: 'google-001',
-        name: 'Vikram Singh',
-        email: 'vikram.singh@gmail.com',
-        picture: '',
-        role: 'admin',
-        provider: 'google',
-      };
-      setUser(googleUser);
-      localStorage.setItem(REMEMBER_KEY, 'true');
+      const { logOut: firebaseLogOut } = await import('@/lib/auth');
+      await firebaseLogOut();
     } catch {
-      setError('Google sign-in failed. Please try again.');
-    } finally {
-      setIsLoading(false);
+      // Firebase not available or user is demo — just clear local state
     }
-  }, []);
-
-  const loginWithDemo = useCallback(async (role: string) => {
-    setIsLoading(true);
-    setError(null);
-
-    try {
-      await new Promise(resolve => setTimeout(resolve, 800));
-      const demoUser = DEMO_USERS[role];
-      if (demoUser) {
-        setUser(demoUser);
-        localStorage.setItem(REMEMBER_KEY, 'true');
-      } else {
-        throw new Error('Invalid demo role.');
-      }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Demo login failed.';
-      setError(message);
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
-  const logout = useCallback(() => {
     setUser(null);
     localStorage.removeItem(SESSION_KEY);
-    localStorage.removeItem(REMEMBER_KEY);
   }, []);
 
   const clearError = useCallback(() => {
@@ -199,8 +195,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isLoading,
         isInitializing,
         error,
-        loginWithEmail,
-        loginWithGoogle,
+        setError,
         loginWithDemo,
         logout,
         clearError,

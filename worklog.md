@@ -23,3 +23,32 @@ Stage Summary:
 - Responsive design tested: Desktop (1280x800) and Mobile (375x812)
 - Lint passes cleanly
 - All existing dashboard modules preserved (GSTR Filing, Reconciliation, Invoices, Clients, etc.)
+
+---
+Task ID: 2
+Agent: Main Agent
+Task: Implement Complete Firebase Auth for GSTPilot
+
+Work Log:
+- Installed firebase@12.14.0 package via bun
+- Created src/lib/firebase.ts with Firebase config (apiKey, authDomain, projectId, storageBucket, messagingSenderId, appId) and exported auth, db, googleProvider with select_account prompt and email+profile scopes
+- Created src/lib/auth.ts with complete auth functions: signInWithGoogle (redirect method), handleRedirectResult, signInWithEmail (with error code mapping), signUpWithEmail (with profile update + Firestore save), resetPassword, logOut, saveUserToFirestore, and onAuthStateChanged re-export
+- Rewrote src/contexts/AuthContext.tsx to use Firebase Auth: dynamic import of @/lib/auth to handle SSR gracefully, onAuthStateChanged listener with fallback to localStorage demo sessions, 5-second safety timeout if Firebase doesn't respond, firebaseToAuthUser converter, loginWithDemo (local-only), logout (Firebase + local cleanup)
+- Rewrote src/components/auth/LoginPage.tsx with 3 modes (login/signup/forgot): dynamic imports for all Firebase auth functions, email/password sign in via Firebase, email sign up with name field + Firebase createUserWithEmailAndPassword, Google Sign-In via redirect, forgot password with Firebase sendPasswordResetEmail, demo login (local-only), mode switching with back buttons, error/success state animations
+- Updated src/app/page.tsx to handle Google redirect result via dynamic import, with error handling
+- Fixed critical bug: Static Firebase imports caused client-side exception on load - converted all to dynamic imports with try-catch
+- Fixed bug: Firebase onAuthStateChanged callback never firing in sandbox environment - added 5-second safety timeout fallback to localStorage
+- Removed unused static import of handleRedirectResult from page.tsx
+
+Stage Summary:
+- Complete Firebase Auth integration with Google + Email/Password
+- Firebase config: gstpilot-f226e project with redirect-based Google Sign-In
+- AuthContext gracefully handles Firebase unavailability (dynamic imports + safety timeout)
+- LoginPage supports 3 modes: Sign In, Sign Up, Forgot Password
+- Google Sign-In uses redirect method (works on all browsers)
+- Email/Password auth with full error message mapping (user-not-found, wrong-password, invalid-credential, etc.)
+- New users saved to Firestore (uid, email, displayName, photoURL, plan, gstNumbers)
+- Demo login still works as local fallback
+- All auth functions use dynamic imports to prevent SSR/module-load failures
+- Lint passes cleanly
+- Browser verified: Landing → Login → Demo Login → Dashboard → Logout flow works

@@ -154,8 +154,9 @@ function DashboardContent() {
 
 function AppRouter() {
   const { currentScreen, setCurrentScreen } = useApp()
-  const { isAuthenticated, isInitializing } = useAuth()
+  const { isAuthenticated, isInitializing, setError } = useAuth()
   const hasSeededRef = React.useRef(false)
+  const redirectHandledRef = React.useRef(false)
 
   // Seed database on first load
   useEffect(() => {
@@ -167,6 +168,23 @@ function AppRouter() {
         .catch(() => {})
     }
   }, [])
+
+  // ── Handle Firebase Google redirect result ──
+  useEffect(() => {
+    if (redirectHandledRef.current) return
+    redirectHandledRef.current = true
+
+    import('@/lib/auth')
+      .then(({ handleRedirectResult }) => handleRedirectResult())
+      .then(({ error }) => {
+        if (error) {
+          setError(error)
+        }
+      })
+      .catch(() => {
+        // Firebase unavailable or no redirect result — ignore
+      })
+  }, [setError])
 
   // Sync auth state with screen state
   useEffect(() => {

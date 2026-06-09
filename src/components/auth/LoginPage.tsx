@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -38,7 +38,7 @@ interface LoginPageProps {
 type AuthMode = 'login' | 'signup' | 'forgot';
 
 export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
-  const { loginWithDemo, isLoading, error, setError, clearError } = useAuth();
+  const { loginWithDemo, isLoading, isInitializing, error, setError, clearError } = useAuth();
 
   const [mode, setMode] = useState<AuthMode>('login');
   const [email, setEmail] = useState('');
@@ -54,6 +54,19 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
 
   const combinedLoading = isLoading || localLoading;
   const displayError = localError || error;
+
+  // ── Show loading screen while Firebase processes redirect result ──
+  if (isInitializing) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-gray-950 gap-4">
+        <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-500 to-emerald-600 shadow-lg shadow-emerald-600/20">
+          <Zap className="h-7 w-7 text-white animate-pulse" />
+        </div>
+        <div className="w-8 h-8 border-2 border-emerald-400/30 border-t-emerald-400 rounded-full animate-spin" />
+        <p className="text-gray-400 text-sm font-medium">Completing sign in...</p>
+      </div>
+    );
+  }
 
   // ── Email/Password Sign In ──
   const handleEmailSignIn = async (e: React.FormEvent) => {
@@ -116,7 +129,8 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
     try {
       const { signInWithGoogle } = await import('@/lib/auth');
       await signInWithGoogle();
-      // This will redirect the page, so we won't reach here
+      // Page will redirect to Google, so we won't reach here.
+      // When user returns, isInitializing will be true and we'll show "Completing sign in..."
     } catch {
       setLocalError('Google sign-in failed. Please try again.');
       setLocalLoading(false);

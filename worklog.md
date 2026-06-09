@@ -52,3 +52,42 @@ Stage Summary:
 - All auth functions use dynamic imports to prevent SSR/module-load failures
 - Lint passes cleanly
 - Browser verified: Landing → Login → Demo Login → Dashboard → Logout flow works
+
+---
+Task ID: 3
+Agent: Main Agent
+Task: Fix Google redirect auth - getRedirectResult not being handled properly
+
+Work Log:
+- Analyzed the root cause: getRedirectResult was called in page.tsx (separate from AuthContext), disconnected from the auth state management. After Google redirect returned, the result wasn't being processed in the right place.
+- Rewrote src/contexts/AuthContext.tsx with proper Firebase auth flow:
+  - Added direct imports from firebase/auth and firebase/firestore (instead of dynamic imports)
+  - Added getRedirectResult(auth) call FIRST in the useEffect, before onAuthStateChanged listener
+  - When getRedirectResult returns a user: converts to AuthUser, saves to localStorage, saves to Firestore (non-blocking)
+  - Handles unauthorized-domain error specifically with helpful message
+  - onAuthStateChanged listener as STEP 2 - fires on every auth state change including redirect returns
+  - Safety timeout (6s) fallback to localStorage if neither resolves
+  - Added isRedirecting state to context
+- Updated src/components/auth/LoginPage.tsx:
+  - Added isInitializing check at top of render - shows dark "Completing sign in..." loading spinner while Firebase processes redirect
+  - This handles the critical UX: when user returns from Google redirect, they see "Completing sign in..." instead of the login form again
+- Updated src/app/page.tsx:
+  - Removed duplicate handleRedirectResult useEffect (was disconnected from AuthContext state)
+  - Removed redirectHandledRef (no longer needed)
+  - Added second useEffect to sync logout (when !isAuthenticated && currentScreen === 'app' → go to landing)
+  - Cleaner separation of concerns: AuthContext handles all Firebase auth, page.tsx only handles screen routing
+- Verified firebase.ts authDomain is correct: gstpilot-f226e.firebaseapp.com
+- Lint passes cleanly (0 errors, 0 warnings)
+- Browser tested: Landing → Login → Demo Admin → Dashboard → Sign Out → Landing flow works
+- Browser tested: Session persistence works (reload keeps user logged in)
+- Browser tested: Mobile responsive (375x812) layout correct
+- No errors in dev server log
+
+Stage Summary:
+- Core fix: getRedirectResult is now called INSIDE AuthContext's init useEffect, BEFORE onAuthStateChanged
+- This ensures Google redirect results are captured and processed into app state
+- LoginPage shows "Completing sign in..." spinner during redirect processing
+- page.tsx no longer has duplicate redirect handling - AuthContext is the single source of truth
+- Demo login flow verified working
+- Session persistence verified working
+- All auth methods (demo, email, Google redirect) now route through a single, consistent auth pipeline

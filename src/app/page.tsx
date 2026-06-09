@@ -154,9 +154,8 @@ function DashboardContent() {
 
 function AppRouter() {
   const { currentScreen, setCurrentScreen } = useApp()
-  const { isAuthenticated, isInitializing, setError } = useAuth()
+  const { isAuthenticated, isInitializing } = useAuth()
   const hasSeededRef = React.useRef(false)
-  const redirectHandledRef = React.useRef(false)
 
   // Seed database on first load
   useEffect(() => {
@@ -169,28 +168,20 @@ function AppRouter() {
     }
   }, [])
 
-  // ── Handle Firebase Google redirect result ──
-  useEffect(() => {
-    if (redirectHandledRef.current) return
-    redirectHandledRef.current = true
-
-    import('@/lib/auth')
-      .then(({ handleRedirectResult }) => handleRedirectResult())
-      .then(({ error }) => {
-        if (error) {
-          setError(error)
-        }
-      })
-      .catch(() => {
-        // Firebase unavailable or no redirect result — ignore
-      })
-  }, [setError])
-
-  // Sync auth state with screen state
+  // ── Sync auth state with screen state ──
+  // When user is authenticated (via any method), switch to app screen
   useEffect(() => {
     if (isInitializing) return
     if (isAuthenticated && currentScreen !== 'app') {
       setCurrentScreen('app')
+    }
+  }, [isAuthenticated, isInitializing, currentScreen, setCurrentScreen])
+
+  // When user logs out, go back to landing
+  useEffect(() => {
+    if (isInitializing) return
+    if (!isAuthenticated && currentScreen === 'app') {
+      setCurrentScreen('landing')
     }
   }, [isAuthenticated, isInitializing, currentScreen, setCurrentScreen])
 
@@ -206,7 +197,7 @@ function AppRouter() {
     setCurrentScreen('landing')
   }
 
-  // Show loading during auth initialization
+  // Show loading during auth initialization (includes redirect processing)
   if (isInitializing) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-white">

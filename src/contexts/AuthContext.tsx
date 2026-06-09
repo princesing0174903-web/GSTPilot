@@ -1,6 +1,13 @@
 'use client';
 
 import { createContext, useContext, useState, useCallback, useEffect, ReactNode } from 'react';
+import {
+  onAuthStateChanged,
+  getRedirectResult,
+  User as FirebaseUser,
+} from 'firebase/auth';
+import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
+import { auth, db } from '@/lib/firebase';
 
 export interface AuthUser {
   id: string;
@@ -42,7 +49,7 @@ const DEMO_USERS: Record<string, AuthUser> = {
 const SESSION_KEY = 'gstpilot_session';
 
 // ── Convert Firebase User to our AuthUser ──
-function firebaseToAuthUser(fbUser: { uid: string; displayName: string | null; email: string | null; photoURL: string | null; providerData: { providerId: string }[] }): AuthUser {
+function firebaseToAuthUser(fbUser: FirebaseUser): AuthUser {
   return {
     id: fbUser.uid,
     name: fbUser.displayName || fbUser.email?.split('@')[0] || 'User',
@@ -53,11 +60,33 @@ function firebaseToAuthUser(fbUser: { uid: string; displayName: string | null; e
   };
 }
 
+// ── Save user to Firestore (create if doesn't exist) ──
+async function saveUserToFirestore(fbUser: FirebaseUser) {
+  try {
+    const userRef = doc(db, 'users', fbUser.uid);
+    const snap = await getDoc(userRef);
+    if (!snap.exists()) {
+      await setDoc(userRef, {
+        uid: fbUser.uid,
+        email: fbUser.email,
+        displayName: fbUser.displayName || 'User',
+        photoURL: fbUser.photoURL || null,
+        createdAt: serverTimestamp(),
+        plan: 'free',
+      });
+    }
+  } catch (error) {
+    // Firestore write failure shouldn't block login
+    console.warn('Failed to save user to Firestore:', error);
+  }
+}
+
 interface AuthContextType {
   user: AuthUser | null;
   isAuthenticated: boolean;
   isLoading: boolean;
   isInitializing: boolean;
+  isRedirecting: boolean;
   error: string | null;
   setError: (error: string | null) => void;
   loginWithDemo: (role: string) => void;
@@ -71,72 +100,75 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isInitializing, setIsInitializing] = useState(true);
+  const [isRedirecting, setIsRedirecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // ── Initialize: Try Firebase auth state listener, fallback to localStorage ──
+  // ── Core Auth Init: Handle redirect result + onAuthStateChanged ──
   useEffect(() => {
     let mounted = true;
-    let unsubscribe: (() => void) | null = null;
-    let initialized = false;
 
-    // Safety timeout: if Firebase doesn't respond in 5s, fall back to localStorage
-    const safetyTimer = setTimeout(() => {
-      if (!initialized && mounted) {
-        initialized = true;
+    // STEP 1: Handle Google redirect result FIRST
+    // This resolves when a user returns from Google sign-in redirect
+    getRedirectResult(auth)
+      .then((result) => {
+        if (!mounted) return;
+        if (result?.user) {
+          // Google sign-in succeeded via redirect
+          console.log('[Auth] Google redirect successful:', result.user.email);
+          const authUser = firebaseToAuthUser(result.user);
+          setUser(authUser);
+          localStorage.setItem(SESSION_KEY, JSON.stringify(authUser));
+          setIsInitializing(false);
+          // Save to Firestore (non-blocking)
+          saveUserToFirestore(result.user);
+        }
+        // If result is null, no redirect was pending — onAuthStateChanged will handle it
+      })
+      .catch((err) => {
+        if (!mounted) return;
+        console.error('[Auth] Redirect error:', err);
+        const message = err instanceof Error ? err.message : 'Google sign-in failed.';
+        if (message.includes('unauthorized-domain')) {
+          setError('This domain is not authorized for Google Sign-In. Please add it in Firebase Console → Authentication → Settings → Authorized domains.');
+        }
+        setIsInitializing(false);
+      });
+
+    // STEP 2: Listen for normal auth state changes
+    // This fires on every page load and whenever auth state changes
+    const unsubscribe = onAuthStateChanged(auth, (fbUser) => {
+      if (!mounted) return;
+      console.log('[Auth] Auth state changed:', fbUser ? fbUser.email : 'null');
+
+      if (fbUser) {
+        const authUser = firebaseToAuthUser(fbUser);
+        setUser(authUser);
+        localStorage.setItem(SESSION_KEY, JSON.stringify(authUser));
+      } else {
+        // No Firebase user — check for demo session
         try {
           const stored = localStorage.getItem(SESSION_KEY);
           if (stored) {
             const parsed = JSON.parse(stored) as AuthUser;
-            setUser(parsed);
-          }
-        } catch {
-          localStorage.removeItem(SESSION_KEY);
-        }
-        setIsInitializing(false);
-      }
-    }, 5000);
-
-    async function initAuth() {
-      try {
-        // Dynamic import to avoid SSR issues and handle Firebase load failures gracefully
-        const { onAuthStateChanged, auth } = await import('@/lib/auth');
-
-        unsubscribe = onAuthStateChanged(auth, (fbUser) => {
-          if (!mounted) return;
-          if (initialized) return; // Already initialized via safety timeout
-          initialized = true;
-          clearTimeout(safetyTimer);
-
-          if (fbUser) {
-            const authUser = firebaseToAuthUser(fbUser);
-            setUser(authUser);
-            localStorage.setItem(SESSION_KEY, JSON.stringify(authUser));
-          } else {
-            // No Firebase user — check for demo session
-            try {
-              const stored = localStorage.getItem(SESSION_KEY);
-              if (stored) {
-                const parsed = JSON.parse(stored) as AuthUser;
-                if (parsed.provider === 'demo') {
-                  setUser(parsed);
-                } else {
-                  localStorage.removeItem(SESSION_KEY);
-                  setUser(null);
-                }
-              }
-            } catch {
+            if (parsed.provider === 'demo') {
+              setUser(parsed);
+            } else {
               localStorage.removeItem(SESSION_KEY);
               setUser(null);
             }
           }
-          setIsInitializing(false);
-        });
-      } catch (err) {
-        // Firebase failed to load — fall back to localStorage demo session
-        if (!mounted || initialized) return;
-        initialized = true;
-        clearTimeout(safetyTimer);
+        } catch {
+          localStorage.removeItem(SESSION_KEY);
+          setUser(null);
+        }
+      }
+      setIsInitializing(false);
+    });
 
+    // Safety timeout: if neither getRedirectResult nor onAuthStateChanged resolves in 6s
+    const safetyTimer = setTimeout(() => {
+      if (mounted) {
+        console.log('[Auth] Safety timeout — falling back to localStorage');
         try {
           const stored = localStorage.getItem(SESSION_KEY);
           if (stored) {
@@ -148,14 +180,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
         setIsInitializing(false);
       }
-    }
-
-    initAuth();
+    }, 6000);
 
     return () => {
       mounted = false;
       clearTimeout(safetyTimer);
-      if (unsubscribe) unsubscribe();
+      unsubscribe();
     };
   }, []);
 
@@ -194,6 +224,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isAuthenticated: !!user,
         isLoading,
         isInitializing,
+        isRedirecting,
         error,
         setError,
         loginWithDemo,

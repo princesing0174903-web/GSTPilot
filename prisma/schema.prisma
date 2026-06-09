@@ -1,0 +1,180 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  role      String   @default("staff")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Client {
+  id             String   @id @default(cuid())
+  gstin          String   @unique
+  tradeName      String
+  legalName      String?
+  address        String?
+  state          String?
+  stateCode      String?
+  contactEmail   String?
+  contactPhone   String?
+  entityType     String   @default("regular")
+  returnPeriod   String?
+  lastFilingDate String?
+  status         String   @default("active")
+  healthScore    Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  invoices       Invoice[]
+  gstrFilings    GSTRFiling[]
+  healthScores   HealthScore[]
+  issues         Issue[]
+  auditLogs      AuditLog[]
+}
+
+model Invoice {
+  id              String   @id @default(cuid())
+  clientId        String
+  invoiceNumber   String
+  invoiceDate     String
+  sellerGstin     String
+  buyerGstin      String?
+  buyerName       String?
+  invoiceType     String   @default("B2B")
+  gstr1Section    String   @default("b2b")
+  taxableValue    Float    @default(0)
+  cgst            Float    @default(0)
+  sgst            Float    @default(0)
+  igst            Float    @default(0)
+  cess            Float    @default(0)
+  totalAmount     Float    @default(0)
+  hsnCode         String?
+  reverseCharge   Boolean  @default(false)
+  status          String   @default("draft")
+  matchStatus     String   @default("unmatched")
+  riskLevel       String   @default("low")
+  riskScore       Int      @default(0)
+  aiExplanation   String?
+  notes           String?
+  period          String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  client          Client   @relation(fields: [clientId], references: [id])
+  reconciliations ReconciliationResult[]
+  issues          Issue[]
+}
+
+model GSTRFiling {
+  id                  String   @id @default(cuid())
+  clientId            String
+  returnType          String   @default("GSTR-1")
+  period              String
+  financialYear       String?
+  status              String   @default("draft")
+  filedDate           String?
+  acknowledgmentNumber String?
+  totalInvoices       Int      @default(0)
+  readyForFiling      Int      @default(0)
+  issuesFound         Int      @default(0)
+  criticalErrors      Int      @default(0)
+  warnings            Int      @default(0)
+  totalTaxableValue   Float    @default(0)
+  totalTax            Float    @default(0)
+  jsonPayload         String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  client              Client       @relation(fields: [clientId], references: [id])
+  events              FilingEvent[]
+  issues              Issue[]
+}
+
+model ReconciliationResult {
+  id             String   @id @default(cuid())
+  clientId       String
+  invoiceId      String
+  sourceType     String   @default("books")
+  sourceGstin    String?
+  matchedGstin   String?
+  matchStatus    String   @default("unmatched")
+  matchScore     Float    @default(0)
+  mismatches     String?
+  aiExplanation  String?
+  resolved       Boolean  @default(false)
+  resolvedBy     String?
+  resolvedAt     String?
+  createdAt      DateTime @default(now())
+
+  invoice        Invoice  @relation(fields: [invoiceId], references: [id])
+}
+
+model FilingEvent {
+  id          String   @id @default(cuid())
+  filingId    String
+  clientId    String
+  eventType   String
+  description String?
+  userId      String?
+  timestamp   DateTime @default(now())
+
+  filing      GSTRFiling @relation(fields: [filingId], references: [id])
+}
+
+model Issue {
+  id          String   @id @default(cuid())
+  clientId    String
+  invoiceId   String?
+  filingId    String?
+  severity    String   @default("info")
+  category    String
+  title       String
+  description String?
+  status      String   @default("open")
+  assignedTo  String?
+  notes       String?
+  resolvedAt  String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  client      Client   @relation(fields: [clientId], references: [id])
+  invoice     Invoice? @relation(fields: [invoiceId], references: [id])
+  filing      GSTRFiling? @relation(fields: [filingId], references: [id])
+}
+
+model HealthScore {
+  id               String   @id @default(cuid())
+  clientId         String
+  score            Int      @default(0)
+  missingGstin     Int      @default(0)
+  invalidGstin     Int      @default(0)
+  duplicateInvoices Int     @default(0)
+  filingDelays     Int      @default(0)
+  validationErrors Int      @default(0)
+  period           String?
+  createdAt        DateTime @default(now())
+
+  client           Client   @relation(fields: [clientId], references: [id])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  clientId  String?
+  userId    String?
+  action    String
+  entity    String?
+  entityId  String?
+  details   String?
+  timestamp DateTime @default(now())
+
+  client    Client?  @relation(fields: [clientId], references: [id])
+}

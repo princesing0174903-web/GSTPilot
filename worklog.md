@@ -1,40 +1,25 @@
 ---
 Task ID: 1
-Agent: Main
-Task: Build complete GSTPilot GST Filing Automation Engine
+Agent: Main Agent
+Task: Upgrade GSTPilot with Premium Enterprise Landing Page and Authentication Experience
 
 Work Log:
-- Explored existing project structure - found fresh scaffold with no custom components
-- Created comprehensive Prisma schema with 9 models: User, Client, Invoice, GSTRFiling, ReconciliationResult, FilingEvent, Issue, HealthScore, AuditLog
-- Pushed schema to SQLite database
-- Created type definitions in src/types/gst.ts with all GST-specific types and config objects
-- Created GST utility functions in src/lib/gst-utils.ts (GSTIN validation, tax calculation, health score, risk scoring, etc.)
-- Created providers.tsx with ThemeProvider, QueryClientProvider, AppProvider, and Toaster
-- Created AppContext.tsx with global state management (currentView, selectedClientId, sidebarOpen)
-- Created error.tsx for error boundary handling
-- Updated layout.tsx with proper providers and metadata
-- Created app-sidebar.tsx with emerald-accented navigation (10 views: Dashboard, GSTR Filing, Reconciliation, Invoices, Clients, Error Center, Calendar, Reports, Audit Logs, Settings)
-- Created 10 API routes: /api/clients, /api/invoices, /api/gstr-filing, /api/reconciliation, /api/health-score, /api/audit-logs, /api/errors, /api/export, /api/filing-events, /api/dashboard, /api/seed
-- Created DashboardPage with KPI cards, filing readiness, match/risk overview, monthly chart, health distribution, deadlines, activity, quick actions
-- Created GSTRFilingPage with invoice classification, GSTR-1 preparation, filing status, filing timeline
-- Created ReconciliationPage with reconciliation dashboard, match table, AI analysis, detail dialog
-- Created ClientRegistryPage with client table, add client dialog, client detail with filing history and health trend
-- Created InvoiceWorkspacePage with invoice table, add/edit dialogs, batch actions
-- Created ErrorResolutionPage with issue buckets (Critical/Warning/Info), resolution workflow, assign/notes
-- Created FilingCalendarPage with monthly calendar grid, filing deadlines, status badges
-- Created ReportsPage with export options (GSTR-1 JSON/Excel/PDF), configuration panel, preview section
-- Created AuditLogsPage with filterable log table, pagination, summary cards
-- Created TeamManagementPage with team table, add/edit/remove members, app settings, fiscal year config, dark mode
-- Created main page.tsx with view routing and auto-seeding
-- All lint checks pass cleanly
-- Browser verification confirms all 10 views render correctly with real data
+- Created AuthContext (src/contexts/AuthContext.tsx) with localStorage session persistence, demo users (admin/manager/staff), email/password login, Google Sign-In simulation, loading/error/success states
+- Created premium Landing Page (src/components/landing/LandingPage.tsx) with Hero section (glassmorphism, animated chart, floating metric cards), Trust section (animated counters), Features section (9 feature cards), Workflow timeline (6 steps), Comparison table (Traditional vs GSTPilot), Testimonials, Pricing section (4 plans with annual/monthly toggle), Footer
+- Created premium Login Page (src/components/auth/LoginPage.tsx) with split layout (left: branding/benefits/animated illustration, right: login form), Google Sign-In, email/password fields with validation, password visibility toggle, remember me checkbox, demo quick-access buttons, loading/error/success states, back to homepage link
+- Modified AppContext (src/contexts/AppContext.tsx) to add AppScreen type ('landing' | 'login' | 'app') and currentScreen state
+- Modified providers.tsx to wrap with AuthProvider
+- Modified page.tsx to conditionally render LandingPage → LoginPage → Dashboard based on auth state and screen state
+- Added user profile dropdown in dashboard header with Avatar, name, email, and Sign Out option
+- Updated globals.css with smooth scrolling and custom scrollbar styles
+- Fixed bug: LoginPage was referencing undefined onGetStarted prop - added it to interface and function signature
+- Fixed bug: Removed unused Card/CardContent import from LoginPage
 
 Stage Summary:
-- Complete GST Filing Automation Engine built from scratch
-- 10 views fully functional: Dashboard, GSTR Filing, Reconciliation, Invoices, Clients, Error Center, Calendar, Reports, Audit Logs, Settings
-- 10+ API routes serving real data from SQLite database
-- Database seeded with 8 Indian clients (TCS, Infosys, Reliance, Wipro, etc.), 52+ invoices, 27 GSTR filings, reconciliation results, issues, audit logs
-- GST Health Score: 75/100, Returns Filed: 4, Pending: 21, Critical Issues: 4
-- Emerald/amber/red color scheme throughout (no blue/indigo)
-- Responsive design with sidebar navigation, overflow handling, proper scrolling
-- No mock data - all data comes from API routes with database backend
+- All 3 screens work: Landing Page (with navbar, hero, trust, features, workflow, comparison, testimonials, pricing, footer) → Login Page (split layout with form) → Dashboard (existing with user profile)
+- Auth flow: Email/password login, Google Sign-In simulation, 3 demo users (Admin, Manager, Staff)
+- Session persistence via localStorage - user stays logged in on refresh
+- User profile shows in dashboard header: Avatar initials, name, email with dropdown (Profile, Settings, Sign Out)
+- Responsive design tested: Desktop (1280x800) and Mobile (375x812)
+- Lint passes cleanly
+- All existing dashboard modules preserved (GSTR Filing, Reconciliation, Invoices, Clients, etc.)

@@ -4,13 +4,17 @@ import { createContext, useContext, useState, useCallback } from 'react';
 
 export type AppView = 'dashboard' | 'gstr-filing' | 'reconciliation' | 'invoices' | 'clients' | 'errors' | 'calendar' | 'reports' | 'audit-logs' | 'settings';
 
+export type AppScreen = 'landing' | 'login' | 'app';
+
 interface AppContextType {
   currentView: AppView;
   selectedClientId: string | null;
   sidebarOpen: boolean;
+  currentScreen: AppScreen;
   setCurrentView: (view: AppView) => void;
   setSelectedClientId: (id: string | null) => void;
   setSidebarOpen: (open: boolean) => void;
+  setCurrentScreen: (screen: AppScreen) => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -19,6 +23,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [currentView, setCurrentView] = useState<AppView>('dashboard');
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(true);
+  const [currentScreen, setCurrentScreen] = useState<AppScreen>('landing');
 
   const handleSetCurrentView = useCallback((view: AppView) => {
     setCurrentView(view);
@@ -32,15 +37,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setSidebarOpen(open);
   }, []);
 
+  const handleSetCurrentScreen = useCallback((screen: AppScreen) => {
+    setCurrentScreen(screen);
+  }, []);
+
   return (
     <AppContext.Provider
       value={{
         currentView,
         selectedClientId,
         sidebarOpen,
+        currentScreen,
         setCurrentView: handleSetCurrentView,
         setSelectedClientId: handleSetSelectedClientId,
         setSidebarOpen: handleSetSidebarOpen,
+        setCurrentScreen: handleSetCurrentScreen,
       }}
     >
       {children}

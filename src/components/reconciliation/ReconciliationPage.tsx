@@ -1,6 +1,14 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import {
+  PieChart,
+  Pie,
+  Cell,
+  ResponsiveContainer,
+  Tooltip as RechartsTooltip,
+} from 'recharts';
 import {
   Card,
   CardContent,
@@ -40,158 +48,32 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Progress } from '@/components/ui/progress';
-import { Separator } from '@/components/ui/separator';
 import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Separator } from '@/components/ui/separator';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
-import {
-  RefreshCw,
   CheckCircle2,
   AlertTriangle,
   XCircle,
-  Search,
+  RefreshCw,
+  Play,
   Eye,
-  Zap,
+  Link2,
+  Ban,
   ArrowRight,
-  Shield,
-  TrendingUp,
-  HelpCircle,
-  Database,
-  ShieldAlert,
-  IndianRupee,
-  Download,
-  MoreHorizontal,
-  FileSpreadsheet,
-  FileText,
-  AlertOctagon,
-  ClipboardList,
-  ArrowUpRight,
-  X,
   Clock,
-  User,
-  MessageSquare,
+  Search,
+  ChevronDown,
   Activity,
-  Copy,
-  ExternalLink,
+  Target,
 } from 'lucide-react';
-import type {
-  ReconciliationResult,
-  ReconciliationRun,
-  MatchStatus,
-  RiskLevel,
-  WorkflowStatus,
-  AIRecommendationType,
-} from '@/types/gst';
-import {
-  MATCH_STATUS_CONFIG,
-  RISK_LEVEL_CONFIG,
-  WORKFLOW_STATUS_CONFIG,
-  AI_RECOMMENDATION_CONFIG,
-} from '@/types/gst';
 import { formatCurrency } from '@/lib/gst-utils';
 import { useApp } from '@/contexts/AppContext';
 
 // ──────────────────────────────────────────────
-// Static Data
-// ──────────────────────────────────────────────
-const TEAM_MEMBERS = [
-  { id: 'tm1', name: 'Rahul Sharma' },
-  { id: 'tm2', name: 'Priya Patel' },
-  { id: 'tm3', name: 'Amit Kumar' },
-  { id: 'tm4', name: 'Sneha Reddy' },
-  { id: 'tm5', name: 'Vikram Singh' },
-];
-
-const PERIODS = [
-  '2026-03',
-  '2026-02',
-  '2026-01',
-  '2025-12',
-  '2025-11',
-  '2025-10',
-];
-
-const SOURCE_OPTIONS = [
-  { value: 'Purchase Register,GSTR-2B', label: 'Purchase Register vs GSTR-2B' },
-  { value: 'Sales Register,GSTR-1', label: 'Sales Register vs GSTR-1' },
-  { value: 'Purchase Register,GSTR-3B', label: 'Purchase Register vs GSTR-3B' },
-  { value: 'All Sources', label: 'All Sources' },
-];
-
-// ──────────────────────────────────────────────
-// Helpers
-// ──────────────────────────────────────────────
-function parseMismatches(
-  mismatches?: string | null
-): { field: string; expected: string | number; actual: string | number; difference?: number }[] {
-  if (!mismatches) return [];
-  try {
-    return JSON.parse(mismatches);
-  } catch {
-    return [];
-  }
-}
-
-function formatFieldName(field: string): string {
-  const map: Record<string, string> = {
-    gst_amount: 'GST Amount',
-    total_amount: 'Total Amount',
-    tax: 'Tax Amount',
-    cgst: 'CGST',
-    sgst: 'SGST',
-    igst: 'IGST',
-    cess: 'Cess',
-    taxableValue: 'Taxable Value',
-    invoice_number: 'Invoice Number',
-    invoice_date: 'Invoice Date',
-    vendor_gstin: 'Vendor GSTIN',
-  };
-  return map[field] || field.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
-}
-
-function getConfidenceColor(score: number): string {
-  if (score >= 80) return 'text-emerald-700';
-  if (score >= 50) return 'text-amber-700';
-  return 'text-red-700';
-}
-
-function getConfidenceBarColor(score: number): string {
-  if (score >= 80) return '[&>div]:bg-emerald-500';
-  if (score >= 50) return '[&>div]:bg-amber-500';
-  return '[&>div]:bg-red-500';
-}
-
-function getRiskLevelForResult(result: ReconciliationResult): RiskLevel {
-  const inv = result.invoice;
-  if (inv && inv.riskLevel) return inv.riskLevel as RiskLevel;
-  return 'low';
-}
-
-function getAIRecConfig(rec?: string | null) {
-  if (!rec) return null;
-  if (rec in AI_RECOMMENDATION_CONFIG) {
-    return AI_RECOMMENDATION_CONFIG[rec as AIRecommendationType];
-  }
-  return null;
-}
-
-function truncate(str: string, max: number) {
-  if (!str) return '';
-  return str.length > max ? str.slice(0, max) + '...' : str;
-}
-
-// ──────────────────────────────────────────────
-// Types for local state
+// Types
 // ──────────────────────────────────────────────
 interface ClientOption {
   id: string;
@@ -199,18 +81,196 @@ interface ClientOption {
   gstin: string;
 }
 
+interface InvoiceData {
+  invoiceNumber: string;
+  invoiceDate: string;
+  sellerGstin: string;
+  buyerGstin?: string;
+  buyerName?: string;
+  totalAmount: number;
+  cgst: number;
+  sgst: number;
+  igst: number;
+  taxableValue: number;
+}
+
+interface ReconResult {
+  id: string;
+  clientId: string;
+  invoiceId: string;
+  matchStatus: string;
+  matchScore: number;
+  mismatches?: string;
+  aiExplanation?: string;
+  confidenceScore: number;
+  workflowStatus: string;
+  resolved: boolean;
+  sourceA?: string;
+  sourceB?: string;
+  sourceGstin?: string;
+  matchedGstin?: string;
+  createdAt: string;
+  invoice?: InvoiceData & { client?: { id: string; tradeName: string; gstin: string } };
+}
+
+interface ReconRun {
+  id: string;
+  clientId: string;
+  period: string;
+  sources: string;
+  totalRecords: number;
+  matched: number;
+  unmatched: number;
+  partialMatches: number;
+  highRisk: number;
+  gstDifference: number;
+  status: string;
+  createdAt: string;
+}
+
 interface StatsData {
   totalResults: number;
   matchBreakdown: Record<string, number>;
-  unresolved: number;
-  riskBreakdown: { high: number; critical: number; highAndCritical: number };
-  workflowBreakdown: Record<string, number>;
   matchPercentage: number;
-  riskPercentage: number;
+  unresolved: number;
   totalGstDifference: number;
-  avgMatchScore: number;
-  avgConfidenceScore: number;
 }
+
+// ──────────────────────────────────────────────
+// Constants
+// ──────────────────────────────────────────────
+const PERIODS = [
+  '2026-03', '2026-02', '2026-01',
+  '2025-12', '2025-11', '2025-10',
+];
+
+const SOURCE_OPTIONS = [
+  { value: 'GSTR-1,GSTR-2A', label: 'GSTR-1 vs GSTR-2A' },
+  { value: 'GSTR-1,GSTR-2B', label: 'GSTR-1 vs GSTR-2B' },
+];
+
+const PIE_COLORS = ['#10b981', '#f59e0b', '#ef4444'];
+
+// ──────────────────────────────────────────────
+// Helpers
+// ──────────────────────────────────────────────
+function parseMismatches(raw?: string | null) {
+  if (!raw) return [];
+  try { return JSON.parse(raw); } catch { return []; }
+}
+
+function getMatchRateColor(rate: number) {
+  if (rate >= 90) return 'text-emerald-600';
+  if (rate >= 70) return 'text-amber-600';
+  return 'text-red-600';
+}
+
+function getMatchRateStroke(rate: number) {
+  if (rate >= 90) return '#10b981';
+  if (rate >= 70) return '#f59e0b';
+  return '#ef4444';
+}
+
+function getMatchRateBg(rate: number) {
+  if (rate >= 90) return 'bg-emerald-50';
+  if (rate >= 70) return 'bg-amber-50';
+  return 'bg-red-50';
+}
+
+function getMismatchType(result: ReconResult): string {
+  const status = result.matchStatus;
+  if (status === 'missing_in_gstr') return 'Missing in 2A/2B';
+  if (status === 'missing_in_books') return 'Missing in GSTR-1';
+  const mm = parseMismatches(result.mismatches);
+  if (mm.some((m: { field: string }) => m.field === 'vendor_gstin')) return 'GSTIN Mismatch';
+  if (mm.some((m: { field: string }) => m.field === 'gst_amount' || m.field === 'total_amount')) return 'Amount Mismatch';
+  return 'Other Mismatch';
+}
+
+function getMismatchBadge(mismatchType: string) {
+  switch (mismatchType) {
+    case 'Amount Mismatch':
+      return { variant: 'outline' as const, className: 'border-amber-200 bg-amber-50 text-amber-700' };
+    case 'GSTIN Mismatch':
+      return { variant: 'outline' as const, className: 'border-orange-200 bg-orange-50 text-orange-700' };
+    case 'Missing in 2A/2B':
+      return { variant: 'outline' as const, className: 'border-purple-200 bg-purple-50 text-purple-700' };
+    case 'Missing in GSTR-1':
+      return { variant: 'outline' as const, className: 'border-rose-200 bg-rose-50 text-rose-700' };
+    default:
+      return { variant: 'outline' as const, className: 'border-slate-200 bg-slate-50 text-slate-700' };
+  }
+}
+
+function formatPeriod(period: string) {
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const [year, month] = period.split('-').map(Number);
+  return `${months[month - 1]} ${year}`;
+}
+
+// ──────────────────────────────────────────────
+// Circular Progress Component
+// ──────────────────────────────────────────────
+function CircularProgress({ value, size = 120, strokeWidth = 8 }: { value: number; size?: number; strokeWidth?: number }) {
+  const radius = (size - strokeWidth) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const offset = circumference - (value / 100) * circumference;
+  const color = getMatchRateStroke(value);
+
+  return (
+    <div className="relative" style={{ width: size, height: size }}>
+      <svg width={size} height={size} className="-rotate-90">
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          fill="none"
+          stroke="#e5e7eb"
+          strokeWidth={strokeWidth}
+        />
+        <motion.circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          fill="none"
+          stroke={color}
+          strokeWidth={strokeWidth}
+          strokeLinecap="round"
+          strokeDasharray={circumference}
+          initial={{ strokeDashoffset: circumference }}
+          animate={{ strokeDashoffset: offset }}
+          transition={{ duration: 1.2, ease: 'easeOut' }}
+        />
+      </svg>
+      <div className="absolute inset-0 flex flex-col items-center justify-center">
+        <span className={`text-3xl font-bold ${getMatchRateColor(value)}`}>
+          {value}%
+        </span>
+        <span className="text-[10px] text-muted-foreground">matched</span>
+      </div>
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────────
+// Animation Variants
+// ──────────────────────────────────────────────
+const containerVariants = {
+  hidden: {},
+  visible: {
+    transition: { staggerChildren: 0.08 },
+  },
+};
+
+const cardVariants = {
+  hidden: { opacity: 0, y: 20 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.4, ease: 'easeOut' } },
+};
+
+const rowVariants = {
+  hidden: { opacity: 0, x: -10 },
+  visible: { opacity: 1, x: 0, transition: { duration: 0.25 } },
+};
 
 // ──────────────────────────────────────────────
 // Main Component
@@ -219,32 +279,35 @@ export default function ReconciliationPage() {
   const { selectedClientId, setSelectedClientId } = useApp();
 
   // ── Data ──
-  const [reconResults, setReconResults] = useState<ReconciliationResult[]>([]);
+  const [results, setResults] = useState<ReconResult[]>([]);
   const [clients, setClients] = useState<ClientOption[]>([]);
-  const [runs, setRuns] = useState<ReconciliationRun[]>([]);
+  const [runs, setRuns] = useState<ReconRun[]>([]);
   const [stats, setStats] = useState<StatsData | null>(null);
 
-  // ── Loading States ──
+  // ── Loading ──
   const [loading, setLoading] = useState(true);
   const [runningRecon, setRunningRecon] = useState(false);
-  const [exporting, setExporting] = useState(false);
+  const [reconProgress, setReconProgress] = useState(0);
 
   // ── Filters ──
-  const [selectedPeriod, setSelectedPeriod] = useState<string>('2026-03');
-  const [selectedSource, setSelectedSource] = useState<string>('Purchase Register,GSTR-2B');
-  const [filterStatus, setFilterStatus] = useState<string>('all');
-  const [filterRisk, setFilterRisk] = useState<string>('all');
-  const [filterWorkflow, setFilterWorkflow] = useState<string>('all');
+  const [filterClient, setFilterClient] = useState<string>('all');
+  const [filterMismatchType, setFilterMismatchType] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
 
-  // ── Detail Dialog ──
-  const [detailOpen, setDetailOpen] = useState(false);
-  const [selectedResult, setSelectedResult] = useState<ReconciliationResult | null>(null);
-  const [resolveNote, setResolveNote] = useState('');
-  const [assignedTo, setAssignedTo] = useState('');
+  // ── Dialogs ──
+  const [runDialogOpen, setRunDialogOpen] = useState(false);
+  const [resolveDialogOpen, setResolveDialogOpen] = useState(false);
+  const [selectedResult, setSelectedResult] = useState<ReconResult | null>(null);
 
-  // ── Active Tab ──
-  const [activeTab, setActiveTab] = useState('all');
+  // ── Run Config ──
+  const [runClient, setRunClient] = useState<string>('all');
+  const [runPeriod, setRunPeriod] = useState('2026-03');
+  const [runSource, setRunSource] = useState('GSTR-1,GSTR-2A');
+
+  // ── Resolve Form ──
+  const [resolveChoice, setResolveChoice] = useState<'gstr1' | 'gstr2a' | 'custom'>('gstr1');
+  const [customAmount, setCustomAmount] = useState('');
+  const [resolveNotes, setResolveNotes] = useState('');
 
   // ──────────────────────────────────────────
   // Data Fetching
@@ -253,31 +316,13 @@ export default function ReconciliationPage() {
     try {
       const params = new URLSearchParams();
       if (selectedClientId) params.set('clientId', selectedClientId);
-      if (filterStatus !== 'all') params.set('matchStatus', filterStatus);
-      if (filterWorkflow !== 'all') params.set('workflowStatus', filterWorkflow);
-      if (searchQuery) params.set('search', searchQuery);
-
       const res = await fetch(`/api/reconciliation?${params.toString()}`);
       if (res.ok) {
         const data = await res.json();
-        setReconResults(data.results || []);
+        setResults(data.results || []);
       }
     } catch (err) {
-      console.error('Error fetching reconciliation results:', err);
-    }
-  }, [selectedClientId, filterStatus, filterWorkflow, searchQuery]);
-
-  const fetchRuns = useCallback(async () => {
-    try {
-      const params = new URLSearchParams({ action: 'runs' });
-      if (selectedClientId) params.set('clientId', selectedClientId);
-      const res = await fetch(`/api/reconciliation?${params.toString()}`);
-      if (res.ok) {
-        const data = await res.json();
-        setRuns(data.runs || []);
-      }
-    } catch (err) {
-      console.error('Error fetching runs:', err);
+      console.error('Error fetching results:', err);
     }
   }, [selectedClientId]);
 
@@ -292,6 +337,20 @@ export default function ReconciliationPage() {
       }
     } catch (err) {
       console.error('Error fetching stats:', err);
+    }
+  }, [selectedClientId]);
+
+  const fetchRuns = useCallback(async () => {
+    try {
+      const params = new URLSearchParams({ action: 'runs' });
+      if (selectedClientId) params.set('clientId', selectedClientId);
+      const res = await fetch(`/api/reconciliation?${params.toString()}`);
+      if (res.ok) {
+        const data = await res.json();
+        setRuns(data.runs || []);
+      }
+    } catch (err) {
+      console.error('Error fetching runs:', err);
     }
   }, [selectedClientId]);
 
@@ -317,1655 +376,1174 @@ export default function ReconciliationPage() {
   useEffect(() => {
     async function loadAll() {
       setLoading(true);
-      await Promise.all([fetchResults(), fetchRuns(), fetchStats(), fetchClients()]);
+      await Promise.all([fetchResults(), fetchStats(), fetchRuns(), fetchClients()]);
       setLoading(false);
     }
     loadAll();
-    }, []);
+  }, [fetchResults, fetchStats, fetchRuns, fetchClients]);
 
-  // ── Refetch when filters change ──
+  // ── Refetch on client change ──
   useEffect(() => {
     if (!loading) {
       fetchResults();
       fetchStats();
+      fetchRuns();
     }
-  }, [selectedClientId, filterStatus, filterWorkflow, searchQuery]);
+  }, [selectedClientId]);
+
+  // ──────────────────────────────────────────
+  // Computed Values
+  // ──────────────────────────────────────────
+  const summary = useMemo(() => {
+    if (stats) {
+      const matched = stats.matchBreakdown?.perfect_match ?? 0;
+      const mismatched =
+        (stats.matchBreakdown?.partial_match ?? 0) +
+        (stats.matchBreakdown?.mismatch ?? 0);
+      const unmatched =
+        (stats.matchBreakdown?.missing_in_books ?? 0) +
+        (stats.matchBreakdown?.missing_in_gstr ?? 0) +
+        (stats.matchBreakdown?.unmatched ?? 0) +
+        (stats.matchBreakdown?.duplicate ?? 0);
+      return {
+        total: stats.totalResults,
+        matched,
+        mismatched,
+        unmatched,
+        matchRate: stats.matchPercentage ?? (stats.totalResults > 0 ? Math.round((matched / stats.totalResults) * 100) : 0),
+        gstDifference: stats.totalGstDifference ?? 0,
+      };
+    }
+    const total = results.length;
+    const matched = results.filter(r => r.matchStatus === 'perfect_match').length;
+    const mismatched = results.filter(r => r.matchStatus === 'partial_match' || r.matchStatus === 'mismatch').length;
+    const unmatched = results.filter(r =>
+      r.matchStatus === 'missing_in_books' ||
+      r.matchStatus === 'missing_in_gstr' ||
+      r.matchStatus === 'unmatched' ||
+      r.matchStatus === 'duplicate'
+    ).length;
+    return {
+      total,
+      matched,
+      mismatched,
+      unmatched,
+      matchRate: total > 0 ? Math.round((matched / total) * 100) : 0,
+      gstDifference: 0,
+    };
+  }, [stats, results]);
+
+  const pieData = useMemo(() => [
+    { name: 'Matched', value: summary.matched },
+    { name: 'Mismatched', value: summary.mismatched },
+    { name: 'Unmatched', value: summary.unmatched },
+  ], [summary]);
+
+  // Client-wise summary
+  const clientSummary = useMemo(() => {
+    const map = new Map<string, { name: string; total: number; matched: number; mismatched: number; unmatched: number }>();
+    for (const r of results) {
+      const clientName = r.invoice?.client?.tradeName || 'Unknown';
+      const key = r.clientId;
+      if (!map.has(key)) {
+        map.set(key, { name: clientName, total: 0, matched: 0, mismatched: 0, unmatched: 0 });
+      }
+      const entry = map.get(key)!;
+      entry.total++;
+      if (r.matchStatus === 'perfect_match') entry.matched++;
+      else if (r.matchStatus === 'partial_match' || r.matchStatus === 'mismatch') entry.mismatched++;
+      else entry.unmatched++;
+    }
+    return Array.from(map.values());
+  }, [results]);
+
+  // Mismatch results
+  const mismatchResults = useMemo(() => {
+    return results.filter(r =>
+      r.matchStatus === 'partial_match' ||
+      r.matchStatus === 'mismatch'
+    ).filter(r => {
+      if (filterClient !== 'all' && r.clientId !== filterClient) return false;
+      if (filterMismatchType !== 'all' && getMismatchType(r) !== filterMismatchType) return false;
+      if (searchQuery) {
+        const q = searchQuery.toLowerCase();
+        const invNum = r.invoice?.invoiceNumber?.toLowerCase() ?? '';
+        const gstin = r.sourceGstin?.toLowerCase() ?? '';
+        if (!invNum.includes(q) && !gstin.includes(q)) return false;
+      }
+      return true;
+    });
+  }, [results, filterClient, filterMismatchType, searchQuery]);
+
+  // Unmatched results
+  const unmatchedResults = useMemo(() => {
+    return results.filter(r =>
+      r.matchStatus === 'missing_in_books' ||
+      r.matchStatus === 'missing_in_gstr' ||
+      r.matchStatus === 'unmatched' ||
+      r.matchStatus === 'duplicate'
+    ).filter(r => {
+      if (filterClient !== 'all' && r.clientId !== filterClient) return false;
+      if (searchQuery) {
+        const q = searchQuery.toLowerCase();
+        const invNum = r.invoice?.invoiceNumber?.toLowerCase() ?? '';
+        const gstin = r.sourceGstin?.toLowerCase() ?? '';
+        if (!invNum.includes(q) && !gstin.includes(q)) return false;
+      }
+      return true;
+    });
+  }, [results, filterClient, searchQuery]);
 
   // ──────────────────────────────────────────
   // Actions
   // ──────────────────────────────────────────
   const handleRunReconciliation = async () => {
-    if (!selectedClientId) return;
     setRunningRecon(true);
+    setReconProgress(0);
+
+    // Simulate progress
+    const progressInterval = setInterval(() => {
+      setReconProgress(prev => {
+        if (prev >= 90) { clearInterval(progressInterval); return 90; }
+        return prev + Math.random() * 15;
+      });
+    }, 400);
+
     try {
+      const clientId = runClient === 'all' ? selectedClientId : runClient;
+      if (!clientId) {
+        clearInterval(progressInterval);
+        setRunningRecon(false);
+        return;
+      }
       const res = await fetch('/api/reconciliation', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'run',
-          clientId: selectedClientId,
-          period: selectedPeriod,
-          sources: selectedSource,
+          clientId,
+          period: runPeriod,
+          sources: runSource,
         }),
       });
       if (res.ok) {
-        await Promise.all([fetchResults(), fetchRuns(), fetchStats()]);
+        clearInterval(progressInterval);
+        setReconProgress(100);
+        await new Promise(r => setTimeout(r, 500));
+        await Promise.all([fetchResults(), fetchStats(), fetchRuns()]);
       }
     } catch (err) {
       console.error('Error running reconciliation:', err);
     } finally {
+      clearInterval(progressInterval);
       setRunningRecon(false);
-    }
-  };
-
-  const handleUpdateWorkflow = async (id: string, workflowStatus: WorkflowStatus) => {
-    try {
-      const res = await fetch('/api/reconciliation', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'update_workflow', id, workflowStatus }),
-      });
-      if (res.ok) {
-        setReconResults((prev) =>
-          prev.map((r) =>
-            r.id === id ? { ...r, workflowStatus, resolved: workflowStatus === 'resolved' } : r
-          )
-        );
-        if (selectedResult && selectedResult.id === id) {
-          setSelectedResult((prev) =>
-            prev ? { ...prev, workflowStatus, resolved: workflowStatus === 'resolved' } : null
-          );
-        }
-        await fetchStats();
-      }
-    } catch (err) {
-      console.error('Error updating workflow:', err);
-    }
-  };
-
-  const handleExport = async (format: string) => {
-    setExporting(true);
-    try {
-      const res = await fetch('/api/reconciliation', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'export',
-          format,
-          clientId: selectedClientId || undefined,
-          filters: {
-            matchStatus: filterStatus !== 'all' ? filterStatus : undefined,
-            riskLevel: filterRisk !== 'all' ? filterRisk : undefined,
-            workflowStatus: filterWorkflow !== 'all' ? filterWorkflow : undefined,
-            search: searchQuery || undefined,
-          },
-        }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        const blob = new Blob([JSON.stringify(data.export, null, 2)], {
-          type: 'application/json',
-        });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `reconciliation-${format}-${new Date().toISOString().slice(0, 10)}.json`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-      }
-    } catch (err) {
-      console.error('Error exporting:', err);
-    } finally {
-      setExporting(false);
+      setReconProgress(0);
+      setRunDialogOpen(false);
     }
   };
 
   const handleResolve = async () => {
     if (!selectedResult) return;
     try {
-      const res = await fetch('/api/reconciliation', {
-        method: 'PUT',
+      await fetch('/api/reconciliation', {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          action: 'update_workflow',
           id: selectedResult.id,
-          resolvedBy: assignedTo || 'Current User',
+          workflowStatus: 'resolved',
         }),
       });
-      if (res.ok) {
-        setReconResults((prev) =>
-          prev.map((r) =>
-            r.id === selectedResult.id
-              ? {
-                  ...r,
-                  resolved: true,
-                  resolvedBy: assignedTo || 'Current User',
-                  resolvedAt: new Date().toISOString(),
-                  workflowStatus: 'resolved' as WorkflowStatus,
-                }
-              : r
-          )
-        );
-        setDetailOpen(false);
-        setSelectedResult(null);
-        setResolveNote('');
-        setAssignedTo('');
-        await fetchStats();
-      }
+      setResults(prev =>
+        prev.map(r =>
+          r.id === selectedResult.id
+            ? { ...r, resolved: true, workflowStatus: 'resolved' }
+            : r
+        )
+      );
+      setResolveDialogOpen(false);
+      setSelectedResult(null);
+      setResolveNotes('');
+      setCustomAmount('');
+      setResolveChoice('gstr1');
+      await fetchStats();
     } catch (err) {
       console.error('Error resolving:', err);
     }
   };
 
-  // ──────────────────────────────────────────
-  // Computed Values
-  // ──────────────────────────────────────────
-  const filteredResults = useMemo(() => {
-    return reconResults.filter((r) => {
-      if (selectedClientId && r.clientId !== selectedClientId) return false;
-      if (filterStatus !== 'all' && r.matchStatus !== filterStatus) return false;
-      if (filterRisk !== 'all') {
-        const risk = getRiskLevelForResult(r);
-        if (risk !== filterRisk) return false;
-      }
-      if (filterWorkflow !== 'all' && r.workflowStatus !== filterWorkflow) return false;
-      if (searchQuery) {
-        const q = searchQuery.toLowerCase();
-        const inv = r.invoice;
-        const matchInvNum = inv?.invoiceNumber?.toLowerCase().includes(q) ?? false;
-        const matchBuyer = inv?.buyerName?.toLowerCase().includes(q) ?? false;
-        const matchSrcGstin = r.sourceGstin?.toLowerCase().includes(q) ?? false;
-        const matchMatchGstin = r.matchedGstin?.toLowerCase().includes(q) ?? false;
-        if (!matchInvNum && !matchBuyer && !matchSrcGstin && !matchMatchGstin) return false;
-      }
-      return true;
-    });
-  }, [reconResults, selectedClientId, filterStatus, filterRisk, filterWorkflow, searchQuery]);
-
-  const tabFilteredResults = useMemo(() => {
-    switch (activeTab) {
-      case 'matched':
-        return filteredResults.filter((r) => r.matchStatus === 'perfect_match');
-      case 'mismatches':
-        return filteredResults.filter(
-          (r) => r.matchStatus === 'mismatch' || r.matchStatus === 'partial_match'
-        );
-      case 'missing':
-        return filteredResults.filter(
-          (r) => r.matchStatus === 'missing_in_books' || r.matchStatus === 'missing_in_gstr'
-        );
-      case 'high_risk':
-        return filteredResults.filter((r) => {
-          const risk = getRiskLevelForResult(r);
-          return risk === 'high' || risk === 'critical';
-        });
-      case 'duplicates':
-        return filteredResults.filter((r) => r.matchStatus === 'duplicate');
-      default:
-        return filteredResults;
-    }
-  }, [filteredResults, activeTab]);
-
-  const kpiData = useMemo(() => {
-    if (stats) {
-      return {
-        totalRecords: stats.totalResults,
-        matched: stats.matchBreakdown?.perfect_match ?? 0,
-        unmatched:
-          (stats.matchBreakdown?.mismatch ?? 0) +
-          (stats.matchBreakdown?.unmatched ?? 0),
-        partialMatches: stats.matchBreakdown?.partial_match ?? 0,
-        highRisk: stats.riskBreakdown?.highAndCritical ?? 0,
-        gstDifference: stats.totalGstDifference ?? 0,
-      };
-    }
-    const total = reconResults.length;
-    const matched = reconResults.filter((r) => r.matchStatus === 'perfect_match').length;
-    const unmatched = reconResults.filter(
-      (r) => r.matchStatus === 'mismatch' || r.matchStatus === 'unmatched'
-    ).length;
-    const partial = reconResults.filter((r) => r.matchStatus === 'partial_match').length;
-    const highRisk = reconResults.filter((r) => {
-      const risk = getRiskLevelForResult(r);
-      return risk === 'high' || risk === 'critical';
-    }).length;
-    let gstDiff = 0;
-    for (const r of reconResults) {
-      if (r.mismatches) {
-        try {
-          const parsed = JSON.parse(r.mismatches);
-          if (Array.isArray(parsed)) {
-            for (const m of parsed) {
-              if (m.field === 'gst_amount' && m.difference) {
-                gstDiff += Math.abs(m.difference);
-              }
-            }
-          }
-        } catch {
-          /* ignore */
-        }
-      }
-    }
-    return { totalRecords: total, matched, unmatched, partialMatches: partial, highRisk, gstDifference: gstDiff };
-  }, [stats, reconResults]);
-
-  const hasActiveFilters =
-    filterStatus !== 'all' || filterRisk !== 'all' || filterWorkflow !== 'all' || searchQuery !== '';
-
-  // ──────────────────────────────────────────
-  // Render Helpers
-  // ──────────────────────────────────────────
-  const renderReconTable = (results: ReconciliationResult[]) => {
-    if (loading) {
-      return (
-        <TableBody>
-          {Array.from({ length: 5 }).map((_, i) => (
-            <TableRow key={i}>
-              {Array.from({ length: 13 }).map((_, j) => (
-                <TableCell key={j}>
-                  <div className="h-4 w-20 bg-muted animate-pulse rounded" />
-                </TableCell>
-              ))}
-            </TableRow>
-          ))}
-        </TableBody>
+  const handleIgnore = async (id: string) => {
+    try {
+      await fetch('/api/reconciliation', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'update_workflow', id, workflowStatus: 'ignored' }),
+      });
+      setResults(prev =>
+        prev.map(r => r.id === id ? { ...r, workflowStatus: 'ignored' } : r)
       );
+      await fetchStats();
+    } catch (err) {
+      console.error('Error ignoring:', err);
     }
-
-    if (results.length === 0) {
-      return (
-        <TableBody>
-          <TableRow>
-            <TableCell colSpan={13} className="text-center py-16 text-muted-foreground">
-              <HelpCircle className="h-12 w-12 mx-auto mb-3 opacity-30" />
-              <p className="text-base font-medium">No reconciliation results found</p>
-              <p className="text-sm mt-1">Run reconciliation to start matching your records</p>
-            </TableCell>
-          </TableRow>
-        </TableBody>
-      );
-    }
-
-    return (
-      <TableBody>
-        {results.map((result) => {
-          const statusCfg = MATCH_STATUS_CONFIG[result.matchStatus as MatchStatus];
-          const invoice = result.invoice;
-          const riskLevel = getRiskLevelForResult(result);
-          const riskCfg = RISK_LEVEL_CONFIG[riskLevel];
-          const workflowCfg = WORKFLOW_STATUS_CONFIG[result.workflowStatus as WorkflowStatus];
-          const aiRec = getAIRecConfig(result.aiRecommendation);
-          const gstAmount = invoice
-            ? invoice.cgst + invoice.sgst + invoice.igst
-            : 0;
-
-          return (
-            <TableRow
-              key={result.id}
-              className="hover:bg-accent/40 transition-colors cursor-pointer"
-              onClick={() => {
-                setSelectedResult(result);
-                setDetailOpen(true);
-              }}
-            >
-              {/* Invoice Number */}
-              <TableCell className="font-medium text-sm whitespace-nowrap">
-                {invoice?.invoiceNumber || '—'}
-              </TableCell>
-
-              {/* Vendor/Buyer Name */}
-              <TableCell className="text-sm text-muted-foreground whitespace-nowrap max-w-[150px] truncate">
-                {invoice?.buyerName || invoice?.sellerGstin?.slice(0, 10) + '...' || '—'}
-              </TableCell>
-
-              {/* GSTIN */}
-              <TableCell className="font-mono text-xs whitespace-nowrap">
-                {result.matchedGstin || result.sourceGstin || '—'}
-              </TableCell>
-
-              {/* Taxable Amount */}
-              <TableCell className="text-sm text-right whitespace-nowrap">
-                {invoice ? formatCurrency(invoice.taxableValue) : '—'}
-              </TableCell>
-
-              {/* GST Amount */}
-              <TableCell className="text-sm text-right whitespace-nowrap">
-                {invoice ? formatCurrency(gstAmount) : '—'}
-              </TableCell>
-
-              {/* Source A */}
-              <TableCell className="whitespace-nowrap">
-                <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-slate-50 border-slate-200 text-slate-600">
-                  {result.sourceA || 'Purchase Register'}
-                </Badge>
-              </TableCell>
-
-              {/* Source B */}
-              <TableCell className="whitespace-nowrap">
-                <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-slate-50 border-slate-200 text-slate-600">
-                  {result.sourceB || 'GSTR-2B'}
-                </Badge>
-              </TableCell>
-
-              {/* Match Status */}
-              <TableCell className="whitespace-nowrap">
-                {statusCfg ? (
-                  <Badge
-                    variant="outline"
-                    className={`${statusCfg.color} ${statusCfg.bgColor} border text-xs`}
-                  >
-                    {statusCfg.label}
-                  </Badge>
-                ) : (
-                  <Badge variant="outline" className="text-xs">
-                    {result.matchStatus}
-                  </Badge>
-                )}
-              </TableCell>
-
-              {/* Risk Level */}
-              <TableCell className="whitespace-nowrap">
-                <Badge
-                  variant="outline"
-                  className={`${riskCfg.color} ${riskCfg.bgColor} border text-xs`}
-                >
-                  {riskCfg.icon} {riskCfg.label}
-                </Badge>
-              </TableCell>
-
-              {/* AI Recommendation */}
-              <TableCell className="whitespace-nowrap">
-                {aiRec ? (
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <span className={`text-xs ${aiRec.color} flex items-center gap-1`}>
-                          <span>{aiRec.icon}</span>
-                          <span className="truncate max-w-[100px] inline-block">
-                            {truncate(aiRec.label, 25)}
-                          </span>
-                        </span>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p>{aiRec.label}</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                ) : (
-                  <span className="text-xs text-slate-400 italic">—</span>
-                )}
-              </TableCell>
-
-              {/* Confidence */}
-              <TableCell className="whitespace-nowrap">
-                <div className="flex items-center gap-1.5">
-                  <Progress
-                    value={result.confidenceScore}
-                    className={`h-1.5 w-12 ${getConfidenceBarColor(result.confidenceScore)}`}
-                  />
-                  <span className={`text-[10px] font-semibold ${getConfidenceColor(result.confidenceScore)}`}>
-                    {Math.round(result.confidenceScore)}%
-                  </span>
-                </div>
-              </TableCell>
-
-              {/* Workflow Status */}
-              <TableCell className="whitespace-nowrap">
-                {workflowCfg ? (
-                  <Badge
-                    variant="outline"
-                    className={`${workflowCfg.color} ${workflowCfg.bgColor} border text-xs`}
-                  >
-                    {workflowCfg.label}
-                  </Badge>
-                ) : (
-                  <Badge variant="outline" className="text-xs">
-                    {result.workflowStatus}
-                  </Badge>
-                )}
-              </TableCell>
-
-              {/* Actions */}
-              <TableCell className="whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
-                      <MoreHorizontal className="h-4 w-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-44">
-                    <DropdownMenuItem
-                      onClick={() => {
-                        setSelectedResult(result);
-                        setDetailOpen(true);
-                      }}
-                      className="gap-2"
-                    >
-                      <Eye className="h-3.5 w-3.5" />
-                      View Details
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={() => handleUpdateWorkflow(result.id, 'under_review')}
-                      disabled={result.workflowStatus === 'under_review' || result.resolved}
-                      className="gap-2"
-                    >
-                      <Clock className="h-3.5 w-3.5" />
-                      Mark Under Review
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={() => {
-                        setSelectedResult(result);
-                        setAssignedTo('');
-                        setResolveNote('');
-                        setDetailOpen(true);
-                      }}
-                      disabled={result.resolved}
-                      className="gap-2"
-                    >
-                      <CheckCircle2 className="h-3.5 w-3.5" />
-                      Resolve
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={() => handleUpdateWorkflow(result.id, 'ignored')}
-                      disabled={result.workflowStatus === 'ignored' || result.resolved}
-                      className="gap-2"
-                    >
-                      <X className="h-3.5 w-3.5" />
-                      Ignore
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={() => handleUpdateWorkflow(result.id, 'escalated')}
-                      disabled={result.workflowStatus === 'escalated' || result.resolved}
-                      className="gap-2 text-red-600 focus:text-red-600"
-                    >
-                      <ArrowUpRight className="h-3.5 w-3.5" />
-                      Escalate
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </TableCell>
-            </TableRow>
-          );
-        })}
-      </TableBody>
-    );
   };
+
+  // ──────────────────────────────────────────
+  // Render: Skeleton Loader
+  // ──────────────────────────────────────────
+  if (loading) {
+    return (
+      <div className="space-y-6 p-4 md:p-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="h-8 w-40 bg-muted animate-pulse rounded-lg" />
+            <div className="h-4 w-64 bg-muted animate-pulse rounded-lg mt-2" />
+          </div>
+          <div className="h-10 w-48 bg-muted animate-pulse rounded-lg" />
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Card key={i} className="animate-pulse">
+              <CardContent className="p-6">
+                <div className="h-20 bg-muted rounded" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   // ──────────────────────────────────────────
   // Render
   // ──────────────────────────────────────────
   return (
-    <div className="space-y-6 p-4 md:p-6">
+    <div className="space-y-6 p-4 md:p-6 max-w-[1440px] mx-auto">
       {/* ════════════════════════════════════════════
-          1. Page Header
+          1. Header
       ════════════════════════════════════════════ */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <motion.div
+        initial={{ opacity: 0, y: -10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4 }}
+        className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4"
+      >
         <div>
-          <h1 className="text-2xl md:text-3xl font-bold tracking-tight">
-            Reconciliation Center
+          <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground">
+            Reconcile
           </h1>
           <p className="text-muted-foreground text-sm mt-1">
-            GST Auto-Matching &amp; AI Analysis Engine
+            Match invoices, find discrepancies, stay compliant
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <Badge
-            variant="outline"
-            className="gap-1.5 px-3 py-1 border-emerald-200 text-emerald-700 bg-emerald-50"
-          >
-            <Shield className="h-3.5 w-3.5" />
-            Auto-Match
-          </Badge>
-          <Badge
-            variant="outline"
-            className="gap-1.5 px-3 py-1 border-purple-200 text-purple-700 bg-purple-50"
-          >
-            <Zap className="h-3.5 w-3.5" />
-            AI-Powered
-          </Badge>
-        </div>
-      </div>
+        <Button
+          onClick={() => setRunDialogOpen(true)}
+          className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
+        >
+          <Play className="h-4 w-4" />
+          Run Reconciliation
+        </Button>
+      </motion.div>
 
       {/* ════════════════════════════════════════════
-          2. Matching Dashboard — 6 KPI Cards
+          2. Summary Cards
       ════════════════════════════════════════════ */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
-        {/* Total Records */}
-        <Card className="hover:shadow-md transition-shadow">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="flex items-center justify-center h-10 w-10 rounded-lg bg-slate-100">
-                <Database className="h-5 w-5 text-slate-600" />
+      <motion.div
+        variants={containerVariants}
+        initial="hidden"
+        animate="visible"
+        className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"
+      >
+        {/* Match Rate Card */}
+        <motion.div variants={cardVariants}>
+          <Card className="hover:shadow-md transition-shadow h-full">
+            <CardContent className="p-6 flex items-center gap-5">
+              <CircularProgress value={summary.matchRate} size={100} strokeWidth={8} />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-muted-foreground">Match Rate</p>
+                <p className="text-2xl font-bold mt-1">{summary.matchRate}%</p>
+                <div className="flex items-center gap-1 mt-1">
+                  <div className={`h-1.5 w-1.5 rounded-full ${summary.matchRate >= 90 ? 'bg-emerald-500' : summary.matchRate >= 70 ? 'bg-amber-500' : 'bg-red-500'}`} />
+                  <span className="text-[11px] text-muted-foreground">
+                    {summary.matchRate >= 90 ? 'Excellent' : summary.matchRate >= 70 ? 'Needs attention' : 'Critical'}
+                  </span>
+                </div>
               </div>
-              <div>
-                <p className="text-2xl font-bold">{kpiData.totalRecords}</p>
-                <p className="text-[11px] text-muted-foreground">Total Records</p>
-              </div>
-            </div>
-            <div className="mt-2 flex items-center gap-1 text-[10px] text-slate-500">
-              <Activity className="h-3 w-3" />
-              <span>Across all sources</span>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        </motion.div>
 
-        {/* Matched */}
-        <Card className="hover:shadow-md transition-shadow">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="flex items-center justify-center h-10 w-10 rounded-lg bg-emerald-50">
-                <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+        {/* Matched Card */}
+        <motion.div variants={cardVariants}>
+          <Card className="hover:shadow-md transition-shadow h-full">
+            <CardContent className="p-6">
+              <div className="flex items-center gap-3">
+                <div className="flex items-center justify-center h-11 w-11 rounded-xl bg-emerald-50">
+                  <CheckCircle2 className="h-6 w-6 text-emerald-600" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Matched</p>
+                  <p className="text-2xl font-bold text-emerald-700">{summary.matched}</p>
+                </div>
               </div>
-              <div>
-                <p className="text-2xl font-bold text-emerald-700">{kpiData.matched}</p>
-                <p className="text-[11px] text-muted-foreground">Matched</p>
-              </div>
-            </div>
-            <div className="mt-2">
-              <Progress
-                value={kpiData.totalRecords > 0 ? (kpiData.matched / kpiData.totalRecords) * 100 : 0}
-                className="h-1.5 [&>div]:bg-emerald-500"
-              />
-              <p className="text-[10px] text-emerald-600 mt-0.5">
-                {kpiData.totalRecords > 0
-                  ? Math.round((kpiData.matched / kpiData.totalRecords) * 100)
-                  : 0}
-                % match rate
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Unmatched */}
-        <Card className="hover:shadow-md transition-shadow">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="flex items-center justify-center h-10 w-10 rounded-lg bg-red-50">
-                <XCircle className="h-5 w-5 text-red-600" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-red-700">{kpiData.unmatched}</p>
-                <p className="text-[11px] text-muted-foreground">Unmatched</p>
-              </div>
-            </div>
-            <div className="mt-2 flex items-center gap-1 text-[10px] text-red-500">
-              <AlertOctagon className="h-3 w-3" />
-              <span>Require review</span>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Partial Matches */}
-        <Card className="hover:shadow-md transition-shadow">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="flex items-center justify-center h-10 w-10 rounded-lg bg-amber-50">
-                <AlertTriangle className="h-5 w-5 text-amber-600" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-amber-700">{kpiData.partialMatches}</p>
-                <p className="text-[11px] text-muted-foreground">Partial Matches</p>
-              </div>
-            </div>
-            <div className="mt-2 flex items-center gap-1 text-[10px] text-amber-500">
-              <TrendingUp className="h-3 w-3" />
-              <span>Minor discrepancies</span>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* High Risk */}
-        <Card className="hover:shadow-md transition-shadow">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="flex items-center justify-center h-10 w-10 rounded-lg bg-orange-50">
-                <ShieldAlert className="h-5 w-5 text-orange-600" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-orange-700">{kpiData.highRisk}</p>
-                <p className="text-[11px] text-muted-foreground">High Risk</p>
-              </div>
-            </div>
-            <div className="mt-2 flex items-center gap-1 text-[10px] text-orange-500">
-              <ShieldAlert className="h-3 w-3" />
-              <span>Critical &amp; high</span>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* GST Difference */}
-        <Card className="hover:shadow-md transition-shadow">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="flex items-center justify-center h-10 w-10 rounded-lg bg-purple-50">
-                <IndianRupee className="h-5 w-5 text-purple-600" />
-              </div>
-              <div>
-                <p className="text-xl font-bold text-purple-700">
-                  {formatCurrency(kpiData.gstDifference)}
+              <div className="mt-3">
+                <Progress
+                  value={summary.total > 0 ? (summary.matched / summary.total) * 100 : 0}
+                  className="h-1.5 [&>div]:bg-emerald-500"
+                />
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  {summary.total > 0 ? Math.round((summary.matched / summary.total) * 100) : 0}% of total
                 </p>
-                <p className="text-[11px] text-muted-foreground">GST Difference</p>
               </div>
-            </div>
-            <div className="mt-2 flex items-center gap-1 text-[10px] text-purple-500">
-              <TrendingUp className="h-3 w-3" />
-              <span>Needs reconciliation</span>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+            </CardContent>
+          </Card>
+        </motion.div>
+
+        {/* Mismatches Card */}
+        <motion.div variants={cardVariants}>
+          <Card className="hover:shadow-md transition-shadow h-full">
+            <CardContent className="p-6">
+              <div className="flex items-center gap-3">
+                <div className="flex items-center justify-center h-11 w-11 rounded-xl bg-amber-50">
+                  <AlertTriangle className="h-6 w-6 text-amber-600" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Mismatches</p>
+                  <p className="text-2xl font-bold text-amber-700">{summary.mismatched}</p>
+                </div>
+              </div>
+              <div className="mt-3">
+                <Progress
+                  value={summary.total > 0 ? (summary.mismatched / summary.total) * 100 : 0}
+                  className="h-1.5 [&>div]:bg-amber-500"
+                />
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  {summary.total > 0 ? Math.round((summary.mismatched / summary.total) * 100) : 0}% of total
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        </motion.div>
+
+        {/* Unmatched Card */}
+        <motion.div variants={cardVariants}>
+          <Card className="hover:shadow-md transition-shadow h-full">
+            <CardContent className="p-6">
+              <div className="flex items-center gap-3">
+                <div className="flex items-center justify-center h-11 w-11 rounded-xl bg-red-50">
+                  <XCircle className="h-6 w-6 text-red-600" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Unmatched</p>
+                  <p className="text-2xl font-bold text-red-700">{summary.unmatched}</p>
+                </div>
+              </div>
+              <div className="mt-3">
+                <Progress
+                  value={summary.total > 0 ? (summary.unmatched / summary.total) * 100 : 0}
+                  className="h-1.5 [&>div]:bg-red-500"
+                />
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  {summary.total > 0 ? Math.round((summary.unmatched / summary.total) * 100) : 0}% of total
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        </motion.div>
+      </motion.div>
 
       {/* ════════════════════════════════════════════
-          3. Action Bar Card
+          3. Main Content Tabs
       ════════════════════════════════════════════ */}
-      <Card>
-        <CardContent className="p-4">
-          <div className="flex flex-col lg:flex-row lg:items-center gap-3">
-            {/* Client Selector */}
-            <Select
-              value={selectedClientId ?? 'all'}
-              onValueChange={(v) => setSelectedClientId(v === 'all' ? null : v)}
-            >
-              <SelectTrigger className="w-full lg:w-[220px]">
-                <SelectValue placeholder="Select Client" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Clients</SelectItem>
-                {clients.map((c) => (
-                  <SelectItem key={c.id} value={c.id}>
-                    {c.tradeName}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            {/* Period Selector */}
-            <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
-              <SelectTrigger className="w-full lg:w-[160px]">
-                <SelectValue placeholder="Select Period" />
-              </SelectTrigger>
-              <SelectContent>
-                {PERIODS.map((p) => (
-                  <SelectItem key={p} value={p}>
-                    {p}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            {/* Source Comparison Selector */}
-            <Select value={selectedSource} onValueChange={setSelectedSource}>
-              <SelectTrigger className="w-full lg:w-[260px]">
-                <SelectValue placeholder="Source Comparison" />
-              </SelectTrigger>
-              <SelectContent>
-                {SOURCE_OPTIONS.map((opt) => (
-                  <SelectItem key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            <div className="flex-1" />
-
-            {/* Run Reconciliation */}
-            <Button
-              onClick={handleRunReconciliation}
-              disabled={runningRecon || !selectedClientId}
-              className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white min-w-[180px]"
-            >
-              {runningRecon ? (
-                <RefreshCw className="h-4 w-4 animate-spin" />
-              ) : (
-                <RefreshCw className="h-4 w-4" />
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, delay: 0.3 }}
+      >
+        <Tabs defaultValue="overview" className="space-y-4">
+          <TabsList className="bg-muted/60">
+            <TabsTrigger value="overview" className="gap-1.5 text-sm">
+              <Activity className="h-3.5 w-3.5" />
+              Overview
+            </TabsTrigger>
+            <TabsTrigger value="mismatches" className="gap-1.5 text-sm">
+              <AlertTriangle className="h-3.5 w-3.5" />
+              Mismatches
+              {summary.mismatched > 0 && (
+                <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-[10px] bg-amber-100 text-amber-700">
+                  {summary.mismatched}
+                </Badge>
               )}
-              {runningRecon ? 'Running Reconciliation...' : 'Run Reconciliation'}
-            </Button>
+            </TabsTrigger>
+            <TabsTrigger value="unmatched" className="gap-1.5 text-sm">
+              <XCircle className="h-3.5 w-3.5" />
+              Unmatched
+              {summary.unmatched > 0 && (
+                <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-[10px] bg-red-100 text-red-700">
+                  {summary.unmatched}
+                </Badge>
+              )}
+            </TabsTrigger>
+          </TabsList>
 
-            {/* Export Dropdown */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" className="gap-2 min-w-[100px]" disabled={exporting}>
-                  {exporting ? (
-                    <RefreshCw className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Download className="h-4 w-4" />
-                  )}
-                  Export
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-48">
-                <DropdownMenuItem onClick={() => handleExport('excel')} className="gap-2">
-                  <FileSpreadsheet className="h-4 w-4" />
-                  Excel
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => handleExport('pdf')} className="gap-2">
-                  <FileText className="h-4 w-4" />
-                  PDF
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => handleExport('summary')} className="gap-2">
-                  <ClipboardList className="h-4 w-4" />
-                  GST Summary
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => handleExport('mismatch')} className="gap-2">
-                  <AlertTriangle className="h-4 w-4" />
-                  Mismatch Report
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => handleExport('risk')} className="gap-2">
-                  <ShieldAlert className="h-4 w-4" />
-                  Risk Report
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-        </CardContent>
-      </Card>
+          {/* ─── Overview Tab ─── */}
+          <TabsContent value="overview" className="space-y-4">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+              {/* Pie Chart */}
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium">Match Distribution</CardTitle>
+                </CardHeader>
+                <CardContent className="flex items-center justify-center pb-6">
+                  <div className="w-full max-w-[260px]">
+                    <ResponsiveContainer width="100%" height={220}>
+                      <PieChart>
+                        <Pie
+                          data={pieData}
+                          cx="50%"
+                          cy="50%"
+                          innerRadius={55}
+                          outerRadius={85}
+                          paddingAngle={3}
+                          dataKey="value"
+                          animationBegin={0}
+                          animationDuration={800}
+                        >
+                          {pieData.map((_entry, index) => (
+                            <Cell key={`cell-${index}`} fill={PIE_COLORS[index]} stroke="none" />
+                          ))}
+                        </Pie>
+                        <RechartsTooltip
+                          formatter={(value: number, name: string) => [`${value} invoices`, name]}
+                          contentStyle={{
+                            borderRadius: '8px',
+                            border: '1px solid #e5e7eb',
+                            boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
+                            fontSize: '12px',
+                          }}
+                        />
+                      </PieChart>
+                    </ResponsiveContainer>
+                    <div className="flex items-center justify-center gap-4 mt-2">
+                      {pieData.map((entry, i) => (
+                        <div key={entry.name} className="flex items-center gap-1.5">
+                          <div className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: PIE_COLORS[i] }} />
+                          <span className="text-[11px] text-muted-foreground">{entry.name} ({entry.value})</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
 
-      {/* ════════════════════════════════════════════
-          4. Filter Row
-      ════════════════════════════════════════════ */}
-      <Card>
-        <CardContent className="p-3">
-          <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-            {/* Search */}
-            <div className="relative flex-1 min-w-0">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search invoice #, GSTIN, vendor..."
-                className="pl-8 w-full"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
+              {/* Client-wise Summary Table */}
+              <Card className="lg:col-span-2">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium">Client-wise Reconciliation</CardTitle>
+                </CardHeader>
+                <CardContent className="p-0">
+                  <ScrollArea className="max-h-[320px]">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="hover:bg-transparent">
+                          <TableHead className="text-xs">Client</TableHead>
+                          <TableHead className="text-xs text-right">Total</TableHead>
+                          <TableHead className="text-xs text-right">Matched</TableHead>
+                          <TableHead className="text-xs text-right">Mismatched</TableHead>
+                          <TableHead className="text-xs text-right">Unmatched</TableHead>
+                          <TableHead className="text-xs text-right">Rate</TableHead>
+                          <TableHead className="text-xs text-right">Action</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {clientSummary.length === 0 ? (
+                          <TableRow>
+                            <TableCell colSpan={7} className="text-center py-10 text-muted-foreground text-sm">
+                              No reconciliation data yet. Run reconciliation to get started.
+                            </TableCell>
+                          </TableRow>
+                        ) : (
+                          clientSummary.map((c, idx) => {
+                            const rate = c.total > 0 ? Math.round((c.matched / c.total) * 100) : 0;
+                            return (
+                              <motion.tr
+                                key={idx}
+                                variants={rowVariants}
+                                initial="hidden"
+                                animate="visible"
+                                transition={{ delay: idx * 0.04 }}
+                                className="hover:bg-accent/40 transition-colors"
+                              >
+                                <TableCell className="font-medium text-sm">{c.name}</TableCell>
+                                <TableCell className="text-sm text-right">{c.total}</TableCell>
+                                <TableCell className="text-sm text-right text-emerald-700">{c.matched}</TableCell>
+                                <TableCell className="text-sm text-right text-amber-700">{c.mismatched}</TableCell>
+                                <TableCell className="text-sm text-right text-red-700">{c.unmatched}</TableCell>
+                                <TableCell className="text-right">
+                                  <Badge
+                                    variant="outline"
+                                    className={`text-[10px] ${
+                                      rate >= 90
+                                        ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                                        : rate >= 70
+                                        ? 'border-amber-200 bg-amber-50 text-amber-700'
+                                        : 'border-red-200 bg-red-50 text-red-700'
+                                    }`}
+                                  >
+                                    {rate}%
+                                  </Badge>
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-7 text-xs gap-1 text-emerald-700 hover:text-emerald-800 hover:bg-emerald-50"
+                                    onClick={() => {
+                                      const client = clients.find(cl => cl.tradeName === c.name);
+                                      if (client) setSelectedClientId(client.id);
+                                    }}
+                                  >
+                                    <Eye className="h-3 w-3" />
+                                    View
+                                  </Button>
+                                </TableCell>
+                              </motion.tr>
+                            );
+                          })
+                        )}
+                      </TableBody>
+                    </Table>
+                  </ScrollArea>
+                </CardContent>
+              </Card>
             </div>
 
-            {/* Match Status Filter */}
-            <Select value={filterStatus} onValueChange={setFilterStatus}>
-              <SelectTrigger className="w-full sm:w-[170px]">
-                <SelectValue placeholder="Match Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Match Statuses</SelectItem>
-                {Object.entries(MATCH_STATUS_CONFIG).map(([key, cfg]) => (
-                  <SelectItem key={key} value={key}>
-                    {cfg.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            {/* Risk Level Filter */}
-            <Select value={filterRisk} onValueChange={setFilterRisk}>
-              <SelectTrigger className="w-full sm:w-[140px]">
-                <SelectValue placeholder="Risk Level" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Risk Levels</SelectItem>
-                {Object.entries(RISK_LEVEL_CONFIG).map(([key, cfg]) => (
-                  <SelectItem key={key} value={key}>
-                    {cfg.icon} {cfg.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            {/* Workflow Status Filter */}
-            <Select value={filterWorkflow} onValueChange={setFilterWorkflow}>
-              <SelectTrigger className="w-full sm:w-[160px]">
-                <SelectValue placeholder="Workflow" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Workflow</SelectItem>
-                {Object.entries(WORKFLOW_STATUS_CONFIG).map(([key, cfg]) => (
-                  <SelectItem key={key} value={key}>
-                    {cfg.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            {/* Clear Filters */}
-            {hasActiveFilters && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="gap-1 text-slate-500 hover:text-slate-700 shrink-0"
-                onClick={() => {
-                  setFilterStatus('all');
-                  setFilterRisk('all');
-                  setFilterWorkflow('all');
-                  setSearchQuery('');
-                }}
-              >
-                <X className="h-3.5 w-3.5" />
-                Clear Filters
-              </Button>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* ════════════════════════════════════════════
-          5 & 6. Tabs Section + Reconciliation Grid
-      ════════════════════════════════════════════ */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList className="flex-wrap h-auto gap-1">
-          <TabsTrigger value="all" className="gap-1.5">
-            All Records
-            <Badge variant="secondary" className="ml-1 text-[10px] px-1.5 py-0">
-              {filteredResults.length}
-            </Badge>
-          </TabsTrigger>
-          <TabsTrigger value="matched" className="gap-1.5">
-            Matched
-            <Badge variant="secondary" className="ml-1 text-[10px] px-1.5 py-0 bg-emerald-50 text-emerald-700">
-              {filteredResults.filter((r) => r.matchStatus === 'perfect_match').length}
-            </Badge>
-          </TabsTrigger>
-          <TabsTrigger value="mismatches" className="gap-1.5">
-            Mismatches
-            <Badge variant="secondary" className="ml-1 text-[10px] px-1.5 py-0 bg-red-50 text-red-700">
-              {filteredResults.filter((r) => r.matchStatus === 'mismatch' || r.matchStatus === 'partial_match').length}
-            </Badge>
-          </TabsTrigger>
-          <TabsTrigger value="missing" className="gap-1.5">
-            Missing
-            <Badge variant="secondary" className="ml-1 text-[10px] px-1.5 py-0 bg-purple-50 text-purple-700">
-              {filteredResults.filter((r) => r.matchStatus === 'missing_in_books' || r.matchStatus === 'missing_in_gstr').length}
-            </Badge>
-          </TabsTrigger>
-          <TabsTrigger value="high_risk" className="gap-1.5">
-            High Risk
-            <Badge variant="secondary" className="ml-1 text-[10px] px-1.5 py-0 bg-orange-50 text-orange-700">
-              {filteredResults.filter((r) => {
-                const risk = getRiskLevelForResult(r);
-                return risk === 'high' || risk === 'critical';
-              }).length}
-            </Badge>
-          </TabsTrigger>
-          <TabsTrigger value="duplicates" className="gap-1.5">
-            Duplicates
-            <Badge variant="secondary" className="ml-1 text-[10px] px-1.5 py-0 bg-pink-50 text-pink-700">
-              {filteredResults.filter((r) => r.matchStatus === 'duplicate').length}
-            </Badge>
-          </TabsTrigger>
-        </TabsList>
-
-        {/* All Records Tab */}
-        <TabsContent value="all">
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <Database className="h-5 w-5 text-slate-600" />
-                All Reconciliation Records
-                <Badge variant="secondary" className="ml-1">
-                  {tabFilteredResults.length}
-                </Badge>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-0">
-              <div className="overflow-x-auto">
-                <Table style={{ minWidth: 1200 }}>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Invoice Number</TableHead>
-                      <TableHead>Vendor/Buyer</TableHead>
-                      <TableHead>GSTIN</TableHead>
-                      <TableHead className="text-right">Taxable Amount</TableHead>
-                      <TableHead className="text-right">GST Amount</TableHead>
-                      <TableHead>Source A</TableHead>
-                      <TableHead>Source B</TableHead>
-                      <TableHead>Match Status</TableHead>
-                      <TableHead>Risk Level</TableHead>
-                      <TableHead>AI Recommendation</TableHead>
-                      <TableHead>Confidence</TableHead>
-                      <TableHead>Workflow</TableHead>
-                      <TableHead>Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  {renderReconTable(tabFilteredResults)}
-                </Table>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Matched Tab */}
-        <TabsContent value="matched">
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <CheckCircle2 className="h-5 w-5 text-emerald-600" />
-                Perfect Matches
-                <Badge variant="secondary" className="ml-1 bg-emerald-50 text-emerald-700">
-                  {tabFilteredResults.length}
-                </Badge>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-0">
-              <div className="overflow-x-auto">
-                <Table style={{ minWidth: 1200 }}>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Invoice Number</TableHead>
-                      <TableHead>Vendor/Buyer</TableHead>
-                      <TableHead>GSTIN</TableHead>
-                      <TableHead className="text-right">Taxable Amount</TableHead>
-                      <TableHead className="text-right">GST Amount</TableHead>
-                      <TableHead>Source A</TableHead>
-                      <TableHead>Source B</TableHead>
-                      <TableHead>Match Status</TableHead>
-                      <TableHead>Risk Level</TableHead>
-                      <TableHead>AI Recommendation</TableHead>
-                      <TableHead>Confidence</TableHead>
-                      <TableHead>Workflow</TableHead>
-                      <TableHead>Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  {renderReconTable(tabFilteredResults)}
-                </Table>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Mismatches Tab */}
-        <TabsContent value="mismatches">
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <AlertOctagon className="h-5 w-5 text-red-600" />
-                Mismatches &amp; Partial Matches
-                <Badge variant="secondary" className="ml-1 bg-red-50 text-red-700">
-                  {tabFilteredResults.length}
-                </Badge>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-0">
-              <div className="overflow-x-auto">
-                <Table style={{ minWidth: 1200 }}>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Invoice Number</TableHead>
-                      <TableHead>Vendor/Buyer</TableHead>
-                      <TableHead>GSTIN</TableHead>
-                      <TableHead className="text-right">Taxable Amount</TableHead>
-                      <TableHead className="text-right">GST Amount</TableHead>
-                      <TableHead>Source A</TableHead>
-                      <TableHead>Source B</TableHead>
-                      <TableHead>Match Status</TableHead>
-                      <TableHead>Risk Level</TableHead>
-                      <TableHead>AI Recommendation</TableHead>
-                      <TableHead>Confidence</TableHead>
-                      <TableHead>Workflow</TableHead>
-                      <TableHead>Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  {renderReconTable(tabFilteredResults)}
-                </Table>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Missing Tab */}
-        <TabsContent value="missing">
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <AlertTriangle className="h-5 w-5 text-purple-600" />
-                Missing Records
-                <Badge variant="secondary" className="ml-1 bg-purple-50 text-purple-700">
-                  {tabFilteredResults.length}
-                </Badge>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-0">
-              <div className="overflow-x-auto">
-                <Table style={{ minWidth: 1200 }}>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Invoice Number</TableHead>
-                      <TableHead>Vendor/Buyer</TableHead>
-                      <TableHead>GSTIN</TableHead>
-                      <TableHead className="text-right">Taxable Amount</TableHead>
-                      <TableHead className="text-right">GST Amount</TableHead>
-                      <TableHead>Source A</TableHead>
-                      <TableHead>Source B</TableHead>
-                      <TableHead>Match Status</TableHead>
-                      <TableHead>Risk Level</TableHead>
-                      <TableHead>AI Recommendation</TableHead>
-                      <TableHead>Confidence</TableHead>
-                      <TableHead>Workflow</TableHead>
-                      <TableHead>Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  {renderReconTable(tabFilteredResults)}
-                </Table>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* High Risk Tab */}
-        <TabsContent value="high_risk">
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <ShieldAlert className="h-5 w-5 text-orange-600" />
-                High Risk Records
-                <Badge variant="secondary" className="ml-1 bg-orange-50 text-orange-700">
-                  {tabFilteredResults.length}
-                </Badge>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-0">
-              <div className="overflow-x-auto">
-                <Table style={{ minWidth: 1200 }}>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Invoice Number</TableHead>
-                      <TableHead>Vendor/Buyer</TableHead>
-                      <TableHead>GSTIN</TableHead>
-                      <TableHead className="text-right">Taxable Amount</TableHead>
-                      <TableHead className="text-right">GST Amount</TableHead>
-                      <TableHead>Source A</TableHead>
-                      <TableHead>Source B</TableHead>
-                      <TableHead>Match Status</TableHead>
-                      <TableHead>Risk Level</TableHead>
-                      <TableHead>AI Recommendation</TableHead>
-                      <TableHead>Confidence</TableHead>
-                      <TableHead>Workflow</TableHead>
-                      <TableHead>Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  {renderReconTable(tabFilteredResults)}
-                </Table>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Duplicates Tab */}
-        <TabsContent value="duplicates">
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <Copy className="h-5 w-5 text-pink-600" />
-                Duplicate Records
-                <Badge variant="secondary" className="ml-1 bg-pink-50 text-pink-700">
-                  {tabFilteredResults.length}
-                </Badge>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-0">
-              <div className="overflow-x-auto">
-                <Table style={{ minWidth: 1200 }}>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Invoice Number</TableHead>
-                      <TableHead>Vendor/Buyer</TableHead>
-                      <TableHead>GSTIN</TableHead>
-                      <TableHead className="text-right">Taxable Amount</TableHead>
-                      <TableHead className="text-right">GST Amount</TableHead>
-                      <TableHead>Source A</TableHead>
-                      <TableHead>Source B</TableHead>
-                      <TableHead>Match Status</TableHead>
-                      <TableHead>Risk Level</TableHead>
-                      <TableHead>AI Recommendation</TableHead>
-                      <TableHead>Confidence</TableHead>
-                      <TableHead>Workflow</TableHead>
-                      <TableHead>Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  {renderReconTable(tabFilteredResults)}
-                </Table>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
-
-      {/* ════════════════════════════════════════════
-          7. Detail Dialog
-      ════════════════════════════════════════════ */}
-      <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          {selectedResult && (() => {
-            const invoice = selectedResult.invoice;
-            const riskLevel = getRiskLevelForResult(selectedResult);
-            const riskCfg = RISK_LEVEL_CONFIG[riskLevel];
-            const statusCfg = MATCH_STATUS_CONFIG[selectedResult.matchStatus as MatchStatus];
-            const workflowCfg = WORKFLOW_STATUS_CONFIG[selectedResult.workflowStatus as WorkflowStatus];
-            const aiRec = getAIRecConfig(selectedResult.aiRecommendation);
-            const parsedMismatches = parseMismatches(selectedResult.mismatches);
-            const gstAmount = invoice ? invoice.cgst + invoice.sgst + invoice.igst : 0;
-
-            return (
-              <>
-                <DialogHeader>
-                  <DialogTitle className="flex items-center gap-2">
-                    <Eye className="h-5 w-5 text-emerald-600" />
-                    Reconciliation Detail
-                  </DialogTitle>
-                  <DialogDescription>
-                    Invoice {invoice?.invoiceNumber || selectedResult.invoiceId} —{' '}
-                    {statusCfg?.label || selectedResult.matchStatus}
-                  </DialogDescription>
-                </DialogHeader>
-
-                <div className="space-y-5 mt-2">
-                  {/* ── Invoice Details ── */}
-                  <div>
-                    <h4 className="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-1.5">
-                      <Database className="h-4 w-4" />
-                      Invoice Details
-                    </h4>
-                    <div className="grid grid-cols-2 gap-3 text-sm">
-                      <div>
-                        <span className="text-muted-foreground text-xs">Invoice Number</span>
-                        <p className="font-medium">{invoice?.invoiceNumber || '—'}</p>
-                      </div>
-                      <div>
-                        <span className="text-muted-foreground text-xs">Invoice Date</span>
-                        <p className="font-medium">
-                          {invoice?.invoiceDate
-                            ? new Date(invoice.invoiceDate).toLocaleDateString('en-IN', {
+            {/* Recent Runs */}
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium">Recent Reconciliation Runs</CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                <ScrollArea className="max-h-[240px]">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="hover:bg-transparent">
+                        <TableHead className="text-xs">Period</TableHead>
+                        <TableHead className="text-xs">Sources</TableHead>
+                        <TableHead className="text-xs text-right">Total</TableHead>
+                        <TableHead className="text-xs text-right">Matched</TableHead>
+                        <TableHead className="text-xs text-right">Unmatched</TableHead>
+                        <TableHead className="text-xs text-right">GST Diff</TableHead>
+                        <TableHead className="text-xs">Status</TableHead>
+                        <TableHead className="text-xs">Ran At</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {runs.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={8} className="text-center py-8 text-muted-foreground text-sm">
+                            No reconciliation runs yet
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        runs.slice(0, 10).map((run, idx) => (
+                          <motion.tr
+                            key={run.id}
+                            variants={rowVariants}
+                            initial="hidden"
+                            animate="visible"
+                            transition={{ delay: idx * 0.04 }}
+                            className="hover:bg-accent/40 transition-colors"
+                          >
+                            <TableCell className="font-medium text-sm">{formatPeriod(run.period)}</TableCell>
+                            <TableCell className="text-sm text-muted-foreground">{run.sources}</TableCell>
+                            <TableCell className="text-sm text-right">{run.totalRecords}</TableCell>
+                            <TableCell className="text-sm text-right text-emerald-700">{run.matched}</TableCell>
+                            <TableCell className="text-sm text-right text-red-700">{run.unmatched}</TableCell>
+                            <TableCell className="text-sm text-right">{formatCurrency(run.gstDifference)}</TableCell>
+                            <TableCell>
+                              <Badge
+                                variant="outline"
+                                className={
+                                  run.status === 'completed'
+                                    ? 'border-emerald-200 bg-emerald-50 text-emerald-700 text-[10px]'
+                                    : 'border-amber-200 bg-amber-50 text-amber-700 text-[10px]'
+                                }
+                              >
+                                {run.status === 'completed' ? 'Completed' : run.status}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-xs text-muted-foreground">
+                              {new Date(run.createdAt).toLocaleDateString('en-IN', {
                                 day: '2-digit',
                                 month: 'short',
                                 year: 'numeric',
-                              })
-                            : '—'}
-                        </p>
-                      </div>
-                      <div>
-                        <span className="text-muted-foreground text-xs">Vendor / Seller GSTIN</span>
-                        <p className="font-mono text-xs">{invoice?.sellerGstin || '—'}</p>
-                      </div>
-                      <div>
-                        <span className="text-muted-foreground text-xs">Buyer Name</span>
-                        <p className="font-medium">{invoice?.buyerName || '—'}</p>
-                      </div>
-                      <div>
-                        <span className="text-muted-foreground text-xs">Taxable Value</span>
-                        <p className="font-medium">{invoice ? formatCurrency(invoice.taxableValue) : '—'}</p>
-                      </div>
-                      <div>
-                        <span className="text-muted-foreground text-xs">Total Amount</span>
-                        <p className="font-medium">{invoice ? formatCurrency(invoice.totalAmount) : '—'}</p>
-                      </div>
-                    </div>
+                                hour: '2-digit',
+                                minute: '2-digit',
+                              })}
+                            </TableCell>
+                          </motion.tr>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+                </ScrollArea>
+              </CardContent>
+            </Card>
+          </TabsContent>
 
-                    {/* GST Breakdown */}
-                    {invoice && (
-                      <div className="mt-3 grid grid-cols-4 gap-2">
-                        <div className="rounded-md bg-slate-50 p-2 text-center">
-                          <p className="text-[10px] text-muted-foreground">CGST</p>
-                          <p className="text-xs font-semibold">{formatCurrency(invoice.cgst)}</p>
-                        </div>
-                        <div className="rounded-md bg-slate-50 p-2 text-center">
-                          <p className="text-[10px] text-muted-foreground">SGST</p>
-                          <p className="text-xs font-semibold">{formatCurrency(invoice.sgst)}</p>
-                        </div>
-                        <div className="rounded-md bg-slate-50 p-2 text-center">
-                          <p className="text-[10px] text-muted-foreground">IGST</p>
-                          <p className="text-xs font-semibold">{formatCurrency(invoice.igst)}</p>
-                        </div>
-                        <div className="rounded-md bg-slate-50 p-2 text-center">
-                          <p className="text-[10px] text-muted-foreground">Cess</p>
-                          <p className="text-xs font-semibold">{formatCurrency(invoice.cess)}</p>
-                        </div>
-                      </div>
-                    )}
+          {/* ─── Mismatches Tab ─── */}
+          <TabsContent value="mismatches" className="space-y-4">
+            {/* Filters */}
+            <Card>
+              <CardContent className="p-4">
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <div className="flex-1 relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Search invoices..."
+                      value={searchQuery}
+                      onChange={e => setSearchQuery(e.target.value)}
+                      className="pl-9 h-9"
+                    />
                   </div>
-
-                  <Separator />
-
-                  {/* ── Match Details ── */}
-                  <div>
-                    <h4 className="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-1.5">
-                      <Shield className="h-4 w-4" />
-                      Match Details
-                    </h4>
-                    <div className="grid grid-cols-2 gap-3 text-sm mb-3">
-                      <div className="rounded-md border p-3">
-                        <p className="text-[10px] text-muted-foreground mb-0.5">Source A</p>
-                        <div className="flex items-center gap-2">
-                          <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-slate-50">
-                            {selectedResult.sourceA || 'Purchase Register'}
-                          </Badge>
-                        </div>
-                        <p className="font-mono text-xs mt-1">
-                          {selectedResult.sourceGstin || '—'}
-                        </p>
-                      </div>
-                      <div className="rounded-md border p-3">
-                        <p className="text-[10px] text-muted-foreground mb-0.5">Source B</p>
-                        <div className="flex items-center gap-2">
-                          <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-slate-50">
-                            {selectedResult.sourceB || 'GSTR-2B'}
-                          </Badge>
-                        </div>
-                        <p className="font-mono text-xs mt-1">
-                          {selectedResult.matchedGstin || '—'}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-3 text-sm">
-                      <div>
-                        <span className="text-muted-foreground text-xs">Match Score</span>
-                        <div className="flex items-center gap-2 mt-0.5">
-                          <Progress
-                            value={selectedResult.matchScore}
-                            className="h-2 flex-1"
-                          />
-                          <span className="text-sm font-bold">{Math.round(selectedResult.matchScore)}</span>
-                        </div>
-                      </div>
-                      <div>
-                        <span className="text-muted-foreground text-xs">Confidence Score</span>
-                        <div className="flex items-center gap-2 mt-0.5">
-                          <Progress
-                            value={selectedResult.confidenceScore}
-                            className={`h-2 flex-1 ${getConfidenceBarColor(selectedResult.confidenceScore)}`}
-                          />
-                          <span className={`text-sm font-bold ${getConfidenceColor(selectedResult.confidenceScore)}`}>
-                            {Math.round(selectedResult.confidenceScore)}%
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2 mt-3">
-                      <span className="text-xs text-muted-foreground">Status:</span>
-                      {statusCfg && (
-                        <Badge variant="outline" className={`${statusCfg.color} ${statusCfg.bgColor} border text-xs`}>
-                          {statusCfg.label}
-                        </Badge>
-                      )}
-                      <span className="text-xs text-muted-foreground ml-2">Risk:</span>
-                      <Badge variant="outline" className={`${riskCfg.color} ${riskCfg.bgColor} border text-xs`}>
-                        {riskCfg.icon} {riskCfg.label}
-                      </Badge>
-                    </div>
-                  </div>
-
-                  <Separator />
-
-                  {/* ── Mismatch Breakdown ── */}
-                  {parsedMismatches.length > 0 && (
-                    <div>
-                      <h4 className="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-1.5">
-                        <AlertTriangle className="h-4 w-4 text-amber-500" />
-                        Mismatch Breakdown
-                      </h4>
-                      <div className="rounded-md border overflow-hidden">
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead className="text-xs">Field</TableHead>
-                              <TableHead className="text-xs">Books Value</TableHead>
-                              <TableHead className="text-xs">Portal Value</TableHead>
-                              <TableHead className="text-xs">Difference</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {parsedMismatches.map((m, idx) => (
-                              <TableRow key={idx}>
-                                <TableCell className="text-xs font-medium">
-                                  {formatFieldName(m.field)}
-                                </TableCell>
-                                <TableCell className="text-xs">
-                                  {typeof m.expected === 'number'
-                                    ? formatCurrency(m.expected)
-                                    : String(m.expected)}
-                                </TableCell>
-                                <TableCell className="text-xs">
-                                  {typeof m.actual === 'number'
-                                    ? formatCurrency(m.actual)
-                                    : String(m.actual)}
-                                </TableCell>
-                                <TableCell className="text-xs">
-                                  {m.difference ? (
-                                    <span className="text-red-600 font-medium">
-                                      {typeof m.difference === 'number'
-                                        ? formatCurrency(m.difference)
-                                        : String(m.difference)}
-                                    </span>
-                                  ) : (
-                                    <span className="text-amber-600">Differs</span>
-                                  )}
-                                </TableCell>
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* ── AI Explanation ── */}
-                  {selectedResult.aiExplanation && (
-                    <div>
-                      <h4 className="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-1.5">
-                        <Zap className="h-4 w-4 text-purple-500" />
-                        AI Explanation
-                      </h4>
-                      <div className="rounded-md bg-purple-50 border border-purple-100 p-3">
-                        <p className="text-sm text-purple-900 leading-relaxed">
-                          {selectedResult.aiExplanation}
-                        </p>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* ── AI Recommendation ── */}
-                  {aiRec && (
-                    <div>
-                      <h4 className="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-1.5">
-                        <MessageSquare className="h-4 w-4 text-blue-500" />
-                        AI Recommendation
-                      </h4>
-                      <div className="flex items-center gap-2 rounded-md border p-3">
-                        <span className="text-lg">{aiRec.icon}</span>
-                        <span className={`text-sm font-medium ${aiRec.color}`}>
-                          {aiRec.label}
-                        </span>
-                      </div>
-                    </div>
-                  )}
-
-                  <Separator />
-
-                  {/* ── Workflow Status Selector ── */}
-                  <div>
-                    <h4 className="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-1.5">
-                      <Activity className="h-4 w-4" />
-                      Workflow Status
-                    </h4>
-                    <div className="flex items-center gap-2">
-                      <Select
-                        value={selectedResult.workflowStatus}
-                        onValueChange={(v) =>
-                          handleUpdateWorkflow(selectedResult.id, v as WorkflowStatus)
-                        }
-                      >
-                        <SelectTrigger className="w-[180px]">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {Object.entries(WORKFLOW_STATUS_CONFIG).map(([key, cfg]) => (
-                            <SelectItem key={key} value={key}>
-                              {cfg.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      {workflowCfg && (
-                        <Badge
-                          variant="outline"
-                          className={`${workflowCfg.color} ${workflowCfg.bgColor} border text-xs`}
-                        >
-                          {workflowCfg.label}
-                        </Badge>
-                      )}
-                    </div>
-                  </div>
-
-                  <Separator />
-
-                  {/* ── Resolve Section ── */}
-                  {!selectedResult.resolved && (
-                    <div>
-                      <h4 className="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-1.5">
-                        <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                        Resolve This Issue
-                      </h4>
-                      <div className="space-y-3">
-                        <div>
-                          <label className="text-xs text-muted-foreground mb-1 block">
-                            Assign To
-                          </label>
-                          <Select value={assignedTo} onValueChange={setAssignedTo}>
-                            <SelectTrigger className="w-full">
-                              <SelectValue placeholder="Select team member" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {TEAM_MEMBERS.map((m) => (
-                                <SelectItem key={m.id} value={m.name}>
-                                  <div className="flex items-center gap-2">
-                                    <User className="h-3 w-3" />
-                                    {m.name}
-                                  </div>
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div>
-                          <label className="text-xs text-muted-foreground mb-1 block">
-                            Resolution Note
-                          </label>
-                          <Textarea
-                            placeholder="Add a note about how this was resolved..."
-                            value={resolveNote}
-                            onChange={(e) => setResolveNote(e.target.value)}
-                            rows={3}
-                          />
-                        </div>
-                        <Button
-                          onClick={handleResolve}
-                          className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2"
-                          disabled={!assignedTo}
-                        >
-                          <CheckCircle2 className="h-4 w-4" />
-                          Mark as Resolved
-                        </Button>
-                      </div>
-                    </div>
-                  )}
-
-                  {selectedResult.resolved && (
-                    <div className="rounded-md bg-emerald-50 border border-emerald-200 p-3">
-                      <div className="flex items-center gap-2">
-                        <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                        <span className="text-sm font-medium text-emerald-700">
-                          This issue has been resolved
-                        </span>
-                      </div>
-                      {selectedResult.resolvedBy && (
-                        <p className="text-xs text-emerald-600 mt-1">
-                          Resolved by: {selectedResult.resolvedBy}
-                        </p>
-                      )}
-                      {selectedResult.resolvedAt && (
-                        <p className="text-xs text-emerald-600">
-                          On: {new Date(selectedResult.resolvedAt).toLocaleDateString('en-IN')}
-                        </p>
-                      )}
-                    </div>
-                  )}
-
-                  <Separator />
-
-                  {/* ── Activity Log Note ── */}
-                  <div>
-                    <h4 className="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-1.5">
-                      <Clock className="h-4 w-4" />
-                      Activity Log
-                    </h4>
-                    <div className="text-xs text-muted-foreground space-y-1">
-                      <p>
-                        Created:{' '}
-                        {new Date(selectedResult.createdAt).toLocaleString('en-IN')}
-                      </p>
-                      <p>
-                        Last Updated:{' '}
-                        {new Date(selectedResult.updatedAt).toLocaleString('en-IN')}
-                      </p>
-                      {selectedResult.run && (
-                        <p>
-                          Reconciliation Run: {selectedResult.run.period} —{' '}
-                          {selectedResult.run.sources}
-                        </p>
-                      )}
-                    </div>
-                  </div>
+                  <Select value={filterClient} onValueChange={setFilterClient}>
+                    <SelectTrigger className="w-full sm:w-[180px] h-9">
+                      <SelectValue placeholder="All Clients" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Clients</SelectItem>
+                      {clients.map(c => (
+                        <SelectItem key={c.id} value={c.id}>{c.tradeName}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Select value={filterMismatchType} onValueChange={setFilterMismatchType}>
+                    <SelectTrigger className="w-full sm:w-[180px] h-9">
+                      <SelectValue placeholder="All Types" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Types</SelectItem>
+                      <SelectItem value="Amount Mismatch">Amount Mismatch</SelectItem>
+                      <SelectItem value="GSTIN Mismatch">GSTIN Mismatch</SelectItem>
+                      <SelectItem value="Missing in 2A/2B">Missing in 2A/2B</SelectItem>
+                      <SelectItem value="Missing in GSTR-1">Missing in GSTR-1</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
+              </CardContent>
+            </Card>
 
-                <DialogFooter className="mt-4">
-                  <Button variant="outline" onClick={() => setDetailOpen(false)}>
-                    Close
-                  </Button>
-                </DialogFooter>
-              </>
-            );
-          })()}
+            {/* Mismatches Table */}
+            <Card>
+              <CardContent className="p-0">
+                <ScrollArea className="max-h-[500px]">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="hover:bg-transparent">
+                        <TableHead className="text-xs">Invoice #</TableHead>
+                        <TableHead className="text-xs">Client</TableHead>
+                        <TableHead className="text-xs">Seller GSTIN</TableHead>
+                        <TableHead className="text-xs text-right">GSTR-1 Amount</TableHead>
+                        <TableHead className="text-xs text-right">GSTR-2A Amount</TableHead>
+                        <TableHead className="text-xs text-right">Difference</TableHead>
+                        <TableHead className="text-xs">Type</TableHead>
+                        <TableHead className="text-xs text-right">Action</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {mismatchResults.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={8} className="text-center py-12 text-muted-foreground">
+                            <CheckCircle2 className="h-10 w-10 mx-auto mb-2 text-emerald-300" />
+                            <p className="text-sm font-medium">No mismatches found</p>
+                            <p className="text-xs mt-1">All invoices are perfectly matched!</p>
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        mismatchResults.map((r, idx) => {
+                          const mm = parseMismatches(r.mismatches);
+                          const amountMismatch = mm.find((m: { field: string }) => m.field === 'gst_amount' || m.field === 'total_amount');
+                          const gstr1Amount = r.invoice?.totalAmount ?? 0;
+                          const gstr2aAmount = amountMismatch
+                            ? (amountMismatch.expected as number) === gstr1Amount
+                              ? (amountMismatch.actual as number)
+                              : (amountMismatch.expected as number)
+                            : gstr1Amount;
+                          const difference = Math.abs(gstr1Amount - gstr2aAmount);
+                          const mismatchType = getMismatchType(r);
+                          const badgeConfig = getMismatchBadge(mismatchType);
+
+                          return (
+                            <motion.tr
+                              key={r.id}
+                              variants={rowVariants}
+                              initial="hidden"
+                              animate="visible"
+                              transition={{ delay: idx * 0.02 }}
+                              className="hover:bg-accent/40 transition-colors"
+                            >
+                              <TableCell className="font-medium text-sm font-mono">
+                                {r.invoice?.invoiceNumber ?? '—'}
+                              </TableCell>
+                              <TableCell className="text-sm text-muted-foreground">
+                                {r.invoice?.client?.tradeName ?? '—'}
+                              </TableCell>
+                              <TableCell className="text-xs font-mono text-muted-foreground">
+                                {r.sourceGstin ?? '—'}
+                              </TableCell>
+                              <TableCell className="text-sm text-right">{formatCurrency(gstr1Amount)}</TableCell>
+                              <TableCell className="text-sm text-right">{formatCurrency(gstr2aAmount)}</TableCell>
+                              <TableCell className="text-sm text-right font-medium text-red-600">
+                                {difference > 0 ? formatCurrency(difference) : '—'}
+                              </TableCell>
+                              <TableCell>
+                                <Badge variant={badgeConfig.variant} className={`text-[10px] ${badgeConfig.className}`}>
+                                  {mismatchType}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="text-right">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-7 text-xs gap-1 text-emerald-700 hover:text-emerald-800 hover:bg-emerald-50"
+                                  onClick={() => {
+                                    setSelectedResult(r);
+                                    setResolveChoice('gstr1');
+                                    setCustomAmount('');
+                                    setResolveNotes('');
+                                    setResolveDialogOpen(true);
+                                  }}
+                                  disabled={r.resolved}
+                                >
+                                  <Target className="h-3 w-3" />
+                                  {r.resolved ? 'Resolved' : 'Resolve'}
+                                </Button>
+                              </TableCell>
+                            </motion.tr>
+                          );
+                        })
+                      )}
+                    </TableBody>
+                  </Table>
+                </ScrollArea>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* ─── Unmatched Tab ─── */}
+          <TabsContent value="unmatched" className="space-y-4">
+            {/* Filter */}
+            <Card>
+              <CardContent className="p-4">
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <div className="flex-1 relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Search invoices..."
+                      value={searchQuery}
+                      onChange={e => setSearchQuery(e.target.value)}
+                      className="pl-9 h-9"
+                    />
+                  </div>
+                  <Select value={filterClient} onValueChange={setFilterClient}>
+                    <SelectTrigger className="w-full sm:w-[180px] h-9">
+                      <SelectValue placeholder="All Clients" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Clients</SelectItem>
+                      {clients.map(c => (
+                        <SelectItem key={c.id} value={c.id}>{c.tradeName}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Unmatched Table */}
+            <Card>
+              <CardContent className="p-0">
+                <ScrollArea className="max-h-[500px]">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="hover:bg-transparent">
+                        <TableHead className="text-xs">Invoice #</TableHead>
+                        <TableHead className="text-xs">Client</TableHead>
+                        <TableHead className="text-xs">GSTIN</TableHead>
+                        <TableHead className="text-xs text-right">Amount</TableHead>
+                        <TableHead className="text-xs">Source</TableHead>
+                        <TableHead className="text-xs">Period</TableHead>
+                        <TableHead className="text-xs text-right">Action</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {unmatchedResults.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={7} className="text-center py-12 text-muted-foreground">
+                            <CheckCircle2 className="h-10 w-10 mx-auto mb-2 text-emerald-300" />
+                            <p className="text-sm font-medium">No unmatched invoices</p>
+                            <p className="text-xs mt-1">All invoices have been matched or are mismatches!</p>
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        unmatchedResults.map((r, idx) => {
+                          const source = r.matchStatus === 'missing_in_gstr'
+                            ? 'GSTR-1 only'
+                            : r.matchStatus === 'missing_in_books'
+                            ? 'GSTR-2A/2B only'
+                            : 'GSTR-1';
+                          return (
+                            <motion.tr
+                              key={r.id}
+                              variants={rowVariants}
+                              initial="hidden"
+                              animate="visible"
+                              transition={{ delay: idx * 0.02 }}
+                              className="hover:bg-accent/40 transition-colors"
+                            >
+                              <TableCell className="font-medium text-sm font-mono">
+                                {r.invoice?.invoiceNumber ?? '—'}
+                              </TableCell>
+                              <TableCell className="text-sm text-muted-foreground">
+                                {r.invoice?.client?.tradeName ?? '—'}
+                              </TableCell>
+                              <TableCell className="text-xs font-mono text-muted-foreground">
+                                {r.sourceGstin ?? '—'}
+                              </TableCell>
+                              <TableCell className="text-sm text-right">
+                                {formatCurrency(r.invoice?.totalAmount ?? 0)}
+                              </TableCell>
+                              <TableCell>
+                                <Badge variant="outline" className="text-[10px] border-slate-200 bg-slate-50 text-slate-700">
+                                  {source}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="text-sm text-muted-foreground">
+                                {r.invoice?.invoiceDate
+                                  ? new Date(r.invoice.invoiceDate).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })
+                                  : '—'}
+                              </TableCell>
+                              <TableCell className="text-right">
+                                <div className="flex items-center justify-end gap-1">
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-7 text-xs gap-1 text-emerald-700 hover:text-emerald-800 hover:bg-emerald-50"
+                                    onClick={() => {
+                                      setSelectedResult(r);
+                                      setResolveChoice('gstr1');
+                                      setCustomAmount('');
+                                      setResolveNotes('');
+                                      setResolveDialogOpen(true);
+                                    }}
+                                  >
+                                    <Link2 className="h-3 w-3" />
+                                    Link
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-7 text-xs gap-1 text-slate-500 hover:text-slate-700 hover:bg-slate-50"
+                                    onClick={() => handleIgnore(r.id)}
+                                    disabled={r.workflowStatus === 'ignored'}
+                                  >
+                                    <Ban className="h-3 w-3" />
+                                    {r.workflowStatus === 'ignored' ? 'Ignored' : 'Ignore'}
+                                  </Button>
+                                </div>
+                              </TableCell>
+                            </motion.tr>
+                          );
+                        })
+                      )}
+                    </TableBody>
+                  </Table>
+                </ScrollArea>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
+      </motion.div>
+
+      {/* ════════════════════════════════════════════
+          Resolve Dialog
+      ════════════════════════════════════════════ */}
+      <Dialog open={resolveDialogOpen} onOpenChange={setResolveDialogOpen}>
+        <DialogContent className="sm:max-w-[580px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Target className="h-5 w-5 text-emerald-600" />
+              Resolve Mismatch
+            </DialogTitle>
+            <DialogDescription>
+              Review both sides and choose the correct amount to proceed with.
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedResult && (
+            <div className="space-y-4">
+              {/* Invoice Info */}
+              <div className="rounded-lg border bg-muted/30 p-3">
+                <p className="text-sm font-medium">
+                  Invoice: {selectedResult.invoice?.invoiceNumber ?? '—'}
+                </p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Client: {selectedResult.invoice?.client?.tradeName ?? '—'} &middot;{' '}
+                  Seller GSTIN: {selectedResult.sourceGstin ?? '—'}
+                </p>
+              </div>
+
+              {/* Side-by-side comparison */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-lg border border-emerald-200 bg-emerald-50/50 p-3">
+                  <p className="text-xs font-semibold text-emerald-700 mb-1">GSTR-1 (Books)</p>
+                  <p className="text-lg font-bold">{formatCurrency(selectedResult.invoice?.totalAmount ?? 0)}</p>
+                  <p className="text-[10px] text-muted-foreground mt-1">
+                    Tax: {formatCurrency(
+                      (selectedResult.invoice?.cgst ?? 0) +
+                      (selectedResult.invoice?.sgst ?? 0) +
+                      (selectedResult.invoice?.igst ?? 0)
+                    )}
+                  </p>
+                </div>
+                <div className="rounded-lg border border-amber-200 bg-amber-50/50 p-3">
+                  <p className="text-xs font-semibold text-amber-700 mb-1">GSTR-2A/2B (Portal)</p>
+                  {(() => {
+                    const mm = parseMismatches(selectedResult.mismatches);
+                    const amountMM = mm.find((m: { field: string }) => m.field === 'gst_amount' || m.field === 'total_amount');
+                    const portalAmount = amountMM
+                      ? (amountMM.expected as number) === (selectedResult.invoice?.totalAmount ?? 0)
+                        ? (amountMM.actual as number)
+                        : (amountMM.expected as number)
+                      : selectedResult.invoice?.totalAmount ?? 0;
+                    return (
+                      <>
+                        <p className="text-lg font-bold">{formatCurrency(portalAmount)}</p>
+                        <p className="text-[10px] text-muted-foreground mt-1">
+                          Diff: {formatCurrency(Math.abs((selectedResult.invoice?.totalAmount ?? 0) - portalAmount))}
+                        </p>
+                      </>
+                    );
+                  })()}
+                </div>
+              </div>
+
+              {/* Mismatch details */}
+              {parseMismatches(selectedResult.mismatches).length > 0 && (
+                <div className="space-y-1.5">
+                  <p className="text-xs font-medium text-muted-foreground">Discrepancy Details</p>
+                  {parseMismatches(selectedResult.mismatches).map((m: { field: string; expected: string | number; actual: string | number; difference?: number }, i: number) => (
+                    <div key={i} className="flex items-center gap-2 text-xs rounded border px-3 py-2 bg-muted/30">
+                      <AlertTriangle className="h-3 w-3 text-amber-500 shrink-0" />
+                      <span className="font-medium capitalize">{m.field.replace(/_/g, ' ')}</span>
+                      <span className="text-muted-foreground">:</span>
+                      <span className="text-emerald-700">{String(m.expected)}</span>
+                      <ArrowRight className="h-3 w-3 text-muted-foreground" />
+                      <span className="text-amber-700">{String(m.actual)}</span>
+                      {m.difference && (
+                        <Badge variant="outline" className="text-[9px] border-red-200 bg-red-50 text-red-700 ml-auto">
+                          Δ {m.difference}
+                        </Badge>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <Separator />
+
+              {/* Resolution Choice */}
+              <div className="space-y-3">
+                <Label className="text-sm font-medium">Accept which value?</Label>
+                <RadioGroup value={resolveChoice} onValueChange={(v) => setResolveChoice(v as 'gstr1' | 'gstr2a' | 'custom')}>
+                  <div className="flex items-center gap-3 rounded-lg border p-3 hover:bg-accent/40 transition-colors cursor-pointer">
+                    <RadioGroupItem value="gstr1" id="gstr1" />
+                    <Label htmlFor="gstr1" className="cursor-pointer flex-1">
+                      <span className="font-medium text-sm">Accept GSTR-1</span>
+                      <span className="text-xs text-muted-foreground block">Use books value as source of truth</span>
+                    </Label>
+                  </div>
+                  <div className="flex items-center gap-3 rounded-lg border p-3 hover:bg-accent/40 transition-colors cursor-pointer">
+                    <RadioGroupItem value="gstr2a" id="gstr2a" />
+                    <Label htmlFor="gstr2a" className="cursor-pointer flex-1">
+                      <span className="font-medium text-sm">Accept GSTR-2A/2B</span>
+                      <span className="text-xs text-muted-foreground block">Use portal value as source of truth</span>
+                    </Label>
+                  </div>
+                  <div className="flex items-center gap-3 rounded-lg border p-3 hover:bg-accent/40 transition-colors cursor-pointer">
+                    <RadioGroupItem value="custom" id="custom" />
+                    <Label htmlFor="custom" className="cursor-pointer flex-1">
+                      <span className="font-medium text-sm">Custom Amount</span>
+                      <span className="text-xs text-muted-foreground block">Enter a corrected amount manually</span>
+                    </Label>
+                  </div>
+                </RadioGroup>
+
+                <AnimatePresence>
+                  {resolveChoice === 'custom' && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                      transition={{ duration: 0.2 }}
+                    >
+                      <div className="pt-2">
+                        <Label htmlFor="customAmount" className="text-xs">Corrected Amount (₹)</Label>
+                        <Input
+                          id="customAmount"
+                          type="number"
+                          placeholder="Enter amount"
+                          value={customAmount}
+                          onChange={e => setCustomAmount(e.target.value)}
+                          className="mt-1.5 h-9"
+                        />
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+
+              {/* Notes */}
+              <div>
+                <Label htmlFor="notes" className="text-xs">Notes (optional)</Label>
+                <Textarea
+                  id="notes"
+                  placeholder="Add a note about this resolution..."
+                  value={resolveNotes}
+                  onChange={e => setResolveNotes(e.target.value)}
+                  className="mt-1.5 min-h-[60px] text-sm"
+                />
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setResolveDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleResolve}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2"
+            >
+              <CheckCircle2 className="h-4 w-4" />
+              Resolve
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
       {/* ════════════════════════════════════════════
-          7b. Empty State (shown when no results at all)
+          Run Reconciliation Dialog
       ════════════════════════════════════════════ */}
-      {!loading && reconResults.length === 0 && (
-        <Card>
-          <CardContent className="py-16 text-center">
-            <Database className="h-16 w-16 mx-auto mb-4 text-slate-300" />
-            <h3 className="text-lg font-semibold text-slate-700 mb-1">
-              No reconciliation results found
-            </h3>
-            <p className="text-sm text-muted-foreground mb-4">
-              Run reconciliation to start matching your records and identify discrepancies.
-            </p>
+      <Dialog open={runDialogOpen} onOpenChange={setRunDialogOpen}>
+        <DialogContent className="sm:max-w-[460px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <RefreshCw className="h-5 w-5 text-emerald-600" />
+              Run Reconciliation
+            </DialogTitle>
+            <DialogDescription>
+              Select the client, period, and sources to match invoices.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {/* Client */}
+            <div>
+              <Label className="text-sm">Client</Label>
+              <Select value={runClient} onValueChange={setRunClient}>
+                <SelectTrigger className="mt-1.5">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">
+                    {selectedClientId ? 'Use Selected Client' : 'Select a client first'}
+                  </SelectItem>
+                  {clients.map(c => (
+                    <SelectItem key={c.id} value={c.id}>{c.tradeName}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Period */}
+            <div>
+              <Label className="text-sm">Period</Label>
+              <Select value={runPeriod} onValueChange={setRunPeriod}>
+                <SelectTrigger className="mt-1.5">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {PERIODS.map(p => (
+                    <SelectItem key={p} value={p}>{formatPeriod(p)}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Sources */}
+            <div>
+              <Label className="text-sm">Source Comparison</Label>
+              <Select value={runSource} onValueChange={setRunSource}>
+                <SelectTrigger className="mt-1.5">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {SOURCE_OPTIONS.map(opt => (
+                    <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Progress (shown during run) */}
+            <AnimatePresence>
+              {runningRecon && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className="space-y-2"
+                >
+                  <div className="flex items-center justify-between text-xs text-muted-foreground">
+                    <span>Processing invoices...</span>
+                    <span>{Math.round(reconProgress)}%</span>
+                  </div>
+                  <Progress value={reconProgress} className="h-2 [&>div]:bg-emerald-500" />
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setRunDialogOpen(false)}
+              disabled={runningRecon}
+            >
+              Cancel
+            </Button>
             <Button
               onClick={handleRunReconciliation}
-              disabled={runningRecon || !selectedClientId}
-              className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white"
+              disabled={runningRecon || (!selectedClientId && runClient === 'all')}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2 min-w-[160px]"
             >
               {runningRecon ? (
-                <RefreshCw className="h-4 w-4 animate-spin" />
+                <>
+                  <RefreshCw className="h-4 w-4 animate-spin" />
+                  Running...
+                </>
               ) : (
-                <RefreshCw className="h-4 w-4" />
+                <>
+                  <Play className="h-4 w-4" />
+                  Start Reconciliation
+                </>
               )}
-              {runningRecon ? 'Running...' : 'Run Reconciliation'}
             </Button>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* ════════════════════════════════════════════
-          8. Run History Section
-      ════════════════════════════════════════════ */}
-      {runs.length > 0 && (
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Clock className="h-5 w-5 text-slate-600" />
-              Recent Reconciliation Runs
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-0">
-            <div className="overflow-x-auto">
-              <Table style={{ minWidth: 1000 }}>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Period</TableHead>
-                    <TableHead>Sources</TableHead>
-                    <TableHead className="text-right">Total</TableHead>
-                    <TableHead className="text-right">Matched</TableHead>
-                    <TableHead className="text-right">Unmatched</TableHead>
-                    <TableHead className="text-right">Partial</TableHead>
-                    <TableHead className="text-right">High Risk</TableHead>
-                    <TableHead className="text-right">GST Diff</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Run By</TableHead>
-                    <TableHead>Date</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {runs.map((run) => {
-                    const runStatus =
-                      run.status === 'completed'
-                        ? { color: 'text-emerald-700', bgColor: 'bg-emerald-50', label: 'Completed' }
-                        : run.status === 'running'
-                        ? { color: 'text-blue-700', bgColor: 'bg-blue-50', label: 'Running' }
-                        : { color: 'text-red-700', bgColor: 'bg-red-50', label: 'Failed' };
-
-                    return (
-                      <TableRow
-                        key={run.id}
-                        className="hover:bg-accent/40 transition-colors cursor-pointer"
-                        onClick={() => {
-                          // Filter results by this run
-                          const runResults = reconResults.filter(
-                            (r) => r.runId === run.id
-                          );
-                          if (runResults.length > 0) {
-                            setReconResults(runResults);
-                          }
-                        }}
-                      >
-                        <TableCell className="font-medium text-sm whitespace-nowrap">
-                          {run.period}
-                        </TableCell>
-                        <TableCell className="text-sm whitespace-nowrap">
-                          <div className="flex items-center gap-1">
-                            <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-slate-50">
-                              {run.sources?.split(',')[0] || 'Source A'}
-                            </Badge>
-                            <ArrowRight className="h-3 w-3 text-slate-400" />
-                            <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-slate-50">
-                              {run.sources?.split(',')[1] || 'Source B'}
-                            </Badge>
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-sm text-right">{run.totalRecords}</TableCell>
-                        <TableCell className="text-sm text-right text-emerald-700 font-medium">
-                          {run.matched}
-                        </TableCell>
-                        <TableCell className="text-sm text-right text-red-700 font-medium">
-                          {run.unmatched}
-                        </TableCell>
-                        <TableCell className="text-sm text-right text-amber-700 font-medium">
-                          {run.partialMatches}
-                        </TableCell>
-                        <TableCell className="text-sm text-right text-orange-700 font-medium">
-                          {run.highRisk}
-                        </TableCell>
-                        <TableCell className="text-sm text-right text-purple-700 font-medium">
-                          {formatCurrency(run.gstDifference)}
-                        </TableCell>
-                        <TableCell>
-                          <Badge
-                            variant="outline"
-                            className={`${runStatus.color} ${runStatus.bgColor} border text-xs`}
-                          >
-                            {runStatus.label}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-sm text-muted-foreground">
-                          {run.runBy || 'System'}
-                        </TableCell>
-                        <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
-                          {new Date(run.createdAt).toLocaleString('en-IN', {
-                            day: '2-digit',
-                            month: 'short',
-                            year: '2-digit',
-                            hour: '2-digit',
-                            minute: '2-digit',
-                          })}
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

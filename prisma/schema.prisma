@@ -125,6 +125,7 @@ model ReconciliationResult {
   resolved         Boolean  @default(false)
   resolvedBy       String?
   resolvedAt       String?
+  riskLevel        String   @default("low")
   runId            String?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt

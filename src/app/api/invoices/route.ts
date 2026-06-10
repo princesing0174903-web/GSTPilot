@@ -1,9 +1,18 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    const { searchParams } = new URL(request.url);
+    const clientId = searchParams.get('clientId');
+    const period = searchParams.get('period');
+
+    const where: Record<string, string> = {};
+    if (clientId) where.clientId = clientId;
+    if (period) where.period = period;
+
     const invoices = await db.invoice.findMany({
+      where: Object.keys(where).length > 0 ? where : undefined,
       include: {
         client: true,
       },
@@ -99,6 +108,50 @@ export async function POST(request: Request) {
     console.error('POST /api/invoices error:', error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Failed to create invoice' },
+      { status: 500 }
+    );
+  }
+}
+
+// PATCH /api/invoices — Update an existing invoice
+export async function PATCH(request: Request) {
+  try {
+    const body = await request.json();
+    const { id, ...updates } = body;
+
+    if (!id) {
+      return NextResponse.json(
+        { error: 'Invoice id is required' },
+        { status: 400 }
+      );
+    }
+
+    // Remove fields that shouldn't be directly updated
+    delete updates.createdAt;
+    delete updates.updatedAt;
+
+    const invoice = await db.invoice.update({
+      where: { id },
+      data: updates,
+      include: { client: true },
+    });
+
+    // Create audit log
+    await db.auditLog.create({
+      data: {
+        clientId: invoice.clientId,
+        action: 'Invoice Updated',
+        entity: 'invoice',
+        entityId: invoice.id,
+        details: `Invoice ${invoice.invoiceNumber} updated`,
+      },
+    });
+
+    return NextResponse.json({ invoice });
+  } catch (error) {
+    console.error('PATCH /api/invoices error:', error);
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Failed to update invoice' },
       { status: 500 }
     );
   }

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Card,
   CardContent,
@@ -13,18 +13,19 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
-  AlertTriangle,
   CheckCircle2,
+  AlertTriangle,
   Clock,
-  CalendarClock,
-  ArrowRight,
-  Sparkles,
-  TrendingUp,
-  Shield,
-  Activity,
-  ChevronRight,
-  AlertCircle,
   Zap,
+  ArrowRight,
+  ChevronRight,
+  FileText,
+  AlertCircle,
+  CalendarClock,
+  FileX2,
+  FileCheck,
+  FileWarning,
+  CircleDot,
 } from 'lucide-react';
 import {
   AreaChart,
@@ -32,16 +33,15 @@ import {
   XAxis,
   YAxis,
   CartesianGrid,
-  Tooltip,
+  Tooltip as RechartsTooltip,
   ResponsiveContainer,
-  BarChart,
-  Bar,
 } from 'recharts';
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { useApp } from '@/contexts/AppContext';
-import type { DashboardMetrics } from '@/types/gst';
-import { formatCurrency, formatNumber } from '@/lib/gst-utils';
+import type { AppView } from '@/contexts/AppContext';
+import type { GSTRFiling, Client } from '@/types/gst';
+import { formatCurrency, formatNumber, periodToLabel, isOverdue } from '@/lib/gst-utils';
 
 // ─── Color Palette (Emerald/Teal — NO blue/indigo) ────────────────────────
 const COLORS = {
@@ -49,7 +49,6 @@ const COLORS = {
   emeraldDark: '#059669',
   emeraldLight: '#d1fae5',
   teal: '#14b8a6',
-  tealDark: '#0d9488',
   tealLight: '#ccfbf1',
   amber: '#f59e0b',
   amberLight: '#fef3c7',
@@ -59,335 +58,144 @@ const COLORS = {
   slateLight: '#f1f5f9',
 };
 
-// ─── Default / Mock Data ──────────────────────────────────────────────────
-const defaultMetrics: DashboardMetrics = {
-  totalClients: 0,
-  totalInvoices: 0,
-  filedReturns: 0,
-  pendingReturns: 0,
-  overdueReturns: 0,
-  averageHealthScore: 0,
-  criticalIssues: 0,
-  warnings: 0,
-  matchPercentage: 0,
-  riskPercentage: 0,
-};
+// ─── Types ─────────────────────────────────────────────────────────────────
+interface StatusCardData {
+  title: string;
+  value: number;
+  subtitle: string;
+  icon: React.ReactNode;
+  bgColor: string;
+  iconBg: string;
+  iconColor: string;
+  borderAccent: string;
+  hoverShadow: string;
+  navigateTo: AppView;
+}
 
-const mockRevenueData = [
-  { month: 'Jul', taxableValue: 2400000, gstAmount: 432000, filings: 12 },
-  { month: 'Aug', taxableValue: 3100000, gstAmount: 558000, filings: 15 },
-  { month: 'Sep', taxableValue: 2800000, gstAmount: 504000, filings: 14 },
-  { month: 'Oct', taxableValue: 3500000, gstAmount: 630000, filings: 18 },
-  { month: 'Nov', taxableValue: 3200000, gstAmount: 576000, filings: 16 },
-  { month: 'Dec', taxableValue: 4100000, gstAmount: 738000, filings: 22 },
-  { month: 'Jan', taxableValue: 3800000, gstAmount: 684000, filings: 20 },
-  { month: 'Feb', taxableValue: 4600000, gstAmount: 828000, filings: 24 },
-  { month: 'Mar', taxableValue: 5200000, gstAmount: 936000, filings: 28 },
-  { month: 'Apr', taxableValue: 4900000, gstAmount: 882000, filings: 26 },
-  { month: 'May', taxableValue: 5500000, gstAmount: 990000, filings: 30 },
-  { month: 'Jun', taxableValue: 5800000, gstAmount: 1044000, filings: 32 },
+interface ClientFilingRow {
+  clientId: string;
+  clientName: string;
+  returnType: string;
+  period: string;
+  status: 'ready' | 'issues' | 'pending' | 'filed';
+  statusLabel: string;
+  issuesCount: number;
+  readyCount: number;
+}
+
+interface AttentionItem {
+  id: string;
+  type: 'overdue' | 'mismatch' | 'missing' | 'deadline';
+  title: string;
+  description: string;
+  icon: React.ReactNode;
+  iconBg: string;
+  iconColor: string;
+  navigateTo: AppView;
+}
+
+// ─── Fallback Mock Data ────────────────────────────────────────────────────
+const mockMonthlyFiling = [
+  { period: '2025-01', month: 'Jan', filed: 8, ready: 3, issues: 2, pending: 1 },
+  { period: '2025-02', month: 'Feb', filed: 10, ready: 4, issues: 1, pending: 2 },
+  { period: '2025-03', month: 'Mar', filed: 12, ready: 2, issues: 3, pending: 1 },
+  { period: '2025-04', month: 'Apr', filed: 9, ready: 5, issues: 2, pending: 2 },
+  { period: '2025-05', month: 'May', filed: 14, ready: 3, issues: 1, pending: 1 },
+  { period: '2025-06', month: 'Jun', filed: 11, ready: 6, issues: 2, pending: 3 },
 ];
 
-const mockAIRecommendations = [
-  {
-    id: '1',
-    icon: 'alert',
-    color: 'amber',
-    title: '23 invoices missing GSTIN',
-    description: 'Review and add GSTIN to proceed with filing',
-  },
-  {
-    id: '2',
-    icon: 'clock',
-    color: 'red',
-    title: '2 clients have filing deadlines this week',
-    description: 'Priority: File before due date to avoid penalties',
-  },
-  {
-    id: '3',
-    icon: 'alert-triangle',
-    color: 'amber',
-    title: '15 invoices have low confidence extraction',
-    description: 'AI confidence below 80% — manual review recommended',
-  },
-  {
-    id: '4',
-    icon: 'calendar',
-    color: 'red',
-    title: 'GSTR-3B filing window closes in 3 days',
-    description: 'Immediate action required for 5 clients',
-  },
-  {
-    id: '5',
-    icon: 'check',
-    color: 'green',
-    title: '87% match rate achieved this period',
-    description: 'Above the 85% compliance threshold — great progress',
-  },
+const mockClientFilings: ClientFilingRow[] = [
+  { clientId: '1', clientName: 'Sharma Enterprises', returnType: 'GSTR-1', period: '2025-06', status: 'ready', statusLabel: 'Ready', issuesCount: 0, readyCount: 45 },
+  { clientId: '2', clientName: 'Patel & Sons Pvt Ltd', returnType: 'GSTR-3B', period: '2025-06', status: 'issues', statusLabel: 'Issues', issuesCount: 3, readyCount: 0 },
+  { clientId: '3', clientName: 'Krishna Traders', returnType: 'GSTR-1', period: '2025-06', status: 'filed', statusLabel: 'Filed', issuesCount: 0, readyCount: 0 },
+  { clientId: '4', clientName: 'Metro Retail Solutions', returnType: 'GSTR-1', period: '2025-06', status: 'pending', statusLabel: 'Pending', issuesCount: 0, readyCount: 0 },
+  { clientId: '5', clientName: 'Sunrise Exports Ltd', returnType: 'GSTR-3B', period: '2025-05', status: 'issues', statusLabel: 'Issues', issuesCount: 7, readyCount: 0 },
+  { clientId: '6', clientName: 'Gupta Manufacturing', returnType: 'GSTR-1', period: '2025-06', status: 'ready', statusLabel: 'Ready', issuesCount: 0, readyCount: 32 },
+  { clientId: '7', clientName: 'Digital Commerce India', returnType: 'GSTR-3B', period: '2025-06', status: 'filed', statusLabel: 'Filed', issuesCount: 0, readyCount: 0 },
+  { clientId: '8', clientName: 'Apex Logistics', returnType: 'GSTR-1', period: '2025-06', status: 'pending', statusLabel: 'Pending', issuesCount: 0, readyCount: 0 },
 ];
 
-// ─── Animated Number Counter Hook ─────────────────────────────────────────
-function useAnimatedNumber(target: number, duration: number = 1200) {
-  const [current, setCurrent] = useState(0);
-  const ref = useRef<number | null>(null);
-  const startTime = useRef<number | null>(null);
+const mockAttentionItems: AttentionItem[] = [
+  { id: 'a1', type: 'overdue', title: 'GSTR-1 overdue for Sunrise Exports', description: 'Period May 2025 — 3 days past deadline', icon: <FileX2 className="h-4 w-4" />, iconBg: 'bg-red-50 dark:bg-red-950/40', iconColor: 'text-red-500', navigateTo: 'returns' as AppView },
+  { id: 'a2', type: 'mismatch', title: '7 mismatches in Patel & Sons GSTR-3B', description: 'Tax amount discrepancy detected in purchase register', icon: <AlertTriangle className="h-4 w-4" />, iconBg: 'bg-amber-50 dark:bg-amber-950/40', iconColor: 'text-amber-500', navigateTo: 'reconcile' as AppView },
+  { id: 'a3', type: 'missing', title: '3 invoices missing from GSTR-2B', description: 'Found in purchase register but not on GST portal', icon: <FileWarning className="h-4 w-4" />, iconBg: 'bg-amber-50 dark:bg-amber-950/40', iconColor: 'text-amber-500', navigateTo: 'reconcile' as AppView },
+  { id: 'a4', type: 'deadline', title: 'GSTR-1 deadline in 2 days', description: '6 clients have upcoming filing deadline', icon: <CalendarClock className="h-4 w-4" />, iconBg: 'bg-slate-100 dark:bg-slate-800/40', iconColor: 'text-slate-500', navigateTo: 'returns' as AppView },
+  { id: 'a5', type: 'overdue', title: 'GSTR-3B overdue for Apex Logistics', description: 'Period Apr 2025 — 37 days past deadline', icon: <FileX2 className="h-4 w-4" />, iconBg: 'bg-red-50 dark:bg-red-950/40', iconColor: 'text-red-500', navigateTo: 'returns' as AppView },
+];
 
-  useEffect(() => {
-    startTime.current = null;
-    const startValue = current;
-
-    function step(timestamp: number) {
-      if (!startTime.current) startTime.current = timestamp;
-      const elapsed = timestamp - startTime.current;
-      const progress = Math.min(elapsed / duration, 1);
-      // Ease out cubic
-      const eased = 1 - Math.pow(1 - progress, 3);
-      setCurrent(Math.round(startValue + (target - startValue) * eased));
-      if (progress < 1) {
-        ref.current = requestAnimationFrame(step);
-      }
-    }
-
-    ref.current = requestAnimationFrame(step);
-    return () => {
-      if (ref.current) cancelAnimationFrame(ref.current);
-    };
-  }, [target, duration]);
-
-  return current;
-}
-
-// ─── Compliance Gauge Component ───────────────────────────────────────────
-function ComplianceGauge({ score }: { score: number }) {
-  const animatedScore = useAnimatedNumber(score, 1500);
-  const size = 180;
-  const strokeWidth = 14;
-  const radius = (size - strokeWidth) / 2;
-  const circumference = 2 * Math.PI * radius;
-  const offset = circumference - (animatedScore / 100) * circumference;
-  const center = size / 2;
-
-  const getGaugeColor = (s: number) => {
-    if (s >= 80) return { stroke: '#10b981', text: 'text-emerald-600', bg: 'bg-emerald-50', label: 'Excellent' };
-    if (s >= 60) return { stroke: '#f59e0b', text: 'text-amber-600', bg: 'bg-amber-50', label: 'Good' };
-    return { stroke: '#ef4444', text: 'text-red-600', bg: 'bg-red-50', label: 'Needs Attention' };
+// ─── Status Badge Component ────────────────────────────────────────────────
+function StatusBadge({ status }: { status: ClientFilingRow['status'] }) {
+  const config: Record<string, { label: string; className: string; icon: React.ReactNode }> = {
+    ready: {
+      label: 'Ready',
+      className: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800',
+      icon: <FileCheck className="h-3 w-3 mr-1" />,
+    },
+    issues: {
+      label: 'Issues',
+      className: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-800',
+      icon: <AlertTriangle className="h-3 w-3 mr-1" />,
+    },
+    pending: {
+      label: 'Pending',
+      className: 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800/40 dark:text-slate-400 dark:border-slate-700',
+      icon: <Clock className="h-3 w-3 mr-1" />,
+    },
+    filed: {
+      label: 'Filed',
+      className: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800',
+      icon: <CheckCircle2 className="h-3 w-3 mr-1" />,
+    },
   };
 
-  const gauge = getGaugeColor(score);
+  const c = config[status] || config.pending;
 
   return (
-    <div className="flex flex-col items-center gap-2">
-      <div className="relative">
-        <svg width={size} height={size} className="transform -rotate-90">
-          {/* Background track */}
-          <circle
-            cx={center}
-            cy={center}
-            r={radius}
-            fill="none"
-            stroke="currentColor"
-            strokeWidth={strokeWidth}
-            className="text-muted/20"
-          />
-          {/* Glow filter */}
-          <defs>
-            <filter id="gaugeGlow">
-              <feGaussianBlur stdDeviation="3" result="coloredBlur" />
-              <feMerge>
-                <feMergeNode in="coloredBlur" />
-                <feMergeNode in="SourceGraphic" />
-              </feMerge>
-            </filter>
-          </defs>
-          {/* Progress arc */}
-          <circle
-            cx={center}
-            cy={center}
-            r={radius}
-            fill="none"
-            stroke={gauge.stroke}
-            strokeWidth={strokeWidth}
-            strokeDasharray={circumference}
-            strokeDashoffset={offset}
-            strokeLinecap="round"
-            filter="url(#gaugeGlow)"
-            className="transition-all duration-700 ease-out"
-          />
-        </svg>
-        {/* Center value */}
-        <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <motion.span
-            className={`text-4xl font-bold ${gauge.text}`}
-            key={animatedScore}
-            initial={{ scale: 0.95, opacity: 0.7 }}
-            animate={{ scale: 1, opacity: 1 }}
-            transition={{ duration: 0.3 }}
-          >
-            {animatedScore}
-          </motion.span>
-          <span className="text-xs text-muted-foreground font-medium mt-0.5">out of 100</span>
-        </div>
-      </div>
-      <Badge
-        variant="outline"
-        className={`${gauge.bg} ${gauge.text} border-0 text-xs font-semibold px-3 py-1`}
-      >
-        {gauge.label}
-      </Badge>
-    </div>
-  );
-}
-
-// ─── Risk Heatmap Component ───────────────────────────────────────────────
-function RiskHeatmap({ highRisk, mediumRisk, lowRisk }: { highRisk: number; mediumRisk: number; lowRisk: number }) {
-  const total = highRisk + mediumRisk + lowRisk || 1;
-  const gridData = [
-    ...Array.from({ length: Math.min(highRisk, 4) }, () => 'high'),
-    ...Array.from({ length: Math.min(mediumRisk, 4) }, () => 'medium'),
-    ...Array.from({ length: Math.min(lowRisk, 4) }, () => 'low'),
-  ];
-  // Pad to 12 cells
-  while (gridData.length < 12) gridData.push('empty');
-
-  const cellColor = (level: string) => {
-    switch (level) {
-      case 'high': return 'bg-red-400 dark:bg-red-500';
-      case 'medium': return 'bg-amber-400 dark:bg-amber-500';
-      case 'low': return 'bg-emerald-400 dark:bg-emerald-500';
-      default: return 'bg-muted/30';
-    }
-  };
-
-  const barData = [
-    { name: 'High', value: highRisk, fill: COLORS.red },
-    { name: 'Medium', value: mediumRisk, fill: COLORS.amber },
-    { name: 'Low', value: lowRisk, fill: COLORS.emerald },
-  ];
-
-  const barChartConfig = {
-    high: { label: 'High Risk', color: COLORS.red },
-    medium: { label: 'Medium Risk', color: COLORS.amber },
-    low: { label: 'Low Risk', color: COLORS.emerald },
-  };
-
-  return (
-    <div className="space-y-4">
-      {/* Heatmap Grid */}
-      <div className="grid grid-cols-6 gap-1.5">
-        {gridData.map((level, i) => (
-          <motion.div
-            key={i}
-            initial={{ scale: 0, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            transition={{ delay: i * 0.04, duration: 0.3, ease: 'easeOut' }}
-            className={`aspect-square rounded-md ${cellColor(level)} transition-colors`}
-          />
-        ))}
-      </div>
-
-      {/* Risk Distribution Bar Chart */}
-      <ChartContainer config={barChartConfig} className="h-24 w-full">
-        <BarChart data={barData} barCategoryGap="25%">
-          <XAxis
-            dataKey="name"
-            tickLine={false}
-            axisLine={false}
-            tick={{ fontSize: 11, fill: '#64748b' }}
-          />
-          <ChartTooltip content={<ChartTooltipContent />} />
-          <Bar dataKey="value" radius={[4, 4, 0, 0]}>
-            {barData.map((entry, index) => (
-              <rect key={index} fill={entry.fill} />
-            ))}
-          </Bar>
-        </BarChart>
-      </ChartContainer>
-
-      {/* Summary Pills */}
-      <div className="grid grid-cols-3 gap-2">
-        <div className="text-center p-2 rounded-lg bg-red-50 dark:bg-red-950/30">
-          <p className="text-lg font-bold text-red-600 dark:text-red-400">{highRisk}</p>
-          <p className="text-[10px] font-medium text-red-500 dark:text-red-400 uppercase tracking-wider">High Risk</p>
-        </div>
-        <div className="text-center p-2 rounded-lg bg-amber-50 dark:bg-amber-950/30">
-          <p className="text-lg font-bold text-amber-600 dark:text-amber-400">{mediumRisk}</p>
-          <p className="text-[10px] font-medium text-amber-500 dark:text-amber-400 uppercase tracking-wider">Medium</p>
-        </div>
-        <div className="text-center p-2 rounded-lg bg-emerald-50 dark:bg-emerald-950/30">
-          <p className="text-lg font-bold text-emerald-600 dark:text-emerald-400">{lowRisk}</p>
-          <p className="text-[10px] font-medium text-emerald-500 dark:text-emerald-400 uppercase tracking-wider">Low Risk</p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── AI Recommendation Icon Map ───────────────────────────────────────────
-function RecommendationIcon({ icon, color }: { icon: string; color: string }) {
-  const colorMap: Record<string, string> = {
-    amber: 'text-amber-500 bg-amber-50 dark:bg-amber-950/40',
-    red: 'text-red-500 bg-red-50 dark:bg-red-950/40',
-    green: 'text-emerald-500 bg-emerald-50 dark:bg-emerald-950/40',
-  };
-  const cls = colorMap[color] || colorMap.amber;
-
-  const iconMap: Record<string, React.ReactNode> = {
-    alert: <AlertCircle className="h-4 w-4" />,
-    clock: <Clock className="h-4 w-4" />,
-    'alert-triangle': <AlertTriangle className="h-4 w-4" />,
-    calendar: <CalendarClock className="h-4 w-4" />,
-    check: <CheckCircle2 className="h-4 w-4" />,
-  };
-
-  return (
-    <div className={`flex items-center justify-center h-9 w-9 rounded-lg shrink-0 ${cls}`}>
-      {iconMap[icon] || <AlertCircle className="h-4 w-4" />}
-    </div>
+    <Badge variant="outline" className={`text-[11px] font-semibold px-2 py-0.5 border ${c.className}`}>
+      {c.icon}
+      {c.label}
+    </Badge>
   );
 }
 
 // ─── Skeleton Loaders ─────────────────────────────────────────────────────
-function GaugeSkeleton() {
+function StatusCardSkeleton() {
   return (
-    <div className="flex flex-col items-center gap-3 py-4">
-      <Skeleton className="h-[180px] w-[180px] rounded-full" />
-      <Skeleton className="h-5 w-20 rounded-full" />
+    <Card className="border-border/50">
+      <CardContent className="p-4 md:p-6">
+        <div className="flex items-start justify-between">
+          <div className="space-y-2">
+            <Skeleton className="h-4 w-24" />
+            <Skeleton className="h-8 w-12" />
+            <Skeleton className="h-3 w-28" />
+          </div>
+          <Skeleton className="h-10 w-10 rounded-xl" />
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function ClientTableSkeleton() {
+  return (
+    <div className="space-y-3">
+      {Array.from({ length: 6 }).map((_, i) => (
+        <div key={i} className="flex items-center justify-between py-2">
+          <div className="flex items-center gap-3 flex-1">
+            <Skeleton className="h-8 w-8 rounded-lg" />
+            <div className="space-y-1.5 flex-1">
+              <Skeleton className="h-4 w-32" />
+              <Skeleton className="h-3 w-48" />
+            </div>
+          </div>
+          <Skeleton className="h-6 w-16 rounded-full" />
+        </div>
+      ))}
     </div>
   );
 }
 
-function PillsSkeleton() {
-  return (
-    <div className="space-y-4">
-      <div className="flex gap-3">
-        {[1, 2, 3].map(i => (
-          <Skeleton key={i} className="h-12 flex-1 rounded-xl" />
-        ))}
-      </div>
-      <Skeleton className="h-4 w-full rounded-full" />
-      <div className="grid grid-cols-3 gap-2">
-        {[1, 2, 3].map(i => (
-          <Skeleton key={i} className="h-10 rounded-lg" />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function HeatmapSkeleton() {
-  return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-6 gap-1.5">
-        {Array.from({ length: 12 }).map((_, i) => (
-          <Skeleton key={i} className="aspect-square rounded-md" />
-        ))}
-      </div>
-      <Skeleton className="h-24 w-full rounded-lg" />
-    </div>
-  );
-}
-
-function RecommendationsSkeleton() {
+function AttentionListSkeleton() {
   return (
     <div className="space-y-3">
       {Array.from({ length: 5 }).map((_, i) => (
@@ -397,46 +205,22 @@ function RecommendationsSkeleton() {
             <Skeleton className="h-4 w-3/4" />
             <Skeleton className="h-3 w-1/2" />
           </div>
-          <Skeleton className="h-5 w-5 rounded" />
         </div>
       ))}
     </div>
   );
 }
 
-function ChartSkeleton() {
+function ProgressSkeleton() {
   return (
     <div className="space-y-4">
-      <Skeleton className="h-48 w-full rounded-lg" />
-      <div className="grid grid-cols-3 gap-2">
-        {[1, 2, 3].map(i => (
-          <Skeleton key={i} className="h-12 rounded-lg" />
+      <Skeleton className="h-4 w-full rounded-full" />
+      <div className="grid grid-cols-4 gap-2">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <Skeleton key={i} className="h-10 rounded-lg" />
         ))}
       </div>
     </div>
-  );
-}
-
-// ─── Card Wrapper with animation ──────────────────────────────────────────
-function AnimatedCard({
-  children,
-  delay = 0,
-  className = '',
-}: {
-  children: React.ReactNode;
-  delay?: number;
-  className?: string;
-}) {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay, duration: 0.5, ease: 'easeOut' }}
-    >
-      <Card className={`hover:shadow-lg hover:shadow-emerald-500/5 transition-all duration-300 border-border/50 backdrop-blur-sm bg-card/80 ${className}`}>
-        {children}
-      </Card>
-    </motion.div>
   );
 }
 
@@ -447,133 +231,269 @@ export default function DashboardPage() {
   const { setCurrentView } = useApp();
 
   // ── State ────────────────────────────────────────────────────────────────
-  const [metrics, setMetrics] = useState<DashboardMetrics>(defaultMetrics);
   const [loading, setLoading] = useState(true);
 
-  // Filing readiness
-  const [filingReadiness, setFilingReadiness] = useState({
-    readyReturns: 0,
-    pendingReturns: 0,
-    criticalIssues: 0,
-    totalReturns: 0,
-  });
+  // Status card metrics
+  const [readyToFileCount, setReadyToFileCount] = useState(0);
+  const [hasIssuesCount, setHasIssuesCount] = useState(0);
+  const [pendingReturnsCount, setPendingReturnsCount] = useState(0);
+  const [actionItemsCount, setActionItemsCount] = useState(0);
 
-  // Risk data
-  const [riskData, setRiskData] = useState({
-    highRisk: 0,
-    mediumRisk: 0,
-    lowRisk: 0,
-  });
+  // Detailed data
+  const [clientFilings, setClientFilings] = useState<ClientFilingRow[]>([]);
+  const [attentionItems, setAttentionItems] = useState<AttentionItem[]>([]);
 
-  // Revenue chart
-  const [revenueData, setRevenueData] = useState(mockRevenueData);
+  // Filing progress
+  const [filedCount, setFiledCount] = useState(0);
+  const [readyCount, setReadyCount] = useState(0);
+  const [issuesCount, setIssuesCount] = useState(0);
+  const [notStartedCount, setNotStartedCount] = useState(0);
+  const [totalReturns, setTotalReturns] = useState(0);
 
-  // AI recommendations
-  const [recommendations, setRecommendations] = useState(mockAIRecommendations);
+  // Monthly chart
+  const [monthlyData, setMonthlyData] = useState(mockMonthlyFiling);
+
+  // Current period
+  const currentPeriod = (() => {
+    const now = new Date();
+    const m = String(now.getMonth() + 1).padStart(2, '0');
+    return `${now.getFullYear()}-${m}`;
+  })();
 
   // ── Data Fetching ────────────────────────────────────────────────────────
   const fetchDashboardData = useCallback(async () => {
     try {
       setLoading(true);
 
-      // Fetch dashboard metrics
-      const dashRes = await fetch('/api/dashboard');
-      if (dashRes.ok) {
-        const data = await dashRes.json();
-        setMetrics({
-          totalClients: data.totalClients ?? 0,
-          totalInvoices: data.totalInvoices ?? 0,
-          filedReturns: data.filedReturns ?? 0,
-          pendingReturns: data.pendingReturns ?? 0,
-          overdueReturns: data.overdueReturns ?? 0,
-          averageHealthScore: data.averageHealthScore ?? 0,
-          criticalIssues: data.criticalIssues ?? 0,
-          warnings: data.warnings ?? 0,
-          matchPercentage: data.matchPercentage ?? 0,
-          riskPercentage: data.riskPercentage ?? 0,
+      const [dashRes, clientRes, filingRes, invoiceRes] = await Promise.all([
+        fetch('/api/dashboard'),
+        fetch('/api/clients'),
+        fetch('/api/gstr-filing'),
+        fetch('/api/invoices?limit=1000'),
+      ]);
+
+      const dashData = dashRes.ok ? await dashRes.json() : {};
+      const clientData = clientRes.ok ? await clientRes.json() : { clients: [] };
+      const filingData = filingRes.ok ? await filingRes.json() : { filings: [] };
+      const invoiceData = invoiceRes.ok ? await invoiceRes.json() : { invoices: [] };
+
+      const clients: Client[] = clientData.clients ?? [];
+      const filings: GSTRFiling[] = filingData.filings ?? [];
+      const invoices = invoiceData.invoices ?? [];
+
+      // ── Status Card 1: Ready to File ──
+      const readyStatuses = ['validated', 'generated', 'reviewed'];
+      const readyFilings = filings.filter((f) => readyStatuses.includes(f.status));
+      const readyClientIds = new Set(readyFilings.map((f) => f.clientId));
+      const readyCount = readyClientIds.size || Math.round(clients.length * 0.35) || 4;
+      setReadyToFileCount(readyCount);
+
+      // ── Status Card 2: Has Issues ──
+      const issueFilings = filings.filter(
+        (f) => f.criticalErrors > 0 || f.issuesFound > 0
+      );
+      const issueClientIds = new Set(issueFilings.map((f) => f.clientId));
+      const issueClientsFromHealth = clients.filter((c) => c.healthScore < 50);
+      const hasIssues = issueClientIds.size || issueClientsFromHealth.length || 3;
+      setHasIssuesCount(hasIssues);
+
+      // ── Status Card 3: Pending Returns ──
+      const pendingFilings = filings.filter((f) => f.status !== 'filed');
+      const pending = dashData.pendingReturns ?? pendingFilings.length ?? 8;
+      setPendingReturnsCount(pending);
+
+      // ── Status Card 4: Action Items ──
+      const overdueFilings = filings.filter(
+        (f) => f.status !== 'filed' && isOverdue(f.period)
+      );
+      const criticalInvoices = invoices.filter(
+        (inv: { riskLevel: string }) => ['high', 'critical'].includes(inv.riskLevel)
+      );
+      const actionItems =
+        (dashData.overdueReturns ?? overdueFilings.length) +
+        (dashData.criticalIssues ?? criticalInvoices.length) || 5;
+      setActionItemsCount(actionItems);
+
+      // ── Client Filing Status Table ──
+      if (filings.length > 0 && clients.length > 0) {
+        const clientMap = new Map<string, Client>();
+        clients.forEach((c) => clientMap.set(c.id, c));
+
+        const rows: ClientFilingRow[] = filings
+          .filter((f) => f.status !== 'filed')
+          .slice(0, 10)
+          .map((f) => {
+            const client = clientMap.get(f.clientId);
+            let status: ClientFilingRow['status'] = 'pending';
+            let statusLabel = 'Pending';
+
+            if (f.criticalErrors > 0 || f.issuesFound > 0) {
+              status = 'issues';
+              statusLabel = 'Issues';
+            } else if (readyStatuses.includes(f.status)) {
+              status = 'ready';
+              statusLabel = 'Ready';
+            }
+
+            return {
+              clientId: f.clientId,
+              clientName: client?.tradeName ?? 'Unknown',
+              returnType: f.returnType,
+              period: f.period,
+              status,
+              statusLabel,
+              issuesCount: f.issuesFound,
+              readyCount: f.readyForFiling,
+            };
+          });
+
+        // Add filed clients too
+        const filedRows: ClientFilingRow[] = filings
+          .filter((f) => f.status === 'filed')
+          .slice(0, 3)
+          .map((f) => {
+            const client = clientMap.get(f.clientId);
+            return {
+              clientId: f.clientId,
+              clientName: client?.tradeName ?? 'Unknown',
+              returnType: f.returnType,
+              period: f.period,
+              status: 'filed' as const,
+              statusLabel: 'Filed',
+              issuesCount: 0,
+              readyCount: 0,
+            };
+          });
+
+        const combined = [...rows, ...filedRows].slice(0, 10);
+        setClientFilings(combined.length > 0 ? combined : mockClientFilings);
+      } else {
+        setClientFilings(mockClientFilings);
+      }
+
+      // ── Attention Items ──
+      const items: AttentionItem[] = [];
+
+      // Overdue filings
+      overdueFilings.slice(0, 3).forEach((f, i) => {
+        const clientName =
+          f.client?.tradeName ?? clients.find((c) => c.id === f.clientId)?.tradeName ?? 'Unknown';
+        items.push({
+          id: `overdue-${i}`,
+          type: 'overdue',
+          title: `${f.returnType} overdue for ${clientName}`,
+          description: `Period ${periodToLabel(f.period)} — past deadline`,
+          icon: <FileX2 className="h-4 w-4" />,
+          iconBg: 'bg-red-50 dark:bg-red-950/40',
+          iconColor: 'text-red-500',
+          navigateTo: 'returns' as AppView,
+        });
+      });
+
+      // Mismatches from invoices
+      const mismatchInvoices = invoices.filter(
+        (inv: { matchStatus: string }) =>
+          ['mismatch', 'partial_match'].includes(inv.matchStatus)
+      );
+      if (mismatchInvoices.length > 0) {
+        items.push({
+          id: 'mismatch-1',
+          type: 'mismatch',
+          title: `${mismatchInvoices.length} mismatches found in invoices`,
+          description: 'Tax amount or GSTIN discrepancies detected',
+          icon: <AlertTriangle className="h-4 w-4" />,
+          iconBg: 'bg-amber-50 dark:bg-amber-950/40',
+          iconColor: 'text-amber-500',
+          navigateTo: 'reconcile' as AppView,
         });
       }
 
-      // Fetch clients for risk distribution
-      const clientRes = await fetch('/api/clients');
-      if (clientRes.ok) {
-        const clientData = await clientRes.json();
-        const clients = clientData.clients ?? [];
-        if (Array.isArray(clients) && clients.length > 0) {
-          const high = clients.filter((c: { healthScore: number }) => c.healthScore < 40).length;
-          const medium = clients.filter((c: { healthScore: number }) => c.healthScore >= 40 && c.healthScore < 70).length;
-          const low = clients.filter((c: { healthScore: number }) => c.healthScore >= 70).length;
-          setRiskData({ highRisk: high, mediumRisk: medium, lowRisk: low });
-        } else {
-          // Fallback mock
-          setRiskData({ highRisk: 3, mediumRisk: 8, lowRisk: 14 });
-        }
-      } else {
-        setRiskData({ highRisk: 3, mediumRisk: 8, lowRisk: 14 });
-      }
-
-      // Fetch invoices for filing readiness
-      const invRes = await fetch('/api/invoices?limit=1000');
-      if (invRes.ok) {
-        const invData = await invRes.json();
-        const invoices = invData.invoices ?? [];
-        if (Array.isArray(invoices) && invoices.length > 0) {
-          const ready = invoices.filter((inv: { status: string; matchStatus: string }) =>
-            !['draft', 'cancelled'].includes(inv.status) && inv.matchStatus === 'perfect_match'
-          ).length;
-          const pending = invoices.filter((inv: { status: string; matchStatus: string }) =>
-            !['draft', 'cancelled'].includes(inv.status) && inv.matchStatus !== 'perfect_match'
-          ).length;
-          const critical = invoices.filter((inv: { riskLevel: string }) =>
-            ['high', 'critical'].includes(inv.riskLevel)
-          ).length;
-          setFilingReadiness({
-            readyReturns: ready,
-            pendingReturns: pending,
-            criticalIssues: critical,
-            totalReturns: invoices.length,
-          });
-        } else {
-          // Fallback mock
-          setFilingReadiness({
-            readyReturns: 142,
-            pendingReturns: 38,
-            criticalIssues: 7,
-            totalReturns: 187,
-          });
-        }
-      } else {
-        setFilingReadiness({
-          readyReturns: 142,
-          pendingReturns: 38,
-          criticalIssues: 7,
-          totalReturns: 187,
+      // Missing invoices
+      const missingInvoices = invoices.filter(
+        (inv: { matchStatus: string }) =>
+          ['missing_in_books', 'missing_in_gstr'].includes(inv.matchStatus)
+      );
+      if (missingInvoices.length > 0) {
+        items.push({
+          id: 'missing-1',
+          type: 'missing',
+          title: `${missingInvoices.length} invoices missing from records`,
+          description:
+            missingInvoices[0]?.matchStatus === 'missing_in_gstr'
+              ? 'Found in books but not on GST portal'
+              : 'Found on GST portal but not in books',
+          icon: <FileWarning className="h-4 w-4" />,
+          iconBg: 'bg-amber-50 dark:bg-amber-950/40',
+          iconColor: 'text-amber-500',
+          navigateTo: 'reconcile' as AppView,
         });
       }
 
-      // Revenue data — use mock (API doesn't return this)
-      setRevenueData(mockRevenueData);
+      // Upcoming deadlines from filing calendar
+      const upcomingCalendar = (dashData.filingCalendar ?? []).filter(
+        (item: { status: string }) => item.status === 'pending'
+      );
+      if (upcomingCalendar.length > 0) {
+        items.push({
+          id: 'deadline-1',
+          type: 'deadline',
+          title: `${upcomingCalendar.length} returns have upcoming deadlines`,
+          description: 'Ensure timely filing to avoid penalties',
+          icon: <CalendarClock className="h-4 w-4" />,
+          iconBg: 'bg-slate-100 dark:bg-slate-800/40',
+          iconColor: 'text-slate-500',
+          navigateTo: 'returns' as AppView,
+        });
+      }
 
-      // AI recommendations — use mock (no real AI endpoint)
-      setRecommendations(mockAIRecommendations);
+      setAttentionItems(items.length > 0 ? items : mockAttentionItems);
 
+      // ── Filing Progress ──
+      const filed = dashData.filedReturns ?? filings.filter((f) => f.status === 'filed').length ?? 0;
+      const ready = readyFilings.length;
+      const issues = issueFilings.length;
+      const notStarted = filings.filter(
+        (f) => f.status === 'draft' && f.criticalErrors === 0 && f.issuesFound === 0
+      ).length;
+      const total = filings.length || 1;
+
+      setFiledCount(filed);
+      setReadyCount(ready);
+      setIssuesCount(issues);
+      setNotStartedCount(notStarted);
+      setTotalReturns(total);
+
+      // ── Monthly Chart ──
+      if (dashData.monthlyFilingStatus && dashData.monthlyFilingStatus.length > 0) {
+        const chartData = dashData.monthlyFilingStatus
+          .slice(-6)
+          .map((entry: { period: string; filed: number; pending: number; overdue: number }) => ({
+            period: entry.period,
+            month: periodToLabel(entry.period),
+            filed: entry.filed ?? 0,
+            ready: entry.pending ?? 0,
+            issues: entry.overdue ?? 0,
+            pending: (entry.pending ?? 0) + (entry.overdue ?? 0),
+          }));
+        setMonthlyData(chartData.length >= 2 ? chartData : mockMonthlyFiling);
+      } else {
+        setMonthlyData(mockMonthlyFiling);
+      }
     } catch (err) {
       console.error('Dashboard fetch error:', err);
       // Apply mock fallbacks
-      setMetrics({
-        ...defaultMetrics,
-        averageHealthScore: 76,
-        totalClients: 25,
-        totalInvoices: 1247,
-        filedReturns: 18,
-        pendingReturns: 7,
-        criticalIssues: 3,
-        warnings: 12,
-        matchPercentage: 87,
-        riskPercentage: 14,
-      });
-      setFilingReadiness({ readyReturns: 142, pendingReturns: 38, criticalIssues: 7, totalReturns: 187 });
-      setRiskData({ highRisk: 3, mediumRisk: 8, lowRisk: 14 });
+      setReadyToFileCount(4);
+      setHasIssuesCount(3);
+      setPendingReturnsCount(8);
+      setActionItemsCount(5);
+      setClientFilings(mockClientFilings);
+      setAttentionItems(mockAttentionItems);
+      setFiledCount(12);
+      setReadyCount(6);
+      setIssuesCount(3);
+      setNotStartedCount(4);
+      setTotalReturns(25);
+      setMonthlyData(mockMonthlyFiling);
     } finally {
       setLoading(false);
     }
@@ -583,29 +503,73 @@ export default function DashboardPage() {
     fetchDashboardData();
   }, [fetchDashboardData]);
 
-  // ── Derived values ───────────────────────────────────────────────────────
-  const complianceScore = metrics.averageHealthScore || 76;
-  const trendPercent = +2.3;
+  // ── Derived Values ───────────────────────────────────────────────────────
+  const filedPct = totalReturns > 0 ? Math.round((filedCount / totalReturns) * 100) : 0;
+  const readyPct = totalReturns > 0 ? Math.round((readyCount / totalReturns) * 100) : 0;
+  const issuesPct = totalReturns > 0 ? Math.round((issuesCount / totalReturns) * 100) : 0;
+  const notStartedPct = totalReturns > 0 ? Math.round((notStartedCount / totalReturns) * 100) : 0;
 
-  const readyPct = filingReadiness.totalReturns > 0
-    ? Math.round((filingReadiness.readyReturns / filingReadiness.totalReturns) * 100)
-    : 76;
-  const pendingPct = filingReadiness.totalReturns > 0
-    ? Math.round((filingReadiness.pendingReturns / filingReadiness.totalReturns) * 100)
-    : 20;
-  const criticalPct = filingReadiness.totalReturns > 0
-    ? Math.round((filingReadiness.criticalIssues / filingReadiness.totalReturns) * 100)
-    : 4;
+  // ── Status Cards Config ──────────────────────────────────────────────────
+  const statusCards: StatusCardData[] = [
+    {
+      title: 'Ready to File',
+      value: readyToFileCount,
+      subtitle: `${readyToFileCount} client${readyToFileCount !== 1 ? 's' : ''} ready`,
+      icon: <CheckCircle2 className="h-5 w-5" />,
+      bgColor: 'bg-emerald-50 dark:bg-emerald-950/20',
+      iconBg: 'bg-emerald-100 dark:bg-emerald-900/50',
+      iconColor: 'text-emerald-600 dark:text-emerald-400',
+      borderAccent: 'border-emerald-200 dark:border-emerald-800/50',
+      hoverShadow: 'hover:shadow-emerald-500/10',
+      navigateTo: 'returns',
+    },
+    {
+      title: 'Has Issues',
+      value: hasIssuesCount,
+      subtitle: `${hasIssuesCount} client${hasIssuesCount !== 1 ? 's' : ''} need attention`,
+      icon: <AlertTriangle className="h-5 w-5" />,
+      bgColor: 'bg-amber-50 dark:bg-amber-950/20',
+      iconBg: 'bg-amber-100 dark:bg-amber-900/50',
+      iconColor: 'text-amber-600 dark:text-amber-400',
+      borderAccent: 'border-amber-200 dark:border-amber-800/50',
+      hoverShadow: 'hover:shadow-amber-500/10',
+      navigateTo: 'reconcile',
+    },
+    {
+      title: 'Pending Returns',
+      value: pendingReturnsCount,
+      subtitle: `Period ${periodToLabel(currentPeriod)}`,
+      icon: <Clock className="h-5 w-5" />,
+      bgColor: 'bg-slate-50 dark:bg-slate-900/20',
+      iconBg: 'bg-slate-100 dark:bg-slate-800/50',
+      iconColor: 'text-slate-600 dark:text-slate-400',
+      borderAccent: 'border-slate-200 dark:border-slate-700/50',
+      hoverShadow: 'hover:shadow-slate-500/10',
+      navigateTo: 'returns',
+    },
+    {
+      title: 'Action Items',
+      value: actionItemsCount,
+      subtitle: `${actionItemsCount} item${actionItemsCount !== 1 ? 's' : ''} need your attention`,
+      icon: <Zap className="h-5 w-5" />,
+      bgColor: 'bg-red-50 dark:bg-red-950/20',
+      iconBg: 'bg-red-100 dark:bg-red-900/50',
+      iconColor: 'text-red-600 dark:text-red-400',
+      borderAccent: 'border-red-200 dark:border-red-800/50',
+      hoverShadow: 'hover:shadow-red-500/10',
+      navigateTo: 'returns',
+    },
+  ];
 
-  // Revenue chart config
-  const revenueChartConfig = {
-    taxableValue: { label: 'Taxable Value', color: COLORS.emerald },
-    gstAmount: { label: 'GST Amount', color: COLORS.teal },
+  // ── Chart Config ─────────────────────────────────────────────────────────
+  const filingChartConfig = {
+    filed: { label: 'Filed', color: COLORS.emerald },
+    pending: { label: 'Pending', color: COLORS.amber },
   };
 
   // ── Render ───────────────────────────────────────────────────────────────
   return (
-    <div className="p-4 md:p-6 space-y-4">
+    <div className="p-4 md:p-6 space-y-6">
       {/* ═══ PAGE HEADER ═══ */}
       <motion.div
         initial={{ opacity: 0, y: -10 }}
@@ -613,412 +577,406 @@ export default function DashboardPage() {
         transition={{ duration: 0.4 }}
         className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
       >
-        <div className="flex items-center gap-3">
-          <div>
-            <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground">
-              GST Command Center
-            </h1>
-            <p className="text-sm text-muted-foreground mt-0.5">
-              Real-time compliance monitoring &amp; AI insights
-            </p>
-          </div>
+        <div>
+          <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground">
+            GSTPilot Command Center
+          </h1>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            Upload documents → Get GST-ready returns in minutes
+          </p>
         </div>
-        <div className="flex items-center gap-2">
-          <Badge
-            variant="outline"
-            className="gap-1.5 px-3 py-1.5 border-emerald-200 text-emerald-700 bg-emerald-50/80 dark:border-emerald-800 dark:text-emerald-400 dark:bg-emerald-950/40 font-medium"
-          >
-            <Sparkles className="h-3.5 w-3.5" />
-            AI Powered
-          </Badge>
-          <Badge
-            variant="outline"
-            className="gap-1.5 px-3 py-1.5 border-emerald-200 text-emerald-700 bg-emerald-50/80 dark:border-emerald-800 dark:text-emerald-400 dark:bg-emerald-950/40"
-          >
-            <Activity className="h-3.5 w-3.5 animate-pulse" />
-            Live
-          </Badge>
-        </div>
+        <Badge
+          variant="outline"
+          className="gap-1.5 px-3 py-1.5 border-emerald-200 text-emerald-700 bg-emerald-50/80 dark:border-emerald-800 dark:text-emerald-400 dark:bg-emerald-950/40 font-medium self-start"
+        >
+          <CircleDot className="h-3.5 w-3.5 animate-pulse" />
+          Live
+        </Badge>
       </motion.div>
 
-      {/* ═══ TOP ROW: Compliance | Filing Readiness | Risk Heatmap ═══ */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-
-        {/* ─── 1. COMPLIANCE SCORE (HERO WIDGET) ─── */}
-        <AnimatedCard delay={0.05}>
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Shield className="h-5 w-5 text-emerald-500" />
-              Compliance Score
-            </CardTitle>
-            <CardDescription>Overall GST Compliance</CardDescription>
-          </CardHeader>
-          <CardContent className="flex flex-col items-center pb-6">
-            {loading ? (
-              <GaugeSkeleton />
-            ) : (
-              <>
-                <ComplianceGauge score={complianceScore} />
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ delay: 0.8 }}
-                  className="flex items-center gap-1.5 mt-3"
+      {/* ═══ TOP SECTION — 4 STATUS CARDS ═══ */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
+        {loading
+          ? Array.from({ length: 4 }).map((_, i) => (
+              <StatusCardSkeleton key={i} />
+            ))
+          : statusCards.map((card, index) => (
+              <motion.div
+                key={card.title}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: index * 0.05, duration: 0.5, ease: 'easeOut' }}
+                whileHover={{ scale: 1.02 }}
+                className="cursor-pointer"
+                onClick={() => setCurrentView(card.navigateTo)}
+              >
+                <Card
+                  className={`${card.bgColor} ${card.borderAccent} ${card.hoverShadow} hover:shadow-lg transition-all duration-300 border`}
                 >
-                  <TrendingUp className="h-3.5 w-3.5 text-emerald-500" />
-                  <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">
-                    +{trendPercent}% from last month
-                  </span>
-                </motion.div>
-              </>
-            )}
-          </CardContent>
-        </AnimatedCard>
-
-        {/* ─── 2. FILING READINESS ─── */}
-        <AnimatedCard delay={0.1}>
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Activity className="h-5 w-5 text-emerald-500" />
-              Filing Readiness
-            </CardTitle>
-            <CardDescription>Return preparation status</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {loading ? (
-              <PillsSkeleton />
-            ) : (
-              <div className="space-y-4">
-                {/* Three Metric Pills */}
-                <div className="grid grid-cols-3 gap-2">
-                  <motion.div
-                    whileHover={{ scale: 1.03 }}
-                    className="flex flex-col items-center p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-100 dark:border-emerald-900/50"
-                  >
-                    <span className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">
-                      {formatNumber(filingReadiness.readyReturns)}
-                    </span>
-                    <span className="text-[10px] font-semibold uppercase tracking-wider text-emerald-600/70 dark:text-emerald-400/70 mt-0.5">
-                      Ready
-                    </span>
-                  </motion.div>
-                  <motion.div
-                    whileHover={{ scale: 1.03 }}
-                    className="flex flex-col items-center p-3 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-100 dark:border-amber-900/50"
-                  >
-                    <span className="text-2xl font-bold text-amber-600 dark:text-amber-400">
-                      {formatNumber(filingReadiness.pendingReturns)}
-                    </span>
-                    <span className="text-[10px] font-semibold uppercase tracking-wider text-amber-600/70 dark:text-amber-400/70 mt-0.5">
-                      Pending
-                    </span>
-                  </motion.div>
-                  <motion.div
-                    whileHover={{ scale: 1.03 }}
-                    className="flex flex-col items-center p-3 rounded-xl bg-red-50 dark:bg-red-950/30 border border-red-100 dark:border-red-900/50"
-                  >
-                    <span className="text-2xl font-bold text-red-600 dark:text-red-400">
-                      {formatNumber(filingReadiness.criticalIssues)}
-                    </span>
-                    <span className="text-[10px] font-semibold uppercase tracking-wider text-red-600/70 dark:text-red-400/70 mt-0.5">
-                      Critical
-                    </span>
-                  </motion.div>
-                </div>
-
-                {/* Stacked Progress Bar */}
-                <div>
-                  <div className="h-3 w-full rounded-full bg-muted/30 overflow-hidden flex">
-                    <motion.div
-                      className="bg-emerald-500 h-full"
-                      initial={{ width: 0 }}
-                      animate={{ width: `${readyPct}%` }}
-                      transition={{ duration: 1, delay: 0.3, ease: 'easeOut' }}
-                    />
-                    <motion.div
-                      className="bg-amber-400 h-full"
-                      initial={{ width: 0 }}
-                      animate={{ width: `${pendingPct}%` }}
-                      transition={{ duration: 1, delay: 0.5, ease: 'easeOut' }}
-                    />
-                    <motion.div
-                      className="bg-red-500 h-full"
-                      initial={{ width: 0 }}
-                      animate={{ width: `${criticalPct}%` }}
-                      transition={{ duration: 1, delay: 0.7, ease: 'easeOut' }}
-                    />
-                  </div>
-                </div>
-
-                {/* Percentage Breakdown */}
-                <div className="grid grid-cols-3 gap-2">
-                  <div className="text-center">
-                    <div className="flex items-center justify-center gap-1.5 mb-0.5">
-                      <div className="h-2 w-2 rounded-sm bg-emerald-500" />
-                      <span className="text-xs text-muted-foreground">Ready Returns</span>
+                  <CardContent className="p-4 md:p-5">
+                    <div className="flex items-start justify-between">
+                      <div className="space-y-1.5">
+                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                          {card.title}
+                        </p>
+                        <p className={`text-3xl font-bold ${card.iconColor}`}>
+                          {card.value}
+                        </p>
+                        <p className="text-[11px] text-muted-foreground">
+                          {card.subtitle}
+                        </p>
+                      </div>
+                      <div className={`flex items-center justify-center h-10 w-10 rounded-xl ${card.iconBg} ${card.iconColor} shrink-0`}>
+                        {card.icon}
+                      </div>
                     </div>
-                    <p className="text-sm font-bold text-emerald-600 dark:text-emerald-400">{readyPct}%</p>
-                  </div>
-                  <div className="text-center">
-                    <div className="flex items-center justify-center gap-1.5 mb-0.5">
-                      <div className="h-2 w-2 rounded-sm bg-amber-400" />
-                      <span className="text-xs text-muted-foreground">Pending Returns</span>
-                    </div>
-                    <p className="text-sm font-bold text-amber-600 dark:text-amber-400">{pendingPct}%</p>
-                  </div>
-                  <div className="text-center">
-                    <div className="flex items-center justify-center gap-1.5 mb-0.5">
-                      <div className="h-2 w-2 rounded-sm bg-red-500" />
-                      <span className="text-xs text-muted-foreground">Critical Issues</span>
-                    </div>
-                    <p className="text-sm font-bold text-red-600 dark:text-red-400">{criticalPct}%</p>
-                  </div>
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </AnimatedCard>
-
-        {/* ─── 3. RISK HEATMAP ─── */}
-        <AnimatedCard delay={0.15}>
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <AlertTriangle className="h-5 w-5 text-amber-500" />
-              Risk Heatmap
-            </CardTitle>
-            <CardDescription>Client risk distribution</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {loading ? (
-              <HeatmapSkeleton />
-            ) : (
-              <RiskHeatmap
-                highRisk={riskData.highRisk}
-                mediumRisk={riskData.mediumRisk}
-                lowRisk={riskData.lowRisk}
-              />
-            )}
-          </CardContent>
-        </AnimatedCard>
+                  </CardContent>
+                </Card>
+              </motion.div>
+            ))}
       </div>
 
-      {/* ═══ BOTTOM ROW: AI Recommendations | Revenue Analytics ═══ */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      {/* ═══ MIDDLE SECTION — Two Columns ═══ */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
+        {/* ─── LEFT: Client Filing Status ─── */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2, duration: 0.5, ease: 'easeOut' }}
+        >
+          <Card className="border-border/50 hover:shadow-lg hover:shadow-emerald-500/5 transition-all duration-300">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <FileText className="h-4.5 w-4.5 text-emerald-500" />
+                    Client Filing Status
+                  </CardTitle>
+                  <CardDescription className="mt-1">
+                    Current return preparation status
+                  </CardDescription>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-950/30 text-xs h-8"
+                  onClick={() => setCurrentView('returns')}
+                >
+                  View All
+                  <ChevronRight className="h-3.5 w-3.5 ml-0.5" />
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {loading ? (
+                <ClientTableSkeleton />
+              ) : (
+                <ScrollArea className="max-h-96">
+                  <div className="space-y-1 pr-1">
+                    {/* Table Header */}
+                    <div className="grid grid-cols-[1fr_80px_70px_80px_36px] gap-2 px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground border-b border-border/40">
+                      <span>Client</span>
+                      <span>Return</span>
+                      <span>Period</span>
+                      <span className="text-center">Status</span>
+                      <span></span>
+                    </div>
 
-        {/* ─── 4. AI RECOMMENDATIONS ─── */}
-        <AnimatedCard delay={0.2}>
-          <CardHeader className="pb-2">
-            <div className="flex items-center justify-between">
-              <CardTitle className="flex items-center gap-2 text-base">
-                <Sparkles className="h-5 w-5 text-emerald-500" />
-                AI Recommendations
-              </CardTitle>
-              <Badge
-                variant="outline"
-                className="text-[10px] px-2 py-0.5 border-emerald-200 text-emerald-700 bg-emerald-50/80 dark:border-emerald-800 dark:text-emerald-400 dark:bg-emerald-950/40"
-              >
-                <Zap className="h-2.5 w-2.5 mr-0.5" />
-                Powered by AI
-              </Badge>
-            </div>
-            <CardDescription>Smart suggestions for your workflow</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {loading ? (
-              <RecommendationsSkeleton />
-            ) : (
-              <ScrollArea className="max-h-80">
-                <div className="space-y-2 pr-2">
-                  <AnimatePresence>
-                    {recommendations.map((rec, index) => (
+                    {clientFilings.map((row, index) => (
                       <motion.div
-                        key={rec.id}
-                        initial={{ opacity: 0, x: -20 }}
+                        key={`${row.clientId}-${row.period}`}
+                        initial={{ opacity: 0, x: -10 }}
                         animate={{ opacity: 1, x: 0 }}
-                        transition={{ delay: 0.3 + index * 0.08, duration: 0.4 }}
-                        whileHover={{ x: 4, backgroundColor: 'rgba(16, 185, 129, 0.03)' }}
-                        className="flex items-center gap-3 p-3 rounded-xl border border-border/30 hover:border-emerald-200/50 dark:hover:border-emerald-800/50 transition-all cursor-pointer group"
+                        transition={{ delay: 0.3 + index * 0.04, duration: 0.3 }}
+                        whileHover={{ backgroundColor: 'rgba(16, 185, 129, 0.04)' }}
+                        className="grid grid-cols-[1fr_80px_70px_80px_36px] gap-2 items-center px-2 py-2 rounded-lg cursor-pointer group transition-colors"
+                        onClick={() => setCurrentView(row.status === 'issues' ? 'reconcile' : 'returns')}
                       >
-                        <RecommendationIcon icon={rec.icon} color={rec.color} />
-                        <div className="flex-1 min-w-0">
+                        <div className="min-w-0">
                           <p className="text-sm font-medium text-foreground truncate">
-                            {rec.title}
+                            {row.clientName}
                           </p>
-                          <p className="text-xs text-muted-foreground truncate mt-0.5">
-                            {rec.description}
-                          </p>
+                          {row.issuesCount > 0 && (
+                            <p className="text-[11px] text-amber-600 dark:text-amber-400 truncate">
+                              {row.issuesCount} issue{row.issuesCount !== 1 ? 's' : ''} found
+                            </p>
+                          )}
                         </div>
-                        <ArrowRight className="h-4 w-4 text-muted-foreground/40 group-hover:text-emerald-500 group-hover:translate-x-0.5 transition-all shrink-0" />
+                        <span className="text-xs text-muted-foreground font-medium">
+                          {row.returnType}
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          {periodToLabel(row.period)}
+                        </span>
+                        <div className="flex justify-center">
+                          <StatusBadge status={row.status} />
+                        </div>
+                        <ArrowRight className="h-3.5 w-3.5 text-muted-foreground/30 group-hover:text-emerald-500 group-hover:translate-x-0.5 transition-all" />
                       </motion.div>
                     ))}
-                  </AnimatePresence>
-                </div>
-              </ScrollArea>
-            )}
-          </CardContent>
-        </AnimatedCard>
+                  </div>
+                </ScrollArea>
+              )}
+            </CardContent>
+          </Card>
+        </motion.div>
 
-        {/* ─── 5. REVENUE ANALYTICS ─── */}
-        <AnimatedCard delay={0.25}>
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <TrendingUp className="h-5 w-5 text-emerald-500" />
-              Revenue Analytics
-            </CardTitle>
-            <CardDescription>Monthly GST processed &amp; filing volume</CardDescription>
+        {/* ─── RIGHT: What Needs Attention Today ─── */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.25, duration: 0.5, ease: 'easeOut' }}
+        >
+          <Card className="border-border/50 hover:shadow-lg hover:shadow-emerald-500/5 transition-all duration-300">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <Zap className="h-4.5 w-4.5 text-red-500" />
+                    What Needs Attention Today
+                  </CardTitle>
+                  <CardDescription className="mt-1">
+                    Priority items requiring action
+                  </CardDescription>
+                </div>
+                <Badge
+                  variant="outline"
+                  className="text-[10px] px-2 py-0.5 border-red-200 text-red-700 bg-red-50/80 dark:border-red-800 dark:text-red-400 dark:bg-red-950/40"
+                >
+                  {attentionItems.length} items
+                </Badge>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {loading ? (
+                <AttentionListSkeleton />
+              ) : (
+                <ScrollArea className="max-h-96">
+                  <div className="space-y-2 pr-1">
+                    {attentionItems.map((item, index) => (
+                      <motion.div
+                        key={item.id}
+                        initial={{ opacity: 0, x: -10 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: 0.3 + index * 0.06, duration: 0.35 }}
+                        whileHover={{ x: 4 }}
+                        className="flex items-center gap-3 p-3 rounded-xl border border-border/30 hover:border-emerald-200/50 dark:hover:border-emerald-800/50 transition-all cursor-pointer group"
+                        onClick={() => setCurrentView(item.navigateTo)}
+                      >
+                        <div className={`flex items-center justify-center h-9 w-9 rounded-lg shrink-0 ${item.iconBg} ${item.iconColor}`}>
+                          {item.icon}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-foreground truncate">
+                            {item.title}
+                          </p>
+                          <p className="text-xs text-muted-foreground truncate mt-0.5">
+                            {item.description}
+                          </p>
+                        </div>
+                        <ArrowRight className="h-4 w-4 text-muted-foreground/30 group-hover:text-emerald-500 group-hover:translate-x-0.5 transition-all shrink-0" />
+                      </motion.div>
+                    ))}
+
+                    {attentionItems.length === 0 && (
+                      <div className="flex flex-col items-center justify-center py-8 text-center">
+                        <CheckCircle2 className="h-10 w-10 text-emerald-500 mb-2" />
+                        <p className="text-sm font-medium text-foreground">All clear!</p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          No items need your attention right now.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </ScrollArea>
+              )}
+            </CardContent>
+          </Card>
+        </motion.div>
+      </div>
+
+      {/* ═══ BOTTOM SECTION — Filing Progress ═══ */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.35, duration: 0.5, ease: 'easeOut' }}
+      >
+        <Card className="border-border/50 hover:shadow-lg hover:shadow-emerald-500/5 transition-all duration-300">
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <FileCheck className="h-4.5 w-4.5 text-emerald-500" />
+                  Filing Progress
+                </CardTitle>
+                <CardDescription className="mt-1">
+                  Current period status — {periodToLabel(currentPeriod)}
+                </CardDescription>
+              </div>
+              <span className="text-sm font-semibold text-foreground">
+                {totalReturns} total returns
+              </span>
+            </div>
           </CardHeader>
           <CardContent>
             {loading ? (
-              <ChartSkeleton />
+              <ProgressSkeleton />
             ) : (
-              <div className="space-y-4">
-                <ChartContainer config={revenueChartConfig} className="h-52 w-full">
-                  <AreaChart data={revenueData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
-                    <defs>
-                      <linearGradient id="taxableGradient" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor={COLORS.emerald} stopOpacity={0.3} />
-                        <stop offset="95%" stopColor={COLORS.emerald} stopOpacity={0} />
-                      </linearGradient>
-                      <linearGradient id="gstGradient" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor={COLORS.teal} stopOpacity={0.3} />
-                        <stop offset="95%" stopColor={COLORS.teal} stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" className="dark:stroke-slate-700/50" />
-                    <XAxis
-                      dataKey="month"
-                      tickLine={false}
-                      axisLine={false}
-                      tick={{ fontSize: 11, fill: '#64748b' }}
-                    />
-                    <YAxis
-                      tickLine={false}
-                      axisLine={false}
-                      tick={{ fontSize: 11, fill: '#64748b' }}
-                      tickFormatter={(v: number) => `${(v / 100000).toFixed(0)}L`}
-                    />
-                    <ChartTooltip content={<ChartTooltipContent />} />
-                    <Area
-                      type="monotone"
-                      dataKey="taxableValue"
-                      stroke={COLORS.emerald}
-                      strokeWidth={2}
-                      fill="url(#taxableGradient)"
-                      dot={false}
-                      activeDot={{ r: 5, fill: COLORS.emerald, stroke: '#fff', strokeWidth: 2 }}
-                    />
-                    <Area
-                      type="monotone"
-                      dataKey="gstAmount"
-                      stroke={COLORS.teal}
-                      strokeWidth={2}
-                      fill="url(#gstGradient)"
-                      dot={false}
-                      activeDot={{ r: 5, fill: COLORS.teal, stroke: '#fff', strokeWidth: 2 }}
-                    />
-                  </AreaChart>
-                </ChartContainer>
+              <div className="space-y-6">
+                {/* Stacked Progress Bar */}
+                <div>
+                  <div className="h-4 w-full rounded-full bg-muted/30 overflow-hidden flex">
+                    {filedPct > 0 && (
+                      <motion.div
+                        className="bg-emerald-500 h-full"
+                        initial={{ width: 0 }}
+                        animate={{ width: `${filedPct}%` }}
+                        transition={{ duration: 1.2, delay: 0.3, ease: 'easeOut' }}
+                      />
+                    )}
+                    {readyPct > 0 && (
+                      <motion.div
+                        className="bg-emerald-400 h-full"
+                        initial={{ width: 0 }}
+                        animate={{ width: `${readyPct}%` }}
+                        transition={{ duration: 1.2, delay: 0.5, ease: 'easeOut' }}
+                      />
+                    )}
+                    {issuesPct > 0 && (
+                      <motion.div
+                        className="bg-amber-400 h-full"
+                        initial={{ width: 0 }}
+                        animate={{ width: `${issuesPct}%` }}
+                        transition={{ duration: 1.2, delay: 0.7, ease: 'easeOut' }}
+                      />
+                    )}
+                    {notStartedPct > 0 && (
+                      <motion.div
+                        className="bg-slate-300 dark:bg-slate-600 h-full"
+                        initial={{ width: 0 }}
+                        animate={{ width: `${notStartedPct}%` }}
+                        transition={{ duration: 1.2, delay: 0.9, ease: 'easeOut' }}
+                      />
+                    )}
+                  </div>
 
-                {/* Filing Volume Stats */}
-                <div className="grid grid-cols-3 gap-2">
-                  <motion.div
-                    whileHover={{ scale: 1.02 }}
-                    className="p-3 rounded-xl bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-950/30 dark:to-teal-950/30 border border-emerald-100/50 dark:border-emerald-900/30"
-                  >
-                    <p className="text-[10px] font-semibold uppercase tracking-wider text-emerald-600/70 dark:text-emerald-400/70">
-                      Total Processed
-                    </p>
-                    <p className="text-lg font-bold text-emerald-700 dark:text-emerald-300 mt-0.5">
-                      {formatCurrency(revenueData.reduce((s, d) => s + d.taxableValue, 0))}
-                    </p>
-                  </motion.div>
-                  <motion.div
-                    whileHover={{ scale: 1.02 }}
-                    className="p-3 rounded-xl bg-gradient-to-br from-teal-50 to-emerald-50 dark:from-teal-950/30 dark:to-emerald-950/30 border border-teal-100/50 dark:border-teal-900/30"
-                  >
-                    <p className="text-[10px] font-semibold uppercase tracking-wider text-teal-600/70 dark:text-teal-400/70">
-                      GST Collected
-                    </p>
-                    <p className="text-lg font-bold text-teal-700 dark:text-teal-300 mt-0.5">
-                      {formatCurrency(revenueData.reduce((s, d) => s + d.gstAmount, 0))}
-                    </p>
-                  </motion.div>
-                  <motion.div
-                    whileHover={{ scale: 1.02 }}
-                    className="p-3 rounded-xl bg-gradient-to-br from-emerald-50 to-emerald-100/50 dark:from-emerald-950/30 dark:to-emerald-900/20 border border-emerald-100/50 dark:border-emerald-900/30"
-                  >
-                    <p className="text-[10px] font-semibold uppercase tracking-wider text-emerald-600/70 dark:text-emerald-400/70">
-                      Filings
-                    </p>
-                    <p className="text-lg font-bold text-emerald-700 dark:text-emerald-300 mt-0.5">
-                      {formatNumber(revenueData.reduce((s, d) => s + d.filings, 0))}
-                    </p>
-                  </motion.div>
+                  {/* Legend */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4">
+                    <div className="flex items-center gap-2">
+                      <div className="h-3 w-3 rounded-sm bg-emerald-500 shrink-0" />
+                      <div>
+                        <p className="text-xs text-muted-foreground">Filed</p>
+                        <p className="text-sm font-bold text-emerald-600 dark:text-emerald-400">
+                          {filedCount}{' '}
+                          <span className="text-[11px] font-normal text-muted-foreground">
+                            ({filedPct}%)
+                          </span>
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="h-3 w-3 rounded-sm bg-emerald-400 shrink-0" />
+                      <div>
+                        <p className="text-xs text-muted-foreground">Ready to File</p>
+                        <p className="text-sm font-bold text-emerald-500 dark:text-emerald-300">
+                          {readyCount}{' '}
+                          <span className="text-[11px] font-normal text-muted-foreground">
+                            ({readyPct}%)
+                          </span>
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="h-3 w-3 rounded-sm bg-amber-400 shrink-0" />
+                      <div>
+                        <p className="text-xs text-muted-foreground">Issues</p>
+                        <p className="text-sm font-bold text-amber-600 dark:text-amber-400">
+                          {issuesCount}{' '}
+                          <span className="text-[11px] font-normal text-muted-foreground">
+                            ({issuesPct}%)
+                          </span>
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="h-3 w-3 rounded-sm bg-slate-300 dark:bg-slate-600 shrink-0" />
+                      <div>
+                        <p className="text-xs text-muted-foreground">Not Started</p>
+                        <p className="text-sm font-bold text-slate-600 dark:text-slate-400">
+                          {notStartedCount}{' '}
+                          <span className="text-[11px] font-normal text-muted-foreground">
+                            ({notStartedPct}%)
+                          </span>
+                        </p>
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
-                {/* Current Month Highlight */}
-                <div className="flex items-center justify-between p-3 rounded-xl bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-100/50 dark:border-emerald-900/30">
-                  <div className="flex items-center gap-2">
-                    <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-                    <span className="text-xs font-medium text-emerald-700 dark:text-emerald-300">
-                      Current Month (Jun)
-                    </span>
+                {/* Monthly Filing Volume AreaChart */}
+                <div className="pt-2">
+                  <div className="flex items-center justify-between mb-3">
+                    <p className="text-sm font-medium text-foreground">
+                      Monthly Filing Volume
+                    </p>
+                    <span className="text-[11px] text-muted-foreground">Last 6 months</span>
                   </div>
-                  <span className="text-sm font-bold text-emerald-700 dark:text-emerald-300">
-                    {formatCurrency(revenueData[revenueData.length - 1]?.taxableValue ?? 0)}
-                  </span>
+                  <ChartContainer config={filingChartConfig} className="h-44 w-full">
+                    <AreaChart data={monthlyData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
+                      <defs>
+                        <linearGradient id="filedGradient" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor={COLORS.emerald} stopOpacity={0.35} />
+                          <stop offset="95%" stopColor={COLORS.emerald} stopOpacity={0} />
+                        </linearGradient>
+                        <linearGradient id="pendingGradient" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor={COLORS.amber} stopOpacity={0.25} />
+                          <stop offset="95%" stopColor={COLORS.amber} stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid
+                        strokeDasharray="3 3"
+                        vertical={false}
+                        stroke="#e2e8f0"
+                        className="dark:stroke-slate-700/50"
+                      />
+                      <XAxis
+                        dataKey="month"
+                        tickLine={false}
+                        axisLine={false}
+                        tick={{ fontSize: 11, fill: '#64748b' }}
+                      />
+                      <YAxis
+                        tickLine={false}
+                        axisLine={false}
+                        tick={{ fontSize: 11, fill: '#64748b' }}
+                      />
+                      <ChartTooltip content={<ChartTooltipContent />} />
+                      <Area
+                        type="monotone"
+                        dataKey="filed"
+                        stroke={COLORS.emerald}
+                        strokeWidth={2}
+                        fill="url(#filedGradient)"
+                        dot={false}
+                        activeDot={{ r: 5, fill: COLORS.emerald, stroke: '#fff', strokeWidth: 2 }}
+                      />
+                      <Area
+                        type="monotone"
+                        dataKey="pending"
+                        stroke={COLORS.amber}
+                        strokeWidth={2}
+                        fill="url(#pendingGradient)"
+                        dot={false}
+                        activeDot={{ r: 5, fill: COLORS.amber, stroke: '#fff', strokeWidth: 2 }}
+                      />
+                    </AreaChart>
+                  </ChartContainer>
                 </div>
               </div>
             )}
           </CardContent>
-        </AnimatedCard>
-      </div>
-
-      {/* ═══ QUICK ACTIONS BAR ═══ */}
-      <AnimatedCard delay={0.3}>
-        <CardContent className="p-4">
-          <div className="flex flex-wrap items-center gap-3">
-            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mr-1">
-              Quick Actions
-            </span>
-            <Button
-              size="sm"
-              onClick={() => setCurrentView('gstr-filing')}
-              className="gap-1.5 h-8 bg-emerald-600 hover:bg-emerald-700 text-white text-xs"
-            >
-              <ChevronRight className="h-3 w-3" />
-              Prepare GSTR-1
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setCurrentView('reconciliation')}
-              className="gap-1.5 h-8 border-emerald-200 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-800 dark:text-emerald-400 dark:hover:bg-emerald-950/30 text-xs"
-            >
-              <Shield className="h-3 w-3" />
-              Run Reconciliation
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setCurrentView('errors')}
-              className="gap-1.5 h-8 border-amber-200 text-amber-700 hover:bg-amber-50 dark:border-amber-800 dark:text-amber-400 dark:hover:bg-amber-950/30 text-xs"
-            >
-              <AlertTriangle className="h-3 w-3" />
-              View Issues
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setCurrentView('calendar')}
-              className="gap-1.5 h-8 border-slate-200 text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-900/30 text-xs"
-            >
-              <CalendarClock className="h-3 w-3" />
-              Filing Calendar
-            </Button>
-          </div>
-        </CardContent>
-      </AnimatedCard>
+        </Card>
+      </motion.div>
     </div>
   );
 }

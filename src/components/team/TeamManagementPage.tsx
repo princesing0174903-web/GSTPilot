@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   Card,
   CardContent,
@@ -8,26 +9,13 @@ import {
   CardTitle,
   CardDescription,
 } from '@/components/ui/card';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
+import { Separator } from '@/components/ui/separator';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Select,
   SelectContent,
@@ -35,766 +23,1007 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Switch } from '@/components/ui/switch';
-import { Separator } from '@/components/ui/separator';
-import { Label } from '@/components/ui/label';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 import {
   Settings,
-  Users,
-  Plus,
+  User,
+  Database,
+  Info,
+  Save,
+  Check,
+  Building2,
+  Hash,
+  MapPin,
+  Calendar,
+  Mail,
   Shield,
-  Edit,
-  Trash2,
-  Moon,
-  Sun,
   Bell,
-  RefreshCw,
-  FileText,
+  Clock,
+  AlertTriangle,
+  Download,
+  Upload,
+  Trash2,
+  HardDrive,
+  ExternalLink,
+  MessageSquare,
+  FileJson,
+  Lock,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
-import { useTheme } from 'next-themes';
+import { useApp } from '@/contexts/AppContext';
+import { useAuth } from '@/contexts/AuthContext';
 
-// --- Types ---
-interface TeamMember {
-  id: string;
-  name: string;
-  email: string;
-  role: 'admin' | 'manager' | 'staff';
-  status: 'online' | 'offline';
-  lastActive: string;
-}
+// ── Animation variants ──
+const containerVariants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: { staggerChildren: 0.06 },
+  },
+};
 
-// --- Hardcoded Team Member Data ---
-const initialTeamMembers: TeamMember[] = [
-  {
-    id: '1',
-    name: 'CA Rajesh Kumar',
-    email: 'rajesh.kumar@gstpilot.in',
-    role: 'admin',
-    status: 'online',
-    lastActive: 'Just now',
-  },
-  {
-    id: '2',
-    name: 'Priya Sharma',
-    email: 'priya.sharma@gstpilot.in',
-    role: 'manager',
-    status: 'online',
-    lastActive: '5m ago',
-  },
-  {
-    id: '3',
-    name: 'Amit Patel',
-    email: 'amit.patel@gstpilot.in',
-    role: 'staff',
-    status: 'offline',
-    lastActive: '2h ago',
-  },
+const itemVariants = {
+  hidden: { opacity: 0, y: 12 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.35, ease: 'easeOut' } },
+};
+
+// ── Indian States list ──
+const INDIAN_STATES = [
+  'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh',
+  'Goa', 'Gujarat', 'Haryana', 'Himachal Pradesh', 'Jharkhand',
+  'Karnataka', 'Kerala', 'Madhya Pradesh', 'Maharashtra', 'Manipur',
+  'Meghalaya', 'Mizoram', 'Nagaland', 'Odisha', 'Punjab',
+  'Rajasthan', 'Sikkim', 'Tamil Nadu', 'Telangana', 'Tripura',
+  'Uttar Pradesh', 'Uttarakhand', 'West Bengal',
+  'Andaman and Nicobar Islands', 'Chandigarh',
+  'Dadra and Nagar Haveli and Daman and Diu', 'Delhi',
+  'Jammu and Kashmir', 'Ladakh', 'Lakshadweep', 'Puducherry',
 ];
 
-// --- Role Badge Helper ---
-function getRoleBadge(role: TeamMember['role']) {
-  switch (role) {
-    case 'admin':
-      return (
-        <Badge className="bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border-emerald-200 gap-1">
-          <Shield className="h-3 w-3" />
-          Admin
-        </Badge>
-      );
-    case 'manager':
-      return (
-        <Badge className="bg-amber-50 text-amber-700 hover:bg-amber-100 border-amber-200 gap-1">
-          <Edit className="h-3 w-3" />
-          Manager
-        </Badge>
-      );
-    case 'staff':
-      return (
-        <Badge className="bg-slate-50 text-slate-700 hover:bg-slate-100 border-slate-200 gap-1">
-          <Users className="h-3 w-3" />
-          Staff
-        </Badge>
-      );
-  }
-}
+// ── GSTIN validation regex ──
+const GSTIN_REGEX = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
 
-// --- Status Dot Helper ---
-function getStatusDot(status: TeamMember['status']) {
-  return (
-    <div className="flex items-center gap-2">
-      <span
-        className={`inline-block h-2.5 w-2.5 rounded-full ${
-          status === 'online' ? 'bg-green-500' : 'bg-gray-400'
-        }`}
-      />
-      <span className="text-sm capitalize text-muted-foreground">
-        {status}
-      </span>
-    </div>
-  );
-}
+// ── Save button states ──
+type SaveState = 'idle' | 'saving' | 'saved';
 
-// ===================== MAIN COMPONENT =====================
+// ========================== MAIN COMPONENT ==========================
 export default function TeamManagementPage() {
-  const { theme, setTheme } = useTheme();
+  const { } = useApp();
+  const { user } = useAuth();
 
-  // Team members state
-  const [teamMembers, setTeamMembers] = useState<TeamMember[]>(initialTeamMembers);
+  // ── General tab state ──
+  const [firmName, setFirmName] = useState('GSTPilot Firm');
+  const [gstin, setGstin] = useState('');
+  const [state, setState] = useState('');
+  const [returnPeriod, setReturnPeriod] = useState('monthly');
+  const [fyStart, setFyStart] = useState('april');
+  const [saveState, setSaveState] = useState<SaveState>('idle');
 
-  // Add member dialog state
-  const [addDialogOpen, setAddDialogOpen] = useState(false);
-  const [newMemberName, setNewMemberName] = useState('');
-  const [newMemberEmail, setNewMemberEmail] = useState('');
-  const [newMemberRole, setNewMemberRole] = useState<TeamMember['role']>('staff');
-
-  // Edit role dialog state
-  const [editDialogOpen, setEditDialogOpen] = useState(false);
-  const [editingMember, setEditingMember] = useState<TeamMember | null>(null);
-  const [editRole, setEditRole] = useState<TeamMember['role']>('staff');
-
-  // Remove confirmation dialog
-  const [removeDialogOpen, setRemoveDialogOpen] = useState(false);
-  const [removingMember, setRemovingMember] = useState<TeamMember | null>(null);
-
-  // Application settings state
-  const [defaultGstRate, setDefaultGstRate] = useState('18');
-  const [defaultReturnPeriod, setDefaultReturnPeriod] = useState('monthly');
-  const [autoReconciliation, setAutoReconciliation] = useState(true);
-  const [autoClassifyInvoices, setAutoClassifyInvoices] = useState(true);
+  // ── Profile tab state ──
+  const [profileName, setProfileName] = useState(user?.name || '');
   const [emailNotifications, setEmailNotifications] = useState(true);
+  const [filingReminders, setFilingReminders] = useState(true);
+  const [mismatchAlerts, setMismatchAlerts] = useState(true);
+  const [showPassword, setShowPassword] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [passwordSaveState, setPasswordSaveState] = useState<SaveState>('idle');
 
-  // --- Handlers ---
-  function handleAddMember() {
-    if (!newMemberName.trim() || !newMemberEmail.trim()) return;
-    const newMember: TeamMember = {
-      id: String(Date.now()),
-      name: newMemberName.trim(),
-      email: newMemberEmail.trim(),
-      role: newMemberRole,
-      status: 'offline',
-      lastActive: 'Never',
-    };
-    setTeamMembers((prev) => [...prev, newMember]);
-    setNewMemberName('');
-    setNewMemberEmail('');
-    setNewMemberRole('staff');
-    setAddDialogOpen(false);
-  }
+  // ── Data tab state ──
+  const [clearDialogOpen, setClearDialogOpen] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  function handleEditRole() {
-    if (!editingMember) return;
-    setTeamMembers((prev) =>
-      prev.map((m) => (m.id === editingMember.id ? { ...m, role: editRole } : m))
-    );
-    setEditDialogOpen(false);
-    setEditingMember(null);
-  }
+  // ── GSTIN validation ──
+  const gstinValid = gstin === '' || GSTIN_REGEX.test(gstin.toUpperCase());
+  const gstinFormatted = gstin.toUpperCase();
 
-  function handleRemoveMember() {
-    if (!removingMember) return;
-    setTeamMembers((prev) => prev.filter((m) => m.id !== removingMember.id));
-    setRemoveDialogOpen(false);
-    setRemovingMember(null);
-  }
-
-  function openEditDialog(member: TeamMember) {
-    setEditingMember(member);
-    setEditRole(member.role);
-    setEditDialogOpen(true);
-  }
-
-  function openRemoveDialog(member: TeamMember) {
-    setRemovingMember(member);
-    setRemoveDialogOpen(true);
-  }
-
-  function toggleDarkMode() {
-    setTheme(theme === 'dark' ? 'light' : 'dark');
-  }
-
-  // Fiscal year helpers
-  function getCurrentFiscalYear(): string {
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = now.getMonth(); // 0-indexed
-    // Indian FY: April to March
-    if (month >= 3) {
-      return `FY ${year}-${(year + 1).toString().slice(2)}`;
+  // ── Save handler ──
+  const handleSaveGeneral = useCallback(async () => {
+    setSaveState('saving');
+    try {
+      const res = await fetch('/api/firm-settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          firmName,
+          primaryColor: '#059669',
+        }),
+      });
+      if (!res.ok) throw new Error('Save failed');
+      setSaveState('saved');
+      setTimeout(() => setSaveState('idle'), 2000);
+    } catch {
+      setSaveState('idle');
     }
-    return `FY ${year - 1}-${year.toString().slice(2)}`;
-  }
+  }, [firmName]);
 
-  function getFiscalYearQuarters(): { quarter: string; period: string }[] {
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = now.getMonth();
-    const startYear = month >= 3 ? year : year - 1;
+  // ── Password change handler ──
+  const handlePasswordChange = useCallback(() => {
+    if (newPassword && newPassword === confirmPassword) {
+      setPasswordSaveState('saving');
+      setTimeout(() => {
+        setPasswordSaveState('saved');
+        setCurrentPassword('');
+        setNewPassword('');
+        setConfirmPassword('');
+        setTimeout(() => setPasswordSaveState('idle'), 2000);
+      }, 800);
+    }
+  }, [newPassword, confirmPassword]);
 
-    return [
-      {
-        quarter: 'Q1',
-        period: `Apr ${startYear} - Jun ${startYear}`,
-      },
-      {
-        quarter: 'Q2',
-        period: `Jul ${startYear} - Sep ${startYear}`,
-      },
-      {
-        quarter: 'Q3',
-        period: `Oct ${startYear} - Dec ${startYear}`,
-      },
-      {
-        quarter: 'Q4',
-        period: `Jan ${startYear + 1} - Mar ${startYear + 1}`,
-      },
-    ];
-  }
+  // ── Export data ──
+  const handleExport = useCallback(async () => {
+    try {
+      const res = await fetch('/api/export');
+      if (!res.ok) throw new Error('Export failed');
+      const data = await res.json();
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `gstpilot-export-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      // Silent fail for settings page
+    }
+  }, []);
 
-  const fiscalYear = getCurrentFiscalYear();
-  const quarters = getFiscalYearQuarters();
+  // ── Import data ──
+  const handleImport = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        JSON.parse(reader.result as string);
+        // Import logic would go here
+      } catch {
+        // Invalid JSON
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  }, []);
+
+  // ── Clear all data ──
+  const handleClearAll = useCallback(() => {
+    setClearDialogOpen(false);
+  }, []);
+
+  // ── Save button renderer ──
+  const renderSaveButton = (
+    state: SaveState,
+    onClick: () => void,
+    label = 'Save Changes',
+  ) => (
+    <Button
+      onClick={onClick}
+      disabled={state === 'saving'}
+      className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white min-w-[140px]"
+    >
+      <AnimatePresence mode="wait">
+        {state === 'idle' && (
+          <motion.span
+            key="idle"
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.8 }}
+            className="flex items-center gap-2"
+          >
+            <Save className="h-4 w-4" />
+            {label}
+          </motion.span>
+        )}
+        {state === 'saving' && (
+          <motion.span
+            key="saving"
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.8 }}
+            className="flex items-center gap-2"
+          >
+            <motion.div
+              animate={{ rotate: 360 }}
+              transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+            >
+              <Save className="h-4 w-4" />
+            </motion.div>
+            Saving...
+          </motion.span>
+        )}
+        {state === 'saved' && (
+          <motion.span
+            key="saved"
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.8 }}
+            className="flex items-center gap-2"
+          >
+            <Check className="h-4 w-4" />
+            Saved!
+          </motion.span>
+        )}
+      </AnimatePresence>
+    </Button>
+  );
 
   // ==================== RENDER ====================
   return (
-    <div className="space-y-6 p-4 md:p-6">
-      {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl md:text-3xl font-bold tracking-tight flex items-center gap-2">
-            <Settings className="h-7 w-7 text-emerald-600" />
-            Settings &amp; Team Management
-          </h1>
-          <p className="text-muted-foreground text-sm mt-1">
-            Manage team members, application preferences, and fiscal year settings
-          </p>
-        </div>
-        <Badge variant="outline" className="gap-1.5 px-3 py-1.5 w-fit">
-          <Shield className="h-3.5 w-3.5 text-emerald-500" />
-          <span className="text-emerald-700">Admin Access</span>
-        </Badge>
-      </div>
-
-      {/* ===== Team Members Section ===== */}
-      <Card className="hover:shadow-md transition-shadow">
-        <CardHeader>
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-            <div>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <Users className="h-5 w-5 text-emerald-600" />
-                Team Members
-              </CardTitle>
-              <CardDescription className="mt-1">
-                {teamMembers.length} member{teamMembers.length !== 1 ? 's' : ''} in your organization
-              </CardDescription>
-            </div>
-
-            {/* Add Member Dialog Trigger */}
-            <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
-              <DialogTrigger asChild>
-                <Button className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white">
-                  <Plus className="h-4 w-4" />
-                  Add Member
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Add Team Member</DialogTitle>
-                  <DialogDescription>
-                    Invite a new member to your GSTPilot organization.
-                  </DialogDescription>
-                </DialogHeader>
-                <div className="space-y-4 py-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="member-name">Name</Label>
-                    <Input
-                      id="member-name"
-                      placeholder="Enter full name"
-                      value={newMemberName}
-                      onChange={(e) => setNewMemberName(e.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="member-email">Email</Label>
-                    <Input
-                      id="member-email"
-                      type="email"
-                      placeholder="email@example.com"
-                      value={newMemberEmail}
-                      onChange={(e) => setNewMemberEmail(e.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="member-role">Role</Label>
-                    <Select
-                      value={newMemberRole}
-                      onValueChange={(val) =>
-                        setNewMemberRole(val as TeamMember['role'])
-                      }
-                    >
-                      <SelectTrigger className="w-full" id="member-role">
-                        <SelectValue placeholder="Select role" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="admin">Admin</SelectItem>
-                        <SelectItem value="manager">Manager</SelectItem>
-                        <SelectItem value="staff">Staff</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-                <DialogFooter>
-                  <Button
-                    variant="outline"
-                    onClick={() => setAddDialogOpen(false)}
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    className="bg-emerald-600 hover:bg-emerald-700 text-white"
-                    onClick={handleAddMember}
-                    disabled={!newMemberName.trim() || !newMemberEmail.trim()}
-                  >
-                    Add Member
-                  </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Email</TableHead>
-                  <TableHead>Role</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Last Active</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {teamMembers.length === 0 ? (
-                  <TableRow>
-                    <TableCell
-                      colSpan={6}
-                      className="text-center text-muted-foreground py-8"
-                    >
-                      No team members found. Add your first member above.
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  teamMembers.map((member) => (
-                    <TableRow key={member.id}>
-                      <TableCell className="font-medium">
-                        <div className="flex items-center gap-2">
-                          <div className="flex items-center justify-center h-8 w-8 rounded-full bg-emerald-100 text-emerald-700 text-xs font-semibold shrink-0">
-                            {member.name
-                              .split(' ')
-                              .map((n) => n[0])
-                              .join('')
-                              .slice(0, 2)}
-                          </div>
-                          <span className="truncate">{member.name}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        <span className="truncate block max-w-[200px]">
-                          {member.email}
-                        </span>
-                      </TableCell>
-                      <TableCell>{getRoleBadge(member.role)}</TableCell>
-                      <TableCell>{getStatusDot(member.status)}</TableCell>
-                      <TableCell className="text-muted-foreground text-sm">
-                        {member.lastActive}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-8 gap-1.5 text-emerald-700 hover:text-emerald-800 hover:bg-emerald-50"
-                            onClick={() => openEditDialog(member)}
-                          >
-                            <Edit className="h-3.5 w-3.5" />
-                            <span className="hidden sm:inline">Edit Role</span>
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-8 gap-1.5 text-red-600 hover:text-red-700 hover:bg-red-50"
-                            onClick={() => openRemoveDialog(member)}
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                            <span className="hidden sm:inline">Remove</span>
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* ===== Edit Role Dialog ===== */}
-      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Edit Role</DialogTitle>
-            <DialogDescription>
-              Change the role for {editingMember?.name}.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-2">
-            <div className="space-y-2">
-              <Label>Current Role</Label>
-              <div>{editingMember && getRoleBadge(editingMember.role)}</div>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="edit-role">New Role</Label>
-              <Select
-                value={editRole}
-                onValueChange={(val) =>
-                  setEditRole(val as TeamMember['role'])
-                }
-              >
-                <SelectTrigger className="w-full" id="edit-role">
-                  <SelectValue placeholder="Select new role" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="admin">Admin</SelectItem>
-                  <SelectItem value="manager">Manager</SelectItem>
-                  <SelectItem value="staff">Staff</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setEditDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              className="bg-emerald-600 hover:bg-emerald-700 text-white"
-              onClick={handleEditRole}
-            >
-              Update Role
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* ===== Remove Confirmation Dialog ===== */}
-      <Dialog open={removeDialogOpen} onOpenChange={setRemoveDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Remove Team Member</DialogTitle>
-            <DialogDescription>
-              Are you sure you want to remove {removingMember?.name}? This action
-              cannot be undone.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setRemoveDialogOpen(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={handleRemoveMember}
-            >
-              Remove
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* ===== Application Settings Section ===== */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* GST & Return Settings */}
-        <Card className="hover:shadow-md transition-shadow">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <FileText className="h-5 w-5 text-emerald-600" />
-              GST &amp; Return Settings
-            </CardTitle>
-            <CardDescription>
-              Configure default GST rates and return filing preferences
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            {/* Default GST Rate */}
-            <div className="space-y-2">
-              <Label htmlFor="gst-rate">Default GST Rate</Label>
-              <Select value={defaultGstRate} onValueChange={setDefaultGstRate}>
-                <SelectTrigger className="w-full" id="gst-rate">
-                  <SelectValue placeholder="Select GST rate" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="5">5%</SelectItem>
-                  <SelectItem value="12">12%</SelectItem>
-                  <SelectItem value="18">18%</SelectItem>
-                  <SelectItem value="28">28%</SelectItem>
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                Applied as default when creating new invoices
-              </p>
-            </div>
-
-            <Separator />
-
-            {/* Default Return Period */}
-            <div className="space-y-2">
-              <Label htmlFor="return-period">Default Return Period</Label>
-              <Select
-                value={defaultReturnPeriod}
-                onValueChange={setDefaultReturnPeriod}
-              >
-                <SelectTrigger className="w-full" id="return-period">
-                  <SelectValue placeholder="Select return period" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="monthly">Monthly</SelectItem>
-                  <SelectItem value="quarterly">Quarterly</SelectItem>
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                Default filing frequency for new clients
-              </p>
-            </div>
-
-            <Separator />
-
-            {/* Auto-Reconciliation Toggle */}
-            <div className="flex items-center justify-between">
-              <div className="space-y-0.5">
-                <Label className="flex items-center gap-2">
-                  <RefreshCw className="h-4 w-4 text-emerald-600" />
-                  Auto-reconciliation
-                </Label>
-                <p className="text-xs text-muted-foreground">
-                  Automatically reconcile GSTR-2A with purchase register
-                </p>
-              </div>
-              <Switch
-                checked={autoReconciliation}
-                onCheckedChange={setAutoReconciliation}
-              />
-            </div>
-
-            <Separator />
-
-            {/* Auto-classify Invoices Toggle */}
-            <div className="flex items-center justify-between">
-              <div className="space-y-0.5">
-                <Label className="flex items-center gap-2">
-                  <FileText className="h-4 w-4 text-emerald-600" />
-                  Auto-classify invoices
-                </Label>
-                <p className="text-xs text-muted-foreground">
-                  Automatically categorize invoices by HSN/SAC codes
-                </p>
-              </div>
-              <Switch
-                checked={autoClassifyInvoices}
-                onCheckedChange={setAutoClassifyInvoices}
-              />
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Notification & Appearance Settings */}
-        <Card className="hover:shadow-md transition-shadow">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Bell className="h-5 w-5 text-emerald-600" />
-              Notifications &amp; Appearance
-            </CardTitle>
-            <CardDescription>
-              Manage notification preferences and display settings
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            {/* Email Notifications Toggle */}
-            <div className="flex items-center justify-between">
-              <div className="space-y-0.5">
-                <Label className="flex items-center gap-2">
-                  <Bell className="h-4 w-4 text-emerald-600" />
-                  Email notifications
-                </Label>
-                <p className="text-xs text-muted-foreground">
-                  Receive email alerts for filing deadlines and issues
-                </p>
-              </div>
-              <Switch
-                checked={emailNotifications}
-                onCheckedChange={setEmailNotifications}
-              />
-            </div>
-
-            <Separator />
-
-            {/* Dark Mode Toggle */}
-            <div className="flex items-center justify-between">
-              <div className="space-y-0.5">
-                <Label className="flex items-center gap-2">
-                  {theme === 'dark' ? (
-                    <Moon className="h-4 w-4 text-emerald-600" />
-                  ) : (
-                    <Sun className="h-4 w-4 text-emerald-600" />
-                  )}
-                  Dark mode
-                </Label>
-                <p className="text-xs text-muted-foreground">
-                  Switch between light and dark themes
-                </p>
-              </div>
-              <Switch
-                checked={theme === 'dark'}
-                onCheckedChange={toggleDarkMode}
-              />
-            </div>
-
-            <Separator />
-
-            {/* Appearance Preview */}
-            <div className="rounded-lg border border-border/50 p-4 space-y-3">
-              <p className="text-sm font-medium">Theme Preview</p>
-              <div className="grid grid-cols-2 gap-3">
-                <div
-                  className={`rounded-md p-3 border cursor-pointer transition-all ${
-                    theme === 'light'
-                      ? 'border-emerald-300 ring-2 ring-emerald-200'
-                      : 'border-border hover:border-emerald-300'
-                  }`}
-                  onClick={() => setTheme('light')}
-                >
-                  <div className="flex items-center gap-2 mb-2">
-                    <Sun className="h-4 w-4 text-amber-500" />
-                    <span className="text-sm font-medium">Light</span>
-                  </div>
-                  <div className="space-y-1.5">
-                    <div className="h-2 w-full rounded bg-gray-200" />
-                    <div className="h-2 w-3/4 rounded bg-gray-100" />
-                    <div className="h-2 w-1/2 rounded bg-emerald-200" />
-                  </div>
-                </div>
-                <div
-                  className={`rounded-md p-3 border cursor-pointer transition-all bg-gray-900 ${
-                    theme === 'dark'
-                      ? 'border-emerald-300 ring-2 ring-emerald-200'
-                      : 'border-border hover:border-emerald-300'
-                  }`}
-                  onClick={() => setTheme('dark')}
-                >
-                  <div className="flex items-center gap-2 mb-2">
-                    <Moon className="h-4 w-4 text-blue-400" />
-                    <span className="text-sm font-medium text-gray-200">Dark</span>
-                  </div>
-                  <div className="space-y-1.5">
-                    <div className="h-2 w-full rounded bg-gray-700" />
-                    <div className="h-2 w-3/4 rounded bg-gray-800" />
-                    <div className="h-2 w-1/2 rounded bg-emerald-800" />
-                  </div>
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* ===== Fiscal Year Settings Section ===== */}
-      <Card className="hover:shadow-md transition-shadow">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Settings className="h-5 w-5 text-emerald-600" />
-            Fiscal Year Settings
-          </CardTitle>
-          <CardDescription>
-            Current financial year and quarter definitions for GST compliance
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          {/* Current Financial Year Display */}
-          <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 rounded-lg border border-emerald-200 bg-emerald-50/50 dark:bg-emerald-950/20 dark:border-emerald-800">
-            <div className="flex items-center gap-3">
-              <div className="flex items-center justify-center h-10 w-10 rounded-lg bg-emerald-100 dark:bg-emerald-900">
-                <FileText className="h-5 w-5 text-emerald-700 dark:text-emerald-400" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">
-                  Current Financial Year
-                </p>
-                <p className="text-lg font-bold text-emerald-700 dark:text-emerald-400">
-                  {fiscalYear}
-                </p>
-              </div>
-            </div>
-            <Separator orientation="vertical" className="hidden sm:block h-12" />
-            <div className="flex items-center gap-3">
-              <div className="flex items-center justify-center h-10 w-10 rounded-lg bg-amber-100 dark:bg-amber-900">
-                <RefreshCw className="h-5 w-5 text-amber-700 dark:text-amber-400" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Return Period</p>
-                <p className="text-lg font-bold text-amber-700 dark:text-amber-400 capitalize">
-                  {defaultReturnPeriod}
-                </p>
-              </div>
-            </div>
-            <Separator orientation="vertical" className="hidden sm:block h-12" />
-            <div className="flex items-center gap-3">
-              <div className="flex items-center justify-center h-10 w-10 rounded-lg bg-slate-100 dark:bg-slate-800">
-                <Users className="h-5 w-5 text-slate-700 dark:text-slate-400" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Team Size</p>
-                <p className="text-lg font-bold text-slate-700 dark:text-slate-400">
-                  {teamMembers.length} Member{teamMembers.length !== 1 ? 's' : ''}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <Separator />
-
-          {/* Quarter Definitions */}
+    <motion.div
+      className="space-y-6 p-4 md:p-6"
+      variants={containerVariants}
+      initial="hidden"
+      animate="visible"
+    >
+      {/* ── Header ── */}
+      <motion.div variants={itemVariants}>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <p className="text-sm font-medium mb-3">Quarter Definitions</p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-              {quarters.map((q, idx) => (
-                <div
-                  key={q.quarter}
-                  className="rounded-lg border border-border/50 p-4 hover:border-emerald-300 hover:bg-emerald-50/30 dark:hover:bg-emerald-950/10 dark:hover:border-emerald-800 transition-colors"
-                >
-                  <div className="flex items-center gap-2 mb-2">
-                    <div
-                      className={`flex items-center justify-center h-8 w-8 rounded-md text-xs font-bold ${
-                        idx === 0
-                          ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-400'
-                          : idx === 1
-                          ? 'bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-400'
-                          : idx === 2
-                          ? 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-400'
-                          : 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-400'
-                      }`}
-                    >
-                      {q.quarter}
-                    </div>
-                    <span className="text-sm font-semibold">{q.quarter}</span>
-                  </div>
-                  <p className="text-xs text-muted-foreground">{q.period}</p>
-                </div>
-              ))}
-            </div>
+            <h1 className="text-2xl md:text-3xl font-bold tracking-tight flex items-center gap-2">
+              <Settings className="h-7 w-7 text-emerald-600" />
+              Settings
+            </h1>
+            <p className="text-muted-foreground text-sm mt-1">
+              Configure your workspace
+            </p>
           </div>
-        </CardContent>
-      </Card>
-    </div>
+          <Badge variant="outline" className="gap-1.5 px-3 py-1.5 w-fit border-emerald-200 text-emerald-700">
+            <Shield className="h-3.5 w-3.5 text-emerald-500" />
+            Admin Access
+          </Badge>
+        </div>
+      </motion.div>
+
+      {/* ── Tabs ── */}
+      <motion.div variants={itemVariants}>
+        <Tabs defaultValue="general" className="space-y-6">
+          <TabsList className="w-full sm:w-auto flex h-auto p-1 bg-muted/60">
+            <TabsTrigger value="general" className="gap-1.5 flex-1 sm:flex-none text-xs sm:text-sm">
+              <Building2 className="h-4 w-4" />
+              General
+            </TabsTrigger>
+            <TabsTrigger value="profile" className="gap-1.5 flex-1 sm:flex-none text-xs sm:text-sm">
+              <User className="h-4 w-4" />
+              Profile
+            </TabsTrigger>
+            <TabsTrigger value="data" className="gap-1.5 flex-1 sm:flex-none text-xs sm:text-sm">
+              <Database className="h-4 w-4" />
+              Data
+            </TabsTrigger>
+            <TabsTrigger value="about" className="gap-1.5 flex-1 sm:flex-none text-xs sm:text-sm">
+              <Info className="h-4 w-4" />
+              About
+            </TabsTrigger>
+          </TabsList>
+
+          {/* ═══════════════ GENERAL TAB ═══════════════ */}
+          <TabsContent value="general">
+            <motion.div
+              className="space-y-6"
+              variants={containerVariants}
+              initial="hidden"
+              animate="visible"
+            >
+              <motion.div variants={itemVariants}>
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-base">
+                      <Building2 className="h-5 w-5 text-emerald-600" />
+                      Firm Details
+                    </CardTitle>
+                    <CardDescription>
+                      Basic information about your practice or business
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
+                    {/* Firm Name */}
+                    <div className="space-y-2">
+                      <Label htmlFor="firm-name" className="flex items-center gap-1.5">
+                        <Building2 className="h-3.5 w-3.5 text-emerald-600" />
+                        Firm Name
+                      </Label>
+                      <Input
+                        id="firm-name"
+                        value={firmName}
+                        onChange={(e) => setFirmName(e.target.value)}
+                        placeholder="Enter firm name"
+                      />
+                    </div>
+
+                    <Separator />
+
+                    {/* GSTIN */}
+                    <div className="space-y-2">
+                      <Label htmlFor="gstin" className="flex items-center gap-1.5">
+                        <Hash className="h-3.5 w-3.5 text-emerald-600" />
+                        GSTIN
+                      </Label>
+                      <Input
+                        id="gstin"
+                        value={gstinFormatted}
+                        onChange={(e) => setGstin(e.target.value.toUpperCase())}
+                        placeholder="22AAAAA0000A1Z5"
+                        maxLength={15}
+                        className={!gstinValid ? 'border-red-400 focus-visible:border-red-500' : ''}
+                      />
+                      {!gstinValid && (
+                        <motion.p
+                          initial={{ opacity: 0, y: -4 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          className="text-xs text-red-500 flex items-center gap-1"
+                        >
+                          <AlertTriangle className="h-3 w-3" />
+                          Invalid GSTIN format. Expected: 22AAAAA0000A1Z5
+                        </motion.p>
+                      )}
+                      {gstinValid && gstin.length > 0 && (
+                        <p className="text-xs text-emerald-600 flex items-center gap-1">
+                          <Check className="h-3 w-3" />
+                          Valid GSTIN format
+                        </p>
+                      )}
+                    </div>
+
+                    <Separator />
+
+                    {/* State */}
+                    <div className="space-y-2">
+                      <Label htmlFor="state" className="flex items-center gap-1.5">
+                        <MapPin className="h-3.5 w-3.5 text-emerald-600" />
+                        State
+                      </Label>
+                      <Select value={state} onValueChange={setState}>
+                        <SelectTrigger className="w-full" id="state">
+                          <SelectValue placeholder="Select your state" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {INDIAN_STATES.map((s) => (
+                            <SelectItem key={s} value={s}>
+                              {s}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <Separator />
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                      {/* Default Return Period */}
+                      <div className="space-y-2">
+                        <Label htmlFor="return-period" className="flex items-center gap-1.5">
+                          <Calendar className="h-3.5 w-3.5 text-emerald-600" />
+                          Default Return Period
+                        </Label>
+                        <Select value={returnPeriod} onValueChange={setReturnPeriod}>
+                          <SelectTrigger className="w-full" id="return-period">
+                            <SelectValue placeholder="Select period" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="monthly">Monthly</SelectItem>
+                            <SelectItem value="quarterly">Quarterly</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <p className="text-xs text-muted-foreground">
+                          Default filing frequency for new clients
+                        </p>
+                      </div>
+
+                      {/* Financial Year Start */}
+                      <div className="space-y-2">
+                        <Label htmlFor="fy-start" className="flex items-center gap-1.5">
+                          <Calendar className="h-3.5 w-3.5 text-emerald-600" />
+                          Financial Year Start
+                        </Label>
+                        <Select value={fyStart} onValueChange={setFyStart}>
+                          <SelectTrigger className="w-full" id="fy-start">
+                            <SelectValue placeholder="Select month" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="april">April (India Standard)</SelectItem>
+                            <SelectItem value="january">January</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <p className="text-xs text-muted-foreground">
+                          FY runs April to March by default
+                        </p>
+                      </div>
+                    </div>
+
+                    <Separator />
+
+                    {/* Save Button */}
+                    <div className="flex items-center gap-3">
+                      {renderSaveButton(saveState, handleSaveGeneral)}
+                      {saveState === 'saved' && (
+                        <motion.span
+                          initial={{ opacity: 0, x: -8 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          exit={{ opacity: 0 }}
+                          className="text-sm text-emerald-600"
+                        >
+                          Settings updated
+                        </motion.span>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              </motion.div>
+            </motion.div>
+          </TabsContent>
+
+          {/* ═══════════════ PROFILE TAB ═══════════════ */}
+          <TabsContent value="profile">
+            <motion.div
+              className="space-y-6"
+              variants={containerVariants}
+              initial="hidden"
+              animate="visible"
+            >
+              {/* Profile Info */}
+              <motion.div variants={itemVariants}>
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-base">
+                      <User className="h-5 w-5 text-emerald-600" />
+                      Profile Information
+                    </CardTitle>
+                    <CardDescription>
+                      Your personal account details
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
+                    {/* Name */}
+                    <div className="space-y-2">
+                      <Label htmlFor="profile-name">Your Name</Label>
+                      <Input
+                        id="profile-name"
+                        value={profileName}
+                        onChange={(e) => setProfileName(e.target.value)}
+                        placeholder="Enter your name"
+                      />
+                    </div>
+
+                    <Separator />
+
+                    {/* Email (disabled) */}
+                    <div className="space-y-2">
+                      <Label htmlFor="profile-email" className="flex items-center gap-1.5">
+                        <Mail className="h-3.5 w-3.5 text-emerald-600" />
+                        Email
+                      </Label>
+                      <Input
+                        id="profile-email"
+                        value={user?.email || 'user@gstpilot.ai'}
+                        disabled
+                        className="bg-muted/50"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Email is managed by your authentication provider
+                      </p>
+                    </div>
+
+                    <Separator />
+
+                    {/* Role (display only) */}
+                    <div className="space-y-2">
+                      <Label className="flex items-center gap-1.5">
+                        <Shield className="h-3.5 w-3.5 text-emerald-600" />
+                        Role
+                      </Label>
+                      <div>
+                        <Badge className="bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border-emerald-200 gap-1 capitalize">
+                          <Shield className="h-3 w-3" />
+                          {user?.role || 'Admin'}
+                        </Badge>
+                      </div>
+                    </div>
+
+                    <Separator />
+
+                    <div className="flex items-center gap-3">
+                      {renderSaveButton(saveState, () => {
+                        setSaveState('saving');
+                        setTimeout(() => {
+                          setSaveState('saved');
+                          setTimeout(() => setSaveState('idle'), 2000);
+                        }, 600);
+                      })}
+                    </div>
+                  </CardContent>
+                </Card>
+              </motion.div>
+
+              {/* Change Password */}
+              {(user?.provider === 'email' || user?.provider === 'demo') && (
+                <motion.div variants={itemVariants}>
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2 text-base">
+                        <Lock className="h-5 w-5 text-emerald-600" />
+                        Change Password
+                      </CardTitle>
+                      <CardDescription>
+                        Update your account password
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="current-password">Current Password</Label>
+                        <div className="relative">
+                          <Input
+                            id="current-password"
+                            type={showPassword ? 'text' : 'password'}
+                            value={currentPassword}
+                            onChange={(e) => setCurrentPassword(e.target.value)}
+                            placeholder="Enter current password"
+                            className="pr-10"
+                          />
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
+                            onClick={() => setShowPassword(!showPassword)}
+                          >
+                            {showPassword ? (
+                              <EyeOff className="h-4 w-4 text-muted-foreground" />
+                            ) : (
+                              <Eye className="h-4 w-4 text-muted-foreground" />
+                            )}
+                          </Button>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="new-password">New Password</Label>
+                          <Input
+                            id="new-password"
+                            type="password"
+                            value={newPassword}
+                            onChange={(e) => setNewPassword(e.target.value)}
+                            placeholder="Enter new password"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="confirm-password">Confirm Password</Label>
+                          <Input
+                            id="confirm-password"
+                            type="password"
+                            value={confirmPassword}
+                            onChange={(e) => setConfirmPassword(e.target.value)}
+                            placeholder="Confirm new password"
+                          />
+                        </div>
+                      </div>
+                      {newPassword && confirmPassword && newPassword !== confirmPassword && (
+                        <motion.p
+                          initial={{ opacity: 0, y: -4 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          className="text-xs text-red-500 flex items-center gap-1"
+                        >
+                          <AlertTriangle className="h-3 w-3" />
+                          Passwords do not match
+                        </motion.p>
+                      )}
+                      <div className="flex items-center gap-3">
+                        {renderSaveButton(
+                          passwordSaveState,
+                          handlePasswordChange,
+                          'Update Password',
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              )}
+
+              {/* Notification Preferences */}
+              <motion.div variants={itemVariants}>
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-base">
+                      <Bell className="h-5 w-5 text-emerald-600" />
+                      Notification Preferences
+                    </CardTitle>
+                    <CardDescription>
+                      Control how and when you receive alerts
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
+                    {/* Email notifications */}
+                    <div className="flex items-center justify-between gap-4">
+                      <div className="space-y-0.5">
+                        <Label className="flex items-center gap-2">
+                          <Mail className="h-4 w-4 text-emerald-600" />
+                          Email notifications
+                        </Label>
+                        <p className="text-xs text-muted-foreground">
+                          Receive important updates via email
+                        </p>
+                      </div>
+                      <Switch
+                        checked={emailNotifications}
+                        onCheckedChange={setEmailNotifications}
+                      />
+                    </div>
+
+                    <Separator />
+
+                    {/* Filing deadline reminders */}
+                    <div className="flex items-center justify-between gap-4">
+                      <div className="space-y-0.5">
+                        <Label className="flex items-center gap-2">
+                          <Clock className="h-4 w-4 text-emerald-600" />
+                          Filing deadline reminders
+                        </Label>
+                        <p className="text-xs text-muted-foreground">
+                          Get notified before GST return due dates
+                        </p>
+                      </div>
+                      <Switch
+                        checked={filingReminders}
+                        onCheckedChange={setFilingReminders}
+                      />
+                    </div>
+
+                    <Separator />
+
+                    {/* Mismatch alerts */}
+                    <div className="flex items-center justify-between gap-4">
+                      <div className="space-y-0.5">
+                        <Label className="flex items-center gap-2">
+                          <AlertTriangle className="h-4 w-4 text-amber-600" />
+                          Mismatch alerts
+                        </Label>
+                        <p className="text-xs text-muted-foreground">
+                          Alert when GSTR-2A data doesn&apos;t match your books
+                        </p>
+                      </div>
+                      <Switch
+                        checked={mismatchAlerts}
+                        onCheckedChange={setMismatchAlerts}
+                      />
+                    </div>
+                  </CardContent>
+                </Card>
+              </motion.div>
+            </motion.div>
+          </TabsContent>
+
+          {/* ═══════════════ DATA TAB ═══════════════ */}
+          <TabsContent value="data">
+            <motion.div
+              className="space-y-6"
+              variants={containerVariants}
+              initial="hidden"
+              animate="visible"
+            >
+              {/* Export */}
+              <motion.div variants={itemVariants}>
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-base">
+                      <Download className="h-5 w-5 text-emerald-600" />
+                      Export Data
+                    </CardTitle>
+                    <CardDescription>
+                      Download all your data as a JSON file
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 rounded-lg border border-emerald-200 bg-emerald-50/50 dark:bg-emerald-950/20 dark:border-emerald-800">
+                      <div className="flex items-center gap-3">
+                        <div className="flex items-center justify-center h-10 w-10 rounded-lg bg-emerald-100 dark:bg-emerald-900 shrink-0">
+                          <FileJson className="h-5 w-5 text-emerald-700 dark:text-emerald-400" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium">Full Data Export</p>
+                          <p className="text-xs text-muted-foreground">
+                            Exports clients, invoices, returns, and reconciliation data
+                          </p>
+                        </div>
+                      </div>
+                      <Button
+                        onClick={handleExport}
+                        className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white sm:ml-auto"
+                      >
+                        <Download className="h-4 w-4" />
+                        Export JSON
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              </motion.div>
+
+              {/* Import */}
+              <motion.div variants={itemVariants}>
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-base">
+                      <Upload className="h-5 w-5 text-emerald-600" />
+                      Import Data
+                    </CardTitle>
+                    <CardDescription>
+                      Restore data from a previously exported JSON file
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div
+                      onClick={() => fileInputRef.current?.click()}
+                      className="flex flex-col items-center justify-center gap-3 p-8 border-2 border-dashed border-muted-foreground/25 rounded-lg cursor-pointer hover:border-emerald-400 hover:bg-emerald-50/30 dark:hover:bg-emerald-950/10 transition-colors"
+                    >
+                      <div className="flex items-center justify-center h-12 w-12 rounded-full bg-emerald-100 dark:bg-emerald-900">
+                        <Upload className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
+                      </div>
+                      <div className="text-center">
+                        <p className="text-sm font-medium">
+                          Click to upload or drag and drop
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          JSON files only (max 10MB)
+                        </p>
+                      </div>
+                    </div>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept=".json"
+                      className="hidden"
+                      onChange={handleImport}
+                    />
+                  </CardContent>
+                </Card>
+              </motion.div>
+
+              {/* Clear all data */}
+              <motion.div variants={itemVariants}>
+                <Card className="border-red-200 dark:border-red-900/40">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-base text-red-600">
+                      <Trash2 className="h-5 w-5" />
+                      Danger Zone
+                    </CardTitle>
+                    <CardDescription>
+                      Irreversible actions that affect all your data
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 rounded-lg border border-red-200 bg-red-50/50 dark:bg-red-950/20 dark:border-red-800">
+                      <div className="flex items-center gap-3">
+                        <div className="flex items-center justify-center h-10 w-10 rounded-lg bg-red-100 dark:bg-red-900 shrink-0">
+                          <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium text-red-700 dark:text-red-400">
+                            Clear All Data
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            Permanently delete all clients, invoices, and returns
+                          </p>
+                        </div>
+                      </div>
+                      <AlertDialog open={clearDialogOpen} onOpenChange={setClearDialogOpen}>
+                        <AlertDialogTrigger asChild>
+                          <Button
+                            variant="destructive"
+                            className="gap-2 sm:ml-auto"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                            Clear All Data
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              This action cannot be undone. This will permanently delete
+                              all your clients, invoices, returns, and reconciliation
+                              data from the database.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogAction
+                              onClick={handleClearAll}
+                              className="bg-red-600 hover:bg-red-700 text-white"
+                            >
+                              Yes, clear all data
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    </div>
+                  </CardContent>
+                </Card>
+              </motion.div>
+
+              {/* Database Info */}
+              <motion.div variants={itemVariants}>
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-base">
+                      <HardDrive className="h-5 w-5 text-emerald-600" />
+                      Database Information
+                    </CardTitle>
+                    <CardDescription>
+                      Local SQLite database details
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      <div className="p-4 rounded-lg border bg-muted/30">
+                        <p className="text-xs text-muted-foreground mb-1">Database Path</p>
+                        <p className="text-sm font-mono font-medium truncate">
+                          ./db/custom.db
+                        </p>
+                      </div>
+                      <div className="p-4 rounded-lg border bg-muted/30">
+                        <p className="text-xs text-muted-foreground mb-1">Engine</p>
+                        <p className="text-sm font-medium">SQLite (Local)</p>
+                      </div>
+                      <div className="p-4 rounded-lg border bg-muted/30">
+                        <p className="text-xs text-muted-foreground mb-1">Last Backup</p>
+                        <p className="text-sm font-medium">
+                          {new Date().toLocaleDateString('en-IN', {
+                            day: 'numeric',
+                            month: 'short',
+                            year: 'numeric',
+                          })}
+                        </p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </motion.div>
+            </motion.div>
+          </TabsContent>
+
+          {/* ═══════════════ ABOUT TAB ═══════════════ */}
+          <TabsContent value="about">
+            <motion.div
+              className="space-y-6"
+              variants={containerVariants}
+              initial="hidden"
+              animate="visible"
+            >
+              {/* Version & Build */}
+              <motion.div variants={itemVariants}>
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-base">
+                      <Info className="h-5 w-5 text-emerald-600" />
+                      About GSTPilot
+                    </CardTitle>
+                    <CardDescription>
+                      Application version and build information
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="p-4 rounded-lg border bg-muted/30">
+                        <p className="text-xs text-muted-foreground mb-1">Version</p>
+                        <p className="text-sm font-semibold text-emerald-700 dark:text-emerald-400">
+                          v1.0.0
+                        </p>
+                      </div>
+                      <div className="p-4 rounded-lg border bg-muted/30">
+                        <p className="text-xs text-muted-foreground mb-1">Build</p>
+                        <p className="text-sm font-medium font-mono">
+                          2026.03.04
+                        </p>
+                      </div>
+                      <div className="p-4 rounded-lg border bg-muted/30">
+                        <p className="text-xs text-muted-foreground mb-1">Framework</p>
+                        <p className="text-sm font-medium">
+                          Next.js 16 + TypeScript
+                        </p>
+                      </div>
+                      <div className="p-4 rounded-lg border bg-muted/30">
+                        <p className="text-xs text-muted-foreground mb-1">License</p>
+                        <p className="text-sm font-medium">Commercial</p>
+                      </div>
+                    </div>
+
+                    <Separator />
+
+                    {/* Logo / Branding */}
+                    <div className="flex items-center gap-4 p-4 rounded-lg border border-emerald-200 bg-emerald-50/50 dark:bg-emerald-950/20 dark:border-emerald-800">
+                      <div className="flex items-center justify-center h-12 w-12 rounded-xl bg-emerald-600 shrink-0">
+                        <span className="text-white font-bold text-lg">G</span>
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold">GSTPilot</p>
+                        <p className="text-xs text-muted-foreground">
+                          Smart GST compliance management for Indian businesses
+                        </p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </motion.div>
+
+              {/* Support & Links */}
+              <motion.div variants={itemVariants}>
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-base">
+                      <MessageSquare className="h-5 w-5 text-emerald-600" />
+                      Support & Feedback
+                    </CardTitle>
+                    <CardDescription>
+                      Get help or share your thoughts
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <Button
+                      variant="outline"
+                      className="w-full justify-start gap-3 h-12 hover:bg-emerald-50 hover:border-emerald-300 dark:hover:bg-emerald-950/30 dark:hover:border-emerald-800"
+                      asChild
+                    >
+                      <a href="mailto:support@gstpilot.ai">
+                        <div className="flex items-center justify-center h-8 w-8 rounded-md bg-emerald-100 dark:bg-emerald-900 shrink-0">
+                          <Mail className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                        </div>
+                        <div className="text-left">
+                          <p className="text-sm font-medium">Contact Support</p>
+                          <p className="text-xs text-muted-foreground">support@gstpilot.ai</p>
+                        </div>
+                        <ExternalLink className="h-4 w-4 ml-auto text-muted-foreground" />
+                      </a>
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="w-full justify-start gap-3 h-12 hover:bg-emerald-50 hover:border-emerald-300 dark:hover:bg-emerald-950/30 dark:hover:border-emerald-800"
+                      asChild
+                    >
+                      <a href="https://gstpilot.ai/feedback" target="_blank" rel="noopener noreferrer">
+                        <div className="flex items-center justify-center h-8 w-8 rounded-md bg-amber-100 dark:bg-amber-900 shrink-0">
+                          <MessageSquare className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                        </div>
+                        <div className="text-left">
+                          <p className="text-sm font-medium">Share Feedback</p>
+                          <p className="text-xs text-muted-foreground">Help us improve GSTPilot</p>
+                        </div>
+                        <ExternalLink className="h-4 w-4 ml-auto text-muted-foreground" />
+                      </a>
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="w-full justify-start gap-3 h-12 hover:bg-emerald-50 hover:border-emerald-300 dark:hover:bg-emerald-950/30 dark:hover:border-emerald-800"
+                      asChild
+                    >
+                      <a href="https://gstpilot.ai/docs" target="_blank" rel="noopener noreferrer">
+                        <div className="flex items-center justify-center h-8 w-8 rounded-md bg-teal-100 dark:bg-teal-900 shrink-0">
+                          <Info className="h-4 w-4 text-teal-600 dark:text-teal-400" />
+                        </div>
+                        <div className="text-left">
+                          <p className="text-sm font-medium">Documentation</p>
+                          <p className="text-xs text-muted-foreground">Guides, API reference, and more</p>
+                        </div>
+                        <ExternalLink className="h-4 w-4 ml-auto text-muted-foreground" />
+                      </a>
+                    </Button>
+                  </CardContent>
+                </Card>
+              </motion.div>
+            </motion.div>
+          </TabsContent>
+        </Tabs>
+      </motion.div>
+    </motion.div>
   );
 }

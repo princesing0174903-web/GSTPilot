@@ -23,17 +23,14 @@ export async function GET() {
         const invoiceCount = client._count.invoices
         const filingCount = client._count.gstrFilings
 
-        // Filed returns (status = 'filed')
         const filedReturns = await db.gSTRFiling.count({
           where: { clientId: client.id, status: 'filed' },
         })
 
-        // Pending returns (not filed yet)
         const pendingReturns = await db.gSTRFiling.count({
           where: { clientId: client.id, status: { not: 'filed' } },
         })
 
-        // Match percentage — perfect_match out of total matched invoices
         const totalMatchedInvoices = await db.invoice.count({
           where: {
             clientId: client.id,
@@ -152,6 +149,107 @@ export async function POST(request: Request) {
     console.error('POST /api/clients error:', error)
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Failed to create client' },
+      { status: 500 }
+    )
+  }
+}
+
+// PATCH /api/clients — Update a client
+export async function PATCH(request: Request) {
+  try {
+    const body = await request.json()
+    const { id, ...updates } = body
+
+    if (!id) {
+      return NextResponse.json(
+        { error: 'Client id is required' },
+        { status: 400 }
+      )
+    }
+
+    const existing = await db.client.findUnique({ where: { id } })
+    if (!existing) {
+      return NextResponse.json(
+        { error: 'Client not found' },
+        { status: 404 }
+      )
+    }
+
+    // Check GSTIN uniqueness if being updated
+    if (updates.gstin && updates.gstin !== existing.gstin) {
+      const duplicate = await db.client.findUnique({ where: { gstin: updates.gstin } })
+      if (duplicate) {
+        return NextResponse.json(
+          { error: 'A client with this GSTIN already exists' },
+          { status: 409 }
+        )
+      }
+    }
+
+    const client = await db.client.update({
+      where: { id },
+      data: updates,
+    })
+
+    // Create audit log
+    await db.auditLog.create({
+      data: {
+        clientId: client.id,
+        action: 'Client Updated',
+        entity: 'client',
+        entityId: client.id,
+        details: `Client ${client.tradeName} (${client.gstin}) updated`,
+      },
+    })
+
+    return NextResponse.json({ client })
+  } catch (error) {
+    console.error('PATCH /api/clients error:', error)
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Failed to update client' },
+      { status: 500 }
+    )
+  }
+}
+
+// DELETE /api/clients — Delete a client
+export async function DELETE(request: Request) {
+  try {
+    const { searchParams } = new URL(request.url)
+    const id = searchParams.get('id')
+
+    if (!id) {
+      return NextResponse.json(
+        { error: 'Client id is required' },
+        { status: 400 }
+      )
+    }
+
+    const existing = await db.client.findUnique({ where: { id } })
+    if (!existing) {
+      return NextResponse.json(
+        { error: 'Client not found' },
+        { status: 404 }
+      )
+    }
+
+    // Create audit log before deletion
+    await db.auditLog.create({
+      data: {
+        action: 'Client Deleted',
+        entity: 'client',
+        entityId: id,
+        details: `Client ${existing.tradeName} (${existing.gstin}) deleted`,
+      },
+    })
+
+    await db.client.delete({ where: { id } })
+
+    return NextResponse.json({ success: true })
+  } catch (error) {
+    console.error('DELETE /api/clients error:', error)
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Failed to delete client' },
       { status: 500 }
     )
   }

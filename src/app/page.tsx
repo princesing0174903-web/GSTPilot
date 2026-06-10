@@ -14,35 +14,9 @@ import GSTRFilingPage from '@/components/gstr/GSTRFilingPage'
 import ReconciliationPage from '@/components/reconciliation/ReconciliationPage'
 import ClientRegistryPage from '@/components/clients/ClientRegistryPage'
 import InvoiceWorkspacePage from '@/components/invoices/InvoiceWorkspacePage'
-import ErrorResolutionPage from '@/components/audit/ErrorResolutionPage'
-import FilingCalendarPage from '@/components/calendar/FilingCalendarPage'
-import ReportsPage from '@/components/reports/ReportsPage'
-import AuditLogsPage from '@/components/audit-logs/AuditLogsPage'
 import TeamManagementPage from '@/components/team/TeamManagementPage'
 import LandingPage from '@/components/landing/LandingPage'
 import LoginPage from '@/components/auth/LoginPage'
-import ClientHealthPage from '@/components/client-health/ClientHealthPage'
-import DocumentVaultPage from '@/components/documents/DocumentVaultPage'
-import ExecutiveAnalyticsPage from '@/components/executive-analytics/ExecutiveAnalyticsPage'
-import DeadlineCenterPage from '@/components/deadlines/DeadlineCenterPage'
-import FirmOperationsPage from '@/components/firm-operations/FirmOperationsPage'
-import TeamPerformancePage from '@/components/team-performance/TeamPerformancePage'
-import WhiteLabelPage from '@/components/white-label/WhiteLabelPage'
-import AutomationCenterPage from '@/components/automation/AutomationCenterPage'
-import WorkloadPage from '@/components/workload/WorkloadPage'
-import NoticeCenterPage from '@/components/notices/NoticeCenterPage'
-import ClientPortalPage from '@/components/client-portal/ClientPortalPage'
-import AICFODashboardPage from '@/components/ai-cfo/AICFODashboardPage'
-import AIRiskEnginePage from '@/components/ai-risk/AIRiskEnginePage'
-import AICompliancePage from '@/components/ai-compliance/AICompliancePage'
-import AIClientInsightsPage from '@/components/ai-insights/AIClientInsightsPage'
-import AITaskGeneratorPage from '@/components/ai-tasks/AITaskGeneratorPage'
-import AIKnowledgeCenterPage from '@/components/ai-knowledge/AIKnowledgeCenterPage'
-import AIDocumentChatPage from '@/components/ai-doc-chat/AIDocumentChatPage'
-import AIExecutiveReportsPage from '@/components/ai-reports/AIExecutiveReportsPage'
-import AIBenchmarkPage from '@/components/ai-benchmark/AIBenchmarkPage'
-import AICopilot from '@/components/copilot/AICopilot'
-import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import {
@@ -53,38 +27,15 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Zap, LogOut, User, Settings } from 'lucide-react'
+import { useApp as useAppContext } from '@/contexts/AppContext'
 
 const VIEW_TITLES: Record<string, string> = {
-  dashboard: 'GST Command Center',
-  'gstr-filing': 'GSTR Filing Center',
-  reconciliation: 'GST Reconciliation',
-  invoices: 'Invoice Workspace',
-  clients: 'Client Registry',
-  'client-health': 'Client Health Center',
-  deadlines: 'Deadline Center',
-  documents: 'Document Vault',
-  'executive-analytics': 'Executive Analytics',
-  'firm-operations': 'Firm Operations Center',
-  'team-performance': 'Team Performance Center',
-  errors: 'Error Resolution Center',
-  calendar: 'Filing Calendar',
-  reports: 'Reports & Export',
-  'audit-logs': 'Audit Logs',
-  settings: 'Settings & Team',
-  'white-label': 'White Label Settings',
-  automation: 'Automation Center',
-  workload: 'Workload Distribution',
-  notices: 'Notice Center',
-  'client-portal': 'Client Portal',
-  'ai-cfo': 'AI CFO Dashboard',
-  'ai-risk': 'AI Risk Engine',
-  'ai-compliance': 'AI Compliance Forecast',
-  'ai-insights': 'AI Client Insights',
-  'ai-tasks': 'AI Task Generator',
-  'ai-knowledge': 'AI Knowledge Center',
-  'ai-doc-chat': 'AI Document Chat',
-  'ai-reports': 'AI Executive Reports',
-  'ai-benchmark': 'AI Benchmark Engine',
+  dashboard: 'Dashboard',
+  returns: 'GST Returns',
+  reconcile: 'Reconcile',
+  invoices: 'Invoices',
+  clients: 'Clients',
+  settings: 'Settings',
 }
 
 function DashboardContent() {
@@ -95,64 +46,18 @@ function DashboardContent() {
     switch (currentView) {
       case 'dashboard':
         return <DashboardPage />
+      case 'returns':
       case 'gstr-filing':
         return <GSTRFilingPage />
+      case 'reconcile':
       case 'reconciliation':
         return <ReconciliationPage />
       case 'invoices':
         return <InvoiceWorkspacePage />
       case 'clients':
         return <ClientRegistryPage />
-      case 'client-health':
-        return <ClientHealthPage />
-      case 'deadlines':
-        return <DeadlineCenterPage />
-      case 'documents':
-        return <DocumentVaultPage />
-      case 'executive-analytics':
-        return <ExecutiveAnalyticsPage />
-      case 'firm-operations':
-        return <FirmOperationsPage />
-      case 'team-performance':
-        return <TeamPerformancePage />
-      case 'errors':
-        return <ErrorResolutionPage />
-      case 'calendar':
-        return <FilingCalendarPage />
-      case 'reports':
-        return <ReportsPage />
-      case 'audit-logs':
-        return <AuditLogsPage />
       case 'settings':
         return <TeamManagementPage />
-      case 'white-label':
-        return <WhiteLabelPage />
-      case 'automation':
-        return <AutomationCenterPage />
-      case 'workload':
-        return <WorkloadPage />
-      case 'notices':
-        return <NoticeCenterPage />
-      case 'client-portal':
-        return <ClientPortalPage />
-      case 'ai-cfo':
-        return <AICFODashboardPage />
-      case 'ai-risk':
-        return <AIRiskEnginePage />
-      case 'ai-compliance':
-        return <AICompliancePage />
-      case 'ai-insights':
-        return <AIClientInsightsPage />
-      case 'ai-tasks':
-        return <AITaskGeneratorPage />
-      case 'ai-knowledge':
-        return <AIKnowledgeCenterPage />
-      case 'ai-doc-chat':
-        return <AIDocumentChatPage />
-      case 'ai-reports':
-        return <AIExecutiveReportsPage />
-      case 'ai-benchmark':
-        return <AIBenchmarkPage />
       default:
         return <DashboardPage />
     }
@@ -175,10 +80,6 @@ function DashboardContent() {
             </h1>
           </div>
           <div className="ml-auto flex items-center gap-3">
-            <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-emerald-200 text-emerald-700 bg-emerald-50 dark:border-emerald-800 dark:text-emerald-400 dark:bg-emerald-950">
-              <Zap className="h-2.5 w-2.5 mr-0.5" />
-              AI Powered
-            </Badge>
             <Separator orientation="vertical" className="h-5" />
             {/* User Profile Dropdown */}
             <DropdownMenu>
@@ -228,7 +129,6 @@ function DashboardContent() {
         <main className="flex-1 overflow-auto bg-gray-50/50 dark:bg-gray-950/50">
           {renderView()}
         </main>
-        <AICopilot />
       </SidebarInset>
     </SidebarProvider>
   )
@@ -250,7 +150,7 @@ function AppRouter() {
     }
   }, [])
 
-  // ── Sync auth state with screen state ──
+  // Sync auth state with screen state
   useEffect(() => {
     if (isInitializing) return
     if (isAuthenticated && currentScreen !== 'app') {

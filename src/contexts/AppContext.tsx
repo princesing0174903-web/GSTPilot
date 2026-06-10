@@ -4,35 +4,11 @@ import { createContext, useContext, useState, useCallback } from 'react';
 
 export type AppView = 
   | 'dashboard' 
-  | 'gstr-filing' 
-  | 'reconciliation' 
+  | 'returns' 
+  | 'reconcile' 
   | 'invoices' 
   | 'clients' 
-  | 'errors' 
-  | 'calendar' 
-  | 'reports' 
-  | 'audit-logs' 
-  | 'settings' 
-  | 'client-health' 
-  | 'deadlines'
-  | 'firm-operations'
-  | 'team-performance'
-  | 'workload'
-  | 'notices'
-  | 'documents'
-  | 'executive-analytics'
-  | 'white-label'
-  | 'automation'
-  | 'client-portal'
-  | 'ai-cfo'
-  | 'ai-risk'
-  | 'ai-compliance'
-  | 'ai-insights'
-  | 'ai-tasks'
-  | 'ai-knowledge'
-  | 'ai-doc-chat'
-  | 'ai-reports'
-  | 'ai-benchmark';
+  | 'settings';
 
 export type AppScreen = 'landing' | 'login' | 'app';
 

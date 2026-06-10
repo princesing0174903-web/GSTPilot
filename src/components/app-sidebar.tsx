@@ -17,35 +17,11 @@ import {
 import {
   LayoutDashboard,
   FileText,
-  RefreshCw,
+  ArrowLeftRight,
+  Receipt,
   Users,
-  FileSpreadsheet,
-  ShieldAlert,
-  Calendar,
-  Download,
-  ScrollText,
   Settings,
   Zap,
-  HeartPulse,
-  Clock,
-  Building2,
-  BarChart3,
-  Briefcase,
-  Bell,
-  FolderLock,
-  TrendingUp,
-  Palette,
-  Workflow,
-  Globe,
-  Brain,
-  ShieldCheck,
-  Eye,
-  Lightbulb,
-  ListTodo,
-  BookOpen,
-  MessageSquare,
-  FileBarChart2,
-  GitCompare,
 } from 'lucide-react'
 import { useApp, type AppView } from '@/contexts/AppContext'
 
@@ -53,51 +29,16 @@ interface NavItem {
   title: string
   view: AppView
   icon: React.ElementType
+  subtitle?: string
 }
 
-const mainNavItems: NavItem[] = [
-  { title: 'Command Center', view: 'dashboard', icon: LayoutDashboard },
-  { title: 'GSTR Filing', view: 'gstr-filing', icon: FileText },
-  { title: 'Reconciliation', view: 'reconciliation', icon: RefreshCw },
-  { title: 'Invoices', view: 'invoices', icon: FileSpreadsheet },
-  { title: 'Clients', view: 'clients', icon: Users },
-  { title: 'Client Health', view: 'client-health', icon: HeartPulse },
-  { title: 'Deadlines', view: 'deadlines', icon: Clock },
-  { title: 'Error Center', view: 'errors', icon: ShieldAlert },
-]
-
-const operationsNavItems: NavItem[] = [
-  { title: 'Firm Operations', view: 'firm-operations', icon: Building2 },
-  { title: 'Team Performance', view: 'team-performance', icon: BarChart3 },
-  { title: 'Workload', view: 'workload', icon: Briefcase },
-  { title: 'Notices', view: 'notices', icon: Bell },
-  { title: 'Document Vault', view: 'documents', icon: FolderLock },
-]
-
-const analyticsNavItems: NavItem[] = [
-  { title: 'Executive Analytics', view: 'executive-analytics', icon: TrendingUp },
-  { title: 'Automation', view: 'automation', icon: Workflow },
-  { title: 'White Label', view: 'white-label', icon: Palette },
-  { title: 'Client Portal', view: 'client-portal', icon: Globe },
-]
-
-const aiNavItems: NavItem[] = [
-  { title: 'AI CFO', view: 'ai-cfo', icon: Brain },
-  { title: 'AI Risk Engine', view: 'ai-risk', icon: ShieldCheck },
-  { title: 'AI Compliance', view: 'ai-compliance', icon: Eye },
-  { title: 'AI Insights', view: 'ai-insights', icon: Lightbulb },
-  { title: 'AI Tasks', view: 'ai-tasks', icon: ListTodo },
-  { title: 'AI Knowledge', view: 'ai-knowledge', icon: BookOpen },
-  { title: 'AI Doc Chat', view: 'ai-doc-chat', icon: MessageSquare },
-  { title: 'AI Reports', view: 'ai-reports', icon: FileBarChart2 },
-  { title: 'AI Benchmark', view: 'ai-benchmark', icon: GitCompare },
-]
-
-const secondaryNavItems: NavItem[] = [
-  { title: 'Filing Calendar', view: 'calendar', icon: Calendar },
-  { title: 'Reports & Export', view: 'reports', icon: Download },
-  { title: 'Audit Logs', view: 'audit-logs', icon: ScrollText },
-  { title: 'Settings', view: 'settings', icon: Settings },
+const navItems: NavItem[] = [
+  { title: 'Dashboard', view: 'dashboard', icon: LayoutDashboard, subtitle: 'Overview' },
+  { title: 'Returns', view: 'returns', icon: FileText, subtitle: 'GSTR Filing' },
+  { title: 'Reconcile', view: 'reconcile', icon: ArrowLeftRight, subtitle: 'Match & Verify' },
+  { title: 'Invoices', view: 'invoices', icon: Receipt, subtitle: 'Process & Classify' },
+  { title: 'Clients', view: 'clients', icon: Users, subtitle: 'Manage Clients' },
+  { title: 'Settings', view: 'settings', icon: Settings, subtitle: 'Configure' },
 ]
 
 function SidebarNav() {
@@ -107,41 +48,6 @@ function SidebarNav() {
   const handleNavClick = (view: AppView) => {
     setCurrentView(view)
     setOpenMobile(false)
-  }
-
-  const renderNavItem = (item: NavItem) => {
-    const isActive = currentView === item.view
-    return (
-      <SidebarMenuItem key={item.view}>
-        <SidebarMenuButton
-          isActive={isActive}
-          onClick={() => handleNavClick(item.view)}
-          tooltip={item.title}
-          className={`
-            group relative h-9 rounded-lg transition-all duration-200 ease-in-out
-            ${
-              isActive
-                ? 'bg-emerald-500/10 font-semibold text-emerald-600 hover:bg-emerald-500/15 hover:text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-400 dark:hover:bg-emerald-500/20 dark:hover:text-emerald-400'
-                : 'text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground'
-            }
-          `}
-        >
-          {isActive && (
-            <div className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-emerald-500 transition-all duration-200" />
-          )}
-          <item.icon
-            className={`h-4 w-4 transition-colors duration-200 ${
-              isActive
-                ? 'text-emerald-600 dark:text-emerald-400'
-                : 'text-sidebar-foreground/50 group-hover:text-sidebar-foreground/80'
-            }`}
-          />
-          <span className="transition-colors duration-200">
-            {item.title}
-          </span>
-        </SidebarMenuButton>
-      </SidebarMenuItem>
-    )
   }
 
   return (
@@ -155,70 +61,58 @@ function SidebarNav() {
             <span className="text-lg font-bold tracking-tight text-sidebar-foreground">
               GSTPilot
             </span>
-            <span className="inline-flex items-center rounded-md bg-gradient-to-r from-emerald-500/15 to-purple-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
-              Enterprise
-            </span>
           </div>
         </div>
       </SidebarHeader>
 
-      <SidebarContent className="px-2 py-3 overflow-y-auto">
-        {/* Main Navigation */}
+      <SidebarContent className="px-2 py-4">
         <SidebarGroup>
           <SidebarGroupLabel className="px-2 text-[11px] font-semibold uppercase tracking-widest text-sidebar-foreground/40">
-            Main
+            Menu
           </SidebarGroupLabel>
           <SidebarGroupContent>
-            <SidebarMenu>
-              {mainNavItems.map(renderNavItem)}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-
-        {/* Firm Operations */}
-        <SidebarGroup className="mt-1">
-          <SidebarGroupLabel className="px-2 text-[11px] font-semibold uppercase tracking-widest text-sidebar-foreground/40">
-            Operations
-          </SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {operationsNavItems.map(renderNavItem)}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-
-        {/* Analytics & Automation */}
-        <SidebarGroup className="mt-1">
-          <SidebarGroupLabel className="px-2 text-[11px] font-semibold uppercase tracking-widest text-sidebar-foreground/40">
-            Intelligence
-          </SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {analyticsNavItems.map(renderNavItem)}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-
-        {/* AI Tax Intelligence */}
-        <SidebarGroup className="mt-1">
-          <SidebarGroupLabel className="px-2 text-[11px] font-semibold uppercase tracking-widest text-sidebar-foreground/40">
-            AI Intelligence
-          </SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {aiNavItems.map(renderNavItem)}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-
-        {/* Tools */}
-        <SidebarGroup className="mt-1">
-          <SidebarGroupLabel className="px-2 text-[11px] font-semibold uppercase tracking-widest text-sidebar-foreground/40">
-            Tools
-          </SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {secondaryNavItems.map(renderNavItem)}
+            <SidebarMenu className="gap-1">
+              {navItems.map((item) => {
+                const isActive = currentView === item.view
+                return (
+                  <SidebarMenuItem key={item.view}>
+                    <SidebarMenuButton
+                      isActive={isActive}
+                      onClick={() => handleNavClick(item.view)}
+                      tooltip={item.title}
+                      className={`
+                        group relative h-10 rounded-lg transition-all duration-200 ease-in-out
+                        ${
+                          isActive
+                            ? 'bg-emerald-500/10 font-semibold text-emerald-600 hover:bg-emerald-500/15 hover:text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-400 dark:hover:bg-emerald-500/20 dark:hover:text-emerald-400'
+                            : 'text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground'
+                        }
+                      `}
+                    >
+                      {isActive && (
+                        <div className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-emerald-500 transition-all duration-200" />
+                      )}
+                      <item.icon
+                        className={`h-[18px] w-[18px] transition-colors duration-200 ${
+                          isActive
+                            ? 'text-emerald-600 dark:text-emerald-400'
+                            : 'text-sidebar-foreground/50 group-hover:text-sidebar-foreground/80'
+                        }`}
+                      />
+                      <div className="flex flex-col">
+                        <span className="text-sm leading-tight transition-colors duration-200">
+                          {item.title}
+                        </span>
+                        {item.subtitle && (
+                          <span className="text-[10px] leading-tight text-sidebar-foreground/40">
+                            {item.subtitle}
+                          </span>
+                        )}
+                      </div>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                )
+              })}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
@@ -227,7 +121,7 @@ function SidebarNav() {
       <SidebarFooter className="border-t border-sidebar-border/50 px-4 py-3">
         <div className="flex items-center justify-between">
           <span className="text-[11px] font-medium text-sidebar-foreground/40">
-            v4.0 AI Enterprise
+            GSTPilot v1.0
           </span>
           <div className="flex items-center gap-1">
             <div className="h-1.5 w-1.5 rounded-full bg-emerald-500" />

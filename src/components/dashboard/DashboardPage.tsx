@@ -684,7 +684,7 @@ export default function DashboardPage() {
 
                     {clientFilings.map((row, index) => (
                       <motion.div
-                        key={`${row.clientId}-${row.period}`}
+                        key={`${row.clientId}-${row.returnType}-${row.period}`}
                         initial={{ opacity: 0, x: -10 }}
                         animate={{ opacity: 1, x: 0 }}
                         transition={{ delay: 0.3 + index * 0.04, duration: 0.3 }}

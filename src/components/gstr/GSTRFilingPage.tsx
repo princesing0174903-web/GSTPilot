@@ -832,62 +832,56 @@ export default function GSTRFilingPage() {
                         </TableCell>
                       </TableRow>
                     ) : (
-                      <AnimatePresence>
-                        <motion.tbody
-                          variants={staggerContainer}
-                          initial="hidden"
-                          animate="show"
+                      filteredFilings.map((filing, index) => (
+                        <motion.tr
+                          key={filing.id}
+                          initial={{ opacity: 0, y: 8 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ delay: index * 0.03, duration: 0.3 }}
+                          className="group border-b transition-colors hover:bg-muted/30"
                         >
-                          {filteredFilings.map((filing) => (
-                            <motion.tr
-                              key={filing.id}
-                              variants={staggerItem}
-                              className="group border-b transition-colors hover:bg-muted/30"
-                            >
-                              <TableCell className="font-medium whitespace-nowrap">
-                                {filing.client?.tradeName ?? '—'}
-                              </TableCell>
-                              <TableCell className="whitespace-nowrap">
-                                <Badge variant="outline" className="text-xs border-emerald-200 bg-emerald-50 text-emerald-700">
-                                  {filing.returnType}
-                                </Badge>
-                              </TableCell>
-                              <TableCell className="whitespace-nowrap text-muted-foreground">
-                                {filing.period ? periodToLabel(filing.period) : '—'}
-                              </TableCell>
-                              <TableCell className="whitespace-nowrap">
-                                {renderStatusBadge(filing)}
-                              </TableCell>
-                              <TableCell className="whitespace-nowrap text-right">
-                                {filing.totalInvoices}
-                              </TableCell>
-                              <TableCell className="whitespace-nowrap text-right font-medium">
-                                {formatCurrency(filing.totalTax)}
-                              </TableCell>
-                              <TableCell className="whitespace-nowrap">
-                                <div className="flex items-center gap-1">
-                                  <Button variant="ghost" size="sm" className="size-8 p-0">
-                                    <Eye className="size-3.5" />
-                                  </Button>
-                                  {filing.status !== 'filed' && (
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      className="size-8 p-0 text-emerald-600 hover:text-emerald-700"
-                                      onClick={handleStartQuickFile}
-                                    >
-                                      <Zap className="size-3.5" />
-                                    </Button>
-                                  )}
-                                  <Button variant="ghost" size="sm" className="size-8 p-0">
-                                    <Download className="size-3.5" />
-                                  </Button>
-                                </div>
-                              </TableCell>
-                            </motion.tr>
-                          ))}
-                        </motion.tbody>
-                      </AnimatePresence>
+                          <TableCell className="font-medium whitespace-nowrap">
+                            {filing.client?.tradeName ?? '—'}
+                          </TableCell>
+                          <TableCell className="whitespace-nowrap">
+                            <Badge variant="outline" className="text-xs border-emerald-200 bg-emerald-50 text-emerald-700">
+                              {filing.returnType}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="whitespace-nowrap text-muted-foreground">
+                            {filing.period ? periodToLabel(filing.period) : '—'}
+                          </TableCell>
+                          <TableCell className="whitespace-nowrap">
+                            {renderStatusBadge(filing)}
+                          </TableCell>
+                          <TableCell className="whitespace-nowrap text-right">
+                            {filing.totalInvoices}
+                          </TableCell>
+                          <TableCell className="whitespace-nowrap text-right font-medium">
+                            {formatCurrency(filing.totalTax)}
+                          </TableCell>
+                          <TableCell className="whitespace-nowrap">
+                            <div className="flex items-center gap-1">
+                              <Button variant="ghost" size="sm" className="size-8 p-0">
+                                <Eye className="size-3.5" />
+                              </Button>
+                              {filing.status !== 'filed' && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="size-8 p-0 text-emerald-600 hover:text-emerald-700"
+                                  onClick={handleStartQuickFile}
+                                >
+                                  <Zap className="size-3.5" />
+                                </Button>
+                              )}
+                              <Button variant="ghost" size="sm" className="size-8 p-0">
+                                <Download className="size-3.5" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </motion.tr>
+                      ))
                     )}
                   </TableBody>
                 </Table>

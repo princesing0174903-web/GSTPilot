@@ -21,6 +21,9 @@ import AuditLogsPage from '@/components/audit-logs/AuditLogsPage'
 import TeamManagementPage from '@/components/team/TeamManagementPage'
 import LandingPage from '@/components/landing/LandingPage'
 import LoginPage from '@/components/auth/LoginPage'
+import ClientHealthPage from '@/components/client-health/ClientHealthPage'
+import DeadlineCenterPage from '@/components/deadlines/DeadlineCenterPage'
+import AICopilot from '@/components/copilot/AICopilot'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -34,11 +37,13 @@ import {
 import { Zap, LogOut, User, Settings } from 'lucide-react'
 
 const VIEW_TITLES: Record<string, string> = {
-  dashboard: 'Dashboard',
+  dashboard: 'GST Command Center',
   'gstr-filing': 'GSTR Filing Center',
   reconciliation: 'GST Reconciliation',
   invoices: 'Invoice Workspace',
   clients: 'Client Registry',
+  'client-health': 'Client Health Center',
+  deadlines: 'Deadline Center',
   errors: 'Error Resolution Center',
   calendar: 'Filing Calendar',
   reports: 'Reports & Export',
@@ -62,6 +67,10 @@ function DashboardContent() {
         return <InvoiceWorkspacePage />
       case 'clients':
         return <ClientRegistryPage />
+      case 'client-health':
+        return <ClientHealthPage />
+      case 'deadlines':
+        return <DeadlineCenterPage />
       case 'errors':
         return <ErrorResolutionPage />
       case 'calendar':
@@ -147,6 +156,7 @@ function DashboardContent() {
         <main className="flex-1 overflow-auto bg-gray-50/50 dark:bg-gray-950/50">
           {renderView()}
         </main>
+        <AICopilot />
       </SidebarInset>
     </SidebarProvider>
   )

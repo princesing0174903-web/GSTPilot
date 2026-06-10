@@ -1,93 +1,127 @@
+# GSTPilot AI - Worklog
+
 ---
 Task ID: 1
-Agent: Main Agent
-Task: Upgrade GSTPilot with Premium Enterprise Landing Page and Authentication Experience
+Agent: Main
+Task: Update AppContext + Sidebar + page.tsx for new views
 
 Work Log:
-- Created AuthContext (src/contexts/AuthContext.tsx) with localStorage session persistence, demo users (admin/manager/staff), email/password login, Google Sign-In simulation, loading/error/success states
-- Created premium Landing Page (src/components/landing/LandingPage.tsx) with Hero section (glassmorphism, animated chart, floating metric cards), Trust section (animated counters), Features section (9 feature cards), Workflow timeline (6 steps), Comparison table (Traditional vs GSTPilot), Testimonials, Pricing section (4 plans with annual/monthly toggle), Footer
-- Created premium Login Page (src/components/auth/LoginPage.tsx) with split layout (left: branding/benefits/animated illustration, right: login form), Google Sign-In, email/password fields with validation, password visibility toggle, remember me checkbox, demo quick-access buttons, loading/error/success states, back to homepage link
-- Modified AppContext (src/contexts/AppContext.tsx) to add AppScreen type ('landing' | 'login' | 'app') and currentScreen state
-- Modified providers.tsx to wrap with AuthProvider
-- Modified page.tsx to conditionally render LandingPage → LoginPage → Dashboard based on auth state and screen state
-- Added user profile dropdown in dashboard header with Avatar, name, email, and Sign Out option
-- Updated globals.css with smooth scrolling and custom scrollbar styles
-- Fixed bug: LoginPage was referencing undefined onGetStarted prop - added it to interface and function signature
-- Fixed bug: Removed unused Card/CardContent import from LoginPage
+- Added 'client-health' and 'deadlines' to AppView type in AppContext.tsx
+- Updated sidebar navigation with new items: Client Health (HeartPulse icon), Deadlines (Clock icon)
+- Renamed "Dashboard" to "Command Center" in sidebar
+- Updated brand badge from "AI" to "AI Pro" with gradient styling
+- Added routing for client-health and deadlines views in page.tsx
+- Updated VIEW_TITLES map with new view names
+- Added AICopilot component import and render inside SidebarInset
+- Changed "Dashboard" title to "GST Command Center"
 
 Stage Summary:
-- All 3 screens work: Landing Page (with navbar, hero, trust, features, workflow, comparison, testimonials, pricing, footer) → Login Page (split layout with form) → Dashboard (existing with user profile)
-- Auth flow: Email/password login, Google Sign-In simulation, 3 demo users (Admin, Manager, Staff)
-- Session persistence via localStorage - user stays logged in on refresh
-- User profile shows in dashboard header: Avatar initials, name, email with dropdown (Profile, Settings, Sign Out)
-- Responsive design tested: Desktop (1280x800) and Mobile (375x812)
-- Lint passes cleanly
-- All existing dashboard modules preserved (GSTR Filing, Reconciliation, Invoices, Clients, etc.)
+- Core infrastructure updated to support 2 new views (client-health, deadlines)
+- AI Copilot integrated at layout level (available on all pages)
+- All new routes properly mapped in page.tsx
 
 ---
 Task ID: 2
-Agent: Main Agent
-Task: Implement Complete Firebase Auth for GSTPilot
+Agent: full-stack-developer
+Task: Build GST Command Center - Premium dashboard with 5 widgets
 
 Work Log:
-- Installed firebase@12.14.0 package via bun
-- Created src/lib/firebase.ts with Firebase config (apiKey, authDomain, projectId, storageBucket, messagingSenderId, appId) and exported auth, db, googleProvider with select_account prompt and email+profile scopes
-- Created src/lib/auth.ts with complete auth functions: signInWithGoogle (redirect method), handleRedirectResult, signInWithEmail (with error code mapping), signUpWithEmail (with profile update + Firestore save), resetPassword, logOut, saveUserToFirestore, and onAuthStateChanged re-export
-- Rewrote src/contexts/AuthContext.tsx to use Firebase Auth: dynamic import of @/lib/auth to handle SSR gracefully, onAuthStateChanged listener with fallback to localStorage demo sessions, 5-second safety timeout if Firebase doesn't respond, firebaseToAuthUser converter, loginWithDemo (local-only), logout (Firebase + local cleanup)
-- Rewrote src/components/auth/LoginPage.tsx with 3 modes (login/signup/forgot): dynamic imports for all Firebase auth functions, email/password sign in via Firebase, email sign up with name field + Firebase createUserWithEmailAndPassword, Google Sign-In via redirect, forgot password with Firebase sendPasswordResetEmail, demo login (local-only), mode switching with back buttons, error/success state animations
-- Updated src/app/page.tsx to handle Google redirect result via dynamic import, with error handling
-- Fixed critical bug: Static Firebase imports caused client-side exception on load - converted all to dynamic imports with try-catch
-- Fixed bug: Firebase onAuthStateChanged callback never firing in sandbox environment - added 5-second safety timeout fallback to localStorage
-- Removed unused static import of handleRedirectResult from page.tsx
+- Replaced existing DashboardPage.tsx with premium Command Center
+- Built ComplianceGauge component with animated circular SVG gauge
+- Built Filing Readiness widget with 3 metric pills + stacked progress bar
+- Built RiskHeatmap component with grid visualization + bar chart
+- Built AI Recommendations list with 5 smart suggestions
+- Built Revenue Analytics widget with dual-area chart + stats cards
+- Added useAnimatedNumber hook for counter animations
+- Implemented AnimatedCard wrapper with Framer Motion
+- Added comprehensive skeleton loaders for all widgets
+- Used emerald/teal color palette (NO blue/indigo)
+- Full dark mode support
 
 Stage Summary:
-- Complete Firebase Auth integration with Google + Email/Password
-- Firebase config: gstpilot-f226e project with redirect-based Google Sign-In
-- AuthContext gracefully handles Firebase unavailability (dynamic imports + safety timeout)
-- LoginPage supports 3 modes: Sign In, Sign Up, Forgot Password
-- Google Sign-In uses redirect method (works on all browsers)
-- Email/Password auth with full error message mapping (user-not-found, wrong-password, invalid-credential, etc.)
-- New users saved to Firestore (uid, email, displayName, photoURL, plan, gstNumbers)
-- Demo login still works as local fallback
-- All auth functions use dynamic imports to prevent SSR/module-load failures
-- Lint passes cleanly
-- Browser verified: Landing → Login → Demo Login → Dashboard → Logout flow works
+- 5 premium widgets fully implemented in DashboardPage.tsx (~1024 lines)
+- All widgets fetch real data from /api/dashboard, /api/clients, /api/invoices
+- Mock fallback data ensures widgets always render
+- VLM-verified: rendering properly with no blank areas
 
 ---
 Task ID: 3
-Agent: Main Agent
-Task: Fix Google redirect auth - getRedirectResult not being handled properly
+Agent: full-stack-developer (initially), then manually rebuilt
+Task: Build AI Copilot - Floating chat assistant at bottom right
 
 Work Log:
-- Analyzed the root cause: getRedirectResult was called in page.tsx (separate from AuthContext), disconnected from the auth state management. After Google redirect returned, the result wasn't being processed in the right place.
-- Rewrote src/contexts/AuthContext.tsx with proper Firebase auth flow:
-  - Added direct imports from firebase/auth and firebase/firestore (instead of dynamic imports)
-  - Added getRedirectResult(auth) call FIRST in the useEffect, before onAuthStateChanged listener
-  - When getRedirectResult returns a user: converts to AuthUser, saves to localStorage, saves to Firestore (non-blocking)
-  - Handles unauthorized-domain error specifically with helpful message
-  - onAuthStateChanged listener as STEP 2 - fires on every auth state change including redirect returns
-  - Safety timeout (6s) fallback to localStorage if neither resolves
-  - Added isRedirecting state to context
-- Updated src/components/auth/LoginPage.tsx:
-  - Added isInitializing check at top of render - shows dark "Completing sign in..." loading spinner while Firebase processes redirect
-  - This handles the critical UX: when user returns from Google redirect, they see "Completing sign in..." instead of the login form again
-- Updated src/app/page.tsx:
-  - Removed duplicate handleRedirectResult useEffect (was disconnected from AuthContext state)
-  - Removed redirectHandledRef (no longer needed)
-  - Added second useEffect to sync logout (when !isAuthenticated && currentScreen === 'app' → go to landing)
-  - Cleaner separation of concerns: AuthContext handles all Firebase auth, page.tsx only handles screen routing
-- Verified firebase.ts authDomain is correct: gstpilot-f226e.firebaseapp.com
-- Lint passes cleanly (0 errors, 0 warnings)
-- Browser tested: Landing → Login → Demo Admin → Dashboard → Sign Out → Landing flow works
-- Browser tested: Session persistence works (reload keeps user logged in)
-- Browser tested: Mobile responsive (375x812) layout correct
-- No errors in dev server log
+- Initially created as placeholder (return null) by subagent
+- Manually rebuilt complete AICopilot.tsx (~350 lines)
+- FAB (closed state): 56x56px green circular button with Bot icon + pulse animation
+- Chat panel: 380px wide, 520px max height, spring animation
+- Header: gradient emerald bar with Bot avatar + "GSTPilot AI" + online indicator
+- Welcome message auto-displays on first open
+- 5 quick-action chips with icons
+- Simulated AI responses with pattern matching (6+ response templates)
+- Typing indicator with animated dots
+- User messages: right-aligned, emerald bg; Bot messages: left-aligned with AI badge
+- Simple markdown formatting (bold, bullets, newlines)
+- Fixed lint error (setState in effect) by using useCallback + useRef pattern
+- Full dark mode support, mobile responsive
 
 Stage Summary:
-- Core fix: getRedirectResult is now called INSIDE AuthContext's init useEffect, BEFORE onAuthStateChanged
-- This ensures Google redirect results are captured and processed into app state
-- LoginPage shows "Completing sign in..." spinner during redirect processing
-- page.tsx no longer has duplicate redirect handling - AuthContext is the single source of truth
-- Demo login flow verified working
-- Session persistence verified working
-- All auth methods (demo, email, Google redirect) now route through a single, consistent auth pipeline
+- AICopilot.tsx fully functional with chat UI
+- VLM-verified: FAB visible, chat panel opens with welcome message, quick actions, and input
+
+---
+Task ID: 4
+Agent: full-stack-developer
+Task: Build Client Health Center - Health scores and beautiful cards
+
+Work Log:
+- Created ClientHealthPage.tsx (~1250 lines)
+- 4 KPI cards: Total Clients, Healthy (80+), At Risk (40-79), Critical (<40)
+- Client health cards grid: responsive 1/2/3 columns
+- Each card has: circular health gauge, compliance score, pending actions, issues breakdown, filing status, mini sparkline
+- Detail dialog with health trend chart (Recharts AreaChart), issues list, pending filings, AI recommendations
+- Filter controls: search, state filter, health score range
+- Framer Motion stagger animations
+- Full dark mode support
+
+Stage Summary:
+- ClientHealthPage.tsx complete with premium health monitoring cards
+- VLM-verified: rendering properly with 6 client cards visible, health gauges, sparklines
+
+---
+Task ID: 5
+Agent: full-stack-developer
+Task: Build Deadline Center - Calendar dashboard with GSTR deadlines
+
+Work Log:
+- Created DeadlineCenterPage.tsx (~1308 lines)
+- 4 KPI cards: Upcoming Deadlines, Overdue Filings, Filed This Month, Compliance Rate
+- Monthly calendar view with color-coded deadline dots
+- Deadline timeline (vertical) with chronological entries
+- Deadline cards for GSTR-1, GSTR-3B, GSTR-2B with progress bars
+- Additional deadline cards for GSTR-9 Annual Return and TDS/TCS
+- Month/year navigation, "Today" button
+- Clickable days showing detail panel
+- Full dark mode support, responsive layout
+
+Stage Summary:
+- DeadlineCenterPage.tsx complete with calendar, timeline, and deadline cards
+- VLM-verified: rendering properly with calendar, overdue timeline, filing deadline cards
+
+---
+Task ID: 7
+Agent: Main
+Task: Final verification with Agent Browser
+
+Work Log:
+- Lint passes clean (0 errors, 0 warnings)
+- Command Center: VLM-verified all 5 widgets rendering (Compliance Score 75/100, Filing Readiness, Risk Heatmap, AI Recommendations, Revenue Analytics)
+- Client Health Center: VLM-verified 6 client cards with health gauges, sparklines
+- Deadline Center: VLM-verified calendar, timeline, deadline cards
+- AI Copilot: VLM-verified FAB visible at bottom-right, chat panel opens correctly
+- Reconciliation Center: Still rendering properly (existing component)
+- Mobile responsive: VLM-verified at 375x812 viewport, no overlapping elements
+- Dark mode: All components use dark: variants
+
+Stage Summary:
+- All 5 new features verified working via Agent Browser + VLM
+- GSTPilot successfully transformed into premium AI GST Command Center

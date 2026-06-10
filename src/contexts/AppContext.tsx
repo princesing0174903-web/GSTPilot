@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useState, useCallback } from 'react';
 
-export type AppView = 'dashboard' | 'gstr-filing' | 'reconciliation' | 'invoices' | 'clients' | 'errors' | 'calendar' | 'reports' | 'audit-logs' | 'settings';
+export type AppView = 'dashboard' | 'gstr-filing' | 'reconciliation' | 'invoices' | 'clients' | 'errors' | 'calendar' | 'reports' | 'audit-logs' | 'settings' | 'client-health' | 'deadlines';
 
 export type AppScreen = 'landing' | 'login' | 'app';
 

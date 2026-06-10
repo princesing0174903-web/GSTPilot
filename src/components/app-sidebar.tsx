@@ -30,6 +30,9 @@ import {
   ChevronLeft,
   ChevronRight,
   Zap,
+  HeartPulse,
+  Clock,
+  Bot,
 } from 'lucide-react'
 import { useApp, type AppView } from '@/contexts/AppContext'
 
@@ -40,11 +43,13 @@ interface NavItem {
 }
 
 const mainNavItems: NavItem[] = [
-  { title: 'Dashboard', view: 'dashboard', icon: LayoutDashboard },
+  { title: 'Command Center', view: 'dashboard', icon: LayoutDashboard },
   { title: 'GSTR Filing', view: 'gstr-filing', icon: FileText },
   { title: 'Reconciliation', view: 'reconciliation', icon: RefreshCw },
   { title: 'Invoices', view: 'invoices', icon: FileSpreadsheet },
   { title: 'Clients', view: 'clients', icon: Users },
+  { title: 'Client Health', view: 'client-health', icon: HeartPulse },
+  { title: 'Deadlines', view: 'deadlines', icon: Clock },
   { title: 'Error Center', view: 'errors', icon: ShieldAlert },
 ]
 
@@ -76,8 +81,8 @@ function SidebarNav() {
             <span className="text-lg font-bold tracking-tight text-sidebar-foreground">
               GSTPilot
             </span>
-            <span className="inline-flex items-center rounded-md bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-emerald-500">
-              AI
+            <span className="inline-flex items-center rounded-md bg-gradient-to-r from-emerald-500/15 to-purple-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
+              AI Pro
             </span>
           </div>
         </div>

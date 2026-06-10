@@ -2,7 +2,13 @@ export type InvoiceType = 'B2B' | 'B2C Large' | 'B2C Small' | 'Export' | 'Credit
 
 export type GSTR1Section = 'b2b' | 'b2cl' | 'b2cs' | 'cdnr' | 'cdnur' | 'exp';
 
-export type MatchStatus = 'perfect_match' | 'partial_match' | 'mismatch' | 'missing_in_books' | 'missing_in_gstr' | 'unmatched';
+export type MatchStatus = 'perfect_match' | 'partial_match' | 'mismatch' | 'missing_in_books' | 'missing_in_gstr' | 'unmatched' | 'duplicate';
+
+export type WorkflowStatus = 'pending' | 'under_review' | 'resolved' | 'ignored' | 'escalated';
+
+export type ReconSourceType = 'Purchase Register' | 'Sales Register' | 'GSTR-1' | 'GSTR-2B' | 'GSTR-3B';
+
+export type AIRecommendationType = 'correct_gstin' | 'correct_invoice_number' | 'adjust_gst_amount' | 'review_vendor_data' | 'mark_as_duplicate' | 'review_manually';
 
 export type RiskLevel = 'low' | 'medium' | 'high' | 'critical';
 
@@ -93,17 +99,42 @@ export interface ReconciliationResult {
   clientId: string;
   invoiceId: string;
   sourceType: string;
+  sourceA?: string;
+  sourceB?: string;
   sourceGstin?: string;
   matchedGstin?: string;
   matchStatus: MatchStatus;
   matchScore: number;
   mismatches?: string;
   aiExplanation?: string;
+  aiRecommendation?: string;
+  confidenceScore: number;
+  workflowStatus: WorkflowStatus;
   resolved: boolean;
   resolvedBy?: string;
   resolvedAt?: string;
+  runId?: string;
   createdAt: string;
+  updatedAt: string;
   invoice?: Invoice;
+  run?: ReconciliationRun;
+}
+
+export interface ReconciliationRun {
+  id: string;
+  clientId: string;
+  period: string;
+  sources: string;
+  totalRecords: number;
+  matched: number;
+  unmatched: number;
+  partialMatches: number;
+  highRisk: number;
+  gstDifference: number;
+  status: string;
+  runBy?: string;
+  createdAt: string;
+  results?: ReconciliationResult[];
 }
 
 export interface FilingEvent {
@@ -190,6 +221,24 @@ export const MATCH_STATUS_CONFIG: Record<MatchStatus, { label: string; color: st
   missing_in_books: { label: 'Missing in Books', color: 'text-orange-700', bgColor: 'bg-orange-50 border-orange-200' },
   missing_in_gstr: { label: 'Missing in GSTR', color: 'text-purple-700', bgColor: 'bg-purple-50 border-purple-200' },
   unmatched: { label: 'Unmatched', color: 'text-slate-700', bgColor: 'bg-slate-50 border-slate-200' },
+  duplicate: { label: 'Duplicate', color: 'text-pink-700', bgColor: 'bg-pink-50 border-pink-200' },
+};
+
+export const WORKFLOW_STATUS_CONFIG: Record<WorkflowStatus, { label: string; color: string; bgColor: string }> = {
+  pending: { label: 'Pending', color: 'text-slate-700', bgColor: 'bg-slate-50 border-slate-200' },
+  under_review: { label: 'Under Review', color: 'text-blue-700', bgColor: 'bg-blue-50 border-blue-200' },
+  resolved: { label: 'Resolved', color: 'text-emerald-700', bgColor: 'bg-emerald-50 border-emerald-200' },
+  ignored: { label: 'Ignored', color: 'text-slate-500', bgColor: 'bg-slate-50 border-slate-200' },
+  escalated: { label: 'Escalated', color: 'text-red-700', bgColor: 'bg-red-50 border-red-200' },
+};
+
+export const AI_RECOMMENDATION_CONFIG: Record<AIRecommendationType, { label: string; icon: string; color: string }> = {
+  correct_gstin: { label: 'Correct GSTIN', icon: '🔧', color: 'text-blue-700' },
+  correct_invoice_number: { label: 'Correct Invoice #', icon: '📝', color: 'text-purple-700' },
+  adjust_gst_amount: { label: 'Adjust GST Amount', icon: '💰', color: 'text-amber-700' },
+  review_vendor_data: { label: 'Review Vendor Data', icon: '🔍', color: 'text-orange-700' },
+  mark_as_duplicate: { label: 'Mark as Duplicate', icon: '📋', color: 'text-pink-700' },
+  review_manually: { label: 'Review Manually', icon: '👁️', color: 'text-slate-700' },
 };
 
 export const RISK_LEVEL_CONFIG: Record<RiskLevel, { label: string; color: string; bgColor: string; icon: string }> = {

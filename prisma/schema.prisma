@@ -100,22 +100,48 @@ model GSTRFiling {
 }
 
 model ReconciliationResult {
-  id             String   @id @default(cuid())
-  clientId       String
-  invoiceId      String
-  sourceType     String   @default("books")
-  sourceGstin    String?
-  matchedGstin   String?
-  matchStatus    String   @default("unmatched")
-  matchScore     Float    @default(0)
-  mismatches     String?
-  aiExplanation  String?
-  resolved       Boolean  @default(false)
-  resolvedBy     String?
-  resolvedAt     String?
-  createdAt      DateTime @default(now())
+  id               String   @id @default(cuid())
+  clientId         String
+  invoiceId        String
+  sourceType       String   @default("books")
+  sourceA          String?  @default("Purchase Register")
+  sourceB          String?  @default("GSTR-2B")
+  sourceGstin      String?
+  matchedGstin     String?
+  matchStatus      String   @default("unmatched")
+  matchScore       Float    @default(0)
+  mismatches       String?
+  aiExplanation    String?
+  aiRecommendation String?
+  confidenceScore  Float    @default(0)
+  workflowStatus   String   @default("pending")
+  resolved         Boolean  @default(false)
+  resolvedBy       String?
+  resolvedAt       String?
+  runId            String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
-  invoice        Invoice  @relation(fields: [invoiceId], references: [id])
+  invoice          Invoice            @relation(fields: [invoiceId], references: [id])
+  run              ReconciliationRun? @relation(fields: [runId], references: [id])
+}
+
+model ReconciliationRun {
+  id              String   @id @default(cuid())
+  clientId        String
+  period          String
+  sources         String   @default("Purchase Register,GSTR-2B")
+  totalRecords    Int      @default(0)
+  matched         Int      @default(0)
+  unmatched       Int      @default(0)
+  partialMatches  Int      @default(0)
+  highRisk        Int      @default(0)
+  gstDifference   Float    @default(0)
+  status          String   @default("completed")
+  runBy           String?
+  createdAt       DateTime @default(now())
+
+  results         ReconciliationResult[]
 }
 
 model FilingEvent {

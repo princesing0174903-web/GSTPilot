@@ -23,6 +23,7 @@ export async function POST() {
     // 1. Clear existing data (respect foreign key order)
     await db.filingEvent.deleteMany()
     await db.reconciliationResult.deleteMany()
+    await db.reconciliationRun.deleteMany()
     await db.issue.deleteMany()
     await db.auditLog.deleteMany()
     await db.healthScore.deleteMany()
@@ -366,58 +367,222 @@ export async function POST() {
       }
     }
 
-    // 7. Create Reconciliation Results for some invoices
+    // 7. Create Reconciliation Runs for each client (2-3 per client)
+    const runSources = [
+      'Purchase Register,GSTR-2B',
+      'Purchase Register,GSTR-2A',
+      'Books,GSTR-1',
+      'Sales Register,GSTR-1',
+      'Purchase Register,GSTR-2B',
+    ]
+    const runStatuses = ['completed', 'completed', 'completed', 'in_progress', 'failed']
+
+    const allRuns: Awaited<ReturnType<typeof db.reconciliationRun.create>>[] = []
+
+    for (const client of clients) {
+      const runCount = rand(2, 3)
+      const usedRunPeriods = new Set<string>()
+
+      for (let i = 0; i < runCount; i++) {
+        const month = rand(1, 6)
+        const period = `2024-${String(month).padStart(2, '0')}`
+
+        // Avoid duplicate periods for same client runs (allow some overlap for different sources)
+        const runKey = `${period}-${i}`
+        if (usedRunPeriods.has(runKey)) continue
+        usedRunPeriods.add(runKey)
+
+        const sources = runSources[i % runSources.length]
+        const status = pick(runStatuses)
+
+        const totalRecords = rand(20, 120)
+        const matched = rand(Math.floor(totalRecords * 0.3), Math.floor(totalRecords * 0.7))
+        const partialMatches = rand(Math.floor(totalRecords * 0.05), Math.floor(totalRecords * 0.2))
+        const unmatched = totalRecords - matched - partialMatches
+        const highRisk = rand(Math.floor(unmatched * 0.1), Math.floor(unmatched * 0.5))
+        const gstDifference = rand(5000, 250000)
+
+        const run = await db.reconciliationRun.create({
+          data: {
+            clientId: client.id,
+            period,
+            sources,
+            totalRecords,
+            matched,
+            unmatched,
+            partialMatches,
+            highRisk,
+            gstDifference,
+            status,
+            runBy: pick(users).id,
+          },
+        })
+        allRuns.push(run)
+      }
+    }
+
+    // 8. Create Reconciliation Results for some invoices (with enhanced fields)
     const recMatchStatuses = ['perfect_match', 'partial_match', 'mismatch', 'missing_in_books', 'missing_in_gstr']
     let totalReconciliations = 0
+
+    // Helper to determine workflowStatus based on matchStatus
+    function getWorkflowStatus(matchStatus: string): string {
+      switch (matchStatus) {
+        case 'perfect_match':
+          return 'resolved'
+        case 'mismatch':
+          return 'pending'
+        case 'missing_in_books':
+        case 'missing_in_gstr':
+          return 'pending'
+        case 'partial_match':
+          // Some partial matches are under_review, most are pending
+          return Math.random() < 0.4 ? 'under_review' : 'pending'
+        default:
+          return 'pending'
+      }
+    }
+
+    // Helper to determine confidenceScore based on matchStatus
+    function getConfidenceScore(matchStatus: string): number {
+      switch (matchStatus) {
+        case 'perfect_match':
+          return rand(85, 98)
+        case 'partial_match':
+          return rand(50, 84)
+        case 'mismatch':
+          return rand(20, 49)
+        case 'missing_in_books':
+        case 'missing_in_gstr':
+          return rand(0, 19)
+        default:
+          return rand(0, 50)
+      }
+    }
+
+    // Helper to determine aiRecommendation based on mismatch type
+    function getAiRecommendation(matchStatus: string, mismatches: string | null): string {
+      if (matchStatus === 'perfect_match') {
+        return 'no_action_needed'
+      }
+
+      // Parse mismatches to determine recommendation
+      if (mismatches) {
+        try {
+          const mismatchArr = JSON.parse(mismatches) as Array<{ field: string }>
+          const fields = mismatchArr.map((m) => m.field)
+
+          if (fields.includes('buyerGstin') || fields.includes('sellerGstin') || fields.includes('matchedGstin')) {
+            return 'correct_gstin'
+          }
+          if (fields.includes('taxableValue') || fields.includes('cgst') || fields.includes('sgst') || fields.includes('igst')) {
+            return 'adjust_gst_amount'
+          }
+          if (fields.includes('invoiceNumber')) {
+            return 'correct_invoice_number'
+          }
+        } catch {
+          // fallback below
+        }
+      }
+
+      // Default recommendations by matchStatus
+      switch (matchStatus) {
+        case 'mismatch':
+          return pick(['adjust_gst_amount', 'correct_gstin', 'review_vendor_data'])
+        case 'partial_match':
+          return pick(['correct_gstin', 'correct_invoice_number', 'review_vendor_data'])
+        case 'missing_in_books':
+          return pick(['mark_as_duplicate', 'review_manually'])
+        case 'missing_in_gstr':
+          return 'review_manually'
+        default:
+          return 'review_manually'
+      }
+    }
 
     for (const invoice of allInvoices) {
       // Create reconciliation for roughly 60% of invoices
       if (Math.random() < 0.4) continue
 
+      const resolvedMatchStatus = invoice.matchStatus === 'unmatched'
+        ? pick(recMatchStatuses)
+        : invoice.matchStatus as string
+
       const matchScore =
-        invoice.matchStatus === 'perfect_match' ? rand(90, 100) :
-        invoice.matchStatus === 'partial_match' ? rand(50, 89) :
-        invoice.matchStatus === 'mismatch' ? rand(10, 49) :
+        resolvedMatchStatus === 'perfect_match' ? rand(90, 100) :
+        resolvedMatchStatus === 'partial_match' ? rand(50, 89) :
+        resolvedMatchStatus === 'mismatch' ? rand(10, 49) :
         rand(0, 30)
 
-      const resolved = invoice.matchStatus === 'perfect_match' || (Math.random() < 0.3)
+      const resolved = resolvedMatchStatus === 'perfect_match' || (Math.random() < 0.3)
       const client = clients.find((c) => c.id === invoice.clientId)
 
-      const mismatches = invoice.matchStatus === 'mismatch'
+      const mismatches = resolvedMatchStatus === 'mismatch'
         ? JSON.stringify([{ field: 'taxableValue', books: invoice.taxableValue, gstr: invoice.taxableValue + rand(500, 5000) }])
-        : invoice.matchStatus === 'partial_match'
+        : resolvedMatchStatus === 'partial_match'
         ? JSON.stringify([{ field: 'buyerGstin', books: invoice.buyerGstin, gstr: invoice.buyerGstin?.replace(/.$/, 'X') ?? null }])
+        : resolvedMatchStatus === 'missing_in_books'
+        ? JSON.stringify([{ field: 'invoiceNumber', books: null, gstr: invoice.invoiceNumber }])
+        : resolvedMatchStatus === 'missing_in_gstr'
+        ? JSON.stringify([{ field: 'invoiceNumber', books: invoice.invoiceNumber, gstr: null }])
         : null
 
       const aiRecExplanation =
-        invoice.matchStatus === 'mismatch'
+        resolvedMatchStatus === 'mismatch'
           ? `Reconciliation mismatch: Tax amount differs between books (₹${invoice.cgst + invoice.sgst + invoice.igst}) and GSTR-1. Recommend verifying tax rate applied.`
-          : invoice.matchStatus === 'partial_match'
+          : resolvedMatchStatus === 'partial_match'
           ? `Partial reconciliation — buyer GSTIN mismatch detected. Verify recipient details before filing.`
+          : resolvedMatchStatus === 'missing_in_books'
+          ? `Invoice found in GSTR but missing from company books. Possible data entry omission or timing difference.`
+          : resolvedMatchStatus === 'missing_in_gstr'
+          ? `Invoice present in books but not reflected in GSTR. May require manual reporting or amendment.`
           : undefined
+
+      const confidenceScore = getConfidenceScore(resolvedMatchStatus)
+      const workflowStatus = getWorkflowStatus(resolvedMatchStatus)
+      const aiRecommendation = getAiRecommendation(resolvedMatchStatus, mismatches)
+
+      // Determine sourceA and sourceB based on sourceType
+      const sourceType = pick(['books', 'gstr1', 'gstr2a'])
+      const sourceA = sourceType === 'gstr2a' ? 'Purchase Register' : 'Sales Register'
+      const sourceB = sourceType === 'gstr2a' ? 'GSTR-2B' : sourceType === 'gstr1' ? 'GSTR-1' : 'GSTR-2B'
+
+      // Find a matching run for this client (prefer one in the same period)
+      const clientRuns = allRuns.filter((r) => r.clientId === invoice.clientId)
+      const periodRuns = clientRuns.filter((r) => r.period === invoice.period)
+      const runId = periodRuns.length > 0
+        ? pick(periodRuns).id
+        : clientRuns.length > 0
+          ? pick(clientRuns).id
+          : null
 
       await db.reconciliationResult.create({
         data: {
           clientId: invoice.clientId,
           invoiceId: invoice.id,
-          sourceType: pick(['books', 'gstr1', 'gstr2a']),
+          sourceType,
+          sourceA,
+          sourceB,
           sourceGstin: client?.gstin ?? null,
           matchedGstin: invoice.buyerGstin,
-          matchStatus: invoice.matchStatus === 'unmatched'
-            ? pick(recMatchStatuses)
-            : invoice.matchStatus as string,
+          matchStatus: resolvedMatchStatus,
           matchScore,
           mismatches,
           aiExplanation: aiRecExplanation,
+          aiRecommendation,
+          confidenceScore,
+          workflowStatus,
           resolved,
           resolvedBy: resolved ? pick(users).id : null,
           resolvedAt: resolved ? randomDate(2024, rand(2, 6), [1, 28]) : null,
+          runId,
         },
       })
       totalReconciliations++
     }
 
-    // 8. Create Issues for each client
+    // 9. Create Issues for each client
     const severities = ['critical', 'warning', 'info']
     const categories = ['GST Mismatch', 'Tax Mismatch', 'Date Mismatch', 'Missing Invoice', 'Duplicate', 'Invalid GSTIN']
     const issueStatuses = ['open', 'resolved', 'ignored']
@@ -491,7 +656,7 @@ export async function POST() {
       }
     }
 
-    // 9. Create Health Score Records for each client
+    // 10. Create Health Score Records for each client
     let totalHealthScores = 0
 
     for (const client of clients) {
@@ -516,7 +681,7 @@ export async function POST() {
       }
     }
 
-    // 10. Create Audit Log Entries
+    // 11. Create Audit Log Entries
     const auditActions = [
       'GSTR Generated',
       'GSTR Downloaded',
@@ -562,6 +727,7 @@ export async function POST() {
         invoices: allInvoices.length,
         gstrFilings: allFilings.length,
         filingEvents: totalFilingEvents,
+        reconciliationRuns: allRuns.length,
         reconciliationResults: totalReconciliations,
         issues: totalIssues,
         healthScores: totalHealthScores,

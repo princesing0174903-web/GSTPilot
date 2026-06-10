@@ -16,9 +16,10 @@ import {
 } from '@/components/ui/sidebar'
 import {
   LayoutDashboard,
-  FileText,
+  Upload,
+  ScanSearch,
   ArrowLeftRight,
-  Receipt,
+  FileText,
   Users,
   Settings,
   Zap,
@@ -34,9 +35,10 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { title: 'Dashboard', view: 'dashboard', icon: LayoutDashboard, subtitle: 'Overview' },
-  { title: 'Returns', view: 'returns', icon: FileText, subtitle: 'GSTR Filing' },
+  { title: 'Upload', view: 'upload', icon: Upload, subtitle: 'Import Documents' },
+  { title: 'Review', view: 'review', icon: ScanSearch, subtitle: 'Verify Invoices' },
   { title: 'Reconcile', view: 'reconcile', icon: ArrowLeftRight, subtitle: 'Match & Verify' },
-  { title: 'Invoices', view: 'invoices', icon: Receipt, subtitle: 'Process & Classify' },
+  { title: 'Returns', view: 'returns', icon: FileText, subtitle: 'File GST Returns' },
   { title: 'Clients', view: 'clients', icon: Users, subtitle: 'Manage Clients' },
   { title: 'Settings', view: 'settings', icon: Settings, subtitle: 'Configure' },
 ]
@@ -68,7 +70,7 @@ function SidebarNav() {
       <SidebarContent className="px-2 py-4">
         <SidebarGroup>
           <SidebarGroupLabel className="px-2 text-[11px] font-semibold uppercase tracking-widest text-sidebar-foreground/40">
-            Menu
+            Workflow
           </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu className="gap-1">

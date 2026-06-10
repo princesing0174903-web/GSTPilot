@@ -4,9 +4,10 @@ import { createContext, useContext, useState, useCallback } from 'react';
 
 export type AppView = 
   | 'dashboard' 
-  | 'returns' 
+  | 'upload' 
+  | 'review' 
   | 'reconcile' 
-  | 'invoices' 
+  | 'returns' 
   | 'clients' 
   | 'settings';
 

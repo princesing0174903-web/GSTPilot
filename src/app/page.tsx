@@ -10,11 +10,12 @@ import { AppSidebar } from '@/components/app-sidebar'
 import { useApp } from '@/contexts/AppContext'
 import { useAuth } from '@/contexts/AuthContext'
 import DashboardPage from '@/components/dashboard/DashboardPage'
-import GSTRFilingPage from '@/components/gstr/GSTRFilingPage'
+import UploadPage from '@/components/upload/UploadPage'
+import ReviewPage from '@/components/review/ReviewPage'
 import ReconciliationPage from '@/components/reconciliation/ReconciliationPage'
+import ReturnsPage from '@/components/returns/ReturnsPage'
 import ClientRegistryPage from '@/components/clients/ClientRegistryPage'
-import InvoiceWorkspacePage from '@/components/invoices/InvoiceWorkspacePage'
-import TeamManagementPage from '@/components/team/TeamManagementPage'
+import SettingsPage from '@/components/settings/SettingsPage'
 import LandingPage from '@/components/landing/LandingPage'
 import LoginPage from '@/components/auth/LoginPage'
 import { Separator } from '@/components/ui/separator'
@@ -27,13 +28,13 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Zap, LogOut, User, Settings } from 'lucide-react'
-import { useApp as useAppContext } from '@/contexts/AppContext'
 
 const VIEW_TITLES: Record<string, string> = {
   dashboard: 'Dashboard',
-  returns: 'GST Returns',
+  upload: 'Upload',
+  review: 'Review',
   reconcile: 'Reconcile',
-  invoices: 'Invoices',
+  returns: 'Returns',
   clients: 'Clients',
   settings: 'Settings',
 }
@@ -46,18 +47,18 @@ function DashboardContent() {
     switch (currentView) {
       case 'dashboard':
         return <DashboardPage />
-      case 'returns':
-      case 'gstr-filing':
-        return <GSTRFilingPage />
+      case 'upload':
+        return <UploadPage />
+      case 'review':
+        return <ReviewPage />
       case 'reconcile':
-      case 'reconciliation':
         return <ReconciliationPage />
-      case 'invoices':
-        return <InvoiceWorkspacePage />
+      case 'returns':
+        return <ReturnsPage />
       case 'clients':
         return <ClientRegistryPage />
       case 'settings':
-        return <TeamManagementPage />
+        return <SettingsPage />
       default:
         return <DashboardPage />
     }

@@ -13,200 +13,219 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
+  Upload,
+  Cpu,
   CheckCircle2,
+  Link2,
+  ClipboardCheck,
+  FileCheck2,
   AlertTriangle,
   Clock,
-  Zap,
-  ArrowRight,
   ChevronRight,
-  FileText,
-  AlertCircle,
-  CalendarClock,
+  ArrowRight,
   FileX2,
-  FileCheck,
-  FileWarning,
-  CircleDot,
+  Zap,
 } from 'lucide-react';
-import {
-  AreaChart,
-  Area,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip as RechartsTooltip,
-  ResponsiveContainer,
-} from 'recharts';
-import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
 import { motion } from 'framer-motion';
 import { useApp } from '@/contexts/AppContext';
 import type { AppView } from '@/contexts/AppContext';
 import type { GSTRFiling, Client } from '@/types/gst';
 import { formatCurrency, formatNumber, periodToLabel, isOverdue } from '@/lib/gst-utils';
 
-// ─── Color Palette (Emerald/Teal — NO blue/indigo) ────────────────────────
-const COLORS = {
-  emerald: '#10b981',
-  emeraldDark: '#059669',
-  emeraldLight: '#d1fae5',
-  teal: '#14b8a6',
-  tealLight: '#ccfbf1',
-  amber: '#f59e0b',
-  amberLight: '#fef3c7',
-  red: '#ef4444',
-  redLight: '#fee2e2',
-  slate: '#64748b',
-  slateLight: '#f1f5f9',
-};
-
-// ─── Types ─────────────────────────────────────────────────────────────────
-interface StatusCardData {
-  title: string;
-  value: number;
-  subtitle: string;
+// ─── Pipeline Stage Type ─────────────────────────────────────────────────
+interface PipelineStage {
+  id: string;
   icon: React.ReactNode;
-  bgColor: string;
-  iconBg: string;
-  iconColor: string;
-  borderAccent: string;
-  hoverShadow: string;
+  label: string;
+  count: number;
   navigateTo: AppView;
+  isBottleneck: boolean;
 }
 
-interface ClientFilingRow {
+// ─── Client Card Type ────────────────────────────────────────────────────
+interface ClientCard {
   clientId: string;
   clientName: string;
+  initials: string;
   returnType: string;
   period: string;
   status: 'ready' | 'issues' | 'pending' | 'filed';
-  statusLabel: string;
   issuesCount: number;
-  readyCount: number;
 }
 
-interface AttentionItem {
+// ─── Attention Card Type ─────────────────────────────────────────────────
+interface AttentionCard {
   id: string;
-  type: 'overdue' | 'mismatch' | 'missing' | 'deadline';
   title: string;
+  count: number;
   description: string;
+  accentColor: string;
+  accentBg: string;
+  accentBorder: string;
   icon: React.ReactNode;
   iconBg: string;
-  iconColor: string;
+  ctaLabel: string;
   navigateTo: AppView;
 }
 
-// ─── Fallback Mock Data ────────────────────────────────────────────────────
-const mockMonthlyFiling = [
-  { period: '2025-01', month: 'Jan', filed: 8, ready: 3, issues: 2, pending: 1 },
-  { period: '2025-02', month: 'Feb', filed: 10, ready: 4, issues: 1, pending: 2 },
-  { period: '2025-03', month: 'Mar', filed: 12, ready: 2, issues: 3, pending: 1 },
-  { period: '2025-04', month: 'Apr', filed: 9, ready: 5, issues: 2, pending: 2 },
-  { period: '2025-05', month: 'May', filed: 14, ready: 3, issues: 1, pending: 1 },
-  { period: '2025-06', month: 'Jun', filed: 11, ready: 6, issues: 2, pending: 3 },
+// ─── Mock Data (inline, realistic Indian business names & GST data) ──────
+const mockPipelineStages: PipelineStage[] = [
+  { id: 'uploaded', icon: <Upload className="h-4 w-4" />, label: 'Uploaded', count: 24, navigateTo: 'upload', isBottleneck: false },
+  { id: 'processing', icon: <Cpu className="h-4 w-4" />, label: 'AI Processing', count: 8, navigateTo: 'review', isBottleneck: true },
+  { id: 'reviewed', icon: <CheckCircle2 className="h-4 w-4" />, label: 'Reviewed', count: 12, navigateTo: 'review', isBottleneck: false },
+  { id: 'reconciled', icon: <Link2 className="h-4 w-4" />, label: 'Reconciled', count: 9, navigateTo: 'reconcile', isBottleneck: false },
+  { id: 'ready', icon: <ClipboardCheck className="h-4 w-4" />, label: 'Ready to File', count: 6, navigateTo: 'returns', isBottleneck: false },
+  { id: 'filed', icon: <FileCheck2 className="h-4 w-4" />, label: 'Filed', count: 18, navigateTo: 'returns', isBottleneck: false },
 ];
 
-const mockClientFilings: ClientFilingRow[] = [
-  { clientId: '1', clientName: 'Sharma Enterprises', returnType: 'GSTR-1', period: '2025-06', status: 'ready', statusLabel: 'Ready', issuesCount: 0, readyCount: 45 },
-  { clientId: '2', clientName: 'Patel & Sons Pvt Ltd', returnType: 'GSTR-3B', period: '2025-06', status: 'issues', statusLabel: 'Issues', issuesCount: 3, readyCount: 0 },
-  { clientId: '3', clientName: 'Krishna Traders', returnType: 'GSTR-1', period: '2025-06', status: 'filed', statusLabel: 'Filed', issuesCount: 0, readyCount: 0 },
-  { clientId: '4', clientName: 'Metro Retail Solutions', returnType: 'GSTR-1', period: '2025-06', status: 'pending', statusLabel: 'Pending', issuesCount: 0, readyCount: 0 },
-  { clientId: '5', clientName: 'Sunrise Exports Ltd', returnType: 'GSTR-3B', period: '2025-05', status: 'issues', statusLabel: 'Issues', issuesCount: 7, readyCount: 0 },
-  { clientId: '6', clientName: 'Gupta Manufacturing', returnType: 'GSTR-1', period: '2025-06', status: 'ready', statusLabel: 'Ready', issuesCount: 0, readyCount: 32 },
-  { clientId: '7', clientName: 'Digital Commerce India', returnType: 'GSTR-3B', period: '2025-06', status: 'filed', statusLabel: 'Filed', issuesCount: 0, readyCount: 0 },
-  { clientId: '8', clientName: 'Apex Logistics', returnType: 'GSTR-1', period: '2025-06', status: 'pending', statusLabel: 'Pending', issuesCount: 0, readyCount: 0 },
+const mockAttentionCards: AttentionCard[] = [
+  {
+    id: 'overdue',
+    title: 'Overdue Returns',
+    count: 3,
+    description: 'Returns past their filing deadline. Penalties may apply.',
+    accentColor: 'text-red-600 dark:text-red-400',
+    accentBg: 'bg-red-50 dark:bg-red-950/20',
+    accentBorder: 'border-red-200 dark:border-red-800/50',
+    icon: <FileX2 className="h-5 w-5" />,
+    iconBg: 'bg-red-100 dark:bg-red-900/50',
+    ctaLabel: 'File Now',
+    navigateTo: 'returns',
+  },
+  {
+    id: 'mismatches',
+    title: 'Mismatches Found',
+    count: 7,
+    description: 'Tax amount or GSTIN discrepancies detected across invoices.',
+    accentColor: 'text-amber-600 dark:text-amber-400',
+    accentBg: 'bg-amber-50 dark:bg-amber-950/20',
+    accentBorder: 'border-amber-200 dark:border-amber-800/50',
+    icon: <AlertTriangle className="h-5 w-5" />,
+    iconBg: 'bg-amber-100 dark:bg-amber-900/50',
+    ctaLabel: 'Resolve',
+    navigateTo: 'reconcile',
+  },
+  {
+    id: 'pending-review',
+    title: 'Pending Review',
+    count: 5,
+    description: 'AI-processed filings waiting for your review and approval.',
+    accentColor: 'text-slate-600 dark:text-slate-400',
+    accentBg: 'bg-slate-50 dark:bg-slate-900/20',
+    accentBorder: 'border-slate-200 dark:border-slate-700/50',
+    icon: <Clock className="h-5 w-5" />,
+    iconBg: 'bg-slate-100 dark:bg-slate-800/50',
+    ctaLabel: 'Review Now',
+    navigateTo: 'review',
+  },
 ];
 
-const mockAttentionItems: AttentionItem[] = [
-  { id: 'a1', type: 'overdue', title: 'GSTR-1 overdue for Sunrise Exports', description: 'Period May 2025 — 3 days past deadline', icon: <FileX2 className="h-4 w-4" />, iconBg: 'bg-red-50 dark:bg-red-950/40', iconColor: 'text-red-500', navigateTo: 'returns' as AppView },
-  { id: 'a2', type: 'mismatch', title: '7 mismatches in Patel & Sons GSTR-3B', description: 'Tax amount discrepancy detected in purchase register', icon: <AlertTriangle className="h-4 w-4" />, iconBg: 'bg-amber-50 dark:bg-amber-950/40', iconColor: 'text-amber-500', navigateTo: 'reconcile' as AppView },
-  { id: 'a3', type: 'missing', title: '3 invoices missing from GSTR-2B', description: 'Found in purchase register but not on GST portal', icon: <FileWarning className="h-4 w-4" />, iconBg: 'bg-amber-50 dark:bg-amber-950/40', iconColor: 'text-amber-500', navigateTo: 'reconcile' as AppView },
-  { id: 'a4', type: 'deadline', title: 'GSTR-1 deadline in 2 days', description: '6 clients have upcoming filing deadline', icon: <CalendarClock className="h-4 w-4" />, iconBg: 'bg-slate-100 dark:bg-slate-800/40', iconColor: 'text-slate-500', navigateTo: 'returns' as AppView },
-  { id: 'a5', type: 'overdue', title: 'GSTR-3B overdue for Apex Logistics', description: 'Period Apr 2025 — 37 days past deadline', icon: <FileX2 className="h-4 w-4" />, iconBg: 'bg-red-50 dark:bg-red-950/40', iconColor: 'text-red-500', navigateTo: 'returns' as AppView },
+const mockClientCards: ClientCard[] = [
+  { clientId: '1', clientName: 'Sharma Enterprises', initials: 'SE', returnType: 'GSTR-1', period: '2025-06', status: 'ready', issuesCount: 0 },
+  { clientId: '2', clientName: 'Patel & Sons Pvt Ltd', initials: 'PS', returnType: 'GSTR-3B', period: '2025-06', status: 'issues', issuesCount: 3 },
+  { clientId: '3', clientName: 'Krishna Traders', initials: 'KT', returnType: 'GSTR-1', period: '2025-06', status: 'filed', issuesCount: 0 },
+  { clientId: '4', clientName: 'Metro Retail Solutions', initials: 'MR', returnType: 'GSTR-1', period: '2025-06', status: 'pending', issuesCount: 0 },
+  { clientId: '5', clientName: 'Sunrise Exports Ltd', initials: 'SX', returnType: 'GSTR-3B', period: '2025-05', status: 'issues', issuesCount: 7 },
+  { clientId: '6', clientName: 'Gupta Manufacturing', initials: 'GM', returnType: 'GSTR-1', period: '2025-06', status: 'ready', issuesCount: 0 },
 ];
 
-// ─── Status Badge Component ────────────────────────────────────────────────
-function StatusBadge({ status }: { status: ClientFilingRow['status'] }) {
+// ─── Status Badge Component ──────────────────────────────────────────────
+function ClientStatusBadge({ status }: { status: ClientCard['status'] }) {
   const config: Record<string, { label: string; className: string; icon: React.ReactNode }> = {
     ready: {
       label: 'Ready',
       className: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800',
-      icon: <FileCheck className="h-3 w-3 mr-1" />,
+      icon: <CheckCircle2 className="h-3 w-3" />,
     },
     issues: {
       label: 'Issues',
       className: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-800',
-      icon: <AlertTriangle className="h-3 w-3 mr-1" />,
+      icon: <AlertTriangle className="h-3 w-3" />,
     },
     pending: {
       label: 'Pending',
       className: 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800/40 dark:text-slate-400 dark:border-slate-700',
-      icon: <Clock className="h-3 w-3 mr-1" />,
+      icon: <Clock className="h-3 w-3" />,
     },
     filed: {
       label: 'Filed',
       className: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800',
-      icon: <CheckCircle2 className="h-3 w-3 mr-1" />,
+      icon: <FileCheck2 className="h-3 w-3" />,
     },
   };
 
   const c = config[status] || config.pending;
 
   return (
-    <Badge variant="outline" className={`text-[11px] font-semibold px-2 py-0.5 border ${c.className}`}>
+    <Badge variant="outline" className={`text-[11px] font-semibold px-2 py-0.5 border gap-1 ${c.className}`}>
       {c.icon}
       {c.label}
     </Badge>
   );
 }
 
-// ─── Skeleton Loaders ─────────────────────────────────────────────────────
-function StatusCardSkeleton() {
+// ─── Avatar Initials ─────────────────────────────────────────────────────
+function AvatarInitials({ initials, status }: { initials: string; status: ClientCard['status'] }) {
+  const bgMap: Record<string, string> = {
+    ready: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300',
+    issues: 'bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300',
+    pending: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400',
+    filed: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300',
+  };
+
   return (
-    <Card className="border-border/50">
-      <CardContent className="p-4 md:p-6">
-        <div className="flex items-start justify-between">
-          <div className="space-y-2">
-            <Skeleton className="h-4 w-24" />
-            <Skeleton className="h-8 w-12" />
-            <Skeleton className="h-3 w-28" />
-          </div>
-          <Skeleton className="h-10 w-10 rounded-xl" />
-        </div>
-      </CardContent>
-    </Card>
+    <div className={`flex items-center justify-center h-9 w-9 rounded-lg text-xs font-bold shrink-0 ${bgMap[status] || bgMap.pending}`}>
+      {initials}
+    </div>
   );
 }
 
-function ClientTableSkeleton() {
+// ─── Skeleton Loaders ────────────────────────────────────────────────────
+function PipelineSkeleton() {
   return (
-    <div className="space-y-3">
+    <div className="flex items-center gap-0 overflow-x-auto pb-2">
       {Array.from({ length: 6 }).map((_, i) => (
-        <div key={i} className="flex items-center justify-between py-2">
-          <div className="flex items-center gap-3 flex-1">
-            <Skeleton className="h-8 w-8 rounded-lg" />
-            <div className="space-y-1.5 flex-1">
-              <Skeleton className="h-4 w-32" />
-              <Skeleton className="h-3 w-48" />
-            </div>
+        <div key={i} className="flex items-center shrink-0">
+          <div className="flex flex-col items-center gap-2 p-3 min-w-[100px]">
+            <Skeleton className="h-9 w-9 rounded-lg" />
+            <Skeleton className="h-3 w-16" />
+            <Skeleton className="h-5 w-6" />
           </div>
-          <Skeleton className="h-6 w-16 rounded-full" />
+          {i < 5 && <Skeleton className="h-0.5 w-6 mx-1" />}
         </div>
       ))}
     </div>
   );
 }
 
-function AttentionListSkeleton() {
+function AttentionCardSkeleton() {
   return (
-    <div className="space-y-3">
-      {Array.from({ length: 5 }).map((_, i) => (
-        <div key={i} className="flex items-center gap-3">
-          <Skeleton className="h-9 w-9 rounded-lg shrink-0" />
-          <div className="flex-1 space-y-1.5">
-            <Skeleton className="h-4 w-3/4" />
-            <Skeleton className="h-3 w-1/2" />
+    <Card className="border-border/50">
+      <CardContent className="p-5">
+        <div className="flex items-start gap-4">
+          <Skeleton className="h-11 w-11 rounded-xl shrink-0" />
+          <div className="flex-1 space-y-2">
+            <Skeleton className="h-4 w-32" />
+            <Skeleton className="h-7 w-10" />
+            <Skeleton className="h-3 w-48" />
           </div>
+          <Skeleton className="h-9 w-24 rounded-lg" />
         </div>
-      ))}
+      </CardContent>
+    </Card>
+  );
+}
+
+function ClientCardSkeleton() {
+  return (
+    <div className="flex items-center gap-3 p-3">
+      <Skeleton className="h-9 w-9 rounded-lg shrink-0" />
+      <div className="flex-1 space-y-1.5">
+        <Skeleton className="h-4 w-36" />
+        <Skeleton className="h-3 w-24" />
+      </div>
+      <Skeleton className="h-6 w-16 rounded-full" />
+      <Skeleton className="h-8 w-8 rounded-lg" />
     </div>
   );
 }
@@ -214,12 +233,28 @@ function AttentionListSkeleton() {
 function ProgressSkeleton() {
   return (
     <div className="space-y-4">
-      <Skeleton className="h-4 w-full rounded-full" />
-      <div className="grid grid-cols-4 gap-2">
+      <Skeleton className="h-3 w-full rounded-full" />
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {Array.from({ length: 4 }).map((_, i) => (
-          <Skeleton key={i} className="h-10 rounded-lg" />
+          <div key={i} className="flex items-center gap-2">
+            <Skeleton className="h-3 w-3 rounded-sm" />
+            <div className="space-y-1">
+              <Skeleton className="h-3 w-16" />
+              <Skeleton className="h-4 w-10" />
+            </div>
+          </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+// ─── Pipeline Connector Arrow Component ──────────────────────────────────
+function PipelineConnector({ isBottleneck }: { isBottleneck: boolean }) {
+  return (
+    <div className="flex items-center shrink-0 px-1 md:px-2 self-center pt-0">
+      <div className={`h-0.5 w-3 md:w-5 ${isBottleneck ? 'bg-emerald-400' : 'bg-border'}`} />
+      <div className={`h-0 w-0 border-t-[4px] border-b-[4px] border-l-[6px] border-t-transparent border-b-transparent ${isBottleneck ? 'border-l-emerald-400' : 'border-l-border'}`} />
     </div>
   );
 }
@@ -233,15 +268,14 @@ export default function DashboardPage() {
   // ── State ────────────────────────────────────────────────────────────────
   const [loading, setLoading] = useState(true);
 
-  // Status card metrics
-  const [readyToFileCount, setReadyToFileCount] = useState(0);
-  const [hasIssuesCount, setHasIssuesCount] = useState(0);
-  const [pendingReturnsCount, setPendingReturnsCount] = useState(0);
-  const [actionItemsCount, setActionItemsCount] = useState(0);
+  // Pipeline data
+  const [pipelineStages, setPipelineStages] = useState<PipelineStage[]>(mockPipelineStages);
 
-  // Detailed data
-  const [clientFilings, setClientFilings] = useState<ClientFilingRow[]>([]);
-  const [attentionItems, setAttentionItems] = useState<AttentionItem[]>([]);
+  // Attention cards
+  const [attentionCards, setAttentionCards] = useState<AttentionCard[]>(mockAttentionCards);
+
+  // Client cards
+  const [clientCards, setClientCards] = useState<ClientCard[]>(mockClientCards);
 
   // Filing progress
   const [filedCount, setFiledCount] = useState(0);
@@ -249,9 +283,6 @@ export default function DashboardPage() {
   const [issuesCount, setIssuesCount] = useState(0);
   const [notStartedCount, setNotStartedCount] = useState(0);
   const [totalReturns, setTotalReturns] = useState(0);
-
-  // Monthly chart
-  const [monthlyData, setMonthlyData] = useState(mockMonthlyFiling);
 
   // Current period
   const currentPeriod = (() => {
@@ -281,180 +312,177 @@ export default function DashboardPage() {
       const filings: GSTRFiling[] = filingData.filings ?? [];
       const invoices = invoiceData.invoices ?? [];
 
-      // ── Status Card 1: Ready to File ──
+      // ── Pipeline Stages ──
+      const uploadedCount = invoices.filter(
+        (inv: { matchStatus: string }) => inv.matchStatus === 'unmatched'
+      ).length || 24;
+
+      const processingCount = filings.filter(
+        (f) => f.status === 'draft' && f.criticalErrors === 0 && f.issuesFound === 0
+      ).length || 8;
+
+      const reviewedCount = filings.filter(
+        (f) => ['reviewed', 'validated'].includes(f.status)
+      ).length || 12;
+
+      const reconciledCount = invoices.filter(
+        (inv: { matchStatus: string }) => inv.matchStatus === 'perfect_match'
+      ).length || 9;
+
       const readyStatuses = ['validated', 'generated', 'reviewed'];
-      const readyFilings = filings.filter((f) => readyStatuses.includes(f.status));
-      const readyClientIds = new Set(readyFilings.map((f) => f.clientId));
-      const readyCount = readyClientIds.size || Math.round(clients.length * 0.35) || 4;
-      setReadyToFileCount(readyCount);
+      const readyToFileCount = filings.filter(
+        (f) => readyStatuses.includes(f.status)
+      ).length || 6;
 
-      // ── Status Card 2: Has Issues ──
-      const issueFilings = filings.filter(
-        (f) => f.criticalErrors > 0 || f.issuesFound > 0
-      );
-      const issueClientIds = new Set(issueFilings.map((f) => f.clientId));
-      const issueClientsFromHealth = clients.filter((c) => c.healthScore < 50);
-      const hasIssues = issueClientIds.size || issueClientsFromHealth.length || 3;
-      setHasIssuesCount(hasIssues);
+      const filedFilings = filings.filter((f) => f.status === 'filed').length || 18;
 
-      // ── Status Card 3: Pending Returns ──
-      const pendingFilings = filings.filter((f) => f.status !== 'filed');
-      const pending = dashData.pendingReturns ?? pendingFilings.length ?? 8;
-      setPendingReturnsCount(pending);
+      const stageCounts = [uploadedCount, processingCount, reviewedCount, reconciledCount, readyToFileCount, filedFilings];
+      const maxCount = Math.max(...stageCounts);
 
-      // ── Status Card 4: Action Items ──
+      const stages: PipelineStage[] = [
+        { id: 'uploaded', icon: <Upload className="h-4 w-4" />, label: 'Uploaded', count: uploadedCount, navigateTo: 'upload', isBottleneck: false },
+        { id: 'processing', icon: <Cpu className="h-4 w-4" />, label: 'AI Processing', count: processingCount, navigateTo: 'review', isBottleneck: processingCount === maxCount && processingCount > 0 },
+        { id: 'reviewed', icon: <CheckCircle2 className="h-4 w-4" />, label: 'Reviewed', count: reviewedCount, navigateTo: 'review', isBottleneck: reviewedCount === maxCount && processingCount !== maxCount && reviewedCount > 0 },
+        { id: 'reconciled', icon: <Link2 className="h-4 w-4" />, label: 'Reconciled', count: reconciledCount, navigateTo: 'reconcile', isBottleneck: reconciledCount === maxCount && processingCount !== maxCount && reviewedCount !== maxCount && reconciledCount > 0 },
+        { id: 'ready', icon: <ClipboardCheck className="h-4 w-4" />, label: 'Ready to File', count: readyToFileCount, navigateTo: 'returns', isBottleneck: false },
+        { id: 'filed', icon: <FileCheck2 className="h-4 w-4" />, label: 'Filed', count: filedFilings, navigateTo: 'returns', isBottleneck: false },
+      ];
+
+      // Find the bottleneck: highest count in the middle stages (not filed)
+      const middleStages = stages.slice(0, 5);
+      const bottleneckIdx = middleStages.reduce((maxI, stage, i, arr) =>
+        stage.count > arr[maxI].count ? i : maxI, 0);
+      stages.forEach((s, i) => { s.isBottleneck = i === bottleneckIdx && s.count > 0 && i < 5; });
+
+      setPipelineStages(stages);
+
+      // ── Attention Cards ──
       const overdueFilings = filings.filter(
         (f) => f.status !== 'filed' && isOverdue(f.period)
       );
-      const criticalInvoices = invoices.filter(
-        (inv: { riskLevel: string }) => ['high', 'critical'].includes(inv.riskLevel)
-      );
-      const actionItems =
-        (dashData.overdueReturns ?? overdueFilings.length) +
-        (dashData.criticalIssues ?? criticalInvoices.length) || 5;
-      setActionItemsCount(actionItems);
+      const overdueCount = dashData.overdueReturns ?? overdueFilings.length ?? 3;
 
-      // ── Client Filing Status Table ──
+      const mismatchInvoices = invoices.filter(
+        (inv: { matchStatus: string }) => ['mismatch', 'partial_match'].includes(inv.matchStatus)
+      );
+      const mismatchCount = mismatchInvoices.length || 7;
+
+      const pendingReviewCount = processingCount || 5;
+
+      setAttentionCards([
+        {
+          id: 'overdue',
+          title: 'Overdue Returns',
+          count: overdueCount,
+          description: overdueCount > 0
+            ? `${overdueCount} ${overdueCount === 1 ? 'return' : 'returns'} past filing deadline. Penalties may apply.`
+            : 'All returns filed on time.',
+          accentColor: 'text-red-600 dark:text-red-400',
+          accentBg: 'bg-red-50 dark:bg-red-950/20',
+          accentBorder: 'border-red-200 dark:border-red-800/50',
+          icon: <FileX2 className="h-5 w-5" />,
+          iconBg: 'bg-red-100 dark:bg-red-900/50 text-red-600 dark:text-red-400',
+          ctaLabel: 'File Now',
+          navigateTo: 'returns',
+        },
+        {
+          id: 'mismatches',
+          title: 'Mismatches Found',
+          count: mismatchCount,
+          description: mismatchCount > 0
+            ? `${mismatchCount} ${mismatchCount === 1 ? 'discrepancy' : 'discrepancies'} in tax amounts or GSTIN across invoices.`
+            : 'All invoices match perfectly.',
+          accentColor: 'text-amber-600 dark:text-amber-400',
+          accentBg: 'bg-amber-50 dark:bg-amber-950/20',
+          accentBorder: 'border-amber-200 dark:border-amber-800/50',
+          icon: <AlertTriangle className="h-5 w-5" />,
+          iconBg: 'bg-amber-100 dark:bg-amber-900/50 text-amber-600 dark:text-amber-400',
+          ctaLabel: 'Resolve',
+          navigateTo: 'reconcile',
+        },
+        {
+          id: 'pending-review',
+          title: 'Pending Review',
+          count: pendingReviewCount,
+          description: pendingReviewCount > 0
+            ? `${pendingReviewCount} AI-processed ${pendingReviewCount === 1 ? 'filing' : 'filings'} waiting for your review and approval.`
+            : 'No filings pending review.',
+          accentColor: 'text-slate-600 dark:text-slate-400',
+          accentBg: 'bg-slate-50 dark:bg-slate-900/20',
+          accentBorder: 'border-slate-200 dark:border-slate-700/50',
+          icon: <Clock className="h-5 w-5" />,
+          iconBg: 'bg-slate-100 dark:bg-slate-800/50 text-slate-600 dark:text-slate-400',
+          ctaLabel: 'Review Now',
+          navigateTo: 'review',
+        },
+      ]);
+
+      // ── Client Cards ──
       if (filings.length > 0 && clients.length > 0) {
         const clientMap = new Map<string, Client>();
         clients.forEach((c) => clientMap.set(c.id, c));
 
-        const rows: ClientFilingRow[] = filings
+        const cards: ClientCard[] = filings
           .filter((f) => f.status !== 'filed')
-          .slice(0, 10)
+          .slice(0, 8)
           .map((f) => {
             const client = clientMap.get(f.clientId);
-            let status: ClientFilingRow['status'] = 'pending';
-            let statusLabel = 'Pending';
+            let status: ClientCard['status'] = 'pending';
 
             if (f.criticalErrors > 0 || f.issuesFound > 0) {
               status = 'issues';
-              statusLabel = 'Issues';
             } else if (readyStatuses.includes(f.status)) {
               status = 'ready';
-              statusLabel = 'Ready';
             }
+
+            const name = client?.tradeName ?? 'Unknown';
+            const initials = name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
 
             return {
               clientId: f.clientId,
-              clientName: client?.tradeName ?? 'Unknown',
+              clientName: name,
+              initials,
               returnType: f.returnType,
               period: f.period,
               status,
-              statusLabel,
               issuesCount: f.issuesFound,
-              readyCount: f.readyForFiling,
             };
           });
 
-        // Add filed clients too
-        const filedRows: ClientFilingRow[] = filings
+        // Add some filed clients
+        const filedCards: ClientCard[] = filings
           .filter((f) => f.status === 'filed')
-          .slice(0, 3)
+          .slice(0, 2)
           .map((f) => {
             const client = clientMap.get(f.clientId);
+            const name = client?.tradeName ?? 'Unknown';
+            const initials = name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
             return {
               clientId: f.clientId,
-              clientName: client?.tradeName ?? 'Unknown',
+              clientName: name,
+              initials,
               returnType: f.returnType,
               period: f.period,
               status: 'filed' as const,
-              statusLabel: 'Filed',
               issuesCount: 0,
-              readyCount: 0,
             };
           });
 
-        const combined = [...rows, ...filedRows].slice(0, 10);
-        setClientFilings(combined.length > 0 ? combined : mockClientFilings);
+        const combined = [...cards, ...filedCards].slice(0, 6);
+        setClientCards(combined.length > 0 ? combined : mockClientCards);
       } else {
-        setClientFilings(mockClientFilings);
+        setClientCards(mockClientCards);
       }
-
-      // ── Attention Items ──
-      const items: AttentionItem[] = [];
-
-      // Overdue filings
-      overdueFilings.slice(0, 3).forEach((f, i) => {
-        const clientName =
-          f.client?.tradeName ?? clients.find((c) => c.id === f.clientId)?.tradeName ?? 'Unknown';
-        items.push({
-          id: `overdue-${i}`,
-          type: 'overdue',
-          title: `${f.returnType} overdue for ${clientName}`,
-          description: `Period ${periodToLabel(f.period)} — past deadline`,
-          icon: <FileX2 className="h-4 w-4" />,
-          iconBg: 'bg-red-50 dark:bg-red-950/40',
-          iconColor: 'text-red-500',
-          navigateTo: 'returns' as AppView,
-        });
-      });
-
-      // Mismatches from invoices
-      const mismatchInvoices = invoices.filter(
-        (inv: { matchStatus: string }) =>
-          ['mismatch', 'partial_match'].includes(inv.matchStatus)
-      );
-      if (mismatchInvoices.length > 0) {
-        items.push({
-          id: 'mismatch-1',
-          type: 'mismatch',
-          title: `${mismatchInvoices.length} mismatches found in invoices`,
-          description: 'Tax amount or GSTIN discrepancies detected',
-          icon: <AlertTriangle className="h-4 w-4" />,
-          iconBg: 'bg-amber-50 dark:bg-amber-950/40',
-          iconColor: 'text-amber-500',
-          navigateTo: 'reconcile' as AppView,
-        });
-      }
-
-      // Missing invoices
-      const missingInvoices = invoices.filter(
-        (inv: { matchStatus: string }) =>
-          ['missing_in_books', 'missing_in_gstr'].includes(inv.matchStatus)
-      );
-      if (missingInvoices.length > 0) {
-        items.push({
-          id: 'missing-1',
-          type: 'missing',
-          title: `${missingInvoices.length} invoices missing from records`,
-          description:
-            missingInvoices[0]?.matchStatus === 'missing_in_gstr'
-              ? 'Found in books but not on GST portal'
-              : 'Found on GST portal but not in books',
-          icon: <FileWarning className="h-4 w-4" />,
-          iconBg: 'bg-amber-50 dark:bg-amber-950/40',
-          iconColor: 'text-amber-500',
-          navigateTo: 'reconcile' as AppView,
-        });
-      }
-
-      // Upcoming deadlines from filing calendar
-      const upcomingCalendar = (dashData.filingCalendar ?? []).filter(
-        (item: { status: string }) => item.status === 'pending'
-      );
-      if (upcomingCalendar.length > 0) {
-        items.push({
-          id: 'deadline-1',
-          type: 'deadline',
-          title: `${upcomingCalendar.length} returns have upcoming deadlines`,
-          description: 'Ensure timely filing to avoid penalties',
-          icon: <CalendarClock className="h-4 w-4" />,
-          iconBg: 'bg-slate-100 dark:bg-slate-800/40',
-          iconColor: 'text-slate-500',
-          navigateTo: 'returns' as AppView,
-        });
-      }
-
-      setAttentionItems(items.length > 0 ? items : mockAttentionItems);
 
       // ── Filing Progress ──
-      const filed = dashData.filedReturns ?? filings.filter((f) => f.status === 'filed').length ?? 0;
-      const ready = readyFilings.length;
+      const issueFilings = filings.filter(
+        (f) => f.criticalErrors > 0 || f.issuesFound > 0
+      );
+
+      const filed = dashData.filedReturns ?? filedFilings;
+      const ready = readyToFileCount;
       const issues = issueFilings.length;
-      const notStarted = filings.filter(
-        (f) => f.status === 'draft' && f.criticalErrors === 0 && f.issuesFound === 0
-      ).length;
+      const notStarted = processingCount;
       const total = filings.length || 1;
 
       setFiledCount(filed);
@@ -462,38 +490,17 @@ export default function DashboardPage() {
       setIssuesCount(issues);
       setNotStartedCount(notStarted);
       setTotalReturns(total);
-
-      // ── Monthly Chart ──
-      if (dashData.monthlyFilingStatus && dashData.monthlyFilingStatus.length > 0) {
-        const chartData = dashData.monthlyFilingStatus
-          .slice(-6)
-          .map((entry: { period: string; filed: number; pending: number; overdue: number }) => ({
-            period: entry.period,
-            month: periodToLabel(entry.period),
-            filed: entry.filed ?? 0,
-            ready: entry.pending ?? 0,
-            issues: entry.overdue ?? 0,
-            pending: (entry.pending ?? 0) + (entry.overdue ?? 0),
-          }));
-        setMonthlyData(chartData.length >= 2 ? chartData : mockMonthlyFiling);
-      } else {
-        setMonthlyData(mockMonthlyFiling);
-      }
     } catch (err) {
       console.error('Dashboard fetch error:', err);
       // Apply mock fallbacks
-      setReadyToFileCount(4);
-      setHasIssuesCount(3);
-      setPendingReturnsCount(8);
-      setActionItemsCount(5);
-      setClientFilings(mockClientFilings);
-      setAttentionItems(mockAttentionItems);
-      setFiledCount(12);
+      setPipelineStages(mockPipelineStages);
+      setAttentionCards(mockAttentionCards);
+      setClientCards(mockClientCards);
+      setFiledCount(18);
       setReadyCount(6);
       setIssuesCount(3);
-      setNotStartedCount(4);
-      setTotalReturns(25);
-      setMonthlyData(mockMonthlyFiling);
+      setNotStartedCount(8);
+      setTotalReturns(35);
     } finally {
       setLoading(false);
     }
@@ -509,304 +516,278 @@ export default function DashboardPage() {
   const issuesPct = totalReturns > 0 ? Math.round((issuesCount / totalReturns) * 100) : 0;
   const notStartedPct = totalReturns > 0 ? Math.round((notStartedCount / totalReturns) * 100) : 0;
 
-  // ── Status Cards Config ──────────────────────────────────────────────────
-  const statusCards: StatusCardData[] = [
-    {
-      title: 'Ready to File',
-      value: readyToFileCount,
-      subtitle: `${readyToFileCount} client${readyToFileCount !== 1 ? 's' : ''} ready`,
-      icon: <CheckCircle2 className="h-5 w-5" />,
-      bgColor: 'bg-emerald-50 dark:bg-emerald-950/20',
-      iconBg: 'bg-emerald-100 dark:bg-emerald-900/50',
-      iconColor: 'text-emerald-600 dark:text-emerald-400',
-      borderAccent: 'border-emerald-200 dark:border-emerald-800/50',
-      hoverShadow: 'hover:shadow-emerald-500/10',
-      navigateTo: 'returns',
+  // ── Animation Variants ───────────────────────────────────────────────────
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    visible: {
+      opacity: 1,
+      transition: { staggerChildren: 0.06 },
     },
-    {
-      title: 'Has Issues',
-      value: hasIssuesCount,
-      subtitle: `${hasIssuesCount} client${hasIssuesCount !== 1 ? 's' : ''} need attention`,
-      icon: <AlertTriangle className="h-5 w-5" />,
-      bgColor: 'bg-amber-50 dark:bg-amber-950/20',
-      iconBg: 'bg-amber-100 dark:bg-amber-900/50',
-      iconColor: 'text-amber-600 dark:text-amber-400',
-      borderAccent: 'border-amber-200 dark:border-amber-800/50',
-      hoverShadow: 'hover:shadow-amber-500/10',
-      navigateTo: 'reconcile',
-    },
-    {
-      title: 'Pending Returns',
-      value: pendingReturnsCount,
-      subtitle: `Period ${periodToLabel(currentPeriod)}`,
-      icon: <Clock className="h-5 w-5" />,
-      bgColor: 'bg-slate-50 dark:bg-slate-900/20',
-      iconBg: 'bg-slate-100 dark:bg-slate-800/50',
-      iconColor: 'text-slate-600 dark:text-slate-400',
-      borderAccent: 'border-slate-200 dark:border-slate-700/50',
-      hoverShadow: 'hover:shadow-slate-500/10',
-      navigateTo: 'returns',
-    },
-    {
-      title: 'Action Items',
-      value: actionItemsCount,
-      subtitle: `${actionItemsCount} item${actionItemsCount !== 1 ? 's' : ''} need your attention`,
-      icon: <Zap className="h-5 w-5" />,
-      bgColor: 'bg-red-50 dark:bg-red-950/20',
-      iconBg: 'bg-red-100 dark:bg-red-900/50',
-      iconColor: 'text-red-600 dark:text-red-400',
-      borderAccent: 'border-red-200 dark:border-red-800/50',
-      hoverShadow: 'hover:shadow-red-500/10',
-      navigateTo: 'returns',
-    },
-  ];
+  };
 
-  // ── Chart Config ─────────────────────────────────────────────────────────
-  const filingChartConfig = {
-    filed: { label: 'Filed', color: COLORS.emerald },
-    pending: { label: 'Pending', color: COLORS.amber },
+  const itemVariants = {
+    hidden: { opacity: 0, y: 16 },
+    visible: { opacity: 1, y: 0, transition: { duration: 0.5, ease: 'easeOut' } },
   };
 
   // ── Render ───────────────────────────────────────────────────────────────
   return (
-    <div className="p-4 md:p-6 space-y-6">
-      {/* ═══ PAGE HEADER ═══ */}
+    <div className="p-4 md:p-6 space-y-6 max-w-7xl mx-auto">
+
+      {/* ═══ 1. PAGE HEADER ═══ */}
       <motion.div
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4 }}
-        className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
+        className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4"
       >
         <div>
           <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground">
-            GSTPilot Command Center
+            Command Center
           </h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
+          <p className="text-sm text-muted-foreground mt-1">
             Upload documents → Get GST-ready returns in minutes
           </p>
         </div>
-        <Badge
-          variant="outline"
-          className="gap-1.5 px-3 py-1.5 border-emerald-200 text-emerald-700 bg-emerald-50/80 dark:border-emerald-800 dark:text-emerald-400 dark:bg-emerald-950/40 font-medium self-start"
+        <Button
+          onClick={() => setCurrentView('upload')}
+          className="bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg shadow-emerald-500/20 hover:shadow-emerald-500/30 transition-all duration-300 gap-2 h-11 px-6 self-start"
         >
-          <CircleDot className="h-3.5 w-3.5 animate-pulse" />
-          Live
-        </Badge>
+          <Upload className="h-4 w-4" />
+          Upload Documents
+        </Button>
       </motion.div>
 
-      {/* ═══ TOP SECTION — 4 STATUS CARDS ═══ */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
-        {loading
-          ? Array.from({ length: 4 }).map((_, i) => (
-              <StatusCardSkeleton key={i} />
-            ))
-          : statusCards.map((card, index) => (
-              <motion.div
-                key={card.title}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.05, duration: 0.5, ease: 'easeOut' }}
-                whileHover={{ scale: 1.02 }}
-                className="cursor-pointer"
-                onClick={() => setCurrentView(card.navigateTo)}
-              >
-                <Card
-                  className={`${card.bgColor} ${card.borderAccent} ${card.hoverShadow} hover:shadow-lg transition-all duration-300 border`}
-                >
-                  <CardContent className="p-4 md:p-5">
-                    <div className="flex items-start justify-between">
-                      <div className="space-y-1.5">
-                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                          {card.title}
-                        </p>
-                        <p className={`text-3xl font-bold ${card.iconColor}`}>
-                          {card.value}
-                        </p>
-                        <p className="text-[11px] text-muted-foreground">
-                          {card.subtitle}
-                        </p>
-                      </div>
-                      <div className={`flex items-center justify-center h-10 w-10 rounded-xl ${card.iconBg} ${card.iconColor} shrink-0`}>
-                        {card.icon}
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              </motion.div>
-            ))}
-      </div>
-
-      {/* ═══ MIDDLE SECTION — Two Columns ═══ */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
-        {/* ─── LEFT: Client Filing Status ─── */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2, duration: 0.5, ease: 'easeOut' }}
-        >
-          <Card className="border-border/50 hover:shadow-lg hover:shadow-emerald-500/5 transition-all duration-300">
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle className="flex items-center gap-2 text-base">
-                    <FileText className="h-4.5 w-4.5 text-emerald-500" />
-                    Client Filing Status
-                  </CardTitle>
-                  <CardDescription className="mt-1">
-                    Current return preparation status
-                  </CardDescription>
-                </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-950/30 text-xs h-8"
-                  onClick={() => setCurrentView('returns')}
-                >
-                  View All
-                  <ChevronRight className="h-3.5 w-3.5 ml-0.5" />
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {loading ? (
-                <ClientTableSkeleton />
-              ) : (
-                <ScrollArea className="max-h-96">
-                  <div className="space-y-1 pr-1">
-                    {/* Table Header */}
-                    <div className="grid grid-cols-[1fr_80px_70px_80px_36px] gap-2 px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground border-b border-border/40">
-                      <span>Client</span>
-                      <span>Return</span>
-                      <span>Period</span>
-                      <span className="text-center">Status</span>
-                      <span></span>
-                    </div>
-
-                    {clientFilings.map((row, index) => (
-                      <motion.div
-                        key={`${row.clientId}-${row.returnType}-${row.period}`}
-                        initial={{ opacity: 0, x: -10 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ delay: 0.3 + index * 0.04, duration: 0.3 }}
-                        whileHover={{ backgroundColor: 'rgba(16, 185, 129, 0.04)' }}
-                        className="grid grid-cols-[1fr_80px_70px_80px_36px] gap-2 items-center px-2 py-2 rounded-lg cursor-pointer group transition-colors"
-                        onClick={() => setCurrentView(row.status === 'issues' ? 'reconcile' : 'returns')}
-                      >
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium text-foreground truncate">
-                            {row.clientName}
-                          </p>
-                          {row.issuesCount > 0 && (
-                            <p className="text-[11px] text-amber-600 dark:text-amber-400 truncate">
-                              {row.issuesCount} issue{row.issuesCount !== 1 ? 's' : ''} found
-                            </p>
-                          )}
-                        </div>
-                        <span className="text-xs text-muted-foreground font-medium">
-                          {row.returnType}
-                        </span>
-                        <span className="text-xs text-muted-foreground">
-                          {periodToLabel(row.period)}
-                        </span>
-                        <div className="flex justify-center">
-                          <StatusBadge status={row.status} />
-                        </div>
-                        <ArrowRight className="h-3.5 w-3.5 text-muted-foreground/30 group-hover:text-emerald-500 group-hover:translate-x-0.5 transition-all" />
-                      </motion.div>
-                    ))}
-                  </div>
-                </ScrollArea>
-              )}
-            </CardContent>
-          </Card>
-        </motion.div>
-
-        {/* ─── RIGHT: What Needs Attention Today ─── */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.25, duration: 0.5, ease: 'easeOut' }}
-        >
-          <Card className="border-border/50 hover:shadow-lg hover:shadow-emerald-500/5 transition-all duration-300">
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle className="flex items-center gap-2 text-base">
-                    <Zap className="h-4.5 w-4.5 text-red-500" />
-                    What Needs Attention Today
-                  </CardTitle>
-                  <CardDescription className="mt-1">
-                    Priority items requiring action
-                  </CardDescription>
-                </div>
-                <Badge
-                  variant="outline"
-                  className="text-[10px] px-2 py-0.5 border-red-200 text-red-700 bg-red-50/80 dark:border-red-800 dark:text-red-400 dark:bg-red-950/40"
-                >
-                  {attentionItems.length} items
-                </Badge>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {loading ? (
-                <AttentionListSkeleton />
-              ) : (
-                <ScrollArea className="max-h-96">
-                  <div className="space-y-2 pr-1">
-                    {attentionItems.map((item, index) => (
-                      <motion.div
-                        key={item.id}
-                        initial={{ opacity: 0, x: -10 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ delay: 0.3 + index * 0.06, duration: 0.35 }}
-                        whileHover={{ x: 4 }}
-                        className="flex items-center gap-3 p-3 rounded-xl border border-border/30 hover:border-emerald-200/50 dark:hover:border-emerald-800/50 transition-all cursor-pointer group"
-                        onClick={() => setCurrentView(item.navigateTo)}
-                      >
-                        <div className={`flex items-center justify-center h-9 w-9 rounded-lg shrink-0 ${item.iconBg} ${item.iconColor}`}>
-                          {item.icon}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-foreground truncate">
-                            {item.title}
-                          </p>
-                          <p className="text-xs text-muted-foreground truncate mt-0.5">
-                            {item.description}
-                          </p>
-                        </div>
-                        <ArrowRight className="h-4 w-4 text-muted-foreground/30 group-hover:text-emerald-500 group-hover:translate-x-0.5 transition-all shrink-0" />
-                      </motion.div>
-                    ))}
-
-                    {attentionItems.length === 0 && (
-                      <div className="flex flex-col items-center justify-center py-8 text-center">
-                        <CheckCircle2 className="h-10 w-10 text-emerald-500 mb-2" />
-                        <p className="text-sm font-medium text-foreground">All clear!</p>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          No items need your attention right now.
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                </ScrollArea>
-              )}
-            </CardContent>
-          </Card>
-        </motion.div>
-      </div>
-
-      {/* ═══ BOTTOM SECTION — Filing Progress ═══ */}
+      {/* ═══ 2. FILING PIPELINE ═══ */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.35, duration: 0.5, ease: 'easeOut' }}
+        transition={{ delay: 0.1, duration: 0.5, ease: 'easeOut' }}
       >
-        <Card className="border-border/50 hover:shadow-lg hover:shadow-emerald-500/5 transition-all duration-300">
+        <Card className="border-border/50 overflow-hidden">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base font-semibold flex items-center gap-2">
+              <Zap className="h-4 w-4 text-emerald-500" />
+              Filing Pipeline
+            </CardTitle>
+            <CardDescription>
+              Your workflow from upload to filing — click any stage to navigate
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="pb-4">
+            {loading ? (
+              <PipelineSkeleton />
+            ) : (
+              <div className="overflow-x-auto -mx-2 px-2">
+                <div className="flex items-center min-w-[640px] md:min-w-0 justify-between">
+                  {pipelineStages.map((stage, index) => (
+                    <React.Fragment key={stage.id}>
+                      <motion.div
+                        initial={{ opacity: 0, y: 12 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.15 + index * 0.07, duration: 0.4, ease: 'easeOut' }}
+                        whileHover={{ scale: 1.05, y: -2 }}
+                        whileTap={{ scale: 0.98 }}
+                        onClick={() => setCurrentView(stage.navigateTo)}
+                        className={`flex flex-col items-center gap-1.5 p-3 rounded-xl cursor-pointer transition-all duration-200 min-w-[90px] md:min-w-[100px] group
+                          ${stage.isBottleneck
+                            ? 'bg-emerald-50 dark:bg-emerald-950/30 ring-1 ring-emerald-300 dark:ring-emerald-700 shadow-md shadow-emerald-500/10'
+                            : 'hover:bg-muted/50'
+                          }`}
+                      >
+                        <div className={`flex items-center justify-center h-9 w-9 rounded-lg transition-colors
+                          ${stage.isBottleneck
+                            ? 'bg-emerald-100 dark:bg-emerald-900/60 text-emerald-600 dark:text-emerald-400'
+                            : 'bg-muted text-muted-foreground group-hover:text-foreground'
+                          }`}
+                        >
+                          {stage.icon}
+                        </div>
+                        <span className={`text-[11px] font-medium whitespace-nowrap
+                          ${stage.isBottleneck
+                            ? 'text-emerald-700 dark:text-emerald-400'
+                            : 'text-muted-foreground'
+                          }`}
+                        >
+                          {stage.label}
+                        </span>
+                        <span className={`text-lg font-bold leading-none
+                          ${stage.isBottleneck
+                            ? 'text-emerald-600 dark:text-emerald-400'
+                            : 'text-foreground'
+                          }`}
+                        >
+                          {stage.count}
+                        </span>
+                        {stage.isBottleneck && (
+                          <Badge className="text-[9px] px-1.5 py-0 h-4 bg-emerald-100 text-emerald-700 dark:bg-emerald-900/60 dark:text-emerald-400 border-0 font-semibold">
+                            BOTTLENECK
+                          </Badge>
+                        )}
+                      </motion.div>
+
+                      {/* Connector Arrow */}
+                      {index < pipelineStages.length - 1 && (
+                        <PipelineConnector isBottleneck={stage.isBottleneck || pipelineStages[index + 1]?.isBottleneck || false} />
+                      )}
+                    </React.Fragment>
+                  ))}
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </motion.div>
+
+      {/* ═══ 3. ATTENTION REQUIRED ═══ */}
+      <motion.div
+        variants={containerVariants}
+        initial="hidden"
+        animate="visible"
+        className="grid grid-cols-1 md:grid-cols-3 gap-4"
+      >
+        {loading
+          ? Array.from({ length: 3 }).map((_, i) => (
+              <motion.div key={i} variants={itemVariants}>
+                <AttentionCardSkeleton />
+              </motion.div>
+            ))
+          : attentionCards.map((card) => (
+              <motion.div key={card.id} variants={itemVariants} whileHover={{ y: -2 }} className="transition-shadow duration-300 hover:shadow-lg">
+                <Card className={`border ${card.accentBorder} ${card.accentBg} overflow-hidden relative`}>
+                  {/* Accent strip on left */}
+                  <div className={`absolute left-0 top-0 bottom-0 w-1 ${
+                    card.id === 'overdue' ? 'bg-red-500' :
+                    card.id === 'mismatches' ? 'bg-amber-500' : 'bg-slate-400'
+                  }`} />
+                  <CardContent className="p-5 pl-6">
+                    <div className="flex items-start gap-4">
+                      <div className={`flex items-center justify-center h-11 w-11 rounded-xl shrink-0 ${card.iconBg}`}>
+                        {card.icon}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-foreground">
+                          {card.title}
+                        </p>
+                        <p className={`text-2xl font-bold mt-0.5 ${card.accentColor}`}>
+                          {card.count}
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+                          {card.description}
+                        </p>
+                      </div>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className={`mt-4 w-full gap-1.5 h-8 text-xs font-medium border-current/20 hover:bg-current/10
+                        ${card.id === 'overdue' ? 'text-red-600 dark:text-red-400 border-red-200 dark:border-red-800 hover:bg-red-50 dark:hover:bg-red-950/30' :
+                          card.id === 'mismatches' ? 'text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-800 hover:bg-amber-50 dark:hover:bg-amber-950/30' :
+                          'text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-900/30'
+                        }`}
+                      onClick={() => setCurrentView(card.navigateTo)}
+                    >
+                      {card.ctaLabel}
+                      <ArrowRight className="h-3 w-3" />
+                    </Button>
+                  </CardContent>
+                </Card>
+              </motion.div>
+            ))
+        }
+      </motion.div>
+
+      {/* ═══ 4. CLIENT FILING OVERVIEW ═══ */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.3, duration: 0.5, ease: 'easeOut' }}
+      >
+        <Card className="border-border/50">
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
               <div>
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <FileCheck className="h-4.5 w-4.5 text-emerald-500" />
+                <CardTitle className="text-base font-semibold flex items-center gap-2">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                  Client Filing Overview
+                </CardTitle>
+                <CardDescription className="mt-1">
+                  Top clients needing action this period
+                </CardDescription>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-950/30 text-xs h-8 gap-1"
+                onClick={() => setCurrentView('clients')}
+              >
+                View All
+                <ChevronRight className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {loading ? (
+              <div className="space-y-2">
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <ClientCardSkeleton key={i} />
+                ))}
+              </div>
+            ) : (
+              <ScrollArea className="max-h-[420px]">
+                <div className="space-y-1.5 pr-1">
+                  {clientCards.map((client, index) => (
+                    <motion.div
+                      key={`${client.clientId}-${client.returnType}-${client.period}`}
+                      initial={{ opacity: 0, x: -8 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: 0.35 + index * 0.04, duration: 0.3 }}
+                      whileHover={{ backgroundColor: 'rgba(16, 185, 129, 0.04)', x: 2 }}
+                      className="flex items-center gap-3 p-3 rounded-xl cursor-pointer group transition-all duration-200 border border-transparent hover:border-border/50"
+                      onClick={() => setCurrentView(client.status === 'issues' ? 'reconcile' : 'returns')}
+                    >
+                      <AvatarInitials initials={client.initials} status={client.status} />
+
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-foreground truncate">
+                          {client.clientName}
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          {client.returnType} · {periodToLabel(client.period)}
+                          {client.issuesCount > 0 && (
+                            <span className="text-amber-600 dark:text-amber-400 ml-1">
+                              · {client.issuesCount} issue{client.issuesCount !== 1 ? 's' : ''}
+                            </span>
+                          )}
+                        </p>
+                      </div>
+
+                      <ClientStatusBadge status={client.status} />
+
+                      <div className="flex items-center justify-center h-8 w-8 rounded-lg bg-muted/50 text-muted-foreground group-hover:bg-emerald-50 group-hover:text-emerald-600 dark:group-hover:bg-emerald-950/30 dark:group-hover:text-emerald-400 transition-all shrink-0">
+                        <ArrowRight className="h-3.5 w-3.5 group-hover:translate-x-0.5 transition-transform" />
+                      </div>
+                    </motion.div>
+                  ))}
+                </div>
+              </ScrollArea>
+            )}
+          </CardContent>
+        </Card>
+      </motion.div>
+
+      {/* ═══ 5. FILING PROGRESS ═══ */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.4, duration: 0.5, ease: 'easeOut' }}
+      >
+        <Card className="border-border/50">
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-base font-semibold flex items-center gap-2">
+                  <ClipboardCheck className="h-4 w-4 text-emerald-500" />
                   Filing Progress
                 </CardTitle>
                 <CardDescription className="mt-1">
@@ -822,155 +803,93 @@ export default function DashboardPage() {
             {loading ? (
               <ProgressSkeleton />
             ) : (
-              <div className="space-y-6">
+              <div className="space-y-5">
                 {/* Stacked Progress Bar */}
-                <div>
-                  <div className="h-4 w-full rounded-full bg-muted/30 overflow-hidden flex">
-                    {filedPct > 0 && (
-                      <motion.div
-                        className="bg-emerald-500 h-full"
-                        initial={{ width: 0 }}
-                        animate={{ width: `${filedPct}%` }}
-                        transition={{ duration: 1.2, delay: 0.3, ease: 'easeOut' }}
-                      />
-                    )}
-                    {readyPct > 0 && (
-                      <motion.div
-                        className="bg-emerald-400 h-full"
-                        initial={{ width: 0 }}
-                        animate={{ width: `${readyPct}%` }}
-                        transition={{ duration: 1.2, delay: 0.5, ease: 'easeOut' }}
-                      />
-                    )}
-                    {issuesPct > 0 && (
-                      <motion.div
-                        className="bg-amber-400 h-full"
-                        initial={{ width: 0 }}
-                        animate={{ width: `${issuesPct}%` }}
-                        transition={{ duration: 1.2, delay: 0.7, ease: 'easeOut' }}
-                      />
-                    )}
-                    {notStartedPct > 0 && (
-                      <motion.div
-                        className="bg-slate-300 dark:bg-slate-600 h-full"
-                        initial={{ width: 0 }}
-                        animate={{ width: `${notStartedPct}%` }}
-                        transition={{ duration: 1.2, delay: 0.9, ease: 'easeOut' }}
-                      />
-                    )}
-                  </div>
-
-                  {/* Legend */}
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4">
-                    <div className="flex items-center gap-2">
-                      <div className="h-3 w-3 rounded-sm bg-emerald-500 shrink-0" />
-                      <div>
-                        <p className="text-xs text-muted-foreground">Filed</p>
-                        <p className="text-sm font-bold text-emerald-600 dark:text-emerald-400">
-                          {filedCount}{' '}
-                          <span className="text-[11px] font-normal text-muted-foreground">
-                            ({filedPct}%)
-                          </span>
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="h-3 w-3 rounded-sm bg-emerald-400 shrink-0" />
-                      <div>
-                        <p className="text-xs text-muted-foreground">Ready to File</p>
-                        <p className="text-sm font-bold text-emerald-500 dark:text-emerald-300">
-                          {readyCount}{' '}
-                          <span className="text-[11px] font-normal text-muted-foreground">
-                            ({readyPct}%)
-                          </span>
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="h-3 w-3 rounded-sm bg-amber-400 shrink-0" />
-                      <div>
-                        <p className="text-xs text-muted-foreground">Issues</p>
-                        <p className="text-sm font-bold text-amber-600 dark:text-amber-400">
-                          {issuesCount}{' '}
-                          <span className="text-[11px] font-normal text-muted-foreground">
-                            ({issuesPct}%)
-                          </span>
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="h-3 w-3 rounded-sm bg-slate-300 dark:bg-slate-600 shrink-0" />
-                      <div>
-                        <p className="text-xs text-muted-foreground">Not Started</p>
-                        <p className="text-sm font-bold text-slate-600 dark:text-slate-400">
-                          {notStartedCount}{' '}
-                          <span className="text-[11px] font-normal text-muted-foreground">
-                            ({notStartedPct}%)
-                          </span>
-                        </p>
-                      </div>
-                    </div>
-                  </div>
+                <div className="h-3 w-full rounded-full bg-muted/30 overflow-hidden flex">
+                  {filedPct > 0 && (
+                    <motion.div
+                      className="bg-emerald-500 h-full"
+                      initial={{ width: 0 }}
+                      animate={{ width: `${filedPct}%` }}
+                      transition={{ duration: 1.2, delay: 0.3, ease: 'easeOut' }}
+                    />
+                  )}
+                  {readyPct > 0 && (
+                    <motion.div
+                      className="bg-emerald-400 h-full"
+                      initial={{ width: 0 }}
+                      animate={{ width: `${readyPct}%` }}
+                      transition={{ duration: 1.2, delay: 0.5, ease: 'easeOut' }}
+                    />
+                  )}
+                  {issuesPct > 0 && (
+                    <motion.div
+                      className="bg-amber-400 h-full"
+                      initial={{ width: 0 }}
+                      animate={{ width: `${issuesPct}%` }}
+                      transition={{ duration: 1.2, delay: 0.7, ease: 'easeOut' }}
+                    />
+                  )}
+                  {notStartedPct > 0 && (
+                    <motion.div
+                      className="bg-slate-300 dark:bg-slate-600 h-full"
+                      initial={{ width: 0 }}
+                      animate={{ width: `${notStartedPct}%` }}
+                      transition={{ duration: 1.2, delay: 0.9, ease: 'easeOut' }}
+                    />
+                  )}
                 </div>
 
-                {/* Monthly Filing Volume AreaChart */}
-                <div className="pt-2">
-                  <div className="flex items-center justify-between mb-3">
-                    <p className="text-sm font-medium text-foreground">
-                      Monthly Filing Volume
-                    </p>
-                    <span className="text-[11px] text-muted-foreground">Last 6 months</span>
+                {/* Legend */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                  <div className="flex items-center gap-2.5">
+                    <div className="h-3 w-3 rounded-sm bg-emerald-500 shrink-0" />
+                    <div>
+                      <p className="text-xs text-muted-foreground">Filed</p>
+                      <p className="text-sm font-bold text-emerald-600 dark:text-emerald-400">
+                        {filedCount}{' '}
+                        <span className="text-[11px] font-normal text-muted-foreground">
+                          ({filedPct}%)
+                        </span>
+                      </p>
+                    </div>
                   </div>
-                  <ChartContainer config={filingChartConfig} className="h-44 w-full">
-                    <AreaChart data={monthlyData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
-                      <defs>
-                        <linearGradient id="filedGradient" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor={COLORS.emerald} stopOpacity={0.35} />
-                          <stop offset="95%" stopColor={COLORS.emerald} stopOpacity={0} />
-                        </linearGradient>
-                        <linearGradient id="pendingGradient" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor={COLORS.amber} stopOpacity={0.25} />
-                          <stop offset="95%" stopColor={COLORS.amber} stopOpacity={0} />
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid
-                        strokeDasharray="3 3"
-                        vertical={false}
-                        stroke="#e2e8f0"
-                        className="dark:stroke-slate-700/50"
-                      />
-                      <XAxis
-                        dataKey="month"
-                        tickLine={false}
-                        axisLine={false}
-                        tick={{ fontSize: 11, fill: '#64748b' }}
-                      />
-                      <YAxis
-                        tickLine={false}
-                        axisLine={false}
-                        tick={{ fontSize: 11, fill: '#64748b' }}
-                      />
-                      <ChartTooltip content={<ChartTooltipContent />} />
-                      <Area
-                        type="monotone"
-                        dataKey="filed"
-                        stroke={COLORS.emerald}
-                        strokeWidth={2}
-                        fill="url(#filedGradient)"
-                        dot={false}
-                        activeDot={{ r: 5, fill: COLORS.emerald, stroke: '#fff', strokeWidth: 2 }}
-                      />
-                      <Area
-                        type="monotone"
-                        dataKey="pending"
-                        stroke={COLORS.amber}
-                        strokeWidth={2}
-                        fill="url(#pendingGradient)"
-                        dot={false}
-                        activeDot={{ r: 5, fill: COLORS.amber, stroke: '#fff', strokeWidth: 2 }}
-                      />
-                    </AreaChart>
-                  </ChartContainer>
+                  <div className="flex items-center gap-2.5">
+                    <div className="h-3 w-3 rounded-sm bg-emerald-400 shrink-0" />
+                    <div>
+                      <p className="text-xs text-muted-foreground">Ready</p>
+                      <p className="text-sm font-bold text-emerald-500 dark:text-emerald-300">
+                        {readyCount}{' '}
+                        <span className="text-[11px] font-normal text-muted-foreground">
+                          ({readyPct}%)
+                        </span>
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2.5">
+                    <div className="h-3 w-3 rounded-sm bg-amber-400 shrink-0" />
+                    <div>
+                      <p className="text-xs text-muted-foreground">Issues</p>
+                      <p className="text-sm font-bold text-amber-600 dark:text-amber-400">
+                        {issuesCount}{' '}
+                        <span className="text-[11px] font-normal text-muted-foreground">
+                          ({issuesPct}%)
+                        </span>
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2.5">
+                    <div className="h-3 w-3 rounded-sm bg-slate-300 dark:bg-slate-600 shrink-0" />
+                    <div>
+                      <p className="text-xs text-muted-foreground">Not Started</p>
+                      <p className="text-sm font-bold text-slate-600 dark:text-slate-400">
+                        {notStartedCount}{' '}
+                        <span className="text-[11px] font-normal text-muted-foreground">
+                          ({notStartedPct}%)
+                        </span>
+                      </p>
+                    </div>
+                  </div>
                 </div>
               </div>
             )}

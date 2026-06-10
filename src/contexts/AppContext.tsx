@@ -23,7 +23,16 @@ export type AppView =
   | 'executive-analytics'
   | 'white-label'
   | 'automation'
-  | 'client-portal';
+  | 'client-portal'
+  | 'ai-cfo'
+  | 'ai-risk'
+  | 'ai-compliance'
+  | 'ai-insights'
+  | 'ai-tasks'
+  | 'ai-knowledge'
+  | 'ai-doc-chat'
+  | 'ai-reports'
+  | 'ai-benchmark';
 
 export type AppScreen = 'landing' | 'login' | 'app';
 

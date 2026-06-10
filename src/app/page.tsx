@@ -32,6 +32,15 @@ import AutomationCenterPage from '@/components/automation/AutomationCenterPage'
 import WorkloadPage from '@/components/workload/WorkloadPage'
 import NoticeCenterPage from '@/components/notices/NoticeCenterPage'
 import ClientPortalPage from '@/components/client-portal/ClientPortalPage'
+import AICFODashboardPage from '@/components/ai-cfo/AICFODashboardPage'
+import AIRiskEnginePage from '@/components/ai-risk/AIRiskEnginePage'
+import AICompliancePage from '@/components/ai-compliance/AICompliancePage'
+import AIClientInsightsPage from '@/components/ai-insights/AIClientInsightsPage'
+import AITaskGeneratorPage from '@/components/ai-tasks/AITaskGeneratorPage'
+import AIKnowledgeCenterPage from '@/components/ai-knowledge/AIKnowledgeCenterPage'
+import AIDocumentChatPage from '@/components/ai-doc-chat/AIDocumentChatPage'
+import AIExecutiveReportsPage from '@/components/ai-reports/AIExecutiveReportsPage'
+import AIBenchmarkPage from '@/components/ai-benchmark/AIBenchmarkPage'
 import AICopilot from '@/components/copilot/AICopilot'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
@@ -67,6 +76,15 @@ const VIEW_TITLES: Record<string, string> = {
   workload: 'Workload Distribution',
   notices: 'Notice Center',
   'client-portal': 'Client Portal',
+  'ai-cfo': 'AI CFO Dashboard',
+  'ai-risk': 'AI Risk Engine',
+  'ai-compliance': 'AI Compliance Forecast',
+  'ai-insights': 'AI Client Insights',
+  'ai-tasks': 'AI Task Generator',
+  'ai-knowledge': 'AI Knowledge Center',
+  'ai-doc-chat': 'AI Document Chat',
+  'ai-reports': 'AI Executive Reports',
+  'ai-benchmark': 'AI Benchmark Engine',
 }
 
 function DashboardContent() {
@@ -117,6 +135,24 @@ function DashboardContent() {
         return <NoticeCenterPage />
       case 'client-portal':
         return <ClientPortalPage />
+      case 'ai-cfo':
+        return <AICFODashboardPage />
+      case 'ai-risk':
+        return <AIRiskEnginePage />
+      case 'ai-compliance':
+        return <AICompliancePage />
+      case 'ai-insights':
+        return <AIClientInsightsPage />
+      case 'ai-tasks':
+        return <AITaskGeneratorPage />
+      case 'ai-knowledge':
+        return <AIKnowledgeCenterPage />
+      case 'ai-doc-chat':
+        return <AIDocumentChatPage />
+      case 'ai-reports':
+        return <AIExecutiveReportsPage />
+      case 'ai-benchmark':
+        return <AIBenchmarkPage />
       default:
         return <DashboardPage />
     }
@@ -215,7 +251,6 @@ function AppRouter() {
   }, [])
 
   // ── Sync auth state with screen state ──
-  // When user is authenticated (via any method), switch to app screen
   useEffect(() => {
     if (isInitializing) return
     if (isAuthenticated && currentScreen !== 'app') {
@@ -223,7 +258,6 @@ function AppRouter() {
     }
   }, [isAuthenticated, isInitializing, currentScreen, setCurrentScreen])
 
-  // When user logs out, go back to landing
   useEffect(() => {
     if (isInitializing) return
     if (!isAuthenticated && currentScreen === 'app') {
@@ -243,7 +277,6 @@ function AppRouter() {
     setCurrentScreen('landing')
   }
 
-  // Show loading during auth initialization (includes redirect processing)
   if (isInitializing) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-white">

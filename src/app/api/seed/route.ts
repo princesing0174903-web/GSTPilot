@@ -21,6 +21,15 @@ function randomDate(baseYear: number, month: number, dayRange: [number, number])
 export async function POST() {
   try {
     // 1. Clear existing data (respect foreign key order)
+    await db.clientBenchmark.deleteMany()
+    await db.executiveReport.deleteMany()
+    await db.documentChatSession.deleteMany()
+    await db.knowledgeEntry.deleteMany()
+    await db.aITask.deleteMany()
+    await db.clientInsight.deleteMany()
+    await db.complianceForecast.deleteMany()
+    await db.riskScore.deleteMany()
+    await db.aIPrediction.deleteMany()
     await db.automationLog.deleteMany()
     await db.automationRule.deleteMany()
     await db.workloadAssignment.deleteMany()
@@ -1006,10 +1015,254 @@ export async function POST() {
       totalFirmMetrics++
     }
 
+    // ─── AI Tax Intelligence Layer Seed Data ───
+
+    // 21. Create AI Predictions (CFO Dashboard)
+    const predictionCategories = [
+      { category: 'revenue', base: 1500000, variance: 300000 },
+      { category: 'gst_liability', base: 450000, variance: 100000 },
+      { category: 'collections', base: 1200000, variance: 200000 },
+      { category: 'churn', base: 12, variance: 5 },
+      { category: 'filing_load', base: 24, variance: 8 },
+      { category: 'team_load', base: 78, variance: 12 },
+    ]
+    let totalPredictions = 0
+    for (let m = 1; m <= 9; m++) {
+      const period = m <= 6 ? `2024-${String(m).padStart(2, '0')}` : `2024-${String(m).padStart(2, '0')}`
+      for (const cat of predictionCategories) {
+        const predictedValue = cat.base + (Math.random() - 0.5) * cat.variance * 2
+        const confidence = m <= 6 ? rand(85, 98) : Math.max(55, 95 - (m - 6) * 12)
+        await db.aIPrediction.create({
+          data: {
+            category: cat.category,
+            period,
+            predictedValue: Math.round(predictedValue),
+            confidence,
+            lowerBound: Math.round(predictedValue * 0.88),
+            upperBound: Math.round(predictedValue * 1.12),
+            trend: m > 6 ? pick(['up', 'up', 'stable']) : pick(['up', 'down', 'stable']),
+            modelVersion: 'v2',
+            factors: JSON.stringify({ seasonality: rand(80, 100), trendStrength: rand(60, 95) }),
+          },
+        })
+        totalPredictions++
+      }
+    }
+
+    // 22. Create Risk Scores per client
+    let totalRiskScores = 0
+    for (const client of clients) {
+      const lateFilings = client.healthScore < 60 ? rand(2, 5) : client.healthScore < 80 ? rand(0, 2) : 0
+      const noticeFrequency = client.healthScore < 60 ? rand(2, 4) : client.healthScore < 80 ? rand(0, 2) : 0
+      const gstMismatches = client.healthScore < 60 ? rand(3, 8) : client.healthScore < 80 ? rand(1, 3) : rand(0, 1)
+      const vendorRisk = client.healthScore < 60 ? rand(40, 80) / 100 : rand(5, 30) / 100
+      const itcRisk = client.healthScore < 60 ? rand(30, 70) / 100 : rand(5, 25) / 100
+      const overallScore = Math.min(100, lateFilings * 20 + noticeFrequency * 15 + gstMismatches * 10)
+      const riskLevel = overallScore <= 25 ? 'low' : overallScore <= 50 ? 'medium' : overallScore <= 75 ? 'high' : 'critical'
+
+      await db.riskScore.create({
+        data: {
+          clientId: client.id,
+          overallScore,
+          category: 'overall',
+          lateFilings,
+          noticeFrequency,
+          gstMismatches,
+          vendorRisk,
+          itcRisk,
+          riskLevel,
+          period: '2024-06',
+          factors: JSON.stringify({ healthScore: client.healthScore, filingPattern: riskLevel === 'low' ? 'consistent' : 'irregular' }),
+          recommendations: riskLevel === 'high' || riskLevel === 'critical'
+            ? 'Immediate review required. Consider assigning senior auditor for compliance remediation.'
+            : 'Monitor regularly. Schedule periodic compliance reviews.',
+        },
+      })
+      totalRiskScores++
+    }
+
+    // 23. Create Compliance Forecasts
+    let totalForecasts = 0
+    for (const client of clients) {
+      if (client.healthScore < 70) {
+        await db.complianceForecast.create({
+          data: {
+            clientId: client.id,
+            forecastType: 'notice',
+            predictedEvent: `GST Notice expected for ${client.tradeName}`,
+            probability: Math.round((100 - client.healthScore) * 0.8),
+            confidence: rand(65, 85),
+            expectedDate: '2024-08-15',
+            impact: client.healthScore < 50 ? 'critical' : 'high',
+            mitigatingActions: 'Proactive filing compliance review and ITC verification recommended.',
+            period: '2024-06',
+          },
+        })
+        totalForecasts++
+      }
+      if (client.healthScore < 80) {
+        await db.complianceForecast.create({
+          data: {
+            clientId: client.id,
+            forecastType: 'filing_delay',
+            predictedEvent: `Filing delay expected for ${client.tradeName}`,
+            probability: Math.round((100 - client.healthScore) * 0.6),
+            confidence: rand(60, 80),
+            expectedDate: '2024-07-20',
+            impact: client.healthScore < 60 ? 'high' : 'medium',
+            mitigatingActions: 'Pre-filing preparation and early data collection recommended.',
+            period: '2024-06',
+          },
+        })
+        totalForecasts++
+      }
+      await db.complianceForecast.create({
+        data: {
+          clientId: client.id,
+          forecastType: 'reconciliation_issue',
+          predictedEvent: `Reconciliation discrepancies for ${client.tradeName}`,
+          probability: rand(20, 60),
+          confidence: rand(55, 80),
+          impact: 'medium',
+          mitigatingActions: 'Regular reconciliation runs and vendor communication.',
+          period: '2024-06',
+        },
+      })
+      totalForecasts++
+
+      if (client.healthScore < 65) {
+        await db.complianceForecast.create({
+          data: {
+            clientId: client.id,
+            forecastType: 'itc_loss',
+            predictedEvent: `Potential ITC loss for ${client.tradeName}`,
+            probability: Math.round((100 - client.healthScore) * 0.5),
+            confidence: rand(55, 75),
+            expectedDate: '2024-09-30',
+            impact: 'high',
+            mitigatingActions: 'ITC reconciliation and vendor compliance verification recommended.',
+            period: '2024-06',
+          },
+        })
+        totalForecasts++
+      }
+    }
+
+    // 24. Create Client Insights
+    let totalInsights = 0
+    const insightCategories = ['growth', 'compliance', 'risk', 'gst', 'payment']
+    const insightTrends = ['improving', 'declining', 'stable']
+    for (const client of clients) {
+      for (const cat of insightCategories) {
+        const trend = cat === 'compliance' ? (client.healthScore > 80 ? 'improving' : client.healthScore > 60 ? 'stable' : 'declining')
+          : cat === 'risk' ? (client.healthScore > 80 ? 'stable' : client.healthScore > 60 ? 'improving' : 'declining')
+          : pick(insightTrends)
+        const observations: Record<string, string> = {
+          growth: trend === 'improving' ? `${client.tradeName} shows positive growth trajectory with increasing transaction volume.` : trend === 'declining' ? `${client.tradeName} transaction volume has decreased over the last quarter.` : `${client.tradeName} maintains steady business volume.`,
+          compliance: trend === 'improving' ? `Compliance score improved to ${client.healthScore}%. Filing patterns are becoming more consistent.` : trend === 'declining' ? `Client compliance score dropped ${rand(5, 15)}% in the last quarter. Immediate attention needed.` : `Compliance score stable at ${client.healthScore}%. Regular monitoring recommended.`,
+          risk: trend === 'improving' ? 'Risk profile improving with reduced mismatches and timely filings.' : trend === 'declining' ? 'Risk profile deteriorating with increasing notice frequency and filing delays.' : 'Risk profile stable. Continue standard monitoring protocols.',
+          gst: trend === 'improving' ? 'GST liability management improving with better ITC utilization.' : trend === 'declining' ? 'GST liability trending upward. Consider ITC optimization review.' : 'GST liability patterns remain consistent with business volume.',
+          payment: trend === 'improving' ? 'Payment and collection patterns improving with faster settlement cycles.' : trend === 'declining' ? 'Payment delays increasing. Consider proactive collection follow-up.' : 'Payment patterns stable and within expected ranges.',
+        }
+        await db.clientInsight.create({
+          data: {
+            clientId: client.id,
+            category: cat,
+            trend,
+            observation: observations[cat],
+            confidence: rand(65, 95) / 100,
+            dataPoints: JSON.stringify({ healthScore: client.healthScore, period: '2024-Q2' }),
+            period: '2024-06',
+          },
+        })
+        totalInsights++
+      }
+    }
+
+    // 25. Create Knowledge Entries
+    const knowledgeEntries = [
+      { title: 'GST Section 16 - Input Tax Credit Eligibility', category: 'rule', content: 'Every registered person shall be entitled to take credit of input tax on any supply of goods or services to him which are used or intended to be used in the course or furtherance of business, subject to conditions prescribed.', source: 'CGST Act 2017', referenceNumber: 'Sec 16', tags: 'itc,eligibility,input tax credit' },
+      { title: 'GSTR-1 Filing Due Date Extension - Q1 2024', category: 'circular', content: 'CBIC has extended the due date for filing GSTR-1 for the quarter ending March 2024. Taxpayers are advised to file returns at the earliest to avoid penalties.', source: 'CBIC Circular 208/2024', referenceNumber: 'CBIC/208/2024', tags: 'gstr1,due date,extension,q1 2024' },
+      { title: 'E-Way Bill Validity Extension Notification', category: 'notification', content: 'The validity period of e-way bills has been extended from 1 day per 200 km to 1 day per 200 km for ordinary vehicles and 1 day per 300 km for over-dimensional cargo vehicles.', source: 'Notification 12/2024', referenceNumber: 'Notif 12/2024', tags: 'eway bill,validity,transport' },
+      { title: 'Supreme Court Ruling on GST Refund Claims', category: 'case_law', content: 'The Supreme Court held that the limitation period for filing refund claims under GST is governed by Section 54 of the CGST Act and not by the general limitation act. Refund claims must be filed within 2 years from the relevant date.', source: 'Supreme Court of India', referenceNumber: 'SC/2024/GST/142', tags: 'refund,supreme court,limitation,gst' },
+      { title: 'New GST Rate for Online Gaming - 28%', category: 'department_update', content: 'GST Council has approved 28% GST on online gaming, casinos, and horse racing. The new rate is applicable from October 2023. All online gaming platforms must comply with the revised rate structure.', source: 'GST Council Meeting 51', referenceNumber: 'GCM/51/2023', tags: 'online gaming,gst rate,28%,casino' },
+      { title: 'GSTR-3B Auto-Population from GSTR-1', category: 'rule', content: 'From January 2024, GSTR-3B will be auto-populated based on GSTR-1 data filed by the taxpayer. Taxpayers need to verify and can edit the auto-populated data before filing.', source: 'CGST Act 2017', referenceNumber: 'Sec 39', tags: 'gstr3b,autopopulation,gstr1,filing' },
+      { title: 'ITC Reversal for Exempt Supplies - Rule 42', category: 'rule', content: 'Input tax credit attributable to exempt supplies must be reversed proportionately. The formula under Rule 42 of CGST Rules prescribes the method for computing the amount of ITC to be reversed.', source: 'CGST Rules 2017', referenceNumber: 'Rule 42', tags: 'itc,reversal,exempt supplies,rule 42' },
+      { title: 'Annual Return Filing Requirement - GSTR-9', category: 'circular', content: 'All registered taxpayers with turnover exceeding Rs 2 crore must file GSTR-9 (Annual Return) for each financial year. The due date is December 31 of the year following the financial year.', source: 'CBIC Circular 205/2024', referenceNumber: 'CBIC/205/2024', tags: 'gstr9,annual return,filing requirement' },
+    ]
+    let totalKnowledge = 0
+    for (const entry of knowledgeEntries) {
+      await db.knowledgeEntry.create({
+        data: {
+          title: entry.title,
+          category: entry.category,
+          content: entry.content,
+          summary: entry.content.slice(0, 120) + '...',
+          tags: entry.tags,
+          source: entry.source,
+          referenceNumber: entry.referenceNumber,
+          effectiveDate: '2024-01-01',
+          relevanceScore: rand(70, 100) / 100,
+        },
+      })
+      totalKnowledge++
+    }
+
+    // 26. Create Executive Reports
+    const reportTypes = ['client_health', 'gst_risk', 'compliance', 'firm_performance', 'board']
+    const reportTitles = ['Client Health Report Q2 2024', 'GST Risk Assessment Report', 'Compliance Summary Report', 'Firm Performance Report Q2', 'Board Report - Q2 2024']
+    let totalReports = 0
+    for (let i = 0; i < reportTypes.length; i++) {
+      await db.executiveReport.create({
+        data: {
+          reportType: reportTypes[i],
+          title: reportTitles[i],
+          description: `Comprehensive ${reportTypes[i].replace(/_/g, ' ')} report for Q2 2024`,
+          period: '2024-Q2',
+          data: JSON.stringify({ generated: true, period: '2024-Q2' }),
+          format: pick(['pdf', 'excel']),
+          status: 'generated',
+          generatedBy: teamMembers[0].id,
+        },
+      })
+      totalReports++
+    }
+
+    // 27. Create Client Benchmarks
+    let totalBenchmarks = 0
+    const benchmarkMetrics = ['compliance_score', 'filing_timeliness', 'gst_volume', 'risk_score']
+    for (const client of clients) {
+      for (const metric of benchmarkMetrics) {
+        const clientValue = metric === 'compliance_score' ? client.healthScore
+          : metric === 'filing_timeliness' ? rand(60, 100)
+          : metric === 'gst_volume' ? rand(40, 95)
+          : 100 - client.healthScore
+        const industryAvg = clientValue + (Math.random() - 0.5) * 20
+        const stateAvg = clientValue + (Math.random() - 0.5) * 15
+        const firmAvg = clients.reduce((sum, c) => sum + (metric === 'compliance_score' ? c.healthScore : metric === 'risk_score' ? 100 - c.healthScore : rand(50, 90)), 0) / clients.length
+
+        await db.clientBenchmark.create({
+          data: {
+            clientId: client.id,
+            metric,
+            clientValue: Math.round(clientValue),
+            industryAverage: Math.round(industryAvg),
+            stateAverage: Math.round(stateAvg),
+            firmAverage: Math.round(firmAvg),
+            industryPercentile: Math.round(rand(20, 95)),
+            statePercentile: Math.round(rand(25, 90)),
+            firmPercentile: Math.round(rand(15, 85)),
+            period: '2024-Q2',
+          },
+        })
+        totalBenchmarks++
+      }
+    }
+
     // ─── Summary ────────────────────────────────────────────────────────────
     return NextResponse.json({
       success: true,
-      message: 'Database seeded successfully with GST data and Firm Operations data',
+      message: 'Database seeded successfully with AI Tax Intelligence data',
       counts: {
         users: users.length,
         clients: clients.length,
@@ -1029,6 +1282,13 @@ export async function POST() {
         automationRules: automationRules.length,
         automationLogs: totalAutomationLogs,
         firmMetrics: totalFirmMetrics,
+        predictions: totalPredictions,
+        riskScores: totalRiskScores,
+        forecasts: totalForecasts,
+        insights: totalInsights,
+        knowledgeEntries: totalKnowledge,
+        reports: totalReports,
+        benchmarks: totalBenchmarks,
       },
     })
   } catch (error) {

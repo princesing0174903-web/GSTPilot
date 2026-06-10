@@ -37,6 +37,15 @@ import {
   Palette,
   Workflow,
   Globe,
+  Brain,
+  ShieldCheck,
+  Eye,
+  Lightbulb,
+  ListTodo,
+  BookOpen,
+  MessageSquare,
+  FileBarChart2,
+  GitCompare,
 } from 'lucide-react'
 import { useApp, type AppView } from '@/contexts/AppContext'
 
@@ -70,6 +79,18 @@ const analyticsNavItems: NavItem[] = [
   { title: 'Automation', view: 'automation', icon: Workflow },
   { title: 'White Label', view: 'white-label', icon: Palette },
   { title: 'Client Portal', view: 'client-portal', icon: Globe },
+]
+
+const aiNavItems: NavItem[] = [
+  { title: 'AI CFO', view: 'ai-cfo', icon: Brain },
+  { title: 'AI Risk Engine', view: 'ai-risk', icon: ShieldCheck },
+  { title: 'AI Compliance', view: 'ai-compliance', icon: Eye },
+  { title: 'AI Insights', view: 'ai-insights', icon: Lightbulb },
+  { title: 'AI Tasks', view: 'ai-tasks', icon: ListTodo },
+  { title: 'AI Knowledge', view: 'ai-knowledge', icon: BookOpen },
+  { title: 'AI Doc Chat', view: 'ai-doc-chat', icon: MessageSquare },
+  { title: 'AI Reports', view: 'ai-reports', icon: FileBarChart2 },
+  { title: 'AI Benchmark', view: 'ai-benchmark', icon: GitCompare },
 ]
 
 const secondaryNavItems: NavItem[] = [
@@ -178,6 +199,18 @@ function SidebarNav() {
           </SidebarGroupContent>
         </SidebarGroup>
 
+        {/* AI Tax Intelligence */}
+        <SidebarGroup className="mt-1">
+          <SidebarGroupLabel className="px-2 text-[11px] font-semibold uppercase tracking-widest text-sidebar-foreground/40">
+            AI Intelligence
+          </SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {aiNavItems.map(renderNavItem)}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
         {/* Tools */}
         <SidebarGroup className="mt-1">
           <SidebarGroupLabel className="px-2 text-[11px] font-semibold uppercase tracking-widest text-sidebar-foreground/40">
@@ -194,7 +227,7 @@ function SidebarNav() {
       <SidebarFooter className="border-t border-sidebar-border/50 px-4 py-3">
         <div className="flex items-center justify-between">
           <span className="text-[11px] font-medium text-sidebar-foreground/40">
-            v3.0 Enterprise
+            v4.0 AI Enterprise
           </span>
           <div className="flex items-center gap-1">
             <div className="h-1.5 w-1.5 rounded-full bg-emerald-500" />

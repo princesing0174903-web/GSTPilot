@@ -2,7 +2,6 @@
 
 import React from 'react'
 import {
-  SidebarProvider,
   Sidebar,
   SidebarContent,
   SidebarGroup,
@@ -13,7 +12,6 @@ import {
   SidebarMenuItem,
   SidebarHeader,
   SidebarFooter,
-  SidebarTrigger,
   useSidebar,
 } from '@/components/ui/sidebar'
 import {
@@ -27,12 +25,18 @@ import {
   Download,
   ScrollText,
   Settings,
-  ChevronLeft,
-  ChevronRight,
   Zap,
   HeartPulse,
   Clock,
-  Bot,
+  Building2,
+  BarChart3,
+  Briefcase,
+  Bell,
+  FolderLock,
+  TrendingUp,
+  Palette,
+  Workflow,
+  Globe,
 } from 'lucide-react'
 import { useApp, type AppView } from '@/contexts/AppContext'
 
@@ -53,6 +57,21 @@ const mainNavItems: NavItem[] = [
   { title: 'Error Center', view: 'errors', icon: ShieldAlert },
 ]
 
+const operationsNavItems: NavItem[] = [
+  { title: 'Firm Operations', view: 'firm-operations', icon: Building2 },
+  { title: 'Team Performance', view: 'team-performance', icon: BarChart3 },
+  { title: 'Workload', view: 'workload', icon: Briefcase },
+  { title: 'Notices', view: 'notices', icon: Bell },
+  { title: 'Document Vault', view: 'documents', icon: FolderLock },
+]
+
+const analyticsNavItems: NavItem[] = [
+  { title: 'Executive Analytics', view: 'executive-analytics', icon: TrendingUp },
+  { title: 'Automation', view: 'automation', icon: Workflow },
+  { title: 'White Label', view: 'white-label', icon: Palette },
+  { title: 'Client Portal', view: 'client-portal', icon: Globe },
+]
+
 const secondaryNavItems: NavItem[] = [
   { title: 'Filing Calendar', view: 'calendar', icon: Calendar },
   { title: 'Reports & Export', view: 'reports', icon: Download },
@@ -62,12 +81,46 @@ const secondaryNavItems: NavItem[] = [
 
 function SidebarNav() {
   const { currentView, setCurrentView } = useApp()
-  const { state, setOpenMobile } = useSidebar()
+  const { setOpenMobile } = useSidebar()
 
   const handleNavClick = (view: AppView) => {
     setCurrentView(view)
-    // Close mobile sidebar on navigation
     setOpenMobile(false)
+  }
+
+  const renderNavItem = (item: NavItem) => {
+    const isActive = currentView === item.view
+    return (
+      <SidebarMenuItem key={item.view}>
+        <SidebarMenuButton
+          isActive={isActive}
+          onClick={() => handleNavClick(item.view)}
+          tooltip={item.title}
+          className={`
+            group relative h-9 rounded-lg transition-all duration-200 ease-in-out
+            ${
+              isActive
+                ? 'bg-emerald-500/10 font-semibold text-emerald-600 hover:bg-emerald-500/15 hover:text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-400 dark:hover:bg-emerald-500/20 dark:hover:text-emerald-400'
+                : 'text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground'
+            }
+          `}
+        >
+          {isActive && (
+            <div className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-emerald-500 transition-all duration-200" />
+          )}
+          <item.icon
+            className={`h-4 w-4 transition-colors duration-200 ${
+              isActive
+                ? 'text-emerald-600 dark:text-emerald-400'
+                : 'text-sidebar-foreground/50 group-hover:text-sidebar-foreground/80'
+            }`}
+          />
+          <span className="transition-colors duration-200">
+            {item.title}
+          </span>
+        </SidebarMenuButton>
+      </SidebarMenuItem>
+    )
   }
 
   return (
@@ -82,13 +135,13 @@ function SidebarNav() {
               GSTPilot
             </span>
             <span className="inline-flex items-center rounded-md bg-gradient-to-r from-emerald-500/15 to-purple-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
-              AI Pro
+              Enterprise
             </span>
           </div>
         </div>
       </SidebarHeader>
 
-      <SidebarContent className="px-2 py-3">
+      <SidebarContent className="px-2 py-3 overflow-y-auto">
         {/* Main Navigation */}
         <SidebarGroup>
           <SidebarGroupLabel className="px-2 text-[11px] font-semibold uppercase tracking-widest text-sidebar-foreground/40">
@@ -96,85 +149,43 @@ function SidebarNav() {
           </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {mainNavItems.map((item) => {
-                const isActive = currentView === item.view
-                return (
-                  <SidebarMenuItem key={item.view}>
-                    <SidebarMenuButton
-                      isActive={isActive}
-                      onClick={() => handleNavClick(item.view)}
-                      tooltip={item.title}
-                      className={`
-                        group relative h-9 rounded-lg transition-all duration-200 ease-in-out
-                        ${
-                          isActive
-                            ? 'bg-emerald-500/10 font-semibold text-emerald-600 hover:bg-emerald-500/15 hover:text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-400 dark:hover:bg-emerald-500/20 dark:hover:text-emerald-400'
-                            : 'text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground'
-                        }
-                      `}
-                    >
-                      {isActive && (
-                        <div className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-emerald-500 transition-all duration-200" />
-                      )}
-                      <item.icon
-                        className={`h-4 w-4 transition-colors duration-200 ${
-                          isActive
-                            ? 'text-emerald-600 dark:text-emerald-400'
-                            : 'text-sidebar-foreground/50 group-hover:text-sidebar-foreground/80'
-                        }`}
-                      />
-                      <span className="transition-colors duration-200">
-                        {item.title}
-                      </span>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                )
-              })}
+              {mainNavItems.map(renderNavItem)}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
 
-        {/* Secondary Navigation */}
+        {/* Firm Operations */}
+        <SidebarGroup className="mt-1">
+          <SidebarGroupLabel className="px-2 text-[11px] font-semibold uppercase tracking-widest text-sidebar-foreground/40">
+            Operations
+          </SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {operationsNavItems.map(renderNavItem)}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        {/* Analytics & Automation */}
+        <SidebarGroup className="mt-1">
+          <SidebarGroupLabel className="px-2 text-[11px] font-semibold uppercase tracking-widest text-sidebar-foreground/40">
+            Intelligence
+          </SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {analyticsNavItems.map(renderNavItem)}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        {/* Tools */}
         <SidebarGroup className="mt-1">
           <SidebarGroupLabel className="px-2 text-[11px] font-semibold uppercase tracking-widest text-sidebar-foreground/40">
             Tools
           </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {secondaryNavItems.map((item) => {
-                const isActive = currentView === item.view
-                return (
-                  <SidebarMenuItem key={item.view}>
-                    <SidebarMenuButton
-                      isActive={isActive}
-                      onClick={() => handleNavClick(item.view)}
-                      tooltip={item.title}
-                      className={`
-                        group relative h-9 rounded-lg transition-all duration-200 ease-in-out
-                        ${
-                          isActive
-                            ? 'bg-emerald-500/10 font-semibold text-emerald-600 hover:bg-emerald-500/15 hover:text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-400 dark:hover:bg-emerald-500/20 dark:hover:text-emerald-400'
-                            : 'text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground'
-                        }
-                      `}
-                    >
-                      {isActive && (
-                        <div className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-emerald-500 transition-all duration-200" />
-                      )}
-                      <item.icon
-                        className={`h-4 w-4 transition-colors duration-200 ${
-                          isActive
-                            ? 'text-emerald-600 dark:text-emerald-400'
-                            : 'text-sidebar-foreground/50 group-hover:text-sidebar-foreground/80'
-                        }`}
-                      />
-                      <span className="transition-colors duration-200">
-                        {item.title}
-                      </span>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                )
-              })}
+              {secondaryNavItems.map(renderNavItem)}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
@@ -183,7 +194,7 @@ function SidebarNav() {
       <SidebarFooter className="border-t border-sidebar-border/50 px-4 py-3">
         <div className="flex items-center justify-between">
           <span className="text-[11px] font-medium text-sidebar-foreground/40">
-            v2.0 Production
+            v3.0 Enterprise
           </span>
           <div className="flex items-center gap-1">
             <div className="h-1.5 w-1.5 rounded-full bg-emerald-500" />

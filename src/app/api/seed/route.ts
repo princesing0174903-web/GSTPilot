@@ -21,6 +21,15 @@ function randomDate(baseYear: number, month: number, dayRange: [number, number])
 export async function POST() {
   try {
     // 1. Clear existing data (respect foreign key order)
+    await db.automationLog.deleteMany()
+    await db.automationRule.deleteMany()
+    await db.workloadAssignment.deleteMany()
+    await db.teamPerformance.deleteMany()
+    await db.notice.deleteMany()
+    await db.document.deleteMany()
+    await db.firmMetrics.deleteMany()
+    await db.firmSettings.deleteMany()
+    await db.teamMember.deleteMany()
     await db.filingEvent.deleteMany()
     await db.reconciliationResult.deleteMany()
     await db.reconciliationRun.deleteMany()
@@ -717,10 +726,290 @@ export async function POST() {
       totalAuditLogs++
     }
 
+    // ─── CA Firm Operations Layer Seed Data ───
+
+    // 12. Create Team Members
+    const teamMembers = await Promise.all([
+      db.teamMember.create({
+        data: { name: 'CA Rajesh Kumar', email: 'rajesh@gstpilot.ai', role: 'admin', department: 'management', isActive: true },
+      }),
+      db.teamMember.create({
+        data: { name: 'Priya Sharma', email: 'priya@gstpilot.ai', role: 'manager', department: 'audit', isActive: true },
+      }),
+      db.teamMember.create({
+        data: { name: 'Amit Patel', email: 'amit@gstpilot.ai', role: 'auditor', department: 'audit', isActive: true },
+      }),
+      db.teamMember.create({
+        data: { name: 'Sneha Reddy', email: 'sneha@gstpilot.ai', role: 'auditor', department: 'tax', isActive: true },
+      }),
+      db.teamMember.create({
+        data: { name: 'Vikram Singh', email: 'vikram@gstpilot.ai', role: 'staff', department: 'compliance', isActive: true },
+      }),
+      db.teamMember.create({
+        data: { name: 'Neha Gupta', email: 'neha@gstpilot.ai', role: 'staff', department: 'data-entry', isActive: true },
+      }),
+      db.teamMember.create({
+        data: { name: 'Ravi Krishnan', email: 'ravi@gstpilot.ai', role: 'manager', department: 'tax', isActive: true },
+      }),
+      db.teamMember.create({
+        data: { name: 'Anjali Desai', email: 'anjali@gstpilot.ai', role: 'staff', department: 'compliance', isActive: false },
+      }),
+    ])
+
+    // 13. Create Team Performance Records
+    let totalPerformanceRecords = 0
+    for (const member of teamMembers) {
+      if (!member.isActive) continue
+      for (let m = 1; m <= 6; m++) {
+        const period = `2024-${String(m).padStart(2, '0')}`
+        const baseVolume = member.role === 'admin' ? 20 : member.role === 'manager' ? 40 : member.role === 'auditor' ? 60 : 80
+        const invoicesProcessed = rand(baseVolume, baseVolume + 30)
+        const reviewsCompleted = member.role === 'auditor' || member.role === 'manager' ? rand(15, 40) : rand(5, 15)
+        const approvalsCompleted = member.role === 'manager' || member.role === 'admin' ? rand(10, 30) : rand(0, 5)
+        const averageAccuracy = rand(88, 99)
+        const averageTurnaround = rand(2, 24)
+        const totalActions = invoicesProcessed + reviewsCompleted + approvalsCompleted
+        const score = (averageAccuracy * 0.3) + (totalActions / 150 * 25) + ((24 - averageTurnaround) / 24 * 25) + (reviewsCompleted / 40 * 20)
+
+        await db.teamPerformance.create({
+          data: {
+            teamMemberId: member.id,
+            period,
+            invoicesProcessed,
+            reviewsCompleted,
+            approvalsCompleted,
+            averageAccuracy,
+            averageTurnaround,
+            totalActions,
+            score: Math.min(100, Math.max(0, score)),
+          },
+        })
+        totalPerformanceRecords++
+      }
+    }
+
+    // 14. Create Workload Assignments
+    let totalAssignments = 0
+    const assignmentTypes = ['invoice', 'review', 'approval', 'notice']
+    const assignmentStatuses = ['pending', 'in-progress', 'completed']
+    const priorities = ['low', 'medium', 'high', 'urgent']
+
+    for (const member of teamMembers) {
+      if (!member.isActive) continue
+      const assignmentCount = rand(4, 8)
+      for (let i = 0; i < assignmentCount; i++) {
+        const status = pick(assignmentStatuses)
+        const client = pick(clients)
+        await db.workloadAssignment.create({
+          data: {
+            teamMemberId: member.id,
+            entityType: pick(assignmentTypes),
+            title: `${pick(['Process', 'Review', 'Approve', 'Verify'])} ${pick(['Invoice', 'Return', 'Notice', 'Document'])} - ${client.tradeName}`,
+            clientId: client.id,
+            status,
+            priority: pick(priorities),
+            dueDate: `2024-${String(rand(3, 8)).padStart(2, '0')}-${String(rand(1, 28)).padStart(2, '0')}`,
+            assignedBy: teamMembers[0].id,
+          },
+        })
+        totalAssignments++
+      }
+    }
+
+    // 15. Create Notices
+    let totalNotices = 0
+    const noticeTypes = ['gst_notice', 'department_notice', 'tax_query']
+    const noticeSubjects = [
+      'GST Assessment Notice for FY 2023-24',
+      'Show Cause Notice for ITC Discrepancy',
+      'Demand Notice for Short Payment',
+      'Tax Query on Input Tax Credit Claims',
+      'Department Notice for Filing Delay',
+      'GST Audit Intimation Notice',
+      'Scrutiny Notice for GSTR-1 Data',
+      'Assessment Order for FY 2022-23',
+    ]
+
+    for (const client of clients) {
+      const noticeCount = rand(1, 3)
+      for (let i = 0; i < noticeCount; i++) {
+        const status = pick(['open', 'in_progress', 'resolved'])
+        await db.notice.create({
+          data: {
+            clientId: client.id,
+            noticeType: pick(noticeTypes),
+            noticeNumber: `GST/NOT/${rand(100000, 999999)}`,
+            noticeDate: `2024-${String(rand(1, 6)).padStart(2, '0')}-${String(rand(1, 28)).padStart(2, '0')}`,
+            subject: pick(noticeSubjects),
+            description: `Notice received from GST department regarding compliance for client ${client.tradeName}. Immediate attention required.`,
+            status,
+            assignedTo: pick(teamMembers.filter(m => m.isActive)).id,
+            priority: pick(priorities),
+            dueDate: `2024-${String(rand(4, 9)).padStart(2, '0')}-${String(rand(1, 28)).padStart(2, '0')}`,
+            resolution: status === 'resolved' ? 'Resolved with supporting documentation provided to the department.' : null,
+          },
+        })
+        totalNotices++
+      }
+    }
+
+    // 16. Create Documents
+    let totalDocuments = 0
+    const folders = ['invoices', 'returns', 'reports', 'client-documents', 'notices']
+    const fileTypes = ['pdf', 'xlsx', 'docx', 'jpg', 'png']
+    const docNames = [
+      'GSTR-1 Return Summary', 'Purchase Register', 'Sales Invoice Batch',
+      'ITC Reconciliation Report', 'Tax Computation Sheet', 'Client KYC Documents',
+      'GST Assessment Order', 'Annual Return GSTR-9', 'Audit Report FY2024',
+      'Input Tax Credit Register', 'GST Payment Challan', 'E-Way Bill Report',
+    ]
+
+    for (const client of clients) {
+      const docCount = rand(3, 6)
+      for (let i = 0; i < docCount; i++) {
+        await db.document.create({
+          data: {
+            clientId: client.id,
+            folder: pick(folders),
+            name: `${pick(docNames)} - ${client.tradeName.slice(0, 15)}`,
+            fileType: pick(fileTypes),
+            size: rand(50000, 5000000),
+            tags: pick(['gst', 'filing', 'compliance', 'audit', 'invoice', 'return']),
+            description: `Document for ${client.tradeName}`,
+            uploadedBy: pick(teamMembers).name,
+            version: 1,
+            isLatest: true,
+          },
+        })
+        totalDocuments++
+      }
+    }
+
+    // 17. Create Automation Rules
+    const automationRules = await Promise.all([
+      db.automationRule.create({
+        data: {
+          name: 'Invoice Auto-Extract',
+          description: 'Automatically extract invoice data when a new invoice is uploaded',
+          trigger: 'invoice_uploaded',
+          conditions: JSON.stringify({ fileType: 'pdf', source: 'email' }),
+          actions: JSON.stringify({ extract: true, notify: 'manager', createTask: true }),
+          isActive: true,
+          runCount: rand(50, 200),
+          lastRunAt: new Date(2024, rand(3, 5), rand(1, 28)),
+          createdBy: teamMembers[0].id,
+        },
+      }),
+      db.automationRule.create({
+        data: {
+          name: 'Return Filing Notification',
+          description: 'Notify manager when a return is ready for filing',
+          trigger: 'return_ready',
+          conditions: JSON.stringify({ status: 'validated', criticalErrors: 0 }),
+          actions: JSON.stringify({ notify: 'manager', createTask: true, sendEmail: true }),
+          isActive: true,
+          runCount: rand(20, 80),
+          lastRunAt: new Date(2024, rand(3, 5), rand(1, 28)),
+          createdBy: teamMembers[0].id,
+        },
+      }),
+      db.automationRule.create({
+        data: {
+          name: 'Client Filing Confirmation',
+          description: 'Send confirmation email to client when return is filed',
+          trigger: 'return_filed',
+          conditions: JSON.stringify({ returnType: 'GSTR-1' }),
+          actions: JSON.stringify({ sendEmail: true, notify: 'client', updateStatus: true }),
+          isActive: true,
+          runCount: rand(30, 100),
+          lastRunAt: new Date(2024, rand(3, 5), rand(1, 28)),
+          createdBy: teamMembers[0].id,
+        },
+      }),
+      db.automationRule.create({
+        data: {
+          name: 'Notice Alert Task',
+          description: 'Create urgent task when a GST notice is received',
+          trigger: 'notice_received',
+          conditions: JSON.stringify({ priority: ['high', 'urgent'] }),
+          actions: JSON.stringify({ createTask: true, notify: 'manager', assignTo: 'senior_auditor' }),
+          isActive: true,
+          runCount: rand(5, 25),
+          lastRunAt: new Date(2024, rand(3, 5), rand(1, 28)),
+          createdBy: teamMembers[0].id,
+        },
+      }),
+      db.automationRule.create({
+        data: {
+          name: 'Weekly Compliance Report',
+          description: 'Generate weekly compliance status report for all active clients',
+          trigger: 'invoice_uploaded',
+          conditions: JSON.stringify({ schedule: 'weekly', clientStatus: 'active' }),
+          actions: JSON.stringify({ generateReport: true, sendEmail: true, notify: 'admin' }),
+          isActive: false,
+          runCount: rand(2, 10),
+          createdBy: teamMembers[0].id,
+        },
+      }),
+    ])
+
+    // 18. Create Automation Logs
+    let totalAutomationLogs = 0
+    for (const rule of automationRules) {
+      const logCount = rand(3, 8)
+      for (let i = 0; i < logCount; i++) {
+        await db.automationLog.create({
+          data: {
+            ruleId: rule.id,
+            trigger: rule.trigger,
+            status: pick(['success', 'success', 'success', 'failed']),
+            details: `Automated execution of "${rule.name}"`,
+            executedAt: new Date(2024, rand(2, 5), rand(1, 28), rand(9, 18), rand(0, 59)),
+          },
+        })
+        totalAutomationLogs++
+      }
+    }
+
+    // 19. Create Firm Settings
+    await db.firmSettings.create({
+      data: {
+        firmName: 'GSTPilot Associates',
+        primaryColor: '#059669',
+        accentColor: '#7c3aed',
+        emailFromName: 'GSTPilot Associates',
+      },
+    })
+
+    // 20. Create Firm Metrics (6 months)
+    let totalFirmMetrics = 0
+    for (let m = 1; m <= 6; m++) {
+      const period = `2024-${String(m).padStart(2, '0')}`
+      const totalRevenue = rand(800000, 2500000)
+      await db.firmMetrics.create({
+        data: {
+          period,
+          totalRevenue,
+          mrr: Math.round(totalRevenue * (0.6 + Math.random() * 0.3)),
+          arr: Math.round(totalRevenue * 12 * (0.7 + Math.random() * 0.2)),
+          clientsOnboarded: rand(1, 4),
+          activeClients: clients.filter(c => c.status === 'active').length + rand(-2, 2),
+          inactiveClients: clients.filter(c => c.status === 'inactive').length + rand(-1, 1),
+          teamUtilization: rand(65, 92),
+          avgProcessingTime: rand(2, 8),
+          avgFilingTime: rand(1, 4),
+          gstProcessed: rand(5000000, 25000000),
+          profitability: rand(18, 38),
+          clientGrowth: rand(-2, 8),
+        },
+      })
+      totalFirmMetrics++
+    }
+
     // ─── Summary ────────────────────────────────────────────────────────────
     return NextResponse.json({
       success: true,
-      message: 'Database seeded successfully with GST data',
+      message: 'Database seeded successfully with GST data and Firm Operations data',
       counts: {
         users: users.length,
         clients: clients.length,
@@ -732,6 +1021,14 @@ export async function POST() {
         issues: totalIssues,
         healthScores: totalHealthScores,
         auditLogs: totalAuditLogs,
+        teamMembers: teamMembers.length,
+        performanceRecords: totalPerformanceRecords,
+        assignments: totalAssignments,
+        notices: totalNotices,
+        documents: totalDocuments,
+        automationRules: automationRules.length,
+        automationLogs: totalAutomationLogs,
+        firmMetrics: totalFirmMetrics,
       },
     })
   } catch (error) {

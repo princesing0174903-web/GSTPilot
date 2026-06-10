@@ -22,7 +22,16 @@ import TeamManagementPage from '@/components/team/TeamManagementPage'
 import LandingPage from '@/components/landing/LandingPage'
 import LoginPage from '@/components/auth/LoginPage'
 import ClientHealthPage from '@/components/client-health/ClientHealthPage'
+import DocumentVaultPage from '@/components/documents/DocumentVaultPage'
+import ExecutiveAnalyticsPage from '@/components/executive-analytics/ExecutiveAnalyticsPage'
 import DeadlineCenterPage from '@/components/deadlines/DeadlineCenterPage'
+import FirmOperationsPage from '@/components/firm-operations/FirmOperationsPage'
+import TeamPerformancePage from '@/components/team-performance/TeamPerformancePage'
+import WhiteLabelPage from '@/components/white-label/WhiteLabelPage'
+import AutomationCenterPage from '@/components/automation/AutomationCenterPage'
+import WorkloadPage from '@/components/workload/WorkloadPage'
+import NoticeCenterPage from '@/components/notices/NoticeCenterPage'
+import ClientPortalPage from '@/components/client-portal/ClientPortalPage'
 import AICopilot from '@/components/copilot/AICopilot'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
@@ -44,11 +53,20 @@ const VIEW_TITLES: Record<string, string> = {
   clients: 'Client Registry',
   'client-health': 'Client Health Center',
   deadlines: 'Deadline Center',
+  documents: 'Document Vault',
+  'executive-analytics': 'Executive Analytics',
+  'firm-operations': 'Firm Operations Center',
+  'team-performance': 'Team Performance Center',
   errors: 'Error Resolution Center',
   calendar: 'Filing Calendar',
   reports: 'Reports & Export',
   'audit-logs': 'Audit Logs',
   settings: 'Settings & Team',
+  'white-label': 'White Label Settings',
+  automation: 'Automation Center',
+  workload: 'Workload Distribution',
+  notices: 'Notice Center',
+  'client-portal': 'Client Portal',
 }
 
 function DashboardContent() {
@@ -71,6 +89,14 @@ function DashboardContent() {
         return <ClientHealthPage />
       case 'deadlines':
         return <DeadlineCenterPage />
+      case 'documents':
+        return <DocumentVaultPage />
+      case 'executive-analytics':
+        return <ExecutiveAnalyticsPage />
+      case 'firm-operations':
+        return <FirmOperationsPage />
+      case 'team-performance':
+        return <TeamPerformancePage />
       case 'errors':
         return <ErrorResolutionPage />
       case 'calendar':
@@ -81,6 +107,16 @@ function DashboardContent() {
         return <AuditLogsPage />
       case 'settings':
         return <TeamManagementPage />
+      case 'white-label':
+        return <WhiteLabelPage />
+      case 'automation':
+        return <AutomationCenterPage />
+      case 'workload':
+        return <WorkloadPage />
+      case 'notices':
+        return <NoticeCenterPage />
+      case 'client-portal':
+        return <ClientPortalPage />
       default:
         return <DashboardPage />
     }

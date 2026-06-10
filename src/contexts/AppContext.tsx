@@ -2,7 +2,28 @@
 
 import { createContext, useContext, useState, useCallback } from 'react';
 
-export type AppView = 'dashboard' | 'gstr-filing' | 'reconciliation' | 'invoices' | 'clients' | 'errors' | 'calendar' | 'reports' | 'audit-logs' | 'settings' | 'client-health' | 'deadlines';
+export type AppView = 
+  | 'dashboard' 
+  | 'gstr-filing' 
+  | 'reconciliation' 
+  | 'invoices' 
+  | 'clients' 
+  | 'errors' 
+  | 'calendar' 
+  | 'reports' 
+  | 'audit-logs' 
+  | 'settings' 
+  | 'client-health' 
+  | 'deadlines'
+  | 'firm-operations'
+  | 'team-performance'
+  | 'workload'
+  | 'notices'
+  | 'documents'
+  | 'executive-analytics'
+  | 'white-label'
+  | 'automation'
+  | 'client-portal';
 
 export type AppScreen = 'landing' | 'login' | 'app';
 

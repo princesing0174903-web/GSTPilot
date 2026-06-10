@@ -39,6 +39,8 @@ model Client {
   healthScores   HealthScore[]
   issues         Issue[]
   auditLogs      AuditLog[]
+  notices        Notice[]
+  documents      Document[]
 }
 
 model Invoice {
@@ -66,6 +68,7 @@ model Invoice {
   aiExplanation   String?
   notes           String?
   period          String?
+  assignedTo      String?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -203,4 +206,164 @@ model AuditLog {
   timestamp DateTime @default(now())
 
   client    Client?  @relation(fields: [clientId], references: [id])
+}
+
+// ─── CA Firm Operations Layer ───
+
+model TeamMember {
+  id          String   @id @default(cuid())
+  userId      String?  @unique
+  name        String
+  email       String   @unique
+  role        String   @default("staff")
+  department  String?  @default("general")
+  avatar      String?
+  isActive    Boolean  @default(true)
+  joinedAt    DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  performances  TeamPerformance[]
+  assignments   WorkloadAssignment[]
+  notices       Notice[]
+}
+
+model TeamPerformance {
+  id                  String   @id @default(cuid())
+  teamMemberId        String
+  period              String
+  invoicesProcessed   Int      @default(0)
+  reviewsCompleted    Int      @default(0)
+  approvalsCompleted  Int      @default(0)
+  averageAccuracy     Float    @default(0)
+  averageTurnaround   Float    @default(0)
+  totalActions        Int      @default(0)
+  score               Float    @default(0)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  teamMember          TeamMember @relation(fields: [teamMemberId], references: [id])
+}
+
+model WorkloadAssignment {
+  id            String   @id @default(cuid())
+  teamMemberId  String
+  entityType    String   @default("invoice")
+  entityId      String?
+  clientId      String?
+  title         String
+  description   String?
+  status        String   @default("pending")
+  priority      String   @default("medium")
+  dueDate       String?
+  assignedBy    String?
+  assignedAt    DateTime @default(now())
+  completedAt   DateTime?
+  notes         String?
+
+  teamMember    TeamMember @relation(fields: [teamMemberId], references: [id])
+}
+
+model Notice {
+  id              String   @id @default(cuid())
+  clientId        String
+  noticeType      String   @default("gst_notice")
+  noticeNumber    String?
+  noticeDate      String?
+  subject         String
+  description     String?
+  status          String   @default("open")
+  assignedTo      String?
+  priority        String   @default("medium")
+  dueDate         String?
+  responseDate    String?
+  resolution      String?
+  attachments     String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  client          Client      @relation(fields: [clientId], references: [id])
+  assignee        TeamMember? @relation(fields: [assignedTo], references: [id])
+}
+
+model Document {
+  id          String   @id @default(cuid())
+  clientId    String?
+  folder      String   @default("general")
+  name        String
+  fileType    String   @default("pdf")
+  size        Int      @default(0)
+  path        String?
+  tags        String?
+  description String?
+  uploadedBy  String?
+  version     Int      @default(1)
+  isLatest    Boolean  @default(true)
+  parentId    String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  client      Client?  @relation(fields: [clientId], references: [id])
+  parent      Document? @relation("DocumentVersion", fields: [parentId], references: [id])
+  versions    Document[] @relation("DocumentVersion")
+}
+
+model AutomationRule {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  trigger     String
+  conditions  String?
+  actions     String
+  isActive    Boolean  @default(true)
+  lastRunAt   DateTime?
+  runCount    Int      @default(0)
+  createdBy   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  logs        AutomationLog[]
+}
+
+model AutomationLog {
+  id          String   @id @default(cuid())
+  ruleId      String
+  trigger     String
+  status      String   @default("success")
+  details     String?
+  executedAt  DateTime @default(now())
+
+  rule        AutomationRule @relation(fields: [ruleId], references: [id])
+}
+
+model FirmSettings {
+  id              String   @id @default(cuid())
+  firmName        String   @default("GSTPilot Firm")
+  logoUrl         String?
+  primaryColor    String   @default("#059669")
+  accentColor     String   @default("#7c3aed")
+  customDomain    String?
+  emailFromName   String?
+  emailTemplate   String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model FirmMetrics {
+  id                String   @id @default(cuid())
+  period            String   @unique
+  totalRevenue      Float    @default(0)
+  mrr               Float    @default(0)
+  arr               Float    @default(0)
+  clientsOnboarded  Int      @default(0)
+  activeClients     Int      @default(0)
+  inactiveClients   Int      @default(0)
+  teamUtilization   Float    @default(0)
+  avgProcessingTime Float    @default(0)
+  avgFilingTime     Float    @default(0)
+  gstProcessed      Float    @default(0)
+  profitability     Float    @default(0)
+  clientGrowth      Float    @default(0)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 }

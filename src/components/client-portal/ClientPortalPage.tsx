@@ -82,9 +82,9 @@ export default function ClientPortalPage() {
 
   // Demo clients for login
   const demoClients = [
-    { email: 'gst@tcs.com', password: 'demo', name: 'Tata Consultancy Services Ltd', gstin: '27AABCT1332L1ZP', id: 'demo-1' },
-    { email: 'gst@infosys.com', password: 'demo', name: 'Infosys Limited', gstin: '29AABCI6228L1Z5', id: 'demo-2' },
-    { email: 'gst@ril.com', password: 'demo', name: 'Reliance Industries Ltd', gstin: '27AABCR5638L1Z1', id: 'demo-3' },
+    { email: 'accounts@sharmaent.com', password: 'demo', name: 'Sharma Enterprises', gstin: '27AABCS1429B1Z5', id: 'demo-1' },
+    { email: 'gst@patelsons.com', password: 'demo', name: 'Patel & Sons', gstin: '24AABCP5678G1Z3', id: 'demo-2' },
+    { email: 'gst@krishnatraders.in', password: 'demo', name: 'Krishna Traders', gstin: '06AABCK9012H1Z1', id: 'demo-3' },
   ]
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -144,15 +144,15 @@ export default function ClientPortalPage() {
       // Set fallback data if API didn't return enough
       if (filings.length === 0) {
         setFilings([
-          { id: '1', returnType: 'GSTR-1', period: '2024-06', status: 'filed', filedDate: '2024-07-11', totalTax: 2450000 },
-          { id: '2', returnType: 'GSTR-3B', period: '2024-06', status: 'filed', filedDate: '2024-07-20', totalTax: 2380000 },
-          { id: '3', returnType: 'GSTR-1', period: '2024-07', status: 'pending', totalTax: 0 },
-          { id: '4', returnType: 'GSTR-3B', period: '2024-07', status: 'draft', totalTax: 0 },
+          { id: '1', returnType: 'GSTR-1', period: '2025-05', status: 'filed', filedDate: '2025-06-11', totalTax: 2450000 },
+          { id: '2', returnType: 'GSTR-3B', period: '2025-05', status: 'filed', filedDate: '2025-06-20', totalTax: 2380000 },
+          { id: '3', returnType: 'GSTR-1', period: '2025-06', status: 'pending', totalTax: 0 },
+          { id: '4', returnType: 'GSTR-3B', period: '2025-06', status: 'draft', totalTax: 0 },
         ])
       }
       if (notices.length === 0) {
         setNotices([
-          { id: '1', subject: 'GST Assessment Notice for FY 2023-24', noticeType: 'gst_notice', status: 'open', priority: 'high', dueDate: '2024-08-15' },
+          { id: '1', subject: 'GST Assessment Notice for FY 2024-25', noticeType: 'gst_notice', status: 'open', priority: 'high', dueDate: '2025-08-15' },
         ])
       }
     } else {

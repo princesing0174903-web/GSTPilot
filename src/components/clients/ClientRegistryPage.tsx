@@ -62,10 +62,6 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import {
-  Progress,
-} from '@/components/ui/progress';
-import {
-  Users,
   Plus,
   Search,
   Building2,
@@ -78,17 +74,22 @@ import {
   Mail,
   Phone,
   MapPin,
-  ChevronRight,
   AlertTriangle,
   CheckCircle2,
   Clock,
   UserPlus,
-  Activity,
+  TrendingUp,
+  TrendingDown,
+  FileWarning,
+  CircleDot,
+  IndianRupee,
+  BarChart3,
+  Calendar,
 } from 'lucide-react';
 import { useApp } from '@/contexts/AppContext';
 import type { AppView } from '@/contexts/AppContext';
 import type { Client, ClientStatus } from '@/types/gst';
-import { validateGSTIN, formatGSTIN } from '@/lib/gst-utils';
+import { validateGSTIN, formatGSTIN, formatCurrency } from '@/lib/gst-utils';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -147,178 +148,30 @@ const INDIAN_STATES: { name: string; code: string }[] = [
   { name: 'Puducherry', code: '34' },
 ];
 
-// ─── Mock Data ────────────────────────────────────────────────────────────────
+// ─── Extended Types ────────────────────────────────────────────────────────────
 
-const MOCK_CLIENTS: ClientWithAggregations[] = [
-  {
-    id: 'cl_001',
-    gstin: '27AABCT1332L1ZP',
-    tradeName: 'Tata Consultancy',
-    legalName: 'Tata Consultancy Services Ltd',
-    state: 'Maharashtra',
-    stateCode: '27',
-    contactEmail: 'gst@tcs.com',
-    contactPhone: '+91-22-6778-9999',
-    entityType: 'regular',
-    returnPeriod: 'monthly',
-    lastFilingDate: '2026-05-11',
-    status: 'active',
-    healthScore: 92,
-    createdAt: '2025-01-15T10:00:00Z',
-    updatedAt: '2026-05-11T14:30:00Z',
-    _aggregations: { totalInvoices: 1240, filedReturns: 24, pendingReturns: 1, matchPercentage: 96 },
-  },
-  {
-    id: 'cl_002',
-    gstin: '29AABCI5055K1ZI',
-    tradeName: 'Infosys Ltd',
-    legalName: 'Infosys Limited',
-    state: 'Karnataka',
-    stateCode: '29',
-    contactEmail: 'compliance@infosys.com',
-    contactPhone: '+91-80-2852-0261',
-    entityType: 'regular',
-    returnPeriod: 'monthly',
-    lastFilingDate: '2026-05-09',
-    status: 'active',
-    healthScore: 87,
-    createdAt: '2025-02-10T09:00:00Z',
-    updatedAt: '2026-05-09T11:20:00Z',
-    _aggregations: { totalInvoices: 980, filedReturns: 22, pendingReturns: 2, matchPercentage: 91 },
-  },
-  {
-    id: 'cl_003',
-    gstin: '24AABCR1718E1ZD',
-    tradeName: 'Reliance Industries',
-    legalName: 'Reliance Industries Limited',
-    state: 'Gujarat',
-    stateCode: '24',
-    contactEmail: 'gst@ril.com',
-    contactPhone: '+91-79-6677-8888',
-    entityType: 'regular',
-    returnPeriod: 'monthly',
-    lastFilingDate: '2026-04-11',
-    status: 'active',
-    healthScore: 78,
-    createdAt: '2025-03-05T12:00:00Z',
-    updatedAt: '2026-04-11T16:45:00Z',
-    _aggregations: { totalInvoices: 2100, filedReturns: 20, pendingReturns: 3, matchPercentage: 85 },
-  },
-  {
-    id: 'cl_004',
-    gstin: '33AABCR5278M1ZC',
-    tradeName: 'Murugappa Group',
-    legalName: 'Murugappa Group Pvt Ltd',
-    state: 'Tamil Nadu',
-    stateCode: '33',
-    contactEmail: 'finance@murugappa.com',
-    contactPhone: '+91-44-2847-3001',
-    entityType: 'regular',
-    returnPeriod: 'quarterly',
-    lastFilingDate: '2026-03-31',
-    status: 'active',
-    healthScore: 65,
-    createdAt: '2025-04-20T08:00:00Z',
-    updatedAt: '2026-03-31T10:00:00Z',
-    _aggregations: { totalInvoices: 560, filedReturns: 8, pendingReturns: 2, matchPercentage: 72 },
-  },
-  {
-    id: 'cl_005',
-    gstin: '06AABCF8035D1ZL',
-    tradeName: 'Flipkart Internet',
-    legalName: 'Flipkart Internet Private Limited',
-    state: 'Haryana',
-    stateCode: '06',
-    contactEmail: 'gst@flipkart.com',
-    contactPhone: '+91-124-619-8000',
-    entityType: 'ecommerce',
-    returnPeriod: 'monthly',
-    lastFilingDate: '2026-04-10',
-    status: 'active',
-    healthScore: 54,
-    createdAt: '2025-05-12T14:00:00Z',
-    updatedAt: '2026-04-10T09:30:00Z',
-    _aggregations: { totalInvoices: 3500, filedReturns: 18, pendingReturns: 5, matchPercentage: 68 },
-  },
-  {
-    id: 'cl_006',
-    gstin: '19AABCM1234L1ZA',
-    tradeName: 'Emami Ltd',
-    legalName: 'Emami Limited',
-    state: 'West Bengal',
-    stateCode: '19',
-    contactEmail: 'accounts@emami.in',
-    contactPhone: '+91-33-2246-8013',
-    entityType: 'regular',
-    returnPeriod: 'monthly',
-    status: 'active',
-    healthScore: 45,
-    createdAt: '2025-06-01T10:00:00Z',
-    updatedAt: '2026-02-15T12:00:00Z',
-    _aggregations: { totalInvoices: 420, filedReturns: 15, pendingReturns: 4, matchPercentage: 58 },
-  },
-  {
-    id: 'cl_007',
-    gstin: '09AABCD5678K1ZB',
-    tradeName: 'Lohia Corp',
-    legalName: 'Lohia Corp Pvt Ltd',
-    state: 'Uttar Pradesh',
-    stateCode: '09',
-    contactEmail: 'gst@lohia.com',
-    contactPhone: '+91-512-236-1802',
-    entityType: 'composition',
-    returnPeriod: 'quarterly',
-    status: 'pending',
-    healthScore: 32,
-    createdAt: '2025-07-15T16:00:00Z',
-    updatedAt: '2026-01-20T14:30:00Z',
-    _aggregations: { totalInvoices: 180, filedReturns: 4, pendingReturns: 6, matchPercentage: 45 },
-  },
-  {
-    id: 'cl_008',
-    gstin: '07AABCG9012M1ZE',
-    tradeName: 'Bharat Pe Exports',
-    legalName: 'Bharat Pe Exports Pvt Ltd',
-    state: 'Delhi',
-    stateCode: '07',
-    contactEmail: 'tax@bharatpe.in',
-    contactPhone: '+91-11-4152-9000',
-    entityType: 'sez_unit',
-    returnPeriod: 'monthly',
-    status: 'inactive',
-    healthScore: 18,
-    createdAt: '2025-02-28T11:00:00Z',
-    updatedAt: '2025-11-30T08:00:00Z',
-    _aggregations: { totalInvoices: 90, filedReturns: 6, pendingReturns: 8, matchPercentage: 30 },
-  },
-  {
-    id: 'cl_009',
-    gstin: '36AABCT3456N1ZF',
-    tradeName: 'Divis Laboratories',
-    legalName: 'Divis Laboratories Ltd',
-    state: 'Telangana',
-    stateCode: '36',
-    contactEmail: 'compliance@divislabs.com',
-    contactPhone: '+91-40-2381-5600',
-    entityType: 'regular',
-    returnPeriod: 'monthly',
-    lastFilingDate: '2026-05-11',
-    status: 'active',
-    healthScore: 85,
-    createdAt: '2025-03-22T09:00:00Z',
-    updatedAt: '2026-05-11T17:00:00Z',
-    _aggregations: { totalInvoices: 720, filedReturns: 23, pendingReturns: 1, matchPercentage: 93 },
-  },
-];
+type RiskLevel = 'Low' | 'Medium' | 'High';
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+interface HealthBreakdown {
+  gstinValidity: number;
+  filingTimeliness: number;
+  invoiceAccuracy: number;
+}
 
-interface ClientWithAggregations extends Client {
-  _aggregations?: {
-    totalInvoices: number;
-    filedReturns: number;
-    pendingReturns: number;
-    matchPercentage: number;
+interface MonthlyVolume {
+  month: string;
+  amount: number;
+}
+
+interface ClientPortfolio extends Client {
+  _portfolio: {
+    monthlyTaxVolume: number;
+    monthlyVolumeChart: MonthlyVolume[];
+    pendingFilings: number;
+    riskLevel: RiskLevel;
+    riskDetail?: string;
+    healthBreakdown: HealthBreakdown;
+    recentFilings: { period: string; type: string; status: string; date: string }[];
   };
 }
 
@@ -346,13 +199,310 @@ const EMPTY_FORM: ClientForm = {
   returnPeriod: 'monthly',
 };
 
+// ─── Mock Data ────────────────────────────────────────────────────────────────
+
+const MOCK_CLIENTS: ClientPortfolio[] = [
+  {
+    id: 'cl_001',
+    gstin: '27AABCS1429B1Z5',
+    tradeName: 'Sharma Enterprises',
+    legalName: 'Sharma Enterprises Pvt Ltd',
+    state: 'Maharashtra',
+    stateCode: '27',
+    contactEmail: 'accounts@sharmaent.com',
+    contactPhone: '+91-22-2847-3001',
+    entityType: 'regular',
+    returnPeriod: 'monthly',
+    lastFilingDate: '2025-05-11',
+    status: 'active',
+    healthScore: 92,
+    createdAt: '2025-01-15T10:00:00Z',
+    updatedAt: '2025-05-11T14:30:00Z',
+    _portfolio: {
+      monthlyTaxVolume: 450000,
+      monthlyVolumeChart: [
+        { month: 'Dec', amount: 380000 },
+        { month: 'Jan', amount: 420000 },
+        { month: 'Feb', amount: 395000 },
+        { month: 'Mar', amount: 510000 },
+        { month: 'Apr', amount: 430000 },
+        { month: 'May', amount: 450000 },
+      ],
+      pendingFilings: 0,
+      riskLevel: 'Low',
+      healthBreakdown: { gstinValidity: 95, filingTimeliness: 88, invoiceAccuracy: 94 },
+      recentFilings: [
+        { period: 'May 2025', type: 'GSTR-1', status: 'Filed', date: '2025-05-11' },
+        { period: 'May 2025', type: 'GSTR-3B', status: 'Filed', date: '2025-05-18' },
+        { period: 'Apr 2025', type: 'GSTR-1', status: 'Filed', date: '2025-04-10' },
+      ],
+    },
+  },
+  {
+    id: 'cl_002',
+    gstin: '24AABCP5678G1Z3',
+    tradeName: 'Patel & Sons',
+    legalName: 'Patel & Sons Trading Co',
+    state: 'Gujarat',
+    stateCode: '24',
+    contactEmail: 'gst@patelsons.com',
+    contactPhone: '+91-79-6677-8888',
+    entityType: 'regular',
+    returnPeriod: 'monthly',
+    lastFilingDate: '2025-05-09',
+    status: 'active',
+    healthScore: 67,
+    createdAt: '2025-02-10T09:00:00Z',
+    updatedAt: '2025-05-09T11:20:00Z',
+    _portfolio: {
+      monthlyTaxVolume: 1280000,
+      monthlyVolumeChart: [
+        { month: 'Dec', amount: 1100000 },
+        { month: 'Jan', amount: 1250000 },
+        { month: 'Feb', amount: 1180000 },
+        { month: 'Mar', amount: 1400000 },
+        { month: 'Apr', amount: 1320000 },
+        { month: 'May', amount: 1280000 },
+      ],
+      pendingFilings: 2,
+      riskLevel: 'Medium',
+      riskDetail: '7 mismatches',
+      healthBreakdown: { gstinValidity: 72, filingTimeliness: 58, invoiceAccuracy: 70 },
+      recentFilings: [
+        { period: 'May 2025', type: 'GSTR-1', status: 'Filed', date: '2025-05-09' },
+        { period: 'Apr 2025', type: 'GSTR-3B', status: 'Pending', date: '' },
+        { period: 'Apr 2025', type: 'GSTR-1', status: 'Filed', date: '2025-04-11' },
+      ],
+    },
+  },
+  {
+    id: 'cl_003',
+    gstin: '06AABCK9012H1Z1',
+    tradeName: 'Krishna Traders',
+    legalName: 'Krishna Traders Pvt Ltd',
+    state: 'Haryana',
+    stateCode: '06',
+    contactEmail: 'gst@krishnatraders.in',
+    contactPhone: '+91-80-2852-0261',
+    entityType: 'regular',
+    returnPeriod: 'monthly',
+    lastFilingDate: '2025-05-11',
+    status: 'active',
+    healthScore: 88,
+    createdAt: '2025-03-05T12:00:00Z',
+    updatedAt: '2025-05-11T16:45:00Z',
+    _portfolio: {
+      monthlyTaxVolume: 220000,
+      monthlyVolumeChart: [
+        { month: 'Dec', amount: 190000 },
+        { month: 'Jan', amount: 205000 },
+        { month: 'Feb', amount: 198000 },
+        { month: 'Mar', amount: 240000 },
+        { month: 'Apr', amount: 215000 },
+        { month: 'May', amount: 220000 },
+      ],
+      pendingFilings: 1,
+      riskLevel: 'Low',
+      healthBreakdown: { gstinValidity: 92, filingTimeliness: 85, invoiceAccuracy: 88 },
+      recentFilings: [
+        { period: 'May 2025', type: 'GSTR-1', status: 'Filed', date: '2025-05-11' },
+        { period: 'May 2025', type: 'GSTR-3B', status: 'Pending', date: '' },
+        { period: 'Apr 2025', type: 'GSTR-1', status: 'Filed', date: '2025-04-10' },
+      ],
+    },
+  },
+  {
+    id: 'cl_004',
+    gstin: '33AABCM3456J1Z7',
+    tradeName: 'Metro Retail',
+    legalName: 'Metro Retail India Pvt Ltd',
+    state: 'Tamil Nadu',
+    stateCode: '33',
+    contactEmail: 'tax@metroretail.com',
+    contactPhone: '+91-22-6778-9999',
+    entityType: 'regular',
+    returnPeriod: 'monthly',
+    lastFilingDate: '2025-03-15',
+    status: 'active',
+    healthScore: 45,
+    createdAt: '2025-04-20T08:00:00Z',
+    updatedAt: '2025-03-15T10:00:00Z',
+    _portfolio: {
+      monthlyTaxVolume: 650000,
+      monthlyVolumeChart: [
+        { month: 'Dec', amount: 720000 },
+        { month: 'Jan', amount: 680000 },
+        { month: 'Feb', amount: 630000 },
+        { month: 'Mar', amount: 590000 },
+        { month: 'Apr', amount: 540000 },
+        { month: 'May', amount: 650000 },
+      ],
+      pendingFilings: 4,
+      riskLevel: 'High',
+      riskDetail: 'Filing delays',
+      healthBreakdown: { gstinValidity: 60, filingTimeliness: 32, invoiceAccuracy: 52 },
+      recentFilings: [
+        { period: 'Apr 2025', type: 'GSTR-1', status: 'Overdue', date: '' },
+        { period: 'Mar 2025', type: 'GSTR-3B', status: 'Overdue', date: '' },
+        { period: 'Feb 2025', type: 'GSTR-1', status: 'Filed', date: '2025-03-15' },
+      ],
+    },
+  },
+  {
+    id: 'cl_005',
+    gstin: '27AABCS7890K1Z9',
+    tradeName: 'Sunrise Exports',
+    legalName: 'Sunrise Exports India Ltd',
+    state: 'Maharashtra',
+    stateCode: '27',
+    contactEmail: 'compliance@sunriseexports.com',
+    contactPhone: '+91-22-4567-8901',
+    entityType: 'regular',
+    returnPeriod: 'monthly',
+    lastFilingDate: '2025-05-10',
+    status: 'active',
+    healthScore: 78,
+    createdAt: '2025-05-12T14:00:00Z',
+    updatedAt: '2025-05-10T09:30:00Z',
+    _portfolio: {
+      monthlyTaxVolume: 890000,
+      monthlyVolumeChart: [
+        { month: 'Dec', amount: 820000 },
+        { month: 'Jan', amount: 870000 },
+        { month: 'Feb', amount: 850000 },
+        { month: 'Mar', amount: 950000 },
+        { month: 'Apr', amount: 910000 },
+        { month: 'May', amount: 890000 },
+      ],
+      pendingFilings: 1,
+      riskLevel: 'Low',
+      healthBreakdown: { gstinValidity: 88, filingTimeliness: 72, invoiceAccuracy: 82 },
+      recentFilings: [
+        { period: 'May 2025', type: 'GSTR-1', status: 'Filed', date: '2025-05-10' },
+        { period: 'May 2025', type: 'GSTR-3B', status: 'Pending', date: '' },
+        { period: 'Apr 2025', type: 'GSTR-1', status: 'Filed', date: '2025-04-11' },
+      ],
+    },
+  },
+  {
+    id: 'cl_006',
+    gstin: '09AABCG2345L1Z2',
+    tradeName: 'Gupta Manufacturing',
+    legalName: 'Gupta Manufacturing Co',
+    state: 'Uttar Pradesh',
+    stateCode: '09',
+    contactEmail: 'finance@guptamfg.com',
+    contactPhone: '+91-79-2345-6789',
+    entityType: 'composition',
+    returnPeriod: 'quarterly',
+    lastFilingDate: '2025-04-18',
+    status: 'active',
+    healthScore: 94,
+    createdAt: '2025-06-01T10:00:00Z',
+    updatedAt: '2025-04-18T12:00:00Z',
+    _portfolio: {
+      monthlyTaxVolume: 330000,
+      monthlyVolumeChart: [
+        { month: 'Dec', amount: 290000 },
+        { month: 'Jan', amount: 310000 },
+        { month: 'Feb', amount: 305000 },
+        { month: 'Mar', amount: 340000 },
+        { month: 'Apr', amount: 320000 },
+        { month: 'May', amount: 330000 },
+      ],
+      pendingFilings: 0,
+      riskLevel: 'Low',
+      healthBreakdown: { gstinValidity: 98, filingTimeliness: 92, invoiceAccuracy: 96 },
+      recentFilings: [
+        { period: 'Q4 FY26', type: 'GSTR-4', status: 'Filed', date: '2025-04-18' },
+        { period: 'Q3 FY26', type: 'GSTR-4', status: 'Filed', date: '2025-01-18' },
+        { period: 'Q2 FY26', type: 'GSTR-4', status: 'Filed', date: '2025-10-18' },
+      ],
+    },
+  },
+  {
+    id: 'cl_007',
+    gstin: '29AABCD6789M1Z4',
+    tradeName: 'RK Electronics',
+    legalName: 'RK Electronics Pvt Ltd',
+    state: 'Karnataka',
+    stateCode: '29',
+    contactEmail: 'gst@rkelectronics.in',
+    contactPhone: '+91-80-4567-8901',
+    entityType: 'regular',
+    returnPeriod: 'monthly',
+    lastFilingDate: '2025-04-11',
+    status: 'active',
+    healthScore: 73,
+    createdAt: '2025-07-15T16:00:00Z',
+    updatedAt: '2025-04-11T14:30:00Z',
+    _portfolio: {
+      monthlyTaxVolume: 150000,
+      monthlyVolumeChart: [
+        { month: 'Dec', amount: 120000 },
+        { month: 'Jan', amount: 135000 },
+        { month: 'Feb', amount: 140000 },
+        { month: 'Mar', amount: 165000 },
+        { month: 'Apr', amount: 145000 },
+        { month: 'May', amount: 150000 },
+      ],
+      pendingFilings: 3,
+      riskLevel: 'Medium',
+      riskDetail: 'Incomplete docs',
+      healthBreakdown: { gstinValidity: 65, filingTimeliness: 58, invoiceAccuracy: 72 },
+      recentFilings: [
+        { period: 'May 2025', type: 'GSTR-1', status: 'Filed', date: '2025-05-09' },
+        { period: 'Apr 2025', type: 'GSTR-3B', status: 'Pending', date: '' },
+        { period: 'Apr 2025', type: 'GSTR-1', status: 'Filed', date: '2025-04-11' },
+      ],
+    },
+  },
+  {
+    id: 'cl_008',
+    gstin: '27AABCA0123N1Z6',
+    tradeName: 'Apex Logistics',
+    legalName: 'Apex Logistics India Pvt Ltd',
+    state: 'Maharashtra',
+    stateCode: '27',
+    contactEmail: 'tax@apexlogistics.com',
+    contactPhone: '+91-22-8901-2345',
+    entityType: 'regular',
+    returnPeriod: 'monthly',
+    lastFilingDate: '2025-11-30',
+    status: 'inactive',
+    healthScore: 31,
+    createdAt: '2025-02-28T11:00:00Z',
+    updatedAt: '2025-11-30T08:00:00Z',
+    _portfolio: {
+      monthlyTaxVolume: 580000,
+      monthlyVolumeChart: [
+        { month: 'Dec', amount: 620000 },
+        { month: 'Jan', amount: 590000 },
+        { month: 'Feb', amount: 560000 },
+        { month: 'Mar', amount: 510000 },
+        { month: 'Apr', amount: 480000 },
+        { month: 'May', amount: 580000 },
+      ],
+      pendingFilings: 6,
+      riskLevel: 'High',
+      riskDetail: 'Multiple delays',
+      healthBreakdown: { gstinValidity: 40, filingTimeliness: 18, invoiceAccuracy: 45 },
+      recentFilings: [
+        { period: 'Nov 2025', type: 'GSTR-1', status: 'Filed', date: '2025-11-30' },
+        { period: 'Oct 2025', type: 'GSTR-3B', status: 'Overdue', date: '' },
+        { period: 'Sep 2025', type: 'GSTR-1', status: 'Overdue', date: '' },
+      ],
+    },
+  },
+];
+
 // ─── GSTIN Form Validation ──────────────────────────────────────────────────
 
 function validateGSTINForm(gstin: string): { valid: boolean; error?: string } {
   if (!gstin) return { valid: false, error: 'GSTIN is required' };
   const clean = formatGSTIN(gstin);
   if (clean.length !== 15) return { valid: false, error: 'GSTIN must be 15 characters' };
-  if (!validateGSTIN(clean)) return { valid: false, error: 'Invalid GSTIN format (e.g. 27AABCT1332L1ZP)' };
+  if (!validateGSTIN(clean)) return { valid: false, error: 'Invalid GSTIN format (e.g. 27AABCS1234F1ZH)' };
   const stateCode = clean.slice(0, 2);
   const validCodes = INDIAN_STATES.map(s => s.code);
   if (!validCodes.includes(stateCode)) return { valid: false, error: 'Invalid state code in GSTIN' };
@@ -361,32 +511,16 @@ function validateGSTINForm(gstin: string): { valid: boolean; error?: string } {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function getInitials(name: string): string {
-  return name
-    .split(' ')
-    .filter(Boolean)
-    .slice(0, 2)
-    .map(w => w[0])
-    .join('')
-    .toUpperCase();
-}
-
-function getHealthColor(score: number): { bg: string; text: string; bar: string; ring: string } {
-  if (score > 70) return { bg: 'bg-emerald-50', text: 'text-emerald-700', bar: 'bg-emerald-500', ring: 'ring-emerald-200' };
-  if (score >= 40) return { bg: 'bg-amber-50', text: 'text-amber-700', bar: 'bg-amber-500', ring: 'ring-amber-200' };
-  return { bg: 'bg-red-50', text: 'text-red-700', bar: 'bg-red-500', ring: 'ring-red-200' };
+function getHealthColor(score: number): { bg: string; text: string; bar: string; stroke: string } {
+  if (score > 80) return { bg: 'bg-emerald-50', text: 'text-emerald-700', bar: 'bg-emerald-500', stroke: '#10b981' };
+  if (score >= 50) return { bg: 'bg-amber-50', text: 'text-amber-700', bar: 'bg-amber-500', stroke: '#f59e0b' };
+  return { bg: 'bg-red-50', text: 'text-red-700', bar: 'bg-red-500', stroke: '#ef4444' };
 }
 
 function getHealthLabel(score: number): string {
-  if (score > 70) return 'Good';
-  if (score >= 40) return 'Fair';
+  if (score > 80) return 'Excellent';
+  if (score >= 50) return 'Fair';
   return 'Poor';
-}
-
-function getHealthIcon(score: number) {
-  if (score > 70) return CheckCircle2;
-  if (score >= 40) return Clock;
-  return AlertTriangle;
 }
 
 function getStatusBadge(status: string) {
@@ -408,7 +542,7 @@ function getStatusBadge(status: string) {
     case 'inactive':
     case 'suspended':
       return (
-        <Badge className="bg-slate-50 text-slate-600 hover:bg-slate-100 border-slate-200 font-medium gap-1.5 text-[10px] px-2 py-0.5">
+        <Badge className="bg-slate-100 text-slate-600 hover:bg-slate-200 border-slate-200 font-medium gap-1.5 text-[10px] px-2 py-0.5">
           <span className="size-1.5 rounded-full bg-slate-400" />
           Inactive
         </Badge>
@@ -422,19 +556,258 @@ function getEntityTypeLabel(type: string): string {
   return ENTITY_TYPES.find(e => e.value === type)?.label ?? type;
 }
 
+function getRiskBadge(risk: RiskLevel, detail?: string) {
+  switch (risk) {
+    case 'Low':
+      return (
+        <Badge className="bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border-emerald-200 font-medium gap-1 text-[10px] px-2 py-0.5">
+          <Shield className="size-2.5" />
+          Low{detail ? ` — ${detail}` : ''}
+        </Badge>
+      );
+    case 'Medium':
+      return (
+        <Badge className="bg-amber-50 text-amber-700 hover:bg-amber-100 border-amber-200 font-medium gap-1 text-[10px] px-2 py-0.5">
+          <AlertTriangle className="size-2.5" />
+          Medium{detail ? ` — ${detail}` : ''}
+        </Badge>
+      );
+    case 'High':
+      return (
+        <Badge className="bg-red-50 text-red-700 hover:bg-red-100 border-red-200 font-medium gap-1 text-[10px] px-2 py-0.5">
+          <AlertTriangle className="size-2.5" />
+          High{detail ? ` — ${detail}` : ''}
+        </Badge>
+      );
+  }
+}
+
+function formatVolumeShort(amount: number): string {
+  if (amount >= 10000000) return `₹${(amount / 10000000).toFixed(2)} Cr`;
+  if (amount >= 100000) return `₹${(amount / 100000).toFixed(1)}L`;
+  if (amount >= 1000) return `₹${(amount / 1000).toFixed(1)}K`;
+  return `₹${amount}`;
+}
+
+function formatVolumeCrore(amount: number): string {
+  if (amount >= 10000000) return `₹${(amount / 10000000).toFixed(2)} Cr`;
+  return `₹${(amount / 100000).toFixed(2)}L`;
+}
+
+// ─── Circular Health Ring SVG ─────────────────────────────────────────────────
+
+function HealthRing({ score, size = 60, strokeWidth = 5, showLabel = true }: { score: number; size?: number; strokeWidth?: number; showLabel?: boolean }) {
+  const radius = (size - strokeWidth) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const offset = circumference - (score / 100) * circumference;
+  const color = getHealthColor(score);
+
+  return (
+    <div className="relative inline-flex items-center justify-center" style={{ width: size, height: size }}>
+      <svg width={size} height={size} className="-rotate-90">
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          fill="none"
+          stroke="#e2e8f0"
+          strokeWidth={strokeWidth}
+        />
+        <motion.circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          fill="none"
+          stroke={color.stroke}
+          strokeWidth={strokeWidth}
+          strokeLinecap="round"
+          strokeDasharray={circumference}
+          initial={{ strokeDashoffset: circumference }}
+          animate={{ strokeDashoffset: offset }}
+          transition={{ duration: 1, delay: 0.3, ease: 'easeOut' }}
+        />
+      </svg>
+      {showLabel && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center">
+          <span className={`font-bold leading-none ${size >= 100 ? 'text-2xl' : 'text-sm'} ${color.text}`}>
+            {score}
+          </span>
+          {size >= 100 && (
+            <span className="text-[9px] text-muted-foreground mt-0.5">/ 100</span>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Compliance Score Badge ───────────────────────────────────────────────────
+
+function ComplianceBadge({ score }: { score: number }) {
+  const color = score > 85 ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : score >= 60 ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-red-50 text-red-700 border-red-200';
+  const dotColor = score > 85 ? 'bg-emerald-500' : score >= 60 ? 'bg-amber-500' : 'bg-red-500';
+  return (
+    <div className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 border text-[9px] font-semibold ${color}`}>
+      <span className={`size-1.5 rounded-full ${dotColor}`} />
+      {score}%
+    </div>
+  );
+}
+
+// ─── Filing Trend Area Chart ────────────────────────────────────────────────────
+
+function FilingTrendChart({ data }: { data: MonthlyVolume[] }) {
+  const width = 260;
+  const height = 80;
+  const padding = { top: 8, right: 8, bottom: 20, left: 8 };
+  const chartW = width - padding.left - padding.right;
+  const chartH = height - padding.top - padding.bottom;
+  const maxAmount = Math.max(...data.map(d => d.amount), 1);
+
+  const points = data.map((d, i) => ({
+    x: padding.left + (i / (data.length - 1)) * chartW,
+    y: padding.top + chartH - (d.amount / maxAmount) * chartH,
+    ...d,
+  }));
+
+  const linePath = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
+  const areaPath = `${linePath} L ${points[points.length - 1].x} ${padding.top + chartH} L ${points[0].x} ${padding.top + chartH} Z`;
+
+  const [hoverIdx, setHoverIdx] = useState<number | null>(null);
+
+  return (
+    <div className="relative">
+      <svg width="100%" viewBox={`0 0 ${width} ${height}`} className="overflow-visible">
+        {/* Area fill */}
+        <motion.path
+          d={areaPath}
+          fill="url(#areaGradient)"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.6, delay: 0.3 }}
+        />
+        {/* Line */}
+        <motion.path
+          d={linePath}
+          fill="none"
+          stroke="#10b981"
+          strokeWidth={2}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          initial={{ pathLength: 0 }}
+          animate={{ pathLength: 1 }}
+          transition={{ duration: 0.8, delay: 0.2 }}
+        />
+        {/* Dots */}
+        {points.map((p, i) => (
+          <circle
+            key={i}
+            cx={p.x}
+            cy={p.y}
+            r={hoverIdx === i ? 4 : 2.5}
+            fill="#10b981"
+            stroke="white"
+            strokeWidth={2}
+            className="transition-all duration-150 cursor-pointer"
+            onMouseEnter={() => setHoverIdx(i)}
+            onMouseLeave={() => setHoverIdx(null)}
+          />
+        ))}
+        {/* Month labels */}
+        {points.map((p, i) => (
+          <text
+            key={i}
+            x={p.x}
+            y={height - 4}
+            textAnchor="middle"
+            className="fill-muted-foreground"
+            fontSize="8"
+          >
+            {data[i].month}
+          </text>
+        ))}
+        <defs>
+          <linearGradient id="areaGradient" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#10b981" stopOpacity="0.2" />
+            <stop offset="100%" stopColor="#10b981" stopOpacity="0.02" />
+          </linearGradient>
+        </defs>
+      </svg>
+      {/* Hover tooltip */}
+      {hoverIdx !== null && (
+        <div
+          className="absolute -top-8 px-2 py-1 rounded bg-slate-800 text-white text-[10px] font-medium pointer-events-none whitespace-nowrap z-10"
+          style={{ left: `${((points[hoverIdx].x) / width) * 100}%`, transform: 'translateX(-50%)' }}
+        >
+          {formatCurrency(data[hoverIdx].amount)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Mini Bar Chart ───────────────────────────────────────────────────────────
+
+function MiniBarChart({ data, height = 28, barColor }: { data: MonthlyVolume[]; height?: number; barColor?: string }) {
+  const maxAmount = Math.max(...data.map(d => d.amount), 1);
+
+  return (
+    <div className="flex items-end gap-[3px]" style={{ height }}>
+      {data.map((d, i) => {
+        const barHeight = Math.max(3, (d.amount / maxAmount) * height);
+        return (
+          <motion.div
+            key={d.month}
+            className="rounded-sm min-w-[6px] flex-1"
+            style={{
+              height: barHeight,
+              backgroundColor: barColor ?? (i === data.length - 1 ? '#10b981' : '#d1fae5'),
+            }}
+            initial={{ height: 0 }}
+            animate={{ height: barHeight }}
+            transition={{ duration: 0.5, delay: i * 0.05 }}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── Health Breakdown Bar ──────────────────────────────────────────────────────
+
+function HealthBreakdownBar({ label, value }: { label: string; value: number }) {
+  const color = value > 80 ? 'bg-emerald-500' : value >= 50 ? 'bg-amber-500' : 'bg-red-500';
+  const textColor = value > 80 ? 'text-emerald-700' : value >= 50 ? 'text-amber-700' : 'text-red-700';
+
+  return (
+    <div className="flex items-center gap-2">
+      <span className="text-[10px] text-muted-foreground w-24 shrink-0 truncate">{label}</span>
+      <div className="flex-1 h-1.5 rounded-full bg-slate-100 overflow-hidden">
+        <motion.div
+          className={`h-full rounded-full ${color}`}
+          initial={{ width: 0 }}
+          animate={{ width: `${value}%` }}
+          transition={{ duration: 0.7, delay: 0.4 }}
+        />
+      </div>
+      <span className={`text-[10px] font-semibold w-8 text-right ${textColor}`}>{value}%</span>
+    </div>
+  );
+}
+
 // ─── Animation Variants ───────────────────────────────────────────────────────
 
 const containerVariants = {
   hidden: { opacity: 0 },
   visible: {
     opacity: 1,
-    transition: { staggerChildren: 0.06 },
+    transition: { staggerChildren: 0.07 },
   },
 };
 
 const itemVariants = {
-  hidden: { opacity: 0, y: 16, scale: 0.97 },
-  visible: { opacity: 1, y: 0, scale: 1, transition: { duration: 0.35, ease: [0.25, 0.46, 0.45, 0.94] } },
+  hidden: { opacity: 0, y: 20, scale: 0.96 },
+  visible: { opacity: 1, y: 0, scale: 1, transition: { duration: 0.4, ease: [0.25, 0.46, 0.45, 0.94] } },
 };
 
 // ─── Skeleton ─────────────────────────────────────────────────────────────────
@@ -444,8 +817,8 @@ function PageSkeleton() {
     <div className="space-y-6 p-4 md:p-6 max-w-[1400px] mx-auto">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="space-y-2">
-          <Skeleton className="h-8 w-32" />
-          <Skeleton className="h-4 w-56" />
+          <Skeleton className="h-8 w-48" />
+          <Skeleton className="h-4 w-72" />
         </div>
         <div className="flex gap-3">
           <Skeleton className="h-10 w-64" />
@@ -458,8 +831,9 @@ function PageSkeleton() {
             <CardContent className="p-5">
               <div className="flex items-center justify-between">
                 <div className="space-y-2">
-                  <Skeleton className="h-4 w-24" />
-                  <Skeleton className="h-8 w-12" />
+                  <Skeleton className="h-3 w-24" />
+                  <Skeleton className="h-8 w-16" />
+                  <Skeleton className="h-3 w-40" />
                 </div>
                 <Skeleton className="size-11 rounded-xl" />
               </div>
@@ -470,26 +844,25 @@ function PageSkeleton() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {Array.from({ length: 6 }).map((_, i) => (
           <Card key={i} className="shadow-sm">
-            <CardContent className="p-5 space-y-4">
+            <CardContent className="p-5 space-y-3">
               <div className="flex items-start justify-between">
-                <div className="flex items-center gap-3">
-                  <Skeleton className="size-11 rounded-full" />
-                  <div className="space-y-1.5">
-                    <Skeleton className="h-4 w-28" />
-                    <Skeleton className="h-3 w-36" />
-                  </div>
-                </div>
+                <Skeleton className="size-15 rounded-full" />
                 <Skeleton className="h-5 w-16 rounded-full" />
               </div>
+              <div className="space-y-1.5">
+                <Skeleton className="h-4 w-32" />
+                <Skeleton className="h-3 w-40" />
+              </div>
+              <div className="flex gap-1.5">
+                <Skeleton className="h-4 w-16 rounded-full" />
+                <Skeleton className="h-4 w-14 rounded-full" />
+              </div>
+              <Skeleton className="h-6 w-full" />
               <div className="space-y-2">
-                <Skeleton className="h-3 w-full" />
-                <Skeleton className="h-2 w-full rounded-full" />
+                <Skeleton className="h-2.5 w-full" />
+                <Skeleton className="h-2.5 w-full" />
+                <Skeleton className="h-2.5 w-full" />
               </div>
-              <div className="flex gap-2">
-                <Skeleton className="h-3 w-14" />
-                <Skeleton className="h-3 w-16" />
-              </div>
-              <Skeleton className="h-8 w-full" />
               <div className="flex gap-2">
                 <Skeleton className="h-8 flex-1" />
                 <Skeleton className="h-8 flex-1" />
@@ -503,29 +876,48 @@ function PageSkeleton() {
   );
 }
 
+// ─── Filing Status Dot ────────────────────────────────────────────────────────
+
+function FilingStatusDot({ count }: { count: number }) {
+  if (count === 0) {
+    return (
+      <span className="flex items-center gap-1 text-[11px] text-emerald-700">
+        <span className="size-2 rounded-full bg-emerald-500" />
+        All filed
+      </span>
+    );
+  }
+  return (
+    <span className="flex items-center gap-1 text-[11px] text-amber-700">
+      <span className="size-2 rounded-full bg-amber-500" />
+      {count} pending
+    </span>
+  );
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function ClientRegistryPage() {
   const { setCurrentView, setSelectedClientId } = useApp();
 
   // ─── State ────────────────────────────────────────────────────────────────
-  const [clients, setClients] = useState<ClientWithAggregations[]>([]);
+  const [clients, setClients] = useState<ClientPortfolio[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
 
   // Dialog state
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [editingClient, setEditingClient] = useState<ClientWithAggregations | null>(null);
+  const [editingClient, setEditingClient] = useState<ClientPortfolio | null>(null);
   const [form, setForm] = useState<ClientForm>(EMPTY_FORM);
   const [gstinError, setGstinError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   // Sheet state
   const [sheetOpen, setSheetOpen] = useState(false);
-  const [sheetClient, setSheetClient] = useState<ClientWithAggregations | null>(null);
+  const [sheetClient, setSheetClient] = useState<ClientPortfolio | null>(null);
 
   // Delete confirmation
-  const [deleteTarget, setDeleteTarget] = useState<ClientWithAggregations | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<ClientPortfolio | null>(null);
 
   // ─── Data Fetching ────────────────────────────────────────────────────────
   const fetchClients = useCallback(async () => {
@@ -535,7 +927,22 @@ export default function ClientRegistryPage() {
       if (res.ok) {
         const data = await res.json();
         if (data.clients && data.clients.length > 0) {
-          setClients(data.clients);
+          // Enrich API data with portfolio data
+          const enriched: ClientPortfolio[] = data.clients.map((c: Client, idx: number) => {
+            const mock = MOCK_CLIENTS[idx % MOCK_CLIENTS.length];
+            return {
+              ...c,
+              _portfolio: mock?._portfolio ?? {
+                monthlyTaxVolume: 0,
+                monthlyVolumeChart: [],
+                pendingFilings: 0,
+                riskLevel: 'Low' as RiskLevel,
+                healthBreakdown: { gstinValidity: c.healthScore, filingTimeliness: c.healthScore, invoiceAccuracy: c.healthScore },
+                recentFilings: [],
+              },
+            };
+          });
+          setClients(enriched);
         } else {
           setClients(MOCK_CLIENTS);
         }
@@ -566,11 +973,12 @@ export default function ClientRegistryPage() {
     );
   }, [clients, searchQuery]);
 
-  const stats = useMemo(() => {
+  const portfolioStats = useMemo(() => {
     const active = clients.filter(c => c.status === 'active').length;
-    const pending = clients.filter(c => c.status === 'pending').length;
-    const inactive = clients.filter(c => c.status === 'inactive' || c.status === 'suspended').length;
-    return { active, pending, inactive };
+    const atRisk = clients.filter(c => c.healthScore < 70).length;
+    const pendingFilings = clients.reduce((sum, c) => sum + c._portfolio.pendingFilings, 0);
+    const totalTaxVolume = clients.reduce((sum, c) => sum + c._portfolio.monthlyTaxVolume, 0);
+    return { active, atRisk, pendingFilings, totalTaxVolume };
   }, [clients]);
 
   // ─── Form Handlers ────────────────────────────────────────────────────────
@@ -581,7 +989,7 @@ export default function ClientRegistryPage() {
     setDialogOpen(true);
   };
 
-  const openEditDialog = (client: ClientWithAggregations) => {
+  const openEditDialog = (client: ClientPortfolio) => {
     setEditingClient(client);
     setForm({
       gstin: client.gstin,
@@ -619,7 +1027,6 @@ export default function ClientRegistryPage() {
 
   const handleSubmit = async () => {
     if (!form.gstin || !form.tradeName) return;
-    // Validate GSTIN on submit
     const result = validateGSTINForm(form.gstin);
     if (!result.valid) {
       setGstinError(result.error ?? 'Invalid GSTIN');
@@ -701,7 +1108,7 @@ export default function ClientRegistryPage() {
     }
   };
 
-  const openClientSheet = (client: ClientWithAggregations) => {
+  const openClientSheet = (client: ClientPortfolio) => {
     setSheetClient(client);
     setSheetOpen(true);
   };
@@ -725,8 +1132,8 @@ export default function ClientRegistryPage() {
         className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"
       >
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">Clients</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">Manage your client directory</p>
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">Client Portfolio</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">Monitor health and compliance across all clients</p>
         </div>
         <div className="flex items-center gap-3">
           <div className="relative">
@@ -748,55 +1155,76 @@ export default function ClientRegistryPage() {
         </div>
       </motion.div>
 
-      {/* ── Quick Stats ─────────────────────────────────────────────────────── */}
+      {/* ── Summary Strip ───────────────────────────────────────────────────── */}
       <motion.div
         variants={containerVariants}
         initial="hidden"
         animate="visible"
         className="grid grid-cols-1 sm:grid-cols-3 gap-4"
       >
+        {/* Active Clients */}
         <motion.div variants={itemVariants}>
-          <Card className="border-l-4 border-l-emerald-500 shadow-sm hover:shadow-md transition-shadow bg-gradient-to-br from-white to-emerald-50/30">
+          <Card className="shadow-sm hover:shadow-md transition-shadow bg-gradient-to-br from-white to-emerald-50/40 border-slate-200/80">
             <CardContent className="p-5">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-wider text-emerald-600">Active Clients</p>
-                  <p className="text-3xl font-bold text-foreground mt-1">{stats.active}</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-emerald-600">Active Clients</p>
+                  <p className="text-3xl font-bold text-foreground mt-1">{portfolioStats.active}</p>
+                  <div className="flex items-center gap-1 mt-1.5">
+                    <TrendingUp className="size-3 text-emerald-500" />
+                    <span className="text-[11px] text-emerald-600 font-medium">
+                      {formatVolumeCrore(portfolioStats.totalTaxVolume)} total tax volume
+                    </span>
+                  </div>
                 </div>
-                <div className="flex size-11 items-center justify-center rounded-xl bg-emerald-100">
-                  <Activity className="size-5 text-emerald-600" />
+                <div className="flex size-12 items-center justify-center rounded-2xl bg-emerald-100">
+                  <BarChart3 className="size-5 text-emerald-600" />
                 </div>
               </div>
             </CardContent>
           </Card>
         </motion.div>
 
+        {/* At Risk */}
         <motion.div variants={itemVariants}>
-          <Card className="border-l-4 border-l-amber-500 shadow-sm hover:shadow-md transition-shadow bg-gradient-to-br from-white to-amber-50/30">
+          <Card className="shadow-sm hover:shadow-md transition-shadow bg-gradient-to-br from-white to-red-50/30 border-slate-200/80">
             <CardContent className="p-5">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-wider text-amber-600">Pending Setup</p>
-                  <p className="text-3xl font-bold text-foreground mt-1">{stats.pending}</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-red-600">At Risk</p>
+                  <p className="text-3xl font-bold text-foreground mt-1">{portfolioStats.atRisk}</p>
+                  <div className="flex items-center gap-1 mt-1.5">
+                    <AlertTriangle className="size-3 text-red-500" />
+                    <span className="text-[11px] text-red-600 font-medium">
+                      {portfolioStats.atRisk} clients below 70 health score
+                    </span>
+                  </div>
                 </div>
-                <div className="flex size-11 items-center justify-center rounded-xl bg-amber-100">
-                  <Clock className="size-5 text-amber-600" />
+                <div className="flex size-12 items-center justify-center rounded-2xl bg-red-100">
+                  <Shield className="size-5 text-red-600" />
                 </div>
               </div>
             </CardContent>
           </Card>
         </motion.div>
 
+        {/* Pending Filings */}
         <motion.div variants={itemVariants}>
-          <Card className="border-l-4 border-l-slate-400 shadow-sm hover:shadow-md transition-shadow bg-gradient-to-br from-white to-slate-50/50">
+          <Card className="shadow-sm hover:shadow-md transition-shadow bg-gradient-to-br from-white to-amber-50/40 border-slate-200/80">
             <CardContent className="p-5">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Inactive</p>
-                  <p className="text-3xl font-bold text-foreground mt-1">{stats.inactive}</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-amber-600">Pending Filings</p>
+                  <p className="text-3xl font-bold text-foreground mt-1">{portfolioStats.pendingFilings}</p>
+                  <div className="flex items-center gap-1 mt-1.5">
+                    <Clock className="size-3 text-amber-500" />
+                    <span className="text-[11px] text-amber-600 font-medium">
+                      {portfolioStats.pendingFilings} returns need attention
+                    </span>
+                  </div>
                 </div>
-                <div className="flex size-11 items-center justify-center rounded-xl bg-slate-100">
-                  <Users className="size-5 text-slate-500" />
+                <div className="flex size-12 items-center justify-center rounded-2xl bg-amber-100">
+                  <FileWarning className="size-5 text-amber-600" />
                 </div>
               </div>
             </CardContent>
@@ -821,7 +1249,7 @@ export default function ClientRegistryPage() {
           <p className="text-sm text-muted-foreground mb-5 max-w-xs text-center">
             {searchQuery
               ? 'Try adjusting your search query'
-              : 'Add your first client to get started'}
+              : 'Add your first client to start filing'}
           </p>
           {!searchQuery && (
             <Button
@@ -842,87 +1270,83 @@ export default function ClientRegistryPage() {
         >
           {filteredClients.map(client => {
             const health = getHealthColor(client.healthScore);
-            const HealthIcon = getHealthIcon(client.healthScore);
-            const initials = getInitials(client.tradeName);
+            const portfolio = client._portfolio;
 
             return (
               <motion.div key={client.id} variants={itemVariants}>
                 <motion.div
-                  whileHover={{ y: -3, transition: { duration: 0.2, ease: 'easeOut' } }}
+                  whileHover={{ y: -4, transition: { duration: 0.2, ease: 'easeOut' } }}
                   className="h-full"
                 >
                   <Card
                     className="h-full cursor-pointer shadow-sm hover:shadow-lg hover:border-emerald-200/60 transition-all duration-200 border-slate-200/80"
-                    onClick={() => openClientSheet(client)}
+                    onClick={() => { setSelectedClientId(client.id); setCurrentView('client-workspace' as AppView); }}
                   >
                     <CardContent className="p-5">
-                      {/* Header: Avatar + Name + Status */}
-                      <div className="flex items-start justify-between mb-4">
-                        <div className="flex items-center gap-3 min-w-0">
-                          <div
-                            className={`flex size-11 items-center justify-center rounded-full shrink-0 font-semibold text-sm ring-2 ${health.bg} ${health.text} ${health.ring}`}
-                          >
-                            {initials}
-                          </div>
-                          <div className="min-w-0">
-                            <p className="font-semibold text-sm text-foreground truncate leading-tight">
-                              {client.tradeName}
-                            </p>
-                            <p className="text-xs font-mono text-muted-foreground truncate mt-0.5">
-                              {client.gstin}
-                            </p>
+                      {/* Top row: Health Ring + Compliance Badge + Status Badge */}
+                      <div className="flex items-start justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <HealthRing score={client.healthScore} size={60} strokeWidth={5} />
+                          <div className="flex flex-col gap-1">
+                            <span className="text-[9px] text-muted-foreground font-medium">Compliance</span>
+                            <ComplianceBadge score={Math.round((portfolio.healthBreakdown.gstinValidity + portfolio.healthBreakdown.filingTimeliness) / 2)} />
                           </div>
                         </div>
-                        <div className="shrink-0 ml-2">
+                        <div className="shrink-0">
                           {getStatusBadge(client.status)}
                         </div>
                       </div>
 
-                      {/* Health Score Bar */}
+                      {/* Client info section */}
                       <div className="mb-3">
-                        <div className="flex items-center justify-between mb-1.5">
-                          <span className="text-xs font-medium text-muted-foreground flex items-center gap-1">
-                            <HealthIcon className={`size-3 ${health.text}`} />
-                            Health Score
-                          </span>
-                          <span className={`text-xs font-bold ${health.text}`}>
-                            {client.healthScore}/100
-                          </span>
-                        </div>
-                        <div className="h-1.5 rounded-full bg-slate-100 overflow-hidden">
-                          <motion.div
-                            className={`h-full rounded-full ${health.bar}`}
-                            initial={{ width: 0 }}
-                            animate={{ width: `${client.healthScore}%` }}
-                            transition={{ duration: 0.8, delay: 0.2, ease: 'easeOut' }}
-                          />
-                        </div>
-                        <p className={`text-[10px] mt-1 font-medium ${health.text}`}>
-                          {getHealthLabel(client.healthScore)}
+                        <p className="font-bold text-base text-foreground leading-tight truncate">
+                          {client.tradeName}
                         </p>
+                        <p className="text-xs font-mono text-muted-foreground truncate mt-0.5">
+                          {client.gstin}
+                        </p>
+                        <div className="flex flex-wrap gap-1.5 mt-2">
+                          {client.state && (
+                            <Badge variant="outline" className="text-[10px] px-2 py-0 h-5 border-slate-200 bg-slate-50 text-slate-600 gap-1">
+                              <MapPin className="size-2.5" />
+                              {client.state}
+                            </Badge>
+                          )}
+                          <Badge variant="outline" className="text-[10px] px-2 py-0 h-5 border-slate-200 bg-slate-50 text-slate-600">
+                            {getEntityTypeLabel(client.entityType)}
+                          </Badge>
+                        </div>
                       </div>
 
-                      {/* State + Entity Badges */}
-                      <div className="flex flex-wrap gap-1.5 mb-3">
-                        {client.state && (
-                          <Badge variant="outline" className="text-[10px] px-2 py-0 h-5 border-slate-200 bg-slate-50 text-slate-600 gap-1">
-                            <MapPin className="size-2.5" />
-                            {client.state}
-                          </Badge>
-                        )}
-                        <Badge variant="outline" className="text-[10px] px-2 py-0 h-5 border-slate-200 bg-slate-50 text-slate-600">
-                          {getEntityTypeLabel(client.entityType)}
-                        </Badge>
-                        {client.returnPeriod && (
-                          <Badge variant="outline" className="text-[10px] px-2 py-0 h-5 border-emerald-200 bg-emerald-50/60 text-emerald-700 capitalize">
-                            {client.returnPeriod}
-                          </Badge>
-                        )}
+                      {/* Key metrics row */}
+                      <div className="grid grid-cols-3 gap-2 mb-3">
+                        <div className="rounded-lg bg-slate-50 p-2">
+                          <p className="text-[9px] uppercase tracking-wider text-muted-foreground font-medium mb-1">Tax Volume</p>
+                          <p className="text-xs font-bold text-foreground">{formatVolumeShort(portfolio.monthlyTaxVolume)}</p>
+                          <MiniBarChart data={portfolio.monthlyVolumeChart} height={16} />
+                        </div>
+                        <div className="rounded-lg bg-slate-50 p-2">
+                          <p className="text-[9px] uppercase tracking-wider text-muted-foreground font-medium mb-1">Filing Status</p>
+                          <div className="mt-1">
+                            <FilingStatusDot count={portfolio.pendingFilings} />
+                          </div>
+                        </div>
+                        <div className="rounded-lg bg-slate-50 p-2">
+                          <p className="text-[9px] uppercase tracking-wider text-muted-foreground font-medium mb-1">Risk</p>
+                          <div className="mt-0.5">
+                            {getRiskBadge(portfolio.riskLevel)}
+                          </div>
+                        </div>
                       </div>
 
-                      <Separator className="mb-3" />
+                      {/* Health breakdown bars */}
+                      <div className="space-y-1.5 mb-3">
+                        <HealthBreakdownBar label="GSTIN Validity" value={portfolio.healthBreakdown.gstinValidity} />
+                        <HealthBreakdownBar label="Filing Timeliness" value={portfolio.healthBreakdown.filingTimeliness} />
+                        <HealthBreakdownBar label="Invoice Accuracy" value={portfolio.healthBreakdown.invoiceAccuracy} />
+                      </div>
 
-                      {/* Quick Actions */}
+                      {/* Action buttons row */}
                       <div className="flex items-center gap-2">
                         <Button
                           variant="outline"
@@ -994,7 +1418,7 @@ export default function ClientRegistryPage() {
                 </Label>
                 <Input
                   id="tradeName"
-                  placeholder="e.g. Acme Enterprises"
+                  placeholder="e.g. Sharma Enterprises"
                   value={form.tradeName}
                   onChange={e => handleFormChange('tradeName', e.target.value)}
                   className="h-9"
@@ -1006,7 +1430,7 @@ export default function ClientRegistryPage() {
                 <Label htmlFor="legalName" className="text-xs font-medium">Legal Name</Label>
                 <Input
                   id="legalName"
-                  placeholder="e.g. Acme Enterprises Pvt Ltd"
+                  placeholder="e.g. Sharma Enterprises Pvt Ltd"
                   value={form.legalName}
                   onChange={e => handleFormChange('legalName', e.target.value)}
                   className="h-9"
@@ -1020,7 +1444,7 @@ export default function ClientRegistryPage() {
                 </Label>
                 <Input
                   id="gstin"
-                  placeholder="e.g. 27AABCT1332L1ZP"
+                  placeholder="e.g. 27AABCS1234F1ZH"
                   value={form.gstin}
                   onChange={e => handleFormChange('gstin', e.target.value.toUpperCase())}
                   onBlur={handleGstinBlur}
@@ -1043,9 +1467,7 @@ export default function ClientRegistryPage() {
                   </SelectTrigger>
                   <SelectContent>
                     {INDIAN_STATES.map(s => (
-                      <SelectItem key={s.code} value={s.name}>
-                        {s.name}
-                      </SelectItem>
+                      <SelectItem key={s.code} value={s.name}>{s.name}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -1056,13 +1478,11 @@ export default function ClientRegistryPage() {
                 <Label className="text-xs font-medium">Entity Type</Label>
                 <Select value={form.entityType} onValueChange={v => handleFormChange('entityType', v)}>
                   <SelectTrigger className="h-9">
-                    <SelectValue />
+                    <SelectValue placeholder="Select type" />
                   </SelectTrigger>
                   <SelectContent>
-                    {ENTITY_TYPES.map(et => (
-                      <SelectItem key={et.value} value={et.value}>
-                        {et.label}
-                      </SelectItem>
+                    {ENTITY_TYPES.map(e => (
+                      <SelectItem key={e.value} value={e.value}>{e.label}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -1073,8 +1493,8 @@ export default function ClientRegistryPage() {
                 <Label htmlFor="contactEmail" className="text-xs font-medium">Contact Email</Label>
                 <Input
                   id="contactEmail"
-                  placeholder="email@company.com"
                   type="email"
+                  placeholder="gst@company.com"
                   value={form.contactEmail}
                   onChange={e => handleFormChange('contactEmail', e.target.value)}
                   className="h-9"
@@ -1086,11 +1506,26 @@ export default function ClientRegistryPage() {
                 <Label htmlFor="contactPhone" className="text-xs font-medium">Contact Phone</Label>
                 <Input
                   id="contactPhone"
-                  placeholder="+91-XXXX-XXXXXX"
+                  placeholder="+91-XXXX-XXX-XXX"
                   value={form.contactPhone}
                   onChange={e => handleFormChange('contactPhone', e.target.value)}
                   className="h-9"
                 />
+              </div>
+
+              {/* Return Period */}
+              <div className="space-y-2 sm:col-span-2">
+                <Label className="text-xs font-medium">Default Return Period</Label>
+                <Select value={form.returnPeriod} onValueChange={v => handleFormChange('returnPeriod', v)}>
+                  <SelectTrigger className="h-9">
+                    <SelectValue placeholder="Select period" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {RETURN_PERIODS.map(p => (
+                      <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
           </div>
@@ -1101,208 +1536,206 @@ export default function ClientRegistryPage() {
             </Button>
             <Button
               onClick={handleSubmit}
-              disabled={!form.gstin || !form.tradeName || !!gstinError || submitting}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white min-w-[100px] h-9"
+              disabled={submitting || !form.tradeName || !form.gstin}
+              className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white h-9"
             >
               {submitting ? (
-                <span className="flex items-center gap-2">
-                  <span className="size-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  Saving...
-                </span>
-              ) : editingClient ? 'Save Changes' : 'Add Client'}
+                <motion.div
+                  className="size-4 border-2 border-white/30 border-t-white rounded-full"
+                  animate={{ rotate: 360 }}
+                  transition={{ duration: 0.8, repeat: Infinity, ease: 'linear' }}
+                />
+              ) : (
+                <Plus className="size-4" />
+              )}
+              {editingClient ? 'Update Client' : 'Add Client'}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* ── Client Detail Sheet ──────────────────────────────────────────────── */}
+      {/* ── Client Detail Sheet ─────────────────────────────────────────────── */}
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-        <SheetContent side="right" className="w-full sm:max-w-lg overflow-y-auto">
-          {sheetClient && (() => {
-            const health = getHealthColor(sheetClient.healthScore);
-            const HealthIcon = getHealthIcon(sheetClient.healthScore);
-            const initials = getInitials(sheetClient.tradeName);
+        <SheetContent side="right" className="w-full sm:max-w-md lg:max-w-lg overflow-y-auto">
+          {sheetClient && (
+            <>
+              <SheetHeader className="pb-2">
+                <SheetTitle className="sr-only">{sheetClient.tradeName}</SheetTitle>
+              </SheetHeader>
 
-            return (
-              <>
-                <SheetHeader className="pb-0">
-                  <SheetTitle className="flex items-center gap-3">
-                    <div
-                      className={`flex size-12 items-center justify-center rounded-full shrink-0 font-bold text-base ring-2 ${health.bg} ${health.text} ${health.ring}`}
-                    >
-                      {initials}
-                    </div>
-                    <div className="min-w-0">
-                      <p className="font-bold truncate text-base">{sheetClient.tradeName}</p>
-                      <p className="text-sm font-mono font-normal text-muted-foreground">{sheetClient.gstin}</p>
-                    </div>
-                  </SheetTitle>
-                </SheetHeader>
-
-                <div className="px-4 pt-5 space-y-5">
-                  {/* Status & Health */}
-                  <div className="flex items-center justify-between">
+              <div className="px-4 pb-6 space-y-6">
+                {/* Hero: Large Health Ring + Client Name */}
+                <div className="flex flex-col items-center text-center pt-2">
+                  <HealthRing score={sheetClient.healthScore} size={100} strokeWidth={7} />
+                  <h2 className="text-lg font-bold text-foreground mt-3">{sheetClient.tradeName}</h2>
+                  <p className="text-sm font-mono text-muted-foreground mt-0.5">{sheetClient.gstin}</p>
+                  <div className="flex items-center gap-2 mt-2">
                     {getStatusBadge(sheetClient.status)}
-                    <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold ${health.bg} ${health.text} ${health.ring} ring-1`}>
-                      <HealthIcon className="size-3.5" />
-                      {sheetClient.healthScore}/100 — {getHealthLabel(sheetClient.healthScore)}
-                    </div>
+                    {sheetClient.state && (
+                      <Badge variant="outline" className="text-[10px] px-2 py-0 h-5 border-slate-200 bg-slate-50 text-slate-600 gap-1">
+                        <MapPin className="size-2.5" />
+                        {sheetClient.state}
+                      </Badge>
+                    )}
+                    <Badge variant="outline" className="text-[10px] px-2 py-0 h-5 border-slate-200 bg-slate-50 text-slate-600">
+                      {getEntityTypeLabel(sheetClient.entityType)}
+                    </Badge>
                   </div>
+                </div>
 
-                  {/* Health Progress */}
-                  <div>
-                    <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
-                      <motion.div
-                        className={`h-full rounded-full ${health.bar}`}
-                        initial={{ width: 0 }}
-                        animate={{ width: `${sheetClient.healthScore}%` }}
-                        transition={{ duration: 0.6, ease: 'easeOut' }}
-                      />
-                    </div>
+                <Separator />
+
+                {/* Health Breakdown */}
+                <div>
+                  <h3 className="text-sm font-semibold text-foreground mb-3">Health Breakdown</h3>
+                  <div className="space-y-2.5">
+                    <HealthBreakdownBar label="GSTIN Validity" value={sheetClient._portfolio.healthBreakdown.gstinValidity} />
+                    <HealthBreakdownBar label="Filing Timeliness" value={sheetClient._portfolio.healthBreakdown.filingTimeliness} />
+                    <HealthBreakdownBar label="Invoice Accuracy" value={sheetClient._portfolio.healthBreakdown.invoiceAccuracy} />
                   </div>
+                </div>
 
-                  <Separator />
+                <Separator />
 
-                  {/* Contact Info */}
-                  <div className="space-y-3">
-                    <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
-                      <Shield className="size-3.5 text-emerald-600" />
-                      Client Information
-                    </h3>
-                    <div className="grid gap-3 text-sm">
-                      {sheetClient.legalName && (
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Legal Name</span>
-                          <span className="font-medium truncate ml-4 max-w-[220px]">{sheetClient.legalName}</span>
-                        </div>
-                      )}
-                      <div className="flex justify-between items-center">
-                        <span className="text-muted-foreground">Entity Type</span>
-                        <Badge variant="outline" className="text-xs border-slate-200 bg-slate-50 text-slate-700">
-                          {getEntityTypeLabel(sheetClient.entityType)}
-                        </Badge>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">State / Code</span>
-                        <span className="font-medium">{sheetClient.state ?? '—'} ({sheetClient.stateCode ?? '—'})</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Return Period</span>
-                        <span className="font-medium capitalize">{sheetClient.returnPeriod ?? '—'}</span>
-                      </div>
-                      {sheetClient.contactEmail && (
-                        <div className="flex items-center gap-2 text-muted-foreground">
-                          <Mail className="size-3.5 shrink-0" />
-                          <span className="truncate text-sm">{sheetClient.contactEmail}</span>
-                        </div>
-                      )}
-                      {sheetClient.contactPhone && (
-                        <div className="flex items-center gap-2 text-muted-foreground">
-                          <Phone className="size-3.5 shrink-0" />
-                          <span className="text-sm">{sheetClient.contactPhone}</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  <Separator />
-
-                  {/* Quick Stats */}
-                  <div className="space-y-3">
-                    <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
-                      <FileText className="size-3.5 text-emerald-600" />
-                      Filing Stats
-                    </h3>
-                    <div className="grid grid-cols-3 gap-2">
-                      <div className="rounded-lg bg-slate-50 border border-slate-100 p-3 text-center">
-                        <p className="text-[10px] text-muted-600 font-medium">Total Returns</p>
-                        <p className="text-xl font-bold text-foreground mt-0.5">
-                          {(sheetClient._aggregations?.filedReturns ?? 0) + (sheetClient._aggregations?.pendingReturns ?? 0)}
-                        </p>
-                      </div>
-                      <div className="rounded-lg bg-emerald-50 border border-emerald-100 p-3 text-center">
-                        <p className="text-[10px] text-emerald-600 font-medium">Filed</p>
-                        <p className="text-xl font-bold text-emerald-700 mt-0.5">
-                          {sheetClient._aggregations?.filedReturns ?? 0}
-                        </p>
-                      </div>
-                      <div className="rounded-lg bg-amber-50 border border-amber-100 p-3 text-center">
-                        <p className="text-[10px] text-amber-600 font-medium">Pending</p>
-                        <p className="text-xl font-bold text-amber-700 mt-0.5">
-                          {sheetClient._aggregations?.pendingReturns ?? 0}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-
-                  <Separator />
-
-                  {/* Action Buttons */}
+                {/* Contact Info */}
+                <div>
+                  <h3 className="text-sm font-semibold text-foreground mb-3">Contact Information</h3>
                   <div className="space-y-2">
-                    <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Actions</h3>
-                    <div className="grid gap-2">
-                      <Button
-                        variant="outline"
-                        className="justify-start gap-3 h-10 border-emerald-200 text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800"
-                        onClick={() => navigateTo('returns', sheetClient.id)}
-                      >
-                        <FileText className="size-4" />
-                        View Returns
-                        <ChevronRight className="size-4 ml-auto text-muted-foreground" />
-                      </Button>
-                      <Button
-                        variant="outline"
-                        className="justify-start gap-3 h-10 border-amber-200 text-amber-700 hover:bg-amber-50 hover:text-amber-800"
-                        onClick={() => navigateTo('reconcile', sheetClient.id)}
-                      >
-                        <ArrowRightLeft className="size-4" />
-                        Run Reconciliation
-                        <ChevronRight className="size-4 ml-auto text-muted-foreground" />
-                      </Button>
-                      <Button
-                        variant="outline"
-                        className="justify-start gap-3 h-10"
-                        onClick={() => {
-                          setSheetOpen(false);
-                          setTimeout(() => openEditDialog(sheetClient), 200);
-                        }}
-                      >
-                        <Pencil className="size-4" />
-                        Edit Client
-                        <ChevronRight className="size-4 ml-auto text-muted-foreground" />
-                      </Button>
-                      <Button
-                        variant="outline"
-                        className="justify-start gap-3 h-10 border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700"
-                        onClick={() => {
-                          setSheetOpen(false);
-                          setTimeout(() => setDeleteTarget(sheetClient), 200);
-                        }}
-                      >
-                        <Trash2 className="size-4" />
-                        Delete Client
-                        <ChevronRight className="size-4 ml-auto text-muted-foreground" />
-                      </Button>
+                    {sheetClient.contactEmail && (
+                      <div className="flex items-center gap-2.5 text-sm">
+                        <Mail className="size-4 text-muted-foreground shrink-0" />
+                        <span className="text-foreground truncate">{sheetClient.contactEmail}</span>
+                      </div>
+                    )}
+                    {sheetClient.contactPhone && (
+                      <div className="flex items-center gap-2.5 text-sm">
+                        <Phone className="size-4 text-muted-foreground shrink-0" />
+                        <span className="text-foreground">{sheetClient.contactPhone}</span>
+                      </div>
+                    )}
+                    {sheetClient.legalName && (
+                      <div className="flex items-center gap-2.5 text-sm">
+                        <Building2 className="size-4 text-muted-foreground shrink-0" />
+                        <span className="text-foreground truncate">{sheetClient.legalName}</span>
+                      </div>
+                    )}
+                    {sheetClient.returnPeriod && (
+                      <div className="flex items-center gap-2.5 text-sm">
+                        <Calendar className="size-4 text-muted-foreground shrink-0" />
+                        <span className="text-foreground capitalize">{sheetClient.returnPeriod} filing</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <Separator />
+
+                {/* Compliance Risk */}
+                <div>
+                  <h3 className="text-sm font-semibold text-foreground mb-3">Compliance Risk</h3>
+                  <div className="flex items-center gap-2">
+                    {getRiskBadge(sheetClient._portfolio.riskLevel, sheetClient._portfolio.riskDetail)}
+                  </div>
+                </div>
+
+                <Separator />
+
+                {/* Recent Filing History Timeline */}
+                <div>
+                  <h3 className="text-sm font-semibold text-foreground mb-3">Recent Filings</h3>
+                  {sheetClient._portfolio.recentFilings.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No recent filings</p>
+                  ) : (
+                    <div className="relative pl-5 space-y-3">
+                      {/* Timeline line */}
+                      <div className="absolute left-[7px] top-1.5 bottom-1.5 w-px bg-slate-200" />
+                      {sheetClient._portfolio.recentFilings.map((filing, idx) => {
+                        const isFiled = filing.status === 'Filed';
+                        const isOverdue = filing.status === 'Overdue';
+                        return (
+                          <div key={idx} className="relative flex items-start gap-3">
+                            <div className={`absolute -left-5 top-1 size-2.5 rounded-full ring-2 ring-white ${
+                              isFiled ? 'bg-emerald-500' : isOverdue ? 'bg-red-500' : 'bg-amber-500'
+                            }`} />
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center justify-between gap-2">
+                                <p className="text-sm font-medium text-foreground truncate">
+                                  {filing.type} — {filing.period}
+                                </p>
+                                <Badge className={`text-[9px] px-1.5 py-0 shrink-0 ${
+                                  isFiled
+                                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                    : isOverdue
+                                    ? 'bg-red-50 text-red-700 border-red-200'
+                                    : 'bg-amber-50 text-amber-700 border-amber-200'
+                                }`}>
+                                  {filing.status}
+                                </Badge>
+                              </div>
+                              {filing.date && (
+                                <p className="text-[11px] text-muted-foreground mt-0.5">
+                                  Filed on {new Date(filing.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                <Separator />
+
+                {/* Filing Trend Area Chart */}
+                <div>
+                  <h3 className="text-sm font-semibold text-foreground mb-1">Filing Trend</h3>
+                  <p className="text-[11px] text-muted-foreground mb-3">Monthly tax volume — last 6 months</p>
+                  <div className="bg-slate-50 rounded-xl p-4">
+                    <FilingTrendChart data={sheetClient._portfolio.monthlyVolumeChart} />
+                    <div className="flex items-center justify-between mt-3 pt-2 border-t border-slate-200">
+                      <span className="text-xs text-muted-foreground">Current month</span>
+                      <span className="text-sm font-bold text-foreground">
+                        {formatCurrency(sheetClient._portfolio.monthlyTaxVolume)}
+                      </span>
                     </div>
                   </div>
                 </div>
-              </>
-            );
-          })()}
+
+                <Separator />
+
+                {/* Action Buttons */}
+                <div className="flex gap-3">
+                  <Button
+                    className="flex-1 gap-2 bg-emerald-600 hover:bg-emerald-700 text-white"
+                    onClick={() => { navigateTo('returns', sheetClient.id); setSheetOpen(false); }}
+                  >
+                    <FileText className="size-4" />
+                    View Returns
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="flex-1 gap-2 border-amber-200 text-amber-700 hover:bg-amber-50"
+                    onClick={() => { navigateTo('reconcile', sheetClient.id); setSheetOpen(false); }}
+                  >
+                    <ArrowRightLeft className="size-4" />
+                    Reconcile
+                  </Button>
+                </div>
+              </div>
+            </>
+          )}
         </SheetContent>
       </Sheet>
 
-      {/* ── Delete Confirmation ─────────────────────────────────────────────── */}
-      <AlertDialog open={!!deleteTarget} onOpenChange={open => !open && setDeleteTarget(null)}>
+      {/* ── Delete Confirmation ──────────────────────────────────────────────── */}
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle className="flex items-center gap-2">
-              <AlertTriangle className="size-5 text-red-500" />
-              Delete Client
-            </AlertDialogTitle>
+            <AlertDialogTitle>Delete Client</AlertDialogTitle>
             <AlertDialogDescription>
               Are you sure you want to delete <strong>{deleteTarget?.tradeName}</strong> ({deleteTarget?.gstin})?
-              This action cannot be undone. All associated invoices, filings, and data will be permanently removed.
+              This action cannot be undone and will remove all associated data.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -1311,7 +1744,7 @@ export default function ClientRegistryPage() {
               onClick={handleDelete}
               className="bg-red-600 hover:bg-red-700 text-white"
             >
-              Delete
+              Delete Client
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

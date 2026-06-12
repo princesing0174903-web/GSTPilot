@@ -16,10 +16,9 @@ import {
 } from '@/components/ui/sidebar'
 import {
   LayoutDashboard,
-  Upload,
-  ScanSearch,
-  ArrowLeftRight,
   FileText,
+  Search,
+  FileScan,
   Users,
   Settings,
   Zap,
@@ -33,14 +32,16 @@ interface NavItem {
   subtitle?: string
 }
 
-const navItems: NavItem[] = [
-  { title: 'Dashboard', view: 'dashboard', icon: LayoutDashboard, subtitle: 'Overview' },
-  { title: 'Upload', view: 'upload', icon: Upload, subtitle: 'Import Documents' },
-  { title: 'Review', view: 'review', icon: ScanSearch, subtitle: 'Verify Invoices' },
-  { title: 'Reconcile', view: 'reconcile', icon: ArrowLeftRight, subtitle: 'Match & Verify' },
-  { title: 'Returns', view: 'returns', icon: FileText, subtitle: 'File GST Returns' },
-  { title: 'Clients', view: 'clients', icon: Users, subtitle: 'Manage Clients' },
-  { title: 'Settings', view: 'settings', icon: Settings, subtitle: 'Configure' },
+const workflowItems: NavItem[] = [
+  { title: 'Dashboard', view: 'dashboard', icon: LayoutDashboard, subtitle: 'Command Center' },
+  { title: 'Returns', view: 'returns', icon: FileText, subtitle: 'Filing Workspace' },
+  { title: 'Reconcile', view: 'reconcile', icon: Search, subtitle: 'Investigation Center' },
+  { title: 'Invoices', view: 'invoices', icon: FileScan, subtitle: 'Processing Center' },
+]
+
+const manageItems: NavItem[] = [
+  { title: 'Clients', view: 'clients', icon: Users, subtitle: 'Client Portfolio' },
+  { title: 'Settings', view: 'settings', icon: Settings, subtitle: 'Workspace' },
 ]
 
 function SidebarNav() {
@@ -50,6 +51,48 @@ function SidebarNav() {
   const handleNavClick = (view: AppView) => {
     setCurrentView(view)
     setOpenMobile(false)
+  }
+
+  const renderNavItem = (item: NavItem) => {
+    const isActive = currentView === item.view || (currentView === 'client-workspace' && item.view === 'clients')
+    return (
+      <SidebarMenuItem key={item.view}>
+        <SidebarMenuButton
+          isActive={isActive}
+          onClick={() => handleNavClick(item.view)}
+          tooltip={item.title}
+          className={`
+            group relative h-10 rounded-lg transition-all duration-200 ease-in-out
+            ${
+              isActive
+                ? 'bg-emerald-500/10 font-semibold text-emerald-600 hover:bg-emerald-500/15 hover:text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-400 dark:hover:bg-emerald-500/20 dark:hover:text-emerald-400'
+                : 'text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground'
+            }
+          `}
+        >
+          {isActive && (
+            <div className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-emerald-500 transition-all duration-200" />
+          )}
+          <item.icon
+            className={`h-[18px] w-[18px] transition-colors duration-200 ${
+              isActive
+                ? 'text-emerald-600 dark:text-emerald-400'
+                : 'text-sidebar-foreground/50 group-hover:text-sidebar-foreground/80'
+            }`}
+          />
+          <div className="flex flex-col">
+            <span className="text-sm leading-tight transition-colors duration-200">
+              {item.title}
+            </span>
+            {item.subtitle && (
+              <span className="text-[10px] leading-tight text-sidebar-foreground/40">
+                {item.subtitle}
+              </span>
+            )}
+          </div>
+        </SidebarMenuButton>
+      </SidebarMenuItem>
+    )
   }
 
   return (
@@ -74,47 +117,18 @@ function SidebarNav() {
           </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu className="gap-1">
-              {navItems.map((item) => {
-                const isActive = currentView === item.view
-                return (
-                  <SidebarMenuItem key={item.view}>
-                    <SidebarMenuButton
-                      isActive={isActive}
-                      onClick={() => handleNavClick(item.view)}
-                      tooltip={item.title}
-                      className={`
-                        group relative h-10 rounded-lg transition-all duration-200 ease-in-out
-                        ${
-                          isActive
-                            ? 'bg-emerald-500/10 font-semibold text-emerald-600 hover:bg-emerald-500/15 hover:text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-400 dark:hover:bg-emerald-500/20 dark:hover:text-emerald-400'
-                            : 'text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground'
-                        }
-                      `}
-                    >
-                      {isActive && (
-                        <div className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-emerald-500 transition-all duration-200" />
-                      )}
-                      <item.icon
-                        className={`h-[18px] w-[18px] transition-colors duration-200 ${
-                          isActive
-                            ? 'text-emerald-600 dark:text-emerald-400'
-                            : 'text-sidebar-foreground/50 group-hover:text-sidebar-foreground/80'
-                        }`}
-                      />
-                      <div className="flex flex-col">
-                        <span className="text-sm leading-tight transition-colors duration-200">
-                          {item.title}
-                        </span>
-                        {item.subtitle && (
-                          <span className="text-[10px] leading-tight text-sidebar-foreground/40">
-                            {item.subtitle}
-                          </span>
-                        )}
-                      </div>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                )
-              })}
+              {workflowItems.map(renderNavItem)}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup className="mt-2">
+          <SidebarGroupLabel className="px-2 text-[11px] font-semibold uppercase tracking-widest text-sidebar-foreground/40">
+            Manage
+          </SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu className="gap-1">
+              {manageItems.map(renderNavItem)}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>

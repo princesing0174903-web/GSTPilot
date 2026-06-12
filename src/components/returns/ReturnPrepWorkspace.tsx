@@ -1,0 +1,1161 @@
+'use client';
+
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Separator } from '@/components/ui/separator';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
+  ArrowLeft,
+  Save,
+  ShieldCheck,
+  GitCompareArrows,
+  CheckCircle2,
+  Send,
+  ChevronRight,
+  FileText,
+  AlertTriangle,
+  AlertCircle,
+  XCircle,
+  Clock,
+  Eye,
+  Pencil,
+  Check,
+  RefreshCw,
+  Sparkles,
+  Building2,
+  Upload,
+  FileCheck2,
+  FileWarning,
+  ClipboardCheck,
+  IndianRupee,
+  TrendingUp,
+  TrendingDown,
+  AlertOctagon,
+  Search,
+  FilePlus2,
+  Shield,
+  Zap,
+  X,
+  Loader2,
+  PartyPopper,
+  ArrowRight,
+} from 'lucide-react';
+import { useApp } from '@/contexts/AppContext';
+import type { AppView } from '@/contexts/AppContext';
+import type { Client } from '@/types/gst';
+import { formatCurrency } from '@/lib/gst-utils';
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// TYPES
+// ═══════════════════════════════════════════════════════════════════════════════
+
+interface PrepStep {
+  id: string;
+  label: string;
+  completed: boolean;
+  active: boolean;
+}
+
+interface InvoiceRow {
+  id: string;
+  invoiceNumber: string;
+  date: string;
+  customer: string;
+  customerGstin?: string;
+  taxableValue: number;
+  cgst: number;
+  sgst: number;
+  igst: number;
+  status: 'validated' | 'warning' | 'error';
+  errorDetail?: string;
+  hsnCode?: string;
+  placeOfSupply?: string;
+}
+
+interface ValidationIssue {
+  id: string;
+  severity: 'critical' | 'warning' | 'info';
+  category: string;
+  description: string;
+  invoiceRef: string;
+  fixAction: string;
+  resolved: boolean;
+}
+
+interface ReconCategory {
+  label: string;
+  count: number;
+  amount: number;
+  color: string;
+  bgColor: string;
+}
+
+interface ReconDrilldown {
+  invoiceNumber: string;
+  date: string;
+  vendor: string;
+  booksAmount: number;
+  portalAmount: number;
+  difference: number;
+  reason: string;
+}
+
+interface GSTR1Summary {
+  b2bSales: number;
+  b2cSales: number;
+  exports: number;
+  creditNotes: number;
+  debitNotes: number;
+}
+
+interface GSTR3BSummary {
+  taxableSupplies: number;
+  itcAvailable: number;
+  outputTax: number;
+  netTaxPayable: number;
+}
+
+interface AIInsight {
+  id: string;
+  type: 'risk_alert' | 'missing_doc' | 'tax_anomaly' | 'filing_rec';
+  title: string;
+  description: string;
+  suggestedAction: string;
+  actionView: AppView;
+  urgency: 'high' | 'medium' | 'info';
+  dismissed: boolean;
+}
+
+interface ToastMessage {
+  id: string;
+  title: string;
+  description: string;
+  type: 'success' | 'info' | 'warning';
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// INITIAL DATA FACTORY
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function createInitialInvoices(): InvoiceRow[] {
+  return [
+    { id: 'inv1', invoiceNumber: 'INV-2025-0801', date: '2025-06-02', customer: 'Reliance Industries Ltd', customerGstin: '27AAACR5055K1Z5', taxableValue: 450000, cgst: 40500, sgst: 40500, igst: 0, status: 'validated', hsnCode: '8471', placeOfSupply: '27' },
+    { id: 'inv2', invoiceNumber: 'INV-2025-0802', date: '2025-06-04', customer: 'Tata Consultancy Services', customerGstin: '27AAACR4898K1Z3', taxableValue: 320000, cgst: 28800, sgst: 28800, igst: 0, status: 'validated', hsnCode: '9983', placeOfSupply: '27' },
+    { id: 'inv3', invoiceNumber: 'INV-2025-0803', date: '2025-06-05', customer: 'Mahindra & Mahindra Ltd', customerGstin: '27AAACM1410M1Z1', taxableValue: 185000, cgst: 16650, sgst: 16650, igst: 0, status: 'validated', hsnCode: '8703', placeOfSupply: '27' },
+    { id: 'inv4', invoiceNumber: 'INV-2025-0804', date: '2025-06-07', customer: 'Infosys Technologies', customerGstin: '29AABCI6782L1Z7', taxableValue: 275000, cgst: 0, sgst: 0, igst: 49500, status: 'validated', hsnCode: '9983', placeOfSupply: '29' },
+    { id: 'inv5', invoiceNumber: 'INV-2025-0805', date: '2025-06-08', customer: 'Wipro Enterprises', customerGstin: '29AABCW7489P1Z9', taxableValue: 142000, cgst: 12780, sgst: 12780, igst: 0, status: 'warning', errorDetail: 'Missing HSN code for 2 line items', hsnCode: '' },
+    { id: 'inv6', invoiceNumber: 'INV-2025-0806', date: '2025-06-10', customer: 'HDFC Bank Ltd', customerGstin: '27AABCH3681K1Z4', taxableValue: 95000, cgst: 8550, sgst: 8550, igst: 0, status: 'validated', hsnCode: '9997', placeOfSupply: '27' },
+    { id: 'inv7', invoiceNumber: 'INV-2025-0807', date: '2025-06-11', customer: 'Bajaj Finserv Ltd', customerGstin: '27AABCB5342M1Z1', taxableValue: 210000, cgst: 0, sgst: 0, igst: 37800, status: 'validated', hsnCode: '9999', placeOfSupply: '29' },
+    { id: 'inv8', invoiceNumber: 'INV-2025-0808', date: '2025-06-12', customer: 'Larsen & Toubro Ltd', customerGstin: '27AAACM5241Z2ZM', taxableValue: 520000, cgst: 46800, sgst: 46800, igst: 0, status: 'error', errorDetail: 'Invalid GSTIN: 27AAACM5241Z2ZM fails checksum', hsnCode: '8479', placeOfSupply: '27' },
+    { id: 'inv9', invoiceNumber: 'INV-2025-0809', date: '2025-06-14', customer: 'Godrej Consumer Products', customerGstin: '27AAACG4735K1Z8', taxableValue: 168000, cgst: 15120, sgst: 15120, igst: 0, status: 'validated', hsnCode: '3304', placeOfSupply: '27' },
+    { id: 'inv10', invoiceNumber: 'INV-2025-0810', date: '2025-06-15', customer: 'Maruti Suzuki India', customerGstin: '06AABCM6420B1Z2', taxableValue: 390000, cgst: 0, sgst: 0, igst: 70200, status: 'validated', hsnCode: '8703', placeOfSupply: '06' },
+    { id: 'inv11', invoiceNumber: 'INV-2025-0811', date: '2025-06-17', customer: 'Adani Ports & SEZ', customerGstin: '27AAACA7392N1Z5', taxableValue: 245000, cgst: 22050, sgst: 22050, igst: 0, status: 'validated', hsnCode: '9983', placeOfSupply: '27' },
+    { id: 'inv12', invoiceNumber: 'INV-2025-0812', date: '2025-06-18', customer: 'Bharti Airtel Ltd', customerGstin: '29AABCB6472H1Z3', taxableValue: 178000, cgst: 0, sgst: 0, igst: 32040, status: 'warning', errorDetail: 'Duplicate invoice number detected', hsnCode: '9984', placeOfSupply: '29' },
+    { id: 'inv13', invoiceNumber: 'INV-2025-0813', date: '2025-06-20', customer: 'ICICI Lombard General', customerGstin: '27AAACI1847J1Z6', taxableValue: 134000, cgst: 12060, sgst: 12060, igst: 0, status: 'validated', hsnCode: '9996', placeOfSupply: '27' },
+    { id: 'inv14', invoiceNumber: 'INV-2025-0814', date: '2025-06-22', customer: 'Hindustan Unilever Ltd', customerGstin: '27AAACH1542Q1Z3', taxableValue: 295000, cgst: 26550, sgst: 26550, igst: 0, status: 'error', errorDetail: 'Tax calculation error: CGST should be ₹26,550 but found ₹25,350', hsnCode: '3401', placeOfSupply: '27' },
+    { id: 'inv15', invoiceNumber: 'INV-2025-0815', date: '2025-06-25', customer: 'Asian Paints Ltd', customerGstin: '27AAACA5321K1Z7', taxableValue: 88000, cgst: 7920, sgst: 7920, igst: 0, status: 'validated', hsnCode: '3209', placeOfSupply: '27' },
+  ];
+}
+
+function createInitialIssues(): ValidationIssue[] {
+  return [
+    { id: 'v1', severity: 'critical', category: 'Invalid GSTIN', description: 'Buyer GSTIN 27AAACM5241Z2ZM in INV-2025-0808 fails checksum validation', invoiceRef: 'INV-2025-0808', fixAction: 'Correct GSTIN', resolved: false },
+    { id: 'v2', severity: 'critical', category: 'Tax Calculation Error', description: 'CGST amount in INV-2025-0814 does not match 9% of taxable value ₹2,95,000 (expected ₹26,550, found ₹25,350)', invoiceRef: 'INV-2025-0814', fixAction: 'Recalculate Tax', resolved: false },
+    { id: 'v3', severity: 'warning', category: 'Missing HSN Code', description: '2 line items in INV-2025-0805 missing HSN/SAC codes as required for GSTR-1 filing', invoiceRef: 'INV-2025-0805', fixAction: 'Add HSN Codes', resolved: false },
+    { id: 'v4', severity: 'warning', category: 'Duplicate Invoice', description: 'INV-2025-0812 has same number as a previously filed invoice in May 2025 return', invoiceRef: 'INV-2025-0812', fixAction: 'Resolve Duplicate', resolved: false },
+    { id: 'v5', severity: 'info', category: 'Missing Mandatory Field', description: 'Place of supply not specified for 3 inter-state invoices (INV-2025-0804, INV-2025-0807, INV-2025-0810)', invoiceRef: 'INV-2025-0804', fixAction: 'Add Place of Supply', resolved: false },
+  ];
+}
+
+function createInitialInsights(): AIInsight[] {
+  return [
+    { id: 'ai1', type: 'risk_alert', title: 'Invalid GSTIN blocking 1 B2B invoice', description: 'INV-2025-0808 has GSTIN 27AAACM5241Z2ZM which fails checksum. This invoice (₹5,20,000 + ₹93,600 tax) cannot be included in filing until corrected.', suggestedAction: 'Fix GSTIN', actionView: 'reconcile', urgency: 'high', dismissed: false },
+    { id: 'ai2', type: 'tax_anomaly', title: 'Tax calculation discrepancy of ₹1,200', description: 'INV-2025-0814 shows CGST ₹25,350 instead of expected ₹26,550 (9% of ₹2,95,000). Likely a data entry error in the sales register.', suggestedAction: 'Recalculate', actionView: 'invoices', urgency: 'high', dismissed: false },
+    { id: 'ai3', type: 'missing_doc', title: '3 invoices missing from GSTR-2B', description: 'Invoices from Adani Ports (₹2,45,000), Asian Paints (₹88,000), and ICICI Lombard (₹1,34,000) not reflected in GSTR-2B. Vendors may not have filed yet.', suggestedAction: 'Review Missing', actionView: 'reconcile', urgency: 'medium', dismissed: false },
+    { id: 'ai4', type: 'filing_rec', title: 'File GSTR-1 before July 11 deadline', description: '3 days remaining. Resolve 2 critical issues and 2 warnings to achieve 100% filing readiness.', suggestedAction: 'Resolve Issues', actionView: 'returns', urgency: 'high', dismissed: false },
+    { id: 'ai5', type: 'risk_alert', title: 'Duplicate invoice number may cause rejection', description: 'INV-2025-0812 duplicates a number already filed in May 2025. GST portal will reject the JSON. Renumber before filing.', suggestedAction: 'Fix Duplicate', actionView: 'invoices', urgency: 'medium', dismissed: false },
+    { id: 'ai6', type: 'filing_rec', title: 'ITC of ₹18,240 at risk from recon mismatches', description: '3 invoices show mismatch between books and GSTR-2B. If unresolved, ITC claims will be disallowed during assessment.', suggestedAction: 'Run Reconciliation', actionView: 'reconcile', urgency: 'info', dismissed: false },
+  ];
+}
+
+// Reconciliation drill-down data per category
+const reconDrilldowns: Record<string, ReconDrilldown[]> = {
+  'Partial Match': [
+    { invoiceNumber: 'INV-2025-0789', date: '2025-06-03', vendor: 'Tata Steel Ltd', booksAmount: 285000, portalAmount: 262000, difference: 23000, reason: 'Credit note of ₹23,000 not reflected in GSTR-2B yet' },
+    { invoiceNumber: 'INV-2025-0795', date: '2025-06-08', vendor: 'Reliance Retail Ltd', booksAmount: 142000, portalAmount: 135000, difference: 7000, reason: 'Discount of ₹7,000 applied post-filing by supplier' },
+    { invoiceNumber: 'INV-2025-0801', date: '2025-06-12', vendor: 'Hindustan Petroleum', booksAmount: 96000, portalAmount: 89000, difference: 7000, reason: 'TCS amount included in books but excluded from portal' },
+    { invoiceNumber: 'INV-2025-0803', date: '2025-06-15', vendor: 'ITC Ltd', booksAmount: 178000, portalAmount: 164000, difference: 14000, reason: 'Supplier filed partial amount; amended return expected' },
+  ],
+  'Mismatch': [
+    { invoiceNumber: 'INV-2025-0792', date: '2025-06-05', vendor: 'Mahindra Logistics', booksAmount: 340000, portalAmount: 285000, difference: 55000, reason: 'Wrong GSTIN used in portal; supplier filed under different entity' },
+    { invoiceNumber: 'INV-2025-0798', date: '2025-06-10', vendor: 'Adani Wilmar Ltd', booksAmount: 225000, portalAmount: 180000, difference: 45000, reason: 'IGST vs CGST+SGST mismatch — inter-state filed as intra-state' },
+    { invoiceNumber: 'INV-2025-0810', date: '2025-06-18', vendor: 'Dalmia Cement Ltd', booksAmount: 412000, portalAmount: 350000, difference: 62000, reason: 'Tax rate difference: 18% in books vs 12% in portal. HSN reclassification needed.' },
+  ],
+  'Missing in Books': [
+    { invoiceNumber: 'G2B-2025-4421', date: '2025-06-07', vendor: 'Sun Pharma Industries', booksAmount: 0, portalAmount: 52000, difference: 52000, reason: 'Invoice present in GSTR-2B but not recorded in purchase register' },
+    { invoiceNumber: 'G2B-2025-4456', date: '2025-06-14', vendor: 'Divi\'s Laboratories', booksAmount: 0, portalAmount: 34000, difference: 34000, reason: 'Purchase invoice from vendor not entered; possibly received after month-end' },
+  ],
+  'Missing in Portal': [
+    { invoiceNumber: 'INV-2025-0791', date: '2025-06-02', vendor: 'Bharat Petroleum', booksAmount: 89000, portalAmount: 0, difference: 89000, reason: 'Supplier has not filed GSTR-1 for June 2025 yet. Follow up required.' },
+    { invoiceNumber: 'INV-2025-0804', date: '2025-06-09', vendor: 'Asian Paints Ltd', booksAmount: 67000, portalAmount: 0, difference: 67000, reason: 'Supplier filing deadline is Jul 11. Check again after due date.' },
+    { invoiceNumber: 'INV-2025-0812', date: '2025-06-16', vendor: 'Pidilite Industries', booksAmount: 38000, portalAmount: 0, difference: 38000, reason: 'Invoice recorded in books; vendor may file under QRMP scheme' },
+  ],
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function getStatusBadge(status: string) {
+  switch (status) {
+    case 'validated': return <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px] px-1.5 py-0 h-5 gap-0.5"><CheckCircle2 className="size-2.5" />Validated</Badge>;
+    case 'warning': return <Badge className="bg-amber-50 text-amber-700 border-amber-200 text-[10px] px-1.5 py-0 h-5 gap-0.5"><AlertTriangle className="size-2.5" />Warning</Badge>;
+    case 'error': return <Badge className="bg-red-50 text-red-700 border-red-200 text-[10px] px-1.5 py-0 h-5 gap-0.5"><XCircle className="size-2.5" />Error</Badge>;
+    default: return <Badge variant="secondary" className="text-[10px]">{status}</Badge>;
+  }
+}
+
+function getSeverityIcon(severity: string) {
+  switch (severity) {
+    case 'critical': return <XCircle className="h-4 w-4 text-red-600" />;
+    case 'warning': return <AlertTriangle className="h-4 w-4 text-amber-600" />;
+    case 'info': return <AlertCircle className="h-4 w-4 text-blue-600" />;
+    default: return <AlertCircle className="h-4 w-4 text-slate-500" />;
+  }
+}
+
+function getSeverityBadge(severity: string) {
+  switch (severity) {
+    case 'critical': return <Badge className="bg-red-50 text-red-700 border-red-200 text-[10px] px-1.5 py-0">Critical</Badge>;
+    case 'warning': return <Badge className="bg-amber-50 text-amber-700 border-amber-200 text-[10px] px-1.5 py-0">Warning</Badge>;
+    case 'info': return <Badge className="bg-blue-50 text-blue-700 border-blue-200 text-[10px] px-1.5 py-0">Info</Badge>;
+    default: return <Badge variant="secondary" className="text-[10px]">{severity}</Badge>;
+  }
+}
+
+function getAIInsightIcon(type: string) {
+  switch (type) {
+    case 'risk_alert': return <AlertOctagon className="h-4 w-4" />;
+    case 'missing_doc': return <FileWarning className="h-4 w-4" />;
+    case 'tax_anomaly': return <IndianRupee className="h-4 w-4" />;
+    case 'filing_rec': return <Sparkles className="h-4 w-4" />;
+    default: return <AlertCircle className="h-4 w-4" />;
+  }
+}
+
+function getAIInsightColors(type: string) {
+  switch (type) {
+    case 'risk_alert': return { bg: 'bg-red-50', color: 'text-red-600', border: 'border-red-200' };
+    case 'missing_doc': return { bg: 'bg-orange-50', color: 'text-orange-600', border: 'border-orange-200' };
+    case 'tax_anomaly': return { bg: 'bg-amber-50', color: 'text-amber-600', border: 'border-amber-200' };
+    case 'filing_rec': return { bg: 'bg-emerald-50', color: 'text-emerald-600', border: 'border-emerald-200' };
+    default: return { bg: 'bg-slate-50', color: 'text-slate-600', border: 'border-slate-200' };
+  }
+}
+
+function getUrgencyBadge(urgency: string) {
+  switch (urgency) {
+    case 'high': return <Badge className="bg-red-50 text-red-700 border-red-200 text-[10px] px-1.5 py-0">High</Badge>;
+    case 'medium': return <Badge className="bg-amber-50 text-amber-700 border-amber-200 text-[10px] px-1.5 py-0">Medium</Badge>;
+    case 'info': return <Badge className="bg-blue-50 text-blue-700 border-blue-200 text-[10px] px-1.5 py-0">Info</Badge>;
+    default: return null;
+  }
+}
+
+function periodToLabel(period: string): string {
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const [year, month] = period.split('-').map(Number);
+  return `${months[month - 1]} ${year}`;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ANIMATION
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const stagger = {
+  hidden: { opacity: 0 },
+  visible: { opacity: 1, transition: { staggerChildren: 0.05 } },
+};
+
+const fadeUp = {
+  hidden: { opacity: 0, y: 12 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.35 } },
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// TOAST SYSTEM
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function ToastContainer({ toasts, onDismiss }: { toasts: ToastMessage[]; onDismiss: (id: string) => void }) {
+  return (
+    <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2 max-w-sm">
+      <AnimatePresence>
+        {toasts.map((toast) => (
+          <motion.div
+            key={toast.id}
+            initial={{ opacity: 0, y: 20, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 10, scale: 0.95 }}
+            transition={{ duration: 0.25 }}
+            className={`flex items-start gap-3 p-3.5 rounded-xl border shadow-lg backdrop-blur-sm ${
+              toast.type === 'success' ? 'bg-emerald-50/95 border-emerald-200' :
+              toast.type === 'warning' ? 'bg-amber-50/95 border-amber-200' :
+              'bg-white/95 border-border'
+            }`}
+          >
+            <div className={`mt-0.5 shrink-0 ${
+              toast.type === 'success' ? 'text-emerald-600' :
+              toast.type === 'warning' ? 'text-amber-600' :
+              'text-blue-600'
+            }`}>
+              {toast.type === 'success' ? <CheckCircle2 className="h-4 w-4" /> : toast.type === 'warning' ? <AlertTriangle className="h-4 w-4" /> : <Sparkles className="h-4 w-4" />}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-semibold text-foreground">{toast.title}</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">{toast.description}</p>
+            </div>
+            <button className="shrink-0 text-muted-foreground hover:text-foreground" onClick={() => onDismiss(toast.id)}>
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </motion.div>
+        ))}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// MAIN COMPONENT
+// ═══════════════════════════════════════════════════════════════════════════════
+
+export default function ReturnPrepWorkspace() {
+  const { selectedClientId, returnPrepCtx, setCurrentView, setSelectedClientId, setReturnPrepCtx } = useApp();
+  const [clientData, setClientData] = useState<Client | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [invoiceFilter, setInvoiceFilter] = useState<'all' | 'validated' | 'warning' | 'error'>('all');
+
+  // ── Interactive State ──
+  const [invoices, setInvoices] = useState<InvoiceRow[]>(createInitialInvoices);
+  const [validationIssues, setValidationIssues] = useState<ValidationIssue[]>(createInitialIssues);
+  const [aiInsights, setAiInsights] = useState<AIInsight[]>(createInitialInsights);
+  const [toasts, setToasts] = useState<ToastMessage[]>([]);
+
+  // ── Drill-down State ──
+  const [selectedInvoice, setSelectedInvoice] = useState<InvoiceRow | null>(null);
+  const [selectedReconCategory, setSelectedReconCategory] = useState<string | null>(null);
+  const [filingModalOpen, setFilingModalOpen] = useState(false);
+  const [filingProgress, setFilingProgress] = useState<'idle' | 'validating' | 'generating' | 'submitting' | 'success'>('idle');
+
+  const returnType = returnPrepCtx.returnType;
+  const period = returnPrepCtx.period;
+
+  // ── Toast helper ──
+  const addToast = useCallback((title: string, description: string, type: ToastMessage['type'] = 'success') => {
+    const id = `toast-${Date.now()}`;
+    setToasts(prev => [...prev, { id, title, description, type }]);
+    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 4000);
+  }, []);
+
+  const dismissToast = useCallback((id: string) => {
+    setToasts(prev => prev.filter(t => t.id !== id));
+  }, []);
+
+  // Fetch client
+  const fetchClient = useCallback(async () => {
+    if (!selectedClientId) {
+      setClientData({
+        id: 'cl_001', gstin: '27AABCS1429B1Z5', tradeName: 'Sharma Enterprises',
+        legalName: 'Sharma Enterprises Pvt Ltd', state: 'Maharashtra', stateCode: '27',
+        entityType: 'regular', returnPeriod: 'monthly', lastFilingDate: '2025-05-11',
+        status: 'active', healthScore: 92, createdAt: '2025-01-15T10:00:00Z', updatedAt: '2025-05-11T14:30:00Z',
+      });
+      setLoading(false);
+      return;
+    }
+    try {
+      setLoading(true);
+      const res = await fetch('/api/clients');
+      if (res.ok) {
+        const data = await res.json();
+        const clients: Client[] = data.clients ?? [];
+        const found = clients.find((c: Client) => c.id === selectedClientId);
+        setClientData(found ?? clients[0] ?? null);
+      }
+    } catch { /* silent */ } finally { setLoading(false); }
+  }, [selectedClientId]);
+
+  useEffect(() => { fetchClient(); }, [fetchClient]);
+
+  const clientName = clientData?.tradeName ?? 'Sharma Enterprises';
+  const clientGSTIN = clientData?.gstin ?? '27AABCS1429B1Z5';
+
+  // ── Derived State ──
+  const filteredInvoices = useMemo(() => {
+    if (invoiceFilter === 'all') return invoices;
+    return invoices.filter(inv => inv.status === invoiceFilter);
+  }, [invoices, invoiceFilter]);
+
+  const totalTaxable = invoices.reduce((sum, inv) => sum + inv.taxableValue, 0);
+  const totalCGST = invoices.reduce((sum, inv) => sum + inv.cgst, 0);
+  const totalSGST = invoices.reduce((sum, inv) => sum + inv.sgst, 0);
+  const totalIGST = invoices.reduce((sum, inv) => sum + inv.igst, 0);
+  const totalTax = totalCGST + totalSGST + totalIGST;
+
+  const errorCount = invoices.filter(i => i.status === 'error').length;
+  const warningCount = invoices.filter(i => i.status === 'warning').length;
+  const validatedCount = invoices.filter(i => i.status === 'validated').length;
+  const unresolvedIssues = validationIssues.filter(i => !i.resolved).length;
+
+  // ── Computed Progress ──
+  const validationScore = Math.min(100, Math.round((validatedCount / invoices.length) * 100));
+  const matchRate = 78;
+  const complianceScore = 82;
+
+  const steps: PrepStep[] = useMemo(() => {
+    const hasErrors = errorCount > 0;
+    const hasWarnings = warningCount > 0;
+    const allValidated = errorCount === 0 && warningCount === 0;
+    return [
+      { id: 's1', label: 'Documents Uploaded', completed: true, active: false },
+      { id: 's2', label: 'AI Extraction Complete', completed: true, active: false },
+      { id: 's3', label: 'Validation Complete', completed: allValidated, active: !allValidated && unresolvedIssues === 0 },
+      { id: 's4', label: 'Reconciliation Complete', completed: false, active: allValidated },
+      { id: 's5', label: 'Return Prepared', completed: false, active: false },
+      { id: 's6', label: 'Ready to File', completed: false, active: false },
+      { id: 's7', label: 'Filed Successfully', completed: false, active: false },
+    ];
+  }, [errorCount, warningCount, unresolvedIssues]);
+
+  const progressPercent = Math.round((steps.filter(s => s.completed).length / steps.length) * 100);
+  const allChecksPass = validationScore >= 95 && unresolvedIssues === 0;
+  const isGSTR1 = returnType === 'GSTR-1';
+
+  // ── Recon summary ──
+  const reconData: ReconCategory[] = [
+    { label: 'Perfect Match', count: 38, amount: 2854000, color: 'text-emerald-700', bgColor: 'bg-emerald-50 border-emerald-200' },
+    { label: 'Partial Match', count: 4, amount: 312000, color: 'text-amber-700', bgColor: 'bg-amber-50 border-amber-200' },
+    { label: 'Mismatch', count: 3, amount: 245000, color: 'text-red-700', bgColor: 'bg-red-50 border-red-200' },
+    { label: 'Missing in Books', count: 2, amount: 86000, color: 'text-orange-700', bgColor: 'bg-orange-50 border-orange-200' },
+    { label: 'Missing in Portal', count: 3, amount: 194000, color: 'text-purple-700', bgColor: 'bg-purple-50 border-purple-200' },
+  ];
+
+  // ── Actions ──
+  const handleBack = () => setCurrentView('client-workspace');
+  const handleAction = (view: AppView) => setCurrentView(view);
+
+  // Approve invoice — change warning/error → validated
+  const handleApproveInvoice = (invId: string) => {
+    const inv = invoices.find(i => i.id === invId);
+    if (!inv || inv.status === 'validated') return;
+
+    setInvoices(prev => prev.map(i =>
+      i.id === invId ? { ...i, status: 'validated' as const, errorDetail: undefined } : i
+    ));
+
+    // Also resolve the corresponding validation issue
+    const invoiceNum = inv.invoiceNumber;
+    setValidationIssues(prev => prev.map(iss =>
+      iss.invoiceRef === invoiceNum ? { ...iss, resolved: true } : iss
+    ));
+
+    addToast(
+      `${inv.invoiceNumber} approved`,
+      `Invoice status changed to Validated. Tax amount: ${formatCurrency(inv.taxableValue + inv.cgst + inv.sgst + inv.igst)}`,
+      'success'
+    );
+  };
+
+  // Fix validation issue
+  const handleFixIssue = (issueId: string) => {
+    const issue = validationIssues.find(i => i.id === issueId);
+    if (!issue || issue.resolved) return;
+
+    setValidationIssues(prev => prev.map(i =>
+      i.id === issueId ? { ...i, resolved: true } : i
+    ));
+
+    // Also fix the related invoice
+    const invId = invoices.find(i => i.invoiceNumber === issue.invoiceRef)?.id;
+    if (invId) {
+      setInvoices(prev => prev.map(i =>
+        i.id === invId ? { ...i, status: 'validated' as const, errorDetail: undefined } : i
+      ));
+    }
+
+    addToast(
+      `${issue.category} resolved`,
+      `${issue.invoiceRef}: ${issue.fixAction} applied successfully`,
+      'success'
+    );
+  };
+
+  // Dismiss AI insight
+  const handleDismissInsight = (insightId: string) => {
+    setAiInsights(prev => prev.map(i =>
+      i.id === insightId ? { ...i, dismissed: true } : i
+    ));
+    addToast('Insight dismissed', 'This recommendation has been acknowledged', 'info');
+  };
+
+  // Mark Ready
+  const handleMarkReady = () => {
+    if (errorCount > 0 || warningCount > 0) {
+      addToast('Cannot mark ready', `${errorCount} errors and ${warningCount} warnings must be resolved first`, 'warning');
+      return;
+    }
+    addToast('Return marked as Ready to File', 'All validations passed. You can now file this return.', 'success');
+  };
+
+  // File Return Simulation
+  const handleFileReturn = () => {
+    if (!allChecksPass) return;
+    setFilingModalOpen(true);
+    setFilingProgress('validating');
+
+    setTimeout(() => setFilingProgress('generating'), 1500);
+    setTimeout(() => setFilingProgress('submitting'), 3000);
+    setTimeout(() => {
+      setFilingProgress('success');
+      addToast('GSTR-1 Filed Successfully!', `ARN: AA080725001234 · Period: ${periodToLabel(period)} · Tax: ${formatCurrency(totalTax)}`, 'success');
+    }, 4500);
+  };
+
+  // ── Return Summary ──
+  const gstr1Summary: GSTR1Summary = { b2bSales: 3245000, b2cSales: 485000, exports: 189500, creditNotes: -125000, debitNotes: 45000 };
+  const gstr3bSummary: GSTR3BSummary = { taxableSupplies: 4365000, itcAvailable: 1872000, outputTax: 785700, netTaxPayable: 0 };
+
+  // Loading
+  if (loading) {
+    return (
+      <div className="max-w-7xl mx-auto px-4 md:px-6 py-6 space-y-6">
+        <Skeleton className="h-6 w-40" />
+        <div className="border rounded-xl p-6 space-y-4">
+          <div className="flex gap-4"><Skeleton className="h-10 w-10 rounded-lg" /><div className="space-y-2 flex-1"><Skeleton className="h-6 w-64" /><Skeleton className="h-4 w-48" /></div></div>
+        </div>
+        <div className="flex gap-2">{Array.from({ length: 7 }).map((_, i) => <Skeleton key={i} className="h-10 flex-1 rounded-lg" />)}</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-w-7xl mx-auto px-4 md:px-6 py-6 space-y-8">
+
+      {/* ═══ TOAST CONTAINER ═══ */}
+      <ToastContainer toasts={toasts} onDismiss={dismissToast} />
+
+      {/* ═══ INVOICE DETAIL DRILL-DOWN ═══ */}
+      <Dialog open={!!selectedInvoice} onOpenChange={(open) => { if (!open) setSelectedInvoice(null); }}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileText className="h-4 w-4 text-emerald-600" />
+              Invoice Detail
+            </DialogTitle>
+          </DialogHeader>
+          {selectedInvoice && (
+            <div className="space-y-4 mt-2">
+              <div className="grid grid-cols-2 gap-3">
+                <div><span className="text-[10px] text-muted-foreground uppercase tracking-wider">Invoice Number</span><p className="text-sm font-mono font-semibold">{selectedInvoice.invoiceNumber}</p></div>
+                <div><span className="text-[10px] text-muted-foreground uppercase tracking-wider">Date</span><p className="text-sm">{new Date(selectedInvoice.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</p></div>
+                <div><span className="text-[10px] text-muted-foreground uppercase tracking-wider">Customer</span><p className="text-sm font-medium">{selectedInvoice.customer}</p></div>
+                <div><span className="text-[10px] text-muted-foreground uppercase tracking-wider">Customer GSTIN</span><p className="text-sm font-mono">{selectedInvoice.customerGstin || '—'}</p></div>
+                <div><span className="text-[10px] text-muted-foreground uppercase tracking-wider">HSN Code</span><p className="text-sm font-mono">{selectedInvoice.hsnCode || 'Missing'}</p></div>
+                <div><span className="text-[10px] text-muted-foreground uppercase tracking-wider">Place of Supply</span><p className="text-sm">{selectedInvoice.placeOfSupply || '—'}</p></div>
+              </div>
+              <Separator />
+              <div className="grid grid-cols-2 gap-3">
+                <div><span className="text-[10px] text-muted-foreground uppercase tracking-wider">Taxable Value</span><p className="text-sm font-bold">{formatCurrency(selectedInvoice.taxableValue)}</p></div>
+                <div><span className="text-[10px] text-muted-foreground uppercase tracking-wider">Status</span><div className="mt-0.5">{getStatusBadge(selectedInvoice.status)}</div></div>
+                <div><span className="text-[10px] text-muted-foreground uppercase tracking-wider">CGST (9%)</span><p className="text-sm">{selectedInvoice.cgst > 0 ? formatCurrency(selectedInvoice.cgst) : '—'}</p></div>
+                <div><span className="text-[10px] text-muted-foreground uppercase tracking-wider">SGST (9%)</span><p className="text-sm">{selectedInvoice.sgst > 0 ? formatCurrency(selectedInvoice.sgst) : '—'}</p></div>
+                <div><span className="text-[10px] text-muted-foreground uppercase tracking-wider">IGST (18%)</span><p className="text-sm">{selectedInvoice.igst > 0 ? formatCurrency(selectedInvoice.igst) : '—'}</p></div>
+                <div><span className="text-[10px] text-muted-foreground uppercase tracking-wider">Total Amount</span><p className="text-sm font-bold text-emerald-700">{formatCurrency(selectedInvoice.taxableValue + selectedInvoice.cgst + selectedInvoice.sgst + selectedInvoice.igst)}</p></div>
+              </div>
+              {selectedInvoice.errorDetail && (
+                <>
+                  <Separator />
+                  <div className="p-3 rounded-lg bg-amber-50 border border-amber-200">
+                    <p className="text-xs font-semibold text-amber-700 mb-1">Issue Detected</p>
+                    <p className="text-[11px] text-amber-800 leading-relaxed">{selectedInvoice.errorDetail}</p>
+                  </div>
+                </>
+              )}
+              {selectedInvoice.status !== 'validated' && (
+                <Button className="w-full h-9 text-xs font-medium gap-2 bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => { handleApproveInvoice(selectedInvoice.id); setSelectedInvoice(null); }}>
+                  <Check className="h-3.5 w-3.5" />
+                  Approve & Validate Invoice
+                </Button>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* ═══ RECONCILIATION DRILL-DOWN ═══ */}
+      <Dialog open={!!selectedReconCategory} onOpenChange={(open) => { if (!open) setSelectedReconCategory(null); }}>
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <GitCompareArrows className="h-4 w-4 text-emerald-600" />
+              {selectedReconCategory} — Books vs GSTR-2B
+            </DialogTitle>
+          </DialogHeader>
+          {selectedReconCategory && reconDrilldowns[selectedReconCategory] && (
+            <div className="space-y-3 mt-2 max-h-[60vh] overflow-y-auto">
+              {reconDrilldowns[selectedReconCategory].map((item, idx) => (
+                <div key={idx} className="border border-border/60 rounded-lg p-3.5">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-mono font-semibold text-foreground">{item.invoiceNumber}</span>
+                      <span className="text-[10px] text-muted-foreground">{new Date(item.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}</span>
+                    </div>
+                    <Badge className={`text-[10px] ${selectedReconCategory === 'Mismatch' ? 'bg-red-50 text-red-700 border-red-200' : selectedReconCategory === 'Missing in Books' ? 'bg-orange-50 text-orange-700 border-orange-200' : selectedReconCategory === 'Missing in Portal' ? 'bg-purple-50 text-purple-700 border-purple-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
+                      {selectedReconCategory}
+                    </Badge>
+                  </div>
+                  <p className="text-xs font-medium text-foreground mb-2">{item.vendor}</p>
+                  <div className="grid grid-cols-3 gap-3 mb-2">
+                    <div className="p-2 rounded-md bg-slate-50 border border-border/40 text-center">
+                      <span className="text-[9px] text-muted-foreground uppercase block">Books</span>
+                      <span className="text-xs font-bold text-foreground">{item.booksAmount > 0 ? formatCurrency(item.booksAmount) : '—'}</span>
+                    </div>
+                    <div className="p-2 rounded-md bg-slate-50 border border-border/40 text-center">
+                      <span className="text-[9px] text-muted-foreground uppercase block">Portal (GSTR-2B)</span>
+                      <span className="text-xs font-bold text-foreground">{item.portalAmount > 0 ? formatCurrency(item.portalAmount) : '—'}</span>
+                    </div>
+                    <div className="p-2 rounded-md bg-red-50 border border-red-200 text-center">
+                      <span className="text-[9px] text-red-600 uppercase block">Difference</span>
+                      <span className="text-xs font-bold text-red-700">{formatCurrency(item.difference)}</span>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-1.5 p-2 rounded-md bg-amber-50/50 border border-amber-100">
+                    <AlertTriangle className="h-3 w-3 text-amber-600 mt-0.5 shrink-0" />
+                    <p className="text-[11px] text-amber-800 leading-relaxed">{item.reason}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* ═══ FILING SIMULATION MODAL ═══ */}
+      <Dialog open={filingModalOpen} onOpenChange={(open) => { if (!open && filingProgress !== 'submitting') { setFilingModalOpen(false); setFilingProgress('idle'); } }}>
+        <DialogContent className="sm:max-w-md">
+          <div className="py-8 text-center space-y-4">
+            {filingProgress === 'validating' && (
+              <>
+                <Loader2 className="h-10 w-10 animate-spin text-emerald-600 mx-auto" />
+                <div>
+                  <p className="text-sm font-semibold text-foreground">Validating return data...</p>
+                  <p className="text-xs text-muted-foreground mt-1">Checking JSON schema compliance</p>
+                </div>
+              </>
+            )}
+            {filingProgress === 'generating' && (
+              <>
+                <Loader2 className="h-10 w-10 animate-spin text-emerald-600 mx-auto" />
+                <div>
+                  <p className="text-sm font-semibold text-foreground">Generating JSON payload...</p>
+                  <p className="text-xs text-muted-foreground mt-1">{invoices.length} invoices being packaged for GST portal</p>
+                </div>
+              </>
+            )}
+            {filingProgress === 'submitting' && (
+              <>
+                <Loader2 className="h-10 w-10 animate-spin text-emerald-600 mx-auto" />
+                <div>
+                  <p className="text-sm font-semibold text-foreground">Submitting to GST portal...</p>
+                  <p className="text-xs text-muted-foreground mt-1">Connecting to GSTN via APIs</p>
+                </div>
+              </>
+            )}
+            {filingProgress === 'success' && (
+              <>
+                <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', stiffness: 200 }}>
+                  <PartyPopper className="h-12 w-12 text-emerald-600 mx-auto" />
+                </motion.div>
+                <div>
+                  <p className="text-lg font-bold text-emerald-700">Filed Successfully!</p>
+                  <div className="mt-3 p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-left space-y-1.5">
+                    <div className="flex justify-between text-xs"><span className="text-muted-foreground">ARN</span><span className="font-mono font-bold text-emerald-700">AA080725001234</span></div>
+                    <div className="flex justify-between text-xs"><span className="text-muted-foreground">Return Type</span><span className="font-medium">{returnType}</span></div>
+                    <div className="flex justify-between text-xs"><span className="text-muted-foreground">Period</span><span className="font-medium">{periodToLabel(period)}</span></div>
+                    <div className="flex justify-between text-xs"><span className="text-muted-foreground">Total Tax</span><span className="font-bold">{formatCurrency(totalTax)}</span></div>
+                    <div className="flex justify-between text-xs"><span className="text-muted-foreground">Filed On</span><span className="font-medium">Jul 8, 2025 · 12:34 PM</span></div>
+                  </div>
+                  <Button className="mt-4 bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => { setFilingModalOpen(false); setFilingProgress('idle'); }}>
+                    Done
+                  </Button>
+                </div>
+              </>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ═══════════════════════════════════════════════════════════════════════
+          TOP HEADER
+          ═══════════════════════════════════════════════════════════════════════ */}
+      <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
+        <div className="flex items-center gap-2 mb-4">
+          <Button variant="ghost" size="sm" className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground gap-1" onClick={handleBack}>
+            <ArrowLeft className="h-3.5 w-3.5" /> Client Workspace
+          </Button>
+          <ChevronRight className="h-3 w-3 text-muted-foreground" />
+          <span className="text-xs text-muted-foreground">{clientName}</span>
+          <ChevronRight className="h-3 w-3 text-muted-foreground" />
+          <span className="text-xs text-foreground font-medium">{returnType} · {periodToLabel(period)}</span>
+        </div>
+
+        <div className="border border-border/60 rounded-xl p-5">
+          <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-5">
+            <div className="flex items-start gap-4">
+              <div className="flex items-center justify-center h-11 w-11 rounded-xl bg-emerald-50 border border-emerald-200 shrink-0">
+                <FileText className="h-5 w-5 text-emerald-600" />
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2.5 flex-wrap">
+                  <h1 className="text-lg font-semibold text-foreground tracking-tight">{clientName}</h1>
+                  <Badge className={`text-[10px] px-2 py-0.5 gap-1 ${isGSTR1 ? 'bg-teal-50 text-teal-700 border-teal-200' : 'bg-violet-50 text-violet-700 border-violet-200'}`}>{returnType}</Badge>
+                </div>
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 mt-2">
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <Building2 className="size-3 text-slate-400" />
+                    <span className="font-mono font-medium text-foreground">{clientGSTIN}</span>
+                  </div>
+                  <Separator orientation="vertical" className="h-3.5" />
+                  <span className="text-xs text-muted-foreground">Tax Period: <span className="font-medium text-foreground">{periodToLabel(period)}</span></span>
+                  <Separator orientation="vertical" className="h-3.5" />
+                  <Badge className={`text-[10px] px-1.5 py-0 ${
+                    allChecksPass ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                    errorCount > 0 ? 'bg-red-50 text-red-700 border-red-200' :
+                    'bg-amber-50 text-amber-700 border-amber-200'
+                  }`}>
+                    {allChecksPass ? 'Ready to File' : errorCount > 0 ? 'Issues Blocking Filing' : 'Preparation In Progress'}
+                  </Badge>
+                  <Separator orientation="vertical" className="h-3.5" />
+                  <span className="text-xs text-muted-foreground">Last Updated: <span className="font-medium text-foreground">Jul 8, 2025 · 11:42 AM</span></span>
+                </div>
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
+              <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5" onClick={() => addToast('Draft saved', 'Return data saved as draft', 'info')}>
+                <Save className="size-3.5" /> Save Draft
+              </Button>
+              <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5" onClick={() => addToast('Validation running', 'Checking 15 invoices against GST rules...', 'info')}>
+                <ShieldCheck className="size-3.5" /> Run Validation
+              </Button>
+              <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5" onClick={() => handleAction('reconcile')}>
+                <GitCompareArrows className="size-3.5" /> Run Reconciliation
+              </Button>
+              <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 border-emerald-200 text-emerald-700 hover:bg-emerald-50" onClick={handleMarkReady}>
+                <CheckCircle2 className="size-3.5" /> Mark Ready
+              </Button>
+              <Button size="sm" className={`h-8 text-xs gap-1.5 ${allChecksPass ? 'bg-emerald-600 hover:bg-emerald-700 text-white' : 'bg-slate-200 text-slate-500 cursor-not-allowed'}`} disabled={!allChecksPass} onClick={handleFileReturn}>
+                <Send className="size-3.5" /> File Return
+              </Button>
+            </div>
+          </div>
+        </div>
+      </motion.div>
+
+      {/* ═══════════════════════════════════════════════════════════════════════
+          SECTION 1: PREPARATION PROGRESS
+          ═══════════════════════════════════════════════════════════════════════ */}
+      <motion.section initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1, duration: 0.4 }}>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">Preparation Progress</h2>
+          <span className="text-xs font-medium text-muted-foreground">{progressPercent}% Complete</span>
+        </div>
+        <div className="border border-border/60 rounded-xl p-5">
+          <div className="h-2 rounded-full bg-slate-100 mb-5 overflow-hidden">
+            <motion.div className="h-full rounded-full bg-emerald-500" animate={{ width: `${progressPercent}%` }} transition={{ duration: 0.6, ease: 'easeOut' }} />
+          </div>
+          <div className="flex items-center gap-1 overflow-x-auto pb-1">
+            {steps.map((step, idx) => (
+              <React.Fragment key={step.id}>
+                <div className="flex flex-col items-center gap-1.5 min-w-[100px]">
+                  <div className={`flex items-center justify-center h-8 w-8 rounded-full shrink-0 text-xs font-semibold transition-all duration-500 ${
+                    step.completed ? 'bg-emerald-500 text-white' : step.active ? 'bg-emerald-50 text-emerald-700 border-2 border-emerald-500' : 'bg-slate-100 text-slate-400'
+                  }`}>
+                    {step.completed ? <Check className="h-4 w-4" /> : idx + 1}
+                  </div>
+                  <span className={`text-[10px] text-center leading-tight max-w-[90px] transition-colors duration-300 ${
+                    step.completed ? 'text-emerald-700 font-medium' : step.active ? 'text-foreground font-medium' : 'text-muted-foreground'
+                  }`}>{step.label}</span>
+                </div>
+                {idx < steps.length - 1 && (
+                  <div className={`h-0.5 flex-1 min-w-[20px] mt-[-18px] rounded-full transition-colors duration-500 ${step.completed ? 'bg-emerald-300' : 'bg-slate-200'}`} />
+                )}
+              </React.Fragment>
+            ))}
+          </div>
+        </div>
+      </motion.section>
+
+      {/* ═══════════════════════════════════════════════════════════════════════
+          SECTION 2: INVOICE REVIEW TABLE
+          ═══════════════════════════════════════════════════════════════════════ */}
+      <motion.section initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15, duration: 0.4 }}>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">Invoice Review</h2>
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs text-muted-foreground">{invoices.length} invoices · {formatCurrency(totalTaxable)} taxable</span>
+          </div>
+        </div>
+
+        <div className="border border-border/60 rounded-xl overflow-hidden">
+          <div className="flex items-center gap-1.5 px-4 py-2.5 border-b border-border/40 bg-slate-50/50 overflow-x-auto">
+            {(['all', 'validated', 'warning', 'error'] as const).map(filter => {
+              const count = filter === 'all' ? invoices.length : invoices.filter(i => i.status === filter).length;
+              const isActive = invoiceFilter === filter;
+              return (
+                <Button key={filter} variant={isActive ? 'secondary' : 'ghost'} size="sm"
+                  className={`h-7 text-xs font-medium px-2.5 gap-1 capitalize shrink-0 ${isActive ? 'bg-white shadow-sm border border-border/60' : 'text-muted-foreground hover:text-foreground'}`}
+                  onClick={() => setInvoiceFilter(filter)}
+                >
+                  {filter === 'all' ? 'All' : filter.charAt(0).toUpperCase() + filter.slice(1)}
+                  <span className={`text-[10px] px-1 py-0 rounded-full ${isActive ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-muted-foreground'}`}>{count}</span>
+                </Button>
+              );
+            })}
+            <div className="flex-1" />
+            <div className="hidden md:flex items-center gap-2 text-xs text-muted-foreground shrink-0">
+              <span>CGST: <span className="font-medium text-foreground">{formatCurrency(totalCGST)}</span></span>
+              <span>SGST: <span className="font-medium text-foreground">{formatCurrency(totalSGST)}</span></span>
+              <span>IGST: <span className="font-medium text-foreground">{formatCurrency(totalIGST)}</span></span>
+            </div>
+          </div>
+
+          <ScrollArea className="max-h-[400px]">
+            <table className="w-full">
+              <thead className="sticky top-0 bg-white z-10">
+                <tr className="border-b border-border/40">
+                  <th className="text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-4 py-2.5">Invoice #</th>
+                  <th className="text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-4 py-2.5 hidden sm:table-cell">Date</th>
+                  <th className="text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-4 py-2.5">Customer</th>
+                  <th className="text-right text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-4 py-2.5 hidden md:table-cell">Taxable Value</th>
+                  <th className="text-right text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-4 py-2.5 hidden lg:table-cell">CGST</th>
+                  <th className="text-right text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-4 py-2.5 hidden lg:table-cell">SGST</th>
+                  <th className="text-right text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-4 py-2.5 hidden lg:table-cell">IGST</th>
+                  <th className="text-center text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-4 py-2.5">Status</th>
+                  <th className="text-center text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-4 py-2.5">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                <AnimatePresence mode="popLayout">
+                  {filteredInvoices.map((inv) => (
+                    <motion.tr key={inv.id} layout
+                      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, scale: 0.98 }}
+                      className={`border-b border-border/20 hover:bg-muted/30 transition-colors cursor-pointer ${inv.status === 'error' ? 'bg-red-50/30' : inv.status === 'warning' ? 'bg-amber-50/30' : ''}`}
+                      onClick={() => setSelectedInvoice(inv)}
+                    >
+                      <td className="px-4 py-2.5 text-xs font-mono font-medium text-foreground">{inv.invoiceNumber}</td>
+                      <td className="px-4 py-2.5 text-xs text-muted-foreground hidden sm:table-cell">{new Date(inv.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' })}</td>
+                      <td className="px-4 py-2.5 text-xs text-foreground max-w-[180px] truncate">{inv.customer}</td>
+                      <td className="px-4 py-2.5 text-xs text-right font-medium text-foreground hidden md:table-cell">{formatCurrency(inv.taxableValue)}</td>
+                      <td className="px-4 py-2.5 text-xs text-right text-muted-foreground hidden lg:table-cell">{inv.cgst > 0 ? formatCurrency(inv.cgst) : '—'}</td>
+                      <td className="px-4 py-2.5 text-xs text-right text-muted-foreground hidden lg:table-cell">{inv.sgst > 0 ? formatCurrency(inv.sgst) : '—'}</td>
+                      <td className="px-4 py-2.5 text-xs text-right text-muted-foreground hidden lg:table-cell">{inv.igst > 0 ? formatCurrency(inv.igst) : '—'}</td>
+                      <td className="px-4 py-2.5 text-center">{getStatusBadge(inv.status)}</td>
+                      <td className="px-4 py-2.5" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-center gap-1">
+                          <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground" onClick={() => setSelectedInvoice(inv)}><Eye className="h-3 w-3" /></Button>
+                          {inv.status !== 'validated' && (
+                            <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50" onClick={() => handleApproveInvoice(inv.id)}><Check className="h-3 w-3" /></Button>
+                          )}
+                        </div>
+                      </td>
+                    </motion.tr>
+                  ))}
+                </AnimatePresence>
+              </tbody>
+            </table>
+          </ScrollArea>
+
+          <div className="flex items-center justify-between px-4 py-2.5 border-t border-border/40 bg-slate-50/50">
+            <span className="text-xs text-muted-foreground">Showing {filteredInvoices.length} of {invoices.length} invoices</span>
+            <span className="text-xs font-medium text-foreground">Total Tax: {formatCurrency(totalTax)}</span>
+          </div>
+        </div>
+      </motion.section>
+
+      {/* ═══════════════════════════════════════════════════════════════════════
+          TWO-COLUMN: VALIDATION CENTER + RECONCILIATION
+          ═══════════════════════════════════════════════════════════════════════ */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+        {/* SECTION 3: VALIDATION CENTER */}
+        <motion.section initial={{ opacity: 0, x: -12 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.2, duration: 0.4 }}>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">Validation Center</h2>
+            <Badge variant="outline" className={`text-[10px] font-medium ${unresolvedIssues > 0 ? 'text-red-700 bg-red-50 border-red-200' : 'text-emerald-700 bg-emerald-50 border-emerald-200'}`}>
+              {unresolvedIssues > 0 ? `${unresolvedIssues} issues` : 'All clear'}
+            </Badge>
+          </div>
+
+          <div className="border border-border/60 rounded-xl divide-y divide-border/40 overflow-hidden">
+            <AnimatePresence mode="popLayout">
+              {validationIssues.map((issue) => (
+                <motion.div key={issue.id} layout
+                  initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, height: 0 }}
+                  className={`px-4 py-3.5 transition-all ${issue.resolved ? 'bg-emerald-50/30' : 'hover:bg-muted/20'}`}
+                >
+                  <div className="flex items-start gap-3">
+                    <div className="mt-0.5 shrink-0">
+                      {issue.resolved ? <CheckCircle2 className="h-4 w-4 text-emerald-600" /> : getSeverityIcon(issue.severity)}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        {issue.resolved ? <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px] px-1.5 py-0">Resolved</Badge> : getSeverityBadge(issue.severity)}
+                        <Badge variant="outline" className="text-[10px] px-1.5 py-0">{issue.category}</Badge>
+                      </div>
+                      <p className={`text-xs leading-snug ${issue.resolved ? 'text-muted-foreground line-through' : 'text-foreground'}`}>{issue.description}</p>
+                      <p className="text-[10px] text-muted-foreground mt-1">Invoice: <span className="font-mono font-medium">{issue.invoiceRef}</span></p>
+                    </div>
+                    {!issue.resolved && (
+                      <Button size="sm" variant="outline" className="h-7 text-xs font-medium px-3 shrink-0 border-border/60 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200" onClick={() => handleFixIssue(issue.id)}>
+                        {issue.fixAction}
+                      </Button>
+                    )}
+                  </div>
+                </motion.div>
+              ))}
+            </AnimatePresence>
+            {unresolvedIssues === 0 && (
+              <div className="p-8 text-center">
+                <CheckCircle2 className="h-8 w-8 text-emerald-500 mx-auto mb-2" />
+                <p className="text-sm font-semibold text-emerald-700">All validation issues resolved</p>
+                <p className="text-xs text-muted-foreground mt-1">Your return data passes all GST validation rules</p>
+              </div>
+            )}
+          </div>
+        </motion.section>
+
+        {/* SECTION 4: GST RECONCILIATION */}
+        <motion.section initial={{ opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.25, duration: 0.4 }}>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">GST Reconciliation</h2>
+            <Badge variant="outline" className="text-[10px] font-medium text-muted-foreground">Books vs GSTR-2B</Badge>
+          </div>
+
+          <div className="border border-border/60 rounded-xl p-5 space-y-3">
+            {reconData.map((cat, idx) => (
+              <motion.div key={cat.label} initial={{ opacity: 0, x: 8 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.3 + idx * 0.06, duration: 0.3 }}
+                className={`flex items-center justify-between p-3 rounded-lg border ${cat.bgColor} cursor-pointer hover:shadow-sm transition-shadow`}
+                onClick={() => { if (cat.label !== 'Perfect Match' && reconDrilldowns[cat.label]) setSelectedReconCategory(cat.label); }}
+              >
+                <div className="flex items-center gap-2.5">
+                  <span className={`text-xs font-semibold ${cat.color}`}>{cat.label}</span>
+                  <span className={`text-[10px] ${cat.color} opacity-70`}>{cat.count} invoices</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className={`text-sm font-bold ${cat.color}`}>{formatCurrency(cat.amount)}</span>
+                  {cat.label !== 'Perfect Match' && reconDrilldowns[cat.label] && (
+                    <ArrowRight className={`h-3.5 w-3.5 ${cat.color} opacity-50`} />
+                  )}
+                </div>
+              </motion.div>
+            ))}
+
+            <Separator className="my-2" />
+
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-medium text-muted-foreground">Total Records Compared</span>
+              <span className="text-sm font-bold text-foreground">50 invoices · {formatCurrency(3691000)}</span>
+            </div>
+
+            <p className="text-[10px] text-muted-foreground text-center">Click any category to view detailed breakdown</p>
+          </div>
+        </motion.section>
+      </div>
+
+      {/* ═══════════════════════════════════════════════════════════════════════
+          SECTION 5: RETURN SUMMARY
+          ═══════════════════════════════════════════════════════════════════════ */}
+      <motion.section initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3, duration: 0.4 }}>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">Return Summary — {returnType}</h2>
+          <Badge variant="outline" className="text-[10px] font-medium text-muted-foreground">{periodToLabel(period)}</Badge>
+        </div>
+
+        {isGSTR1 ? (
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+            {[
+              { label: 'B2B Sales', value: gstr1Summary.b2bSales, icon: <Building2 className="h-4 w-4" />, color: 'text-emerald-700', bg: 'bg-emerald-50' },
+              { label: 'B2C Sales', value: gstr1Summary.b2cSales, icon: <IndianRupee className="h-4 w-4" />, color: 'text-teal-700', bg: 'bg-teal-50' },
+              { label: 'Exports', value: gstr1Summary.exports, icon: <TrendingUp className="h-4 w-4" />, color: 'text-blue-700', bg: 'bg-blue-50' },
+              { label: 'Credit Notes', value: gstr1Summary.creditNotes, icon: <TrendingDown className="h-4 w-4" />, color: 'text-orange-700', bg: 'bg-orange-50' },
+              { label: 'Debit Notes', value: gstr1Summary.debitNotes, icon: <FilePlus2 className="h-4 w-4" />, color: 'text-purple-700', bg: 'bg-purple-50' },
+            ].map((item, idx) => (
+              <motion.div key={item.label} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.35 + idx * 0.05, duration: 0.3 }}
+                className="border border-border/60 rounded-xl p-4 hover:border-border transition-colors"
+              >
+                <div className="flex items-center gap-2 mb-2">
+                  <div className={`flex items-center justify-center h-7 w-7 rounded-lg ${item.bg} ${item.color}`}>{item.icon}</div>
+                  <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">{item.label}</span>
+                </div>
+                <p className={`text-lg font-bold ${item.color}`}>{formatCurrency(item.value)}</p>
+              </motion.div>
+            ))}
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {[
+              { label: 'Taxable Supplies', value: gstr3bSummary.taxableSupplies, icon: <IndianRupee className="h-4 w-4" />, color: 'text-emerald-700', bg: 'bg-emerald-50' },
+              { label: 'ITC Available', value: gstr3bSummary.itcAvailable, icon: <Shield className="h-4 w-4" />, color: 'text-teal-700', bg: 'bg-teal-50' },
+              { label: 'Output Tax', value: gstr3bSummary.outputTax, icon: <FileText className="h-4 w-4" />, color: 'text-amber-700', bg: 'bg-amber-50' },
+              { label: 'Net Tax Payable', value: gstr3bSummary.netTaxPayable, icon: <Zap className="h-4 w-4" />, color: 'text-violet-700', bg: 'bg-violet-50' },
+            ].map((item, idx) => (
+              <motion.div key={item.label} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.35 + idx * 0.05, duration: 0.3 }}
+                className="border border-border/60 rounded-xl p-4 hover:border-border transition-colors"
+              >
+                <div className="flex items-center gap-2 mb-2">
+                  <div className={`flex items-center justify-center h-7 w-7 rounded-lg ${item.bg} ${item.color}`}>{item.icon}</div>
+                  <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">{item.label}</span>
+                </div>
+                <p className={`text-lg font-bold ${item.color}`}>{formatCurrency(item.value)}</p>
+              </motion.div>
+            ))}
+          </div>
+        )}
+      </motion.section>
+
+      {/* ═══════════════════════════════════════════════════════════════════════
+          TWO-COLUMN: AI REVIEW + READY TO FILE
+          ═══════════════════════════════════════════════════════════════════════ */}
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+
+        {/* SECTION 6: AI REVIEW */}
+        <motion.section initial={{ opacity: 0, x: -12 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.35, duration: 0.4 }} className="lg:col-span-3">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">AI Review</h2>
+            <Badge variant="outline" className="text-[10px] font-medium text-emerald-700 bg-emerald-50 border-emerald-200 gap-1">
+              <Sparkles className="size-2.5" /> {aiInsights.filter(i => !i.dismissed).length} active
+            </Badge>
+          </div>
+
+          <ScrollArea className="max-h-[480px]">
+            <div className="space-y-2.5">
+              <AnimatePresence mode="popLayout">
+                {aiInsights.filter(i => !i.dismissed).map((insight) => {
+                  const colors = getAIInsightColors(insight.type);
+                  return (
+                    <motion.div key={insight.id} layout initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, height: 0 }}
+                      className="border border-border/60 rounded-lg p-3.5 hover:border-border transition-colors"
+                    >
+                      <div className="flex items-start gap-3">
+                        <div className={`flex items-center justify-center h-8 w-8 rounded-lg shrink-0 ${colors.bg} ${colors.color}`}>{getAIInsightIcon(insight.type)}</div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-xs font-semibold text-foreground">{insight.title}</span>
+                            {getUrgencyBadge(insight.urgency)}
+                          </div>
+                          <p className="text-[11px] text-muted-foreground leading-relaxed line-clamp-2">{insight.description}</p>
+                          <div className="flex items-center gap-2 mt-2">
+                            <Button size="sm" variant="outline" className="h-6 text-[10px] font-medium px-2.5 shrink-0 border-border/60 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200"
+                              onClick={() => {
+                                if (insight.type === 'risk_alert' || insight.type === 'tax_anomaly') {
+                                  const linkedIssue = validationIssues.find(v => !v.resolved);
+                                  if (linkedIssue) handleFixIssue(linkedIssue.id);
+                                  else handleDismissInsight(insight.id);
+                                } else {
+                                  handleDismissInsight(insight.id);
+                                }
+                              }}
+                            >
+                              {insight.suggestedAction}
+                            </Button>
+                            <Button size="sm" variant="ghost" className="h-6 text-[10px] px-2 text-muted-foreground hover:text-foreground"
+                              onClick={() => handleDismissInsight(insight.id)}
+                            >
+                              Dismiss
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    </motion.div>
+                  );
+                })}
+              </AnimatePresence>
+              {aiInsights.filter(i => !i.dismissed).length === 0 && (
+                <div className="p-8 text-center border border-border/60 rounded-xl">
+                  <CheckCircle2 className="h-8 w-8 text-emerald-500 mx-auto mb-2" />
+                  <p className="text-sm font-semibold text-emerald-700">All AI recommendations addressed</p>
+                  <p className="text-xs text-muted-foreground mt-1">No outstanding risk alerts or missing documents</p>
+                </div>
+              )}
+            </div>
+          </ScrollArea>
+        </motion.section>
+
+        {/* SECTION 7: READY TO FILE PANEL */}
+        <motion.section initial={{ opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.4, duration: 0.4 }} className="lg:col-span-2">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">Filing Readiness</h2>
+          </div>
+
+          <div className="border border-border/60 rounded-xl p-5 space-y-5">
+            <div className="grid grid-cols-2 gap-3">
+              {[
+                { label: 'Validation Score', value: validationScore, target: 95, icon: <ClipboardCheck className="h-4 w-4" />, color: validationScore >= 95 ? 'text-emerald-700' : validationScore >= 80 ? 'text-amber-700' : 'text-red-700', bg: validationScore >= 95 ? 'bg-emerald-50' : validationScore >= 80 ? 'bg-amber-50' : 'bg-red-50', stroke: validationScore >= 95 ? '#10b981' : validationScore >= 80 ? '#f59e0b' : '#ef4444' },
+                { label: 'Match Rate', value: matchRate, target: 90, icon: <GitCompareArrows className="h-4 w-4" />, color: matchRate >= 90 ? 'text-emerald-700' : matchRate >= 70 ? 'text-amber-700' : 'text-red-700', bg: matchRate >= 90 ? 'bg-emerald-50' : matchRate >= 70 ? 'bg-amber-50' : 'bg-red-50', stroke: matchRate >= 90 ? '#10b981' : matchRate >= 70 ? '#f59e0b' : '#ef4444' },
+                { label: 'Compliance Score', value: complianceScore, target: 85, icon: <ShieldCheck className="h-4 w-4" />, color: complianceScore >= 85 ? 'text-emerald-700' : complianceScore >= 65 ? 'text-amber-700' : 'text-red-700', bg: complianceScore >= 85 ? 'bg-emerald-50' : complianceScore >= 65 ? 'bg-amber-50' : 'bg-red-50', stroke: complianceScore >= 85 ? '#10b981' : complianceScore >= 65 ? '#f59e0b' : '#ef4444' },
+              ].map((score) => (
+                <div key={score.label} className="border border-border/40 rounded-lg p-3 text-center">
+                  <div className={`flex items-center justify-center h-7 w-7 rounded-lg mx-auto mb-1.5 ${score.bg} ${score.color}`}>{score.icon}</div>
+                  <p className="text-xl font-bold text-foreground">{score.value}%</p>
+                  <p className="text-[10px] text-muted-foreground">{score.label}</p>
+                  <div className="h-1.5 rounded-full bg-slate-100 mt-2 overflow-hidden">
+                    <motion.div className="h-full rounded-full" style={{ backgroundColor: score.stroke }}
+                      animate={{ width: `${score.value}%` }} transition={{ duration: 0.8, delay: 0.5 }}
+                    />
+                  </div>
+                  <p className="text-[9px] text-muted-foreground mt-1">Target: {score.target}%</p>
+                </div>
+              ))}
+            </div>
+
+            <div className={`rounded-lg p-4 border ${allChecksPass ? 'bg-emerald-50 border-emerald-200' : 'bg-amber-50 border-amber-200'}`}>
+              <div className="flex items-center gap-2 mb-2">
+                {allChecksPass ? <CheckCircle2 className="h-5 w-5 text-emerald-600" /> : <AlertTriangle className="h-5 w-5 text-amber-600" />}
+                <span className={`text-sm font-semibold ${allChecksPass ? 'text-emerald-700' : 'text-amber-700'}`}>
+                  {allChecksPass ? 'All Checks Passed' : 'Action Required Before Filing'}
+                </span>
+              </div>
+              {!allChecksPass && (
+                <ul className="text-xs text-amber-700 space-y-1 ml-7">
+                  {errorCount > 0 && <li>• {errorCount} invoice{errorCount > 1 ? 's' : ''} with errors need fixing</li>}
+                  {warningCount > 0 && <li>• {warningCount} invoice{warningCount > 1 ? 's' : ''} with warnings need approval</li>}
+                  {unresolvedIssues > 0 && <li>• {unresolvedIssues} validation issue{unresolvedIssues > 1 ? 's' : ''} unresolved</li>}
+                </ul>
+              )}
+            </div>
+
+            <Button className={`w-full h-12 text-sm font-semibold gap-2 shadow-lg ${allChecksPass ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/20' : 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'}`}
+              disabled={!allChecksPass} onClick={handleFileReturn}
+            >
+              {allChecksPass ? <><Send className="h-4 w-4" /> File GST Return</> : <><Clock className="h-4 w-4" /> Resolve Issues to File</>}
+            </Button>
+
+            {!allChecksPass && (
+              <p className="text-[10px] text-center text-muted-foreground">Fix all issues above to unlock filing</p>
+            )}
+          </div>
+        </motion.section>
+      </div>
+
+    </div>
+  );
+}

@@ -10,11 +10,12 @@ import { AppSidebar } from '@/components/app-sidebar'
 import { useApp } from '@/contexts/AppContext'
 import { useAuth } from '@/contexts/AuthContext'
 import DashboardPage from '@/components/dashboard/DashboardPage'
-import UploadPage from '@/components/upload/UploadPage'
-import ReviewPage from '@/components/review/ReviewPage'
-import ReconciliationPage from '@/components/reconciliation/ReconciliationPage'
 import ReturnsPage from '@/components/returns/ReturnsPage'
+import ReconciliationPage from '@/components/reconciliation/ReconciliationPage'
+import InvoiceWorkspacePage from '@/components/invoices/InvoiceWorkspacePage'
 import ClientRegistryPage from '@/components/clients/ClientRegistryPage'
+import ClientWorkspacePage from '@/components/clients/ClientWorkspacePage'
+import ReturnPrepWorkspace from '@/components/returns/ReturnPrepWorkspace'
 import SettingsPage from '@/components/settings/SettingsPage'
 import LandingPage from '@/components/landing/LandingPage'
 import LoginPage from '@/components/auth/LoginPage'
@@ -28,15 +29,17 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Zap, LogOut, User, Settings } from 'lucide-react'
+import WorkflowTracker from '@/components/workflow/WorkflowTracker'
 
 const VIEW_TITLES: Record<string, string> = {
   dashboard: 'Dashboard',
-  upload: 'Upload',
-  review: 'Review',
-  reconcile: 'Reconcile',
   returns: 'Returns',
+  reconcile: 'Reconcile',
+  invoices: 'Invoices',
   clients: 'Clients',
   settings: 'Settings',
+  'client-workspace': 'Client Workspace',
+  'return-prep': 'Return Preparation',
 }
 
 function DashboardContent() {
@@ -47,16 +50,18 @@ function DashboardContent() {
     switch (currentView) {
       case 'dashboard':
         return <DashboardPage />
-      case 'upload':
-        return <UploadPage />
-      case 'review':
-        return <ReviewPage />
-      case 'reconcile':
-        return <ReconciliationPage />
       case 'returns':
         return <ReturnsPage />
+      case 'reconcile':
+        return <ReconciliationPage />
+      case 'invoices':
+        return <InvoiceWorkspacePage />
       case 'clients':
         return <ClientRegistryPage />
+      case 'client-workspace':
+        return <ClientWorkspacePage />
+      case 'return-prep':
+        return <ReturnPrepWorkspace />
       case 'settings':
         return <SettingsPage />
       default:
@@ -82,7 +87,6 @@ function DashboardContent() {
           </div>
           <div className="ml-auto flex items-center gap-3">
             <Separator orientation="vertical" className="h-5" />
-            {/* User Profile Dropdown */}
             <DropdownMenu>
               <DropdownMenuTrigger className="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-accent transition-colors outline-none">
                 <Avatar className="h-7 w-7">
@@ -127,6 +131,10 @@ function DashboardContent() {
             </DropdownMenu>
           </div>
         </header>
+        {/* Persistent Workflow Tracker Bar */}
+        <div className="border-b border-border/30 bg-white/60 dark:bg-gray-900/60 backdrop-blur-sm px-4">
+          <WorkflowTracker compact />
+        </div>
         <main className="flex-1 overflow-auto bg-gray-50/50 dark:bg-gray-950/50">
           {renderView()}
         </main>
@@ -140,7 +148,6 @@ function AppRouter() {
   const { isAuthenticated, isInitializing } = useAuth()
   const hasSeededRef = React.useRef(false)
 
-  // Seed database on first load
   useEffect(() => {
     if (!hasSeededRef.current) {
       hasSeededRef.current = true
@@ -151,7 +158,6 @@ function AppRouter() {
     }
   }, [])
 
-  // Sync auth state with screen state
   useEffect(() => {
     if (isInitializing) return
     if (isAuthenticated && currentScreen !== 'app') {
@@ -166,17 +172,9 @@ function AppRouter() {
     }
   }, [isAuthenticated, isInitializing, currentScreen, setCurrentScreen])
 
-  const handleGetStarted = () => {
-    setCurrentScreen('login')
-  }
-
-  const handleBookDemo = () => {
-    setCurrentScreen('login')
-  }
-
-  const handleBackToLanding = () => {
-    setCurrentScreen('landing')
-  }
+  const handleGetStarted = () => setCurrentScreen('login')
+  const handleBookDemo = () => setCurrentScreen('login')
+  const handleBackToLanding = () => setCurrentScreen('landing')
 
   if (isInitializing) {
     return (

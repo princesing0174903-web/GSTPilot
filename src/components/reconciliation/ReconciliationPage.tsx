@@ -18,17 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-} from '@/components/ui/dialog';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Label } from '@/components/ui/label';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import {
@@ -36,18 +26,28 @@ import {
   AlertTriangle,
   XCircle,
   Play,
-  ArrowRight,
-  Search,
-  Handshake,
-  Sparkles,
-  PartyPopper,
-  Upload,
   Loader2,
-  FileSpreadsheet,
   GitCompareArrows,
+  FileSpreadsheet,
+  Search,
+  Sparkles,
+  ShieldCheck,
+  ShieldAlert,
+  ShieldX,
+  Eye,
+  ArrowRight,
+  ChevronRight,
+  Clock,
+  History,
+  FileText,
+  Copy,
+  AlertCircle,
+  CircleDot,
+  MinusCircle,
 } from 'lucide-react';
-import { formatCurrency } from '@/lib/gst-utils';
+import { formatCurrency, generateMismatchExplanation } from '@/lib/gst-utils';
 import { useApp } from '@/contexts/AppContext';
+import { toast } from 'sonner';
 import type {
   ReconciliationResult,
   ReconciliationRun,
@@ -65,284 +65,445 @@ interface ClientOption {
   gstin: string;
 }
 
-interface ReconResult {
+interface MismatchDetail {
+  field: string;
+  expected: string | number;
+  actual: string | number;
+  difference?: number;
+}
+
+interface MismatchRecord {
   id: string;
-  clientId: string;
-  invoiceId: string;
-  matchStatus: string;
-  matchScore: number;
-  mismatches?: string;
-  aiExplanation?: string;
-  aiRecommendation?: string;
+  invoiceNumber: string;
+  clientName: string;
+  mismatchCategory: string;
+  mismatchType: string;
+  taxDifference: number;
   confidenceScore: number;
-  workflowStatus: string;
-  resolved: boolean;
-  sourceA?: string;
-  sourceB?: string;
-  sourceGstin?: string;
-  matchedGstin?: string;
-  createdAt: string;
-  invoice?: {
+  aiExplanation: string;
+  aiRecommendation: string;
+  booksData: {
     invoiceNumber: string;
     invoiceDate: string;
     sellerGstin: string;
-    buyerGstin?: string;
-    buyerName?: string;
-    totalAmount: number;
+    buyerGstin: string;
+    taxableValue: number;
     cgst: number;
     sgst: number;
     igst: number;
-    taxableValue: number;
-    client?: { id: string; tradeName: string; gstin: string };
+    totalAmount: number;
   };
+  gstr2bData: {
+    invoiceNumber: string;
+    invoiceDate: string;
+    sellerGstin: string;
+    buyerGstin: string;
+    taxableValue: number;
+    cgst: number;
+    sgst: number;
+    igst: number;
+    totalAmount: number;
+  } | null;
+  diffFields: string[];
+  resolved: boolean;
+  workflowStatus: string;
 }
 
-interface ReconRun {
+interface ReconTimelineEntry {
   id: string;
-  clientId: string;
-  period: string;
-  sources: string;
-  totalRecords: number;
-  matched: number;
-  unmatched: number;
-  partialMatches: number;
-  highRisk: number;
-  gstDifference: number;
-  status: string;
-  createdAt: string;
-}
-
-interface StatsData {
-  totalResults: number;
-  matchBreakdown: Record<string, number>;
-  matchPercentage: number;
-  unresolved: number;
-  totalGstDifference: number;
+  date: string;
+  clients: string;
+  recordsProcessed: number;
+  matchRate: number;
 }
 
 // ──────────────────────────────────────────────
-// Mock Data Fallback
+// Mock Data — the 6 CRITICAL mismatches from spec
 // ──────────────────────────────────────────────
 const MOCK_CLIENTS: ClientOption[] = [
-  { id: 'cl-1', tradeName: 'Sharma & Associates', gstin: '27AABCS1429B1Z5' },
-  { id: 'cl-2', tradeName: 'Patel Enterprises', gstin: '24AABCP1234B1Z3' },
-  { id: 'cl-3', tradeName: 'Mehta Infra Pvt Ltd', gstin: '27AABCM5678B1Z1' },
-  { id: 'cl-4', tradeName: 'Reddy Constructions', gstin: '36AABCR9012B1Z9' },
+  { id: 'cl-1', tradeName: 'Sharma Enterprises', gstin: '27AABCS1429B1Z5' },
+  { id: 'cl-2', tradeName: 'Patel & Sons', gstin: '24AABCP1234B1Z3' },
+  { id: 'cl-3', tradeName: 'Krishna Traders', gstin: '27AABCK5678B1Z1' },
+  { id: 'cl-4', tradeName: 'Metro Retail', gstin: '36AABCM9012B1Z9' },
+  { id: 'cl-5', tradeName: 'Sunrise Exports', gstin: '27AABCS3456B1Z7' },
+  { id: 'cl-6', tradeName: 'Gupta Manufacturing', gstin: '09AABCG7890B1Z3' },
 ];
 
-const MOCK_RESULTS: ReconResult[] = [
+const MOCK_MISMATCHES: MismatchRecord[] = [
   {
-    id: 'recon-1', clientId: 'cl-1', invoiceId: 'inv-1', matchStatus: 'perfect_match',
-    matchScore: 98, confidenceScore: 97, workflowStatus: 'resolved', resolved: true,
-    sourceA: 'Purchase Register', sourceB: 'GSTR-2B', sourceGstin: '27AABCS1429B1Z5',
-    createdAt: '2026-03-01T10:00:00Z',
-    invoice: {
-      invoiceNumber: 'INV-2026-001', invoiceDate: '2026-02-15', sellerGstin: '27AABCS1429B1Z5',
-      totalAmount: 118000, cgst: 9000, sgst: 9000, igst: 0, taxableValue: 100000,
-      client: { id: 'cl-1', tradeName: 'Sharma & Associates', gstin: '27AABCS1429B1Z5' },
+    id: 'mm-1',
+    invoiceNumber: 'INV-2025-0045',
+    clientName: 'Sharma Enterprises',
+    mismatchCategory: 'tax_difference',
+    mismatchType: 'Tax Amount Difference',
+    taxDifference: 1240,
+    confidenceScore: 94,
+    aiExplanation: 'CGST ₹620 less in GSTR-2B',
+    aiRecommendation: 'Accept GSTR-2B value — the vendor likely reported a lower CGST amount. The difference of ₹620 per component (₹1,240 total) suggests a rate revision.',
+    booksData: {
+      invoiceNumber: 'INV-2025-0045',
+      invoiceDate: '2025-02-15',
+      sellerGstin: '27AABCS1429B1Z5',
+      buyerGstin: '27AABCB9876B1Z1',
+      taxableValue: 50000,
+      cgst: 4500,
+      sgst: 4500,
+      igst: 0,
+      totalAmount: 59000,
     },
+    gstr2bData: {
+      invoiceNumber: 'INV-2025-0045',
+      invoiceDate: '2025-02-15',
+      sellerGstin: '27AABCS1429B1Z5',
+      buyerGstin: '27AABCB9876B1Z1',
+      taxableValue: 50000,
+      cgst: 3880,
+      sgst: 4500,
+      igst: 0,
+      totalAmount: 58380,
+    },
+    diffFields: ['cgst', 'totalAmount'],
+    resolved: false,
+    workflowStatus: 'pending',
   },
   {
-    id: 'recon-2', clientId: 'cl-2', invoiceId: 'inv-2', matchStatus: 'perfect_match',
-    matchScore: 95, confidenceScore: 94, workflowStatus: 'resolved', resolved: true,
-    sourceA: 'Purchase Register', sourceB: 'GSTR-2B', sourceGstin: '24AABCP1234B1Z3',
-    createdAt: '2026-03-01T10:01:00Z',
-    invoice: {
-      invoiceNumber: 'INV-2026-012', invoiceDate: '2026-02-18', sellerGstin: '24AABCP1234B1Z3',
-      totalAmount: 59000, cgst: 4500, sgst: 4500, igst: 0, taxableValue: 50000,
-      client: { id: 'cl-2', tradeName: 'Patel Enterprises', gstin: '24AABCP1234B1Z3' },
+    id: 'mm-2',
+    invoiceNumber: 'INV-2025-0078',
+    clientName: 'Patel & Sons',
+    mismatchCategory: 'gstin_mismatch',
+    mismatchType: 'GSTIN Mismatch',
+    taxDifference: 0,
+    confidenceScore: 87,
+    aiExplanation: 'Seller GSTIN differs by 1 character',
+    aiRecommendation: 'Correct GSTIN — the seller GSTIN in books ends with "Z3" while GSTR-2B shows "Z4". This is likely a data entry error in your purchase register.',
+    booksData: {
+      invoiceNumber: 'INV-2025-0078',
+      invoiceDate: '2025-02-18',
+      sellerGstin: '24AABCP1234B1Z3',
+      buyerGstin: '24AABCB5678B1Z2',
+      taxableValue: 75000,
+      cgst: 6750,
+      sgst: 6750,
+      igst: 0,
+      totalAmount: 88500,
     },
+    gstr2bData: {
+      invoiceNumber: 'INV-2025-0078',
+      invoiceDate: '2025-02-18',
+      sellerGstin: '24AABCP1234B1Z4',
+      buyerGstin: '24AABCB5678B1Z2',
+      taxableValue: 75000,
+      cgst: 6750,
+      sgst: 6750,
+      igst: 0,
+      totalAmount: 88500,
+    },
+    diffFields: ['sellerGstin'],
+    resolved: false,
+    workflowStatus: 'pending',
   },
   {
-    id: 'recon-3', clientId: 'cl-3', invoiceId: 'inv-3', matchStatus: 'perfect_match',
-    matchScore: 100, confidenceScore: 99, workflowStatus: 'resolved', resolved: true,
-    sourceA: 'Purchase Register', sourceB: 'GSTR-2B', sourceGstin: '27AABCM5678B1Z1',
-    createdAt: '2026-03-01T10:02:00Z',
-    invoice: {
-      invoiceNumber: 'INV-2026-023', invoiceDate: '2026-02-20', sellerGstin: '27AABCM5678B1Z1',
-      totalAmount: 236000, cgst: 18000, sgst: 18000, igst: 0, taxableValue: 200000,
-      client: { id: 'cl-3', tradeName: 'Mehta Infra Pvt Ltd', gstin: '27AABCM5678B1Z1' },
+    id: 'mm-3',
+    invoiceNumber: 'INV-2025-0112',
+    clientName: 'Krishna Traders',
+    mismatchCategory: 'missing_in_gstr',
+    mismatchType: 'Invoice Not in GSTR-2B',
+    taxDifference: 5400,
+    confidenceScore: 91,
+    aiExplanation: 'Found in books but missing from portal',
+    aiRecommendation: 'Contact vendor immediately — this invoice is not reflected in GSTR-2B. ITC of ₹5,400 is at risk if the vendor does not upload before the deadline.',
+    booksData: {
+      invoiceNumber: 'INV-2025-0112',
+      invoiceDate: '2025-02-22',
+      sellerGstin: '27AABCK5678B1Z1',
+      buyerGstin: '27AABCB9876B1Z1',
+      taxableValue: 30000,
+      cgst: 2700,
+      sgst: 2700,
+      igst: 0,
+      totalAmount: 35400,
     },
+    gstr2bData: null,
+    diffFields: ['sellerGstin', 'taxableValue', 'cgst', 'sgst', 'igst', 'totalAmount'],
+    resolved: false,
+    workflowStatus: 'pending',
   },
   {
-    id: 'recon-4', clientId: 'cl-4', invoiceId: 'inv-4', matchStatus: 'perfect_match',
-    matchScore: 97, confidenceScore: 96, workflowStatus: 'resolved', resolved: true,
-    sourceA: 'Purchase Register', sourceB: 'GSTR-2B', sourceGstin: '36AABCR9012B1Z9',
-    createdAt: '2026-03-01T10:03:00Z',
-    invoice: {
-      invoiceNumber: 'INV-2026-034', invoiceDate: '2026-02-22', sellerGstin: '36AABCR9012B1Z9',
-      totalAmount: 35400, cgst: 2700, sgst: 2700, igst: 0, taxableValue: 30000,
-      client: { id: 'cl-4', tradeName: 'Reddy Constructions', gstin: '36AABCR9012B1Z9' },
+    id: 'mm-4',
+    invoiceNumber: 'INV-2025-0203',
+    clientName: 'Metro Retail',
+    mismatchCategory: 'duplicate',
+    mismatchType: 'Duplicate Detected',
+    taxDifference: 0,
+    confidenceScore: 96,
+    aiExplanation: 'Same invoice number appears twice',
+    aiRecommendation: 'Mark as duplicate — the same invoice number INV-2025-0203 from this GSTIN appears twice in your purchase register. Remove the duplicate entry to avoid double ITC claim.',
+    booksData: {
+      invoiceNumber: 'INV-2025-0203',
+      invoiceDate: '2025-02-25',
+      sellerGstin: '36AABCM9012B1Z9',
+      buyerGstin: '36AABCB3456B1Z5',
+      taxableValue: 45000,
+      cgst: 4050,
+      sgst: 4050,
+      igst: 0,
+      totalAmount: 53100,
     },
+    gstr2bData: {
+      invoiceNumber: 'INV-2025-0203',
+      invoiceDate: '2025-02-25',
+      sellerGstin: '36AABCM9012B1Z9',
+      buyerGstin: '36AABCB3456B1Z5',
+      taxableValue: 45000,
+      cgst: 4050,
+      sgst: 4050,
+      igst: 0,
+      totalAmount: 53100,
+    },
+    diffFields: [],
+    resolved: false,
+    workflowStatus: 'pending',
   },
   {
-    id: 'recon-5', clientId: 'cl-1', invoiceId: 'inv-5', matchStatus: 'mismatch',
-    matchScore: 62, confidenceScore: 78, workflowStatus: 'pending', resolved: false,
-    sourceA: 'Purchase Register', sourceB: 'GSTR-2B', sourceGstin: '27AABCS1429B1Z5',
-    mismatches: JSON.stringify([
-      { field: 'gst_amount', expected: 16200, actual: 15390, difference: 810 },
-      { field: 'total_amount', expected: 106200, actual: 105390, difference: 810 },
-    ]),
-    aiExplanation: 'GST amount mismatch detected between Purchase Register (₹16,200) and GSTR-2B (₹15,390). Difference of ₹810 may be due to rate change or partial credit note.',
-    aiRecommendation: 'adjust_gst_amount',
-    createdAt: '2026-03-01T10:04:00Z',
-    invoice: {
-      invoiceNumber: 'INV-2026-045', invoiceDate: '2026-02-25', sellerGstin: '27AABCS1429B1Z5',
-      totalAmount: 106200, cgst: 8100, sgst: 8100, igst: 0, taxableValue: 90000,
-      client: { id: 'cl-1', tradeName: 'Sharma & Associates', gstin: '27AABCS1429B1Z5' },
+    id: 'mm-5',
+    invoiceNumber: 'INV-2025-0287',
+    clientName: 'Sunrise Exports',
+    mismatchCategory: 'tax_difference',
+    mismatchType: 'Tax Amount Difference',
+    taxDifference: 3450,
+    confidenceScore: 89,
+    aiExplanation: 'IGST ₹3,450 more in books',
+    aiRecommendation: 'Verify with shipping documents — books show IGST of ₹11,500 but GSTR-2B reflects only ₹8,050. This could be an export invoice with incorrect tax treatment.',
+    booksData: {
+      invoiceNumber: 'INV-2025-0287',
+      invoiceDate: '2025-03-01',
+      sellerGstin: '27AABCS3456B1Z7',
+      buyerGstin: '',
+      taxableValue: 65000,
+      cgst: 0,
+      sgst: 0,
+      igst: 11500,
+      totalAmount: 76500,
     },
+    gstr2bData: {
+      invoiceNumber: 'INV-2025-0287',
+      invoiceDate: '2025-03-01',
+      sellerGstin: '27AABCS3456B1Z7',
+      buyerGstin: '',
+      taxableValue: 65000,
+      cgst: 0,
+      sgst: 0,
+      igst: 8050,
+      totalAmount: 73050,
+    },
+    diffFields: ['igst', 'totalAmount'],
+    resolved: false,
+    workflowStatus: 'pending',
   },
   {
-    id: 'recon-6', clientId: 'cl-2', invoiceId: 'inv-6', matchStatus: 'partial_match',
-    matchScore: 78, confidenceScore: 85, workflowStatus: 'pending', resolved: false,
-    sourceA: 'Purchase Register', sourceB: 'GSTR-2B', sourceGstin: '24AABCP1234B1Z3',
-    mismatches: JSON.stringify([
-      { field: 'vendor_gstin', expected: '24AABCP1234B1Z3', actual: '24AABCP1234B1Z4' },
-    ]),
-    aiExplanation: 'Vendor GSTIN shows minor discrepancy — last character differs by 1. This may be a data entry error in GSTR-2B.',
-    aiRecommendation: 'correct_gstin',
-    createdAt: '2026-03-01T10:05:00Z',
-    invoice: {
-      invoiceNumber: 'INV-2026-056', invoiceDate: '2026-02-26', sellerGstin: '24AABCP1234B1Z3',
-      totalAmount: 70800, cgst: 5400, sgst: 5400, igst: 0, taxableValue: 60000,
-      client: { id: 'cl-2', tradeName: 'Patel Enterprises', gstin: '24AABCP1234B1Z3' },
+    id: 'mm-6',
+    invoiceNumber: 'INV-2025-0341',
+    clientName: 'Gupta Manufacturing',
+    mismatchCategory: 'missing_in_books',
+    mismatchType: 'Invoice Not in Books',
+    taxDifference: 3600,
+    confidenceScore: 93,
+    aiExplanation: 'Present in GSTR-2B but not in purchase register',
+    aiRecommendation: 'Add to purchase register — this invoice from GSTR-2B is not in your books. If legitimate, add it to claim the eligible ITC of ₹3,600.',
+    booksData: {
+      invoiceNumber: '—',
+      invoiceDate: '—',
+      sellerGstin: '—',
+      buyerGstin: '—',
+      taxableValue: 0,
+      cgst: 0,
+      sgst: 0,
+      igst: 0,
+      totalAmount: 0,
     },
+    gstr2bData: {
+      invoiceNumber: 'INV-2025-0341',
+      invoiceDate: '2025-03-05',
+      sellerGstin: '09AABCG7890B1Z3',
+      buyerGstin: '09AABCB1234B1Z1',
+      taxableValue: 20000,
+      cgst: 1800,
+      sgst: 1800,
+      igst: 0,
+      totalAmount: 23600,
+    },
+    diffFields: ['invoiceNumber', 'invoiceDate', 'sellerGstin', 'buyerGstin', 'taxableValue', 'cgst', 'sgst', 'igst', 'totalAmount'],
+    resolved: false,
+    workflowStatus: 'pending',
+  },
+];
+
+const MOCK_PERFECT_MATCHES = 18;
+const MOCK_PARTIAL_MATCHES = 3;
+
+const MOCK_TIMELINE: ReconTimelineEntry[] = [
+  {
+    id: 'run-1',
+    date: '2025-03-04T14:32:00Z',
+    clients: 'All Clients',
+    recordsProcessed: 27,
+    matchRate: 67,
   },
   {
-    id: 'recon-7', clientId: 'cl-3', invoiceId: 'inv-7', matchStatus: 'mismatch',
-    matchScore: 45, confidenceScore: 72, workflowStatus: 'pending', resolved: false,
-    sourceA: 'Purchase Register', sourceB: 'GSTR-2B', sourceGstin: '27AABCM5678B1Z1',
-    mismatches: JSON.stringify([
-      { field: 'gst_amount', expected: 27000, actual: 25650, difference: 1350 },
-      { field: 'invoice_date', expected: '2026-02-28', actual: '2026-03-15', difference: 15 },
-    ]),
-    aiExplanation: 'Multiple mismatches: GST amount difference of ₹1,350 and invoice date shifted by 15 days. Likely a delayed upload by vendor with revised figures.',
-    aiRecommendation: 'review_manually',
-    createdAt: '2026-03-01T10:06:00Z',
-    invoice: {
-      invoiceNumber: 'INV-2026-067', invoiceDate: '2026-02-28', sellerGstin: '27AABCM5678B1Z1',
-      totalAmount: 177000, cgst: 13500, sgst: 13500, igst: 0, taxableValue: 150000,
-      client: { id: 'cl-3', tradeName: 'Mehta Infra Pvt Ltd', gstin: '27AABCM5678B1Z1' },
-    },
+    id: 'run-2',
+    date: '2025-03-01T09:15:00Z',
+    clients: 'Sharma Enterprises, Patel & Sons',
+    recordsProcessed: 14,
+    matchRate: 71,
   },
   {
-    id: 'recon-8', clientId: 'cl-1', invoiceId: 'inv-8', matchStatus: 'missing_in_gstr',
-    matchScore: 0, confidenceScore: 90, workflowStatus: 'pending', resolved: false,
-    sourceA: 'Purchase Register', sourceB: 'GSTR-2B', sourceGstin: '27AABCS1429B1Z5',
-    aiExplanation: 'Invoice present in Purchase Register but not found in GSTR-2B. Vendor may not have uploaded this invoice. ITC at risk if not resolved.',
-    aiRecommendation: 'review_manually',
-    createdAt: '2026-03-01T10:07:00Z',
-    invoice: {
-      invoiceNumber: 'INV-2026-078', invoiceDate: '2026-02-10', sellerGstin: '27AABCS1429B1Z5',
-      totalAmount: 47200, cgst: 3600, sgst: 3600, igst: 0, taxableValue: 40000,
-      client: { id: 'cl-1', tradeName: 'Sharma & Associates', gstin: '27AABCS1429B1Z5' },
-    },
+    id: 'run-3',
+    date: '2025-02-25T11:48:00Z',
+    clients: 'All Clients',
+    recordsProcessed: 27,
+    matchRate: 74,
   },
   {
-    id: 'recon-9', clientId: 'cl-4', invoiceId: 'inv-9', matchStatus: 'missing_in_books',
-    matchScore: 0, confidenceScore: 88, workflowStatus: 'pending', resolved: false,
-    sourceA: 'Purchase Register', sourceB: 'GSTR-2B', sourceGstin: '36AABCR9012B1Z9',
-    aiExplanation: 'Invoice appears in GSTR-2B but is not recorded in the Purchase Register. Possible missed entry or vendor misclassification.',
-    aiRecommendation: 'review_vendor_data',
-    createdAt: '2026-03-01T10:08:00Z',
-    invoice: {
-      invoiceNumber: 'GSTR2B-INV-901', invoiceDate: '2026-02-14', sellerGstin: '36AABCR9012B1Z9',
-      totalAmount: 23600, cgst: 1800, sgst: 1800, igst: 0, taxableValue: 20000,
-      client: { id: 'cl-4', tradeName: 'Reddy Constructions', gstin: '36AABCR9012B1Z9' },
-    },
+    id: 'run-4',
+    date: '2025-02-20T16:22:00Z',
+    clients: 'Krishna Traders',
+    recordsProcessed: 5,
+    matchRate: 80,
   },
   {
-    id: 'recon-10', clientId: 'cl-2', invoiceId: 'inv-10', matchStatus: 'missing_in_gstr',
-    matchScore: 0, confidenceScore: 92, workflowStatus: 'pending', resolved: false,
-    sourceA: 'Purchase Register', sourceB: 'GSTR-2B', sourceGstin: '24AABCP1234B1Z3',
-    aiExplanation: 'Invoice not found in GSTR-2B data. This ITC of ₹5,400 may be at risk. Contact vendor to ensure timely upload.',
-    aiRecommendation: 'review_manually',
-    createdAt: '2026-03-01T10:09:00Z',
-    invoice: {
-      invoiceNumber: 'INV-2026-089', invoiceDate: '2026-02-12', sellerGstin: '24AABCP1234B1Z3',
-      totalAmount: 35400, cgst: 2700, sgst: 2700, igst: 0, taxableValue: 30000,
-      client: { id: 'cl-2', tradeName: 'Patel Enterprises', gstin: '24AABCP1234B1Z3' },
-    },
-  },
-  {
-    id: 'recon-11', clientId: 'cl-3', invoiceId: 'inv-11', matchStatus: 'duplicate',
-    matchScore: 50, confidenceScore: 85, workflowStatus: 'pending', resolved: false,
-    sourceA: 'Purchase Register', sourceB: 'GSTR-2B', sourceGstin: '27AABCM5678B1Z1',
-    mismatches: JSON.stringify([]),
-    aiExplanation: 'Duplicate invoice detected — same invoice number and GSTIN found multiple times with identical amounts.',
-    aiRecommendation: 'mark_as_duplicate',
-    createdAt: '2026-03-01T10:10:00Z',
-    invoice: {
-      invoiceNumber: 'INV-2026-001', invoiceDate: '2026-02-15', sellerGstin: '27AABCM5678B1Z1',
-      totalAmount: 118000, cgst: 9000, sgst: 9000, igst: 0, taxableValue: 100000,
-      client: { id: 'cl-3', tradeName: 'Mehta Infra Pvt Ltd', gstin: '27AABCM5678B1Z1' },
-    },
+    id: 'run-5',
+    date: '2025-02-15T10:05:00Z',
+    clients: 'Metro Retail, Sunrise Exports',
+    recordsProcessed: 11,
+    matchRate: 73,
   },
 ];
 
 // ──────────────────────────────────────────────
-// Helpers
+// Mismatch Category Config
 // ──────────────────────────────────────────────
-function parseMismatches(raw?: string | null): { field: string; expected: string | number; actual: string | number; difference?: number }[] {
-  if (!raw) return [];
-  try { return JSON.parse(raw); } catch { return []; }
+type MismatchCategory = 'all' | 'tax_difference' | 'gstin_mismatch' | 'missing_in_gstr' | 'missing_in_books' | 'duplicate';
+
+interface MismatchCategoryConfig {
+  key: MismatchCategory;
+  label: string;
+  icon: React.ReactNode;
+  color: string;
+  activeBorder: string;
+  bgColor: string;
 }
 
-function getMismatchType(result: ReconResult): string {
-  const status = result.matchStatus;
-  if (status === 'missing_in_gstr') return 'Missing in 2B';
-  if (status === 'missing_in_books') return 'Missing in Books';
-  if (status === 'duplicate') return 'Duplicate';
-  const mm = parseMismatches(result.mismatches);
-  if (mm.some(m => m.field === 'vendor_gstin')) return 'GSTIN Mismatch';
-  if (mm.some(m => m.field === 'gst_amount' || m.field === 'total_amount')) return 'Amount Mismatch';
-  if (mm.some(m => m.field === 'invoice_date')) return 'Date Mismatch';
-  return 'Partial Match';
-}
+const MISMATCH_CATEGORIES: MismatchCategoryConfig[] = [
+  {
+    key: 'tax_difference',
+    label: 'Tax Amount Difference',
+    icon: <AlertCircle className="h-3.5 w-3.5" />,
+    color: 'text-amber-700',
+    activeBorder: 'border-emerald-500',
+    bgColor: 'bg-amber-50',
+  },
+  {
+    key: 'gstin_mismatch',
+    label: 'GSTIN Mismatch',
+    icon: <ShieldAlert className="h-3.5 w-3.5" />,
+    color: 'text-orange-700',
+    activeBorder: 'border-emerald-500',
+    bgColor: 'bg-orange-50',
+  },
+  {
+    key: 'missing_in_gstr',
+    label: 'Invoice Not in GSTR-2B',
+    icon: <FileText className="h-3.5 w-3.5" />,
+    color: 'text-rose-700',
+    activeBorder: 'border-emerald-500',
+    bgColor: 'bg-rose-50',
+  },
+  {
+    key: 'missing_in_books',
+    label: 'Invoice Not in Books',
+    icon: <Copy className="h-3.5 w-3.5" />,
+    color: 'text-violet-700',
+    activeBorder: 'border-emerald-500',
+    bgColor: 'bg-violet-50',
+  },
+  {
+    key: 'duplicate',
+    label: 'Duplicate Detected',
+    icon: <Copy className="h-3.5 w-3.5" />,
+    color: 'text-pink-700',
+    activeBorder: 'border-emerald-500',
+    bgColor: 'bg-pink-50',
+  },
+];
 
-function getMismatchBadgeStyle(mismatchType: string) {
-  switch (mismatchType) {
-    case 'Amount Mismatch':
-      return 'border-amber-300 bg-amber-50 text-amber-800';
-    case 'GSTIN Mismatch':
-      return 'border-orange-300 bg-orange-50 text-orange-800';
-    case 'Date Mismatch':
-      return 'border-teal-300 bg-teal-50 text-teal-800';
-    case 'Missing in 2B':
-      return 'border-rose-300 bg-rose-50 text-rose-800';
-    case 'Missing in Books':
-      return 'border-fuchsia-300 bg-fuchsia-50 text-fuchsia-800';
-    case 'Duplicate':
-      return 'border-violet-300 bg-violet-50 text-violet-800';
+// ──────────────────────────────────────────────
+// Mismatch type badge styling
+// ──────────────────────────────────────────────
+function getMismatchBadgeClasses(category: string): string {
+  switch (category) {
+    case 'tax_difference':
+      return 'bg-amber-50 text-amber-800 border-amber-200';
+    case 'gstin_mismatch':
+      return 'bg-orange-50 text-orange-800 border-orange-200';
+    case 'missing_in_gstr':
+      return 'bg-rose-50 text-rose-800 border-rose-200';
+    case 'missing_in_books':
+      return 'bg-violet-50 text-violet-800 border-violet-200';
+    case 'duplicate':
+      return 'bg-pink-50 text-pink-800 border-pink-200';
     default:
-      return 'border-slate-300 bg-slate-50 text-slate-700';
+      return 'bg-slate-50 text-slate-800 border-slate-200';
   }
 }
 
-function getSourceLabel(result: ReconResult): string {
-  if (result.matchStatus === 'missing_in_gstr') return 'Books';
-  if (result.matchStatus === 'missing_in_books') return 'GSTR-2B';
-  return result.sourceA || 'Books';
+function getMismatchDotColor(category: string): string {
+  switch (category) {
+    case 'tax_difference': return 'bg-amber-500';
+    case 'gstin_mismatch': return 'bg-orange-500';
+    case 'missing_in_gstr': return 'bg-rose-500';
+    case 'missing_in_books': return 'bg-violet-500';
+    case 'duplicate': return 'bg-pink-500';
+    default: return 'bg-slate-500';
+  }
 }
 
 // ──────────────────────────────────────────────
-// Animated Match Rate Ring (SVG Donut)
+// Animated SVG Ring for Match Rate
 // ──────────────────────────────────────────────
 function MatchRateRing({
-  value,
-  size = 180,
-  strokeWidth = 12,
+  matchPercent,
+  partialPercent,
+  mismatchPercent,
+  size = 160,
+  strokeWidth = 14,
 }: {
-  value: number;
+  matchPercent: number;
+  partialPercent: number;
+  mismatchPercent: number;
   size?: number;
   strokeWidth?: number;
 }) {
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
-  const offset = circumference - (value / 100) * circumference;
+  const gapAngle = 2; // degrees gap between segments
 
-  const color = value >= 90 ? '#10b981' : value >= 70 ? '#f59e0b' : '#ef4444';
-  const bgTrack = '#f1f5f9';
+  const matchArc = (matchPercent / 100) * circumference;
+  const partialArc = (partialPercent / 100) * circumference;
+  const mismatchArc = (mismatchPercent / 100) * circumference;
+
+  // Calculate stroke-dasharray and stroke-dashoffset for each segment
+  // We rotate the SVG so it starts at the top
+  const totalGap = gapAngle * 3 * (circumference / 360);
+  const availableCircumference = circumference - totalGap;
+  const gapLen = totalGap / 3;
+
+  const matchLen = (matchPercent / 100) * availableCircumference;
+  const partialLen = (partialPercent / 100) * availableCircumference;
+  const mismatchLen = (mismatchPercent / 100) * availableCircumference;
+
+  const matchOffset = 0;
+  const partialOffset = -(matchLen + gapLen);
+  const mismatchOffset = -(matchLen + gapLen + partialLen + gapLen);
 
   return (
     <div className="relative inline-flex items-center justify-center" style={{ width: size, height: size }}>
@@ -353,54 +514,92 @@ function MatchRateRing({
           cy={size / 2}
           r={radius}
           fill="none"
-          stroke={bgTrack}
+          stroke="#f1f5f9"
           strokeWidth={strokeWidth}
         />
-        {/* Subtle glow filter */}
+        {/* Glow filter */}
         <defs>
           <filter id="ringGlow" x="-20%" y="-20%" width="140%" height="140%">
-            <feGaussianBlur stdDeviation="3" result="blur" />
+            <feGaussianBlur stdDeviation="2.5" result="blur" />
             <feMerge>
               <feMergeNode in="blur" />
               <feMergeNode in="SourceGraphic" />
             </feMerge>
           </filter>
         </defs>
-        {/* Animated progress arc */}
-        <motion.circle
-          cx={size / 2}
-          cy={size / 2}
-          r={radius}
-          fill="none"
-          stroke={color}
-          strokeWidth={strokeWidth}
-          strokeLinecap="round"
-          strokeDasharray={circumference}
-          initial={{ strokeDashoffset: circumference }}
-          animate={{ strokeDashoffset: offset }}
-          transition={{ duration: 1.6, ease: [0.25, 0.46, 0.45, 0.94] }}
-          filter="url(#ringGlow)"
-        />
+        {/* Green segment — matched */}
+        {matchPercent > 0 && (
+          <motion.circle
+            cx={size / 2}
+            cy={size / 2}
+            r={radius}
+            fill="none"
+            stroke="#10b981"
+            strokeWidth={strokeWidth}
+            strokeLinecap="round"
+            strokeDasharray={`${matchLen} ${circumference - matchLen}`}
+            strokeDashoffset={matchOffset}
+            initial={{ strokeDasharray: `0 ${circumference}` }}
+            animate={{ strokeDasharray: `${matchLen} ${circumference - matchLen}` }}
+            transition={{ duration: 1.4, ease: [0.25, 0.46, 0.45, 0.94] }}
+            filter="url(#ringGlow)"
+          />
+        )}
+        {/* Amber segment — partial */}
+        {partialPercent > 0 && (
+          <motion.circle
+            cx={size / 2}
+            cy={size / 2}
+            r={radius}
+            fill="none"
+            stroke="#f59e0b"
+            strokeWidth={strokeWidth}
+            strokeLinecap="round"
+            strokeDasharray={`${partialLen} ${circumference - partialLen}`}
+            strokeDashoffset={partialOffset}
+            initial={{ strokeDasharray: `0 ${circumference}`, strokeDashoffset: 0 }}
+            animate={{ strokeDasharray: `${partialLen} ${circumference - partialLen}`, strokeDashoffset: partialOffset }}
+            transition={{ duration: 1.4, ease: [0.25, 0.46, 0.45, 0.94], delay: 0.3 }}
+            filter="url(#ringGlow)"
+          />
+        )}
+        {/* Red segment — mismatch/missing */}
+        {mismatchPercent > 0 && (
+          <motion.circle
+            cx={size / 2}
+            cy={size / 2}
+            r={radius}
+            fill="none"
+            stroke="#ef4444"
+            strokeWidth={strokeWidth}
+            strokeLinecap="round"
+            strokeDasharray={`${mismatchLen} ${circumference - mismatchLen}`}
+            strokeDashoffset={mismatchOffset}
+            initial={{ strokeDasharray: `0 ${circumference}`, strokeDashoffset: 0 }}
+            animate={{ strokeDasharray: `${mismatchLen} ${circumference - mismatchLen}`, strokeDashoffset: mismatchOffset }}
+            transition={{ duration: 1.4, ease: [0.25, 0.46, 0.45, 0.94], delay: 0.6 }}
+            filter="url(#ringGlow)"
+          />
+        )}
       </svg>
       {/* Center content */}
       <div className="absolute inset-0 flex flex-col items-center justify-center">
         <motion.span
-          className="text-4xl font-bold tracking-tight"
-          style={{ color }}
+          className="text-4xl font-bold tracking-tight text-foreground"
           initial={{ opacity: 0, scale: 0.5 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ delay: 0.8, duration: 0.5, type: 'spring' }}
         >
-          {value}%
+          {matchPercent}%
         </motion.span>
-        <span className="text-xs font-medium text-muted-foreground mt-0.5">Match Rate</span>
+        <span className="text-[11px] font-medium text-muted-foreground mt-0.5">Match Rate</span>
       </div>
     </div>
   );
 }
 
 // ──────────────────────────────────────────────
-// Animation Variants
+// Animation variants
 // ──────────────────────────────────────────────
 const pageVariants = {
   hidden: { opacity: 0 },
@@ -409,18 +608,47 @@ const pageVariants = {
 
 const staggerContainer = {
   hidden: {},
-  visible: { transition: { staggerChildren: 0.06 } },
+  visible: { transition: { staggerChildren: 0.05 } },
 };
 
 const cardEntrance = {
-  hidden: { opacity: 0, y: 16, scale: 0.97 },
-  visible: { opacity: 1, y: 0, scale: 1, transition: { duration: 0.35, ease: 'easeOut' } },
+  hidden: { opacity: 0, y: 12, scale: 0.97 },
+  visible: { opacity: 1, y: 0, scale: 1, transition: { duration: 0.3, ease: 'easeOut' } },
 };
 
-const columnEntrance = {
-  hidden: { opacity: 0, y: 20 },
-  visible: { opacity: 1, y: 0, transition: { duration: 0.5, ease: 'easeOut' } },
+const slideInRight = {
+  hidden: { opacity: 0, x: 20 },
+  visible: { opacity: 1, x: 0, transition: { duration: 0.35, ease: 'easeOut' } },
 };
+
+// ──────────────────────────────────────────────
+// Comparison Field Row
+// ──────────────────────────────────────────────
+function ComparisonField({
+  label,
+  booksValue,
+  gstr2bValue,
+  isDiff = false,
+}: {
+  label: string;
+  booksValue: string | number;
+  gstr2bValue: string | number;
+  isDiff?: boolean;
+}) {
+  return (
+    <div className="grid grid-cols-[1fr_1fr_1fr] gap-0">
+      <div className="px-3 py-2 text-xs font-medium text-muted-foreground border-b border-border/40">
+        {label}
+      </div>
+      <div className={`px-3 py-2 text-xs border-b border-border/40 ${isDiff ? 'bg-emerald-50/70 font-semibold text-emerald-900' : 'text-foreground'}`}>
+        {booksValue || '—'}
+      </div>
+      <div className={`px-3 py-2 text-xs border-b border-border/40 ${isDiff ? 'bg-amber-50/70 font-semibold text-amber-900' : 'text-foreground'}`}>
+        {gstr2bValue || '—'}
+      </div>
+    </div>
+  );
+}
 
 // ──────────────────────────────────────────────
 // Main Component
@@ -429,8 +657,13 @@ export default function ReconciliationPage() {
   const { selectedClientId, setCurrentView } = useApp();
 
   // ── Data ──
-  const [results, setResults] = useState<ReconResult[]>([]);
+  const [mismatches, setMismatches] = useState<MismatchRecord[]>([]);
   const [clients, setClients] = useState<ClientOption[]>([]);
+  const [timeline, setTimeline] = useState<ReconTimelineEntry[]>([]);
+
+  // ── Computed stats ──
+  const [perfectMatchCount, setPerfectMatchCount] = useState(0);
+  const [partialMatchCount, setPartialMatchCount] = useState(0);
 
   // ── Loading ──
   const [loading, setLoading] = useState(true);
@@ -438,125 +671,247 @@ export default function ReconciliationPage() {
 
   // ── Filters ──
   const [filterClient, setFilterClient] = useState<string>('all');
+  const [activeCategory, setActiveCategory] = useState<MismatchCategory>('all');
+  const [filterSeverity, setFilterSeverity] = useState<string>('all');
 
-  // ── Dialogs ──
-  const [resolveDialogOpen, setResolveDialogOpen] = useState(false);
-  const [selectedResult, setSelectedResult] = useState<ReconResult | null>(null);
+  // ── Selection ──
+  const [selectedMismatchId, setSelectedMismatchId] = useState<string | null>(null);
 
-  // ── Resolve Form ──
-  const [resolveChoice, setResolveChoice] = useState<'gstr2b' | 'books' | 'custom'>('gstr2b');
+  // ── Sidebar ──
+  const [timelineCollapsed, setTimelineCollapsed] = useState(false);
 
   // ──────────────────────────────────────────
   // Data Fetching
   // ──────────────────────────────────────────
-  const fetchResults = useCallback(async () => {
+  const fetchData = useCallback(async () => {
+    setLoading(true);
     try {
       const params = new URLSearchParams();
       if (selectedClientId) params.set('clientId', selectedClientId);
-      const res = await fetch(`/api/reconciliation?${params.toString()}`);
-      if (res.ok) {
-        const data = await res.json();
-        setResults(data.results || []);
-        return;
-      }
-    } catch (err) {
-      console.error('Error fetching results:', err);
-    }
-    // Mock fallback
-    setResults(MOCK_RESULTS);
-  }, [selectedClientId]);
 
-  const fetchClients = useCallback(async () => {
-    try {
-      const res = await fetch('/api/clients');
-      if (res.ok) {
-        const data = await res.json();
-        setClients(
-          (data.clients || []).map((c: { id: string; tradeName: string; gstin: string }) => ({
-            id: c.id,
-            tradeName: c.tradeName,
-            gstin: c.gstin,
-          }))
+      const [reconRes, clientsRes] = await Promise.all([
+        fetch(`/api/reconciliation?${params.toString()}`),
+        fetch('/api/clients'),
+      ]);
+
+      let fetchedResults: MismatchRecord[] = [];
+      let fetchedPerfect = 0;
+      let fetchedPartial = 0;
+      let fetchedClients: ClientOption[] = [];
+      let fetchedTimeline: ReconTimelineEntry[] = [];
+
+      if (reconRes.ok) {
+        const data = await reconRes.json();
+        // Transform API results into our MismatchRecord format
+        const results = data.results || [];
+        const nonPerfect = results.filter(
+          (r: ReconciliationResult) => r.matchStatus !== 'perfect_match'
         );
-        return;
+        fetchedPerfect = results.filter(
+          (r: ReconciliationResult) => r.matchStatus === 'perfect_match'
+        ).length;
+        fetchedPartial = results.filter(
+          (r: ReconciliationResult) => r.matchStatus === 'partial_match'
+        ).length;
+
+        fetchedResults = nonPerfect.map((r: ReconciliationResult) => {
+          let parsedMismatches: MismatchDetail[] = [];
+          if (r.mismatches) {
+            try { parsedMismatches = JSON.parse(r.mismatches); } catch { /* noop */ }
+          }
+
+          const category = mapStatusToCategory(r.matchStatus, parsedMismatches);
+          const inv = r.invoice;
+
+          return {
+            id: r.id,
+            invoiceNumber: inv?.invoiceNumber || '—',
+            clientName: inv?.client?.tradeName || 'Unknown',
+            mismatchCategory: category,
+            mismatchType: MATCH_STATUS_CONFIG[r.matchStatus as MatchStatus]?.label || 'Unknown',
+            taxDifference: calculateTaxDiff(parsedMismatches),
+            confidenceScore: r.confidenceScore || 0,
+            aiExplanation: r.aiExplanation || '',
+            aiRecommendation: r.aiRecommendation || '',
+            booksData: {
+              invoiceNumber: inv?.invoiceNumber || '—',
+              invoiceDate: inv?.invoiceDate || '—',
+              sellerGstin: inv?.sellerGstin || '—',
+              buyerGstin: inv?.buyerGstin || '—',
+              taxableValue: inv?.taxableValue || 0,
+              cgst: inv?.cgst || 0,
+              sgst: inv?.sgst || 0,
+              igst: inv?.igst || 0,
+              totalAmount: inv?.totalAmount || 0,
+            },
+            gstr2bData: r.matchStatus === 'missing_in_gstr' ? null : {
+              invoiceNumber: inv?.invoiceNumber || '—',
+              invoiceDate: inv?.invoiceDate || '—',
+              sellerGstin: r.matchedGstin || inv?.sellerGstin || '—',
+              buyerGstin: inv?.buyerGstin || '—',
+              taxableValue: inv?.taxableValue || 0,
+              cgst: inv?.cgst || 0,
+              sgst: inv?.sgst || 0,
+              igst: inv?.igst || 0,
+              totalAmount: inv?.totalAmount || 0,
+            },
+            diffFields: parsedMismatches.map(m => m.field),
+            resolved: r.resolved || false,
+            workflowStatus: r.workflowStatus || 'pending',
+          } as MismatchRecord;
+        });
+      }
+
+      if (clientsRes.ok) {
+        const data = await clientsRes.json();
+        fetchedClients = (data.clients || []).map((c: Client) => ({
+          id: c.id,
+          tradeName: c.tradeName,
+          gstin: c.gstin,
+        }));
+      }
+
+      // Fetch runs for timeline
+      try {
+        const runsRes = await fetch(`/api/reconciliation?action=runs&${params.toString()}`);
+        if (runsRes.ok) {
+          const runsData = await runsRes.json();
+          fetchedTimeline = (runsData.runs || []).map((run: ReconciliationRun) => ({
+            id: run.id,
+            date: run.createdAt,
+            clients: run.clientId,
+            recordsProcessed: run.totalRecords,
+            matchRate: run.totalRecords > 0 ? Math.round((run.matched / run.totalRecords) * 100) : 0,
+          }));
+        }
+      } catch { /* timeline is non-critical */ }
+
+      // Use fetched data if available, otherwise use mocks
+      if (fetchedResults.length > 0) {
+        setMismatches(fetchedResults);
+        setPerfectMatchCount(fetchedPerfect);
+        setPartialMatchCount(fetchedPartial);
+      } else {
+        setMismatches(MOCK_MISMATCHES);
+        setPerfectMatchCount(MOCK_PERFECT_MATCHES);
+        setPartialMatchCount(MOCK_PARTIAL_MATCHES);
+      }
+
+      if (fetchedClients.length > 0) {
+        setClients(fetchedClients);
+      } else {
+        setClients(MOCK_CLIENTS);
+      }
+
+      if (fetchedTimeline.length > 0) {
+        setTimeline(fetchedTimeline);
+      } else {
+        setTimeline(MOCK_TIMELINE);
       }
     } catch (err) {
-      console.error('Error fetching clients:', err);
-    }
-    setClients(MOCK_CLIENTS);
-  }, []);
-
-  // ── Initial Load ──
-  useEffect(() => {
-    async function loadAll() {
-      setLoading(true);
-      await Promise.all([fetchResults(), fetchClients()]);
+      console.error('Error fetching reconciliation data:', err);
+      // Fallback to mocks
+      setMismatches(MOCK_MISMATCHES);
+      setPerfectMatchCount(MOCK_PERFECT_MATCHES);
+      setPartialMatchCount(MOCK_PARTIAL_MATCHES);
+      setClients(MOCK_CLIENTS);
+      setTimeline(MOCK_TIMELINE);
+    } finally {
       setLoading(false);
     }
-    loadAll();
-  }, [fetchResults, fetchClients]);
+  }, [selectedClientId]);
 
-  // ── Refetch on client change ──
   useEffect(() => {
-    if (!loading) {
-      fetchResults();
-    }
-  }, [selectedClientId, fetchResults, loading]);
+    fetchData();
+  }, [fetchData]);
+
+  // ──────────────────────────────────────────
+  // Helpers
+  // ──────────────────────────────────────────
+  function mapStatusToCategory(status: string, parsedMismatches: MismatchDetail[]): string {
+    if (status === 'missing_in_gstr') return 'missing_in_gstr';
+    if (status === 'missing_in_books') return 'missing_in_books';
+    if (status === 'duplicate') return 'duplicate';
+    if (parsedMismatches.some(m => m.field === 'vendor_gstin')) return 'gstin_mismatch';
+    if (parsedMismatches.some(m => m.field === 'gst_amount' || m.field === 'total_amount')) return 'tax_difference';
+    return 'tax_difference'; // default for partial/mismatch
+  }
+
+  function calculateTaxDiff(parsedMismatches: MismatchDetail[]): number {
+    const gstMismatch = parsedMismatches.find(m => m.field === 'gst_amount');
+    if (gstMismatch?.difference) return Math.abs(gstMismatch.difference);
+    return 0;
+  }
 
   // ──────────────────────────────────────────
   // Computed Values
   // ──────────────────────────────────────────
-  const filteredResults = useMemo(() => {
-    if (filterClient === 'all') return results;
-    return results.filter(r => r.clientId === filterClient);
-  }, [results, filterClient]);
+  // ── Severity helpers ──
+  function getMismatchSeverity(m: MismatchRecord): 'critical' | 'high' | 'medium' | 'low' {
+    if (m.mismatchCategory === 'missing_in_gstr' && m.taxDifference > 3000) return 'critical';
+    if (m.taxDifference > 3000) return 'critical';
+    if (m.mismatchCategory === 'gstin_mismatch') return 'high';
+    if (m.taxDifference > 1000) return 'high';
+    if (m.mismatchCategory === 'duplicate') return 'medium';
+    if (m.taxDifference <= 1000 && m.taxDifference > 0) return 'medium';
+    return 'low';
+  }
 
-  const summary = useMemo(() => {
-    const total = filteredResults.length;
-    const matched = filteredResults.filter(r => r.matchStatus === 'perfect_match').length;
-    const mismatched = filteredResults.filter(
-      r => r.matchStatus === 'partial_match' || r.matchStatus === 'mismatch'
-    ).length;
-    const unmatched = filteredResults.filter(
-      r =>
-        r.matchStatus === 'missing_in_books' ||
-        r.matchStatus === 'missing_in_gstr' ||
-        r.matchStatus === 'unmatched' ||
-        r.matchStatus === 'duplicate'
-    ).length;
-    return {
-      total,
-      matched,
-      mismatched,
-      unmatched,
-      matchRate: total > 0 ? Math.round((matched / total) * 100) : 0,
+  function getSeverityConfig(severity: string): { color: string; bgColor: string; dotClass: string; label: string } {
+    switch (severity) {
+      case 'critical': return { color: 'text-red-700', bgColor: 'bg-red-50 border-red-200', dotClass: 'bg-red-500', label: 'Critical' };
+      case 'high': return { color: 'text-orange-700', bgColor: 'bg-orange-50 border-orange-200', dotClass: 'bg-orange-500', label: 'High' };
+      case 'medium': return { color: 'text-amber-700', bgColor: 'bg-amber-50 border-amber-200', dotClass: 'bg-amber-500', label: 'Medium' };
+      case 'low': return { color: 'text-slate-600', bgColor: 'bg-slate-50 border-slate-200', dotClass: 'bg-slate-400', label: 'Low' };
+      default: return { color: 'text-slate-600', bgColor: 'bg-slate-50 border-slate-200', dotClass: 'bg-slate-400', label: 'Low' };
+    }
+  }
+
+  const filteredMismatches = useMemo(() => {
+    let filtered = mismatches;
+    if (filterClient !== 'all') {
+      filtered = filtered.filter(m =>
+        clients.find(c => c.id === filterClient)?.tradeName === m.clientName
+      );
+    }
+    if (activeCategory !== 'all') {
+      filtered = filtered.filter(m => m.mismatchCategory === activeCategory);
+    }
+    if (filterSeverity !== 'all') {
+      filtered = filtered.filter(m => getMismatchSeverity(m) === filterSeverity);
+    }
+    return filtered;
+  }, [mismatches, filterClient, activeCategory, clients, filterSeverity]);
+
+  const selectedMismatch = useMemo(
+    () => mismatches.find(m => m.id === selectedMismatchId) || null,
+    [mismatches, selectedMismatchId]
+  );
+
+  const categoryCounts = useMemo(() => {
+    const counts: Record<string, number> = {
+      tax_difference: 0,
+      gstin_mismatch: 0,
+      missing_in_gstr: 0,
+      missing_in_books: 0,
+      duplicate: 0,
     };
-  }, [filteredResults]);
+    mismatches.forEach(m => {
+      if (counts[m.mismatchCategory] !== undefined) {
+        counts[m.mismatchCategory]++;
+      }
+    });
+    return counts;
+  }, [mismatches]);
 
-  const matchedResults = useMemo(
-    () => filteredResults.filter(r => r.matchStatus === 'perfect_match'),
-    [filteredResults]
-  );
+  const totalRecords = perfectMatchCount + partialMatchCount + mismatches.length;
+  const totalGstDifference = mismatches.reduce((sum, m) => sum + m.taxDifference, 0);
 
-  const mismatchResults = useMemo(
-    () => filteredResults.filter(r => r.matchStatus === 'partial_match' || r.matchStatus === 'mismatch'),
-    [filteredResults]
-  );
+  const matchPercent = totalRecords > 0 ? Math.round((perfectMatchCount / totalRecords) * 100) : 0;
+  const partialPercent = totalRecords > 0 ? Math.round((partialMatchCount / totalRecords) * 100) : 0;
+  const mismatchPercent = totalRecords > 0 ? 100 - matchPercent - partialPercent : 0;
 
-  const unmatchedResults = useMemo(
-    () =>
-      filteredResults.filter(
-        r =>
-          r.matchStatus === 'missing_in_books' ||
-          r.matchStatus === 'missing_in_gstr' ||
-          r.matchStatus === 'unmatched' ||
-          r.matchStatus === 'duplicate'
-      ),
-    [filteredResults]
-  );
-
-  const isPerfect = summary.matchRate === 100 && summary.total > 0;
-  const isEmpty = summary.total === 0;
+  const isEmpty = totalRecords === 0;
 
   // ──────────────────────────────────────────
   // Actions
@@ -566,6 +921,7 @@ export default function ReconciliationPage() {
     try {
       const clientId = selectedClientId || (filterClient !== 'all' ? filterClient : null);
       if (!clientId) {
+        toast.error('Select a client first to run reconciliation');
         setRunningRecon(false);
         return;
       }
@@ -575,66 +931,51 @@ export default function ReconciliationPage() {
         body: JSON.stringify({
           action: 'run',
           clientId,
-          period: '2026-03',
+          period: '2025-03',
           sources: 'Purchase Register,GSTR-2B',
         }),
       });
       if (res.ok) {
-        await fetchResults();
+        toast.success('Reconciliation completed successfully');
+        await fetchData();
+      } else {
+        toast.error('Reconciliation failed');
       }
-    } catch (err) {
-      console.error('Error running reconciliation:', err);
+    } catch {
+      toast.error('Error running reconciliation');
     } finally {
       setRunningRecon(false);
     }
   };
 
-  const handleResolve = async () => {
-    if (!selectedResult) return;
-    try {
-      await fetch('/api/reconciliation', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'update_workflow',
-          id: selectedResult.id,
-          workflowStatus: 'resolved',
-        }),
-      });
-      setResults(prev =>
-        prev.map(r =>
-          r.id === selectedResult.id
-            ? { ...r, resolved: true, workflowStatus: 'resolved' }
-            : r
-        )
-      );
-      setResolveDialogOpen(false);
-      setSelectedResult(null);
-      setResolveChoice('gstr2b');
-    } catch (err) {
-      console.error('Error resolving:', err);
-    }
+  const handleAcceptGSTR2B = (id: string) => {
+    setMismatches(prev =>
+      prev.map(m => m.id === id ? { ...m, resolved: true, workflowStatus: 'resolved' } : m)
+    );
+    toast.success('Accepted GSTR-2B value — mismatch resolved');
   };
 
-  const handleIgnore = async (id: string) => {
-    try {
-      await fetch('/api/reconciliation', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'update_workflow', id, workflowStatus: 'ignored' }),
-      });
-      setResults(prev =>
-        prev.map(r => r.id === id ? { ...r, workflowStatus: 'ignored' } : r)
-      );
-    } catch (err) {
-      console.error('Error ignoring:', err);
-    }
+  const handleKeepBooks = (id: string) => {
+    setMismatches(prev =>
+      prev.map(m => m.id === id ? { ...m, resolved: true, workflowStatus: 'resolved' } : m)
+    );
+    toast.success('Kept books value — mismatch resolved');
   };
 
-  const openResolveDialog = (result: ReconResult) => {
-    setSelectedResult(result);
-    setResolveChoice('gstr2b');
-    setResolveDialogOpen(true);
+  const handleCustomResolution = (id: string) => {
+    setMismatches(prev =>
+      prev.map(m => m.id === id ? { ...m, workflowStatus: 'under_review' } : m)
+    );
+    toast.info('Marked for custom resolution — under review');
+  };
+
+  const handleAutoResolve = () => {
+    const toResolve = mismatches.filter(m => !m.resolved && m.confidenceScore >= 93);
+    const ids = new Set(toResolve.map(m => m.id));
+    setMismatches(prev =>
+      prev.map(m => ids.has(m.id) ? { ...m, resolved: true, workflowStatus: 'resolved' } : m)
+    );
+    toast.success(`Auto-resolved ${toResolve.length} mismatches with high confidence`);
   };
 
   // ──────────────────────────────────────────
@@ -643,35 +984,35 @@ export default function ReconciliationPage() {
   if (loading) {
     return (
       <div className="p-4 md:p-6 space-y-6 max-w-[1440px] mx-auto">
-        {/* Header skeleton */}
         <div className="flex items-center justify-between">
           <div className="space-y-2">
-            <Skeleton className="h-8 w-32" />
-            <Skeleton className="h-4 w-72" />
+            <Skeleton className="h-8 w-52" />
+            <Skeleton className="h-4 w-64" />
           </div>
-          <Skeleton className="h-10 w-48 rounded-lg" />
-        </div>
-
-        {/* Match Rate Hero skeleton */}
-        <div className="flex flex-col items-center gap-6 py-4">
-          <Skeleton className="h-[180px] w-[180px] rounded-full" />
-          <div className="grid grid-cols-3 gap-4 w-full max-w-md">
-            <Skeleton className="h-20 rounded-xl" />
-            <Skeleton className="h-20 rounded-xl" />
-            <Skeleton className="h-20 rounded-xl" />
+          <div className="flex gap-3">
+            <Skeleton className="h-9 w-[160px] rounded-lg" />
+            <Skeleton className="h-9 w-40 rounded-lg" />
           </div>
         </div>
 
-        {/* Kanban skeleton */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className="space-y-3">
-              <Skeleton className="h-10 rounded-lg" />
-              {Array.from({ length: 3 }).map((_, j) => (
-                <Skeleton key={j} className="h-28 rounded-xl" />
-              ))}
-            </div>
-          ))}
+        <div className="flex flex-col md:flex-row items-center gap-6 py-6">
+          <Skeleton className="h-[160px] w-[160px] rounded-full" />
+          <div className="grid grid-cols-4 gap-3 flex-1 w-full">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <Skeleton key={i} className="h-24 rounded-xl" />
+            ))}
+          </div>
+        </div>
+
+        <Skeleton className="h-12 w-full rounded-lg" />
+
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+          <div className="lg:col-span-2 space-y-3">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <Skeleton key={i} className="h-24 rounded-xl" />
+            ))}
+          </div>
+          <Skeleton className="lg:col-span-3 h-96 rounded-xl" />
         </div>
       </div>
     );
@@ -688,31 +1029,25 @@ export default function ReconciliationPage() {
         animate="visible"
         className="p-4 md:p-6 max-w-[1440px] mx-auto"
       >
-        {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
           <div>
             <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground">
-              Reconcile
+              Investigation Center
             </h1>
             <p className="text-muted-foreground text-sm mt-1">
-              Match your books with GST portal data
+              Reconcile books with GST portal
             </p>
           </div>
           <Button
             onClick={handleRunReconciliation}
-            disabled={runningRecon || !selectedClientId}
+            disabled={runningRecon}
             className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
           >
-            {runningRecon ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Play className="h-4 w-4" />
-            )}
+            {runningRecon ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
             Run Reconciliation
           </Button>
         </div>
 
-        {/* Empty State */}
         <motion.div
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
@@ -722,17 +1057,19 @@ export default function ReconciliationPage() {
           <div className="flex items-center justify-center h-20 w-20 rounded-2xl bg-muted/60 mb-6">
             <GitCompareArrows className="h-10 w-10 text-muted-foreground/60" />
           </div>
-          <h3 className="text-lg font-semibold text-foreground mb-2">No reconciliation data yet</h3>
+          <h3 className="text-lg font-semibold text-foreground mb-2">
+            No reconciliation data yet
+          </h3>
           <p className="text-sm text-muted-foreground max-w-sm mb-6">
-            Upload and review documents first, then run reconciliation to match your books with GST portal data.
+            Upload and review invoices first, then run reconciliation to match your books with GST portal data.
           </p>
           <Button
-            onClick={() => setCurrentView('upload')}
+            onClick={() => setCurrentView('invoices')}
             variant="outline"
             className="gap-2 border-emerald-200 text-emerald-700 hover:bg-emerald-50"
           >
-            <Upload className="h-4 w-4" />
-            Go to Upload
+            <FileSpreadsheet className="h-4 w-4" />
+            Go to Invoices
           </Button>
         </motion.div>
       </motion.div>
@@ -740,17 +1077,17 @@ export default function ReconciliationPage() {
   }
 
   // ──────────────────────────────────────────
-  // Render: Main
+  // Render: Main Investigation Center
   // ──────────────────────────────────────────
   return (
     <motion.div
       variants={pageVariants}
       initial="hidden"
       animate="visible"
-      className="p-4 md:p-6 max-w-[1440px] mx-auto space-y-8"
+      className="p-4 md:p-6 max-w-[1440px] mx-auto space-y-5"
     >
       {/* ════════════════════════════════════════════
-          1. Page Header
+          1. HEADER
       ════════════════════════════════════════════ */}
       <motion.div
         initial={{ opacity: 0, y: -10 }}
@@ -760,14 +1097,13 @@ export default function ReconciliationPage() {
       >
         <div>
           <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground">
-            Reconcile
+            Investigation Center
           </h1>
           <p className="text-muted-foreground text-sm mt-1">
-            Match your books with GST portal data
+            Reconcile books with GST portal
           </p>
         </div>
         <div className="flex items-center gap-3">
-          {/* Client Filter */}
           <Select value={filterClient} onValueChange={setFilterClient}>
             <SelectTrigger className="w-[180px] h-9 text-sm bg-background">
               <SelectValue placeholder="All Clients" />
@@ -783,8 +1119,16 @@ export default function ReconciliationPage() {
           </Select>
 
           <Button
+            onClick={handleAutoResolve}
+            variant="outline"
+            className="gap-2 border-emerald-200 text-emerald-700 hover:bg-emerald-50 hover:border-emerald-300 shadow-sm"
+          >
+            <Sparkles className="h-4 w-4" />
+            Auto Resolve
+          </Button>
+          <Button
             onClick={handleRunReconciliation}
-            disabled={runningRecon || !selectedClientId}
+            disabled={runningRecon}
             className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
           >
             {runningRecon ? (
@@ -798,534 +1142,578 @@ export default function ReconciliationPage() {
       </motion.div>
 
       {/* ════════════════════════════════════════════
-          2. Match Rate Hero
+          2. MATCH RATE HERO SECTION
       ════════════════════════════════════════════ */}
       <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, delay: 0.15 }}
+        transition={{ duration: 0.5, delay: 0.1 }}
       >
         <Card className="border-0 shadow-sm bg-gradient-to-b from-background to-muted/20">
-          <CardContent className="py-8 flex flex-col items-center gap-6">
-            {/* Ring */}
-            <MatchRateRing value={summary.matchRate} size={180} strokeWidth={14} />
+          <CardContent className="py-6 px-4 md:px-6">
+            <div className="flex flex-col md:flex-row items-center gap-6 md:gap-10">
+              {/* SVG Ring */}
+              <MatchRateRing
+                matchPercent={matchPercent}
+                partialPercent={partialPercent}
+                mismatchPercent={mismatchPercent}
+                size={160}
+                strokeWidth={14}
+              />
 
-            {/* 3 Stat Cards */}
-            <motion.div
-              variants={staggerContainer}
-              initial="hidden"
-              animate="visible"
-              className="grid grid-cols-3 gap-3 sm:gap-4 w-full max-w-md"
-            >
-              {/* Matched */}
-              <motion.div variants={cardEntrance}>
-                <div className="flex flex-col items-center gap-1.5 p-3 sm:p-4 rounded-xl bg-emerald-50/80 border border-emerald-100">
-                  <div className="flex items-center gap-1.5">
-                    <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                    <span className="text-[11px] font-medium text-emerald-700">Matched</span>
+              {/* 4 Category Cards */}
+              <motion.div
+                variants={staggerContainer}
+                initial="hidden"
+                animate="visible"
+                className="grid grid-cols-2 md:grid-cols-4 gap-3 flex-1 w-full"
+              >
+                {/* Perfect Match */}
+                <motion.div variants={cardEntrance}>
+                  <div className="flex flex-col items-center gap-1.5 p-4 rounded-xl bg-emerald-50/80 border border-emerald-100">
+                    <div className="flex items-center gap-1.5">
+                      <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                      <span className="text-[11px] font-medium text-emerald-700">Perfect Match</span>
+                    </div>
+                    <span className="text-2xl font-bold text-emerald-800">{perfectMatchCount}</span>
                   </div>
-                  <span className="text-xl sm:text-2xl font-bold text-emerald-800">{summary.matched}</span>
-                </div>
-              </motion.div>
-
-              {/* Mismatch */}
-              <motion.div variants={cardEntrance}>
-                <div className="flex flex-col items-center gap-1.5 p-3 sm:p-4 rounded-xl bg-amber-50/80 border border-amber-100">
-                  <div className="flex items-center gap-1.5">
-                    <AlertTriangle className="h-4 w-4 text-amber-600" />
-                    <span className="text-[11px] font-medium text-amber-700">Mismatch</span>
-                  </div>
-                  <span className="text-xl sm:text-2xl font-bold text-amber-800">{summary.mismatched}</span>
-                </div>
-              </motion.div>
-
-              {/* Unmatched */}
-              <motion.div variants={cardEntrance}>
-                <div className="flex flex-col items-center gap-1.5 p-3 sm:p-4 rounded-xl bg-red-50/80 border border-red-100">
-                  <div className="flex items-center gap-1.5">
-                    <XCircle className="h-4 w-4 text-red-600" />
-                    <span className="text-[11px] font-medium text-red-700">Unmatched</span>
-                  </div>
-                  <span className="text-xl sm:text-2xl font-bold text-red-800">{summary.unmatched}</span>
-                </div>
-              </motion.div>
-            </motion.div>
-
-            {/* 100% celebration */}
-            <AnimatePresence>
-              {isPerfect && (
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.8 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.8 }}
-                  className="flex items-center gap-2 px-4 py-2 rounded-full bg-emerald-50 border border-emerald-200"
-                >
-                  <PartyPopper className="h-4 w-4 text-emerald-600" />
-                  <span className="text-sm font-semibold text-emerald-800">100% Match Rate!</span>
-                  <PartyPopper className="h-4 w-4 text-emerald-600" />
                 </motion.div>
-              )}
-            </AnimatePresence>
+
+                {/* Partial Match */}
+                <motion.div variants={cardEntrance}>
+                  <div className="flex flex-col items-center gap-1.5 p-4 rounded-xl bg-amber-50/80 border border-amber-100">
+                    <div className="flex items-center gap-1.5">
+                      <span className="h-2 w-2 rounded-full bg-amber-500" />
+                      <span className="text-[11px] font-medium text-amber-700">Partial Match</span>
+                    </div>
+                    <span className="text-2xl font-bold text-amber-800">{partialMatchCount}</span>
+                  </div>
+                </motion.div>
+
+                {/* Mismatch */}
+                <motion.div variants={cardEntrance}>
+                  <div className="flex flex-col items-center gap-1.5 p-4 rounded-xl bg-red-50/80 border border-red-100">
+                    <div className="flex items-center gap-1.5">
+                      <span className="h-2 w-2 rounded-full bg-red-500" />
+                      <span className="text-[11px] font-medium text-red-700">Mismatch</span>
+                    </div>
+                    <span className="text-2xl font-bold text-red-800">{mismatches.length}</span>
+                    {totalGstDifference > 0 && (
+                      <span className="text-[10px] font-semibold text-red-600">
+                        {formatCurrency(totalGstDifference)} diff
+                      </span>
+                    )}
+                  </div>
+                </motion.div>
+
+                {/* Missing */}
+                <motion.div variants={cardEntrance}>
+                  <div className="flex flex-col items-center gap-1.5 p-4 rounded-xl bg-slate-50/80 border border-slate-200">
+                    <div className="flex items-center gap-1.5">
+                      <span className="h-2 w-2 rounded-full bg-slate-400" />
+                      <span className="text-[11px] font-medium text-slate-600">Missing</span>
+                    </div>
+                    <span className="text-2xl font-bold text-slate-700">
+                      {categoryCounts['missing_in_gstr'] + categoryCounts['missing_in_books']}
+                    </span>
+                  </div>
+                </motion.div>
+              </motion.div>
+            </div>
           </CardContent>
         </Card>
       </motion.div>
 
       {/* ════════════════════════════════════════════
-          3. Kanban Columns
+          3. MISMATCH CATEGORIES (filter strip)
       ════════════════════════════════════════════ */}
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 0.4 }}
-        className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-5"
-      >
-        {/* ── Matched Column ── */}
-        <motion.div variants={columnEntrance} initial="hidden" animate="visible">
-          <div className="rounded-t-xl border-t-4 border-t-emerald-500 bg-card border border-border shadow-sm overflow-hidden">
-            <div className="px-4 py-3 flex items-center justify-between border-b border-border/60">
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                <h3 className="text-sm font-semibold text-foreground">Matched</h3>
-              </div>
-              <Badge variant="secondary" className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[11px] h-5">
-                {matchedResults.length}
-              </Badge>
-            </div>
-            <ScrollArea className="h-[460px]">
-              <div className="p-2.5 space-y-2.5">
-                <AnimatePresence>
-                  {matchedResults.length === 0 ? (
-                    <div className="py-10 text-center text-xs text-muted-foreground">
-                      No matched invoices
-                    </div>
-                  ) : (
-                    matchedResults.map((r, i) => (
-                      <motion.div
-                        key={r.id}
-                        variants={cardEntrance}
-                        initial="hidden"
-                        animate="visible"
-                        transition={{ delay: i * 0.05 }}
-                      >
-                        <div className="group p-3 rounded-lg border border-emerald-100 bg-emerald-50/30 hover:bg-emerald-50/60 hover:border-emerald-200 transition-all cursor-default">
-                          <div className="flex items-center justify-between mb-1.5">
-                            <span className="text-xs font-mono font-semibold text-foreground">
-                              {r.invoice?.invoiceNumber || '—'}
-                            </span>
-                            <Badge variant="outline" className="h-5 text-[10px] border-emerald-200 bg-emerald-50 text-emerald-700">
-                              {r.matchScore}%
-                            </Badge>
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <span className="text-[11px] text-muted-foreground truncate max-w-[120px]">
-                              {r.invoice?.client?.tradeName || '—'}
-                            </span>
-                            <span className="text-xs font-semibold text-foreground">
-                              {formatCurrency(r.invoice?.totalAmount || 0)}
-                            </span>
-                          </div>
-                        </div>
-                      </motion.div>
-                    ))
-                  )}
-                </AnimatePresence>
-              </div>
-            </ScrollArea>
-          </div>
+      <div className="flex items-center gap-3">
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.25 }}
+          className="flex gap-2 overflow-x-auto pb-1 scrollbar-none flex-1"
+        >
+        {/* All button */}
+        <button
+          onClick={() => setActiveCategory('all')}
+          className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg border text-xs font-medium whitespace-nowrap transition-all ${
+            activeCategory === 'all'
+              ? 'border-emerald-500 bg-emerald-50 text-emerald-800 shadow-sm'
+              : 'border-border bg-background text-muted-foreground hover:border-emerald-300 hover:bg-emerald-50/30'
+          }`}
+        >
+          <CircleDot className="h-3.5 w-3.5" />
+          All
+          <span className="ml-0.5 text-[10px] opacity-70">({mismatches.length})</span>
+        </button>
+
+          {MISMATCH_CATEGORIES.map(cat => (
+            <button
+              key={cat.key}
+              onClick={() => setActiveCategory(cat.key)}
+              className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg border text-xs font-medium whitespace-nowrap transition-all ${
+                activeCategory === cat.key
+                  ? `${cat.activeBorder} ${cat.bgColor} shadow-sm`
+                  : 'border-border bg-background text-muted-foreground hover:border-emerald-300 hover:bg-emerald-50/30'
+              }`}
+            >
+              {cat.icon}
+              {cat.label}
+              <span className="ml-0.5 text-[10px] opacity-70">({categoryCounts[cat.key] || 0})</span>
+            </button>
+          ))}
         </motion.div>
 
-        {/* ── Mismatch Column ── */}
-        <motion.div variants={columnEntrance} initial="hidden" animate="visible" transition={{ delay: 0.1 }}>
-          <div className="rounded-t-xl border-t-4 border-t-amber-500 bg-card border border-border shadow-sm overflow-hidden">
-            <div className="px-4 py-3 flex items-center justify-between border-b border-border/60">
-              <div className="flex items-center gap-2">
-                <AlertTriangle className="h-4 w-4 text-amber-600" />
-                <h3 className="text-sm font-semibold text-foreground">Mismatch</h3>
-              </div>
-              <Badge variant="secondary" className="bg-amber-50 text-amber-700 border-amber-200 text-[11px] h-5">
-                {mismatchResults.length}
-              </Badge>
-            </div>
-            <ScrollArea className="h-[460px]">
-              <div className="p-2.5 space-y-2.5">
-                <AnimatePresence>
-                  {mismatchResults.length === 0 ? (
-                    <div className="py-10 text-center text-xs text-muted-foreground">
-                      No mismatches found
-                    </div>
-                  ) : (
-                    mismatchResults.map((r, i) => {
-                      const mismatchType = getMismatchType(r);
-                      return (
-                        <motion.div
-                          key={r.id}
-                          variants={cardEntrance}
-                          initial="hidden"
-                          animate="visible"
-                          transition={{ delay: i * 0.05 }}
-                        >
-                          <div className="group p-3 rounded-lg border border-amber-100 bg-amber-50/20 hover:bg-amber-50/40 hover:border-amber-200 transition-all">
-                            <div className="flex items-center justify-between mb-1.5">
-                              <span className="text-xs font-mono font-semibold text-foreground">
-                                {r.invoice?.invoiceNumber || '—'}
-                              </span>
-                              <Badge
-                                variant="outline"
-                                className={`h-5 text-[10px] ${getMismatchBadgeStyle(mismatchType)}`}
-                              >
-                                {mismatchType}
-                              </Badge>
-                            </div>
-                            <div className="flex items-center justify-between mb-2">
-                              <span className="text-[11px] text-muted-foreground truncate max-w-[100px]">
-                                {r.invoice?.client?.tradeName || '—'}
-                              </span>
-                              <span className="text-xs font-semibold text-foreground">
-                                {formatCurrency(r.invoice?.totalAmount || 0)}
-                              </span>
-                            </div>
-                            <Button
-                              size="sm"
-                              className="w-full h-7 text-[11px] gap-1.5 bg-amber-600 hover:bg-amber-700 text-white"
-                              onClick={() => openResolveDialog(r)}
-                            >
-                              <Handshake className="h-3 w-3" />
-                              Resolve
-                            </Button>
-                          </div>
-                        </motion.div>
-                      );
-                    })
-                  )}
-                </AnimatePresence>
-              </div>
-            </ScrollArea>
-          </div>
+        {/* Severity Filter */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.3 }}
+          className="shrink-0"
+        >
+          <Select value={filterSeverity} onValueChange={setFilterSeverity}>
+            <SelectTrigger className="h-9 w-[140px] text-xs bg-background">
+              <SelectValue placeholder="All Severity" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Severity</SelectItem>
+              <SelectItem value="critical">Critical</SelectItem>
+              <SelectItem value="high">High</SelectItem>
+              <SelectItem value="medium">Medium</SelectItem>
+              <SelectItem value="low">Low</SelectItem>
+            </SelectContent>
+          </Select>
         </motion.div>
-
-        {/* ── Unmatched Column ── */}
-        <motion.div variants={columnEntrance} initial="hidden" animate="visible" transition={{ delay: 0.2 }}>
-          <div className="rounded-t-xl border-t-4 border-t-red-500 bg-card border border-border shadow-sm overflow-hidden">
-            <div className="px-4 py-3 flex items-center justify-between border-b border-border/60">
-              <div className="flex items-center gap-2">
-                <XCircle className="h-4 w-4 text-red-600" />
-                <h3 className="text-sm font-semibold text-foreground">Unmatched</h3>
-              </div>
-              <Badge variant="secondary" className="bg-red-50 text-red-700 border-red-200 text-[11px] h-5">
-                {unmatchedResults.length}
-              </Badge>
-            </div>
-            <ScrollArea className="h-[460px]">
-              <div className="p-2.5 space-y-2.5">
-                <AnimatePresence>
-                  {unmatchedResults.length === 0 ? (
-                    <div className="py-10 text-center text-xs text-muted-foreground">
-                      No unmatched invoices
-                    </div>
-                  ) : (
-                    unmatchedResults.map((r, i) => {
-                      const mismatchType = getMismatchType(r);
-                      return (
-                        <motion.div
-                          key={r.id}
-                          variants={cardEntrance}
-                          initial="hidden"
-                          animate="visible"
-                          transition={{ delay: i * 0.05 }}
-                        >
-                          <div className="group p-3 rounded-lg border border-red-100 bg-red-50/20 hover:bg-red-50/40 hover:border-red-200 transition-all">
-                            <div className="flex items-center justify-between mb-1.5">
-                              <span className="text-xs font-mono font-semibold text-foreground">
-                                {r.invoice?.invoiceNumber || '—'}
-                              </span>
-                              <Badge
-                                variant="outline"
-                                className={`h-5 text-[10px] ${getMismatchBadgeStyle(mismatchType)}`}
-                              >
-                                {mismatchType}
-                              </Badge>
-                            </div>
-                            <div className="flex items-center justify-between mb-1">
-                              <span className="text-[11px] text-muted-foreground">
-                                Source: <span className="font-medium text-foreground">{getSourceLabel(r)}</span>
-                              </span>
-                              <span className="text-xs font-semibold text-foreground">
-                                {formatCurrency(r.invoice?.totalAmount || 0)}
-                              </span>
-                            </div>
-                            <div className="flex gap-2 mt-2">
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="flex-1 h-7 text-[11px] gap-1 border-emerald-200 text-emerald-700 hover:bg-emerald-50"
-                                onClick={() => openResolveDialog(r)}
-                              >
-                                <Handshake className="h-3 w-3" />
-                                Match Manually
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                className="h-7 text-[11px] text-muted-foreground hover:text-foreground"
-                                onClick={() => handleIgnore(r.id)}
-                              >
-                                Ignore
-                              </Button>
-                            </div>
-                          </div>
-                        </motion.div>
-                      );
-                    })
-                  )}
-                </AnimatePresence>
-              </div>
-            </ScrollArea>
-          </div>
-        </motion.div>
-      </motion.div>
+      </div>
 
       {/* ════════════════════════════════════════════
-          4. Resolve Dialog
+          4 & 5. MAIN CONTENT: TWO-PANEL + TIMELINE
       ════════════════════════════════════════════ */}
-      <Dialog open={resolveDialogOpen} onOpenChange={setResolveDialogOpen}>
-        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <GitCompareArrows className="h-5 w-5 text-emerald-600" />
-              Resolve Mismatch
-            </DialogTitle>
-            <DialogDescription>
-              Review the differences between your books and GSTR-2B data, then choose how to resolve.
-            </DialogDescription>
-          </DialogHeader>
-
-          {selectedResult && (
-            <div className="space-y-5">
-              {/* Invoice Info */}
-              <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
-                <FileSpreadsheet className="h-5 w-5 text-emerald-600" />
-                <div>
-                  <p className="text-sm font-semibold">
-                    {selectedResult.invoice?.invoiceNumber || 'Unknown Invoice'}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {selectedResult.invoice?.client?.tradeName || 'Unknown Client'} &middot;{' '}
-                    {formatCurrency(selectedResult.invoice?.totalAmount || 0)}
-                  </p>
-                </div>
-              </div>
-
-              {/* Side-by-side comparison */}
-              <div className="grid grid-cols-2 gap-3">
-                {/* Books side */}
-                <div className="p-3 rounded-lg border border-emerald-200 bg-emerald-50/50">
-                  <div className="flex items-center gap-1.5 mb-3">
-                    <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-600" />
-                    <span className="text-xs font-semibold text-emerald-800">
-                      {selectedResult.sourceA || 'Books'}
+      <div className="flex gap-4">
+        {/* Two-Panel Investigation View */}
+        <div className="flex-1 grid grid-cols-1 lg:grid-cols-5 gap-4 min-w-0">
+          {/* ── Left Panel: Mismatch List ── */}
+          <motion.div
+            initial={{ opacity: 0, x: -10 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: 0.35 }}
+            className="lg:col-span-2"
+          >
+            <Card className="border shadow-sm overflow-hidden h-full">
+              <CardHeader className="px-4 py-3 border-b border-border/60">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-sm font-semibold">
+                    Mismatches
+                    <span className="ml-2 text-xs font-normal text-muted-foreground">
+                      ({filteredMismatches.length})
                     </span>
-                  </div>
-                  <div className="space-y-2">
-                    <div className="flex justify-between text-[11px]">
-                      <span className="text-muted-foreground">GSTIN</span>
-                      <span className="font-mono font-medium text-foreground">
-                        {selectedResult.invoice?.sellerGstin || '—'}
-                      </span>
-                    </div>
-                    <Separator />
-                    <div className="flex justify-between text-[11px]">
-                      <span className="text-muted-foreground">Taxable</span>
-                      <span className="font-medium text-foreground">
-                        {formatCurrency(selectedResult.invoice?.taxableValue || 0)}
-                      </span>
-                    </div>
-                    <Separator />
-                    <div className="flex justify-between text-[11px]">
-                      <span className="text-muted-foreground">CGST</span>
-                      <span className="font-medium text-foreground">
-                        {formatCurrency(selectedResult.invoice?.cgst || 0)}
-                      </span>
-                    </div>
-                    <Separator />
-                    <div className="flex justify-between text-[11px]">
-                      <span className="text-muted-foreground">SGST</span>
-                      <span className="font-medium text-foreground">
-                        {formatCurrency(selectedResult.invoice?.sgst || 0)}
-                      </span>
-                    </div>
-                    <Separator />
-                    <div className="flex justify-between text-[11px]">
-                      <span className="text-muted-foreground">Total</span>
-                      <span className="font-semibold text-emerald-800">
-                        {formatCurrency(selectedResult.invoice?.totalAmount || 0)}
-                      </span>
-                    </div>
-                  </div>
+                  </CardTitle>
+                  {activeCategory !== 'all' && (
+                    <button
+                      onClick={() => setActiveCategory('all')}
+                      className="text-[11px] text-emerald-600 hover:text-emerald-700 font-medium"
+                    >
+                      Clear filter
+                    </button>
+                  )}
                 </div>
-
-                {/* GSTR-2B side */}
-                <div className="p-3 rounded-lg border border-amber-200 bg-amber-50/50">
-                  <div className="flex items-center gap-1.5 mb-3">
-                    <Search className="h-3.5 w-3.5 text-amber-600" />
-                    <span className="text-xs font-semibold text-amber-800">
-                      {selectedResult.sourceB || 'GSTR-2B'}
-                    </span>
-                  </div>
-                  <div className="space-y-2">
-                    {(() => {
-                      const mm = parseMismatches(selectedResult.mismatches);
-                      const gstMismatch = mm.find(m => m.field === 'gst_amount');
-                      const totalMismatch = mm.find(m => m.field === 'total_amount');
-                      const gstinMismatch = mm.find(m => m.field === 'vendor_gstin');
-                      const dateMismatch = mm.find(m => m.field === 'invoice_date');
-
-                      const altCgst = gstMismatch
-                        ? Number(gstMismatch.actual) / 2
-                        : selectedResult.invoice?.cgst || 0;
-                      const altSgst = gstMismatch
-                        ? Number(gstMismatch.actual) / 2
-                        : selectedResult.invoice?.sgst || 0;
-                      const altTotal = totalMismatch
-                        ? Number(totalMismatch.actual)
-                        : selectedResult.invoice?.totalAmount || 0;
-                      const altGstin = gstinMismatch
-                        ? String(gstinMismatch.actual)
-                        : selectedResult.invoice?.sellerGstin || '—';
-
-                      return (
-                        <>
-                          <div className="flex justify-between text-[11px]">
-                            <span className="text-muted-foreground">GSTIN</span>
-                            <span className={`font-mono font-medium ${gstinMismatch ? 'text-amber-700' : 'text-foreground'}`}>
-                              {altGstin}
-                            </span>
-                          </div>
-                          <Separator />
-                          <div className="flex justify-between text-[11px]">
-                            <span className="text-muted-foreground">Taxable</span>
-                            <span className="font-medium text-foreground">
-                              {formatCurrency(selectedResult.invoice?.taxableValue || 0)}
-                            </span>
-                          </div>
-                          <Separator />
-                          <div className="flex justify-between text-[11px]">
-                            <span className="text-muted-foreground">CGST</span>
-                            <span className={`font-medium ${gstMismatch ? 'text-amber-700' : 'text-foreground'}`}>
-                              {formatCurrency(altCgst)}
-                            </span>
-                          </div>
-                          <Separator />
-                          <div className="flex justify-between text-[11px]">
-                            <span className="text-muted-foreground">SGST</span>
-                            <span className={`font-medium ${gstMismatch ? 'text-amber-700' : 'text-foreground'}`}>
-                              {formatCurrency(altSgst)}
-                            </span>
-                          </div>
-                          <Separator />
-                          <div className="flex justify-between text-[11px]">
-                            <span className="text-muted-foreground">Total</span>
-                            <span className={`font-semibold ${totalMismatch ? 'text-amber-800' : 'text-amber-800'}`}>
-                              {formatCurrency(altTotal)}
-                            </span>
-                          </div>
-                          {dateMismatch && (
-                            <>
-                              <Separator />
-                              <div className="flex justify-between text-[11px]">
-                                <span className="text-muted-foreground">Date</span>
-                                <span className="font-medium text-amber-700">
-                                  {String(dateMismatch.actual)}
+              </CardHeader>
+              <ScrollArea className="h-[520px] lg:h-[560px]">
+                <div className="p-2.5 space-y-2">
+                  <AnimatePresence mode="popLayout">
+                    {filteredMismatches.length === 0 ? (
+                      <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        className="py-12 text-center text-xs text-muted-foreground"
+                      >
+                        No mismatches in this category
+                      </motion.div>
+                    ) : (
+                      filteredMismatches.map((m, i) => (
+                        <motion.div
+                          key={m.id}
+                          variants={cardEntrance}
+                          initial="hidden"
+                          animate="visible"
+                          transition={{ delay: i * 0.04 }}
+                          layout
+                        >
+                          <button
+                            onClick={() => setSelectedMismatchId(m.id)}
+                            className={`w-full text-left p-3.5 rounded-xl border transition-all group ${
+                              selectedMismatchId === m.id
+                                ? 'border-l-4 border-l-emerald-500 border-emerald-200 bg-emerald-50/40 shadow-sm'
+                                : 'border-border bg-card hover:border-emerald-200 hover:bg-emerald-50/20'
+                            } ${m.resolved ? 'opacity-60' : ''}`}
+                          >
+                            <div className="flex items-center justify-between mb-1.5">
+                              <span className="text-sm font-mono font-bold text-foreground">
+                                {m.invoiceNumber}
+                              </span>
+                              {m.resolved && (
+                                <Badge variant="outline" className="h-5 text-[10px] border-emerald-200 bg-emerald-50 text-emerald-700">
+                                  Resolved
+                                </Badge>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2 mb-2 flex-wrap">
+                              <span className="text-[11px] text-muted-foreground truncate max-w-[120px]">
+                                {m.clientName}
+                              </span>
+                              <Badge
+                                variant="outline"
+                                className={`h-5 text-[10px] px-1.5 ${getMismatchBadgeClasses(m.mismatchCategory)}`}
+                              >
+                                {m.mismatchType}
+                              </Badge>
+                              <span className={`inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded border ${getSeverityConfig(getMismatchSeverity(m)).bgColor} ${getSeverityConfig(getMismatchSeverity(m)).color}`}>
+                                <span className={`size-1.5 rounded-full ${getSeverityConfig(getMismatchSeverity(m)).dotClass}`} />
+                                {getSeverityConfig(getMismatchSeverity(m)).label}
+                              </span>
+                            </div>
+                            <div className="flex items-center justify-between">
+                              {m.taxDifference > 0 ? (
+                                <span className="text-xs font-semibold text-red-700">
+                                  {formatCurrency(m.taxDifference)} diff
+                                </span>
+                              ) : (
+                                <span className="text-xs text-muted-foreground">—</span>
+                              )}
+                              <div className="flex items-center gap-1">
+                                <Sparkles className="h-3 w-3 text-emerald-600" />
+                                <span className="text-[10px] font-semibold text-emerald-700">
+                                  AI: {m.confidenceScore}%
                                 </span>
                               </div>
-                            </>
-                          )}
-                        </>
-                      );
-                    })()}
-                  </div>
+                            </div>
+                          </button>
+                        </motion.div>
+                      ))
+                    )}
+                  </AnimatePresence>
                 </div>
-              </div>
+              </ScrollArea>
+            </Card>
+          </motion.div>
 
-              {/* AI Recommendation */}
-              {selectedResult.aiExplanation && (
-                <div className="p-3 rounded-lg border border-emerald-200 bg-emerald-50/30">
-                  <div className="flex items-start gap-2.5">
-                    <div className="flex items-center justify-center h-6 w-6 rounded-full bg-emerald-100 shrink-0 mt-0.5">
-                      <Sparkles className="h-3.5 w-3.5 text-emerald-700" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="text-xs font-semibold text-emerald-800">AI Recommendation</span>
-                        <Badge variant="outline" className="h-4 text-[9px] border-emerald-200 bg-emerald-50 text-emerald-700">
-                          {selectedResult.confidenceScore}% confidence
-                        </Badge>
+          {/* ── Right Panel: Side-by-Side Comparison ── */}
+          <motion.div
+            initial={{ opacity: 0, x: 10 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: 0.4 }}
+            className="lg:col-span-3"
+          >
+            <AnimatePresence mode="wait">
+              {!selectedMismatch ? (
+                /* Empty state — no mismatch selected */
+                <motion.div
+                  key="empty"
+                  initial={{ opacity: 0, scale: 0.97 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.97 }}
+                  transition={{ duration: 0.25 }}
+                >
+                  <Card className="border shadow-sm h-full min-h-[560px] flex items-center justify-center">
+                    <CardContent className="flex flex-col items-center text-center py-16">
+                      <div className="flex items-center justify-center h-16 w-16 rounded-2xl bg-muted/50 mb-4">
+                        <Eye className="h-8 w-8 text-muted-foreground/50" />
                       </div>
-                      <p className="text-[11px] text-emerald-700 leading-relaxed">
-                        {selectedResult.aiExplanation}
+                      <h3 className="text-sm font-semibold text-foreground mb-1">
+                        Select a mismatch to investigate
+                      </h3>
+                      <p className="text-xs text-muted-foreground max-w-[240px]">
+                        Click on any mismatch from the list to see a detailed side-by-side comparison
                       </p>
-                    </div>
-                  </div>
-                </div>
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              ) : (
+                /* Selected mismatch — comparison view */
+                <motion.div
+                  key={selectedMismatch.id}
+                  initial={{ opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -12 }}
+                  transition={{ duration: 0.3 }}
+                >
+                  <Card className="border shadow-sm overflow-hidden">
+                    <CardHeader className="px-4 py-3 border-b border-border/60">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <CardTitle className="text-sm font-semibold font-mono">
+                            {selectedMismatch.invoiceNumber}
+                          </CardTitle>
+                          <Badge
+                            variant="outline"
+                            className={`h-5 text-[10px] ${getMismatchBadgeClasses(selectedMismatch.mismatchCategory)}`}
+                          >
+                            {selectedMismatch.mismatchType}
+                          </Badge>
+                        </div>
+                        {selectedMismatch.resolved && (
+                          <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px]">
+                            <CheckCircle2 className="h-3 w-3 mr-1" />
+                            Resolved
+                          </Badge>
+                        )}
+                      </div>
+                      <CardDescription className="text-xs mt-0.5">
+                        {selectedMismatch.clientName}
+                        {selectedMismatch.taxDifference > 0 && (
+                          <span className="text-red-600 font-medium ml-2">
+                            • {formatCurrency(selectedMismatch.taxDifference)} GST difference
+                          </span>
+                        )}
+                      </CardDescription>
+                    </CardHeader>
+
+                    <ScrollArea className="max-h-[520px]">
+                      <div className="p-4 space-y-4">
+                        {/* ── Side-by-Side Comparison ── */}
+                        <div className="rounded-xl border border-border overflow-hidden">
+                          {/* Header row */}
+                          <div className="grid grid-cols-[1fr_1fr_1fr] bg-muted/30">
+                            <div className="px-3 py-2 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+                              Field
+                            </div>
+                            <div className="px-3 py-2 text-[11px] font-semibold text-emerald-700 uppercase tracking-wider bg-emerald-50/50 flex items-center gap-1.5">
+                              <ShieldCheck className="h-3 w-3" />
+                              Your Books
+                            </div>
+                            <div className="px-3 py-2 text-[11px] font-semibold text-amber-700 uppercase tracking-wider bg-amber-50/50 flex items-center gap-1.5">
+                              <ShieldAlert className="h-3 w-3" />
+                              GSTR-2B Data
+                            </div>
+                          </div>
+
+                          {/* Data rows */}
+                          <ComparisonField
+                            label="Invoice #"
+                            booksValue={selectedMismatch.booksData.invoiceNumber}
+                            gstr2bValue={selectedMismatch.gstr2bData?.invoiceNumber || '—'}
+                            isDiff={selectedMismatch.diffFields.includes('invoice_number')}
+                          />
+                          <ComparisonField
+                            label="Date"
+                            booksValue={selectedMismatch.booksData.invoiceDate}
+                            gstr2bValue={selectedMismatch.gstr2bData?.invoiceDate || '—'}
+                            isDiff={selectedMismatch.diffFields.includes('invoice_date')}
+                          />
+                          <ComparisonField
+                            label="Seller GSTIN"
+                            booksValue={selectedMismatch.booksData.sellerGstin}
+                            gstr2bValue={selectedMismatch.gstr2bData?.sellerGstin || '—'}
+                            isDiff={selectedMismatch.diffFields.includes('sellerGstin') || selectedMismatch.diffFields.includes('vendor_gstin')}
+                          />
+                          <ComparisonField
+                            label="Buyer GSTIN"
+                            booksValue={selectedMismatch.booksData.buyerGstin || '—'}
+                            gstr2bValue={selectedMismatch.gstr2bData?.buyerGstin || '—'}
+                            isDiff={selectedMismatch.diffFields.includes('buyerGstin')}
+                          />
+                          <ComparisonField
+                            label="Taxable Value"
+                            booksValue={selectedMismatch.booksData.taxableValue > 0 ? formatCurrency(selectedMismatch.booksData.taxableValue) : '—'}
+                            gstr2bValue={selectedMismatch.gstr2bData && selectedMismatch.gstr2bData.taxableValue > 0 ? formatCurrency(selectedMismatch.gstr2bData.taxableValue) : '—'}
+                            isDiff={selectedMismatch.diffFields.includes('taxableValue')}
+                          />
+                          <ComparisonField
+                            label="CGST"
+                            booksValue={selectedMismatch.booksData.cgst > 0 ? formatCurrency(selectedMismatch.booksData.cgst) : '—'}
+                            gstr2bValue={selectedMismatch.gstr2bData && selectedMismatch.gstr2bData.cgst > 0 ? formatCurrency(selectedMismatch.gstr2bData.cgst) : '—'}
+                            isDiff={selectedMismatch.diffFields.includes('cgst') || selectedMismatch.diffFields.includes('gst_amount')}
+                          />
+                          <ComparisonField
+                            label="SGST"
+                            booksValue={selectedMismatch.booksData.sgst > 0 ? formatCurrency(selectedMismatch.booksData.sgst) : '—'}
+                            gstr2bValue={selectedMismatch.gstr2bData && selectedMismatch.gstr2bData.sgst > 0 ? formatCurrency(selectedMismatch.gstr2bData.sgst) : '—'}
+                            isDiff={selectedMismatch.diffFields.includes('sgst')}
+                          />
+                          <ComparisonField
+                            label="IGST"
+                            booksValue={selectedMismatch.booksData.igst > 0 ? formatCurrency(selectedMismatch.booksData.igst) : '—'}
+                            gstr2bValue={selectedMismatch.gstr2bData && selectedMismatch.gstr2bData.igst > 0 ? formatCurrency(selectedMismatch.gstr2bData.igst) : '—'}
+                            isDiff={selectedMismatch.diffFields.includes('igst')}
+                          />
+                          <ComparisonField
+                            label="Total"
+                            booksValue={selectedMismatch.booksData.totalAmount > 0 ? formatCurrency(selectedMismatch.booksData.totalAmount) : '—'}
+                            gstr2bValue={selectedMismatch.gstr2bData && selectedMismatch.gstr2bData.totalAmount > 0 ? formatCurrency(selectedMismatch.gstr2bData.totalAmount) : '—'}
+                            isDiff={selectedMismatch.diffFields.includes('totalAmount') || selectedMismatch.diffFields.includes('total_amount')}
+                          />
+                        </div>
+
+                        {/* ── AI Recommendation Card ── */}
+                        {!selectedMismatch.resolved && (
+                          <motion.div
+                            initial={{ opacity: 0, y: 8 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: 0.2 }}
+                          >
+                            <Card className="border-emerald-200 bg-gradient-to-r from-emerald-50/60 to-teal-50/30">
+                              <CardContent className="py-3.5 px-4">
+                                <div className="flex items-start gap-3">
+                                  <div className="flex items-center justify-center h-8 w-8 rounded-lg bg-emerald-100 mt-0.5 shrink-0">
+                                    <Sparkles className="h-4 w-4 text-emerald-700" />
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2 mb-1">
+                                      <span className="text-xs font-semibold text-emerald-800">
+                                        AI suggests: {selectedMismatch.aiRecommendation.split('—')[0].trim()}
+                                      </span>
+                                      <Badge variant="outline" className="h-5 text-[10px] border-emerald-300 bg-emerald-50 text-emerald-700 shrink-0">
+                                        {selectedMismatch.confidenceScore}% confidence
+                                      </Badge>
+                                    </div>
+                                    <p className="text-[11px] text-emerald-700/90 leading-relaxed">
+                                      {selectedMismatch.aiRecommendation}
+                                    </p>
+                                  </div>
+                                </div>
+                              </CardContent>
+                            </Card>
+                          </motion.div>
+                        )}
+
+                        {/* ── AI Explanation ── */}
+                        <div className="rounded-lg bg-muted/40 border border-border/50 px-3.5 py-2.5">
+                          <p className="text-[11px] text-muted-foreground leading-relaxed">
+                            <span className="font-medium text-foreground">AI Summary:</span>{' '}
+                            {selectedMismatch.aiExplanation}
+                          </p>
+                        </div>
+
+                        {/* ── Action Buttons ── */}
+                        {!selectedMismatch.resolved && (
+                          <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            transition={{ delay: 0.3 }}
+                            className="flex flex-col sm:flex-row gap-2 pt-1"
+                          >
+                            <Button
+                              onClick={() => handleAcceptGSTR2B(selectedMismatch.id)}
+                              className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm flex-1"
+                              size="sm"
+                            >
+                              <CheckCircle2 className="h-3.5 w-3.5" />
+                              Accept GSTR-2B
+                            </Button>
+                            <Button
+                              onClick={() => handleKeepBooks(selectedMismatch.id)}
+                              variant="secondary"
+                              className="gap-1.5 flex-1"
+                              size="sm"
+                            >
+                              <ShieldCheck className="h-3.5 w-3.5" />
+                              Keep Books Value
+                            </Button>
+                            <Button
+                              onClick={() => handleCustomResolution(selectedMismatch.id)}
+                              variant="outline"
+                              className="gap-1.5 flex-1"
+                              size="sm"
+                            >
+                              <AlertCircle className="h-3.5 w-3.5" />
+                              Custom Resolution
+                            </Button>
+                          </motion.div>
+                        )}
+                      </div>
+                    </ScrollArea>
+                  </Card>
+                </motion.div>
               )}
+            </AnimatePresence>
+          </motion.div>
+        </div>
 
-              {/* Resolution Options */}
-              <div className="space-y-3">
-                <Label className="text-xs font-semibold text-foreground">Choose Resolution</Label>
-                <RadioGroup
-                  value={resolveChoice}
-                  onValueChange={(v) => setResolveChoice(v as 'gstr2b' | 'books' | 'custom')}
-                  className="gap-2"
-                >
-                  <div className="flex items-start gap-3 p-3 rounded-lg border border-border/60 hover:bg-muted/30 transition-colors cursor-pointer">
-                    <RadioGroupItem value="gstr2b" id="gstr2b" className="mt-0.5" />
-                    <div className="flex-1">
-                      <Label htmlFor="gstr2b" className="text-xs font-semibold cursor-pointer">Accept GSTR-2B Value</Label>
-                      <p className="text-[11px] text-muted-foreground mt-0.5">
-                        Update your books to match the GST portal data. Recommended for minor discrepancies.
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-3 p-3 rounded-lg border border-border/60 hover:bg-muted/30 transition-colors cursor-pointer">
-                    <RadioGroupItem value="books" id="books" className="mt-0.5" />
-                    <div className="flex-1">
-                      <Label htmlFor="books" className="text-xs font-semibold cursor-pointer">Accept Books Value</Label>
-                      <p className="text-[11px] text-muted-foreground mt-0.5">
-                        Keep your books as-is. Use when the GST portal data appears incorrect.
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-3 p-3 rounded-lg border border-border/60 hover:bg-muted/30 transition-colors cursor-pointer">
-                    <RadioGroupItem value="custom" id="custom" className="mt-0.5" />
-                    <div className="flex-1">
-                      <Label htmlFor="custom" className="text-xs font-semibold cursor-pointer">Custom Value</Label>
-                      <p className="text-[11px] text-muted-foreground mt-0.5">
-                        Enter a custom amount. Use when neither source is fully correct.
-                      </p>
-                    </div>
-                  </div>
-                </RadioGroup>
-              </div>
+        {/* ── Reconciliation Timeline Sidebar ── */}
+        <motion.div
+          initial={{ opacity: 0, x: 20 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ delay: 0.45 }}
+          className={`hidden xl:block ${timelineCollapsed ? 'w-10' : 'w-[220px]'} shrink-0 transition-all duration-300`}
+        >
+          <Card className="border shadow-sm overflow-hidden h-full">
+            <CardHeader className="px-3 py-2.5 border-b border-border/60 flex flex-row items-center justify-between space-y-0">
+              {!timelineCollapsed && (
+                <CardTitle className="text-xs font-semibold flex items-center gap-1.5">
+                  <History className="h-3.5 w-3.5 text-muted-foreground" />
+                  Recon Timeline
+                </CardTitle>
+              )}
+              <button
+                onClick={() => setTimelineCollapsed(!timelineCollapsed)}
+                className="text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <ChevronRight className={`h-3.5 w-3.5 transition-transform ${timelineCollapsed ? '' : 'rotate-180'}`} />
+              </button>
+            </CardHeader>
+            {!timelineCollapsed && (
+              <ScrollArea className="h-[560px]">
+                <div className="p-2.5 space-y-1.5">
+                  {timeline.map((entry, i) => {
+                    const entryDate = new Date(entry.date);
+                    const formattedDate = entryDate.toLocaleDateString('en-IN', {
+                      day: '2-digit',
+                      month: 'short',
+                      year: '2-digit',
+                    });
+                    const formattedTime = entryDate.toLocaleTimeString('en-IN', {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      hour12: true,
+                    });
 
-              <DialogFooter className="gap-2 pt-2">
-                <Button
-                  variant="outline"
-                  onClick={() => setResolveDialogOpen(false)}
-                  className="text-sm"
-                >
-                  Cancel
-                </Button>
-                <Button
-                  onClick={handleResolve}
-                  className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm"
-                >
-                  <CheckCircle2 className="h-4 w-4" />
-                  Save Resolution
-                </Button>
-              </DialogFooter>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+                    return (
+                      <motion.button
+                        key={entry.id}
+                        initial={{ opacity: 0, x: 10 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: 0.5 + i * 0.05 }}
+                        className="w-full text-left p-2.5 rounded-lg border border-border/50 hover:border-emerald-200 hover:bg-emerald-50/30 transition-all group"
+                        onClick={() => {
+                          toast.info(`Loading run from ${formattedDate}...`);
+                        }}
+                      >
+                        <div className="flex items-center gap-1.5 mb-1">
+                          <Clock className="h-3 w-3 text-muted-foreground group-hover:text-emerald-600 transition-colors" />
+                          <span className="text-[10px] font-medium text-muted-foreground">
+                            {formattedDate} · {formattedTime}
+                          </span>
+                        </div>
+                        <p className="text-[11px] font-medium text-foreground truncate mb-0.5">
+                          {entry.clients}
+                        </p>
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] text-muted-foreground">
+                            {entry.recordsProcessed} records
+                          </span>
+                          <Badge
+                            variant="outline"
+                            className={`h-4 text-[9px] px-1 ${
+                              entry.matchRate >= 80
+                                ? 'border-emerald-200 text-emerald-700 bg-emerald-50'
+                                : entry.matchRate >= 60
+                                ? 'border-amber-200 text-amber-700 bg-amber-50'
+                                : 'border-red-200 text-red-700 bg-red-50'
+                            }`}
+                          >
+                            {entry.matchRate}%
+                          </Badge>
+                        </div>
+                      </motion.button>
+                    );
+                  })}
+                </div>
+              </ScrollArea>
+            )}
+          </Card>
+        </motion.div>
+      </div>
     </motion.div>
   );
 }

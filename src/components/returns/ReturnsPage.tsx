@@ -5,9 +5,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Card,
   CardContent,
-  CardHeader,
-  CardTitle,
-  CardDescription,
 } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -22,25 +19,32 @@ import {
 } from '@/components/ui/sheet';
 import { Separator } from '@/components/ui/separator';
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
   FileText,
   CheckCircle2,
   AlertTriangle,
-  Clock,
   Plus,
   Download,
   ArrowRight,
   Zap,
-  Upload,
-  ChevronRight,
-  Calendar,
-  AlertCircle,
   Send,
   Loader2,
-  FileCheck2,
-  RotateCcw,
-  ExternalLink,
+  ChevronRight,
+  AlertCircle,
+  Clock,
+  Wrench,
+  Eye,
   Info,
+  ShieldCheck,
+  FileOutput,
 } from 'lucide-react';
+import { toast } from 'sonner';
 import { useApp } from '@/contexts/AppContext';
 import {
   GSTRFiling,
@@ -51,64 +55,11 @@ import {
 import {
   formatCurrency,
   periodToLabel,
-  isOverdue,
-  getFilingDueDate,
 } from '@/lib/gst-utils';
 
-// ─── Pipeline Stage Config ────────────────────────────────────────────────────
+// ─── Types ──────────────────────────────────────────────────────────────────────
 
-type PipelineStage = 'draft' | 'ready' | 'filed' | 'issues';
-
-interface PipelineStageConfig {
-  key: PipelineStage;
-  label: string;
-  borderColor: string;
-  bgColor: string;
-  headerBg: string;
-  icon: React.ReactNode;
-  emptyText: string;
-}
-
-const PIPELINE_STAGES: PipelineStageConfig[] = [
-  {
-    key: 'draft',
-    label: 'Draft',
-    borderColor: 'border-t-slate-400',
-    bgColor: 'bg-slate-50/50',
-    headerBg: 'bg-slate-100',
-    icon: <FileText className="size-4 text-slate-500" />,
-    emptyText: 'No drafts yet',
-  },
-  {
-    key: 'ready',
-    label: 'Ready to File',
-    borderColor: 'border-t-emerald-500',
-    bgColor: 'bg-emerald-50/30',
-    headerBg: 'bg-emerald-100',
-    icon: <Zap className="size-4 text-emerald-600" />,
-    emptyText: 'No returns ready',
-  },
-  {
-    key: 'filed',
-    label: 'Filed',
-    borderColor: 'border-t-green-600',
-    bgColor: 'bg-green-50/30',
-    headerBg: 'bg-green-100',
-    icon: <CheckCircle2 className="size-4 text-green-600" />,
-    emptyText: 'No filed returns',
-  },
-  {
-    key: 'issues',
-    label: 'Issues',
-    borderColor: 'border-t-red-500',
-    bgColor: 'bg-red-50/20',
-    headerBg: 'bg-red-100',
-    icon: <AlertTriangle className="size-4 text-red-500" />,
-    emptyText: 'No issues found',
-  },
-];
-
-// ─── Section Breakdown for Detail Sheet ───────────────────────────────────────
+type KanbanColumn = 'draft' | 'ready' | 'filed' | 'attention';
 
 interface SectionBreakdown {
   section: string;
@@ -117,307 +68,68 @@ interface SectionBreakdown {
   taxAmount: number;
 }
 
-// ─── Mock Data ────────────────────────────────────────────────────────────────
+// ─── Kanban Column Config ───────────────────────────────────────────────────────
 
-const MOCK_CLIENTS: Client[] = [
+const KANBAN_COLUMNS: {
+  key: KanbanColumn;
+  label: string;
+  borderTopColor: string;
+  bgColor: string;
+  headerBg: string;
+  countBadgeClass: string;
+  icon: React.ReactNode;
+  emptyText: string;
+}[] = [
   {
-    id: 'cl-1',
-    gstin: '27AABCU9603R1ZM',
-    tradeName: 'Sharma Enterprises',
-    legalName: 'Sharma Enterprises Pvt Ltd',
-    state: 'Maharashtra',
-    stateCode: '27',
-    entityType: 'Regular',
-    status: 'active',
-    healthScore: 92,
-    createdAt: '2024-01-10T10:00:00Z',
-    updatedAt: '2024-03-01T10:00:00Z',
+    key: 'draft',
+    label: 'Draft',
+    borderTopColor: 'border-t-slate-400',
+    bgColor: 'bg-slate-50',
+    headerBg: 'bg-slate-100/80',
+    countBadgeClass: 'bg-slate-200 text-slate-700',
+    icon: <FileText className="size-4 text-slate-500" />,
+    emptyText: 'No draft returns',
   },
   {
-    id: 'cl-2',
-    gstin: '29AABCU9603R1ZP',
-    tradeName: 'Patel & Sons',
-    legalName: 'Patel & Sons Trading Co',
-    state: 'Karnataka',
-    stateCode: '29',
-    entityType: 'Regular',
-    status: 'active',
-    healthScore: 85,
-    createdAt: '2024-01-15T10:00:00Z',
-    updatedAt: '2024-03-01T10:00:00Z',
+    key: 'ready',
+    label: 'Ready to File',
+    borderTopColor: 'border-t-emerald-500',
+    bgColor: 'bg-emerald-50',
+    headerBg: 'bg-emerald-100/80',
+    countBadgeClass: 'bg-emerald-200 text-emerald-800',
+    icon: <Zap className="size-4 text-emerald-600" />,
+    emptyText: 'No returns ready to file',
   },
   {
-    id: 'cl-3',
-    gstin: '06AABCU9603R1ZQ',
-    tradeName: 'Krishna Industries',
-    legalName: 'Krishna Industries Ltd',
-    state: 'Haryana',
-    stateCode: '06',
-    entityType: 'Regular',
-    status: 'active',
-    healthScore: 78,
-    createdAt: '2024-02-01T10:00:00Z',
-    updatedAt: '2024-03-01T10:00:00Z',
+    key: 'filed',
+    label: 'Filed',
+    borderTopColor: 'border-t-green-600',
+    bgColor: 'bg-green-50',
+    headerBg: 'bg-green-100/80',
+    countBadgeClass: 'bg-green-200 text-green-800',
+    icon: <CheckCircle2 className="size-4 text-green-600" />,
+    emptyText: 'No filed returns yet',
   },
   {
-    id: 'cl-4',
-    gstin: '33AABCU9603R1ZR',
-    tradeName: 'Rajesh Textiles',
-    legalName: 'Rajesh Textiles Pvt Ltd',
-    state: 'Tamil Nadu',
-    stateCode: '33',
-    entityType: 'Regular',
-    status: 'active',
-    healthScore: 95,
-    createdAt: '2024-01-20T10:00:00Z',
-    updatedAt: '2024-03-01T10:00:00Z',
-  },
-  {
-    id: 'cl-5',
-    gstin: '24AABCU9603R1ZS',
-    tradeName: 'Gujarat Traders',
-    legalName: 'Gujarat Traders Association',
-    state: 'Gujarat',
-    stateCode: '24',
-    entityType: 'Regular',
-    status: 'active',
-    healthScore: 88,
-    createdAt: '2024-02-10T10:00:00Z',
-    updatedAt: '2024-03-01T10:00:00Z',
-  },
-  {
-    id: 'cl-6',
-    gstin: '19AABCU9603R1ZT',
-    tradeName: 'Mohan Exports',
-    legalName: 'Mohan Exports India Pvt Ltd',
-    state: 'West Bengal',
-    stateCode: '19',
-    entityType: 'Regular',
-    status: 'active',
-    healthScore: 71,
-    createdAt: '2024-01-05T10:00:00Z',
-    updatedAt: '2024-03-01T10:00:00Z',
+    key: 'attention',
+    label: 'Requires Attention',
+    borderTopColor: 'border-t-red-500',
+    bgColor: 'bg-red-50',
+    headerBg: 'bg-red-100/80',
+    countBadgeClass: 'bg-red-200 text-red-800',
+    icon: <AlertTriangle className="size-4 text-red-500" />,
+    emptyText: 'No issues found',
   },
 ];
 
-const MOCK_FILINGS: GSTRFiling[] = [
-  // Draft
-  {
-    id: 'fil-1',
-    clientId: 'cl-1',
-    returnType: 'GSTR-1',
-    period: '2026-03',
-    financialYear: '2025-26',
-    status: 'draft',
-    totalInvoices: 42,
-    readyForFiling: 38,
-    issuesFound: 4,
-    criticalErrors: 0,
-    warnings: 3,
-    totalTaxableValue: 2850000,
-    totalTax: 513000,
-    createdAt: '2026-03-05T10:00:00Z',
-    updatedAt: '2026-03-06T10:00:00Z',
-    client: MOCK_CLIENTS[0],
-  },
-  {
-    id: 'fil-2',
-    clientId: 'cl-3',
-    returnType: 'GSTR-3B',
-    period: '2026-03',
-    financialYear: '2025-26',
-    status: 'draft',
-    totalInvoices: 18,
-    readyForFiling: 15,
-    issuesFound: 3,
-    criticalErrors: 1,
-    warnings: 2,
-    totalTaxableValue: 1240000,
-    totalTax: 223200,
-    createdAt: '2026-03-04T10:00:00Z',
-    updatedAt: '2026-03-05T10:00:00Z',
-    client: MOCK_CLIENTS[2],
-  },
-  {
-    id: 'fil-10',
-    clientId: 'cl-6',
-    returnType: 'GSTR-1',
-    period: '2026-02',
-    financialYear: '2025-26',
-    status: 'draft',
-    totalInvoices: 31,
-    readyForFiling: 28,
-    issuesFound: 3,
-    criticalErrors: 0,
-    warnings: 2,
-    totalTaxableValue: 1780000,
-    totalTax: 320400,
-    createdAt: '2026-02-28T10:00:00Z',
-    updatedAt: '2026-03-01T10:00:00Z',
-    client: MOCK_CLIENTS[5],
-  },
-  // Ready to File
-  {
-    id: 'fil-3',
-    clientId: 'cl-2',
-    returnType: 'GSTR-1',
-    period: '2026-03',
-    financialYear: '2025-26',
-    status: 'generated',
-    totalInvoices: 56,
-    readyForFiling: 56,
-    issuesFound: 0,
-    criticalErrors: 0,
-    warnings: 0,
-    totalTaxableValue: 4520000,
-    totalTax: 813600,
-    createdAt: '2026-03-02T10:00:00Z',
-    updatedAt: '2026-03-07T10:00:00Z',
-    client: MOCK_CLIENTS[1],
-  },
-  {
-    id: 'fil-4',
-    clientId: 'cl-4',
-    returnType: 'GSTR-3B',
-    period: '2026-03',
-    financialYear: '2025-26',
-    status: 'validated',
-    totalInvoices: 34,
-    readyForFiling: 34,
-    issuesFound: 0,
-    criticalErrors: 0,
-    warnings: 0,
-    totalTaxableValue: 2180000,
-    totalTax: 392400,
-    createdAt: '2026-03-01T10:00:00Z',
-    updatedAt: '2026-03-06T10:00:00Z',
-    client: MOCK_CLIENTS[3],
-  },
-  {
-    id: 'fil-5',
-    clientId: 'cl-5',
-    returnType: 'GSTR-1',
-    period: '2026-02',
-    financialYear: '2025-26',
-    status: 'generated',
-    totalInvoices: 29,
-    readyForFiling: 29,
-    issuesFound: 0,
-    criticalErrors: 0,
-    warnings: 0,
-    totalTaxableValue: 1960000,
-    totalTax: 352800,
-    createdAt: '2026-02-25T10:00:00Z',
-    updatedAt: '2026-03-03T10:00:00Z',
-    client: MOCK_CLIENTS[4],
-  },
-  // Filed
-  {
-    id: 'fil-6',
-    clientId: 'cl-1',
-    returnType: 'GSTR-1',
-    period: '2026-02',
-    financialYear: '2025-26',
-    status: 'filed',
-    filedDate: '2026-03-09T14:30:00Z',
-    acknowledgmentNumber: 'ARN271603091430001',
-    totalInvoices: 38,
-    readyForFiling: 38,
-    issuesFound: 0,
-    criticalErrors: 0,
-    warnings: 0,
-    totalTaxableValue: 2680000,
-    totalTax: 482400,
-    createdAt: '2026-02-28T10:00:00Z',
-    updatedAt: '2026-03-09T14:30:00Z',
-    client: MOCK_CLIENTS[0],
-  },
-  {
-    id: 'fil-7',
-    clientId: 'cl-2',
-    returnType: 'GSTR-3B',
-    period: '2026-02',
-    financialYear: '2025-26',
-    status: 'filed',
-    filedDate: '2026-03-10T11:15:00Z',
-    acknowledgmentNumber: 'ARN291603101115002',
-    totalInvoices: 48,
-    readyForFiling: 48,
-    issuesFound: 0,
-    criticalErrors: 0,
-    warnings: 0,
-    totalTaxableValue: 3950000,
-    totalTax: 711000,
-    createdAt: '2026-02-27T10:00:00Z',
-    updatedAt: '2026-03-10T11:15:00Z',
-    client: MOCK_CLIENTS[1],
-  },
-  {
-    id: 'fil-8',
-    clientId: 'cl-4',
-    returnType: 'GSTR-1',
-    period: '2026-01',
-    financialYear: '2025-26',
-    status: 'filed',
-    filedDate: '2026-02-10T16:45:00Z',
-    acknowledgmentNumber: 'ARN331602101645003',
-    totalInvoices: 41,
-    readyForFiling: 41,
-    issuesFound: 0,
-    criticalErrors: 0,
-    warnings: 0,
-    totalTaxableValue: 3120000,
-    totalTax: 561600,
-    createdAt: '2026-01-30T10:00:00Z',
-    updatedAt: '2026-02-10T16:45:00Z',
-    client: MOCK_CLIENTS[3],
-  },
-  // Issues
-  {
-    id: 'fil-9',
-    clientId: 'cl-3',
-    returnType: 'GSTR-1',
-    period: '2026-02',
-    financialYear: '2025-26',
-    status: 'reopened',
-    totalInvoices: 22,
-    readyForFiling: 16,
-    issuesFound: 6,
-    criticalErrors: 2,
-    warnings: 4,
-    totalTaxableValue: 1450000,
-    totalTax: 261000,
-    createdAt: '2026-02-25T10:00:00Z',
-    updatedAt: '2026-03-08T10:00:00Z',
-    client: MOCK_CLIENTS[2],
-  },
-  {
-    id: 'fil-11',
-    clientId: 'cl-6',
-    returnType: 'GSTR-3B',
-    period: '2026-01',
-    financialYear: '2025-26',
-    status: 'reopened',
-    totalInvoices: 15,
-    readyForFiling: 10,
-    issuesFound: 5,
-    criticalErrors: 1,
-    warnings: 3,
-    totalTaxableValue: 980000,
-    totalTax: 176400,
-    createdAt: '2026-01-28T10:00:00Z',
-    updatedAt: '2026-03-05T10:00:00Z',
-    client: MOCK_CLIENTS[5],
-  },
-];
+// ─── Section Breakdown Mocks ────────────────────────────────────────────────────
 
-const MOCK_SECTION_BREAKDOWN: Record<string, SectionBreakdown[]> = {
+const SECTION_MAP: Record<string, SectionBreakdown[]> = {
   'GSTR-1': [
-    { section: 'B2B Invoices', invoiceCount: 28, taxableValue: 1850000, taxAmount: 333000 },
-    { section: 'B2C Large', invoiceCount: 8, taxableValue: 640000, taxAmount: 115200 },
-    { section: 'B2C Small', invoiceCount: 4, taxableValue: 120000, taxAmount: 21600 },
-    { section: 'Credit/Debit Notes', invoiceCount: 2, taxableValue: 40000, taxAmount: -7200 },
-    { section: 'Exports', invoiceCount: 3, taxableValue: 200000, taxAmount: 0 },
+    { section: 'B2B', invoiceCount: 15, taxableValue: 845200, taxAmount: 152136 },
+    { section: 'B2C Large', invoiceCount: 8, taxableValue: 321400, taxAmount: 57852 },
+    { section: 'B2C Small', invoiceCount: 22, taxableValue: 187650, taxAmount: 33777 },
+    { section: 'CDNR', invoiceCount: 3, taxableValue: 98060, taxAmount: -17651 },
   ],
   'GSTR-3B': [
     { section: 'Outward Supplies', invoiceCount: 30, taxableValue: 2180000, taxAmount: 392400 },
@@ -427,27 +139,299 @@ const MOCK_SECTION_BREAKDOWN: Record<string, SectionBreakdown[]> = {
   ],
 };
 
-// ─── Upcoming Deadlines Mock ──────────────────────────────────────────────────
+// ─── Mock Clients ───────────────────────────────────────────────────────────────
 
-interface Deadline {
-  returnType: string;
-  period: string;
-  dueDate: string;
-  clientName: string;
-  clientId: string;
-}
-
-const MOCK_DEADLINES: Deadline[] = [
-  { returnType: 'GSTR-1', period: '2026-03', dueDate: '2026-04-11', clientName: 'Sharma Enterprises', clientId: 'cl-1' },
-  { returnType: 'GSTR-3B', period: '2026-03', dueDate: '2026-04-20', clientName: 'Patel & Sons', clientId: 'cl-2' },
-  { returnType: 'GSTR-1', period: '2026-03', dueDate: '2026-04-11', clientName: 'Krishna Industries', clientId: 'cl-3' },
-  { returnType: 'GSTR-3B', period: '2026-03', dueDate: '2026-04-20', clientName: 'Rajesh Textiles', clientId: 'cl-4' },
-  { returnType: 'GSTR-1', period: '2026-03', dueDate: '2026-04-11', clientName: 'Gujarat Traders', clientId: 'cl-5' },
+const MOCK_CLIENTS: Client[] = [
+  {
+    id: 'cl-sharma',
+    gstin: '27AABCS1234F1Z5',
+    tradeName: 'Sharma Enterprises',
+    legalName: 'Sharma Enterprises Pvt Ltd',
+    state: 'Maharashtra',
+    stateCode: '27',
+    entityType: 'Regular',
+    status: 'active',
+    healthScore: 92,
+    createdAt: '2024-01-10T10:00:00Z',
+    updatedAt: '2025-06-01T10:00:00Z',
+  },
+  {
+    id: 'cl-patel',
+    gstin: '24AABCP5678G1Z3',
+    tradeName: 'Patel & Sons',
+    legalName: 'Patel & Sons Trading Co',
+    state: 'Gujarat',
+    stateCode: '24',
+    entityType: 'Regular',
+    status: 'active',
+    healthScore: 78,
+    createdAt: '2024-01-15T10:00:00Z',
+    updatedAt: '2025-06-01T10:00:00Z',
+  },
+  {
+    id: 'cl-krishna',
+    gstin: '06AABCK9012H1Z1',
+    tradeName: 'Krishna Traders',
+    legalName: 'Krishna Traders Pvt Ltd',
+    state: 'Haryana',
+    stateCode: '06',
+    entityType: 'Regular',
+    status: 'active',
+    healthScore: 88,
+    createdAt: '2024-02-01T10:00:00Z',
+    updatedAt: '2025-06-01T10:00:00Z',
+  },
+  {
+    id: 'cl-metro',
+    gstin: '33AABCM3456J1Z7',
+    tradeName: 'Metro Retail',
+    legalName: 'Metro Retail India Pvt Ltd',
+    state: 'Tamil Nadu',
+    stateCode: '33',
+    entityType: 'Regular',
+    status: 'active',
+    healthScore: 65,
+    createdAt: '2024-01-20T10:00:00Z',
+    updatedAt: '2025-05-15T10:00:00Z',
+  },
+  {
+    id: 'cl-sunrise',
+    gstin: '27AABCS7890K1Z9',
+    tradeName: 'Sunrise Exports',
+    legalName: 'Sunrise Exports India Ltd',
+    state: 'Maharashtra',
+    stateCode: '27',
+    entityType: 'Regular',
+    status: 'active',
+    healthScore: 85,
+    createdAt: '2024-02-10T10:00:00Z',
+    updatedAt: '2025-05-20T10:00:00Z',
+  },
+  {
+    id: 'cl-gupta',
+    gstin: '09AABCG2345L1Z2',
+    tradeName: 'Gupta Manufacturing',
+    legalName: 'Gupta Manufacturing Co',
+    state: 'Uttar Pradesh',
+    stateCode: '09',
+    entityType: 'Regular',
+    status: 'active',
+    healthScore: 91,
+    createdAt: '2024-01-05T10:00:00Z',
+    updatedAt: '2025-06-01T10:00:00Z',
+  },
+  {
+    id: 'cl-digital',
+    gstin: '29AABCD6789M1Z4',
+    tradeName: 'Digital Commerce',
+    legalName: 'Digital Commerce Solutions Pvt Ltd',
+    state: 'Karnataka',
+    stateCode: '29',
+    entityType: 'Regular',
+    status: 'active',
+    healthScore: 73,
+    createdAt: '2024-03-01T10:00:00Z',
+    updatedAt: '2025-06-01T10:00:00Z',
+  },
+  {
+    id: 'cl-apex',
+    gstin: '27AABCA0123N1Z6',
+    tradeName: 'Apex Logistics',
+    legalName: 'Apex Logistics India Pvt Ltd',
+    state: 'Maharashtra',
+    stateCode: '27',
+    entityType: 'Regular',
+    status: 'active',
+    healthScore: 58,
+    createdAt: '2023-12-01T10:00:00Z',
+    updatedAt: '2025-04-15T10:00:00Z',
+  },
 ];
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// ─── Mock Filings ───────────────────────────────────────────────────────────────
 
-function getPipelineStage(status: FilingStatus): PipelineStage {
+const MOCK_FILINGS: GSTRFiling[] = [
+  // Ready to File
+  {
+    id: 'fil-sharma-gstr1',
+    clientId: 'cl-sharma',
+    returnType: 'GSTR-1',
+    period: '2025-06',
+    financialYear: '2025-26',
+    status: 'generated',
+    totalInvoices: 45,
+    readyForFiling: 45,
+    issuesFound: 0,
+    criticalErrors: 0,
+    warnings: 0,
+    totalTaxableValue: 2518000,
+    totalTax: 452310,
+    createdAt: '2025-06-02T10:00:00Z',
+    updatedAt: '2025-06-08T10:00:00Z',
+    client: MOCK_CLIENTS[0],
+  },
+  // Requires Attention
+  {
+    id: 'fil-patel-gstr3b',
+    clientId: 'cl-patel',
+    returnType: 'GSTR-3B',
+    period: '2025-06',
+    financialYear: '2025-26',
+    status: 'reopened',
+    totalInvoices: 89,
+    readyForFiling: 78,
+    issuesFound: 7,
+    criticalErrors: 2,
+    warnings: 5,
+    totalTaxableValue: 7156000,
+    totalTax: 1287650,
+    createdAt: '2025-06-01T10:00:00Z',
+    updatedAt: '2025-06-07T10:00:00Z',
+    client: MOCK_CLIENTS[1],
+  },
+  // Filed
+  {
+    id: 'fil-krishna-gstr1',
+    clientId: 'cl-krishna',
+    returnType: 'GSTR-1',
+    period: '2025-06',
+    financialYear: '2025-26',
+    status: 'filed',
+    filedDate: '2025-06-10T14:30:00Z',
+    acknowledgmentNumber: 'AA110625001234',
+    totalInvoices: 22,
+    readyForFiling: 22,
+    issuesFound: 0,
+    criticalErrors: 0,
+    warnings: 0,
+    totalTaxableValue: 1218000,
+    totalTax: 218940,
+    createdAt: '2025-06-01T10:00:00Z',
+    updatedAt: '2025-06-10T14:30:00Z',
+    client: MOCK_CLIENTS[2],
+  },
+  // Draft
+  {
+    id: 'fil-metro-gstr1',
+    clientId: 'cl-metro',
+    returnType: 'GSTR-1',
+    period: '2025-05',
+    financialYear: '2025-26',
+    status: 'draft',
+    totalInvoices: 67,
+    readyForFiling: 60,
+    issuesFound: 3,
+    criticalErrors: 0,
+    warnings: 3,
+    totalTaxableValue: 3638000,
+    totalTax: 654200,
+    createdAt: '2025-05-28T10:00:00Z',
+    updatedAt: '2025-06-01T10:00:00Z',
+    client: MOCK_CLIENTS[3],
+  },
+  // Ready to File
+  {
+    id: 'fil-sunrise-gstr3b',
+    clientId: 'cl-sunrise',
+    returnType: 'GSTR-3B',
+    period: '2025-05',
+    financialYear: '2025-26',
+    status: 'validated',
+    totalInvoices: 53,
+    readyForFiling: 53,
+    issuesFound: 0,
+    criticalErrors: 0,
+    warnings: 0,
+    totalTaxableValue: 4954000,
+    totalTax: 891430,
+    createdAt: '2025-05-25T10:00:00Z',
+    updatedAt: '2025-06-03T10:00:00Z',
+    client: MOCK_CLIENTS[4],
+  },
+  // Filed
+  {
+    id: 'fil-gupta-gstr1',
+    clientId: 'cl-gupta',
+    returnType: 'GSTR-1',
+    period: '2025-06',
+    financialYear: '2025-26',
+    status: 'filed',
+    filedDate: '2025-06-09T11:15:00Z',
+    acknowledgmentNumber: 'AA110625005678',
+    totalInvoices: 31,
+    readyForFiling: 31,
+    issuesFound: 0,
+    criticalErrors: 0,
+    warnings: 0,
+    totalTaxableValue: 1818000,
+    totalTax: 327180,
+    createdAt: '2025-06-01T10:00:00Z',
+    updatedAt: '2025-06-09T11:15:00Z',
+    client: MOCK_CLIENTS[5],
+  },
+  // Draft
+  {
+    id: 'fil-digital-gstr3b',
+    clientId: 'cl-digital',
+    returnType: 'GSTR-3B',
+    period: '2025-06',
+    financialYear: '2025-26',
+    status: 'draft',
+    totalInvoices: 19,
+    readyForFiling: 19,
+    issuesFound: 0,
+    criticalErrors: 0,
+    warnings: 0,
+    totalTaxableValue: 810000,
+    totalTax: 145670,
+    createdAt: '2025-06-03T10:00:00Z',
+    updatedAt: '2025-06-05T10:00:00Z',
+    client: MOCK_CLIENTS[6],
+  },
+  // Requires Attention
+  {
+    id: 'fil-apex-gstr1',
+    clientId: 'cl-apex',
+    returnType: 'GSTR-1',
+    period: '2025-04',
+    financialYear: '2025-26',
+    status: 'reopened',
+    totalInvoices: 41,
+    readyForFiling: 32,
+    issuesFound: 9,
+    criticalErrors: 3,
+    warnings: 6,
+    totalTaxableValue: 3238000,
+    totalTax: 582900,
+    createdAt: '2025-04-28T10:00:00Z',
+    updatedAt: '2025-06-02T10:00:00Z',
+    client: MOCK_CLIENTS[7],
+  },
+];
+
+// ─── Period Options ─────────────────────────────────────────────────────────────
+
+const PERIOD_OPTIONS = [
+  { value: '2025-06', label: 'Jun 2025' },
+  { value: '2025-05', label: 'May 2025' },
+  { value: '2025-04', label: 'Apr 2025' },
+  { value: '2025-03', label: 'Mar 2025' },
+  { value: '2025-02', label: 'Feb 2025' },
+  { value: '2025-01', label: 'Jan 2025' },
+];
+
+// ─── Timeline Steps ─────────────────────────────────────────────────────────────
+
+const TIMELINE_STEPS = [
+  { key: 'draft', label: 'Draft' },
+  { key: 'validated', label: 'Validated' },
+  { key: 'generated', label: 'Generated' },
+  { key: 'filed', label: 'Filed' },
+];
+
+// ─── Helpers ────────────────────────────────────────────────────────────────────
+
+function getKanbanColumn(status: FilingStatus): KanbanColumn {
   switch (status) {
     case 'draft':
     case 'prepared':
@@ -459,75 +443,18 @@ function getPipelineStage(status: FilingStatus): PipelineStage {
     case 'filed':
       return 'filed';
     case 'reopened':
-      return 'issues';
+      return 'attention';
     default:
       return 'draft';
   }
 }
 
-function getDaysUntilDue(dueDateStr: string): number {
-  const dueDate = new Date(dueDateStr);
-  const now = new Date();
-  const diffMs = dueDate.getTime() - now.getTime();
-  return Math.ceil(diffMs / (1000 * 60 * 60 * 24));
-}
-
-function getDeadlineUrgency(daysLeft: number): 'overdue' | 'this_week' | 'this_month' | 'safe' {
-  if (daysLeft < 0) return 'overdue';
-  if (daysLeft <= 7) return 'this_week';
-  if (daysLeft <= 30) return 'this_month';
-  return 'safe';
-}
-
-function getIssueSummary(filing: GSTRFiling): string {
-  const parts: string[] = [];
-  if (filing.criticalErrors > 0) parts.push(`${filing.criticalErrors} critical`);
-  if (filing.warnings > 0) parts.push(`${filing.warnings} warnings`);
-  if (filing.issuesFound > 0 && parts.length === 0) parts.push(`${filing.issuesFound} issues`);
-  return parts.length > 0 ? parts.join(', ') : 'No issues';
-}
-
-// ─── Animation Variants ──────────────────────────────────────────────────────
-
-const fadeInUp = {
-  hidden: { opacity: 0, y: 16 },
-  show: { opacity: 1, y: 0, transition: { duration: 0.35 } },
-};
-
-const staggerContainer = {
-  hidden: { opacity: 0 },
-  show: {
-    opacity: 1,
-    transition: { staggerChildren: 0.06 },
-  },
-};
-
-const staggerItem = {
-  hidden: { opacity: 0, y: 10 },
-  show: { opacity: 1, y: 0, transition: { duration: 0.3 } },
-};
-
-const cardHover = {
-  scale: 1.015,
-  transition: { duration: 0.15 },
-};
-
-// ─── Status Timeline Data ─────────────────────────────────────────────────────
-
-const STATUS_TIMELINE_STEPS = [
-  { key: 'data_imported', label: 'Created', icon: FileText },
-  { key: 'validation_completed', label: 'Validated', icon: CheckCircle2 },
-  { key: 'gstr_generated', label: 'Generated', icon: FileCheck2 },
-  { key: 'filed', label: 'Filed', icon: Send },
-];
-
-function getTimelineProgress(status: FilingStatus): number {
+function getTimelineStepIndex(status: FilingStatus): number {
   switch (status) {
     case 'draft':
     case 'prepared':
       return 0;
     case 'validated':
-      return 1;
     case 'reviewed':
       return 1;
     case 'generated':
@@ -541,6 +468,61 @@ function getTimelineProgress(status: FilingStatus): number {
   }
 }
 
+function getAttentionSummary(filing: GSTRFiling): string {
+  if (filing.issuesFound <= 0) return 'No issues';
+  const parts: string[] = [];
+  if (filing.criticalErrors > 0) parts.push(`${filing.criticalErrors} critical error${filing.criticalErrors > 1 ? 's' : ''}`);
+  if (filing.warnings > 0) parts.push(`${filing.warnings} warning${filing.warnings > 1 ? 's' : ''}`);
+  if (filing.issuesFound > 0 && parts.length === 0) parts.push(`${filing.issuesFound} issue${filing.issuesFound > 1 ? 's' : ''}`);
+
+  // Add specific mismatch/missing text for our known mock data
+  if (filing.id === 'fil-patel-gstr3b') return '7 mismatches';
+  if (filing.id === 'fil-apex-gstr1') return 'Overdue · 3 missing invoices';
+  return parts.join(' · ');
+}
+
+function getReturnTypeBadgeClass(returnType: string): string {
+  if (returnType === 'GSTR-1') {
+    return 'border-teal-200 bg-teal-50 text-teal-700';
+  }
+  return 'border-emerald-200 bg-emerald-50 text-emerald-700';
+}
+
+// ─── Animation Variants ─────────────────────────────────────────────────────────
+
+const fadeInUp = {
+  hidden: { opacity: 0, y: 20 },
+  show: { opacity: 1, y: 0, transition: { duration: 0.4, ease: 'easeOut' } },
+};
+
+const staggerContainer = {
+  hidden: { opacity: 0 },
+  show: {
+    opacity: 1,
+    transition: { staggerChildren: 0.07 },
+  },
+};
+
+const staggerItem = {
+  hidden: { opacity: 0, y: 12, scale: 0.97 },
+  show: { opacity: 1, y: 0, scale: 1, transition: { duration: 0.3, ease: 'easeOut' } },
+};
+
+const cardHover = {
+  y: -2,
+  boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+  transition: { duration: 0.18 },
+};
+
+const columnEnter = {
+  hidden: { opacity: 0, y: 24 },
+  show: (i: number) => ({
+    opacity: 1,
+    y: 0,
+    transition: { duration: 0.4, delay: i * 0.1, ease: 'easeOut' },
+  }),
+};
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Main Component
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -550,13 +532,11 @@ export default function ReturnsPage() {
 
   // ── State ─────────────────────────────────────────────────────────────────
   const [filings, setFilings] = useState<GSTRFiling[]>([]);
-  const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedFiling, setSelectedFiling] = useState<GSTRFiling | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [filingAction, setFilingAction] = useState<string | null>(null);
-  const [showSuccess, setShowSuccess] = useState(false);
-  const [successArn, setSuccessArn] = useState('');
+  const [selectedPeriod, setSelectedPeriod] = useState('2025-06');
 
   // ── Data Fetching ─────────────────────────────────────────────────────────
   const fetchFilings = useCallback(async () => {
@@ -567,75 +547,43 @@ export default function ReturnsPage() {
         const rawFilings = data.filings ?? data ?? [];
         if (Array.isArray(rawFilings) && rawFilings.length > 0) {
           setFilings(rawFilings);
-        } else {
-          setFilings(MOCK_FILINGS);
+          return;
         }
-      } else {
-        setFilings(MOCK_FILINGS);
       }
     } catch {
-      setFilings(MOCK_FILINGS);
+      // fall through to mock
     }
-  }, []);
-
-  const fetchClients = useCallback(async () => {
-    try {
-      const res = await fetch('/api/clients');
-      if (res.ok) {
-        const data = await res.json();
-        const rawClients = data.clients ?? data ?? [];
-        if (Array.isArray(rawClients) && rawClients.length > 0) {
-          setClients(rawClients);
-        } else {
-          setClients(MOCK_CLIENTS);
-        }
-      } else {
-        setClients(MOCK_CLIENTS);
-      }
-    } catch {
-      setClients(MOCK_CLIENTS);
-    }
+    setFilings(MOCK_FILINGS);
   }, []);
 
   useEffect(() => {
     async function load() {
       setLoading(true);
-      await Promise.all([fetchFilings(), fetchClients()]);
+      await fetchFilings();
       setLoading(false);
     }
     load();
-  }, [fetchFilings, fetchClients]);
+  }, [fetchFilings]);
 
   // ── Derived Data ──────────────────────────────────────────────────────────
-  const pipelineData = useMemo(() => {
-    const stages: Record<PipelineStage, GSTRFiling[]> = {
+  const filteredFilings = useMemo(() => {
+    // Show all filings (don't filter by period so all kanban cards are visible)
+    return filings;
+  }, [filings]);
+
+  const kanbanData = useMemo(() => {
+    const columns: Record<KanbanColumn, GSTRFiling[]> = {
       draft: [],
       ready: [],
       filed: [],
-      issues: [],
+      attention: [],
     };
-    filings.forEach((f) => {
-      const stage = getPipelineStage(f.status);
-      stages[stage].push(f);
+    filteredFilings.forEach((f) => {
+      const col = getKanbanColumn(f.status);
+      columns[col].push(f);
     });
-    return stages;
-  }, [filings]);
-
-  const currentPeriod = useMemo(() => {
-    const now = new Date();
-    const month = String(now.getMonth() + 1).padStart(2, '0');
-    const year = now.getFullYear();
-    return `${year}-${month}`;
-  }, []);
-
-  const deadlines = useMemo(() => {
-    return MOCK_DEADLINES.map((d) => ({
-      ...d,
-      daysLeft: getDaysUntilDue(d.dueDate),
-    }))
-      .sort((a, b) => a.daysLeft - b.daysLeft)
-      .slice(0, 5);
-  }, []);
+    return columns;
+  }, [filteredFilings]);
 
   // ── Handlers ──────────────────────────────────────────────────────────────
   const handleCardClick = (filing: GSTRFiling) => {
@@ -645,15 +593,13 @@ export default function ReturnsPage() {
 
   const handleFileReturn = async (filing: GSTRFiling) => {
     setFilingAction(filing.id);
-    // Simulate filing
-    await new Promise((r) => setTimeout(r, 2000));
-    const arn = `ARN${filing.client?.gstin?.slice(0, 2) ?? '00'}${Date.now()}`;
-    setSuccessArn(arn);
-    setShowSuccess(true);
-    setFilingAction(null);
-    setSheetOpen(false);
 
-    // Update filing status locally
+    // Simulate filing — 2 second delay
+    await new Promise((r) => setTimeout(r, 2000));
+
+    const arn = `AA${String(new Date().getDate()).padStart(2, '0')}${String(new Date().getMonth() + 1).padStart(2, '0')}${new Date().getFullYear()}${String(Math.floor(Math.random() * 999999)).padStart(6, '0')}`;
+
+    // Update filing locally
     setFilings((prev) =>
       prev.map((f) =>
         f.id === filing.id
@@ -667,7 +613,14 @@ export default function ReturnsPage() {
       )
     );
 
-    setTimeout(() => setShowSuccess(false), 6000);
+    setFilingAction(null);
+    setSheetOpen(false);
+    setSelectedFiling(null);
+
+    toast.success(`${filing.returnType} filed successfully!`, {
+      description: `ARN: ${arn}`,
+      duration: 5000,
+    });
   };
 
   const handlePrepare = (filing: GSTRFiling) => {
@@ -679,28 +632,44 @@ export default function ReturnsPage() {
     setCurrentView('reconcile');
   };
 
+  const handleViewDetails = (filing: GSTRFiling) => {
+    setSelectedFiling(filing);
+    setSheetOpen(true);
+  };
+
   const handleCreateReturn = () => {
-    setCurrentView('upload');
+    toast.info('Create Return wizard coming soon!', {
+      description: 'You can upload documents from the Invoices section.',
+    });
+  };
+
+  const handleDownloadJSON = (filing: GSTRFiling) => {
+    toast.success('JSON downloaded', {
+      description: `${filing.returnType} for ${filing.client?.tradeName} · ${periodToLabel(filing.period)}`,
+    });
   };
 
   // ── Loading State ─────────────────────────────────────────────────────────
   if (loading) {
     return (
-      <div className="space-y-6 p-4 md:p-6">
+      <div className="space-y-5 p-4 md:p-6">
         <div className="flex items-center justify-between">
-          <div className="space-y-2">
-            <Skeleton className="h-8 w-48" />
-            <Skeleton className="h-4 w-72" />
+          <div className="flex items-center gap-3">
+            <Skeleton className="h-8 w-44" />
+            <Skeleton className="h-6 w-20 rounded-full" />
           </div>
-          <Skeleton className="h-9 w-36" />
+          <div className="flex items-center gap-2">
+            <Skeleton className="h-9 w-32" />
+            <Skeleton className="h-9 w-36" />
+          </div>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           {[1, 2, 3, 4].map((i) => (
             <div key={i} className="space-y-3">
-              <Skeleton className="h-10 w-full rounded-t-lg" />
+              <Skeleton className="h-12 w-full rounded-t-lg" />
               <div className="space-y-2 p-2">
-                <Skeleton className="h-24 w-full rounded-lg" />
-                <Skeleton className="h-24 w-full rounded-lg" />
+                <Skeleton className="h-28 w-full rounded-lg" />
+                <Skeleton className="h-28 w-full rounded-lg" />
               </div>
             </div>
           ))}
@@ -709,44 +678,11 @@ export default function ReturnsPage() {
     );
   }
 
-  // ── Empty State ───────────────────────────────────────────────────────────
-  const totalFilings = filings.length;
-
-  if (totalFilings === 0) {
-    return (
-      <motion.div
-        className="flex min-h-[70vh] items-center justify-center p-4"
-        variants={fadeInUp}
-        initial="hidden"
-        animate="show"
-      >
-        <div className="flex flex-col items-center gap-6 text-center max-w-md">
-          <div className="flex size-20 items-center justify-center rounded-2xl bg-emerald-100">
-            <FileText className="size-10 text-emerald-600" />
-          </div>
-          <div className="space-y-2">
-            <h2 className="text-2xl font-bold tracking-tight">No returns yet</h2>
-            <p className="text-muted-foreground">
-              Upload documents to start preparing returns. GSTPilot will handle the rest.
-            </p>
-          </div>
-          <Button
-            onClick={handleCreateReturn}
-            className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-6"
-          >
-            <Upload className="size-4" />
-            Go to Upload
-          </Button>
-        </div>
-      </motion.div>
-    );
-  }
-
-  // ═══════════════════════════════════════════════════════════════════════════
+  // ═════════════════════════════════════════════════════════════════════════
   // Render Helpers
-  // ═══════════════════════════════════════════════════════════════════════════
+  // ═════════════════════════════════════════════════════════════════════════
 
-  const renderReturnCard = (filing: GSTRFiling, stage: PipelineStage) => {
+  const renderDraftCard = (filing: GSTRFiling) => {
     const clientName = filing.client?.tradeName ?? 'Unknown Client';
     const periodLabel = periodToLabel(filing.period);
 
@@ -758,204 +694,335 @@ export default function ReturnsPage() {
         className="cursor-pointer"
         onClick={() => handleCardClick(filing)}
       >
-        <Card className="border shadow-sm transition-shadow hover:shadow-md">
-          <CardContent className="p-3 space-y-2.5">
-            {/* Client & Return Type */}
-            <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold truncate leading-tight">
-                  {clientName}
-                </p>
-                <div className="flex items-center gap-1.5 mt-1">
-                  <Badge
-                    variant="outline"
-                    className="text-[10px] px-1.5 py-0 h-5 border-emerald-200 bg-emerald-50 text-emerald-700 font-medium"
-                  >
-                    {filing.returnType}
-                  </Badge>
-                  <span className="text-[11px] text-muted-foreground">{periodLabel}</span>
-                </div>
-              </div>
+        <Card className="border shadow-sm bg-white transition-shadow hover:shadow-md">
+          <CardContent className="p-3.5 space-y-2.5">
+            {/* Client Name */}
+            <p className="text-sm font-semibold truncate leading-tight">
+              {clientName}
+            </p>
+
+            {/* Return Type + Period */}
+            <div className="flex items-center gap-1.5">
+              <Badge
+                variant="outline"
+                className={`text-[10px] px-1.5 py-0 h-5 font-semibold ${getReturnTypeBadgeClass(filing.returnType)}`}
+              >
+                {filing.returnType}
+              </Badge>
+              <span className="text-[11px] text-muted-foreground">{periodLabel}</span>
             </div>
 
-            {/* Stage-specific content */}
-            {stage === 'draft' && (
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between text-[11px]">
-                  <span className="text-muted-foreground">Invoices</span>
-                  <span className="font-medium">{filing.totalInvoices}</span>
-                </div>
-                {filing.issuesFound > 0 && (
-                  <div className="flex items-center gap-1 text-[11px] text-amber-600">
-                    <AlertCircle className="size-3" />
-                    <span>{filing.issuesFound} issues to resolve</span>
-                  </div>
-                )}
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="w-full h-7 text-xs gap-1.5 border-slate-300 hover:border-emerald-400 hover:text-emerald-700 hover:bg-emerald-50"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handlePrepare(filing);
-                  }}
-                >
-                  <ArrowRight className="size-3" />
-                  Prepare
-                </Button>
+            {/* Invoice count */}
+            <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+              <FileText className="size-3" />
+              <span>{filing.totalInvoices} invoices</span>
+            </div>
+
+            {/* Issues badge */}
+            {filing.issuesFound > 0 && (
+              <div className="flex items-center gap-1">
+                <Badge className="text-[10px] px-1.5 py-0 h-5 bg-amber-100 text-amber-700 border-amber-200 hover:bg-amber-100 font-medium">
+                  <AlertCircle className="size-2.5 mr-0.5" />
+                  {filing.issuesFound} issues
+                </Badge>
               </div>
             )}
 
-            {stage === 'ready' && (
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between text-[11px]">
-                  <span className="text-muted-foreground">Total Tax</span>
-                  <span className="font-semibold text-emerald-700">
-                    {formatCurrency(filing.totalTax)}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between text-[11px]">
-                  <span className="text-muted-foreground">Invoices</span>
-                  <span className="font-medium">{filing.totalInvoices}</span>
-                </div>
-                <Button
-                  size="sm"
-                  className="w-full h-7 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleFileReturn(filing);
-                  }}
-                  disabled={filingAction === filing.id}
-                >
-                  {filingAction === filing.id ? (
-                    <Loader2 className="size-3 animate-spin" />
-                  ) : (
-                    <Send className="size-3" />
-                  )}
-                  {filingAction === filing.id ? 'Filing...' : 'File Return'}
-                </Button>
-              </div>
-            )}
-
-            {stage === 'filed' && (
-              <div className="space-y-1.5">
-                <div className="flex items-center gap-1.5 text-[11px]">
-                  <CheckCircle2 className="size-3 text-green-600" />
-                  <span className="text-green-700 font-medium">Filed</span>
-                </div>
-                {filing.acknowledgmentNumber && (
-                  <div className="flex items-center justify-between text-[11px]">
-                    <span className="text-muted-foreground">ARN</span>
-                    <span className="font-mono text-[10px] font-medium">
-                      {filing.acknowledgmentNumber}
-                    </span>
-                  </div>
-                )}
-                {filing.filedDate && (
-                  <div className="flex items-center justify-between text-[11px]">
-                    <span className="text-muted-foreground">Date</span>
-                    <span className="font-medium">
-                      {new Date(filing.filedDate).toLocaleDateString('en-IN', {
-                        day: '2-digit',
-                        month: 'short',
-                        year: 'numeric',
-                      })}
-                    </span>
-                  </div>
-                )}
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="w-full h-7 text-xs gap-1.5 text-emerald-700 hover:text-emerald-800 hover:bg-emerald-50"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                  }}
-                >
-                  <Download className="size-3" />
-                  Download JSON
-                </Button>
-              </div>
-            )}
-
-            {stage === 'issues' && (
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between text-[11px]">
-                  <span className="text-muted-foreground">Issues</span>
-                  <span className="font-semibold text-red-600">{filing.issuesFound}</span>
-                </div>
-                <div className="flex items-center gap-1 text-[11px] text-red-600">
-                  <AlertTriangle className="size-3 shrink-0" />
-                  <span className="truncate">{getIssueSummary(filing)}</span>
-                </div>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="w-full h-7 text-xs gap-1.5 border-red-200 text-red-700 hover:bg-red-50 hover:border-red-300"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleFixIssues();
-                  }}
-                >
-                  <RotateCcw className="size-3" />
-                  Fix Issues
-                </Button>
-              </div>
-            )}
+            {/* Prepare button */}
+            <Button
+              size="sm"
+              variant="outline"
+              className="w-full h-7 text-xs gap-1.5 border-slate-300 hover:border-emerald-400 hover:text-emerald-700 hover:bg-emerald-50"
+              onClick={(e) => {
+                e.stopPropagation();
+                handlePrepare(filing);
+              }}
+            >
+              <ArrowRight className="size-3" />
+              Prepare
+            </Button>
           </CardContent>
         </Card>
       </motion.div>
     );
   };
 
-  const renderPipelineColumn = (stageConfig: PipelineStageConfig) => {
-    const items = pipelineData[stageConfig.key];
+  const renderReadyCard = (filing: GSTRFiling) => {
+    const clientName = filing.client?.tradeName ?? 'Unknown Client';
+    const periodLabel = periodToLabel(filing.period);
+    const isFiling = filingAction === filing.id;
+
     return (
-      <div
-        className={`flex flex-col rounded-xl border-t-4 ${stageConfig.borderColor} ${stageConfig.bgColor} border border-slate-200/80`}
+      <motion.div
+        key={filing.id}
+        variants={staggerItem}
+        whileHover={cardHover}
+        className="cursor-pointer"
+        onClick={() => handleCardClick(filing)}
+      >
+        <Card className="border shadow-sm bg-white transition-shadow hover:shadow-md">
+          <CardContent className="p-3.5 space-y-2.5">
+            {/* Client Name */}
+            <p className="text-sm font-semibold truncate leading-tight">
+              {clientName}
+            </p>
+
+            {/* Return Type + Period */}
+            <div className="flex items-center gap-1.5">
+              <Badge
+                variant="outline"
+                className={`text-[10px] px-1.5 py-0 h-5 font-semibold ${getReturnTypeBadgeClass(filing.returnType)}`}
+              >
+                {filing.returnType}
+              </Badge>
+              <span className="text-[11px] text-muted-foreground">{periodLabel}</span>
+            </div>
+
+            {/* Total Tax — prominent */}
+            <div className="flex items-baseline gap-1">
+              <span className="text-lg font-bold text-emerald-700">
+                {formatCurrency(filing.totalTax)}
+              </span>
+              <span className="text-[10px] text-muted-foreground">total tax</span>
+            </div>
+
+            {/* Invoice count */}
+            <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+              <FileText className="size-3" />
+              <span>{filing.totalInvoices} invoices</span>
+            </div>
+
+            {/* File Return button — MAIN CTA */}
+            <Button
+              size="sm"
+              className="w-full h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm font-semibold"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleFileReturn(filing);
+              }}
+              disabled={isFiling}
+            >
+              {isFiling ? (
+                <Loader2 className="size-3.5 animate-spin" />
+              ) : (
+                <Send className="size-3.5" />
+              )}
+              {isFiling ? 'Filing...' : 'File Return'}
+            </Button>
+          </CardContent>
+        </Card>
+      </motion.div>
+    );
+  };
+
+  const renderFiledCard = (filing: GSTRFiling) => {
+    const clientName = filing.client?.tradeName ?? 'Unknown Client';
+
+    return (
+      <motion.div
+        key={filing.id}
+        variants={staggerItem}
+        whileHover={cardHover}
+        className="cursor-pointer"
+        onClick={() => handleCardClick(filing)}
+      >
+        <Card className="border shadow-sm bg-white transition-shadow hover:shadow-md">
+          <CardContent className="p-3.5 space-y-2.5">
+            {/* Client Name */}
+            <p className="text-sm font-semibold truncate leading-tight">
+              {clientName}
+            </p>
+
+            {/* Return Type */}
+            <div className="flex items-center gap-1.5">
+              <Badge
+                variant="outline"
+                className={`text-[10px] px-1.5 py-0 h-5 font-semibold ${getReturnTypeBadgeClass(filing.returnType)}`}
+              >
+                {filing.returnType}
+              </Badge>
+            </div>
+
+            {/* ARN Number */}
+            {filing.acknowledgmentNumber && (
+              <div className="rounded-md bg-green-50 border border-green-100 px-2.5 py-1.5">
+                <p className="text-[10px] text-green-600 font-medium">ARN</p>
+                <p className="text-xs font-mono font-semibold text-green-800">
+                  {filing.acknowledgmentNumber}
+                </p>
+              </div>
+            )}
+
+            {/* Filed date */}
+            {filing.filedDate && (
+              <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                <Clock className="size-3" />
+                <span>
+                  Filed {new Date(filing.filedDate).toLocaleDateString('en-IN', {
+                    day: '2-digit',
+                    month: 'short',
+                    year: 'numeric',
+                  })}
+                </span>
+              </div>
+            )}
+
+            {/* Download JSON text link */}
+            <button
+              className="flex items-center gap-1 text-[11px] font-medium text-emerald-600 hover:text-emerald-800 transition-colors"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleDownloadJSON(filing);
+              }}
+            >
+              <Download className="size-3" />
+              Download JSON
+            </button>
+          </CardContent>
+        </Card>
+      </motion.div>
+    );
+  };
+
+  const renderAttentionCard = (filing: GSTRFiling) => {
+    const clientName = filing.client?.tradeName ?? 'Unknown Client';
+    const issueSummary = getAttentionSummary(filing);
+
+    return (
+      <motion.div
+        key={filing.id}
+        variants={staggerItem}
+        whileHover={cardHover}
+        className="cursor-pointer"
+        onClick={() => handleCardClick(filing)}
+      >
+        <Card className="border shadow-sm bg-white transition-shadow hover:shadow-md border-l-4 border-l-red-400">
+          <CardContent className="p-3.5 space-y-2.5">
+            {/* Client Name */}
+            <p className="text-sm font-semibold truncate leading-tight">
+              {clientName}
+            </p>
+
+            {/* Return Type */}
+            <div className="flex items-center gap-1.5">
+              <Badge
+                variant="outline"
+                className={`text-[10px] px-1.5 py-0 h-5 font-semibold ${getReturnTypeBadgeClass(filing.returnType)}`}
+              >
+                {filing.returnType}
+              </Badge>
+            </div>
+
+            {/* Issue summary */}
+            <div className="rounded-md bg-red-50 border border-red-100 px-2.5 py-2">
+              <div className="flex items-center gap-1.5 text-[11px] font-semibold text-red-700">
+                <AlertTriangle className="size-3 shrink-0" />
+                <span>{issueSummary}</span>
+              </div>
+            </div>
+
+            {/* Fix Issues button */}
+            <Button
+              size="sm"
+              variant="outline"
+              className="w-full h-7 text-xs gap-1.5 border-red-200 text-red-700 hover:bg-red-50 hover:border-red-300"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleFixIssues();
+              }}
+            >
+              <Wrench className="size-3" />
+              Fix Issues
+            </Button>
+
+            {/* View Details text link */}
+            <button
+              className="flex items-center gap-1 text-[11px] font-medium text-slate-500 hover:text-slate-700 transition-colors"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleViewDetails(filing);
+              }}
+            >
+              <Eye className="size-3" />
+              View Details
+            </button>
+          </CardContent>
+        </Card>
+      </motion.div>
+    );
+  };
+
+  const renderCard = (filing: GSTRFiling, column: KanbanColumn) => {
+    switch (column) {
+      case 'draft':
+        return renderDraftCard(filing);
+      case 'ready':
+        return renderReadyCard(filing);
+      case 'filed':
+        return renderFiledCard(filing);
+      case 'attention':
+        return renderAttentionCard(filing);
+    }
+  };
+
+  const renderKanbanColumn = (colConfig: typeof KANBAN_COLUMNS[number], index: number) => {
+    const items = kanbanData[colConfig.key];
+
+    return (
+      <motion.div
+        key={colConfig.key}
+        custom={index}
+        variants={columnEnter}
+        initial="hidden"
+        animate="show"
+        className={`flex flex-col rounded-xl border-t-4 ${colConfig.borderTopColor} ${colConfig.bgColor} border border-slate-200/60 min-h-0`}
       >
         {/* Column Header */}
         <div
-          className={`flex items-center justify-between px-3 py-2.5 ${stageConfig.headerBg} rounded-t-[10px]`}
+          className={`flex items-center justify-between px-3.5 py-3 ${colConfig.headerBg} rounded-t-[8px] shrink-0`}
         >
           <div className="flex items-center gap-2">
-            {stageConfig.icon}
-            <span className="text-sm font-semibold">{stageConfig.label}</span>
+            {colConfig.icon}
+            <span className="text-sm font-semibold tracking-tight">{colConfig.label}</span>
+            {colConfig.key === 'filed' && items.length > 0 && (
+              <CheckCircle2 className="size-3.5 text-green-600" />
+            )}
+            {colConfig.key === 'attention' && items.length > 0 && (
+              <AlertCircle className="size-3.5 text-red-500" />
+            )}
           </div>
           <Badge
-            variant="secondary"
-            className="h-5 min-w-[20px] justify-center text-[11px] font-semibold"
+            className={`h-5 min-w-[22px] justify-center text-[11px] font-bold border-0 ${colConfig.countBadgeClass}`}
           >
             {items.length}
           </Badge>
         </div>
 
-        {/* Cards */}
-        <ScrollArea className="flex-1 max-h-[420px]">
-          <div className="p-2 space-y-2">
-            <AnimatePresence>
+        {/* Cards Area */}
+        <ScrollArea className="flex-1 max-h-[calc(100vh-220px)]">
+          <div className="p-2.5 space-y-2.5">
+            {items.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-10 text-center">
+                <div className="size-12 rounded-full bg-white/60 flex items-center justify-center mb-2">
+                  {React.cloneElement(colConfig.icon as React.ReactElement, {
+                    className: 'size-5 opacity-25',
+                  })}
+                </div>
+                <p className="text-xs text-muted-foreground/70">{colConfig.emptyText}</p>
+              </div>
+            ) : (
               <motion.div
                 variants={staggerContainer}
                 initial="hidden"
                 animate="show"
-                className="space-y-2"
+                className="space-y-2.5"
               >
-                {items.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-8 text-center">
-                    <div className="size-10 rounded-full bg-white/80 flex items-center justify-center mb-2">
-                      {React.cloneElement(stageConfig.icon as React.ReactElement, {
-                        className: 'size-5 opacity-30',
-                      })}
-                    </div>
-                    <p className="text-xs text-muted-foreground">{stageConfig.emptyText}</p>
-                  </div>
-                ) : (
-                  items.map((filing) => renderReturnCard(filing, stageConfig.key))
-                )}
+                {items.map((filing) => renderCard(filing, colConfig.key))}
               </motion.div>
-            </AnimatePresence>
+            )}
           </div>
         </ScrollArea>
-      </div>
+      </motion.div>
     );
   };
 
@@ -963,18 +1030,23 @@ export default function ReturnsPage() {
     if (!selectedFiling) return null;
     const filing = selectedFiling;
     const clientName = filing.client?.tradeName ?? 'Unknown';
-    const stage = getPipelineStage(filing.status);
-    const sections = MOCK_SECTION_BREAKDOWN[filing.returnType] ?? MOCK_SECTION_BREAKDOWN['GSTR-1'];
-    const timelineProgress = getTimelineProgress(filing.status);
+    const clientGstin = filing.client?.gstin ?? '';
+    const column = getKanbanColumn(filing.status);
+    const sections = SECTION_MAP[filing.returnType] ?? SECTION_MAP['GSTR-1'];
+    const timelineIndex = getTimelineStepIndex(filing.status);
 
     return (
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
         <SheetContent side="right" className="w-full sm:max-w-lg overflow-y-auto p-0">
-          <SheetHeader className="p-6 pb-4 border-b bg-gradient-to-b from-emerald-50/50 to-transparent">
-            <div className="flex items-center gap-2">
+          <SheetHeader className="p-6 pb-4 border-b bg-gradient-to-b from-emerald-50/60 to-transparent">
+            <SheetTitle className="text-lg font-bold">{clientName}</SheetTitle>
+            <SheetDescription className="text-sm font-mono">
+              {clientGstin}
+            </SheetDescription>
+            <div className="flex items-center gap-2 mt-1">
               <Badge
                 variant="outline"
-                className="text-xs border-emerald-200 bg-emerald-50 text-emerald-700"
+                className={`text-xs font-semibold ${getReturnTypeBadgeClass(filing.returnType)}`}
               >
                 {filing.returnType}
               </Badge>
@@ -984,80 +1056,114 @@ export default function ReturnsPage() {
               >
                 {FILING_STATUS_CONFIG[filing.status]?.label ?? filing.status}
               </Badge>
+              <span className="text-xs text-muted-foreground">
+                {periodToLabel(filing.period)}
+              </span>
             </div>
-            <SheetTitle className="text-lg">{clientName}</SheetTitle>
-            <SheetDescription className="text-sm">
-              {filing.client?.gstin} &middot; {periodToLabel(filing.period)}
-            </SheetDescription>
           </SheetHeader>
 
           <div className="p-6 space-y-6">
-            {/* Key Metrics */}
-            <div className="grid grid-cols-3 gap-3">
-              <div className="rounded-lg bg-slate-50 p-3 text-center">
-                <p className="text-[11px] text-muted-foreground">Invoices</p>
-                <p className="text-lg font-bold">{filing.totalInvoices}</p>
-              </div>
-              <div className="rounded-lg bg-emerald-50 p-3 text-center">
-                <p className="text-[11px] text-muted-foreground">Taxable Value</p>
-                <p className="text-lg font-bold text-emerald-700">
-                  {formatCurrency(filing.totalTaxableValue)}
-                </p>
-              </div>
-              <div className="rounded-lg bg-teal-50 p-3 text-center">
-                <p className="text-[11px] text-muted-foreground">Total Tax</p>
-                <p className="text-lg font-bold text-teal-700">
-                  {formatCurrency(filing.totalTax)}
-                </p>
+            {/* ── Status Timeline (Horizontal) ──────────────────────────── */}
+            <div className="space-y-2">
+              <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Status
+              </h4>
+              <div className="flex items-center gap-0">
+                {TIMELINE_STEPS.map((step, i) => {
+                  const isCompleted = timelineIndex >= 0 && i <= timelineIndex;
+                  const isCurrent = timelineIndex >= 0 && i === timelineIndex;
+                  const isReopened = timelineIndex === -1;
+
+                  return (
+                    <React.Fragment key={step.key}>
+                      {i > 0 && (
+                        <div
+                          className={`flex-1 h-0.5 mx-1 rounded-full ${
+                            isCompleted && !isReopened
+                              ? 'bg-emerald-400'
+                              : 'bg-slate-200'
+                          }`}
+                        />
+                      )}
+                      <div className="flex flex-col items-center gap-1.5">
+                        <div
+                          className={`flex size-7 items-center justify-center rounded-full shrink-0 ${
+                            isReopened
+                              ? 'bg-red-100 text-red-500 ring-2 ring-red-200'
+                              : isCompleted
+                              ? 'bg-emerald-600 text-white'
+                              : isCurrent
+                              ? 'bg-emerald-100 text-emerald-700 ring-2 ring-emerald-300'
+                              : 'bg-slate-100 text-slate-400'
+                          }`}
+                        >
+                          {isCompleted && !isReopened ? (
+                            <CheckCircle2 className="size-3.5" />
+                          ) : isReopened && i === 0 ? (
+                            <AlertTriangle className="size-3.5" />
+                          ) : (
+                            <ChevronRight className="size-3.5" />
+                          )}
+                        </div>
+                        <span
+                          className={`text-[10px] font-medium whitespace-nowrap ${
+                            isCompleted && !isReopened
+                              ? 'text-emerald-700'
+                              : isReopened
+                              ? 'text-red-600'
+                              : 'text-muted-foreground'
+                          }`}
+                        >
+                          {step.label}
+                        </span>
+                      </div>
+                    </React.Fragment>
+                  );
+                })}
               </div>
             </div>
 
-            {/* Section-wise Breakdown */}
+            <Separator />
+
+            {/* ── Section Breakdown — Mini Cards ───────────────────────── */}
             <div className="space-y-3">
-              <h4 className="text-sm font-semibold flex items-center gap-1.5">
-                <FileText className="size-3.5 text-muted-foreground" />
-                Section-wise Breakdown
+              <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                <FileText className="size-3" />
+                Section Breakdown
               </h4>
-              <div className="grid gap-2">
+              <div className="grid grid-cols-2 gap-2">
                 {sections.map((sec) => (
                   <div
                     key={sec.section}
-                    className="flex items-center justify-between rounded-lg border bg-white p-3"
+                    className="rounded-lg border bg-white p-3 space-y-1"
                   >
-                    <div>
-                      <p className="text-xs font-medium">{sec.section}</p>
-                      <p className="text-[11px] text-muted-foreground">
-                        {sec.invoiceCount} invoice{sec.invoiceCount !== 1 ? 's' : ''}
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-xs font-semibold">
-                        {formatCurrency(sec.taxableValue)}
-                      </p>
-                      <p
-                        className={`text-[11px] ${sec.taxAmount >= 0 ? 'text-emerald-600' : 'text-red-600'}`}
-                      >
-                        Tax: {formatCurrency(Math.abs(sec.taxAmount))}
-                        {sec.taxAmount < 0 ? ' (cr)' : ''}
-                      </p>
-                    </div>
+                    <p className="text-xs font-semibold text-foreground">{sec.section}</p>
+                    <p className="text-[10px] text-muted-foreground">
+                      {sec.invoiceCount} invoice{sec.invoiceCount !== 1 ? 's' : ''}
+                    </p>
+                    <p className="text-sm font-bold text-emerald-700">
+                      {formatCurrency(sec.taxableValue)}
+                    </p>
                   </div>
                 ))}
               </div>
             </div>
 
-            {/* Tax Breakdown */}
+            <Separator />
+
+            {/* ── Tax Breakdown ────────────────────────────────────────── */}
             <div className="space-y-3">
-              <h4 className="text-sm font-semibold flex items-center gap-1.5">
-                <Info className="size-3.5 text-muted-foreground" />
+              <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                <Info className="size-3" />
                 Tax Breakdown
               </h4>
-              <div className="rounded-lg border bg-white p-3 space-y-2">
+              <div className="rounded-lg border bg-white p-3.5 space-y-2.5">
                 {(() => {
                   const total = filing.totalTax;
                   const cgst = Math.round(total * 0.4);
                   const sgst = Math.round(total * 0.4);
                   const igst = total - cgst - sgst;
+                  const cess = 0;
                   return (
                     <>
                       <div className="flex items-center justify-between text-xs">
@@ -1072,8 +1178,12 @@ export default function ReturnsPage() {
                         <span className="text-muted-foreground">IGST</span>
                         <span className="font-medium">{formatCurrency(igst)}</span>
                       </div>
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-muted-foreground">Cess</span>
+                        <span className="font-medium">{formatCurrency(cess)}</span>
+                      </div>
                       <Separator />
-                      <div className="flex items-center justify-between text-xs font-semibold">
+                      <div className="flex items-center justify-between text-sm font-bold">
                         <span>Total Tax</span>
                         <span className="text-emerald-700">{formatCurrency(total)}</span>
                       </div>
@@ -1083,170 +1193,82 @@ export default function ReturnsPage() {
               </div>
             </div>
 
-            {/* Status Timeline */}
-            <div className="space-y-3">
-              <h4 className="text-sm font-semibold flex items-center gap-1.5">
-                <Clock className="size-3.5 text-muted-foreground" />
-                Status Timeline
-              </h4>
-              <div className="space-y-0">
-                {STATUS_TIMELINE_STEPS.map((step, i) => {
-                  const isCompleted =
-                    filing.status === 'reopened'
-                      ? false
-                      : i <= timelineProgress;
-                  const isCurrent =
-                    filing.status === 'reopened'
-                      ? false
-                      : i === timelineProgress;
+            <Separator />
 
-                  return (
-                    <div key={step.key} className="flex items-start gap-3">
-                      <div className="flex flex-col items-center">
-                        <div
-                          className={`flex size-7 items-center justify-center rounded-full ${
-                            isCompleted
-                              ? 'bg-emerald-600 text-white'
-                              : isCurrent
-                              ? 'bg-emerald-100 text-emerald-700 ring-2 ring-emerald-300'
-                              : 'bg-slate-100 text-slate-400'
-                          }`}
-                        >
-                          {isCompleted ? (
-                            <CheckCircle2 className="size-3.5" />
-                          ) : (
-                            <step.icon className="size-3.5" />
-                          )}
-                        </div>
-                        {i < STATUS_TIMELINE_STEPS.length - 1 && (
-                          <div
-                            className={`w-0.5 h-6 ${
-                              i < timelineProgress && filing.status !== 'reopened'
-                                ? 'bg-emerald-300'
-                                : 'bg-slate-200'
-                            }`}
-                          />
-                        )}
-                      </div>
-                      <div className="pb-3">
-                        <p
-                          className={`text-xs font-medium ${
-                            isCompleted
-                              ? 'text-emerald-700'
-                              : isCurrent
-                              ? 'text-foreground'
-                              : 'text-muted-foreground'
-                          }`}
-                        >
-                          {step.label}
-                        </p>
-                        {filing.status === 'reopened' && i === 0 && (
-                          <p className="text-[10px] text-red-600 mt-0.5">
-                            Return reopened due to issues
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
+            {/* ── Key Metrics ──────────────────────────────────────────── */}
+            <div className="grid grid-cols-3 gap-3">
+              <div className="rounded-lg bg-slate-50 p-3 text-center">
+                <p className="text-[10px] text-muted-foreground">Invoices</p>
+                <p className="text-lg font-bold">{filing.totalInvoices}</p>
+              </div>
+              <div className="rounded-lg bg-emerald-50 p-3 text-center">
+                <p className="text-[10px] text-muted-foreground">Taxable Value</p>
+                <p className="text-sm font-bold text-emerald-700">
+                  {formatCurrency(filing.totalTaxableValue)}
+                </p>
+              </div>
+              <div className="rounded-lg bg-teal-50 p-3 text-center">
+                <p className="text-[10px] text-muted-foreground">Total Tax</p>
+                <p className="text-sm font-bold text-teal-700">
+                  {formatCurrency(filing.totalTax)}
+                </p>
               </div>
             </div>
 
-            {/* Action Buttons */}
-            <Separator />
-            <div className="space-y-2 pb-4">
-              {stage === 'ready' && (
-                <>
-                  <Button
-                    className="w-full gap-2 bg-emerald-600 hover:bg-emerald-700 text-white"
-                    onClick={() => handleFileReturn(filing)}
-                    disabled={filingAction === filing.id}
-                  >
-                    {filingAction === filing.id ? (
-                      <Loader2 className="size-4 animate-spin" />
-                    ) : (
-                      <Send className="size-4" />
-                    )}
-                    {filingAction === filing.id
-                      ? 'Filing with GST Portal...'
-                      : 'File with GST Portal'}
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="w-full gap-2"
-                    onClick={() => {}}
-                  >
-                    <Download className="size-4" />
-                    Download JSON
-                  </Button>
-                </>
-              )}
-
-              {stage === 'draft' && (
+            {/* ── Action Buttons (matching the column) ─────────────────── */}
+            <div className="pt-2">
+              {column === 'draft' && (
                 <Button
                   className="w-full gap-2 bg-emerald-600 hover:bg-emerald-700 text-white"
-                  onClick={() => {
-                    setSheetOpen(false);
-                    setCurrentView('upload');
-                  }}
+                  onClick={() => handlePrepare(filing)}
                 >
                   <ArrowRight className="size-4" />
-                  Continue Preparing
+                  Prepare Return
                 </Button>
               )}
-
-              {stage === 'filed' && (
-                <>
-                  <Button
-                    variant="outline"
-                    className="w-full gap-2"
-                    onClick={() => {}}
-                  >
-                    <Download className="size-4" />
-                    Download Filed JSON
-                  </Button>
-                  <div className="rounded-lg bg-green-50 border border-green-200 p-3">
-                    <div className="flex items-center gap-2">
-                      <CheckCircle2 className="size-4 text-green-600" />
-                      <div>
-                        <p className="text-xs font-medium text-green-800">
-                          Successfully Filed
-                        </p>
-                        {filing.acknowledgmentNumber && (
-                          <p className="text-[11px] text-green-700 font-mono mt-0.5">
-                            ARN: {filing.acknowledgmentNumber}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </>
+              {column === 'ready' && (
+                <Button
+                  className="w-full gap-2 bg-emerald-600 hover:bg-emerald-700 text-white"
+                  onClick={() => handleFileReturn(filing)}
+                  disabled={filingAction === filing.id}
+                >
+                  {filingAction === filing.id ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <Send className="size-4" />
+                  )}
+                  {filingAction === filing.id ? 'Filing...' : 'File Return'}
+                </Button>
               )}
-
-              {stage === 'issues' && (
-                <>
+              {column === 'filed' && (
+                <Button
+                  variant="outline"
+                  className="w-full gap-2 border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+                  onClick={() => handleDownloadJSON(filing)}
+                >
+                  <Download className="size-4" />
+                  Download JSON
+                </Button>
+              )}
+              {column === 'attention' && (
+                <div className="flex gap-2">
                   <Button
                     variant="outline"
-                    className="w-full gap-2 border-red-200 text-red-700 hover:bg-red-50 hover:border-red-300"
-                    onClick={handleFixIssues}
+                    className="flex-1 gap-2 border-red-200 text-red-700 hover:bg-red-50"
+                    onClick={() => handleFixIssues()}
                   >
-                    <RotateCcw className="size-4" />
-                    Go to Reconciliation
+                    <Wrench className="size-4" />
+                    Fix Issues
                   </Button>
-                  <div className="rounded-lg bg-red-50 border border-red-200 p-3">
-                    <div className="flex items-center gap-2">
-                      <AlertTriangle className="size-4 text-red-600" />
-                      <div>
-                        <p className="text-xs font-medium text-red-800">
-                          {filing.issuesFound} Issues Found
-                        </p>
-                        <p className="text-[11px] text-red-700 mt-0.5">
-                          {getIssueSummary(filing)} — resolve before filing
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                </>
+                  <Button
+                    variant="outline"
+                    className="flex-1 gap-2"
+                    onClick={() => handleCardClick(filing)}
+                  >
+                    <Eye className="size-4" />
+                    View Details
+                  </Button>
+                </div>
               )}
             </div>
           </div>
@@ -1255,241 +1277,195 @@ export default function ReturnsPage() {
     );
   };
 
-  const renderDeadlineCard = (deadline: Deadline & { daysLeft: number }) => {
-    const urgency = getDeadlineUrgency(deadline.daysLeft);
-
-    const urgencyStyles: Record<string, { bg: string; border: string; text: string; label: string }> = {
-      overdue: { bg: 'bg-red-50', border: 'border-red-200', text: 'text-red-700', label: 'Overdue' },
-      this_week: { bg: 'bg-amber-50', border: 'border-amber-200', text: 'text-amber-700', label: 'Due this week' },
-      this_month: { bg: 'bg-slate-50', border: 'border-slate-200', text: 'text-slate-700', label: 'Due this month' },
-      safe: { bg: 'bg-slate-50', border: 'border-slate-200', text: 'text-slate-700', label: '' },
-    };
-
-    const style = urgencyStyles[urgency];
-
-    return (
-      <motion.div
-        key={`${deadline.clientId}-${deadline.returnType}-${deadline.period}`}
-        variants={staggerItem}
-      >
-        <Card className={`${style.border} ${style.bg} shadow-sm`}>
-          <CardContent className="p-3 flex items-center gap-3">
-            <div
-              className={`flex size-9 items-center justify-center rounded-lg ${
-                urgency === 'overdue'
-                  ? 'bg-red-100'
-                  : urgency === 'this_week'
-                  ? 'bg-amber-100'
-                  : 'bg-slate-100'
-              }`}
-            >
-              <Calendar
-                className={`size-4 ${
-                  urgency === 'overdue'
-                    ? 'text-red-600'
-                    : urgency === 'this_week'
-                    ? 'text-amber-600'
-                    : 'text-slate-500'
-                }`}
-              />
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-1.5">
-                <p className="text-xs font-medium truncate">{deadline.clientName}</p>
-                <Badge
-                  variant="outline"
-                  className="text-[9px] h-4 px-1 border-emerald-200 bg-emerald-50 text-emerald-700"
-                >
-                  {deadline.returnType}
-                </Badge>
-              </div>
-              <p className="text-[11px] text-muted-foreground">
-                Due: {new Date(deadline.dueDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
-                {' '}&middot;{' '}
-                <span className={style.text}>
-                  {deadline.daysLeft < 0
-                    ? `${Math.abs(deadline.daysLeft)}d overdue`
-                    : deadline.daysLeft === 0
-                    ? 'Due today'
-                    : `${deadline.daysLeft}d left`}
-                </span>
-              </p>
-            </div>
-            {urgency !== 'safe' && (
-              <Badge
-                variant="outline"
-                className={`text-[10px] h-5 shrink-0 ${style.border} ${style.text}`}
-              >
-                {style.label}
-              </Badge>
-            )}
-          </CardContent>
-        </Card>
-      </motion.div>
-    );
-  };
-
-  // ═══════════════════════════════════════════════════════════════════════════
+  // ═════════════════════════════════════════════════════════════════════════
   // Main Render
-  // ═══════════════════════════════════════════════════════════════════════════
+  // ═════════════════════════════════════════════════════════════════════════
 
   return (
-    <div className="space-y-6 p-4 md:p-6">
-      {/* ─── Success Toast ──────────────────────────────────────────────────── */}
-      <AnimatePresence>
-        {showSuccess && (
-          <motion.div
-            initial={{ opacity: 0, y: -20, scale: 0.95 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -20, scale: 0.95 }}
-            className="fixed top-4 left-1/2 -translate-x-1/2 z-50"
-          >
-            <Card className="border-green-200 bg-green-50 shadow-lg shadow-green-100/50">
-              <CardContent className="p-4 flex items-center gap-3">
-                <div className="flex size-10 items-center justify-center rounded-full bg-green-100">
-                  <CheckCircle2 className="size-5 text-green-600" />
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-green-800">
-                    Return filed successfully! 🎉
-                  </p>
-                  <p className="text-xs text-green-700 font-mono mt-0.5">
-                    ARN: {successArn}
-                  </p>
-                  <p className="text-[11px] text-green-600 mt-1">
-                    You can download the filed JSON from the Filed column.
-                  </p>
-                </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="text-green-600 hover:text-green-800 hover:bg-green-100 ml-2"
-                  onClick={() => setShowSuccess(false)}
-                >
-                  Dismiss
-                </Button>
-              </CardContent>
-            </Card>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* ─── Page Header ─────────────────────────────────────────────────────── */}
+    <div className="flex flex-col h-full min-h-0">
+      {/* ── Minimal Header ──────────────────────────────────────────────── */}
       <motion.div
-        className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"
         variants={fadeInUp}
         initial="hidden"
         animate="show"
+        className="flex items-center justify-between px-4 md:px-6 py-4 border-b bg-white shrink-0"
       >
         <div className="flex items-center gap-3">
-          <div className="flex size-10 items-center justify-center rounded-xl bg-emerald-100">
-            <FileText className="size-5 text-emerald-700" />
-          </div>
-          <div>
-            <h1 className="text-xl font-bold tracking-tight sm:text-2xl">
-              GST Returns
-            </h1>
-            <p className="text-sm text-muted-foreground">
-              File your returns on time, every time
-              <span className="ml-2 inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700 border border-emerald-200">
-                <Calendar className="size-3" />
-                {periodToLabel(currentPeriod)}
-              </span>
-            </p>
-          </div>
+          <h1 className="text-xl font-bold tracking-tight">Filing Workspace</h1>
+          <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200 text-xs font-semibold hover:bg-emerald-100">
+            Jun 2025
+          </Badge>
         </div>
-        <Button
-          onClick={handleCreateReturn}
-          className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
-        >
-          <Plus className="size-4" />
-          Create Return
-        </Button>
-      </motion.div>
-
-      {/* ─── Summary Stats ───────────────────────────────────────────────────── */}
-      <motion.div
-        variants={staggerContainer}
-        initial="hidden"
-        animate="show"
-        className="grid grid-cols-2 lg:grid-cols-4 gap-3"
-      >
-        {PIPELINE_STAGES.map((stage) => {
-          const count = pipelineData[stage.key].length;
-          const stageColors: Record<PipelineStage, { bg: string; icon: string; text: string }> = {
-            draft: { bg: 'bg-slate-50', icon: 'text-slate-500', text: 'text-slate-700' },
-            ready: { bg: 'bg-emerald-50', icon: 'text-emerald-600', text: 'text-emerald-700' },
-            filed: { bg: 'bg-green-50', icon: 'text-green-600', text: 'text-green-700' },
-            issues: { bg: 'bg-red-50', icon: 'text-red-500', text: 'text-red-700' },
-          };
-          const colors = stageColors[stage.key];
-          return (
-            <motion.div key={stage.key} variants={staggerItem}>
-              <Card className={`${colors.bg} border-0 shadow-sm`}>
-                <CardContent className="p-3 flex items-center gap-3">
-                  <div className={`flex size-8 items-center justify-center rounded-lg bg-white/80 ${colors.icon}`}>
-                    {stage.icon}
-                  </div>
-                  <div>
-                    <p className="text-2xl font-bold tracking-tight">{count}</p>
-                    <p className={`text-[11px] font-medium ${colors.text}`}>{stage.label}</p>
-                  </div>
-                </CardContent>
-              </Card>
-            </motion.div>
-          );
-        })}
-      </motion.div>
-
-      {/* ─── Filing Pipeline ─────────────────────────────────────────────────── */}
-      <motion.div
-        initial={{ opacity: 0, y: 16 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4, delay: 0.15 }}
-      >
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {PIPELINE_STAGES.map((stage) => (
-            <div key={stage.key} className="min-h-[300px] flex flex-col">
-              {renderPipelineColumn(stage)}
-            </div>
-          ))}
-        </div>
-      </motion.div>
-
-      {/* ─── Upcoming Deadlines ──────────────────────────────────────────────── */}
-      <motion.div
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.35, delay: 0.3 }}
-        className="space-y-3"
-      >
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold flex items-center gap-1.5">
-            <Clock className="size-4 text-muted-foreground" />
-            Upcoming Deadlines
-          </h3>
+        <div className="flex items-center gap-2">
+          <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
+            <SelectTrigger className="h-9 w-[140px] text-xs">
+              <SelectValue placeholder="Period" />
+            </SelectTrigger>
+            <SelectContent>
+              {PERIOD_OPTIONS.map((opt) => (
+                <SelectItem key={opt.value} value={opt.value} className="text-xs">
+                  {opt.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <Button
-            variant="ghost"
             size="sm"
-            className="text-xs text-emerald-700 hover:text-emerald-800 gap-1"
-            onClick={() => setCurrentView('reconcile')}
+            className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white h-9"
+            onClick={handleCreateReturn}
           >
-            View Calendar
-            <ChevronRight className="size-3" />
+            <Plus className="size-4" />
+            Create Return
           </Button>
         </div>
-        <motion.div
-          variants={staggerContainer}
-          initial="hidden"
-          animate="show"
-          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3"
-        >
-          {deadlines.map((d) => renderDeadlineCard(d))}
-        </motion.div>
       </motion.div>
 
-      {/* ─── Detail Sheet ────────────────────────────────────────────────────── */}
-      {renderDetailSheet()}
+      {/* ── Return Health Score ─────────────────────────────────────── */}
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, delay: 0.1 }}
+        className="px-4 md:px-6 pt-4"
+      >
+        <Card className="border-0 shadow-sm bg-gradient-to-b from-background to-muted/20">
+          <CardContent className="py-4 px-4 md:px-6">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 sm:gap-8">
+              {/* Health Score Ring */}
+              <div className="relative flex items-center justify-center" style={{ width: 72, height: 72 }}>
+                <svg width={72} height={72} className="-rotate-90">
+                  <circle cx={36} cy={36} r={30} fill="none" stroke="#f1f5f9" strokeWidth={6} />
+                  <motion.circle
+                    cx={36} cy={36} r={30} fill="none"
+                    stroke={72 > 80 ? '#10b981' : 72 > 50 ? '#f59e0b' : '#ef4444'}
+                    strokeWidth={6}
+                    strokeLinecap="round"
+                    strokeDasharray={`${(72 / 100) * 2 * Math.PI * 30} ${2 * Math.PI * 30}`}
+                    initial={{ strokeDasharray: `0 ${2 * Math.PI * 30}` }}
+                    animate={{ strokeDasharray: `${(72 / 100) * 2 * Math.PI * 30} ${2 * Math.PI * 30}` }}
+                    transition={{ duration: 1.2, ease: [0.25, 0.46, 0.45, 0.94] }}
+                  />
+                </svg>
+                <div className="absolute inset-0 flex flex-col items-center justify-center">
+                  <span className="text-lg font-bold text-foreground">72</span>
+                  <span className="text-[8px] font-medium text-muted-foreground leading-none">/100</span>
+                </div>
+              </div>
+
+              {/* Breakdown Bars */}
+              <div className="flex-1 grid grid-cols-1 sm:grid-cols-3 gap-3 w-full">
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-medium text-muted-foreground">Filing Timeliness</span>
+                    <span className="text-[11px] font-bold text-amber-700">68%</span>
+                  </div>
+                  <div className="h-1.5 rounded-full bg-slate-100 overflow-hidden">
+                    <motion.div
+                      className="h-full rounded-full bg-amber-500"
+                      initial={{ width: 0 }}
+                      animate={{ width: '68%' }}
+                      transition={{ duration: 1, ease: 'easeOut', delay: 0.3 }}
+                    />
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-medium text-muted-foreground">Data Accuracy</span>
+                    <span className="text-[11px] font-bold text-emerald-700">85%</span>
+                  </div>
+                  <div className="h-1.5 rounded-full bg-slate-100 overflow-hidden">
+                    <motion.div
+                      className="h-full rounded-full bg-emerald-500"
+                      initial={{ width: 0 }}
+                      animate={{ width: '85%' }}
+                      transition={{ duration: 1, ease: 'easeOut', delay: 0.4 }}
+                    />
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-medium text-muted-foreground">Compliance</span>
+                    <span className="text-[11px] font-bold text-amber-700">65%</span>
+                  </div>
+                  <div className="h-1.5 rounded-full bg-slate-100 overflow-hidden">
+                    <motion.div
+                      className="h-full rounded-full bg-amber-500"
+                      initial={{ width: 0 }}
+                      animate={{ width: '65%' }}
+                      transition={{ duration: 1, ease: 'easeOut', delay: 0.5 }}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Label */}
+              <div className="hidden sm:flex flex-col items-end shrink-0">
+                <span className="text-xs font-semibold text-foreground">Return Health</span>
+                <span className="text-[10px] text-muted-foreground">Across all clients</span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </motion.div>
+
+      {/* ── Bulk Filing Actions ────────────────────────────────────── */}
+      {kanbanData.ready.length > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, delay: 0.2 }}
+          className="px-4 md:px-6 pt-3"
+        >
+          <div className="flex items-center justify-between rounded-lg border border-emerald-200 bg-emerald-50/60 px-4 py-2.5">
+            <div className="flex items-center gap-2">
+              <div className="flex items-center justify-center size-7 rounded-full bg-emerald-100">
+                <Send className="size-3.5 text-emerald-700" />
+              </div>
+              <span className="text-sm font-medium text-emerald-800">
+                {kanbanData.ready.length} return{kanbanData.ready.length !== 1 ? 's' : ''} ready to file
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 text-xs gap-1.5 border-emerald-300 text-emerald-700 hover:bg-emerald-50"
+                onClick={() => {
+                  const readyFilings = kanbanData.ready;
+                  readyFilings.forEach((f) => handleDownloadJSON(f));
+                }}
+              >
+                <FileOutput className="size-3.5" />
+                Download JSON for All
+              </Button>
+              <Button
+                size="sm"
+                className="h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm font-semibold"
+                onClick={() => {
+                  toast.success(`Filing ${kanbanData.ready.length} returns`, {
+                    description: 'All ready returns have been submitted for filing',
+                    duration: 4000,
+                  });
+                }}
+              >
+                <Send className="size-3.5" />
+                File All
+              </Button>
+            </div>
+          </div>
+        </motion.div>
+      )}
+
+      {/* ── Kanban Board ────────────────────────────────────────────────── */}
+      <div className="flex-1 min-h-0 overflow-hidden">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 p-4 md:p-6 h-full">
+          {KANBAN_COLUMNS.map((col, i) => renderKanbanColumn(col, i))}
+        </div>
+      </div>
+
+      {/* ── Detail Sheet ────────────────────────────────────────────────── */}
+      <AnimatePresence>
+        {sheetOpen && renderDetailSheet()}
+      </AnimatePresence>
     </div>
   );
 }

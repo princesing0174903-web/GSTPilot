@@ -66,115 +66,115 @@ export async function POST() {
     // 3. Create Clients
     const clientDefs = [
       {
-        tradeName: 'Tata Consultancy Services Ltd',
-        gstin: '27AABCT1332L1ZP',
-        address: 'TCS House, Raveline Street, Fort',
+        tradeName: 'Sharma Enterprises',
+        gstin: '27AABCS1429B1Z5',
+        address: '302, Laxmi Nagar, Andheri East',
         state: 'Maharashtra',
         stateCode: '27',
-        contactEmail: 'gst@tcs.com',
-        contactPhone: '+91-22-67789999',
-        legalName: 'Tata Consultancy Services Limited',
+        contactEmail: 'accounts@sharmaent.com',
+        contactPhone: '+91-22-2847-3001',
+        legalName: 'Sharma Enterprises Pvt Ltd',
         entityType: 'regular',
         returnPeriod: 'monthly',
         status: 'active',
         healthScore: 92,
       },
       {
-        tradeName: 'Infosys Limited',
-        gstin: '29AABCI6228L1Z5',
-        address: '44, Electronics City, Hosur Road',
-        state: 'Karnataka',
-        stateCode: '29',
-        contactEmail: 'gst@infosys.com',
-        contactPhone: '+91-80-28520358',
-        legalName: 'Infosys Limited',
+        tradeName: 'Patel & Sons',
+        gstin: '24AABCP5678G1Z3',
+        address: '15, CG Road, Navrangpura',
+        state: 'Gujarat',
+        stateCode: '24',
+        contactEmail: 'gst@patelsons.com',
+        contactPhone: '+91-79-6677-8888',
+        legalName: 'Patel & Sons Trading Co',
+        entityType: 'regular',
+        returnPeriod: 'monthly',
+        status: 'active',
+        healthScore: 78,
+      },
+      {
+        tradeName: 'Krishna Traders',
+        gstin: '06AABCK9012H1Z1',
+        address: 'Plot 45, Udyog Vihar, Phase III',
+        state: 'Haryana',
+        stateCode: '06',
+        contactEmail: 'gst@krishnatraders.in',
+        contactPhone: '+91-124-2852-0261',
+        legalName: 'Krishna Traders Pvt Ltd',
         entityType: 'regular',
         returnPeriod: 'monthly',
         status: 'active',
         healthScore: 88,
       },
       {
-        tradeName: 'Reliance Industries Ltd',
-        gstin: '27AABCR5638L1Z1',
-        address: 'Maker Chambers IV, Nariman Point',
-        state: 'Maharashtra',
-        stateCode: '27',
-        contactEmail: 'gst@ril.com',
-        contactPhone: '+91-22-22785000',
-        legalName: 'Reliance Industries Limited',
+        tradeName: 'Metro Retail',
+        gstin: '33AABCM3456J1Z7',
+        address: '78, T Nagar, Chennai',
+        state: 'Tamil Nadu',
+        stateCode: '33',
+        contactEmail: 'tax@metroretail.com',
+        contactPhone: '+91-44-6778-9999',
+        legalName: 'Metro Retail India Pvt Ltd',
         entityType: 'regular',
         returnPeriod: 'monthly',
         status: 'active',
-        healthScore: 75,
+        healthScore: 65,
       },
       {
-        tradeName: 'Wipro Technologies',
-        gstin: '29AABCW5982L1Z3',
-        address: 'Doddakannelli, Sarjapur Road',
+        tradeName: 'Gupta Manufacturing',
+        gstin: '09AABCG2345L1Z2',
+        address: '12, Sector 62, Noida',
+        state: 'Uttar Pradesh',
+        stateCode: '09',
+        contactEmail: 'finance@guptamfg.com',
+        contactPhone: '+91-120-2345-6789',
+        legalName: 'Gupta Manufacturing Co',
+        entityType: 'composition',
+        returnPeriod: 'quarterly',
+        status: 'active',
+        healthScore: 91,
+      },
+      {
+        tradeName: 'Sunrise Exports',
+        gstin: '27AABCS7890K1Z9',
+        address: '501, MIDC, Andheri East',
+        state: 'Maharashtra',
+        stateCode: '27',
+        contactEmail: 'compliance@sunriseexports.com',
+        contactPhone: '+91-22-4567-8901',
+        legalName: 'Sunrise Exports India Ltd',
+        entityType: 'regular',
+        returnPeriod: 'monthly',
+        status: 'active',
+        healthScore: 85,
+      },
+      {
+        tradeName: 'RK Electronics',
+        gstin: '29AABCD6789M1Z4',
+        address: '22, Electronic City, Phase I',
         state: 'Karnataka',
         stateCode: '29',
-        contactEmail: 'gst@wipro.com',
-        contactPhone: '+91-80-28440011',
-        legalName: 'Wipro Limited',
+        contactEmail: 'gst@rkelectronics.in',
+        contactPhone: '+91-80-4567-8901',
+        legalName: 'RK Electronics Pvt Ltd',
         entityType: 'regular',
         returnPeriod: 'monthly',
         status: 'active',
-        healthScore: 68,
+        healthScore: 73,
       },
       {
-        tradeName: 'Mahindra & Mahindra Ltd',
-        gstin: '27AABCM5638L1Z9',
-        address: 'Mahindra Towers, Worli',
+        tradeName: 'Apex Logistics',
+        gstin: '27AABCA0123N1Z6',
+        address: '8, Transport Nagar, Kalamboli',
         state: 'Maharashtra',
         stateCode: '27',
-        contactEmail: 'gst@mahindra.com',
-        contactPhone: '+91-22-24901341',
-        legalName: 'Mahindra & Mahindra Limited',
+        contactEmail: 'tax@apexlogistics.com',
+        contactPhone: '+91-22-8901-2345',
+        legalName: 'Apex Logistics India Pvt Ltd',
         entityType: 'regular',
-        returnPeriod: 'quarterly',
+        returnPeriod: 'monthly',
         status: 'inactive',
-        healthScore: 52,
-      },
-      {
-        tradeName: 'Bajaj Finserv Ltd',
-        gstin: '27AABCB4298L1Z7',
-        address: 'Bajaj Finserv Corporate Office, Pune-Satara Road',
-        state: 'Maharashtra',
-        stateCode: '27',
-        contactEmail: 'gst@bajajfinserv.in',
-        contactPhone: '+91-20-67275555',
-        legalName: 'Bajaj Finserv Limited',
-        entityType: 'regular',
-        returnPeriod: 'monthly',
-        status: 'active',
-        healthScore: 81,
-      },
-      {
-        tradeName: 'HDFC Bank Limited',
-        gstin: '27AABCH5682L1Z4',
-        address: 'HDFC Bank House, Senapati Bapat Marg',
-        state: 'Maharashtra',
-        stateCode: '27',
-        contactEmail: 'gst@hdfcbank.com',
-        contactPhone: '+91-22-26612300',
-        legalName: 'HDFC Bank Limited',
-        entityType: 'regular',
-        returnPeriod: 'monthly',
-        status: 'active',
-        healthScore: 95,
-      },
-      {
-        tradeName: 'Larsen & Toubro Ltd',
-        gstin: '27AABCL5298L1Z6',
-        address: 'L&T House, Ballard Estate',
-        state: 'Maharashtra',
-        stateCode: '27',
-        contactEmail: 'gst@lant.com',
-        contactPhone: '+91-22-67659999',
-        legalName: 'Larsen & Toubro Limited',
-        entityType: 'regular',
-        returnPeriod: 'monthly',
-        status: 'active',
         healthScore: 45,
       },
     ]
@@ -203,14 +203,14 @@ export async function POST() {
       '36AABCL5298L1Z4', // Telangana
     ]
     const buyerNames = [
-      'Tech Solutions Pvt Ltd',
-      'Global Traders India',
-      'Sunrise Industries Ltd',
-      'Metro Distributors Pvt Ltd',
-      'Southern Exports Ltd',
-      'Pacific Solutions India',
-      'Eastern Manufacturing Co',
-      'Digital Services Pvt Ltd',
+      'Vijay Components Pvt Ltd',
+      'Delhi Auto Parts',
+      'Chennai Textiles Ltd',
+      'UP Agro Industries',
+      'Rajkot Engineering',
+      'Kolkata Traders',
+      'Kerala Spices Co',
+      'Hyderabad IT Solutions',
     ]
 
     const allInvoices: Awaited<ReturnType<typeof db.invoice.create>>[] = []
@@ -226,10 +226,10 @@ export async function POST() {
         const isB2CSmall = invType === 'B2C Small'
 
         const month = rand(1, 6)
-        const period = `2024-${String(month).padStart(2, '0')}`
-        const invoiceDate = randomDate(2024, month, [1, 28])
+        const period = `2025-${String(month).padStart(2, '0')}`
+        const invoiceDate = randomDate(2025, month, [1, 28])
 
-        const taxableValue = rand(50000, 2500000)
+        const taxableValue = rand(15000, 500000)
         const rate = pick(taxRates)
         const isInterState = client.stateCode !== buyerGstins[i % buyerGstins.length].substring(0, 2)
 
@@ -271,7 +271,7 @@ export async function POST() {
         const invoice = await db.invoice.create({
           data: {
             clientId: client.id,
-            invoiceNumber: `INV/2024/${String(invIdx).padStart(3, '0')}`,
+            invoiceNumber: `INV/2025/${String(invIdx).padStart(3, '0')}`,
             invoiceDate,
             sellerGstin: client.gstin,
             buyerGstin: isB2CSmall ? null : buyerGstins[i % buyerGstins.length],
@@ -284,7 +284,7 @@ export async function POST() {
             igst,
             cess: 0,
             totalAmount,
-            hsnCode: pick(['998314', '998315', '998311', '8471', '8517', '7308', '8703', '9996']),
+            hsnCode: pick(['998314', '998315', '8471', '8517', '7308', '8703', '6109', '2106']),
             reverseCharge: i % 7 === 0,
             status: isCreditNote ? 'credit_note' : 'posted',
             matchStatus,
@@ -311,7 +311,7 @@ export async function POST() {
       for (let i = 0; i < filingCount; i++) {
         const returnType = returnTypes[i % 2]
         const periodMonth = rand(1, 6)
-        const period = `2024-${String(periodMonth).padStart(2, '0')}`
+        const period = `2025-${String(periodMonth).padStart(2, '0')}`
         const key = `${returnType}-${period}`
 
         // avoid duplicates for same returnType+period on same client
@@ -322,7 +322,7 @@ export async function POST() {
         const status = filingStatuses[statusIdx]
         const isFiled = status === 'filed'
 
-        const totalTaxable = rand(500000, 15000000)
+        const totalTaxable = rand(200000, 5000000)
         const totalTax = Math.round(totalTaxable * 0.18)
 
         const filing = await db.gSTRFiling.create({
@@ -330,9 +330,9 @@ export async function POST() {
             clientId: client.id,
             returnType,
             period,
-            financialYear: '2024-25',
+            financialYear: '2025-26',
             status,
-            filedDate: isFiled ? randomDate(2024, periodMonth > 1 ? periodMonth - 1 : 1, [1, 20]) : null,
+            filedDate: isFiled ? randomDate(2025, periodMonth > 1 ? periodMonth - 1 : 1, [1, 20]) : null,
             acknowledgmentNumber: isFiled ? `ACK${rand(10000000, 99999999)}` : null,
             totalInvoices: rand(15, 80),
             readyForFiling: rand(10, 70),
@@ -373,7 +373,7 @@ export async function POST() {
             description: eventDescriptions[eventType],
             userId: user.id,
             timestamp: new Date(
-              2024,
+              2025,
               rand(0, 5),
               rand(1, 28),
               rand(9, 18),
@@ -403,7 +403,7 @@ export async function POST() {
 
       for (let i = 0; i < runCount; i++) {
         const month = rand(1, 6)
-        const period = `2024-${String(month).padStart(2, '0')}`
+        const period = `2025-${String(month).padStart(2, '0')}`
 
         // Avoid duplicate periods for same client runs (allow some overlap for different sources)
         const runKey = `${period}-${i}`
@@ -413,12 +413,12 @@ export async function POST() {
         const sources = runSources[i % runSources.length]
         const status = pick(runStatuses)
 
-        const totalRecords = rand(20, 120)
+        const totalRecords = rand(10, 60)
         const matched = rand(Math.floor(totalRecords * 0.3), Math.floor(totalRecords * 0.7))
         const partialMatches = rand(Math.floor(totalRecords * 0.05), Math.floor(totalRecords * 0.2))
         const unmatched = totalRecords - matched - partialMatches
         const highRisk = rand(Math.floor(unmatched * 0.1), Math.floor(unmatched * 0.5))
-        const gstDifference = rand(5000, 250000)
+        const gstDifference = rand(2000, 50000)
 
         const run = await db.reconciliationRun.create({
           data: {
@@ -593,7 +593,7 @@ export async function POST() {
           workflowStatus,
           resolved,
           resolvedBy: resolved ? pick(users).id : null,
-          resolvedAt: resolved ? randomDate(2024, rand(2, 6), [1, 28]) : null,
+          resolvedAt: resolved ? randomDate(2025, rand(2, 6), [1, 28]) : null,
           runId,
         },
       })
@@ -653,7 +653,7 @@ export async function POST() {
           : pick(issueStatuses)
 
         const assignedTo = issueStatus === 'open' ? pick(users).id : null
-        const resolvedAt = issueStatus === 'resolved' ? randomDate(2024, rand(2, 6), [1, 28]) : null
+        const resolvedAt = issueStatus === 'resolved' ? randomDate(2025, rand(2, 6), [1, 28]) : null
 
         await db.issue.create({
           data: {
@@ -663,7 +663,7 @@ export async function POST() {
             severity,
             category,
             title,
-            description: `${title} — detected during reconciliation for period 2024-${String(rand(1, 6)).padStart(2, '0')}. Requires review by the GST compliance team.`,
+            description: `${title} — detected during reconciliation for period 2025-${String(rand(1, 6)).padStart(2, '0')}. Requires review by the GST compliance team.`,
             status: issueStatus,
             assignedTo,
             notes: issueStatus === 'resolved' ? 'Issue reviewed and resolved by team.' : issueStatus === 'ignored' ? 'False positive — acknowledged and ignored.' : null,
@@ -681,7 +681,7 @@ export async function POST() {
       const recordCount = rand(3, 6)
       for (let i = 0; i < recordCount; i++) {
         const month = i + 1
-        const period = `2024-${String(month).padStart(2, '0')}`
+        const period = `2025-${String(month).padStart(2, '0')}`
 
         await db.healthScore.create({
           data: {
@@ -729,7 +729,7 @@ export async function POST() {
           entity: pick(['invoice', 'filing', 'client', 'reconciliation', 'report']),
           entityId: pick([...allInvoices, ...allFilings]).id,
           details: `${action} for ${client.tradeName} by ${user.name}`,
-          timestamp: new Date(2024, rand(0, 5), rand(1, 28), rand(9, 18), rand(0, 59)),
+          timestamp: new Date(2025, rand(0, 5), rand(1, 28), rand(9, 18), rand(0, 59)),
         },
       })
       totalAuditLogs++
@@ -770,7 +770,7 @@ export async function POST() {
     for (const member of teamMembers) {
       if (!member.isActive) continue
       for (let m = 1; m <= 6; m++) {
-        const period = `2024-${String(m).padStart(2, '0')}`
+        const period = `2025-${String(m).padStart(2, '0')}`
         const baseVolume = member.role === 'admin' ? 20 : member.role === 'manager' ? 40 : member.role === 'auditor' ? 60 : 80
         const invoicesProcessed = rand(baseVolume, baseVolume + 30)
         const reviewsCompleted = member.role === 'auditor' || member.role === 'manager' ? rand(15, 40) : rand(5, 15)
@@ -817,7 +817,7 @@ export async function POST() {
             clientId: client.id,
             status,
             priority: pick(priorities),
-            dueDate: `2024-${String(rand(3, 8)).padStart(2, '0')}-${String(rand(1, 28)).padStart(2, '0')}`,
+            dueDate: `2025-${String(rand(3, 8)).padStart(2, '0')}-${String(rand(1, 28)).padStart(2, '0')}`,
             assignedBy: teamMembers[0].id,
           },
         })
@@ -848,13 +848,13 @@ export async function POST() {
             clientId: client.id,
             noticeType: pick(noticeTypes),
             noticeNumber: `GST/NOT/${rand(100000, 999999)}`,
-            noticeDate: `2024-${String(rand(1, 6)).padStart(2, '0')}-${String(rand(1, 28)).padStart(2, '0')}`,
+            noticeDate: `2025-${String(rand(1, 6)).padStart(2, '0')}-${String(rand(1, 28)).padStart(2, '0')}`,
             subject: pick(noticeSubjects),
             description: `Notice received from GST department regarding compliance for client ${client.tradeName}. Immediate attention required.`,
             status,
             assignedTo: pick(teamMembers.filter(m => m.isActive)).id,
             priority: pick(priorities),
-            dueDate: `2024-${String(rand(4, 9)).padStart(2, '0')}-${String(rand(1, 28)).padStart(2, '0')}`,
+            dueDate: `2025-${String(rand(4, 9)).padStart(2, '0')}-${String(rand(1, 28)).padStart(2, '0')}`,
             resolution: status === 'resolved' ? 'Resolved with supporting documentation provided to the department.' : null,
           },
         })
@@ -869,7 +869,7 @@ export async function POST() {
     const docNames = [
       'GSTR-1 Return Summary', 'Purchase Register', 'Sales Invoice Batch',
       'ITC Reconciliation Report', 'Tax Computation Sheet', 'Client KYC Documents',
-      'GST Assessment Order', 'Annual Return GSTR-9', 'Audit Report FY2024',
+      'GST Assessment Order', 'Annual Return GSTR-9', 'Audit Report FY2025',
       'Input Tax Credit Register', 'GST Payment Challan', 'E-Way Bill Report',
     ]
 
@@ -905,7 +905,7 @@ export async function POST() {
           actions: JSON.stringify({ extract: true, notify: 'manager', createTask: true }),
           isActive: true,
           runCount: rand(50, 200),
-          lastRunAt: new Date(2024, rand(3, 5), rand(1, 28)),
+          lastRunAt: new Date(2025, rand(3, 5), rand(1, 28)),
           createdBy: teamMembers[0].id,
         },
       }),
@@ -918,7 +918,7 @@ export async function POST() {
           actions: JSON.stringify({ notify: 'manager', createTask: true, sendEmail: true }),
           isActive: true,
           runCount: rand(20, 80),
-          lastRunAt: new Date(2024, rand(3, 5), rand(1, 28)),
+          lastRunAt: new Date(2025, rand(3, 5), rand(1, 28)),
           createdBy: teamMembers[0].id,
         },
       }),
@@ -931,7 +931,7 @@ export async function POST() {
           actions: JSON.stringify({ sendEmail: true, notify: 'client', updateStatus: true }),
           isActive: true,
           runCount: rand(30, 100),
-          lastRunAt: new Date(2024, rand(3, 5), rand(1, 28)),
+          lastRunAt: new Date(2025, rand(3, 5), rand(1, 28)),
           createdBy: teamMembers[0].id,
         },
       }),
@@ -944,7 +944,7 @@ export async function POST() {
           actions: JSON.stringify({ createTask: true, notify: 'manager', assignTo: 'senior_auditor' }),
           isActive: true,
           runCount: rand(5, 25),
-          lastRunAt: new Date(2024, rand(3, 5), rand(1, 28)),
+          lastRunAt: new Date(2025, rand(3, 5), rand(1, 28)),
           createdBy: teamMembers[0].id,
         },
       }),
@@ -973,7 +973,7 @@ export async function POST() {
             trigger: rule.trigger,
             status: pick(['success', 'success', 'success', 'failed']),
             details: `Automated execution of "${rule.name}"`,
-            executedAt: new Date(2024, rand(2, 5), rand(1, 28), rand(9, 18), rand(0, 59)),
+            executedAt: new Date(2025, rand(2, 5), rand(1, 28), rand(9, 18), rand(0, 59)),
           },
         })
         totalAutomationLogs++
@@ -993,8 +993,8 @@ export async function POST() {
     // 20. Create Firm Metrics (6 months)
     let totalFirmMetrics = 0
     for (let m = 1; m <= 6; m++) {
-      const period = `2024-${String(m).padStart(2, '0')}`
-      const totalRevenue = rand(800000, 2500000)
+      const period = `2025-${String(m).padStart(2, '0')}`
+      const totalRevenue = rand(300000, 800000)
       await db.firmMetrics.create({
         data: {
           period,
@@ -1007,7 +1007,7 @@ export async function POST() {
           teamUtilization: rand(65, 92),
           avgProcessingTime: rand(2, 8),
           avgFilingTime: rand(1, 4),
-          gstProcessed: rand(5000000, 25000000),
+          gstProcessed: rand(1000000, 8000000),
           profitability: rand(18, 38),
           clientGrowth: rand(-2, 8),
         },
@@ -1028,7 +1028,7 @@ export async function POST() {
     ]
     let totalPredictions = 0
     for (let m = 1; m <= 9; m++) {
-      const period = m <= 6 ? `2024-${String(m).padStart(2, '0')}` : `2024-${String(m).padStart(2, '0')}`
+      const period = m <= 6 ? `2025-${String(m).padStart(2, '0')}` : `2025-${String(m).padStart(2, '0')}`
       for (const cat of predictionCategories) {
         const predictedValue = cat.base + (Math.random() - 0.5) * cat.variance * 2
         const confidence = m <= 6 ? rand(85, 98) : Math.max(55, 95 - (m - 6) * 12)
@@ -1071,7 +1071,7 @@ export async function POST() {
           vendorRisk,
           itcRisk,
           riskLevel,
-          period: '2024-06',
+          period: '2025-06',
           factors: JSON.stringify({ healthScore: client.healthScore, filingPattern: riskLevel === 'low' ? 'consistent' : 'irregular' }),
           recommendations: riskLevel === 'high' || riskLevel === 'critical'
             ? 'Immediate review required. Consider assigning senior auditor for compliance remediation.'
@@ -1092,10 +1092,10 @@ export async function POST() {
             predictedEvent: `GST Notice expected for ${client.tradeName}`,
             probability: Math.round((100 - client.healthScore) * 0.8),
             confidence: rand(65, 85),
-            expectedDate: '2024-08-15',
+            expectedDate: '2025-08-15',
             impact: client.healthScore < 50 ? 'critical' : 'high',
             mitigatingActions: 'Proactive filing compliance review and ITC verification recommended.',
-            period: '2024-06',
+            period: '2025-06',
           },
         })
         totalForecasts++
@@ -1108,10 +1108,10 @@ export async function POST() {
             predictedEvent: `Filing delay expected for ${client.tradeName}`,
             probability: Math.round((100 - client.healthScore) * 0.6),
             confidence: rand(60, 80),
-            expectedDate: '2024-07-20',
+            expectedDate: '2025-07-20',
             impact: client.healthScore < 60 ? 'high' : 'medium',
             mitigatingActions: 'Pre-filing preparation and early data collection recommended.',
-            period: '2024-06',
+            period: '2025-06',
           },
         })
         totalForecasts++
@@ -1125,7 +1125,7 @@ export async function POST() {
           confidence: rand(55, 80),
           impact: 'medium',
           mitigatingActions: 'Regular reconciliation runs and vendor communication.',
-          period: '2024-06',
+          period: '2025-06',
         },
       })
       totalForecasts++
@@ -1138,10 +1138,10 @@ export async function POST() {
             predictedEvent: `Potential ITC loss for ${client.tradeName}`,
             probability: Math.round((100 - client.healthScore) * 0.5),
             confidence: rand(55, 75),
-            expectedDate: '2024-09-30',
+            expectedDate: '2025-09-30',
             impact: 'high',
             mitigatingActions: 'ITC reconciliation and vendor compliance verification recommended.',
-            period: '2024-06',
+            period: '2025-06',
           },
         })
         totalForecasts++
@@ -1171,8 +1171,8 @@ export async function POST() {
             trend,
             observation: observations[cat],
             confidence: rand(65, 95) / 100,
-            dataPoints: JSON.stringify({ healthScore: client.healthScore, period: '2024-Q2' }),
-            period: '2024-06',
+            dataPoints: JSON.stringify({ healthScore: client.healthScore, period: '2025-Q2' }),
+            period: '2025-06',
           },
         })
         totalInsights++
@@ -1182,13 +1182,13 @@ export async function POST() {
     // 25. Create Knowledge Entries
     const knowledgeEntries = [
       { title: 'GST Section 16 - Input Tax Credit Eligibility', category: 'rule', content: 'Every registered person shall be entitled to take credit of input tax on any supply of goods or services to him which are used or intended to be used in the course or furtherance of business, subject to conditions prescribed.', source: 'CGST Act 2017', referenceNumber: 'Sec 16', tags: 'itc,eligibility,input tax credit' },
-      { title: 'GSTR-1 Filing Due Date Extension - Q1 2024', category: 'circular', content: 'CBIC has extended the due date for filing GSTR-1 for the quarter ending March 2024. Taxpayers are advised to file returns at the earliest to avoid penalties.', source: 'CBIC Circular 208/2024', referenceNumber: 'CBIC/208/2024', tags: 'gstr1,due date,extension,q1 2024' },
-      { title: 'E-Way Bill Validity Extension Notification', category: 'notification', content: 'The validity period of e-way bills has been extended from 1 day per 200 km to 1 day per 200 km for ordinary vehicles and 1 day per 300 km for over-dimensional cargo vehicles.', source: 'Notification 12/2024', referenceNumber: 'Notif 12/2024', tags: 'eway bill,validity,transport' },
-      { title: 'Supreme Court Ruling on GST Refund Claims', category: 'case_law', content: 'The Supreme Court held that the limitation period for filing refund claims under GST is governed by Section 54 of the CGST Act and not by the general limitation act. Refund claims must be filed within 2 years from the relevant date.', source: 'Supreme Court of India', referenceNumber: 'SC/2024/GST/142', tags: 'refund,supreme court,limitation,gst' },
+      { title: 'GSTR-1 Filing Due Date Extension - Q1 2025', category: 'circular', content: 'CBIC has extended the due date for filing GSTR-1 for the quarter ending March 2025. Taxpayers are advised to file returns at the earliest to avoid penalties.', source: 'CBIC Circular 208/2025', referenceNumber: 'CBIC/208/2025', tags: 'gstr1,due date,extension,q1 2025' },
+      { title: 'E-Way Bill Validity Extension Notification', category: 'notification', content: 'The validity period of e-way bills has been extended from 1 day per 200 km to 1 day per 200 km for ordinary vehicles and 1 day per 300 km for over-dimensional cargo vehicles.', source: 'Notification 12/2025', referenceNumber: 'Notif 12/2025', tags: 'eway bill,validity,transport' },
+      { title: 'Supreme Court Ruling on GST Refund Claims', category: 'case_law', content: 'The Supreme Court held that the limitation period for filing refund claims under GST is governed by Section 54 of the CGST Act and not by the general limitation act. Refund claims must be filed within 2 years from the relevant date.', source: 'Supreme Court of India', referenceNumber: 'SC/2025/GST/142', tags: 'refund,supreme court,limitation,gst' },
       { title: 'New GST Rate for Online Gaming - 28%', category: 'department_update', content: 'GST Council has approved 28% GST on online gaming, casinos, and horse racing. The new rate is applicable from October 2023. All online gaming platforms must comply with the revised rate structure.', source: 'GST Council Meeting 51', referenceNumber: 'GCM/51/2023', tags: 'online gaming,gst rate,28%,casino' },
-      { title: 'GSTR-3B Auto-Population from GSTR-1', category: 'rule', content: 'From January 2024, GSTR-3B will be auto-populated based on GSTR-1 data filed by the taxpayer. Taxpayers need to verify and can edit the auto-populated data before filing.', source: 'CGST Act 2017', referenceNumber: 'Sec 39', tags: 'gstr3b,autopopulation,gstr1,filing' },
+      { title: 'GSTR-3B Auto-Population from GSTR-1', category: 'rule', content: 'From January 2025, GSTR-3B will be auto-populated based on GSTR-1 data filed by the taxpayer. Taxpayers need to verify and can edit the auto-populated data before filing.', source: 'CGST Act 2017', referenceNumber: 'Sec 39', tags: 'gstr3b,autopopulation,gstr1,filing' },
       { title: 'ITC Reversal for Exempt Supplies - Rule 42', category: 'rule', content: 'Input tax credit attributable to exempt supplies must be reversed proportionately. The formula under Rule 42 of CGST Rules prescribes the method for computing the amount of ITC to be reversed.', source: 'CGST Rules 2017', referenceNumber: 'Rule 42', tags: 'itc,reversal,exempt supplies,rule 42' },
-      { title: 'Annual Return Filing Requirement - GSTR-9', category: 'circular', content: 'All registered taxpayers with turnover exceeding Rs 2 crore must file GSTR-9 (Annual Return) for each financial year. The due date is December 31 of the year following the financial year.', source: 'CBIC Circular 205/2024', referenceNumber: 'CBIC/205/2024', tags: 'gstr9,annual return,filing requirement' },
+      { title: 'Annual Return Filing Requirement - GSTR-9', category: 'circular', content: 'All registered taxpayers with turnover exceeding Rs 2 crore must file GSTR-9 (Annual Return) for each financial year. The due date is December 31 of the year following the financial year.', source: 'CBIC Circular 205/2025', referenceNumber: 'CBIC/205/2025', tags: 'gstr9,annual return,filing requirement' },
     ]
     let totalKnowledge = 0
     for (const entry of knowledgeEntries) {
@@ -1201,7 +1201,7 @@ export async function POST() {
           tags: entry.tags,
           source: entry.source,
           referenceNumber: entry.referenceNumber,
-          effectiveDate: '2024-01-01',
+          effectiveDate: '2025-01-01',
           relevanceScore: rand(70, 100) / 100,
         },
       })
@@ -1210,16 +1210,16 @@ export async function POST() {
 
     // 26. Create Executive Reports
     const reportTypes = ['client_health', 'gst_risk', 'compliance', 'firm_performance', 'board']
-    const reportTitles = ['Client Health Report Q2 2024', 'GST Risk Assessment Report', 'Compliance Summary Report', 'Firm Performance Report Q2', 'Board Report - Q2 2024']
+    const reportTitles = ['Client Health Report Q2 2025', 'GST Risk Assessment Report', 'Compliance Summary Report', 'Firm Performance Report Q2', 'Board Report - Q2 2025']
     let totalReports = 0
     for (let i = 0; i < reportTypes.length; i++) {
       await db.executiveReport.create({
         data: {
           reportType: reportTypes[i],
           title: reportTitles[i],
-          description: `Comprehensive ${reportTypes[i].replace(/_/g, ' ')} report for Q2 2024`,
-          period: '2024-Q2',
-          data: JSON.stringify({ generated: true, period: '2024-Q2' }),
+          description: `Comprehensive ${reportTypes[i].replace(/_/g, ' ')} report for Q2 2025`,
+          period: '2025-Q2',
+          data: JSON.stringify({ generated: true, period: '2025-Q2' }),
           format: pick(['pdf', 'excel']),
           status: 'generated',
           generatedBy: teamMembers[0].id,
@@ -1252,7 +1252,7 @@ export async function POST() {
             industryPercentile: Math.round(rand(20, 95)),
             statePercentile: Math.round(rand(25, 90)),
             firmPercentile: Math.round(rand(15, 85)),
-            period: '2024-Q2',
+            period: '2025-Q2',
           },
         })
         totalBenchmarks++

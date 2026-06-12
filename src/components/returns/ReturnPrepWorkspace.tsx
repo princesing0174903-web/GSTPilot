@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -16,32 +16,24 @@ import {
 } from '@/components/ui/dialog';
 import {
   ArrowLeft,
-  Save,
   ShieldCheck,
   GitCompareArrows,
   CheckCircle2,
   Send,
-  ChevronRight,
   FileText,
   AlertTriangle,
   AlertCircle,
   XCircle,
   Clock,
   Eye,
-  Pencil,
   Check,
-  RefreshCw,
   Sparkles,
   Building2,
-  Upload,
-  FileCheck2,
   FileWarning,
-  ClipboardCheck,
   IndianRupee,
   TrendingUp,
   TrendingDown,
   AlertOctagon,
-  Search,
   FilePlus2,
   Shield,
   Zap,
@@ -49,92 +41,17 @@ import {
   Loader2,
   PartyPopper,
   ArrowRight,
+  ClipboardCheck,
 } from 'lucide-react';
 import { useApp } from '@/contexts/AppContext';
 import type { AppView } from '@/contexts/AppContext';
-import type { Client } from '@/types/gst';
-import { formatCurrency } from '@/lib/gst-utils';
+import { useGSTStore } from '@/stores/gst-store';
+import type { SampleInvoice, SampleValidationIssue, SampleAIInsight, SampleReconDrilldown, SampleReconCategory } from '@/data/sample-data';
+import { formatCurrency, periodToLabel } from '@/lib/gst-utils';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // TYPES
 // ═══════════════════════════════════════════════════════════════════════════════
-
-interface PrepStep {
-  id: string;
-  label: string;
-  completed: boolean;
-  active: boolean;
-}
-
-interface InvoiceRow {
-  id: string;
-  invoiceNumber: string;
-  date: string;
-  customer: string;
-  customerGstin?: string;
-  taxableValue: number;
-  cgst: number;
-  sgst: number;
-  igst: number;
-  status: 'validated' | 'warning' | 'error';
-  errorDetail?: string;
-  hsnCode?: string;
-  placeOfSupply?: string;
-}
-
-interface ValidationIssue {
-  id: string;
-  severity: 'critical' | 'warning' | 'info';
-  category: string;
-  description: string;
-  invoiceRef: string;
-  fixAction: string;
-  resolved: boolean;
-}
-
-interface ReconCategory {
-  label: string;
-  count: number;
-  amount: number;
-  color: string;
-  bgColor: string;
-}
-
-interface ReconDrilldown {
-  invoiceNumber: string;
-  date: string;
-  vendor: string;
-  booksAmount: number;
-  portalAmount: number;
-  difference: number;
-  reason: string;
-}
-
-interface GSTR1Summary {
-  b2bSales: number;
-  b2cSales: number;
-  exports: number;
-  creditNotes: number;
-  debitNotes: number;
-}
-
-interface GSTR3BSummary {
-  taxableSupplies: number;
-  itcAvailable: number;
-  outputTax: number;
-  netTaxPayable: number;
-}
-
-interface AIInsight {
-  id: string;
-  type: 'risk_alert' | 'missing_doc' | 'tax_anomaly' | 'filing_rec';
-  title: string;
-  description: string;
-  suggestedAction: string;
-  actionView: AppView;
-  urgency: 'high' | 'medium' | 'info';
-  dismissed: boolean;
-}
 
 interface ToastMessage {
   id: string;
@@ -144,73 +61,18 @@ interface ToastMessage {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// INITIAL DATA FACTORY
+// STEP DEFINITIONS
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function createInitialInvoices(): InvoiceRow[] {
-  return [
-    { id: 'inv1', invoiceNumber: 'INV-2025-0801', date: '2025-06-02', customer: 'Reliance Industries Ltd', customerGstin: '27AAACR5055K1Z5', taxableValue: 450000, cgst: 40500, sgst: 40500, igst: 0, status: 'validated', hsnCode: '8471', placeOfSupply: '27' },
-    { id: 'inv2', invoiceNumber: 'INV-2025-0802', date: '2025-06-04', customer: 'Tata Consultancy Services', customerGstin: '27AAACR4898K1Z3', taxableValue: 320000, cgst: 28800, sgst: 28800, igst: 0, status: 'validated', hsnCode: '9983', placeOfSupply: '27' },
-    { id: 'inv3', invoiceNumber: 'INV-2025-0803', date: '2025-06-05', customer: 'Mahindra & Mahindra Ltd', customerGstin: '27AAACM1410M1Z1', taxableValue: 185000, cgst: 16650, sgst: 16650, igst: 0, status: 'validated', hsnCode: '8703', placeOfSupply: '27' },
-    { id: 'inv4', invoiceNumber: 'INV-2025-0804', date: '2025-06-07', customer: 'Infosys Technologies', customerGstin: '29AABCI6782L1Z7', taxableValue: 275000, cgst: 0, sgst: 0, igst: 49500, status: 'validated', hsnCode: '9983', placeOfSupply: '29' },
-    { id: 'inv5', invoiceNumber: 'INV-2025-0805', date: '2025-06-08', customer: 'Wipro Enterprises', customerGstin: '29AABCW7489P1Z9', taxableValue: 142000, cgst: 12780, sgst: 12780, igst: 0, status: 'warning', errorDetail: 'Missing HSN code for 2 line items', hsnCode: '' },
-    { id: 'inv6', invoiceNumber: 'INV-2025-0806', date: '2025-06-10', customer: 'HDFC Bank Ltd', customerGstin: '27AABCH3681K1Z4', taxableValue: 95000, cgst: 8550, sgst: 8550, igst: 0, status: 'validated', hsnCode: '9997', placeOfSupply: '27' },
-    { id: 'inv7', invoiceNumber: 'INV-2025-0807', date: '2025-06-11', customer: 'Bajaj Finserv Ltd', customerGstin: '27AABCB5342M1Z1', taxableValue: 210000, cgst: 0, sgst: 0, igst: 37800, status: 'validated', hsnCode: '9999', placeOfSupply: '29' },
-    { id: 'inv8', invoiceNumber: 'INV-2025-0808', date: '2025-06-12', customer: 'Larsen & Toubro Ltd', customerGstin: '27AAACM5241Z2ZM', taxableValue: 520000, cgst: 46800, sgst: 46800, igst: 0, status: 'error', errorDetail: 'Invalid GSTIN: 27AAACM5241Z2ZM fails checksum', hsnCode: '8479', placeOfSupply: '27' },
-    { id: 'inv9', invoiceNumber: 'INV-2025-0809', date: '2025-06-14', customer: 'Godrej Consumer Products', customerGstin: '27AAACG4735K1Z8', taxableValue: 168000, cgst: 15120, sgst: 15120, igst: 0, status: 'validated', hsnCode: '3304', placeOfSupply: '27' },
-    { id: 'inv10', invoiceNumber: 'INV-2025-0810', date: '2025-06-15', customer: 'Maruti Suzuki India', customerGstin: '06AABCM6420B1Z2', taxableValue: 390000, cgst: 0, sgst: 0, igst: 70200, status: 'validated', hsnCode: '8703', placeOfSupply: '06' },
-    { id: 'inv11', invoiceNumber: 'INV-2025-0811', date: '2025-06-17', customer: 'Adani Ports & SEZ', customerGstin: '27AAACA7392N1Z5', taxableValue: 245000, cgst: 22050, sgst: 22050, igst: 0, status: 'validated', hsnCode: '9983', placeOfSupply: '27' },
-    { id: 'inv12', invoiceNumber: 'INV-2025-0812', date: '2025-06-18', customer: 'Bharti Airtel Ltd', customerGstin: '29AABCB6472H1Z3', taxableValue: 178000, cgst: 0, sgst: 0, igst: 32040, status: 'warning', errorDetail: 'Duplicate invoice number detected', hsnCode: '9984', placeOfSupply: '29' },
-    { id: 'inv13', invoiceNumber: 'INV-2025-0813', date: '2025-06-20', customer: 'ICICI Lombard General', customerGstin: '27AAACI1847J1Z6', taxableValue: 134000, cgst: 12060, sgst: 12060, igst: 0, status: 'validated', hsnCode: '9996', placeOfSupply: '27' },
-    { id: 'inv14', invoiceNumber: 'INV-2025-0814', date: '2025-06-22', customer: 'Hindustan Unilever Ltd', customerGstin: '27AAACH1542Q1Z3', taxableValue: 295000, cgst: 26550, sgst: 26550, igst: 0, status: 'error', errorDetail: 'Tax calculation error: CGST should be ₹26,550 but found ₹25,350', hsnCode: '3401', placeOfSupply: '27' },
-    { id: 'inv15', invoiceNumber: 'INV-2025-0815', date: '2025-06-25', customer: 'Asian Paints Ltd', customerGstin: '27AAACA5321K1Z7', taxableValue: 88000, cgst: 7920, sgst: 7920, igst: 0, status: 'validated', hsnCode: '3209', placeOfSupply: '27' },
-  ];
-}
-
-function createInitialIssues(): ValidationIssue[] {
-  return [
-    { id: 'v1', severity: 'critical', category: 'Invalid GSTIN', description: 'Buyer GSTIN 27AAACM5241Z2ZM in INV-2025-0808 fails checksum validation', invoiceRef: 'INV-2025-0808', fixAction: 'Correct GSTIN', resolved: false },
-    { id: 'v2', severity: 'critical', category: 'Tax Calculation Error', description: 'CGST amount in INV-2025-0814 does not match 9% of taxable value ₹2,95,000 (expected ₹26,550, found ₹25,350)', invoiceRef: 'INV-2025-0814', fixAction: 'Recalculate Tax', resolved: false },
-    { id: 'v3', severity: 'warning', category: 'Missing HSN Code', description: '2 line items in INV-2025-0805 missing HSN/SAC codes as required for GSTR-1 filing', invoiceRef: 'INV-2025-0805', fixAction: 'Add HSN Codes', resolved: false },
-    { id: 'v4', severity: 'warning', category: 'Duplicate Invoice', description: 'INV-2025-0812 has same number as a previously filed invoice in May 2025 return', invoiceRef: 'INV-2025-0812', fixAction: 'Resolve Duplicate', resolved: false },
-    { id: 'v5', severity: 'info', category: 'Missing Mandatory Field', description: 'Place of supply not specified for 3 inter-state invoices (INV-2025-0804, INV-2025-0807, INV-2025-0810)', invoiceRef: 'INV-2025-0804', fixAction: 'Add Place of Supply', resolved: false },
-  ];
-}
-
-function createInitialInsights(): AIInsight[] {
-  return [
-    { id: 'ai1', type: 'risk_alert', title: 'Invalid GSTIN blocking 1 B2B invoice', description: 'INV-2025-0808 has GSTIN 27AAACM5241Z2ZM which fails checksum. This invoice (₹5,20,000 + ₹93,600 tax) cannot be included in filing until corrected.', suggestedAction: 'Fix GSTIN', actionView: 'reconcile', urgency: 'high', dismissed: false },
-    { id: 'ai2', type: 'tax_anomaly', title: 'Tax calculation discrepancy of ₹1,200', description: 'INV-2025-0814 shows CGST ₹25,350 instead of expected ₹26,550 (9% of ₹2,95,000). Likely a data entry error in the sales register.', suggestedAction: 'Recalculate', actionView: 'invoices', urgency: 'high', dismissed: false },
-    { id: 'ai3', type: 'missing_doc', title: '3 invoices missing from GSTR-2B', description: 'Invoices from Adani Ports (₹2,45,000), Asian Paints (₹88,000), and ICICI Lombard (₹1,34,000) not reflected in GSTR-2B. Vendors may not have filed yet.', suggestedAction: 'Review Missing', actionView: 'reconcile', urgency: 'medium', dismissed: false },
-    { id: 'ai4', type: 'filing_rec', title: 'File GSTR-1 before July 11 deadline', description: '3 days remaining. Resolve 2 critical issues and 2 warnings to achieve 100% filing readiness.', suggestedAction: 'Resolve Issues', actionView: 'returns', urgency: 'high', dismissed: false },
-    { id: 'ai5', type: 'risk_alert', title: 'Duplicate invoice number may cause rejection', description: 'INV-2025-0812 duplicates a number already filed in May 2025. GST portal will reject the JSON. Renumber before filing.', suggestedAction: 'Fix Duplicate', actionView: 'invoices', urgency: 'medium', dismissed: false },
-    { id: 'ai6', type: 'filing_rec', title: 'ITC of ₹18,240 at risk from recon mismatches', description: '3 invoices show mismatch between books and GSTR-2B. If unresolved, ITC claims will be disallowed during assessment.', suggestedAction: 'Run Reconciliation', actionView: 'reconcile', urgency: 'info', dismissed: false },
-  ];
-}
-
-// Reconciliation drill-down data per category
-const reconDrilldowns: Record<string, ReconDrilldown[]> = {
-  'Partial Match': [
-    { invoiceNumber: 'INV-2025-0789', date: '2025-06-03', vendor: 'Tata Steel Ltd', booksAmount: 285000, portalAmount: 262000, difference: 23000, reason: 'Credit note of ₹23,000 not reflected in GSTR-2B yet' },
-    { invoiceNumber: 'INV-2025-0795', date: '2025-06-08', vendor: 'Reliance Retail Ltd', booksAmount: 142000, portalAmount: 135000, difference: 7000, reason: 'Discount of ₹7,000 applied post-filing by supplier' },
-    { invoiceNumber: 'INV-2025-0801', date: '2025-06-12', vendor: 'Hindustan Petroleum', booksAmount: 96000, portalAmount: 89000, difference: 7000, reason: 'TCS amount included in books but excluded from portal' },
-    { invoiceNumber: 'INV-2025-0803', date: '2025-06-15', vendor: 'ITC Ltd', booksAmount: 178000, portalAmount: 164000, difference: 14000, reason: 'Supplier filed partial amount; amended return expected' },
-  ],
-  'Mismatch': [
-    { invoiceNumber: 'INV-2025-0792', date: '2025-06-05', vendor: 'Mahindra Logistics', booksAmount: 340000, portalAmount: 285000, difference: 55000, reason: 'Wrong GSTIN used in portal; supplier filed under different entity' },
-    { invoiceNumber: 'INV-2025-0798', date: '2025-06-10', vendor: 'Adani Wilmar Ltd', booksAmount: 225000, portalAmount: 180000, difference: 45000, reason: 'IGST vs CGST+SGST mismatch — inter-state filed as intra-state' },
-    { invoiceNumber: 'INV-2025-0810', date: '2025-06-18', vendor: 'Dalmia Cement Ltd', booksAmount: 412000, portalAmount: 350000, difference: 62000, reason: 'Tax rate difference: 18% in books vs 12% in portal. HSN reclassification needed.' },
-  ],
-  'Missing in Books': [
-    { invoiceNumber: 'G2B-2025-4421', date: '2025-06-07', vendor: 'Sun Pharma Industries', booksAmount: 0, portalAmount: 52000, difference: 52000, reason: 'Invoice present in GSTR-2B but not recorded in purchase register' },
-    { invoiceNumber: 'G2B-2025-4456', date: '2025-06-14', vendor: 'Divi\'s Laboratories', booksAmount: 0, portalAmount: 34000, difference: 34000, reason: 'Purchase invoice from vendor not entered; possibly received after month-end' },
-  ],
-  'Missing in Portal': [
-    { invoiceNumber: 'INV-2025-0791', date: '2025-06-02', vendor: 'Bharat Petroleum', booksAmount: 89000, portalAmount: 0, difference: 89000, reason: 'Supplier has not filed GSTR-1 for June 2025 yet. Follow up required.' },
-    { invoiceNumber: 'INV-2025-0804', date: '2025-06-09', vendor: 'Asian Paints Ltd', booksAmount: 67000, portalAmount: 0, difference: 67000, reason: 'Supplier filing deadline is Jul 11. Check again after due date.' },
-    { invoiceNumber: 'INV-2025-0812', date: '2025-06-16', vendor: 'Pidilite Industries', booksAmount: 38000, portalAmount: 0, difference: 38000, reason: 'Invoice recorded in books; vendor may file under QRMP scheme' },
-  ],
-};
+const PREP_STEPS = [
+  { id: 's0', label: 'Documents Uploaded', shortLabel: 'Upload' },
+  { id: 's1', label: 'AI Extraction', shortLabel: 'Extraction' },
+  { id: 's2', label: 'Validation', shortLabel: 'Validation' },
+  { id: 's3', label: 'Reconciliation', shortLabel: 'Reconciliation' },
+  { id: 's4', label: 'Return Prepared', shortLabel: 'Prepared' },
+  { id: 's5', label: 'Ready to File', shortLabel: 'Ready' },
+  { id: 's6', label: 'Filed Successfully', shortLabel: 'Filed' },
+] as const;
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // HELPERS
@@ -272,20 +134,9 @@ function getUrgencyBadge(urgency: string) {
   }
 }
 
-function periodToLabel(period: string): string {
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  const [year, month] = period.split('-').map(Number);
-  return `${months[month - 1]} ${year}`;
-}
-
 // ═══════════════════════════════════════════════════════════════════════════════
 // ANIMATION
 // ═══════════════════════════════════════════════════════════════════════════════
-
-const stagger = {
-  hidden: { opacity: 0 },
-  visible: { opacity: 1, transition: { staggerChildren: 0.05 } },
-};
 
 const fadeUp = {
   hidden: { opacity: 0, y: 12 },
@@ -335,71 +186,145 @@ function ToastContainer({ toasts, onDismiss }: { toasts: ToastMessage[]; onDismi
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// PROGRESS BAR COMPONENTS
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function DesktopProgressBar({ completedStep }: { completedStep: number }) {
+  const completedCount = completedStep + 1;
+  const percent = Math.round((completedCount / PREP_STEPS.length) * 100);
+
+  return (
+    <div className="hidden md:block border border-border/60 rounded-xl p-6">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-sm font-semibold text-foreground uppercase tracking-wider">Preparation Progress</h3>
+        <span className="text-xs font-medium text-muted-foreground">{percent}% Complete</span>
+      </div>
+      <div className="h-2 rounded-full bg-slate-100 mb-6 overflow-hidden">
+        <motion.div
+          className="h-full rounded-full bg-emerald-500"
+          animate={{ width: `${percent}%` }}
+          transition={{ duration: 0.6, ease: 'easeOut' }}
+        />
+      </div>
+      <div className="flex items-start">
+        {PREP_STEPS.map((step, idx) => {
+          const isCompleted = idx <= completedStep;
+          const isActive = idx === completedStep + 1 && idx < PREP_STEPS.length;
+          const isFuture = idx > completedStep + 1;
+          return (
+            <React.Fragment key={step.id}>
+              <div className="flex flex-col items-center" style={{ minWidth: idx === 0 || idx === PREP_STEPS.length - 1 ? '80px' : '100px', flex: '1 1 0' }}>
+                <motion.div
+                  className={`flex items-center justify-center h-9 w-9 rounded-full shrink-0 text-sm font-semibold transition-all duration-500 ${
+                    isCompleted
+                      ? 'bg-emerald-500 text-white shadow-sm shadow-emerald-500/30'
+                      : isActive
+                        ? 'bg-emerald-50 text-emerald-700 border-2 border-emerald-500 shadow-sm shadow-emerald-200/50'
+                        : 'bg-slate-100 text-slate-400'
+                  }`}
+                  animate={isActive ? { scale: [1, 1.08, 1] } : {}}
+                  transition={isActive ? { duration: 2, repeat: Infinity, ease: 'easeInOut' } : {}}
+                >
+                  {isCompleted ? <Check className="h-4 w-4" /> : idx + 1}
+                </motion.div>
+                <span className={`text-xs text-center leading-tight mt-2 whitespace-nowrap ${
+                  isCompleted ? 'text-emerald-700 font-medium' : isActive ? 'text-foreground font-semibold' : 'text-muted-foreground'
+                }`}>
+                  {step.label}
+                </span>
+              </div>
+              {idx < PREP_STEPS.length - 1 && (
+                <div className="flex items-center pt-[18px] flex-1 min-w-[16px]">
+                  <motion.div
+                    className={`h-[3px] w-full rounded-full transition-colors duration-500 ${isCompleted ? 'bg-emerald-400' : 'bg-slate-200'}`}
+                    animate={isActive ? { opacity: [0.5, 1, 0.5] } : {}}
+                    transition={isActive ? { duration: 2, repeat: Infinity, ease: 'easeInOut' } : {}}
+                  />
+                </div>
+              )}
+            </React.Fragment>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function MobileProgressBar({ completedStep }: { completedStep: number }) {
+  const completedCount = completedStep + 1;
+  const total = PREP_STEPS.length;
+  const percent = Math.round((completedCount / total) * 100);
+
+  return (
+    <div className="md:hidden border border-border/60 rounded-xl p-4">
+      <div className="flex items-center justify-between mb-2">
+        <h3 className="text-xs font-semibold text-foreground uppercase tracking-wider">Progress</h3>
+        <span className="text-xs font-medium text-emerald-700">{completedCount}/{total} steps</span>
+      </div>
+      <div className="h-2.5 rounded-full bg-slate-100 overflow-hidden">
+        <motion.div
+          className="h-full rounded-full bg-emerald-500"
+          animate={{ width: `${percent}%` }}
+          transition={{ duration: 0.6, ease: 'easeOut' }}
+        />
+      </div>
+      <div className="flex items-center justify-between mt-1.5">
+        <span className="text-[10px] text-muted-foreground">{PREP_STEPS[completedStep]?.label ?? 'Start'} complete</span>
+        <span className="text-[10px] font-medium text-foreground">{percent}%</span>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // MAIN COMPONENT
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export default function ReturnPrepWorkspace() {
-  const { selectedClientId, returnPrepCtx, setCurrentView, setSelectedClientId, setReturnPrepCtx } = useApp();
-  const [clientData, setClientData] = useState<Client | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { selectedClientId, returnPrepCtx, setCurrentView } = useApp();
+  const store = useGSTStore();
+
+  // Resolve client ID — handle both store format (client-1) and DB format (cl_001)
+  const rawClientId = selectedClientId ?? returnPrepCtx.clientId ?? 'client-1';
+  const resolvedClientId = useMemo(() => {
+    const direct = store.getClient(rawClientId);
+    if (direct) return rawClientId;
+    // Fallback: extract numeric index and map to store format
+    const numMatch = rawClientId.match(/(\d+)/);
+    if (numMatch) {
+      const idx = parseInt(numMatch[1], 10) - 1;
+      if (idx >= 0 && idx < store.clients.length) {
+        return store.clients[idx].id;
+      }
+    }
+    return store.clients[0]?.id ?? 'client-1';
+  }, [rawClientId, store]);
+
+  const clientId = resolvedClientId;
+  const returnType = returnPrepCtx.returnType;
+  const period = returnPrepCtx.period;
+
+  // ── Store data ──
+  const client = store.getClient(clientId);
+  const invoices = store.getInvoicesForClient(clientId);
+  const validationIssues = store.getIssuesForClient(clientId);
+  const aiInsights = store.getInsightsForClient(clientId);
+  const reconDrilldowns = store.getReconDrilldowns(clientId);
+  const reconData = store.getReconSummary(clientId);
+  const currentPrepStep = store.getPrepStep(clientId);
+
+  // ── Local UI state ──
   const [invoiceFilter, setInvoiceFilter] = useState<'all' | 'validated' | 'warning' | 'error'>('all');
-
-  // ── Interactive State ──
-  const [invoices, setInvoices] = useState<InvoiceRow[]>(createInitialInvoices);
-  const [validationIssues, setValidationIssues] = useState<ValidationIssue[]>(createInitialIssues);
-  const [aiInsights, setAiInsights] = useState<AIInsight[]>(createInitialInsights);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
-
-  // ── Drill-down State ──
-  const [selectedInvoice, setSelectedInvoice] = useState<InvoiceRow | null>(null);
+  const [selectedInvoice, setSelectedInvoice] = useState<SampleInvoice | null>(null);
   const [selectedReconCategory, setSelectedReconCategory] = useState<string | null>(null);
   const [filingModalOpen, setFilingModalOpen] = useState(false);
   const [filingProgress, setFilingProgress] = useState<'idle' | 'validating' | 'generating' | 'submitting' | 'success'>('idle');
 
-  const returnType = returnPrepCtx.returnType;
-  const period = returnPrepCtx.period;
+  // ── Derived state ──
+  const clientName = client?.tradeName ?? 'Sharma Enterprises';
+  const clientGSTIN = client?.gstin ?? '27AABCS1429B1Z5';
 
-  // ── Toast helper ──
-  const addToast = useCallback((title: string, description: string, type: ToastMessage['type'] = 'success') => {
-    const id = `toast-${Date.now()}`;
-    setToasts(prev => [...prev, { id, title, description, type }]);
-    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 4000);
-  }, []);
-
-  const dismissToast = useCallback((id: string) => {
-    setToasts(prev => prev.filter(t => t.id !== id));
-  }, []);
-
-  // Fetch client
-  const fetchClient = useCallback(async () => {
-    if (!selectedClientId) {
-      setClientData({
-        id: 'cl_001', gstin: '27AABCS1429B1Z5', tradeName: 'Sharma Enterprises',
-        legalName: 'Sharma Enterprises Pvt Ltd', state: 'Maharashtra', stateCode: '27',
-        entityType: 'regular', returnPeriod: 'monthly', lastFilingDate: '2025-05-11',
-        status: 'active', healthScore: 92, createdAt: '2025-01-15T10:00:00Z', updatedAt: '2025-05-11T14:30:00Z',
-      });
-      setLoading(false);
-      return;
-    }
-    try {
-      setLoading(true);
-      const res = await fetch('/api/clients');
-      if (res.ok) {
-        const data = await res.json();
-        const clients: Client[] = data.clients ?? [];
-        const found = clients.find((c: Client) => c.id === selectedClientId);
-        setClientData(found ?? clients[0] ?? null);
-      }
-    } catch { /* silent */ } finally { setLoading(false); }
-  }, [selectedClientId]);
-
-  useEffect(() => { fetchClient(); }, [fetchClient]);
-
-  const clientName = clientData?.tradeName ?? 'Sharma Enterprises';
-  const clientGSTIN = clientData?.gstin ?? '27AABCS1429B1Z5';
-
-  // ── Derived State ──
   const filteredInvoices = useMemo(() => {
     if (invoiceFilter === 'all') return invoices;
     return invoices.filter(inv => inv.status === invoiceFilter);
@@ -415,59 +340,42 @@ export default function ReturnPrepWorkspace() {
   const warningCount = invoices.filter(i => i.status === 'warning').length;
   const validatedCount = invoices.filter(i => i.status === 'validated').length;
   const unresolvedIssues = validationIssues.filter(i => !i.resolved).length;
+  const allValidated = errorCount === 0 && warningCount === 0;
 
-  // ── Computed Progress ──
-  const validationScore = Math.min(100, Math.round((validatedCount / invoices.length) * 100));
+  const validationScore = invoices.length > 0 ? Math.min(100, Math.round((validatedCount / invoices.length) * 100)) : 100;
   const matchRate = 78;
   const complianceScore = 82;
-
-  const steps: PrepStep[] = useMemo(() => {
-    const hasErrors = errorCount > 0;
-    const hasWarnings = warningCount > 0;
-    const allValidated = errorCount === 0 && warningCount === 0;
-    return [
-      { id: 's1', label: 'Documents Uploaded', completed: true, active: false },
-      { id: 's2', label: 'AI Extraction Complete', completed: true, active: false },
-      { id: 's3', label: 'Validation Complete', completed: allValidated, active: !allValidated && unresolvedIssues === 0 },
-      { id: 's4', label: 'Reconciliation Complete', completed: false, active: allValidated },
-      { id: 's5', label: 'Return Prepared', completed: false, active: false },
-      { id: 's6', label: 'Ready to File', completed: false, active: false },
-      { id: 's7', label: 'Filed Successfully', completed: false, active: false },
-    ];
-  }, [errorCount, warningCount, unresolvedIssues]);
-
-  const progressPercent = Math.round((steps.filter(s => s.completed).length / steps.length) * 100);
   const allChecksPass = validationScore >= 95 && unresolvedIssues === 0;
   const isGSTR1 = returnType === 'GSTR-1';
 
-  // ── Recon summary ──
-  const reconData: ReconCategory[] = [
-    { label: 'Perfect Match', count: 38, amount: 2854000, color: 'text-emerald-700', bgColor: 'bg-emerald-50 border-emerald-200' },
-    { label: 'Partial Match', count: 4, amount: 312000, color: 'text-amber-700', bgColor: 'bg-amber-50 border-amber-200' },
-    { label: 'Mismatch', count: 3, amount: 245000, color: 'text-red-700', bgColor: 'bg-red-50 border-red-200' },
-    { label: 'Missing in Books', count: 2, amount: 86000, color: 'text-orange-700', bgColor: 'bg-orange-50 border-orange-200' },
-    { label: 'Missing in Portal', count: 3, amount: 194000, color: 'text-purple-700', bgColor: 'bg-purple-50 border-purple-200' },
-  ];
+  // Compute effective completed step based on store step AND data state
+  const effectiveCompletedStep = useMemo(() => {
+    let step = currentPrepStep;
+    // If store says step < 2 but all invoices are validated with no issues, bump to 2
+    if (step < 2 && allValidated && unresolvedIssues === 0) step = 2;
+    // If store says step >= 2 but there are still issues, cap at 1
+    if (step >= 2 && (!allValidated || unresolvedIssues > 0)) step = 1;
+    return step;
+  }, [currentPrepStep, allValidated, unresolvedIssues]);
+
+  // ── Toast helper ──
+  const addToast = useCallback((title: string, description: string, type: ToastMessage['type'] = 'success') => {
+    const id = `toast-${Date.now()}`;
+    setToasts(prev => [...prev, { id, title, description, type }]);
+    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 4000);
+  }, []);
+
+  const dismissToast = useCallback((id: string) => {
+    setToasts(prev => prev.filter(t => t.id !== id));
+  }, []);
 
   // ── Actions ──
   const handleBack = () => setCurrentView('client-workspace');
-  const handleAction = (view: AppView) => setCurrentView(view);
 
-  // Approve invoice — change warning/error → validated
   const handleApproveInvoice = (invId: string) => {
     const inv = invoices.find(i => i.id === invId);
     if (!inv || inv.status === 'validated') return;
-
-    setInvoices(prev => prev.map(i =>
-      i.id === invId ? { ...i, status: 'validated' as const, errorDetail: undefined } : i
-    ));
-
-    // Also resolve the corresponding validation issue
-    const invoiceNum = inv.invoiceNumber;
-    setValidationIssues(prev => prev.map(iss =>
-      iss.invoiceRef === invoiceNum ? { ...iss, resolved: true } : iss
-    ));
-
+    store.approveInvoice(clientId, invId);
     addToast(
       `${inv.invoiceNumber} approved`,
       `Invoice status changed to Validated. Tax amount: ${formatCurrency(inv.taxableValue + inv.cgst + inv.sgst + inv.igst)}`,
@@ -475,23 +383,10 @@ export default function ReturnPrepWorkspace() {
     );
   };
 
-  // Fix validation issue
   const handleFixIssue = (issueId: string) => {
     const issue = validationIssues.find(i => i.id === issueId);
     if (!issue || issue.resolved) return;
-
-    setValidationIssues(prev => prev.map(i =>
-      i.id === issueId ? { ...i, resolved: true } : i
-    ));
-
-    // Also fix the related invoice
-    const invId = invoices.find(i => i.invoiceNumber === issue.invoiceRef)?.id;
-    if (invId) {
-      setInvoices(prev => prev.map(i =>
-        i.id === invId ? { ...i, status: 'validated' as const, errorDetail: undefined } : i
-      ));
-    }
-
+    store.resolveIssue(clientId, issueId);
     addToast(
       `${issue.category} resolved`,
       `${issue.invoiceRef}: ${issue.fixAction} applied successfully`,
@@ -499,20 +394,51 @@ export default function ReturnPrepWorkspace() {
     );
   };
 
-  // Dismiss AI insight
   const handleDismissInsight = (insightId: string) => {
-    setAiInsights(prev => prev.map(i =>
-      i.id === insightId ? { ...i, dismissed: true } : i
-    ));
+    store.dismissInsight(clientId, insightId);
     addToast('Insight dismissed', 'This recommendation has been acknowledged', 'info');
   };
 
-  // Mark Ready
+  // Run Validation: resolve all issues, mark all invoices as validated
+  const handleRunValidation = () => {
+    const unresolved = validationIssues.filter(i => !i.resolved);
+    unresolved.forEach(issue => {
+      store.resolveIssue(clientId, issue.id);
+    });
+    // Mark all non-validated invoices as validated
+    invoices.forEach(inv => {
+      if (inv.status !== 'validated') {
+        store.approveInvoice(clientId, inv.id);
+      }
+    });
+    // Advance step to at least 2 (Validation complete)
+    if (currentPrepStep < 2) {
+      store.setPrepStep(clientId, 2);
+    }
+    addToast(
+      'Validation Complete',
+      `All ${unresolved.length} issues resolved. ${invoices.length - validatedCount} invoices updated to Validated.`,
+      'success'
+    );
+  };
+
+  // Run Reconciliation: advance step to 3
+  const handleRunReconciliation = () => {
+    if (effectiveCompletedStep < 2) {
+      addToast('Complete validation first', 'All invoices must be validated before reconciliation', 'warning');
+      return;
+    }
+    store.setPrepStep(clientId, 3);
+    addToast('Reconciliation Complete', 'Books vs GSTR-2B matching finished. Review results below.', 'success');
+  };
+
+  // Mark Ready: advance step to 5 (Ready to File)
   const handleMarkReady = () => {
     if (errorCount > 0 || warningCount > 0) {
       addToast('Cannot mark ready', `${errorCount} errors and ${warningCount} warnings must be resolved first`, 'warning');
       return;
     }
+    store.setPrepStep(clientId, 5);
     addToast('Return marked as Ready to File', 'All validations passed. You can now file this return.', 'success');
   };
 
@@ -526,16 +452,24 @@ export default function ReturnPrepWorkspace() {
     setTimeout(() => setFilingProgress('submitting'), 3000);
     setTimeout(() => {
       setFilingProgress('success');
-      addToast('GSTR-1 Filed Successfully!', `ARN: AA080725001234 · Period: ${periodToLabel(period)} · Tax: ${formatCurrency(totalTax)}`, 'success');
+      // Update the store
+      store.setPrepStep(clientId, 6);
+      // Find the matching filing and file it
+      const filings = store.getFilingsForClient(clientId);
+      const matchingFiling = filings.find(f => f.returnType === returnType && f.period === period);
+      if (matchingFiling) {
+        store.fileReturn(matchingFiling.id);
+      }
+      addToast(`${returnType} Filed Successfully!`, `Period: ${periodToLabel(period)} · Tax: ${formatCurrency(totalTax)}`, 'success');
     }, 4500);
   };
 
-  // ── Return Summary ──
-  const gstr1Summary: GSTR1Summary = { b2bSales: 3245000, b2cSales: 485000, exports: 189500, creditNotes: -125000, debitNotes: 45000 };
-  const gstr3bSummary: GSTR3BSummary = { taxableSupplies: 4365000, itcAvailable: 1872000, outputTax: 785700, netTaxPayable: 0 };
+  // ── Return Summary (static reference data) ──
+  const gstr1Summary = { b2bSales: 3245000, b2cSales: 485000, exports: 189500, creditNotes: -125000, debitNotes: 45000 };
+  const gstr3bSummary = { taxableSupplies: 4365000, itcAvailable: 1872000, outputTax: 785700, netTaxPayable: 0 };
 
-  // Loading
-  if (loading) {
+  // Loading skeleton (only if client not yet available)
+  if (!client && !selectedClientId) {
     return (
       <div className="max-w-7xl mx-auto px-4 md:px-6 py-6 space-y-6">
         <Skeleton className="h-6 w-40" />
@@ -612,7 +546,7 @@ export default function ReturnPrepWorkspace() {
           </DialogHeader>
           {selectedReconCategory && reconDrilldowns[selectedReconCategory] && (
             <div className="space-y-3 mt-2 max-h-[60vh] overflow-y-auto">
-              {reconDrilldowns[selectedReconCategory].map((item, idx) => (
+              {reconDrilldowns[selectedReconCategory].map((item: SampleReconDrilldown, idx: number) => (
                 <div key={idx} className="border border-border/60 rounded-lg p-3.5">
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-2">
@@ -688,11 +622,10 @@ export default function ReturnPrepWorkspace() {
                 <div>
                   <p className="text-lg font-bold text-emerald-700">Filed Successfully!</p>
                   <div className="mt-3 p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-left space-y-1.5">
-                    <div className="flex justify-between text-xs"><span className="text-muted-foreground">ARN</span><span className="font-mono font-bold text-emerald-700">AA080725001234</span></div>
                     <div className="flex justify-between text-xs"><span className="text-muted-foreground">Return Type</span><span className="font-medium">{returnType}</span></div>
                     <div className="flex justify-between text-xs"><span className="text-muted-foreground">Period</span><span className="font-medium">{periodToLabel(period)}</span></div>
                     <div className="flex justify-between text-xs"><span className="text-muted-foreground">Total Tax</span><span className="font-bold">{formatCurrency(totalTax)}</span></div>
-                    <div className="flex justify-between text-xs"><span className="text-muted-foreground">Filed On</span><span className="font-medium">Jul 8, 2025 · 12:34 PM</span></div>
+                    <div className="flex justify-between text-xs"><span className="text-muted-foreground">Filed On</span><span className="font-medium">{new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</span></div>
                   </div>
                   <Button className="mt-4 bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => { setFilingModalOpen(false); setFilingProgress('idle'); }}>
                     Done
@@ -704,62 +637,36 @@ export default function ReturnPrepWorkspace() {
         </DialogContent>
       </Dialog>
 
-      {/* ═══════════════════════════════════════════════════════════════════════
-          TOP HEADER
-          ═══════════════════════════════════════════════════════════════════════ */}
-      <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
-        <div className="flex items-center gap-2 mb-4">
-          <Button variant="ghost" size="sm" className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground gap-1" onClick={handleBack}>
-            <ArrowLeft className="h-3.5 w-3.5" /> Client Workspace
-          </Button>
-          <ChevronRight className="h-3 w-3 text-muted-foreground" />
-          <span className="text-xs text-muted-foreground">{clientName}</span>
-          <ChevronRight className="h-3 w-3 text-muted-foreground" />
-          <span className="text-xs text-foreground font-medium">{returnType} · {periodToLabel(period)}</span>
-        </div>
-
+      {/* ═══ HEADER ═══ */}
+      <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
         <div className="border border-border/60 rounded-xl p-5">
-          <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-5">
-            <div className="flex items-start gap-4">
-              <div className="flex items-center justify-center h-11 w-11 rounded-xl bg-emerald-50 border border-emerald-200 shrink-0">
-                <FileText className="h-5 w-5 text-emerald-600" />
-              </div>
-              <div className="min-w-0">
-                <div className="flex items-center gap-2.5 flex-wrap">
-                  <h1 className="text-lg font-semibold text-foreground tracking-tight">{clientName}</h1>
-                  <Badge className={`text-[10px] px-2 py-0.5 gap-1 ${isGSTR1 ? 'bg-teal-50 text-teal-700 border-teal-200' : 'bg-violet-50 text-violet-700 border-violet-200'}`}>{returnType}</Badge>
-                </div>
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 mt-2">
-                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                    <Building2 className="size-3 text-slate-400" />
-                    <span className="font-mono font-medium text-foreground">{clientGSTIN}</span>
-                  </div>
-                  <Separator orientation="vertical" className="h-3.5" />
-                  <span className="text-xs text-muted-foreground">Tax Period: <span className="font-medium text-foreground">{periodToLabel(period)}</span></span>
-                  <Separator orientation="vertical" className="h-3.5" />
-                  <Badge className={`text-[10px] px-1.5 py-0 ${
-                    allChecksPass ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
-                    errorCount > 0 ? 'bg-red-50 text-red-700 border-red-200' :
-                    'bg-amber-50 text-amber-700 border-amber-200'
-                  }`}>
-                    {allChecksPass ? 'Ready to File' : errorCount > 0 ? 'Issues Blocking Filing' : 'Preparation In Progress'}
-                  </Badge>
-                  <Separator orientation="vertical" className="h-3.5" />
-                  <span className="text-xs text-muted-foreground">Last Updated: <span className="font-medium text-foreground">Jul 8, 2025 · 11:42 AM</span></span>
-                </div>
-              </div>
-            </div>
-            <div className="flex flex-wrap items-center gap-2 shrink-0">
-              <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5" onClick={() => addToast('Draft saved', 'Return data saved as draft', 'info')}>
-                <Save className="size-3.5" /> Save Draft
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <div className="flex items-center gap-3">
+              <Button variant="ghost" size="sm" className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground gap-1" onClick={handleBack}>
+                <ArrowLeft className="h-3.5 w-3.5" /> Client Workspace
               </Button>
-              <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5" onClick={() => addToast('Validation running', 'Checking 15 invoices against GST rules...', 'info')}>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 mr-3">
+                <div className="flex items-center justify-center h-9 w-9 rounded-lg bg-emerald-50 text-emerald-700">
+                  <Building2 className="h-4 w-4" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-foreground leading-tight">{clientName}</p>
+                  <p className="text-[10px] font-mono text-muted-foreground">{clientGSTIN}</p>
+                </div>
+              </div>
+              <Badge variant="outline" className="text-xs font-medium">{returnType}</Badge>
+              <Badge variant="outline" className="text-xs font-medium">{periodToLabel(period)}</Badge>
+            </div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 border-amber-200 text-amber-700 hover:bg-amber-50" onClick={handleRunValidation} disabled={effectiveCompletedStep >= 2}>
                 <ShieldCheck className="size-3.5" /> Run Validation
               </Button>
-              <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5" onClick={() => handleAction('reconcile')}>
+              <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 border-blue-200 text-blue-700 hover:bg-blue-50" onClick={handleRunReconciliation} disabled={effectiveCompletedStep < 2 || effectiveCompletedStep >= 3}>
                 <GitCompareArrows className="size-3.5" /> Run Reconciliation
               </Button>
-              <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 border-emerald-200 text-emerald-700 hover:bg-emerald-50" onClick={handleMarkReady}>
+              <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 border-emerald-200 text-emerald-700 hover:bg-emerald-50" onClick={handleMarkReady} disabled={effectiveCompletedStep < 3 || effectiveCompletedStep >= 5}>
                 <CheckCircle2 className="size-3.5" /> Mark Ready
               </Button>
               <Button size="sm" className={`h-8 text-xs gap-1.5 ${allChecksPass ? 'bg-emerald-600 hover:bg-emerald-700 text-white' : 'bg-slate-200 text-slate-500 cursor-not-allowed'}`} disabled={!allChecksPass} onClick={handleFileReturn}>
@@ -770,43 +677,13 @@ export default function ReturnPrepWorkspace() {
         </div>
       </motion.div>
 
-      {/* ═══════════════════════════════════════════════════════════════════════
-          SECTION 1: PREPARATION PROGRESS
-          ═══════════════════════════════════════════════════════════════════════ */}
+      {/* ═══ SECTION 1: PREPARATION PROGRESS ═══ */}
       <motion.section initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1, duration: 0.4 }}>
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">Preparation Progress</h2>
-          <span className="text-xs font-medium text-muted-foreground">{progressPercent}% Complete</span>
-        </div>
-        <div className="border border-border/60 rounded-xl p-5">
-          <div className="h-2 rounded-full bg-slate-100 mb-5 overflow-hidden">
-            <motion.div className="h-full rounded-full bg-emerald-500" animate={{ width: `${progressPercent}%` }} transition={{ duration: 0.6, ease: 'easeOut' }} />
-          </div>
-          <div className="flex items-center gap-1 overflow-x-auto pb-1">
-            {steps.map((step, idx) => (
-              <React.Fragment key={step.id}>
-                <div className="flex flex-col items-center gap-1.5 min-w-[100px]">
-                  <div className={`flex items-center justify-center h-8 w-8 rounded-full shrink-0 text-xs font-semibold transition-all duration-500 ${
-                    step.completed ? 'bg-emerald-500 text-white' : step.active ? 'bg-emerald-50 text-emerald-700 border-2 border-emerald-500' : 'bg-slate-100 text-slate-400'
-                  }`}>
-                    {step.completed ? <Check className="h-4 w-4" /> : idx + 1}
-                  </div>
-                  <span className={`text-[10px] text-center leading-tight max-w-[90px] transition-colors duration-300 ${
-                    step.completed ? 'text-emerald-700 font-medium' : step.active ? 'text-foreground font-medium' : 'text-muted-foreground'
-                  }`}>{step.label}</span>
-                </div>
-                {idx < steps.length - 1 && (
-                  <div className={`h-0.5 flex-1 min-w-[20px] mt-[-18px] rounded-full transition-colors duration-500 ${step.completed ? 'bg-emerald-300' : 'bg-slate-200'}`} />
-                )}
-              </React.Fragment>
-            ))}
-          </div>
-        </div>
+        <DesktopProgressBar completedStep={effectiveCompletedStep} />
+        <MobileProgressBar completedStep={effectiveCompletedStep} />
       </motion.section>
 
-      {/* ═══════════════════════════════════════════════════════════════════════
-          SECTION 2: INVOICE REVIEW TABLE
-          ═══════════════════════════════════════════════════════════════════════ */}
+      {/* ═══ SECTION 2: INVOICE REVIEW TABLE ═══ */}
       <motion.section initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15, duration: 0.4 }}>
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">Invoice Review</h2>
@@ -891,9 +768,7 @@ export default function ReturnPrepWorkspace() {
         </div>
       </motion.section>
 
-      {/* ═══════════════════════════════════════════════════════════════════════
-          TWO-COLUMN: VALIDATION CENTER + RECONCILIATION
-          ═══════════════════════════════════════════════════════════════════════ */}
+      {/* ═══ TWO-COLUMN: VALIDATION CENTER + RECONCILIATION ═══ */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
         {/* SECTION 3: VALIDATION CENTER */}
@@ -951,7 +826,7 @@ export default function ReturnPrepWorkspace() {
           </div>
 
           <div className="border border-border/60 rounded-xl p-5 space-y-3">
-            {reconData.map((cat, idx) => (
+            {reconData.map((cat: SampleReconCategory, idx: number) => (
               <motion.div key={cat.label} initial={{ opacity: 0, x: 8 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.3 + idx * 0.06, duration: 0.3 }}
                 className={`flex items-center justify-between p-3 rounded-lg border ${cat.bgColor} cursor-pointer hover:shadow-sm transition-shadow`}
                 onClick={() => { if (cat.label !== 'Perfect Match' && reconDrilldowns[cat.label]) setSelectedReconCategory(cat.label); }}
@@ -981,9 +856,7 @@ export default function ReturnPrepWorkspace() {
         </motion.section>
       </div>
 
-      {/* ═══════════════════════════════════════════════════════════════════════
-          SECTION 5: RETURN SUMMARY
-          ═══════════════════════════════════════════════════════════════════════ */}
+      {/* ═══ SECTION 5: RETURN SUMMARY ═══ */}
       <motion.section initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3, duration: 0.4 }}>
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">Return Summary — {returnType}</h2>
@@ -1032,9 +905,7 @@ export default function ReturnPrepWorkspace() {
         )}
       </motion.section>
 
-      {/* ═══════════════════════════════════════════════════════════════════════
-          TWO-COLUMN: AI REVIEW + READY TO FILE
-          ═══════════════════════════════════════════════════════════════════════ */}
+      {/* ═══ TWO-COLUMN: AI REVIEW + READY TO FILE ═══ */}
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
 
         {/* SECTION 6: AI REVIEW */}
@@ -1111,7 +982,7 @@ export default function ReturnPrepWorkspace() {
               {[
                 { label: 'Validation Score', value: validationScore, target: 95, icon: <ClipboardCheck className="h-4 w-4" />, color: validationScore >= 95 ? 'text-emerald-700' : validationScore >= 80 ? 'text-amber-700' : 'text-red-700', bg: validationScore >= 95 ? 'bg-emerald-50' : validationScore >= 80 ? 'bg-amber-50' : 'bg-red-50', stroke: validationScore >= 95 ? '#10b981' : validationScore >= 80 ? '#f59e0b' : '#ef4444' },
                 { label: 'Match Rate', value: matchRate, target: 90, icon: <GitCompareArrows className="h-4 w-4" />, color: matchRate >= 90 ? 'text-emerald-700' : matchRate >= 70 ? 'text-amber-700' : 'text-red-700', bg: matchRate >= 90 ? 'bg-emerald-50' : matchRate >= 70 ? 'bg-amber-50' : 'bg-red-50', stroke: matchRate >= 90 ? '#10b981' : matchRate >= 70 ? '#f59e0b' : '#ef4444' },
-                { label: 'Compliance Score', value: complianceScore, target: 85, icon: <ShieldCheck className="h-4 w-4" />, color: complianceScore >= 85 ? 'text-emerald-700' : complianceScore >= 65 ? 'text-amber-700' : 'text-red-700', bg: complianceScore >= 85 ? 'bg-emerald-50' : complianceScore >= 65 ? 'bg-amber-50' : 'bg-red-50', stroke: complianceScore >= 85 ? '#10b981' : complianceScore >= 65 ? '#f59e0b' : '#ef4444' },
+                { label: 'Compliance', value: complianceScore, target: 85, icon: <ShieldCheck className="h-4 w-4" />, color: complianceScore >= 85 ? 'text-emerald-700' : complianceScore >= 65 ? 'text-amber-700' : 'text-red-700', bg: complianceScore >= 85 ? 'bg-emerald-50' : complianceScore >= 65 ? 'bg-amber-50' : 'bg-red-50', stroke: complianceScore >= 85 ? '#10b981' : complianceScore >= 65 ? '#f59e0b' : '#ef4444' },
               ].map((score) => (
                 <div key={score.label} className="border border-border/40 rounded-lg p-3 text-center">
                   <div className={`flex items-center justify-center h-7 w-7 rounded-lg mx-auto mb-1.5 ${score.bg} ${score.color}`}>{score.icon}</div>

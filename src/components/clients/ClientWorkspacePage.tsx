@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -43,12 +43,14 @@ import {
   TrendingDown,
   Minus,
   Separator as SeparatorIcon,
+  CircleDot,
 } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 import { useApp } from '@/contexts/AppContext';
 import type { AppView } from '@/contexts/AppContext';
-import type { Client } from '@/types/gst';
-import { formatCurrency } from '@/lib/gst-utils';
+import { formatCurrency, periodToLabel, getFilingDueDate } from '@/lib/gst-utils';
+import { useGSTStore } from '@/stores/gst-store';
+import type { SampleClient, SampleFiling, SampleValidationIssue, SampleAIInsight, SampleReconCategory } from '@/data/sample-data';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // TYPES
@@ -134,221 +136,78 @@ interface ClientWorkspaceData {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// CLIENT-SPECIFIC DATA GENERATOR
+// STATIC DATA — Documents & Activities (not yet in the store)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function generateWorkspace(client: Client | null, clientIndex: number): ClientWorkspaceData {
-  const hs = client?.healthScore ?? 75;
-  const name = client?.tradeName ?? 'Unknown Client';
-  const isHighRisk = hs < 50;
-  const isLowRisk = hs > 80;
+const CLIENT_DOCUMENTS: Record<string, DocumentEntry[]> = {
+  'client-1': [
+    { id: 'd1', name: 'Sales_Register_Jun2025.xlsx', type: 'Sales Register', uploadDate: '2025-07-01', status: 'Processed', invoicesExtracted: 47, totalRows: 342, accuracy: 98.7, size: '2.4 MB' },
+    { id: 'd2', name: 'Purchase_Register_Jun2025.pdf', type: 'Purchase Register', uploadDate: '2025-07-02', status: 'Processing', invoicesExtracted: 0, totalRows: 186, accuracy: 0, size: '1.8 MB' },
+    { id: 'd3', name: 'GSTR2A_May2025.json', type: 'GST Portal Data', uploadDate: '2025-06-15', status: 'Processed', invoicesExtracted: 38, totalRows: 38, accuracy: 100, size: '890 KB' },
+    { id: 'd4', name: 'Bank_Statement_Jun2025.pdf', type: 'Bank Statement', uploadDate: '2025-07-03', status: 'Processed', invoicesExtracted: 0, totalRows: 94, accuracy: 92.1, size: '1.1 MB' },
+    { id: 'd5', name: 'Credit_Notes_May2025.xlsx', type: 'Credit Notes', uploadDate: '2025-06-20', status: 'Error', invoicesExtracted: 0, totalRows: 0, accuracy: 0, size: '340 KB' },
+  ],
+  'client-2': [
+    { id: 'd1', name: 'Sales_Register_Jun2025.xlsx', type: 'Sales Register', uploadDate: '2025-07-01', status: 'Processed', invoicesExtracted: 32, totalRows: 256, accuracy: 96.2, size: '2.1 MB' },
+    { id: 'd2', name: 'Purchase_Register_May2025.pdf', type: 'Purchase Register', uploadDate: '2025-06-10', status: 'Processed', invoicesExtracted: 28, totalRows: 210, accuracy: 91.4, size: '1.6 MB' },
+    { id: 'd3', name: 'GSTR2B_May2025.json', type: 'GST Portal Data', uploadDate: '2025-06-14', status: 'Processed', invoicesExtracted: 25, totalRows: 25, accuracy: 100, size: '720 KB' },
+  ],
+  'client-3': [
+    { id: 'd1', name: 'Sales_Register_Jun2025.xlsx', type: 'Sales Register', uploadDate: '2025-07-01', status: 'Processed', invoicesExtracted: 19, totalRows: 148, accuracy: 97.5, size: '1.2 MB' },
+    { id: 'd2', name: 'GSTR2B_May2025.json', type: 'GST Portal Data', uploadDate: '2025-06-14', status: 'Processed', invoicesExtracted: 17, totalRows: 17, accuracy: 100, size: '520 KB' },
+  ],
+  'client-4': [
+    { id: 'd1', name: 'Sales_Register_Jun2025.xlsx', type: 'Sales Register', uploadDate: '2025-07-02', status: 'Processed', invoicesExtracted: 56, totalRows: 412, accuracy: 94.8, size: '3.2 MB' },
+    { id: 'd2', name: 'Purchase_Register_Jun2025.pdf', type: 'Purchase Register', uploadDate: '2025-07-03', status: 'Uploaded', invoicesExtracted: 0, totalRows: 0, accuracy: 0, size: '2.0 MB' },
+    { id: 'd3', name: 'GSTR1_May2025.json', type: 'GST Portal Data', uploadDate: '2025-06-12', status: 'Processed', invoicesExtracted: 48, totalRows: 48, accuracy: 100, size: '1.1 MB' },
+  ],
+};
 
-  // Client-specific return data with realistic GST details
-  const clientReturns: Record<string, ReturnEntry[]> = {
-    'Sharma Enterprises': [
-      { id: 'r1', type: 'GSTR-1', period: 'Jun 2025', filingDate: '', arn: '', status: 'Ready to File', taxAmount: 226155 },
-      { id: 'r2', type: 'GSTR-3B', period: 'Jun 2025', filingDate: '', arn: '', status: 'Draft', taxAmount: 245800 },
-      { id: 'r3', type: 'GSTR-1', period: 'May 2025', filingDate: '2025-06-10', arn: 'AA060625001234', status: 'Filed', taxAmount: 218400 },
-      { id: 'r4', type: 'GSTR-3B', period: 'May 2025', filingDate: '2025-06-18', arn: 'AA060625005678', status: 'Filed', taxAmount: 234100 },
-      { id: 'r5', type: 'GSTR-1', period: 'Apr 2025', filingDate: '2025-05-11', arn: 'AA050625003456', status: 'Filed', taxAmount: 195600 },
-      { id: 'r6', type: 'GSTR-3B', period: 'Apr 2025', filingDate: '2025-05-20', arn: 'AA050625007890', status: 'Filed', taxAmount: 210300 },
-    ],
-    'Patel & Sons': [
-      { id: 'r1', type: 'GSTR-1', period: 'Jun 2025', filingDate: '', arn: '', status: 'Draft', taxAmount: 640125 },
-      { id: 'r2', type: 'GSTR-3B', period: 'May 2025', filingDate: '', arn: '', status: 'Overdue', taxAmount: 672300 },
-      { id: 'r3', type: 'GSTR-1', period: 'May 2025', filingDate: '2025-06-09', arn: 'AA060625009012', status: 'Filed', taxAmount: 612500 },
-      { id: 'r4', type: 'GSTR-1', period: 'Apr 2025', filingDate: '2025-05-10', arn: 'AA050625011234', status: 'Filed', taxAmount: 598000 },
-      { id: 'r5', type: 'GSTR-3B', period: 'Apr 2025', filingDate: '2025-05-22', arn: 'AA050625015678', status: 'Filed', taxAmount: 634700 },
-    ],
-    'Krishna Traders': [
-      { id: 'r1', type: 'GSTR-1', period: 'Jun 2025', filingDate: '', arn: '', status: 'Ready to File', taxAmount: 110000 },
-      { id: 'r2', type: 'GSTR-3B', period: 'Jun 2025', filingDate: '', arn: '', status: 'Pending', taxAmount: 118500 },
-      { id: 'r3', type: 'GSTR-1', period: 'May 2025', filingDate: '2025-06-11', arn: 'AA060625019012', status: 'Filed', taxAmount: 105200 },
-      { id: 'r4', type: 'GSTR-3B', period: 'May 2025', filingDate: '2025-06-19', arn: 'AA060625023456', status: 'Filed', taxAmount: 112800 },
-      { id: 'r5', type: 'GSTR-1', period: 'Apr 2025', filingDate: '2025-05-11', arn: 'AA050625027890', status: 'Filed', taxAmount: 98700 },
-    ],
-    'Metro Retail': [
-      { id: 'r1', type: 'GSTR-1', period: 'Jun 2025', filingDate: '', arn: '', status: 'In Review', taxAmount: 337445 },
-      { id: 'r2', type: 'GSTR-3B', period: 'May 2025', filingDate: '', arn: '', status: 'Overdue', taxAmount: 356200 },
-      { id: 'r3', type: 'GSTR-1', period: 'May 2025', filingDate: '', arn: '', status: 'Overdue', taxAmount: 328900 },
-      { id: 'r4', type: 'GSTR-1', period: 'Apr 2025', filingDate: '2025-05-11', arn: 'AA050625031234', status: 'Filed', taxAmount: 315600 },
-      { id: 'r5', type: 'GSTR-3B', period: 'Apr 2025', filingDate: '2025-05-19', arn: 'AA050625035678', status: 'Filed', taxAmount: 342100 },
-    ],
-  };
+const DEFAULT_DOCUMENTS: DocumentEntry[] = [
+  { id: 'd1', name: 'Sales_Register_Jun2025.xlsx', type: 'Sales Register', uploadDate: '2025-07-01', status: 'Processed', invoicesExtracted: 0, totalRows: 0, accuracy: 0, size: '2.0 MB' },
+  { id: 'd2', name: 'Purchase_Register_May2025.pdf', type: 'Purchase Register', uploadDate: '2025-06-15', status: 'Processed', invoicesExtracted: 0, totalRows: 0, accuracy: 0, size: '1.5 MB' },
+];
 
-  const defaultReturns: ReturnEntry[] = [
-    { id: 'r1', type: 'GSTR-1', period: 'Jun 2025', filingDate: '', arn: '', status: isLowRisk ? 'Ready to File' : 'Draft', taxAmount: hs * 2400 },
-    { id: 'r2', type: 'GSTR-3B', period: 'Jun 2025', filingDate: '', arn: '', status: 'Pending', taxAmount: hs * 2600 },
-    { id: 'r3', type: 'GSTR-1', period: 'May 2025', filingDate: '2025-06-10', arn: 'AA060625001234', status: 'Filed', taxAmount: hs * 2300 },
-    { id: 'r4', type: 'GSTR-3B', period: 'May 2025', filingDate: '2025-06-18', arn: 'AA060625005678', status: 'Filed', taxAmount: hs * 2500 },
-    { id: 'r5', type: 'GSTR-1', period: 'Apr 2025', filingDate: '2025-05-11', arn: 'AA050625003456', status: 'Filed', taxAmount: hs * 2200 },
-  ];
+const CLIENT_ACTIVITIES: Record<string, ActivityEvent[]> = {
+  'client-1': [
+    { id: 'a1', type: 'upload', description: 'Sales_Register_Jun2025.xlsx uploaded — 342 rows, 47 invoices extracted', timestamp: '2025-07-01T09:30:00Z' },
+    { id: 'a2', type: 'upload', description: 'Purchase_Register_Jun2025.pdf uploaded — processing started', timestamp: '2025-07-02T14:20:00Z' },
+    { id: 'a3', type: 'ai_action', description: 'AI auto-drafted GSTR-1 for Jun 2025 from sales register', timestamp: '2025-07-01T10:15:00Z' },
+    { id: 'a4', type: 'recon_run', description: 'Reconciliation completed for May 2025 — 94% match rate', timestamp: '2025-06-28T11:00:00Z' },
+    { id: 'a5', type: 'filing_submitted', description: 'GSTR-1 May 2025 filed — ARN: AA060625001234', timestamp: '2025-06-10T16:45:00Z' },
+    { id: 'a6', type: 'filing_submitted', description: 'GSTR-3B May 2025 filed — ARN: AA060625005678', timestamp: '2025-06-18T15:30:00Z' },
+    { id: 'a7', type: 'upload', description: 'GSTR2A_May2025.json downloaded from portal', timestamp: '2025-06-15T08:45:00Z' },
+    { id: 'a8', type: 'user_action', description: 'Credit_Notes_May2025.xlsx upload failed — retry needed', timestamp: '2025-06-20T10:00:00Z' },
+  ],
+  'client-2': [
+    { id: 'a1', type: 'recon_run', description: 'Reconciliation completed for May 2025 — 78% match rate, 12 mismatches', timestamp: '2025-06-29T11:00:00Z' },
+    { id: 'a2', type: 'ai_action', description: 'AI flagged ₹42,560 ITC mismatch in INV-2025-1045', timestamp: '2025-06-29T11:15:00Z' },
+    { id: 'a3', type: 'filing_submitted', description: 'GSTR-1 May 2025 filed — ARN: AA060625009012', timestamp: '2025-06-09T14:30:00Z' },
+    { id: 'a4', type: 'upload', description: 'Sales_Register_Jun2025.xlsx uploaded — 256 rows, 32 invoices', timestamp: '2025-07-01T09:00:00Z' },
+    { id: 'a5', type: 'user_action', description: 'GSTR-3B May 2025 not filed — now overdue', timestamp: '2025-06-20T23:59:00Z' },
+  ],
+  'client-3': [
+    { id: 'a1', type: 'upload', description: 'Sales_Register_Jun2025.xlsx uploaded — 148 rows, 19 invoices', timestamp: '2025-07-01T09:15:00Z' },
+    { id: 'a2', type: 'ai_action', description: 'AI auto-prepared GSTR-1 Jun 2025 from validated invoices', timestamp: '2025-07-01T10:00:00Z' },
+    { id: 'a3', type: 'filing_submitted', description: 'GSTR-1 May 2025 filed — ARN: AA060625019012', timestamp: '2025-06-11T12:00:00Z' },
+    { id: 'a4', type: 'filing_submitted', description: 'GSTR-3B May 2025 filed — ARN: AA060625023456', timestamp: '2025-06-19T15:30:00Z' },
+  ],
+  'client-4': [
+    { id: 'a1', type: 'upload', description: 'Sales_Register_Jun2025.xlsx uploaded — 412 rows, 56 invoices', timestamp: '2025-07-02T09:30:00Z' },
+    { id: 'a2', type: 'upload', description: 'Purchase_Register_Jun2025.pdf uploaded — awaiting processing', timestamp: '2025-07-03T10:15:00Z' },
+    { id: 'a3', type: 'recon_run', description: 'Reconciliation completed for May 2025 — 55% match rate, 28 mismatches', timestamp: '2025-06-30T14:00:00Z' },
+    { id: 'a4', type: 'ai_action', description: 'AI flagged 2 invalid GSTINs in B2B invoices', timestamp: '2025-06-30T14:10:00Z' },
+    { id: 'a5', type: 'user_action', description: 'GSTR-1 May 2025 filing missed — now overdue by 20 days', timestamp: '2025-06-11T23:59:00Z' },
+    { id: 'a6', type: 'filing_submitted', description: 'GSTR-1 Apr 2025 filed — ARN: AA050625031234', timestamp: '2025-05-11T16:00:00Z' },
+  ],
+};
 
-  const clientDocs: Record<string, DocumentEntry[]> = {
-    'Sharma Enterprises': [
-      { id: 'd1', name: 'Sales_Register_Jun2025.xlsx', type: 'Sales Register', uploadDate: '2025-07-01', status: 'Processed', invoicesExtracted: 47, totalRows: 342, accuracy: 98.7, size: '2.4 MB' },
-      { id: 'd2', name: 'Purchase_Register_Jun2025.pdf', type: 'Purchase Register', uploadDate: '2025-07-02', status: 'Processing', invoicesExtracted: 0, totalRows: 186, accuracy: 0, size: '1.8 MB' },
-      { id: 'd3', name: 'GSTR2A_May2025.json', type: 'GST Portal Data', uploadDate: '2025-06-15', status: 'Processed', invoicesExtracted: 38, totalRows: 38, accuracy: 100, size: '890 KB' },
-      { id: 'd4', name: 'Bank_Statement_Jun2025.pdf', type: 'Bank Statement', uploadDate: '2025-07-03', status: 'Processed', invoicesExtracted: 0, totalRows: 94, accuracy: 92.1, size: '1.1 MB' },
-      { id: 'd5', name: 'Credit_Notes_May2025.xlsx', type: 'Credit Notes', uploadDate: '2025-06-20', status: 'Error', invoicesExtracted: 0, totalRows: 0, accuracy: 0, size: '340 KB' },
-    ],
-    'Patel & Sons': [
-      { id: 'd1', name: 'Sales_Register_Jun2025.xlsx', type: 'Sales Register', uploadDate: '2025-07-01', status: 'Processed', invoicesExtracted: 32, totalRows: 256, accuracy: 96.2, size: '2.1 MB' },
-      { id: 'd2', name: 'Purchase_Register_May2025.pdf', type: 'Purchase Register', uploadDate: '2025-06-10', status: 'Processed', invoicesExtracted: 28, totalRows: 210, accuracy: 91.4, size: '1.6 MB' },
-      { id: 'd3', name: 'GSTR2B_May2025.json', type: 'GST Portal Data', uploadDate: '2025-06-14', status: 'Processed', invoicesExtracted: 25, totalRows: 25, accuracy: 100, size: '720 KB' },
-    ],
-    'Metro Retail': [
-      { id: 'd1', name: 'Sales_Register_Jun2025.xlsx', type: 'Sales Register', uploadDate: '2025-07-02', status: 'Processed', invoicesExtracted: 56, totalRows: 412, accuracy: 94.8, size: '3.2 MB' },
-      { id: 'd2', name: 'Purchase_Register_Jun2025.pdf', type: 'Purchase Register', uploadDate: '2025-07-03', status: 'Uploaded', invoicesExtracted: 0, totalRows: 0, accuracy: 0, size: '2.0 MB' },
-      { id: 'd3', name: 'GSTR1_May2025.json', type: 'GST Portal Data', uploadDate: '2025-06-12', status: 'Processed', invoicesExtracted: 48, totalRows: 48, accuracy: 100, size: '1.1 MB' },
-    ],
-  };
-
-  const defaultDocs: DocumentEntry[] = [
-    { id: 'd1', name: `Sales_Register_Jun2025.xlsx`, type: 'Sales Register', uploadDate: '2025-07-01', status: isLowRisk ? 'Processed' : 'Processing', invoicesExtracted: isLowRisk ? Math.floor(hs * 0.5) : 0, totalRows: hs * 3, accuracy: isLowRisk ? 96.5 : 0, size: '2.0 MB' },
-    { id: 'd2', name: `Purchase_Register_May2025.pdf`, type: 'Purchase Register', uploadDate: '2025-06-15', status: 'Processed', invoicesExtracted: Math.floor(hs * 0.35), totalRows: hs * 2, accuracy: 92.3, size: '1.5 MB' },
-    { id: 'd3', name: `GSTR2B_May2025.json`, type: 'GST Portal Data', uploadDate: '2025-06-14', status: 'Processed', invoicesExtracted: Math.floor(hs * 0.3), totalRows: Math.floor(hs * 0.3), accuracy: 100, size: '650 KB' },
-  ];
-
-  const clientActions: Record<string, PendingAction[]> = {
-    'Sharma Enterprises': [
-      { id: 'pa1', type: 'ready_to_file', title: 'GSTR-1 Jun 2025 ready to file', description: '47 invoices validated, ₹2,26,155 total tax', dueDate: '2025-07-11', actionLabel: 'File Return', targetView: 'returns', priority: 'high' },
-      { id: 'pa2', type: 'missing_documents', title: 'Purchase register for June missing', description: 'Upload Purchase_Register_Jun2025.pdf to complete GSTR-3B preparation', actionLabel: 'Upload Document', targetView: 'invoices', priority: 'high' },
-      { id: 'pa3', type: 'recon_mismatch', title: '₹12,400 reconciliation mismatch in May', description: 'INV-2025-0782 shows Books ₹38,000 vs Portal ₹25,600 CGST', actionLabel: 'Run Reconciliation', targetView: 'reconcile', priority: 'medium' },
-    ],
-    'Patel & Sons': [
-      { id: 'pa1', type: 'gstin_error', title: '2 B2B invoices with invalid GSTIN', description: '24AABCT1234F1Z5 fails checksum in INV-2025-1045, INV-2025-1056', actionLabel: 'Review Issue', targetView: 'reconcile', priority: 'high' },
-      { id: 'pa2', type: 'recon_mismatch', title: '₹42,560 ITC mismatch detected', description: 'INV-2025-1045: Books ₹50,000 vs Portal ₹44,000. Possible partial reporting by Mahalaxmi Textiles', actionLabel: 'Run Reconciliation', targetView: 'reconcile', priority: 'high' },
-      { id: 'pa3', type: 'awaiting_review', title: 'GSTR-3B May 2025 overdue', description: 'Return was due Jun 20. Late fee accruing at ₹50/day', dueDate: '2025-06-20', actionLabel: 'Prepare Return', targetView: 'returns', priority: 'high' },
-      { id: 'pa4', type: 'missing_documents', title: 'June sales register not uploaded', description: 'Required for GSTR-1 preparation', actionLabel: 'Upload Document', targetView: 'invoices', priority: 'medium' },
-    ],
-    'Krishna Traders': [
-      { id: 'pa1', type: 'ready_to_file', title: 'GSTR-1 Jun 2025 ready to file', description: '19 invoices validated, ₹1,10,000 total tax', dueDate: '2025-07-11', actionLabel: 'File Return', targetView: 'returns', priority: 'high' },
-      { id: 'pa2', type: 'awaiting_review', title: 'GSTR-3B Jun 2025 awaiting review', description: 'Auto-prepared from GSTR-1 data. Needs manual review before filing.', actionLabel: 'Review & File', targetView: 'returns', priority: 'medium' },
-    ],
-    'Metro Retail': [
-      { id: 'pa1', type: 'gstin_error', title: 'Invalid GSTIN in 2 B2B invoices', description: '27AAACM5241Z2ZM fails checksum — INV-2025-1089, INV-2025-1092', actionLabel: 'Review Issue', targetView: 'reconcile', priority: 'high' },
-      { id: 'pa2', type: 'recon_mismatch', title: '7 reconciliation mismatches unresolved', description: 'Total tax difference: ₹89,650 across May and April returns', actionLabel: 'Run Reconciliation', targetView: 'reconcile', priority: 'high' },
-      { id: 'pa3', type: 'awaiting_review', title: 'GSTR-1 May 2025 overdue by 20 days', description: 'Late fee of ₹1,000 already accrued. File immediately.', dueDate: '2025-06-11', actionLabel: 'File Now', targetView: 'returns', priority: 'high' },
-      { id: 'pa4', type: 'missing_documents', title: 'Purchase register for June not uploaded', description: 'Required for ITC reconciliation and GSTR-3B preparation', actionLabel: 'Upload Document', targetView: 'invoices', priority: 'medium' },
-      { id: 'pa5', type: 'awaiting_review', title: 'GSTR-3B May 2025 overdue', description: 'Was due Jun 20. Late fee accruing daily.', dueDate: '2025-06-20', actionLabel: 'Prepare Return', targetView: 'returns', priority: 'high' },
-    ],
-  };
-
-  const defaultActions: PendingAction[] = [
-    { id: 'pa1', type: isLowRisk ? 'ready_to_file' : 'missing_documents', title: isLowRisk ? 'GSTR-1 Jun 2025 ready to file' : 'Sales register for June missing', description: isLowRisk ? 'All invoices validated and approved' : 'Upload required documents to proceed', dueDate: '2025-07-11', actionLabel: isLowRisk ? 'File Return' : 'Upload Document', targetView: isLowRisk ? 'returns' : 'invoices', priority: 'high' },
-    { id: 'pa2', type: 'recon_mismatch', title: `${isHighRisk ? 5 : 2} reconciliation mismatches`, description: `Tax difference of ${formatCurrency(isHighRisk ? 89000 : 12000)} needs review`, actionLabel: 'Run Reconciliation', targetView: 'reconcile', priority: isHighRisk ? 'high' : 'medium' },
-    { id: 'pa3', type: 'awaiting_review', title: 'GSTR-3B Jun 2025 pending', description: 'Awaiting review before filing', actionLabel: 'Review & File', targetView: 'returns', priority: 'medium' },
-  ];
-
-  const clientRecon: Record<string, ReconRun[]> = {
-    'Sharma Enterprises': [
-      { id: 'rc1', period: 'May 2025', matchRate: 94, mismatches: 3, missingInvoices: 1, taxDifference: 12400, runDate: '2025-06-28', status: 'Completed' },
-      { id: 'rc2', period: 'Apr 2025', matchRate: 96, mismatches: 2, missingInvoices: 0, taxDifference: 5200, runDate: '2025-05-29', status: 'Completed' },
-      { id: 'rc3', period: 'Mar 2025', matchRate: 95, mismatches: 4, missingInvoices: 1, taxDifference: 18500, runDate: '2025-04-28', status: 'Completed' },
-    ],
-    'Patel & Sons': [
-      { id: 'rc1', period: 'May 2025', matchRate: 78, mismatches: 12, missingInvoices: 5, taxDifference: 89000, runDate: '2025-06-29', status: 'Completed' },
-      { id: 'rc2', period: 'Apr 2025', matchRate: 82, mismatches: 9, missingInvoices: 4, taxDifference: 62000, runDate: '2025-05-30', status: 'Completed' },
-      { id: 'rc3', period: 'Mar 2025', matchRate: 75, mismatches: 15, missingInvoices: 6, taxDifference: 95000, runDate: '2025-04-29', status: 'Completed' },
-    ],
-    'Metro Retail': [
-      { id: 'rc1', period: 'May 2025', matchRate: 55, mismatches: 28, missingInvoices: 14, taxDifference: 345000, runDate: '2025-06-30', status: 'Completed' },
-      { id: 'rc2', period: 'Apr 2025', matchRate: 58, mismatches: 22, missingInvoices: 11, taxDifference: 280000, runDate: '2025-05-28', status: 'Completed' },
-    ],
-  };
-
-  const defaultRecon: ReconRun[] = [
-    { id: 'rc1', period: 'May 2025', matchRate: isLowRisk ? 92 : isHighRisk ? 58 : 78, mismatches: isLowRisk ? 3 : isHighRisk ? 22 : 9, missingInvoices: isLowRisk ? 1 : isHighRisk ? 11 : 4, taxDifference: isLowRisk ? 12000 : isHighRisk ? 280000 : 62000, runDate: '2025-06-28', status: 'Completed' },
-    { id: 'rc2', period: 'Apr 2025', matchRate: isLowRisk ? 94 : isHighRisk ? 55 : 80, mismatches: isLowRisk ? 2 : isHighRisk ? 28 : 8, missingInvoices: isLowRisk ? 0 : isHighRisk ? 14 : 3, taxDifference: isLowRisk ? 5000 : isHighRisk ? 345000 : 48000, runDate: '2025-05-29', status: 'Completed' },
-  ];
-
-  const clientInsights: Record<string, AIInsight[]> = {
-    'Sharma Enterprises': [
-      { id: 'ai1', severity: 'warning', title: 'GSTR-1 due in 3 days', description: 'Filing deadline Jul 11 for June 2025. Late fee ₹50/day after deadline.', suggestedAction: 'File Return', actionView: 'returns', category: 'Deadline' },
-      { id: 'ai2', severity: 'info', title: 'Purchase register for June not uploaded', description: 'Upload to complete GSTR-3B preparation. Last month took 2 days to process.', suggestedAction: 'Upload Document', actionView: 'invoices', category: 'Documents' },
-      { id: 'ai3', severity: 'info', title: '₹12,400 recon mismatch from May resolved', description: 'INV-2025-0782 discrepancy was due to credit note not reported in GSTR-1.', suggestedAction: 'View Details', actionView: 'reconcile', category: 'ITC' },
-    ],
-    'Patel & Sons': [
-      { id: 'ai1', severity: 'critical', title: '₹42,560 ITC mismatch detected', description: 'INV-2025-1045: Books ₹50,000 vs Portal ₹44,000. Possible partial reporting by supplier Mahalaxmi Textiles.', suggestedAction: 'Run Reconciliation', actionView: 'reconcile', category: 'ITC' },
-      { id: 'ai2', severity: 'critical', title: 'GSTR-3B May 2025 overdue — late fee accruing', description: '₹50/day penalty since Jun 20. Current late fee: ₹900. File immediately to stop accrual.', suggestedAction: 'File Return', actionView: 'returns', category: 'Deadline' },
-      { id: 'ai3', severity: 'warning', title: '2 GSTIN validation errors blocking filing', description: '24AABCT1234F1Z5 in INV-2025-1045 and INV-2025-1056 fails checksum. Correct before filing.', suggestedAction: 'Review Issue', actionView: 'reconcile', category: 'Validation' },
-      { id: 'ai4', severity: 'warning', title: 'Compliance score dropped from 78 to 62', description: 'Caused by 3 late filings and 2 GSTIN errors. Below 65 threshold triggers scrutiny risk.', suggestedAction: 'View Compliance', actionView: 'dashboard', category: 'Risk' },
-    ],
-    'Metro Retail': [
-      { id: 'ai1', severity: 'critical', title: 'GSTR-1 May 2025 overdue by 20 days', description: 'Late fee ₹1,000 already accrued. GSTR-3B May also overdue. Immediate action required.', suggestedAction: 'File Now', actionView: 'returns', category: 'Deadline' },
-      { id: 'ai2', severity: 'critical', title: '7 unresolved reconciliation mismatches', description: 'Total tax difference: ₹89,650. Includes INV-2025-1089 with invalid GSTIN.', suggestedAction: 'Run Reconciliation', actionView: 'reconcile', category: 'ITC' },
-      { id: 'ai3', severity: 'warning', title: 'Purchase register June not uploaded', description: 'ITC claims cannot be verified without purchase data. Risk of under-claiming ITC.', suggestedAction: 'Upload Document', actionView: 'invoices', category: 'Documents' },
-    ],
-  };
-
-  const defaultInsights: AIInsight[] = [
-    { id: 'ai1', severity: isHighRisk ? 'critical' : 'warning', title: isHighRisk ? 'Multiple filings overdue' : 'GSTR-1 due in 3 days', description: isHighRisk ? 'Late fees accruing on 2 returns. Immediate action required.' : 'Filing deadline Jul 11 for June 2025.', suggestedAction: isHighRisk ? 'File Now' : 'File Return', actionView: 'returns', category: 'Deadline' },
-    { id: 'ai2', severity: 'warning', title: `${isHighRisk ? 5 : 2} reconciliation mismatches`, description: `Total tax difference: ${formatCurrency(isHighRisk ? 89000 : 12000)}.`, suggestedAction: 'Run Reconciliation', actionView: 'reconcile', category: 'ITC' },
-    { id: 'ai3', severity: 'info', title: 'Compliance score trend', description: isLowRisk ? 'Score stable above 80. Good filing pattern.' : 'Score declining. Recent delays are impacting compliance health.', suggestedAction: 'View Details', actionView: 'dashboard', category: 'Risk' },
-  ];
-
-  const clientActivities: Record<string, ActivityEvent[]> = {
-    'Sharma Enterprises': [
-      { id: 'a1', type: 'upload', description: 'Sales_Register_Jun2025.xlsx uploaded — 342 rows, 47 invoices extracted', timestamp: '2025-07-01T09:30:00Z' },
-      { id: 'a2', type: 'upload', description: 'Purchase_Register_Jun2025.pdf uploaded — processing started', timestamp: '2025-07-02T14:20:00Z' },
-      { id: 'a3', type: 'ai_action', description: 'AI auto-drafted GSTR-1 for Jun 2025 from sales register', timestamp: '2025-07-01T10:15:00Z' },
-      { id: 'a4', type: 'recon_run', description: 'Reconciliation completed for May 2025 — 94% match rate', timestamp: '2025-06-28T11:00:00Z' },
-      { id: 'a5', type: 'filing_submitted', description: 'GSTR-1 May 2025 filed — ARN: AA060625001234', timestamp: '2025-06-10T16:45:00Z' },
-      { id: 'a6', type: 'filing_submitted', description: 'GSTR-3B May 2025 filed — ARN: AA060625005678', timestamp: '2025-06-18T15:30:00Z' },
-      { id: 'a7', type: 'upload', description: 'GSTR2A_May2025.json downloaded from portal', timestamp: '2025-06-15T08:45:00Z' },
-      { id: 'a8', type: 'user_action', description: 'Credit_Notes_May2025.xlsx upload failed — retry needed', timestamp: '2025-06-20T10:00:00Z' },
-    ],
-    'Patel & Sons': [
-      { id: 'a1', type: 'recon_run', description: 'Reconciliation completed for May 2025 — 78% match rate, 12 mismatches', timestamp: '2025-06-29T11:00:00Z' },
-      { id: 'a2', type: 'ai_action', description: 'AI flagged ₹42,560 ITC mismatch in INV-2025-1045', timestamp: '2025-06-29T11:15:00Z' },
-      { id: 'a3', type: 'filing_submitted', description: 'GSTR-1 May 2025 filed — ARN: AA060625009012', timestamp: '2025-06-09T14:30:00Z' },
-      { id: 'a4', type: 'upload', description: 'Sales_Register_Jun2025.xlsx uploaded — 256 rows, 32 invoices', timestamp: '2025-07-01T09:00:00Z' },
-      { id: 'a5', type: 'user_action', description: 'GSTR-3B May 2025 not filed — now overdue', timestamp: '2025-06-20T23:59:00Z' },
-    ],
-    'Metro Retail': [
-      { id: 'a1', type: 'upload', description: 'Sales_Register_Jun2025.xlsx uploaded — 412 rows, 56 invoices', timestamp: '2025-07-02T09:30:00Z' },
-      { id: 'a2', type: 'upload', description: 'Purchase_Register_Jun2025.pdf uploaded — awaiting processing', timestamp: '2025-07-03T10:15:00Z' },
-      { id: 'a3', type: 'recon_run', description: 'Reconciliation completed for May 2025 — 55% match rate, 28 mismatches', timestamp: '2025-06-30T14:00:00Z' },
-      { id: 'a4', type: 'ai_action', description: 'AI flagged 2 invalid GSTINs in B2B invoices', timestamp: '2025-06-30T14:10:00Z' },
-      { id: 'a5', type: 'user_action', description: 'GSTR-1 May 2025 filing missed — now overdue by 20 days', timestamp: '2025-06-11T23:59:00Z' },
-      { id: 'a6', type: 'filing_submitted', description: 'GSTR-1 Apr 2025 filed — ARN: AA050625031234', timestamp: '2025-05-11T16:00:00Z' },
-    ],
-  };
-
-  const defaultActivities: ActivityEvent[] = [
-    { id: 'a1', type: 'upload', description: `Sales_Register_Jun2025.xlsx uploaded`, timestamp: '2025-07-01T09:30:00Z' },
-    { id: 'a2', type: 'recon_run', description: `Reconciliation completed for May 2025 — ${isLowRisk ? '94' : isHighRisk ? '58' : '78'}% match rate`, timestamp: '2025-06-28T11:00:00Z' },
-    { id: 'a3', type: 'filing_submitted', description: 'GSTR-1 May 2025 filed', timestamp: '2025-06-10T16:45:00Z' },
-    { id: 'a4', type: 'ai_action', description: 'AI auto-drafted GSTR-1 from sales register data', timestamp: '2025-07-01T10:00:00Z' },
-    { id: 'a5', type: 'user_action', description: 'GSTR-3B May 2025 filed', timestamp: '2025-06-18T15:30:00Z' },
-  ];
-
-  const riskLevel: 'Low' | 'Medium' | 'High' | 'Critical' = isLowRisk ? 'Low' : hs >= 50 ? 'Medium' : hs >= 30 ? 'High' : 'Critical';
-  const matchRate = isLowRisk ? 94 : isHighRisk ? 58 : 78;
-  const pendingReturns = clientReturns[name]?.filter(r => r.status !== 'Filed').length ?? (isLowRisk ? 2 : isHighRisk ? 4 : 3);
-  const openIssues = isLowRisk ? 2 : isHighRisk ? 8 : 5;
-  const taxVolume = isLowRisk ? 450000 : isHighRisk ? 650000 : 300000;
-  const docsUploaded = clientDocs[name]?.length ?? 3;
-
-  return {
-    complianceScore: hs,
-    riskLevel,
-    filingFrequency: client?.returnPeriod === 'quarterly' ? 'Quarterly' : 'Monthly',
-    lastFilingDate: client?.lastFilingDate ?? '2025-05-11',
-    matchRate,
-    pendingReturns,
-    openIssues,
-    taxVolume,
-    documentsUploaded: docsUploaded,
-    returns: clientReturns[name] ?? defaultReturns,
-    pendingActions: clientActions[name] ?? defaultActions,
-    documents: clientDocs[name] ?? defaultDocs,
-    reconRuns: clientRecon[name] ?? defaultRecon,
-    insights: clientInsights[name] ?? defaultInsights,
-    activities: clientActivities[name] ?? defaultActivities,
-  };
-}
+const DEFAULT_ACTIVITIES: ActivityEvent[] = [
+  { id: 'a1', type: 'upload', description: 'Sales_Register_Jun2025.xlsx uploaded', timestamp: '2025-07-01T09:30:00Z' },
+  { id: 'a2', type: 'recon_run', description: 'Reconciliation completed for May 2025', timestamp: '2025-06-28T11:00:00Z' },
+  { id: 'a3', type: 'filing_submitted', description: 'GSTR-1 May 2025 filed', timestamp: '2025-06-10T16:45:00Z' },
+  { id: 'a4', type: 'ai_action', description: 'AI auto-drafted GSTR-1 from sales register data', timestamp: '2025-07-01T10:00:00Z' },
+];
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // HELPER FUNCTIONS
@@ -444,6 +303,100 @@ function formatRelativeTime(timestamp: string): string {
 function formatFileSize(size: string): string { return size; }
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// STORE → WORKSPACE DERIVATION HELPERS
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const SIMULATED_NOW = new Date('2025-07-08T12:00:00Z');
+
+/** Check if a filing period is overdue relative to the simulated current date */
+function isFilingOverdue(period: string): boolean {
+  const dueDate = new Date(getFilingDueDate('GSTR-1', period));
+  return SIMULATED_NOW > dueDate;
+}
+
+/** Map store filing status to UI ReturnEntry status */
+function mapFilingStatus(filing: SampleFiling): ReturnEntry['status'] {
+  if (filing.status === 'filed') return 'Filed';
+
+  const readyStatuses: SampleFiling['status'][] = ['validated', 'reviewed', 'generated'];
+  if (readyStatuses.includes(filing.status)) {
+    // Even "ready" filings can be overdue
+    return isFilingOverdue(filing.period) ? 'Overdue' : 'Ready to File';
+  }
+
+  // draft, prepared, reopened
+  return isFilingOverdue(filing.period) ? 'Overdue' : 'Draft';
+}
+
+/** Derive recon runs from store summary data */
+function deriveReconRuns(summary: SampleReconCategory[], healthScore: number): ReconRun[] {
+  if (summary.length === 0) {
+    // Fallback based on health score
+    const isLowRisk = healthScore > 80;
+    const isHighRisk = healthScore < 50;
+    return [
+      { id: 'rc1', period: 'May 2025', matchRate: isLowRisk ? 92 : isHighRisk ? 58 : 78, mismatches: isLowRisk ? 3 : isHighRisk ? 22 : 9, missingInvoices: isLowRisk ? 1 : isHighRisk ? 11 : 4, taxDifference: isLowRisk ? 12000 : isHighRisk ? 280000 : 62000, runDate: '2025-06-28', status: 'Completed' },
+      { id: 'rc2', period: 'Apr 2025', matchRate: isLowRisk ? 94 : isHighRisk ? 55 : 80, mismatches: isLowRisk ? 2 : isHighRisk ? 28 : 8, missingInvoices: isLowRisk ? 0 : isHighRisk ? 14 : 3, taxDifference: isLowRisk ? 5000 : isHighRisk ? 345000 : 48000, runDate: '2025-05-29', status: 'Completed' },
+    ];
+  }
+
+  const total = summary.reduce((sum, c) => sum + c.count, 0);
+  const perfectMatch = summary.find(c => c.label === 'Perfect Match');
+  const matchRate = perfectMatch && total > 0 ? Math.round((perfectMatch.count / total) * 100) : 0;
+  const mismatches = summary.filter(c => ['Mismatch', 'Partial Match'].includes(c.label)).reduce((sum, c) => sum + c.count, 0);
+  const missingInvoices = summary.filter(c => c.label.includes('Missing')).reduce((sum, c) => sum + c.count, 0);
+  const taxDifference = summary.filter(c => c.label !== 'Perfect Match').reduce((sum, c) => sum + c.amount, 0);
+
+  return [
+    { id: 'rc1', period: 'May 2025', matchRate, mismatches, missingInvoices, taxDifference, runDate: '2025-06-28', status: 'Completed' as const },
+    { id: 'rc2', period: 'Apr 2025', matchRate: Math.min(100, matchRate + 2), mismatches: Math.max(0, mismatches - 1), missingInvoices: Math.max(0, missingInvoices - 1), taxDifference: Math.round(taxDifference * 0.7), runDate: '2025-05-29', status: 'Completed' as const },
+  ];
+}
+
+/** Compute overall match rate from recon summary */
+function computeMatchRate(summary: SampleReconCategory[], healthScore: number): number {
+  if (summary.length === 0) {
+    if (healthScore > 80) return 94;
+    if (healthScore < 50) return 58;
+    return 78;
+  }
+  const total = summary.reduce((sum, c) => sum + c.count, 0);
+  const perfectMatch = summary.find(c => c.label === 'Perfect Match');
+  return perfectMatch && total > 0 ? Math.round((perfectMatch.count / total) * 100) : 0;
+}
+
+/** Map issue category to pending action type */
+function issueCategoryToActionType(category: string): PendingAction['type'] {
+  const lower = category.toLowerCase();
+  if (lower.includes('gstin') || lower.includes('invalid')) return 'gstin_error';
+  if (lower.includes('missing') || lower.includes('mandatory') || lower.includes('hsn')) return 'missing_documents';
+  if (lower.includes('duplicate') || lower.includes('calculation') || lower.includes('tax')) return 'recon_mismatch';
+  return 'awaiting_review';
+}
+
+/** Map AI insight type to action view */
+function insightTypeToActionView(type: SampleAIInsight['type']): AppView {
+  switch (type) {
+    case 'risk_alert': return 'reconcile';
+    case 'missing_doc': return 'invoices';
+    case 'tax_anomaly': return 'reconcile';
+    case 'filing_rec': return 'returns';
+    default: return 'dashboard';
+  }
+}
+
+/** Map AI insight type to category label */
+function insightTypeToCategory(type: SampleAIInsight['type']): string {
+  switch (type) {
+    case 'risk_alert': return 'Risk';
+    case 'missing_doc': return 'Documents';
+    case 'tax_anomaly': return 'ITC';
+    case 'filing_rec': return 'Deadline';
+    default: return 'General';
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // SVG Health Ring
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -487,56 +440,182 @@ const fadeUp = {
 
 export default function ClientWorkspacePage() {
   const { selectedClientId, setCurrentView, setSelectedClientId, setReturnPrepCtx } = useApp();
-  const [clientData, setClientData] = useState<Client | null>(null);
-  const [clientIndex, setClientIndex] = useState(0);
-  const [loading, setLoading] = useState(true);
+  const store = useGSTStore();
   const [returnFilter, setReturnFilter] = useState('all');
 
-  // Fetch client
-  const fetchClient = useCallback(async () => {
-    if (!selectedClientId) { setLoading(false); return; }
-    try {
-      setLoading(true);
-      const res = await fetch('/api/clients');
-      if (res.ok) {
-        const data = await res.json();
-        const clients: Client[] = data.clients ?? [];
-        const idx = clients.findIndex((c: Client) => c.id === selectedClientId);
-        setClientIndex(idx >= 0 ? idx : 0);
-        setClientData(clients[idx >= 0 ? idx : 0] ?? null);
+  // ─── Derive client from store ────────────────────────────────────────────
+  // Try direct ID match first, then fall back to finding by index from clients array
+  const client = useMemo(() => {
+    if (!selectedClientId) return undefined;
+    // Direct lookup
+    const direct = store.getClient(selectedClientId);
+    if (direct) return direct;
+    // Fallback: try to find by matching against known client IDs
+    // The registry page may use different IDs (cl_001 vs client-1)
+    // Try extracting a numeric index and mapping to store format
+    const numMatch = selectedClientId.match(/(\d+)/);
+    if (numMatch) {
+      const idx = parseInt(numMatch[1], 10) - 1;
+      if (idx >= 0 && idx < store.clients.length) {
+        return store.clients[idx];
       }
-    } catch {
-      // silent fallback
-    } finally {
-      setLoading(false);
     }
-  }, [selectedClientId]);
+    // Last resort: return first client
+    return store.clients[0];
+  }, [selectedClientId, store]);
 
-  useEffect(() => { fetchClient(); }, [fetchClient]);
+  // ─── Derive all workspace data reactively from the store ─────────────────
+  const workspace = useMemo<ClientWorkspaceData | null>(() => {
+    if (!client) return null;
+    const clientId = client.id;
+    const hs = client.healthScore;
 
-  const workspace = useMemo(() => generateWorkspace(clientData, clientIndex), [clientData, clientIndex]);
-  const name = clientData?.tradeName ?? 'Unknown Client';
+    // ── Filings → Returns ──
+    const filings = store.getFilingsForClient(clientId);
+    const returns: ReturnEntry[] = filings.map(f => ({
+      id: f.id,
+      type: f.returnType,
+      period: periodToLabel(f.period),
+      filingDate: f.filedDate ?? '',
+      arn: f.acknowledgmentNumber ?? '',
+      status: mapFilingStatus(f),
+      taxAmount: f.totalTax,
+    }));
+
+    // ── Issues → Pending Actions ──
+    const issues = store.getIssuesForClient(clientId);
+    const issueActions: PendingAction[] = issues
+      .filter(i => !i.resolved)
+      .map(i => {
+        const actionType = issueCategoryToActionType(i.category);
+        const priority: PendingAction['priority'] =
+          i.severity === 'critical' ? 'high' : i.severity === 'warning' ? 'medium' : 'low';
+        const targetView: AppView =
+          actionType === 'gstin_error' || actionType === 'recon_mismatch' ? 'reconcile'
+          : actionType === 'missing_documents' ? 'invoices'
+          : 'returns';
+        return {
+          id: i.id,
+          type: actionType,
+          title: i.category,
+          description: i.description,
+          actionLabel: i.fixAction,
+          targetView,
+          priority,
+        };
+      });
+
+    // Ready-to-file actions from filings
+    const readyStatuses: SampleFiling['status'][] = ['validated', 'reviewed', 'generated'];
+    const readyFilings = filings.filter(f => readyStatuses.includes(f.status));
+    const readyActions: PendingAction[] = readyFilings.map(f => ({
+      id: `ready-${f.id}`,
+      type: 'ready_to_file' as const,
+      title: `${f.returnType} ${periodToLabel(f.period)} ready to file`,
+      description: `${f.readyForFiling} invoices validated, ${formatCurrency(f.totalTax)} total tax`,
+      dueDate: getFilingDueDate(f.returnType, f.period),
+      actionLabel: 'File Return',
+      targetView: 'returns' as AppView,
+      priority: 'high' as const,
+    }));
+
+    // Overdue filing actions (not already ready-to-file)
+    const overdueFilings = filings.filter(f => f.status !== 'filed' && isFilingOverdue(f.period) && !readyStatuses.includes(f.status));
+    const overdueActions: PendingAction[] = overdueFilings.map(f => ({
+      id: `overdue-${f.id}`,
+      type: 'awaiting_review' as const,
+      title: `${f.returnType} ${periodToLabel(f.period)} overdue`,
+      description: `Return was due ${new Date(getFilingDueDate(f.returnType, f.period)).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}. Late fee may be accruing.`,
+      dueDate: getFilingDueDate(f.returnType, f.period),
+      actionLabel: 'Prepare Return',
+      targetView: 'returns' as AppView,
+      priority: 'high' as const,
+    }));
+
+    // Combine: ready first, then issues sorted by priority, then overdue
+    const pendingActions: PendingAction[] = [
+      ...readyActions,
+      ...issueActions.sort((a, b) => (a.priority === 'high' ? -1 : b.priority === 'high' ? 1 : 0)),
+      ...overdueActions,
+    ];
+
+    // ── Documents (static per-client) ──
+    const documents = CLIENT_DOCUMENTS[clientId] ?? DEFAULT_DOCUMENTS;
+
+    // ── Reconciliation Runs ──
+    const reconSummary = store.getReconSummary(clientId);
+    const reconRuns = deriveReconRuns(reconSummary, hs);
+
+    // ── AI Insights ──
+    const storeInsights = store.getInsightsForClient(clientId);
+    const insights: AIInsight[] = storeInsights
+      .filter(i => !i.dismissed)
+      .map(i => ({
+        id: i.id,
+        severity: i.urgency === 'high' ? 'critical' as const : i.urgency === 'medium' ? 'warning' as const : 'info' as const,
+        title: i.title,
+        description: i.description,
+        suggestedAction: i.suggestedAction,
+        actionView: insightTypeToActionView(i.type),
+        category: insightTypeToCategory(i.type),
+      }));
+
+    // ── Activities (static per-client) ──
+    const activities = CLIENT_ACTIVITIES[clientId] ?? DEFAULT_ACTIVITIES;
+
+    // ── Computed metrics ──
+    const isLowRisk = hs > 80;
+    const isHighRisk = hs < 50;
+    const riskLevel: ClientWorkspaceData['riskLevel'] =
+      isLowRisk ? 'Low' : hs >= 50 ? 'Medium' : hs >= 30 ? 'High' : 'Critical';
+    const matchRate = computeMatchRate(reconSummary, hs);
+    const pendingReturns = filings.filter(f => f.status !== 'filed').length;
+    const openIssues = issues.filter(i => !i.resolved).length;
+    const taxVolume = filings.reduce((sum, f) => sum + f.totalTax, 0);
+
+    return {
+      complianceScore: hs,
+      riskLevel,
+      filingFrequency: client.returnPeriod === 'quarterly' ? 'Quarterly' : 'Monthly',
+      lastFilingDate: client.lastFilingDate ?? '2025-05-11',
+      matchRate,
+      pendingReturns,
+      openIssues,
+      taxVolume,
+      documentsUploaded: documents.length,
+      returns,
+      pendingActions,
+      documents,
+      reconRuns,
+      insights,
+      activities,
+    };
+  }, [client, store]);
+
+  const name = client?.tradeName ?? 'Unknown Client';
 
   // Filter returns
   const filteredReturns = useMemo(() => {
+    if (!workspace) return [];
     if (returnFilter === 'all') return workspace.returns;
     return workspace.returns.filter(r => r.type === returnFilter);
-  }, [workspace.returns, returnFilter]);
+  }, [workspace, returnFilter]);
 
   const handleBack = () => { setSelectedClientId(null); setCurrentView('clients'); };
   const handleAction = (view: AppView) => setCurrentView(view);
 
   const handleOpenReturnPrep = (returnType: 'GSTR-1' | 'GSTR-3B' = 'GSTR-1') => {
+    const resolvedId = client?.id ?? selectedClientId ?? 'client-1';
     setReturnPrepCtx({
-      clientId: selectedClientId,
+      clientId: resolvedId,
       returnType,
       period: '2025-06',
     });
     setCurrentView('return-prep');
   };
 
-  // Loading
-  if (loading) {
+  // No client selected or not found
+  if (!selectedClientId || !client || !workspace) {
     return (
       <div className="max-w-6xl mx-auto px-4 md:px-6 py-6 space-y-6">
         <Skeleton className="h-6 w-40" />
@@ -578,18 +657,18 @@ export default function ClientWorkspacePage() {
                   <h1 className="text-xl font-semibold text-foreground tracking-tight">{name}</h1>
                   {getRiskBadge(workspace.riskLevel)}
                 </div>
-                {clientData?.legalName && <p className="text-sm text-muted-foreground mt-0.5">{clientData.legalName}</p>}
+                {client.legalName && <p className="text-sm text-muted-foreground mt-0.5">{client.legalName}</p>}
 
                 {/* Key info row */}
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 mt-2.5">
                   <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                     <Building2 className="size-3 text-slate-400" />
-                    <span className="font-mono font-medium text-foreground">{clientData?.gstin ?? '00AAAAA0000A0AA'}</span>
+                    <span className="font-mono font-medium text-foreground">{client.gstin}</span>
                   </div>
                   <Separator orientation="vertical" className="h-3.5" />
                   <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                     <MapPin className="size-3 text-slate-400" />
-                    <span>{clientData?.state ?? 'Unknown'}</span>
+                    <span>{client.state}</span>
                   </div>
                   <Separator orientation="vertical" className="h-3.5" />
                   <span className="text-xs text-muted-foreground">

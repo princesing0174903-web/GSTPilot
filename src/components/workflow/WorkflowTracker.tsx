@@ -204,34 +204,58 @@ export default function WorkflowTracker({
     setCurrentView(step.targetView);
   };
 
-  // ── Compact mode: Horizontal bar for page header ──
+  // ── Compact mode: Clean horizontal progress bar ──
   if (compact) {
+    const overallProgress = Math.round(Object.values(progress).reduce((a, b) => a + b, 0) / 7);
+    const completedSteps = Object.values(progress).filter(v => v >= 100).length;
+
     return (
       <TooltipProvider delayDuration={200}>
-        <div className="flex items-center gap-1 sm:gap-1.5 w-full overflow-x-auto py-1 scrollbar-none">
-          {WORKFLOW_STEPS.map((step, idx) => {
-            const stepProgress = progress[step.id];
-            const status = getStepStatus(idx, currentStepIndex, stepProgress);
-            const isBottleneck = bottleneck === step.id;
-            const Icon = step.icon;
-            const isActive = status === 'active';
-            const isCompleted = status === 'completed';
+        <div className="flex items-center gap-3 py-1.5 w-full">
+          {/* Overall progress bar */}
+          <div className="flex-1">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-[10px] font-semibold text-emerald-700 uppercase tracking-wider">
+                Filing Workflow
+              </span>
+              <span className="text-[10px] font-medium text-muted-foreground">
+                {completedSteps}/7 complete · {overallProgress}%
+              </span>
+            </div>
+            <div className="h-2 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+              <motion.div
+                className={`h-full rounded-full ${overallProgress >= 70 ? 'bg-emerald-500' : overallProgress >= 40 ? 'bg-amber-400' : 'bg-red-400'}`}
+                initial={{ width: 0 }}
+                animate={{ width: `${overallProgress}%` }}
+                transition={{ duration: 0.8, ease: 'easeOut' }}
+              />
+            </div>
+          </div>
 
-            return (
-              <React.Fragment key={step.id}>
-                <Tooltip>
+          {/* Step indicators — icons only with tooltip */}
+          <div className="flex items-center gap-0.5 shrink-0">
+            {WORKFLOW_STEPS.map((step, idx) => {
+              const stepProgress = progress[step.id];
+              const status = getStepStatus(idx, currentStepIndex, stepProgress);
+              const isBottleneck = bottleneck === step.id;
+              const Icon = step.icon;
+              const isActive = status === 'active';
+              const isCompleted = status === 'completed';
+
+              return (
+                <Tooltip key={step.id}>
                   <TooltipTrigger asChild>
                     <button
                       onClick={() => handleStepClick(step)}
                       className={`
-                        flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-md text-[11px] sm:text-xs font-medium transition-all duration-200 shrink-0 whitespace-nowrap
+                        flex items-center justify-center h-6 w-6 rounded-md transition-all duration-200
                         ${isActive
-                          ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-sm dark:bg-emerald-950/30 dark:text-emerald-400 dark:border-emerald-800'
+                          ? 'bg-emerald-600 text-white shadow-sm'
                           : isCompleted
-                          ? 'bg-emerald-50/50 text-emerald-600 border border-emerald-100 dark:bg-emerald-950/20 dark:text-emerald-500 dark:border-emerald-900'
+                          ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/50 dark:text-emerald-400'
                           : isBottleneck
-                          ? 'bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/30 dark:text-amber-400 dark:border-amber-800'
-                          : 'bg-slate-50 text-slate-500 border border-slate-100 hover:bg-slate-100 dark:bg-slate-900/30 dark:text-slate-400 dark:border-slate-800 dark:hover:bg-slate-800/50'
+                          ? 'bg-amber-100 text-amber-600 dark:bg-amber-900/50 dark:text-amber-400'
+                          : 'bg-slate-100 text-slate-400 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-500 dark:hover:bg-slate-700'
                         }
                       `}
                     >
@@ -244,27 +268,18 @@ export default function WorkflowTracker({
                       ) : (
                         <Icon className="h-3 w-3" />
                       )}
-                      <span className="hidden md:inline">{step.shortLabel}</span>
-                      <span className="md:hidden">{step.shortLabel.slice(0, 3)}</span>
-                      {stepProgress > 0 && stepProgress < 100 && (
-                        <span className={`text-[9px] sm:text-[10px] font-semibold ${isActive ? 'text-emerald-600 dark:text-emerald-400' : isBottleneck ? 'text-amber-600' : 'text-slate-400'}`}>
-                          {stepProgress}%
-                        </span>
-                      )}
                     </button>
                   </TooltipTrigger>
                   <TooltipContent side="bottom" className="text-xs">
-                    <p className="font-medium">{step.label}</p>
+                    <p className="font-semibold">{step.label}</p>
                     <p className="text-muted-foreground">{step.description}</p>
-                    <p className="mt-1">Progress: {stepProgress}%</p>
+                    <p className="mt-1 font-medium">{stepProgress}% complete</p>
+                    {isBottleneck && <p className="text-amber-600 mt-0.5">⚠ Bottleneck</p>}
                   </TooltipContent>
                 </Tooltip>
-                {idx < WORKFLOW_STEPS.length - 1 && (
-                  <ChevronRight className="h-3 w-3 text-slate-300 dark:text-slate-600 shrink-0" />
-                )}
-              </React.Fragment>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
       </TooltipProvider>
     );

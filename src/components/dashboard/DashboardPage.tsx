@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -30,8 +30,9 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useApp } from '@/contexts/AppContext';
-import type { GSTRFiling, Client, DashboardMetrics } from '@/types/gst';
-import { formatCurrency, periodToLabel, isOverdue } from '@/lib/gst-utils';
+import type { AppView } from '@/contexts/AppContext';
+import { useGSTStore } from '@/stores/gst-store';
+import { formatCurrency, periodToLabel, isOverdue, getFilingDueDate } from '@/lib/gst-utils';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // TYPES
@@ -111,277 +112,13 @@ interface AIRecommendation {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// MOCK / FALLBACK DATA — Realistic Indian GST business data (June 2025)
+// CONSTANTS & STATIC DATA
 // ═══════════════════════════════════════════════════════════════════════════════
 
 const CURRENT_PERIOD = '2025-06';
 
-const mockMetrics: MetricCard[] = [
-  {
-    id: 'ready',
-    label: 'Ready to File',
-    value: 5,
-    icon: <ShieldCheck className="h-4 w-4" />,
-    iconColor: 'text-emerald-600',
-    iconBg: 'bg-emerald-50',
-    subtitle: 'Validated & approved',
-  },
-  {
-    id: 'critical',
-    label: 'Critical Issues',
-    value: 4,
-    icon: <AlertOctagon className="h-4 w-4" />,
-    iconColor: 'text-red-600',
-    iconBg: 'bg-red-50',
-    subtitle: 'Blocking 3 filings',
-  },
-  {
-    id: 'pending',
-    label: 'Pending Returns',
-    value: 11,
-    icon: <Clock className="h-4 w-4" />,
-    iconColor: 'text-amber-600',
-    iconBg: 'bg-amber-50',
-    subtitle: 'Due this month',
-  },
-  {
-    id: 'filed',
-    label: 'Filed This Month',
-    value: 5,
-    icon: <CheckCircle2 className="h-4 w-4" />,
-    iconColor: 'text-emerald-600',
-    iconBg: 'bg-emerald-50',
-    subtitle: 'of 16 total',
-  },
-];
-
-const mockPriorities: PriorityItem[] = [
-  {
-    id: 'p1',
-    clientName: 'Sharma Enterprises',
-    clientInitials: 'SE',
-    clientId: 'client-1',
-    returnType: 'GSTR-1',
-    period: '2025-06',
-    dueDate: '2025-07-11',
-    daysRemaining: 3,
-    urgency: 'due-soon',
-    reason: 'GSTR-1 due in 3 days — 47 invoices ready',
-    actionLabel: 'File Return',
-    actionView: 'returns',
-  },
-  {
-    id: 'p2',
-    clientName: 'Krishna Traders',
-    clientInitials: 'KT',
-    clientId: 'client-3',
-    returnType: 'GSTR-1',
-    period: '2025-05',
-    dueDate: '2025-06-11',
-    daysRemaining: -3,
-    urgency: 'overdue',
-    reason: 'GSTR-1 overdue by 3 days — late fee accruing',
-    actionLabel: 'File Now',
-    actionView: 'returns',
-  },
-  {
-    id: 'p3',
-    clientName: 'Patel & Sons',
-    clientInitials: 'PS',
-    clientId: 'client-2',
-    returnType: 'GSTR-3B',
-    period: '2025-06',
-    dueDate: '2025-07-20',
-    daysRemaining: 12,
-    urgency: 'upcoming',
-    reason: '₹2,40,650 ITC mismatch needs resolution',
-    actionLabel: 'Review Issue',
-    actionView: 'reconcile',
-  },
-  {
-    id: 'p4',
-    clientName: 'Metro Retail',
-    clientInitials: 'MR',
-    clientId: 'client-4',
-    returnType: 'GSTR-1',
-    period: '2025-06',
-    dueDate: '2025-07-11',
-    daysRemaining: 3,
-    urgency: 'due-soon',
-    reason: '2 GSTIN validation errors blocking filing',
-    actionLabel: 'Review Issue',
-    actionView: 'reconcile',
-  },
-  {
-    id: 'p5',
-    clientName: 'Gupta Manufacturing',
-    clientInitials: 'GM',
-    clientId: 'client-6',
-    returnType: 'GSTR-1',
-    period: '2025-06',
-    dueDate: '2025-07-11',
-    daysRemaining: 3,
-    urgency: 'due-soon',
-    reason: 'Ready to file — 32 invoices, ₹12.87L tax',
-    actionLabel: 'File Return',
-    actionView: 'returns',
-  },
-];
-
-const mockReadyToFile: ReadyToFileItem[] = [
-  {
-    id: 'rf1',
-    clientId: 'client-1',
-    clientName: 'Sharma Enterprises',
-    clientInitials: 'SE',
-    returnType: 'GSTR-1',
-    invoiceCount: 47,
-    taxAmount: 452310,
-    period: '2025-06',
-  },
-  {
-    id: 'rf2',
-    clientId: 'client-6',
-    clientName: 'Gupta Manufacturing',
-    clientInitials: 'GM',
-    returnType: 'GSTR-1',
-    invoiceCount: 32,
-    taxAmount: 1287650,
-    period: '2025-06',
-  },
-  {
-    id: 'rf3',
-    clientId: 'client-5',
-    clientName: 'Sunrise Exports',
-    clientInitials: 'SX',
-    returnType: 'GSTR-1',
-    invoiceCount: 19,
-    taxAmount: 893420,
-    period: '2025-06',
-  },
-  {
-    id: 'rf4',
-    clientId: 'client-4',
-    clientName: 'Metro Retail',
-    clientInitials: 'MR',
-    returnType: 'GSTR-3B',
-    invoiceCount: 56,
-    taxAmount: 674890,
-    period: '2025-06',
-  },
-  {
-    id: 'rf5',
-    clientId: 'client-2',
-    clientName: 'Patel & Sons',
-    clientInitials: 'PS',
-    returnType: 'GSTR-1',
-    invoiceCount: 23,
-    taxAmount: 341200,
-    period: '2025-06',
-  },
-];
-
-const mockBlockingIssues: BlockingIssue[] = [
-  {
-    id: 'bi1',
-    clientId: 'client-4',
-    clientName: 'Metro Retail',
-    clientInitials: 'MR',
-    category: 'gstin_error',
-    title: 'Invalid GSTIN in 2 B2B invoices',
-    detail: '27AAACM5241Z2ZM fails checksum — buyer GSTIN in INV-2025-1089, INV-2025-1092',
-    invoiceRef: 'INV-2025-1089',
-    actionLabel: 'Review Issue',
-    actionView: 'reconcile',
-  },
-  {
-    id: 'bi2',
-    clientId: 'client-2',
-    clientName: 'Patel & Sons',
-    clientInitials: 'PS',
-    category: 'recon_mismatch',
-    title: '₹42,560 ITC mismatch on INV-2025-1045',
-    detail: 'Books: ₹25,000 CGST + ₹25,000 SGST. Portal: ₹22,000 CGST + ₹22,000 SGST. Difference: ₹6,000',
-    invoiceRef: 'INV-2025-1045',
-    amount: 42560,
-    actionLabel: 'Run Reconciliation',
-    actionView: 'reconcile',
-  },
-  {
-    id: 'bi3',
-    clientId: 'client-7',
-    clientName: 'Apex Logistics',
-    clientInitials: 'AL',
-    category: 'missing_invoice',
-    title: '4 invoices missing from GSTR-2B',
-    detail: 'Purchase invoices from May 2025 not reflected in GSTR-2B. Vendors may not have filed.',
-    actionLabel: 'Upload Missing Document',
-    actionView: 'invoices',
-  },
-  {
-    id: 'bi4',
-    clientId: 'client-3',
-    clientName: 'Krishna Traders',
-    clientInitials: 'KT',
-    category: 'validation_failure',
-    title: 'HSN code validation failed for 3 line items',
-    detail: 'HSN codes 8471, 8517, 8528 returned invalid in GSTR-1 JSON schema validation',
-    actionLabel: 'Review Issue',
-    actionView: 'returns',
-  },
-  {
-    id: 'bi5',
-    clientId: 'client-8',
-    clientName: 'RK Electronics',
-    clientInitials: 'RK',
-    category: 'recon_mismatch',
-    title: '₹18,240 tax difference in INV-2025-0923',
-    detail: 'Books: ₹54,720 IGST. Portal: ₹36,480 IGST. Possible partial reporting by supplier.',
-    invoiceRef: 'INV-2025-0923',
-    amount: 18240,
-    actionLabel: 'Run Reconciliation',
-    actionView: 'reconcile',
-  },
-];
-
-const mockRecentUploads: RecentUpload[] = [
-  {
-    id: 'u1',
-    filename: 'Sales_Register_Jun2025.xlsx',
-    uploadTime: '2 hours ago',
-    status: 'extracted',
-    clientName: 'Sharma Enterprises',
-    rowCount: 342,
-    invoiceCount: 47,
-    accuracy: 98.7,
-  },
-  {
-    id: 'u2',
-    filename: 'Purchase_Register_Jun2025.pdf',
-    uploadTime: '3 hours ago',
-    status: 'processing',
-    clientName: 'Gupta Manufacturing',
-    rowCount: 186,
-  },
-  {
-    id: 'u3',
-    filename: 'GSTR1_May2025.json',
-    uploadTime: '5 hours ago',
-    status: 'extracted',
-    clientName: 'Sunrise Exports',
-    invoiceCount: 19,
-    accuracy: 100,
-  },
-  {
-    id: 'u4',
-    filename: 'Bank_Statement_Jun2025.pdf',
-    uploadTime: 'Yesterday',
-    status: 'failed',
-    clientName: 'Metro Retail',
-  },
-];
-
-const mockAIRecommendations: AIRecommendation[] = [
+// AI Recommendations remain static — no store equivalent
+const aiRecommendations: AIRecommendation[] = [
   {
     id: 'ai1',
     title: '4 invoices missing from GSTR-2B for Apex Logistics',
@@ -447,6 +184,15 @@ function formatDaysRemaining(days: number): string {
   return `${days}d left`;
 }
 
+function getInitials(name: string): string {
+  return name
+    .split(' ')
+    .map(w => w[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase();
+}
+
 const issueCategoryConfig: Record<BlockingIssue['category'], { label: string; icon: React.ReactNode; color: string; bg: string }> = {
   gstin_error: {
     label: 'GSTIN Error',
@@ -486,203 +232,211 @@ const uploadStatusConfig: Record<RecentUpload['status'], { label: string; icon: 
 
 export default function DashboardPage() {
   const { setCurrentView, setSelectedClientId, setReturnPrepCtx } = useApp();
+  const store = useGSTStore();
 
   // ── State ────────────────────────────────────────────────────────────────
   const [loading, setLoading] = useState(true);
-  const [metrics, setMetrics] = useState<MetricCard[]>(mockMetrics);
-  const [priorities, setPriorities] = useState<PriorityItem[]>(mockPriorities);
-  const [readyToFile, setReadyToFile] = useState<ReadyToFileItem[]>(mockReadyToFile);
-  const [blockingIssues, setBlockingIssues] = useState<BlockingIssue[]>(mockBlockingIssues);
-  const [recentUploads, setRecentUploads] = useState<RecentUpload[]>(mockRecentUploads);
-  const [aiRecommendations, setAiRecommendations] = useState<AIRecommendation[]>(mockAIRecommendations);
-  const [filingItems, setFilingItems] = useState<Set<string>>(new Set());
-  const [filedItems, setFiledItems] = useState<Set<string>>(new Set());
   const [dashboardToasts, setDashboardToasts] = useState<{ id: string; title: string; desc: string; type: 'success' | 'info' }[]>([]);
 
   const currentPeriodLabel = periodToLabel(CURRENT_PERIOD);
 
-  // ── Data Fetching ────────────────────────────────────────────────────────
-  const fetchDashboardData = useCallback(async () => {
-    try {
-      setLoading(true);
+  // ── Derived data from Zustand store (reactive) ──────────────────────────
 
-      const [dashRes, clientRes, filingRes] = await Promise.all([
-        fetch('/api/dashboard'),
-        fetch('/api/clients'),
-        fetch('/api/gstr-filing'),
-      ]);
+  const dashMetrics = store.getDashboardMetrics();
 
-      const clientData = clientRes.ok ? await clientRes.json() : { clients: [] };
-      const filingData = filingRes.ok ? await filingRes.json() : { filings: [] };
+  const metrics: MetricCard[] = [
+    {
+      id: 'ready',
+      label: 'Ready to File',
+      value: dashMetrics.readyToFile,
+      icon: <ShieldCheck className="h-4 w-4" />,
+      iconColor: 'text-emerald-600',
+      iconBg: 'bg-emerald-50',
+      subtitle: 'Validated & approved',
+    },
+    {
+      id: 'critical',
+      label: 'Critical Issues',
+      value: dashMetrics.criticalIssues,
+      icon: <AlertOctagon className="h-4 w-4" />,
+      iconColor: 'text-red-600',
+      iconBg: 'bg-red-50',
+      subtitle: `Blocking ${Math.min(dashMetrics.criticalIssues, dashMetrics.pendingReturns)} filings`,
+    },
+    {
+      id: 'pending',
+      label: 'Pending Returns',
+      value: dashMetrics.pendingReturns,
+      icon: <Clock className="h-4 w-4" />,
+      iconColor: 'text-amber-600',
+      iconBg: 'bg-amber-50',
+      subtitle: 'Due this month',
+    },
+    {
+      id: 'filed',
+      label: 'Filed This Month',
+      value: dashMetrics.filedThisMonth,
+      icon: <CheckCircle2 className="h-4 w-4" />,
+      iconColor: 'text-emerald-600',
+      iconBg: 'bg-emerald-50',
+      subtitle: `of ${dashMetrics.totalReturns} total`,
+    },
+  ];
 
-      const clients: Client[] = clientData.clients ?? [];
-      const filings: GSTRFiling[] = filingData.filings ?? [];
-      const clientMap = new Map<string, Client>();
-      clients.forEach((c) => clientMap.set(c.id, c));
+  const unfiledFilings = store.filings
+    .filter((f) => f.status !== 'filed')
+    .sort((a, b) => {
+      const aOverdue = isOverdue(a.period) ? 0 : 1;
+      const bOverdue = isOverdue(b.period) ? 0 : 1;
+      return aOverdue - bOverdue || a.period.localeCompare(b.period);
+    });
 
-      // ── Metrics ──
-      const readyStatuses = ['validated', 'generated', 'reviewed'];
-      const readyCount = filings.filter((f) => readyStatuses.includes(f.status)).length || 5;
-      const criticalCount = filings.filter((f) => f.criticalErrors > 0).length || 4;
-      const pendingCount = filings.filter((f) => f.status !== 'filed').length || 11;
-      const filedCount = filings.filter((f) => f.status === 'filed').length || 5;
+  const priorities: PriorityItem[] = unfiledFilings.slice(0, 5).map((f) => {
+    const client = store.getClient(f.clientId);
+    const name = client?.tradeName ?? 'Unknown';
+    const dueDateStr = getFilingDueDate(f.returnType, f.period);
+    const days = getDaysRemaining(dueDateStr);
 
-      setMetrics([
-        {
-          id: 'ready',
-          label: 'Ready to File',
-          value: readyCount,
-          icon: <ShieldCheck className="h-4 w-4" />,
-          iconColor: 'text-emerald-600',
-          iconBg: 'bg-emerald-50',
-          subtitle: 'Validated & approved',
-        },
-        {
-          id: 'critical',
-          label: 'Critical Issues',
-          value: criticalCount,
-          icon: <AlertOctagon className="h-4 w-4" />,
-          iconColor: 'text-red-600',
-          iconBg: 'bg-red-50',
-          subtitle: `Blocking ${Math.min(criticalCount, filings.length - filedCount)} filings`,
-        },
-        {
-          id: 'pending',
-          label: 'Pending Returns',
-          value: pendingCount,
-          icon: <Clock className="h-4 w-4" />,
-          iconColor: 'text-amber-600',
-          iconBg: 'bg-amber-50',
-          subtitle: 'Due this month',
-        },
-        {
-          id: 'filed',
-          label: 'Filed This Month',
-          value: filedCount,
-          icon: <CheckCircle2 className="h-4 w-4" />,
-          iconColor: 'text-emerald-600',
-          iconBg: 'bg-emerald-50',
-          subtitle: `of ${filings.length || 16} total`,
-        },
-      ]);
+    let urgency: PriorityItem['urgency'] = 'upcoming';
+    if (days < 0) urgency = 'overdue';
+    else if (days <= 5) urgency = 'due-soon';
 
-      // ── Priorities ──
-      if (filings.length > 0) {
-        const unfiled = filings
-          .filter((f) => f.status !== 'filed')
-          .sort((a, b) => {
-            const aOverdue = isOverdue(a.period) ? 0 : 1;
-            const bOverdue = isOverdue(b.period) ? 0 : 1;
-            return aOverdue - bOverdue || a.period.localeCompare(b.period);
-          });
+    return {
+      id: f.id,
+      clientName: name,
+      clientInitials: getInitials(name),
+      clientId: f.clientId,
+      returnType: f.returnType,
+      period: f.period,
+      dueDate: dueDateStr,
+      daysRemaining: days,
+      urgency,
+      reason: urgency === 'overdue'
+        ? `${f.returnType} overdue — late fee accruing`
+        : urgency === 'due-soon'
+        ? `${f.returnType} due in ${days} days`
+        : `${f.totalInvoices} invoices pending`,
+      actionLabel: urgency === 'overdue' ? 'File Now' : urgency === 'due-soon' ? 'File Return' : 'Prepare',
+      actionView: 'returns',
+    };
+  });
 
-        if (unfiled.length > 0) {
-          const priorityItems: PriorityItem[] = unfiled.slice(0, 5).map((f, idx) => {
-            const client = clientMap.get(f.clientId);
-            const name = client?.tradeName ?? ['Sharma Enterprises', 'Patel & Sons', 'Krishna Traders', 'Metro Retail', 'Gupta Manufacturing'][idx % 5];
-            const initials = name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
-            const dueDateStr = f.period + '-11';
-            const days = getDaysRemaining(dueDateStr);
+  const readyFilings = store.getReadyToFileFilings();
+  const readyToFile: ReadyToFileItem[] = readyFilings.slice(0, 5).map((f) => {
+    const client = store.getClient(f.clientId);
+    const name = client?.tradeName ?? 'Unknown';
+    return {
+      id: f.id,
+      clientId: f.clientId,
+      clientName: name,
+      clientInitials: getInitials(name),
+      returnType: f.returnType,
+      invoiceCount: f.totalInvoices,
+      taxAmount: f.totalTax,
+      period: f.period,
+    };
+  });
 
-            let urgency: PriorityItem['urgency'] = 'upcoming';
-            if (days < 0) urgency = 'overdue';
-            else if (days <= 5) urgency = 'due-soon';
+  const storeBlockingIssues = store.getBlockingIssues();
+  const blockingIssues: BlockingIssue[] = storeBlockingIssues.map((issue) => {
+    const client = store.getClient(issue.clientId);
+    const name = client?.tradeName ?? issue.clientName;
+    let actionLabel = 'Review Issue';
+    let actionView = 'returns';
 
-            return {
-              id: f.id,
-              clientName: name,
-              clientInitials: initials,
-              clientId: f.clientId,
-              returnType: f.returnType,
-              period: f.period,
-              dueDate: dueDateStr,
-              daysRemaining: days,
-              urgency,
-              reason: urgency === 'overdue'
-                ? `${f.returnType} overdue — late fee accruing`
-                : urgency === 'due-soon'
-                ? `${f.returnType} due in ${days} days`
-                : `${f.totalInvoices} invoices pending`,
-              actionLabel: urgency === 'overdue' ? 'File Now' : urgency === 'due-soon' ? 'File Return' : 'Prepare',
-              actionView: 'returns',
-            };
-          });
-          setPriorities(priorityItems.length > 0 ? priorityItems : mockPriorities);
-        }
-      }
-
-      // ── Ready to File ──
-      if (filings.length > 0) {
-        const readyFilings = filings.filter((f) => readyStatuses.includes(f.status));
-        if (readyFilings.length > 0) {
-          const readyItems: ReadyToFileItem[] = readyFilings.slice(0, 5).map((f) => {
-            const client = clientMap.get(f.clientId);
-            const name = client?.tradeName ?? 'Unknown';
-            const initials = name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
-            return {
-              id: f.id,
-              clientId: f.clientId,
-              clientName: name,
-              clientInitials: initials,
-              returnType: f.returnType,
-              invoiceCount: f.totalInvoices,
-              taxAmount: f.totalTax,
-              period: f.period,
-            };
-          });
-          setReadyToFile(readyItems.length > 0 ? readyItems : mockReadyToFile);
-        }
-      }
-
-    } catch (err) {
-      console.error('Dashboard fetch error:', err);
-    } finally {
-      setLoading(false);
+    if (issue.category === 'recon_mismatch') {
+      actionLabel = 'Run Reconciliation';
+      actionView = 'reconcile';
+    } else if (issue.category === 'missing_invoice') {
+      actionLabel = 'Upload Missing Document';
+      actionView = 'invoices';
+    } else if (issue.category === 'gstin_error') {
+      actionLabel = 'Review Issue';
+      actionView = 'reconcile';
     }
+
+    return {
+      id: issue.id,
+      clientId: issue.clientId,
+      clientName: name,
+      clientInitials: getInitials(name),
+      category: issue.category,
+      title: issue.title,
+      detail: issue.detail,
+      invoiceRef: issue.invoiceRef,
+      amount: issue.amount,
+      actionLabel,
+      actionView,
+    };
+  });
+
+  const storeUploads = store.getRecentUploads();
+  const recentUploads: RecentUpload[] = storeUploads.map((u) => ({
+    id: u.id,
+    filename: u.filename,
+    uploadTime: u.uploadTime,
+    status: u.status,
+    clientName: u.clientName,
+    rowCount: u.rowCount,
+    invoiceCount: u.invoiceCount,
+    accuracy: u.accuracy,
+  }));
+
+  // ── Simulate initial load ───────────────────────────────────────────────
+  useEffect(() => {
+    const timer = setTimeout(() => setLoading(false), 600);
+    return () => clearTimeout(timer);
   }, []);
 
-  useEffect(() => {
-    fetchDashboardData();
-  }, [fetchDashboardData]);
+  // ── Track which filing IDs have been toasted ────────────────────────────
+  const toastedFilingIds = useRef<Set<string>>(new Set());
 
   // ── Helpers ───────────────────────────────────────────────────────────────
   const handleOpenClient = (clientId: string) => {
-    setSelectedClientId(clientId);
+    // Resolve to store-format ID if needed
+    const resolvedId = store.getClient(clientId) ? clientId : (store.clients[0]?.id ?? clientId);
+    setSelectedClientId(resolvedId);
     setCurrentView('client-workspace');
   };
 
   const handleFileReturn = (clientId: string, returnType: string, period: string) => {
-    setSelectedClientId(clientId);
+    const resolvedId = store.getClient(clientId) ? clientId : (store.clients[0]?.id ?? clientId);
+    setSelectedClientId(resolvedId);
     setReturnPrepCtx({
-      clientId,
+      clientId: resolvedId,
       returnType: (returnType === 'GSTR-3B' ? 'GSTR-3B' : 'GSTR-1') as 'GSTR-1' | 'GSTR-3B',
       period,
     });
     setCurrentView('return-prep');
   };
 
-  const handleQuickFile = (itemId: string, clientName: string, returnType: string) => {
-    if (filingItems.has(itemId) || filedItems.has(itemId)) return;
-    setFilingItems(prev => new Set(prev).add(itemId));
+  const handleQuickFile = (filingId: string, clientName: string, returnType: string) => {
+    // Delegate to the store — it manages filingInProgressIds and filedReturnIds
+    store.fileReturn(filingId);
 
-    setTimeout(() => {
-      setFiledItems(prev => new Set(prev).add(itemId));
-      setFilingItems(prev => { const n = new Set(prev); n.delete(itemId); return n; });
-
-      // Update metrics
-      setMetrics(prev => prev.map(m => {
-        if (m.id === 'ready') return { ...m, value: Math.max(0, m.value - 1) };
-        if (m.id === 'filed') return { ...m, value: m.value + 1 };
-        if (m.id === 'pending') return { ...m, value: Math.max(0, m.value - 1) };
-        return m;
-      }));
-
-      // Add toast
-      const toastId = `toast-${Date.now()}`;
-      const arn = `AA${String(new Date().getDate()).padStart(2, '0')}${String(new Date().getMonth() + 1).padStart(2, '0')}25${String(Math.floor(Math.random() * 999999)).padStart(6, '0')}`;
-      setDashboardToasts(prev => [...prev, { id: toastId, title: `${returnType} Filed Successfully`, desc: `${clientName} — ARN: ${arn}`, type: 'success' }]);
-      setTimeout(() => setDashboardToasts(prev => prev.filter(t => t.id !== toastId)), 4000);
-    }, 1500);
+    // Schedule a toast after the store's async filing simulation completes (~1.5s)
+    // Use the ref to avoid duplicate toasts
+    if (!toastedFilingIds.current.has(filingId)) {
+      toastedFilingIds.current.add(filingId);
+      setTimeout(() => {
+        const filing = store.filings.find(f => f.id === filingId);
+        const arn = filing?.acknowledgmentNumber ??
+          `AA${String(new Date().getDate()).padStart(2, '0')}${String(new Date().getMonth() + 1).padStart(2, '0')}25${String(Math.floor(Math.random() * 999999)).padStart(6, '0')}`;
+        const toastId = `toast-${filingId}`;
+        setDashboardToasts(prev => {
+          if (prev.some(t => t.id === toastId)) return prev;
+          return [...prev, {
+            id: toastId,
+            title: `${returnType} Filed Successfully`,
+            desc: `${clientName} — ARN: ${arn}`,
+            type: 'success' as const,
+          }];
+        });
+        setTimeout(() => {
+          setDashboardToasts(prev => prev.filter(t => t.id !== toastId));
+        }, 4000);
+      }, 1600);
+    }
   };
 
   // ── Animation ─────────────────────────────────────────────────────────────
@@ -889,7 +643,7 @@ export default function DashboardPage() {
                       if (priority.actionView === 'returns') {
                         handleFileReturn(priority.clientId, priority.returnType, priority.period);
                       } else {
-                        setCurrentView(priority.actionView as 'returns' | 'reconcile' | 'invoices' | 'clients' | 'dashboard' | 'settings' | 'client-workspace' | 'return-prep');
+                        setCurrentView(priority.actionView as AppView);
                       }
                     }}
                   >
@@ -973,18 +727,18 @@ export default function DashboardPage() {
                     </div>
 
                     {/* File button */}
-                    {filedItems.has(item.id) ? (
+                    {store.filedReturnIds.has(item.id) ? (
                       <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px] px-2 py-0.5 gap-1 shrink-0">
                         <CheckCircle2 className="size-2.5" /> Filed
                       </Badge>
                     ) : (
                       <Button
                         size="sm"
-                        className={`h-7 text-xs font-medium px-3 shrink-0 ${filingItems.has(item.id) ? 'bg-amber-500 text-white' : 'bg-emerald-600 hover:bg-emerald-700 text-white'}`}
-                        disabled={filingItems.has(item.id)}
+                        className={`h-7 text-xs font-medium px-3 shrink-0 ${store.filingInProgressIds.has(item.id) ? 'bg-amber-500 text-white' : 'bg-emerald-600 hover:bg-emerald-700 text-white'}`}
+                        disabled={store.filingInProgressIds.has(item.id)}
                         onClick={() => handleQuickFile(item.id, item.clientName, item.returnType)}
                       >
-                        {filingItems.has(item.id) ? (
+                        {store.filingInProgressIds.has(item.id) ? (
                           <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Filing...</>
                         ) : (
                           'File Return'
@@ -1088,7 +842,7 @@ export default function DashboardPage() {
                             size="sm"
                             variant="outline"
                             className="h-7 text-xs font-medium px-3 shrink-0 border-border/60 hover:bg-red-50 hover:text-red-700 hover:border-red-200"
-                            onClick={() => setCurrentView(issue.actionView as 'returns' | 'reconcile' | 'invoices' | 'clients' | 'dashboard' | 'settings' | 'client-workspace' | 'return-prep')}
+                            onClick={() => setCurrentView(issue.actionView as AppView)}
                           >
                             {issue.actionLabel}
                           </Button>
@@ -1273,7 +1027,7 @@ export default function DashboardPage() {
                 whileHover={{ y: -2 }}
                 transition={{ type: 'spring', stiffness: 400, damping: 25 }}
                 className="border border-border/60 rounded-xl p-4 hover:border-border transition-colors cursor-pointer group"
-                onClick={() => setCurrentView(rec.actionView as 'returns' | 'reconcile' | 'invoices' | 'clients' | 'dashboard' | 'settings' | 'client-workspace' | 'return-prep')}
+                onClick={() => setCurrentView(rec.actionView as AppView)}
               >
                 <div className="flex gap-3">
                   <div className={`flex items-center justify-center h-8 w-8 rounded-lg shrink-0 ${rec.iconBg} transition-transform group-hover:scale-105`}>
@@ -1297,7 +1051,7 @@ export default function DashboardPage() {
                       className="mt-2.5 text-xs font-semibold text-emerald-600 hover:text-emerald-700 flex items-center gap-1 group-hover:gap-1.5 transition-all"
                       onClick={(e) => {
                         e.stopPropagation();
-                        setCurrentView(rec.actionView as 'returns' | 'reconcile' | 'invoices' | 'clients' | 'dashboard' | 'settings' | 'client-workspace' | 'return-prep');
+                        setCurrentView(rec.actionView as AppView);
                       }}
                     >
                       {rec.actionLabel}

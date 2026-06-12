@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useCallback, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Card,
@@ -72,6 +72,7 @@ import {
   formatNumber,
 } from '@/lib/gst-utils';
 import { useApp } from '@/contexts/AppContext';
+import { useGSTStore } from '@/stores/gst-store';
 
 // ─── Local Types ──────────────────────────────────────────────────────────────
 
@@ -116,118 +117,7 @@ interface ValidationIssueItem {
   invoiceId: string;
 }
 
-// ─── Mock Data ────────────────────────────────────────────────────────────────
-
-const MOCK_INVOICES: ExtractedInvoice[] = [
-  {
-    id: 'inv-001',
-    invoiceNumber: 'INV-2025-0451',
-    clientName: 'Sharma Enterprises',
-    invoiceDate: '2025-01-15',
-    section: 'b2b',
-    sectionLabel: 'B2B',
-    taxableValue: 245000,
-    cgst: 24500,
-    sgst: 24500,
-    igst: 0,
-    totalTax: 49000,
-    totalAmount: 294000,
-    validationStatus: 'validated',
-    ocrConfidence: 99.8,
-    missingFields: [],
-    validationMessages: [],
-  },
-  {
-    id: 'inv-002',
-    invoiceNumber: 'INV-2025-0452',
-    clientName: 'Patel & Sons',
-    invoiceDate: '2025-01-18',
-    section: 'b2cl',
-    sectionLabel: 'B2C Large',
-    taxableValue: 187500,
-    cgst: 0,
-    sgst: 0,
-    igst: 33750,
-    totalTax: 33750,
-    totalAmount: 221250,
-    validationStatus: 'warning',
-    ocrConfidence: 98.2,
-    missingFields: ['HSN Code'],
-    validationMessages: ['Missing HSN Code — optional but recommended'],
-  },
-  {
-    id: 'inv-003',
-    invoiceNumber: 'INV-2025-0453',
-    clientName: 'Krishna Traders',
-    invoiceDate: '2025-01-20',
-    section: 'exp',
-    sectionLabel: 'Export',
-    taxableValue: 562000,
-    cgst: 0,
-    sgst: 0,
-    igst: 101160,
-    totalTax: 101160,
-    totalAmount: 663160,
-    validationStatus: 'validated',
-    ocrConfidence: 99.5,
-    missingFields: [],
-    validationMessages: [],
-  },
-  {
-    id: 'inv-004',
-    invoiceNumber: 'INV-2025-0454',
-    clientName: 'Metro Retail',
-    invoiceDate: '2025-01-22',
-    section: 'b2b',
-    sectionLabel: 'B2B',
-    taxableValue: 89000,
-    cgst: 8900,
-    sgst: 8900,
-    igst: 0,
-    totalTax: 17800,
-    totalAmount: 106800,
-    validationStatus: 'error',
-    ocrConfidence: 72.3,
-    missingFields: [],
-    validationMessages: ['Invalid seller GSTIN — checksum validation failed'],
-  },
-  {
-    id: 'inv-005',
-    invoiceNumber: 'INV-2025-0455',
-    clientName: 'Sunrise Exports',
-    invoiceDate: '2025-01-25',
-    section: 'cdnr',
-    sectionLabel: 'CDNR',
-    taxableValue: 123400,
-    cgst: 12340,
-    sgst: 12340,
-    igst: 0,
-    totalTax: 24680,
-    totalAmount: 148080,
-    validationStatus: 'validated',
-    ocrConfidence: 97.1,
-    missingFields: [],
-    validationMessages: [],
-  },
-  {
-    id: 'inv-006',
-    invoiceNumber: 'INV-2025-0456',
-    clientName: 'Gupta Manufacturing',
-    invoiceDate: '2025-01-28',
-    section: 'b2cs',
-    sectionLabel: 'B2C Small',
-    taxableValue: 34500,
-    cgst: 1725,
-    sgst: 1725,
-    igst: 0,
-    totalTax: 3450,
-    totalAmount: 37950,
-    validationStatus: 'validated',
-    ocrConfidence: 99.9,
-    missingFields: [],
-    validationMessages: [],
-  },
-];
+// ─── Mock Data removed — all data comes from GST store now ───
 
 // ─── Animation Variants ───────────────────────────────────────────────────────
 
@@ -329,19 +219,50 @@ function getValidationLabel(status: ValidationStatus): string {
 
 export default function InvoiceWorkspacePage() {
   const { selectedClientId, setSelectedClientId } = useApp();
+  const store = useGSTStore();
 
-  // ── Data State ──
-  const [clients, setClients] = useState<Client[]>([]);
-  const [loading, setLoading] = useState(true);
+  // ── Clients from store ──
+  const clients = store.clients;
 
   // ── Upload State ──
   const [isDragging, setIsDragging] = useState(false);
   const [processingFiles, setProcessingFiles] = useState<ProcessingFile[]>([]);
-  const [hasInvoices, setHasInvoices] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // ── Invoice State ──
-  const [invoices, setInvoices] = useState<ExtractedInvoice[]>([]);
+  // ── Invoices from store ──
+  // Get all invoices across clients (or filtered by selectedClientId)
+  const storeInvoices = useMemo(() => {
+    if (selectedClientId) {
+      return store.getInvoicesForClient(selectedClientId);
+    }
+    // Flatten all client invoices
+    return store.clients.flatMap(c => store.getInvoicesForClient(c.id));
+  }, [store, selectedClientId]);
+
+  // Map store invoices to the local ExtractedInvoice type for the UI
+  const invoices: ExtractedInvoice[] = useMemo(() =>
+    storeInvoices.map(inv => ({
+      id: inv.id,
+      invoiceNumber: inv.invoiceNumber,
+      clientName: store.getClient(inv.clientId)?.tradeName ?? 'Unknown',
+      invoiceDate: inv.date,
+      section: (inv.placeOfSupply && inv.placeOfSupply !== store.getClient(inv.clientId)?.stateCode ? 'b2cl' : 'b2b') as GSTR1Section,
+      sectionLabel: (inv.placeOfSupply && inv.placeOfSupply !== store.getClient(inv.clientId)?.stateCode ? 'B2C Large' : 'B2B'),
+      taxableValue: inv.taxableValue,
+      cgst: inv.cgst,
+      sgst: inv.sgst,
+      igst: inv.igst,
+      totalTax: inv.cgst + inv.sgst + inv.igst,
+      totalAmount: inv.taxableValue + inv.cgst + inv.sgst + inv.igst,
+      validationStatus: inv.status as ValidationStatus,
+      ocrConfidence: inv.status === 'error' ? 75.0 : inv.status === 'warning' ? 92.0 : 98.5,
+      missingFields: inv.errorDetail ? [inv.errorDetail.split(' ').slice(0, 2).join(' ')] : [],
+      validationMessages: inv.errorDetail ? [inv.errorDetail] : [],
+    })),
+    [storeInvoices, store]
+  );
+
+  const hasInvoices = invoices.length > 0;
 
   // ── Filter State ──
   const [sectionFilter, setSectionFilter] = useState<string>('all');
@@ -353,45 +274,8 @@ export default function InvoiceWorkspacePage() {
   // ── AI Review Queue ──
   const [reviewingInvoiceId, setReviewingInvoiceId] = useState<string | null>(null);
 
-  // ── Data Fetching ──
-  const fetchData = useCallback(async () => {
-    try {
-      setLoading(true);
-      const [clientsRes] = await Promise.all([
-        fetch('/api/clients'),
-      ]);
-
-      if (clientsRes.ok) {
-        const data = await clientsRes.json();
-        setClients(data.clients ?? data ?? []);
-      }
-
-      // Try to fetch invoices from API, fall back to mock
-      try {
-        const params = new URLSearchParams();
-        if (selectedClientId) params.set('clientId', selectedClientId);
-        const invRes = await fetch(`/api/invoices?${params.toString()}`);
-        if (invRes.ok) {
-          const invData = await invRes.json();
-          const apiInvoices = invData.invoices ?? invData ?? [];
-          if (apiInvoices.length > 0) {
-            setHasInvoices(true);
-            // Map API invoices to our local type (we still use mock for the rich UI)
-          }
-        }
-      } catch {
-        // API not available, use mock
-      }
-    } catch (err) {
-      console.error('Failed to fetch data:', err);
-    } finally {
-      setLoading(false);
-    }
-  }, [selectedClientId]);
-
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+  // Loading is instant — data comes from store
+  const loading = false;
 
   // ── Pipeline Counts ──
   const pipelineCounts = useMemo(() => {
@@ -461,11 +345,21 @@ export default function InvoiceWorkspacePage() {
   }, [pipelineCounts]);
 
   // ── Upload Handlers ──
+  // Deterministic file sizes based on file name hash
+  function getDeterministicSize(name: string): number {
+    let hash = 0;
+    for (let i = 0; i < name.length; i++) {
+      hash = ((hash << 5) - hash) + name.charCodeAt(i);
+      hash |= 0;
+    }
+    return Math.abs(hash % 1500000) + 200000; // 200KB - 1.7MB
+  }
+
   const simulateUpload = useCallback((fileNames: string[]) => {
     const newFiles: ProcessingFile[] = fileNames.map((name, idx) => ({
       id: `file-${Date.now()}-${idx}`,
       name,
-      size: Math.floor(Math.random() * 2000000) + 50000,
+      size: getDeterministicSize(name),
       format: name.split('.').pop()?.toUpperCase() || 'JSON',
       progress: 0,
       status: 'uploading' as const,
@@ -479,9 +373,9 @@ export default function InvoiceWorkspacePage() {
       const fileIndex = idx;
       let progress = 0;
 
-      // Phase 1: Upload
+      // Phase 1: Upload — deterministic progress steps
       const uploadInterval = setInterval(() => {
-        progress += Math.random() * 20 + 10;
+        progress += 25; // Fixed increment
         if (progress >= 100) {
           progress = 100;
           clearInterval(uploadInterval);
@@ -495,8 +389,8 @@ export default function InvoiceWorkspacePage() {
 
           // Phase 2: Extracting
           setTimeout(() => {
-            const invCount = Math.floor(Math.random() * 8) + 4;
-            const ocr = Math.round((Math.random() * 15 + 85) * 10) / 10;
+            const invCount = 8; // Fixed realistic count
+            const ocr = 96.5;  // Fixed realistic confidence
             setProcessingFiles(prev =>
               prev.map((f, i) =>
                 i === prev.length - newFiles.length + fileIndex
@@ -515,9 +409,14 @@ export default function InvoiceWorkspacePage() {
                 )
               );
 
-              // Load mock invoices if first batch
-              setHasInvoices(true);
-              setInvoices(MOCK_INVOICES);
+              // Record upload in store
+              store.addUpload({
+                fileName: file.name,
+                fileType: file.format.toLowerCase() as 'json' | 'csv' | 'xlsx',
+                uploadTime: new Date().toISOString(),
+                status: 'processed',
+                invoiceCount: invCount,
+              });
             }, 1200);
           }, 1800);
         } else {
@@ -531,7 +430,7 @@ export default function InvoiceWorkspacePage() {
         }
       }, 300);
     });
-  }, []);
+  }, [store]);
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -568,7 +467,7 @@ export default function InvoiceWorkspacePage() {
   };
 
   const handleDemoUpload = () => {
-    simulateUpload(['GSTR1_Jan2025_SharmaEnt.json', 'SalesRegister_Jan2025.csv']);
+    simulateUpload(['GSTR1_Jun2025_SharmaEnt.json', 'SalesRegister_Jun2025.csv']);
   };
 
   const removeFile = (fileId: string) => {

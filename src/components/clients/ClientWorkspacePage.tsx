@@ -50,7 +50,7 @@ import { useApp } from '@/contexts/AppContext';
 import type { AppView } from '@/contexts/AppContext';
 import { formatCurrency, periodToLabel, getFilingDueDate } from '@/lib/gst-utils';
 import { useGSTStore } from '@/stores/gst-store';
-import type { SampleClient, SampleFiling, SampleValidationIssue, SampleAIInsight, SampleReconCategory } from '@/data/sample-data';
+import type { SampleClient, SampleFiling, SampleValidationIssue, SampleAIInsight, SampleReconCategory, SampleUpload, SampleActivity } from '@/data/sample-data';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // TYPES
@@ -136,80 +136,6 @@ interface ClientWorkspaceData {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// STATIC DATA — Documents & Activities (not yet in the store)
-// ═══════════════════════════════════════════════════════════════════════════════
-
-const CLIENT_DOCUMENTS: Record<string, DocumentEntry[]> = {
-  'client-1': [
-    { id: 'd1', name: 'Sales_Register_Jun2025.xlsx', type: 'Sales Register', uploadDate: '2025-07-01', status: 'Processed', invoicesExtracted: 47, totalRows: 342, accuracy: 98.7, size: '2.4 MB' },
-    { id: 'd2', name: 'Purchase_Register_Jun2025.pdf', type: 'Purchase Register', uploadDate: '2025-07-02', status: 'Processing', invoicesExtracted: 0, totalRows: 186, accuracy: 0, size: '1.8 MB' },
-    { id: 'd3', name: 'GSTR2A_May2025.json', type: 'GST Portal Data', uploadDate: '2025-06-15', status: 'Processed', invoicesExtracted: 38, totalRows: 38, accuracy: 100, size: '890 KB' },
-    { id: 'd4', name: 'Bank_Statement_Jun2025.pdf', type: 'Bank Statement', uploadDate: '2025-07-03', status: 'Processed', invoicesExtracted: 0, totalRows: 94, accuracy: 92.1, size: '1.1 MB' },
-    { id: 'd5', name: 'Credit_Notes_May2025.xlsx', type: 'Credit Notes', uploadDate: '2025-06-20', status: 'Error', invoicesExtracted: 0, totalRows: 0, accuracy: 0, size: '340 KB' },
-  ],
-  'client-2': [
-    { id: 'd1', name: 'Sales_Register_Jun2025.xlsx', type: 'Sales Register', uploadDate: '2025-07-01', status: 'Processed', invoicesExtracted: 32, totalRows: 256, accuracy: 96.2, size: '2.1 MB' },
-    { id: 'd2', name: 'Purchase_Register_May2025.pdf', type: 'Purchase Register', uploadDate: '2025-06-10', status: 'Processed', invoicesExtracted: 28, totalRows: 210, accuracy: 91.4, size: '1.6 MB' },
-    { id: 'd3', name: 'GSTR2B_May2025.json', type: 'GST Portal Data', uploadDate: '2025-06-14', status: 'Processed', invoicesExtracted: 25, totalRows: 25, accuracy: 100, size: '720 KB' },
-  ],
-  'client-3': [
-    { id: 'd1', name: 'Sales_Register_Jun2025.xlsx', type: 'Sales Register', uploadDate: '2025-07-01', status: 'Processed', invoicesExtracted: 19, totalRows: 148, accuracy: 97.5, size: '1.2 MB' },
-    { id: 'd2', name: 'GSTR2B_May2025.json', type: 'GST Portal Data', uploadDate: '2025-06-14', status: 'Processed', invoicesExtracted: 17, totalRows: 17, accuracy: 100, size: '520 KB' },
-  ],
-  'client-4': [
-    { id: 'd1', name: 'Sales_Register_Jun2025.xlsx', type: 'Sales Register', uploadDate: '2025-07-02', status: 'Processed', invoicesExtracted: 56, totalRows: 412, accuracy: 94.8, size: '3.2 MB' },
-    { id: 'd2', name: 'Purchase_Register_Jun2025.pdf', type: 'Purchase Register', uploadDate: '2025-07-03', status: 'Uploaded', invoicesExtracted: 0, totalRows: 0, accuracy: 0, size: '2.0 MB' },
-    { id: 'd3', name: 'GSTR1_May2025.json', type: 'GST Portal Data', uploadDate: '2025-06-12', status: 'Processed', invoicesExtracted: 48, totalRows: 48, accuracy: 100, size: '1.1 MB' },
-  ],
-};
-
-const DEFAULT_DOCUMENTS: DocumentEntry[] = [
-  { id: 'd1', name: 'Sales_Register_Jun2025.xlsx', type: 'Sales Register', uploadDate: '2025-07-01', status: 'Processed', invoicesExtracted: 0, totalRows: 0, accuracy: 0, size: '2.0 MB' },
-  { id: 'd2', name: 'Purchase_Register_May2025.pdf', type: 'Purchase Register', uploadDate: '2025-06-15', status: 'Processed', invoicesExtracted: 0, totalRows: 0, accuracy: 0, size: '1.5 MB' },
-];
-
-const CLIENT_ACTIVITIES: Record<string, ActivityEvent[]> = {
-  'client-1': [
-    { id: 'a1', type: 'upload', description: 'Sales_Register_Jun2025.xlsx uploaded — 342 rows, 47 invoices extracted', timestamp: '2025-07-01T09:30:00Z' },
-    { id: 'a2', type: 'upload', description: 'Purchase_Register_Jun2025.pdf uploaded — processing started', timestamp: '2025-07-02T14:20:00Z' },
-    { id: 'a3', type: 'ai_action', description: 'AI auto-drafted GSTR-1 for Jun 2025 from sales register', timestamp: '2025-07-01T10:15:00Z' },
-    { id: 'a4', type: 'recon_run', description: 'Reconciliation completed for May 2025 — 94% match rate', timestamp: '2025-06-28T11:00:00Z' },
-    { id: 'a5', type: 'filing_submitted', description: 'GSTR-1 May 2025 filed — ARN: AA060625001234', timestamp: '2025-06-10T16:45:00Z' },
-    { id: 'a6', type: 'filing_submitted', description: 'GSTR-3B May 2025 filed — ARN: AA060625005678', timestamp: '2025-06-18T15:30:00Z' },
-    { id: 'a7', type: 'upload', description: 'GSTR2A_May2025.json downloaded from portal', timestamp: '2025-06-15T08:45:00Z' },
-    { id: 'a8', type: 'user_action', description: 'Credit_Notes_May2025.xlsx upload failed — retry needed', timestamp: '2025-06-20T10:00:00Z' },
-  ],
-  'client-2': [
-    { id: 'a1', type: 'recon_run', description: 'Reconciliation completed for May 2025 — 78% match rate, 12 mismatches', timestamp: '2025-06-29T11:00:00Z' },
-    { id: 'a2', type: 'ai_action', description: 'AI flagged ₹42,560 ITC mismatch in INV-2025-1045', timestamp: '2025-06-29T11:15:00Z' },
-    { id: 'a3', type: 'filing_submitted', description: 'GSTR-1 May 2025 filed — ARN: AA060625009012', timestamp: '2025-06-09T14:30:00Z' },
-    { id: 'a4', type: 'upload', description: 'Sales_Register_Jun2025.xlsx uploaded — 256 rows, 32 invoices', timestamp: '2025-07-01T09:00:00Z' },
-    { id: 'a5', type: 'user_action', description: 'GSTR-3B May 2025 not filed — now overdue', timestamp: '2025-06-20T23:59:00Z' },
-  ],
-  'client-3': [
-    { id: 'a1', type: 'upload', description: 'Sales_Register_Jun2025.xlsx uploaded — 148 rows, 19 invoices', timestamp: '2025-07-01T09:15:00Z' },
-    { id: 'a2', type: 'ai_action', description: 'AI auto-prepared GSTR-1 Jun 2025 from validated invoices', timestamp: '2025-07-01T10:00:00Z' },
-    { id: 'a3', type: 'filing_submitted', description: 'GSTR-1 May 2025 filed — ARN: AA060625019012', timestamp: '2025-06-11T12:00:00Z' },
-    { id: 'a4', type: 'filing_submitted', description: 'GSTR-3B May 2025 filed — ARN: AA060625023456', timestamp: '2025-06-19T15:30:00Z' },
-  ],
-  'client-4': [
-    { id: 'a1', type: 'upload', description: 'Sales_Register_Jun2025.xlsx uploaded — 412 rows, 56 invoices', timestamp: '2025-07-02T09:30:00Z' },
-    { id: 'a2', type: 'upload', description: 'Purchase_Register_Jun2025.pdf uploaded — awaiting processing', timestamp: '2025-07-03T10:15:00Z' },
-    { id: 'a3', type: 'recon_run', description: 'Reconciliation completed for May 2025 — 55% match rate, 28 mismatches', timestamp: '2025-06-30T14:00:00Z' },
-    { id: 'a4', type: 'ai_action', description: 'AI flagged 2 invalid GSTINs in B2B invoices', timestamp: '2025-06-30T14:10:00Z' },
-    { id: 'a5', type: 'user_action', description: 'GSTR-1 May 2025 filing missed — now overdue by 20 days', timestamp: '2025-06-11T23:59:00Z' },
-    { id: 'a6', type: 'filing_submitted', description: 'GSTR-1 Apr 2025 filed — ARN: AA050625031234', timestamp: '2025-05-11T16:00:00Z' },
-  ],
-};
-
-const DEFAULT_ACTIVITIES: ActivityEvent[] = [
-  { id: 'a1', type: 'upload', description: 'Sales_Register_Jun2025.xlsx uploaded', timestamp: '2025-07-01T09:30:00Z' },
-  { id: 'a2', type: 'recon_run', description: 'Reconciliation completed for May 2025', timestamp: '2025-06-28T11:00:00Z' },
-  { id: 'a3', type: 'filing_submitted', description: 'GSTR-1 May 2025 filed', timestamp: '2025-06-10T16:45:00Z' },
-  { id: 'a4', type: 'ai_action', description: 'AI auto-drafted GSTR-1 from sales register data', timestamp: '2025-07-01T10:00:00Z' },
-];
-
-// ═══════════════════════════════════════════════════════════════════════════════
 // HELPER FUNCTIONS
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -287,7 +213,7 @@ function getActivityColor(type: string) {
 }
 
 function formatRelativeTime(timestamp: string): string {
-  const now = new Date('2025-07-08T12:00:00Z');
+  const now = new Date();
   const date = new Date(timestamp);
   const diffMs = now.getTime() - date.getTime();
   const diffMins = Math.floor(diffMs / 60000);
@@ -302,14 +228,65 @@ function formatRelativeTime(timestamp: string): string {
 
 function formatFileSize(size: string): string { return size; }
 
+/** Map a store upload to a DocumentEntry for the UI */
+function mapUploadToDocument(upload: SampleUpload): DocumentEntry {
+  const statusMap: Record<SampleUpload['status'], DocumentEntry['status']> = {
+    extracted: 'Processed',
+    processing: 'Processing',
+    failed: 'Error',
+  };
+  const sizeBytes = (upload.rowCount ?? 0) * 128; // Approximate size
+  const sizeStr = sizeBytes > 1048576 ? `${(sizeBytes / 1048576).toFixed(1)} MB` : sizeBytes > 1024 ? `${(sizeBytes / 1024).toFixed(0)} KB` : `${sizeBytes} B`;
+  // Derive document type from filename
+  const ext = upload.filename.split('.').pop()?.toLowerCase() ?? '';
+  const typeMap: Record<string, string> = {
+    xlsx: 'Sales Register',
+    xls: 'Sales Register',
+    pdf: 'Purchase Register',
+    json: 'GST Portal Data',
+    csv: 'Data Import',
+  };
+  return {
+    id: upload.id,
+    name: upload.filename,
+    type: typeMap[ext] ?? 'Document',
+    uploadDate: upload.uploadTime.split('T')[0],
+    status: statusMap[upload.status],
+    invoicesExtracted: upload.invoiceCount ?? 0,
+    totalRows: upload.rowCount ?? 0,
+    accuracy: upload.accuracy ?? 0,
+    size: sizeStr || '1.0 MB',
+  };
+}
+
+/** Map a store activity to an ActivityEvent for the UI */
+function mapActivityToEvent(activity: SampleActivity): ActivityEvent {
+  const typeMap: Record<SampleActivity['type'], ActivityEvent['type']> = {
+    document_uploaded: 'upload',
+    invoice_uploaded: 'upload',
+    return_prepared: 'return_created',
+    return_filed: 'filing_submitted',
+    mismatch_resolved: 'recon_run',
+    validation_completed: 'ai_action',
+    payment_received: 'user_action',
+  };
+  return {
+    id: activity.id,
+    type: typeMap[activity.type] ?? 'user_action',
+    description: activity.description,
+    timestamp: activity.timestamp,
+  };
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // STORE → WORKSPACE DERIVATION HELPERS
 // ═══════════════════════════════════════════════════════════════════════════════
 
 const SIMULATED_NOW = new Date('2025-07-08T12:00:00Z');
 
-/** Check if a filing period is overdue relative to the simulated current date */
+/** Check if a filing period is overdue relative to current date */
 function isFilingOverdue(period: string): boolean {
+  // Use a fixed reference date to match sample data context
   const dueDate = new Date(getFilingDueDate('GSTR-1', period));
   return SIMULATED_NOW > dueDate;
 }
@@ -539,8 +516,13 @@ export default function ClientWorkspacePage() {
       ...overdueActions,
     ];
 
-    // ── Documents (static per-client) ──
-    const documents = CLIENT_DOCUMENTS[clientId] ?? DEFAULT_DOCUMENTS;
+    // ── Documents from store uploads ──
+    const clientUploads = store.uploads.filter(u => u.clientId === clientId);
+    const documents: DocumentEntry[] = clientUploads.length > 0
+      ? clientUploads.map(mapUploadToDocument)
+      : [
+          { id: 'd-default', name: 'No documents uploaded yet', type: 'General', uploadDate: new Date().toISOString().split('T')[0], status: 'Uploaded' as const, invoicesExtracted: 0, totalRows: 0, accuracy: 0, size: '0 KB' },
+        ];
 
     // ── Reconciliation Runs ──
     const reconSummary = store.getReconSummary(clientId);
@@ -560,8 +542,13 @@ export default function ClientWorkspacePage() {
         category: insightTypeToCategory(i.type),
       }));
 
-    // ── Activities (static per-client) ──
-    const activities = CLIENT_ACTIVITIES[clientId] ?? DEFAULT_ACTIVITIES;
+    // ── Activities from store ──
+    const storeActivities = store.getActivitiesForClient(clientId);
+    const activities: ActivityEvent[] = storeActivities.length > 0
+      ? storeActivities.map(mapActivityToEvent)
+      : [
+          { id: 'a-default', type: 'ai_action', description: 'No activity yet for this client', timestamp: new Date().toISOString() },
+        ];
 
     // ── Computed metrics ──
     const isLowRisk = hs > 80;
@@ -571,7 +558,7 @@ export default function ClientWorkspacePage() {
     const matchRate = computeMatchRate(reconSummary, hs);
     const pendingReturns = filings.filter(f => f.status !== 'filed').length;
     const openIssues = issues.filter(i => !i.resolved).length;
-    const taxVolume = filings.reduce((sum, f) => sum + f.totalTax, 0);
+    const taxVolume = filings.reduce((sum, f) => sum + f.totalTaxableValue, 0);
 
     return {
       complianceScore: hs,

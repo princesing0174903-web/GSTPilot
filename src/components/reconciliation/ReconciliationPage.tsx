@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Card,
@@ -48,13 +48,7 @@ import {
 import { formatCurrency, generateMismatchExplanation } from '@/lib/gst-utils';
 import { useApp } from '@/contexts/AppContext';
 import { toast } from 'sonner';
-import type {
-  ReconciliationResult,
-  ReconciliationRun,
-  Client,
-  MatchStatus,
-} from '@/types/gst';
-import { MATCH_STATUS_CONFIG } from '@/types/gst';
+import { useGSTStore } from '@/stores/gst-store';
 
 // ──────────────────────────────────────────────
 // Types
@@ -118,266 +112,9 @@ interface ReconTimelineEntry {
 }
 
 // ──────────────────────────────────────────────
-// Mock Data — the 6 CRITICAL mismatches from spec
+// Mismatch data is now loaded from the GST store.
+// No inline mock data — all comes from sample-data.ts via Zustand.
 // ──────────────────────────────────────────────
-const MOCK_CLIENTS: ClientOption[] = [
-  { id: 'cl-1', tradeName: 'Sharma Enterprises', gstin: '27AABCS1429B1Z5' },
-  { id: 'cl-2', tradeName: 'Patel & Sons', gstin: '24AABCP1234B1Z3' },
-  { id: 'cl-3', tradeName: 'Krishna Traders', gstin: '27AABCK5678B1Z1' },
-  { id: 'cl-4', tradeName: 'Metro Retail', gstin: '36AABCM9012B1Z9' },
-  { id: 'cl-5', tradeName: 'Sunrise Exports', gstin: '27AABCS3456B1Z7' },
-  { id: 'cl-6', tradeName: 'Gupta Manufacturing', gstin: '09AABCG7890B1Z3' },
-];
-
-const MOCK_MISMATCHES: MismatchRecord[] = [
-  {
-    id: 'mm-1',
-    invoiceNumber: 'INV-2025-0045',
-    clientName: 'Sharma Enterprises',
-    mismatchCategory: 'tax_difference',
-    mismatchType: 'Tax Amount Difference',
-    taxDifference: 1240,
-    confidenceScore: 94,
-    aiExplanation: 'CGST ₹620 less in GSTR-2B',
-    aiRecommendation: 'Accept GSTR-2B value — the vendor likely reported a lower CGST amount. The difference of ₹620 per component (₹1,240 total) suggests a rate revision.',
-    booksData: {
-      invoiceNumber: 'INV-2025-0045',
-      invoiceDate: '2025-02-15',
-      sellerGstin: '27AABCS1429B1Z5',
-      buyerGstin: '27AABCB9876B1Z1',
-      taxableValue: 50000,
-      cgst: 4500,
-      sgst: 4500,
-      igst: 0,
-      totalAmount: 59000,
-    },
-    gstr2bData: {
-      invoiceNumber: 'INV-2025-0045',
-      invoiceDate: '2025-02-15',
-      sellerGstin: '27AABCS1429B1Z5',
-      buyerGstin: '27AABCB9876B1Z1',
-      taxableValue: 50000,
-      cgst: 3880,
-      sgst: 4500,
-      igst: 0,
-      totalAmount: 58380,
-    },
-    diffFields: ['cgst', 'totalAmount'],
-    resolved: false,
-    workflowStatus: 'pending',
-  },
-  {
-    id: 'mm-2',
-    invoiceNumber: 'INV-2025-0078',
-    clientName: 'Patel & Sons',
-    mismatchCategory: 'gstin_mismatch',
-    mismatchType: 'GSTIN Mismatch',
-    taxDifference: 0,
-    confidenceScore: 87,
-    aiExplanation: 'Seller GSTIN differs by 1 character',
-    aiRecommendation: 'Correct GSTIN — the seller GSTIN in books ends with "Z3" while GSTR-2B shows "Z4". This is likely a data entry error in your purchase register.',
-    booksData: {
-      invoiceNumber: 'INV-2025-0078',
-      invoiceDate: '2025-02-18',
-      sellerGstin: '24AABCP1234B1Z3',
-      buyerGstin: '24AABCB5678B1Z2',
-      taxableValue: 75000,
-      cgst: 6750,
-      sgst: 6750,
-      igst: 0,
-      totalAmount: 88500,
-    },
-    gstr2bData: {
-      invoiceNumber: 'INV-2025-0078',
-      invoiceDate: '2025-02-18',
-      sellerGstin: '24AABCP1234B1Z4',
-      buyerGstin: '24AABCB5678B1Z2',
-      taxableValue: 75000,
-      cgst: 6750,
-      sgst: 6750,
-      igst: 0,
-      totalAmount: 88500,
-    },
-    diffFields: ['sellerGstin'],
-    resolved: false,
-    workflowStatus: 'pending',
-  },
-  {
-    id: 'mm-3',
-    invoiceNumber: 'INV-2025-0112',
-    clientName: 'Krishna Traders',
-    mismatchCategory: 'missing_in_gstr',
-    mismatchType: 'Invoice Not in GSTR-2B',
-    taxDifference: 5400,
-    confidenceScore: 91,
-    aiExplanation: 'Found in books but missing from portal',
-    aiRecommendation: 'Contact vendor immediately — this invoice is not reflected in GSTR-2B. ITC of ₹5,400 is at risk if the vendor does not upload before the deadline.',
-    booksData: {
-      invoiceNumber: 'INV-2025-0112',
-      invoiceDate: '2025-02-22',
-      sellerGstin: '27AABCK5678B1Z1',
-      buyerGstin: '27AABCB9876B1Z1',
-      taxableValue: 30000,
-      cgst: 2700,
-      sgst: 2700,
-      igst: 0,
-      totalAmount: 35400,
-    },
-    gstr2bData: null,
-    diffFields: ['sellerGstin', 'taxableValue', 'cgst', 'sgst', 'igst', 'totalAmount'],
-    resolved: false,
-    workflowStatus: 'pending',
-  },
-  {
-    id: 'mm-4',
-    invoiceNumber: 'INV-2025-0203',
-    clientName: 'Metro Retail',
-    mismatchCategory: 'duplicate',
-    mismatchType: 'Duplicate Detected',
-    taxDifference: 0,
-    confidenceScore: 96,
-    aiExplanation: 'Same invoice number appears twice',
-    aiRecommendation: 'Mark as duplicate — the same invoice number INV-2025-0203 from this GSTIN appears twice in your purchase register. Remove the duplicate entry to avoid double ITC claim.',
-    booksData: {
-      invoiceNumber: 'INV-2025-0203',
-      invoiceDate: '2025-02-25',
-      sellerGstin: '36AABCM9012B1Z9',
-      buyerGstin: '36AABCB3456B1Z5',
-      taxableValue: 45000,
-      cgst: 4050,
-      sgst: 4050,
-      igst: 0,
-      totalAmount: 53100,
-    },
-    gstr2bData: {
-      invoiceNumber: 'INV-2025-0203',
-      invoiceDate: '2025-02-25',
-      sellerGstin: '36AABCM9012B1Z9',
-      buyerGstin: '36AABCB3456B1Z5',
-      taxableValue: 45000,
-      cgst: 4050,
-      sgst: 4050,
-      igst: 0,
-      totalAmount: 53100,
-    },
-    diffFields: [],
-    resolved: false,
-    workflowStatus: 'pending',
-  },
-  {
-    id: 'mm-5',
-    invoiceNumber: 'INV-2025-0287',
-    clientName: 'Sunrise Exports',
-    mismatchCategory: 'tax_difference',
-    mismatchType: 'Tax Amount Difference',
-    taxDifference: 3450,
-    confidenceScore: 89,
-    aiExplanation: 'IGST ₹3,450 more in books',
-    aiRecommendation: 'Verify with shipping documents — books show IGST of ₹11,500 but GSTR-2B reflects only ₹8,050. This could be an export invoice with incorrect tax treatment.',
-    booksData: {
-      invoiceNumber: 'INV-2025-0287',
-      invoiceDate: '2025-03-01',
-      sellerGstin: '27AABCS3456B1Z7',
-      buyerGstin: '',
-      taxableValue: 65000,
-      cgst: 0,
-      sgst: 0,
-      igst: 11500,
-      totalAmount: 76500,
-    },
-    gstr2bData: {
-      invoiceNumber: 'INV-2025-0287',
-      invoiceDate: '2025-03-01',
-      sellerGstin: '27AABCS3456B1Z7',
-      buyerGstin: '',
-      taxableValue: 65000,
-      cgst: 0,
-      sgst: 0,
-      igst: 8050,
-      totalAmount: 73050,
-    },
-    diffFields: ['igst', 'totalAmount'],
-    resolved: false,
-    workflowStatus: 'pending',
-  },
-  {
-    id: 'mm-6',
-    invoiceNumber: 'INV-2025-0341',
-    clientName: 'Gupta Manufacturing',
-    mismatchCategory: 'missing_in_books',
-    mismatchType: 'Invoice Not in Books',
-    taxDifference: 3600,
-    confidenceScore: 93,
-    aiExplanation: 'Present in GSTR-2B but not in purchase register',
-    aiRecommendation: 'Add to purchase register — this invoice from GSTR-2B is not in your books. If legitimate, add it to claim the eligible ITC of ₹3,600.',
-    booksData: {
-      invoiceNumber: '—',
-      invoiceDate: '—',
-      sellerGstin: '—',
-      buyerGstin: '—',
-      taxableValue: 0,
-      cgst: 0,
-      sgst: 0,
-      igst: 0,
-      totalAmount: 0,
-    },
-    gstr2bData: {
-      invoiceNumber: 'INV-2025-0341',
-      invoiceDate: '2025-03-05',
-      sellerGstin: '09AABCG7890B1Z3',
-      buyerGstin: '09AABCB1234B1Z1',
-      taxableValue: 20000,
-      cgst: 1800,
-      sgst: 1800,
-      igst: 0,
-      totalAmount: 23600,
-    },
-    diffFields: ['invoiceNumber', 'invoiceDate', 'sellerGstin', 'buyerGstin', 'taxableValue', 'cgst', 'sgst', 'igst', 'totalAmount'],
-    resolved: false,
-    workflowStatus: 'pending',
-  },
-];
-
-const MOCK_PERFECT_MATCHES = 18;
-const MOCK_PARTIAL_MATCHES = 3;
-
-const MOCK_TIMELINE: ReconTimelineEntry[] = [
-  {
-    id: 'run-1',
-    date: '2025-03-04T14:32:00Z',
-    clients: 'All Clients',
-    recordsProcessed: 27,
-    matchRate: 67,
-  },
-  {
-    id: 'run-2',
-    date: '2025-03-01T09:15:00Z',
-    clients: 'Sharma Enterprises, Patel & Sons',
-    recordsProcessed: 14,
-    matchRate: 71,
-  },
-  {
-    id: 'run-3',
-    date: '2025-02-25T11:48:00Z',
-    clients: 'All Clients',
-    recordsProcessed: 27,
-    matchRate: 74,
-  },
-  {
-    id: 'run-4',
-    date: '2025-02-20T16:22:00Z',
-    clients: 'Krishna Traders',
-    recordsProcessed: 5,
-    matchRate: 80,
-  },
-  {
-    id: 'run-5',
-    date: '2025-02-15T10:05:00Z',
-    clients: 'Metro Retail, Sunrise Exports',
-    recordsProcessed: 11,
-    matchRate: 73,
-  },
-];
 
 // ──────────────────────────────────────────────
 // Mismatch Category Config
@@ -655,24 +392,139 @@ function ComparisonField({
 // ──────────────────────────────────────────────
 export default function ReconciliationPage() {
   const { selectedClientId, setCurrentView } = useApp();
+  const store = useGSTStore();
 
-  // ── Data ──
-  const [mismatches, setMismatches] = useState<MismatchRecord[]>([]);
-  const [clients, setClients] = useState<ClientOption[]>([]);
-  const [timeline, setTimeline] = useState<ReconTimelineEntry[]>([]);
-
-  // ── Computed stats ──
-  const [perfectMatchCount, setPerfectMatchCount] = useState(0);
-  const [partialMatchCount, setPartialMatchCount] = useState(0);
-
-  // ── Loading ──
-  const [loading, setLoading] = useState(true);
-  const [runningRecon, setRunningRecon] = useState(false);
-
-  // ── Filters ──
+  // ── Filters (declared early — used in computed values below) ──
   const [filterClient, setFilterClient] = useState<string>('all');
   const [activeCategory, setActiveCategory] = useState<MismatchCategory>('all');
   const [filterSeverity, setFilterSeverity] = useState<string>('all');
+
+  // ── Build client options from store ──
+  const clients: ClientOption[] = useMemo(() =>
+    store.clients.map(c => ({ id: c.id, tradeName: c.tradeName, gstin: c.gstin })),
+    [store.clients]
+  );
+
+  // ── Determine which client to show recon for ──
+  const activeClientId = selectedClientId || (filterClient !== 'all' ? filterClient : null);
+
+  // ── Load recon data from store ──
+  const reconSummary = useMemo(() => {
+    if (activeClientId) return store.getReconSummary(activeClientId);
+    // Aggregate across all clients
+    const all: Record<string, number> = {};
+    for (const c of store.clients) {
+      const cats = store.getReconSummary(c.id);
+      for (const cat of cats) {
+        all[cat.label] = (all[cat.label] || 0) + cat.count;
+      }
+    }
+    return Object.entries(all).map(([label, count]) => ({
+      label,
+      count,
+      amount: 0,
+      color: label === 'Perfect Match' ? 'text-emerald-700' : label === 'Partial Match' ? 'text-amber-700' : 'text-red-700',
+      bgColor: label === 'Perfect Match' ? 'bg-emerald-50 border-emerald-200' : label === 'Partial Match' ? 'bg-amber-50 border-amber-200' : 'bg-red-50 border-red-200',
+    }));
+  }, [store, activeClientId]);
+
+  const reconDrilldowns = useMemo(() => {
+    if (activeClientId) return store.getReconDrilldowns(activeClientId);
+    // Merge all client drilldowns
+    const merged: Record<string, { invoiceNumber: string; date: string; vendor: string; booksAmount: number; portalAmount: number; difference: number; reason: string }[]> = {};
+    for (const c of store.clients) {
+      const dd = store.getReconDrilldowns(c.id);
+      for (const [cat, items] of Object.entries(dd)) {
+        if (!merged[cat]) merged[cat] = [];
+        merged[cat].push(...items);
+      }
+    }
+    return merged;
+  }, [store, activeClientId]);
+
+  // ── Build MismatchRecords from store recon drilldowns ──
+  const mismatches: MismatchRecord[] = useMemo(() => {
+    const records: MismatchRecord[] = [];
+    const clientObj = activeClientId ? store.getClient(activeClientId) : null;
+    const clientName = clientObj?.tradeName ?? 'Multiple Clients';
+
+    for (const [category, items] of Object.entries(reconDrilldowns)) {
+      for (const item of items) {
+        const mismatchCategory =
+          category === 'Mismatch' ? 'tax_difference' :
+          category === 'Missing in Portal' ? 'missing_in_gstr' :
+          category === 'Missing in Books' ? 'missing_in_books' :
+          category === 'Duplicate' ? 'duplicate' :
+          'gstin_mismatch';
+
+        records.push({
+          id: `recon-${item.invoiceNumber}`,
+          invoiceNumber: item.invoiceNumber,
+          clientName,
+          mismatchCategory,
+          mismatchType: category,
+          taxDifference: item.difference,
+          confidenceScore: 90,
+          aiExplanation: item.reason,
+          aiRecommendation: item.reason,
+          booksData: {
+            invoiceNumber: item.invoiceNumber,
+            invoiceDate: item.date,
+            sellerGstin: '',
+            buyerGstin: '',
+            taxableValue: item.booksAmount,
+            cgst: 0,
+            sgst: 0,
+            igst: 0,
+            totalAmount: item.booksAmount,
+          },
+          gstr2bData: item.portalAmount > 0 ? {
+            invoiceNumber: item.invoiceNumber,
+            invoiceDate: item.date,
+            sellerGstin: '',
+            buyerGstin: '',
+            taxableValue: item.portalAmount,
+            cgst: 0,
+            sgst: 0,
+            igst: 0,
+            totalAmount: item.portalAmount,
+          } : null,
+          diffFields: [],
+          resolved: false,
+          workflowStatus: 'pending',
+        });
+      }
+    }
+    return records;
+  }, [reconDrilldowns, store, activeClientId]);
+
+  // ── Compute match counts from reconSummary ──
+  const perfectMatchCount = useMemo(() =>
+    reconSummary.find(c => c.label === 'Perfect Match')?.count ?? 0,
+    [reconSummary]
+  );
+  const partialMatchCount = useMemo(() =>
+    reconSummary.find(c => c.label === 'Partial Match')?.count ?? 0,
+    [reconSummary]
+  );
+
+  // ── Timeline from store activities ──
+  const timeline: ReconTimelineEntry[] = useMemo(() => {
+    const acts = store.getRecentActivities(10)
+      .filter(a => a.type === 'mismatch_resolved');
+    return acts.map((a, idx) => ({
+      id: a.id,
+      date: a.timestamp,
+      clients: store.getClient(a.clientId)?.tradeName ?? 'Unknown',
+      recordsProcessed: 0,
+      matchRate: 0,
+    }));
+  }, [store]);
+
+  // ── Loading ──
+  const [runningRecon, setRunningRecon] = useState(false);
+
+  // ── Filters moved to top of component (above activeClientId) ──
 
   // ── Selection ──
   const [selectedMismatchId, setSelectedMismatchId] = useState<string | null>(null);
@@ -680,150 +532,8 @@ export default function ReconciliationPage() {
   // ── Sidebar ──
   const [timelineCollapsed, setTimelineCollapsed] = useState(false);
 
-  // ──────────────────────────────────────────
-  // Data Fetching
-  // ──────────────────────────────────────────
-  const fetchData = useCallback(async () => {
-    setLoading(true);
-    try {
-      const params = new URLSearchParams();
-      if (selectedClientId) params.set('clientId', selectedClientId);
-
-      const [reconRes, clientsRes] = await Promise.all([
-        fetch(`/api/reconciliation?${params.toString()}`),
-        fetch('/api/clients'),
-      ]);
-
-      let fetchedResults: MismatchRecord[] = [];
-      let fetchedPerfect = 0;
-      let fetchedPartial = 0;
-      let fetchedClients: ClientOption[] = [];
-      let fetchedTimeline: ReconTimelineEntry[] = [];
-
-      if (reconRes.ok) {
-        const data = await reconRes.json();
-        // Transform API results into our MismatchRecord format
-        const results = data.results || [];
-        const nonPerfect = results.filter(
-          (r: ReconciliationResult) => r.matchStatus !== 'perfect_match'
-        );
-        fetchedPerfect = results.filter(
-          (r: ReconciliationResult) => r.matchStatus === 'perfect_match'
-        ).length;
-        fetchedPartial = results.filter(
-          (r: ReconciliationResult) => r.matchStatus === 'partial_match'
-        ).length;
-
-        fetchedResults = nonPerfect.map((r: ReconciliationResult) => {
-          let parsedMismatches: MismatchDetail[] = [];
-          if (r.mismatches) {
-            try { parsedMismatches = JSON.parse(r.mismatches); } catch { /* noop */ }
-          }
-
-          const category = mapStatusToCategory(r.matchStatus, parsedMismatches);
-          const inv = r.invoice;
-
-          return {
-            id: r.id,
-            invoiceNumber: inv?.invoiceNumber || '—',
-            clientName: inv?.client?.tradeName || 'Unknown',
-            mismatchCategory: category,
-            mismatchType: MATCH_STATUS_CONFIG[r.matchStatus as MatchStatus]?.label || 'Unknown',
-            taxDifference: calculateTaxDiff(parsedMismatches),
-            confidenceScore: r.confidenceScore || 0,
-            aiExplanation: r.aiExplanation || '',
-            aiRecommendation: r.aiRecommendation || '',
-            booksData: {
-              invoiceNumber: inv?.invoiceNumber || '—',
-              invoiceDate: inv?.invoiceDate || '—',
-              sellerGstin: inv?.sellerGstin || '—',
-              buyerGstin: inv?.buyerGstin || '—',
-              taxableValue: inv?.taxableValue || 0,
-              cgst: inv?.cgst || 0,
-              sgst: inv?.sgst || 0,
-              igst: inv?.igst || 0,
-              totalAmount: inv?.totalAmount || 0,
-            },
-            gstr2bData: r.matchStatus === 'missing_in_gstr' ? null : {
-              invoiceNumber: inv?.invoiceNumber || '—',
-              invoiceDate: inv?.invoiceDate || '—',
-              sellerGstin: r.matchedGstin || inv?.sellerGstin || '—',
-              buyerGstin: inv?.buyerGstin || '—',
-              taxableValue: inv?.taxableValue || 0,
-              cgst: inv?.cgst || 0,
-              sgst: inv?.sgst || 0,
-              igst: inv?.igst || 0,
-              totalAmount: inv?.totalAmount || 0,
-            },
-            diffFields: parsedMismatches.map(m => m.field),
-            resolved: r.resolved || false,
-            workflowStatus: r.workflowStatus || 'pending',
-          } as MismatchRecord;
-        });
-      }
-
-      if (clientsRes.ok) {
-        const data = await clientsRes.json();
-        fetchedClients = (data.clients || []).map((c: Client) => ({
-          id: c.id,
-          tradeName: c.tradeName,
-          gstin: c.gstin,
-        }));
-      }
-
-      // Fetch runs for timeline
-      try {
-        const runsRes = await fetch(`/api/reconciliation?action=runs&${params.toString()}`);
-        if (runsRes.ok) {
-          const runsData = await runsRes.json();
-          fetchedTimeline = (runsData.runs || []).map((run: ReconciliationRun) => ({
-            id: run.id,
-            date: run.createdAt,
-            clients: run.clientId,
-            recordsProcessed: run.totalRecords,
-            matchRate: run.totalRecords > 0 ? Math.round((run.matched / run.totalRecords) * 100) : 0,
-          }));
-        }
-      } catch { /* timeline is non-critical */ }
-
-      // Use fetched data if available, otherwise use mocks
-      if (fetchedResults.length > 0) {
-        setMismatches(fetchedResults);
-        setPerfectMatchCount(fetchedPerfect);
-        setPartialMatchCount(fetchedPartial);
-      } else {
-        setMismatches(MOCK_MISMATCHES);
-        setPerfectMatchCount(MOCK_PERFECT_MATCHES);
-        setPartialMatchCount(MOCK_PARTIAL_MATCHES);
-      }
-
-      if (fetchedClients.length > 0) {
-        setClients(fetchedClients);
-      } else {
-        setClients(MOCK_CLIENTS);
-      }
-
-      if (fetchedTimeline.length > 0) {
-        setTimeline(fetchedTimeline);
-      } else {
-        setTimeline(MOCK_TIMELINE);
-      }
-    } catch (err) {
-      console.error('Error fetching reconciliation data:', err);
-      // Fallback to mocks
-      setMismatches(MOCK_MISMATCHES);
-      setPerfectMatchCount(MOCK_PERFECT_MATCHES);
-      setPartialMatchCount(MOCK_PARTIAL_MATCHES);
-      setClients(MOCK_CLIENTS);
-      setTimeline(MOCK_TIMELINE);
-    } finally {
-      setLoading(false);
-    }
-  }, [selectedClientId]);
-
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+  // Loading is instant — data comes from store
+  const loading = false;
 
   // ──────────────────────────────────────────
   // Helpers
@@ -925,22 +635,14 @@ export default function ReconciliationPage() {
         setRunningRecon(false);
         return;
       }
-      const res = await fetch('/api/reconciliation', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'run',
-          clientId,
-          period: '2025-03',
-          sources: 'Purchase Register,GSTR-2B',
-        }),
+      // Simulate reconciliation — data is already in store from sample data
+      store.addActivity({
+        clientId,
+        type: 'mismatch_resolved',
+        description: `Reconciliation run completed for ${store.getClient(clientId)?.tradeName}`,
+        timestamp: new Date().toISOString(),
       });
-      if (res.ok) {
-        toast.success('Reconciliation completed successfully');
-        await fetchData();
-      } else {
-        toast.error('Reconciliation failed');
-      }
+      toast.success('Reconciliation completed successfully');
     } catch {
       toast.error('Error running reconciliation');
     } finally {
@@ -949,32 +651,30 @@ export default function ReconciliationPage() {
   };
 
   const handleAcceptGSTR2B = (id: string) => {
-    setMismatches(prev =>
-      prev.map(m => m.id === id ? { ...m, resolved: true, workflowStatus: 'resolved' } : m)
-    );
+    const m = mismatches.find(r => r.id === id);
+    if (m && activeClientId) {
+      store.resolveMismatch(activeClientId, m.invoiceNumber);
+    }
     toast.success('Accepted GSTR-2B value — mismatch resolved');
   };
 
   const handleKeepBooks = (id: string) => {
-    setMismatches(prev =>
-      prev.map(m => m.id === id ? { ...m, resolved: true, workflowStatus: 'resolved' } : m)
-    );
+    const m = mismatches.find(r => r.id === id);
+    if (m && activeClientId) {
+      store.resolveMismatch(activeClientId, m.invoiceNumber);
+    }
     toast.success('Kept books value — mismatch resolved');
   };
 
   const handleCustomResolution = (id: string) => {
-    setMismatches(prev =>
-      prev.map(m => m.id === id ? { ...m, workflowStatus: 'under_review' } : m)
-    );
     toast.info('Marked for custom resolution — under review');
   };
 
   const handleAutoResolve = () => {
     const toResolve = mismatches.filter(m => !m.resolved && m.confidenceScore >= 93);
-    const ids = new Set(toResolve.map(m => m.id));
-    setMismatches(prev =>
-      prev.map(m => ids.has(m.id) ? { ...m, resolved: true, workflowStatus: 'resolved' } : m)
-    );
+    if (activeClientId) {
+      toResolve.forEach(m => store.resolveMismatch(activeClientId, m.invoiceNumber));
+    }
     toast.success(`Auto-resolved ${toResolve.length} mismatches with high confidence`);
   };
 

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Card,
@@ -88,8 +88,9 @@ import {
 } from 'lucide-react';
 import { useApp } from '@/contexts/AppContext';
 import type { AppView } from '@/contexts/AppContext';
-import type { Client, ClientStatus } from '@/types/gst';
 import { validateGSTIN, formatGSTIN, formatCurrency } from '@/lib/gst-utils';
+import { useGSTStore } from '@/stores/gst-store';
+import type { SampleClient } from '@/data/sample-data';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -163,7 +164,7 @@ interface MonthlyVolume {
   amount: number;
 }
 
-interface ClientPortfolio extends Client {
+interface ClientPortfolio extends SampleClient {
   _portfolio: {
     monthlyTaxVolume: number;
     monthlyVolumeChart: MonthlyVolume[];
@@ -199,302 +200,78 @@ const EMPTY_FORM: ClientForm = {
   returnPeriod: 'monthly',
 };
 
-// ─── Mock Data ────────────────────────────────────────────────────────────────
+// ─── Portfolio Derivation Helpers ──────────────────────────────────────────────
 
-const MOCK_CLIENTS: ClientPortfolio[] = [
-  {
-    id: 'cl_001',
-    gstin: '27AABCS1429B1Z5',
-    tradeName: 'Sharma Enterprises',
-    legalName: 'Sharma Enterprises Pvt Ltd',
-    state: 'Maharashtra',
-    stateCode: '27',
-    contactEmail: 'accounts@sharmaent.com',
-    contactPhone: '+91-22-2847-3001',
-    entityType: 'regular',
-    returnPeriod: 'monthly',
-    lastFilingDate: '2025-05-11',
-    status: 'active',
-    healthScore: 92,
-    createdAt: '2025-01-15T10:00:00Z',
-    updatedAt: '2025-05-11T14:30:00Z',
+/** Compute a ClientPortfolio from a store client by deriving portfolio metrics from store data */
+function derivePortfolio(client: SampleClient, store: ReturnType<typeof useGSTStore>): ClientPortfolio {
+  const filings = store.getFilingsForClient(client.id);
+  const issues = store.getIssuesForClient(client.id);
+  const invoices = store.getInvoicesForClient(client.id);
+  const reconSummary = store.getReconSummary(client.id);
+
+  const hs = client.healthScore;
+  const pendingFilings = filings.filter(f => f.status !== 'filed').length;
+  const taxVolume = filings.reduce((sum, f) => sum + f.totalTaxableValue, 0);
+  const unresolvedIssues = issues.filter(i => !i.resolved).length;
+
+  // Derive risk level from health score and issues
+  const riskLevel: RiskLevel = hs > 80 ? 'Low' : hs >= 50 ? 'Medium' : 'High';
+  const riskDetail = riskLevel === 'High' ? (pendingFilings > 3 ? 'Multiple delays' : 'Filing delays')
+    : riskLevel === 'Medium' ? `${unresolvedIssues} issue${unresolvedIssues !== 1 ? 's' : ''}`
+    : undefined;
+
+  // Derive match rate from recon summary
+  let matchRate = 78;
+  if (reconSummary.length > 0) {
+    const total = reconSummary.reduce((sum, c) => sum + c.count, 0);
+    const perfectMatch = reconSummary.find(c => c.label === 'Perfect Match');
+    matchRate = perfectMatch && total > 0 ? Math.round((perfectMatch.count / total) * 100) : 0;
+  } else {
+    matchRate = hs > 80 ? 94 : hs < 50 ? 58 : 78;
+  }
+
+  // Derive health breakdown from health score components
+  const gstinValidity = Math.min(100, hs + 3);
+  const filingTimeliness = pendingFilings === 0 ? Math.min(100, hs + 5) : Math.max(10, hs - pendingFilings * 8);
+  const invoiceAccuracy = Math.min(100, Math.max(10, matchRate));
+
+  // Recent filings (last 3 filings from store)
+  const recentFilings = filings.slice(0, 3).map(f => {
+    const periodLabel = f.period.replace('-', ' ');
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const [year, month] = f.period.split('-').map(Number);
+    const label = `${monthNames[month - 1]} ${year}`;
+    return {
+      period: label,
+      type: f.returnType,
+      status: f.status === 'filed' ? 'Filed' : f.filedDate ? 'Filed' : pendingFilings > 2 ? 'Overdue' : 'Pending',
+      date: f.filedDate ?? '',
+    };
+  });
+
+  // Monthly volume chart — derive from filings' taxable values
+  const monthlyVolumeChart: MonthlyVolume[] = [
+    { month: 'Dec', amount: Math.round(taxVolume * 0.85) },
+    { month: 'Jan', amount: Math.round(taxVolume * 0.92) },
+    { month: 'Feb', amount: Math.round(taxVolume * 0.88) },
+    { month: 'Mar', amount: Math.round(taxVolume * 1.1) },
+    { month: 'Apr', amount: Math.round(taxVolume * 0.95) },
+    { month: 'May', amount: taxVolume },
+  ];
+
+  return {
+    ...client,
     _portfolio: {
-      monthlyTaxVolume: 450000,
-      monthlyVolumeChart: [
-        { month: 'Dec', amount: 380000 },
-        { month: 'Jan', amount: 420000 },
-        { month: 'Feb', amount: 395000 },
-        { month: 'Mar', amount: 510000 },
-        { month: 'Apr', amount: 430000 },
-        { month: 'May', amount: 450000 },
-      ],
-      pendingFilings: 0,
-      riskLevel: 'Low',
-      healthBreakdown: { gstinValidity: 95, filingTimeliness: 88, invoiceAccuracy: 94 },
-      recentFilings: [
-        { period: 'May 2025', type: 'GSTR-1', status: 'Filed', date: '2025-05-11' },
-        { period: 'May 2025', type: 'GSTR-3B', status: 'Filed', date: '2025-05-18' },
-        { period: 'Apr 2025', type: 'GSTR-1', status: 'Filed', date: '2025-04-10' },
-      ],
+      monthlyTaxVolume: taxVolume,
+      monthlyVolumeChart,
+      pendingFilings,
+      riskLevel,
+      riskDetail,
+      healthBreakdown: { gstinValidity, filingTimeliness, invoiceAccuracy },
+      recentFilings,
     },
-  },
-  {
-    id: 'cl_002',
-    gstin: '24AABCP5678G1Z3',
-    tradeName: 'Patel & Sons',
-    legalName: 'Patel & Sons Trading Co',
-    state: 'Gujarat',
-    stateCode: '24',
-    contactEmail: 'gst@patelsons.com',
-    contactPhone: '+91-79-6677-8888',
-    entityType: 'regular',
-    returnPeriod: 'monthly',
-    lastFilingDate: '2025-05-09',
-    status: 'active',
-    healthScore: 67,
-    createdAt: '2025-02-10T09:00:00Z',
-    updatedAt: '2025-05-09T11:20:00Z',
-    _portfolio: {
-      monthlyTaxVolume: 1280000,
-      monthlyVolumeChart: [
-        { month: 'Dec', amount: 1100000 },
-        { month: 'Jan', amount: 1250000 },
-        { month: 'Feb', amount: 1180000 },
-        { month: 'Mar', amount: 1400000 },
-        { month: 'Apr', amount: 1320000 },
-        { month: 'May', amount: 1280000 },
-      ],
-      pendingFilings: 2,
-      riskLevel: 'Medium',
-      riskDetail: '7 mismatches',
-      healthBreakdown: { gstinValidity: 72, filingTimeliness: 58, invoiceAccuracy: 70 },
-      recentFilings: [
-        { period: 'May 2025', type: 'GSTR-1', status: 'Filed', date: '2025-05-09' },
-        { period: 'Apr 2025', type: 'GSTR-3B', status: 'Pending', date: '' },
-        { period: 'Apr 2025', type: 'GSTR-1', status: 'Filed', date: '2025-04-11' },
-      ],
-    },
-  },
-  {
-    id: 'cl_003',
-    gstin: '06AABCK9012H1Z1',
-    tradeName: 'Krishna Traders',
-    legalName: 'Krishna Traders Pvt Ltd',
-    state: 'Haryana',
-    stateCode: '06',
-    contactEmail: 'gst@krishnatraders.in',
-    contactPhone: '+91-80-2852-0261',
-    entityType: 'regular',
-    returnPeriod: 'monthly',
-    lastFilingDate: '2025-05-11',
-    status: 'active',
-    healthScore: 88,
-    createdAt: '2025-03-05T12:00:00Z',
-    updatedAt: '2025-05-11T16:45:00Z',
-    _portfolio: {
-      monthlyTaxVolume: 220000,
-      monthlyVolumeChart: [
-        { month: 'Dec', amount: 190000 },
-        { month: 'Jan', amount: 205000 },
-        { month: 'Feb', amount: 198000 },
-        { month: 'Mar', amount: 240000 },
-        { month: 'Apr', amount: 215000 },
-        { month: 'May', amount: 220000 },
-      ],
-      pendingFilings: 1,
-      riskLevel: 'Low',
-      healthBreakdown: { gstinValidity: 92, filingTimeliness: 85, invoiceAccuracy: 88 },
-      recentFilings: [
-        { period: 'May 2025', type: 'GSTR-1', status: 'Filed', date: '2025-05-11' },
-        { period: 'May 2025', type: 'GSTR-3B', status: 'Pending', date: '' },
-        { period: 'Apr 2025', type: 'GSTR-1', status: 'Filed', date: '2025-04-10' },
-      ],
-    },
-  },
-  {
-    id: 'cl_004',
-    gstin: '33AABCM3456J1Z7',
-    tradeName: 'Metro Retail',
-    legalName: 'Metro Retail India Pvt Ltd',
-    state: 'Tamil Nadu',
-    stateCode: '33',
-    contactEmail: 'tax@metroretail.com',
-    contactPhone: '+91-22-6778-9999',
-    entityType: 'regular',
-    returnPeriod: 'monthly',
-    lastFilingDate: '2025-03-15',
-    status: 'active',
-    healthScore: 45,
-    createdAt: '2025-04-20T08:00:00Z',
-    updatedAt: '2025-03-15T10:00:00Z',
-    _portfolio: {
-      monthlyTaxVolume: 650000,
-      monthlyVolumeChart: [
-        { month: 'Dec', amount: 720000 },
-        { month: 'Jan', amount: 680000 },
-        { month: 'Feb', amount: 630000 },
-        { month: 'Mar', amount: 590000 },
-        { month: 'Apr', amount: 540000 },
-        { month: 'May', amount: 650000 },
-      ],
-      pendingFilings: 4,
-      riskLevel: 'High',
-      riskDetail: 'Filing delays',
-      healthBreakdown: { gstinValidity: 60, filingTimeliness: 32, invoiceAccuracy: 52 },
-      recentFilings: [
-        { period: 'Apr 2025', type: 'GSTR-1', status: 'Overdue', date: '' },
-        { period: 'Mar 2025', type: 'GSTR-3B', status: 'Overdue', date: '' },
-        { period: 'Feb 2025', type: 'GSTR-1', status: 'Filed', date: '2025-03-15' },
-      ],
-    },
-  },
-  {
-    id: 'cl_005',
-    gstin: '27AABCS7890K1Z9',
-    tradeName: 'Sunrise Exports',
-    legalName: 'Sunrise Exports India Ltd',
-    state: 'Maharashtra',
-    stateCode: '27',
-    contactEmail: 'compliance@sunriseexports.com',
-    contactPhone: '+91-22-4567-8901',
-    entityType: 'regular',
-    returnPeriod: 'monthly',
-    lastFilingDate: '2025-05-10',
-    status: 'active',
-    healthScore: 78,
-    createdAt: '2025-05-12T14:00:00Z',
-    updatedAt: '2025-05-10T09:30:00Z',
-    _portfolio: {
-      monthlyTaxVolume: 890000,
-      monthlyVolumeChart: [
-        { month: 'Dec', amount: 820000 },
-        { month: 'Jan', amount: 870000 },
-        { month: 'Feb', amount: 850000 },
-        { month: 'Mar', amount: 950000 },
-        { month: 'Apr', amount: 910000 },
-        { month: 'May', amount: 890000 },
-      ],
-      pendingFilings: 1,
-      riskLevel: 'Low',
-      healthBreakdown: { gstinValidity: 88, filingTimeliness: 72, invoiceAccuracy: 82 },
-      recentFilings: [
-        { period: 'May 2025', type: 'GSTR-1', status: 'Filed', date: '2025-05-10' },
-        { period: 'May 2025', type: 'GSTR-3B', status: 'Pending', date: '' },
-        { period: 'Apr 2025', type: 'GSTR-1', status: 'Filed', date: '2025-04-11' },
-      ],
-    },
-  },
-  {
-    id: 'cl_006',
-    gstin: '09AABCG2345L1Z2',
-    tradeName: 'Gupta Manufacturing',
-    legalName: 'Gupta Manufacturing Co',
-    state: 'Uttar Pradesh',
-    stateCode: '09',
-    contactEmail: 'finance@guptamfg.com',
-    contactPhone: '+91-79-2345-6789',
-    entityType: 'composition',
-    returnPeriod: 'quarterly',
-    lastFilingDate: '2025-04-18',
-    status: 'active',
-    healthScore: 94,
-    createdAt: '2025-06-01T10:00:00Z',
-    updatedAt: '2025-04-18T12:00:00Z',
-    _portfolio: {
-      monthlyTaxVolume: 330000,
-      monthlyVolumeChart: [
-        { month: 'Dec', amount: 290000 },
-        { month: 'Jan', amount: 310000 },
-        { month: 'Feb', amount: 305000 },
-        { month: 'Mar', amount: 340000 },
-        { month: 'Apr', amount: 320000 },
-        { month: 'May', amount: 330000 },
-      ],
-      pendingFilings: 0,
-      riskLevel: 'Low',
-      healthBreakdown: { gstinValidity: 98, filingTimeliness: 92, invoiceAccuracy: 96 },
-      recentFilings: [
-        { period: 'Q4 FY26', type: 'GSTR-4', status: 'Filed', date: '2025-04-18' },
-        { period: 'Q3 FY26', type: 'GSTR-4', status: 'Filed', date: '2025-01-18' },
-        { period: 'Q2 FY26', type: 'GSTR-4', status: 'Filed', date: '2025-10-18' },
-      ],
-    },
-  },
-  {
-    id: 'cl_007',
-    gstin: '29AABCD6789M1Z4',
-    tradeName: 'RK Electronics',
-    legalName: 'RK Electronics Pvt Ltd',
-    state: 'Karnataka',
-    stateCode: '29',
-    contactEmail: 'gst@rkelectronics.in',
-    contactPhone: '+91-80-4567-8901',
-    entityType: 'regular',
-    returnPeriod: 'monthly',
-    lastFilingDate: '2025-04-11',
-    status: 'active',
-    healthScore: 73,
-    createdAt: '2025-07-15T16:00:00Z',
-    updatedAt: '2025-04-11T14:30:00Z',
-    _portfolio: {
-      monthlyTaxVolume: 150000,
-      monthlyVolumeChart: [
-        { month: 'Dec', amount: 120000 },
-        { month: 'Jan', amount: 135000 },
-        { month: 'Feb', amount: 140000 },
-        { month: 'Mar', amount: 165000 },
-        { month: 'Apr', amount: 145000 },
-        { month: 'May', amount: 150000 },
-      ],
-      pendingFilings: 3,
-      riskLevel: 'Medium',
-      riskDetail: 'Incomplete docs',
-      healthBreakdown: { gstinValidity: 65, filingTimeliness: 58, invoiceAccuracy: 72 },
-      recentFilings: [
-        { period: 'May 2025', type: 'GSTR-1', status: 'Filed', date: '2025-05-09' },
-        { period: 'Apr 2025', type: 'GSTR-3B', status: 'Pending', date: '' },
-        { period: 'Apr 2025', type: 'GSTR-1', status: 'Filed', date: '2025-04-11' },
-      ],
-    },
-  },
-  {
-    id: 'cl_008',
-    gstin: '27AABCA0123N1Z6',
-    tradeName: 'Apex Logistics',
-    legalName: 'Apex Logistics India Pvt Ltd',
-    state: 'Maharashtra',
-    stateCode: '27',
-    contactEmail: 'tax@apexlogistics.com',
-    contactPhone: '+91-22-8901-2345',
-    entityType: 'regular',
-    returnPeriod: 'monthly',
-    lastFilingDate: '2025-11-30',
-    status: 'inactive',
-    healthScore: 31,
-    createdAt: '2025-02-28T11:00:00Z',
-    updatedAt: '2025-11-30T08:00:00Z',
-    _portfolio: {
-      monthlyTaxVolume: 580000,
-      monthlyVolumeChart: [
-        { month: 'Dec', amount: 620000 },
-        { month: 'Jan', amount: 590000 },
-        { month: 'Feb', amount: 560000 },
-        { month: 'Mar', amount: 510000 },
-        { month: 'Apr', amount: 480000 },
-        { month: 'May', amount: 580000 },
-      ],
-      pendingFilings: 6,
-      riskLevel: 'High',
-      riskDetail: 'Multiple delays',
-      healthBreakdown: { gstinValidity: 40, filingTimeliness: 18, invoiceAccuracy: 45 },
-      recentFilings: [
-        { period: 'Nov 2025', type: 'GSTR-1', status: 'Filed', date: '2025-11-30' },
-        { period: 'Oct 2025', type: 'GSTR-3B', status: 'Overdue', date: '' },
-        { period: 'Sep 2025', type: 'GSTR-1', status: 'Overdue', date: '' },
-      ],
-    },
-  },
-];
+  };
+}
 
 // ─── GSTIN Form Validation ──────────────────────────────────────────────────
 
@@ -899,10 +676,9 @@ function FilingStatusDot({ count }: { count: number }) {
 
 export default function ClientRegistryPage() {
   const { setCurrentView, setSelectedClientId } = useApp();
+  const store = useGSTStore();
 
   // ─── State ────────────────────────────────────────────────────────────────
-  const [clients, setClients] = useState<ClientPortfolio[]>([]);
-  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
 
   // Dialog state
@@ -919,46 +695,10 @@ export default function ClientRegistryPage() {
   // Delete confirmation
   const [deleteTarget, setDeleteTarget] = useState<ClientPortfolio | null>(null);
 
-  // ─── Data Fetching ────────────────────────────────────────────────────────
-  const fetchClients = useCallback(async () => {
-    try {
-      setLoading(true);
-      const res = await fetch('/api/clients');
-      if (res.ok) {
-        const data = await res.json();
-        if (data.clients && data.clients.length > 0) {
-          // Enrich API data with portfolio data
-          const enriched: ClientPortfolio[] = data.clients.map((c: Client, idx: number) => {
-            const mock = MOCK_CLIENTS[idx % MOCK_CLIENTS.length];
-            return {
-              ...c,
-              _portfolio: mock?._portfolio ?? {
-                monthlyTaxVolume: 0,
-                monthlyVolumeChart: [],
-                pendingFilings: 0,
-                riskLevel: 'Low' as RiskLevel,
-                healthBreakdown: { gstinValidity: c.healthScore, filingTimeliness: c.healthScore, invoiceAccuracy: c.healthScore },
-                recentFilings: [],
-              },
-            };
-          });
-          setClients(enriched);
-        } else {
-          setClients(MOCK_CLIENTS);
-        }
-      } else {
-        setClients(MOCK_CLIENTS);
-      }
-    } catch {
-      setClients(MOCK_CLIENTS);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchClients();
-  }, [fetchClients]);
+  // ─── Derive clients with portfolio data from store ───────────────────────
+  const clients = useMemo<ClientPortfolio[]>(() => {
+    return store.clients.map(c => derivePortfolio(c, store));
+  }, [store]);
 
   // ─── Derived Data ─────────────────────────────────────────────────────────
   const filteredClients = useMemo(() => {
@@ -1037,52 +777,34 @@ export default function ClientRegistryPage() {
     setSubmitting(true);
     try {
       if (editingClient) {
-        const res = await fetch('/api/clients', {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            id: editingClient.id,
-            gstin: formatGSTIN(form.gstin),
-            tradeName: form.tradeName,
-            legalName: form.legalName || null,
-            contactEmail: form.contactEmail || null,
-            contactPhone: form.contactPhone || null,
-            state: form.state || null,
-            stateCode: form.stateCode || null,
-            entityType: form.entityType,
-            returnPeriod: form.returnPeriod,
-          }),
+        store.updateClient(editingClient.id, {
+          gstin: formatGSTIN(form.gstin),
+          tradeName: form.tradeName,
+          legalName: form.legalName || undefined,
+          contactEmail: form.contactEmail || undefined,
+          contactPhone: form.contactPhone || undefined,
+          state: form.state || undefined,
+          stateCode: form.stateCode || undefined,
+          entityType: form.entityType as SampleClient['entityType'],
+          returnPeriod: form.returnPeriod as SampleClient['returnPeriod'],
         });
-        if (res.ok) {
-          setDialogOpen(false);
-          await fetchClients();
-        } else {
-          const data = await res.json();
-          setGstinError(data.error ?? 'Failed to update client');
-        }
+        setDialogOpen(false);
       } else {
-        const res = await fetch('/api/clients', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            gstin: formatGSTIN(form.gstin),
-            tradeName: form.tradeName,
-            legalName: form.legalName || null,
-            contactEmail: form.contactEmail || null,
-            contactPhone: form.contactPhone || null,
-            state: form.state || null,
-            stateCode: form.stateCode || null,
-            entityType: form.entityType,
-            returnPeriod: form.returnPeriod,
-          }),
+        store.addClient({
+          gstin: formatGSTIN(form.gstin),
+          tradeName: form.tradeName,
+          legalName: form.legalName || '',
+          state: form.state || '',
+          stateCode: form.stateCode || '',
+          entityType: form.entityType as SampleClient['entityType'],
+          returnPeriod: form.returnPeriod as SampleClient['returnPeriod'],
+          lastFilingDate: '',
+          status: 'active',
+          healthScore: 50,
+          contactEmail: form.contactEmail || undefined,
+          contactPhone: form.contactPhone || undefined,
         });
-        if (res.ok) {
-          setDialogOpen(false);
-          await fetchClients();
-        } else {
-          const data = await res.json();
-          setGstinError(data.error ?? 'Failed to create client');
-        }
+        setDialogOpen(false);
       }
     } catch (err) {
       console.error('Submit error:', err);
@@ -1091,20 +813,13 @@ export default function ClientRegistryPage() {
     }
   };
 
-  const handleDelete = async () => {
+  const handleDelete = () => {
     if (!deleteTarget) return;
-    try {
-      const res = await fetch(`/api/clients?id=${deleteTarget.id}`, { method: 'DELETE' });
-      if (res.ok) {
-        setDeleteTarget(null);
-        if (sheetClient?.id === deleteTarget.id) {
-          setSheetOpen(false);
-          setSheetClient(null);
-        }
-        await fetchClients();
-      }
-    } catch (err) {
-      console.error('Delete error:', err);
+    store.deleteClient(deleteTarget.id);
+    setDeleteTarget(null);
+    if (sheetClient?.id === deleteTarget.id) {
+      setSheetOpen(false);
+      setSheetClient(null);
     }
   };
 
@@ -1119,7 +834,7 @@ export default function ClientRegistryPage() {
   };
 
   // ─── Loading ──────────────────────────────────────────────────────────────
-  if (loading) return <PageSkeleton />;
+  // No loading state needed — store is synchronous
 
   // ─── Render ───────────────────────────────────────────────────────────────
   return (

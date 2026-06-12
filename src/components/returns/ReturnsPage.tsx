@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Card,
@@ -46,6 +46,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useApp } from '@/contexts/AppContext';
+import { useGSTStore } from '@/stores/gst-store';
 import {
   GSTRFiling,
   Client,
@@ -55,6 +56,7 @@ import {
 import {
   formatCurrency,
   periodToLabel,
+  getFinancialYear,
 } from '@/lib/gst-utils';
 
 // ─── Types ──────────────────────────────────────────────────────────────────────
@@ -119,293 +121,6 @@ const KANBAN_COLUMNS: {
     countBadgeClass: 'bg-red-200 text-red-800',
     icon: <AlertTriangle className="size-4 text-red-500" />,
     emptyText: 'No issues found',
-  },
-];
-
-// ─── Section Breakdown Mocks ────────────────────────────────────────────────────
-
-const SECTION_MAP: Record<string, SectionBreakdown[]> = {
-  'GSTR-1': [
-    { section: 'B2B', invoiceCount: 15, taxableValue: 845200, taxAmount: 152136 },
-    { section: 'B2C Large', invoiceCount: 8, taxableValue: 321400, taxAmount: 57852 },
-    { section: 'B2C Small', invoiceCount: 22, taxableValue: 187650, taxAmount: 33777 },
-    { section: 'CDNR', invoiceCount: 3, taxableValue: 98060, taxAmount: -17651 },
-  ],
-  'GSTR-3B': [
-    { section: 'Outward Supplies', invoiceCount: 30, taxableValue: 2180000, taxAmount: 392400 },
-    { section: 'Inward Supplies (RC)', invoiceCount: 2, taxableValue: 120000, taxAmount: 21600 },
-    { section: 'ITC Claims', invoiceCount: 15, taxableValue: 0, taxAmount: -180000 },
-    { section: 'Tax Paid', invoiceCount: 0, taxableValue: 0, taxAmount: 234000 },
-  ],
-};
-
-// ─── Mock Clients ───────────────────────────────────────────────────────────────
-
-const MOCK_CLIENTS: Client[] = [
-  {
-    id: 'cl-sharma',
-    gstin: '27AABCS1234F1Z5',
-    tradeName: 'Sharma Enterprises',
-    legalName: 'Sharma Enterprises Pvt Ltd',
-    state: 'Maharashtra',
-    stateCode: '27',
-    entityType: 'Regular',
-    status: 'active',
-    healthScore: 92,
-    createdAt: '2024-01-10T10:00:00Z',
-    updatedAt: '2025-06-01T10:00:00Z',
-  },
-  {
-    id: 'cl-patel',
-    gstin: '24AABCP5678G1Z3',
-    tradeName: 'Patel & Sons',
-    legalName: 'Patel & Sons Trading Co',
-    state: 'Gujarat',
-    stateCode: '24',
-    entityType: 'Regular',
-    status: 'active',
-    healthScore: 78,
-    createdAt: '2024-01-15T10:00:00Z',
-    updatedAt: '2025-06-01T10:00:00Z',
-  },
-  {
-    id: 'cl-krishna',
-    gstin: '06AABCK9012H1Z1',
-    tradeName: 'Krishna Traders',
-    legalName: 'Krishna Traders Pvt Ltd',
-    state: 'Haryana',
-    stateCode: '06',
-    entityType: 'Regular',
-    status: 'active',
-    healthScore: 88,
-    createdAt: '2024-02-01T10:00:00Z',
-    updatedAt: '2025-06-01T10:00:00Z',
-  },
-  {
-    id: 'cl-metro',
-    gstin: '33AABCM3456J1Z7',
-    tradeName: 'Metro Retail',
-    legalName: 'Metro Retail India Pvt Ltd',
-    state: 'Tamil Nadu',
-    stateCode: '33',
-    entityType: 'Regular',
-    status: 'active',
-    healthScore: 65,
-    createdAt: '2024-01-20T10:00:00Z',
-    updatedAt: '2025-05-15T10:00:00Z',
-  },
-  {
-    id: 'cl-sunrise',
-    gstin: '27AABCS7890K1Z9',
-    tradeName: 'Sunrise Exports',
-    legalName: 'Sunrise Exports India Ltd',
-    state: 'Maharashtra',
-    stateCode: '27',
-    entityType: 'Regular',
-    status: 'active',
-    healthScore: 85,
-    createdAt: '2024-02-10T10:00:00Z',
-    updatedAt: '2025-05-20T10:00:00Z',
-  },
-  {
-    id: 'cl-gupta',
-    gstin: '09AABCG2345L1Z2',
-    tradeName: 'Gupta Manufacturing',
-    legalName: 'Gupta Manufacturing Co',
-    state: 'Uttar Pradesh',
-    stateCode: '09',
-    entityType: 'Regular',
-    status: 'active',
-    healthScore: 91,
-    createdAt: '2024-01-05T10:00:00Z',
-    updatedAt: '2025-06-01T10:00:00Z',
-  },
-  {
-    id: 'cl-digital',
-    gstin: '29AABCD6789M1Z4',
-    tradeName: 'Digital Commerce',
-    legalName: 'Digital Commerce Solutions Pvt Ltd',
-    state: 'Karnataka',
-    stateCode: '29',
-    entityType: 'Regular',
-    status: 'active',
-    healthScore: 73,
-    createdAt: '2024-03-01T10:00:00Z',
-    updatedAt: '2025-06-01T10:00:00Z',
-  },
-  {
-    id: 'cl-apex',
-    gstin: '27AABCA0123N1Z6',
-    tradeName: 'Apex Logistics',
-    legalName: 'Apex Logistics India Pvt Ltd',
-    state: 'Maharashtra',
-    stateCode: '27',
-    entityType: 'Regular',
-    status: 'active',
-    healthScore: 58,
-    createdAt: '2023-12-01T10:00:00Z',
-    updatedAt: '2025-04-15T10:00:00Z',
-  },
-];
-
-// ─── Mock Filings ───────────────────────────────────────────────────────────────
-
-const MOCK_FILINGS: GSTRFiling[] = [
-  // Ready to File
-  {
-    id: 'fil-sharma-gstr1',
-    clientId: 'cl-sharma',
-    returnType: 'GSTR-1',
-    period: '2025-06',
-    financialYear: '2025-26',
-    status: 'generated',
-    totalInvoices: 45,
-    readyForFiling: 45,
-    issuesFound: 0,
-    criticalErrors: 0,
-    warnings: 0,
-    totalTaxableValue: 2518000,
-    totalTax: 452310,
-    createdAt: '2025-06-02T10:00:00Z',
-    updatedAt: '2025-06-08T10:00:00Z',
-    client: MOCK_CLIENTS[0],
-  },
-  // Requires Attention
-  {
-    id: 'fil-patel-gstr3b',
-    clientId: 'cl-patel',
-    returnType: 'GSTR-3B',
-    period: '2025-06',
-    financialYear: '2025-26',
-    status: 'reopened',
-    totalInvoices: 89,
-    readyForFiling: 78,
-    issuesFound: 7,
-    criticalErrors: 2,
-    warnings: 5,
-    totalTaxableValue: 7156000,
-    totalTax: 1287650,
-    createdAt: '2025-06-01T10:00:00Z',
-    updatedAt: '2025-06-07T10:00:00Z',
-    client: MOCK_CLIENTS[1],
-  },
-  // Filed
-  {
-    id: 'fil-krishna-gstr1',
-    clientId: 'cl-krishna',
-    returnType: 'GSTR-1',
-    period: '2025-06',
-    financialYear: '2025-26',
-    status: 'filed',
-    filedDate: '2025-06-10T14:30:00Z',
-    acknowledgmentNumber: 'AA110625001234',
-    totalInvoices: 22,
-    readyForFiling: 22,
-    issuesFound: 0,
-    criticalErrors: 0,
-    warnings: 0,
-    totalTaxableValue: 1218000,
-    totalTax: 218940,
-    createdAt: '2025-06-01T10:00:00Z',
-    updatedAt: '2025-06-10T14:30:00Z',
-    client: MOCK_CLIENTS[2],
-  },
-  // Draft
-  {
-    id: 'fil-metro-gstr1',
-    clientId: 'cl-metro',
-    returnType: 'GSTR-1',
-    period: '2025-05',
-    financialYear: '2025-26',
-    status: 'draft',
-    totalInvoices: 67,
-    readyForFiling: 60,
-    issuesFound: 3,
-    criticalErrors: 0,
-    warnings: 3,
-    totalTaxableValue: 3638000,
-    totalTax: 654200,
-    createdAt: '2025-05-28T10:00:00Z',
-    updatedAt: '2025-06-01T10:00:00Z',
-    client: MOCK_CLIENTS[3],
-  },
-  // Ready to File
-  {
-    id: 'fil-sunrise-gstr3b',
-    clientId: 'cl-sunrise',
-    returnType: 'GSTR-3B',
-    period: '2025-05',
-    financialYear: '2025-26',
-    status: 'validated',
-    totalInvoices: 53,
-    readyForFiling: 53,
-    issuesFound: 0,
-    criticalErrors: 0,
-    warnings: 0,
-    totalTaxableValue: 4954000,
-    totalTax: 891430,
-    createdAt: '2025-05-25T10:00:00Z',
-    updatedAt: '2025-06-03T10:00:00Z',
-    client: MOCK_CLIENTS[4],
-  },
-  // Filed
-  {
-    id: 'fil-gupta-gstr1',
-    clientId: 'cl-gupta',
-    returnType: 'GSTR-1',
-    period: '2025-06',
-    financialYear: '2025-26',
-    status: 'filed',
-    filedDate: '2025-06-09T11:15:00Z',
-    acknowledgmentNumber: 'AA110625005678',
-    totalInvoices: 31,
-    readyForFiling: 31,
-    issuesFound: 0,
-    criticalErrors: 0,
-    warnings: 0,
-    totalTaxableValue: 1818000,
-    totalTax: 327180,
-    createdAt: '2025-06-01T10:00:00Z',
-    updatedAt: '2025-06-09T11:15:00Z',
-    client: MOCK_CLIENTS[5],
-  },
-  // Draft
-  {
-    id: 'fil-digital-gstr3b',
-    clientId: 'cl-digital',
-    returnType: 'GSTR-3B',
-    period: '2025-06',
-    financialYear: '2025-26',
-    status: 'draft',
-    totalInvoices: 19,
-    readyForFiling: 19,
-    issuesFound: 0,
-    criticalErrors: 0,
-    warnings: 0,
-    totalTaxableValue: 810000,
-    totalTax: 145670,
-    createdAt: '2025-06-03T10:00:00Z',
-    updatedAt: '2025-06-05T10:00:00Z',
-    client: MOCK_CLIENTS[6],
-  },
-  // Requires Attention
-  {
-    id: 'fil-apex-gstr1',
-    clientId: 'cl-apex',
-    returnType: 'GSTR-1',
-    period: '2025-04',
-    financialYear: '2025-26',
-    status: 'reopened',
-    totalInvoices: 41,
-    readyForFiling: 32,
-    issuesFound: 9,
-    criticalErrors: 3,
-    warnings: 6,
-    totalTaxableValue: 3238000,
-    totalTax: 582900,
-    createdAt: '2025-04-28T10:00:00Z',
-    updatedAt: '2025-06-02T10:00:00Z',
-    client: MOCK_CLIENTS[7],
   },
 ];
 
@@ -474,10 +189,6 @@ function getAttentionSummary(filing: GSTRFiling): string {
   if (filing.criticalErrors > 0) parts.push(`${filing.criticalErrors} critical error${filing.criticalErrors > 1 ? 's' : ''}`);
   if (filing.warnings > 0) parts.push(`${filing.warnings} warning${filing.warnings > 1 ? 's' : ''}`);
   if (filing.issuesFound > 0 && parts.length === 0) parts.push(`${filing.issuesFound} issue${filing.issuesFound > 1 ? 's' : ''}`);
-
-  // Add specific mismatch/missing text for our known mock data
-  if (filing.id === 'fil-patel-gstr3b') return '7 mismatches';
-  if (filing.id === 'fil-apex-gstr1') return 'Overdue · 3 missing invoices';
   return parts.join(' · ');
 }
 
@@ -486,6 +197,76 @@ function getReturnTypeBadgeClass(returnType: string): string {
     return 'border-teal-200 bg-teal-50 text-teal-700';
   }
   return 'border-emerald-200 bg-emerald-50 text-emerald-700';
+}
+
+// ─── Section Breakdown Computation ──────────────────────────────────────────────
+
+function computeSectionsForFiling(
+  returnType: string,
+  invoices: { taxableValue: number; cgst: number; sgst: number; igst: number; customerGstin?: string; status: string }[]
+): SectionBreakdown[] {
+  if (returnType === 'GSTR-1') {
+    const b2b = invoices.filter(inv => inv.customerGstin);
+    const b2cLarge = invoices.filter(inv => !inv.customerGstin && inv.taxableValue >= 250000);
+    const b2cSmall = invoices.filter(inv => !inv.customerGstin && inv.taxableValue < 250000);
+
+    return [
+      {
+        section: 'B2B',
+        invoiceCount: b2b.length,
+        taxableValue: b2b.reduce((s, i) => s + i.taxableValue, 0),
+        taxAmount: b2b.reduce((s, i) => s + i.cgst + i.sgst + i.igst, 0),
+      },
+      {
+        section: 'B2C Large',
+        invoiceCount: b2cLarge.length,
+        taxableValue: b2cLarge.reduce((s, i) => s + i.taxableValue, 0),
+        taxAmount: b2cLarge.reduce((s, i) => s + i.cgst + i.sgst + i.igst, 0),
+      },
+      {
+        section: 'B2C Small',
+        invoiceCount: b2cSmall.length,
+        taxableValue: b2cSmall.reduce((s, i) => s + i.taxableValue, 0),
+        taxAmount: b2cSmall.reduce((s, i) => s + i.cgst + i.sgst + i.igst, 0),
+      },
+      {
+        section: 'CDNR',
+        invoiceCount: 0,
+        taxableValue: 0,
+        taxAmount: 0,
+      },
+    ];
+  }
+
+  // GSTR-3B
+  const totalTax = invoices.reduce((s, i) => s + i.cgst + i.sgst + i.igst, 0);
+  const totalTaxable = invoices.reduce((s, i) => s + i.taxableValue, 0);
+  return [
+    {
+      section: 'Outward Supplies',
+      invoiceCount: invoices.length,
+      taxableValue: totalTaxable,
+      taxAmount: totalTax,
+    },
+    {
+      section: 'Inward Supplies (RC)',
+      invoiceCount: 0,
+      taxableValue: 0,
+      taxAmount: 0,
+    },
+    {
+      section: 'ITC Claims',
+      invoiceCount: 0,
+      taxableValue: 0,
+      taxAmount: Math.round(-totalTax * 0.6),
+    },
+    {
+      section: 'Tax Paid',
+      invoiceCount: 0,
+      taxableValue: 0,
+      taxAmount: Math.round(totalTax * 0.75),
+    },
+  ];
 }
 
 // ─── Animation Variants ─────────────────────────────────────────────────────────
@@ -529,41 +310,29 @@ const columnEnter = {
 
 export default function ReturnsPage() {
   const { setCurrentView } = useApp();
+  const store = useGSTStore();
 
   // ── State ─────────────────────────────────────────────────────────────────
-  const [filings, setFilings] = useState<GSTRFiling[]>([]);
-  const [loading, setLoading] = useState(true);
   const [selectedFiling, setSelectedFiling] = useState<GSTRFiling | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [filingAction, setFilingAction] = useState<string | null>(null);
   const [selectedPeriod, setSelectedPeriod] = useState('2025-06');
 
-  // ── Data Fetching ─────────────────────────────────────────────────────────
-  const fetchFilings = useCallback(async () => {
-    try {
-      const res = await fetch('/api/gstr-filing');
-      if (res.ok) {
-        const data = await res.json();
-        const rawFilings = data.filings ?? data ?? [];
-        if (Array.isArray(rawFilings) && rawFilings.length > 0) {
-          setFilings(rawFilings);
-          return;
-        }
-      }
-    } catch {
-      // fall through to mock
-    }
-    setFilings(MOCK_FILINGS);
-  }, []);
+  // ── Data from Store ──────────────────────────────────────────────────────
+  const storeFilings = store.filings;
+  const storeClients = store.clients;
 
-  useEffect(() => {
-    async function load() {
-      setLoading(true);
-      await fetchFilings();
-      setLoading(false);
-    }
-    load();
-  }, [fetchFilings]);
+  // Map store filings to GSTRFiling format with client enriched
+  const filings = useMemo<GSTRFiling[]>(() => {
+    return storeFilings.map((f) => {
+      const client = storeClients.find(c => c.id === f.clientId) as Client | undefined;
+      return {
+        ...f,
+        financialYear: getFinancialYear(f.period),
+        client,
+      };
+    });
+  }, [storeFilings, storeClients]);
 
   // ── Derived Data ──────────────────────────────────────────────────────────
   const filteredFilings = useMemo(() => {
@@ -585,6 +354,26 @@ export default function ReturnsPage() {
     return columns;
   }, [filteredFilings]);
 
+  // ── Health Score Computation from Store ───────────────────────────────────
+  const healthMetrics = useMemo(() => {
+    const filedCount = storeFilings.filter(f => f.status === 'filed').length;
+    const criticalCount = storeFilings.filter(f => f.criticalErrors > 0).length;
+    const totalReturns = storeFilings.length;
+    const avgCompliance = storeClients.length > 0
+      ? Math.round(storeClients.reduce((sum, c) => sum + c.healthScore, 0) / storeClients.length)
+      : 0;
+
+    const overallHealth = avgCompliance;
+    const filingTimeliness = totalReturns > 0
+      ? Math.round((filedCount / totalReturns) * 100)
+      : 0;
+    const dataAccuracy = totalReturns > 0
+      ? Math.round(((totalReturns - criticalCount) / totalReturns) * 100)
+      : 100;
+    const compliance = avgCompliance;
+    return { overallHealth, filingTimeliness, dataAccuracy, compliance };
+  }, [storeFilings, storeClients]);
+
   // ── Handlers ──────────────────────────────────────────────────────────────
   const handleCardClick = (filing: GSTRFiling) => {
     setSelectedFiling(filing);
@@ -594,31 +383,21 @@ export default function ReturnsPage() {
   const handleFileReturn = async (filing: GSTRFiling) => {
     setFilingAction(filing.id);
 
-    // Simulate filing — 2 second delay
+    // Use store's fileReturn method (handles status update, ARN generation, activity logging)
+    store.fileReturn(filing.id);
+
+    // Wait for store to complete filing (store has 1.5s delay internally)
     await new Promise((r) => setTimeout(r, 2000));
 
-    const arn = `AA${String(new Date().getDate()).padStart(2, '0')}${String(new Date().getMonth() + 1).padStart(2, '0')}${new Date().getFullYear()}${String(Math.floor(Math.random() * 999999)).padStart(6, '0')}`;
-
-    // Update filing locally
-    setFilings((prev) =>
-      prev.map((f) =>
-        f.id === filing.id
-          ? {
-              ...f,
-              status: 'filed' as FilingStatus,
-              filedDate: new Date().toISOString(),
-              acknowledgmentNumber: arn,
-            }
-          : f
-      )
-    );
+    // Read updated filing from store for ARN in toast
+    const updatedFiling = store.filings.find(f => f.id === filing.id);
 
     setFilingAction(null);
     setSheetOpen(false);
     setSelectedFiling(null);
 
     toast.success(`${filing.returnType} filed successfully!`, {
-      description: `ARN: ${arn}`,
+      description: `ARN: ${updatedFiling?.acknowledgmentNumber ?? 'Pending'}`,
       duration: 5000,
     });
   };
@@ -650,7 +429,8 @@ export default function ReturnsPage() {
   };
 
   // ── Loading State ─────────────────────────────────────────────────────────
-  if (loading) {
+  // Show a brief skeleton while store data initializes
+  if (storeFilings.length === 0) {
     return (
       <div className="space-y-5 p-4 md:p-6">
         <div className="flex items-center justify-between">
@@ -750,7 +530,7 @@ export default function ReturnsPage() {
   const renderReadyCard = (filing: GSTRFiling) => {
     const clientName = filing.client?.tradeName ?? 'Unknown Client';
     const periodLabel = periodToLabel(filing.period);
-    const isFiling = filingAction === filing.id;
+    const isFiling = filingAction === filing.id || store.filingInProgressIds.includes(filing.id);
 
     return (
       <motion.div
@@ -1032,7 +812,11 @@ export default function ReturnsPage() {
     const clientName = filing.client?.tradeName ?? 'Unknown';
     const clientGstin = filing.client?.gstin ?? '';
     const column = getKanbanColumn(filing.status);
-    const sections = SECTION_MAP[filing.returnType] ?? SECTION_MAP['GSTR-1'];
+
+    // Compute section breakdown from store invoices for this client
+    const clientInvoices = store.getInvoicesForClient(filing.clientId);
+    const sections = computeSectionsForFiling(filing.returnType, clientInvoices);
+
     const timelineIndex = getTimelineStepIndex(filing.status);
 
     return (
@@ -1230,14 +1014,14 @@ export default function ReturnsPage() {
                 <Button
                   className="w-full gap-2 bg-emerald-600 hover:bg-emerald-700 text-white"
                   onClick={() => handleFileReturn(filing)}
-                  disabled={filingAction === filing.id}
+                  disabled={filingAction === filing.id || store.filingInProgressIds.includes(filing.id)}
                 >
-                  {filingAction === filing.id ? (
+                  {filingAction === filing.id || store.filingInProgressIds.includes(filing.id) ? (
                     <Loader2 className="size-4 animate-spin" />
                   ) : (
                     <Send className="size-4" />
                   )}
-                  {filingAction === filing.id ? 'Filing...' : 'File Return'}
+                  {filingAction === filing.id || store.filingInProgressIds.includes(filing.id) ? 'Filing...' : 'File Return'}
                 </Button>
               )}
               {column === 'filed' && (
@@ -1280,6 +1064,9 @@ export default function ReturnsPage() {
   // ═════════════════════════════════════════════════════════════════════════
   // Main Render
   // ═════════════════════════════════════════════════════════════════════════
+
+  const healthScore = healthMetrics.overallHealth;
+  const healthColor = healthScore > 80 ? '#10b981' : healthScore > 50 ? '#f59e0b' : '#ef4444';
 
   return (
     <div className="flex flex-col h-full min-h-0">
@@ -1336,17 +1123,17 @@ export default function ReturnsPage() {
                   <circle cx={36} cy={36} r={30} fill="none" stroke="#f1f5f9" strokeWidth={6} />
                   <motion.circle
                     cx={36} cy={36} r={30} fill="none"
-                    stroke={72 > 80 ? '#10b981' : 72 > 50 ? '#f59e0b' : '#ef4444'}
+                    stroke={healthColor}
                     strokeWidth={6}
                     strokeLinecap="round"
-                    strokeDasharray={`${(72 / 100) * 2 * Math.PI * 30} ${2 * Math.PI * 30}`}
+                    strokeDasharray={`${(healthScore / 100) * 2 * Math.PI * 30} ${2 * Math.PI * 30}`}
                     initial={{ strokeDasharray: `0 ${2 * Math.PI * 30}` }}
-                    animate={{ strokeDasharray: `${(72 / 100) * 2 * Math.PI * 30} ${2 * Math.PI * 30}` }}
+                    animate={{ strokeDasharray: `${(healthScore / 100) * 2 * Math.PI * 30} ${2 * Math.PI * 30}` }}
                     transition={{ duration: 1.2, ease: [0.25, 0.46, 0.45, 0.94] }}
                   />
                 </svg>
                 <div className="absolute inset-0 flex flex-col items-center justify-center">
-                  <span className="text-lg font-bold text-foreground">72</span>
+                  <span className="text-lg font-bold text-foreground">{healthScore}</span>
                   <span className="text-[8px] font-medium text-muted-foreground leading-none">/100</span>
                 </div>
               </div>
@@ -1356,13 +1143,15 @@ export default function ReturnsPage() {
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between">
                     <span className="text-[11px] font-medium text-muted-foreground">Filing Timeliness</span>
-                    <span className="text-[11px] font-bold text-amber-700">68%</span>
+                    <span className={`text-[11px] font-bold ${healthMetrics.filingTimeliness > 80 ? 'text-emerald-700' : healthMetrics.filingTimeliness > 50 ? 'text-amber-700' : 'text-red-700'}`}>
+                      {healthMetrics.filingTimeliness}%
+                    </span>
                   </div>
                   <div className="h-1.5 rounded-full bg-slate-100 overflow-hidden">
                     <motion.div
-                      className="h-full rounded-full bg-amber-500"
+                      className={`h-full rounded-full ${healthMetrics.filingTimeliness > 80 ? 'bg-emerald-500' : healthMetrics.filingTimeliness > 50 ? 'bg-amber-500' : 'bg-red-500'}`}
                       initial={{ width: 0 }}
-                      animate={{ width: '68%' }}
+                      animate={{ width: `${healthMetrics.filingTimeliness}%` }}
                       transition={{ duration: 1, ease: 'easeOut', delay: 0.3 }}
                     />
                   </div>
@@ -1370,13 +1159,15 @@ export default function ReturnsPage() {
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between">
                     <span className="text-[11px] font-medium text-muted-foreground">Data Accuracy</span>
-                    <span className="text-[11px] font-bold text-emerald-700">85%</span>
+                    <span className={`text-[11px] font-bold ${healthMetrics.dataAccuracy > 80 ? 'text-emerald-700' : healthMetrics.dataAccuracy > 50 ? 'text-amber-700' : 'text-red-700'}`}>
+                      {healthMetrics.dataAccuracy}%
+                    </span>
                   </div>
                   <div className="h-1.5 rounded-full bg-slate-100 overflow-hidden">
                     <motion.div
-                      className="h-full rounded-full bg-emerald-500"
+                      className={`h-full rounded-full ${healthMetrics.dataAccuracy > 80 ? 'bg-emerald-500' : healthMetrics.dataAccuracy > 50 ? 'bg-amber-500' : 'bg-red-500'}`}
                       initial={{ width: 0 }}
-                      animate={{ width: '85%' }}
+                      animate={{ width: `${healthMetrics.dataAccuracy}%` }}
                       transition={{ duration: 1, ease: 'easeOut', delay: 0.4 }}
                     />
                   </div>
@@ -1384,13 +1175,15 @@ export default function ReturnsPage() {
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between">
                     <span className="text-[11px] font-medium text-muted-foreground">Compliance</span>
-                    <span className="text-[11px] font-bold text-amber-700">65%</span>
+                    <span className={`text-[11px] font-bold ${healthMetrics.compliance > 80 ? 'text-emerald-700' : healthMetrics.compliance > 50 ? 'text-amber-700' : 'text-red-700'}`}>
+                      {healthMetrics.compliance}%
+                    </span>
                   </div>
                   <div className="h-1.5 rounded-full bg-slate-100 overflow-hidden">
                     <motion.div
-                      className="h-full rounded-full bg-amber-500"
+                      className={`h-full rounded-full ${healthMetrics.compliance > 80 ? 'bg-emerald-500' : healthMetrics.compliance > 50 ? 'bg-amber-500' : 'bg-red-500'}`}
                       initial={{ width: 0 }}
-                      animate={{ width: '65%' }}
+                      animate={{ width: `${healthMetrics.compliance}%` }}
                       transition={{ duration: 1, ease: 'easeOut', delay: 0.5 }}
                     />
                   </div>

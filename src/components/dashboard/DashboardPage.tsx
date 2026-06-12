@@ -99,71 +99,13 @@ interface RecentUpload {
   accuracy?: number;
 }
 
-interface AIRecommendation {
-  id: string;
-  title: string;
-  description: string;
-  icon: React.ReactNode;
-  iconBg: string;
-  iconColor: string;
-  actionLabel: string;
-  actionView: string;
-  urgency: 'high' | 'medium' | 'info';
-}
+// AI Recommendation is now derived from store.aiInsights — no separate interface needed
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // CONSTANTS & STATIC DATA
 // ═══════════════════════════════════════════════════════════════════════════════
 
 const CURRENT_PERIOD = '2025-06';
-
-// AI Recommendations remain static — no store equivalent
-const aiRecommendations: AIRecommendation[] = [
-  {
-    id: 'ai1',
-    title: '4 invoices missing from GSTR-2B for Apex Logistics',
-    description: 'Purchase invoices from May 2025 not reflected. Contact vendors Sun Pharma & Reliance Retail to file their GSTR-1.',
-    icon: <AlertTriangle className="h-4 w-4" />,
-    iconBg: 'bg-amber-50',
-    iconColor: 'text-amber-600',
-    actionLabel: 'Review Missing Invoices',
-    actionView: 'reconcile',
-    urgency: 'high',
-  },
-  {
-    id: 'ai2',
-    title: '₹42,560 ITC mismatch detected for Patel & Sons',
-    description: 'INV-2025-1045 shows Books ₹50,000 vs Portal ₹44,000. Possible partial reporting by supplier Mahalaxmi Textiles.',
-    icon: <GitCompareArrows className="h-4 w-4" />,
-    iconBg: 'bg-red-50',
-    iconColor: 'text-red-600',
-    actionLabel: 'Run Reconciliation',
-    actionView: 'reconcile',
-    urgency: 'high',
-  },
-  {
-    id: 'ai3',
-    title: 'GSTR-1 due in 3 days for 3 clients',
-    description: 'Sharma Enterprises, Metro Retail, and Gupta Manufacturing have GSTR-1 due Jul 11. Start filing now to avoid ₹50/day late fee.',
-    icon: <CalendarClock className="h-4 w-4" />,
-    iconBg: 'bg-amber-50',
-    iconColor: 'text-amber-600',
-    actionLabel: 'File Return',
-    actionView: 'returns',
-    urgency: 'high',
-  },
-  {
-    id: 'ai4',
-    title: 'Auto-draft GSTR-1 ready for Gupta Manufacturing',
-    description: '32 invoices extracted from Sales_Register_Jun2025.xlsx with 99.2% accuracy. Review and file directly.',
-    icon: <Sparkles className="h-4 w-4" />,
-    iconBg: 'bg-emerald-50',
-    iconColor: 'text-emerald-600',
-    actionLabel: 'Review & File',
-    actionView: 'returns',
-    urgency: 'info',
-  },
-];
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // HELPERS
@@ -382,6 +324,38 @@ export default function DashboardPage() {
     accuracy: u.accuracy,
   }));
 
+  // ── AI Insights from store (replaces hardcoded aiRecommendations) ──────────
+  const recentActivities = store.getRecentActivities(10);
+
+  const insightTypeConfig: Record<string, { icon: React.ReactNode; iconBg: string; iconColor: string; actionView: string; actionLabel: string }> = {
+    risk_alert: { icon: <AlertTriangle className="h-4 w-4" />, iconBg: 'bg-red-50', iconColor: 'text-red-600', actionView: 'reconcile', actionLabel: 'Review Issue' },
+    missing_doc: { icon: <FileWarning className="h-4 w-4" />, iconBg: 'bg-amber-50', iconColor: 'text-amber-600', actionView: 'reconcile', actionLabel: 'Review Missing Invoices' },
+    tax_anomaly: { icon: <GitCompareArrows className="h-4 w-4" />, iconBg: 'bg-red-50', iconColor: 'text-red-600', actionView: 'reconcile', actionLabel: 'Run Reconciliation' },
+    filing_rec: { icon: <CalendarClock className="h-4 w-4" />, iconBg: 'bg-emerald-50', iconColor: 'text-emerald-600', actionView: 'returns', actionLabel: 'File Return' },
+  };
+
+  const allInsights = Object.values(store.aiInsights)
+    .flat()
+    .filter(i => !i.dismissed)
+    .sort((a, b) => (a.urgency === 'high' ? 0 : a.urgency === 'medium' ? 1 : 2) - (b.urgency === 'high' ? 0 : b.urgency === 'medium' ? 1 : 2));
+
+  const aiRecommendations = allInsights.slice(0, 6).map((insight) => {
+    const config = insightTypeConfig[insight.type] ?? insightTypeConfig.filing_rec;
+    const client = store.getClient(insight.clientId);
+    return {
+      id: insight.id,
+      title: insight.title,
+      description: insight.description,
+      icon: config.icon,
+      iconBg: config.iconBg,
+      iconColor: config.iconColor,
+      actionLabel: insight.suggestedAction || config.actionLabel,
+      actionView: config.actionView,
+      urgency: insight.urgency as 'high' | 'medium' | 'info',
+      clientName: client?.tradeName,
+    };
+  });
+
   // ── Simulate initial load ───────────────────────────────────────────────
   useEffect(() => {
     const timer = setTimeout(() => setLoading(false), 600);
@@ -421,7 +395,7 @@ export default function DashboardPage() {
       setTimeout(() => {
         const filing = store.filings.find(f => f.id === filingId);
         const arn = filing?.acknowledgmentNumber ??
-          `AA${String(new Date().getDate()).padStart(2, '0')}${String(new Date().getMonth() + 1).padStart(2, '0')}25${String(Math.floor(Math.random() * 999999)).padStart(6, '0')}`;
+          `AA${String(new Date().getDate()).padStart(2, '0')}${String(new Date().getMonth() + 1).padStart(2, '0')}25${String(Date.now() % 999999).padStart(6, '0')}`;
         const toastId = `toast-${filingId}`;
         setDashboardToasts(prev => {
           if (prev.some(t => t.id === toastId)) return prev;
@@ -727,18 +701,18 @@ export default function DashboardPage() {
                     </div>
 
                     {/* File button */}
-                    {store.filedReturnIds.has(item.id) ? (
+                    {store.filedReturnIds.includes(item.id) ? (
                       <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px] px-2 py-0.5 gap-1 shrink-0">
                         <CheckCircle2 className="size-2.5" /> Filed
                       </Badge>
                     ) : (
                       <Button
                         size="sm"
-                        className={`h-7 text-xs font-medium px-3 shrink-0 ${store.filingInProgressIds.has(item.id) ? 'bg-amber-500 text-white' : 'bg-emerald-600 hover:bg-emerald-700 text-white'}`}
-                        disabled={store.filingInProgressIds.has(item.id)}
+                        className={`h-7 text-xs font-medium px-3 shrink-0 ${store.filingInProgressIds.includes(item.id) ? 'bg-amber-500 text-white' : 'bg-emerald-600 hover:bg-emerald-700 text-white'}`}
+                        disabled={store.filingInProgressIds.includes(item.id)}
                         onClick={() => handleQuickFile(item.id, item.clientName, item.returnType)}
                       >
-                        {store.filingInProgressIds.has(item.id) ? (
+                        {store.filingInProgressIds.includes(item.id) ? (
                           <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Filing...</>
                         ) : (
                           'File Return'

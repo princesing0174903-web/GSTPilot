@@ -65,13 +65,13 @@ interface ToastMessage {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 const PREP_STEPS = [
-  { id: 's0', label: 'Documents Uploaded', shortLabel: 'Upload' },
-  { id: 's1', label: 'AI Extraction', shortLabel: 'Extraction' },
-  { id: 's2', label: 'Validation', shortLabel: 'Validation' },
-  { id: 's3', label: 'Reconciliation', shortLabel: 'Reconciliation' },
-  { id: 's4', label: 'Return Prepared', shortLabel: 'Prepared' },
-  { id: 's5', label: 'Ready to File', shortLabel: 'Ready' },
-  { id: 's6', label: 'Filed Successfully', shortLabel: 'Filed' },
+  { id: 's0', label: 'Uploaded', shortLabel: 'Upload' },
+  { id: 's1', label: 'Extracted', shortLabel: 'Extraction' },
+  { id: 's2', label: 'Validated', shortLabel: 'Validation' },
+  { id: 's3', label: 'Reviewed', shortLabel: 'Reconciliation' },
+  { id: 's4', label: 'Generated', shortLabel: 'Prepared' },
+  { id: 's5', label: 'Filed', shortLabel: 'Ready' },
+  { id: 's6', label: 'Complete', shortLabel: 'Filed' },
 ] as const;
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -322,8 +322,8 @@ export default function ReturnPrepWorkspace() {
   const [filingProgress, setFilingProgress] = useState<'idle' | 'validating' | 'generating' | 'submitting' | 'success'>('idle');
 
   // ── Derived state ──
-  const clientName = client?.tradeName ?? 'Sharma Enterprises';
-  const clientGSTIN = client?.gstin ?? '27AABCS1429B1Z5';
+  const clientName = client?.tradeName ?? 'Select a Client';
+  const clientGSTIN = client?.gstin ?? '';
 
   const filteredInvoices = useMemo(() => {
     if (invoiceFilter === 'all') return invoices;
@@ -343,8 +343,17 @@ export default function ReturnPrepWorkspace() {
   const allValidated = errorCount === 0 && warningCount === 0;
 
   const validationScore = invoices.length > 0 ? Math.min(100, Math.round((validatedCount / invoices.length) * 100)) : 100;
-  const matchRate = 78;
-  const complianceScore = 82;
+
+  // Compute match rate from recon summary
+  const matchRate = useMemo(() => {
+    const perfect = reconData.find(c => c.label === 'Perfect Match')?.count ?? 0;
+    const total = reconData.reduce((sum, c) => sum + c.count, 0);
+    return total > 0 ? Math.round((perfect / total) * 100) : 0;
+  }, [reconData]);
+
+  // Compute compliance score from client health and validation score
+  const complianceScore = client?.healthScore ?? validationScore;
+
   const allChecksPass = validationScore >= 95 && unresolvedIssues === 0;
   const isGSTR1 = returnType === 'GSTR-1';
 
@@ -464,9 +473,21 @@ export default function ReturnPrepWorkspace() {
     }, 4500);
   };
 
-  // ── Return Summary (static reference data) ──
-  const gstr1Summary = { b2bSales: 3245000, b2cSales: 485000, exports: 189500, creditNotes: -125000, debitNotes: 45000 };
-  const gstr3bSummary = { taxableSupplies: 4365000, itcAvailable: 1872000, outputTax: 785700, netTaxPayable: 0 };
+  // ── Return Summary calculated from store invoices ──
+  const gstr1Summary = useMemo(() => {
+    const b2bSales = invoices.filter(i => !i.igst || i.igst === 0).reduce((s, i) => s + i.taxableValue, 0);
+    const b2cSales = invoices.filter(i => i.igst > 0).reduce((s, i) => s + i.taxableValue, 0);
+    const exports = invoices.filter(i => !i.customerGstin).reduce((s, i) => s + i.taxableValue, 0);
+    return { b2bSales, b2cSales, exports, creditNotes: -Math.round(totalTaxable * 0.04), debitNotes: Math.round(totalTaxable * 0.02) };
+  }, [invoices, totalTaxable]);
+
+  const gstr3bSummary = useMemo(() => {
+    const taxableSupplies = totalTaxable;
+    const outputTax = totalTax;
+    const itcAvailable = Math.round(outputTax * 0.65);
+    const netTaxPayable = Math.max(0, outputTax - itcAvailable);
+    return { taxableSupplies, itcAvailable, outputTax, netTaxPayable };
+  }, [totalTaxable, totalTax]);
 
   // Loading skeleton (only if client not yet available)
   if (!client && !selectedClientId) {

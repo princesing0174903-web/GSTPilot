@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -27,12 +27,25 @@ import {
   ExternalLink,
   Loader2,
   X,
+  Users,
+  IndianRupee,
+  TrendingUp,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useApp } from '@/contexts/AppContext';
 import type { AppView } from '@/contexts/AppContext';
-import { useGSTStore } from '@/stores/gst-store';
+import {
+  useDashboardMetrics,
+  useClients,
+  useFilings,
+  useIssues,
+  useUploadedFiles,
+  useActivities,
+  useUpdateFilingStatus,
+} from '@/hooks/api';
 import { formatCurrency, periodToLabel, isOverdue, getFilingDueDate } from '@/lib/gst-utils';
+import { toast } from 'sonner';
+import type { Client, GSTRFiling, Issue } from '@/types/gst';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // TYPES
@@ -98,8 +111,6 @@ interface RecentUpload {
   invoiceCount?: number;
   accuracy?: number;
 }
-
-// AI Recommendation is now derived from store.aiInsights — no separate interface needed
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // CONSTANTS & STATIC DATA
@@ -168,213 +179,320 @@ const uploadStatusConfig: Record<RecentUpload['status'], { label: string; icon: 
   failed: { label: 'Failed', icon: <AlertTriangle className="h-3.5 w-3.5" />, color: 'text-red-600', bg: 'bg-red-50' },
 };
 
+// Map Issue category to BlockingIssue category
+function mapIssueCategory(issue: Issue): BlockingIssue['category'] {
+  const cat = issue.category?.toLowerCase() ?? '';
+  if (cat.includes('gstin')) return 'gstin_error';
+  if (cat.includes('missing') || cat.includes('invoice')) return 'missing_invoice';
+  if (cat.includes('recon') || cat.includes('mismatch')) return 'recon_mismatch';
+  return 'validation_failure';
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // MAIN COMPONENT
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export default function DashboardPage() {
   const { setCurrentView, setSelectedClientId, setReturnPrepCtx } = useApp();
-  const store = useGSTStore();
 
-  // ── State ────────────────────────────────────────────────────────────────
-  const [loading, setLoading] = useState(true);
-  const [dashboardToasts, setDashboardToasts] = useState<{ id: string; title: string; desc: string; type: 'success' | 'info' }[]>([]);
+  // ── React Query hooks ────────────────────────────────────────────────────
+  const { data: dashData, isLoading: dashLoading } = useDashboardMetrics();
+  const { data: clientsData, isLoading: clientsLoading } = useClients();
+  const { data: filingsData, isLoading: filingsLoading } = useFilings();
+  const { data: issuesData, isLoading: issuesLoading } = useIssues();
+  const { data: uploadsData, isLoading: uploadsLoading } = useUploadedFiles();
+  const { data: activitiesData } = useActivities();
+
+  const fileReturnMutation = useUpdateFilingStatus();
+
+  // ── Track which filing IDs have been toasted ─────────────────────────────
+  const toastedFilingIds = useRef<Set<string>>(new Set());
+
+  // ── Derived data ─────────────────────────────────────────────────────────
+  const isLoading = dashLoading || filingsLoading;
+
+  const clients = clientsData?.clients ?? [];
+  const clientMap = useMemo(() => {
+    const map = new Map<string, Client & { _aggregations?: { totalInvoices: number; filedReturns: number; pendingReturns: number; matchPercentage: number } }>();
+    for (const c of clients) {
+      map.set(c.id, c);
+    }
+    return map;
+  }, [clients]);
+
+  const filings = filingsData?.filings ?? [];
+  const issues = issuesData?.issues ?? [];
 
   const currentPeriodLabel = periodToLabel(CURRENT_PERIOD);
 
-  // ── Derived data from Zustand store (reactive) ──────────────────────────
+  // ── Metrics from dashboard API ───────────────────────────────────────────
+  const metrics: MetricCard[] = useMemo(() => {
+    const readyCount = filings.filter(f => f.status === 'reviewed' || f.status === 'generated').length;
+    const criticalCount = dashData?.criticalIssues ?? 0;
+    const pendingCount = dashData?.pendingReturns ?? 0;
+    const filedCount = dashData?.filedReturns ?? 0;
+    const totalReturns = filedCount + pendingCount;
 
-  const dashMetrics = store.getDashboardMetrics();
+    return [
+      {
+        id: 'ready',
+        label: 'Ready to File',
+        value: readyCount,
+        icon: <ShieldCheck className="h-4 w-4" />,
+        iconColor: 'text-emerald-600',
+        iconBg: 'bg-emerald-50',
+        subtitle: 'Validated & approved',
+      },
+      {
+        id: 'critical',
+        label: 'Critical Issues',
+        value: criticalCount,
+        icon: <AlertOctagon className="h-4 w-4" />,
+        iconColor: 'text-red-600',
+        iconBg: 'bg-red-50',
+        subtitle: `Blocking ${Math.min(criticalCount, pendingCount)} filings`,
+      },
+      {
+        id: 'pending',
+        label: 'Pending Returns',
+        value: pendingCount,
+        icon: <Clock className="h-4 w-4" />,
+        iconColor: 'text-amber-600',
+        iconBg: 'bg-amber-50',
+        subtitle: 'Due this month',
+      },
+      {
+        id: 'filed',
+        label: 'Filed This Month',
+        value: filedCount,
+        icon: <CheckCircle2 className="h-4 w-4" />,
+        iconColor: 'text-emerald-600',
+        iconBg: 'bg-emerald-50',
+        subtitle: `of ${totalReturns} total`,
+      },
+    ];
+  }, [dashData, filings]);
 
-  const metrics: MetricCard[] = [
-    {
-      id: 'ready',
-      label: 'Ready to File',
-      value: dashMetrics.readyToFile,
-      icon: <ShieldCheck className="h-4 w-4" />,
-      iconColor: 'text-emerald-600',
-      iconBg: 'bg-emerald-50',
-      subtitle: 'Validated & approved',
-    },
-    {
-      id: 'critical',
-      label: 'Critical Issues',
-      value: dashMetrics.criticalIssues,
-      icon: <AlertOctagon className="h-4 w-4" />,
-      iconColor: 'text-red-600',
-      iconBg: 'bg-red-50',
-      subtitle: `Blocking ${Math.min(dashMetrics.criticalIssues, dashMetrics.pendingReturns)} filings`,
-    },
-    {
-      id: 'pending',
-      label: 'Pending Returns',
-      value: dashMetrics.pendingReturns,
-      icon: <Clock className="h-4 w-4" />,
-      iconColor: 'text-amber-600',
-      iconBg: 'bg-amber-50',
-      subtitle: 'Due this month',
-    },
-    {
-      id: 'filed',
-      label: 'Filed This Month',
-      value: dashMetrics.filedThisMonth,
-      icon: <CheckCircle2 className="h-4 w-4" />,
-      iconColor: 'text-emerald-600',
-      iconBg: 'bg-emerald-50',
-      subtitle: `of ${dashMetrics.totalReturns} total`,
-    },
-  ];
+  // ── Additional summary metrics ───────────────────────────────────────────
+  const totalTaxVolume = useMemo(() => {
+    return filings.reduce((sum, f) => sum + f.totalTax, 0);
+  }, [filings]);
 
-  const unfiledFilings = store.filings
-    .filter((f) => f.status !== 'filed')
-    .sort((a, b) => {
-      const aOverdue = isOverdue(a.period) ? 0 : 1;
-      const bOverdue = isOverdue(b.period) ? 0 : 1;
-      return aOverdue - bOverdue || a.period.localeCompare(b.period);
+  const avgCompliance = dashData?.averageHealthScore ?? 0;
+
+  // ── Priorities: unfiled filings sorted by urgency ────────────────────────
+  const priorities: PriorityItem[] = useMemo(() => {
+    const unfiled = filings
+      .filter(f => f.status !== 'filed')
+      .sort((a, b) => {
+        const aOverdue = isOverdue(a.period) ? 0 : 1;
+        const bOverdue = isOverdue(b.period) ? 0 : 1;
+        return aOverdue - bOverdue || a.period.localeCompare(b.period);
+      });
+
+    return unfiled.slice(0, 5).map((f) => {
+      const client = clientMap.get(f.clientId);
+      const name = client?.tradeName ?? f.client?.tradeName ?? 'Unknown';
+      const dueDateStr = getFilingDueDate(f.returnType, f.period);
+      const days = getDaysRemaining(dueDateStr);
+
+      let urgency: PriorityItem['urgency'] = 'upcoming';
+      if (days < 0) urgency = 'overdue';
+      else if (days <= 5) urgency = 'due-soon';
+
+      return {
+        id: f.id,
+        clientName: name,
+        clientInitials: getInitials(name),
+        clientId: f.clientId,
+        returnType: f.returnType,
+        period: f.period,
+        dueDate: dueDateStr,
+        daysRemaining: days,
+        urgency,
+        reason: urgency === 'overdue'
+          ? `${f.returnType} overdue — late fee accruing`
+          : urgency === 'due-soon'
+          ? `${f.returnType} due in ${days} days`
+          : `${f.totalInvoices} invoices pending`,
+        actionLabel: urgency === 'overdue' ? 'File Now' : urgency === 'due-soon' ? 'File Return' : 'Prepare',
+        actionView: 'returns',
+      };
     });
+  }, [filings, clientMap]);
 
-  const priorities: PriorityItem[] = unfiledFilings.slice(0, 5).map((f) => {
-    const client = store.getClient(f.clientId);
-    const name = client?.tradeName ?? 'Unknown';
-    const dueDateStr = getFilingDueDate(f.returnType, f.period);
-    const days = getDaysRemaining(dueDateStr);
+  // ── Ready to File: filings in reviewed/generated status ──────────────────
+  const readyToFile: ReadyToFileItem[] = useMemo(() => {
+    return filings
+      .filter(f => f.status === 'reviewed' || f.status === 'generated')
+      .slice(0, 5)
+      .map((f) => {
+        const client = clientMap.get(f.clientId);
+        const name = client?.tradeName ?? f.client?.tradeName ?? 'Unknown';
+        return {
+          id: f.id,
+          clientId: f.clientId,
+          clientName: name,
+          clientInitials: getInitials(name),
+          returnType: f.returnType,
+          invoiceCount: f.totalInvoices,
+          taxAmount: f.totalTax,
+          period: f.period,
+        };
+      });
+  }, [filings, clientMap]);
 
-    let urgency: PriorityItem['urgency'] = 'upcoming';
-    if (days < 0) urgency = 'overdue';
-    else if (days <= 5) urgency = 'due-soon';
+  // ── Blocking Issues from API ─────────────────────────────────────────────
+  const blockingIssues: BlockingIssue[] = useMemo(() => {
+    return issues
+      .filter(i => i.severity === 'critical' && i.status === 'open')
+      .slice(0, 10)
+      .map((issue) => {
+        const client = clientMap.get(issue.clientId ?? '');
+        const name = client?.tradeName ?? issue.client?.tradeName ?? 'Unknown';
+        const category = mapIssueCategory(issue);
 
-    return {
-      id: f.id,
-      clientName: name,
-      clientInitials: getInitials(name),
-      clientId: f.clientId,
-      returnType: f.returnType,
-      period: f.period,
-      dueDate: dueDateStr,
-      daysRemaining: days,
-      urgency,
-      reason: urgency === 'overdue'
-        ? `${f.returnType} overdue — late fee accruing`
-        : urgency === 'due-soon'
-        ? `${f.returnType} due in ${days} days`
-        : `${f.totalInvoices} invoices pending`,
-      actionLabel: urgency === 'overdue' ? 'File Now' : urgency === 'due-soon' ? 'File Return' : 'Prepare',
-      actionView: 'returns',
-    };
-  });
+        let actionLabel = 'Review Issue';
+        let actionView = 'returns';
 
-  const readyFilings = store.getReadyToFileFilings();
-  const readyToFile: ReadyToFileItem[] = readyFilings.slice(0, 5).map((f) => {
-    const client = store.getClient(f.clientId);
-    const name = client?.tradeName ?? 'Unknown';
-    return {
-      id: f.id,
-      clientId: f.clientId,
-      clientName: name,
-      clientInitials: getInitials(name),
-      returnType: f.returnType,
-      invoiceCount: f.totalInvoices,
-      taxAmount: f.totalTax,
-      period: f.period,
-    };
-  });
+        if (category === 'recon_mismatch') {
+          actionLabel = 'Run Reconciliation';
+          actionView = 'reconcile';
+        } else if (category === 'missing_invoice') {
+          actionLabel = 'Upload Missing Document';
+          actionView = 'invoices';
+        } else if (category === 'gstin_error') {
+          actionLabel = 'Review Issue';
+          actionView = 'reconcile';
+        }
 
-  const storeBlockingIssues = store.getBlockingIssues();
-  const blockingIssues: BlockingIssue[] = storeBlockingIssues.map((issue) => {
-    const client = store.getClient(issue.clientId);
-    const name = client?.tradeName ?? issue.clientName;
-    let actionLabel = 'Review Issue';
-    let actionView = 'returns';
+        return {
+          id: issue.id,
+          clientId: issue.clientId ?? '',
+          clientName: name,
+          clientInitials: getInitials(name),
+          category,
+          title: issue.title,
+          detail: issue.description ?? '',
+          invoiceRef: issue.invoiceId,
+          actionLabel,
+          actionView,
+        };
+      });
+  }, [issues, clientMap]);
 
-    if (issue.category === 'recon_mismatch') {
-      actionLabel = 'Run Reconciliation';
-      actionView = 'reconcile';
-    } else if (issue.category === 'missing_invoice') {
-      actionLabel = 'Upload Missing Document';
-      actionView = 'invoices';
-    } else if (issue.category === 'gstin_error') {
-      actionLabel = 'Review Issue';
-      actionView = 'reconcile';
+  // ── Recent Uploads from API ──────────────────────────────────────────────
+  const recentUploads: RecentUpload[] = useMemo(() => {
+    const docs = uploadsData?.documents ?? [];
+    return docs.slice(0, 4).map((doc: Record<string, unknown>) => ({
+      id: (doc.id as string) ?? '',
+      filename: (doc.filename as string) ?? (doc.name as string) ?? 'Upload',
+      uploadTime: doc.createdAt ? new Date(doc.createdAt as string).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : '',
+      status: ((doc.status as string) === 'completed' ? 'extracted' : (doc.status as string) === 'failed' ? 'failed' : 'processing') as RecentUpload['status'],
+      clientName: (doc.clientName as string) ?? 'Unknown',
+      rowCount: doc.rowCount as number | undefined,
+      invoiceCount: doc.invoiceCount as number | undefined,
+      accuracy: doc.accuracy as number | undefined,
+    }));
+  }, [uploadsData]);
+
+  // ── AI Recommendations derived from issues ──────────────────────────────
+  const aiRecommendations = useMemo(() => {
+    const recs: Array<{
+      id: string;
+      title: string;
+      description: string;
+      icon: React.ReactNode;
+      iconBg: string;
+      iconColor: string;
+      actionLabel: string;
+      actionView: string;
+      urgency: 'high' | 'medium' | 'info';
+      clientName?: string;
+    }> = [];
+
+    // Generate recommendations from open issues
+    const openIssues = issues.filter(i => i.status === 'open');
+    const seenCategories = new Set<string>();
+
+    for (const issue of openIssues.slice(0, 6)) {
+      const client = clientMap.get(issue.clientId ?? '');
+      const cat = mapIssueCategory(issue);
+      const key = `${issue.clientId}-${cat}`;
+      if (seenCategories.has(key)) continue;
+      seenCategories.add(key);
+
+      const config = issueCategoryConfig[cat];
+      let actionView: string = 'returns';
+      let actionLabel = 'Review';
+
+      if (cat === 'recon_mismatch') {
+        actionView = 'reconcile';
+        actionLabel = 'Run Reconciliation';
+      } else if (cat === 'missing_invoice') {
+        actionView = 'invoices';
+        actionLabel = 'Upload Document';
+      } else if (cat === 'gstin_error') {
+        actionView = 'reconcile';
+        actionLabel = 'Fix GSTIN';
+      }
+
+      recs.push({
+        id: issue.id,
+        title: issue.title,
+        description: issue.description ?? `Issue detected for ${client?.tradeName ?? 'client'}`,
+        icon: config.icon,
+        iconBg: config.bg,
+        iconColor: config.color,
+        actionLabel,
+        actionView,
+        urgency: issue.severity === 'critical' ? 'high' : issue.severity === 'warning' ? 'medium' : 'info',
+        clientName: client?.tradeName,
+      });
     }
 
-    return {
-      id: issue.id,
-      clientId: issue.clientId,
-      clientName: name,
-      clientInitials: getInitials(name),
-      category: issue.category,
-      title: issue.title,
-      detail: issue.detail,
-      invoiceRef: issue.invoiceRef,
-      amount: issue.amount,
-      actionLabel,
-      actionView,
-    };
-  });
+    // If no issues, add filing recommendations from pending filings
+    if (recs.length === 0) {
+      const pendingFilings = filings.filter(f => f.status !== 'filed').slice(0, 3);
+      for (const f of pendingFilings) {
+        const client = clientMap.get(f.clientId);
+        const overdue = isOverdue(f.period);
+        recs.push({
+          id: `rec-${f.id}`,
+          title: overdue ? `${f.returnType} Overdue for ${client?.tradeName ?? 'Client'}` : `${f.returnType} Due Soon`,
+          description: overdue
+            ? `${f.returnType} for period ${periodToLabel(f.period)} is overdue. Late fees may apply.`
+            : `${f.returnType} for period ${periodToLabel(f.period)} needs to be filed.`,
+          icon: <CalendarClock className="h-4 w-4" />,
+          iconBg: 'bg-emerald-50',
+          iconColor: 'text-emerald-600',
+          actionLabel: 'File Return',
+          actionView: 'returns',
+          urgency: overdue ? 'high' : 'medium',
+          clientName: client?.tradeName,
+        });
+      }
+    }
 
-  const storeUploads = store.getRecentUploads();
-  const recentUploads: RecentUpload[] = storeUploads.map((u) => ({
-    id: u.id,
-    filename: u.filename,
-    uploadTime: u.uploadTime,
-    status: u.status,
-    clientName: u.clientName,
-    rowCount: u.rowCount,
-    invoiceCount: u.invoiceCount,
-    accuracy: u.accuracy,
-  }));
+    return recs;
+  }, [issues, filings, clientMap]);
 
-  // ── AI Insights from store (replaces hardcoded aiRecommendations) ──────────
-  const recentActivities = store.getRecentActivities(10);
+  // ── Recent Activities from audit logs ────────────────────────────────────
+  const recentActivities = activitiesData?.logs ?? [];
 
-  const insightTypeConfig: Record<string, { icon: React.ReactNode; iconBg: string; iconColor: string; actionView: string; actionLabel: string }> = {
-    risk_alert: { icon: <AlertTriangle className="h-4 w-4" />, iconBg: 'bg-red-50', iconColor: 'text-red-600', actionView: 'reconcile', actionLabel: 'Review Issue' },
-    missing_doc: { icon: <FileWarning className="h-4 w-4" />, iconBg: 'bg-amber-50', iconColor: 'text-amber-600', actionView: 'reconcile', actionLabel: 'Review Missing Invoices' },
-    tax_anomaly: { icon: <GitCompareArrows className="h-4 w-4" />, iconBg: 'bg-red-50', iconColor: 'text-red-600', actionView: 'reconcile', actionLabel: 'Run Reconciliation' },
-    filing_rec: { icon: <CalendarClock className="h-4 w-4" />, iconBg: 'bg-emerald-50', iconColor: 'text-emerald-600', actionView: 'returns', actionLabel: 'File Return' },
-  };
-
-  const allInsights = Object.values(store.aiInsights)
-    .flat()
-    .filter(i => !i.dismissed)
-    .sort((a, b) => (a.urgency === 'high' ? 0 : a.urgency === 'medium' ? 1 : 2) - (b.urgency === 'high' ? 0 : b.urgency === 'medium' ? 1 : 2));
-
-  const aiRecommendations = allInsights.slice(0, 6).map((insight) => {
-    const config = insightTypeConfig[insight.type] ?? insightTypeConfig.filing_rec;
-    const client = store.getClient(insight.clientId);
-    return {
-      id: insight.id,
-      title: insight.title,
-      description: insight.description,
-      icon: config.icon,
-      iconBg: config.iconBg,
-      iconColor: config.iconColor,
-      actionLabel: insight.suggestedAction || config.actionLabel,
-      actionView: config.actionView,
-      urgency: insight.urgency as 'high' | 'medium' | 'info',
-      clientName: client?.tradeName,
-    };
-  });
-
-  // ── Simulate initial load ───────────────────────────────────────────────
-  useEffect(() => {
-    const timer = setTimeout(() => setLoading(false), 600);
-    return () => clearTimeout(timer);
-  }, []);
-
-  // ── Track which filing IDs have been toasted ────────────────────────────
-  const toastedFilingIds = useRef<Set<string>>(new Set());
+  // ── Filing in-progress tracking (local state) ───────────────────────────
+  const [filingInProgressIds, setFilingInProgressIds] = useState<Set<string>>(new Set());
+  const [filedReturnIds, setFiledReturnIds] = useState<Set<string>>(new Set());
 
   // ── Helpers ───────────────────────────────────────────────────────────────
   const handleOpenClient = (clientId: string) => {
-    // Resolve to store-format ID if needed
-    const resolvedId = store.getClient(clientId) ? clientId : (store.clients[0]?.id ?? clientId);
+    const resolvedId = clientMap.has(clientId) ? clientId : (clients[0]?.id ?? clientId);
     setSelectedClientId(resolvedId);
     setCurrentView('client-workspace');
   };
 
   const handleFileReturn = (clientId: string, returnType: string, period: string) => {
-    const resolvedId = store.getClient(clientId) ? clientId : (store.clients[0]?.id ?? clientId);
+    const resolvedId = clientMap.has(clientId) ? clientId : (clients[0]?.id ?? clientId);
     setSelectedClientId(resolvedId);
     setReturnPrepCtx({
       clientId: resolvedId,
@@ -385,32 +503,37 @@ export default function DashboardPage() {
   };
 
   const handleQuickFile = (filingId: string, clientName: string, returnType: string) => {
-    // Delegate to the store — it manages filingInProgressIds and filedReturnIds
-    store.fileReturn(filingId);
+    if (filingInProgressIds.has(filingId) || filedReturnIds.has(filingId)) return;
 
-    // Schedule a toast after the store's async filing simulation completes (~1.5s)
-    // Use the ref to avoid duplicate toasts
-    if (!toastedFilingIds.current.has(filingId)) {
-      toastedFilingIds.current.add(filingId);
-      setTimeout(() => {
-        const filing = store.filings.find(f => f.id === filingId);
-        const arn = filing?.acknowledgmentNumber ??
-          `AA${String(new Date().getDate()).padStart(2, '0')}${String(new Date().getMonth() + 1).padStart(2, '0')}25${String(Date.now() % 999999).padStart(6, '0')}`;
-        const toastId = `toast-${filingId}`;
-        setDashboardToasts(prev => {
-          if (prev.some(t => t.id === toastId)) return prev;
-          return [...prev, {
-            id: toastId,
-            title: `${returnType} Filed Successfully`,
-            desc: `${clientName} — ARN: ${arn}`,
-            type: 'success' as const,
-          }];
-        });
-        setTimeout(() => {
-          setDashboardToasts(prev => prev.filter(t => t.id !== toastId));
-        }, 4000);
-      }, 1600);
-    }
+    setFilingInProgressIds(prev => new Set(prev).add(filingId));
+
+    fileReturnMutation.mutate(
+      { id: filingId, status: 'filed' },
+      {
+        onSuccess: () => {
+          setFilingInProgressIds(prev => {
+            const next = new Set(prev);
+            next.delete(filingId);
+            return next;
+          });
+          setFiledReturnIds(prev => new Set(prev).add(filingId));
+          const arn = `AA${String(new Date().getDate()).padStart(2, '0')}${String(new Date().getMonth() + 1).padStart(2, '0')}25${String(Date.now() % 999999).padStart(6, '0')}`;
+          toast.success(`${returnType} Filed Successfully`, {
+            description: `${clientName} — ARN: ${arn}`,
+          });
+        },
+        onError: (err) => {
+          setFilingInProgressIds(prev => {
+            const next = new Set(prev);
+            next.delete(filingId);
+            return next;
+          });
+          toast.error('Filing Failed', {
+            description: err.message,
+          });
+        },
+      }
+    );
   };
 
   // ── Animation ─────────────────────────────────────────────────────────────
@@ -465,6 +588,49 @@ export default function DashboardPage() {
       </motion.div>
 
       {/* ═══════════════════════════════════════════════════════════════════════
+          SUMMARY STRIP — Tax Volume + Avg Compliance
+          ═══════════════════════════════════════════════════════════════════════ */}
+      <motion.div
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.05, duration: 0.35 }}
+        className="grid grid-cols-2 gap-3"
+      >
+        <div className="border border-border/60 rounded-xl p-4 hover:border-border transition-colors cursor-default group">
+          <div className="flex items-center gap-2.5 mb-3">
+            <div className="flex items-center justify-center h-8 w-8 rounded-lg bg-emerald-50 transition-transform group-hover:scale-105">
+              <IndianRupee className="h-4 w-4 text-emerald-600" />
+            </div>
+            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+              Total Tax Volume
+            </span>
+          </div>
+          <p className="text-2xl font-bold text-foreground leading-none">
+            {isLoading ? <Skeleton className="h-7 w-24 inline-block" /> : formatCurrency(totalTaxVolume)}
+          </p>
+          <p className="text-xs text-muted-foreground mt-1.5">
+            Across all filings
+          </p>
+        </div>
+        <div className="border border-border/60 rounded-xl p-4 hover:border-border transition-colors cursor-default group">
+          <div className="flex items-center gap-2.5 mb-3">
+            <div className="flex items-center justify-center h-8 w-8 rounded-lg bg-emerald-50 transition-transform group-hover:scale-105">
+              <TrendingUp className="h-4 w-4 text-emerald-600" />
+            </div>
+            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+              Avg Compliance
+            </span>
+          </div>
+          <p className="text-2xl font-bold text-foreground leading-none">
+            {isLoading ? <Skeleton className="h-7 w-8 inline-block" /> : avgCompliance}
+          </p>
+          <p className="text-xs text-muted-foreground mt-1.5">
+            Health score average
+          </p>
+        </div>
+      </motion.div>
+
+      {/* ═══════════════════════════════════════════════════════════════════════
           TOP ROW — 4 METRICS
           ═══════════════════════════════════════════════════════════════════════ */}
       <motion.div
@@ -473,7 +639,7 @@ export default function DashboardPage() {
         animate="visible"
         className="grid grid-cols-2 lg:grid-cols-4 gap-3"
       >
-        {loading
+        {isLoading
           ? Array.from({ length: 4 }).map((_, i) => (
               <motion.div key={i} variants={fadeUp}>
                 <div className="border border-border/60 rounded-xl p-4 space-y-2.5">
@@ -531,7 +697,7 @@ export default function DashboardPage() {
           </Badge>
         </div>
 
-        {loading ? (
+        {isLoading ? (
           <div className="space-y-2">
             {Array.from({ length: 4 }).map((_, i) => (
               <div key={i} className="border border-border/40 rounded-lg p-3.5 flex gap-3">
@@ -543,6 +709,14 @@ export default function DashboardPage() {
                 <Skeleton className="h-7 w-20 rounded-md" />
               </div>
             ))}
+          </div>
+        ) : priorities.length === 0 ? (
+          <div className="border border-border/60 rounded-xl p-8 flex flex-col items-center justify-center text-center">
+            <div className="flex items-center justify-center h-10 w-10 rounded-lg bg-emerald-50 mb-3">
+              <CheckCircle2 className="h-5 w-5 text-emerald-500" />
+            </div>
+            <p className="text-sm font-medium text-foreground">All caught up!</p>
+            <p className="text-xs text-muted-foreground mt-1">No pending filings require attention</p>
           </div>
         ) : (
           <div className="border border-border/60 rounded-xl divide-y divide-border/40 overflow-hidden">
@@ -650,7 +824,7 @@ export default function DashboardPage() {
             </Badge>
           </div>
 
-          {loading ? (
+          {isLoading ? (
             <div className="space-y-2">
               {Array.from({ length: 4 }).map((_, i) => (
                 <div key={i} className="border border-border/40 rounded-lg p-3.5 flex gap-3">
@@ -662,6 +836,24 @@ export default function DashboardPage() {
                   <Skeleton className="h-7 w-16 rounded-md" />
                 </div>
               ))}
+            </div>
+          ) : readyToFile.length === 0 ? (
+            <div className="border border-border/60 rounded-xl p-8 flex flex-col items-center justify-center text-center">
+              <div className="flex items-center justify-center h-10 w-10 rounded-lg bg-slate-50 mb-3">
+                <FileCheck2 className="h-5 w-5 text-slate-400" />
+              </div>
+              <p className="text-sm font-medium text-foreground">No returns ready to file</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Filings will appear here once validated
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                className="mt-3 text-xs text-emerald-600 border-emerald-200 hover:bg-emerald-50"
+                onClick={() => setCurrentView('returns')}
+              >
+                View All Returns
+              </Button>
             </div>
           ) : (
             <div className="border border-border/60 rounded-xl divide-y divide-border/40 overflow-hidden">
@@ -701,18 +893,18 @@ export default function DashboardPage() {
                     </div>
 
                     {/* File button */}
-                    {store.filedReturnIds.includes(item.id) ? (
+                    {filedReturnIds.has(item.id) ? (
                       <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px] px-2 py-0.5 gap-1 shrink-0">
                         <CheckCircle2 className="size-2.5" /> Filed
                       </Badge>
                     ) : (
                       <Button
                         size="sm"
-                        className={`h-7 text-xs font-medium px-3 shrink-0 ${store.filingInProgressIds.includes(item.id) ? 'bg-amber-500 text-white' : 'bg-emerald-600 hover:bg-emerald-700 text-white'}`}
-                        disabled={store.filingInProgressIds.includes(item.id)}
+                        className={`h-7 text-xs font-medium px-3 shrink-0 ${filingInProgressIds.has(item.id) ? 'bg-amber-500 text-white' : 'bg-emerald-600 hover:bg-emerald-700 text-white'}`}
+                        disabled={filingInProgressIds.has(item.id)}
                         onClick={() => handleQuickFile(item.id, item.clientName, item.returnType)}
                       >
-                        {store.filingInProgressIds.includes(item.id) ? (
+                        {filingInProgressIds.has(item.id) ? (
                           <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Filing...</>
                         ) : (
                           'File Return'
@@ -754,7 +946,7 @@ export default function DashboardPage() {
             </Badge>
           </div>
 
-          {loading ? (
+          {isLoading ? (
             <div className="space-y-2">
               {Array.from({ length: 4 }).map((_, i) => (
                 <div key={i} className="border border-border/40 rounded-lg p-3.5 flex gap-3">
@@ -766,6 +958,14 @@ export default function DashboardPage() {
                   <Skeleton className="h-7 w-20 rounded-md" />
                 </div>
               ))}
+            </div>
+          ) : blockingIssues.length === 0 ? (
+            <div className="border border-border/60 rounded-xl p-8 flex flex-col items-center justify-center text-center">
+              <div className="flex items-center justify-center h-10 w-10 rounded-lg bg-emerald-50 mb-3">
+                <CheckCircle2 className="h-5 w-5 text-emerald-500" />
+              </div>
+              <p className="text-sm font-medium text-foreground">No blocking issues</p>
+              <p className="text-xs text-muted-foreground mt-1">All filings are clear of critical errors</p>
             </div>
           ) : (
             <ScrollArea className="max-h-[420px]">
@@ -854,7 +1054,7 @@ export default function DashboardPage() {
           </Button>
         </div>
 
-        {loading ? (
+        {isLoading ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             {Array.from({ length: 4 }).map((_, i) => (
               <div key={i} className="border border-border/40 rounded-lg p-4 space-y-2.5">
@@ -863,6 +1063,22 @@ export default function DashboardPage() {
                 <Skeleton className="h-6 w-16 rounded-md" />
               </div>
             ))}
+          </div>
+        ) : recentUploads.length === 0 ? (
+          <div className="border border-border/60 rounded-xl p-8 flex flex-col items-center justify-center text-center">
+            <div className="flex items-center justify-center h-10 w-10 rounded-lg bg-slate-50 mb-3">
+              <Upload className="h-5 w-5 text-slate-400" />
+            </div>
+            <p className="text-sm font-medium text-foreground">No uploads yet</p>
+            <p className="text-xs text-muted-foreground mt-1">Upload invoices to get started</p>
+            <Button
+              size="sm"
+              className="mt-3 gap-2 text-xs bg-emerald-600 hover:bg-emerald-700 text-white"
+              onClick={() => setCurrentView('invoices')}
+            >
+              <Upload className="h-3.5 w-3.5" />
+              Upload Documents
+            </Button>
           </div>
         ) : (
           <motion.div
@@ -975,7 +1191,7 @@ export default function DashboardPage() {
           </Badge>
         </div>
 
-        {loading ? (
+        {isLoading ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {Array.from({ length: 4 }).map((_, i) => (
               <div key={i} className="border border-border/40 rounded-lg p-4 flex gap-3">
@@ -986,6 +1202,24 @@ export default function DashboardPage() {
                 </div>
               </div>
             ))}
+          </div>
+        ) : aiRecommendations.length === 0 ? (
+          <div className="border border-border/60 rounded-xl p-8 flex flex-col items-center justify-center text-center">
+            <div className="flex items-center justify-center h-10 w-10 rounded-lg bg-emerald-50 mb-3">
+              <Sparkles className="h-5 w-5 text-emerald-400" />
+            </div>
+            <p className="text-sm font-medium text-foreground">No recommendations</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              AI insights will appear as you add clients and process filings
+            </p>
+            <Button
+              size="sm"
+              className="mt-3 gap-2 text-xs bg-emerald-600 hover:bg-emerald-700 text-white"
+              onClick={() => setCurrentView('clients')}
+            >
+              <Users className="h-3.5 w-3.5" />
+              Add Your First Client
+            </Button>
           </div>
         ) : (
           <motion.div
@@ -1039,30 +1273,63 @@ export default function DashboardPage() {
         )}
       </motion.section>
 
-      {/* ═══ Dashboard Toast Notifications ═══ */}
-      <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2 max-w-sm">
-        <AnimatePresence>
-          {dashboardToasts.map((toast) => (
-            <motion.div
-              key={toast.id}
-              initial={{ opacity: 0, y: 20, scale: 0.95 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 10, scale: 0.95 }}
-              transition={{ duration: 0.25 }}
-              className="flex items-start gap-3 p-3.5 rounded-xl border shadow-lg backdrop-blur-sm bg-emerald-50/95 border-emerald-200"
-            >
-              <CheckCircle2 className="h-4 w-4 text-emerald-600 mt-0.5 shrink-0" />
-              <div className="flex-1 min-w-0">
-                <p className="text-xs font-semibold text-foreground">{toast.title}</p>
-                <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">{toast.desc}</p>
+      {/* ═══════════════════════════════════════════════════════════════════════
+          SECTION 6: RECENT ACTIVITY
+          ═══════════════════════════════════════════════════════════════════════ */}
+      <motion.section
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.55, duration: 0.45, ease: 'easeOut' }}
+      >
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">
+            Recent Activity
+          </h2>
+        </div>
+
+        {isLoading ? (
+          <div className="space-y-2">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className="border border-border/40 rounded-lg p-3.5 flex gap-3">
+                <Skeleton className="h-8 w-8 rounded-lg shrink-0" />
+                <div className="flex-1 space-y-1.5">
+                  <Skeleton className="h-4 w-48" />
+                  <Skeleton className="h-3 w-32" />
+                </div>
               </div>
-              <button className="shrink-0 text-muted-foreground hover:text-foreground" onClick={() => setDashboardToasts(prev => prev.filter(t => t.id !== toast.id))}>
-                <X className="h-3.5 w-3.5" />
-              </button>
-            </motion.div>
-          ))}
-        </AnimatePresence>
-      </div>
+            ))}
+          </div>
+        ) : recentActivities.length === 0 ? (
+          <div className="border border-border/60 rounded-xl p-8 flex flex-col items-center justify-center text-center">
+            <div className="flex items-center justify-center h-10 w-10 rounded-lg bg-slate-50 mb-3">
+              <ClipboardCheck className="h-5 w-5 text-slate-400" />
+            </div>
+            <p className="text-sm font-medium text-foreground">No activity yet</p>
+            <p className="text-xs text-muted-foreground mt-1">Actions will appear here as you work</p>
+          </div>
+        ) : (
+          <div className="border border-border/60 rounded-xl divide-y divide-border/40 overflow-hidden">
+            {recentActivities.slice(0, 5).map((activity, index) => (
+              <div key={activity.id} className="flex items-center gap-3 px-4 py-3 hover:bg-muted/30 transition-colors">
+                <div className="flex items-center justify-center h-8 w-8 rounded-lg bg-slate-50 text-slate-500 shrink-0">
+                  <ClipboardCheck className="h-4 w-4" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-foreground truncate">
+                    {activity.action}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-0.5 truncate">
+                    {activity.details ?? activity.entity ?? ''} · {activity.client?.tradeName ?? ''}
+                  </p>
+                </div>
+                <span className="text-[11px] text-muted-foreground shrink-0">
+                  {new Date(activity.timestamp).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </motion.section>
 
     </div>
   );

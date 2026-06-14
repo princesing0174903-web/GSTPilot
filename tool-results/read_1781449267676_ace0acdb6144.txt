@@ -1,0 +1,955 @@
+     1→     1→'use client';
+     2→     2→
+     3→     3→import React, { useState, useEffect, useRef, useCallback } from 'react';
+     4→     4→import {
+     5→     5→  Card,
+     6→     6→  CardContent,
+     7→     7→  CardHeader,
+     8→     8→  CardTitle,
+     9→     9→  CardDescription,
+    10→    10→} from '@/components/ui/card';
+    11→    11→import { Badge } from '@/components/ui/badge';
+    12→    12→import { Button } from '@/components/ui/button';
+    13→    13→import { Input } from '@/components/ui/input';
+    14→    14→import { Label } from '@/components/ui/label';
+    15→    15→import { Textarea } from '@/components/ui/textarea';
+    16→    16→import { Skeleton } from '@/components/ui/skeleton';
+    17→    17→import { ScrollArea } from '@/components/ui/scroll-area';
+    18→    18→import {
+    19→    19→  Dialog,
+    20→    20→  DialogContent,
+    21→    21→  DialogDescription,
+    22→    22→  DialogFooter,
+    23→    23→  DialogHeader,
+    24→    24→  DialogTitle,
+    25→    25→} from '@/components/ui/dialog';
+    26→    26→import {
+    27→    27→  Select,
+    28→    28→  SelectContent,
+    29→    29→  SelectItem,
+    30→    30→  SelectTrigger,
+    31→    31→  SelectValue,
+    32→    32→} from '@/components/ui/select';
+    33→    33→import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+    34→    34→import {
+    35→    35→  FolderLock,
+    36→    36→  Upload,
+    37→    37→  Search,
+    38→    38→  FileText,
+    39→    39→  FileSpreadsheet,
+    40→    40→  File,
+    41→    41→  ImageIcon,
+    42→    42→  Download,
+    43→    43→  Eye,
+    44→    44→  History,
+    45→    45→  Plus,
+    46→    46→  HardDrive,
+    47→    47→  CalendarDays,
+    48→    48→  Tag,
+    49→    49→  X,
+    50→    50→  CheckCircle2,
+    51→    51→  Loader2,
+    52→    52→  FolderOpen,
+    53→    53→  AlertCircle,
+    54→    54→} from 'lucide-react';
+    55→    55→import { motion, AnimatePresence } from 'framer-motion';
+    56→    56→import { formatCurrency, formatNumber } from '@/lib/gst-utils';
+    57→    57→
+    58→    58→// ─── Color Palette (Emerald theme) ────────────────────────────────────────
+    59→    59→const COLORS = {
+    60→    60→  emerald: '#10b981',
+    61→    61→  emeraldDark: '#059669',
+    62→    62→  emeraldLight: '#d1fae5',
+    63→    63→  teal: '#14b8a6',
+    64→    64→  tealDark: '#0d9488',
+    65→    65→  amber: '#f59e0b',
+    66→    66→  red: '#ef4444',
+    67→    67→  slate: '#64748b',
+    68→    68→  purple: '#8b5cf6',
+    69→    69→  blue: '#3b82f6',
+    70→    70→};
+    71→    71→
+    72→    72→// ─── Types ─────────────────────────────────────────────────────────────────
+    73→    73→interface DocumentItem {
+    74→    74→  id: string;
+    75→    75→  clientId: string | null;
+    76→    76→  folder: string;
+    77→    77→  name: string;
+    78→    78→  fileType: string;
+    79→    79→  size: number;
+    80→    80→  path: string | null;
+    81→    81→  tags: string | null;
+    82→    82→  description: string | null;
+    83→    83→  uploadedBy: string | null;
+    84→    84→  version: number;
+    85→    85→  isLatest: boolean;
+    86→    86→  parentId: string | null;
+    87→    87→  createdAt: string;
+    88→    88→  updatedAt: string;
+    89→    89→  client?: { id: string; tradeName: string } | null;
+    90→    90→}
+    91→    91→
+    92→    92→interface ClientOption {
+    93→    93→  id: string;
+    94→    94→  tradeName: string;
+    95→    95→  gstin: string;
+    96→    96→}
+    97→    97→
+    98→    98→// ─── Folder config ─────────────────────────────────────────────────────────
+    99→    99→const FOLDERS = [
+   100→   100→  { value: 'all', label: 'All Documents', icon: FolderOpen },
+   101→   101→  { value: 'invoices', label: 'Invoices', icon: FileText },
+   102→   102→  { value: 'returns', label: 'Returns', icon: FileText },
+   103→   103→  { value: 'reports', label: 'Reports', icon: FileSpreadsheet },
+   104→   104→  { value: 'client-documents', label: 'Client Documents', icon: FolderOpen },
+   105→   105→  { value: 'notices', label: 'Notices', icon: AlertCircle },
+   106→   106→] as const;
+   107→   107→
+   108→   108→// ─── Helpers ───────────────────────────────────────────────────────────────
+   109→   109→function formatFileSize(bytes: number): string {
+   110→   110→  if (bytes === 0) return '0 B';
+   111→   111→  const k = 1024;
+   112→   112→  const sizes = ['B', 'KB', 'MB', 'GB'];
+   113→   113→  const i = Math.floor(Math.log(bytes) / Math.log(k));
+   114→   114→  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+   115→   115→}
+   116→   116→
+   117→   117→function getFileTypeColor(type: string): string {
+   118→   118→  const t = type.toLowerCase();
+   119→   119→  if (t === 'pdf') return 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400';
+   120→   120→  if (['xlsx', 'xls', 'csv'].includes(t)) return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400';
+   121→   121→  if (['docx', 'doc'].includes(t)) return 'bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-400';
+   122→   122→  if (['jpg', 'jpeg', 'png', 'gif', 'svg', 'webp'].includes(t)) return 'bg-purple-100 text-purple-700 dark:bg-purple-950/40 dark:text-purple-400';
+   123→   123→  if (['pptx', 'ppt'].includes(t)) return 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400';
+   124→   124→  return 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-400';
+   125→   125→}
+   126→   126→
+   127→   127→function getFileTypeIcon(type: string) {
+   128→   128→  const t = type.toLowerCase();
+   129→   129→  if (t === 'pdf') return <FileText className="h-6 w-6 text-red-500" />;
+   130→   130→  if (['xlsx', 'xls', 'csv'].includes(t)) return <FileSpreadsheet className="h-6 w-6 text-emerald-500" />;
+   131→   131→  if (['docx', 'doc'].includes(t)) return <File className="h-6 w-6 text-blue-500" />;
+   132→   132→  if (['jpg', 'jpeg', 'png', 'gif', 'svg', 'webp'].includes(t)) return <ImageIcon className="h-6 w-6 text-purple-500" />;
+   133→   133→  return <File className="h-6 w-6 text-slate-500" />;
+   134→   134→}
+   135→   135→
+   136→   136→function formatDate(dateStr: string): string {
+   137→   137→  try {
+   138→   138→    return new Date(dateStr).toLocaleDateString('en-IN', {
+   139→   139→      day: '2-digit',
+   140→   140→      month: 'short',
+   141→   141→      year: 'numeric',
+   142→   142→    });
+   143→   143→  } catch {
+   144→   144→    return dateStr;
+   145→   145→  }
+   146→   146→}
+   147→   147→
+   148→   148→// ─── Animated Number Hook ──────────────────────────────────────────────────
+   149→   149→function useAnimatedNumber(target: number, duration: number = 1200) {
+   150→   150→  const [current, setCurrent] = useState(0);
+   151→   151→  const ref = useRef<number | null>(null);
+   152→   152→  const startTime = useRef<number | null>(null);
+   153→   153→
+   154→   154→  useEffect(() => {
+   155→   155→    startTime.current = null;
+   156→   156→    const startValue = current;
+   157→   157→
+   158→   158→    function step(timestamp: number) {
+   159→   159→      if (!startTime.current) startTime.current = timestamp;
+   160→   160→      const elapsed = timestamp - startTime.current;
+   161→   161→      const progress = Math.min(elapsed / duration, 1);
+   162→   162→      const eased = 1 - Math.pow(1 - progress, 3);
+   163→   163→      setCurrent(Math.round(startValue + (target - startValue) * eased));
+   164→   164→      if (progress < 1) {
+   165→   165→        ref.current = requestAnimationFrame(step);
+   166→   166→      }
+   167→   167→    }
+   168→   168→
+   169→   169→    ref.current = requestAnimationFrame(step);
+   170→   170→    return () => {
+   171→   171→      if (ref.current) cancelAnimationFrame(ref.current);
+   172→   172→    };
+   173→   173→  }, [target, duration]);
+   174→   174→
+   175→   175→  return current;
+   176→   176→}
+   177→   177→
+   178→   178→// ─── Animated Card Wrapper ─────────────────────────────────────────────────
+   179→   179→function AnimatedCard({
+   180→   180→  children,
+   181→   181→  delay = 0,
+   182→   182→  className = '',
+   183→   183→}: {
+   184→   184→  children: React.ReactNode;
+   185→   185→  delay?: number;
+   186→   186→  className?: string;
+   187→   187→}) {
+   188→   188→  return (
+   189→   189→    <motion.div
+   190→   190→      initial={{ opacity: 0, y: 20 }}
+   191→   191→      animate={{ opacity: 1, y: 0 }}
+   192→   192→      transition={{ delay, duration: 0.5, ease: 'easeOut' }}
+   193→   193→    >
+   194→   194→      <Card className={`hover:shadow-lg hover:shadow-emerald-500/5 transition-all duration-300 border-border/50 backdrop-blur-sm bg-card/80 ${className}`}>
+   195→   195→        {children}
+   196→   196→      </Card>
+   197→   197→    </motion.div>
+   198→   198→  );
+   199→   199→}
+   200→   200→
+   201→   201→// ─── Skeleton Loaders ─────────────────────────────────────────────────────
+   202→   202→function StatCardSkeleton() {
+   203→   203→  return (
+   204→   204→    <div className="p-4 rounded-xl border border-border/30">
+   205→   205→      <div className="flex items-center gap-3 mb-2">
+   206→   206→        <Skeleton className="h-9 w-9 rounded-lg" />
+   207→   207→        <div className="flex-1 space-y-1.5">
+   208→   208→          <Skeleton className="h-3 w-20" />
+   209→   209→          <Skeleton className="h-6 w-16" />
+   210→   210→        </div>
+   211→   211→      </div>
+   212→   212→    </div>
+   213→   213→  );
+   214→   214→}
+   215→   215→
+   216→   216→function DocumentCardSkeleton() {
+   217→   217→  return (
+   218→   218→    <div className="p-4 rounded-xl border border-border/30 space-y-3">
+   219→   219→      <div className="flex items-start gap-3">
+   220→   220→        <Skeleton className="h-10 w-10 rounded-lg" />
+   221→   221→        <div className="flex-1 space-y-1.5">
+   222→   222→          <Skeleton className="h-4 w-3/4" />
+   223→   223→          <Skeleton className="h-3 w-1/2" />
+   224→   224→        </div>
+   225→   225→      </div>
+   226→   226→      <div className="flex gap-1.5">
+   227→   227→        <Skeleton className="h-5 w-12 rounded-full" />
+   228→   228→        <Skeleton className="h-5 w-16 rounded-full" />
+   229→   229→      </div>
+   230→   230→      <div className="flex items-center justify-between">
+   231→   231→        <Skeleton className="h-3 w-20" />
+   232→   232→        <Skeleton className="h-8 w-8 rounded" />
+   233→   233→      </div>
+   234→   234→    </div>
+   235→   235→  );
+   236→   236→}
+   237→   237→
+   238→   238→// ═══════════════════════════════════════════════════════════════════════════
+   239→   239→// MAIN COMPONENT
+   240→   240→// ═══════════════════════════════════════════════════════════════════════════
+   241→   241→export default function DocumentVaultPage() {
+   242→   242→  // ── State ────────────────────────────────────────────────────────────────
+   243→   243→  const [documents, setDocuments] = useState<DocumentItem[]>([]);
+   244→   244→  const [clients, setClients] = useState<ClientOption[]>([]);
+   245→   245→  const [loading, setLoading] = useState(true);
+   246→   246→  const [error, setError] = useState<string | null>(null);
+   247→   247→  const [activeFolder, setActiveFolder] = useState('all');
+   248→   248→  const [searchQuery, setSearchQuery] = useState('');
+   249→   249→
+   250→   250→  // Upload dialog
+   251→   251→  const [uploadOpen, setUploadOpen] = useState(false);
+   252→   252→  const [uploading, setUploading] = useState(false);
+   253→   253→  const [uploadForm, setUploadForm] = useState({
+   254→   254→    clientId: '',
+   255→   255→    folder: 'general',
+   256→   256→    name: '',
+   257→   257→    fileType: 'pdf',
+   258→   258→    tags: '',
+   259→   259→    description: '',
+   260→   260→  });
+   261→   261→
+   262→   262→  // Version history dialog
+   263→   263→  const [versionOpen, setVersionOpen] = useState(false);
+   264→   264→  const [versionDoc, setVersionDoc] = useState<DocumentItem | null>(null);
+   265→   265→  const [versions, setVersions] = useState<DocumentItem[]>([]);
+   266→   266→  const [versionsLoading, setVersionsLoading] = useState(false);
+   267→   267→
+   268→   268→  // Upload success
+   269→   269→  const [uploadSuccess, setUploadSuccess] = useState(false);
+   270→   270→
+   271→   271→  // ── Fetch data ───────────────────────────────────────────────────────────
+   272→   272→  const fetchData = useCallback(async () => {
+   273→   273→    try {
+   274→   274→      setLoading(true);
+   275→   275→      setError(null);
+   276→   276→
+   277→   277→      const [docRes, clientRes] = await Promise.all([
+   278→   278→        fetch('/api/documents'),
+   279→   279→        fetch('/api/clients'),
+   280→   280→      ]);
+   281→   281→
+   282→   282→      if (docRes.ok) {
+   283→   283→        const docData = await docRes.json();
+   284→   284→        setDocuments(docData.documents ?? []);
+   285→   285→      } else {
+   286→   286→        setError('Failed to fetch documents');
+   287→   287→      }
+   288→   288→
+   289→   289→      if (clientRes.ok) {
+   290→   290→        const clientData = await clientRes.json();
+   291→   291→        setClients(
+   292→   292→          (clientData.clients ?? []).map((c: { id: string; tradeName: string; gstin: string }) => ({
+   293→   293→            id: c.id,
+   294→   294→            tradeName: c.tradeName,
+   295→   295→            gstin: c.gstin,
+   296→   296→          }))
+   297→   297→        );
+   298→   298→      }
+   299→   299→    } catch (err) {
+   300→   300→      console.error('DocumentVault fetch error:', err);
+   301→   301→      setError('Network error. Please try again.');
+   302→   302→    } finally {
+   303→   303→      setLoading(false);
+   304→   304→    }
+   305→   305→  }, []);
+   306→   306→
+   307→   307→  useEffect(() => {
+   308→   308→    fetchData();
+   309→   309→  }, [fetchData]);
+   310→   310→
+   311→   311→  // ── Filtered documents ───────────────────────────────────────────────────
+   312→   312→  const filteredDocuments = documents.filter((doc) => {
+   313→   313→    const matchesFolder = activeFolder === 'all' || doc.folder === activeFolder;
+   314→   314→    if (!matchesFolder) return false;
+   315→   315→    if (!searchQuery.trim()) return true;
+   316→   316→    const q = searchQuery.toLowerCase();
+   317→   317→    return (
+   318→   318→      doc.name.toLowerCase().includes(q) ||
+   319→   319→      (doc.description && doc.description.toLowerCase().includes(q)) ||
+   320→   320→      (doc.tags && doc.tags.toLowerCase().includes(q))
+   321→   321→    );
+   322→   322→  });
+   323→   323→
+   324→   324→  // ── Stats ────────────────────────────────────────────────────────────────
+   325→   325→  const totalDocs = documents.length;
+   326→   326→  const totalStorage = documents.reduce((sum, d) => sum + d.size, 0);
+   327→   327→  const now = new Date();
+   328→   328→  const docsThisMonth = documents.filter((d) => {
+   329→   329→    const created = new Date(d.createdAt);
+   330→   330→    return created.getMonth() === now.getMonth() && created.getFullYear() === now.getFullYear();
+   331→   331→  }).length;
+   332→   332→
+   333→   333→  const animTotalDocs = useAnimatedNumber(totalDocs);
+   334→   334→  const animDocsThisMonth = useAnimatedNumber(docsThisMonth);
+   335→   335→
+   336→   336→  // ── Upload handler ───────────────────────────────────────────────────────
+   337→   337→  const handleUpload = async () => {
+   338→   338→    if (!uploadForm.name.trim()) return;
+   339→   339→    try {
+   340→   340→      setUploading(true);
+   341→   341→      const res = await fetch('/api/documents', {
+   342→   342→        method: 'POST',
+   343→   343→        headers: { 'Content-Type': 'application/json' },
+   344→   344→        body: JSON.stringify({
+   345→   345→          ...uploadForm,
+   346→   346→          size: Math.floor(Math.random() * 500000) + 10000,
+   347→   347→          tags: uploadForm.tags,
+   348→   348→          uploadedBy: 'current-user',
+   349→   349→        }),
+   350→   350→      });
+   351→   351→      if (res.ok) {
+   352→   352→        setUploadSuccess(true);
+   353→   353→        setTimeout(() => {
+   354→   354→          setUploadOpen(false);
+   355→   355→          setUploadSuccess(false);
+   356→   356→          setUploadForm({
+   357→   357→            clientId: '',
+   358→   358→            folder: 'general',
+   359→   359→            name: '',
+   360→   360→            fileType: 'pdf',
+   361→   361→            tags: '',
+   362→   362→            description: '',
+   363→   363→          });
+   364→   364→          fetchData();
+   365→   365→        }, 1200);
+   366→   366→      }
+   367→   367→    } catch (err) {
+   368→   368→      console.error('Upload error:', err);
+   369→   369→    } finally {
+   370→   370→      setUploading(false);
+   371→   371→    }
+   372→   372→  };
+   373→   373→
+   374→   374→  // ── Version history handler ──────────────────────────────────────────────
+   375→   375→  const handleViewVersions = async (doc: DocumentItem) => {
+   376→   376→    setVersionDoc(doc);
+   377→   377→    setVersionOpen(true);
+   378→   378→    setVersionsLoading(true);
+   379→   379→
+   380→   380→    try {
+   381→   381→      // Find root parent id
+   382→   382→      let rootId = doc.id;
+   383→   383→      if (doc.parentId) rootId = doc.parentId;
+   384→   384→
+   385→   385→      // Fetch all versions: the document itself + children
+   386→   386→      const res = await fetch(`/api/documents?search=`);
+   387→   387→      if (res.ok) {
+   388→   388→        const data = await res.json();
+   389→   389→        const allDocs: DocumentItem[] = data.documents ?? [];
+   390→   390→        // Find all docs in the same version chain
+   391→   391→        const versionChain = allDocs.filter(
+   392→   392→          (d) => d.id === rootId || d.parentId === rootId || d.id === doc.id || d.parentId === doc.id
+   393→   393→        );
+   394→   394→        // Sort by version
+   395→   395→        versionChain.sort((a, b) => a.version - b.version);
+   396→   396→        setVersions(versionChain.length > 0 ? versionChain : [doc]);
+   397→   397→      } else {
+   398→   398→        setVersions([doc]);
+   399→   399→      }
+   400→   400→    } catch {
+   401→   401→      setVersions([doc]);
+   402→   402→    } finally {
+   403→   403→      setVersionsLoading(false);
+   404→   404→    }
+   405→   405→  };
+   406→   406→
+   407→   407→  // ── Render ───────────────────────────────────────────────────────────────
+   408→   408→  return (
+   409→   409→    <div className="p-4 md:p-6 space-y-4">
+   410→   410→      {/* ═══ HEADER ═══ */}
+   411→   411→      <motion.div
+   412→   412→        initial={{ opacity: 0, y: -10 }}
+   413→   413→        animate={{ opacity: 1, y: 0 }}
+   414→   414→        transition={{ duration: 0.4 }}
+   415→   415→        className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
+   416→   416→      >
+   417→   417→        <div className="flex items-center gap-3">
+   418→   418→          <div className="flex items-center justify-center h-10 w-10 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-600 shadow-lg shadow-emerald-600/20">
+   419→   419→            <FolderLock className="h-5 w-5 text-white" />
+   420→   420→          </div>
+   421→   421→          <div>
+   422→   422→            <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground">
+   423→   423→              Document Vault
+   424→   424→            </h1>
+   425→   425→            <p className="text-sm text-muted-foreground mt-0.5">
+   426→   426→              Secure document repository for your firm
+   427→   427→            </p>
+   428→   428→          </div>
+   429→   429→        </div>
+   430→   430→        <Button
+   431→   431→          onClick={() => setUploadOpen(true)}
+   432→   432→          className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg shadow-emerald-600/20"
+   433→   433→        >
+   434→   434→          <Upload className="h-4 w-4" />
+   435→   435→          Upload Document
+   436→   436→        </Button>
+   437→   437→      </motion.div>
+   438→   438→
+   439→   439→      {/* ═══ SEARCH BAR ═══ */}
+   440→   440→      <motion.div
+   441→   441→        initial={{ opacity: 0, y: -5 }}
+   442→   442→        animate={{ opacity: 1, y: 0 }}
+   443→   443→        transition={{ delay: 0.1, duration: 0.3 }}
+   444→   444→        className="relative max-w-md"
+   445→   445→      >
+   446→   446→        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+   447→   447→        <Input
+   448→   448→          placeholder="Search by name, description, or tags..."
+   449→   449→          value={searchQuery}
+   450→   450→          onChange={(e) => setSearchQuery(e.target.value)}
+   451→   451→          className="pl-9 border-border/50 focus:border-emerald-300 dark:focus:border-emerald-700"
+   452→   452→        />
+   453→   453→        {searchQuery && (
+   454→   454→          <button
+   455→   455→            onClick={() => setSearchQuery('')}
+   456→   456→            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+   457→   457→          >
+   458→   458→            <X className="h-4 w-4" />
+   459→   459→          </button>
+   460→   460→        )}
+   461→   461→      </motion.div>
+   462→   462→
+   463→   463→      {/* ═══ STATS ROW ═══ */}
+   464→   464→      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+   465→   465→        <AnimatedCard delay={0.05}>
+   466→   466→          <CardContent className="p-4">
+   467→   467→            {loading ? (
+   468→   468→              <StatCardSkeleton />
+   469→   469→            ) : (
+   470→   470→              <div className="flex items-center gap-3">
+   471→   471→                <div className="flex items-center justify-center h-10 w-10 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-100 dark:border-emerald-900/50">
+   472→   472→                  <FileText className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+   473→   473→                </div>
+   474→   474→                <div>
+   475→   475→                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+   476→   476→                    Total Documents
+   477→   477→                  </p>
+   478→   478→                  <p className="text-xl font-bold text-foreground">{formatNumber(animTotalDocs)}</p>
+   479→   479→                </div>
+   480→   480→              </div>
+   481→   481→            )}
+   482→   482→          </CardContent>
+   483→   483→        </AnimatedCard>
+   484→   484→
+   485→   485→        <AnimatedCard delay={0.1}>
+   486→   486→          <CardContent className="p-4">
+   487→   487→            {loading ? (
+   488→   488→              <StatCardSkeleton />
+   489→   489→            ) : (
+   490→   490→              <div className="flex items-center gap-3">
+   491→   491→                <div className="flex items-center justify-center h-10 w-10 rounded-xl bg-teal-50 dark:bg-teal-950/40 border border-teal-100 dark:border-teal-900/50">
+   492→   492→                  <HardDrive className="h-5 w-5 text-teal-600 dark:text-teal-400" />
+   493→   493→                </div>
+   494→   494→                <div>
+   495→   495→                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+   496→   496→                    Storage Used
+   497→   497→                  </p>
+   498→   498→                  <p className="text-xl font-bold text-foreground">{formatFileSize(totalStorage)}</p>
+   499→   499→                </div>
+   500→   500→              </div>
+   501→   501→            )}
+   502→   502→          </CardContent>
+   503→   503→        </AnimatedCard>
+   504→   504→
+   505→   505→        <AnimatedCard delay={0.15}>
+   506→   506→          <CardContent className="p-4">
+   507→   507→            {loading ? (
+   508→   508→              <StatCardSkeleton />
+   509→   509→            ) : (
+   510→   510→              <div className="flex items-center gap-3">
+   511→   511→                <div className="flex items-center justify-center h-10 w-10 rounded-xl bg-purple-50 dark:bg-purple-950/40 border border-purple-100 dark:border-purple-900/50">
+   512→   512→                  <CalendarDays className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+   513→   513→                </div>
+   514→   514→                <div>
+   515→   515→                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+   516→   516→                    This Month
+   517→   517→                  </p>
+   518→   518→                  <p className="text-xl font-bold text-foreground">{formatNumber(animDocsThisMonth)}</p>
+   519→   519→                </div>
+   520→   520→              </div>
+   521→   521→            )}
+   522→   522→          </CardContent>
+   523→   523→        </AnimatedCard>
+   524→   524→      </div>
+   525→   525→
+   526→   526→      {/* ═══ FOLDER TABS + DOCUMENT GRID ═══ */}
+   527→   527→      <AnimatedCard delay={0.2} className="overflow-hidden">
+   528→   528→        <CardContent className="p-0">
+   529→   529→          <Tabs
+   530→   530→            value={activeFolder}
+   531→   531→            onValueChange={setActiveFolder}
+   532→   532→            className="w-full"
+   533→   533→          >
+   534→   534→            <div className="border-b border-border/50 px-4 pt-4">
+   535→   535→              <TabsList className="bg-muted/50 h-auto flex-wrap gap-1 p-1">
+   536→   536→                {FOLDERS.map((folder) => (
+   537→   537→                  <TabsTrigger
+   538→   538→                    key={folder.value}
+   539→   539→                    value={folder.value}
+   540→   540→                    className="data-[state=active]:bg-emerald-50 data-[state=active]:text-emerald-700 dark:data-[state=active]:bg-emerald-950/40 dark:data-[state=active]:text-emerald-400 text-xs px-3 py-1.5"
+   541→   541→                  >
+   542→   542→                    <folder.icon className="h-3.5 w-3.5 mr-1.5" />
+   543→   543→                    {folder.label}
+   544→   544→                  </TabsTrigger>
+   545→   545→                ))}
+   546→   546→              </TabsList>
+   547→   547→            </div>
+   548→   548→
+   549→   549→            {/* All tabs share the same content, filtered by activeFolder */}
+   550→   550→            {FOLDERS.map((folder) => (
+   551→   551→              <TabsContent key={folder.value} value={folder.value} className="mt-0">
+   552→   552→                <div className="p-4">
+   553→   553→                  {error && (
+   554→   554→                    <div className="flex items-center gap-2 p-3 rounded-xl bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900/50 mb-4">
+   555→   555→                      <AlertCircle className="h-4 w-4 text-red-500 shrink-0" />
+   556→   556→                      <p className="text-sm text-red-700 dark:text-red-400">{error}</p>
+   557→   557→                      <Button
+   558→   558→                        variant="ghost"
+   559→   559→                        size="sm"
+   560→   560→                        onClick={fetchData}
+   561→   561→                        className="ml-auto text-xs text-red-600 hover:text-red-700"
+   562→   562→                      >
+   563→   563→                        Retry
+   564→   564→                      </Button>
+   565→   565→                    </div>
+   566→   566→                  )}
+   567→   567→
+   568→   568→                  {loading ? (
+   569→   569→                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+   570→   570→                      {Array.from({ length: 6 }).map((_, i) => (
+   571→   571→                        <DocumentCardSkeleton key={i} />
+   572→   572→                      ))}
+   573→   573→                    </div>
+   574→   574→                  ) : filteredDocuments.length === 0 ? (
+   575→   575→                    <motion.div
+   576→   576→                      initial={{ opacity: 0 }}
+   577→   577→                      animate={{ opacity: 1 }}
+   578→   578→                      className="flex flex-col items-center justify-center py-16 text-center"
+   579→   579→                    >
+   580→   580→                      <div className="h-16 w-16 rounded-2xl bg-emerald-50 dark:bg-emerald-950/30 flex items-center justify-center mb-4">
+   581→   581→                        <FolderOpen className="h-8 w-8 text-emerald-400" />
+   582→   582→                      </div>
+   583→   583→                      <h3 className="text-lg font-semibold text-foreground mb-1">
+   584→   584→                        No documents found
+   585→   585→                      </h3>
+   586→   586→                      <p className="text-sm text-muted-foreground mb-4 max-w-sm">
+   587→   587→                        {searchQuery
+   588→   588→                          ? `No documents match "${searchQuery}"`
+   589→   589→                          : 'Upload your first document to get started'}
+   590→   590→                      </p>
+   591→   591→                      {!searchQuery && (
+   592→   592→                        <Button
+   593→   593→                          onClick={() => setUploadOpen(true)}
+   594→   594→                          variant="outline"
+   595→   595→                          className="gap-2 border-emerald-200 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-800 dark:text-emerald-400 dark:hover:bg-emerald-950/30"
+   596→   596→                        >
+   597→   597→                          <Plus className="h-4 w-4" />
+   598→   598→                          Upload Document
+   599→   599→                        </Button>
+   600→   600→                      )}
+   601→   601→                    </motion.div>
+   602→   602→                  ) : (
+   603→   603→                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+   604→   604→                      <AnimatePresence>
+   605→   605→                        {filteredDocuments.map((doc, index) => (
+   606→   606→                          <motion.div
+   607→   607→                            key={doc.id}
+   608→   608→                            initial={{ opacity: 0, y: 15 }}
+   609→   609→                            animate={{ opacity: 1, y: 0 }}
+   610→   610→                            exit={{ opacity: 0, scale: 0.95 }}
+   611→   611→                            transition={{ delay: index * 0.04, duration: 0.35 }}
+   612→   612→                            whileHover={{ y: -2 }}
+   613→   613→                            className="group p-4 rounded-xl border border-border/30 hover:border-emerald-200/60 dark:hover:border-emerald-800/50 hover:shadow-md hover:shadow-emerald-500/5 transition-all cursor-pointer bg-card/50"
+   614→   614→                          >
+   615→   615→                            {/* Top: icon + name */}
+   616→   616→                            <div className="flex items-start gap-3 mb-3">
+   617→   617→                              <div className="flex items-center justify-center h-10 w-10 rounded-lg bg-muted/50 shrink-0">
+   618→   618→                                {getFileTypeIcon(doc.fileType)}
+   619→   619→                              </div>
+   620→   620→                              <div className="flex-1 min-w-0">
+   621→   621→                                <p className="text-sm font-semibold text-foreground truncate" title={doc.name}>
+   622→   622→                                  {doc.name}
+   623→   623→                                </p>
+   624→   624→                                {doc.client && (
+   625→   625→                                  <p className="text-xs text-muted-foreground truncate mt-0.5">
+   626→   626→                                    {doc.client.tradeName}
+   627→   627→                                  </p>
+   628→   628→                                )}
+   629→   629→                              </div>
+   630→   630→                            </div>
+   631→   631→
+   632→   632→                            {/* File type badge + version */}
+   633→   633→                            <div className="flex items-center gap-2 mb-3">
+   634→   634→                              <Badge
+   635→   635→                                variant="outline"
+   636→   636→                                className={`text-[10px] px-2 py-0 border-0 font-semibold ${getFileTypeColor(doc.fileType)}`}
+   637→   637→                              >
+   638→   638→                                {doc.fileType.toUpperCase()}
+   639→   639→                              </Badge>
+   640→   640→                              <Badge
+   641→   641→                                variant="outline"
+   642→   642→                                className="text-[10px] px-2 py-0 border-border/30 text-muted-foreground font-medium"
+   643→   643→                              >
+   644→   644→                                v{doc.version}
+   645→   645→                              </Badge>
+   646→   646→                              <span className="text-[10px] text-muted-foreground ml-auto">
+   647→   647→                                {formatFileSize(doc.size)}
+   648→   648→                              </span>
+   649→   649→                            </div>
+   650→   650→
+   651→   651→                            {/* Tags */}
+   652→   652→                            {doc.tags && (
+   653→   653→                              <div className="flex flex-wrap gap-1 mb-3">
+   654→   654→                                {doc.tags.split(',').slice(0, 3).map((tag, i) => (
+   655→   655→                                  <Badge
+   656→   656→                                    key={i}
+   657→   657→                                    variant="outline"
+   658→   658→                                    className="text-[10px] px-1.5 py-0 border-emerald-200/50 text-emerald-600 dark:border-emerald-800/50 dark:text-emerald-400 bg-emerald-50/50 dark:bg-emerald-950/20"
+   659→   659→                                  >
+   660→   660→                                    <Tag className="h-2.5 w-2.5 mr-0.5" />
+   661→   661→                                    {tag.trim()}
+   662→   662→                                  </Badge>
+   663→   663→                                ))}
+   664→   664→                                {doc.tags.split(',').length > 3 && (
+   665→   665→                                  <span className="text-[10px] text-muted-foreground self-center">
+   666→   666→                                    +{doc.tags.split(',').length - 3}
+   667→   667→                                  </span>
+   668→   668→                                )}
+   669→   669→                              </div>
+   670→   670→                            )}
+   671→   671→
+   672→   672→                            {/* Date + Actions */}
+   673→   673→                            <div className="flex items-center justify-between pt-2 border-t border-border/20">
+   674→   674→                              <span className="text-[10px] text-muted-foreground">
+   675→   675→                                {formatDate(doc.createdAt)}
+   676→   676→                              </span>
+   677→   677→                              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+   678→   678→                                <Button
+   679→   679→                                  variant="ghost"
+   680→   680→                                  size="sm"
+   681→   681→                                  className="h-7 w-7 p-0 text-muted-foreground hover:text-emerald-600"
+   682→   682→                                  title="Preview"
+   683→   683→                                >
+   684→   684→                                  <Eye className="h-3.5 w-3.5" />
+   685→   685→                                </Button>
+   686→   686→                                <Button
+   687→   687→                                  variant="ghost"
+   688→   688→                                  size="sm"
+   689→   689→                                  className="h-7 w-7 p-0 text-muted-foreground hover:text-emerald-600"
+   690→   690→                                  title="Download"
+   691→   691→                                >
+   692→   692→                                  <Download className="h-3.5 w-3.5" />
+   693→   693→                                </Button>
+   694→   694→                                <Button
+   695→   695→                                  variant="ghost"
+   696→   696→                                  size="sm"
+   697→   697→                                  onClick={(e) => {
+   698→   698→                                    e.stopPropagation();
+   699→   699→                                    handleViewVersions(doc);
+   700→   700→                                  }}
+   701→   701→                                  className="h-7 w-7 p-0 text-muted-foreground hover:text-emerald-600"
+   702→   702→                                  title="Version History"
+   703→   703→                                >
+   704→   704→                                  <History className="h-3.5 w-3.5" />
+   705→   705→                                </Button>
+   706→   706→                              </div>
+   707→   707→                            </div>
+   708→   708→                          </motion.div>
+   709→   709→                        ))}
+   710→   710→                      </AnimatePresence>
+   711→   711→                    </div>
+   712→   712→                  )}
+   713→   713→
+   714→   714→                  {/* Results count */}
+   715→   715→                  {!loading && filteredDocuments.length > 0 && (
+   716→   716→                    <div className="mt-4 text-center">
+   717→   717→                      <p className="text-xs text-muted-foreground">
+   718→   718→                        Showing {filteredDocuments.length} of {documents.length} documents
+   719→   719→                      </p>
+   720→   720→                    </div>
+   721→   721→                  )}
+   722→   722→                </div>
+   723→   723→              </TabsContent>
+   724→   724→            ))}
+   725→   725→          </Tabs>
+   726→   726→        </CardContent>
+   727→   727→      </AnimatedCard>
+   728→   728→
+   729→   729→      {/* ═══ UPLOAD DOCUMENT DIALOG ═══ */}
+   730→   730→      <Dialog open={uploadOpen} onOpenChange={setUploadOpen}>
+   731→   731→        <DialogContent className="sm:max-w-lg">
+   732→   732→          <DialogHeader>
+   733→   733→            <DialogTitle className="flex items-center gap-2">
+   734→   734→              <Upload className="h-5 w-5 text-emerald-500" />
+   735→   735→              Upload Document
+   736→   736→            </DialogTitle>
+   737→   737→            <DialogDescription>
+   738→   738→              Add a new document to the vault
+   739→   739→            </DialogDescription>
+   740→   740→          </DialogHeader>
+   741→   741→
+   742→   742→          {uploadSuccess ? (
+   743→   743→            <motion.div
+   744→   744→              initial={{ opacity: 0, scale: 0.9 }}
+   745→   745→              animate={{ opacity: 1, scale: 1 }}
+   746→   746→              className="flex flex-col items-center py-8"
+   747→   747→            >
+   748→   748→              <div className="h-14 w-14 rounded-full bg-emerald-100 dark:bg-emerald-950/40 flex items-center justify-center mb-3">
+   749→   749→                <CheckCircle2 className="h-7 w-7 text-emerald-600 dark:text-emerald-400" />
+   750→   750→              </div>
+   751→   751→              <p className="text-lg font-semibold text-foreground">Document Uploaded!</p>
+   752→   752→              <p className="text-sm text-muted-foreground mt-1">Your document has been added to the vault.</p>
+   753→   753→            </motion.div>
+   754→   754→          ) : (
+   755→   755→            <div className="space-y-4">
+   756→   756→              <div className="space-y-2">
+   757→   757→                <Label>Client</Label>
+   758→   758→                <Select
+   759→   759→                  value={uploadForm.clientId}
+   760→   760→                  onValueChange={(v) => setUploadForm((f) => ({ ...f, clientId: v }))}
+   761→   761→                >
+   762→   762→                  <SelectTrigger className="w-full">
+   763→   763→                    <SelectValue placeholder="Select client (optional)" />
+   764→   764→                  </SelectTrigger>
+   765→   765→                  <SelectContent>
+   766→   766→                    {clients.map((c) => (
+   767→   767→                      <SelectItem key={c.id} value={c.id}>
+   768→   768→                        {c.tradeName}
+   769→   769→                      </SelectItem>
+   770→   770→                    ))}
+   771→   771→                  </SelectContent>
+   772→   772→                </Select>
+   773→   773→              </div>
+   774→   774→
+   775→   775→              <div className="space-y-2">
+   776→   776→                <Label>Folder</Label>
+   777→   777→                <Select
+   778→   778→                  value={uploadForm.folder}
+   779→   779→                  onValueChange={(v) => setUploadForm((f) => ({ ...f, folder: v }))}
+   780→   780→                >
+   781→   781→                  <SelectTrigger className="w-full">
+   782→   782→                    <SelectValue />
+   783→   783→                  </SelectTrigger>
+   784→   784→                  <SelectContent>
+   785→   785→                    {FOLDERS.filter((f) => f.value !== 'all').map((f) => (
+   786→   786→                      <SelectItem key={f.value} value={f.value}>
+   787→   787→                        {f.label}
+   788→   788→                      </SelectItem>
+   789→   789→                    ))}
+   790→   790→                    <SelectItem value="general">General</SelectItem>
+   791→   791→                  </SelectContent>
+   792→   792→                </Select>
+   793→   793→              </div>
+   794→   794→
+   795→   795→              <div className="space-y-2">
+   796→   796→                <Label>Document Name *</Label>
+   797→   797→                <Input
+   798→   798→                  placeholder="e.g. GSTR-1 Return Q3 2025"
+   799→   799→                  value={uploadForm.name}
+   800→   800→                  onChange={(e) => setUploadForm((f) => ({ ...f, name: e.target.value }))}
+   801→   801→                />
+   802→   802→              </div>
+   803→   803→
+   804→   804→              <div className="grid grid-cols-2 gap-4">
+   805→   805→                <div className="space-y-2">
+   806→   806→                  <Label>File Type</Label>
+   807→   807→                  <Select
+   808→   808→                    value={uploadForm.fileType}
+   809→   809→                    onValueChange={(v) => setUploadForm((f) => ({ ...f, fileType: v }))}
+   810→   810→                  >
+   811→   811→                    <SelectTrigger className="w-full">
+   812→   812→                      <SelectValue />
+   813→   813→                    </SelectTrigger>
+   814→   814→                    <SelectContent>
+   815→   815→                      {['pdf', 'xlsx', 'docx', 'jpg', 'png', 'csv', 'pptx'].map((t) => (
+   816→   816→                        <SelectItem key={t} value={t}>
+   817→   817→                          {t.toUpperCase()}
+   818→   818→                        </SelectItem>
+   819→   819→                      ))}
+   820→   820→                    </SelectContent>
+   821→   821→                  </Select>
+   822→   822→                </div>
+   823→   823→
+   824→   824→                <div className="space-y-2">
+   825→   825→                  <Label>Tags</Label>
+   826→   826→                  <Input
+   827→   827→                    placeholder="gst, return, quarterly"
+   828→   828→                    value={uploadForm.tags}
+   829→   829→                    onChange={(e) => setUploadForm((f) => ({ ...f, tags: e.target.value }))}
+   830→   830→                  />
+   831→   831→                </div>
+   832→   832→              </div>
+   833→   833→
+   834→   834→              <div className="space-y-2">
+   835→   835→                <Label>Description</Label>
+   836→   836→                <Textarea
+   837→   837→                  placeholder="Brief description of the document..."
+   838→   838→                  value={uploadForm.description}
+   839→   839→                  onChange={(e) => setUploadForm((f) => ({ ...f, description: e.target.value }))}
+   840→   840→                  rows={3}
+   841→   841→                />
+   842→   842→              </div>
+   843→   843→            </div>
+   844→   844→          )}
+   845→   845→
+   846→   846→          {!uploadSuccess && (
+   847→   847→            <DialogFooter>
+   848→   848→              <Button
+   849→   849→                variant="outline"
+   850→   850→                onClick={() => setUploadOpen(false)}
+   851→   851→                disabled={uploading}
+   852→   852→              >
+   853→   853→                Cancel
+   854→   854→              </Button>
+   855→   855→              <Button
+   856→   856→                onClick={handleUpload}
+   857→   857→                disabled={!uploadForm.name.trim() || uploading}
+   858→   858→                className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white"
+   859→   859→              >
+   860→   860→                {uploading ? (
+   861→   861→                  <>
+   862→   862→                    <Loader2 className="h-4 w-4 animate-spin" />
+   863→   863→                    Uploading...
+   864→   864→                  </>
+   865→   865→                ) : (
+   866→   866→                  <>
+   867→   867→                    <Upload className="h-4 w-4" />
+   868→   868→                    Upload
+   869→   869→                  </>
+   870→   870→                )}
+   871→   871→              </Button>
+   872→   872→            </DialogFooter>
+   873→   873→          )}
+   874→   874→        </DialogContent>
+   875→   875→      </Dialog>
+   876→   876→
+   877→   877→      {/* ═══ VERSION HISTORY DIALOG ═══ */}
+   878→   878→      <Dialog open={versionOpen} onOpenChange={setVersionOpen}>
+   879→   879→        <DialogContent className="sm:max-w-lg">
+   880→   880→          <DialogHeader>
+   881→   881→            <DialogTitle className="flex items-center gap-2">
+   882→   882→              <History className="h-5 w-5 text-emerald-500" />
+   883→   883→              Version History
+   884→   884→            </DialogTitle>
+   885→   885→            <DialogDescription>
+   886→   886→              {versionDoc ? `All versions of "${versionDoc.name}"` : 'Document versions'}
+   887→   887→            </DialogDescription>
+   888→   888→          </DialogHeader>
+   889→   889→
+   890→   890→          {versionsLoading ? (
+   891→   891→            <div className="space-y-3 py-4">
+   892→   892→              {Array.from({ length: 3 }).map((_, i) => (
+   893→   893→                <div key={i} className="flex items-center gap-3 p-3 rounded-lg">
+   894→   894→                  <Skeleton className="h-8 w-8 rounded-lg" />
+   895→   895→                  <div className="flex-1 space-y-1.5">
+   896→   896→                    <Skeleton className="h-4 w-3/4" />
+   897→   897→                    <Skeleton className="h-3 w-1/2" />
+   898→   898→                  </div>
+   899→   899→                  <Skeleton className="h-8 w-8 rounded" />
+   900→   900→                </div>
+   901→   901→              ))}
+   902→   902→            </div>
+   903→   903→          ) : versions.length === 0 ? (
+   904→   904→            <p className="text-sm text-muted-foreground text-center py-8">
+   905→   905→              No version history available.
+   906→   906→            </p>
+   907→   907→          ) : (
+   908→   908→            <ScrollArea className="max-h-80">
+   909→   909→              <div className="space-y-2 pr-2">
+   910→   910→                {versions.map((v, index) => (
+   911→   911→                  <motion.div
+   912→   912→                    key={v.id}
+   913→   913→                    initial={{ opacity: 0, x: -10 }}
+   914→   914→                    animate={{ opacity: 1, x: 0 }}
+   915→   915→                    transition={{ delay: index * 0.06 }}
+   916→   916→                    className="flex items-center gap-3 p-3 rounded-xl border border-border/30 hover:border-emerald-200/50 dark:hover:border-emerald-800/50 transition-colors"
+   917→   917→                  >
+   918→   918→                    <div className="flex items-center justify-center h-9 w-9 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 shrink-0">
+   919→   919→                      <span className="text-sm font-bold text-emerald-600 dark:text-emerald-400">
+   920→   920→                        v{v.version}
+   921→   921→                      </span>
+   922→   922→                    </div>
+   923→   923→                    <div className="flex-1 min-w-0">
+   924→   924→                      <p className="text-sm font-medium text-foreground truncate">
+   925→   925→                        Version {v.version}
+   926→   926→                        {v.isLatest && (
+   927→   927→                          <Badge className="ml-2 text-[9px] px-1.5 py-0 bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 border-0">
+   928→   928→                            Latest
+   929→   929→                          </Badge>
+   930→   930→                        )}
+   931→   931→                      </p>
+   932→   932→                      <p className="text-xs text-muted-foreground">
+   933→   933→                        {formatDate(v.createdAt)}
+   934→   934→                        {v.uploadedBy && ` by ${v.uploadedBy}`}
+   935→   935→                      </p>
+   936→   936→                    </div>
+   937→   937→                    <Button
+   938→   938→                      variant="ghost"
+   939→   939→                      size="sm"
+   940→   940→                      className="h-8 w-8 p-0 text-muted-foreground hover:text-emerald-600 shrink-0"
+   941→   941→                      title="Download this version"
+   942→   942→                    >
+   943→   943→                      <Download className="h-4 w-4" />
+   944→   944→                    </Button>
+   945→   945→                  </motion.div>
+   946→   946→                ))}
+   947→   947→              </div>
+   948→   948→            </ScrollArea>
+   949→   949→          )}
+   950→   950→        </DialogContent>
+   951→   951→      </Dialog>
+   952→   952→    </div>
+   953→   953→  );
+   954→   954→}
+   955→   955→

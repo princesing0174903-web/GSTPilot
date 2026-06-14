@@ -58,11 +58,14 @@ import {
   Clock,
   Eye,
   ThumbsUp,
+  Inbox,
+  Loader2,
 } from 'lucide-react';
 import type {
   Invoice,
   Client,
   GSTR1Section,
+  Issue,
 } from '@/types/gst';
 import {
   GSTR1_SECTION_LABELS,
@@ -72,7 +75,14 @@ import {
   formatNumber,
 } from '@/lib/gst-utils';
 import { useApp } from '@/contexts/AppContext';
-import { useGSTStore } from '@/stores/gst-store';
+import {
+  useInvoices,
+  useClients,
+  useUpdateInvoice,
+  useIssues,
+} from '@/hooks/api';
+import { toast } from 'sonner';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 // ─── Local Types ──────────────────────────────────────────────────────────────
 
@@ -116,8 +126,6 @@ interface ValidationIssueItem {
   invoiceNumber: string;
   invoiceId: string;
 }
-
-// ─── Mock Data removed — all data comes from GST store now ───
 
 // ─── Animation Variants ───────────────────────────────────────────────────────
 
@@ -215,51 +223,96 @@ function getValidationLabel(status: ValidationStatus): string {
   }
 }
 
+// ─── Map API Invoice to local ExtractedInvoice ────────────────────────────────
+
+function mapInvoiceStatus(status: string): ValidationStatus {
+  if (status === 'approved' || status === 'filed') return 'validated';
+  if (status === 'draft') return 'warning';
+  return 'error';
+}
+
+function mapInvoiceToExtracted(inv: Invoice, clientName: string): ExtractedInvoice {
+  const vStatus = mapInvoiceStatus(inv.status);
+  return {
+    id: inv.id,
+    invoiceNumber: inv.invoiceNumber,
+    clientName,
+    invoiceDate: inv.invoiceDate,
+    section: inv.gstr1Section,
+    sectionLabel: GSTR1_SECTION_LABELS[inv.gstr1Section] ?? inv.gstr1Section.toUpperCase(),
+    taxableValue: inv.taxableValue,
+    cgst: inv.cgst,
+    sgst: inv.sgst,
+    igst: inv.igst,
+    totalTax: inv.cgst + inv.sgst + inv.igst,
+    totalAmount: inv.totalAmount,
+    validationStatus: vStatus,
+    ocrConfidence: vStatus === 'error' ? 75.0 : vStatus === 'warning' ? 92.0 : 98.5,
+    missingFields: inv.aiExplanation ? [inv.aiExplanation.split(' ').slice(0, 2).join(' ')] : [],
+    validationMessages: inv.aiExplanation ? [inv.aiExplanation] : [],
+  };
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function InvoiceWorkspacePage() {
   const { selectedClientId, setSelectedClientId } = useApp();
-  const store = useGSTStore();
+  const queryClient = useQueryClient();
 
-  // ── Clients from store ──
-  const clients = store.clients;
+  // ── React Query data hooks ──
+  const { data: invoicesData, isLoading: invoicesLoading } = useInvoices(selectedClientId ?? undefined);
+  const { data: clientsData, isLoading: clientsLoading } = useClients();
+  const { data: issuesData } = useIssues(selectedClientId ?? undefined);
+
+  // ── Mutations ──
+  const updateInvoiceMutation = useUpdateInvoice();
+
+  // File upload mutation — sends FormData to /api/upload
+  const uploadMutation = useMutation({
+    mutationFn: async (formData: FormData) => {
+      const res = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
+      });
+      if (!res.ok) {
+        const error = await res.json().catch(() => ({ error: 'Upload failed' }));
+        throw new Error(error.error || `HTTP ${res.status}`);
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['invoices'] });
+      queryClient.invalidateQueries({ queryKey: ['documents'] });
+    },
+  });
+
+  // ── Clients from API ──
+  const clients = clientsData?.clients ?? [];
+
+  // ── Client map for name lookups ──
+  const clientMap = useMemo(() => {
+    const map = new Map<string, Client>();
+    for (const c of clients) {
+      map.set(c.id, c);
+    }
+    return map;
+  }, [clients]);
 
   // ── Upload State ──
   const [isDragging, setIsDragging] = useState(false);
   const [processingFiles, setProcessingFiles] = useState<ProcessingFile[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // ── Invoices from store ──
-  // Get all invoices across clients (or filtered by selectedClientId)
-  const storeInvoices = useMemo(() => {
-    if (selectedClientId) {
-      return store.getInvoicesForClient(selectedClientId);
-    }
-    // Flatten all client invoices
-    return store.clients.flatMap(c => store.getInvoicesForClient(c.id));
-  }, [store, selectedClientId]);
+  // ── Invoices from API ──
+  const apiInvoices = invoicesData?.invoices ?? [];
 
-  // Map store invoices to the local ExtractedInvoice type for the UI
+  // Map API invoices to the local ExtractedInvoice type for the UI
   const invoices: ExtractedInvoice[] = useMemo(() =>
-    storeInvoices.map(inv => ({
-      id: inv.id,
-      invoiceNumber: inv.invoiceNumber,
-      clientName: store.getClient(inv.clientId)?.tradeName ?? 'Unknown',
-      invoiceDate: inv.date,
-      section: (inv.placeOfSupply && inv.placeOfSupply !== store.getClient(inv.clientId)?.stateCode ? 'b2cl' : 'b2b') as GSTR1Section,
-      sectionLabel: (inv.placeOfSupply && inv.placeOfSupply !== store.getClient(inv.clientId)?.stateCode ? 'B2C Large' : 'B2B'),
-      taxableValue: inv.taxableValue,
-      cgst: inv.cgst,
-      sgst: inv.sgst,
-      igst: inv.igst,
-      totalTax: inv.cgst + inv.sgst + inv.igst,
-      totalAmount: inv.taxableValue + inv.cgst + inv.sgst + inv.igst,
-      validationStatus: inv.status as ValidationStatus,
-      ocrConfidence: inv.status === 'error' ? 75.0 : inv.status === 'warning' ? 92.0 : 98.5,
-      missingFields: inv.errorDetail ? [inv.errorDetail.split(' ').slice(0, 2).join(' ')] : [],
-      validationMessages: inv.errorDetail ? [inv.errorDetail] : [],
-    })),
-    [storeInvoices, store]
+    apiInvoices.map(inv => {
+      const clientName = clientMap.get(inv.clientId)?.tradeName ?? 'Unknown';
+      return mapInvoiceToExtracted(inv, clientName);
+    }),
+    [apiInvoices, clientMap]
   );
 
   const hasInvoices = invoices.length > 0;
@@ -274,8 +327,8 @@ export default function InvoiceWorkspacePage() {
   // ── AI Review Queue ──
   const [reviewingInvoiceId, setReviewingInvoiceId] = useState<string | null>(null);
 
-  // Loading is instant — data comes from store
-  const loading = false;
+  // ── Loading ──
+  const loading = invoicesLoading || clientsLoading;
 
   // ── Pipeline Counts ──
   const pipelineCounts = useMemo(() => {
@@ -286,8 +339,11 @@ export default function InvoiceWorkspacePage() {
     return { uploading, extracting, validated, errors };
   }, [processingFiles, invoices]);
 
-  // ── Validation Issues ──
-  const validationIssues = useMemo(() => {
+  // ── Validation Issues from API ──
+  const apiIssues = issuesData?.issues ?? [];
+
+  const validationIssues: ValidationIssueItem[] = useMemo(() => {
+    // First, derive issues from invoice validation status
     const issues: ValidationIssueItem[] = [];
     for (const inv of invoices) {
       if (inv.validationStatus === 'error') {
@@ -322,8 +378,20 @@ export default function InvoiceWorkspacePage() {
         });
       }
     }
+    // Also include API issues
+    for (const issue of apiIssues) {
+      if (issue.status === 'open') {
+        issues.push({
+          id: issue.id,
+          severity: issue.severity === 'critical' ? 'critical' : 'warning',
+          description: issue.title + (issue.description ? `: ${issue.description}` : ''),
+          invoiceNumber: issue.invoiceId ? 'See details' : 'N/A',
+          invoiceId: issue.invoiceId ?? '',
+        });
+      }
+    }
     return issues;
-  }, [invoices]);
+  }, [invoices, apiIssues]);
 
   const criticalCount = validationIssues.filter(i => i.severity === 'critical').length;
   const warningCount = validationIssues.filter(i => i.severity === 'warning').length;
@@ -345,92 +413,60 @@ export default function InvoiceWorkspacePage() {
   }, [pipelineCounts]);
 
   // ── Upload Handlers ──
-  // Deterministic file sizes based on file name hash
-  function getDeterministicSize(name: string): number {
-    let hash = 0;
-    for (let i = 0; i < name.length; i++) {
-      hash = ((hash << 5) - hash) + name.charCodeAt(i);
-      hash |= 0;
-    }
-    return Math.abs(hash % 1500000) + 200000; // 200KB - 1.7MB
-  }
+  const handleUpload = useCallback(async (files: File[]) => {
+    for (const file of files) {
+      const fileId = `file-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+      const newFile: ProcessingFile = {
+        id: fileId,
+        name: file.name,
+        size: file.size,
+        format: file.name.split('.').pop()?.toUpperCase() || 'JSON',
+        progress: 0,
+        status: 'uploading',
+        invoiceCount: 0,
+        ocrConfidence: 0,
+      };
 
-  const simulateUpload = useCallback((fileNames: string[]) => {
-    const newFiles: ProcessingFile[] = fileNames.map((name, idx) => ({
-      id: `file-${Date.now()}-${idx}`,
-      name,
-      size: getDeterministicSize(name),
-      format: name.split('.').pop()?.toUpperCase() || 'JSON',
-      progress: 0,
-      status: 'uploading' as const,
-      invoiceCount: 0,
-      ocrConfidence: 0,
-    }));
+      setProcessingFiles(prev => [...prev, newFile]);
 
-    setProcessingFiles(prev => [...prev, ...newFiles]);
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('clientId', selectedClientId ?? '');
+      formData.append('period', '2025-06');
 
-    newFiles.forEach((file, idx) => {
-      const fileIndex = idx;
-      let progress = 0;
+      // Animate upload progress
+      setProcessingFiles(prev =>
+        prev.map(f => f.id === fileId ? { ...f, progress: 30 } : f)
+      );
 
-      // Phase 1: Upload — deterministic progress steps
-      const uploadInterval = setInterval(() => {
-        progress += 25; // Fixed increment
-        if (progress >= 100) {
-          progress = 100;
-          clearInterval(uploadInterval);
+      uploadMutation.mutate(formData, {
+        onSuccess: () => {
+          // Update to extracting phase
           setProcessingFiles(prev =>
-            prev.map((f, i) =>
-              i === prev.length - newFiles.length + fileIndex
-                ? { ...f, progress: 100, status: 'extracting' }
-                : f
-            )
+            prev.map(f => f.id === fileId ? { ...f, progress: 60, status: 'extracting' } : f)
           );
-
-          // Phase 2: Extracting
+          // Simulate extracting → validating → complete
           setTimeout(() => {
-            const invCount = 8; // Fixed realistic count
-            const ocr = 96.5;  // Fixed realistic confidence
             setProcessingFiles(prev =>
-              prev.map((f, i) =>
-                i === prev.length - newFiles.length + fileIndex
-                  ? { ...f, status: 'validating', invoiceCount: invCount, ocrConfidence: ocr }
-                  : f
-              )
+              prev.map(f => f.id === fileId ? { ...f, progress: 85, status: 'validating', invoiceCount: 8, ocrConfidence: 96.5 } : f)
             );
-
-            // Phase 3: Validating -> Complete
             setTimeout(() => {
               setProcessingFiles(prev =>
-                prev.map((f, i) =>
-                  i === prev.length - newFiles.length + fileIndex
-                    ? { ...f, status: 'complete' }
-                    : f
-                )
+                prev.map(f => f.id === fileId ? { ...f, progress: 100, status: 'complete' } : f)
               );
-
-              // Record upload in store
-              store.addUpload({
-                fileName: file.name,
-                fileType: file.format.toLowerCase() as 'json' | 'csv' | 'xlsx',
-                uploadTime: new Date().toISOString(),
-                status: 'processed',
-                invoiceCount: invCount,
-              });
             }, 1200);
           }, 1800);
-        } else {
+          toast.success(`${file.name} uploaded successfully`);
+        },
+        onError: (err) => {
           setProcessingFiles(prev =>
-            prev.map((f, i) =>
-              i === prev.length - newFiles.length + fileIndex
-                ? { ...f, progress: Math.min(progress, 100) }
-                : f
-            )
+            prev.map(f => f.id === fileId ? { ...f, status: 'error', errorMsg: err.message } : f)
           );
-        }
-      }, 300);
-    });
-  }, [store]);
+          toast.error(`Failed to upload ${file.name}: ${err.message}`);
+        },
+      });
+    }
+  }, [selectedClientId, uploadMutation]);
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -450,14 +486,14 @@ export default function InvoiceWorkspacePage() {
     setIsDragging(false);
     const files = Array.from(e.dataTransfer.files);
     if (files.length > 0) {
-      simulateUpload(files.map(f => f.name));
+      handleUpload(files);
     }
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
     if (files.length > 0) {
-      simulateUpload(files.map(f => f.name));
+      handleUpload(files);
     }
     e.target.value = '';
   };
@@ -467,11 +503,37 @@ export default function InvoiceWorkspacePage() {
   };
 
   const handleDemoUpload = () => {
-    simulateUpload(['GSTR1_Jun2025_SharmaEnt.json', 'SalesRegister_Jun2025.csv']);
+    // Demo upload: create synthetic file objects
+    const demoFiles = [
+      new File(['demo'], 'GSTR1_Jun2025_SharmaEnt.json', { type: 'application/json' }),
+      new File(['demo'], 'SalesRegister_Jun2025.csv', { type: 'text/csv' }),
+    ];
+    handleUpload(demoFiles);
   };
 
   const removeFile = (fileId: string) => {
     setProcessingFiles(prev => prev.filter(f => f.id !== fileId));
+  };
+
+  // ── Invoice action handlers ──
+  const handleApproveInvoice = (inv: ExtractedInvoice) => {
+    updateInvoiceMutation.mutate(
+      { id: inv.id, status: 'approved', clientId: selectedClientId ?? undefined },
+      {
+        onSuccess: () => toast.success(`Invoice ${inv.invoiceNumber} approved`),
+        onError: (err) => toast.error(`Failed to approve: ${err.message}`),
+      }
+    );
+  };
+
+  const handleFixInvoice = (inv: ExtractedInvoice) => {
+    updateInvoiceMutation.mutate(
+      { id: inv.id, status: 'draft', clientId: selectedClientId ?? undefined },
+      {
+        onSuccess: () => toast.info(`Invoice ${inv.invoiceNumber} marked for editing`),
+        onError: (err) => toast.error(`Failed to update: ${err.message}`),
+      }
+    );
   };
 
   // ── Loading Skeleton ──
@@ -1198,6 +1260,8 @@ export default function InvoiceWorkspacePage() {
                               variant="outline"
                               size="sm"
                               className="flex-1 h-7 text-xs gap-1.5 border-slate-200 hover:border-emerald-300 hover:text-emerald-700 hover:bg-emerald-50"
+                              onClick={() => handleFixInvoice(inv)}
+                              disabled={updateInvoiceMutation.isPending}
                             >
                               <Edit3 className="size-3" />
                               Edit
@@ -1205,7 +1269,8 @@ export default function InvoiceWorkspacePage() {
                             <Button
                               size="sm"
                               className="flex-1 h-7 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
-                              disabled={inv.validationStatus === 'error'}
+                              disabled={inv.validationStatus === 'error' || updateInvoiceMutation.isPending}
+                              onClick={() => handleApproveInvoice(inv)}
                             >
                               <FileCheck2 className="size-3" />
                               Approve
@@ -1307,9 +1372,8 @@ export default function InvoiceWorkspacePage() {
                             variant="outline"
                             size="sm"
                             className="h-7 text-[10px] gap-1 border-emerald-200 text-emerald-700 hover:bg-emerald-50 hover:border-emerald-300"
-                            onClick={() => {
-                              setInvoices(prev => prev.map(i => i.id === inv.id ? { ...i, validationStatus: 'validated' as ValidationStatus, validationMessages: [], missingFields: [] } : i));
-                            }}
+                            disabled={updateInvoiceMutation.isPending}
+                            onClick={() => handleApproveInvoice(inv)}
                           >
                             <ThumbsUp className="size-3" />
                             Approve
@@ -1402,6 +1466,11 @@ export default function InvoiceWorkspacePage() {
                                   : 'border-amber-200 text-amber-700 hover:bg-amber-50'
                                 }
                               `}
+                              onClick={() => {
+                                const inv = invoices.find(i => i.id === issue.invoiceId);
+                                if (inv) handleFixInvoice(inv);
+                              }}
+                              disabled={updateInvoiceMutation.isPending}
                             >
                               Fix
                             </Button>
@@ -1428,17 +1497,17 @@ export default function InvoiceWorkspacePage() {
             <Card className="border-slate-200/60 shadow-sm">
               <CardContent className="py-16 px-6 flex flex-col items-center text-center">
                 <div className="flex size-16 items-center justify-center rounded-2xl bg-slate-100 mb-4">
-                  <CloudUpload className="size-7 text-slate-400" />
+                  <Inbox className="size-7 text-slate-400" />
                 </div>
                 <h3 className="text-base font-semibold text-slate-700">
-                  No documents uploaded yet
+                  No invoices yet
                 </h3>
                 <p className="mt-1.5 text-sm text-muted-foreground max-w-sm">
-                  Upload your GST documents to start processing — we&apos;ll extract and validate invoices automatically
+                  Upload invoices from documents to start processing — we&apos;ll extract and validate them automatically
                 </p>
                 <Button
                   className="mt-5 gap-2 bg-emerald-600 hover:bg-emerald-700 text-white"
-                  onClick={handleDemoUpload}
+                  onClick={handleBrowseClick}
                 >
                   <Upload className="size-4" />
                   Upload Documents

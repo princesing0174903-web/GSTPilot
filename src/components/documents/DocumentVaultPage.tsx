@@ -51,9 +51,17 @@ import {
   Loader2,
   FolderOpen,
   AlertCircle,
+  Inbox,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { formatCurrency, formatNumber } from '@/lib/gst-utils';
+import {
+  useUploadedFiles,
+  useClients,
+  useUploadFile,
+} from '@/hooks/api';
+import { toast } from 'sonner';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 // ─── Color Palette (Emerald theme) ────────────────────────────────────────
 const COLORS = {
@@ -87,6 +95,10 @@ interface DocumentItem {
   createdAt: string;
   updatedAt: string;
   client?: { id: string; tradeName: string } | null;
+  // Processing status fields (from UploadedFile)
+  status?: string;
+  processingStep?: string;
+  progress?: number;
 }
 
 interface ClientOption {
@@ -239,17 +251,34 @@ function DocumentCardSkeleton() {
 // MAIN COMPONENT
 // ═══════════════════════════════════════════════════════════════════════════
 export default function DocumentVaultPage() {
+  const queryClient = useQueryClient();
+
+  // ── React Query data hooks ──
+  const { data: documentsData, isLoading: documentsLoading, error: documentsError } = useUploadedFiles(undefined, {
+    refetchInterval: (query) => {
+      const files = (query.state.data as { files: DocumentItem[] } | undefined)?.files ?? [];
+      const hasProcessing = files.some(f => f.status === 'processing' || f.status === 'uploaded');
+      return hasProcessing ? 2000 : false;
+    },
+  });
+  const { data: clientsData, isLoading: clientsLoading } = useClients();
+
+  // ── Derived data ──
+  const documents: DocumentItem[] = (documentsData?.files ?? []) as DocumentItem[];
+  const clients: ClientOption[] = (clientsData?.clients ?? []).map(c => ({
+    id: c.id,
+    tradeName: c.tradeName,
+    gstin: c.gstin,
+  }));
+  const loading = documentsLoading || clientsLoading;
+  const error = documentsError ? (documentsError instanceof Error ? documentsError.message : 'Failed to fetch documents') : null;
+
   // ── State ────────────────────────────────────────────────────────────────
-  const [documents, setDocuments] = useState<DocumentItem[]>([]);
-  const [clients, setClients] = useState<ClientOption[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [activeFolder, setActiveFolder] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
 
   // Upload dialog
   const [uploadOpen, setUploadOpen] = useState(false);
-  const [uploading, setUploading] = useState(false);
   const [uploadForm, setUploadForm] = useState({
     clientId: '',
     folder: 'general',
@@ -258,6 +287,10 @@ export default function DocumentVaultPage() {
     tags: '',
     description: '',
   });
+
+  // Drag and drop upload
+  const [isDragging, setIsDragging] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Version history dialog
   const [versionOpen, setVersionOpen] = useState(false);
@@ -268,45 +301,26 @@ export default function DocumentVaultPage() {
   // Upload success
   const [uploadSuccess, setUploadSuccess] = useState(false);
 
-  // ── Fetch data ───────────────────────────────────────────────────────────
-  const fetchData = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError(null);
-
-      const [docRes, clientRes] = await Promise.all([
-        fetch('/api/documents'),
-        fetch('/api/clients'),
-      ]);
-
-      if (docRes.ok) {
-        const docData = await docRes.json();
-        setDocuments(docData.documents ?? []);
-      } else {
-        setError('Failed to fetch documents');
+  // ── File upload mutation (FormData to /api/upload) ──
+  const fileUploadMutation = useMutation({
+    mutationFn: async (formData: FormData) => {
+      const res = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
+      });
+      if (!res.ok) {
+        const error = await res.json().catch(() => ({ error: 'Upload failed' }));
+        throw new Error(error.error || `HTTP ${res.status}`);
       }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['documents'] });
+    },
+  });
 
-      if (clientRes.ok) {
-        const clientData = await clientRes.json();
-        setClients(
-          (clientData.clients ?? []).map((c: { id: string; tradeName: string; gstin: string }) => ({
-            id: c.id,
-            tradeName: c.tradeName,
-            gstin: c.gstin,
-          }))
-        );
-      }
-    } catch (err) {
-      console.error('DocumentVault fetch error:', err);
-      setError('Network error. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+  // ── Document upload mutation (JSON to /api/documents) ──
+  const documentUploadMutation = useUploadFile();
 
   // ── Filtered documents ───────────────────────────────────────────────────
   const filteredDocuments = documents.filter((doc) => {
@@ -333,42 +347,81 @@ export default function DocumentVaultPage() {
   const animTotalDocs = useAnimatedNumber(totalDocs);
   const animDocsThisMonth = useAnimatedNumber(docsThisMonth);
 
-  // ── Upload handler ───────────────────────────────────────────────────────
+  // ── Upload handlers ──────────────────────────────────────────────────────
   const handleUpload = async () => {
     if (!uploadForm.name.trim()) return;
     try {
-      setUploading(true);
-      const res = await fetch('/api/documents', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...uploadForm,
-          size: Math.floor(Math.random() * 500000) + 10000,
-          tags: uploadForm.tags,
-          uploadedBy: 'current-user',
-        }),
-      });
-      if (res.ok) {
-        setUploadSuccess(true);
-        setTimeout(() => {
-          setUploadOpen(false);
-          setUploadSuccess(false);
-          setUploadForm({
-            clientId: '',
-            folder: 'general',
-            name: '',
-            fileType: 'pdf',
-            tags: '',
-            description: '',
-          });
-          fetchData();
-        }, 1200);
-      }
+      await documentUploadMutation.mutateAsync({
+        clientId: uploadForm.clientId || undefined,
+        folder: uploadForm.folder,
+        name: uploadForm.name,
+        fileType: uploadForm.fileType,
+        size: Math.floor(Math.random() * 500000) + 10000,
+        tags: uploadForm.tags,
+        description: uploadForm.description,
+        uploadedBy: 'current-user',
+      } as Record<string, unknown>);
+      setUploadSuccess(true);
+      toast.success('Document uploaded successfully');
+      setTimeout(() => {
+        setUploadOpen(false);
+        setUploadSuccess(false);
+        setUploadForm({
+          clientId: '',
+          folder: 'general',
+          name: '',
+          fileType: 'pdf',
+          tags: '',
+          description: '',
+        });
+      }, 1200);
     } catch (err) {
-      console.error('Upload error:', err);
-    } finally {
-      setUploading(false);
+      toast.error(err instanceof Error ? err.message : 'Upload failed');
     }
+  };
+
+  // File drag-and-drop upload (uses /api/upload with FormData)
+  const handleFileUpload = async (files: FileList | File[]) => {
+    for (const file of files) {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('clientId', uploadForm.clientId || '');
+      formData.append('period', '2025-06');
+      fileUploadMutation.mutate(formData, {
+        onSuccess: () => toast.success(`${file.name} uploaded successfully`),
+        onError: (err) => toast.error(`Failed to upload ${file.name}: ${err.message}`),
+      });
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    const files = Array.from(e.dataTransfer.files);
+    if (files.length > 0) {
+      handleFileUpload(files);
+    }
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length > 0) {
+      handleFileUpload(files);
+    }
+    e.target.value = '';
   };
 
   // ── Version history handler ──────────────────────────────────────────────
@@ -383,7 +436,7 @@ export default function DocumentVaultPage() {
       if (doc.parentId) rootId = doc.parentId;
 
       // Fetch all versions: the document itself + children
-      const res = await fetch(`/api/documents?search=`);
+      const res = await fetch('/api/documents?search=');
       if (res.ok) {
         const data = await res.json();
         const allDocs: DocumentItem[] = data.documents ?? [];
@@ -402,6 +455,12 @@ export default function DocumentVaultPage() {
     } finally {
       setVersionsLoading(false);
     }
+  };
+
+  // ── Retry handler ──
+  const handleRetry = () => {
+    queryClient.invalidateQueries({ queryKey: ['documents'] });
+    queryClient.invalidateQueries({ queryKey: ['clients'] });
   };
 
   // ── Render ───────────────────────────────────────────────────────────────
@@ -427,13 +486,15 @@ export default function DocumentVaultPage() {
             </p>
           </div>
         </div>
-        <Button
-          onClick={() => setUploadOpen(true)}
-          className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg shadow-emerald-600/20"
-        >
-          <Upload className="h-4 w-4" />
-          Upload Document
-        </Button>
+        <div className="flex items-center gap-3">
+          <Button
+            onClick={() => setUploadOpen(true)}
+            className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg shadow-emerald-600/20"
+          >
+            <Upload className="h-4 w-4" />
+            Upload Document
+          </Button>
+        </div>
       </motion.div>
 
       {/* ═══ SEARCH BAR ═══ */}
@@ -557,7 +618,7 @@ export default function DocumentVaultPage() {
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={fetchData}
+                        onClick={handleRetry}
                         className="ml-auto text-xs text-red-600 hover:text-red-700"
                       >
                         Retry
@@ -577,26 +638,83 @@ export default function DocumentVaultPage() {
                       animate={{ opacity: 1 }}
                       className="flex flex-col items-center justify-center py-16 text-center"
                     >
-                      <div className="h-16 w-16 rounded-2xl bg-emerald-50 dark:bg-emerald-950/30 flex items-center justify-center mb-4">
-                        <FolderOpen className="h-8 w-8 text-emerald-400" />
-                      </div>
-                      <h3 className="text-lg font-semibold text-foreground mb-1">
-                        No documents found
-                      </h3>
-                      <p className="text-sm text-muted-foreground mb-4 max-w-sm">
-                        {searchQuery
-                          ? `No documents match "${searchQuery}"`
-                          : 'Upload your first document to get started'}
-                      </p>
-                      {!searchQuery && (
-                        <Button
-                          onClick={() => setUploadOpen(true)}
-                          variant="outline"
-                          className="gap-2 border-emerald-200 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-800 dark:text-emerald-400 dark:hover:bg-emerald-950/30"
-                        >
-                          <Plus className="h-4 w-4" />
-                          Upload Document
-                        </Button>
+                      {documents.length === 0 ? (
+                        // Global empty state — no documents at all
+                        <>
+                          <div className="h-16 w-16 rounded-2xl bg-emerald-50 dark:bg-emerald-950/30 flex items-center justify-center mb-4">
+                            <Inbox className="h-8 w-8 text-emerald-400" />
+                          </div>
+                          <h3 className="text-lg font-semibold text-foreground mb-1">
+                            No documents uploaded
+                          </h3>
+                          <p className="text-sm text-muted-foreground mb-4 max-w-sm">
+                            Upload your first document to get started. Drag and drop files or click the button below.
+                          </p>
+                          <div className="flex flex-col items-center gap-3">
+                            <Button
+                              onClick={() => setUploadOpen(true)}
+                              className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg shadow-emerald-600/20"
+                            >
+                              <Plus className="h-4 w-4" />
+                              Upload Your First Document
+                            </Button>
+                            {/* Drag-and-drop area */}
+                            <motion.div
+                              animate={isDragging ? { scale: 1.01 } : { scale: 1 }}
+                              onDragOver={handleDragOver}
+                              onDragLeave={handleDragLeave}
+                              onDrop={handleDrop}
+                              className={`
+                                mt-4 w-full max-w-md relative overflow-hidden rounded-xl border-2 border-dashed transition-all duration-300 cursor-pointer
+                                ${isDragging
+                                  ? 'border-emerald-400 bg-emerald-50/60'
+                                  : 'border-slate-300 bg-gradient-to-br from-slate-50 via-white to-emerald-50/30 hover:border-emerald-300'
+                                }
+                              `}
+                              onClick={() => fileInputRef.current?.click()}
+                            >
+                              <div className="py-8 px-4 flex flex-col items-center">
+                                <Upload className={`h-8 w-8 mb-2 ${isDragging ? 'text-emerald-600' : 'text-slate-400'}`} />
+                                <p className="text-sm text-muted-foreground">
+                                  {isDragging ? 'Drop files here!' : 'Or drag & drop files here'}
+                                </p>
+                              </div>
+                              <input
+                                ref={fileInputRef}
+                                type="file"
+                                accept=".json,.csv,.xlsx,.xls,.pdf"
+                                multiple
+                                className="hidden"
+                                onChange={handleFileSelect}
+                              />
+                            </motion.div>
+                          </div>
+                        </>
+                      ) : (
+                        // Filter empty state — no matches
+                        <>
+                          <div className="h-16 w-16 rounded-2xl bg-emerald-50 dark:bg-emerald-950/30 flex items-center justify-center mb-4">
+                            <FolderOpen className="h-8 w-8 text-emerald-400" />
+                          </div>
+                          <h3 className="text-lg font-semibold text-foreground mb-1">
+                            No documents found
+                          </h3>
+                          <p className="text-sm text-muted-foreground mb-4 max-w-sm">
+                            {searchQuery
+                              ? `No documents match "${searchQuery}"`
+                              : 'Upload your first document to get started'}
+                          </p>
+                          {!searchQuery && (
+                            <Button
+                              onClick={() => setUploadOpen(true)}
+                              variant="outline"
+                              className="gap-2 border-emerald-200 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-800 dark:text-emerald-400 dark:hover:bg-emerald-950/30"
+                            >
+                              <Plus className="h-4 w-4" />
+                              Upload Document
+                            </Button>
+                          )}
+                        </>
                       )}
                     </motion.div>
                   ) : (
@@ -629,7 +747,7 @@ export default function DocumentVaultPage() {
                               </div>
                             </div>
 
-                            {/* File type badge + version */}
+                            {/* File type badge + version + processing status */}
                             <div className="flex items-center gap-2 mb-3">
                               <Badge
                                 variant="outline"
@@ -643,10 +761,38 @@ export default function DocumentVaultPage() {
                               >
                                 v{doc.version}
                               </Badge>
+                              {/* Processing status badge */}
+                              {(doc.status === 'processing' || doc.status === 'uploaded') && (
+                                <Badge className="text-[10px] px-2 py-0 bg-amber-50 text-amber-700 border-amber-200 border">
+                                  <Loader2 className="h-2.5 w-2.5 mr-1 animate-spin" />
+                                  {doc.processingStep || 'Processing'}
+                                </Badge>
+                              )}
+                              {doc.status === 'completed' && (
+                                <Badge className="text-[10px] px-2 py-0 bg-emerald-50 text-emerald-700 border-emerald-200 border">
+                                  <CheckCircle2 className="h-2.5 w-2.5 mr-1" />
+                                  Processed
+                                </Badge>
+                              )}
                               <span className="text-[10px] text-muted-foreground ml-auto">
                                 {formatFileSize(doc.size)}
                               </span>
                             </div>
+
+                            {/* Processing progress bar */}
+                            {doc.status === 'processing' && typeof doc.progress === 'number' && doc.progress < 100 && (
+                              <div className="mb-3">
+                                <div className="h-1.5 rounded-full bg-slate-100 overflow-hidden">
+                                  <div
+                                    className="h-full rounded-full bg-emerald-500 transition-all duration-500"
+                                    style={{ width: `${doc.progress}%` }}
+                                  />
+                                </div>
+                                <p className="text-[10px] text-muted-foreground mt-1">
+                                  {doc.processingStep}: {doc.progress}%
+                                </p>
+                              </div>
+                            )}
 
                             {/* Tags */}
                             {doc.tags && (
@@ -848,16 +994,16 @@ export default function DocumentVaultPage() {
               <Button
                 variant="outline"
                 onClick={() => setUploadOpen(false)}
-                disabled={uploading}
+                disabled={documentUploadMutation.isPending}
               >
                 Cancel
               </Button>
               <Button
                 onClick={handleUpload}
-                disabled={!uploadForm.name.trim() || uploading}
+                disabled={!uploadForm.name.trim() || documentUploadMutation.isPending}
                 className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white"
               >
-                {uploading ? (
+                {documentUploadMutation.isPending ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" />
                     Uploading...

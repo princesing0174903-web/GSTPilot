@@ -1,0 +1,1094 @@
+     1→'use client';
+     2→
+     3→// ═══════════════════════════════════════════════════════════════════════════════
+     4→// GSTPilot — React Query (TanStack Query) API Hooks
+     5→// Comprehensive data-fetching layer that replaces Zustand store reads.
+     6→// All hooks fetch from Next.js API routes and manage cache via React Query.
+     7→// ═══════════════════════════════════════════════════════════════════════════════
+     8→
+     9→import {
+    10→  useQuery,
+    11→  useMutation,
+    12→  useQueryClient,
+    13→  type UseQueryOptions,
+    14→  type UseMutationOptions,
+    15→} from '@tanstack/react-query';
+    16→import type {
+    17→  Client,
+    18→  Invoice,
+    19→  GSTRFiling,
+    20→  ReconciliationResult,
+    21→  ReconciliationRun,
+    22→  Issue,
+    23→  AuditLogEntry,
+    24→  DashboardMetrics,
+    25→  FilingCalendarItem,
+    26→} from '@/types/gst';
+    27→
+    28→// ─── API Fetch Helper ─────────────────────────────────────────────────────────
+    29→
+    30→async function apiFetch<T>(url: string, options?: RequestInit): Promise<T> {
+    31→  const res = await fetch(url, {
+    32→    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    33→    ...options,
+    34→  });
+    35→  if (!res.ok) {
+    36→    const error = await res.json().catch(() => ({ error: 'Request failed' }));
+    37→    throw new Error(error.error || `HTTP ${res.status}`);
+    38→  }
+    39→  return res.json();
+    40→}
+    41→
+    42→// ─── Query Key Factory ────────────────────────────────────────────────────────
+    43→
+    44→export const queryKeys = {
+    45→  dashboard: ['dashboard'] as const,
+    46→  clients: {
+    47→    all: ['clients'] as const,
+    48→    detail: (id: string) => ['clients', id] as const,
+    49→  },
+    50→  invoices: {
+    51→    all: (clientId?: string) =>
+    52→      ['invoices', clientId ?? 'all'] as const,
+    53→  },
+    54→  filings: {
+    55→    all: (clientId?: string, status?: string) =>
+    56→      ['filings', clientId ?? 'all', status ?? 'all'] as const,
+    57→    detail: (id: string) => ['filings', id] as const,
+    58→    events: (id: string) => ['filings', id, 'events'] as const,
+    59→  },
+    60→  reconciliation: {
+    61→    results: (filters?: Record<string, string>) =>
+    62→      ['reconciliation', 'results', filters ?? {}] as const,
+    63→    runs: (clientId?: string) =>
+    64→      ['reconciliation', 'runs', clientId ?? 'all'] as const,
+    65→    stats: (clientId?: string) =>
+    66→      ['reconciliation', 'stats', clientId ?? 'all'] as const,
+    67→  },
+    68→  documents: {
+    69→    all: (clientId?: string) =>
+    70→      ['documents', clientId ?? 'all'] as const,
+    71→  },
+    72→  notifications: {
+    73→    all: ['notifications'] as const,
+    74→  },
+    75→  auditLogs: {
+    76→    all: (clientId?: string) =>
+    77→      ['audit-logs', clientId ?? 'all'] as const,
+    78→  },
+    79→  issues: {
+    80→    all: (clientId?: string) =>
+    81→      ['issues', clientId ?? 'all'] as const,
+    82→  },
+    83→  notices: {
+    84→    all: (filters?: Record<string, string>) =>
+    85→      ['notices', filters ?? {}] as const,
+    86→  },
+    87→  activities: {
+    88→    all: (clientId?: string) =>
+    89→      ['activities', clientId ?? 'all'] as const,
+    90→  },
+    91→};
+    92→
+    93→// ─── Type Definitions for API Responses ───────────────────────────────────────
+    94→
+    95→interface DashboardResponse {
+    96→  totalClients: number;
+    97→  totalInvoices: number;
+    98→  filedReturns: number;
+    99→  pendingReturns: number;
+   100→  overdueReturns: number;
+   101→  averageHealthScore: number;
+   102→  criticalIssues: number;
+   103→  warnings: number;
+   104→  matchPercentage: number;
+   105→  riskPercentage: number;
+   106→  recentAuditLogs: AuditLogEntry[];
+   107→  filingCalendar: FilingCalendarItem[];
+   108→  monthlyFilingStatus: Array<{
+   109→    period: string;
+   110→    filed: number;
+   111→    pending: number;
+   112→    overdue: number;
+   113→  }>;
+   114→}
+   115→
+   116→interface ClientsResponse {
+   117→  clients: Array<Client & {
+   118→    _aggregations: {
+   119→      totalInvoices: number;
+   120→      filedReturns: number;
+   121→      pendingReturns: number;
+   122→      matchPercentage: number;
+   123→    };
+   124→  }>;
+   125→}
+   126→
+   127→interface ClientResponse {
+   128→  client: Client;
+   129→}
+   130→
+   131→interface InvoicesResponse {
+   132→  invoices: Invoice[];
+   133→}
+   134→
+   135→interface InvoiceResponse {
+   136→  invoice: Invoice;
+   137→}
+   138→
+   139→interface FilingsResponse {
+   140→  filings: GSTRFiling[];
+   141→}
+   142→
+   143→interface FilingResponse {
+   144→  filing: GSTRFiling;
+   145→}
+   146→
+   147→interface FilingEventsResponse {
+   148→  events: GSTRFiling['events'];
+   149→}
+   150→
+   151→interface ReconResultsResponse {
+   152→  results: ReconciliationResult[];
+   153→}
+   154→
+   155→interface ReconRunsResponse {
+   156→  runs: ReconciliationRun[];
+   157→}
+   158→
+   159→interface ReconStatsResponse {
+   160→  stats: {
+   161→    totalResults: number;
+   162→    matchBreakdown: Record<string, number>;
+   163→    unresolved: number;
+   164→    riskBreakdown: { high: number; critical: number; highAndCritical: number };
+   165→    workflowBreakdown: Record<string, number>;
+   166→    matchPercentage: number;
+   167→    riskPercentage: number;
+   168→    totalGstDifference: number;
+   169→    avgMatchScore: number;
+   170→    avgConfidenceScore: number;
+   171→    recentRuns: ReconciliationRun[];
+   172→  };
+   173→}
+   174→
+   175→interface DocumentsResponse {
+   176→  documents: Array<Record<string, unknown>>;
+   177→}
+   178→
+   179→interface DocumentResponse {
+   180→  document: Record<string, unknown>;
+   181→}
+   182→
+   183→interface IssuesResponse {
+   184→  issues: Issue[];
+   185→}
+   186→
+   187→interface IssueResponse {
+   188→  issue: Issue;
+   189→}
+   190→
+   191→interface AuditLogsResponse {
+   192→  logs: AuditLogEntry[];
+   193→  pagination: {
+   194→    total: number;
+   195→    limit: number;
+   196→    offset: number;
+   197→    hasMore: boolean;
+   198→  };
+   199→}
+   200→
+   201→interface NoticesResponse {
+   202→  notices: Array<Record<string, unknown>>;
+   203→}
+   204→
+   205→interface NoticeResponse {
+   206→  notice: Record<string, unknown>;
+   207→}
+   208→
+   209→interface SuccessResponse {
+   210→  success: boolean;
+   211→  message?: string;
+   212→}
+   213→
+   214→// ═══════════════════════════════════════════════════════════════════════════════
+   215→// DASHBOARD HOOKS
+   216→// ═══════════════════════════════════════════════════════════════════════════════
+   217→
+   218→export function useDashboardMetrics(
+   219→  options?: Omit<
+   220→    UseQueryOptions<DashboardResponse, Error>,
+   221→    'queryKey' | 'queryFn'
+   222→  >
+   223→) {
+   224→  return useQuery<DashboardResponse, Error>({
+   225→    queryKey: queryKeys.dashboard,
+   226→    queryFn: () => apiFetch<DashboardResponse>('/api/dashboard'),
+   227→    ...options,
+   228→  });
+   229→}
+   230→
+   231→// ═══════════════════════════════════════════════════════════════════════════════
+   232→// CLIENT HOOKS
+   233→// ═══════════════════════════════════════════════════════════════════════════════
+   234→
+   235→export function useClients(
+   236→  options?: Omit<
+   237→    UseQueryOptions<ClientsResponse, Error>,
+   238→    'queryKey' | 'queryFn'
+   239→  >
+   240→) {
+   241→  return useQuery<ClientsResponse, Error>({
+   242→    queryKey: queryKeys.clients.all,
+   243→    queryFn: () => apiFetch<ClientsResponse>('/api/clients'),
+   244→    ...options,
+   245→  });
+   246→}
+   247→
+   248→export function useClient(
+   249→  id: string | undefined,
+   250→  options?: Omit<
+   251→    UseQueryOptions<ClientsResponse, Error>,
+   252→    'queryKey' | 'queryFn'
+   253→  >
+   254→) {
+   255→  return useQuery<ClientsResponse, Error>({
+   256→    queryKey: queryKeys.clients.detail(id ?? ''),
+   257→    queryFn: () =>
+   258→      apiFetch<ClientsResponse>(`/api/clients?id=${encodeURIComponent(id!)}`),
+   259→    enabled: !!id,
+   260→    ...options,
+   261→  });
+   262→}
+   263→
+   264→export function useCreateClient(
+   265→  options?: Omit<
+   266→    UseMutationOptions<ClientResponse, Error, Partial<Client>>,
+   267→    'mutationFn'
+   268→  >
+   269→) {
+   270→  const queryClient = useQueryClient();
+   271→
+   272→  return useMutation<ClientResponse, Error, Partial<Client>>({
+   273→    mutationFn: (data) =>
+   274→      apiFetch<ClientResponse>('/api/clients', {
+   275→        method: 'POST',
+   276→        body: JSON.stringify(data),
+   277→      }),
+   278→    onSuccess: (...args) => {
+   279→      queryClient.invalidateQueries({ queryKey: queryKeys.clients.all });
+   280→      queryClient.invalidateQueries({ queryKey: queryKeys.dashboard });
+   281→      options?.onSuccess?.(...args);
+   282→    },
+   283→    ...options,
+   284→  });
+   285→}
+   286→
+   287→export function useUpdateClient(
+   288→  options?: Omit<
+   289→    UseMutationOptions<ClientResponse, Error, Partial<Client> & { id: string }>,
+   290→    'mutationFn'
+   291→  >
+   292→) {
+   293→  const queryClient = useQueryClient();
+   294→
+   295→  return useMutation<ClientResponse, Error, Partial<Client> & { id: string }>({
+   296→    mutationFn: ({ id, ...data }) =>
+   297→      apiFetch<ClientResponse>('/api/clients', {
+   298→        method: 'PATCH',
+   299→        body: JSON.stringify({ id, ...data }),
+   300→      }),
+   301→    onSuccess: (data, variables, context) => {
+   302→      queryClient.invalidateQueries({ queryKey: queryKeys.clients.all });
+   303→      queryClient.invalidateQueries({
+   304→        queryKey: queryKeys.clients.detail(variables.id),
+   305→      });
+   306→      queryClient.invalidateQueries({ queryKey: queryKeys.dashboard });
+   307→      options?.onSuccess?.(data, variables, context);
+   308→    },
+   309→    ...options,
+   310→  });
+   311→}
+   312→
+   313→export function useDeleteClient(
+   314→  options?: Omit<
+   315→    UseMutationOptions<SuccessResponse, Error, string>,
+   316→    'mutationFn'
+   317→  >
+   318→) {
+   319→  const queryClient = useQueryClient();
+   320→
+   321→  return useMutation<SuccessResponse, Error, string>({
+   322→    mutationFn: (id) =>
+   323→      apiFetch<SuccessResponse>(
+   324→        `/api/clients?id=${encodeURIComponent(id)}`,
+   325→        { method: 'DELETE' }
+   326→      ),
+   327→    onSuccess: (data, variables, context) => {
+   328→      queryClient.invalidateQueries({ queryKey: queryKeys.clients.all });
+   329→      queryClient.invalidateQueries({
+   330→        queryKey: queryKeys.clients.detail(variables),
+   331→      });
+   332→      queryClient.invalidateQueries({ queryKey: queryKeys.dashboard });
+   333→      options?.onSuccess?.(data, variables, context);
+   334→    },
+   335→    ...options,
+   336→  });
+   337→}
+   338→
+   339→// ═══════════════════════════════════════════════════════════════════════════════
+   340→// INVOICE HOOKS
+   341→// ═══════════════════════════════════════════════════════════════════════════════
+   342→
+   343→export function useInvoices(
+   344→  clientId?: string,
+   345→  options?: Omit<
+   346→    UseQueryOptions<InvoicesResponse, Error>,
+   347→    'queryKey' | 'queryFn'
+   348→  >
+   349→) {
+   350→  return useQuery<InvoicesResponse, Error>({
+   351→    queryKey: queryKeys.invoices.all(clientId),
+   352→    queryFn: () => {
+   353→      const params = new URLSearchParams();
+   354→      if (clientId) params.set('clientId', clientId);
+   355→      const qs = params.toString();
+   356→      return apiFetch<InvoicesResponse>(`/api/invoices${qs ? `?${qs}` : ''}`);
+   357→    },
+   358→    ...options,
+   359→  });
+   360→}
+   361→
+   362→export function useCreateInvoice(
+   363→  options?: Omit<
+   364→    UseMutationOptions<InvoiceResponse, Error, Record<string, unknown>>,
+   365→    'mutationFn'
+   366→  >
+   367→) {
+   368→  const queryClient = useQueryClient();
+   369→
+   370→  return useMutation<InvoiceResponse, Error, Record<string, unknown>>({
+   371→    mutationFn: (data) =>
+   372→      apiFetch<InvoiceResponse>('/api/invoices', {
+   373→        method: 'POST',
+   374→        body: JSON.stringify(data),
+   375→      }),
+   376→    onSuccess: (data, variables, context) => {
+   377→      queryClient.invalidateQueries({
+   378→        queryKey: queryKeys.invoices.all(variables.clientId as string | undefined),
+   379→      });
+   380→      queryClient.invalidateQueries({ queryKey: queryKeys.invoices.all() });
+   381→      queryClient.invalidateQueries({ queryKey: queryKeys.dashboard });
+   382→      options?.onSuccess?.(data, variables, context);
+   383→    },
+   384→    ...options,
+   385→  });
+   386→}
+   387→
+   388→export function useUpdateInvoice(
+   389→  options?: Omit<
+   390→    UseMutationOptions<
+   391→      InvoiceResponse,
+   392→      Error,
+   393→      Record<string, unknown> & { id: string }
+   394→    >,
+   395→    'mutationFn'
+   396→  >
+   397→) {
+   398→  const queryClient = useQueryClient();
+   399→
+   400→  return useMutation<
+   401→    InvoiceResponse,
+   402→    Error,
+   403→    Record<string, unknown> & { id: string }
+   404→  >({
+   405→    mutationFn: ({ id, ...data }) =>
+   406→      apiFetch<InvoiceResponse>('/api/invoices', {
+   407→        method: 'PATCH',
+   408→        body: JSON.stringify({ id, ...data }),
+   409→      }),
+   410→    onSuccess: (data, variables, context) => {
+   411→      queryClient.invalidateQueries({
+   412→        queryKey: queryKeys.invoices.all(variables.clientId as string | undefined),
+   413→      });
+   414→      queryClient.invalidateQueries({ queryKey: queryKeys.invoices.all() });
+   415→      queryClient.invalidateQueries({ queryKey: queryKeys.dashboard });
+   416→      options?.onSuccess?.(data, variables, context);
+   417→    },
+   418→    ...options,
+   419→  });
+   420→}
+   421→
+   422→// ═══════════════════════════════════════════════════════════════════════════════
+   423→// GSTR FILING HOOKS
+   424→// ═══════════════════════════════════════════════════════════════════════════════
+   425→
+   426→export function useFilings(
+   427→  clientId?: string,
+   428→  status?: string,
+   429→  options?: Omit<
+   430→    UseQueryOptions<FilingsResponse, Error>,
+   431→    'queryKey' | 'queryFn'
+   432→  >
+   433→) {
+   434→  return useQuery<FilingsResponse, Error>({
+   435→    queryKey: queryKeys.filings.all(clientId, status),
+   436→    queryFn: () => apiFetch<FilingsResponse>('/api/gstr-filing'),
+   437→    ...options,
+   438→  });
+   439→}
+   440→
+   441→export function useCreateFiling(
+   442→  options?: Omit<
+   443→    UseMutationOptions<
+   444→      FilingResponse,
+   445→      Error,
+   446→      { clientId: string; returnType: string; period: string; financialYear?: string }
+   447→    >,
+   448→    'mutationFn'
+   449→  >
+   450→) {
+   451→  const queryClient = useQueryClient();
+   452→
+   453→  return useMutation<
+   454→    FilingResponse,
+   455→    Error,
+   456→    { clientId: string; returnType: string; period: string; financialYear?: string }
+   457→  >({
+   458→    mutationFn: (data) =>
+   459→      apiFetch<FilingResponse>('/api/gstr-filing', {
+   460→        method: 'POST',
+   461→        body: JSON.stringify(data),
+   462→      }),
+   463→    onSuccess: (data, variables, context) => {
+   464→      queryClient.invalidateQueries({
+   465→        queryKey: queryKeys.filings.all(variables.clientId),
+   466→      });
+   467→      queryClient.invalidateQueries({ queryKey: queryKeys.filings.all() });
+   468→      queryClient.invalidateQueries({ queryKey: queryKeys.dashboard });
+   469→      options?.onSuccess?.(data, variables, context);
+   470→    },
+   471→    ...options,
+   472→  });
+   473→}
+   474→
+   475→export function useUpdateFilingStatus(
+   476→  options?: Omit<
+   477→    UseMutationOptions<
+   478→      FilingResponse,
+   479→      Error,
+   480→      { id: string; status: string; [key: string]: unknown }
+   481→    >,
+   482→    'mutationFn'
+   483→  >
+   484→) {
+   485→  const queryClient = useQueryClient();
+   486→
+   487→  return useMutation<
+   488→    FilingResponse,
+   489→    Error,
+   490→    { id: string; status: string; [key: string]: unknown }
+   491→  >({
+   492→    mutationFn: ({ id, ...data }) =>
+   493→      apiFetch<FilingResponse>('/api/gstr-filing', {
+   494→        method: 'PATCH',
+   495→        body: JSON.stringify({ id, ...data }),
+   496→      }),
+   497→    onSuccess: (data, variables, context) => {
+   498→      queryClient.invalidateQueries({
+   499→        queryKey: queryKeys.filings.detail(variables.id),
+   500→      });
+   501→      queryClient.invalidateQueries({ queryKey: queryKeys.filings.all() });
+   502→      queryClient.invalidateQueries({ queryKey: queryKeys.dashboard });
+   503→      options?.onSuccess?.(data, variables, context);
+   504→    },
+   505→    ...options,
+   506→  });
+   507→}
+   508→
+   509→export function useFileReturn(
+   510→  options?: Omit<
+   511→    UseMutationOptions<
+   512→      FilingResponse,
+   513→      Error,
+   514→      { id: string; [key: string]: unknown }
+   515→    >,
+   516→    'mutationFn'
+   517→  >
+   518→) {
+   519→  const queryClient = useQueryClient();
+   520→
+   521→  return useMutation<
+   522→    FilingResponse,
+   523→    Error,
+   524→    { id: string; [key: string]: unknown }
+   525→  >({
+   526→    mutationFn: ({ id, ...data }) =>
+   527→      apiFetch<FilingResponse>(`/api/gstr-filing/${id}`, {
+   528→        method: 'POST',
+   529→        body: JSON.stringify({ action: 'file', ...data }),
+   530→      }),
+   531→    onSuccess: (data, variables, context) => {
+   532→      queryClient.invalidateQueries({
+   533→        queryKey: queryKeys.filings.detail(variables.id),
+   534→      });
+   535→      queryClient.invalidateQueries({ queryKey: queryKeys.filings.all() });
+   536→      queryClient.invalidateQueries({ queryKey: queryKeys.dashboard });
+   537→      options?.onSuccess?.(data, variables, context);
+   538→    },
+   539→    ...options,
+   540→  });
+   541→}
+   542→
+   543→export function useFilingEvents(
+   544→  filingId: string | undefined,
+   545→  options?: Omit<
+   546→    UseQueryOptions<FilingEventsResponse, Error>,
+   547→    'queryKey' | 'queryFn'
+   548→  >
+   549→) {
+   550→  return useQuery<FilingEventsResponse, Error>({
+   551→    queryKey: queryKeys.filings.events(filingId ?? ''),
+   552→    queryFn: () =>
+   553→      apiFetch<FilingEventsResponse>(
+   554→        `/api/gstr-filing/${encodeURIComponent(filingId!)}/events`
+   555→      ),
+   556→    enabled: !!filingId,
+   557→    ...options,
+   558→  });
+   559→}
+   560→
+   561→// ═══════════════════════════════════════════════════════════════════════════════
+   562→// RECONCILIATION HOOKS
+   563→// ═══════════════════════════════════════════════════════════════════════════════
+   564→
+   565→export function useReconResults(
+   566→  filters?: {
+   567→    clientId?: string;
+   568→    matchStatus?: string;
+   569→    runId?: string;
+   570→    workflowStatus?: string;
+   571→    riskLevel?: string;
+   572→    resolved?: string;
+   573→    search?: string;
+   574→  },
+   575→  options?: Omit<
+   576→    UseQueryOptions<ReconResultsResponse, Error>,
+   577→    'queryKey' | 'queryFn'
+   578→  >
+   579→) {
+   580→  const filterRecord: Record<string, string> = {};
+   581→  if (filters?.clientId) filterRecord.clientId = filters.clientId;
+   582→  if (filters?.matchStatus) filterRecord.matchStatus = filters.matchStatus;
+   583→  if (filters?.runId) filterRecord.runId = filters.runId;
+   584→  if (filters?.workflowStatus) filterRecord.workflowStatus = filters.workflowStatus;
+   585→  if (filters?.riskLevel) filterRecord.riskLevel = filters.riskLevel;
+   586→  if (filters?.resolved) filterRecord.resolved = filters.resolved;
+   587→  if (filters?.search) filterRecord.search = filters.search;
+   588→
+   589→  return useQuery<ReconResultsResponse, Error>({
+   590→    queryKey: queryKeys.reconciliation.results(filterRecord),
+   591→    queryFn: () => {
+   592→      const params = new URLSearchParams(filterRecord);
+   593→      const qs = params.toString();
+   594→      return apiFetch<ReconResultsResponse>(
+   595→        `/api/reconciliation${qs ? `?${qs}` : ''}`
+   596→      );
+   597→    },
+   598→    ...options,
+   599→  });
+   600→}
+   601→
+   602→export function useReconRuns(
+   603→  clientId?: string,
+   604→  options?: Omit<
+   605→    UseQueryOptions<ReconRunsResponse, Error>,
+   606→    'queryKey' | 'queryFn'
+   607→  >
+   608→) {
+   609→  return useQuery<ReconRunsResponse, Error>({
+   610→    queryKey: queryKeys.reconciliation.runs(clientId),
+   611→    queryFn: () => {
+   612→      const params = new URLSearchParams({ action: 'runs' });
+   613→      if (clientId) params.set('clientId', clientId);
+   614→      return apiFetch<ReconRunsResponse>(`/api/reconciliation?${params.toString()}`);
+   615→    },
+   616→    ...options,
+   617→  });
+   618→}
+   619→
+   620→export function useReconStats(
+   621→  clientId?: string,
+   622→  options?: Omit<
+   623→    UseQueryOptions<ReconStatsResponse, Error>,
+   624→    'queryKey' | 'queryFn'
+   625→  >
+   626→) {
+   627→  return useQuery<ReconStatsResponse, Error>({
+   628→    queryKey: queryKeys.reconciliation.stats(clientId),
+   629→    queryFn: () => {
+   630→      const params = new URLSearchParams({ action: 'stats' });
+   631→      if (clientId) params.set('clientId', clientId);
+   632→      return apiFetch<ReconStatsResponse>(`/api/reconciliation?${params.toString()}`);
+   633→    },
+   634→    ...options,
+   635→  });
+   636→}
+   637→
+   638→export function useCreateReconRun(
+   639→  options?: Omit<
+   640→    UseMutationOptions<
+   641→      Record<string, unknown>,
+   642→      Error,
+   643→      { clientId: string; period: string; sources?: string }
+   644→    >,
+   645→    'mutationFn'
+   646→  >
+   647→) {
+   648→  const queryClient = useQueryClient();
+   649→
+   650→  return useMutation<
+   651→    Record<string, unknown>,
+   652→    Error,
+   653→    { clientId: string; period: string; sources?: string }
+   654→  >({
+   655→    mutationFn: (data) =>
+   656→      apiFetch<Record<string, unknown>>('/api/reconciliation', {
+   657→        method: 'POST',
+   658→        body: JSON.stringify({ action: 'run', ...data }),
+   659→      }),
+   660→    onSuccess: (data, variables, context) => {
+   661→      queryClient.invalidateQueries({
+   662→        queryKey: queryKeys.reconciliation.runs(variables.clientId),
+   663→      });
+   664→      queryClient.invalidateQueries({ queryKey: queryKeys.reconciliation.results() });
+   665→      queryClient.invalidateQueries({
+   666→        queryKey: queryKeys.reconciliation.stats(variables.clientId),
+   667→      });
+   668→      queryClient.invalidateQueries({ queryKey: queryKeys.dashboard });
+   669→      options?.onSuccess?.(data, variables, context);
+   670→    },
+   671→    ...options,
+   672→  });
+   673→}
+   674→
+   675→export function useUpdateReconWorkflow(
+   676→  options?: Omit<
+   677→    UseMutationOptions<
+   678→      Record<string, unknown>,
+   679→      Error,
+   680→      { id: string; workflowStatus: string; [key: string]: unknown }
+   681→    >,
+   682→    'mutationFn'
+   683→  >
+   684→) {
+   685→  const queryClient = useQueryClient();
+   686→
+   687→  return useMutation<
+   688→    Record<string, unknown>,
+   689→    Error,
+   690→    { id: string; workflowStatus: string; [key: string]: unknown }
+   691→  >({
+   692→    mutationFn: ({ id, ...data }) =>
+   693→      apiFetch<Record<string, unknown>>('/api/reconciliation', {
+   694→        method: 'POST',
+   695→        body: JSON.stringify({ action: 'update_workflow', id, ...data }),
+   696→      }),
+   697→    onSuccess: (data, variables, context) => {
+   698→      queryClient.invalidateQueries({
+   699→        queryKey: queryKeys.reconciliation.results(),
+   700→      });
+   701→      queryClient.invalidateQueries({
+   702→        queryKey: queryKeys.reconciliation.stats(),
+   703→      });
+   704→      options?.onSuccess?.(data, variables, context);
+   705→    },
+   706→    ...options,
+   707→  });
+   708→}
+   709→
+   710→// ═══════════════════════════════════════════════════════════════════════════════
+   711→// DOCUMENT / UPLOADED FILES HOOKS
+   712→// ═══════════════════════════════════════════════════════════════════════════════
+   713→
+   714→export function useUploadedFiles(
+   715→  clientId?: string,
+   716→  options?: Omit<
+   717→    UseQueryOptions<DocumentsResponse, Error>,
+   718→    'queryKey' | 'queryFn'
+   719→  >
+   720→) {
+   721→  return useQuery<DocumentsResponse, Error>({
+   722→    queryKey: queryKeys.documents.all(clientId),
+   723→    queryFn: () => {
+   724→      const params = new URLSearchParams();
+   725→      if (clientId) params.set('clientId', clientId);
+   726→      const qs = params.toString();
+   727→      return apiFetch<DocumentsResponse>(`/api/documents${qs ? `?${qs}` : ''}`);
+   728→    },
+   729→    ...options,
+   730→  });
+   731→}
+   732→
+   733→export function useUploadFile(
+   734→  options?: Omit<
+   735→    UseMutationOptions<DocumentResponse, Error, Record<string, unknown>>,
+   736→    'mutationFn'
+   737→  >
+   738→) {
+   739→  const queryClient = useQueryClient();
+   740→
+   741→  return useMutation<DocumentResponse, Error, Record<string, unknown>>({
+   742→    mutationFn: (data) =>
+   743→      apiFetch<DocumentResponse>('/api/documents', {
+   744→        method: 'POST',
+   745→        body: JSON.stringify(data),
+   746→      }),
+   747→    onSuccess: (data, variables, context) => {
+   748→      queryClient.invalidateQueries({
+   749→        queryKey: queryKeys.documents.all(variables.clientId as string | undefined),
+   750→      });
+   751→      queryClient.invalidateQueries({ queryKey: queryKeys.documents.all() });
+   752→      options?.onSuccess?.(data, variables, context);
+   753→    },
+   754→    ...options,
+   755→  });
+   756→}
+   757→
+   758→export function useUpdateDocument(
+   759→  options?: Omit<
+   760→    UseMutationOptions<
+   761→      DocumentResponse,
+   762→      Error,
+   763→      { id: string; tags?: string; description?: string }
+   764→    >,
+   765→    'mutationFn'
+   766→  >
+   767→) {
+   768→  const queryClient = useQueryClient();
+   769→
+   770→  return useMutation<
+   771→    DocumentResponse,
+   772→    Error,
+   773→    { id: string; tags?: string; description?: string }
+   774→  >({
+   775→    mutationFn: (data) =>
+   776→      apiFetch<DocumentResponse>('/api/documents', {
+   777→        method: 'PATCH',
+   778→        body: JSON.stringify(data),
+   779→      }),
+   780→    onSuccess: (data, variables, context) => {
+   781→      queryClient.invalidateQueries({ queryKey: queryKeys.documents.all() });
+   782→      options?.onSuccess?.(data, variables, context);
+   783→    },
+   784→    ...options,
+   785→  });
+   786→}
+   787→
+   788→export function useDeleteDocument(
+   789→  options?: Omit<
+   790→    UseMutationOptions<SuccessResponse, Error, string>,
+   791→    'mutationFn'
+   792→  >
+   793→) {
+   794→  const queryClient = useQueryClient();
+   795→
+   796→  return useMutation<SuccessResponse, Error, string>({
+   797→    mutationFn: (id) =>
+   798→      apiFetch<SuccessResponse>('/api/documents', {
+   799→        method: 'DELETE',
+   800→        body: JSON.stringify({ id }),
+   801→      }),
+   802→    onSuccess: (data, variables, context) => {
+   803→      queryClient.invalidateQueries({ queryKey: queryKeys.documents.all() });
+   804→      options?.onSuccess?.(data, variables, context);
+   805→    },
+   806→    ...options,
+   807→  });
+   808→}
+   809→
+   810→// ═══════════════════════════════════════════════════════════════════════════════
+   811→// NOTIFICATION HOOKS
+   812→// ═══════════════════════════════════════════════════════════════════════════════
+   813→// Note: Notification API route does not exist yet. These hooks are designed
+   814→// to work once the /api/notifications route is created.
+   815→
+   816→interface Notification {
+   817→  id: string;
+   818→  type: string;
+   819→  title: string;
+   820→  message: string;
+   821→  read: boolean;
+   822→  createdAt: string;
+   823→  [key: string]: unknown;
+   824→}
+   825→
+   826→interface NotificationsResponse {
+   827→  notifications: Notification[];
+   828→}
+   829→
+   830→export function useNotifications(
+   831→  options?: Omit<
+   832→    UseQueryOptions<NotificationsResponse, Error>,
+   833→    'queryKey' | 'queryFn'
+   834→  >
+   835→) {
+   836→  return useQuery<NotificationsResponse, Error>({
+   837→    queryKey: queryKeys.notifications.all,
+   838→    queryFn: () =>
+   839→      apiFetch<NotificationsResponse>('/api/notifications'),
+   840→    ...options,
+   841→  });
+   842→}
+   843→
+   844→export function useMarkNotificationRead(
+   845→  options?: Omit<
+   846→    UseMutationOptions<
+   847→      Record<string, unknown>,
+   848→      Error,
+   849→      { id: string; read: boolean }
+   850→    >,
+   851→    'mutationFn'
+   852→  >
+   853→) {
+   854→  const queryClient = useQueryClient();
+   855→
+   856→  return useMutation<Record<string, unknown>, Error, { id: string; read: boolean }>({
+   857→    mutationFn: ({ id, read }) =>
+   858→      apiFetch<Record<string, unknown>>('/api/notifications', {
+   859→        method: 'PATCH',
+   860→        body: JSON.stringify({ id, read }),
+   861→      }),
+   862→    onSuccess: (data, variables, context) => {
+   863→      queryClient.invalidateQueries({
+   864→        queryKey: queryKeys.notifications.all,
+   865→      });
+   866→      options?.onSuccess?.(data, variables, context);
+   867→    },
+   868→    ...options,
+   869→  });
+   870→}
+   871→
+   872→// ═══════════════════════════════════════════════════════════════════════════════
+   873→// AUDIT LOG HOOKS
+   874→// ═══════════════════════════════════════════════════════════════════════════════
+   875→
+   876→export function useAuditLogs(
+   877→  clientId?: string,
+   878→  options?: Omit<
+   879→    UseQueryOptions<AuditLogsResponse, Error>,
+   880→    'queryKey' | 'queryFn'
+   881→  >
+   882→) {
+   883→  return useQuery<AuditLogsResponse, Error>({
+   884→    queryKey: queryKeys.auditLogs.all(clientId),
+   885→    queryFn: () => {
+   886→      const params = new URLSearchParams();
+   887→      if (clientId) params.set('clientId', clientId);
+   888→      const qs = params.toString();
+   889→      return apiFetch<AuditLogsResponse>(`/api/audit-logs${qs ? `?${qs}` : ''}`);
+   890→    },
+   891→    ...options,
+   892→  });
+   893→}
+   894→
+   895→// ═══════════════════════════════════════════════════════════════════════════════
+   896→// ISSUES / ERRORS HOOKS
+   897→// ═══════════════════════════════════════════════════════════════════════════════
+   898→
+   899→export function useIssues(
+   900→  clientId?: string,
+   901→  options?: Omit<
+   902→    UseQueryOptions<IssuesResponse, Error>,
+   903→    'queryKey' | 'queryFn'
+   904→  >
+   905→) {
+   906→  return useQuery<IssuesResponse, Error>({
+   907→    queryKey: queryKeys.issues.all(clientId),
+   908→    queryFn: () => {
+   909→      const params = new URLSearchParams();
+   910→      if (clientId) params.set('clientId', clientId);
+   911→      const qs = params.toString();
+   912→      return apiFetch<IssuesResponse>(`/api/errors${qs ? `?${qs}` : ''}`);
+   913→    },
+   914→    ...options,
+   915→  });
+   916→}
+   917→
+   918→export function useCreateIssue(
+   919→  options?: Omit<
+   920→    UseMutationOptions<
+   921→      IssueResponse,
+   922→      Error,
+   923→      Record<string, unknown>
+   924→    >,
+   925→    'mutationFn'
+   926→  >
+   927→) {
+   928→  const queryClient = useQueryClient();
+   929→
+   930→  return useMutation<IssueResponse, Error, Record<string, unknown>>({
+   931→    mutationFn: (data) =>
+   932→      apiFetch<IssueResponse>('/api/errors', {
+   933→        method: 'POST',
+   934→        body: JSON.stringify(data),
+   935→      }),
+   936→    onSuccess: (data, variables, context) => {
+   937→      queryClient.invalidateQueries({
+   938→        queryKey: queryKeys.issues.all(variables.clientId as string | undefined),
+   939→      });
+   940→      queryClient.invalidateQueries({ queryKey: queryKeys.issues.all() });
+   941→      queryClient.invalidateQueries({ queryKey: queryKeys.dashboard });
+   942→      options?.onSuccess?.(data, variables, context);
+   943→    },
+   944→    ...options,
+   945→  });
+   946→}
+   947→
+   948→export function useUpdateIssue(
+   949→  options?: Omit<
+   950→    UseMutationOptions<
+   951→      IssueResponse,
+   952→      Error,
+   953→      { id: string; status?: string; assignedTo?: string; notes?: string }
+   954→    >,
+   955→    'mutationFn'
+   956→  >
+   957→) {
+   958→  const queryClient = useQueryClient();
+   959→
+   960→  return useMutation<
+   961→    IssueResponse,
+   962→    Error,
+   963→    { id: string; status?: string; assignedTo?: string; notes?: string }
+   964→  >({
+   965→    mutationFn: (data) =>
+   966→      apiFetch<IssueResponse>('/api/errors', {
+   967→        method: 'PUT',
+   968→        body: JSON.stringify(data),
+   969→      }),
+   970→    onSuccess: (data, variables, context) => {
+   971→      queryClient.invalidateQueries({ queryKey: queryKeys.issues.all() });
+   972→      queryClient.invalidateQueries({ queryKey: queryKeys.dashboard });
+   973→      options?.onSuccess?.(data, variables, context);
+   974→    },
+   975→    ...options,
+   976→  });
+   977→}
+   978→
+   979→// ═══════════════════════════════════════════════════════════════════════════════
+   980→// ACTIVITY HOOKS (reads from audit-logs)
+   981→// ═══════════════════════════════════════════════════════════════════════════════
+   982→
+   983→export function useActivities(
+   984→  clientId?: string,
+   985→  options?: Omit<
+   986→    UseQueryOptions<AuditLogsResponse, Error>,
+   987→    'queryKey' | 'queryFn'
+   988→  >
+   989→) {
+   990→  return useQuery<AuditLogsResponse, Error>({
+   991→    queryKey: queryKeys.activities.all(clientId),
+   992→    queryFn: () => {
+   993→      const params = new URLSearchParams({ limit: '50' });
+   994→      if (clientId) params.set('clientId', clientId);
+   995→      return apiFetch<AuditLogsResponse>(`/api/audit-logs?${params.toString()}`);
+   996→    },
+   997→    ...options,
+   998→  });
+   999→}
+  1000→
+  1001→// ═══════════════════════════════════════════════════════════════════════════════
+  1002→// NOTICE HOOKS
+  1003→// ═══════════════════════════════════════════════════════════════════════════════
+  1004→
+  1005→export function useNotices(
+  1006→  filters?: {
+  1007→    clientId?: string;
+  1008→    status?: string;
+  1009→    noticeType?: string;
+  1010→    assignedTo?: string;
+  1011→  },
+  1012→  options?: Omit<
+  1013→    UseQueryOptions<NoticesResponse, Error>,
+  1014→    'queryKey' | 'queryFn'
+  1015→  >
+  1016→) {
+  1017→  const filterRecord: Record<string, string> = {};
+  1018→  if (filters?.clientId) filterRecord.clientId = filters.clientId;
+  1019→  if (filters?.status) filterRecord.status = filters.status;
+  1020→  if (filters?.noticeType) filterRecord.noticeType = filters.noticeType;
+  1021→  if (filters?.assignedTo) filterRecord.assignedTo = filters.assignedTo;
+  1022→
+  1023→  return useQuery<NoticesResponse, Error>({
+  1024→    queryKey: queryKeys.notices.all(filterRecord),
+  1025→    queryFn: () => {
+  1026→      const params = new URLSearchParams(filterRecord);
+  1027→      const qs = params.toString();
+  1028→      return apiFetch<NoticesResponse>(`/api/notices${qs ? `?${qs}` : ''}`);
+  1029→    },
+  1030→    ...options,
+  1031→  });
+  1032→}
+  1033→
+  1034→export function useCreateNotice(
+  1035→  options?: Omit<
+  1036→    UseMutationOptions<NoticeResponse, Error, Record<string, unknown>>,
+  1037→    'mutationFn'
+  1038→  >
+  1039→) {
+  1040→  const queryClient = useQueryClient();
+  1041→
+  1042→  return useMutation<NoticeResponse, Error, Record<string, unknown>>({
+  1043→    mutationFn: (data) =>
+  1044→      apiFetch<NoticeResponse>('/api/notices', {
+  1045→        method: 'POST',
+  1046→        body: JSON.stringify(data),
+  1047→      }),
+  1048→    onSuccess: (data, variables, context) => {
+  1049→      queryClient.invalidateQueries({ queryKey: queryKeys.notices.all() });
+  1050→      options?.onSuccess?.(data, variables, context);
+  1051→    },
+  1052→    ...options,
+  1053→  });
+  1054→}
+  1055→
+  1056→export function useUpdateNotice(
+  1057→  options?: Omit<
+  1058→    UseMutationOptions<
+  1059→      NoticeResponse,
+  1060→      Error,
+  1061→      { id: string; status?: string; assignedTo?: string; resolution?: string; notes?: string }
+  1062→    >,
+  1063→    'mutationFn'
+  1064→  >
+  1065→) {
+  1066→  const queryClient = useQueryClient();
+  1067→
+  1068→  return useMutation<
+  1069→    NoticeResponse,
+  1070→    Error,
+  1071→    { id: string; status?: string; assignedTo?: string; resolution?: string; notes?: string }
+  1072→  >({
+  1073→    mutationFn: (data) =>
+  1074→      apiFetch<NoticeResponse>('/api/notices', {
+  1075→        method: 'PATCH',
+  1076→        body: JSON.stringify(data),
+  1077→      }),
+  1078→    onSuccess: (data, variables, context) => {
+  1079→      queryClient.invalidateQueries({ queryKey: queryKeys.notices.all() });
+  1080→      options?.onSuccess?.(data, variables, context);
+  1081→    },
+  1082→    ...options,
+  1083→  });
+  1084→}
+  1085→
+  1086→// ═══════════════════════════════════════════════════════════════════════════════
+  1087→// UTILITY: Invalidate all queries (useful after bulk operations)
+  1088→// ═══════════════════════════════════════════════════════════════════════════════
+  1089→
+  1090→export function useInvalidateAll() {
+  1091→  const queryClient = useQueryClient();
+  1092→  return () => queryClient.invalidateQueries();
+  1093→}
+  1094→

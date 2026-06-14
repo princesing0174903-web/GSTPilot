@@ -156,3 +156,51 @@ export async function PATCH(request: Request) {
     );
   }
 }
+
+// DELETE /api/invoices — Delete an invoice
+export async function DELETE(request: Request) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get('id');
+
+    if (!id) {
+      return NextResponse.json(
+        { error: 'Invoice id is required' },
+        { status: 400 }
+      );
+    }
+
+    const existing = await db.invoice.findUnique({
+      where: { id },
+      include: { client: true },
+    });
+
+    if (!existing) {
+      return NextResponse.json(
+        { error: 'Invoice not found' },
+        { status: 404 }
+      );
+    }
+
+    // Create audit log before deletion
+    await db.auditLog.create({
+      data: {
+        clientId: existing.clientId,
+        action: 'Invoice Deleted',
+        entity: 'invoice',
+        entityId: id,
+        details: `Invoice ${existing.invoiceNumber} deleted for ${existing.client.tradeName}`,
+      },
+    });
+
+    await db.invoice.delete({ where: { id } });
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error('DELETE /api/invoices error:', error);
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Failed to delete invoice' },
+      { status: 500 }
+    );
+  }
+}

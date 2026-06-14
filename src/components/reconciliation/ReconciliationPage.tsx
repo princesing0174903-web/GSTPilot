@@ -44,11 +44,21 @@ import {
   AlertCircle,
   CircleDot,
   MinusCircle,
+  Inbox,
 } from 'lucide-react';
 import { formatCurrency, generateMismatchExplanation } from '@/lib/gst-utils';
 import { useApp } from '@/contexts/AppContext';
 import { toast } from 'sonner';
-import { useGSTStore } from '@/stores/gst-store';
+import {
+  useReconResults,
+  useReconRuns,
+  useReconStats,
+  useClients,
+  useCreateReconRun,
+  useUpdateReconWorkflow,
+  useActivities,
+} from '@/hooks/api';
+import type { ReconciliationResult, ReconciliationRun } from '@/types/gst';
 
 // ──────────────────────────────────────────────
 // Types
@@ -110,11 +120,6 @@ interface ReconTimelineEntry {
   recordsProcessed: number;
   matchRate: number;
 }
-
-// ──────────────────────────────────────────────
-// Mismatch data is now loaded from the GST store.
-// No inline mock data — all comes from sample-data.ts via Zustand.
-// ──────────────────────────────────────────────
 
 // ──────────────────────────────────────────────
 // Mismatch Category Config
@@ -224,12 +229,6 @@ function MatchRateRing({
   const circumference = 2 * Math.PI * radius;
   const gapAngle = 2; // degrees gap between segments
 
-  const matchArc = (matchPercent / 100) * circumference;
-  const partialArc = (partialPercent / 100) * circumference;
-  const mismatchArc = (mismatchPercent / 100) * circumference;
-
-  // Calculate stroke-dasharray and stroke-dashoffset for each segment
-  // We rotate the SVG so it starts at the top
   const totalGap = gapAngle * 3 * (circumference / 360);
   const availableCircumference = circumference - totalGap;
   const gapLen = totalGap / 3;
@@ -387,144 +386,156 @@ function ComparisonField({
   );
 }
 
+// ─── Map API ReconciliationResult to local MismatchRecord ─────────────────
+function mapReconResultToMismatch(
+  result: ReconciliationResult,
+  clientName: string
+): MismatchRecord {
+  // Parse mismatches JSON string
+  let parsedMismatches: MismatchDetail[] = [];
+  try {
+    if (result.mismatches) {
+      parsedMismatches = JSON.parse(result.mismatches);
+    }
+  } catch {
+    parsedMismatches = [];
+  }
+
+  // Derive category from matchStatus
+  const mismatchCategory =
+    result.matchStatus === 'missing_in_gstr' ? 'missing_in_gstr' :
+    result.matchStatus === 'missing_in_books' ? 'missing_in_books' :
+    result.matchStatus === 'duplicate' ? 'duplicate' :
+    parsedMismatches.some(m => m.field === 'vendor_gstin' || m.field === 'sellerGstin') ? 'gstin_mismatch' :
+    'tax_difference';
+
+  const mismatchType =
+    result.matchStatus === 'perfect_match' ? 'Perfect Match' :
+    result.matchStatus === 'partial_match' ? 'Partial Match' :
+    result.matchStatus === 'missing_in_gstr' ? 'Missing in Portal' :
+    result.matchStatus === 'missing_in_books' ? 'Missing in Books' :
+    result.matchStatus === 'duplicate' ? 'Duplicate' :
+    'Mismatch';
+
+  // Compute tax difference from mismatch details
+  const taxDiff = parsedMismatches.reduce((sum, m) => sum + (m.difference || 0), 0);
+
+  // Extract diff fields for highlighting
+  const diffFields = parsedMismatches.map(m => m.field);
+
+  // Build booksData from invoice if available, else from mismatch details
+  const booksTaxableValue = parsedMismatches.find(m => m.field === 'taxableValue')?.expected as number || 0;
+  const portalTaxableValue = parsedMismatches.find(m => m.field === 'taxableValue')?.actual as number || 0;
+
+  return {
+    id: result.id,
+    invoiceNumber: result.invoice?.invoiceNumber ?? result.sourceGstin ?? 'Unknown',
+    clientName,
+    mismatchCategory,
+    mismatchType,
+    taxDifference: Math.abs(taxDiff),
+    confidenceScore: result.confidenceScore ?? 90,
+    aiExplanation: result.aiExplanation ?? generateMismatchExplanation(diffFields),
+    aiRecommendation: result.aiRecommendation ?? 'Review manually',
+    booksData: {
+      invoiceNumber: result.invoice?.invoiceNumber ?? '—',
+      invoiceDate: result.invoice?.invoiceDate ?? '—',
+      sellerGstin: result.sourceGstin ?? result.invoice?.sellerGstin ?? '—',
+      buyerGstin: result.invoice?.buyerGstin ?? '—',
+      taxableValue: booksTaxableValue || (result.invoice?.taxableValue ?? 0),
+      cgst: result.invoice?.cgst ?? 0,
+      sgst: result.invoice?.sgst ?? 0,
+      igst: result.invoice?.igst ?? 0,
+      totalAmount: result.invoice?.totalAmount ?? 0,
+    },
+    gstr2bData: result.matchStatus === 'missing_in_gstr' ? null : {
+      invoiceNumber: result.matchedGstin ?? result.invoice?.invoiceNumber ?? '—',
+      invoiceDate: result.invoice?.invoiceDate ?? '—',
+      sellerGstin: result.matchedGstin ?? result.sourceGstin ?? '—',
+      buyerGstin: '—',
+      taxableValue: portalTaxableValue,
+      cgst: 0,
+      sgst: 0,
+      igst: 0,
+      totalAmount: portalTaxableValue,
+    },
+    diffFields,
+    resolved: result.resolved,
+    workflowStatus: result.workflowStatus,
+  };
+}
+
 // ──────────────────────────────────────────────
 // Main Component
 // ──────────────────────────────────────────────
 export default function ReconciliationPage() {
   const { selectedClientId, setCurrentView } = useApp();
-  const store = useGSTStore();
 
-  // ── Filters (declared early — used in computed values below) ──
+  // ── React Query hooks ──
+  const { data: clientsData, isLoading: clientsLoading } = useClients();
+  const { data: reconResultsData, isLoading: resultsLoading } = useReconResults(
+    selectedClientId ? { clientId: selectedClientId } : undefined
+  );
+  const { data: reconStatsData, isLoading: statsLoading } = useReconStats(selectedClientId ?? undefined);
+  const { data: reconRunsData } = useReconRuns(selectedClientId ?? undefined);
+  const { data: activitiesData } = useActivities(selectedClientId ?? undefined);
+
+  // Mutations
+  const createReconRunMutation = useCreateReconRun();
+  const updateWorkflowMutation = useUpdateReconWorkflow();
+
+  // ── Filters ──
   const [filterClient, setFilterClient] = useState<string>('all');
   const [activeCategory, setActiveCategory] = useState<MismatchCategory>('all');
   const [filterSeverity, setFilterSeverity] = useState<string>('all');
 
-  // ── Build client options from store ──
+  // ── Build client options from API ──
   const clients: ClientOption[] = useMemo(() =>
-    store.clients.map(c => ({ id: c.id, tradeName: c.tradeName, gstin: c.gstin })),
-    [store.clients]
+    (clientsData?.clients ?? []).map(c => ({ id: c.id, tradeName: c.tradeName, gstin: c.gstin })),
+    [clientsData]
   );
 
-  // ── Determine which client to show recon for ──
+  // ── Client map for name lookups ──
+  const clientMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const c of clients) {
+      map.set(c.id, c.tradeName);
+    }
+    return map;
+  }, [clients]);
+
+  // ── Determine active client ──
   const activeClientId = selectedClientId || (filterClient !== 'all' ? filterClient : null);
 
-  // ── Load recon data from store ──
-  const reconSummary = useMemo(() => {
-    if (activeClientId) return store.getReconSummary(activeClientId);
-    // Aggregate across all clients
-    const all: Record<string, number> = {};
-    for (const c of store.clients) {
-      const cats = store.getReconSummary(c.id);
-      for (const cat of cats) {
-        all[cat.label] = (all[cat.label] || 0) + cat.count;
-      }
-    }
-    return Object.entries(all).map(([label, count]) => ({
-      label,
-      count,
-      amount: 0,
-      color: label === 'Perfect Match' ? 'text-emerald-700' : label === 'Partial Match' ? 'text-amber-700' : 'text-red-700',
-      bgColor: label === 'Perfect Match' ? 'bg-emerald-50 border-emerald-200' : label === 'Partial Match' ? 'bg-amber-50 border-amber-200' : 'bg-red-50 border-red-200',
-    }));
-  }, [store, activeClientId]);
-
-  const reconDrilldowns = useMemo(() => {
-    if (activeClientId) return store.getReconDrilldowns(activeClientId);
-    // Merge all client drilldowns
-    const merged: Record<string, { invoiceNumber: string; date: string; vendor: string; booksAmount: number; portalAmount: number; difference: number; reason: string }[]> = {};
-    for (const c of store.clients) {
-      const dd = store.getReconDrilldowns(c.id);
-      for (const [cat, items] of Object.entries(dd)) {
-        if (!merged[cat]) merged[cat] = [];
-        merged[cat].push(...items);
-      }
-    }
-    return merged;
-  }, [store, activeClientId]);
-
-  // ── Build MismatchRecords from store recon drilldowns ──
-  const mismatches: MismatchRecord[] = useMemo(() => {
-    const records: MismatchRecord[] = [];
-    const clientObj = activeClientId ? store.getClient(activeClientId) : null;
-    const clientName = clientObj?.tradeName ?? 'Multiple Clients';
-
-    for (const [category, items] of Object.entries(reconDrilldowns)) {
-      for (const item of items) {
-        const mismatchCategory =
-          category === 'Mismatch' ? 'tax_difference' :
-          category === 'Missing in Portal' ? 'missing_in_gstr' :
-          category === 'Missing in Books' ? 'missing_in_books' :
-          category === 'Duplicate' ? 'duplicate' :
-          'gstin_mismatch';
-
-        records.push({
-          id: `recon-${item.invoiceNumber}`,
-          invoiceNumber: item.invoiceNumber,
-          clientName,
-          mismatchCategory,
-          mismatchType: category,
-          taxDifference: item.difference,
-          confidenceScore: 90,
-          aiExplanation: item.reason,
-          aiRecommendation: item.reason,
-          booksData: {
-            invoiceNumber: item.invoiceNumber,
-            invoiceDate: item.date,
-            sellerGstin: '',
-            buyerGstin: '',
-            taxableValue: item.booksAmount,
-            cgst: 0,
-            sgst: 0,
-            igst: 0,
-            totalAmount: item.booksAmount,
-          },
-          gstr2bData: item.portalAmount > 0 ? {
-            invoiceNumber: item.invoiceNumber,
-            invoiceDate: item.date,
-            sellerGstin: '',
-            buyerGstin: '',
-            taxableValue: item.portalAmount,
-            cgst: 0,
-            sgst: 0,
-            igst: 0,
-            totalAmount: item.portalAmount,
-          } : null,
-          diffFields: [],
-          resolved: false,
-          workflowStatus: 'pending',
-        });
-      }
-    }
-    return records;
-  }, [reconDrilldowns, store, activeClientId]);
-
-  // ── Compute match counts from reconSummary ──
-  const perfectMatchCount = useMemo(() =>
-    reconSummary.find(c => c.label === 'Perfect Match')?.count ?? 0,
-    [reconSummary]
-  );
-  const partialMatchCount = useMemo(() =>
-    reconSummary.find(c => c.label === 'Partial Match')?.count ?? 0,
-    [reconSummary]
+  // ── Build MismatchRecords from API recon results ──
+  const apiResults = reconResultsData?.results ?? [];
+  const mismatches: MismatchRecord[] = useMemo(() =>
+    apiResults
+      .filter(r => r.matchStatus !== 'perfect_match')
+      .map(r => mapReconResultToMismatch(r, clientMap.get(r.clientId) ?? 'Unknown')),
+    [apiResults, clientMap]
   );
 
-  // ── Timeline from store activities ──
+  // ── Compute match counts from stats ──
+  const stats = reconStatsData?.stats;
+  const perfectMatchCount = stats?.matchBreakdown?.perfect_match ?? 0;
+  const partialMatchCount = stats?.matchBreakdown?.partial_match ?? 0;
+
+  // ── Timeline from recon runs ──
   const timeline: ReconTimelineEntry[] = useMemo(() => {
-    const acts = store.getRecentActivities(10)
-      .filter(a => a.type === 'mismatch_resolved');
-    return acts.map((a, idx) => ({
-      id: a.id,
-      date: a.timestamp,
-      clients: store.getClient(a.clientId)?.tradeName ?? 'Unknown',
-      recordsProcessed: 0,
-      matchRate: 0,
+    const runs = reconRunsData?.runs ?? [];
+    return runs.map(run => ({
+      id: run.id,
+      date: run.createdAt,
+      clients: clientMap.get(run.clientId) ?? 'Unknown',
+      recordsProcessed: run.totalRecords,
+      matchRate: run.totalRecords > 0 ? Math.round((run.matched / run.totalRecords) * 100) : 0,
     }));
-  }, [store]);
+  }, [reconRunsData, clientMap]);
 
   // ── Loading ──
+  const loading = clientsLoading || resultsLoading || statsLoading;
   const [runningRecon, setRunningRecon] = useState(false);
-
-  // ── Filters moved to top of component (above activeClientId) ──
 
   // ── Selection ──
   const [selectedMismatchId, setSelectedMismatchId] = useState<string | null>(null);
@@ -532,31 +543,9 @@ export default function ReconciliationPage() {
   // ── Sidebar ──
   const [timelineCollapsed, setTimelineCollapsed] = useState(false);
 
-  // Loading is instant — data comes from store
-  const loading = false;
-
   // ──────────────────────────────────────────
   // Helpers
   // ──────────────────────────────────────────
-  function mapStatusToCategory(status: string, parsedMismatches: MismatchDetail[]): string {
-    if (status === 'missing_in_gstr') return 'missing_in_gstr';
-    if (status === 'missing_in_books') return 'missing_in_books';
-    if (status === 'duplicate') return 'duplicate';
-    if (parsedMismatches.some(m => m.field === 'vendor_gstin')) return 'gstin_mismatch';
-    if (parsedMismatches.some(m => m.field === 'gst_amount' || m.field === 'total_amount')) return 'tax_difference';
-    return 'tax_difference'; // default for partial/mismatch
-  }
-
-  function calculateTaxDiff(parsedMismatches: MismatchDetail[]): number {
-    const gstMismatch = parsedMismatches.find(m => m.field === 'gst_amount');
-    if (gstMismatch?.difference) return Math.abs(gstMismatch.difference);
-    return 0;
-  }
-
-  // ──────────────────────────────────────────
-  // Computed Values
-  // ──────────────────────────────────────────
-  // ── Severity helpers ──
   function getMismatchSeverity(m: MismatchRecord): 'critical' | 'high' | 'medium' | 'low' {
     if (m.mismatchCategory === 'missing_in_gstr' && m.taxDifference > 3000) return 'critical';
     if (m.taxDifference > 3000) return 'critical';
@@ -621,61 +610,78 @@ export default function ReconciliationPage() {
   const partialPercent = totalRecords > 0 ? Math.round((partialMatchCount / totalRecords) * 100) : 0;
   const mismatchPercent = totalRecords > 0 ? 100 - matchPercent - partialPercent : 0;
 
-  const isEmpty = totalRecords === 0;
+  const isEmpty = totalRecords === 0 && !loading;
 
   // ──────────────────────────────────────────
   // Actions
   // ──────────────────────────────────────────
   const handleRunReconciliation = async () => {
+    const clientId = selectedClientId || (filterClient !== 'all' ? filterClient : null);
+    if (!clientId) {
+      toast.error('Select a client first to run reconciliation');
+      return;
+    }
     setRunningRecon(true);
     try {
-      const clientId = selectedClientId || (filterClient !== 'all' ? filterClient : null);
-      if (!clientId) {
-        toast.error('Select a client first to run reconciliation');
-        setRunningRecon(false);
-        return;
-      }
-      // Simulate reconciliation — data is already in store from sample data
-      store.addActivity({
+      await createReconRunMutation.mutateAsync({
         clientId,
-        type: 'mismatch_resolved',
-        description: `Reconciliation run completed for ${store.getClient(clientId)?.tradeName}`,
-        timestamp: new Date().toISOString(),
+        period: '2025-06',
       });
-      toast.success('Reconciliation completed successfully');
-    } catch {
-      toast.error('Error running reconciliation');
+      toast.success('Reconciliation run completed successfully');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Error running reconciliation');
     } finally {
       setRunningRecon(false);
     }
   };
 
   const handleAcceptGSTR2B = (id: string) => {
-    const m = mismatches.find(r => r.id === id);
-    if (m && activeClientId) {
-      store.resolveMismatch(activeClientId, m.invoiceNumber);
-    }
-    toast.success('Accepted GSTR-2B value — mismatch resolved');
+    updateWorkflowMutation.mutate(
+      { id, workflowStatus: 'resolved' },
+      {
+        onSuccess: () => toast.success('Accepted GSTR-2B value — mismatch resolved'),
+        onError: (err) => toast.error(err.message),
+      }
+    );
   };
 
   const handleKeepBooks = (id: string) => {
-    const m = mismatches.find(r => r.id === id);
-    if (m && activeClientId) {
-      store.resolveMismatch(activeClientId, m.invoiceNumber);
-    }
-    toast.success('Kept books value — mismatch resolved');
+    updateWorkflowMutation.mutate(
+      { id, workflowStatus: 'resolved' },
+      {
+        onSuccess: () => toast.success('Kept books value — mismatch resolved'),
+        onError: (err) => toast.error(err.message),
+      }
+    );
   };
 
   const handleCustomResolution = (id: string) => {
-    toast.info('Marked for custom resolution — under review');
+    updateWorkflowMutation.mutate(
+      { id, workflowStatus: 'under_review' },
+      {
+        onSuccess: () => toast.info('Marked for custom resolution — under review'),
+        onError: (err) => toast.error(err.message),
+      }
+    );
   };
 
   const handleAutoResolve = () => {
     const toResolve = mismatches.filter(m => !m.resolved && m.confidenceScore >= 93);
-    if (activeClientId) {
-      toResolve.forEach(m => store.resolveMismatch(activeClientId, m.invoiceNumber));
+    if (toResolve.length === 0) {
+      toast.info('No high-confidence mismatches to auto-resolve');
+      return;
     }
-    toast.success(`Auto-resolved ${toResolve.length} mismatches with high confidence`);
+    // Resolve each one
+    for (const m of toResolve) {
+      updateWorkflowMutation.mutate(
+        { id: m.id, workflowStatus: 'resolved' },
+        {
+          onSuccess: () => {},
+          onError: () => {},
+        }
+      );
+    }
+    toast.success(`Auto-resolving ${toResolve.length} mismatches with high confidence`);
   };
 
   // ──────────────────────────────────────────
@@ -758,18 +764,18 @@ export default function ReconciliationPage() {
             <GitCompareArrows className="h-10 w-10 text-muted-foreground/60" />
           </div>
           <h3 className="text-lg font-semibold text-foreground mb-2">
-            No reconciliation data yet
+            No reconciliation runs yet
           </h3>
           <p className="text-sm text-muted-foreground max-w-sm mb-6">
-            Upload and review invoices first, then run reconciliation to match your books with GST portal data.
+            Run your first reconciliation to match your books with GST portal data and identify discrepancies.
           </p>
           <Button
-            onClick={() => setCurrentView('invoices')}
-            variant="outline"
-            className="gap-2 border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+            onClick={handleRunReconciliation}
+            disabled={runningRecon}
+            className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
           >
-            <FileSpreadsheet className="h-4 w-4" />
-            Go to Invoices
+            {runningRecon ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+            Run Your First Reconciliation
           </Button>
         </motion.div>
       </motion.div>
@@ -822,6 +828,7 @@ export default function ReconciliationPage() {
             onClick={handleAutoResolve}
             variant="outline"
             className="gap-2 border-emerald-200 text-emerald-700 hover:bg-emerald-50 hover:border-emerald-300 shadow-sm"
+            disabled={updateWorkflowMutation.isPending}
           >
             <Sparkles className="h-4 w-4" />
             Auto Resolve
@@ -1297,6 +1304,7 @@ export default function ReconciliationPage() {
                               onClick={() => handleAcceptGSTR2B(selectedMismatch.id)}
                               className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm flex-1"
                               size="sm"
+                              disabled={updateWorkflowMutation.isPending}
                             >
                               <CheckCircle2 className="h-3.5 w-3.5" />
                               Accept GSTR-2B
@@ -1306,6 +1314,7 @@ export default function ReconciliationPage() {
                               variant="secondary"
                               className="gap-1.5 flex-1"
                               size="sm"
+                              disabled={updateWorkflowMutation.isPending}
                             >
                               <ShieldCheck className="h-3.5 w-3.5" />
                               Keep Books Value
@@ -1315,6 +1324,7 @@ export default function ReconciliationPage() {
                               variant="outline"
                               className="gap-1.5 flex-1"
                               size="sm"
+                              disabled={updateWorkflowMutation.isPending}
                             >
                               <AlertCircle className="h-3.5 w-3.5" />
                               Custom Resolution
@@ -1355,59 +1365,65 @@ export default function ReconciliationPage() {
             {!timelineCollapsed && (
               <ScrollArea className="h-[560px]">
                 <div className="p-2.5 space-y-1.5">
-                  {timeline.map((entry, i) => {
-                    const entryDate = new Date(entry.date);
-                    const formattedDate = entryDate.toLocaleDateString('en-IN', {
-                      day: '2-digit',
-                      month: 'short',
-                      year: '2-digit',
-                    });
-                    const formattedTime = entryDate.toLocaleTimeString('en-IN', {
-                      hour: '2-digit',
-                      minute: '2-digit',
-                      hour12: true,
-                    });
+                  {timeline.length === 0 ? (
+                    <div className="py-8 text-center text-xs text-muted-foreground">
+                      No runs yet
+                    </div>
+                  ) : (
+                    timeline.map((entry, i) => {
+                      const entryDate = new Date(entry.date);
+                      const formattedDate = entryDate.toLocaleDateString('en-IN', {
+                        day: '2-digit',
+                        month: 'short',
+                        year: '2-digit',
+                      });
+                      const formattedTime = entryDate.toLocaleTimeString('en-IN', {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        hour12: true,
+                      });
 
-                    return (
-                      <motion.button
-                        key={entry.id}
-                        initial={{ opacity: 0, x: 10 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ delay: 0.5 + i * 0.05 }}
-                        className="w-full text-left p-2.5 rounded-lg border border-border/50 hover:border-emerald-200 hover:bg-emerald-50/30 transition-all group"
-                        onClick={() => {
-                          toast.info(`Loading run from ${formattedDate}...`);
-                        }}
-                      >
-                        <div className="flex items-center gap-1.5 mb-1">
-                          <Clock className="h-3 w-3 text-muted-foreground group-hover:text-emerald-600 transition-colors" />
-                          <span className="text-[10px] font-medium text-muted-foreground">
-                            {formattedDate} · {formattedTime}
-                          </span>
-                        </div>
-                        <p className="text-[11px] font-medium text-foreground truncate mb-0.5">
-                          {entry.clients}
-                        </p>
-                        <div className="flex items-center justify-between">
-                          <span className="text-[10px] text-muted-foreground">
-                            {entry.recordsProcessed} records
-                          </span>
-                          <Badge
-                            variant="outline"
-                            className={`h-4 text-[9px] px-1 ${
-                              entry.matchRate >= 80
-                                ? 'border-emerald-200 text-emerald-700 bg-emerald-50'
-                                : entry.matchRate >= 60
-                                ? 'border-amber-200 text-amber-700 bg-amber-50'
-                                : 'border-red-200 text-red-700 bg-red-50'
-                            }`}
-                          >
-                            {entry.matchRate}%
-                          </Badge>
-                        </div>
-                      </motion.button>
-                    );
-                  })}
+                      return (
+                        <motion.button
+                          key={entry.id}
+                          initial={{ opacity: 0, x: 10 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: 0.5 + i * 0.05 }}
+                          className="w-full text-left p-2.5 rounded-lg border border-border/50 hover:border-emerald-200 hover:bg-emerald-50/30 transition-all group"
+                          onClick={() => {
+                            toast.info(`Loading run from ${formattedDate}...`);
+                          }}
+                        >
+                          <div className="flex items-center gap-1.5 mb-1">
+                            <Clock className="h-3 w-3 text-muted-foreground group-hover:text-emerald-600 transition-colors" />
+                            <span className="text-[10px] font-medium text-muted-foreground">
+                              {formattedDate} · {formattedTime}
+                            </span>
+                          </div>
+                          <p className="text-[11px] font-medium text-foreground truncate mb-0.5">
+                            {entry.clients}
+                          </p>
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] text-muted-foreground">
+                              {entry.recordsProcessed} records
+                            </span>
+                            <Badge
+                              variant="outline"
+                              className={`h-4 text-[9px] px-1 ${
+                                entry.matchRate >= 80
+                                  ? 'border-emerald-200 text-emerald-700 bg-emerald-50'
+                                  : entry.matchRate >= 60
+                                  ? 'border-amber-200 text-amber-700 bg-amber-50'
+                                  : 'border-red-200 text-red-700 bg-red-50'
+                              }`}
+                            >
+                              {entry.matchRate}%
+                            </Badge>
+                          </div>
+                        </motion.button>
+                      );
+                    })
+                  )}
                 </div>
               </ScrollArea>
             )}

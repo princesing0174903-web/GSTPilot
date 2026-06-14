@@ -1,0 +1,1302 @@
+     1→import { db } from '@/lib/db'
+     2→import { NextResponse } from 'next/server'
+     3→
+     4→// ─── helpers ────────────────────────────────────────────────────────────────
+     5→function rand(min: number, max: number) {
+     6→  return Math.floor(Math.random() * (max - min + 1)) + min
+     7→}
+     8→
+     9→function pick<T>(arr: T[]): T {
+    10→  return arr[Math.floor(Math.random() * arr.length)]
+    11→}
+    12→
+    13→function randomDate(baseYear: number, month: number, dayRange: [number, number]): string {
+    14→  const day = rand(dayRange[0], dayRange[1])
+    15→  const m = String(month).padStart(2, '0')
+    16→  const d = String(day).padStart(2, '0')
+    17→  return `${baseYear}-${m}-${d}`
+    18→}
+    19→
+    20→// ─── POST handler ───────────────────────────────────────────────────────────
+    21→export async function POST() {
+    22→  try {
+    23→    // 1. Clear existing data (respect foreign key order)
+    24→    await db.clientBenchmark.deleteMany()
+    25→    await db.executiveReport.deleteMany()
+    26→    await db.documentChatSession.deleteMany()
+    27→    await db.knowledgeEntry.deleteMany()
+    28→    await db.aITask.deleteMany()
+    29→    await db.clientInsight.deleteMany()
+    30→    await db.complianceForecast.deleteMany()
+    31→    await db.riskScore.deleteMany()
+    32→    await db.aIPrediction.deleteMany()
+    33→    await db.automationLog.deleteMany()
+    34→    await db.automationRule.deleteMany()
+    35→    await db.workloadAssignment.deleteMany()
+    36→    await db.teamPerformance.deleteMany()
+    37→    await db.notice.deleteMany()
+    38→    await db.document.deleteMany()
+    39→    await db.firmMetrics.deleteMany()
+    40→    await db.firmSettings.deleteMany()
+    41→    await db.teamMember.deleteMany()
+    42→    await db.filingEvent.deleteMany()
+    43→    await db.reconciliationResult.deleteMany()
+    44→    await db.reconciliationRun.deleteMany()
+    45→    await db.issue.deleteMany()
+    46→    await db.auditLog.deleteMany()
+    47→    await db.healthScore.deleteMany()
+    48→    await db.gSTRFiling.deleteMany()
+    49→    await db.invoice.deleteMany()
+    50→    await db.client.deleteMany()
+    51→    await db.user.deleteMany()
+    52→
+    53→    // 2. Create Users
+    54→    const users = await Promise.all([
+    55→      db.user.create({
+    56→        data: { name: 'CA Rajesh Kumar', email: 'rajesh@gstpilot.ai', role: 'admin' },
+    57→      }),
+    58→      db.user.create({
+    59→        data: { name: 'Priya Sharma', email: 'priya@gstpilot.ai', role: 'manager' },
+    60→      }),
+    61→      db.user.create({
+    62→        data: { name: 'Amit Patel', email: 'amit@gstpilot.ai', role: 'staff' },
+    63→      }),
+    64→    ])
+    65→
+    66→    // 3. Create Clients
+    67→    const clientDefs = [
+    68→      {
+    69→        tradeName: 'Sharma Enterprises',
+    70→        gstin: '27AABCS1429B1Z5',
+    71→        address: '302, Laxmi Nagar, Andheri East',
+    72→        state: 'Maharashtra',
+    73→        stateCode: '27',
+    74→        contactEmail: 'accounts@sharmaent.com',
+    75→        contactPhone: '+91-22-2847-3001',
+    76→        legalName: 'Sharma Enterprises Pvt Ltd',
+    77→        entityType: 'regular',
+    78→        returnPeriod: 'monthly',
+    79→        status: 'active',
+    80→        healthScore: 92,
+    81→      },
+    82→      {
+    83→        tradeName: 'Patel & Sons',
+    84→        gstin: '24AABCP5678G1Z3',
+    85→        address: '15, CG Road, Navrangpura',
+    86→        state: 'Gujarat',
+    87→        stateCode: '24',
+    88→        contactEmail: 'gst@patelsons.com',
+    89→        contactPhone: '+91-79-6677-8888',
+    90→        legalName: 'Patel & Sons Trading Co',
+    91→        entityType: 'regular',
+    92→        returnPeriod: 'monthly',
+    93→        status: 'active',
+    94→        healthScore: 78,
+    95→      },
+    96→      {
+    97→        tradeName: 'Krishna Traders',
+    98→        gstin: '06AABCK9012H1Z1',
+    99→        address: 'Plot 45, Udyog Vihar, Phase III',
+   100→        state: 'Haryana',
+   101→        stateCode: '06',
+   102→        contactEmail: 'gst@krishnatraders.in',
+   103→        contactPhone: '+91-124-2852-0261',
+   104→        legalName: 'Krishna Traders Pvt Ltd',
+   105→        entityType: 'regular',
+   106→        returnPeriod: 'monthly',
+   107→        status: 'active',
+   108→        healthScore: 88,
+   109→      },
+   110→      {
+   111→        tradeName: 'Metro Retail',
+   112→        gstin: '33AABCM3456J1Z7',
+   113→        address: '78, T Nagar, Chennai',
+   114→        state: 'Tamil Nadu',
+   115→        stateCode: '33',
+   116→        contactEmail: 'tax@metroretail.com',
+   117→        contactPhone: '+91-44-6778-9999',
+   118→        legalName: 'Metro Retail India Pvt Ltd',
+   119→        entityType: 'regular',
+   120→        returnPeriod: 'monthly',
+   121→        status: 'active',
+   122→        healthScore: 65,
+   123→      },
+   124→      {
+   125→        tradeName: 'Gupta Manufacturing',
+   126→        gstin: '09AABCG2345L1Z2',
+   127→        address: '12, Sector 62, Noida',
+   128→        state: 'Uttar Pradesh',
+   129→        stateCode: '09',
+   130→        contactEmail: 'finance@guptamfg.com',
+   131→        contactPhone: '+91-120-2345-6789',
+   132→        legalName: 'Gupta Manufacturing Co',
+   133→        entityType: 'composition',
+   134→        returnPeriod: 'quarterly',
+   135→        status: 'active',
+   136→        healthScore: 91,
+   137→      },
+   138→      {
+   139→        tradeName: 'Sunrise Exports',
+   140→        gstin: '27AABCS7890K1Z9',
+   141→        address: '501, MIDC, Andheri East',
+   142→        state: 'Maharashtra',
+   143→        stateCode: '27',
+   144→        contactEmail: 'compliance@sunriseexports.com',
+   145→        contactPhone: '+91-22-4567-8901',
+   146→        legalName: 'Sunrise Exports India Ltd',
+   147→        entityType: 'regular',
+   148→        returnPeriod: 'monthly',
+   149→        status: 'active',
+   150→        healthScore: 85,
+   151→      },
+   152→      {
+   153→        tradeName: 'RK Electronics',
+   154→        gstin: '29AABCD6789M1Z4',
+   155→        address: '22, Electronic City, Phase I',
+   156→        state: 'Karnataka',
+   157→        stateCode: '29',
+   158→        contactEmail: 'gst@rkelectronics.in',
+   159→        contactPhone: '+91-80-4567-8901',
+   160→        legalName: 'RK Electronics Pvt Ltd',
+   161→        entityType: 'regular',
+   162→        returnPeriod: 'monthly',
+   163→        status: 'active',
+   164→        healthScore: 73,
+   165→      },
+   166→      {
+   167→        tradeName: 'Apex Logistics',
+   168→        gstin: '27AABCA0123N1Z6',
+   169→        address: '8, Transport Nagar, Kalamboli',
+   170→        state: 'Maharashtra',
+   171→        stateCode: '27',
+   172→        contactEmail: 'tax@apexlogistics.com',
+   173→        contactPhone: '+91-22-8901-2345',
+   174→        legalName: 'Apex Logistics India Pvt Ltd',
+   175→        entityType: 'regular',
+   176→        returnPeriod: 'monthly',
+   177→        status: 'inactive',
+   178→        healthScore: 45,
+   179→      },
+   180→    ]
+   181→
+   182→    const clients = []
+   183→    for (const def of clientDefs) {
+   184→      const client = await db.client.create({ data: def })
+   185→      clients.push(client)
+   186→    }
+   187→
+   188→    // 4. Create Invoices for each client
+   189→    const invoiceTypes = ['B2B', 'B2C Large', 'B2C Small', 'Export', 'Credit Note']
+   190→    const gstr1Sections = ['b2b', 'b2cl', 'b2cs', 'exp', 'cdnr']
+   191→    const matchStatuses = ['perfect_match', 'partial_match', 'mismatch', 'missing_in_books', 'missing_in_gstr', 'unmatched']
+   192→    const riskLevels = ['low', 'medium', 'high', 'critical']
+   193→    const taxRates = [0.05, 0.12, 0.18]
+   194→
+   195→    const buyerGstins = [
+   196→      '06AABCR5638L1Z5', // Haryana
+   197→      '07AABCI6228L1Z8', // Delhi
+   198→      '33AABCT1332L1Z2', // Tamil Nadu
+   199→      '09AABCW5982L1Z1', // UP
+   200→      '24AABCM5638L1Z3', // Gujarat
+   201→      '19AABCB4298L1Z9', // West Bengal
+   202→      '32AABCH5682L1Z6', // Kerala
+   203→      '36AABCL5298L1Z4', // Telangana
+   204→    ]
+   205→    const buyerNames = [
+   206→      'Vijay Components Pvt Ltd',
+   207→      'Delhi Auto Parts',
+   208→      'Chennai Textiles Ltd',
+   209→      'UP Agro Industries',
+   210→      'Rajkot Engineering',
+   211→      'Kolkata Traders',
+   212→      'Kerala Spices Co',
+   213→      'Hyderabad IT Solutions',
+   214→    ]
+   215→
+   216→    const allInvoices: Awaited<ReturnType<typeof db.invoice.create>>[] = []
+   217→
+   218→    for (const client of clients) {
+   219→      const invoiceCount = rand(5, 8)
+   220→      for (let i = 0; i < invoiceCount; i++) {
+   221→        const invIdx = i + 1
+   222→        const invType = invoiceTypes[i % invoiceTypes.length]
+   223→        const sectionIdx = invoiceTypes.indexOf(invType)
+   224→        const isCreditNote = invType === 'Credit Note'
+   225→        const isExport = invType === 'Export'
+   226→        const isB2CSmall = invType === 'B2C Small'
+   227→
+   228→        const month = rand(1, 6)
+   229→        const period = `2025-${String(month).padStart(2, '0')}`
+   230→        const invoiceDate = randomDate(2025, month, [1, 28])
+   231→
+   232→        const taxableValue = rand(15000, 500000)
+   233→        const rate = pick(taxRates)
+   234→        const isInterState = client.stateCode !== buyerGstins[i % buyerGstins.length].substring(0, 2)
+   235→
+   236→        let cgst = 0
+   237→        let sgst = 0
+   238→        let igst = 0
+   239→        if (isExport) {
+   240→          igst = Math.round(taxableValue * rate)
+   241→        } else if (isInterState) {
+   242→          igst = Math.round(taxableValue * rate)
+   243→        } else {
+   244→          cgst = Math.round(taxableValue * rate / 2)
+   245→          sgst = Math.round(taxableValue * rate / 2)
+   246→        }
+   247→
+   248→        const totalAmount = taxableValue + cgst + sgst + igst
+   249→
+   250→        const matchStatus = pick(matchStatuses)
+   251→        const riskLevel = pick(riskLevels)
+   252→        const riskScore =
+   253→          matchStatus === 'perfect_match' ? rand(0, 20) :
+   254→          matchStatus === 'partial_match' ? rand(20, 50) :
+   255→          matchStatus === 'mismatch' ? rand(50, 80) :
+   256→          matchStatus === 'missing_in_books' ? rand(70, 90) :
+   257→          matchStatus === 'missing_in_gstr' ? rand(60, 85) :
+   258→          rand(30, 70)
+   259→
+   260→        const aiExplanation =
+   261→          matchStatus === 'mismatch'
+   262→            ? `AI detected a tax amount discrepancy of ₹${Math.abs(rand(1000, 15000))} between books and GSTR-1 for this invoice. Possible cause: incorrect tax rate applied.`
+   263→            : matchStatus === 'partial_match'
+   264→            ? `Partial match found — taxable value matches but GSTIN of buyer differs. Likely a data entry error in recipient GSTIN.`
+   265→            : matchStatus === 'missing_in_gstr'
+   266→            ? `Invoice present in books but not found in GSTR-1. This may indicate the invoice was not reported or was reported under a different number.`
+   267→            : matchStatus === 'missing_in_books'
+   268→            ? `Invoice appears in GSTR-1 but not in company books. Possible omission or timing difference in recording.`
+   269→            : undefined
+   270→
+   271→        const invoice = await db.invoice.create({
+   272→          data: {
+   273→            clientId: client.id,
+   274→            invoiceNumber: `INV/2025/${String(invIdx).padStart(3, '0')}`,
+   275→            invoiceDate,
+   276→            sellerGstin: client.gstin,
+   277→            buyerGstin: isB2CSmall ? null : buyerGstins[i % buyerGstins.length],
+   278→            buyerName: isB2CSmall ? null : buyerNames[i % buyerNames.length],
+   279→            invoiceType: invType,
+   280→            gstr1Section: gstr1Sections[sectionIdx] ?? 'b2b',
+   281→            taxableValue,
+   282→            cgst,
+   283→            sgst,
+   284→            igst,
+   285→            cess: 0,
+   286→            totalAmount,
+   287→            hsnCode: pick(['998314', '998315', '8471', '8517', '7308', '8703', '6109', '2106']),
+   288→            reverseCharge: i % 7 === 0,
+   289→            status: isCreditNote ? 'credit_note' : 'posted',
+   290→            matchStatus,
+   291→            riskLevel,
+   292→            riskScore,
+   293→            aiExplanation,
+   294→            period,
+   295→          },
+   296→        })
+   297→        allInvoices.push(invoice)
+   298→      }
+   299→    }
+   300→
+   301→    // 5. Create GSTR Filings for each client
+   302→    const returnTypes = ['GSTR-1', 'GSTR-3B']
+   303→    const filingStatuses = ['draft', 'prepared', 'validated', 'reviewed', 'generated', 'filed']
+   304→
+   305→    const allFilings: Awaited<ReturnType<typeof db.gSTRFiling.create>>[] = []
+   306→
+   307→    for (const client of clients) {
+   308→      const filingCount = rand(3, 4)
+   309→      const usedPeriods = new Set<string>()
+   310→
+   311→      for (let i = 0; i < filingCount; i++) {
+   312→        const returnType = returnTypes[i % 2]
+   313→        const periodMonth = rand(1, 6)
+   314→        const period = `2025-${String(periodMonth).padStart(2, '0')}`
+   315→        const key = `${returnType}-${period}`
+   316→
+   317→        // avoid duplicates for same returnType+period on same client
+   318→        if (usedPeriods.has(key)) continue
+   319→        usedPeriods.add(key)
+   320→
+   321→        const statusIdx = rand(0, filingStatuses.length - 1)
+   322→        const status = filingStatuses[statusIdx]
+   323→        const isFiled = status === 'filed'
+   324→
+   325→        const totalTaxable = rand(200000, 5000000)
+   326→        const totalTax = Math.round(totalTaxable * 0.18)
+   327→
+   328→        const filing = await db.gSTRFiling.create({
+   329→          data: {
+   330→            clientId: client.id,
+   331→            returnType,
+   332→            period,
+   333→            financialYear: '2025-26',
+   334→            status,
+   335→            filedDate: isFiled ? randomDate(2025, periodMonth > 1 ? periodMonth - 1 : 1, [1, 20]) : null,
+   336→            acknowledgmentNumber: isFiled ? `ACK${rand(10000000, 99999999)}` : null,
+   337→            totalInvoices: rand(15, 80),
+   338→            readyForFiling: rand(10, 70),
+   339→            issuesFound: rand(0, 8),
+   340→            criticalErrors: rand(0, 3),
+   341→            warnings: rand(0, 5),
+   342→            totalTaxableValue: totalTaxable,
+   343→            totalTax,
+   344→          },
+   345→        })
+   346→        allFilings.push(filing)
+   347→      }
+   348→    }
+   349→
+   350→    // 6. Create Filing Events for each filing
+   351→    const eventTypes = ['data_imported', 'validation_completed', 'review_completed', 'gstr_generated', 'filed']
+   352→    const eventDescriptions: Record<string, string> = {
+   353→      data_imported: 'Invoice data imported from ERP system',
+   354→      validation_completed: 'Validation checks completed successfully',
+   355→      review_completed: 'Manager review completed',
+   356→      gstr_generated: 'GSTR JSON file generated',
+   357→      filed: 'Return filed on GST portal',
+   358→    }
+   359→
+   360→    let totalFilingEvents = 0
+   361→
+   362→    for (const filing of allFilings) {
+   363→      const eventCount = rand(4, 6)
+   364→      for (let i = 0; i < eventCount; i++) {
+   365→        const eventType = eventTypes[i % eventTypes.length]
+   366→        const user = pick(users)
+   367→
+   368→        await db.filingEvent.create({
+   369→          data: {
+   370→            filingId: filing.id,
+   371→            clientId: filing.clientId,
+   372→            eventType,
+   373→            description: eventDescriptions[eventType],
+   374→            userId: user.id,
+   375→            timestamp: new Date(
+   376→              2025,
+   377→              rand(0, 5),
+   378→              rand(1, 28),
+   379→              rand(9, 18),
+   380→              rand(0, 59),
+   381→            ),
+   382→          },
+   383→        })
+   384→        totalFilingEvents++
+   385→      }
+   386→    }
+   387→
+   388→    // 7. Create Reconciliation Runs for each client (2-3 per client)
+   389→    const runSources = [
+   390→      'Purchase Register,GSTR-2B',
+   391→      'Purchase Register,GSTR-2A',
+   392→      'Books,GSTR-1',
+   393→      'Sales Register,GSTR-1',
+   394→      'Purchase Register,GSTR-2B',
+   395→    ]
+   396→    const runStatuses = ['completed', 'completed', 'completed', 'in_progress', 'failed']
+   397→
+   398→    const allRuns: Awaited<ReturnType<typeof db.reconciliationRun.create>>[] = []
+   399→
+   400→    for (const client of clients) {
+   401→      const runCount = rand(2, 3)
+   402→      const usedRunPeriods = new Set<string>()
+   403→
+   404→      for (let i = 0; i < runCount; i++) {
+   405→        const month = rand(1, 6)
+   406→        const period = `2025-${String(month).padStart(2, '0')}`
+   407→
+   408→        // Avoid duplicate periods for same client runs (allow some overlap for different sources)
+   409→        const runKey = `${period}-${i}`
+   410→        if (usedRunPeriods.has(runKey)) continue
+   411→        usedRunPeriods.add(runKey)
+   412→
+   413→        const sources = runSources[i % runSources.length]
+   414→        const status = pick(runStatuses)
+   415→
+   416→        const totalRecords = rand(10, 60)
+   417→        const matched = rand(Math.floor(totalRecords * 0.3), Math.floor(totalRecords * 0.7))
+   418→        const partialMatches = rand(Math.floor(totalRecords * 0.05), Math.floor(totalRecords * 0.2))
+   419→        const unmatched = totalRecords - matched - partialMatches
+   420→        const highRisk = rand(Math.floor(unmatched * 0.1), Math.floor(unmatched * 0.5))
+   421→        const gstDifference = rand(2000, 50000)
+   422→
+   423→        const run = await db.reconciliationRun.create({
+   424→          data: {
+   425→            clientId: client.id,
+   426→            period,
+   427→            sources,
+   428→            totalRecords,
+   429→            matched,
+   430→            unmatched,
+   431→            partialMatches,
+   432→            highRisk,
+   433→            gstDifference,
+   434→            status,
+   435→            runBy: pick(users).id,
+   436→          },
+   437→        })
+   438→        allRuns.push(run)
+   439→      }
+   440→    }
+   441→
+   442→    // 8. Create Reconciliation Results for some invoices (with enhanced fields)
+   443→    const recMatchStatuses = ['perfect_match', 'partial_match', 'mismatch', 'missing_in_books', 'missing_in_gstr']
+   444→    let totalReconciliations = 0
+   445→
+   446→    // Helper to determine workflowStatus based on matchStatus
+   447→    function getWorkflowStatus(matchStatus: string): string {
+   448→      switch (matchStatus) {
+   449→        case 'perfect_match':
+   450→          return 'resolved'
+   451→        case 'mismatch':
+   452→          return 'pending'
+   453→        case 'missing_in_books':
+   454→        case 'missing_in_gstr':
+   455→          return 'pending'
+   456→        case 'partial_match':
+   457→          // Some partial matches are under_review, most are pending
+   458→          return Math.random() < 0.4 ? 'under_review' : 'pending'
+   459→        default:
+   460→          return 'pending'
+   461→      }
+   462→    }
+   463→
+   464→    // Helper to determine confidenceScore based on matchStatus
+   465→    function getConfidenceScore(matchStatus: string): number {
+   466→      switch (matchStatus) {
+   467→        case 'perfect_match':
+   468→          return rand(85, 98)
+   469→        case 'partial_match':
+   470→          return rand(50, 84)
+   471→        case 'mismatch':
+   472→          return rand(20, 49)
+   473→        case 'missing_in_books':
+   474→        case 'missing_in_gstr':
+   475→          return rand(0, 19)
+   476→        default:
+   477→          return rand(0, 50)
+   478→      }
+   479→    }
+   480→
+   481→    // Helper to determine aiRecommendation based on mismatch type
+   482→    function getAiRecommendation(matchStatus: string, mismatches: string | null): string {
+   483→      if (matchStatus === 'perfect_match') {
+   484→        return 'no_action_needed'
+   485→      }
+   486→
+   487→      // Parse mismatches to determine recommendation
+   488→      if (mismatches) {
+   489→        try {
+   490→          const mismatchArr = JSON.parse(mismatches) as Array<{ field: string }>
+   491→          const fields = mismatchArr.map((m) => m.field)
+   492→
+   493→          if (fields.includes('buyerGstin') || fields.includes('sellerGstin') || fields.includes('matchedGstin')) {
+   494→            return 'correct_gstin'
+   495→          }
+   496→          if (fields.includes('taxableValue') || fields.includes('cgst') || fields.includes('sgst') || fields.includes('igst')) {
+   497→            return 'adjust_gst_amount'
+   498→          }
+   499→          if (fields.includes('invoiceNumber')) {
+   500→            return 'correct_invoice_number'
+   501→          }
+   502→        } catch {
+   503→          // fallback below
+   504→        }
+   505→      }
+   506→
+   507→      // Default recommendations by matchStatus
+   508→      switch (matchStatus) {
+   509→        case 'mismatch':
+   510→          return pick(['adjust_gst_amount', 'correct_gstin', 'review_vendor_data'])
+   511→        case 'partial_match':
+   512→          return pick(['correct_gstin', 'correct_invoice_number', 'review_vendor_data'])
+   513→        case 'missing_in_books':
+   514→          return pick(['mark_as_duplicate', 'review_manually'])
+   515→        case 'missing_in_gstr':
+   516→          return 'review_manually'
+   517→        default:
+   518→          return 'review_manually'
+   519→      }
+   520→    }
+   521→
+   522→    for (const invoice of allInvoices) {
+   523→      // Create reconciliation for roughly 60% of invoices
+   524→      if (Math.random() < 0.4) continue
+   525→
+   526→      const resolvedMatchStatus = invoice.matchStatus === 'unmatched'
+   527→        ? pick(recMatchStatuses)
+   528→        : invoice.matchStatus as string
+   529→
+   530→      const matchScore =
+   531→        resolvedMatchStatus === 'perfect_match' ? rand(90, 100) :
+   532→        resolvedMatchStatus === 'partial_match' ? rand(50, 89) :
+   533→        resolvedMatchStatus === 'mismatch' ? rand(10, 49) :
+   534→        rand(0, 30)
+   535→
+   536→      const resolved = resolvedMatchStatus === 'perfect_match' || (Math.random() < 0.3)
+   537→      const client = clients.find((c) => c.id === invoice.clientId)
+   538→
+   539→      const mismatches = resolvedMatchStatus === 'mismatch'
+   540→        ? JSON.stringify([{ field: 'taxableValue', books: invoice.taxableValue, gstr: invoice.taxableValue + rand(500, 5000) }])
+   541→        : resolvedMatchStatus === 'partial_match'
+   542→        ? JSON.stringify([{ field: 'buyerGstin', books: invoice.buyerGstin, gstr: invoice.buyerGstin?.replace(/.$/, 'X') ?? null }])
+   543→        : resolvedMatchStatus === 'missing_in_books'
+   544→        ? JSON.stringify([{ field: 'invoiceNumber', books: null, gstr: invoice.invoiceNumber }])
+   545→        : resolvedMatchStatus === 'missing_in_gstr'
+   546→        ? JSON.stringify([{ field: 'invoiceNumber', books: invoice.invoiceNumber, gstr: null }])
+   547→        : null
+   548→
+   549→      const aiRecExplanation =
+   550→        resolvedMatchStatus === 'mismatch'
+   551→          ? `Reconciliation mismatch: Tax amount differs between books (₹${invoice.cgst + invoice.sgst + invoice.igst}) and GSTR-1. Recommend verifying tax rate applied.`
+   552→          : resolvedMatchStatus === 'partial_match'
+   553→          ? `Partial reconciliation — buyer GSTIN mismatch detected. Verify recipient details before filing.`
+   554→          : resolvedMatchStatus === 'missing_in_books'
+   555→          ? `Invoice found in GSTR but missing from company books. Possible data entry omission or timing difference.`
+   556→          : resolvedMatchStatus === 'missing_in_gstr'
+   557→          ? `Invoice present in books but not reflected in GSTR. May require manual reporting or amendment.`
+   558→          : undefined
+   559→
+   560→      const confidenceScore = getConfidenceScore(resolvedMatchStatus)
+   561→      const workflowStatus = getWorkflowStatus(resolvedMatchStatus)
+   562→      const aiRecommendation = getAiRecommendation(resolvedMatchStatus, mismatches)
+   563→
+   564→      // Determine sourceA and sourceB based on sourceType
+   565→      const sourceType = pick(['books', 'gstr1', 'gstr2a'])
+   566→      const sourceA = sourceType === 'gstr2a' ? 'Purchase Register' : 'Sales Register'
+   567→      const sourceB = sourceType === 'gstr2a' ? 'GSTR-2B' : sourceType === 'gstr1' ? 'GSTR-1' : 'GSTR-2B'
+   568→
+   569→      // Find a matching run for this client (prefer one in the same period)
+   570→      const clientRuns = allRuns.filter((r) => r.clientId === invoice.clientId)
+   571→      const periodRuns = clientRuns.filter((r) => r.period === invoice.period)
+   572→      const runId = periodRuns.length > 0
+   573→        ? pick(periodRuns).id
+   574→        : clientRuns.length > 0
+   575→          ? pick(clientRuns).id
+   576→          : null
+   577→
+   578→      await db.reconciliationResult.create({
+   579→        data: {
+   580→          clientId: invoice.clientId,
+   581→          invoiceId: invoice.id,
+   582→          sourceType,
+   583→          sourceA,
+   584→          sourceB,
+   585→          sourceGstin: client?.gstin ?? null,
+   586→          matchedGstin: invoice.buyerGstin,
+   587→          matchStatus: resolvedMatchStatus,
+   588→          matchScore,
+   589→          mismatches,
+   590→          aiExplanation: aiRecExplanation,
+   591→          aiRecommendation,
+   592→          confidenceScore,
+   593→          workflowStatus,
+   594→          resolved,
+   595→          resolvedBy: resolved ? pick(users).id : null,
+   596→          resolvedAt: resolved ? randomDate(2025, rand(2, 6), [1, 28]) : null,
+   597→          runId,
+   598→        },
+   599→      })
+   600→      totalReconciliations++
+   601→    }
+   602→
+   603→    // 9. Create Issues for each client
+   604→    const severities = ['critical', 'warning', 'info']
+   605→    const categories = ['GST Mismatch', 'Tax Mismatch', 'Date Mismatch', 'Missing Invoice', 'Duplicate', 'Invalid GSTIN']
+   606→    const issueStatuses = ['open', 'resolved', 'ignored']
+   607→
+   608→    const issueTitles: Record<string, string[]> = {
+   609→      'GST Mismatch': [
+   610→        'GSTIN mismatch in invoice vs GSTR-1',
+   611→        'Recipient GSTIN not matching with GSTR-2A',
+   612→        'Supplier GSTIN discrepancy found',
+   613→      ],
+   614→      'Tax Mismatch': [
+   615→        'CGST/SGST calculation discrepancy',
+   616→        'IGST amount differs between books and return',
+   617→        'Tax rate applied incorrectly on invoice',
+   618→        'Cess amount mismatch detected',
+   619→      ],
+   620→      'Date Mismatch': [
+   621→        'Invoice date outside reporting period',
+   622→        'Filing date exceeds due date',
+   623→      ],
+   624→      'Missing Invoice': [
+   625→        'Invoice found in GSTR-2A but not in books',
+   626→        'Invoice in books missing from GSTR-1',
+   627→        'Credit note not reflected in return',
+   628→      ],
+   629→      'Duplicate': [
+   630→        'Duplicate invoice number detected',
+   631→        'Same GSTIN and invoice amount found twice',
+   632→      ],
+   633→      'Invalid GSTIN': [
+   634→        'Buyer GSTIN failed validation check',
+   635→        'GSTIN checksum verification failed',
+   636→      ],
+   637→    }
+   638→
+   639→    let totalIssues = 0
+   640→
+   641→    for (const client of clients) {
+   642→      const issueCount = rand(3, 5)
+   643→      const clientInvoices = allInvoices.filter((inv) => inv.clientId === client.id)
+   644→      const clientFilings = allFilings.filter((f) => f.clientId === client.id)
+   645→
+   646→      for (let i = 0; i < issueCount; i++) {
+   647→        const category = categories[i % categories.length]
+   648→        const severity = pick(severities)
+   649→        const title = pick(issueTitles[category] ?? [category])
+   650→
+   651→        const issueStatus = severity === 'info'
+   652→          ? pick(['resolved', 'ignored'])
+   653→          : pick(issueStatuses)
+   654→
+   655→        const assignedTo = issueStatus === 'open' ? pick(users).id : null
+   656→        const resolvedAt = issueStatus === 'resolved' ? randomDate(2025, rand(2, 6), [1, 28]) : null
+   657→
+   658→        await db.issue.create({
+   659→          data: {
+   660→            clientId: client.id,
+   661→            invoiceId: clientInvoices.length > 0 ? pick(clientInvoices).id : null,
+   662→            filingId: clientFilings.length > 0 ? pick(clientFilings).id : null,
+   663→            severity,
+   664→            category,
+   665→            title,
+   666→            description: `${title} — detected during reconciliation for period 2025-${String(rand(1, 6)).padStart(2, '0')}. Requires review by the GST compliance team.`,
+   667→            status: issueStatus,
+   668→            assignedTo,
+   669→            notes: issueStatus === 'resolved' ? 'Issue reviewed and resolved by team.' : issueStatus === 'ignored' ? 'False positive — acknowledged and ignored.' : null,
+   670→            resolvedAt,
+   671→          },
+   672→        })
+   673→        totalIssues++
+   674→      }
+   675→    }
+   676→
+   677→    // 10. Create Health Score Records for each client
+   678→    let totalHealthScores = 0
+   679→
+   680→    for (const client of clients) {
+   681→      const recordCount = rand(3, 6)
+   682→      for (let i = 0; i < recordCount; i++) {
+   683→        const month = i + 1
+   684→        const period = `2025-${String(month).padStart(2, '0')}`
+   685→
+   686→        await db.healthScore.create({
+   687→          data: {
+   688→            clientId: client.id,
+   689→            score: Math.max(0, Math.min(100, client.healthScore + rand(-15, 15))),
+   690→            missingGstin: rand(0, 5),
+   691→            invalidGstin: rand(0, 3),
+   692→            duplicateInvoices: rand(0, 2),
+   693→            filingDelays: rand(0, 4),
+   694→            validationErrors: rand(0, 6),
+   695→            period,
+   696→          },
+   697→        })
+   698→        totalHealthScores++
+   699→      }
+   700→    }
+   701→
+   702→    // 11. Create Audit Log Entries
+   703→    const auditActions = [
+   704→      'GSTR Generated',
+   705→      'GSTR Downloaded',
+   706→      'Return Filed',
+   707→      'Invoice Approved',
+   708→      'Reconciliation Completed',
+   709→      'Client Onboarded',
+   710→      'User Login',
+   711→      'Report Exported',
+   712→      'Invoice Uploaded',
+   713→      'Settings Updated',
+   714→    ]
+   715→
+   716→    let totalAuditLogs = 0
+   717→    const logCount = rand(15, 20)
+   718→
+   719→    for (let i = 0; i < logCount; i++) {
+   720→      const action = pick(auditActions)
+   721→      const client = pick(clients)
+   722→      const user = pick(users)
+   723→
+   724→      await db.auditLog.create({
+   725→        data: {
+   726→          clientId: client.id,
+   727→          userId: user.id,
+   728→          action,
+   729→          entity: pick(['invoice', 'filing', 'client', 'reconciliation', 'report']),
+   730→          entityId: pick([...allInvoices, ...allFilings]).id,
+   731→          details: `${action} for ${client.tradeName} by ${user.name}`,
+   732→          timestamp: new Date(2025, rand(0, 5), rand(1, 28), rand(9, 18), rand(0, 59)),
+   733→        },
+   734→      })
+   735→      totalAuditLogs++
+   736→    }
+   737→
+   738→    // ─── CA Firm Operations Layer Seed Data ───
+   739→
+   740→    // 12. Create Team Members
+   741→    const teamMembers = await Promise.all([
+   742→      db.teamMember.create({
+   743→        data: { name: 'CA Rajesh Kumar', email: 'rajesh@gstpilot.ai', role: 'admin', department: 'management', isActive: true },
+   744→      }),
+   745→      db.teamMember.create({
+   746→        data: { name: 'Priya Sharma', email: 'priya@gstpilot.ai', role: 'manager', department: 'audit', isActive: true },
+   747→      }),
+   748→      db.teamMember.create({
+   749→        data: { name: 'Amit Patel', email: 'amit@gstpilot.ai', role: 'auditor', department: 'audit', isActive: true },
+   750→      }),
+   751→      db.teamMember.create({
+   752→        data: { name: 'Sneha Reddy', email: 'sneha@gstpilot.ai', role: 'auditor', department: 'tax', isActive: true },
+   753→      }),
+   754→      db.teamMember.create({
+   755→        data: { name: 'Vikram Singh', email: 'vikram@gstpilot.ai', role: 'staff', department: 'compliance', isActive: true },
+   756→      }),
+   757→      db.teamMember.create({
+   758→        data: { name: 'Neha Gupta', email: 'neha@gstpilot.ai', role: 'staff', department: 'data-entry', isActive: true },
+   759→      }),
+   760→      db.teamMember.create({
+   761→        data: { name: 'Ravi Krishnan', email: 'ravi@gstpilot.ai', role: 'manager', department: 'tax', isActive: true },
+   762→      }),
+   763→      db.teamMember.create({
+   764→        data: { name: 'Anjali Desai', email: 'anjali@gstpilot.ai', role: 'staff', department: 'compliance', isActive: false },
+   765→      }),
+   766→    ])
+   767→
+   768→    // 13. Create Team Performance Records
+   769→    let totalPerformanceRecords = 0
+   770→    for (const member of teamMembers) {
+   771→      if (!member.isActive) continue
+   772→      for (let m = 1; m <= 6; m++) {
+   773→        const period = `2025-${String(m).padStart(2, '0')}`
+   774→        const baseVolume = member.role === 'admin' ? 20 : member.role === 'manager' ? 40 : member.role === 'auditor' ? 60 : 80
+   775→        const invoicesProcessed = rand(baseVolume, baseVolume + 30)
+   776→        const reviewsCompleted = member.role === 'auditor' || member.role === 'manager' ? rand(15, 40) : rand(5, 15)
+   777→        const approvalsCompleted = member.role === 'manager' || member.role === 'admin' ? rand(10, 30) : rand(0, 5)
+   778→        const averageAccuracy = rand(88, 99)
+   779→        const averageTurnaround = rand(2, 24)
+   780→        const totalActions = invoicesProcessed + reviewsCompleted + approvalsCompleted
+   781→        const score = (averageAccuracy * 0.3) + (totalActions / 150 * 25) + ((24 - averageTurnaround) / 24 * 25) + (reviewsCompleted / 40 * 20)
+   782→
+   783→        await db.teamPerformance.create({
+   784→          data: {
+   785→            teamMemberId: member.id,
+   786→            period,
+   787→            invoicesProcessed,
+   788→            reviewsCompleted,
+   789→            approvalsCompleted,
+   790→            averageAccuracy,
+   791→            averageTurnaround,
+   792→            totalActions,
+   793→            score: Math.min(100, Math.max(0, score)),
+   794→          },
+   795→        })
+   796→        totalPerformanceRecords++
+   797→      }
+   798→    }
+   799→
+   800→    // 14. Create Workload Assignments
+   801→    let totalAssignments = 0
+   802→    const assignmentTypes = ['invoice', 'review', 'approval', 'notice']
+   803→    const assignmentStatuses = ['pending', 'in-progress', 'completed']
+   804→    const priorities = ['low', 'medium', 'high', 'urgent']
+   805→
+   806→    for (const member of teamMembers) {
+   807→      if (!member.isActive) continue
+   808→      const assignmentCount = rand(4, 8)
+   809→      for (let i = 0; i < assignmentCount; i++) {
+   810→        const status = pick(assignmentStatuses)
+   811→        const client = pick(clients)
+   812→        await db.workloadAssignment.create({
+   813→          data: {
+   814→            teamMemberId: member.id,
+   815→            entityType: pick(assignmentTypes),
+   816→            title: `${pick(['Process', 'Review', 'Approve', 'Verify'])} ${pick(['Invoice', 'Return', 'Notice', 'Document'])} - ${client.tradeName}`,
+   817→            clientId: client.id,
+   818→            status,
+   819→            priority: pick(priorities),
+   820→            dueDate: `2025-${String(rand(3, 8)).padStart(2, '0')}-${String(rand(1, 28)).padStart(2, '0')}`,
+   821→            assignedBy: teamMembers[0].id,
+   822→          },
+   823→        })
+   824→        totalAssignments++
+   825→      }
+   826→    }
+   827→
+   828→    // 15. Create Notices
+   829→    let totalNotices = 0
+   830→    const noticeTypes = ['gst_notice', 'department_notice', 'tax_query']
+   831→    const noticeSubjects = [
+   832→      'GST Assessment Notice for FY 2023-24',
+   833→      'Show Cause Notice for ITC Discrepancy',
+   834→      'Demand Notice for Short Payment',
+   835→      'Tax Query on Input Tax Credit Claims',
+   836→      'Department Notice for Filing Delay',
+   837→      'GST Audit Intimation Notice',
+   838→      'Scrutiny Notice for GSTR-1 Data',
+   839→      'Assessment Order for FY 2022-23',
+   840→    ]
+   841→
+   842→    for (const client of clients) {
+   843→      const noticeCount = rand(1, 3)
+   844→      for (let i = 0; i < noticeCount; i++) {
+   845→        const status = pick(['open', 'in_progress', 'resolved'])
+   846→        await db.notice.create({
+   847→          data: {
+   848→            clientId: client.id,
+   849→            noticeType: pick(noticeTypes),
+   850→            noticeNumber: `GST/NOT/${rand(100000, 999999)}`,
+   851→            noticeDate: `2025-${String(rand(1, 6)).padStart(2, '0')}-${String(rand(1, 28)).padStart(2, '0')}`,
+   852→            subject: pick(noticeSubjects),
+   853→            description: `Notice received from GST department regarding compliance for client ${client.tradeName}. Immediate attention required.`,
+   854→            status,
+   855→            assignedTo: pick(teamMembers.filter(m => m.isActive)).id,
+   856→            priority: pick(priorities),
+   857→            dueDate: `2025-${String(rand(4, 9)).padStart(2, '0')}-${String(rand(1, 28)).padStart(2, '0')}`,
+   858→            resolution: status === 'resolved' ? 'Resolved with supporting documentation provided to the department.' : null,
+   859→          },
+   860→        })
+   861→        totalNotices++
+   862→      }
+   863→    }
+   864→
+   865→    // 16. Create Documents
+   866→    let totalDocuments = 0
+   867→    const folders = ['invoices', 'returns', 'reports', 'client-documents', 'notices']
+   868→    const fileTypes = ['pdf', 'xlsx', 'docx', 'jpg', 'png']
+   869→    const docNames = [
+   870→      'GSTR-1 Return Summary', 'Purchase Register', 'Sales Invoice Batch',
+   871→      'ITC Reconciliation Report', 'Tax Computation Sheet', 'Client KYC Documents',
+   872→      'GST Assessment Order', 'Annual Return GSTR-9', 'Audit Report FY2025',
+   873→      'Input Tax Credit Register', 'GST Payment Challan', 'E-Way Bill Report',
+   874→    ]
+   875→
+   876→    for (const client of clients) {
+   877→      const docCount = rand(3, 6)
+   878→      for (let i = 0; i < docCount; i++) {
+   879→        await db.document.create({
+   880→          data: {
+   881→            clientId: client.id,
+   882→            folder: pick(folders),
+   883→            name: `${pick(docNames)} - ${client.tradeName.slice(0, 15)}`,
+   884→            fileType: pick(fileTypes),
+   885→            size: rand(50000, 5000000),
+   886→            tags: pick(['gst', 'filing', 'compliance', 'audit', 'invoice', 'return']),
+   887→            description: `Document for ${client.tradeName}`,
+   888→            uploadedBy: pick(teamMembers).name,
+   889→            version: 1,
+   890→            isLatest: true,
+   891→          },
+   892→        })
+   893→        totalDocuments++
+   894→      }
+   895→    }
+   896→
+   897→    // 17. Create Automation Rules
+   898→    const automationRules = await Promise.all([
+   899→      db.automationRule.create({
+   900→        data: {
+   901→          name: 'Invoice Auto-Extract',
+   902→          description: 'Automatically extract invoice data when a new invoice is uploaded',
+   903→          trigger: 'invoice_uploaded',
+   904→          conditions: JSON.stringify({ fileType: 'pdf', source: 'email' }),
+   905→          actions: JSON.stringify({ extract: true, notify: 'manager', createTask: true }),
+   906→          isActive: true,
+   907→          runCount: rand(50, 200),
+   908→          lastRunAt: new Date(2025, rand(3, 5), rand(1, 28)),
+   909→          createdBy: teamMembers[0].id,
+   910→        },
+   911→      }),
+   912→      db.automationRule.create({
+   913→        data: {
+   914→          name: 'Return Filing Notification',
+   915→          description: 'Notify manager when a return is ready for filing',
+   916→          trigger: 'return_ready',
+   917→          conditions: JSON.stringify({ status: 'validated', criticalErrors: 0 }),
+   918→          actions: JSON.stringify({ notify: 'manager', createTask: true, sendEmail: true }),
+   919→          isActive: true,
+   920→          runCount: rand(20, 80),
+   921→          lastRunAt: new Date(2025, rand(3, 5), rand(1, 28)),
+   922→          createdBy: teamMembers[0].id,
+   923→        },
+   924→      }),
+   925→      db.automationRule.create({
+   926→        data: {
+   927→          name: 'Client Filing Confirmation',
+   928→          description: 'Send confirmation email to client when return is filed',
+   929→          trigger: 'return_filed',
+   930→          conditions: JSON.stringify({ returnType: 'GSTR-1' }),
+   931→          actions: JSON.stringify({ sendEmail: true, notify: 'client', updateStatus: true }),
+   932→          isActive: true,
+   933→          runCount: rand(30, 100),
+   934→          lastRunAt: new Date(2025, rand(3, 5), rand(1, 28)),
+   935→          createdBy: teamMembers[0].id,
+   936→        },
+   937→      }),
+   938→      db.automationRule.create({
+   939→        data: {
+   940→          name: 'Notice Alert Task',
+   941→          description: 'Create urgent task when a GST notice is received',
+   942→          trigger: 'notice_received',
+   943→          conditions: JSON.stringify({ priority: ['high', 'urgent'] }),
+   944→          actions: JSON.stringify({ createTask: true, notify: 'manager', assignTo: 'senior_auditor' }),
+   945→          isActive: true,
+   946→          runCount: rand(5, 25),
+   947→          lastRunAt: new Date(2025, rand(3, 5), rand(1, 28)),
+   948→          createdBy: teamMembers[0].id,
+   949→        },
+   950→      }),
+   951→      db.automationRule.create({
+   952→        data: {
+   953→          name: 'Weekly Compliance Report',
+   954→          description: 'Generate weekly compliance status report for all active clients',
+   955→          trigger: 'invoice_uploaded',
+   956→          conditions: JSON.stringify({ schedule: 'weekly', clientStatus: 'active' }),
+   957→          actions: JSON.stringify({ generateReport: true, sendEmail: true, notify: 'admin' }),
+   958→          isActive: false,
+   959→          runCount: rand(2, 10),
+   960→          createdBy: teamMembers[0].id,
+   961→        },
+   962→      }),
+   963→    ])
+   964→
+   965→    // 18. Create Automation Logs
+   966→    let totalAutomationLogs = 0
+   967→    for (const rule of automationRules) {
+   968→      const logCount = rand(3, 8)
+   969→      for (let i = 0; i < logCount; i++) {
+   970→        await db.automationLog.create({
+   971→          data: {
+   972→            ruleId: rule.id,
+   973→            trigger: rule.trigger,
+   974→            status: pick(['success', 'success', 'success', 'failed']),
+   975→            details: `Automated execution of "${rule.name}"`,
+   976→            executedAt: new Date(2025, rand(2, 5), rand(1, 28), rand(9, 18), rand(0, 59)),
+   977→          },
+   978→        })
+   979→        totalAutomationLogs++
+   980→      }
+   981→    }
+   982→
+   983→    // 19. Create Firm Settings
+   984→    await db.firmSettings.create({
+   985→      data: {
+   986→        firmName: 'GSTPilot Associates',
+   987→        primaryColor: '#059669',
+   988→        accentColor: '#7c3aed',
+   989→        emailFromName: 'GSTPilot Associates',
+   990→      },
+   991→    })
+   992→
+   993→    // 20. Create Firm Metrics (6 months)
+   994→    let totalFirmMetrics = 0
+   995→    for (let m = 1; m <= 6; m++) {
+   996→      const period = `2025-${String(m).padStart(2, '0')}`
+   997→      const totalRevenue = rand(300000, 800000)
+   998→      await db.firmMetrics.create({
+   999→        data: {
+  1000→          period,
+  1001→          totalRevenue,
+  1002→          mrr: Math.round(totalRevenue * (0.6 + Math.random() * 0.3)),
+  1003→          arr: Math.round(totalRevenue * 12 * (0.7 + Math.random() * 0.2)),
+  1004→          clientsOnboarded: rand(1, 4),
+  1005→          activeClients: clients.filter(c => c.status === 'active').length + rand(-2, 2),
+  1006→          inactiveClients: clients.filter(c => c.status === 'inactive').length + rand(-1, 1),
+  1007→          teamUtilization: rand(65, 92),
+  1008→          avgProcessingTime: rand(2, 8),
+  1009→          avgFilingTime: rand(1, 4),
+  1010→          gstProcessed: rand(1000000, 8000000),
+  1011→          profitability: rand(18, 38),
+  1012→          clientGrowth: rand(-2, 8),
+  1013→        },
+  1014→      })
+  1015→      totalFirmMetrics++
+  1016→    }
+  1017→
+  1018→    // ─── AI Tax Intelligence Layer Seed Data ───
+  1019→
+  1020→    // 21. Create AI Predictions (CFO Dashboard)
+  1021→    const predictionCategories = [
+  1022→      { category: 'revenue', base: 1500000, variance: 300000 },
+  1023→      { category: 'gst_liability', base: 450000, variance: 100000 },
+  1024→      { category: 'collections', base: 1200000, variance: 200000 },
+  1025→      { category: 'churn', base: 12, variance: 5 },
+  1026→      { category: 'filing_load', base: 24, variance: 8 },
+  1027→      { category: 'team_load', base: 78, variance: 12 },
+  1028→    ]
+  1029→    let totalPredictions = 0
+  1030→    for (let m = 1; m <= 9; m++) {
+  1031→      const period = m <= 6 ? `2025-${String(m).padStart(2, '0')}` : `2025-${String(m).padStart(2, '0')}`
+  1032→      for (const cat of predictionCategories) {
+  1033→        const predictedValue = cat.base + (Math.random() - 0.5) * cat.variance * 2
+  1034→        const confidence = m <= 6 ? rand(85, 98) : Math.max(55, 95 - (m - 6) * 12)
+  1035→        await db.aIPrediction.create({
+  1036→          data: {
+  1037→            category: cat.category,
+  1038→            period,
+  1039→            predictedValue: Math.round(predictedValue),
+  1040→            confidence,
+  1041→            lowerBound: Math.round(predictedValue * 0.88),
+  1042→            upperBound: Math.round(predictedValue * 1.12),
+  1043→            trend: m > 6 ? pick(['up', 'up', 'stable']) : pick(['up', 'down', 'stable']),
+  1044→            modelVersion: 'v2',
+  1045→            factors: JSON.stringify({ seasonality: rand(80, 100), trendStrength: rand(60, 95) }),
+  1046→          },
+  1047→        })
+  1048→        totalPredictions++
+  1049→      }
+  1050→    }
+  1051→
+  1052→    // 22. Create Risk Scores per client
+  1053→    let totalRiskScores = 0
+  1054→    for (const client of clients) {
+  1055→      const lateFilings = client.healthScore < 60 ? rand(2, 5) : client.healthScore < 80 ? rand(0, 2) : 0
+  1056→      const noticeFrequency = client.healthScore < 60 ? rand(2, 4) : client.healthScore < 80 ? rand(0, 2) : 0
+  1057→      const gstMismatches = client.healthScore < 60 ? rand(3, 8) : client.healthScore < 80 ? rand(1, 3) : rand(0, 1)
+  1058→      const vendorRisk = client.healthScore < 60 ? rand(40, 80) / 100 : rand(5, 30) / 100
+  1059→      const itcRisk = client.healthScore < 60 ? rand(30, 70) / 100 : rand(5, 25) / 100
+  1060→      const overallScore = Math.min(100, lateFilings * 20 + noticeFrequency * 15 + gstMismatches * 10)
+  1061→      const riskLevel = overallScore <= 25 ? 'low' : overallScore <= 50 ? 'medium' : overallScore <= 75 ? 'high' : 'critical'
+  1062→
+  1063→      await db.riskScore.create({
+  1064→        data: {
+  1065→          clientId: client.id,
+  1066→          overallScore,
+  1067→          category: 'overall',
+  1068→          lateFilings,
+  1069→          noticeFrequency,
+  1070→          gstMismatches,
+  1071→          vendorRisk,
+  1072→          itcRisk,
+  1073→          riskLevel,
+  1074→          period: '2025-06',
+  1075→          factors: JSON.stringify({ healthScore: client.healthScore, filingPattern: riskLevel === 'low' ? 'consistent' : 'irregular' }),
+  1076→          recommendations: riskLevel === 'high' || riskLevel === 'critical'
+  1077→            ? 'Immediate review required. Consider assigning senior auditor for compliance remediation.'
+  1078→            : 'Monitor regularly. Schedule periodic compliance reviews.',
+  1079→        },
+  1080→      })
+  1081→      totalRiskScores++
+  1082→    }
+  1083→
+  1084→    // 23. Create Compliance Forecasts
+  1085→    let totalForecasts = 0
+  1086→    for (const client of clients) {
+  1087→      if (client.healthScore < 70) {
+  1088→        await db.complianceForecast.create({
+  1089→          data: {
+  1090→            clientId: client.id,
+  1091→            forecastType: 'notice',
+  1092→            predictedEvent: `GST Notice expected for ${client.tradeName}`,
+  1093→            probability: Math.round((100 - client.healthScore) * 0.8),
+  1094→            confidence: rand(65, 85),
+  1095→            expectedDate: '2025-08-15',
+  1096→            impact: client.healthScore < 50 ? 'critical' : 'high',
+  1097→            mitigatingActions: 'Proactive filing compliance review and ITC verification recommended.',
+  1098→            period: '2025-06',
+  1099→          },
+  1100→        })
+  1101→        totalForecasts++
+  1102→      }
+  1103→      if (client.healthScore < 80) {
+  1104→        await db.complianceForecast.create({
+  1105→          data: {
+  1106→            clientId: client.id,
+  1107→            forecastType: 'filing_delay',
+  1108→            predictedEvent: `Filing delay expected for ${client.tradeName}`,
+  1109→            probability: Math.round((100 - client.healthScore) * 0.6),
+  1110→            confidence: rand(60, 80),
+  1111→            expectedDate: '2025-07-20',
+  1112→            impact: client.healthScore < 60 ? 'high' : 'medium',
+  1113→            mitigatingActions: 'Pre-filing preparation and early data collection recommended.',
+  1114→            period: '2025-06',
+  1115→          },
+  1116→        })
+  1117→        totalForecasts++
+  1118→      }
+  1119→      await db.complianceForecast.create({
+  1120→        data: {
+  1121→          clientId: client.id,
+  1122→          forecastType: 'reconciliation_issue',
+  1123→          predictedEvent: `Reconciliation discrepancies for ${client.tradeName}`,
+  1124→          probability: rand(20, 60),
+  1125→          confidence: rand(55, 80),
+  1126→          impact: 'medium',
+  1127→          mitigatingActions: 'Regular reconciliation runs and vendor communication.',
+  1128→          period: '2025-06',
+  1129→        },
+  1130→      })
+  1131→      totalForecasts++
+  1132→
+  1133→      if (client.healthScore < 65) {
+  1134→        await db.complianceForecast.create({
+  1135→          data: {
+  1136→            clientId: client.id,
+  1137→            forecastType: 'itc_loss',
+  1138→            predictedEvent: `Potential ITC loss for ${client.tradeName}`,
+  1139→            probability: Math.round((100 - client.healthScore) * 0.5),
+  1140→            confidence: rand(55, 75),
+  1141→            expectedDate: '2025-09-30',
+  1142→            impact: 'high',
+  1143→            mitigatingActions: 'ITC reconciliation and vendor compliance verification recommended.',
+  1144→            period: '2025-06',
+  1145→          },
+  1146→        })
+  1147→        totalForecasts++
+  1148→      }
+  1149→    }
+  1150→
+  1151→    // 24. Create Client Insights
+  1152→    let totalInsights = 0
+  1153→    const insightCategories = ['growth', 'compliance', 'risk', 'gst', 'payment']
+  1154→    const insightTrends = ['improving', 'declining', 'stable']
+  1155→    for (const client of clients) {
+  1156→      for (const cat of insightCategories) {
+  1157→        const trend = cat === 'compliance' ? (client.healthScore > 80 ? 'improving' : client.healthScore > 60 ? 'stable' : 'declining')
+  1158→          : cat === 'risk' ? (client.healthScore > 80 ? 'stable' : client.healthScore > 60 ? 'improving' : 'declining')
+  1159→          : pick(insightTrends)
+  1160→        const observations: Record<string, string> = {
+  1161→          growth: trend === 'improving' ? `${client.tradeName} shows positive growth trajectory with increasing transaction volume.` : trend === 'declining' ? `${client.tradeName} transaction volume has decreased over the last quarter.` : `${client.tradeName} maintains steady business volume.`,
+  1162→          compliance: trend === 'improving' ? `Compliance score improved to ${client.healthScore}%. Filing patterns are becoming more consistent.` : trend === 'declining' ? `Client compliance score dropped ${rand(5, 15)}% in the last quarter. Immediate attention needed.` : `Compliance score stable at ${client.healthScore}%. Regular monitoring recommended.`,
+  1163→          risk: trend === 'improving' ? 'Risk profile improving with reduced mismatches and timely filings.' : trend === 'declining' ? 'Risk profile deteriorating with increasing notice frequency and filing delays.' : 'Risk profile stable. Continue standard monitoring protocols.',
+  1164→          gst: trend === 'improving' ? 'GST liability management improving with better ITC utilization.' : trend === 'declining' ? 'GST liability trending upward. Consider ITC optimization review.' : 'GST liability patterns remain consistent with business volume.',
+  1165→          payment: trend === 'improving' ? 'Payment and collection patterns improving with faster settlement cycles.' : trend === 'declining' ? 'Payment delays increasing. Consider proactive collection follow-up.' : 'Payment patterns stable and within expected ranges.',
+  1166→        }
+  1167→        await db.clientInsight.create({
+  1168→          data: {
+  1169→            clientId: client.id,
+  1170→            category: cat,
+  1171→            trend,
+  1172→            observation: observations[cat],
+  1173→            confidence: rand(65, 95) / 100,
+  1174→            dataPoints: JSON.stringify({ healthScore: client.healthScore, period: '2025-Q2' }),
+  1175→            period: '2025-06',
+  1176→          },
+  1177→        })
+  1178→        totalInsights++
+  1179→      }
+  1180→    }
+  1181→
+  1182→    // 25. Create Knowledge Entries
+  1183→    const knowledgeEntries = [
+  1184→      { title: 'GST Section 16 - Input Tax Credit Eligibility', category: 'rule', content: 'Every registered person shall be entitled to take credit of input tax on any supply of goods or services to him which are used or intended to be used in the course or furtherance of business, subject to conditions prescribed.', source: 'CGST Act 2017', referenceNumber: 'Sec 16', tags: 'itc,eligibility,input tax credit' },
+  1185→      { title: 'GSTR-1 Filing Due Date Extension - Q1 2025', category: 'circular', content: 'CBIC has extended the due date for filing GSTR-1 for the quarter ending March 2025. Taxpayers are advised to file returns at the earliest to avoid penalties.', source: 'CBIC Circular 208/2025', referenceNumber: 'CBIC/208/2025', tags: 'gstr1,due date,extension,q1 2025' },
+  1186→      { title: 'E-Way Bill Validity Extension Notification', category: 'notification', content: 'The validity period of e-way bills has been extended from 1 day per 200 km to 1 day per 200 km for ordinary vehicles and 1 day per 300 km for over-dimensional cargo vehicles.', source: 'Notification 12/2025', referenceNumber: 'Notif 12/2025', tags: 'eway bill,validity,transport' },
+  1187→      { title: 'Supreme Court Ruling on GST Refund Claims', category: 'case_law', content: 'The Supreme Court held that the limitation period for filing refund claims under GST is governed by Section 54 of the CGST Act and not by the general limitation act. Refund claims must be filed within 2 years from the relevant date.', source: 'Supreme Court of India', referenceNumber: 'SC/2025/GST/142', tags: 'refund,supreme court,limitation,gst' },
+  1188→      { title: 'New GST Rate for Online Gaming - 28%', category: 'department_update', content: 'GST Council has approved 28% GST on online gaming, casinos, and horse racing. The new rate is applicable from October 2023. All online gaming platforms must comply with the revised rate structure.', source: 'GST Council Meeting 51', referenceNumber: 'GCM/51/2023', tags: 'online gaming,gst rate,28%,casino' },
+  1189→      { title: 'GSTR-3B Auto-Population from GSTR-1', category: 'rule', content: 'From January 2025, GSTR-3B will be auto-populated based on GSTR-1 data filed by the taxpayer. Taxpayers need to verify and can edit the auto-populated data before filing.', source: 'CGST Act 2017', referenceNumber: 'Sec 39', tags: 'gstr3b,autopopulation,gstr1,filing' },
+  1190→      { title: 'ITC Reversal for Exempt Supplies - Rule 42', category: 'rule', content: 'Input tax credit attributable to exempt supplies must be reversed proportionately. The formula under Rule 42 of CGST Rules prescribes the method for computing the amount of ITC to be reversed.', source: 'CGST Rules 2017', referenceNumber: 'Rule 42', tags: 'itc,reversal,exempt supplies,rule 42' },
+  1191→      { title: 'Annual Return Filing Requirement - GSTR-9', category: 'circular', content: 'All registered taxpayers with turnover exceeding Rs 2 crore must file GSTR-9 (Annual Return) for each financial year. The due date is December 31 of the year following the financial year.', source: 'CBIC Circular 205/2025', referenceNumber: 'CBIC/205/2025', tags: 'gstr9,annual return,filing requirement' },
+  1192→    ]
+  1193→    let totalKnowledge = 0
+  1194→    for (const entry of knowledgeEntries) {
+  1195→      await db.knowledgeEntry.create({
+  1196→        data: {
+  1197→          title: entry.title,
+  1198→          category: entry.category,
+  1199→          content: entry.content,
+  1200→          summary: entry.content.slice(0, 120) + '...',
+  1201→          tags: entry.tags,
+  1202→          source: entry.source,
+  1203→          referenceNumber: entry.referenceNumber,
+  1204→          effectiveDate: '2025-01-01',
+  1205→          relevanceScore: rand(70, 100) / 100,
+  1206→        },
+  1207→      })
+  1208→      totalKnowledge++
+  1209→    }
+  1210→
+  1211→    // 26. Create Executive Reports
+  1212→    const reportTypes = ['client_health', 'gst_risk', 'compliance', 'firm_performance', 'board']
+  1213→    const reportTitles = ['Client Health Report Q2 2025', 'GST Risk Assessment Report', 'Compliance Summary Report', 'Firm Performance Report Q2', 'Board Report - Q2 2025']
+  1214→    let totalReports = 0
+  1215→    for (let i = 0; i < reportTypes.length; i++) {
+  1216→      await db.executiveReport.create({
+  1217→        data: {
+  1218→          reportType: reportTypes[i],
+  1219→          title: reportTitles[i],
+  1220→          description: `Comprehensive ${reportTypes[i].replace(/_/g, ' ')} report for Q2 2025`,
+  1221→          period: '2025-Q2',
+  1222→          data: JSON.stringify({ generated: true, period: '2025-Q2' }),
+  1223→          format: pick(['pdf', 'excel']),
+  1224→          status: 'generated',
+  1225→          generatedBy: teamMembers[0].id,
+  1226→        },
+  1227→      })
+  1228→      totalReports++
+  1229→    }
+  1230→
+  1231→    // 27. Create Client Benchmarks
+  1232→    let totalBenchmarks = 0
+  1233→    const benchmarkMetrics = ['compliance_score', 'filing_timeliness', 'gst_volume', 'risk_score']
+  1234→    for (const client of clients) {
+  1235→      for (const metric of benchmarkMetrics) {
+  1236→        const clientValue = metric === 'compliance_score' ? client.healthScore
+  1237→          : metric === 'filing_timeliness' ? rand(60, 100)
+  1238→          : metric === 'gst_volume' ? rand(40, 95)
+  1239→          : 100 - client.healthScore
+  1240→        const industryAvg = clientValue + (Math.random() - 0.5) * 20
+  1241→        const stateAvg = clientValue + (Math.random() - 0.5) * 15
+  1242→        const firmAvg = clients.reduce((sum, c) => sum + (metric === 'compliance_score' ? c.healthScore : metric === 'risk_score' ? 100 - c.healthScore : rand(50, 90)), 0) / clients.length
+  1243→
+  1244→        await db.clientBenchmark.create({
+  1245→          data: {
+  1246→            clientId: client.id,
+  1247→            metric,
+  1248→            clientValue: Math.round(clientValue),
+  1249→            industryAverage: Math.round(industryAvg),
+  1250→            stateAverage: Math.round(stateAvg),
+  1251→            firmAverage: Math.round(firmAvg),
+  1252→            industryPercentile: Math.round(rand(20, 95)),
+  1253→            statePercentile: Math.round(rand(25, 90)),
+  1254→            firmPercentile: Math.round(rand(15, 85)),
+  1255→            period: '2025-Q2',
+  1256→          },
+  1257→        })
+  1258→        totalBenchmarks++
+  1259→      }
+  1260→    }
+  1261→
+  1262→    // ─── Summary ────────────────────────────────────────────────────────────
+  1263→    return NextResponse.json({
+  1264→      success: true,
+  1265→      message: 'Database seeded successfully with AI Tax Intelligence data',
+  1266→      counts: {
+  1267→        users: users.length,
+  1268→        clients: clients.length,
+  1269→        invoices: allInvoices.length,
+  1270→        gstrFilings: allFilings.length,
+  1271→        filingEvents: totalFilingEvents,
+  1272→        reconciliationRuns: allRuns.length,
+  1273→        reconciliationResults: totalReconciliations,
+  1274→        issues: totalIssues,
+  1275→        healthScores: totalHealthScores,
+  1276→        auditLogs: totalAuditLogs,
+  1277→        teamMembers: teamMembers.length,
+  1278→        performanceRecords: totalPerformanceRecords,
+  1279→        assignments: totalAssignments,
+  1280→        notices: totalNotices,
+  1281→        documents: totalDocuments,
+  1282→        automationRules: automationRules.length,
+  1283→        automationLogs: totalAutomationLogs,
+  1284→        firmMetrics: totalFirmMetrics,
+  1285→        predictions: totalPredictions,
+  1286→        riskScores: totalRiskScores,
+  1287→        forecasts: totalForecasts,
+  1288→        insights: totalInsights,
+  1289→        knowledgeEntries: totalKnowledge,
+  1290→        reports: totalReports,
+  1291→        benchmarks: totalBenchmarks,
+  1292→      },
+  1293→    })
+  1294→  } catch (error) {
+  1295→    console.error('Seed error:', error)
+  1296→    return NextResponse.json(
+  1297→      { success: false, error: error instanceof Error ? error.message : 'Unknown error' },
+  1298→      { status: 500 }
+  1299→    )
+  1300→  }
+  1301→}
+  1302→

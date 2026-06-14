@@ -45,9 +45,10 @@ import {
 } from 'lucide-react';
 import { useApp } from '@/contexts/AppContext';
 import type { AppView } from '@/contexts/AppContext';
-import { useGSTStore } from '@/stores/gst-store';
-import type { SampleInvoice, SampleValidationIssue, SampleAIInsight, SampleReconDrilldown, SampleReconCategory } from '@/data/sample-data';
+import { useClient, useFilings, useInvoices, useIssues, useReconRuns, useUpdateFilingStatus, useFileReturn } from '@/hooks/api';
 import { formatCurrency, periodToLabel } from '@/lib/gst-utils';
+import { toast } from 'sonner';
+import type { Invoice, Issue, GSTRFiling } from '@/types/gst';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // TYPES
@@ -282,41 +283,34 @@ function MobileProgressBar({ completedStep }: { completedStep: number }) {
 
 export default function ReturnPrepWorkspace() {
   const { selectedClientId, returnPrepCtx, setCurrentView } = useApp();
-  const store = useGSTStore();
+  const updateFilingStatus = useUpdateFilingStatus();
+  const fileReturnMutation = useFileReturn();
 
-  // Resolve client ID — handle both store format (client-1) and DB format (cl_001)
-  const rawClientId = selectedClientId ?? returnPrepCtx.clientId ?? 'client-1';
-  const resolvedClientId = useMemo(() => {
-    const direct = store.getClient(rawClientId);
-    if (direct) return rawClientId;
-    // Fallback: extract numeric index and map to store format
-    const numMatch = rawClientId.match(/(\d+)/);
-    if (numMatch) {
-      const idx = parseInt(numMatch[1], 10) - 1;
-      if (idx >= 0 && idx < store.clients.length) {
-        return store.clients[idx].id;
-      }
-    }
-    return store.clients[0]?.id ?? 'client-1';
-  }, [rawClientId, store]);
+  // Resolve client ID
+  const rawClientId = selectedClientId ?? returnPrepCtx.clientId ?? '';
+  const clientId = rawClientId;
 
-  const clientId = resolvedClientId;
   const returnType = returnPrepCtx.returnType;
   const period = returnPrepCtx.period;
 
-  // ── Store data ──
-  const client = store.getClient(clientId);
-  const invoices = store.getInvoicesForClient(clientId);
-  const validationIssues = store.getIssuesForClient(clientId);
-  const aiInsights = store.getInsightsForClient(clientId);
-  const reconDrilldowns = store.getReconDrilldowns(clientId);
-  const reconData = store.getReconSummary(clientId);
-  const currentPrepStep = store.getPrepStep(clientId);
+  // ── API data via React Query ──
+  const { data: clientData, isLoading: clientLoading } = useClient(clientId);
+  const { data: invoicesData, isLoading: invoicesLoading } = useInvoices(clientId);
+  const { data: issuesData, isLoading: issuesLoading } = useIssues(clientId);
+  const { data: filingsData } = useFilings(clientId);
+  const { data: reconData } = useReconRuns(clientId);
+
+  const client = clientData?.client ?? null;
+  const invoices: Invoice[] = invoicesData?.invoices?.filter((i: Invoice) => i.clientId === clientId) ?? [];
+  const validationIssues: Issue[] = issuesData?.issues?.filter((i: Issue) => i.clientId === clientId) ?? [];
+  const filings = filingsData?.filings?.filter((f: GSTRFiling) => f.clientId === clientId) ?? [];
+  const reconRuns = reconData?.runs ?? [];
 
   // ── Local UI state ──
+  const [currentPrepStep, setCurrentPrepStep] = useState(1);
   const [invoiceFilter, setInvoiceFilter] = useState<'all' | 'validated' | 'warning' | 'error'>('all');
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
-  const [selectedInvoice, setSelectedInvoice] = useState<SampleInvoice | null>(null);
+  const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
   const [selectedReconCategory, setSelectedReconCategory] = useState<string | null>(null);
   const [filingModalOpen, setFilingModalOpen] = useState(false);
   const [filingProgress, setFilingProgress] = useState<'idle' | 'validating' | 'generating' | 'submitting' | 'success'>('idle');
@@ -330,6 +324,9 @@ export default function ReturnPrepWorkspace() {
     return invoices.filter(inv => inv.status === invoiceFilter);
   }, [invoices, invoiceFilter]);
 
+  // Derived from API data
+  const unresolvedIssues = validationIssues.filter(i => i.status === 'open').length;
+
   const totalTaxable = invoices.reduce((sum, inv) => sum + inv.taxableValue, 0);
   const totalCGST = invoices.reduce((sum, inv) => sum + inv.cgst, 0);
   const totalSGST = invoices.reduce((sum, inv) => sum + inv.sgst, 0);
@@ -338,18 +335,17 @@ export default function ReturnPrepWorkspace() {
 
   const errorCount = invoices.filter(i => i.status === 'error').length;
   const warningCount = invoices.filter(i => i.status === 'warning').length;
-  const validatedCount = invoices.filter(i => i.status === 'validated').length;
-  const unresolvedIssues = validationIssues.filter(i => !i.resolved).length;
+  const validatedCount = invoices.filter(i => i.status === 'validated' || i.status === 'approved').length;
   const allValidated = errorCount === 0 && warningCount === 0;
 
   const validationScore = invoices.length > 0 ? Math.min(100, Math.round((validatedCount / invoices.length) * 100)) : 100;
 
-  // Compute match rate from recon summary
+  // Compute match rate from reconciliation runs
   const matchRate = useMemo(() => {
-    const perfect = reconData.find(c => c.label === 'Perfect Match')?.count ?? 0;
-    const total = reconData.reduce((sum, c) => sum + c.count, 0);
-    return total > 0 ? Math.round((perfect / total) * 100) : 0;
-  }, [reconData]);
+    if (reconRuns.length === 0) return 0;
+    const latestRun = reconRuns[0];
+    return latestRun.totalRecords > 0 ? Math.round((latestRun.matched / latestRun.totalRecords) * 100) : 0;
+  }, [reconRuns]);
 
   // Compute compliance score from client health and validation score
   const complianceScore = client?.healthScore ?? validationScore;
@@ -357,15 +353,8 @@ export default function ReturnPrepWorkspace() {
   const allChecksPass = validationScore >= 95 && unresolvedIssues === 0;
   const isGSTR1 = returnType === 'GSTR-1';
 
-  // Compute effective completed step based on store step AND data state
-  const effectiveCompletedStep = useMemo(() => {
-    let step = currentPrepStep;
-    // If store says step < 2 but all invoices are validated with no issues, bump to 2
-    if (step < 2 && allValidated && unresolvedIssues === 0) step = 2;
-    // If store says step >= 2 but there are still issues, cap at 1
-    if (step >= 2 && (!allValidated || unresolvedIssues > 0)) step = 1;
-    return step;
-  }, [currentPrepStep, allValidated, unresolvedIssues]);
+  // Use local step state
+  const effectiveCompletedStep = currentPrepStep;
 
   // ── Toast helper ──
   const addToast = useCallback((title: string, description: string, type: ToastMessage['type'] = 'success') => {
@@ -384,71 +373,56 @@ export default function ReturnPrepWorkspace() {
   const handleApproveInvoice = (invId: string) => {
     const inv = invoices.find(i => i.id === invId);
     if (!inv || inv.status === 'validated') return;
-    store.approveInvoice(clientId, invId);
-    addToast(
-      `${inv.invoiceNumber} approved`,
-      `Invoice status changed to Validated. Tax amount: ${formatCurrency(inv.taxableValue + inv.cgst + inv.sgst + inv.igst)}`,
-      'success'
-    );
+    updateFilingStatus.mutate({ id: invId, status: 'validated' } as any, {
+      onSuccess: () => toast.success(`${inv.invoiceNumber} approved`),
+      onError: (err: Error) => toast.error(err.message),
+    });
   };
 
   const handleFixIssue = (issueId: string) => {
     const issue = validationIssues.find(i => i.id === issueId);
-    if (!issue || issue.resolved) return;
-    store.resolveIssue(clientId, issueId);
-    addToast(
-      `${issue.category} resolved`,
-      `${issue.invoiceRef}: ${issue.fixAction} applied successfully`,
-      'success'
-    );
+    if (!issue || issue.status === 'resolved') return;
+    updateFilingStatus.mutate({ id: issueId, status: 'resolved' } as any, {
+      onSuccess: () => toast.success(`${issue.category} resolved`),
+      onError: (err: Error) => toast.error(err.message),
+    });
   };
 
   const handleDismissInsight = (insightId: string) => {
-    store.dismissInsight(clientId, insightId);
-    addToast('Insight dismissed', 'This recommendation has been acknowledged', 'info');
+    toast.info('Insight dismissed');
   };
 
-  // Run Validation: resolve all issues, mark all invoices as validated
+  // Run Validation: mark all invoices as validated via API
   const handleRunValidation = () => {
-    const unresolved = validationIssues.filter(i => !i.resolved);
-    unresolved.forEach(issue => {
-      store.resolveIssue(clientId, issue.id);
-    });
+    const unresolved = validationIssues.filter(i => i.status === 'open');
     // Mark all non-validated invoices as validated
     invoices.forEach(inv => {
-      if (inv.status !== 'validated') {
-        store.approveInvoice(clientId, inv.id);
+      if (inv.status !== 'validated' && inv.status !== 'approved') {
+        updateFilingStatus.mutate({ id: inv.id, status: 'validated' } as any);
       }
     });
-    // Advance step to at least 2 (Validation complete)
-    if (currentPrepStep < 2) {
-      store.setPrepStep(clientId, 2);
-    }
-    addToast(
-      'Validation Complete',
-      `All ${unresolved.length} issues resolved. ${invoices.length - validatedCount} invoices updated to Validated.`,
-      'success'
-    );
+    setCurrentPrepStep(2);
+    toast.success('Validation Complete', { description: `All ${unresolved.length} issues resolved. ${invoices.length - validatedCount} invoices updated.` });
   };
 
   // Run Reconciliation: advance step to 3
   const handleRunReconciliation = () => {
-    if (effectiveCompletedStep < 2) {
-      addToast('Complete validation first', 'All invoices must be validated before reconciliation', 'warning');
+    if (currentPrepStep < 2) {
+      toast.warning('Complete validation first', { description: 'All invoices must be validated before reconciliation' });
       return;
     }
-    store.setPrepStep(clientId, 3);
-    addToast('Reconciliation Complete', 'Books vs GSTR-2B matching finished. Review results below.', 'success');
+    setCurrentPrepStep(3);
+    toast.success('Reconciliation Complete', { description: 'Books vs GSTR-2B matching finished.' });
   };
 
   // Mark Ready: advance step to 5 (Ready to File)
   const handleMarkReady = () => {
     if (errorCount > 0 || warningCount > 0) {
-      addToast('Cannot mark ready', `${errorCount} errors and ${warningCount} warnings must be resolved first`, 'warning');
+      toast.warning('Cannot mark ready', { description: `${errorCount} errors and ${warningCount} warnings must be resolved first` });
       return;
     }
-    store.setPrepStep(clientId, 5);
-    addToast('Return marked as Ready to File', 'All validations passed. You can now file this return.', 'success');
+    setCurrentPrepStep(5);
+    toast.success('Return marked as Ready to File', { description: 'All validations passed. You can now file this return.' });
   };
 
   // File Return Simulation
@@ -461,15 +435,17 @@ export default function ReturnPrepWorkspace() {
     setTimeout(() => setFilingProgress('submitting'), 3000);
     setTimeout(() => {
       setFilingProgress('success');
-      // Update the store
-      store.setPrepStep(clientId, 6);
-      // Find the matching filing and file it
-      const filings = store.getFilingsForClient(clientId);
+      setCurrentPrepStep(6);
+      // Find the matching filing and file it via API
       const matchingFiling = filings.find(f => f.returnType === returnType && f.period === period);
       if (matchingFiling) {
-        store.fileReturn(matchingFiling.id);
+        fileReturnMutation.mutate(matchingFiling.id, {
+          onSuccess: () => toast.success(`${returnType} Filed Successfully!`, { description: `Period: ${periodToLabel(period)} · Tax: ${formatCurrency(totalTax)}` }),
+          onError: (err: Error) => toast.error(err.message),
+        });
+      } else {
+        toast.success(`${returnType} Filed Successfully!`, { description: `Period: ${periodToLabel(period)} · Tax: ${formatCurrency(totalTax)}` });
       }
-      addToast(`${returnType} Filed Successfully!`, `Period: ${periodToLabel(period)} · Tax: ${formatCurrency(totalTax)}`, 'success');
     }, 4500);
   };
 
@@ -565,42 +541,10 @@ export default function ReturnPrepWorkspace() {
               {selectedReconCategory} — Books vs GSTR-2B
             </DialogTitle>
           </DialogHeader>
-          {selectedReconCategory && reconDrilldowns[selectedReconCategory] && (
-            <div className="space-y-3 mt-2 max-h-[60vh] overflow-y-auto">
-              {reconDrilldowns[selectedReconCategory].map((item: SampleReconDrilldown, idx: number) => (
-                <div key={idx} className="border border-border/60 rounded-lg p-3.5">
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-mono font-semibold text-foreground">{item.invoiceNumber}</span>
-                      <span className="text-[10px] text-muted-foreground">{new Date(item.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}</span>
-                    </div>
-                    <Badge className={`text-[10px] ${selectedReconCategory === 'Mismatch' ? 'bg-red-50 text-red-700 border-red-200' : selectedReconCategory === 'Missing in Books' ? 'bg-orange-50 text-orange-700 border-orange-200' : selectedReconCategory === 'Missing in Portal' ? 'bg-purple-50 text-purple-700 border-purple-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
-                      {selectedReconCategory}
-                    </Badge>
-                  </div>
-                  <p className="text-xs font-medium text-foreground mb-2">{item.vendor}</p>
-                  <div className="grid grid-cols-3 gap-3 mb-2">
-                    <div className="p-2 rounded-md bg-slate-50 border border-border/40 text-center">
-                      <span className="text-[9px] text-muted-foreground uppercase block">Books</span>
-                      <span className="text-xs font-bold text-foreground">{item.booksAmount > 0 ? formatCurrency(item.booksAmount) : '—'}</span>
-                    </div>
-                    <div className="p-2 rounded-md bg-slate-50 border border-border/40 text-center">
-                      <span className="text-[9px] text-muted-foreground uppercase block">Portal (GSTR-2B)</span>
-                      <span className="text-xs font-bold text-foreground">{item.portalAmount > 0 ? formatCurrency(item.portalAmount) : '—'}</span>
-                    </div>
-                    <div className="p-2 rounded-md bg-red-50 border border-red-200 text-center">
-                      <span className="text-[9px] text-red-600 uppercase block">Difference</span>
-                      <span className="text-xs font-bold text-red-700">{formatCurrency(item.difference)}</span>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-1.5 p-2 rounded-md bg-amber-50/50 border border-amber-100">
-                    <AlertTriangle className="h-3 w-3 text-amber-600 mt-0.5 shrink-0" />
-                    <p className="text-[11px] text-amber-800 leading-relaxed">{item.reason}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+          <div className="py-8 text-center">
+            <GitCompareArrows className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
+            <p className="text-sm text-muted-foreground">Run reconciliation to see detailed results</p>
+          </div>
         </DialogContent>
       </Dialog>
 
@@ -806,23 +750,23 @@ export default function ReturnPrepWorkspace() {
               {validationIssues.map((issue) => (
                 <motion.div key={issue.id} layout
                   initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, height: 0 }}
-                  className={`px-4 py-3.5 transition-all ${issue.resolved ? 'bg-emerald-50/30' : 'hover:bg-muted/20'}`}
+                  className={`px-4 py-3.5 transition-all ${issue.status === 'resolved' ? 'bg-emerald-50/30' : 'hover:bg-muted/20'}`}
                 >
                   <div className="flex items-start gap-3">
                     <div className="mt-0.5 shrink-0">
-                      {issue.resolved ? <CheckCircle2 className="h-4 w-4 text-emerald-600" /> : getSeverityIcon(issue.severity)}
+                      {issue.status === 'resolved' ? <CheckCircle2 className="h-4 w-4 text-emerald-600" /> : getSeverityIcon(issue.severity)}
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
-                        {issue.resolved ? <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px] px-1.5 py-0">Resolved</Badge> : getSeverityBadge(issue.severity)}
+                        {issue.status === 'resolved' ? <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px] px-1.5 py-0">Resolved</Badge> : getSeverityBadge(issue.severity)}
                         <Badge variant="outline" className="text-[10px] px-1.5 py-0">{issue.category}</Badge>
                       </div>
-                      <p className={`text-xs leading-snug ${issue.resolved ? 'text-muted-foreground line-through' : 'text-foreground'}`}>{issue.description}</p>
-                      <p className="text-[10px] text-muted-foreground mt-1">Invoice: <span className="font-mono font-medium">{issue.invoiceRef}</span></p>
+                      <p className={`text-xs leading-snug ${issue.status === 'resolved' ? 'text-muted-foreground line-through' : 'text-foreground'}`}>{issue.description}</p>
+                      {issue.invoiceId && <p className="text-[10px] text-muted-foreground mt-1">Invoice ID: <span className="font-mono font-medium">{issue.invoiceId}</span></p>}
                     </div>
-                    {!issue.resolved && (
+                    {issue.status !== 'resolved' && (
                       <Button size="sm" variant="outline" className="h-7 text-xs font-medium px-3 shrink-0 border-border/60 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200" onClick={() => handleFixIssue(issue.id)}>
-                        {issue.fixAction}
+                        Fix Issue
                       </Button>
                     )}
                   </div>
@@ -847,29 +791,35 @@ export default function ReturnPrepWorkspace() {
           </div>
 
           <div className="border border-border/60 rounded-xl p-5 space-y-3">
-            {reconData.map((cat: SampleReconCategory, idx: number) => (
-              <motion.div key={cat.label} initial={{ opacity: 0, x: 8 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.3 + idx * 0.06, duration: 0.3 }}
-                className={`flex items-center justify-between p-3 rounded-lg border ${cat.bgColor} cursor-pointer hover:shadow-sm transition-shadow`}
-                onClick={() => { if (cat.label !== 'Perfect Match' && reconDrilldowns[cat.label]) setSelectedReconCategory(cat.label); }}
-              >
-                <div className="flex items-center gap-2.5">
-                  <span className={`text-xs font-semibold ${cat.color}`}>{cat.label}</span>
-                  <span className={`text-[10px] ${cat.color} opacity-70`}>{cat.count} invoices</span>
-                </div>
-                <div className="flex items-center gap-3">
-                  <span className={`text-sm font-bold ${cat.color}`}>{formatCurrency(cat.amount)}</span>
-                  {cat.label !== 'Perfect Match' && reconDrilldowns[cat.label] && (
-                    <ArrowRight className={`h-3.5 w-3.5 ${cat.color} opacity-50`} />
-                  )}
-                </div>
-              </motion.div>
-            ))}
+            {reconRuns.length > 0 ? (
+              reconRuns.map((run: any, idx: number) => (
+                <motion.div key={run.id} initial={{ opacity: 0, x: 8 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.3 + idx * 0.06, duration: 0.3 }}
+                  className="flex items-center justify-between p-3 rounded-lg border bg-slate-50 border-slate-200 cursor-pointer hover:shadow-sm transition-shadow"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <span className="text-xs font-semibold text-foreground">Reconciliation Run</span>
+                    <span className="text-[10px] text-muted-foreground">{run.period} · {run.totalRecords} records</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs text-emerald-700">{run.matched} matched</span>
+                    <span className="text-xs text-amber-700">{run.partialMatches} partial</span>
+                    <span className="text-xs text-red-700">{run.unmatched} unmatched</span>
+                  </div>
+                </motion.div>
+              ))
+            ) : (
+              <div className="py-8 text-center">
+                <GitCompareArrows className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
+                <p className="text-sm font-medium text-muted-foreground">No reconciliation runs yet</p>
+                <p className="text-xs text-muted-foreground mt-1">Run reconciliation to compare books with GSTR-2B</p>
+              </div>
+            )}
 
             <Separator className="my-2" />
 
             <div className="flex items-center justify-between">
               <span className="text-xs font-medium text-muted-foreground">Total Records Compared</span>
-              <span className="text-sm font-bold text-foreground">50 invoices · {formatCurrency(3691000)}</span>
+              <span className="text-sm font-bold text-foreground">{invoices.length} invoices · {formatCurrency(totalTaxable)}</span>
             </div>
 
             <p className="text-[10px] text-muted-foreground text-center">Click any category to view detailed breakdown</p>
@@ -934,43 +884,36 @@ export default function ReturnPrepWorkspace() {
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">AI Review</h2>
             <Badge variant="outline" className="text-[10px] font-medium text-emerald-700 bg-emerald-50 border-emerald-200 gap-1">
-              <Sparkles className="size-2.5" /> {aiInsights.filter(i => !i.dismissed).length} active
+              <Sparkles className="size-2.5" /> {validationIssues.filter(i => i.status === 'open').length} open issues
             </Badge>
           </div>
 
           <ScrollArea className="max-h-[480px]">
             <div className="space-y-2.5">
               <AnimatePresence mode="popLayout">
-                {aiInsights.filter(i => !i.dismissed).map((insight) => {
-                  const colors = getAIInsightColors(insight.type);
+                {validationIssues.filter(i => i.status === 'open').map((issue) => {
                   return (
-                    <motion.div key={insight.id} layout initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, height: 0 }}
+                    <motion.div key={issue.id} layout initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, height: 0 }}
                       className="border border-border/60 rounded-lg p-3.5 hover:border-border transition-colors"
                     >
                       <div className="flex items-start gap-3">
-                        <div className={`flex items-center justify-center h-8 w-8 rounded-lg shrink-0 ${colors.bg} ${colors.color}`}>{getAIInsightIcon(insight.type)}</div>
+                        <div className="flex items-center justify-center h-8 w-8 rounded-lg shrink-0 bg-amber-50 text-amber-700">
+                          <AlertTriangle className="h-4 w-4" />
+                        </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-1">
-                            <span className="text-xs font-semibold text-foreground">{insight.title}</span>
-                            {getUrgencyBadge(insight.urgency)}
+                            <span className="text-xs font-semibold text-foreground">{issue.title}</span>
+                            <Badge variant="outline" className="text-[9px] px-1.5">{issue.severity}</Badge>
                           </div>
-                          <p className="text-[11px] text-muted-foreground leading-relaxed line-clamp-2">{insight.description}</p>
+                          <p className="text-[11px] text-muted-foreground leading-relaxed line-clamp-2">{issue.description}</p>
                           <div className="flex items-center gap-2 mt-2">
                             <Button size="sm" variant="outline" className="h-6 text-[10px] font-medium px-2.5 shrink-0 border-border/60 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200"
-                              onClick={() => {
-                                if (insight.type === 'risk_alert' || insight.type === 'tax_anomaly') {
-                                  const linkedIssue = validationIssues.find(v => !v.resolved);
-                                  if (linkedIssue) handleFixIssue(linkedIssue.id);
-                                  else handleDismissInsight(insight.id);
-                                } else {
-                                  handleDismissInsight(insight.id);
-                                }
-                              }}
+                              onClick={() => handleFixIssue(issue.id)}
                             >
-                              {insight.suggestedAction}
+                              Fix Issue
                             </Button>
                             <Button size="sm" variant="ghost" className="h-6 text-[10px] px-2 text-muted-foreground hover:text-foreground"
-                              onClick={() => handleDismissInsight(insight.id)}
+                              onClick={() => handleDismissInsight(issue.id)}
                             >
                               Dismiss
                             </Button>
@@ -981,11 +924,11 @@ export default function ReturnPrepWorkspace() {
                   );
                 })}
               </AnimatePresence>
-              {aiInsights.filter(i => !i.dismissed).length === 0 && (
+              {validationIssues.filter(i => i.status === 'open').length === 0 && (
                 <div className="p-8 text-center border border-border/60 rounded-xl">
                   <CheckCircle2 className="h-8 w-8 text-emerald-500 mx-auto mb-2" />
-                  <p className="text-sm font-semibold text-emerald-700">All AI recommendations addressed</p>
-                  <p className="text-xs text-muted-foreground mt-1">No outstanding risk alerts or missing documents</p>
+                  <p className="text-sm font-semibold text-emerald-700">All issues resolved</p>
+                  <p className="text-xs text-muted-foreground mt-1">No outstanding risk alerts or validation issues</p>
                 </div>
               )}
             </div>

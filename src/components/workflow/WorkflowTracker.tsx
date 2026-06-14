@@ -16,6 +16,7 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { useApp, type AppView } from '@/contexts/AppContext';
+import { useDashboardMetrics, useInvoices } from '@/hooks/api';
 import {
   Tooltip,
   TooltipContent,
@@ -137,15 +138,65 @@ export interface WorkflowProgress {
   filed: number;
 }
 
+// Default: all zeros (no data in database yet)
 export const DEFAULT_WORKFLOW_PROGRESS: WorkflowProgress = {
-  upload: 100,
-  extraction: 100,
-  validation: 92,
-  reconciliation: 78,
-  preparation: 55,
-  filing: 25,
-  filed: 8,
+  upload: 0,
+  extraction: 0,
+  validation: 0,
+  reconciliation: 0,
+  preparation: 0,
+  filing: 0,
+  filed: 0,
 };
+
+// Calculate real workflow progress from database metrics
+export function calculateWorkflowProgress(metrics: {
+  totalClients: number;
+  totalInvoices: number;
+  totalFiles: number;
+  validatedInvoices: number;
+  perfectMatchInvoices: number;
+  totalMatchedInvoices: number;
+  pendingReturns: number;
+  filedReturns: number;
+  totalReturns: number;
+}): WorkflowProgress {
+  const { totalClients, totalInvoices, totalFiles, validatedInvoices, perfectMatchInvoices, totalMatchedInvoices, pendingReturns, filedReturns, totalReturns } = metrics;
+
+  // No data → all zeros
+  if (totalClients === 0 && totalInvoices === 0) return DEFAULT_WORKFLOW_PROGRESS;
+
+  // Upload: Have any files been uploaded?
+  const uploadPct = totalFiles > 0 ? 100 : totalClients > 0 ? 20 : 0;
+
+  // Extraction: Have invoices been created (from documents)?
+  const extractionPct = totalInvoices > 0 ? 100 : totalFiles > 0 ? 30 : 0;
+
+  // Validation: What % of invoices are validated?
+  const validationPct = totalInvoices > 0 ? Math.round((validatedInvoices / totalInvoices) * 100) : 0;
+
+  // Reconciliation: What % of matched invoices are perfect matches?
+  const reconciliationPct = totalMatchedInvoices > 0 ? Math.round((perfectMatchInvoices / totalMatchedInvoices) * 100) : 0;
+
+  // Preparation: How many returns are in draft/prepared/validated status?
+  const preparationPct = totalReturns > 0 ? Math.round(((totalReturns - pendingReturns) / totalReturns) * 100) : 0;
+
+  // Filing: How many returns have been filed?
+  const filingPct = totalReturns > 0 ? Math.round((filedReturns / totalReturns) * 100) : 0;
+
+  // Filed: Same as filing for now (binary: filed or not)
+  const filedPct = filingPct;
+
+  return {
+    upload: uploadPct,
+    extraction: extractionPct,
+    validation: validationPct,
+    reconciliation: reconciliationPct,
+    preparation: preparationPct,
+    filing: filingPct,
+    filed: filedPct,
+  };
+}
 
 // ─── Bottleneck Detection ──────────────────────────────────────────────────
 
@@ -191,10 +242,39 @@ interface WorkflowTrackerProps {
 }
 
 export default function WorkflowTracker({
-  progress = DEFAULT_WORKFLOW_PROGRESS,
+  progress: externalProgress,
   compact = false,
 }: WorkflowTrackerProps) {
   const { currentView, setCurrentView } = useApp();
+
+  // Fetch real metrics from database
+  const { data: dashboardData } = useDashboardMetrics();
+  const { data: invoicesData } = useInvoices();
+
+  // Calculate real workflow progress from DB data
+  const metrics = dashboardData ? {
+    totalClients: dashboardData.totalClients,
+    totalInvoices: dashboardData.totalInvoices,
+    totalFiles: 0, // not in dashboard metrics yet
+    validatedInvoices: invoicesData?.invoices?.filter((i: { status: string }) => i.status === 'validated' || i.status === 'approved').length ?? 0,
+    perfectMatchInvoices: 0,
+    totalMatchedInvoices: 0,
+    pendingReturns: dashboardData.pendingReturns,
+    filedReturns: dashboardData.filedReturns,
+    totalReturns: dashboardData.pendingReturns + dashboardData.filedReturns,
+  } : {
+    totalClients: 0,
+    totalInvoices: 0,
+    totalFiles: 0,
+    validatedInvoices: 0,
+    perfectMatchInvoices: 0,
+    totalMatchedInvoices: 0,
+    pendingReturns: 0,
+    filedReturns: 0,
+    totalReturns: 0,
+  };
+
+  const progress = externalProgress ?? calculateWorkflowProgress(metrics);
 
   const currentStepId = getWorkflowStepFromView(currentView);
   const currentStepIndex = WORKFLOW_STEPS.findIndex(s => s.id === currentStepId);

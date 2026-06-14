@@ -43,10 +43,18 @@ import {
   Info,
   ShieldCheck,
   FileOutput,
+  Inbox,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useApp } from '@/contexts/AppContext';
-import { useGSTStore } from '@/stores/gst-store';
+import {
+  useFilings,
+  useClients,
+  useInvoices,
+  useUpdateFilingStatus,
+  useFileReturn,
+  useCreateFiling,
+} from '@/hooks/api';
 import {
   GSTRFiling,
   Client,
@@ -203,12 +211,12 @@ function getReturnTypeBadgeClass(returnType: string): string {
 
 function computeSectionsForFiling(
   returnType: string,
-  invoices: { taxableValue: number; cgst: number; sgst: number; igst: number; customerGstin?: string; status: string }[]
+  invoices: { taxableValue: number; cgst: number; sgst: number; igst: number; buyerGstin?: string | null; status: string }[]
 ): SectionBreakdown[] {
   if (returnType === 'GSTR-1') {
-    const b2b = invoices.filter(inv => inv.customerGstin);
-    const b2cLarge = invoices.filter(inv => !inv.customerGstin && inv.taxableValue >= 250000);
-    const b2cSmall = invoices.filter(inv => !inv.customerGstin && inv.taxableValue < 250000);
+    const b2b = invoices.filter(inv => inv.buyerGstin);
+    const b2cLarge = invoices.filter(inv => !inv.buyerGstin && inv.taxableValue >= 250000);
+    const b2cSmall = invoices.filter(inv => !inv.buyerGstin && inv.taxableValue < 250000);
 
     return [
       {
@@ -310,7 +318,14 @@ const columnEnter = {
 
 export default function ReturnsPage() {
   const { setCurrentView } = useApp();
-  const store = useGSTStore();
+
+  // ── React Query hooks ──────────────────────────────────────────────────
+  const { data: filingsData, isLoading: filingsLoading, error: filingsError } = useFilings();
+  const { data: clientsData, isLoading: clientsLoading } = useClients();
+
+  // Mutations
+  const fileReturnMutation = useFileReturn();
+  const createFilingMutation = useCreateFiling();
 
   // ── State ─────────────────────────────────────────────────────────────────
   const [selectedFiling, setSelectedFiling] = useState<GSTRFiling | null>(null);
@@ -318,28 +333,11 @@ export default function ReturnsPage() {
   const [filingAction, setFilingAction] = useState<string | null>(null);
   const [selectedPeriod, setSelectedPeriod] = useState('2025-06');
 
-  // ── Data from Store ──────────────────────────────────────────────────────
-  const storeFilings = store.filings;
-  const storeClients = store.clients;
-
-  // Map store filings to GSTRFiling format with client enriched
-  const filings = useMemo<GSTRFiling[]>(() => {
-    return storeFilings.map((f) => {
-      const client = storeClients.find(c => c.id === f.clientId) as Client | undefined;
-      return {
-        ...f,
-        financialYear: getFinancialYear(f.period),
-        client,
-      };
-    });
-  }, [storeFilings, storeClients]);
+  // ── Data from API ──────────────────────────────────────────────────────
+  const filings: GSTRFiling[] = filingsData?.filings ?? [];
+  const clients: Array<Client & { _aggregations?: { totalInvoices: number; filedReturns: number; pendingReturns: number; matchPercentage: number } }> = clientsData?.clients ?? [];
 
   // ── Derived Data ──────────────────────────────────────────────────────────
-  const filteredFilings = useMemo(() => {
-    // Show all filings (don't filter by period so all kanban cards are visible)
-    return filings;
-  }, [filings]);
-
   const kanbanData = useMemo(() => {
     const columns: Record<KanbanColumn, GSTRFiling[]> = {
       draft: [],
@@ -347,20 +345,20 @@ export default function ReturnsPage() {
       filed: [],
       attention: [],
     };
-    filteredFilings.forEach((f) => {
+    filings.forEach((f) => {
       const col = getKanbanColumn(f.status);
       columns[col].push(f);
     });
     return columns;
-  }, [filteredFilings]);
+  }, [filings]);
 
-  // ── Health Score Computation from Store ───────────────────────────────────
+  // ── Health Score Computation ───────────────────────────────────────────
   const healthMetrics = useMemo(() => {
-    const filedCount = storeFilings.filter(f => f.status === 'filed').length;
-    const criticalCount = storeFilings.filter(f => f.criticalErrors > 0).length;
-    const totalReturns = storeFilings.length;
-    const avgCompliance = storeClients.length > 0
-      ? Math.round(storeClients.reduce((sum, c) => sum + c.healthScore, 0) / storeClients.length)
+    const filedCount = filings.filter(f => f.status === 'filed').length;
+    const criticalCount = filings.filter(f => f.criticalErrors > 0).length;
+    const totalReturns = filings.length;
+    const avgCompliance = clients.length > 0
+      ? Math.round(clients.reduce((sum, c) => sum + c.healthScore, 0) / clients.length)
       : 0;
 
     const overallHealth = avgCompliance;
@@ -372,7 +370,11 @@ export default function ReturnsPage() {
       : 100;
     const compliance = avgCompliance;
     return { overallHealth, filingTimeliness, dataAccuracy, compliance };
-  }, [storeFilings, storeClients]);
+  }, [filings, clients]);
+
+  // ── Invoices hook for detail sheet ─────────────────────────────────────
+  // This fetches invoices for the selected filing's client
+  const { data: selectedClientInvoicesData } = useInvoices(selectedFiling?.clientId);
 
   // ── Handlers ──────────────────────────────────────────────────────────────
   const handleCardClick = (filing: GSTRFiling) => {
@@ -383,23 +385,29 @@ export default function ReturnsPage() {
   const handleFileReturn = async (filing: GSTRFiling) => {
     setFilingAction(filing.id);
 
-    // Use store's fileReturn method (handles status update, ARN generation, activity logging)
-    store.fileReturn(filing.id);
+    fileReturnMutation.mutate(
+      { id: filing.id },
+      {
+        onSuccess: (data) => {
+          setFilingAction(null);
+          setSheetOpen(false);
+          setSelectedFiling(null);
 
-    // Wait for store to complete filing (store has 1.5s delay internally)
-    await new Promise((r) => setTimeout(r, 2000));
-
-    // Read updated filing from store for ARN in toast
-    const updatedFiling = store.filings.find(f => f.id === filing.id);
-
-    setFilingAction(null);
-    setSheetOpen(false);
-    setSelectedFiling(null);
-
-    toast.success(`${filing.returnType} filed successfully!`, {
-      description: `ARN: ${updatedFiling?.acknowledgmentNumber ?? 'Pending'}`,
-      duration: 5000,
-    });
+          const arn = data?.filing?.acknowledgmentNumber ?? 'Pending';
+          toast.success(`${filing.returnType} filed successfully!`, {
+            description: `ARN: ${arn}`,
+            duration: 5000,
+          });
+        },
+        onError: (error) => {
+          setFilingAction(null);
+          toast.error('Filing failed', {
+            description: error.message,
+            duration: 5000,
+          });
+        },
+      }
+    );
   };
 
   const handlePrepare = (filing: GSTRFiling) => {
@@ -429,8 +437,7 @@ export default function ReturnsPage() {
   };
 
   // ── Loading State ─────────────────────────────────────────────────────────
-  // Show a brief skeleton while store data initializes
-  if (storeFilings.length === 0) {
+  if (filingsLoading || clientsLoading) {
     return (
       <div className="space-y-5 p-4 md:p-6">
         <div className="flex items-center justify-between">
@@ -454,6 +461,17 @@ export default function ReturnsPage() {
             </div>
           ))}
         </div>
+      </div>
+    );
+  }
+
+  // ── Error State ──────────────────────────────────────────────────────────
+  if (filingsError) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full min-h-[400px] space-y-4 p-6">
+        <AlertCircle className="size-12 text-red-400" />
+        <h2 className="text-lg font-semibold text-foreground">Failed to load filings</h2>
+        <p className="text-sm text-muted-foreground">{filingsError.message}</p>
       </div>
     );
   }
@@ -530,7 +548,7 @@ export default function ReturnsPage() {
   const renderReadyCard = (filing: GSTRFiling) => {
     const clientName = filing.client?.tradeName ?? 'Unknown Client';
     const periodLabel = periodToLabel(filing.period);
-    const isFiling = filingAction === filing.id || store.filingInProgressIds.includes(filing.id);
+    const isFiling = filingAction === filing.id || fileReturnMutation.isPending;
 
     return (
       <motion.div
@@ -813,11 +831,12 @@ export default function ReturnsPage() {
     const clientGstin = filing.client?.gstin ?? '';
     const column = getKanbanColumn(filing.status);
 
-    // Compute section breakdown from store invoices for this client
-    const clientInvoices = store.getInvoicesForClient(filing.clientId);
+    // Compute section breakdown from invoices for this client
+    const clientInvoices = selectedClientInvoicesData?.invoices ?? [];
     const sections = computeSectionsForFiling(filing.returnType, clientInvoices);
 
     const timelineIndex = getTimelineStepIndex(filing.status);
+    const isFiling = filingAction === filing.id || fileReturnMutation.isPending;
 
     return (
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
@@ -1014,14 +1033,14 @@ export default function ReturnsPage() {
                 <Button
                   className="w-full gap-2 bg-emerald-600 hover:bg-emerald-700 text-white"
                   onClick={() => handleFileReturn(filing)}
-                  disabled={filingAction === filing.id || store.filingInProgressIds.includes(filing.id)}
+                  disabled={isFiling}
                 >
-                  {filingAction === filing.id || store.filingInProgressIds.includes(filing.id) ? (
+                  {isFiling ? (
                     <Loader2 className="size-4 animate-spin" />
                   ) : (
                     <Send className="size-4" />
                   )}
-                  {filingAction === filing.id || store.filingInProgressIds.includes(filing.id) ? 'Filing...' : 'File Return'}
+                  {isFiling ? 'Filing...' : 'File Return'}
                 </Button>
               )}
               {column === 'filed' && (
@@ -1067,6 +1086,56 @@ export default function ReturnsPage() {
 
   const healthScore = healthMetrics.overallHealth;
   const healthColor = healthScore > 80 ? '#10b981' : healthScore > 50 ? '#f59e0b' : '#ef4444';
+
+  // ── Empty state when no filings exist ────────────────────────────────────
+  if (filings.length === 0) {
+    return (
+      <div className="flex flex-col h-full min-h-0">
+        <motion.div
+          variants={fadeInUp}
+          initial="hidden"
+          animate="show"
+          className="flex items-center justify-between px-4 md:px-6 py-4 border-b bg-white shrink-0"
+        >
+          <div className="flex items-center gap-3">
+            <h1 className="text-xl font-bold tracking-tight">Filing Workspace</h1>
+            <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200 text-xs font-semibold hover:bg-emerald-100">
+              Jun 2025
+            </Badge>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white h-9"
+              onClick={handleCreateReturn}
+            >
+              <Plus className="size-4" />
+              Create Return
+            </Button>
+          </div>
+        </motion.div>
+
+        <div className="flex-1 flex items-center justify-center">
+          <div className="flex flex-col items-center justify-center text-center space-y-4 py-12">
+            <div className="size-16 rounded-full bg-muted/30 flex items-center justify-center">
+              <Inbox className="size-8 text-muted-foreground/40" />
+            </div>
+            <h2 className="text-lg font-semibold text-foreground">No filings yet</h2>
+            <p className="text-sm text-muted-foreground max-w-sm">
+              Start by creating a new GST return draft. You can upload documents and prepare returns from here.
+            </p>
+            <Button
+              className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white"
+              onClick={handleCreateReturn}
+            >
+              <Plus className="size-4" />
+              Create First Return
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-full min-h-0">

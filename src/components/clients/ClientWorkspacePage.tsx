@@ -6,7 +6,6 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   ArrowLeft,
@@ -32,25 +31,37 @@ import {
   ArrowRight,
   Sparkles,
   FileCheck,
-  FileWarning,
-  Timer,
-  Package,
   Gauge,
-  Search,
   FolderOpen,
   IndianRupee,
-  TrendingUp,
-  TrendingDown,
-  Minus,
-  Separator as SeparatorIcon,
   CircleDot,
+  Inbox,
 } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 import { useApp } from '@/contexts/AppContext';
 import type { AppView } from '@/contexts/AppContext';
 import { formatCurrency, periodToLabel, getFilingDueDate } from '@/lib/gst-utils';
-import { useGSTStore } from '@/stores/gst-store';
-import type { SampleClient, SampleFiling, SampleValidationIssue, SampleAIInsight, SampleReconCategory, SampleUpload, SampleActivity } from '@/data/sample-data';
+import { toast } from 'sonner';
+import {
+  useClient,
+  useFilings,
+  useInvoices,
+  useIssues,
+  useUploadedFiles,
+  useAuditLogs,
+  useReconRuns,
+  useUploadFile,
+  useCreateReconRun,
+} from '@/hooks/api';
+import type {
+  Client,
+  GSTRFiling,
+  Invoice,
+  Issue,
+  AuditLogEntry,
+  ReconciliationRun,
+  FilingStatus,
+} from '@/types/gst';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // TYPES
@@ -115,24 +126,6 @@ interface ActivityEvent {
   type: 'upload' | 'return_created' | 'filing_submitted' | 'recon_run' | 'user_action' | 'ai_action';
   description: string;
   timestamp: string;
-}
-
-interface ClientWorkspaceData {
-  complianceScore: number;
-  riskLevel: 'Low' | 'Medium' | 'High' | 'Critical';
-  filingFrequency: string;
-  lastFilingDate: string;
-  matchRate: number;
-  pendingReturns: number;
-  openIssues: number;
-  taxVolume: number;
-  documentsUploaded: number;
-  returns: ReturnEntry[];
-  pendingActions: PendingAction[];
-  documents: DocumentEntry[];
-  reconRuns: ReconRun[];
-  insights: AIInsight[];
-  activities: ActivityEvent[];
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -226,120 +219,92 @@ function formatRelativeTime(timestamp: string): string {
   return date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
 }
 
-function formatFileSize(size: string): string { return size; }
-
-/** Map a store upload to a DocumentEntry for the UI */
-function mapUploadToDocument(upload: SampleUpload): DocumentEntry {
-  const statusMap: Record<SampleUpload['status'], DocumentEntry['status']> = {
-    extracted: 'Processed',
-    processing: 'Processing',
-    failed: 'Error',
-  };
-  const sizeBytes = (upload.rowCount ?? 0) * 128; // Approximate size
-  const sizeStr = sizeBytes > 1048576 ? `${(sizeBytes / 1048576).toFixed(1)} MB` : sizeBytes > 1024 ? `${(sizeBytes / 1024).toFixed(0)} KB` : `${sizeBytes} B`;
-  // Derive document type from filename
-  const ext = upload.filename.split('.').pop()?.toLowerCase() ?? '';
-  const typeMap: Record<string, string> = {
-    xlsx: 'Sales Register',
-    xls: 'Sales Register',
-    pdf: 'Purchase Register',
-    json: 'GST Portal Data',
-    csv: 'Data Import',
-  };
-  return {
-    id: upload.id,
-    name: upload.filename,
-    type: typeMap[ext] ?? 'Document',
-    uploadDate: upload.uploadTime.split('T')[0],
-    status: statusMap[upload.status],
-    invoicesExtracted: upload.invoiceCount ?? 0,
-    totalRows: upload.rowCount ?? 0,
-    accuracy: upload.accuracy ?? 0,
-    size: sizeStr || '1.0 MB',
-  };
-}
-
-/** Map a store activity to an ActivityEvent for the UI */
-function mapActivityToEvent(activity: SampleActivity): ActivityEvent {
-  const typeMap: Record<SampleActivity['type'], ActivityEvent['type']> = {
-    document_uploaded: 'upload',
-    invoice_uploaded: 'upload',
-    return_prepared: 'return_created',
-    return_filed: 'filing_submitted',
-    mismatch_resolved: 'recon_run',
-    validation_completed: 'ai_action',
-    payment_received: 'user_action',
-  };
-  return {
-    id: activity.id,
-    type: typeMap[activity.type] ?? 'user_action',
-    description: activity.description,
-    timestamp: activity.timestamp,
-  };
-}
-
 // ═══════════════════════════════════════════════════════════════════════════════
-// STORE → WORKSPACE DERIVATION HELPERS
+// MAPPING HELPERS (API data → UI types)
 // ═══════════════════════════════════════════════════════════════════════════════
 
 const SIMULATED_NOW = new Date('2025-07-08T12:00:00Z');
 
 /** Check if a filing period is overdue relative to current date */
 function isFilingOverdue(period: string): boolean {
-  // Use a fixed reference date to match sample data context
   const dueDate = new Date(getFilingDueDate('GSTR-1', period));
   return SIMULATED_NOW > dueDate;
 }
 
-/** Map store filing status to UI ReturnEntry status */
-function mapFilingStatus(filing: SampleFiling): ReturnEntry['status'] {
-  if (filing.status === 'filed') return 'Filed';
-
-  const readyStatuses: SampleFiling['status'][] = ['validated', 'reviewed', 'generated'];
-  if (readyStatuses.includes(filing.status)) {
-    // Even "ready" filings can be overdue
-    return isFilingOverdue(filing.period) ? 'Overdue' : 'Ready to File';
+/** Map API filing status to UI ReturnEntry status */
+function mapFilingStatus(status: FilingStatus, period: string): ReturnEntry['status'] {
+  if (status === 'filed') return 'Filed';
+  const readyStatuses: FilingStatus[] = ['validated', 'reviewed', 'generated'];
+  if (readyStatuses.includes(status)) {
+    return isFilingOverdue(period) ? 'Overdue' : 'Ready to File';
   }
-
-  // draft, prepared, reopened
-  return isFilingOverdue(filing.period) ? 'Overdue' : 'Draft';
+  return isFilingOverdue(period) ? 'Overdue' : 'Draft';
 }
 
-/** Derive recon runs from store summary data */
-function deriveReconRuns(summary: SampleReconCategory[], healthScore: number): ReconRun[] {
-  if (summary.length === 0) {
-    // Fallback based on health score
-    const isLowRisk = healthScore > 80;
-    const isHighRisk = healthScore < 50;
-    return [
-      { id: 'rc1', period: 'May 2025', matchRate: isLowRisk ? 92 : isHighRisk ? 58 : 78, mismatches: isLowRisk ? 3 : isHighRisk ? 22 : 9, missingInvoices: isLowRisk ? 1 : isHighRisk ? 11 : 4, taxDifference: isLowRisk ? 12000 : isHighRisk ? 280000 : 62000, runDate: '2025-06-28', status: 'Completed' },
-      { id: 'rc2', period: 'Apr 2025', matchRate: isLowRisk ? 94 : isHighRisk ? 55 : 80, mismatches: isLowRisk ? 2 : isHighRisk ? 28 : 8, missingInvoices: isLowRisk ? 0 : isHighRisk ? 14 : 3, taxDifference: isLowRisk ? 5000 : isHighRisk ? 345000 : 48000, runDate: '2025-05-29', status: 'Completed' },
-    ];
-  }
+/** Map an API document to a DocumentEntry for the UI */
+function mapApiDocument(doc: Record<string, unknown>): DocumentEntry {
+  const statusStr = (doc.processingStep as string) ?? (doc.status as string) ?? 'uploaded';
+  const statusMap: Record<string, DocumentEntry['status']> = {
+    extracted: 'Processed',
+    processing: 'Processing',
+    processed: 'Processed',
+    uploaded: 'Uploaded',
+    failed: 'Error',
+    error: 'Error',
+  };
+  const sizeBytes = (doc.size as number) ?? 0;
+  const sizeStr = sizeBytes > 1048576
+    ? `${(sizeBytes / 1048576).toFixed(1)} MB`
+    : sizeBytes > 1024
+      ? `${(sizeBytes / 1024).toFixed(0)} KB`
+      : sizeBytes > 0
+        ? `${sizeBytes} B`
+        : '1.0 MB';
 
-  const total = summary.reduce((sum, c) => sum + c.count, 0);
-  const perfectMatch = summary.find(c => c.label === 'Perfect Match');
-  const matchRate = perfectMatch && total > 0 ? Math.round((perfectMatch.count / total) * 100) : 0;
-  const mismatches = summary.filter(c => ['Mismatch', 'Partial Match'].includes(c.label)).reduce((sum, c) => sum + c.count, 0);
-  const missingInvoices = summary.filter(c => c.label.includes('Missing')).reduce((sum, c) => sum + c.count, 0);
-  const taxDifference = summary.filter(c => c.label !== 'Perfect Match').reduce((sum, c) => sum + c.amount, 0);
-
-  return [
-    { id: 'rc1', period: 'May 2025', matchRate, mismatches, missingInvoices, taxDifference, runDate: '2025-06-28', status: 'Completed' as const },
-    { id: 'rc2', period: 'Apr 2025', matchRate: Math.min(100, matchRate + 2), mismatches: Math.max(0, mismatches - 1), missingInvoices: Math.max(0, missingInvoices - 1), taxDifference: Math.round(taxDifference * 0.7), runDate: '2025-05-29', status: 'Completed' as const },
-  ];
+  return {
+    id: (doc.id as string) ?? '',
+    name: (doc.name as string) ?? (doc.filename as string) ?? 'Document',
+    type: (doc.fileType as string) ?? (doc.folder as string) ?? 'Document',
+    uploadDate: ((doc.createdAt as string) ?? new Date().toISOString()).split('T')[0],
+    status: statusMap[statusStr.toLowerCase()] ?? 'Uploaded',
+    invoicesExtracted: (doc.invoiceCount as number) ?? 0,
+    totalRows: (doc.rowCount as number) ?? 0,
+    accuracy: (doc.accuracy as number) ?? 0,
+    size: sizeStr,
+  };
 }
 
-/** Compute overall match rate from recon summary */
-function computeMatchRate(summary: SampleReconCategory[], healthScore: number): number {
-  if (summary.length === 0) {
-    if (healthScore > 80) return 94;
-    if (healthScore < 50) return 58;
-    return 78;
-  }
-  const total = summary.reduce((sum, c) => sum + c.count, 0);
-  const perfectMatch = summary.find(c => c.label === 'Perfect Match');
-  return perfectMatch && total > 0 ? Math.round((perfectMatch.count / total) * 100) : 0;
+/** Map an API reconciliation run to a UI ReconRun */
+function mapApiReconRun(run: ReconciliationRun): ReconRun {
+  const matchRate = run.totalRecords > 0 ? Math.round((run.matched / run.totalRecords) * 100) : 0;
+  return {
+    id: run.id,
+    period: periodToLabel(run.period),
+    matchRate,
+    mismatches: run.unmatched + run.partialMatches,
+    missingInvoices: run.unmatched,
+    taxDifference: run.gstDifference,
+    runDate: run.createdAt.split('T')[0],
+    status: run.status === 'completed' ? 'Completed' as const : run.status === 'running' ? 'Running' as const : 'Failed' as const,
+  };
+}
+
+/** Map an API audit log to an ActivityEvent for the UI */
+function mapAuditLogToEvent(log: AuditLogEntry): ActivityEvent {
+  const action = log.action?.toLowerCase() ?? '';
+  let type: ActivityEvent['type'] = 'user_action';
+  if (action.includes('upload') || action.includes('import')) type = 'upload';
+  else if (action.includes('file') || action.includes('submit')) type = 'filing_submitted';
+  else if (action.includes('reconcil')) type = 'recon_run';
+  else if (action.includes('valid') || action.includes('generat')) type = 'ai_action';
+  else if (action.includes('return') || action.includes('creat')) type = 'return_created';
+
+  return {
+    id: log.id,
+    type,
+    description: log.details ?? log.action,
+    timestamp: log.timestamp,
+  };
 }
 
 /** Map issue category to pending action type */
@@ -351,26 +316,34 @@ function issueCategoryToActionType(category: string): PendingAction['type'] {
   return 'awaiting_review';
 }
 
-/** Map AI insight type to action view */
-function insightTypeToActionView(type: SampleAIInsight['type']): AppView {
-  switch (type) {
-    case 'risk_alert': return 'reconcile';
-    case 'missing_doc': return 'invoices';
-    case 'tax_anomaly': return 'reconcile';
-    case 'filing_rec': return 'returns';
-    default: return 'dashboard';
-  }
-}
+/** Map API issue to AIInsight */
+function mapIssueToInsight(issue: Issue): AIInsight {
+  const severity: AIInsight['severity'] =
+    issue.severity === 'critical' ? 'critical' : issue.severity === 'warning' ? 'warning' : 'info';
+  const category = issue.category ?? 'General';
 
-/** Map AI insight type to category label */
-function insightTypeToCategory(type: SampleAIInsight['type']): string {
-  switch (type) {
-    case 'risk_alert': return 'Risk';
-    case 'missing_doc': return 'Documents';
-    case 'tax_anomaly': return 'ITC';
-    case 'filing_rec': return 'Deadline';
-    default: return 'General';
+  let actionView: AppView = 'dashboard';
+  let suggestedAction = 'Review';
+  if (category.toLowerCase().includes('gstin') || category.toLowerCase().includes('tax')) {
+    actionView = 'reconcile';
+    suggestedAction = 'Review Details';
+  } else if (category.toLowerCase().includes('missing') || category.toLowerCase().includes('document')) {
+    actionView = 'invoices';
+    suggestedAction = 'Upload Documents';
+  } else if (category.toLowerCase().includes('filing') || category.toLowerCase().includes('deadline')) {
+    actionView = 'returns';
+    suggestedAction = 'File Return';
   }
+
+  return {
+    id: issue.id,
+    severity,
+    title: issue.title ?? category,
+    description: issue.description ?? '',
+    suggestedAction,
+    actionView,
+    category,
+  };
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -417,73 +390,85 @@ const fadeUp = {
 
 export default function ClientWorkspacePage() {
   const { selectedClientId, setCurrentView, setSelectedClientId, setReturnPrepCtx } = useApp();
-  const store = useGSTStore();
   const [returnFilter, setReturnFilter] = useState('all');
 
-  // ─── Derive client from store ────────────────────────────────────────────
-  // Try direct ID match first, then fall back to finding by index from clients array
-  const client = useMemo(() => {
-    if (!selectedClientId) return undefined;
-    // Direct lookup
-    const direct = store.getClient(selectedClientId);
-    if (direct) return direct;
-    // Fallback: try to find by matching against known client IDs
-    // The registry page may use different IDs (cl_001 vs client-1)
-    // Try extracting a numeric index and mapping to store format
-    const numMatch = selectedClientId.match(/(\d+)/);
-    if (numMatch) {
-      const idx = parseInt(numMatch[1], 10) - 1;
-      if (idx >= 0 && idx < store.clients.length) {
-        return store.clients[idx];
-      }
-    }
-    // Last resort: return first client
-    return store.clients[0];
-  }, [selectedClientId, store]);
+  // ─── React Query hooks ─────────────────────────────────────────────────
+  const { data: clientData, isLoading: clientLoading, error: clientError } = useClient(selectedClientId ?? undefined);
+  const { data: filingsData, isLoading: filingsLoading } = useFilings(selectedClientId ?? undefined);
+  const { data: invoicesData, isLoading: invoicesLoading } = useInvoices(selectedClientId ?? undefined);
+  const { data: issuesData, isLoading: issuesLoading } = useIssues(selectedClientId ?? undefined);
+  const { data: docsData, isLoading: docsLoading } = useUploadedFiles(selectedClientId ?? undefined);
+  const { data: auditData, isLoading: auditLoading } = useAuditLogs(selectedClientId ?? undefined);
+  const { data: reconData, isLoading: reconLoading } = useReconRuns(selectedClientId ?? undefined);
 
-  // ─── Derive all workspace data reactively from the store ─────────────────
-  const workspace = useMemo<ClientWorkspaceData | null>(() => {
-    if (!client) return null;
-    const clientId = client.id;
-    const hs = client.healthScore;
+  // Mutations
+  const uploadFileMutation = useUploadFile();
+  const createReconRunMutation = useCreateReconRun();
 
-    // ── Filings → Returns ──
-    const filings = store.getFilingsForClient(clientId);
-    const returns: ReturnEntry[] = filings.map(f => ({
+  // ─── Extract data from query responses ──────────────────────────────────
+  const client = clientData?.clients?.[0] as (Client & { _aggregations?: { totalInvoices: number; filedReturns: number; pendingReturns: number; matchPercentage: number } }) | undefined;
+  // Filter filings/issues/reconRuns by clientId (API may return all records)
+  const allFilings: GSTRFiling[] = filingsData?.filings ?? [];
+  const filings = useMemo(() => allFilings.filter(f => f.clientId === selectedClientId), [allFilings, selectedClientId]);
+  const allInvoices: Invoice[] = invoicesData?.invoices ?? [];
+  const invoices = useMemo(() => allInvoices.filter(inv => inv.clientId === selectedClientId), [allInvoices, selectedClientId]);
+  const allIssues: Issue[] = issuesData?.issues ?? [];
+  const issues = useMemo(() => allIssues.filter(i => i.clientId === selectedClientId), [allIssues, selectedClientId]);
+  const rawDocuments: Array<Record<string, unknown>> = docsData?.documents ?? [];
+  const allAuditLogs: AuditLogEntry[] = auditData?.logs ?? [];
+  const auditLogs = useMemo(() => allAuditLogs.filter(l => l.clientId === selectedClientId), [allAuditLogs, selectedClientId]);
+  const allReconRuns: ReconciliationRun[] = reconData?.runs ?? [];
+  const reconRuns = useMemo(() => allReconRuns.filter(r => r.clientId === selectedClientId), [allReconRuns, selectedClientId]);
+
+  const isLoading = clientLoading || filingsLoading;
+
+  // ─── Derive workspace data from API responses ─────────────────────────
+  const name = client?.tradeName ?? 'Unknown Client';
+
+  // Map filings → ReturnEntry[]
+  const returns: ReturnEntry[] = useMemo(() => {
+    return filings.map(f => ({
       id: f.id,
       type: f.returnType,
       period: periodToLabel(f.period),
       filingDate: f.filedDate ?? '',
       arn: f.acknowledgmentNumber ?? '',
-      status: mapFilingStatus(f),
+      status: mapFilingStatus(f.status, f.period),
       taxAmount: f.totalTax,
     }));
+  }, [filings]);
 
-    // ── Issues → Pending Actions ──
-    const issues = store.getIssuesForClient(clientId);
-    const issueActions: PendingAction[] = issues
-      .filter(i => !i.resolved)
-      .map(i => {
-        const actionType = issueCategoryToActionType(i.category);
-        const priority: PendingAction['priority'] =
-          i.severity === 'critical' ? 'high' : i.severity === 'warning' ? 'medium' : 'low';
-        const targetView: AppView =
-          actionType === 'gstin_error' || actionType === 'recon_mismatch' ? 'reconcile'
-          : actionType === 'missing_documents' ? 'invoices'
-          : 'returns';
-        return {
-          id: i.id,
-          type: actionType,
-          title: i.category,
-          description: i.description,
-          actionLabel: i.fixAction,
-          targetView,
-          priority,
-        };
-      });
+  // Filter returns
+  const filteredReturns = useMemo(() => {
+    if (returnFilter === 'all') return returns;
+    return returns.filter(r => r.type === returnFilter);
+  }, [returns, returnFilter]);
+
+  // Map issues → Pending Actions
+  const pendingActions: PendingAction[] = useMemo(() => {
+    const openIssues = issues.filter(i => i.status === 'open');
+
+    const issueActions: PendingAction[] = openIssues.map(i => {
+      const actionType = issueCategoryToActionType(i.category);
+      const priority: PendingAction['priority'] =
+        i.severity === 'critical' ? 'high' : i.severity === 'warning' ? 'medium' : 'low';
+      const targetView: AppView =
+        actionType === 'gstin_error' || actionType === 'recon_mismatch' ? 'reconcile'
+        : actionType === 'missing_documents' ? 'invoices'
+        : 'returns';
+      return {
+        id: i.id,
+        type: actionType,
+        title: i.category,
+        description: i.description ?? i.title,
+        actionLabel: actionType === 'gstin_error' ? 'Fix Error' : actionType === 'missing_documents' ? 'Upload' : 'Review',
+        targetView,
+        priority,
+      };
+    });
 
     // Ready-to-file actions from filings
-    const readyStatuses: SampleFiling['status'][] = ['validated', 'reviewed', 'generated'];
+    const readyStatuses: FilingStatus[] = ['validated', 'reviewed', 'generated'];
     const readyFilings = filings.filter(f => readyStatuses.includes(f.status));
     const readyActions: PendingAction[] = readyFilings.map(f => ({
       id: `ready-${f.id}`,
@@ -496,7 +481,7 @@ export default function ClientWorkspacePage() {
       priority: 'high' as const,
     }));
 
-    // Overdue filing actions (not already ready-to-file)
+    // Overdue filing actions
     const overdueFilings = filings.filter(f => f.status !== 'filed' && isFilingOverdue(f.period) && !readyStatuses.includes(f.status));
     const overdueActions: PendingAction[] = overdueFilings.map(f => ({
       id: `overdue-${f.id}`,
@@ -509,85 +494,45 @@ export default function ClientWorkspacePage() {
       priority: 'high' as const,
     }));
 
-    // Combine: ready first, then issues sorted by priority, then overdue
-    const pendingActions: PendingAction[] = [
+    return [
       ...readyActions,
       ...issueActions.sort((a, b) => (a.priority === 'high' ? -1 : b.priority === 'high' ? 1 : 0)),
       ...overdueActions,
     ];
+  }, [issues, filings]);
 
-    // ── Documents from store uploads ──
-    const clientUploads = store.uploads.filter(u => u.clientId === clientId);
-    const documents: DocumentEntry[] = clientUploads.length > 0
-      ? clientUploads.map(mapUploadToDocument)
-      : [
-          { id: 'd-default', name: 'No documents uploaded yet', type: 'General', uploadDate: new Date().toISOString().split('T')[0], status: 'Uploaded' as const, invoicesExtracted: 0, totalRows: 0, accuracy: 0, size: '0 KB' },
-        ];
+  // Map documents
+  const documents: DocumentEntry[] = useMemo(() => {
+    return rawDocuments.map(mapApiDocument);
+  }, [rawDocuments]);
 
-    // ── Reconciliation Runs ──
-    const reconSummary = store.getReconSummary(clientId);
-    const reconRuns = deriveReconRuns(reconSummary, hs);
+  // Map recon runs
+  const mappedReconRuns: ReconRun[] = useMemo(() => {
+    return reconRuns.map(mapApiReconRun);
+  }, [reconRuns]);
 
-    // ── AI Insights ──
-    const storeInsights = store.getInsightsForClient(clientId);
-    const insights: AIInsight[] = storeInsights
-      .filter(i => !i.dismissed)
-      .map(i => ({
-        id: i.id,
-        severity: i.urgency === 'high' ? 'critical' as const : i.urgency === 'medium' ? 'warning' as const : 'info' as const,
-        title: i.title,
-        description: i.description,
-        suggestedAction: i.suggestedAction,
-        actionView: insightTypeToActionView(i.type),
-        category: insightTypeToCategory(i.type),
-      }));
+  // Map audit logs → ActivityEvent[]
+  const activities: ActivityEvent[] = useMemo(() => {
+    return auditLogs.map(mapAuditLogToEvent);
+  }, [auditLogs]);
 
-    // ── Activities from store ──
-    const storeActivities = store.getActivitiesForClient(clientId);
-    const activities: ActivityEvent[] = storeActivities.length > 0
-      ? storeActivities.map(mapActivityToEvent)
-      : [
-          { id: 'a-default', type: 'ai_action', description: 'No activity yet for this client', timestamp: new Date().toISOString() },
-        ];
+  // Map issues → AI insights
+  const insights: AIInsight[] = useMemo(() => {
+    return issues.filter(i => i.status === 'open').map(mapIssueToInsight);
+  }, [issues]);
 
-    // ── Computed metrics ──
-    const isLowRisk = hs > 80;
-    const isHighRisk = hs < 50;
-    const riskLevel: ClientWorkspaceData['riskLevel'] =
-      isLowRisk ? 'Low' : hs >= 50 ? 'Medium' : hs >= 30 ? 'High' : 'Critical';
-    const matchRate = computeMatchRate(reconSummary, hs);
-    const pendingReturns = filings.filter(f => f.status !== 'filed').length;
-    const openIssues = issues.filter(i => !i.resolved).length;
-    const taxVolume = filings.reduce((sum, f) => sum + f.totalTaxableValue, 0);
+  // Computed metrics
+  const healthScore = client?.healthScore ?? 0;
+  const isLowRisk = healthScore > 80;
+  const isHighRisk = healthScore < 50;
+  const riskLevel: 'Low' | 'Medium' | 'High' | 'Critical' =
+    isLowRisk ? 'Low' : healthScore >= 50 ? 'Medium' : healthScore >= 30 ? 'High' : 'Critical';
+  const matchRate = client?._aggregations?.matchPercentage ?? (healthScore > 80 ? 94 : healthScore < 50 ? 58 : 78);
+  const pendingReturnsCount = filings.filter(f => f.status !== 'filed').length;
+  const openIssuesCount = issues.filter(i => i.status === 'open').length;
+  const taxVolume = filings.reduce((sum, f) => sum + f.totalTaxableValue, 0);
 
-    return {
-      complianceScore: hs,
-      riskLevel,
-      filingFrequency: client.returnPeriod === 'quarterly' ? 'Quarterly' : 'Monthly',
-      lastFilingDate: client.lastFilingDate ?? '2025-05-11',
-      matchRate,
-      pendingReturns,
-      openIssues,
-      taxVolume,
-      documentsUploaded: documents.length,
-      returns,
-      pendingActions,
-      documents,
-      reconRuns,
-      insights,
-      activities,
-    };
-  }, [client, store]);
-
-  const name = client?.tradeName ?? 'Unknown Client';
-
-  // Filter returns
-  const filteredReturns = useMemo(() => {
-    if (!workspace) return [];
-    if (returnFilter === 'all') return workspace.returns;
-    return workspace.returns.filter(r => r.type === returnFilter);
-  }, [workspace, returnFilter]);
-
+  // ─── Handlers ─────────────────────────────────────────────────────────
   const handleBack = () => { setSelectedClientId(null); setCurrentView('clients'); };
   const handleAction = (view: AppView) => setCurrentView(view);
 
@@ -601,8 +546,39 @@ export default function ClientWorkspacePage() {
     setCurrentView('return-prep');
   };
 
-  // No client selected or not found
-  if (!selectedClientId || !client || !workspace) {
+  const handleUploadDocument = () => {
+    // Trigger file input
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.xlsx,.xls,.csv,.pdf,.json';
+    input.onchange = (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (file && selectedClientId) {
+        uploadFileMutation.mutate(
+          { clientId: selectedClientId, name: file.name, fileType: file.name.split('.').pop(), size: file.size },
+          {
+            onSuccess: () => toast.success('Document uploaded', { description: file.name }),
+            onError: (err) => toast.error('Upload failed', { description: err.message }),
+          }
+        );
+      }
+    };
+    input.click();
+  };
+
+  const handleRunReconciliation = () => {
+    if (!selectedClientId) return;
+    createReconRunMutation.mutate(
+      { clientId: selectedClientId, period: '2025-06' },
+      {
+        onSuccess: () => toast.success('Reconciliation started', { description: 'Results will appear shortly' }),
+        onError: (err) => toast.error('Reconciliation failed', { description: err.message }),
+      }
+    );
+  };
+
+  // ─── No client selected ───────────────────────────────────────────────
+  if (!selectedClientId) {
     return (
       <div className="max-w-6xl mx-auto px-4 md:px-6 py-6 space-y-6">
         <Skeleton className="h-6 w-40" />
@@ -614,7 +590,44 @@ export default function ClientWorkspacePage() {
     );
   }
 
-  const healthColor = getHealthColor(workspace.complianceScore);
+  // ─── Loading state ────────────────────────────────────────────────────
+  if (isLoading && !client) {
+    return (
+      <div className="max-w-6xl mx-auto px-4 md:px-6 py-6 space-y-6">
+        <Skeleton className="h-6 w-40" />
+        <div className="border rounded-xl p-6 space-y-4">
+          <div className="flex gap-4"><Skeleton className="h-16 w-16 rounded-full" /><div className="space-y-2 flex-1"><Skeleton className="h-6 w-48" /><Skeleton className="h-4 w-64" /></div></div>
+        </div>
+        <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">{Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-20 rounded-lg" />)}</div>
+      </div>
+    );
+  }
+
+  // ─── Error state ──────────────────────────────────────────────────────
+  if (clientError) {
+    return (
+      <div className="max-w-6xl mx-auto px-4 md:px-6 py-12 text-center space-y-4">
+        <AlertCircle className="size-12 text-red-400 mx-auto" />
+        <h2 className="text-lg font-semibold text-foreground">Failed to load client</h2>
+        <p className="text-sm text-muted-foreground">{clientError.message}</p>
+        <Button variant="outline" onClick={handleBack}>Go Back</Button>
+      </div>
+    );
+  }
+
+  // ─── Client not found ─────────────────────────────────────────────────
+  if (!client) {
+    return (
+      <div className="max-w-6xl mx-auto px-4 md:px-6 py-12 text-center space-y-4">
+        <Building2 className="size-12 text-muted-foreground/40 mx-auto" />
+        <h2 className="text-lg font-semibold text-foreground">Client not found</h2>
+        <p className="text-sm text-muted-foreground">The selected client could not be found.</p>
+        <Button variant="outline" onClick={handleBack}>Back to Clients</Button>
+      </div>
+    );
+  }
+
+  const healthColor = getHealthColor(healthScore);
 
   return (
     <div className="max-w-6xl mx-auto px-4 md:px-6 py-6 space-y-8">
@@ -638,11 +651,11 @@ export default function ClientWorkspacePage() {
           <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-5">
             {/* Left: Identity */}
             <div className="flex items-start gap-4">
-              <HealthRing score={workspace.complianceScore} size={72} strokeWidth={5} />
+              <HealthRing score={healthScore} size={72} strokeWidth={5} />
               <div className="min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
                   <h1 className="text-xl font-semibold text-foreground tracking-tight">{name}</h1>
-                  {getRiskBadge(workspace.riskLevel)}
+                  {getRiskBadge(riskLevel)}
                 </div>
                 {client.legalName && <p className="text-sm text-muted-foreground mt-0.5">{client.legalName}</p>}
 
@@ -659,12 +672,12 @@ export default function ClientWorkspacePage() {
                   </div>
                   <Separator orientation="vertical" className="h-3.5" />
                   <span className="text-xs text-muted-foreground">
-                    {workspace.filingFrequency} Filing
+                    {client.returnPeriod === 'quarterly' ? 'Quarterly' : 'Monthly'} Filing
                   </span>
                   <Separator orientation="vertical" className="h-3.5" />
                   <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                     <Calendar className="size-3 text-slate-400" />
-                    <span>Last Filed: {new Date(workspace.lastFilingDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: '2-digit' })}</span>
+                    <span>Last Filed: {client.lastFilingDate ? new Date(client.lastFilingDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: '2-digit' }) : '—'}</span>
                   </div>
                 </div>
               </div>
@@ -672,7 +685,7 @@ export default function ClientWorkspacePage() {
 
             {/* Right: Quick actions */}
             <div className="flex flex-wrap items-center gap-2 shrink-0">
-              <Button size="sm" className="h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => handleAction('invoices')}>
+              <Button size="sm" className="h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white" onClick={handleUploadDocument}>
                 <Upload className="size-3.5" />
                 Upload Documents
               </Button>
@@ -680,9 +693,9 @@ export default function ClientWorkspacePage() {
                 <FileText className="size-3.5" />
                 Create Return
               </Button>
-              <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5" onClick={() => handleAction('reconcile')}>
+              <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5" onClick={handleRunReconciliation} disabled={createReconRunMutation.isPending}>
                 <GitCompareArrows className="size-3.5" />
-                Run Reconciliation
+                {createReconRunMutation.isPending ? 'Running...' : 'Run Reconciliation'}
               </Button>
               <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5" onClick={() => handleOpenReturnPrep('GSTR-3B')}>
                 <Send className="size-3.5" />
@@ -700,12 +713,12 @@ export default function ClientWorkspacePage() {
         <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider mb-3">Client Health Overview</h2>
         <motion.div variants={stagger} initial="hidden" animate="visible" className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
           {[
-            { label: 'Compliance Score', value: `${workspace.complianceScore}%`, icon: Gauge, color: healthColor.text, bg: healthColor.bg },
-            { label: 'Pending Returns', value: String(workspace.pendingReturns), icon: Clock, color: 'text-amber-600', bg: 'bg-amber-50' },
-            { label: 'Open Issues', value: String(workspace.openIssues), icon: AlertCircle, color: 'text-red-600', bg: 'bg-red-50' },
-            { label: 'Tax Volume', value: formatCurrency(workspace.taxVolume), icon: IndianRupee, color: 'text-emerald-600', bg: 'bg-emerald-50' },
-            { label: 'Match Rate', value: `${workspace.matchRate}%`, icon: GitCompareArrows, color: 'text-teal-600', bg: 'bg-teal-50' },
-            { label: 'Documents', value: String(workspace.documentsUploaded), icon: FolderOpen, color: 'text-slate-600', bg: 'bg-slate-50' },
+            { label: 'Compliance Score', value: `${healthScore}%`, icon: Gauge, color: healthColor.text, bg: healthColor.bg },
+            { label: 'Pending Returns', value: String(pendingReturnsCount), icon: Clock, color: 'text-amber-600', bg: 'bg-amber-50' },
+            { label: 'Open Issues', value: String(openIssuesCount), icon: AlertCircle, color: 'text-red-600', bg: 'bg-red-50' },
+            { label: 'Tax Volume', value: formatCurrency(taxVolume), icon: IndianRupee, color: 'text-emerald-600', bg: 'bg-emerald-50' },
+            { label: 'Match Rate', value: `${matchRate}%`, icon: GitCompareArrows, color: 'text-teal-600', bg: 'bg-teal-50' },
+            { label: 'Documents', value: String(documents.length), icon: FolderOpen, color: 'text-slate-600', bg: 'bg-slate-50' },
           ].map((item) => (
             <motion.div key={item.label} variants={fadeUp} whileHover={{ y: -2 }} transition={{ type: 'spring', stiffness: 400, damping: 25 }}>
               <div className="border border-border/60 rounded-xl p-4 hover:border-border transition-colors">
@@ -740,38 +753,50 @@ export default function ClientWorkspacePage() {
           </Select>
         </div>
 
-        <div className="border border-border/60 rounded-xl overflow-hidden">
-          {/* Table header */}
-          <div className="grid grid-cols-12 gap-2 px-4 py-2.5 bg-muted/30 text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
-            <div className="col-span-2">Type</div>
-            <div className="col-span-2">Period</div>
-            <div className="col-span-2">Status</div>
-            <div className="col-span-2">Filed Date</div>
-            <div className="col-span-2">ARN</div>
-            <div className="col-span-2 text-right">Tax Amount</div>
+        {filteredReturns.length === 0 ? (
+          <div className="border border-border/60 rounded-xl p-8 flex flex-col items-center justify-center text-center">
+            <FileText className="size-10 text-muted-foreground/30 mb-3" />
+            <p className="text-sm font-medium text-muted-foreground">No returns filed yet</p>
+            <p className="text-xs text-muted-foreground/70 mt-1">Start by preparing your first GST return</p>
+            <Button size="sm" className="mt-4 h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => handleOpenReturnPrep('GSTR-1')}>
+              <FileText className="size-3.5" />
+              Prepare First Return
+            </Button>
           </div>
-          {/* Table rows */}
-          <div className="divide-y divide-border/40">
-            <AnimatePresence>
-              {filteredReturns.map((ret, index) => (
-                <motion.div
-                  key={ret.id}
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.25 + index * 0.04, duration: 0.3 }}
-                  className="grid grid-cols-12 gap-2 px-4 py-3 hover:bg-muted/20 transition-colors items-center"
-                >
-                  <div className="col-span-2 text-sm font-medium text-foreground">{ret.type}</div>
-                  <div className="col-span-2 text-sm text-muted-foreground">{ret.period}</div>
-                  <div className="col-span-2">{getReturnStatusBadge(ret.status)}</div>
-                  <div className="col-span-2 text-xs text-muted-foreground">{ret.filingDate ? new Date(ret.filingDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : '—'}</div>
-                  <div className="col-span-2 text-xs font-mono text-muted-foreground">{ret.arn || '—'}</div>
-                  <div className="col-span-2 text-sm font-medium text-foreground text-right">{formatCurrency(ret.taxAmount)}</div>
-                </motion.div>
-              ))}
-            </AnimatePresence>
+        ) : (
+          <div className="border border-border/60 rounded-xl overflow-hidden">
+            {/* Table header */}
+            <div className="grid grid-cols-12 gap-2 px-4 py-2.5 bg-muted/30 text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
+              <div className="col-span-2">Type</div>
+              <div className="col-span-2">Period</div>
+              <div className="col-span-2">Status</div>
+              <div className="col-span-2">Filed Date</div>
+              <div className="col-span-2">ARN</div>
+              <div className="col-span-2 text-right">Tax Amount</div>
+            </div>
+            {/* Table rows */}
+            <div className="divide-y divide-border/40">
+              <AnimatePresence>
+                {filteredReturns.map((ret, index) => (
+                  <motion.div
+                    key={ret.id}
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.25 + index * 0.04, duration: 0.3 }}
+                    className="grid grid-cols-12 gap-2 px-4 py-3 hover:bg-muted/20 transition-colors items-center"
+                  >
+                    <div className="col-span-2 text-sm font-medium text-foreground">{ret.type}</div>
+                    <div className="col-span-2 text-sm text-muted-foreground">{ret.period}</div>
+                    <div className="col-span-2">{getReturnStatusBadge(ret.status)}</div>
+                    <div className="col-span-2 text-xs text-muted-foreground">{ret.filingDate ? new Date(ret.filingDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : '—'}</div>
+                    <div className="col-span-2 text-xs font-mono text-muted-foreground">{ret.arn || '—'}</div>
+                    <div className="col-span-2 text-sm font-medium text-foreground text-right">{formatCurrency(ret.taxAmount)}</div>
+                  </motion.div>
+                ))}
+              </AnimatePresence>
+            </div>
           </div>
-        </div>
+        )}
       </motion.section>
 
       {/* ═══════════════════════════════════════════════════════════════════════
@@ -781,62 +806,70 @@ export default function ClientWorkspacePage() {
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">Pending Actions</h2>
           <Badge variant="outline" className="text-[11px] text-muted-foreground">
-            {workspace.pendingActions.filter(a => a.priority === 'high').length} urgent
+            {pendingActions.filter(a => a.priority === 'high').length} urgent
           </Badge>
         </div>
 
-        <div className="border border-border/60 rounded-xl divide-y divide-border/40 overflow-hidden">
-          <AnimatePresence>
-            {workspace.pendingActions.map((action, index) => {
-              const IconComp = getActionTypeIcon(action.type);
-              const priorityStripe = action.priority === 'high' ? 'bg-red-500' : action.priority === 'medium' ? 'bg-amber-500' : 'bg-slate-300';
-              return (
-                <motion.div
-                  key={action.id}
-                  initial={{ opacity: 0, x: -8 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: 0.35 + index * 0.05, duration: 0.3 }}
-                  className="flex items-center gap-3 px-4 py-3.5 hover:bg-muted/20 transition-colors group"
-                >
-                  <div className={`h-8 w-1 rounded-full shrink-0 ${priorityStripe}`} />
-                  <div className={`flex items-center justify-center h-8 w-8 rounded-lg shrink-0 ${
-                    action.priority === 'high' ? 'bg-red-50 text-red-600'
-                    : action.priority === 'medium' ? 'bg-amber-50 text-amber-600'
-                    : 'bg-slate-100 text-slate-500'
-                  }`}>
-                    <IconComp className="size-4" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-foreground">{action.title}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5 truncate">{action.description}</p>
-                  </div>
-                  {action.dueDate && (
-                    <span className="text-xs text-muted-foreground shrink-0">
-                      Due {new Date(action.dueDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
-                    </span>
-                  )}
-                  <Button
-                    size="sm"
-                    className={`h-7 text-xs font-medium px-3 shrink-0 ${
-                      action.priority === 'high' ? 'bg-red-600 hover:bg-red-700 text-white'
-                      : action.type === 'ready_to_file' ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
-                      : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
-                    }`}
-                    onClick={() => {
-                      if (action.targetView === 'returns' || action.type === 'ready_to_file') {
-                        handleOpenReturnPrep('GSTR-1');
-                      } else {
-                        handleAction(action.targetView);
-                      }
-                    }}
+        {pendingActions.length === 0 ? (
+          <div className="border border-border/60 rounded-xl p-6 flex flex-col items-center justify-center text-center">
+            <CheckCircle2 className="size-10 text-emerald-300 mb-3" />
+            <p className="text-sm font-medium text-muted-foreground">All caught up!</p>
+            <p className="text-xs text-muted-foreground/70 mt-1">No pending actions for this client</p>
+          </div>
+        ) : (
+          <div className="border border-border/60 rounded-xl divide-y divide-border/40 overflow-hidden">
+            <AnimatePresence>
+              {pendingActions.map((action, index) => {
+                const IconComp = getActionTypeIcon(action.type);
+                const priorityStripe = action.priority === 'high' ? 'bg-red-500' : action.priority === 'medium' ? 'bg-amber-500' : 'bg-slate-300';
+                return (
+                  <motion.div
+                    key={action.id}
+                    initial={{ opacity: 0, x: -8 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: 0.35 + index * 0.05, duration: 0.3 }}
+                    className="flex items-center gap-3 px-4 py-3.5 hover:bg-muted/20 transition-colors group"
                   >
-                    {action.actionLabel}
-                  </Button>
-                </motion.div>
-              );
-            })}
-          </AnimatePresence>
-        </div>
+                    <div className={`h-8 w-1 rounded-full shrink-0 ${priorityStripe}`} />
+                    <div className={`flex items-center justify-center h-8 w-8 rounded-lg shrink-0 ${
+                      action.priority === 'high' ? 'bg-red-50 text-red-600'
+                      : action.priority === 'medium' ? 'bg-amber-50 text-amber-600'
+                      : 'bg-slate-100 text-slate-500'
+                    }`}>
+                      <IconComp className="size-4" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-foreground">{action.title}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5 truncate">{action.description}</p>
+                    </div>
+                    {action.dueDate && (
+                      <span className="text-xs text-muted-foreground shrink-0">
+                        Due {new Date(action.dueDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                      </span>
+                    )}
+                    <Button
+                      size="sm"
+                      className={`h-7 text-xs font-medium px-3 shrink-0 ${
+                        action.priority === 'high' ? 'bg-red-600 hover:bg-red-700 text-white'
+                        : action.type === 'ready_to_file' ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                        : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                      }`}
+                      onClick={() => {
+                        if (action.targetView === 'returns' || action.type === 'ready_to_file') {
+                          handleOpenReturnPrep('GSTR-1');
+                        } else {
+                          handleAction(action.targetView);
+                        }
+                      }}
+                    >
+                      {action.actionLabel}
+                    </Button>
+                  </motion.div>
+                );
+              })}
+            </AnimatePresence>
+          </div>
+        )}
       </motion.section>
 
       {/* ═══════════════════════════════════════════════════════════════════════
@@ -850,58 +883,70 @@ export default function ClientWorkspacePage() {
           </Button>
         </div>
 
-        <div className="border border-border/60 rounded-xl overflow-hidden">
-          {/* Table header */}
-          <div className="grid grid-cols-12 gap-2 px-4 py-2.5 bg-muted/30 text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
-            <div className="col-span-3">File Name</div>
-            <div className="col-span-2">Upload Date</div>
-            <div className="col-span-2">Type</div>
-            <div className="col-span-2">Status</div>
-            <div className="col-span-1 text-center">Invoices</div>
-            <div className="col-span-2 text-right">Actions</div>
+        {documents.length === 0 ? (
+          <div className="border border-border/60 rounded-xl p-8 flex flex-col items-center justify-center text-center">
+            <UploadCloud className="size-10 text-muted-foreground/30 mb-3" />
+            <p className="text-sm font-medium text-muted-foreground">No documents uploaded yet</p>
+            <p className="text-xs text-muted-foreground/70 mt-1">Upload sales registers, purchase data, or GST portal exports</p>
+            <Button size="sm" className="mt-4 h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white" onClick={handleUploadDocument} disabled={uploadFileMutation.isPending}>
+              <Upload className="size-3.5" />
+              {uploadFileMutation.isPending ? 'Uploading...' : 'Upload Document'}
+            </Button>
           </div>
-          <div className="divide-y divide-border/40">
-            {workspace.documents.map((doc, index) => (
-              <motion.div
-                key={doc.id}
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.45 + index * 0.04, duration: 0.3 }}
-                className="grid grid-cols-12 gap-2 px-4 py-3 hover:bg-muted/20 transition-colors items-center"
-              >
-                <div className="col-span-3 flex items-center gap-2 min-w-0">
-                  <FileText className="size-4 text-muted-foreground shrink-0" />
-                  <span className="text-sm font-medium text-foreground truncate" title={doc.name}>{doc.name}</span>
-                </div>
-                <div className="col-span-2 text-xs text-muted-foreground">
-                  {new Date(doc.uploadDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
-                </div>
-                <div className="col-span-2 text-xs text-muted-foreground">{doc.type}</div>
-                <div className="col-span-2">{getDocStatusBadge(doc.status)}</div>
-                <div className="col-span-1 text-center">
-                  {doc.invoicesExtracted > 0 ? (
-                    <span className="text-xs font-medium text-foreground">{doc.invoicesExtracted}</span>
-                  ) : (
-                    <span className="text-xs text-muted-foreground">—</span>
-                  )}
-                </div>
-                <div className="col-span-2 flex items-center justify-end gap-1">
-                  <Button variant="ghost" size="sm" className="h-6 text-[11px] px-1.5 text-muted-foreground hover:text-foreground" onClick={() => handleAction('invoices')}>
-                    <Eye className="size-3" />
-                  </Button>
-                  {doc.status === 'Error' && (
-                    <Button variant="ghost" size="sm" className="h-6 text-[11px] px-1.5 text-red-600 hover:text-red-700 hover:bg-red-50" onClick={() => handleAction('invoices')}>
-                      <RefreshCw className="size-3" />
+        ) : (
+          <div className="border border-border/60 rounded-xl overflow-hidden">
+            {/* Table header */}
+            <div className="grid grid-cols-12 gap-2 px-4 py-2.5 bg-muted/30 text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
+              <div className="col-span-3">File Name</div>
+              <div className="col-span-2">Upload Date</div>
+              <div className="col-span-2">Type</div>
+              <div className="col-span-2">Status</div>
+              <div className="col-span-1 text-center">Invoices</div>
+              <div className="col-span-2 text-right">Actions</div>
+            </div>
+            <div className="divide-y divide-border/40">
+              {documents.map((doc, index) => (
+                <motion.div
+                  key={doc.id}
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.45 + index * 0.04, duration: 0.3 }}
+                  className="grid grid-cols-12 gap-2 px-4 py-3 hover:bg-muted/20 transition-colors items-center"
+                >
+                  <div className="col-span-3 flex items-center gap-2 min-w-0">
+                    <FileText className="size-4 text-muted-foreground shrink-0" />
+                    <span className="text-sm font-medium text-foreground truncate" title={doc.name}>{doc.name}</span>
+                  </div>
+                  <div className="col-span-2 text-xs text-muted-foreground">
+                    {new Date(doc.uploadDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                  </div>
+                  <div className="col-span-2 text-xs text-muted-foreground">{doc.type}</div>
+                  <div className="col-span-2">{getDocStatusBadge(doc.status)}</div>
+                  <div className="col-span-1 text-center">
+                    {doc.invoicesExtracted > 0 ? (
+                      <span className="text-xs font-medium text-foreground">{doc.invoicesExtracted}</span>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">—</span>
+                    )}
+                  </div>
+                  <div className="col-span-2 flex items-center justify-end gap-1">
+                    <Button variant="ghost" size="sm" className="h-6 text-[11px] px-1.5 text-muted-foreground hover:text-foreground" onClick={() => handleAction('invoices')}>
+                      <Eye className="size-3" />
                     </Button>
-                  )}
-                  <Button variant="ghost" size="sm" className="h-6 text-[11px] px-1.5 text-muted-foreground hover:text-foreground" onClick={() => handleAction('invoices')}>
-                    <Download className="size-3" />
-                  </Button>
-                </div>
-              </motion.div>
-            ))}
+                    {doc.status === 'Error' && (
+                      <Button variant="ghost" size="sm" className="h-6 text-[11px] px-1.5 text-red-600 hover:text-red-700 hover:bg-red-50" onClick={() => handleAction('invoices')}>
+                        <RefreshCw className="size-3" />
+                      </Button>
+                    )}
+                    <Button variant="ghost" size="sm" className="h-6 text-[11px] px-1.5 text-muted-foreground hover:text-foreground" onClick={() => handleAction('invoices')}>
+                      <Download className="size-3" />
+                    </Button>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
       </motion.section>
 
       {/* ═══════════════════════════════════════════════════════════════════════
@@ -913,51 +958,63 @@ export default function ClientWorkspacePage() {
         <motion.section initial={{ opacity: 0, x: -12 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.5, duration: 0.4 }}>
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">Reconciliation History</h2>
-            <Button variant="ghost" size="sm" className="text-xs font-medium text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 h-7 gap-1" onClick={() => handleAction('reconcile')}>
-              Run Reconciliation <ArrowRight className="h-3.5 w-3.5" />
+            <Button variant="ghost" size="sm" className="text-xs font-medium text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 h-7 gap-1" onClick={handleRunReconciliation} disabled={createReconRunMutation.isPending}>
+              {createReconRunMutation.isPending ? 'Running...' : 'Run Reconciliation'} <ArrowRight className="h-3.5 w-3.5" />
             </Button>
           </div>
 
-          <div className="border border-border/60 rounded-xl divide-y divide-border/40 overflow-hidden">
-            {workspace.reconRuns.map((run, index) => (
-              <motion.div
-                key={run.id}
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.55 + index * 0.05, duration: 0.3 }}
-                className="px-4 py-3.5 hover:bg-muted/20 transition-colors"
-              >
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium text-foreground">{run.period}</span>
-                  <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${
-                    run.matchRate >= 90 ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                    : run.matchRate >= 70 ? 'bg-amber-50 text-amber-700 border-amber-200'
-                    : 'bg-red-50 text-red-700 border-red-200'
-                  }`}>
-                    {run.matchRate}% match
-                  </Badge>
-                </div>
-                <div className="grid grid-cols-4 gap-2 text-xs">
-                  <div>
-                    <p className="text-muted-foreground">Mismatches</p>
-                    <p className="font-medium text-foreground">{run.mismatches}</p>
+          {mappedReconRuns.length === 0 ? (
+            <div className="border border-border/60 rounded-xl p-8 flex flex-col items-center justify-center text-center">
+              <GitCompareArrows className="size-10 text-muted-foreground/30 mb-3" />
+              <p className="text-sm font-medium text-muted-foreground">No reconciliation runs yet</p>
+              <p className="text-xs text-muted-foreground/70 mt-1">Run reconciliation to match your books with GST portal data</p>
+              <Button size="sm" className="mt-4 h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white" onClick={handleRunReconciliation} disabled={createReconRunMutation.isPending}>
+                <GitCompareArrows className="size-3.5" />
+                {createReconRunMutation.isPending ? 'Running...' : 'Run Reconciliation'}
+              </Button>
+            </div>
+          ) : (
+            <div className="border border-border/60 rounded-xl divide-y divide-border/40 overflow-hidden">
+              {mappedReconRuns.map((run, index) => (
+                <motion.div
+                  key={run.id}
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.55 + index * 0.05, duration: 0.3 }}
+                  className="px-4 py-3.5 hover:bg-muted/20 transition-colors"
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-medium text-foreground">{run.period}</span>
+                    <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${
+                      run.matchRate >= 90 ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                      : run.matchRate >= 70 ? 'bg-amber-50 text-amber-700 border-amber-200'
+                      : 'bg-red-50 text-red-700 border-red-200'
+                    }`}>
+                      {run.matchRate}% match
+                    </Badge>
                   </div>
-                  <div>
-                    <p className="text-muted-foreground">Missing</p>
-                    <p className="font-medium text-foreground">{run.missingInvoices}</p>
+                  <div className="grid grid-cols-4 gap-2 text-xs">
+                    <div>
+                      <p className="text-muted-foreground">Mismatches</p>
+                      <p className="font-medium text-foreground">{run.mismatches}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Missing</p>
+                      <p className="font-medium text-foreground">{run.missingInvoices}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Tax Diff</p>
+                      <p className="font-medium text-foreground">{formatCurrency(run.taxDifference)}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Run Date</p>
+                      <p className="font-medium text-foreground">{new Date(run.runDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-muted-foreground">Tax Diff</p>
-                    <p className="font-medium text-foreground">{formatCurrency(run.taxDifference)}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">Run Date</p>
-                    <p className="font-medium text-foreground">{new Date(run.runDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</p>
-                  </div>
-                </div>
-              </motion.div>
-            ))}
-          </div>
+                </motion.div>
+              ))}
+            </div>
+          )}
         </motion.section>
 
         {/* SECTION 6: AI COMPLIANCE ADVISOR */}
@@ -968,61 +1025,69 @@ export default function ClientWorkspacePage() {
               AI Compliance Advisor
             </h2>
             <Badge variant="outline" className="text-[11px] text-muted-foreground">
-              {workspace.insights.filter(i => i.severity === 'critical').length} critical
+              {insights.filter(i => i.severity === 'critical').length} critical
             </Badge>
           </div>
 
-          <div className="border border-border/60 rounded-xl divide-y divide-border/40 overflow-hidden">
-            {workspace.insights.map((insight, index) => {
-              const severityConfig = {
-                critical: { icon: XCircle, color: 'text-red-600', bg: 'bg-red-50', badge: 'bg-red-100 text-red-700 border-red-200' },
-                warning: { icon: AlertTriangle, color: 'text-amber-600', bg: 'bg-amber-50', badge: 'bg-amber-100 text-amber-700 border-amber-200' },
-                info: { icon: CheckCircle2, color: 'text-blue-600', bg: 'bg-blue-50', badge: 'bg-blue-100 text-blue-700 border-blue-200' },
-              }[insight.severity];
-              const SevIcon = severityConfig.icon;
+          {insights.length === 0 ? (
+            <div className="border border-border/60 rounded-xl p-8 flex flex-col items-center justify-center text-center">
+              <CheckCircle2 className="size-10 text-emerald-300 mb-3" />
+              <p className="text-sm font-medium text-muted-foreground">No compliance issues detected</p>
+              <p className="text-xs text-muted-foreground/70 mt-1">Your client data looks clean</p>
+            </div>
+          ) : (
+            <div className="border border-border/60 rounded-xl divide-y divide-border/40 overflow-hidden">
+              {insights.map((insight, index) => {
+                const severityConfig = {
+                  critical: { icon: XCircle, color: 'text-red-600', bg: 'bg-red-50', badge: 'bg-red-100 text-red-700 border-red-200' },
+                  warning: { icon: AlertTriangle, color: 'text-amber-600', bg: 'bg-amber-50', badge: 'bg-amber-100 text-amber-700 border-amber-200' },
+                  info: { icon: CheckCircle2, color: 'text-blue-600', bg: 'bg-blue-50', badge: 'bg-blue-100 text-blue-700 border-blue-200' },
+                }[insight.severity];
+                const SevIcon = severityConfig.icon;
 
-              return (
-                <motion.div
-                  key={insight.id}
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.6 + index * 0.05, duration: 0.3 }}
-                  className="px-4 py-3.5 hover:bg-muted/20 transition-colors group"
-                >
-                  <div className="flex gap-3">
-                    <div className={`flex items-center justify-center h-7 w-7 rounded-lg shrink-0 ${severityConfig.bg}`}>
-                      <SevIcon className={`size-3.5 ${severityConfig.color}`} />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-start justify-between gap-2">
-                        <p className="text-sm font-medium text-foreground leading-snug">{insight.title}</p>
-                        {insight.severity === 'critical' && (
-                          <span className="text-[9px] font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded shrink-0">URGENT</span>
-                        )}
+                return (
+                  <motion.div
+                    key={insight.id}
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.6 + index * 0.05, duration: 0.3 }}
+                    className="px-4 py-3.5 hover:bg-muted/20 transition-colors group"
+                  >
+                    <div className="flex gap-3">
+                      <div className={`flex items-center justify-center h-7 w-7 rounded-lg shrink-0 ${severityConfig.bg}`}>
+                        <SevIcon className={`size-3.5 ${severityConfig.color}`} />
                       </div>
-                      <p className="text-xs text-muted-foreground mt-1 leading-relaxed line-clamp-2">{insight.description}</p>
-                      <div className="flex items-center gap-2 mt-2">
-                        <Badge variant="outline" className={`text-[9px] px-1.5 py-0 ${severityConfig.badge}`}>{insight.category}</Badge>
-                        <button
-                          className="text-xs font-semibold text-emerald-600 hover:text-emerald-700 flex items-center gap-1 group-hover:gap-1.5 transition-all"
-                          onClick={() => {
-                            if (insight.actionView === 'returns') {
-                              handleOpenReturnPrep('GSTR-1');
-                            } else {
-                              handleAction(insight.actionView);
-                            }
-                          }}
-                        >
-                          {insight.suggestedAction}
-                          <ArrowRight className="h-3 w-3" />
-                        </button>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-start justify-between gap-2">
+                          <p className="text-sm font-medium text-foreground leading-snug">{insight.title}</p>
+                          {insight.severity === 'critical' && (
+                            <span className="text-[9px] font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded shrink-0">URGENT</span>
+                          )}
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-1 leading-relaxed line-clamp-2">{insight.description}</p>
+                        <div className="flex items-center gap-2 mt-2">
+                          <Badge variant="outline" className={`text-[9px] px-1.5 py-0 ${severityConfig.badge}`}>{insight.category}</Badge>
+                          <button
+                            className="text-xs font-semibold text-emerald-600 hover:text-emerald-700 flex items-center gap-1 group-hover:gap-1.5 transition-all"
+                            onClick={() => {
+                              if (insight.actionView === 'returns') {
+                                handleOpenReturnPrep('GSTR-1');
+                              } else {
+                                handleAction(insight.actionView);
+                              }
+                            }}
+                          >
+                            {insight.suggestedAction}
+                            <ArrowRight className="h-3 w-3" />
+                          </button>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                </motion.div>
-              );
-            })}
-          </div>
+                  </motion.div>
+                );
+              })}
+            </div>
+          )}
         </motion.section>
       </div>
 
@@ -1032,31 +1097,39 @@ export default function ClientWorkspacePage() {
       <motion.section initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.6, duration: 0.4 }}>
         <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider mb-3">Activity Timeline</h2>
 
-        <div className="border border-border/60 rounded-xl overflow-hidden">
-          <div className="divide-y divide-border/40">
-            {workspace.activities.map((event, index) => {
-              const IconComp = getActivityIcon(event.type);
-              const iconColor = getActivityColor(event.type);
-              return (
-                <motion.div
-                  key={event.id}
-                  initial={{ opacity: 0, x: -8 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: 0.65 + index * 0.04, duration: 0.3 }}
-                  className="flex items-center gap-3 px-4 py-3 hover:bg-muted/20 transition-colors"
-                >
-                  <div className={`flex items-center justify-center h-7 w-7 rounded-lg shrink-0 ${iconColor}`}>
-                    <IconComp className="size-3.5" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm text-foreground">{event.description}</p>
-                  </div>
-                  <span className="text-xs text-muted-foreground shrink-0">{formatRelativeTime(event.timestamp)}</span>
-                </motion.div>
-              );
-            })}
+        {activities.length === 0 ? (
+          <div className="border border-border/60 rounded-xl p-8 flex flex-col items-center justify-center text-center">
+            <Inbox className="size-10 text-muted-foreground/30 mb-3" />
+            <p className="text-sm font-medium text-muted-foreground">No activity recorded yet</p>
+            <p className="text-xs text-muted-foreground/70 mt-1">Activities will appear as you upload documents, file returns, and run reconciliation</p>
           </div>
-        </div>
+        ) : (
+          <div className="border border-border/60 rounded-xl overflow-hidden">
+            <div className="divide-y divide-border/40">
+              {activities.map((event, index) => {
+                const IconComp = getActivityIcon(event.type);
+                const iconColor = getActivityColor(event.type);
+                return (
+                  <motion.div
+                    key={event.id}
+                    initial={{ opacity: 0, x: -8 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: 0.65 + index * 0.04, duration: 0.3 }}
+                    className="flex items-center gap-3 px-4 py-3 hover:bg-muted/20 transition-colors"
+                  >
+                    <div className={`flex items-center justify-center h-7 w-7 rounded-lg shrink-0 ${iconColor}`}>
+                      <IconComp className="size-3.5" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-foreground">{event.description}</p>
+                    </div>
+                    <span className="text-xs text-muted-foreground shrink-0">{formatRelativeTime(event.timestamp)}</span>
+                  </motion.div>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </motion.section>
 
     </div>

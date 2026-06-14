@@ -79,7 +79,6 @@ import {
   Clock,
   UserPlus,
   TrendingUp,
-  TrendingDown,
   FileWarning,
   CircleDot,
   IndianRupee,
@@ -89,8 +88,15 @@ import {
 import { useApp } from '@/contexts/AppContext';
 import type { AppView } from '@/contexts/AppContext';
 import { validateGSTIN, formatGSTIN, formatCurrency } from '@/lib/gst-utils';
-import { useGSTStore } from '@/stores/gst-store';
-import type { SampleClient } from '@/data/sample-data';
+import {
+  useClients,
+  useCreateClient,
+  useUpdateClient,
+  useDeleteClient,
+  useFilings,
+} from '@/hooks/api';
+import { toast } from 'sonner';
+import type { Client } from '@/types/gst';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -164,7 +170,32 @@ interface MonthlyVolume {
   amount: number;
 }
 
-interface ClientPortfolio extends SampleClient {
+/** API client with _aggregations from GET /api/clients */
+type ApiClient = Client & {
+  _aggregations?: {
+    totalInvoices: number;
+    filedReturns: number;
+    pendingReturns: number;
+    matchPercentage: number;
+  };
+};
+
+interface ClientPortfolio {
+  id: string;
+  gstin: string;
+  tradeName: string;
+  legalName?: string;
+  state?: string;
+  stateCode?: string;
+  entityType: string;
+  returnPeriod?: string;
+  lastFilingDate?: string;
+  status: string;
+  healthScore: number;
+  contactEmail?: string;
+  contactPhone?: string;
+  createdAt: string;
+  updatedAt: string;
   _portfolio: {
     monthlyTaxVolume: number;
     monthlyVolumeChart: MonthlyVolume[];
@@ -202,42 +233,29 @@ const EMPTY_FORM: ClientForm = {
 
 // ─── Portfolio Derivation Helpers ──────────────────────────────────────────────
 
-/** Compute a ClientPortfolio from a store client by deriving portfolio metrics from store data */
-function derivePortfolio(client: SampleClient, store: ReturnType<typeof useGSTStore>): ClientPortfolio {
-  const filings = store.getFilingsForClient(client.id);
-  const issues = store.getIssuesForClient(client.id);
-  const invoices = store.getInvoicesForClient(client.id);
-  const reconSummary = store.getReconSummary(client.id);
-
+/** Compute a ClientPortfolio from an API client by deriving portfolio metrics */
+function derivePortfolio(
+  client: ApiClient,
+  clientFilings: Array<{ returnType: string; period: string; status: string; filedDate?: string; totalTaxableValue: number }>
+): ClientPortfolio {
   const hs = client.healthScore;
-  const pendingFilings = filings.filter(f => f.status !== 'filed').length;
-  const taxVolume = filings.reduce((sum, f) => sum + f.totalTaxableValue, 0);
-  const unresolvedIssues = issues.filter(i => !i.resolved).length;
+  const pendingFilings = client._aggregations?.pendingReturns ?? clientFilings.filter(f => f.status !== 'filed').length;
+  const taxVolume = clientFilings.reduce((sum, f) => sum + f.totalTaxableValue, 0);
+  const matchRate = client._aggregations?.matchPercentage ?? 0;
 
-  // Derive risk level from health score and issues
+  // Derive risk level from health score
   const riskLevel: RiskLevel = hs > 80 ? 'Low' : hs >= 50 ? 'Medium' : 'High';
   const riskDetail = riskLevel === 'High' ? (pendingFilings > 3 ? 'Multiple delays' : 'Filing delays')
-    : riskLevel === 'Medium' ? `${unresolvedIssues} issue${unresolvedIssues !== 1 ? 's' : ''}`
+    : riskLevel === 'Medium' ? `${pendingFilings} pending filing${pendingFilings !== 1 ? 's' : ''}`
     : undefined;
 
-  // Derive match rate from recon summary
-  let matchRate = 78;
-  if (reconSummary.length > 0) {
-    const total = reconSummary.reduce((sum, c) => sum + c.count, 0);
-    const perfectMatch = reconSummary.find(c => c.label === 'Perfect Match');
-    matchRate = perfectMatch && total > 0 ? Math.round((perfectMatch.count / total) * 100) : 0;
-  } else {
-    matchRate = hs > 80 ? 94 : hs < 50 ? 58 : 78;
-  }
-
-  // Derive health breakdown from health score components
+  // Derive health breakdown from health score and data
   const gstinValidity = Math.min(100, hs + 3);
   const filingTimeliness = pendingFilings === 0 ? Math.min(100, hs + 5) : Math.max(10, hs - pendingFilings * 8);
-  const invoiceAccuracy = Math.min(100, Math.max(10, matchRate));
+  const invoiceAccuracy = Math.min(100, Math.max(10, matchRate > 0 ? matchRate : hs > 80 ? 94 : hs < 50 ? 58 : 78));
 
-  // Recent filings (last 3 filings from store)
-  const recentFilings = filings.slice(0, 3).map(f => {
-    const periodLabel = f.period.replace('-', ' ');
+  // Recent filings (last 3 filings)
+  const recentFilings = clientFilings.slice(0, 3).map(f => {
     const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     const [year, month] = f.period.split('-').map(Number);
     const label = `${monthNames[month - 1]} ${year}`;
@@ -260,7 +278,21 @@ function derivePortfolio(client: SampleClient, store: ReturnType<typeof useGSTSt
   ];
 
   return {
-    ...client,
+    id: client.id,
+    gstin: client.gstin,
+    tradeName: client.tradeName,
+    legalName: client.legalName ?? undefined,
+    state: client.state ?? undefined,
+    stateCode: client.stateCode ?? undefined,
+    entityType: client.entityType,
+    returnPeriod: client.returnPeriod ?? undefined,
+    lastFilingDate: client.lastFilingDate ?? undefined,
+    status: client.status,
+    healthScore: client.healthScore,
+    contactEmail: client.contactEmail ?? undefined,
+    contactPhone: client.contactPhone ?? undefined,
+    createdAt: client.createdAt,
+    updatedAt: client.updatedAt,
     _portfolio: {
       monthlyTaxVolume: taxVolume,
       monthlyVolumeChart,
@@ -676,9 +708,18 @@ function FilingStatusDot({ count }: { count: number }) {
 
 export default function ClientRegistryPage() {
   const { setCurrentView, setSelectedClientId } = useApp();
-  const store = useGSTStore();
 
-  // ─── State ────────────────────────────────────────────────────────────────
+  // ── React Query hooks ──────────────────────────────────────────────────────
+  const { data: clientsData, isLoading: clientsLoading } = useClients();
+  const { data: filingsData, isLoading: filingsLoading } = useFilings();
+
+  const createClientMutation = useCreateClient();
+  const updateClientMutation = useUpdateClient();
+  const deleteClientMutation = useDeleteClient();
+
+  const isLoading = clientsLoading || filingsLoading;
+
+  // ── State ────────────────────────────────────────────────────────────────
   const [searchQuery, setSearchQuery] = useState('');
 
   // Dialog state
@@ -686,7 +727,6 @@ export default function ClientRegistryPage() {
   const [editingClient, setEditingClient] = useState<ClientPortfolio | null>(null);
   const [form, setForm] = useState<ClientForm>(EMPTY_FORM);
   const [gstinError, setGstinError] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
 
   // Sheet state
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -695,12 +735,26 @@ export default function ClientRegistryPage() {
   // Delete confirmation
   const [deleteTarget, setDeleteTarget] = useState<ClientPortfolio | null>(null);
 
-  // ─── Derive clients with portfolio data from store ───────────────────────
-  const clients = useMemo<ClientPortfolio[]>(() => {
-    return store.clients.map(c => derivePortfolio(c, store));
-  }, [store]);
+  // ── Derive clients with portfolio data from API ──────────────────────────
+  const apiClients = clientsData?.clients ?? [];
+  const allFilings = filingsData?.filings ?? [];
 
-  // ─── Derived Data ─────────────────────────────────────────────────────────
+  const clients = useMemo<ClientPortfolio[]>(() => {
+    return apiClients.map(c => {
+      // Get filings for this specific client
+      const clientFilings = allFilings.filter(f => f.clientId === c.id);
+      const filingData = clientFilings.map(f => ({
+        returnType: f.returnType,
+        period: f.period,
+        status: f.status,
+        filedDate: f.filedDate,
+        totalTaxableValue: f.totalTaxableValue,
+      }));
+      return derivePortfolio(c, filingData);
+    });
+  }, [apiClients, allFilings]);
+
+  // ── Derived Data ─────────────────────────────────────────────────────────
   const filteredClients = useMemo(() => {
     if (!searchQuery) return clients;
     const q = searchQuery.toLowerCase();
@@ -721,7 +775,7 @@ export default function ClientRegistryPage() {
     return { active, atRisk, pendingFilings, totalTaxVolume };
   }, [clients]);
 
-  // ─── Form Handlers ────────────────────────────────────────────────────────
+  // ── Form Handlers ────────────────────────────────────────────────────────
   const openAddDialog = () => {
     setEditingClient(null);
     setForm(EMPTY_FORM);
@@ -774,53 +828,62 @@ export default function ClientRegistryPage() {
     }
     if (gstinError) return;
 
-    setSubmitting(true);
-    try {
-      if (editingClient) {
-        store.updateClient(editingClient.id, {
-          gstin: formatGSTIN(form.gstin),
-          tradeName: form.tradeName,
-          legalName: form.legalName || undefined,
-          contactEmail: form.contactEmail || undefined,
-          contactPhone: form.contactPhone || undefined,
-          state: form.state || undefined,
-          stateCode: form.stateCode || undefined,
-          entityType: form.entityType as SampleClient['entityType'],
-          returnPeriod: form.returnPeriod as SampleClient['returnPeriod'],
-        });
-        setDialogOpen(false);
-      } else {
-        store.addClient({
-          gstin: formatGSTIN(form.gstin),
-          tradeName: form.tradeName,
-          legalName: form.legalName || '',
-          state: form.state || '',
-          stateCode: form.stateCode || '',
-          entityType: form.entityType as SampleClient['entityType'],
-          returnPeriod: form.returnPeriod as SampleClient['returnPeriod'],
-          lastFilingDate: '',
-          status: 'active',
-          healthScore: 50,
-          contactEmail: form.contactEmail || undefined,
-          contactPhone: form.contactPhone || undefined,
-        });
-        setDialogOpen(false);
-      }
-    } catch (err) {
-      console.error('Submit error:', err);
-    } finally {
-      setSubmitting(false);
+    const clientData = {
+      gstin: formatGSTIN(form.gstin),
+      tradeName: form.tradeName,
+      legalName: form.legalName || undefined,
+      contactEmail: form.contactEmail || undefined,
+      contactPhone: form.contactPhone || undefined,
+      state: form.state || undefined,
+      stateCode: form.stateCode || undefined,
+      entityType: form.entityType,
+      returnPeriod: form.returnPeriod,
+    };
+
+    if (editingClient) {
+      updateClientMutation.mutate(
+        { id: editingClient.id, ...clientData },
+        {
+          onSuccess: () => {
+            setDialogOpen(false);
+            toast.success('Client updated successfully');
+          },
+          onError: (err) => {
+            toast.error(err.message || 'Failed to update client');
+          },
+        }
+      );
+    } else {
+      createClientMutation.mutate(
+        { ...clientData, status: 'active', healthScore: 50 },
+        {
+          onSuccess: () => {
+            setDialogOpen(false);
+            toast.success('Client added successfully');
+          },
+          onError: (err) => {
+            toast.error(err.message || 'Failed to add client');
+          },
+        }
+      );
     }
   };
 
   const handleDelete = () => {
     if (!deleteTarget) return;
-    store.deleteClient(deleteTarget.id);
-    setDeleteTarget(null);
-    if (sheetClient?.id === deleteTarget.id) {
-      setSheetOpen(false);
-      setSheetClient(null);
-    }
+    deleteClientMutation.mutate(deleteTarget.id, {
+      onSuccess: () => {
+        setDeleteTarget(null);
+        if (sheetClient?.id === deleteTarget.id) {
+          setSheetOpen(false);
+          setSheetClient(null);
+        }
+        toast.success('Client deleted successfully');
+      },
+      onError: (err) => {
+        toast.error(err.message || 'Failed to delete client');
+      },
+    });
   };
 
   const openClientSheet = (client: ClientPortfolio) => {
@@ -833,8 +896,12 @@ export default function ClientRegistryPage() {
     setCurrentView(view as AppView);
   };
 
-  // ─── Loading ──────────────────────────────────────────────────────────────
-  // No loading state needed — store is synchronous
+  const isSubmitting = createClientMutation.isPending || updateClientMutation.isPending;
+
+  // ─── Loading Skeleton ──────────────────────────────────────────────────────
+  if (isLoading) {
+    return <PageSkeleton />;
+  }
 
   // ─── Render ───────────────────────────────────────────────────────────────
   return (
@@ -1251,10 +1318,10 @@ export default function ClientRegistryPage() {
             </Button>
             <Button
               onClick={handleSubmit}
-              disabled={submitting || !form.tradeName || !form.gstin}
+              disabled={isSubmitting || !form.tradeName || !form.gstin}
               className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white h-9"
             >
-              {submitting ? (
+              {isSubmitting ? (
                 <motion.div
                   className="size-4 border-2 border-white/30 border-t-white rounded-full"
                   animate={{ rotate: 360 }}
@@ -1454,12 +1521,13 @@ export default function ClientRegistryPage() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={deleteClientMutation.isPending}>Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDelete}
+              disabled={deleteClientMutation.isPending}
               className="bg-red-600 hover:bg-red-700 text-white"
             >
-              Delete Client
+              {deleteClientMutation.isPending ? 'Deleting...' : 'Delete Client'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

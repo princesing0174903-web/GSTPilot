@@ -1,0 +1,486 @@
+   580→  }, [client, store]);
+   581→
+   582→  const name = client?.tradeName ?? 'Unknown Client';
+   583→
+   584→  // Filter returns
+   585→  const filteredReturns = useMemo(() => {
+   586→    if (!workspace) return [];
+   587→    if (returnFilter === 'all') return workspace.returns;
+   588→    return workspace.returns.filter(r => r.type === returnFilter);
+   589→  }, [workspace, returnFilter]);
+   590→
+   591→  const handleBack = () => { setSelectedClientId(null); setCurrentView('clients'); };
+   592→  const handleAction = (view: AppView) => setCurrentView(view);
+   593→
+   594→  const handleOpenReturnPrep = (returnType: 'GSTR-1' | 'GSTR-3B' = 'GSTR-1') => {
+   595→    const resolvedId = client?.id ?? selectedClientId ?? 'client-1';
+   596→    setReturnPrepCtx({
+   597→      clientId: resolvedId,
+   598→      returnType,
+   599→      period: '2025-06',
+   600→    });
+   601→    setCurrentView('return-prep');
+   602→  };
+   603→
+   604→  // No client selected or not found
+   605→  if (!selectedClientId || !client || !workspace) {
+   606→    return (
+   607→      <div className="max-w-6xl mx-auto px-4 md:px-6 py-6 space-y-6">
+   608→        <Skeleton className="h-6 w-40" />
+   609→        <div className="border rounded-xl p-6 space-y-4">
+   610→          <div className="flex gap-4"><Skeleton className="h-16 w-16 rounded-full" /><div className="space-y-2 flex-1"><Skeleton className="h-6 w-48" /><Skeleton className="h-4 w-64" /></div></div>
+   611→        </div>
+   612→        <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">{Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-20 rounded-lg" />)}</div>
+   613→      </div>
+   614→    );
+   615→  }
+   616→
+   617→  const healthColor = getHealthColor(workspace.complianceScore);
+   618→
+   619→  return (
+   620→    <div className="max-w-6xl mx-auto px-4 md:px-6 py-6 space-y-8">
+   621→
+   622→      {/* ═══════════════════════════════════════════════════════════════════════
+   623→          HEADER
+   624→          ═══════════════════════════════════════════════════════════════════════ */}
+   625→      <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
+   626→        {/* Breadcrumb */}
+   627→        <div className="flex items-center gap-2 mb-4">
+   628→          <Button variant="ghost" size="sm" className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground gap-1" onClick={handleBack}>
+   629→            <ArrowLeft className="h-3.5 w-3.5" />
+   630→            Client Portfolio
+   631→          </Button>
+   632→          <ChevronRight className="h-3 w-3 text-muted-foreground" />
+   633→          <span className="text-xs text-muted-foreground">{name}</span>
+   634→        </div>
+   635→
+   636→        {/* Main header */}
+   637→        <div className="border border-border/60 rounded-xl p-5">
+   638→          <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-5">
+   639→            {/* Left: Identity */}
+   640→            <div className="flex items-start gap-4">
+   641→              <HealthRing score={workspace.complianceScore} size={72} strokeWidth={5} />
+   642→              <div className="min-w-0">
+   643→                <div className="flex items-center gap-2 flex-wrap">
+   644→                  <h1 className="text-xl font-semibold text-foreground tracking-tight">{name}</h1>
+   645→                  {getRiskBadge(workspace.riskLevel)}
+   646→                </div>
+   647→                {client.legalName && <p className="text-sm text-muted-foreground mt-0.5">{client.legalName}</p>}
+   648→
+   649→                {/* Key info row */}
+   650→                <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 mt-2.5">
+   651→                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+   652→                    <Building2 className="size-3 text-slate-400" />
+   653→                    <span className="font-mono font-medium text-foreground">{client.gstin}</span>
+   654→                  </div>
+   655→                  <Separator orientation="vertical" className="h-3.5" />
+   656→                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+   657→                    <MapPin className="size-3 text-slate-400" />
+   658→                    <span>{client.state}</span>
+   659→                  </div>
+   660→                  <Separator orientation="vertical" className="h-3.5" />
+   661→                  <span className="text-xs text-muted-foreground">
+   662→                    {workspace.filingFrequency} Filing
+   663→                  </span>
+   664→                  <Separator orientation="vertical" className="h-3.5" />
+   665→                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+   666→                    <Calendar className="size-3 text-slate-400" />
+   667→                    <span>Last Filed: {new Date(workspace.lastFilingDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: '2-digit' })}</span>
+   668→                  </div>
+   669→                </div>
+   670→              </div>
+   671→            </div>
+   672→
+   673→            {/* Right: Quick actions */}
+   674→            <div className="flex flex-wrap items-center gap-2 shrink-0">
+   675→              <Button size="sm" className="h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => handleAction('invoices')}>
+   676→                <Upload className="size-3.5" />
+   677→                Upload Documents
+   678→              </Button>
+   679→              <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5" onClick={() => handleOpenReturnPrep('GSTR-1')}>
+   680→                <FileText className="size-3.5" />
+   681→                Create Return
+   682→              </Button>
+   683→              <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5" onClick={() => handleAction('reconcile')}>
+   684→                <GitCompareArrows className="size-3.5" />
+   685→                Run Reconciliation
+   686→              </Button>
+   687→              <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5" onClick={() => handleOpenReturnPrep('GSTR-3B')}>
+   688→                <Send className="size-3.5" />
+   689→                File Return
+   690→              </Button>
+   691→            </div>
+   692→          </div>
+   693→        </div>
+   694→      </motion.div>
+   695→
+   696→      {/* ═══════════════════════════════════════════════════════════════════════
+   697→          SECTION 1: CLIENT HEALTH OVERVIEW
+   698→          ═══════════════════════════════════════════════════════════════════════ */}
+   699→      <motion.section initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1, duration: 0.4 }}>
+   700→        <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider mb-3">Client Health Overview</h2>
+   701→        <motion.div variants={stagger} initial="hidden" animate="visible" className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+   702→          {[
+   703→            { label: 'Compliance Score', value: `${workspace.complianceScore}%`, icon: Gauge, color: healthColor.text, bg: healthColor.bg },
+   704→            { label: 'Pending Returns', value: String(workspace.pendingReturns), icon: Clock, color: 'text-amber-600', bg: 'bg-amber-50' },
+   705→            { label: 'Open Issues', value: String(workspace.openIssues), icon: AlertCircle, color: 'text-red-600', bg: 'bg-red-50' },
+   706→            { label: 'Tax Volume', value: formatCurrency(workspace.taxVolume), icon: IndianRupee, color: 'text-emerald-600', bg: 'bg-emerald-50' },
+   707→            { label: 'Match Rate', value: `${workspace.matchRate}%`, icon: GitCompareArrows, color: 'text-teal-600', bg: 'bg-teal-50' },
+   708→            { label: 'Documents', value: String(workspace.documentsUploaded), icon: FolderOpen, color: 'text-slate-600', bg: 'bg-slate-50' },
+   709→          ].map((item) => (
+   710→            <motion.div key={item.label} variants={fadeUp} whileHover={{ y: -2 }} transition={{ type: 'spring', stiffness: 400, damping: 25 }}>
+   711→              <div className="border border-border/60 rounded-xl p-4 hover:border-border transition-colors">
+   712→                <div className="flex items-center gap-2 mb-2.5">
+   713→                  <div className={`flex items-center justify-center h-7 w-7 rounded-md ${item.bg}`}>
+   714→                    <item.icon className={`size-3.5 ${item.color}`} />
+   715→                  </div>
+   716→                </div>
+   717→                <p className="text-lg font-bold text-foreground leading-tight">{item.value}</p>
+   718→                <p className="text-[11px] text-muted-foreground mt-1">{item.label}</p>
+   719→              </div>
+   720→            </motion.div>
+   721→          ))}
+   722→        </motion.div>
+   723→      </motion.section>
+   724→
+   725→      {/* ═══════════════════════════════════════════════════════════════════════
+   726→          SECTION 2: GST RETURN TIMELINE
+   727→          ═══════════════════════════════════════════════════════════════════════ */}
+   728→      <motion.section initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2, duration: 0.4 }}>
+   729→        <div className="flex items-center justify-between mb-3">
+   730→          <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">GST Return Timeline</h2>
+   731→          <Select value={returnFilter} onValueChange={setReturnFilter}>
+   732→            <SelectTrigger className="h-7 w-32 text-xs border-border/60">
+   733→              <SelectValue />
+   734→            </SelectTrigger>
+   735→            <SelectContent>
+   736→              <SelectItem value="all">All Returns</SelectItem>
+   737→              <SelectItem value="GSTR-1">GSTR-1</SelectItem>
+   738→              <SelectItem value="GSTR-3B">GSTR-3B</SelectItem>
+   739→            </SelectContent>
+   740→          </Select>
+   741→        </div>
+   742→
+   743→        <div className="border border-border/60 rounded-xl overflow-hidden">
+   744→          {/* Table header */}
+   745→          <div className="grid grid-cols-12 gap-2 px-4 py-2.5 bg-muted/30 text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
+   746→            <div className="col-span-2">Type</div>
+   747→            <div className="col-span-2">Period</div>
+   748→            <div className="col-span-2">Status</div>
+   749→            <div className="col-span-2">Filed Date</div>
+   750→            <div className="col-span-2">ARN</div>
+   751→            <div className="col-span-2 text-right">Tax Amount</div>
+   752→          </div>
+   753→          {/* Table rows */}
+   754→          <div className="divide-y divide-border/40">
+   755→            <AnimatePresence>
+   756→              {filteredReturns.map((ret, index) => (
+   757→                <motion.div
+   758→                  key={ret.id}
+   759→                  initial={{ opacity: 0, y: 8 }}
+   760→                  animate={{ opacity: 1, y: 0 }}
+   761→                  transition={{ delay: 0.25 + index * 0.04, duration: 0.3 }}
+   762→                  className="grid grid-cols-12 gap-2 px-4 py-3 hover:bg-muted/20 transition-colors items-center"
+   763→                >
+   764→                  <div className="col-span-2 text-sm font-medium text-foreground">{ret.type}</div>
+   765→                  <div className="col-span-2 text-sm text-muted-foreground">{ret.period}</div>
+   766→                  <div className="col-span-2">{getReturnStatusBadge(ret.status)}</div>
+   767→                  <div className="col-span-2 text-xs text-muted-foreground">{ret.filingDate ? new Date(ret.filingDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : '—'}</div>
+   768→                  <div className="col-span-2 text-xs font-mono text-muted-foreground">{ret.arn || '—'}</div>
+   769→                  <div className="col-span-2 text-sm font-medium text-foreground text-right">{formatCurrency(ret.taxAmount)}</div>
+   770→                </motion.div>
+   771→              ))}
+   772→            </AnimatePresence>
+   773→          </div>
+   774→        </div>
+   775→      </motion.section>
+   776→
+   777→      {/* ═══════════════════════════════════════════════════════════════════════
+   778→          SECTION 3: PENDING ACTIONS
+   779→          ═══════════════════════════════════════════════════════════════════════ */}
+   780→      <motion.section initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3, duration: 0.4 }}>
+   781→        <div className="flex items-center justify-between mb-3">
+   782→          <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">Pending Actions</h2>
+   783→          <Badge variant="outline" className="text-[11px] text-muted-foreground">
+   784→            {workspace.pendingActions.filter(a => a.priority === 'high').length} urgent
+   785→          </Badge>
+   786→        </div>
+   787→
+   788→        <div className="border border-border/60 rounded-xl divide-y divide-border/40 overflow-hidden">
+   789→          <AnimatePresence>
+   790→            {workspace.pendingActions.map((action, index) => {
+   791→              const IconComp = getActionTypeIcon(action.type);
+   792→              const priorityStripe = action.priority === 'high' ? 'bg-red-500' : action.priority === 'medium' ? 'bg-amber-500' : 'bg-slate-300';
+   793→              return (
+   794→                <motion.div
+   795→                  key={action.id}
+   796→                  initial={{ opacity: 0, x: -8 }}
+   797→                  animate={{ opacity: 1, x: 0 }}
+   798→                  transition={{ delay: 0.35 + index * 0.05, duration: 0.3 }}
+   799→                  className="flex items-center gap-3 px-4 py-3.5 hover:bg-muted/20 transition-colors group"
+   800→                >
+   801→                  <div className={`h-8 w-1 rounded-full shrink-0 ${priorityStripe}`} />
+   802→                  <div className={`flex items-center justify-center h-8 w-8 rounded-lg shrink-0 ${
+   803→                    action.priority === 'high' ? 'bg-red-50 text-red-600'
+   804→                    : action.priority === 'medium' ? 'bg-amber-50 text-amber-600'
+   805→                    : 'bg-slate-100 text-slate-500'
+   806→                  }`}>
+   807→                    <IconComp className="size-4" />
+   808→                  </div>
+   809→                  <div className="flex-1 min-w-0">
+   810→                    <p className="text-sm font-medium text-foreground">{action.title}</p>
+   811→                    <p className="text-xs text-muted-foreground mt-0.5 truncate">{action.description}</p>
+   812→                  </div>
+   813→                  {action.dueDate && (
+   814→                    <span className="text-xs text-muted-foreground shrink-0">
+   815→                      Due {new Date(action.dueDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+   816→                    </span>
+   817→                  )}
+   818→                  <Button
+   819→                    size="sm"
+   820→                    className={`h-7 text-xs font-medium px-3 shrink-0 ${
+   821→                      action.priority === 'high' ? 'bg-red-600 hover:bg-red-700 text-white'
+   822→                      : action.type === 'ready_to_file' ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+   823→                      : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+   824→                    }`}
+   825→                    onClick={() => {
+   826→                      if (action.targetView === 'returns' || action.type === 'ready_to_file') {
+   827→                        handleOpenReturnPrep('GSTR-1');
+   828→                      } else {
+   829→                        handleAction(action.targetView);
+   830→                      }
+   831→                    }}
+   832→                  >
+   833→                    {action.actionLabel}
+   834→                  </Button>
+   835→                </motion.div>
+   836→              );
+   837→            })}
+   838→          </AnimatePresence>
+   839→        </div>
+   840→      </motion.section>
+   841→
+   842→      {/* ═══════════════════════════════════════════════════════════════════════
+   843→          SECTION 4: UPLOADED DOCUMENTS
+   844→          ═══════════════════════════════════════════════════════════════════════ */}
+   845→      <motion.section initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4, duration: 0.4 }}>
+   846→        <div className="flex items-center justify-between mb-3">
+   847→          <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">Uploaded Documents</h2>
+   848→          <Button variant="ghost" size="sm" className="text-xs font-medium text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 h-7 gap-1" onClick={() => handleAction('invoices')}>
+   849→            View All <ChevronRight className="h-3.5 w-3.5" />
+   850→          </Button>
+   851→        </div>
+   852→
+   853→        <div className="border border-border/60 rounded-xl overflow-hidden">
+   854→          {/* Table header */}
+   855→          <div className="grid grid-cols-12 gap-2 px-4 py-2.5 bg-muted/30 text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
+   856→            <div className="col-span-3">File Name</div>
+   857→            <div className="col-span-2">Upload Date</div>
+   858→            <div className="col-span-2">Type</div>
+   859→            <div className="col-span-2">Status</div>
+   860→            <div className="col-span-1 text-center">Invoices</div>
+   861→            <div className="col-span-2 text-right">Actions</div>
+   862→          </div>
+   863→          <div className="divide-y divide-border/40">
+   864→            {workspace.documents.map((doc, index) => (
+   865→              <motion.div
+   866→                key={doc.id}
+   867→                initial={{ opacity: 0, y: 8 }}
+   868→                animate={{ opacity: 1, y: 0 }}
+   869→                transition={{ delay: 0.45 + index * 0.04, duration: 0.3 }}
+   870→                className="grid grid-cols-12 gap-2 px-4 py-3 hover:bg-muted/20 transition-colors items-center"
+   871→              >
+   872→                <div className="col-span-3 flex items-center gap-2 min-w-0">
+   873→                  <FileText className="size-4 text-muted-foreground shrink-0" />
+   874→                  <span className="text-sm font-medium text-foreground truncate" title={doc.name}>{doc.name}</span>
+   875→                </div>
+   876→                <div className="col-span-2 text-xs text-muted-foreground">
+   877→                  {new Date(doc.uploadDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+   878→                </div>
+   879→                <div className="col-span-2 text-xs text-muted-foreground">{doc.type}</div>
+   880→                <div className="col-span-2">{getDocStatusBadge(doc.status)}</div>
+   881→                <div className="col-span-1 text-center">
+   882→                  {doc.invoicesExtracted > 0 ? (
+   883→                    <span className="text-xs font-medium text-foreground">{doc.invoicesExtracted}</span>
+   884→                  ) : (
+   885→                    <span className="text-xs text-muted-foreground">—</span>
+   886→                  )}
+   887→                </div>
+   888→                <div className="col-span-2 flex items-center justify-end gap-1">
+   889→                  <Button variant="ghost" size="sm" className="h-6 text-[11px] px-1.5 text-muted-foreground hover:text-foreground" onClick={() => handleAction('invoices')}>
+   890→                    <Eye className="size-3" />
+   891→                  </Button>
+   892→                  {doc.status === 'Error' && (
+   893→                    <Button variant="ghost" size="sm" className="h-6 text-[11px] px-1.5 text-red-600 hover:text-red-700 hover:bg-red-50" onClick={() => handleAction('invoices')}>
+   894→                      <RefreshCw className="size-3" />
+   895→                    </Button>
+   896→                  )}
+   897→                  <Button variant="ghost" size="sm" className="h-6 text-[11px] px-1.5 text-muted-foreground hover:text-foreground" onClick={() => handleAction('invoices')}>
+   898→                    <Download className="size-3" />
+   899→                  </Button>
+   900→                </div>
+   901→              </motion.div>
+   902→            ))}
+   903→          </div>
+   904→        </div>
+   905→      </motion.section>
+   906→
+   907→      {/* ═══════════════════════════════════════════════════════════════════════
+   908→          TWO-COLUMN: RECONCILIATION HISTORY + AI COMPLIANCE ADVISOR
+   909→          ═══════════════════════════════════════════════════════════════════════ */}
+   910→      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+   911→
+   912→        {/* SECTION 5: RECONCILIATION HISTORY */}
+   913→        <motion.section initial={{ opacity: 0, x: -12 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.5, duration: 0.4 }}>
+   914→          <div className="flex items-center justify-between mb-3">
+   915→            <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">Reconciliation History</h2>
+   916→            <Button variant="ghost" size="sm" className="text-xs font-medium text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 h-7 gap-1" onClick={() => handleAction('reconcile')}>
+   917→              Run Reconciliation <ArrowRight className="h-3.5 w-3.5" />
+   918→            </Button>
+   919→          </div>
+   920→
+   921→          <div className="border border-border/60 rounded-xl divide-y divide-border/40 overflow-hidden">
+   922→            {workspace.reconRuns.map((run, index) => (
+   923→              <motion.div
+   924→                key={run.id}
+   925→                initial={{ opacity: 0, y: 8 }}
+   926→                animate={{ opacity: 1, y: 0 }}
+   927→                transition={{ delay: 0.55 + index * 0.05, duration: 0.3 }}
+   928→                className="px-4 py-3.5 hover:bg-muted/20 transition-colors"
+   929→              >
+   930→                <div className="flex items-center justify-between mb-2">
+   931→                  <span className="text-sm font-medium text-foreground">{run.period}</span>
+   932→                  <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${
+   933→                    run.matchRate >= 90 ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+   934→                    : run.matchRate >= 70 ? 'bg-amber-50 text-amber-700 border-amber-200'
+   935→                    : 'bg-red-50 text-red-700 border-red-200'
+   936→                  }`}>
+   937→                    {run.matchRate}% match
+   938→                  </Badge>
+   939→                </div>
+   940→                <div className="grid grid-cols-4 gap-2 text-xs">
+   941→                  <div>
+   942→                    <p className="text-muted-foreground">Mismatches</p>
+   943→                    <p className="font-medium text-foreground">{run.mismatches}</p>
+   944→                  </div>
+   945→                  <div>
+   946→                    <p className="text-muted-foreground">Missing</p>
+   947→                    <p className="font-medium text-foreground">{run.missingInvoices}</p>
+   948→                  </div>
+   949→                  <div>
+   950→                    <p className="text-muted-foreground">Tax Diff</p>
+   951→                    <p className="font-medium text-foreground">{formatCurrency(run.taxDifference)}</p>
+   952→                  </div>
+   953→                  <div>
+   954→                    <p className="text-muted-foreground">Run Date</p>
+   955→                    <p className="font-medium text-foreground">{new Date(run.runDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</p>
+   956→                  </div>
+   957→                </div>
+   958→              </motion.div>
+   959→            ))}
+   960→          </div>
+   961→        </motion.section>
+   962→
+   963→        {/* SECTION 6: AI COMPLIANCE ADVISOR */}
+   964→        <motion.section initial={{ opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.55, duration: 0.4 }}>
+   965→          <div className="flex items-center justify-between mb-3">
+   966→            <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider flex items-center gap-2">
+   967→              <Sparkles className="size-3.5 text-emerald-600" />
+   968→              AI Compliance Advisor
+   969→            </h2>
+   970→            <Badge variant="outline" className="text-[11px] text-muted-foreground">
+   971→              {workspace.insights.filter(i => i.severity === 'critical').length} critical
+   972→            </Badge>
+   973→          </div>
+   974→
+   975→          <div className="border border-border/60 rounded-xl divide-y divide-border/40 overflow-hidden">
+   976→            {workspace.insights.map((insight, index) => {
+   977→              const severityConfig = {
+   978→                critical: { icon: XCircle, color: 'text-red-600', bg: 'bg-red-50', badge: 'bg-red-100 text-red-700 border-red-200' },
+   979→                warning: { icon: AlertTriangle, color: 'text-amber-600', bg: 'bg-amber-50', badge: 'bg-amber-100 text-amber-700 border-amber-200' },
+   980→                info: { icon: CheckCircle2, color: 'text-blue-600', bg: 'bg-blue-50', badge: 'bg-blue-100 text-blue-700 border-blue-200' },
+   981→              }[insight.severity];
+   982→              const SevIcon = severityConfig.icon;
+   983→
+   984→              return (
+   985→                <motion.div
+   986→                  key={insight.id}
+   987→                  initial={{ opacity: 0, y: 8 }}
+   988→                  animate={{ opacity: 1, y: 0 }}
+   989→                  transition={{ delay: 0.6 + index * 0.05, duration: 0.3 }}
+   990→                  className="px-4 py-3.5 hover:bg-muted/20 transition-colors group"
+   991→                >
+   992→                  <div className="flex gap-3">
+   993→                    <div className={`flex items-center justify-center h-7 w-7 rounded-lg shrink-0 ${severityConfig.bg}`}>
+   994→                      <SevIcon className={`size-3.5 ${severityConfig.color}`} />
+   995→                    </div>
+   996→                    <div className="flex-1 min-w-0">
+   997→                      <div className="flex items-start justify-between gap-2">
+   998→                        <p className="text-sm font-medium text-foreground leading-snug">{insight.title}</p>
+   999→                        {insight.severity === 'critical' && (
+  1000→                          <span className="text-[9px] font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded shrink-0">URGENT</span>
+  1001→                        )}
+  1002→                      </div>
+  1003→                      <p className="text-xs text-muted-foreground mt-1 leading-relaxed line-clamp-2">{insight.description}</p>
+  1004→                      <div className="flex items-center gap-2 mt-2">
+  1005→                        <Badge variant="outline" className={`text-[9px] px-1.5 py-0 ${severityConfig.badge}`}>{insight.category}</Badge>
+  1006→                        <button
+  1007→                          className="text-xs font-semibold text-emerald-600 hover:text-emerald-700 flex items-center gap-1 group-hover:gap-1.5 transition-all"
+  1008→                          onClick={() => {
+  1009→                            if (insight.actionView === 'returns') {
+  1010→                              handleOpenReturnPrep('GSTR-1');
+  1011→                            } else {
+  1012→                              handleAction(insight.actionView);
+  1013→                            }
+  1014→                          }}
+  1015→                        >
+  1016→                          {insight.suggestedAction}
+  1017→                          <ArrowRight className="h-3 w-3" />
+  1018→                        </button>
+  1019→                      </div>
+  1020→                    </div>
+  1021→                  </div>
+  1022→                </motion.div>
+  1023→              );
+  1024→            })}
+  1025→          </div>
+  1026→        </motion.section>
+  1027→      </div>
+  1028→
+  1029→      {/* ═══════════════════════════════════════════════════════════════════════
+  1030→          SECTION 7: ACTIVITY TIMELINE
+  1031→          ═══════════════════════════════════════════════════════════════════════ */}
+  1032→      <motion.section initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.6, duration: 0.4 }}>
+  1033→        <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider mb-3">Activity Timeline</h2>
+  1034→
+  1035→        <div className="border border-border/60 rounded-xl overflow-hidden">
+  1036→          <div className="divide-y divide-border/40">
+  1037→            {workspace.activities.map((event, index) => {
+  1038→              const IconComp = getActivityIcon(event.type);
+  1039→              const iconColor = getActivityColor(event.type);
+  1040→              return (
+  1041→                <motion.div
+  1042→                  key={event.id}
+  1043→                  initial={{ opacity: 0, x: -8 }}
+  1044→                  animate={{ opacity: 1, x: 0 }}
+  1045→                  transition={{ delay: 0.65 + index * 0.04, duration: 0.3 }}
+  1046→                  className="flex items-center gap-3 px-4 py-3 hover:bg-muted/20 transition-colors"
+  1047→                >
+  1048→                  <div className={`flex items-center justify-center h-7 w-7 rounded-lg shrink-0 ${iconColor}`}>
+  1049→                    <IconComp className="size-3.5" />
+  1050→                  </div>
+  1051→                  <div className="flex-1 min-w-0">
+  1052→                    <p className="text-sm text-foreground">{event.description}</p>
+  1053→                  </div>
+  1054→                  <span className="text-xs text-muted-foreground shrink-0">{formatRelativeTime(event.timestamp)}</span>
+  1055→                </motion.div>
+  1056→              );
+  1057→            })}
+  1058→          </div>
+  1059→        </div>
+  1060→      </motion.section>
+  1061→
+  1062→    </div>
+  1063→  );
+  1064→}
+  1065→

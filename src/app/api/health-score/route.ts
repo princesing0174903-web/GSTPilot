@@ -1,96 +1,14 @@
 import { db } from '@/lib/db'
 import { NextResponse } from 'next/server'
-import { calculateHealthScore } from '@/lib/gst-utils'
+import { calculateHealthScore, validateGSTIN } from '@/lib/gst-utils'
 
-// GET /api/health-score — Fetch health scores
+// GET /api/health-score?clientId=X — Calculate and return health score for a client
+// Query param: clientId (required)
+// Returns { score, breakdown: { missingGstin, invalidGstin, duplicateInvoices, filingDelays, validationErrors } }
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url)
     const clientId = searchParams.get('clientId')
-
-    if (clientId) {
-      // Return latest score + trend for specific client
-      const scores = await db.healthScore.findMany({
-        where: { clientId },
-        orderBy: { createdAt: 'desc' },
-      })
-
-      const latestScore = scores[0] ?? null
-
-      // Calculate trend (comparing last 3 scores)
-      const trend =
-        scores.length >= 2
-          ? scores.slice(0, Math.min(3, scores.length)).map((s) => ({
-              score: s.score,
-              period: s.period,
-              createdAt: s.createdAt,
-            }))
-          : []
-
-      // Dashboard aggregate metrics across all clients
-      const allClients = await db.client.findMany({
-        select: { id: true, healthScore: true },
-      })
-      const averageHealthScore =
-        allClients.length > 0
-          ? Math.round(allClients.reduce((sum, c) => sum + c.healthScore, 0) / allClients.length)
-          : 0
-
-      return NextResponse.json({
-        clientId,
-        latestScore,
-        trend,
-        aggregateMetrics: {
-          totalClients: allClients.length,
-          averageHealthScore,
-        },
-      })
-    }
-
-    // Return all health scores with client info
-    const healthScores = await db.healthScore.findMany({
-      orderBy: { createdAt: 'desc' },
-      include: {
-        client: {
-          select: {
-            id: true,
-            tradeName: true,
-            gstin: true,
-          },
-        },
-      },
-    })
-
-    // Dashboard aggregate metrics
-    const allClients = await db.client.findMany({
-      select: { id: true, healthScore: true },
-    })
-    const averageHealthScore =
-      allClients.length > 0
-        ? Math.round(allClients.reduce((sum, c) => sum + c.healthScore, 0) / allClients.length)
-        : 0
-
-    return NextResponse.json({
-      healthScores,
-      aggregateMetrics: {
-        totalClients: allClients.length,
-        averageHealthScore,
-      },
-    })
-  } catch (error) {
-    console.error('GET /api/health-score error:', error)
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to fetch health scores' },
-      { status: 500 }
-    )
-  }
-}
-
-// POST /api/health-score — Calculate and save health score for a client
-export async function POST(request: Request) {
-  try {
-    const body = await request.json()
-    const { clientId, period } = body
 
     if (!clientId) {
       return NextResponse.json(
@@ -110,13 +28,13 @@ export async function POST(request: Request) {
       where: { clientId },
     })
 
-    // Calculate health score metrics
-    const totalInvoices = invoices.length
+    // Count invoices with missing GSTIN (no buyerGstin)
     const missingGstin = invoices.filter((inv) => !inv.buyerGstin).length
+
+    // Count invoices with invalid GSTIN
     const invalidGstin = invoices.filter((inv) => {
       if (!inv.buyerGstin) return false
-      const regex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/
-      return !regex.test(inv.buyerGstin.toUpperCase())
+      return !validateGSTIN(inv.buyerGstin)
     }).length
 
     // Detect duplicate invoices (same invoiceNumber + sellerGstin)
@@ -129,7 +47,7 @@ export async function POST(request: Request) {
       seen.set(key, count + 1)
     }
 
-    // Check for filing delays
+    // Check for filing delays (filings that are not filed and past due date)
     const filings = await db.gSTRFiling.findMany({
       where: { clientId, status: { not: 'filed' } },
     })
@@ -150,7 +68,7 @@ export async function POST(request: Request) {
 
     // Calculate score using the utility function
     const score = calculateHealthScore({
-      totalInvoices,
+      totalInvoices: invoices.length,
       missingGstin,
       invalidGstin,
       duplicateInvoices,
@@ -158,40 +76,65 @@ export async function POST(request: Request) {
       validationErrors,
     })
 
-    // Save health score record
-    const healthScore = await db.healthScore.create({
-      data: {
-        clientId,
-        score,
-        missingGstin,
-        invalidGstin,
-        duplicateInvoices,
-        filingDelays,
-        validationErrors,
-        period: period ?? new Date().toISOString().slice(0, 7),
-      },
-    })
-
-    // Update client's health score
+    // Update the client's healthScore field
     await db.client.update({
       where: { id: clientId },
       data: { healthScore: score },
     })
 
-    // Create audit log
-    await db.auditLog.create({
-      data: {
+    // Create or update HealthScore record
+    const currentPeriod = new Date().toISOString().slice(0, 7)
+
+    // Check if a HealthScore record already exists for this client and period
+    const existingScore = await db.healthScore.findFirst({
+      where: {
         clientId,
-        action: 'Health Score Calculated',
-        entity: 'health_score',
-        entityId: healthScore.id,
-        details: `Health score calculated: ${score}/100 for ${client.tradeName}`,
+        period: currentPeriod,
       },
+      orderBy: { createdAt: 'desc' },
     })
 
-    return NextResponse.json({ healthScore }, { status: 201 })
+    if (existingScore) {
+      // Update existing record
+      await db.healthScore.update({
+        where: { id: existingScore.id },
+        data: {
+          score,
+          missingGstin,
+          invalidGstin,
+          duplicateInvoices,
+          filingDelays,
+          validationErrors,
+        },
+      })
+    } else {
+      // Create new record
+      await db.healthScore.create({
+        data: {
+          clientId,
+          score,
+          missingGstin,
+          invalidGstin,
+          duplicateInvoices,
+          filingDelays,
+          validationErrors,
+          period: currentPeriod,
+        },
+      })
+    }
+
+    return NextResponse.json({
+      score,
+      breakdown: {
+        missingGstin,
+        invalidGstin,
+        duplicateInvoices,
+        filingDelays,
+        validationErrors,
+      },
+    })
   } catch (error) {
-    console.error('POST /api/health-score error:', error)
+    console.error('GET /api/health-score error:', error)
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Failed to calculate health score' },
       { status: 500 }

@@ -1,0 +1,1454 @@
+     1→'use client';
+     2→
+     3→import React, { useState, useCallback, useMemo, useRef } from 'react';
+     4→import { motion, AnimatePresence } from 'framer-motion';
+     5→import {
+     6→  Card,
+     7→  CardContent,
+     8→} from '@/components/ui/card';
+     9→import {
+    10→  Badge,
+    11→} from '@/components/ui/badge';
+    12→import {
+    13→  Button,
+    14→} from '@/components/ui/button';
+    15→import {
+    16→  Input,
+    17→} from '@/components/ui/input';
+    18→import {
+    19→  Skeleton,
+    20→} from '@/components/ui/skeleton';
+    21→import {
+    22→  ScrollArea,
+    23→} from '@/components/ui/scroll-area';
+    24→import {
+    25→  Progress,
+    26→} from '@/components/ui/progress';
+    27→import {
+    28→  Select,
+    29→  SelectContent,
+    30→  SelectItem,
+    31→  SelectTrigger,
+    32→  SelectValue,
+    33→} from '@/components/ui/select';
+    34→import {
+    35→  Collapsible,
+    36→  CollapsibleTrigger,
+    37→  CollapsibleContent,
+    38→} from '@/components/ui/collapsible';
+    39→import {
+    40→  CloudUpload,
+    41→  FileJson,
+    42→  FileSpreadsheet,
+    43→  FileText,
+    44→  CheckCircle2,
+    45→  AlertTriangle,
+    46→  XCircle,
+    47→  ArrowRight,
+    48→  Edit3,
+    49→  ShieldCheck,
+    50→  ChevronDown,
+    51→  FileUp,
+    52→  Bot,
+    53→  X,
+    54→  Upload,
+    55→  AlertCircle,
+    56→  Sparkles,
+    57→  FileCheck2,
+    58→  Clock,
+    59→  Eye,
+    60→  ThumbsUp,
+    61→} from 'lucide-react';
+    62→import type {
+    63→  Invoice,
+    64→  Client,
+    65→  GSTR1Section,
+    66→} from '@/types/gst';
+    67→import {
+    68→  GSTR1_SECTION_LABELS,
+    69→} from '@/types/gst';
+    70→import {
+    71→  formatCurrency,
+    72→  formatNumber,
+    73→} from '@/lib/gst-utils';
+    74→import { useApp } from '@/contexts/AppContext';
+    75→import { useGSTStore } from '@/stores/gst-store';
+    76→
+    77→// ─── Local Types ──────────────────────────────────────────────────────────────
+    78→
+    79→interface ProcessingFile {
+    80→  id: string;
+    81→  name: string;
+    82→  size: number;
+    83→  format: string;
+    84→  progress: number;
+    85→  status: 'uploading' | 'extracting' | 'validating' | 'complete' | 'error';
+    86→  invoiceCount: number;
+    87→  ocrConfidence: number;
+    88→  errorMsg?: string;
+    89→}
+    90→
+    91→type ValidationStatus = 'validated' | 'warning' | 'error';
+    92→
+    93→interface ExtractedInvoice {
+    94→  id: string;
+    95→  invoiceNumber: string;
+    96→  clientName: string;
+    97→  invoiceDate: string;
+    98→  section: GSTR1Section;
+    99→  sectionLabel: string;
+   100→  taxableValue: number;
+   101→  cgst: number;
+   102→  sgst: number;
+   103→  igst: number;
+   104→  totalTax: number;
+   105→  totalAmount: number;
+   106→  validationStatus: ValidationStatus;
+   107→  ocrConfidence: number;
+   108→  missingFields: string[];
+   109→  validationMessages: string[];
+   110→}
+   111→
+   112→interface ValidationIssueItem {
+   113→  id: string;
+   114→  severity: 'critical' | 'warning';
+   115→  description: string;
+   116→  invoiceNumber: string;
+   117→  invoiceId: string;
+   118→}
+   119→
+   120→// ─── Mock Data removed — all data comes from GST store now ───
+   121→
+   122→// ─── Animation Variants ───────────────────────────────────────────────────────
+   123→
+   124→const fadeInUp = {
+   125→  hidden: { opacity: 0, y: 16 },
+   126→  visible: { opacity: 1, y: 0, transition: { duration: 0.4, ease: 'easeOut' } },
+   127→};
+   128→
+   129→const staggerContainer = {
+   130→  hidden: { opacity: 0 },
+   131→  visible: {
+   132→    opacity: 1,
+   133→    transition: { staggerChildren: 0.07 },
+   134→  },
+   135→};
+   136→
+   137→const staggerItem = {
+   138→  hidden: { opacity: 0, y: 12 },
+   139→  visible: { opacity: 1, y: 0, transition: { duration: 0.35, ease: 'easeOut' } },
+   140→};
+   141→
+   142→const pulseGlow = {
+   143→  pulse: {
+   144→    boxShadow: [
+   145→      '0 0 0 0 rgba(16, 185, 129, 0)',
+   146→      '0 0 0 8px rgba(16, 185, 129, 0.15)',
+   147→      '0 0 0 0 rgba(16, 185, 129, 0)',
+   148→    ],
+   149→    transition: { duration: 2, repeat: Infinity, ease: 'easeInOut' },
+   150→  },
+   151→};
+   152→
+   153→// ─── Helper ───────────────────────────────────────────────────────────────────
+   154→
+   155→function formatFileSize(bytes: number): string {
+   156→  if (bytes < 1024) return `${bytes} B`;
+   157→  if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} KB`;
+   158→  return `${(bytes / 1048576).toFixed(1)} MB`;
+   159→}
+   160→
+   161→function getConfidenceColor(confidence: number): string {
+   162→  if (confidence >= 95) return 'text-emerald-600';
+   163→  if (confidence >= 80) return 'text-amber-600';
+   164→  return 'text-red-600';
+   165→}
+   166→
+   167→function getConfidenceBarColor(confidence: number): string {
+   168→  if (confidence >= 95) return 'bg-emerald-500';
+   169→  if (confidence >= 80) return 'bg-amber-500';
+   170→  return 'bg-red-500';
+   171→}
+   172→
+   173→function getSectionBadgeStyle(section: string): string {
+   174→  const styles: Record<string, string> = {
+   175→    b2b: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+   176→    b2cl: 'bg-teal-50 text-teal-700 border-teal-200',
+   177→    b2cs: 'bg-cyan-50 text-cyan-700 border-cyan-200',
+   178→    exp: 'bg-amber-50 text-amber-700 border-amber-200',
+   179→    cdnr: 'bg-orange-50 text-orange-700 border-orange-200',
+   180→    cdnur: 'bg-rose-50 text-rose-700 border-rose-200',
+   181→  };
+   182→  return styles[section] || 'bg-slate-50 text-slate-700 border-slate-200';
+   183→}
+   184→
+   185→function getValidationIcon(status: ValidationStatus) {
+   186→  switch (status) {
+   187→    case 'validated':
+   188→      return <CheckCircle2 className="size-4 text-emerald-500" />;
+   189→    case 'warning':
+   190→      return <AlertTriangle className="size-4 text-amber-500" />;
+   191→    case 'error':
+   192→      return <XCircle className="size-4 text-red-500" />;
+   193→  }
+   194→}
+   195→
+   196→function getValidationBadge(status: ValidationStatus): string {
+   197→  switch (status) {
+   198→    case 'validated':
+   199→      return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+   200→    case 'warning':
+   201→      return 'bg-amber-50 text-amber-700 border-amber-200';
+   202→    case 'error':
+   203→      return 'bg-red-50 text-red-700 border-red-200';
+   204→  }
+   205→}
+   206→
+   207→function getValidationLabel(status: ValidationStatus): string {
+   208→  switch (status) {
+   209→    case 'validated':
+   210→      return 'Validated';
+   211→    case 'warning':
+   212→      return 'Warning';
+   213→    case 'error':
+   214→      return 'Error';
+   215→  }
+   216→}
+   217→
+   218→// ─── Main Component ───────────────────────────────────────────────────────────
+   219→
+   220→export default function InvoiceWorkspacePage() {
+   221→  const { selectedClientId, setSelectedClientId } = useApp();
+   222→  const store = useGSTStore();
+   223→
+   224→  // ── Clients from store ──
+   225→  const clients = store.clients;
+   226→
+   227→  // ── Upload State ──
+   228→  const [isDragging, setIsDragging] = useState(false);
+   229→  const [processingFiles, setProcessingFiles] = useState<ProcessingFile[]>([]);
+   230→  const fileInputRef = useRef<HTMLInputElement>(null);
+   231→
+   232→  // ── Invoices from store ──
+   233→  // Get all invoices across clients (or filtered by selectedClientId)
+   234→  const storeInvoices = useMemo(() => {
+   235→    if (selectedClientId) {
+   236→      return store.getInvoicesForClient(selectedClientId);
+   237→    }
+   238→    // Flatten all client invoices
+   239→    return store.clients.flatMap(c => store.getInvoicesForClient(c.id));
+   240→  }, [store, selectedClientId]);
+   241→
+   242→  // Map store invoices to the local ExtractedInvoice type for the UI
+   243→  const invoices: ExtractedInvoice[] = useMemo(() =>
+   244→    storeInvoices.map(inv => ({
+   245→      id: inv.id,
+   246→      invoiceNumber: inv.invoiceNumber,
+   247→      clientName: store.getClient(inv.clientId)?.tradeName ?? 'Unknown',
+   248→      invoiceDate: inv.date,
+   249→      section: (inv.placeOfSupply && inv.placeOfSupply !== store.getClient(inv.clientId)?.stateCode ? 'b2cl' : 'b2b') as GSTR1Section,
+   250→      sectionLabel: (inv.placeOfSupply && inv.placeOfSupply !== store.getClient(inv.clientId)?.stateCode ? 'B2C Large' : 'B2B'),
+   251→      taxableValue: inv.taxableValue,
+   252→      cgst: inv.cgst,
+   253→      sgst: inv.sgst,
+   254→      igst: inv.igst,
+   255→      totalTax: inv.cgst + inv.sgst + inv.igst,
+   256→      totalAmount: inv.taxableValue + inv.cgst + inv.sgst + inv.igst,
+   257→      validationStatus: inv.status as ValidationStatus,
+   258→      ocrConfidence: inv.status === 'error' ? 75.0 : inv.status === 'warning' ? 92.0 : 98.5,
+   259→      missingFields: inv.errorDetail ? [inv.errorDetail.split(' ').slice(0, 2).join(' ')] : [],
+   260→      validationMessages: inv.errorDetail ? [inv.errorDetail] : [],
+   261→    })),
+   262→    [storeInvoices, store]
+   263→  );
+   264→
+   265→  const hasInvoices = invoices.length > 0;
+   266→
+   267→  // ── Filter State ──
+   268→  const [sectionFilter, setSectionFilter] = useState<string>('all');
+   269→  const [statusFilter, setStatusFilter] = useState<string>('all');
+   270→
+   271→  // ── Collapsible ──
+   272→  const [issuesOpen, setIssuesOpen] = useState(true);
+   273→
+   274→  // ── AI Review Queue ──
+   275→  const [reviewingInvoiceId, setReviewingInvoiceId] = useState<string | null>(null);
+   276→
+   277→  // Loading is instant — data comes from store
+   278→  const loading = false;
+   279→
+   280→  // ── Pipeline Counts ──
+   281→  const pipelineCounts = useMemo(() => {
+   282→    const uploading = processingFiles.filter(f => f.status === 'uploading').length;
+   283→    const extracting = processingFiles.filter(f => f.status === 'extracting' || f.status === 'validating').length;
+   284→    const validated = invoices.filter(i => i.validationStatus === 'validated').length;
+   285→    const errors = invoices.filter(i => i.validationStatus === 'error').length;
+   286→    return { uploading, extracting, validated, errors };
+   287→  }, [processingFiles, invoices]);
+   288→
+   289→  // ── Validation Issues ──
+   290→  const validationIssues = useMemo(() => {
+   291→    const issues: ValidationIssueItem[] = [];
+   292→    for (const inv of invoices) {
+   293→      if (inv.validationStatus === 'error') {
+   294→        for (const msg of inv.validationMessages) {
+   295→          issues.push({
+   296→            id: `${inv.id}-err-${issues.length}`,
+   297→            severity: 'critical',
+   298→            description: msg,
+   299→            invoiceNumber: inv.invoiceNumber,
+   300→            invoiceId: inv.id,
+   301→          });
+   302→        }
+   303→      }
+   304→      if (inv.validationStatus === 'warning') {
+   305→        for (const msg of inv.validationMessages) {
+   306→          issues.push({
+   307→            id: `${inv.id}-warn-${issues.length}`,
+   308→            severity: 'warning',
+   309→            description: msg,
+   310→            invoiceNumber: inv.invoiceNumber,
+   311→            invoiceId: inv.id,
+   312→          });
+   313→        }
+   314→      }
+   315→      for (const field of inv.missingFields) {
+   316→        issues.push({
+   317→          id: `${inv.id}-missing-${field}`,
+   318→          severity: 'warning',
+   319→          description: `Missing: ${field}`,
+   320→          invoiceNumber: inv.invoiceNumber,
+   321→          invoiceId: inv.id,
+   322→        });
+   323→      }
+   324→    }
+   325→    return issues;
+   326→  }, [invoices]);
+   327→
+   328→  const criticalCount = validationIssues.filter(i => i.severity === 'critical').length;
+   329→  const warningCount = validationIssues.filter(i => i.severity === 'warning').length;
+   330→
+   331→  // ── Filtered Invoices ──
+   332→  const filteredInvoices = useMemo(() => {
+   333→    return invoices.filter(inv => {
+   334→      if (sectionFilter !== 'all' && inv.section !== sectionFilter) return false;
+   335→      if (statusFilter !== 'all' && inv.validationStatus !== statusFilter) return false;
+   336→      return true;
+   337→    });
+   338→  }, [invoices, sectionFilter, statusFilter]);
+   339→
+   340→  // ── Active Pipeline Stage ──
+   341→  const activePipelineStage = useMemo(() => {
+   342→    if (pipelineCounts.uploading > 0) return 'uploading';
+   343→    if (pipelineCounts.extracting > 0) return 'extracting';
+   344→    return 'idle';
+   345→  }, [pipelineCounts]);
+   346→
+   347→  // ── Upload Handlers ──
+   348→  // Deterministic file sizes based on file name hash
+   349→  function getDeterministicSize(name: string): number {
+   350→    let hash = 0;
+   351→    for (let i = 0; i < name.length; i++) {
+   352→      hash = ((hash << 5) - hash) + name.charCodeAt(i);
+   353→      hash |= 0;
+   354→    }
+   355→    return Math.abs(hash % 1500000) + 200000; // 200KB - 1.7MB
+   356→  }
+   357→
+   358→  const simulateUpload = useCallback((fileNames: string[]) => {
+   359→    const newFiles: ProcessingFile[] = fileNames.map((name, idx) => ({
+   360→      id: `file-${Date.now()}-${idx}`,
+   361→      name,
+   362→      size: getDeterministicSize(name),
+   363→      format: name.split('.').pop()?.toUpperCase() || 'JSON',
+   364→      progress: 0,
+   365→      status: 'uploading' as const,
+   366→      invoiceCount: 0,
+   367→      ocrConfidence: 0,
+   368→    }));
+   369→
+   370→    setProcessingFiles(prev => [...prev, ...newFiles]);
+   371→
+   372→    newFiles.forEach((file, idx) => {
+   373→      const fileIndex = idx;
+   374→      let progress = 0;
+   375→
+   376→      // Phase 1: Upload — deterministic progress steps
+   377→      const uploadInterval = setInterval(() => {
+   378→        progress += 25; // Fixed increment
+   379→        if (progress >= 100) {
+   380→          progress = 100;
+   381→          clearInterval(uploadInterval);
+   382→          setProcessingFiles(prev =>
+   383→            prev.map((f, i) =>
+   384→              i === prev.length - newFiles.length + fileIndex
+   385→                ? { ...f, progress: 100, status: 'extracting' }
+   386→                : f
+   387→            )
+   388→          );
+   389→
+   390→          // Phase 2: Extracting
+   391→          setTimeout(() => {
+   392→            const invCount = 8; // Fixed realistic count
+   393→            const ocr = 96.5;  // Fixed realistic confidence
+   394→            setProcessingFiles(prev =>
+   395→              prev.map((f, i) =>
+   396→                i === prev.length - newFiles.length + fileIndex
+   397→                  ? { ...f, status: 'validating', invoiceCount: invCount, ocrConfidence: ocr }
+   398→                  : f
+   399→              )
+   400→            );
+   401→
+   402→            // Phase 3: Validating -> Complete
+   403→            setTimeout(() => {
+   404→              setProcessingFiles(prev =>
+   405→                prev.map((f, i) =>
+   406→                  i === prev.length - newFiles.length + fileIndex
+   407→                    ? { ...f, status: 'complete' }
+   408→                    : f
+   409→                )
+   410→              );
+   411→
+   412→              // Record upload in store
+   413→              store.addUpload({
+   414→                fileName: file.name,
+   415→                fileType: file.format.toLowerCase() as 'json' | 'csv' | 'xlsx',
+   416→                uploadTime: new Date().toISOString(),
+   417→                status: 'processed',
+   418→                invoiceCount: invCount,
+   419→              });
+   420→            }, 1200);
+   421→          }, 1800);
+   422→        } else {
+   423→          setProcessingFiles(prev =>
+   424→            prev.map((f, i) =>
+   425→              i === prev.length - newFiles.length + fileIndex
+   426→                ? { ...f, progress: Math.min(progress, 100) }
+   427→                : f
+   428→            )
+   429→          );
+   430→        }
+   431→      }, 300);
+   432→    });
+   433→  }, [store]);
+   434→
+   435→  const handleDragOver = (e: React.DragEvent) => {
+   436→    e.preventDefault();
+   437→    e.stopPropagation();
+   438→    setIsDragging(true);
+   439→  };
+   440→
+   441→  const handleDragLeave = (e: React.DragEvent) => {
+   442→    e.preventDefault();
+   443→    e.stopPropagation();
+   444→    setIsDragging(false);
+   445→  };
+   446→
+   447→  const handleDrop = (e: React.DragEvent) => {
+   448→    e.preventDefault();
+   449→    e.stopPropagation();
+   450→    setIsDragging(false);
+   451→    const files = Array.from(e.dataTransfer.files);
+   452→    if (files.length > 0) {
+   453→      simulateUpload(files.map(f => f.name));
+   454→    }
+   455→  };
+   456→
+   457→  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+   458→    const files = Array.from(e.target.files || []);
+   459→    if (files.length > 0) {
+   460→      simulateUpload(files.map(f => f.name));
+   461→    }
+   462→    e.target.value = '';
+   463→  };
+   464→
+   465→  const handleBrowseClick = () => {
+   466→    fileInputRef.current?.click();
+   467→  };
+   468→
+   469→  const handleDemoUpload = () => {
+   470→    simulateUpload(['GSTR1_Jun2025_SharmaEnt.json', 'SalesRegister_Jun2025.csv']);
+   471→  };
+   472→
+   473→  const removeFile = (fileId: string) => {
+   474→    setProcessingFiles(prev => prev.filter(f => f.id !== fileId));
+   475→  };
+   476→
+   477→  // ── Loading Skeleton ──
+   478→  if (loading) {
+   479→    return (
+   480→      <div className="space-y-6 p-4 md:p-6">
+   481→        <div className="flex items-center justify-between">
+   482→          <div className="space-y-2">
+   483→            <Skeleton className="h-7 w-56" />
+   484→            <Skeleton className="h-4 w-72" />
+   485→          </div>
+   486→          <Skeleton className="h-9 w-48" />
+   487→        </div>
+   488→        <Skeleton className="h-56 rounded-2xl" />
+   489→        <div className="grid grid-cols-4 gap-4">
+   490→          {Array.from({ length: 4 }).map((_, i) => (
+   491→            <Skeleton key={i} className="h-20 rounded-xl" />
+   492→          ))}
+   493→        </div>
+   494→      </div>
+   495→    );
+   496→  }
+   497→
+   498→  // ── Render ──
+   499→  return (
+   500→    <div className="min-h-screen bg-gradient-to-b from-slate-50/80 to-white">
+   501→      <div className="space-y-6 p-4 md:p-6 lg:p-8">
+   502→
+   503→        {/* ════════════════════════════════════════════════════════════════════
+   504→            1. HEADER
+   505→        ════════════════════════════════════════════════════════════════════ */}
+   506→        <motion.div
+   507→          initial={{ opacity: 0, y: -12 }}
+   508→          animate={{ opacity: 1, y: 0 }}
+   509→          transition={{ duration: 0.4 }}
+   510→          className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"
+   511→        >
+   512→          <div>
+   513→            <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
+   514→              Document Processing
+   515→            </h1>
+   516→            <p className="mt-1 text-sm text-muted-foreground">
+   517→              Upload, extract, and validate invoices
+   518→            </p>
+   519→          </div>
+   520→          <div className="flex items-center gap-3">
+   521→            <Select
+   522→              value={selectedClientId ?? 'all'}
+   523→              onValueChange={(v) => setSelectedClientId(v === 'all' ? null : v)}
+   524→            >
+   525→              <SelectTrigger className="w-[200px] h-9 text-sm border-slate-200">
+   526→                <SelectValue placeholder="Select client" />
+   527→              </SelectTrigger>
+   528→              <SelectContent>
+   529→                <SelectItem value="all">All Clients</SelectItem>
+   530→                {clients.map(c => (
+   531→                  <SelectItem key={c.id} value={c.id}>
+   532→                    {c.tradeName}
+   533→                  </SelectItem>
+   534→                ))}
+   535→              </SelectContent>
+   536→            </Select>
+   537→          </div>
+   538→        </motion.div>
+   539→
+   540→        {/* ════════════════════════════════════════════════════════════════════
+   541→            2. UPLOAD HERO ZONE
+   542→        ════════════════════════════════════════════════════════════════════ */}
+   543→        <motion.div
+   544→          initial={{ opacity: 0, y: 16 }}
+   545→          animate={{ opacity: 1, y: 0 }}
+   546→          transition={{ duration: 0.5, delay: 0.1 }}
+   547→        >
+   548→          <motion.div
+   549→            animate={isDragging ? { scale: 1.01 } : { scale: 1 }}
+   550→            transition={{ duration: 0.2 }}
+   551→            onDragOver={handleDragOver}
+   552→            onDragLeave={handleDragLeave}
+   553→            onDrop={handleDrop}
+   554→            className={`
+   555→              relative overflow-hidden rounded-2xl border-2 border-dashed transition-all duration-300 cursor-pointer
+   556→              ${isDragging
+   557→                ? 'border-emerald-400 bg-emerald-50/60'
+   558→                : 'border-slate-300 bg-gradient-to-br from-slate-50 via-white to-emerald-50/30 hover:border-emerald-300 hover:bg-emerald-50/20'
+   559→              }
+   560→            `}
+   561→            onClick={handleBrowseClick}
+   562→          >
+   563→            {/* Background decoration */}
+   564→            <div className="absolute inset-0 pointer-events-none">
+   565→              <div className="absolute -top-20 -right-20 size-64 rounded-full bg-emerald-100/30 blur-3xl" />
+   566→              <div className="absolute -bottom-20 -left-20 size-64 rounded-full bg-teal-100/20 blur-3xl" />
+   567→            </div>
+   568→
+   569→            <div className="relative z-10 flex flex-col items-center justify-center py-12 px-6 md:py-16">
+   570→              <motion.div
+   571→                animate={isDragging ? { y: -6, scale: 1.1 } : { y: 0, scale: 1 }}
+   572→                transition={{ duration: 0.3, ease: 'easeOut' }}
+   573→                className={`
+   574→                  mb-4 flex size-16 items-center justify-center rounded-2xl transition-colors duration-300
+   575→                  ${isDragging ? 'bg-emerald-200 text-emerald-700' : 'bg-emerald-100 text-emerald-600'}
+   576→                `}
+   577→              >
+   578→                <CloudUpload className="size-8" />
+   579→              </motion.div>
+   580→
+   581→              <h2 className="text-lg font-semibold text-slate-800 sm:text-xl">
+   582→                {isDragging ? 'Drop your files here!' : 'Drop GST documents here'}
+   583→              </h2>
+   584→              <p className="mt-1 text-sm text-muted-foreground">
+   585→                or click to browse
+   586→              </p>
+   587→
+   588→              {/* Format badges */}
+   589→              <div className="mt-4 flex items-center gap-2">
+   590→                <Badge variant="outline" className="gap-1.5 border-slate-200 bg-white/80 text-slate-600 text-xs font-medium">
+   591→                  <FileJson className="size-3" />
+   592→                  JSON
+   593→                </Badge>
+   594→                <span className="text-xs text-slate-300">·</span>
+   595→                <Badge variant="outline" className="gap-1.5 border-slate-200 bg-white/80 text-slate-600 text-xs font-medium">
+   596→                  <FileSpreadsheet className="size-3" />
+   597→                  CSV
+   598→                </Badge>
+   599→                <span className="text-xs text-slate-300">·</span>
+   600→                <Badge variant="outline" className="gap-1.5 border-slate-200 bg-white/80 text-slate-600 text-xs font-medium">
+   601→                  <FileText className="size-3" />
+   602→                  Excel
+   603→                </Badge>
+   604→              </div>
+   605→
+   606→              {/* Demo button */}
+   607→              {!hasInvoices && processingFiles.length === 0 && (
+   608→                <Button
+   609→                  variant="outline"
+   610→                  size="sm"
+   611→                  className="mt-5 gap-2 border-emerald-200 text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800 text-xs"
+   612→                  onClick={(e) => {
+   613→                    e.stopPropagation();
+   614→                    handleDemoUpload();
+   615→                  }}
+   616→                >
+   617→                  <Sparkles className="size-3.5" />
+   618→                  Try with sample data
+   619→                </Button>
+   620→              )}
+   621→            </div>
+   622→
+   623→            <input
+   624→              ref={fileInputRef}
+   625→              type="file"
+   626→              accept=".json,.csv,.xlsx,.xls"
+   627→              multiple
+   628→              className="hidden"
+   629→              onChange={handleFileSelect}
+   630→            />
+   631→          </motion.div>
+   632→        </motion.div>
+   633→
+   634→        {/* ════════════════════════════════════════════════════════════════════
+   635→            3. PROCESSING PIPELINE
+   636→        ════════════════════════════════════════════════════════════════════ */}
+   637→        {(processingFiles.length > 0 || hasInvoices) && (
+   638→          <motion.div
+   639→            initial={{ opacity: 0, y: 12 }}
+   640→            animate={{ opacity: 1, y: 0 }}
+   641→            transition={{ duration: 0.4, delay: 0.15 }}
+   642→          >
+   643→            <div className="flex items-stretch gap-2 sm:gap-3 overflow-x-auto pb-2">
+   644→              {[
+   645→                {
+   646→                  key: 'uploaded',
+   647→                  icon: <Upload className="size-4" />,
+   648→                  label: 'Uploaded',
+   649→                  count: processingFiles.length,
+   650→                  color: 'text-slate-600',
+   651→                  bgColor: 'bg-slate-50 border-slate-200',
+   652→                  active: activePipelineStage === 'uploading',
+   653→                },
+   654→                {
+   655→                  key: 'extracting',
+   656→                  icon: <Bot className="size-4" />,
+   657→                  label: 'AI Extracting',
+   658→                  count: pipelineCounts.extracting,
+   659→                  color: 'text-teal-600',
+   660→                  bgColor: 'bg-teal-50 border-teal-200',
+   661→                  active: activePipelineStage === 'extracting',
+   662→                },
+   663→                {
+   664→                  key: 'validated',
+   665→                  icon: <ShieldCheck className="size-4" />,
+   666→                  label: 'Validated',
+   667→                  count: pipelineCounts.validated,
+   668→                  color: 'text-emerald-600',
+   669→                  bgColor: 'bg-emerald-50 border-emerald-200',
+   670→                  active: false,
+   671→                },
+   672→                {
+   673→                  key: 'errors',
+   674→                  icon: <XCircle className="size-4" />,
+   675→                  label: 'Has Errors',
+   676→                  count: pipelineCounts.errors,
+   677→                  color: 'text-red-600',
+   678→                  bgColor: 'bg-red-50 border-red-200',
+   679→                  active: false,
+   680→                },
+   681→              ].map((stage, idx) => (
+   682→                <React.Fragment key={stage.key}>
+   683→                  <motion.div
+   684→                    variants={staggerItem}
+   685→                    initial="hidden"
+   686→                    animate="visible"
+   687→                    className="flex-1 min-w-[120px]"
+   688→                  >
+   689→                    <motion.div
+   690→                      animate={stage.active ? 'pulse' : undefined}
+   691→                      variants={stage.active ? pulseGlow : undefined}
+   692→                    >
+   693→                      <Card className={`border transition-all ${stage.bgColor} ${stage.active ? 'ring-2 ring-teal-300/50' : ''}`}>
+   694→                        <CardContent className="p-3 sm:p-4">
+   695→                          <div className="flex items-center gap-2">
+   696→                            <div className={`${stage.color}`}>
+   697→                              {stage.icon}
+   698→                            </div>
+   699→                            <div className="min-w-0">
+   700→                              <p className={`text-[10px] sm:text-xs font-medium uppercase tracking-wider ${stage.color} truncate`}>
+   701→                                {stage.label}
+   702→                              </p>
+   703→                              <p className={`text-lg sm:text-xl font-bold ${stage.color}`}>
+   704→                                {stage.count}
+   705→                              </p>
+   706→                            </div>
+   707→                          </div>
+   708→                        </CardContent>
+   709→                      </Card>
+   710→                    </motion.div>
+   711→                  </motion.div>
+   712→
+   713→                  {idx < 3 && (
+   714→                    <div className="flex items-center text-slate-300 shrink-0">
+   715→                      <ArrowRight className="size-4 sm:size-5" />
+   716→                    </div>
+   717→                  )}
+   718→                </React.Fragment>
+   719→              ))}
+   720→            </div>
+   721→          </motion.div>
+   722→        )}
+   723→
+   724→        {/* ════════════════════════════════════════════════════════════════════
+   725→            3.5. PROCESSING TIMELINE
+   726→        ════════════════════════════════════════════════════════════════════ */}
+   727→        {(processingFiles.length > 0 || hasInvoices) && (
+   728→          <motion.div
+   729→            initial={{ opacity: 0, y: 12 }}
+   730→            animate={{ opacity: 1, y: 0 }}
+   731→            transition={{ duration: 0.4, delay: 0.18 }}
+   732→          >
+   733→            <Card className="border-slate-200/60 shadow-sm">
+   734→              <CardContent className="p-4 sm:p-6">
+   735→                <h3 className="text-sm font-semibold text-slate-700 mb-4 flex items-center gap-2">
+   736→                  <Clock className="size-4 text-teal-600" />
+   737→                  Processing Timeline
+   738→                </h3>
+   739→                <div className="relative pl-6">
+   740→                  {/* Timeline vertical line */}
+   741→                  <div className="absolute left-[9px] top-1 bottom-1 w-px bg-slate-200" />
+   742→
+   743→                  {[
+   744→                    {
+   745→                      key: 'upload',
+   746→                      label: 'Upload',
+   747→                      time: '10:32 AM',
+   748→                      status: 'complete' as const,
+   749→                      icon: <Upload className="size-3" />,
+   750→                    },
+   751→                    {
+   752→                      key: 'extraction',
+   753→                      label: 'AI Extraction',
+   754→                      time: '10:33 AM',
+   755→                      status: activePipelineStage === 'extracting' ? ('active' as const) : hasInvoices || processingFiles.some(f => f.status !== 'uploading') ? ('complete' as const) : ('pending' as const),
+   756→                      icon: <Bot className="size-3" />,
+   757→                    },
+   758→                    {
+   759→                      key: 'validation',
+   760→                      label: 'Validation',
+   761→                      time: '10:34 AM',
+   762→                      status: hasInvoices && invoices.length > 0 ? ('complete' as const) : activePipelineStage === 'extracting' ? ('active' as const) : ('pending' as const),
+   763→                      icon: <ShieldCheck className="size-3" />,
+   764→                    },
+   765→                    {
+   766→                      key: 'complete',
+   767→                      label: 'Complete',
+   768→                      time: '10:35 AM',
+   769→                      status: hasInvoices && invoices.length > 0 ? ('complete' as const) : ('pending' as const),
+   770→                      icon: <CheckCircle2 className="size-3" />,
+   771→                    },
+   772→                  ].map((step) => {
+   773→                    const isComplete = step.status === 'complete';
+   774→                    const isActive = step.status === 'active';
+   775→                    const isPending = step.status === 'pending';
+   776→
+   777→                    return (
+   778→                      <div key={step.key} className="relative flex items-start gap-3 pb-4 last:pb-0">
+   779→                        {/* Timeline dot */}
+   780→                        <div className={`
+   781→                          absolute -left-6 top-0.5 flex size-[18px] items-center justify-center rounded-full ring-2 ring-white shrink-0
+   782→                          ${isComplete ? 'bg-emerald-500 text-white' : isActive ? 'bg-teal-500 text-white' : 'bg-slate-200 text-slate-400'}
+   783→                        `}>
+   784→                          {isActive ? (
+   785→                            <motion.div
+   786→                              animate={{ scale: [1, 1.2, 1] }}
+   787→                              transition={{ duration: 1.5, repeat: Infinity, ease: 'easeInOut' }}
+   788→                            >
+   789→                              {step.icon}
+   790→                            </motion.div>
+   791→                          ) : (
+   792→                            step.icon
+   793→                          )}
+   794→                        </div>
+   795→
+   796→                        {/* Step content */}
+   797→                        <div className="flex items-center gap-3 min-w-0">
+   798→                          <div>
+   799→                            <p className={`text-xs font-semibold ${isComplete ? 'text-emerald-700' : isActive ? 'text-teal-700' : 'text-slate-400'}`}>
+   800→                              {step.label}
+   801→                            </p>
+   802→                          </div>
+   803→                          <div className="flex items-center gap-1.5">
+   804→                            <span className={`text-[10px] ${isComplete ? 'text-emerald-600' : isActive ? 'text-teal-600' : 'text-slate-400'}`}>
+   805→                              {step.time}
+   806→                            </span>
+   807→                            {isComplete && <CheckCircle2 className="size-3 text-emerald-500" />}
+   808→                            {isActive && (
+   809→                              <motion.div
+   810→                                animate={{ opacity: [1, 0.3, 1] }}
+   811→                                transition={{ duration: 1.2, repeat: Infinity }}
+   812→                              >
+   813→                                <div className="size-2 rounded-full bg-teal-500" />
+   814→                              </motion.div>
+   815→                            )}
+   816→                          </div>
+   817→                        </div>
+   818→                      </div>
+   819→                    );
+   820→                  })}
+   821→                </div>
+   822→              </CardContent>
+   823→            </Card>
+   824→          </motion.div>
+   825→        )}
+   826→
+   827→        {/* ════════════════════════════════════════════════════════════════════
+   828→            4. PROCESSING QUEUE
+   829→        ════════════════════════════════════════════════════════════════════ */}
+   830→        <AnimatePresence>
+   831→          {processingFiles.length > 0 && (
+   832→            <motion.div
+   833→              initial={{ opacity: 0, height: 0 }}
+   834→              animate={{ opacity: 1, height: 'auto' }}
+   835→              exit={{ opacity: 0, height: 0 }}
+   836→              transition={{ duration: 0.3 }}
+   837→            >
+   838→              <Card className="border-slate-200/60 shadow-sm">
+   839→                <CardContent className="p-4 sm:p-6">
+   840→                  <h3 className="text-sm font-semibold text-slate-700 mb-4 flex items-center gap-2">
+   841→                    <FileUp className="size-4 text-teal-600" />
+   842→                    Processing Queue
+   843→                  </h3>
+   844→                  <div className="space-y-3">
+   845→                    <AnimatePresence>
+   846→                      {processingFiles.map((file) => (
+   847→                        <motion.div
+   848→                          key={file.id}
+   849→                          initial={{ opacity: 0, x: -16 }}
+   850→                          animate={{ opacity: 1, x: 0 }}
+   851→                          exit={{ opacity: 0, x: 16, height: 0 }}
+   852→                          transition={{ duration: 0.3 }}
+   853→                        >
+   854→                          <Card className={`border transition-colors ${
+   855→                            file.status === 'complete'
+   856→                              ? 'border-emerald-200 bg-emerald-50/30'
+   857→                              : file.status === 'error'
+   858→                              ? 'border-red-200 bg-red-50/30'
+   859→                              : 'border-slate-200 bg-white'
+   860→                          }`}>
+   861→                            <CardContent className="p-3 sm:p-4">
+   862→                              <div className="flex items-start gap-3">
+   863→                                {/* File icon */}
+   864→                                <div className={`
+   865→                                  shrink-0 flex size-9 items-center justify-center rounded-lg
+   866→                                  ${file.status === 'complete'
+   867→                                    ? 'bg-emerald-100 text-emerald-600'
+   868→                                    : file.status === 'error'
+   869→                                    ? 'bg-red-100 text-red-600'
+   870→                                    : 'bg-slate-100 text-slate-600'
+   871→                                  }
+   872→                                `}>
+   873→                                  {file.status === 'complete' ? (
+   874→                                    <CheckCircle2 className="size-4" />
+   875→                                  ) : file.status === 'error' ? (
+   876→                                    <XCircle className="size-4" />
+   877→                                  ) : (
+   878→                                    <FileText className="size-4" />
+   879→                                  )}
+   880→                                </div>
+   881→
+   882→                                {/* File info */}
+   883→                                <div className="flex-1 min-w-0">
+   884→                                  <div className="flex items-center justify-between gap-2">
+   885→                                    <p className="text-sm font-medium text-slate-800 truncate">
+   886→                                      {file.name}
+   887→                                    </p>
+   888→                                    <div className="flex items-center gap-2 shrink-0">
+   889→                                      {file.status !== 'complete' && file.status !== 'error' && (
+   890→                                        <Badge variant="outline" className="text-[10px] border-teal-200 bg-teal-50 text-teal-700">
+   891→                                          {file.format}
+   892→                                        </Badge>
+   893→                                      )}
+   894→                                      <button
+   895→                                        onClick={() => removeFile(file.id)}
+   896→                                        className="text-slate-400 hover:text-slate-600 transition-colors"
+   897→                                      >
+   898→                                        <X className="size-3.5" />
+   899→                                      </button>
+   900→                                    </div>
+   901→                                  </div>
+   902→
+   903→                                  {/* Progress bar */}
+   904→                                  {(file.status === 'uploading' || file.status === 'extracting' || file.status === 'validating') && (
+   905→                                    <div className="mt-2 space-y-1.5">
+   906→                                      <Progress
+   907→                                        value={file.progress}
+   908→                                        className="h-1.5 bg-slate-100"
+   909→                                      />
+   910→                                      <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+   911→                                        {file.status === 'uploading' && (
+   912→                                          <>
+   913→                                            <motion.span
+   914→                                              animate={{ opacity: [1, 0.4, 1] }}
+   915→                                              transition={{ duration: 1.5, repeat: Infinity }}
+   916→                                            >
+   917→                                              Uploading...
+   918→                                            </motion.span>
+   919→                                            <span>{Math.round(file.progress)}%</span>
+   920→                                          </>
+   921→                                        )}
+   922→                                        {file.status === 'extracting' && (
+   923→                                          <motion.span
+   924→                                            animate={{ opacity: [1, 0.4, 1] }}
+   925→                                            transition={{ duration: 1.5, repeat: Infinity }}
+   926→                                            className="flex items-center gap-1"
+   927→                                          >
+   928→                                            <Bot className="size-3" />
+   929→                                            Extracting invoices...
+   930→                                          </motion.span>
+   931→                                        )}
+   932→                                        {file.status === 'validating' && (
+   933→                                          <motion.span
+   934→                                            animate={{ opacity: [1, 0.4, 1] }}
+   935→                                            transition={{ duration: 1.5, repeat: Infinity }}
+   936→                                            className="flex items-center gap-1"
+   937→                                          >
+   938→                                            <ShieldCheck className="size-3" />
+   939→                                            Validating data...
+   940→                                          </motion.span>
+   941→                                        )}
+   942→                                      </p>
+   943→                                    </div>
+   944→                                  )}
+   945→
+   946→                                  {/* Completed file info */}
+   947→                                  {file.status === 'complete' && (
+   948→                                    <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
+   949→                                      <span className="text-xs text-emerald-700 font-medium">
+   950→                                        {file.invoiceCount} invoices extracted
+   951→                                      </span>
+   952→                                      {/* OCR confidence bar */}
+   953→                                      <div className="flex items-center gap-1.5">
+   954→                                        <span className="text-[10px] text-muted-foreground">OCR</span>
+   955→                                        <div className="h-1 w-16 rounded-full bg-slate-100 overflow-hidden">
+   956→                                          <div
+   957→                                            className={`h-full rounded-full ${getConfidenceBarColor(file.ocrConfidence)}`}
+   958→                                            style={{ width: `${file.ocrConfidence}%` }}
+   959→                                          />
+   960→                                        </div>
+   961→                                        <span className={`text-[10px] font-medium ${getConfidenceColor(file.ocrConfidence)}`}>
+   962→                                          {file.ocrConfidence}%
+   963→                                        </span>
+   964→                                      </div>
+   965→                                    </div>
+   966→                                  )}
+   967→
+   968→                                  {/* Error info */}
+   969→                                  {file.status === 'error' && (
+   970→                                    <p className="mt-1 text-xs text-red-600">
+   971→                                      {file.errorMsg || 'Unable to parse — try CSV format'}
+   972→                                    </p>
+   973→                                  )}
+   974→                                </div>
+   975→                              </div>
+   976→                            </CardContent>
+   977→                          </Card>
+   978→                        </motion.div>
+   979→                      ))}
+   980→                    </AnimatePresence>
+   981→                  </div>
+   982→                </CardContent>
+   983→              </Card>
+   984→            </motion.div>
+   985→          )}
+   986→        </AnimatePresence>
+   987→
+   988→        {/* ════════════════════════════════════════════════════════════════════
+   989→            5. EXTRACTED INVOICES
+   990→        ════════════════════════════════════════════════════════════════════ */}
+   991→        {hasInvoices && invoices.length > 0 && (
+   992→          <motion.div
+   993→            initial={{ opacity: 0 }}
+   994→            animate={{ opacity: 1 }}
+   995→            transition={{ duration: 0.4 }}
+   996→          >
+   997→            {/* Filter pills: Section */}
+   998→            <div className="space-y-4">
+   999→              <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
+  1000→                <div className="flex items-center gap-1.5 flex-wrap">
+  1001→                  {[
+  1002→                    { key: 'all', label: 'All' },
+  1003→                    { key: 'b2b', label: 'B2B' },
+  1004→                    { key: 'b2cl', label: 'B2C Large' },
+  1005→                    { key: 'b2cs', label: 'B2C Small' },
+  1006→                    { key: 'exp', label: 'Export' },
+  1007→                    { key: 'cdnr', label: 'CDNR' },
+  1008→                  ].map(pill => (
+  1009→                    <button
+  1010→                      key={pill.key}
+  1011→                      onClick={() => setSectionFilter(pill.key)}
+  1012→                      className={`
+  1013→                        px-3 py-1.5 rounded-full text-xs font-medium transition-all
+  1014→                        ${sectionFilter === pill.key
+  1015→                          ? 'bg-emerald-600 text-white shadow-sm'
+  1016→                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+  1017→                        }
+  1018→                      `}
+  1019→                    >
+  1020→                      {pill.label}
+  1021→                    </button>
+  1022→                  ))}
+  1023→                </div>
+  1024→
+  1025→                <div className="flex items-center gap-1.5">
+  1026→                  {[
+  1027→                    { key: 'all', label: 'All Status' },
+  1028→                    { key: 'validated', label: 'Validated' },
+  1029→                    { key: 'warning', label: 'Warning' },
+  1030→                    { key: 'error', label: 'Error' },
+  1031→                  ].map(pill => (
+  1032→                    <button
+  1033→                      key={pill.key}
+  1034→                      onClick={() => setStatusFilter(pill.key)}
+  1035→                      className={`
+  1036→                        px-3 py-1.5 rounded-full text-xs font-medium transition-all
+  1037→                        ${statusFilter === pill.key
+  1038→                          ? pill.key === 'error'
+  1039→                            ? 'bg-red-600 text-white shadow-sm'
+  1040→                            : pill.key === 'warning'
+  1041→                            ? 'bg-amber-500 text-white shadow-sm'
+  1042→                            : pill.key === 'validated'
+  1043→                            ? 'bg-emerald-600 text-white shadow-sm'
+  1044→                            : 'bg-slate-800 text-white shadow-sm'
+  1045→                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+  1046→                        }
+  1047→                      `}
+  1048→                    >
+  1049→                      {pill.label}
+  1050→                    </button>
+  1051→                  ))}
+  1052→                </div>
+  1053→
+  1054→                <p className="text-xs text-muted-foreground ml-auto shrink-0">
+  1055→                  {filteredInvoices.length} invoice{filteredInvoices.length !== 1 ? 's' : ''}
+  1056→                </p>
+  1057→              </div>
+  1058→
+  1059→              {/* Invoice card grid */}
+  1060→              <motion.div
+  1061→                variants={staggerContainer}
+  1062→                initial="hidden"
+  1063→                animate="visible"
+  1064→                className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"
+  1065→              >
+  1066→                <AnimatePresence mode="popLayout">
+  1067→                  {filteredInvoices.map(inv => (
+  1068→                    <motion.div
+  1069→                      key={inv.id}
+  1070→                      variants={staggerItem}
+  1071→                      layout
+  1072→                      exit={{ opacity: 0, scale: 0.95 }}
+  1073→                    >
+  1074→                      <Card className={`
+  1075→                        border shadow-sm hover:shadow-md transition-all duration-200 overflow-hidden
+  1076→                        ${inv.validationStatus === 'error'
+  1077→                          ? 'border-red-200/80 hover:border-red-300'
+  1078→                          : inv.validationStatus === 'warning'
+  1079→                          ? 'border-amber-200/80 hover:border-amber-300'
+  1080→                          : 'border-slate-200/60 hover:border-emerald-200'
+  1081→                        }
+  1082→                      `}>
+  1083→                        <CardContent className="p-4 sm:p-5">
+  1084→                          {/* Header: Invoice # + section badge */}
+  1085→                          <div className="flex items-start justify-between gap-2">
+  1086→                            <div className="min-w-0">
+  1087→                              <p className="text-sm font-bold text-slate-900 truncate">
+  1088→                                {inv.invoiceNumber}
+  1089→                              </p>
+  1090→                              <p className="text-xs text-muted-foreground mt-0.5 truncate">
+  1091→                                {inv.clientName}
+  1092→                              </p>
+  1093→                            </div>
+  1094→                            <div className="flex items-center gap-1.5 shrink-0">
+  1095→                              <Badge
+  1096→                                variant="outline"
+  1097→                                className={`text-[10px] font-medium ${getSectionBadgeStyle(inv.section)}`}
+  1098→                              >
+  1099→                                {inv.sectionLabel}
+  1100→                              </Badge>
+  1101→                            </div>
+  1102→                          </div>
+  1103→
+  1104→                          {/* Date */}
+  1105→                          <p className="mt-2 text-[11px] text-muted-foreground">
+  1106→                            {inv.invoiceDate}
+  1107→                          </p>
+  1108→
+  1109→                          {/* Tax breakdown */}
+  1110→                          <div className="mt-3 space-y-1.5">
+  1111→                            <div className="flex items-center justify-between text-xs">
+  1112→                              <span className="text-muted-foreground">Taxable Amount</span>
+  1113→                              <span className="font-semibold text-slate-800">
+  1114→                                {formatCurrency(inv.taxableValue)}
+  1115→                              </span>
+  1116→                            </div>
+  1117→                            {inv.cgst > 0 && (
+  1118→                              <div className="flex items-center justify-between text-[11px]">
+  1119→                                <span className="text-muted-foreground">CGST</span>
+  1120→                                <span className="text-slate-600">{formatCurrency(inv.cgst)}</span>
+  1121→                              </div>
+  1122→                            )}
+  1123→                            {inv.sgst > 0 && (
+  1124→                              <div className="flex items-center justify-between text-[11px]">
+  1125→                                <span className="text-muted-foreground">SGST</span>
+  1126→                                <span className="text-slate-600">{formatCurrency(inv.sgst)}</span>
+  1127→                              </div>
+  1128→                            )}
+  1129→                            {inv.igst > 0 && (
+  1130→                              <div className="flex items-center justify-between text-[11px]">
+  1131→                                <span className="text-muted-foreground">IGST</span>
+  1132→                                <span className="text-slate-600">{formatCurrency(inv.igst)}</span>
+  1133→                              </div>
+  1134→                            )}
+  1135→                            <div className="flex items-center justify-between text-xs border-t border-slate-100 pt-1.5">
+  1136→                              <span className="text-muted-foreground font-medium">Total</span>
+  1137→                              <span className="font-bold text-slate-900">
+  1138→                                {formatCurrency(inv.totalAmount)}
+  1139→                              </span>
+  1140→                            </div>
+  1141→                          </div>
+  1142→
+  1143→                          {/* Validation status + OCR confidence */}
+  1144→                          <div className="mt-3 flex items-center justify-between gap-2">
+  1145→                            <div className="flex items-center gap-1.5">
+  1146→                              {getValidationIcon(inv.validationStatus)}
+  1147→                              <Badge
+  1148→                                variant="outline"
+  1149→                                className={`text-[10px] font-medium ${getValidationBadge(inv.validationStatus)}`}
+  1150→                              >
+  1151→                                {getValidationLabel(inv.validationStatus)}
+  1152→                              </Badge>
+  1153→                            </div>
+  1154→                            <div className="flex items-center gap-1">
+  1155→                              <div className="h-1 w-10 rounded-full bg-slate-100 overflow-hidden">
+  1156→                                <div
+  1157→                                  className={`h-full rounded-full ${getConfidenceBarColor(inv.ocrConfidence)}`}
+  1158→                                  style={{ width: `${inv.ocrConfidence}%` }}
+  1159→                                />
+  1160→                              </div>
+  1161→                              <span className={`text-[10px] font-medium ${getConfidenceColor(inv.ocrConfidence)}`}>
+  1162→                                {inv.ocrConfidence}%
+  1163→                              </span>
+  1164→                            </div>
+  1165→                          </div>
+  1166→
+  1167→                          {/* Missing fields indicator */}
+  1168→                          {inv.missingFields.length > 0 && (
+  1169→                            <div className="mt-2 flex items-center gap-1">
+  1170→                              <AlertCircle className="size-3 text-amber-500 shrink-0" />
+  1171→                              <p className="text-[10px] text-amber-700 truncate">
+  1172→                                Missing: {inv.missingFields.join(', ')}
+  1173→                              </p>
+  1174→                            </div>
+  1175→                          )}
+  1176→
+  1177→                          {/* Validation messages */}
+  1178→                          {inv.validationMessages.length > 0 && (
+  1179→                            <div className="mt-1.5 space-y-0.5">
+  1180→                              {inv.validationMessages.map((msg, i) => (
+  1181→                                <p
+  1182→                                  key={i}
+  1183→                                  className={`text-[10px] truncate ${
+  1184→                                    inv.validationStatus === 'error'
+  1185→                                      ? 'text-red-600'
+  1186→                                      : 'text-amber-600'
+  1187→                                  }`}
+  1188→                                >
+  1189→                                  {msg}
+  1190→                                </p>
+  1191→                              ))}
+  1192→                            </div>
+  1193→                          )}
+  1194→
+  1195→                          {/* Action buttons */}
+  1196→                          <div className="mt-3 pt-3 border-t border-slate-100 flex items-center gap-2">
+  1197→                            <Button
+  1198→                              variant="outline"
+  1199→                              size="sm"
+  1200→                              className="flex-1 h-7 text-xs gap-1.5 border-slate-200 hover:border-emerald-300 hover:text-emerald-700 hover:bg-emerald-50"
+  1201→                            >
+  1202→                              <Edit3 className="size-3" />
+  1203→                              Edit
+  1204→                            </Button>
+  1205→                            <Button
+  1206→                              size="sm"
+  1207→                              className="flex-1 h-7 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
+  1208→                              disabled={inv.validationStatus === 'error'}
+  1209→                            >
+  1210→                              <FileCheck2 className="size-3" />
+  1211→                              Approve
+  1212→                            </Button>
+  1213→                          </div>
+  1214→                        </CardContent>
+  1215→                      </Card>
+  1216→                    </motion.div>
+  1217→                  ))}
+  1218→                </AnimatePresence>
+  1219→              </motion.div>
+  1220→            </div>
+  1221→          </motion.div>
+  1222→        )}
+  1223→
+  1224→        {/* ════════════════════════════════════════════════════════════════════
+  1225→            5.5. AI REVIEW QUEUE
+  1226→        ════════════════════════════════════════════════════════════════════ */}
+  1227→        {hasInvoices && invoices.some(i => i.validationStatus === 'warning' || i.validationStatus === 'error') && (
+  1228→          <motion.div
+  1229→            initial={{ opacity: 0, y: 12 }}
+  1230→            animate={{ opacity: 1, y: 0 }}
+  1231→            transition={{ duration: 0.4, delay: 0.1 }}
+  1232→          >
+  1233→            <Card className="border-slate-200/60 shadow-sm">
+  1234→              <CardContent className="p-4 sm:p-6">
+  1235→                <div className="flex items-center justify-between mb-4">
+  1236→                  <h3 className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+  1237→                    <Eye className="size-4 text-teal-600" />
+  1238→                    AI Review Queue
+  1239→                  </h3>
+  1240→                  <Badge className="text-[10px] font-semibold bg-amber-50 text-amber-700 border-amber-200 px-2.5 py-0.5">
+  1241→                    {invoices.filter(i => i.validationStatus === 'warning' || i.validationStatus === 'error').length} items
+  1242→                  </Badge>
+  1243→                </div>
+  1244→                <div className="space-y-2">
+  1245→                  {invoices
+  1246→                    .filter(i => i.validationStatus === 'warning' || i.validationStatus === 'error')
+  1247→                    .map((inv, idx) => (
+  1248→                      <motion.div
+  1249→                        key={inv.id}
+  1250→                        initial={{ opacity: 0, x: -8 }}
+  1251→                        animate={{ opacity: 1, x: 0 }}
+  1252→                        transition={{ duration: 0.25, delay: idx * 0.05 }}
+  1253→                        className={`
+  1254→                          flex items-start gap-3 rounded-lg border p-3 transition-all
+  1255→                          ${reviewingInvoiceId === inv.id
+  1256→                            ? 'border-teal-300 bg-teal-50/50 ring-1 ring-teal-200'
+  1257→                            : inv.validationStatus === 'error'
+  1258→                            ? 'border-red-100 bg-red-50/30'
+  1259→                            : 'border-amber-100 bg-amber-50/30'
+  1260→                          }
+  1261→                        `}
+  1262→                      >
+  1263→                        <div className={`shrink-0 mt-0.5 flex size-7 items-center justify-center rounded-lg ${
+  1264→                          inv.validationStatus === 'error' ? 'bg-red-100 text-red-600' : 'bg-amber-100 text-amber-600'
+  1265→                        }`}>
+  1266→                          {inv.validationStatus === 'error' ? <XCircle className="size-3.5" /> : <AlertTriangle className="size-3.5" />}
+  1267→                        </div>
+  1268→                        <div className="flex-1 min-w-0">
+  1269→                          <div className="flex items-center gap-2 flex-wrap">
+  1270→                            <p className="text-xs font-semibold text-slate-800">{inv.invoiceNumber}</p>
+  1271→                            <Badge variant="outline" className={`text-[9px] font-medium ${getValidationBadge(inv.validationStatus)}`}>
+  1272→                              {getValidationLabel(inv.validationStatus)}
+  1273→                            </Badge>
+  1274→                          </div>
+  1275→                          <p className="text-[11px] text-muted-foreground mt-0.5">{inv.clientName}</p>
+  1276→                          <p className={`text-[10px] mt-1 ${inv.validationStatus === 'error' ? 'text-red-600' : 'text-amber-600'}`}>
+  1277→                            {inv.validationMessages.length > 0 ? inv.validationMessages[0] : inv.missingFields.length > 0 ? `Missing: ${inv.missingFields.join(', ')}` : 'Requires review'}
+  1278→                          </p>
+  1279→                          <div className="flex items-center gap-1.5 mt-1.5">
+  1280→                            <span className="text-[9px] text-muted-foreground">Confidence</span>
+  1281→                            <div className="h-1 w-12 rounded-full bg-slate-100 overflow-hidden">
+  1282→                              <div
+  1283→                                className={`h-full rounded-full ${getConfidenceBarColor(inv.ocrConfidence)}`}
+  1284→                                style={{ width: `${inv.ocrConfidence}%` }}
+  1285→                              />
+  1286→                            </div>
+  1287→                            <span className={`text-[9px] font-medium ${getConfidenceColor(inv.ocrConfidence)}`}>
+  1288→                              {inv.ocrConfidence}%
+  1289→                            </span>
+  1290→                          </div>
+  1291→                        </div>
+  1292→                        <div className="flex items-center gap-1.5 shrink-0">
+  1293→                          <Button
+  1294→                            variant="outline"
+  1295→                            size="sm"
+  1296→                            className={`h-7 text-[10px] gap-1 ${
+  1297→                              reviewingInvoiceId === inv.id
+  1298→                                ? 'border-teal-300 text-teal-700 bg-teal-50'
+  1299→                                : 'border-slate-200 text-slate-600 hover:border-teal-300 hover:text-teal-700 hover:bg-teal-50'
+  1300→                            }`}
+  1301→                            onClick={() => setReviewingInvoiceId(reviewingInvoiceId === inv.id ? null : inv.id)}
+  1302→                          >
+  1303→                            <Eye className="size-3" />
+  1304→                            Review
+  1305→                          </Button>
+  1306→                          <Button
+  1307→                            variant="outline"
+  1308→                            size="sm"
+  1309→                            className="h-7 text-[10px] gap-1 border-emerald-200 text-emerald-700 hover:bg-emerald-50 hover:border-emerald-300"
+  1310→                            onClick={() => {
+  1311→                              setInvoices(prev => prev.map(i => i.id === inv.id ? { ...i, validationStatus: 'validated' as ValidationStatus, validationMessages: [], missingFields: [] } : i));
+  1312→                            }}
+  1313→                          >
+  1314→                            <ThumbsUp className="size-3" />
+  1315→                            Approve
+  1316→                          </Button>
+  1317→                        </div>
+  1318→                      </motion.div>
+  1319→                    ))}
+  1320→                </div>
+  1321→              </CardContent>
+  1322→            </Card>
+  1323→          </motion.div>
+  1324→        )}
+  1325→
+  1326→        {/* ════════════════════════════════════════════════════════════════════
+  1327→            6. VALIDATION ISSUES PANEL
+  1328→        ════════════════════════════════════════════════════════════════════ */}
+  1329→        {hasInvoices && validationIssues.length > 0 && (
+  1330→          <motion.div
+  1331→            initial={{ opacity: 0, y: 12 }}
+  1332→            animate={{ opacity: 1, y: 0 }}
+  1333→            transition={{ duration: 0.4, delay: 0.2 }}
+  1334→          >
+  1335→            <Collapsible open={issuesOpen} onOpenChange={setIssuesOpen}>
+  1336→              <Card className="border-slate-200/60 shadow-sm">
+  1337→                <CollapsibleTrigger asChild>
+  1338→                  <button className="w-full text-left">
+  1339→                    <CardContent className="p-4 sm:p-5 flex items-center justify-between">
+  1340→                      <div className="flex items-center gap-3">
+  1341→                        <div className="flex size-8 items-center justify-center rounded-lg bg-red-50">
+  1342→                          <AlertTriangle className="size-4 text-red-500" />
+  1343→                        </div>
+  1344→                        <div>
+  1345→                          <h3 className="text-sm font-semibold text-slate-800">Validation Issues</h3>
+  1346→                          <p className="text-xs text-muted-foreground mt-0.5">
+  1347→                            <span className="text-red-600 font-medium">{criticalCount} Critical</span>
+  1348→                            <span className="mx-1.5">·</span>
+  1349→                            <span className="text-amber-600 font-medium">{warningCount} Warnings</span>
+  1350→                          </p>
+  1351→                        </div>
+  1352→                      </div>
+  1353→                      <motion.div
+  1354→                        animate={{ rotate: issuesOpen ? 180 : 0 }}
+  1355→                        transition={{ duration: 0.2 }}
+  1356→                      >
+  1357→                        <ChevronDown className="size-5 text-slate-400" />
+  1358→                      </motion.div>
+  1359→                    </CardContent>
+  1360→                  </button>
+  1361→                </CollapsibleTrigger>
+  1362→                <CollapsibleContent>
+  1363→                  <div className="px-4 sm:px-5 pb-4 sm:pb-5">
+  1364→                    <ScrollArea className="max-h-64">
+  1365→                      <div className="space-y-2">
+  1366→                        {validationIssues.map((issue, idx) => (
+  1367→                          <motion.div
+  1368→                            key={issue.id}
+  1369→                            initial={{ opacity: 0, x: -8 }}
+  1370→                            animate={{ opacity: 1, x: 0 }}
+  1371→                            transition={{ duration: 0.2, delay: idx * 0.03 }}
+  1372→                            className={`
+  1373→                              flex items-start gap-3 rounded-lg border p-3 transition-colors
+  1374→                              ${issue.severity === 'critical'
+  1375→                                ? 'border-red-100 bg-red-50/50'
+  1376→                                : 'border-amber-100 bg-amber-50/50'
+  1377→                              }
+  1378→                            `}
+  1379→                          >
+  1380→                            <div className="shrink-0 mt-0.5">
+  1381→                              {issue.severity === 'critical' ? (
+  1382→                                <XCircle className="size-4 text-red-500" />
+  1383→                              ) : (
+  1384→                                <AlertTriangle className="size-4 text-amber-500" />
+  1385→                              )}
+  1386→                            </div>
+  1387→                            <div className="flex-1 min-w-0">
+  1388→                              <p className="text-xs font-medium text-slate-800">
+  1389→                                {issue.description}
+  1390→                              </p>
+  1391→                              <p className="text-[10px] text-muted-foreground mt-0.5">
+  1392→                                Invoice: {issue.invoiceNumber}
+  1393→                              </p>
+  1394→                            </div>
+  1395→                            <Button
+  1396→                              variant="outline"
+  1397→                              size="sm"
+  1398→                              className={`
+  1399→                                shrink-0 h-6 text-[10px] gap-1
+  1400→                                ${issue.severity === 'critical'
+  1401→                                  ? 'border-red-200 text-red-700 hover:bg-red-50'
+  1402→                                  : 'border-amber-200 text-amber-700 hover:bg-amber-50'
+  1403→                                }
+  1404→                              `}
+  1405→                            >
+  1406→                              Fix
+  1407→                            </Button>
+  1408→                          </motion.div>
+  1409→                        ))}
+  1410→                      </div>
+  1411→                    </ScrollArea>
+  1412→                  </div>
+  1413→                </CollapsibleContent>
+  1414→              </Card>
+  1415→            </Collapsible>
+  1416→          </motion.div>
+  1417→        )}
+  1418→
+  1419→        {/* ════════════════════════════════════════════════════════════════════
+  1420→            7. EMPTY STATE
+  1421→        ════════════════════════════════════════════════════════════════════ */}
+  1422→        {!hasInvoices && processingFiles.length === 0 && (
+  1423→          <motion.div
+  1424→            initial={{ opacity: 0, y: 16 }}
+  1425→            animate={{ opacity: 1, y: 0 }}
+  1426→            transition={{ duration: 0.5, delay: 0.2 }}
+  1427→          >
+  1428→            <Card className="border-slate-200/60 shadow-sm">
+  1429→              <CardContent className="py-16 px-6 flex flex-col items-center text-center">
+  1430→                <div className="flex size-16 items-center justify-center rounded-2xl bg-slate-100 mb-4">
+  1431→                  <CloudUpload className="size-7 text-slate-400" />
+  1432→                </div>
+  1433→                <h3 className="text-base font-semibold text-slate-700">
+  1434→                  No documents uploaded yet
+  1435→                </h3>
+  1436→                <p className="mt-1.5 text-sm text-muted-foreground max-w-sm">
+  1437→                  Upload your GST documents to start processing — we&apos;ll extract and validate invoices automatically
+  1438→                </p>
+  1439→                <Button
+  1440→                  className="mt-5 gap-2 bg-emerald-600 hover:bg-emerald-700 text-white"
+  1441→                  onClick={handleDemoUpload}
+  1442→                >
+  1443→                  <Upload className="size-4" />
+  1444→                  Upload Documents
+  1445→                </Button>
+  1446→              </CardContent>
+  1447→            </Card>
+  1448→          </motion.div>
+  1449→        )}
+  1450→      </div>
+  1451→    </div>
+  1452→  );
+  1453→}
+  1454→

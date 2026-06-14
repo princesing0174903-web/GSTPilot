@@ -146,17 +146,6 @@ function DashboardContent() {
 function AppRouter() {
   const { currentScreen, setCurrentScreen } = useApp()
   const { isAuthenticated, isInitializing } = useAuth()
-  const hasSeededRef = React.useRef(false)
-
-  useEffect(() => {
-    if (!hasSeededRef.current) {
-      hasSeededRef.current = true
-      fetch('/api/seed', { method: 'POST' })
-        .then(res => res.json())
-        .then(() => {})
-        .catch(() => {})
-    }
-  }, [])
 
   useEffect(() => {
     if (isInitializing) return

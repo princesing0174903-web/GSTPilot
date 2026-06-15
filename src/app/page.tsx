@@ -197,9 +197,13 @@ function EmailVerificationBanner() {
 
 function OnboardingScreen() {
   const { user, refreshUserProfile, logout } = useAuth()
+  const { setCurrentScreen, setCurrentView } = useApp()
   const [saving, setSaving] = React.useState(false)
 
-  const handleOnboardingComplete = async (data: import('@/components/onboarding/OnboardingFlow').OnboardingData) => {
+  const handleOnboardingComplete = async (
+    data: import('@/components/onboarding/OnboardingFlow').OnboardingData,
+    destination?: import('@/components/onboarding/OnboardingFlow').OnboardingDestination
+  ) => {
     setSaving(true)
     try {
       // Save user data to Firestore
@@ -251,8 +255,12 @@ function OnboardingScreen() {
         completedAt: serverTimestamp(),
       })
 
-      // Refresh the auth user profile
+      // Refresh the auth user profile (updates onboardingCompleted flag)
       await refreshUserProfile()
+
+      // Navigate to the app — destination determines which view to show
+      setCurrentView(destination || 'dashboard')
+      setCurrentScreen('app')
     } catch (error) {
       console.error('Failed to save onboarding data:', error)
     } finally {
@@ -272,6 +280,10 @@ function OnboardingScreen() {
       }, { merge: true })
 
       await refreshUserProfile()
+
+      // Navigate to dashboard after skipping
+      setCurrentView('dashboard')
+      setCurrentScreen('app')
     } catch (error) {
       console.error('Failed to skip onboarding:', error)
     }
@@ -283,6 +295,7 @@ function OnboardingScreen() {
       onSkip={handleSkip}
       userEmail={user?.email}
       userName={user?.name}
+      saving={saving}
     />
   )
 }

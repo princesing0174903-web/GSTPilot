@@ -58,11 +58,14 @@ export interface OnboardingData {
   wantsUpdates: boolean;
 }
 
+export type OnboardingDestination = 'dashboard' | 'invoices';
+
 interface OnboardingFlowProps {
-  onComplete: (data: OnboardingData) => void;
+  onComplete: (data: OnboardingData, destination?: OnboardingDestination) => void;
   onSkip?: () => void;
   userEmail?: string;
   userName?: string;
+  saving?: boolean;
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -206,6 +209,7 @@ export function OnboardingFlow({
   onSkip,
   userEmail = '',
   userName = '',
+  saving = false,
 }: OnboardingFlowProps) {
   const [currentStep, setCurrentStep] = useState(0); // 0=welcome, 1-4=steps, 5=final
   const [direction, setDirection] = useState(1);
@@ -994,21 +998,23 @@ export function OnboardingFlow({
           className="flex flex-col sm:flex-row gap-3 mt-8 w-full"
         >
           <Button
-            onClick={() => onComplete(formData)}
+            type="button"
+            onClick={() => onComplete(formData, 'dashboard')}
+            disabled={saving}
             size="lg"
             className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white gap-2"
           >
-            Go to Dashboard
-            <ArrowRight className="size-4" />
+            {saving ? <><span className="size-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Setting up...</> : <>Go to Dashboard<ArrowRight className="size-4" /></>}
           </Button>
           <Button
-            onClick={() => onComplete(formData)}
+            type="button"
+            onClick={() => onComplete(formData, 'invoices')}
+            disabled={saving}
             variant="outline"
             size="lg"
             className="flex-1 gap-2 border-emerald-200 text-emerald-700 hover:bg-emerald-50"
           >
-            <Upload className="size-4" />
-            Upload First Document
+            {saving ? <><span className="size-4 border-2 border-emerald-300/30 border-t-emerald-600 rounded-full animate-spin" /> Setting up...</> : <><Upload className="size-4" />Upload First Document</>}
           </Button>
         </motion.div>
       </motion.div>

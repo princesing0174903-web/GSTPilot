@@ -15,6 +15,7 @@ import {
   Upload,
   Rocket,
   X,
+  AlertCircle,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -66,6 +67,8 @@ interface OnboardingFlowProps {
   userEmail?: string;
   userName?: string;
   saving?: boolean;
+  error?: string | null;
+  onDismissError?: () => void;
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -210,6 +213,8 @@ export function OnboardingFlow({
   userEmail = '',
   userName = '',
   saving = false,
+  error = null,
+  onDismissError,
 }: OnboardingFlowProps) {
   const [currentStep, setCurrentStep] = useState(0); // 0=welcome, 1-4=steps, 5=final
   const [direction, setDirection] = useState(1);
@@ -990,6 +995,28 @@ export function OnboardingFlow({
             </CardContent>
           </Card>
         </motion.div>
+
+        {/* Error display — shows exact Firestore/API error instead of infinite loading */}
+        {error && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mt-4 rounded-lg bg-red-50 border border-red-200 p-3.5 flex items-start gap-3 w-full"
+          >
+            <AlertCircle className="h-5 w-5 text-red-500 mt-0.5 shrink-0" />
+            <div className="flex-1">
+              <p className="text-sm font-medium text-red-800">Setup failed</p>
+              <p className="text-xs text-red-600 mt-0.5">{error}</p>
+              <button
+                type="button"
+                onClick={onDismissError}
+                className="text-xs text-red-600 hover:text-red-800 mt-1.5 underline font-medium"
+              >
+                Dismiss and try again
+              </button>
+            </div>
+          </motion.div>
+        )}
 
         <motion.div
           initial={{ y: 20, opacity: 0 }}

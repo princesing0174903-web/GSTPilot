@@ -199,20 +199,31 @@ function OnboardingScreen() {
   const { user, refreshUserProfile, logout } = useAuth()
   const { setCurrentScreen, setCurrentView } = useApp()
   const [saving, setSaving] = React.useState(false)
+  const [saveError, setSaveError] = React.useState<string | null>(null)
 
   const handleOnboardingComplete = async (
     data: import('@/components/onboarding/OnboardingFlow').OnboardingData,
     destination?: import('@/components/onboarding/OnboardingFlow').OnboardingDestination
   ) => {
+    if (saving) return // Prevent double-click
     setSaving(true)
+    setSaveError(null)
+    console.log('[Onboarding] Starting onboarding completion...')
+
     try {
-      // Save user data to Firestore
+      // Step 1: Import Firestore modules
       const { doc, setDoc, serverTimestamp, collection, addDoc } = await import('firebase/firestore')
       const { db } = await import('@/lib/firebase')
+      console.log('[Onboarding] Firestore modules loaded')
 
-      if (!user) return
+      if (!user) {
+        console.error('[Onboarding] No user found — cannot save onboarding data')
+        setSaveError('No authenticated user found. Please sign in again.')
+        return
+      }
 
-      // Create firm document
+      // Step 2: Create firm document
+      console.log('[Onboarding] Creating firm document...')
       const firmData = {
         ownerId: user.id,
         firmName: data.firmName,
@@ -224,9 +235,18 @@ function OnboardingScreen() {
         officeAddress: data.officeAddress || null,
         createdAt: serverTimestamp(),
       }
-      const firmRef = await addDoc(collection(db, 'firms'), firmData)
+      let firmId = ''
+      try {
+        const firmRef = await addDoc(collection(db, 'firms'), firmData)
+        firmId = firmRef.id
+        console.log('[Onboarding] Firm document created:', firmId)
+      } catch (firmError) {
+        console.warn('[Onboarding] Firm creation failed (non-blocking):', firmError)
+        // Non-blocking — continue without firm
+      }
 
-      // Update user document with onboarding data
+      // Step 3: Update user document with onboarding data
+      console.log('[Onboarding] Updating user document...')
       await setDoc(doc(db, 'users', user.id), {
         uid: user.id,
         fullName: data.fullName,
@@ -235,7 +255,7 @@ function OnboardingScreen() {
         ageGroup: data.ageGroup,
         profession: data.profession,
         experience: data.experience,
-        firmId: firmRef.id,
+        firmId: firmId || null,
         firmName: data.firmName,
         onboardingCompleted: true,
         clientCount: data.clientCount,
@@ -247,45 +267,107 @@ function OnboardingScreen() {
         wantsUpdates: data.wantsUpdates,
         updatedAt: serverTimestamp(),
       }, { merge: true })
+      console.log('[Onboarding] User document updated with onboardingCompleted: true')
 
-      // Save onboarding record
-      await setDoc(doc(db, 'onboarding', user.id), {
-        ...data,
-        firmId: firmRef.id,
-        completedAt: serverTimestamp(),
-      })
+      // Step 4: Save onboarding record (non-blocking)
+      console.log('[Onboarding] Saving onboarding record...')
+      try {
+        await setDoc(doc(db, 'onboarding', user.id), {
+          ...data,
+          firmId: firmId || null,
+          completedAt: serverTimestamp(),
+        })
+        console.log('[Onboarding] Onboarding record saved')
+      } catch (onboardingError) {
+        console.warn('[Onboarding] Onboarding record save failed (non-blocking):', onboardingError)
+      }
 
-      // Refresh the auth user profile (updates onboardingCompleted flag)
-      await refreshUserProfile()
+      // Step 5: Refresh the auth user profile
+      console.log('[Onboarding] Refreshing user profile...')
+      try {
+        await refreshUserProfile()
+        console.log('[Onboarding] User profile refreshed')
+      } catch (refreshError) {
+        console.warn('[Onboarding] Profile refresh failed (will force onboardingCompleted locally):', refreshError)
+      }
 
-      // Navigate to the app — destination determines which view to show
+      // Step 6: Force onboardingCompleted in localStorage as a safety net
+      try {
+        const stored = localStorage.getItem('gstpilot_session')
+        if (stored) {
+          const parsed = JSON.parse(stored)
+          parsed.onboardingCompleted = true
+          localStorage.setItem('gstpilot_session', JSON.stringify(parsed))
+        }
+      } catch {
+        // Ignore localStorage errors
+      }
+
+      // Step 7: Navigate — this MUST happen last
+      console.log('[Onboarding] Navigating to:', destination || 'dashboard')
       setCurrentView(destination || 'dashboard')
       setCurrentScreen('app')
+      console.log('[Onboarding] Navigation complete')
+
     } catch (error) {
-      console.error('Failed to save onboarding data:', error)
+      console.error('[Onboarding] FAILED:', error)
+      const message = error instanceof Error ? error.message : 'Failed to save onboarding data. Please try again.'
+      setSaveError(message)
     } finally {
+      console.log('[Onboarding] Resetting saving state')
       setSaving(false)
     }
   }
 
   const handleSkip = async () => {
+    if (saving) return
+    setSaving(true)
+    setSaveError(null)
+    console.log('[Onboarding] Skipping onboarding...')
+
     try {
       const { doc, setDoc, serverTimestamp } = await import('firebase/firestore')
       const { db } = await import('@/lib/firebase')
-      if (!user) return
+
+      if (!user) {
+        console.error('[Onboarding] No user found — cannot skip onboarding')
+        setSaveError('No authenticated user found. Please sign in again.')
+        return
+      }
 
       await setDoc(doc(db, 'users', user.id), {
         onboardingCompleted: true,
         updatedAt: serverTimestamp(),
       }, { merge: true })
+      console.log('[Onboarding] User marked as onboarding completed (skip)')
 
-      await refreshUserProfile()
+      try {
+        await refreshUserProfile()
+        console.log('[Onboarding] Profile refreshed after skip')
+      } catch (refreshError) {
+        console.warn('[Onboarding] Profile refresh failed after skip:', refreshError)
+      }
 
-      // Navigate to dashboard after skipping
+      // Force onboardingCompleted in localStorage
+      try {
+        const stored = localStorage.getItem('gstpilot_session')
+        if (stored) {
+          const parsed = JSON.parse(stored)
+          parsed.onboardingCompleted = true
+          localStorage.setItem('gstpilot_session', JSON.stringify(parsed))
+        }
+      } catch { /* ignore */ }
+
       setCurrentView('dashboard')
       setCurrentScreen('app')
+      console.log('[Onboarding] Navigation after skip complete')
+
     } catch (error) {
-      console.error('Failed to skip onboarding:', error)
+      console.error('[Onboarding] Skip failed:', error)
+      const message = error instanceof Error ? error.message : 'Failed to skip onboarding. Please try again.'
+      setSaveError(message)
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -296,6 +378,8 @@ function OnboardingScreen() {
       userEmail={user?.email}
       userName={user?.name}
       saving={saving}
+      error={saveError}
+      onDismissError={() => setSaveError(null)}
     />
   )
 }
@@ -306,10 +390,12 @@ function AppRouter() {
 
   useEffect(() => {
     if (isInitializing) return
-    if (isAuthenticated && currentScreen !== 'app') {
+    // Only auto-redirect to app if authenticated AND onboarding is complete
+    // Don't redirect if user still needs onboarding — the OnboardingScreen handles its own navigation
+    if (isAuthenticated && !needsOnboarding && currentScreen !== 'app') {
       setCurrentScreen('app')
     }
-  }, [isAuthenticated, isInitializing, currentScreen, setCurrentScreen])
+  }, [isAuthenticated, isInitializing, currentScreen, setCurrentScreen, needsOnboarding])
 
   useEffect(() => {
     if (isInitializing) return

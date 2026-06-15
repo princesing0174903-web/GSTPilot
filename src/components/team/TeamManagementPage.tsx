@@ -548,7 +548,7 @@ export default function TeamManagementPage() {
               </motion.div>
 
               {/* Change Password */}
-              {(user?.provider === 'email' || user?.provider === 'demo') && (
+              {user?.provider === 'email' && (
                 <motion.div variants={itemVariants}>
                   <Card>
                     <CardHeader>

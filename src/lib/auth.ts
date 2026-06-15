@@ -5,18 +5,19 @@ import {
   createUserWithEmailAndPassword,
   signOut,
   sendPasswordResetEmail,
+  sendEmailVerification,
   updateProfile,
   User,
 } from "firebase/auth";
 import { doc, setDoc, getDoc, serverTimestamp } from "firebase/firestore";
 import { auth, googleProvider, db } from "./firebase";
 
-// ── GOOGLE SIGN IN (redirect method — works on all browsers) ──
+// ── GOOGLE SIGN IN ──
 export async function signInWithGoogle() {
   await signInWithRedirect(auth, googleProvider);
 }
 
-// ── HANDLE GOOGLE REDIRECT RESULT (call on every page load) ──
+// ── HANDLE GOOGLE REDIRECT RESULT ──
 export async function handleRedirectResult(): Promise<{ user: User | null; error: string | null }> {
   try {
     const result = await getRedirectResult(auth);
@@ -27,9 +28,8 @@ export async function handleRedirectResult(): Promise<{ user: User | null; error
     return { user: null, error: null };
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Google sign-in failed.";
-    // Handle unauthorized-domain specifically
     if (message.includes("unauthorized-domain")) {
-      return { user: null, error: "This domain is not authorized for Google Sign-In. Please contact support." };
+      return { user: null, error: "This domain is not authorized for Google Sign-In." };
     }
     return { user: null, error: message };
   }
@@ -63,6 +63,8 @@ export async function signUpWithEmail(
   try {
     const result = await createUserWithEmailAndPassword(auth, email, password);
     await updateProfile(result.user, { displayName: name });
+    // Send email verification
+    await sendEmailVerification(result.user);
     await saveUserToFirestore(result.user, name);
     return { user: result.user, error: null };
   } catch (error: unknown) {
@@ -73,6 +75,18 @@ export async function signUpWithEmail(
       "auth/invalid-email": "Please enter a valid email address.",
     };
     return { user: null, error: messages[code] || "Sign up failed. Please try again." };
+  }
+}
+
+// ── SEND EMAIL VERIFICATION ──
+export async function sendVerificationEmail(): Promise<{ error: string | null }> {
+  try {
+    if (auth.currentUser) {
+      await sendEmailVerification(auth.currentUser);
+    }
+    return { error: null };
+  } catch {
+    return { error: "Could not send verification email." };
   }
 }
 
@@ -102,13 +116,12 @@ async function saveUserToFirestore(user: User, displayName?: string) {
         email: user.email,
         displayName: displayName || user.displayName || "User",
         photoURL: user.photoURL || null,
+        onboardingCompleted: false,
         createdAt: serverTimestamp(),
         plan: "free",
-        gstNumbers: [],
       });
     }
   } catch (error) {
-    // Firestore write failure shouldn't block login
     console.warn("Failed to save user to Firestore:", error);
   }
 }

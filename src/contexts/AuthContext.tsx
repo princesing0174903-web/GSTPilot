@@ -6,7 +6,7 @@ import {
   getRedirectResult,
   User as FirebaseUser,
 } from 'firebase/auth';
-import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 
 export interface AuthUser {
@@ -14,70 +14,51 @@ export interface AuthUser {
   name: string;
   email: string;
   picture?: string;
-  role: 'admin' | 'manager' | 'staff' | 'viewer';
-  provider: 'email' | 'google' | 'demo';
+  role: string;
+  provider: 'email' | 'google';
+  emailVerified: boolean;
+  onboardingCompleted: boolean;
+  firmId?: string;
+  firmName?: string;
+  phone?: string;
 }
-
-// ── Demo users (fallback when Firebase is unavailable) ──
-const DEMO_USERS: Record<string, AuthUser> = {
-  admin: {
-    id: 'demo-admin-001',
-    name: 'Rajesh Kumar',
-    email: 'rajesh@gstpilot.ai',
-    picture: '',
-    role: 'admin',
-    provider: 'demo',
-  },
-  manager: {
-    id: 'demo-manager-001',
-    name: 'Priya Sharma',
-    email: 'priya@gstpilot.ai',
-    picture: '',
-    role: 'manager',
-    provider: 'demo',
-  },
-  staff: {
-    id: 'demo-staff-001',
-    name: 'Amit Patel',
-    email: 'amit@gstpilot.ai',
-    picture: '',
-    role: 'staff',
-    provider: 'demo',
-  },
-};
 
 const SESSION_KEY = 'gstpilot_session';
 
-// ── Convert Firebase User to our AuthUser ──
-function firebaseToAuthUser(fbUser: FirebaseUser): AuthUser {
+// ── Convert Firebase User + Firestore data to our AuthUser ──
+function firebaseToAuthUser(
+  fbUser: FirebaseUser,
+  firestoreData?: Record<string, unknown>
+): AuthUser {
+  const provider = fbUser.providerData[0]?.providerId === 'google.com' ? 'google' : 'email';
+
   return {
     id: fbUser.uid,
-    name: fbUser.displayName || fbUser.email?.split('@')[0] || 'User',
+    name: (firestoreData?.displayName as string) || fbUser.displayName || fbUser.email?.split('@')[0] || 'User',
     email: fbUser.email || '',
-    picture: fbUser.photoURL || undefined,
-    role: 'admin',
-    provider: fbUser.providerData[0]?.providerId === 'google.com' ? 'google' : 'email',
+    picture: (firestoreData?.photoURL as string) || fbUser.photoURL || undefined,
+    role: (firestoreData?.role as string) || 'admin',
+    provider,
+    emailVerified: fbUser.emailVerified,
+    onboardingCompleted: (firestoreData?.onboardingCompleted as boolean) ?? false,
+    firmId: (firestoreData?.firmId as string) || undefined,
+    firmName: (firestoreData?.firmName as string) || undefined,
+    phone: (firestoreData?.phone as string) || undefined,
   };
 }
 
-// ── Save user to Firestore (create if doesn't exist) ──
-async function saveUserToFirestore(fbUser: FirebaseUser) {
+// ── Fetch user's Firestore document ──
+async function fetchFirestoreUser(uid: string): Promise<Record<string, unknown> | null> {
   try {
-    const userRef = doc(db, 'users', fbUser.uid);
+    const userRef = doc(db, 'users', uid);
     const snap = await getDoc(userRef);
-    if (!snap.exists()) {
-      await setDoc(userRef, {
-        uid: fbUser.uid,
-        email: fbUser.email,
-        displayName: fbUser.displayName || 'User',
-        photoURL: fbUser.photoURL || null,
-        createdAt: serverTimestamp(),
-        plan: 'free',
-      });
+    if (snap.exists()) {
+      return snap.data() as Record<string, unknown>;
     }
+    return null;
   } catch (error) {
-    // Firestore write failure shouldn't block login
-    console.warn('Failed to save user to Firestore:', error);
+    console.warn('[Auth] Failed to fetch Firestore user doc:', error);
+    return null;
   }
 }
 
@@ -86,12 +67,12 @@ interface AuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
   isInitializing: boolean;
-  isRedirecting: boolean;
+  needsOnboarding: boolean;
+  needsEmailVerification: boolean;
   error: string | null;
   setError: (error: string | null) => void;
-  loginWithDemo: (role: string) => void;
   logout: () => Promise<void>;
-  clearError: () => void;
+  refreshUserProfile: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -100,8 +81,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isInitializing, setIsInitializing] = useState(true);
-  const [isRedirecting, setIsRedirecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // ── Restore session from localStorage for quick paint, then validate with Firebase ──
+  useEffect(() => {
+    // Quick restore from localStorage to prevent flash
+    try {
+      const stored = localStorage.getItem(SESSION_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored) as AuthUser;
+        // Only restore if it's a real auth user (not demo)
+        if (parsed.provider !== 'demo') {
+          setUser(parsed);
+        } else {
+          localStorage.removeItem(SESSION_KEY);
+        }
+      }
+    } catch {
+      localStorage.removeItem(SESSION_KEY);
+    }
+  }, []);
 
   // ── Core Auth Init: Handle redirect result + onAuthStateChanged ──
   useEffect(() => {
@@ -110,17 +109,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // STEP 1: Handle Google redirect result FIRST
     // This resolves when a user returns from Google sign-in redirect
     getRedirectResult(auth)
-      .then((result) => {
+      .then(async (result) => {
         if (!mounted) return;
         if (result?.user) {
-          // Google sign-in succeeded via redirect
           console.log('[Auth] Google redirect successful:', result.user.email);
-          const authUser = firebaseToAuthUser(result.user);
+          const firestoreData = await fetchFirestoreUser(result.user.uid);
+          const authUser = firebaseToAuthUser(result.user, firestoreData || undefined);
           setUser(authUser);
           localStorage.setItem(SESSION_KEY, JSON.stringify(authUser));
           setIsInitializing(false);
-          // Save to Firestore (non-blocking)
-          saveUserToFirestore(result.user);
         }
         // If result is null, no redirect was pending — onAuthStateChanged will handle it
       })
@@ -134,53 +131,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setIsInitializing(false);
       });
 
-    // STEP 2: Listen for normal auth state changes
-    // This fires on every page load and whenever auth state changes
-    const unsubscribe = onAuthStateChanged(auth, (fbUser) => {
+    // STEP 2: Listen for normal auth state changes (PRIMARY source of truth)
+    const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
       if (!mounted) return;
       console.log('[Auth] Auth state changed:', fbUser ? fbUser.email : 'null');
 
       if (fbUser) {
-        const authUser = firebaseToAuthUser(fbUser);
+        // Fetch Firestore user document for onboarding status and profile data
+        const firestoreData = await fetchFirestoreUser(fbUser.uid);
+        const authUser = firebaseToAuthUser(fbUser, firestoreData || undefined);
         setUser(authUser);
         localStorage.setItem(SESSION_KEY, JSON.stringify(authUser));
       } else {
-        // No Firebase user — check for demo session
-        try {
-          const stored = localStorage.getItem(SESSION_KEY);
-          if (stored) {
-            const parsed = JSON.parse(stored) as AuthUser;
-            if (parsed.provider === 'demo') {
-              setUser(parsed);
-            } else {
-              localStorage.removeItem(SESSION_KEY);
-              setUser(null);
-            }
-          }
-        } catch {
-          localStorage.removeItem(SESSION_KEY);
-          setUser(null);
-        }
+        // No Firebase user — clear everything
+        localStorage.removeItem(SESSION_KEY);
+        setUser(null);
       }
       setIsInitializing(false);
     });
 
-    // Safety timeout: if neither getRedirectResult nor onAuthStateChanged resolves in 6s
+    // Safety timeout: if neither getRedirectResult nor onAuthStateChanged resolves in 8s
     const safetyTimer = setTimeout(() => {
-      if (mounted) {
-        console.log('[Auth] Safety timeout — falling back to localStorage');
-        try {
-          const stored = localStorage.getItem(SESSION_KEY);
-          if (stored) {
-            const parsed = JSON.parse(stored) as AuthUser;
-            setUser(parsed);
-          }
-        } catch {
-          localStorage.removeItem(SESSION_KEY);
-        }
+      if (mounted && isInitializing) {
+        console.log('[Auth] Safety timeout — clearing state');
+        localStorage.removeItem(SESSION_KEY);
+        setUser(null);
         setIsInitializing(false);
       }
-    }, 6000);
+    }, 8000);
 
     return () => {
       mounted = false;
@@ -189,33 +167,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  // ── Demo login (no Firebase required) ──
-  const loginWithDemo = useCallback((role: string) => {
-    setError(null);
-    const demoUser = DEMO_USERS[role];
-    if (demoUser) {
-      setUser(demoUser);
-      localStorage.setItem(SESSION_KEY, JSON.stringify(demoUser));
-    } else {
-      setError('Invalid demo role.');
-    }
-  }, []);
-
   // ── Logout ──
   const logout = useCallback(async () => {
     try {
       const { logOut: firebaseLogOut } = await import('@/lib/auth');
       await firebaseLogOut();
     } catch {
-      // Firebase not available or user is demo — just clear local state
+      // Firebase not available — just clear local state
     }
     setUser(null);
     localStorage.removeItem(SESSION_KEY);
   }, []);
 
-  const clearError = useCallback(() => {
-    setError(null);
+  // ── Refresh user profile from Firestore ──
+  const refreshUserProfile = useCallback(async () => {
+    if (!auth.currentUser) return;
+
+    try {
+      const firestoreData = await fetchFirestoreUser(auth.currentUser.uid);
+      const authUser = firebaseToAuthUser(auth.currentUser, firestoreData || undefined);
+      setUser(authUser);
+      localStorage.setItem(SESSION_KEY, JSON.stringify(authUser));
+    } catch (error) {
+      console.warn('[Auth] Failed to refresh user profile:', error);
+    }
   }, []);
+
+  // ── Derived flags ──
+  const needsOnboarding = user !== null && !user.onboardingCompleted;
+  const needsEmailVerification = user !== null && !user.emailVerified && user.provider === 'email';
 
   return (
     <AuthContext.Provider
@@ -224,12 +204,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isAuthenticated: !!user,
         isLoading,
         isInitializing,
-        isRedirecting,
+        needsOnboarding,
+        needsEmailVerification,
         error,
         setError,
-        loginWithDemo,
         logout,
-        clearError,
+        refreshUserProfile,
       }}
     >
       {children}

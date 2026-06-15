@@ -330,3 +330,112 @@ Stage Summary:
 - Notification system backed by database with helper functions
 - Audit trail on all mutations (create, update, delete)
 - Dashboard metrics calculated from actual database records (no hardcoded values)
+
+---
+Task ID: 2
+Agent: Firebase Config & Auth Builder
+Task: Update Firebase configuration and rebuild the AuthContext with full Firebase Authentication
+
+Work Log:
+- Updated /src/lib/firebase.ts:
+  - Replaced old Firebase config (gstpilot-f226e) with new config (gstpilot1)
+  - Added getStorage import and exported `storage` for Firebase Storage support
+  - New project: gstpilot1 with updated API key, authDomain, storageBucket, messagingSenderId, appId, measurementId
+- Updated /src/lib/auth.ts:
+  - Added sendEmailVerification import from firebase/auth
+  - Added sendVerificationEmail() function to resend email verification to current user
+  - Updated signUpWithEmail() to call sendEmailVerification() after account creation
+  - Updated saveUserToFirestore() to include onboardingCompleted: false in new user docs
+  - Removed gstNumbers field from Firestore user doc (replaced by onboardingCompleted)
+  - Updated unauthorized-domain error message to be more concise
+- Rewrote /src/contexts/AuthContext.tsx:
+  - New AuthUser interface with: id, name, email, picture, role, provider, emailVerified, onboardingCompleted, firmId, firmName, phone
+  - provider type changed from 'email' | 'google' | 'demo' to 'email' | 'google' (removed demo)
+  - role type changed from union ('admin' | 'manager' | 'staff' | 'viewer') to string for flexibility
+  - Removed all DEMO_USERS constants and demo user logic
+  - Removed loginWithDemo, clearError, isRedirecting from context
+  - Added needsOnboarding flag (true when user's Firestore doc has onboardingCompleted === false)
+  - Added needsEmailVerification flag (true when emailVerified === false AND provider === 'email')
+  - Added refreshUserProfile() to re-fetch Firestore user doc and update context
+  - Added fetchFirestoreUser() helper to get user's Firestore document data
+  - Updated firebaseToAuthUser() to merge Firestore data (displayName, photoURL, role, onboardingCompleted, firmId, firmName, phone)
+  - localStorage quick restore only accepts non-demo providers
+  - onAuthStateChanged is the PRIMARY auth source — always validates against Firebase
+  - Safety timeout increased to 8 seconds
+  - Exposed: user, isAuthenticated, isLoading, isInitializing, needsOnboarding, needsEmailVerification, error, setError, logout, refreshUserProfile
+- Updated /src/components/auth/LoginPage.tsx:
+  - Removed loginWithDemo and clearError from useAuth destructure
+  - Removed handleDemoLogin function and activeDemo state
+  - Removed entire demo login section (quick demo access divider + Admin/Manager/Staff buttons)
+  - Removed unused imports: Building2, UserCheck, Briefcase
+  - Updated clearErrors() to call setError(null) instead of clearError()
+  - Updated sign-up success message to mention email verification
+- Updated /src/components/team/TeamManagementPage.tsx:
+  - Changed password change condition from `user?.provider === 'email' || user?.provider === 'demo'` to `user?.provider === 'email'`
+- Updated /src/app/page.tsx:
+  - Added useState import for EmailVerificationBanner
+  - Added MailCheck icon import
+  - Added EmailVerificationBanner component with resend verification email + sign out
+  - AppRouter now destructures needsOnboarding and needsEmailVerification from useAuth
+  - When authenticated, wraps DashboardContent in flex container with conditional EmailVerificationBanner
+- ESLint passes with zero errors
+- Dev server compiles successfully
+
+---
+Task ID: 3
+Agent: Onboarding Flow Builder
+Task: Build a professional 5-step onboarding flow component for GSTPilot
+
+Work Log:
+- Created /src/components/onboarding/OnboardingFlow.tsx — a comprehensive 'use client' multi-step onboarding component
+- Step 0 — Welcome: Logo with emerald gradient background, animated entry (framer-motion scale+fade), "Welcome to GSTPilot" title, "Get Started" button
+- Step 1 — About You: 6 fields — Full Name (required), Work Email (required, email validation), Mobile Number (required, +91 prefix, 10-digit validation), Age Group (select), Profession (select with 9 options), Years of Experience (select)
+- Step 2 — Firm Information: 6 fields — Firm Name (required), Type of Organization (select with 7 options), GSTIN (auto-validation with regex `/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/`, green checkmark/red X feedback), State (select with INDIAN_STATES from @/lib/constants, auto-populates stateCode), ICAI Membership Number (optional), Office Address (textarea, optional)
+- Step 3 — Business Usage: 4 fields — Client Count (select), Monthly Returns (select), GST Services (multi-select chips with 7 options), Pain Points (multi-select chips with 8 options)
+- Step 4 — Marketing & Personalization: 3 fields — Referral Source (select with 10 options), Trial Reasons (multi-select chips with 7 options), Product Updates toggle (Switch, default on)
+- Step 5 — Final Screen: "Your GSTPilot Workspace Is Ready" with summary card (Name, Firm Name, Profession, Clients, State), two buttons: "Go to Dashboard" (primary) and "Upload First Document" (outline)
+- Technical features:
+  - framer-motion AnimatePresence with slide animations (directional: left/right based on nav)
+  - Progress bar at top with segmented dots and animated fill bar
+  - Step counter "Step X of 5" in header
+  - Back button on steps 1-5
+  - Required field validation before advancing (errors shown inline)
+  - MultiSelectChip component with emerald active styling (bg-emerald-50, border-emerald-300, text-emerald-700)
+  - "Skip for now" link in footer (text-xs, muted) calls onSkip
+  - GSTIN uppercase auto-transform and 15-char limit
+  - Phone input with +91 prefix and digit-only filtering
+  - Emerald/teal color theme throughout (no blue/indigo)
+  - Full-screen centered layout, max-width 640px
+  - Props: onComplete(data), onSkip(), userEmail, userName
+  - Exports: OnboardingData interface, OnboardingFlow component
+- Uses shadcn/ui: Button, Input, Label, Select, Card, Badge, Separator, Textarea, Switch
+- Uses lucide-react: Zap, ArrowRight, ArrowLeft, Check, Building2, User, Briefcase, Target, Sparkles, Upload, Rocket, X
+- ESLint passes with zero errors (only pre-existing warning in AuthContext.tsx)
+- Dev server compiles successfully
+
+---
+Task ID: Firebase Integration
+Agent: Main Orchestrator
+Task: Integrate Firebase completely into GSTPilot with Authentication, Onboarding, Firestore, and Storage
+
+Work Log:
+- Updated Firebase config to new project (gstpilot1) with correct API key, auth domain, project ID, storage bucket
+- Added Firebase Storage export to firebase.ts
+- Updated auth.ts with sendEmailVerification, sendVerificationEmail() function
+- Rewrote AuthContext.tsx: Firebase-first auth, removed demo users, added needsOnboarding, needsEmailVerification, refreshUserProfile
+- Updated LoginPage: removed demo login buttons, kept Email/Password + Google Sign-In
+- Built OnboardingFlow.tsx: 5-step onboarding with Welcome, About You, Firm Info, Business Usage, Marketing, Final Summary
+- Updated page.tsx: added OnboardingScreen component that saves to Firestore, integrated onboarding redirect, EmailVerificationBanner
+- Updated app-sidebar.tsx: added user avatar, name, email, firm name in sidebar footer with dropdown menu
+- Created storage.ts: Firebase Storage integration with uploadFile, deleteFile, isSupportedFileType, getFileCategory
+- Browser verified: Landing → Login → Signup → Onboarding flow works end-to-end
+- ESLint passes with zero errors
+
+Stage Summary:
+- Complete Firebase Auth flow: Email/Password signup with email verification, Google sign-in, persistent sessions
+- 5-step onboarding: Welcome → About You → Firm Info → Business Usage → Marketing → Summary
+- Firestore schema: users/{uid}, firms/{firmId}, onboarding/{uid} 
+- Firebase Storage: uploads/invoices/, uploads/gstr/, uploads/excel/, uploads/json/
+- Sidebar shows user name, email, firm name with sign-out dropdown
+- Route protection: unauthenticated → landing, authenticated+needsOnboarding → onboarding, authenticated → dashboard
+- All data saved to Firestore on onboarding completion

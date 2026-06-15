@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useEffect } from 'react'
+import React, { useEffect, useState } from 'react'
 import {
   SidebarProvider,
   SidebarTrigger,
@@ -19,6 +19,7 @@ import ReturnPrepWorkspace from '@/components/returns/ReturnPrepWorkspace'
 import SettingsPage from '@/components/settings/SettingsPage'
 import LandingPage from '@/components/landing/LandingPage'
 import LoginPage from '@/components/auth/LoginPage'
+import { OnboardingFlow } from '@/components/onboarding/OnboardingFlow'
 import { Separator } from '@/components/ui/separator'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import {
@@ -28,7 +29,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Zap, LogOut, User, Settings } from 'lucide-react'
+import { Zap, LogOut, User, Settings, MailCheck } from 'lucide-react'
 import WorkflowTracker from '@/components/workflow/WorkflowTracker'
 
 const VIEW_TITLES: Record<string, string> = {
@@ -143,9 +144,152 @@ function DashboardContent() {
   )
 }
 
+function EmailVerificationBanner() {
+  const { user, logout } = useAuth()
+  const [sending, setSending] = useState(false)
+  const [sent, setSent] = useState(false)
+
+  const handleResend = async () => {
+    setSending(true)
+    try {
+      const { sendVerificationEmail } = await import('@/lib/auth')
+      const { error } = await sendVerificationEmail()
+      if (!error) setSent(true)
+    } catch {
+      // ignore
+    } finally {
+      setSending(false)
+    }
+  }
+
+  return (
+    <div className="bg-amber-50 border-b border-amber-200 px-4 py-3">
+      <div className="flex items-center justify-between gap-3 max-w-7xl mx-auto">
+        <div className="flex items-center gap-2.5">
+          <MailCheck className="h-5 w-5 text-amber-600 shrink-0" />
+          <p className="text-sm text-amber-800">
+            {sent
+              ? 'Verification email sent! Check your inbox.'
+              : 'Please verify your email address to access all features.'}
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          {!sent && (
+            <button
+              onClick={handleResend}
+              disabled={sending}
+              className="text-xs font-semibold text-amber-700 hover:text-amber-900 underline disabled:opacity-50"
+            >
+              {sending ? 'Sending...' : 'Resend email'}
+            </button>
+          )}
+          <button
+            onClick={logout}
+            className="text-xs text-amber-600 hover:text-amber-800 font-medium"
+          >
+            Sign out
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function OnboardingScreen() {
+  const { user, refreshUserProfile, logout } = useAuth()
+  const [saving, setSaving] = React.useState(false)
+
+  const handleOnboardingComplete = async (data: import('@/components/onboarding/OnboardingFlow').OnboardingData) => {
+    setSaving(true)
+    try {
+      // Save user data to Firestore
+      const { doc, setDoc, serverTimestamp, collection, addDoc } = await import('firebase/firestore')
+      const { db } = await import('@/lib/firebase')
+
+      if (!user) return
+
+      // Create firm document
+      const firmData = {
+        ownerId: user.id,
+        firmName: data.firmName,
+        gstin: data.gstin || null,
+        state: data.state,
+        stateCode: data.stateCode,
+        organizationType: data.organizationType,
+        icaiMembershipNo: data.icaiMembershipNo || null,
+        officeAddress: data.officeAddress || null,
+        createdAt: serverTimestamp(),
+      }
+      const firmRef = await addDoc(collection(db, 'firms'), firmData)
+
+      // Update user document with onboarding data
+      await setDoc(doc(db, 'users', user.id), {
+        uid: user.id,
+        fullName: data.fullName,
+        email: data.email,
+        phone: data.phone,
+        ageGroup: data.ageGroup,
+        profession: data.profession,
+        experience: data.experience,
+        firmId: firmRef.id,
+        firmName: data.firmName,
+        onboardingCompleted: true,
+        clientCount: data.clientCount,
+        monthlyReturns: data.monthlyReturns,
+        gstServices: data.gstServices,
+        painPoints: data.painPoints,
+        referralSource: data.referralSource,
+        trialReasons: data.trialReasons,
+        wantsUpdates: data.wantsUpdates,
+        updatedAt: serverTimestamp(),
+      }, { merge: true })
+
+      // Save onboarding record
+      await setDoc(doc(db, 'onboarding', user.id), {
+        ...data,
+        firmId: firmRef.id,
+        completedAt: serverTimestamp(),
+      })
+
+      // Refresh the auth user profile
+      await refreshUserProfile()
+    } catch (error) {
+      console.error('Failed to save onboarding data:', error)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleSkip = async () => {
+    try {
+      const { doc, setDoc, serverTimestamp } = await import('firebase/firestore')
+      const { db } = await import('@/lib/firebase')
+      if (!user) return
+
+      await setDoc(doc(db, 'users', user.id), {
+        onboardingCompleted: true,
+        updatedAt: serverTimestamp(),
+      }, { merge: true })
+
+      await refreshUserProfile()
+    } catch (error) {
+      console.error('Failed to skip onboarding:', error)
+    }
+  }
+
+  return (
+    <OnboardingFlow
+      onComplete={handleOnboardingComplete}
+      onSkip={handleSkip}
+      userEmail={user?.email}
+      userName={user?.name}
+    />
+  )
+}
+
 function AppRouter() {
   const { currentScreen, setCurrentScreen } = useApp()
-  const { isAuthenticated, isInitializing } = useAuth()
+  const { isAuthenticated, isInitializing, needsOnboarding, needsEmailVerification } = useAuth()
 
   useEffect(() => {
     if (isInitializing) return
@@ -178,8 +322,20 @@ function AppRouter() {
     )
   }
 
+  // Show onboarding if user hasn't completed it
+  if (isAuthenticated && needsOnboarding) {
+    return <OnboardingScreen />
+  }
+
   if (currentScreen === 'app' && isAuthenticated) {
-    return <DashboardContent />
+    return (
+      <div className="min-h-screen flex flex-col">
+        {needsEmailVerification && <EmailVerificationBanner />}
+        <div className="flex-1 flex">
+          <DashboardContent />
+        </div>
+      </div>
+    )
   }
 
   if (currentScreen === 'login') {

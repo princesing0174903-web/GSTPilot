@@ -22,9 +22,6 @@ import {
   Loader2,
   AlertCircle,
   Chrome,
-  Building2,
-  UserCheck,
-  Briefcase,
   UserPlus,
   ArrowLeft,
   KeyRound,
@@ -38,7 +35,7 @@ interface LoginPageProps {
 type AuthMode = 'login' | 'signup' | 'forgot';
 
 export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
-  const { loginWithDemo, isLoading, isInitializing, error, setError, clearError } = useAuth();
+  const { isLoading, isInitializing, error, setError } = useAuth();
 
   const [mode, setMode] = useState<AuthMode>('login');
   const [email, setEmail] = useState('');
@@ -50,7 +47,6 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
   const [localError, setLocalError] = useState<string | null>(null);
   const [showSuccess, setShowSuccess] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
-  const [activeDemo, setActiveDemo] = useState<string | null>(null);
 
   const combinedLoading = isLoading || localLoading;
   const displayError = localError || error;
@@ -112,7 +108,7 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
         return;
       }
       if (user) {
-        setSuccessMessage('Account created! Redirecting to dashboard...');
+        setSuccessMessage('Account created! Please check your email to verify your account.');
         setShowSuccess(true);
       }
     } catch {
@@ -159,18 +155,9 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
     }
   };
 
-  // ── Demo Login ──
-  const handleDemoLogin = (role: string) => {
-    setActiveDemo(role);
-    loginWithDemo(role);
-    setSuccessMessage('Logged in as demo user!');
-    setShowSuccess(true);
-    setTimeout(() => setActiveDemo(null), 1000);
-  };
-
   const clearErrors = () => {
     setLocalError(null);
-    clearError();
+    setError(null);
   };
 
   const switchMode = (newMode: AuthMode) => {
@@ -542,48 +529,15 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
           {/* Mode switch links */}
           {mode === 'login' && (
             <>
-              {/* Divider */}
-              <div className="relative my-6">
-                <Separator />
-                <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-white px-3 text-xs text-slate-400">
-                  quick demo access
-                </span>
-              </div>
-
-              {/* Demo Logins */}
-              <div className="grid grid-cols-3 gap-2 mb-6">
-                {[
-                  { role: 'admin', label: 'Admin', icon: Building2 },
-                  { role: 'manager', label: 'Manager', icon: UserCheck },
-                  { role: 'staff', label: 'Staff', icon: Briefcase },
-                ].map((demo) => (
-                  <Button
-                    key={demo.role}
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleDemoLogin(demo.role)}
-                    disabled={combinedLoading}
-                    className={`h-auto py-2.5 flex-col gap-0.5 border-slate-200 hover:border-emerald-300 hover:bg-emerald-50 text-slate-600 ${
-                      activeDemo === demo.role ? 'border-emerald-400 bg-emerald-50 text-emerald-700' : ''
-                    }`}
-                  >
-                    {activeDemo === demo.role ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin text-emerald-600" />
-                    ) : (
-                      <demo.icon className="h-3.5 w-3.5" />
-                    )}
-                    <span className="text-[11px] font-semibold">{demo.label}</span>
-                  </Button>
-                ))}
-              </div>
-
               {/* Create Account link */}
-              <p className="text-center text-sm text-slate-500">
-                Don&apos;t have an account?{' '}
-                <button onClick={() => switchMode('signup')} className="text-emerald-600 hover:text-emerald-700 font-semibold">
-                  Create account
-                </button>
-              </p>
+              <div className="mt-6">
+                <p className="text-center text-sm text-slate-500">
+                  Don&apos;t have an account?{' '}
+                  <button onClick={() => switchMode('signup')} className="text-emerald-600 hover:text-emerald-700 font-semibold">
+                    Create account
+                  </button>
+                </p>
+              </div>
             </>
           )}
 

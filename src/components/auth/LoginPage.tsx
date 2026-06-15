@@ -118,17 +118,22 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
     }
   };
 
-  // ── Google Sign In (redirect) ──
+  // ── Google Sign In (popup with redirect fallback) ──
   const handleGoogleSignIn = async () => {
     setLocalError(null);
     setLocalLoading(true);
     try {
       const { signInWithGoogle } = await import('@/lib/auth');
-      await signInWithGoogle();
-      // Page will redirect to Google, so we won't reach here.
-      // When user returns, isInitializing will be true and we'll show "Completing sign in..."
+      const { error: googleError } = await signInWithGoogle();
+      if (googleError) {
+        // Show the specific Firebase error (e.g., unauthorized-domain, popup-blocked)
+        setLocalError(googleError);
+        setLocalLoading(false);
+      }
+      // If successful via popup: onAuthStateChanged will update the user state
+      // If redirect was triggered: page navigates away, isInitializing will show on return
     } catch {
-      setLocalError('Google sign-in failed. Please try again.');
+      setLocalError('An unexpected error occurred during Google sign-in. Please try again.');
       setLocalLoading(false);
     }
   };

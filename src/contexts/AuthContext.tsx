@@ -3,11 +3,11 @@
 import { createContext, useContext, useState, useCallback, useEffect, ReactNode } from 'react';
 import {
   onAuthStateChanged,
-  getRedirectResult,
   User as FirebaseUser,
 } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
+import { handleRedirectResult } from '@/lib/auth';
 
 export interface AuthUser {
   id: string;
@@ -62,6 +62,35 @@ async function fetchFirestoreUser(uid: string): Promise<Record<string, unknown> 
   }
 }
 
+// ── Ensure user has a Firestore document (create if missing) ──
+async function ensureFirestoreUser(fbUser: FirebaseUser): Promise<Record<string, unknown> | null> {
+  try {
+    const userRef = doc(db, 'users', fbUser.uid);
+    const snap = await getDoc(userRef);
+    if (snap.exists()) {
+      return snap.data() as Record<string, unknown>;
+    }
+    // Create the Firestore doc for the first time
+    const provider = fbUser.providerData[0]?.providerId === 'google.com' ? 'google' : 'email';
+    const newData = {
+      uid: fbUser.uid,
+      email: fbUser.email,
+      displayName: fbUser.displayName || fbUser.email?.split('@')[0] || 'User',
+      photoURL: fbUser.photoURL || null,
+      provider,
+      onboardingCompleted: false,
+      createdAt: serverTimestamp(),
+      plan: 'free',
+    };
+    await setDoc(userRef, newData);
+    console.log('[Auth] Created Firestore user doc for:', fbUser.email);
+    return newData as Record<string, unknown>;
+  } catch (error) {
+    console.warn('[Auth] Failed to ensure Firestore user doc:', error);
+    return null;
+  }
+}
+
 interface AuthContextType {
   user: AuthUser | null;
   isAuthenticated: boolean;
@@ -105,30 +134,50 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // ── Core Auth Init: Handle redirect result + onAuthStateChanged ──
   useEffect(() => {
     let mounted = true;
+    let initialized = false; // Track whether auth init has completed
+
+    const markInitialized = () => {
+      if (!initialized) {
+        initialized = true;
+        setIsInitializing(false);
+      }
+    };
+
+    // Safety timeout: if neither getRedirectResult nor onAuthStateChanged resolves in 8s
+    const safetyTimer = setTimeout(() => {
+      if (mounted && !initialized) {
+        console.log('[Auth] Safety timeout — clearing state');
+        localStorage.removeItem(SESSION_KEY);
+        setUser(null);
+        setIsInitializing(false);
+      }
+    }, 8000);
 
     // STEP 1: Handle Google redirect result FIRST
     // This resolves when a user returns from Google sign-in redirect
-    getRedirectResult(auth)
-      .then(async (result) => {
+    // Uses handleRedirectResult from auth.ts which properly calls saveUserToFirestore
+    handleRedirectResult()
+      .then(async ({ user: redirectUser, error: redirectError }) => {
         if (!mounted) return;
-        if (result?.user) {
-          console.log('[Auth] Google redirect successful:', result.user.email);
-          const firestoreData = await fetchFirestoreUser(result.user.uid);
-          const authUser = firebaseToAuthUser(result.user, firestoreData || undefined);
+        if (redirectError) {
+          console.error('[Auth] Redirect error:', redirectError);
+          setError(redirectError);
+          markInitialized();
+          return;
+        }
+        if (redirectUser) {
+          console.log('[Auth] Google redirect successful:', redirectUser.email);
+          const firestoreData = await fetchFirestoreUser(redirectUser.uid);
+          // If Firestore doc still doesn't exist (edge case), create it now
+          if (!firestoreData) {
+            await ensureFirestoreUser(redirectUser);
+          }
+          const authUser = firebaseToAuthUser(redirectUser, firestoreData || undefined);
           setUser(authUser);
           localStorage.setItem(SESSION_KEY, JSON.stringify(authUser));
-          setIsInitializing(false);
+          markInitialized();
         }
         // If result is null, no redirect was pending — onAuthStateChanged will handle it
-      })
-      .catch((err) => {
-        if (!mounted) return;
-        console.error('[Auth] Redirect error:', err);
-        const message = err instanceof Error ? err.message : 'Google sign-in failed.';
-        if (message.includes('unauthorized-domain')) {
-          setError('This domain is not authorized for Google Sign-In. Please add it in Firebase Console → Authentication → Settings → Authorized domains.');
-        }
-        setIsInitializing(false);
       });
 
     // STEP 2: Listen for normal auth state changes (PRIMARY source of truth)
@@ -137,8 +186,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       console.log('[Auth] Auth state changed:', fbUser ? fbUser.email : 'null');
 
       if (fbUser) {
-        // Fetch Firestore user document for onboarding status and profile data
-        const firestoreData = await fetchFirestoreUser(fbUser.uid);
+        // Fetch or create Firestore user document for onboarding status and profile data
+        let firestoreData = await fetchFirestoreUser(fbUser.uid);
+        if (!firestoreData) {
+          // Firestore doc missing — create it (first sign-in via onAuthStateChanged)
+          firestoreData = await ensureFirestoreUser(fbUser);
+        }
         const authUser = firebaseToAuthUser(fbUser, firestoreData || undefined);
         setUser(authUser);
         localStorage.setItem(SESSION_KEY, JSON.stringify(authUser));
@@ -147,18 +200,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         localStorage.removeItem(SESSION_KEY);
         setUser(null);
       }
-      setIsInitializing(false);
+      markInitialized();
     });
-
-    // Safety timeout: if neither getRedirectResult nor onAuthStateChanged resolves in 8s
-    const safetyTimer = setTimeout(() => {
-      if (mounted && isInitializing) {
-        console.log('[Auth] Safety timeout — clearing state');
-        localStorage.removeItem(SESSION_KEY);
-        setUser(null);
-        setIsInitializing(false);
-      }
-    }, 8000);
 
     return () => {
       mounted = false;

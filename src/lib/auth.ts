@@ -1,4 +1,5 @@
 import {
+  signInWithPopup,
   signInWithRedirect,
   getRedirectResult,
   signInWithEmailAndPassword,
@@ -12,26 +13,70 @@ import {
 import { doc, setDoc, getDoc, serverTimestamp } from "firebase/firestore";
 import { auth, googleProvider, db } from "./firebase";
 
-// ── GOOGLE SIGN IN ──
-export async function signInWithGoogle() {
-  await signInWithRedirect(auth, googleProvider);
+// ── Error code to human-readable message mapping ──
+const AUTH_ERROR_MESSAGES: Record<string, string> = {
+  'auth/unauthorized-domain': 'This domain is not authorized for Google Sign-In. Add it in Firebase Console → Authentication → Settings → Authorized domains.',
+  'auth/popup-blocked': 'Pop-up was blocked by your browser. Please allow pop-ups for this site and try again.',
+  'auth/popup-closed-by-user': 'Sign-in was cancelled. Please try again.',
+  'auth/cancelled-popup-request': 'Only one popup request is allowed at a time. Please try again.',
+  'auth/redirect-operation-cancelled': 'The redirect operation was cancelled. Please try again.',
+  'auth/network-request-failed': 'Network error. Please check your internet connection and try again.',
+  'auth/too-many-requests': 'Too many attempts. Please wait a moment and try again.',
+  'auth/account-exists-with-different-credential': 'An account already exists with this email using a different sign-in method.',
+};
+
+export function getAuthErrorMessage(error: unknown): string {
+  if (error && typeof error === 'object' && 'code' in error) {
+    const code = (error as { code?: string }).code || '';
+    return AUTH_ERROR_MESSAGES[code] || `Authentication error (${code}). Please try again.`;
+  }
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return 'An unexpected authentication error occurred. Please try again.';
 }
 
-// ── HANDLE GOOGLE REDIRECT RESULT ──
-export async function handleRedirectResult(): Promise<{ user: User | null; error: string | null }> {
+// ── GOOGLE SIGN IN (popup primary, redirect fallback) ──
+export async function signInWithGoogle(): Promise<{ user: User | null; error: string | null }> {
   try {
-    const result = await getRedirectResult(auth);
-    if (result?.user) {
+    // Prefer popup — better UX, easier to debug, works in most environments
+    const result = await signInWithPopup(auth, googleProvider);
+    if (result.user) {
       await saveUserToFirestore(result.user);
       return { user: result.user, error: null };
     }
     return { user: null, error: null };
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : "Google sign-in failed.";
-    if (message.includes("unauthorized-domain")) {
-      return { user: null, error: "This domain is not authorized for Google Sign-In." };
+    const code = (error as { code?: string })?.code || '';
+
+    // If popup is blocked, fall back to redirect
+    if (code === 'auth/popup-blocked' || code === 'auth/cancelled-popup-request') {
+      try {
+        await signInWithRedirect(auth, googleProvider);
+        // Page navigates away — won't reach here
+        return { user: null, error: null };
+      } catch (redirectError: unknown) {
+        return { user: null, error: getAuthErrorMessage(redirectError) };
+      }
     }
-    return { user: null, error: message };
+
+    return { user: null, error: getAuthErrorMessage(error) };
+  }
+}
+
+// ── HANDLE GOOGLE REDIRECT RESULT ──
+// Called by AuthContext when the page loads after a redirect back from Google
+export async function handleRedirectResult(): Promise<{ user: User | null; error: string | null }> {
+  try {
+    const result = await getRedirectResult(auth);
+    if (result?.user) {
+      // CRITICAL: Save user to Firestore on first Google sign-in
+      await saveUserToFirestore(result.user);
+      return { user: result.user, error: null };
+    }
+    return { user: null, error: null };
+  } catch (error: unknown) {
+    return { user: null, error: getAuthErrorMessage(error) };
   }
 }
 

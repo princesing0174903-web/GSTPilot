@@ -37,15 +37,14 @@ export function getAuthErrorMessage(error: unknown): string {
 }
 
 // ── GOOGLE SIGN IN (popup primary, redirect fallback) ──
+// NOTE: We do NOT call saveUserToFirestore here. The AuthContext's
+// onAuthStateChanged listener handles Firestore doc creation automatically.
+// This avoids duplicate Firestore writes on every Google sign-in.
 export async function signInWithGoogle(): Promise<{ user: User | null; error: string | null }> {
   try {
-    // Prefer popup — better UX, easier to debug, works in most environments
     const result = await signInWithPopup(auth, googleProvider);
-    if (result.user) {
-      await saveUserToFirestore(result.user);
-      return { user: result.user, error: null };
-    }
-    return { user: null, error: null };
+    // Success — onAuthStateChanged in AuthContext will handle Firestore + state
+    return { user: result.user, error: null };
   } catch (error: unknown) {
     const code = (error as { code?: string })?.code || '';
 
@@ -53,7 +52,6 @@ export async function signInWithGoogle(): Promise<{ user: User | null; error: st
     if (code === 'auth/popup-blocked' || code === 'auth/cancelled-popup-request') {
       try {
         await signInWithRedirect(auth, googleProvider);
-        // Page navigates away — won't reach here
         return { user: null, error: null };
       } catch (redirectError: unknown) {
         return { user: null, error: getAuthErrorMessage(redirectError) };
@@ -65,13 +63,12 @@ export async function signInWithGoogle(): Promise<{ user: User | null; error: st
 }
 
 // ── HANDLE GOOGLE REDIRECT RESULT ──
-// Called by AuthContext when the page loads after a redirect back from Google
+// Called by AuthContext when the page loads after a redirect back from Google.
+// NOTE: Firestore doc creation is handled by onAuthStateChanged, not here.
 export async function handleRedirectResult(): Promise<{ user: User | null; error: string | null }> {
   try {
     const result = await getRedirectResult(auth);
     if (result?.user) {
-      // CRITICAL: Save user to Firestore on first Google sign-in
-      await saveUserToFirestore(result.user);
       return { user: result.user, error: null };
     }
     return { user: null, error: null };
@@ -108,7 +105,6 @@ export async function signUpWithEmail(
   try {
     const result = await createUserWithEmailAndPassword(auth, email, password);
     await updateProfile(result.user, { displayName: name });
-    // Send email verification
     await sendEmailVerification(result.user);
     await saveUserToFirestore(result.user, name);
     return { user: result.user, error: null };
@@ -151,6 +147,7 @@ export async function logOut() {
 }
 
 // ── SAVE USER TO FIRESTORE ──
+// Only used for email sign-up. Google sign-in uses AuthContext's fetchOrCreateFirestoreUser.
 async function saveUserToFirestore(user: User, displayName?: string) {
   try {
     const userRef = doc(db, "users", user.uid);

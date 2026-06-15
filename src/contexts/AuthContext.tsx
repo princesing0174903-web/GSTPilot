@@ -1,13 +1,12 @@
 'use client';
 
-import { createContext, useContext, useState, useCallback, useEffect, ReactNode } from 'react';
+import { createContext, useContext, useState, useCallback, useEffect, useRef, ReactNode } from 'react';
 import {
   onAuthStateChanged,
   User as FirebaseUser,
 } from 'firebase/auth';
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
-import { handleRedirectResult } from '@/lib/auth';
 
 export interface AuthUser {
   id: string;
@@ -47,30 +46,15 @@ function firebaseToAuthUser(
   };
 }
 
-// ── Fetch user's Firestore document ──
-async function fetchFirestoreUser(uid: string): Promise<Record<string, unknown> | null> {
-  try {
-    const userRef = doc(db, 'users', uid);
-    const snap = await getDoc(userRef);
-    if (snap.exists()) {
-      return snap.data() as Record<string, unknown>;
-    }
-    return null;
-  } catch (error) {
-    console.warn('[Auth] Failed to fetch Firestore user doc:', error);
-    return null;
-  }
-}
-
-// ── Ensure user has a Firestore document (create if missing) ──
-async function ensureFirestoreUser(fbUser: FirebaseUser): Promise<Record<string, unknown> | null> {
+// ── Fetch or create user's Firestore document (single round-trip) ──
+async function fetchOrCreateFirestoreUser(fbUser: FirebaseUser): Promise<Record<string, unknown> | null> {
   try {
     const userRef = doc(db, 'users', fbUser.uid);
     const snap = await getDoc(userRef);
     if (snap.exists()) {
       return snap.data() as Record<string, unknown>;
     }
-    // Create the Firestore doc for the first time
+    // First time — create the doc
     const provider = fbUser.providerData[0]?.providerId === 'google.com' ? 'google' : 'email';
     const newData = {
       uid: fbUser.uid,
@@ -86,7 +70,7 @@ async function ensureFirestoreUser(fbUser: FirebaseUser): Promise<Record<string,
     console.log('[Auth] Created Firestore user doc for:', fbUser.email);
     return newData as Record<string, unknown>;
   } catch (error) {
-    console.warn('[Auth] Failed to ensure Firestore user doc:', error);
+    console.warn('[Auth] Failed to fetch/create Firestore user doc:', error);
     return null;
   }
 }
@@ -111,30 +95,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(false);
   const [isInitializing, setIsInitializing] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const cachedUserIdRef = useRef<string | null>(null);
 
-  // ── Restore session from localStorage for quick paint, then validate with Firebase ──
-  useEffect(() => {
-    // Quick restore from localStorage to prevent flash
-    try {
-      const stored = localStorage.getItem(SESSION_KEY);
-      if (stored) {
-        const parsed = JSON.parse(stored) as AuthUser;
-        // Only restore if it's a real auth user (not demo)
-        if (parsed.provider !== 'demo') {
-          setUser(parsed);
-        } else {
-          localStorage.removeItem(SESSION_KEY);
-        }
-      }
-    } catch {
-      localStorage.removeItem(SESSION_KEY);
-    }
-  }, []);
-
-  // ── Core Auth Init: Handle redirect result + onAuthStateChanged ──
+  // ── Core Auth Init ──
   useEffect(() => {
     let mounted = true;
-    let initialized = false; // Track whether auth init has completed
+    let initialized = false;
 
     const markInitialized = () => {
       if (!initialized) {
@@ -143,7 +109,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     };
 
-    // Safety timeout: if neither getRedirectResult nor onAuthStateChanged resolves in 8s
+    // Safety timeout — reduced from 8s to 4s
     const safetyTimer = setTimeout(() => {
       if (mounted && !initialized) {
         console.log('[Auth] Safety timeout — clearing state');
@@ -151,54 +117,62 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(null);
         setIsInitializing(false);
       }
-    }, 8000);
+    }, 4000);
 
-    // STEP 1: Handle Google redirect result FIRST
-    // This resolves when a user returns from Google sign-in redirect
-    // Uses handleRedirectResult from auth.ts which properly calls saveUserToFirestore
-    handleRedirectResult()
-      .then(async ({ user: redirectUser, error: redirectError }) => {
-        if (!mounted) return;
-        if (redirectError) {
-          console.error('[Auth] Redirect error:', redirectError);
-          setError(redirectError);
-          markInitialized();
-          return;
+    // ── Restore from localStorage FIRST for instant UI ──
+    let restoredFromCache = false;
+    try {
+      const stored = localStorage.getItem(SESSION_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored) as AuthUser;
+        if (parsed.provider !== 'demo') {
+          setUser(parsed);
+          cachedUserIdRef.current = parsed.id;
+          restoredFromCache = true;
+        } else {
+          localStorage.removeItem(SESSION_KEY);
         }
-        if (redirectUser) {
-          console.log('[Auth] Google redirect successful:', redirectUser.email);
-          const firestoreData = await fetchFirestoreUser(redirectUser.uid);
-          // If Firestore doc still doesn't exist (edge case), create it now
-          if (!firestoreData) {
-            await ensureFirestoreUser(redirectUser);
-          }
-          const authUser = firebaseToAuthUser(redirectUser, firestoreData || undefined);
-          setUser(authUser);
-          localStorage.setItem(SESSION_KEY, JSON.stringify(authUser));
-          markInitialized();
-        }
-        // If result is null, no redirect was pending — onAuthStateChanged will handle it
-      });
+      }
+    } catch {
+      localStorage.removeItem(SESSION_KEY);
+    }
 
-    // STEP 2: Listen for normal auth state changes (PRIMARY source of truth)
+    // ── Single onAuthStateChanged listener — the ONLY source of truth ──
     const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
       if (!mounted) return;
-      console.log('[Auth] Auth state changed:', fbUser ? fbUser.email : 'null');
 
       if (fbUser) {
-        // Fetch or create Firestore user document for onboarding status and profile data
-        let firestoreData = await fetchFirestoreUser(fbUser.uid);
-        if (!firestoreData) {
-          // Firestore doc missing — create it (first sign-in via onAuthStateChanged)
-          firestoreData = await ensureFirestoreUser(fbUser);
+        console.log('[Auth] Auth state changed:', fbUser.email);
+
+        // Fast path: if cache matches Firebase user, unblock UI immediately
+        // and do Firestore refresh in the background
+        if (restoredFromCache && cachedUserIdRef.current === fbUser.uid) {
+          markInitialized();
+          // Background refresh — don't block the UI
+          fetchOrCreateFirestoreUser(fbUser).then((firestoreData) => {
+            if (!mounted) return;
+            if (firestoreData) {
+              const authUser = firebaseToAuthUser(fbUser, firestoreData);
+              setUser(authUser);
+              localStorage.setItem(SESSION_KEY, JSON.stringify(authUser));
+            }
+          });
+          return;
         }
+
+        // Full fetch (new sign-in or cache mismatch)
+        const firestoreData = await fetchOrCreateFirestoreUser(fbUser);
+        if (!mounted) return;
         const authUser = firebaseToAuthUser(fbUser, firestoreData || undefined);
         setUser(authUser);
+        cachedUserIdRef.current = authUser.id;
         localStorage.setItem(SESSION_KEY, JSON.stringify(authUser));
       } else {
         // No Firebase user — clear everything
+        console.log('[Auth] Auth state changed: null');
         localStorage.removeItem(SESSION_KEY);
         setUser(null);
+        cachedUserIdRef.current = null;
       }
       markInitialized();
     });
@@ -219,6 +193,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Firebase not available — just clear local state
     }
     setUser(null);
+    cachedUserIdRef.current = null;
     localStorage.removeItem(SESSION_KEY);
   }, []);
 
@@ -227,9 +202,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!auth.currentUser) return;
 
     try {
-      const firestoreData = await fetchFirestoreUser(auth.currentUser.uid);
+      const firestoreData = await fetchOrCreateFirestoreUser(auth.currentUser);
       const authUser = firebaseToAuthUser(auth.currentUser, firestoreData || undefined);
       setUser(authUser);
+      cachedUserIdRef.current = authUser.id;
       localStorage.setItem(SESSION_KEY, JSON.stringify(authUser));
     } catch (error) {
       console.warn('[Auth] Failed to refresh user profile:', error);

@@ -1,0 +1,50 @@
+// ═══════════════════════════════════════════════════════════════════════════════
+// GSTPilot — Frontend API Utility
+// Typed helper functions for calling backend routes.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const API_BASE = '/api';
+
+export async function apiGet<T>(path: string, params?: Record<string, string>): Promise<T> {
+  const query = params ? '?' + new URLSearchParams(params).toString() : '';
+  const res = await fetch(`${API_BASE}${path}${query}`);
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error ?? `API Error: ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function apiPost<T>(path: string, body?: unknown): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error ?? `API Error: ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function apiPatch<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error ?? `API Error: ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function apiDelete(path: string): Promise<void> {
+  const res = await fetch(`${API_BASE}${path}`, { method: 'DELETE' });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error ?? `API Error: ${res.status}`);
+  }
+}

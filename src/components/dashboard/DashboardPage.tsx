@@ -45,6 +45,7 @@ import {
 } from '@/hooks/api';
 import { formatCurrency, periodToLabel, isOverdue, getFilingDueDate } from '@/lib/gst-utils';
 import { toast } from 'sonner';
+import { EmptyState } from '@/components/shared/EmptyState';
 import type { Client, GSTRFiling, Issue } from '@/types/gst';
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -551,6 +552,30 @@ export default function DashboardPage() {
   // RENDER
   // ═══════════════════════════════════════════════════════════════════════════════
 
+  // ── Hero empty state when no clients exist (fresh start) ─────────────────
+  if (clients.length === 0 && !isLoading) {
+    return (
+      <div className="max-w-6xl mx-auto px-4 md:px-6 py-6">
+        <EmptyState
+          icon={Sparkles}
+          title="Welcome to GSTPilot"
+          description="No GST documents uploaded yet. Start by adding a client or uploading your first document."
+          action={{
+            label: 'Upload Documents',
+            onClick: () => setCurrentView('invoices'),
+            icon: Upload,
+          }}
+          secondaryAction={{
+            label: 'Add Client',
+            onClick: () => setCurrentView('clients'),
+            icon: Users,
+            variant: 'outline',
+          }}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-6xl mx-auto px-4 md:px-6 py-6 space-y-8">
 
@@ -605,9 +630,9 @@ export default function DashboardPage() {
               Total Tax Volume
             </span>
           </div>
-          <p className="text-2xl font-bold text-foreground leading-none">
+          <div className="text-2xl font-bold text-foreground leading-none">
             {isLoading ? <Skeleton className="h-7 w-24 inline-block" /> : formatCurrency(totalTaxVolume)}
-          </p>
+          </div>
           <p className="text-xs text-muted-foreground mt-1.5">
             Across all filings
           </p>
@@ -621,9 +646,9 @@ export default function DashboardPage() {
               Avg Compliance
             </span>
           </div>
-          <p className="text-2xl font-bold text-foreground leading-none">
+          <div className="text-2xl font-bold text-foreground leading-none">
             {isLoading ? <Skeleton className="h-7 w-8 inline-block" /> : avgCompliance}
-          </p>
+          </div>
           <p className="text-xs text-muted-foreground mt-1.5">
             Health score average
           </p>
@@ -668,9 +693,9 @@ export default function DashboardPage() {
                       {metric.label}
                     </span>
                   </div>
-                  <p className="text-2xl font-bold text-foreground leading-none">
+                  <div className="text-2xl font-bold text-foreground leading-none">
                     {metric.value}
-                  </p>
+                  </div>
                   <p className="text-xs text-muted-foreground mt-1.5">
                     {metric.subtitle}
                   </p>

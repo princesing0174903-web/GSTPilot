@@ -82,6 +82,7 @@ import {
   useIssues,
 } from '@/hooks/api';
 import { toast } from 'sonner';
+import { EmptyState } from '@/components/shared/EmptyState';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 // ─── Local Types ──────────────────────────────────────────────────────────────
@@ -553,6 +554,54 @@ export default function InvoiceWorkspacePage() {
             <Skeleton key={i} className="h-20 rounded-xl" />
           ))}
         </div>
+      </div>
+    );
+  }
+
+  // ── Empty state when no invoices exist ──
+  if (invoices.length === 0 && processingFiles.length === 0) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-slate-50/80 to-white">
+        <div className="space-y-6 p-4 md:p-6 lg:p-8">
+          <motion.div
+            initial={{ opacity: 0, y: -12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4 }}
+            className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"
+          >
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
+                Document Processing
+              </h1>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Upload, extract, and validate invoices
+              </p>
+            </div>
+          </motion.div>
+          <EmptyState
+            icon={FileUp}
+            title="No invoices uploaded"
+            description="Upload invoices to start processing and validating GST data."
+            action={{
+              label: 'Upload Invoice',
+              onClick: () => fileInputRef.current?.click(),
+              icon: Upload,
+            }}
+          />
+        </div>
+        {/* Hidden file input for empty state upload action */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          accept=".csv,.xlsx,.xls,.json,.pdf"
+          className="hidden"
+          onChange={(e) => {
+            if (e.target.files) {
+              handleUpload(Array.from(e.target.files));
+            }
+          }}
+        />
       </div>
     );
   }

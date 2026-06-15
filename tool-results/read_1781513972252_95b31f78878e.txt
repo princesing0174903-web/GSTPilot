@@ -1,0 +1,1334 @@
+     1→'use client';
+     2→
+     3→import React, { useState, useMemo } from 'react';
+     4→import { motion, AnimatePresence } from 'framer-motion';
+     5→import {
+     6→  Card,
+     7→  CardContent,
+     8→} from '@/components/ui/card';
+     9→import { Badge } from '@/components/ui/badge';
+    10→import { Button } from '@/components/ui/button';
+    11→import { Skeleton } from '@/components/ui/skeleton';
+    12→import { ScrollArea } from '@/components/ui/scroll-area';
+    13→import {
+    14→  Sheet,
+    15→  SheetContent,
+    16→  SheetHeader,
+    17→  SheetTitle,
+    18→  SheetDescription,
+    19→} from '@/components/ui/sheet';
+    20→import { Separator } from '@/components/ui/separator';
+    21→import {
+    22→  Select,
+    23→  SelectContent,
+    24→  SelectItem,
+    25→  SelectTrigger,
+    26→  SelectValue,
+    27→} from '@/components/ui/select';
+    28→import {
+    29→  FileText,
+    30→  CheckCircle2,
+    31→  AlertTriangle,
+    32→  Plus,
+    33→  Download,
+    34→  ArrowRight,
+    35→  Zap,
+    36→  Send,
+    37→  Loader2,
+    38→  ChevronRight,
+    39→  AlertCircle,
+    40→  Clock,
+    41→  Wrench,
+    42→  Eye,
+    43→  Info,
+    44→  ShieldCheck,
+    45→  FileOutput,
+    46→  Inbox,
+    47→} from 'lucide-react';
+    48→import { toast } from 'sonner';
+    49→import { useApp } from '@/contexts/AppContext';
+    50→import {
+    51→  useFilings,
+    52→  useClients,
+    53→  useInvoices,
+    54→  useUpdateFilingStatus,
+    55→  useFileReturn,
+    56→  useCreateFiling,
+    57→} from '@/hooks/api';
+    58→import {
+    59→  GSTRFiling,
+    60→  Client,
+    61→  FilingStatus,
+    62→  FILING_STATUS_CONFIG,
+    63→} from '@/types/gst';
+    64→import {
+    65→  formatCurrency,
+    66→  periodToLabel,
+    67→  getFinancialYear,
+    68→} from '@/lib/gst-utils';
+    69→
+    70→// ─── Types ──────────────────────────────────────────────────────────────────────
+    71→
+    72→type KanbanColumn = 'draft' | 'ready' | 'filed' | 'attention';
+    73→
+    74→interface SectionBreakdown {
+    75→  section: string;
+    76→  invoiceCount: number;
+    77→  taxableValue: number;
+    78→  taxAmount: number;
+    79→}
+    80→
+    81→// ─── Kanban Column Config ───────────────────────────────────────────────────────
+    82→
+    83→const KANBAN_COLUMNS: {
+    84→  key: KanbanColumn;
+    85→  label: string;
+    86→  borderTopColor: string;
+    87→  bgColor: string;
+    88→  headerBg: string;
+    89→  countBadgeClass: string;
+    90→  icon: React.ReactNode;
+    91→  emptyText: string;
+    92→}[] = [
+    93→  {
+    94→    key: 'draft',
+    95→    label: 'Draft',
+    96→    borderTopColor: 'border-t-slate-400',
+    97→    bgColor: 'bg-slate-50',
+    98→    headerBg: 'bg-slate-100/80',
+    99→    countBadgeClass: 'bg-slate-200 text-slate-700',
+   100→    icon: <FileText className="size-4 text-slate-500" />,
+   101→    emptyText: 'No draft returns',
+   102→  },
+   103→  {
+   104→    key: 'ready',
+   105→    label: 'Ready to File',
+   106→    borderTopColor: 'border-t-emerald-500',
+   107→    bgColor: 'bg-emerald-50',
+   108→    headerBg: 'bg-emerald-100/80',
+   109→    countBadgeClass: 'bg-emerald-200 text-emerald-800',
+   110→    icon: <Zap className="size-4 text-emerald-600" />,
+   111→    emptyText: 'No returns ready to file',
+   112→  },
+   113→  {
+   114→    key: 'filed',
+   115→    label: 'Filed',
+   116→    borderTopColor: 'border-t-green-600',
+   117→    bgColor: 'bg-green-50',
+   118→    headerBg: 'bg-green-100/80',
+   119→    countBadgeClass: 'bg-green-200 text-green-800',
+   120→    icon: <CheckCircle2 className="size-4 text-green-600" />,
+   121→    emptyText: 'No filed returns yet',
+   122→  },
+   123→  {
+   124→    key: 'attention',
+   125→    label: 'Requires Attention',
+   126→    borderTopColor: 'border-t-red-500',
+   127→    bgColor: 'bg-red-50',
+   128→    headerBg: 'bg-red-100/80',
+   129→    countBadgeClass: 'bg-red-200 text-red-800',
+   130→    icon: <AlertTriangle className="size-4 text-red-500" />,
+   131→    emptyText: 'No issues found',
+   132→  },
+   133→];
+   134→
+   135→// ─── Period Options ─────────────────────────────────────────────────────────────
+   136→
+   137→const PERIOD_OPTIONS = [
+   138→  { value: '2025-06', label: 'Jun 2025' },
+   139→  { value: '2025-05', label: 'May 2025' },
+   140→  { value: '2025-04', label: 'Apr 2025' },
+   141→  { value: '2025-03', label: 'Mar 2025' },
+   142→  { value: '2025-02', label: 'Feb 2025' },
+   143→  { value: '2025-01', label: 'Jan 2025' },
+   144→];
+   145→
+   146→// ─── Timeline Steps ─────────────────────────────────────────────────────────────
+   147→
+   148→const TIMELINE_STEPS = [
+   149→  { key: 'draft', label: 'Draft' },
+   150→  { key: 'validated', label: 'Validated' },
+   151→  { key: 'generated', label: 'Generated' },
+   152→  { key: 'filed', label: 'Filed' },
+   153→];
+   154→
+   155→// ─── Helpers ────────────────────────────────────────────────────────────────────
+   156→
+   157→function getKanbanColumn(status: FilingStatus): KanbanColumn {
+   158→  switch (status) {
+   159→    case 'draft':
+   160→    case 'prepared':
+   161→      return 'draft';
+   162→    case 'validated':
+   163→    case 'reviewed':
+   164→    case 'generated':
+   165→      return 'ready';
+   166→    case 'filed':
+   167→      return 'filed';
+   168→    case 'reopened':
+   169→      return 'attention';
+   170→    default:
+   171→      return 'draft';
+   172→  }
+   173→}
+   174→
+   175→function getTimelineStepIndex(status: FilingStatus): number {
+   176→  switch (status) {
+   177→    case 'draft':
+   178→    case 'prepared':
+   179→      return 0;
+   180→    case 'validated':
+   181→    case 'reviewed':
+   182→      return 1;
+   183→    case 'generated':
+   184→      return 2;
+   185→    case 'filed':
+   186→      return 3;
+   187→    case 'reopened':
+   188→      return -1;
+   189→    default:
+   190→      return 0;
+   191→  }
+   192→}
+   193→
+   194→function getAttentionSummary(filing: GSTRFiling): string {
+   195→  if (filing.issuesFound <= 0) return 'No issues';
+   196→  const parts: string[] = [];
+   197→  if (filing.criticalErrors > 0) parts.push(`${filing.criticalErrors} critical error${filing.criticalErrors > 1 ? 's' : ''}`);
+   198→  if (filing.warnings > 0) parts.push(`${filing.warnings} warning${filing.warnings > 1 ? 's' : ''}`);
+   199→  if (filing.issuesFound > 0 && parts.length === 0) parts.push(`${filing.issuesFound} issue${filing.issuesFound > 1 ? 's' : ''}`);
+   200→  return parts.join(' · ');
+   201→}
+   202→
+   203→function getReturnTypeBadgeClass(returnType: string): string {
+   204→  if (returnType === 'GSTR-1') {
+   205→    return 'border-teal-200 bg-teal-50 text-teal-700';
+   206→  }
+   207→  return 'border-emerald-200 bg-emerald-50 text-emerald-700';
+   208→}
+   209→
+   210→// ─── Section Breakdown Computation ──────────────────────────────────────────────
+   211→
+   212→function computeSectionsForFiling(
+   213→  returnType: string,
+   214→  invoices: { taxableValue: number; cgst: number; sgst: number; igst: number; buyerGstin?: string | null; status: string }[]
+   215→): SectionBreakdown[] {
+   216→  if (returnType === 'GSTR-1') {
+   217→    const b2b = invoices.filter(inv => inv.buyerGstin);
+   218→    const b2cLarge = invoices.filter(inv => !inv.buyerGstin && inv.taxableValue >= 250000);
+   219→    const b2cSmall = invoices.filter(inv => !inv.buyerGstin && inv.taxableValue < 250000);
+   220→
+   221→    return [
+   222→      {
+   223→        section: 'B2B',
+   224→        invoiceCount: b2b.length,
+   225→        taxableValue: b2b.reduce((s, i) => s + i.taxableValue, 0),
+   226→        taxAmount: b2b.reduce((s, i) => s + i.cgst + i.sgst + i.igst, 0),
+   227→      },
+   228→      {
+   229→        section: 'B2C Large',
+   230→        invoiceCount: b2cLarge.length,
+   231→        taxableValue: b2cLarge.reduce((s, i) => s + i.taxableValue, 0),
+   232→        taxAmount: b2cLarge.reduce((s, i) => s + i.cgst + i.sgst + i.igst, 0),
+   233→      },
+   234→      {
+   235→        section: 'B2C Small',
+   236→        invoiceCount: b2cSmall.length,
+   237→        taxableValue: b2cSmall.reduce((s, i) => s + i.taxableValue, 0),
+   238→        taxAmount: b2cSmall.reduce((s, i) => s + i.cgst + i.sgst + i.igst, 0),
+   239→      },
+   240→      {
+   241→        section: 'CDNR',
+   242→        invoiceCount: 0,
+   243→        taxableValue: 0,
+   244→        taxAmount: 0,
+   245→      },
+   246→    ];
+   247→  }
+   248→
+   249→  // GSTR-3B
+   250→  const totalTax = invoices.reduce((s, i) => s + i.cgst + i.sgst + i.igst, 0);
+   251→  const totalTaxable = invoices.reduce((s, i) => s + i.taxableValue, 0);
+   252→  return [
+   253→    {
+   254→      section: 'Outward Supplies',
+   255→      invoiceCount: invoices.length,
+   256→      taxableValue: totalTaxable,
+   257→      taxAmount: totalTax,
+   258→    },
+   259→    {
+   260→      section: 'Inward Supplies (RC)',
+   261→      invoiceCount: 0,
+   262→      taxableValue: 0,
+   263→      taxAmount: 0,
+   264→    },
+   265→    {
+   266→      section: 'ITC Claims',
+   267→      invoiceCount: 0,
+   268→      taxableValue: 0,
+   269→      taxAmount: Math.round(-totalTax * 0.6),
+   270→    },
+   271→    {
+   272→      section: 'Tax Paid',
+   273→      invoiceCount: 0,
+   274→      taxableValue: 0,
+   275→      taxAmount: Math.round(totalTax * 0.75),
+   276→    },
+   277→  ];
+   278→}
+   279→
+   280→// ─── Animation Variants ─────────────────────────────────────────────────────────
+   281→
+   282→const fadeInUp = {
+   283→  hidden: { opacity: 0, y: 20 },
+   284→  show: { opacity: 1, y: 0, transition: { duration: 0.4, ease: 'easeOut' } },
+   285→};
+   286→
+   287→const staggerContainer = {
+   288→  hidden: { opacity: 0 },
+   289→  show: {
+   290→    opacity: 1,
+   291→    transition: { staggerChildren: 0.07 },
+   292→  },
+   293→};
+   294→
+   295→const staggerItem = {
+   296→  hidden: { opacity: 0, y: 12, scale: 0.97 },
+   297→  show: { opacity: 1, y: 0, scale: 1, transition: { duration: 0.3, ease: 'easeOut' } },
+   298→};
+   299→
+   300→const cardHover = {
+   301→  y: -2,
+   302→  boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+   303→  transition: { duration: 0.18 },
+   304→};
+   305→
+   306→const columnEnter = {
+   307→  hidden: { opacity: 0, y: 24 },
+   308→  show: (i: number) => ({
+   309→    opacity: 1,
+   310→    y: 0,
+   311→    transition: { duration: 0.4, delay: i * 0.1, ease: 'easeOut' },
+   312→  }),
+   313→};
+   314→
+   315→// ═══════════════════════════════════════════════════════════════════════════════
+   316→// Main Component
+   317→// ═══════════════════════════════════════════════════════════════════════════════
+   318→
+   319→export default function ReturnsPage() {
+   320→  const { setCurrentView } = useApp();
+   321→
+   322→  // ── React Query hooks ──────────────────────────────────────────────────
+   323→  const { data: filingsData, isLoading: filingsLoading, error: filingsError } = useFilings();
+   324→  const { data: clientsData, isLoading: clientsLoading } = useClients();
+   325→
+   326→  // Mutations
+   327→  const fileReturnMutation = useFileReturn();
+   328→  const createFilingMutation = useCreateFiling();
+   329→
+   330→  // ── State ─────────────────────────────────────────────────────────────────
+   331→  const [selectedFiling, setSelectedFiling] = useState<GSTRFiling | null>(null);
+   332→  const [sheetOpen, setSheetOpen] = useState(false);
+   333→  const [filingAction, setFilingAction] = useState<string | null>(null);
+   334→  const [selectedPeriod, setSelectedPeriod] = useState('2025-06');
+   335→
+   336→  // ── Data from API ──────────────────────────────────────────────────────
+   337→  const filings: GSTRFiling[] = filingsData?.filings ?? [];
+   338→  const clients: Array<Client & { _aggregations?: { totalInvoices: number; filedReturns: number; pendingReturns: number; matchPercentage: number } }> = clientsData?.clients ?? [];
+   339→
+   340→  // ── Derived Data ──────────────────────────────────────────────────────────
+   341→  const kanbanData = useMemo(() => {
+   342→    const columns: Record<KanbanColumn, GSTRFiling[]> = {
+   343→      draft: [],
+   344→      ready: [],
+   345→      filed: [],
+   346→      attention: [],
+   347→    };
+   348→    filings.forEach((f) => {
+   349→      const col = getKanbanColumn(f.status);
+   350→      columns[col].push(f);
+   351→    });
+   352→    return columns;
+   353→  }, [filings]);
+   354→
+   355→  // ── Health Score Computation ───────────────────────────────────────────
+   356→  const healthMetrics = useMemo(() => {
+   357→    const filedCount = filings.filter(f => f.status === 'filed').length;
+   358→    const criticalCount = filings.filter(f => f.criticalErrors > 0).length;
+   359→    const totalReturns = filings.length;
+   360→    const avgCompliance = clients.length > 0
+   361→      ? Math.round(clients.reduce((sum, c) => sum + c.healthScore, 0) / clients.length)
+   362→      : 0;
+   363→
+   364→    const overallHealth = avgCompliance;
+   365→    const filingTimeliness = totalReturns > 0
+   366→      ? Math.round((filedCount / totalReturns) * 100)
+   367→      : 0;
+   368→    const dataAccuracy = totalReturns > 0
+   369→      ? Math.round(((totalReturns - criticalCount) / totalReturns) * 100)
+   370→      : 100;
+   371→    const compliance = avgCompliance;
+   372→    return { overallHealth, filingTimeliness, dataAccuracy, compliance };
+   373→  }, [filings, clients]);
+   374→
+   375→  // ── Invoices hook for detail sheet ─────────────────────────────────────
+   376→  // This fetches invoices for the selected filing's client
+   377→  const { data: selectedClientInvoicesData } = useInvoices(selectedFiling?.clientId);
+   378→
+   379→  // ── Handlers ──────────────────────────────────────────────────────────────
+   380→  const handleCardClick = (filing: GSTRFiling) => {
+   381→    setSelectedFiling(filing);
+   382→    setSheetOpen(true);
+   383→  };
+   384→
+   385→  const handleFileReturn = async (filing: GSTRFiling) => {
+   386→    setFilingAction(filing.id);
+   387→
+   388→    fileReturnMutation.mutate(
+   389→      { id: filing.id },
+   390→      {
+   391→        onSuccess: (data) => {
+   392→          setFilingAction(null);
+   393→          setSheetOpen(false);
+   394→          setSelectedFiling(null);
+   395→
+   396→          const arn = data?.filing?.acknowledgmentNumber ?? 'Pending';
+   397→          toast.success(`${filing.returnType} filed successfully!`, {
+   398→            description: `ARN: ${arn}`,
+   399→            duration: 5000,
+   400→          });
+   401→        },
+   402→        onError: (error) => {
+   403→          setFilingAction(null);
+   404→          toast.error('Filing failed', {
+   405→            description: error.message,
+   406→            duration: 5000,
+   407→          });
+   408→        },
+   409→      }
+   410→    );
+   411→  };
+   412→
+   413→  const handlePrepare = (filing: GSTRFiling) => {
+   414→    setSelectedFiling(filing);
+   415→    setSheetOpen(true);
+   416→  };
+   417→
+   418→  const handleFixIssues = () => {
+   419→    setCurrentView('reconcile');
+   420→  };
+   421→
+   422→  const handleViewDetails = (filing: GSTRFiling) => {
+   423→    setSelectedFiling(filing);
+   424→    setSheetOpen(true);
+   425→  };
+   426→
+   427→  const handleCreateReturn = () => {
+   428→    toast.info('Create Return wizard coming soon!', {
+   429→      description: 'You can upload documents from the Invoices section.',
+   430→    });
+   431→  };
+   432→
+   433→  const handleDownloadJSON = (filing: GSTRFiling) => {
+   434→    toast.success('JSON downloaded', {
+   435→      description: `${filing.returnType} for ${filing.client?.tradeName} · ${periodToLabel(filing.period)}`,
+   436→    });
+   437→  };
+   438→
+   439→  // ── Loading State ─────────────────────────────────────────────────────────
+   440→  if (filingsLoading || clientsLoading) {
+   441→    return (
+   442→      <div className="space-y-5 p-4 md:p-6">
+   443→        <div className="flex items-center justify-between">
+   444→          <div className="flex items-center gap-3">
+   445→            <Skeleton className="h-8 w-44" />
+   446→            <Skeleton className="h-6 w-20 rounded-full" />
+   447→          </div>
+   448→          <div className="flex items-center gap-2">
+   449→            <Skeleton className="h-9 w-32" />
+   450→            <Skeleton className="h-9 w-36" />
+   451→          </div>
+   452→        </div>
+   453→        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+   454→          {[1, 2, 3, 4].map((i) => (
+   455→            <div key={i} className="space-y-3">
+   456→              <Skeleton className="h-12 w-full rounded-t-lg" />
+   457→              <div className="space-y-2 p-2">
+   458→                <Skeleton className="h-28 w-full rounded-lg" />
+   459→                <Skeleton className="h-28 w-full rounded-lg" />
+   460→              </div>
+   461→            </div>
+   462→          ))}
+   463→        </div>
+   464→      </div>
+   465→    );
+   466→  }
+   467→
+   468→  // ── Error State ──────────────────────────────────────────────────────────
+   469→  if (filingsError) {
+   470→    return (
+   471→      <div className="flex flex-col items-center justify-center h-full min-h-[400px] space-y-4 p-6">
+   472→        <AlertCircle className="size-12 text-red-400" />
+   473→        <h2 className="text-lg font-semibold text-foreground">Failed to load filings</h2>
+   474→        <p className="text-sm text-muted-foreground">{filingsError.message}</p>
+   475→      </div>
+   476→    );
+   477→  }
+   478→
+   479→  // ═════════════════════════════════════════════════════════════════════════
+   480→  // Render Helpers
+   481→  // ═════════════════════════════════════════════════════════════════════════
+   482→
+   483→  const renderDraftCard = (filing: GSTRFiling) => {
+   484→    const clientName = filing.client?.tradeName ?? 'Unknown Client';
+   485→    const periodLabel = periodToLabel(filing.period);
+   486→
+   487→    return (
+   488→      <motion.div
+   489→        key={filing.id}
+   490→        variants={staggerItem}
+   491→        whileHover={cardHover}
+   492→        className="cursor-pointer"
+   493→        onClick={() => handleCardClick(filing)}
+   494→      >
+   495→        <Card className="border shadow-sm bg-white transition-shadow hover:shadow-md">
+   496→          <CardContent className="p-3.5 space-y-2.5">
+   497→            {/* Client Name */}
+   498→            <p className="text-sm font-semibold truncate leading-tight">
+   499→              {clientName}
+   500→            </p>
+   501→
+   502→            {/* Return Type + Period */}
+   503→            <div className="flex items-center gap-1.5">
+   504→              <Badge
+   505→                variant="outline"
+   506→                className={`text-[10px] px-1.5 py-0 h-5 font-semibold ${getReturnTypeBadgeClass(filing.returnType)}`}
+   507→              >
+   508→                {filing.returnType}
+   509→              </Badge>
+   510→              <span className="text-[11px] text-muted-foreground">{periodLabel}</span>
+   511→            </div>
+   512→
+   513→            {/* Invoice count */}
+   514→            <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+   515→              <FileText className="size-3" />
+   516→              <span>{filing.totalInvoices} invoices</span>
+   517→            </div>
+   518→
+   519→            {/* Issues badge */}
+   520→            {filing.issuesFound > 0 && (
+   521→              <div className="flex items-center gap-1">
+   522→                <Badge className="text-[10px] px-1.5 py-0 h-5 bg-amber-100 text-amber-700 border-amber-200 hover:bg-amber-100 font-medium">
+   523→                  <AlertCircle className="size-2.5 mr-0.5" />
+   524→                  {filing.issuesFound} issues
+   525→                </Badge>
+   526→              </div>
+   527→            )}
+   528→
+   529→            {/* Prepare button */}
+   530→            <Button
+   531→              size="sm"
+   532→              variant="outline"
+   533→              className="w-full h-7 text-xs gap-1.5 border-slate-300 hover:border-emerald-400 hover:text-emerald-700 hover:bg-emerald-50"
+   534→              onClick={(e) => {
+   535→                e.stopPropagation();
+   536→                handlePrepare(filing);
+   537→              }}
+   538→            >
+   539→              <ArrowRight className="size-3" />
+   540→              Prepare
+   541→            </Button>
+   542→          </CardContent>
+   543→        </Card>
+   544→      </motion.div>
+   545→    );
+   546→  };
+   547→
+   548→  const renderReadyCard = (filing: GSTRFiling) => {
+   549→    const clientName = filing.client?.tradeName ?? 'Unknown Client';
+   550→    const periodLabel = periodToLabel(filing.period);
+   551→    const isFiling = filingAction === filing.id || fileReturnMutation.isPending;
+   552→
+   553→    return (
+   554→      <motion.div
+   555→        key={filing.id}
+   556→        variants={staggerItem}
+   557→        whileHover={cardHover}
+   558→        className="cursor-pointer"
+   559→        onClick={() => handleCardClick(filing)}
+   560→      >
+   561→        <Card className="border shadow-sm bg-white transition-shadow hover:shadow-md">
+   562→          <CardContent className="p-3.5 space-y-2.5">
+   563→            {/* Client Name */}
+   564→            <p className="text-sm font-semibold truncate leading-tight">
+   565→              {clientName}
+   566→            </p>
+   567→
+   568→            {/* Return Type + Period */}
+   569→            <div className="flex items-center gap-1.5">
+   570→              <Badge
+   571→                variant="outline"
+   572→                className={`text-[10px] px-1.5 py-0 h-5 font-semibold ${getReturnTypeBadgeClass(filing.returnType)}`}
+   573→              >
+   574→                {filing.returnType}
+   575→              </Badge>
+   576→              <span className="text-[11px] text-muted-foreground">{periodLabel}</span>
+   577→            </div>
+   578→
+   579→            {/* Total Tax — prominent */}
+   580→            <div className="flex items-baseline gap-1">
+   581→              <span className="text-lg font-bold text-emerald-700">
+   582→                {formatCurrency(filing.totalTax)}
+   583→              </span>
+   584→              <span className="text-[10px] text-muted-foreground">total tax</span>
+   585→            </div>
+   586→
+   587→            {/* Invoice count */}
+   588→            <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+   589→              <FileText className="size-3" />
+   590→              <span>{filing.totalInvoices} invoices</span>
+   591→            </div>
+   592→
+   593→            {/* File Return button — MAIN CTA */}
+   594→            <Button
+   595→              size="sm"
+   596→              className="w-full h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm font-semibold"
+   597→              onClick={(e) => {
+   598→                e.stopPropagation();
+   599→                handleFileReturn(filing);
+   600→              }}
+   601→              disabled={isFiling}
+   602→            >
+   603→              {isFiling ? (
+   604→                <Loader2 className="size-3.5 animate-spin" />
+   605→              ) : (
+   606→                <Send className="size-3.5" />
+   607→              )}
+   608→              {isFiling ? 'Filing...' : 'File Return'}
+   609→            </Button>
+   610→          </CardContent>
+   611→        </Card>
+   612→      </motion.div>
+   613→    );
+   614→  };
+   615→
+   616→  const renderFiledCard = (filing: GSTRFiling) => {
+   617→    const clientName = filing.client?.tradeName ?? 'Unknown Client';
+   618→
+   619→    return (
+   620→      <motion.div
+   621→        key={filing.id}
+   622→        variants={staggerItem}
+   623→        whileHover={cardHover}
+   624→        className="cursor-pointer"
+   625→        onClick={() => handleCardClick(filing)}
+   626→      >
+   627→        <Card className="border shadow-sm bg-white transition-shadow hover:shadow-md">
+   628→          <CardContent className="p-3.5 space-y-2.5">
+   629→            {/* Client Name */}
+   630→            <p className="text-sm font-semibold truncate leading-tight">
+   631→              {clientName}
+   632→            </p>
+   633→
+   634→            {/* Return Type */}
+   635→            <div className="flex items-center gap-1.5">
+   636→              <Badge
+   637→                variant="outline"
+   638→                className={`text-[10px] px-1.5 py-0 h-5 font-semibold ${getReturnTypeBadgeClass(filing.returnType)}`}
+   639→              >
+   640→                {filing.returnType}
+   641→              </Badge>
+   642→            </div>
+   643→
+   644→            {/* ARN Number */}
+   645→            {filing.acknowledgmentNumber && (
+   646→              <div className="rounded-md bg-green-50 border border-green-100 px-2.5 py-1.5">
+   647→                <p className="text-[10px] text-green-600 font-medium">ARN</p>
+   648→                <p className="text-xs font-mono font-semibold text-green-800">
+   649→                  {filing.acknowledgmentNumber}
+   650→                </p>
+   651→              </div>
+   652→            )}
+   653→
+   654→            {/* Filed date */}
+   655→            {filing.filedDate && (
+   656→              <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+   657→                <Clock className="size-3" />
+   658→                <span>
+   659→                  Filed {new Date(filing.filedDate).toLocaleDateString('en-IN', {
+   660→                    day: '2-digit',
+   661→                    month: 'short',
+   662→                    year: 'numeric',
+   663→                  })}
+   664→                </span>
+   665→              </div>
+   666→            )}
+   667→
+   668→            {/* Download JSON text link */}
+   669→            <button
+   670→              className="flex items-center gap-1 text-[11px] font-medium text-emerald-600 hover:text-emerald-800 transition-colors"
+   671→              onClick={(e) => {
+   672→                e.stopPropagation();
+   673→                handleDownloadJSON(filing);
+   674→              }}
+   675→            >
+   676→              <Download className="size-3" />
+   677→              Download JSON
+   678→            </button>
+   679→          </CardContent>
+   680→        </Card>
+   681→      </motion.div>
+   682→    );
+   683→  };
+   684→
+   685→  const renderAttentionCard = (filing: GSTRFiling) => {
+   686→    const clientName = filing.client?.tradeName ?? 'Unknown Client';
+   687→    const issueSummary = getAttentionSummary(filing);
+   688→
+   689→    return (
+   690→      <motion.div
+   691→        key={filing.id}
+   692→        variants={staggerItem}
+   693→        whileHover={cardHover}
+   694→        className="cursor-pointer"
+   695→        onClick={() => handleCardClick(filing)}
+   696→      >
+   697→        <Card className="border shadow-sm bg-white transition-shadow hover:shadow-md border-l-4 border-l-red-400">
+   698→          <CardContent className="p-3.5 space-y-2.5">
+   699→            {/* Client Name */}
+   700→            <p className="text-sm font-semibold truncate leading-tight">
+   701→              {clientName}
+   702→            </p>
+   703→
+   704→            {/* Return Type */}
+   705→            <div className="flex items-center gap-1.5">
+   706→              <Badge
+   707→                variant="outline"
+   708→                className={`text-[10px] px-1.5 py-0 h-5 font-semibold ${getReturnTypeBadgeClass(filing.returnType)}`}
+   709→              >
+   710→                {filing.returnType}
+   711→              </Badge>
+   712→            </div>
+   713→
+   714→            {/* Issue summary */}
+   715→            <div className="rounded-md bg-red-50 border border-red-100 px-2.5 py-2">
+   716→              <div className="flex items-center gap-1.5 text-[11px] font-semibold text-red-700">
+   717→                <AlertTriangle className="size-3 shrink-0" />
+   718→                <span>{issueSummary}</span>
+   719→              </div>
+   720→            </div>
+   721→
+   722→            {/* Fix Issues button */}
+   723→            <Button
+   724→              size="sm"
+   725→              variant="outline"
+   726→              className="w-full h-7 text-xs gap-1.5 border-red-200 text-red-700 hover:bg-red-50 hover:border-red-300"
+   727→              onClick={(e) => {
+   728→                e.stopPropagation();
+   729→                handleFixIssues();
+   730→              }}
+   731→            >
+   732→              <Wrench className="size-3" />
+   733→              Fix Issues
+   734→            </Button>
+   735→
+   736→            {/* View Details text link */}
+   737→            <button
+   738→              className="flex items-center gap-1 text-[11px] font-medium text-slate-500 hover:text-slate-700 transition-colors"
+   739→              onClick={(e) => {
+   740→                e.stopPropagation();
+   741→                handleViewDetails(filing);
+   742→              }}
+   743→            >
+   744→              <Eye className="size-3" />
+   745→              View Details
+   746→            </button>
+   747→          </CardContent>
+   748→        </Card>
+   749→      </motion.div>
+   750→    );
+   751→  };
+   752→
+   753→  const renderCard = (filing: GSTRFiling, column: KanbanColumn) => {
+   754→    switch (column) {
+   755→      case 'draft':
+   756→        return renderDraftCard(filing);
+   757→      case 'ready':
+   758→        return renderReadyCard(filing);
+   759→      case 'filed':
+   760→        return renderFiledCard(filing);
+   761→      case 'attention':
+   762→        return renderAttentionCard(filing);
+   763→    }
+   764→  };
+   765→
+   766→  const renderKanbanColumn = (colConfig: typeof KANBAN_COLUMNS[number], index: number) => {
+   767→    const items = kanbanData[colConfig.key];
+   768→
+   769→    return (
+   770→      <motion.div
+   771→        key={colConfig.key}
+   772→        custom={index}
+   773→        variants={columnEnter}
+   774→        initial="hidden"
+   775→        animate="show"
+   776→        className={`flex flex-col rounded-xl border-t-4 ${colConfig.borderTopColor} ${colConfig.bgColor} border border-slate-200/60 min-h-0`}
+   777→      >
+   778→        {/* Column Header */}
+   779→        <div
+   780→          className={`flex items-center justify-between px-3.5 py-3 ${colConfig.headerBg} rounded-t-[8px] shrink-0`}
+   781→        >
+   782→          <div className="flex items-center gap-2">
+   783→            {colConfig.icon}
+   784→            <span className="text-sm font-semibold tracking-tight">{colConfig.label}</span>
+   785→            {colConfig.key === 'filed' && items.length > 0 && (
+   786→              <CheckCircle2 className="size-3.5 text-green-600" />
+   787→            )}
+   788→            {colConfig.key === 'attention' && items.length > 0 && (
+   789→              <AlertCircle className="size-3.5 text-red-500" />
+   790→            )}
+   791→          </div>
+   792→          <Badge
+   793→            className={`h-5 min-w-[22px] justify-center text-[11px] font-bold border-0 ${colConfig.countBadgeClass}`}
+   794→          >
+   795→            {items.length}
+   796→          </Badge>
+   797→        </div>
+   798→
+   799→        {/* Cards Area */}
+   800→        <ScrollArea className="flex-1 max-h-[calc(100vh-220px)]">
+   801→          <div className="p-2.5 space-y-2.5">
+   802→            {items.length === 0 ? (
+   803→              <div className="flex flex-col items-center justify-center py-10 text-center">
+   804→                <div className="size-12 rounded-full bg-white/60 flex items-center justify-center mb-2">
+   805→                  {React.cloneElement(colConfig.icon as React.ReactElement, {
+   806→                    className: 'size-5 opacity-25',
+   807→                  })}
+   808→                </div>
+   809→                <p className="text-xs text-muted-foreground/70">{colConfig.emptyText}</p>
+   810→              </div>
+   811→            ) : (
+   812→              <motion.div
+   813→                variants={staggerContainer}
+   814→                initial="hidden"
+   815→                animate="show"
+   816→                className="space-y-2.5"
+   817→              >
+   818→                {items.map((filing) => renderCard(filing, colConfig.key))}
+   819→              </motion.div>
+   820→            )}
+   821→          </div>
+   822→        </ScrollArea>
+   823→      </motion.div>
+   824→    );
+   825→  };
+   826→
+   827→  const renderDetailSheet = () => {
+   828→    if (!selectedFiling) return null;
+   829→    const filing = selectedFiling;
+   830→    const clientName = filing.client?.tradeName ?? 'Unknown';
+   831→    const clientGstin = filing.client?.gstin ?? '';
+   832→    const column = getKanbanColumn(filing.status);
+   833→
+   834→    // Compute section breakdown from invoices for this client
+   835→    const clientInvoices = selectedClientInvoicesData?.invoices ?? [];
+   836→    const sections = computeSectionsForFiling(filing.returnType, clientInvoices);
+   837→
+   838→    const timelineIndex = getTimelineStepIndex(filing.status);
+   839→    const isFiling = filingAction === filing.id || fileReturnMutation.isPending;
+   840→
+   841→    return (
+   842→      <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
+   843→        <SheetContent side="right" className="w-full sm:max-w-lg overflow-y-auto p-0">
+   844→          <SheetHeader className="p-6 pb-4 border-b bg-gradient-to-b from-emerald-50/60 to-transparent">
+   845→            <SheetTitle className="text-lg font-bold">{clientName}</SheetTitle>
+   846→            <SheetDescription className="text-sm font-mono">
+   847→              {clientGstin}
+   848→            </SheetDescription>
+   849→            <div className="flex items-center gap-2 mt-1">
+   850→              <Badge
+   851→                variant="outline"
+   852→                className={`text-xs font-semibold ${getReturnTypeBadgeClass(filing.returnType)}`}
+   853→              >
+   854→                {filing.returnType}
+   855→              </Badge>
+   856→              <Badge
+   857→                variant="outline"
+   858→                className={`text-xs ${FILING_STATUS_CONFIG[filing.status]?.bgColor ?? 'bg-slate-100'} ${FILING_STATUS_CONFIG[filing.status]?.color ?? 'text-slate-700'}`}
+   859→              >
+   860→                {FILING_STATUS_CONFIG[filing.status]?.label ?? filing.status}
+   861→              </Badge>
+   862→              <span className="text-xs text-muted-foreground">
+   863→                {periodToLabel(filing.period)}
+   864→              </span>
+   865→            </div>
+   866→          </SheetHeader>
+   867→
+   868→          <div className="p-6 space-y-6">
+   869→            {/* ── Status Timeline (Horizontal) ──────────────────────────── */}
+   870→            <div className="space-y-2">
+   871→              <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+   872→                Status
+   873→              </h4>
+   874→              <div className="flex items-center gap-0">
+   875→                {TIMELINE_STEPS.map((step, i) => {
+   876→                  const isCompleted = timelineIndex >= 0 && i <= timelineIndex;
+   877→                  const isCurrent = timelineIndex >= 0 && i === timelineIndex;
+   878→                  const isReopened = timelineIndex === -1;
+   879→
+   880→                  return (
+   881→                    <React.Fragment key={step.key}>
+   882→                      {i > 0 && (
+   883→                        <div
+   884→                          className={`flex-1 h-0.5 mx-1 rounded-full ${
+   885→                            isCompleted && !isReopened
+   886→                              ? 'bg-emerald-400'
+   887→                              : 'bg-slate-200'
+   888→                          }`}
+   889→                        />
+   890→                      )}
+   891→                      <div className="flex flex-col items-center gap-1.5">
+   892→                        <div
+   893→                          className={`flex size-7 items-center justify-center rounded-full shrink-0 ${
+   894→                            isReopened
+   895→                              ? 'bg-red-100 text-red-500 ring-2 ring-red-200'
+   896→                              : isCompleted
+   897→                              ? 'bg-emerald-600 text-white'
+   898→                              : isCurrent
+   899→                              ? 'bg-emerald-100 text-emerald-700 ring-2 ring-emerald-300'
+   900→                              : 'bg-slate-100 text-slate-400'
+   901→                          }`}
+   902→                        >
+   903→                          {isCompleted && !isReopened ? (
+   904→                            <CheckCircle2 className="size-3.5" />
+   905→                          ) : isReopened && i === 0 ? (
+   906→                            <AlertTriangle className="size-3.5" />
+   907→                          ) : (
+   908→                            <ChevronRight className="size-3.5" />
+   909→                          )}
+   910→                        </div>
+   911→                        <span
+   912→                          className={`text-[10px] font-medium whitespace-nowrap ${
+   913→                            isCompleted && !isReopened
+   914→                              ? 'text-emerald-700'
+   915→                              : isReopened
+   916→                              ? 'text-red-600'
+   917→                              : 'text-muted-foreground'
+   918→                          }`}
+   919→                        >
+   920→                          {step.label}
+   921→                        </span>
+   922→                      </div>
+   923→                    </React.Fragment>
+   924→                  );
+   925→                })}
+   926→              </div>
+   927→            </div>
+   928→
+   929→            <Separator />
+   930→
+   931→            {/* ── Section Breakdown — Mini Cards ───────────────────────── */}
+   932→            <div className="space-y-3">
+   933→              <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+   934→                <FileText className="size-3" />
+   935→                Section Breakdown
+   936→              </h4>
+   937→              <div className="grid grid-cols-2 gap-2">
+   938→                {sections.map((sec) => (
+   939→                  <div
+   940→                    key={sec.section}
+   941→                    className="rounded-lg border bg-white p-3 space-y-1"
+   942→                  >
+   943→                    <p className="text-xs font-semibold text-foreground">{sec.section}</p>
+   944→                    <p className="text-[10px] text-muted-foreground">
+   945→                      {sec.invoiceCount} invoice{sec.invoiceCount !== 1 ? 's' : ''}
+   946→                    </p>
+   947→                    <p className="text-sm font-bold text-emerald-700">
+   948→                      {formatCurrency(sec.taxableValue)}
+   949→                    </p>
+   950→                  </div>
+   951→                ))}
+   952→              </div>
+   953→            </div>
+   954→
+   955→            <Separator />
+   956→
+   957→            {/* ── Tax Breakdown ────────────────────────────────────────── */}
+   958→            <div className="space-y-3">
+   959→              <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+   960→                <Info className="size-3" />
+   961→                Tax Breakdown
+   962→              </h4>
+   963→              <div className="rounded-lg border bg-white p-3.5 space-y-2.5">
+   964→                {(() => {
+   965→                  const total = filing.totalTax;
+   966→                  const cgst = Math.round(total * 0.4);
+   967→                  const sgst = Math.round(total * 0.4);
+   968→                  const igst = total - cgst - sgst;
+   969→                  const cess = 0;
+   970→                  return (
+   971→                    <>
+   972→                      <div className="flex items-center justify-between text-xs">
+   973→                        <span className="text-muted-foreground">CGST</span>
+   974→                        <span className="font-medium">{formatCurrency(cgst)}</span>
+   975→                      </div>
+   976→                      <div className="flex items-center justify-between text-xs">
+   977→                        <span className="text-muted-foreground">SGST</span>
+   978→                        <span className="font-medium">{formatCurrency(sgst)}</span>
+   979→                      </div>
+   980→                      <div className="flex items-center justify-between text-xs">
+   981→                        <span className="text-muted-foreground">IGST</span>
+   982→                        <span className="font-medium">{formatCurrency(igst)}</span>
+   983→                      </div>
+   984→                      <div className="flex items-center justify-between text-xs">
+   985→                        <span className="text-muted-foreground">Cess</span>
+   986→                        <span className="font-medium">{formatCurrency(cess)}</span>
+   987→                      </div>
+   988→                      <Separator />
+   989→                      <div className="flex items-center justify-between text-sm font-bold">
+   990→                        <span>Total Tax</span>
+   991→                        <span className="text-emerald-700">{formatCurrency(total)}</span>
+   992→                      </div>
+   993→                    </>
+   994→                  );
+   995→                })()}
+   996→              </div>
+   997→            </div>
+   998→
+   999→            <Separator />
+  1000→
+  1001→            {/* ── Key Metrics ──────────────────────────────────────────── */}
+  1002→            <div className="grid grid-cols-3 gap-3">
+  1003→              <div className="rounded-lg bg-slate-50 p-3 text-center">
+  1004→                <p className="text-[10px] text-muted-foreground">Invoices</p>
+  1005→                <p className="text-lg font-bold">{filing.totalInvoices}</p>
+  1006→              </div>
+  1007→              <div className="rounded-lg bg-emerald-50 p-3 text-center">
+  1008→                <p className="text-[10px] text-muted-foreground">Taxable Value</p>
+  1009→                <p className="text-sm font-bold text-emerald-700">
+  1010→                  {formatCurrency(filing.totalTaxableValue)}
+  1011→                </p>
+  1012→              </div>
+  1013→              <div className="rounded-lg bg-teal-50 p-3 text-center">
+  1014→                <p className="text-[10px] text-muted-foreground">Total Tax</p>
+  1015→                <p className="text-sm font-bold text-teal-700">
+  1016→                  {formatCurrency(filing.totalTax)}
+  1017→                </p>
+  1018→              </div>
+  1019→            </div>
+  1020→
+  1021→            {/* ── Action Buttons (matching the column) ─────────────────── */}
+  1022→            <div className="pt-2">
+  1023→              {column === 'draft' && (
+  1024→                <Button
+  1025→                  className="w-full gap-2 bg-emerald-600 hover:bg-emerald-700 text-white"
+  1026→                  onClick={() => handlePrepare(filing)}
+  1027→                >
+  1028→                  <ArrowRight className="size-4" />
+  1029→                  Prepare Return
+  1030→                </Button>
+  1031→              )}
+  1032→              {column === 'ready' && (
+  1033→                <Button
+  1034→                  className="w-full gap-2 bg-emerald-600 hover:bg-emerald-700 text-white"
+  1035→                  onClick={() => handleFileReturn(filing)}
+  1036→                  disabled={isFiling}
+  1037→                >
+  1038→                  {isFiling ? (
+  1039→                    <Loader2 className="size-4 animate-spin" />
+  1040→                  ) : (
+  1041→                    <Send className="size-4" />
+  1042→                  )}
+  1043→                  {isFiling ? 'Filing...' : 'File Return'}
+  1044→                </Button>
+  1045→              )}
+  1046→              {column === 'filed' && (
+  1047→                <Button
+  1048→                  variant="outline"
+  1049→                  className="w-full gap-2 border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+  1050→                  onClick={() => handleDownloadJSON(filing)}
+  1051→                >
+  1052→                  <Download className="size-4" />
+  1053→                  Download JSON
+  1054→                </Button>
+  1055→              )}
+  1056→              {column === 'attention' && (
+  1057→                <div className="flex gap-2">
+  1058→                  <Button
+  1059→                    variant="outline"
+  1060→                    className="flex-1 gap-2 border-red-200 text-red-700 hover:bg-red-50"
+  1061→                    onClick={() => handleFixIssues()}
+  1062→                  >
+  1063→                    <Wrench className="size-4" />
+  1064→                    Fix Issues
+  1065→                  </Button>
+  1066→                  <Button
+  1067→                    variant="outline"
+  1068→                    className="flex-1 gap-2"
+  1069→                    onClick={() => handleCardClick(filing)}
+  1070→                  >
+  1071→                    <Eye className="size-4" />
+  1072→                    View Details
+  1073→                  </Button>
+  1074→                </div>
+  1075→              )}
+  1076→            </div>
+  1077→          </div>
+  1078→        </SheetContent>
+  1079→      </Sheet>
+  1080→    );
+  1081→  };
+  1082→
+  1083→  // ═════════════════════════════════════════════════════════════════════════
+  1084→  // Main Render
+  1085→  // ═════════════════════════════════════════════════════════════════════════
+  1086→
+  1087→  const healthScore = healthMetrics.overallHealth;
+  1088→  const healthColor = healthScore > 80 ? '#10b981' : healthScore > 50 ? '#f59e0b' : '#ef4444';
+  1089→
+  1090→  // ── Empty state when no filings exist ────────────────────────────────────
+  1091→  if (filings.length === 0) {
+  1092→    return (
+  1093→      <div className="flex flex-col h-full min-h-0">
+  1094→        <motion.div
+  1095→          variants={fadeInUp}
+  1096→          initial="hidden"
+  1097→          animate="show"
+  1098→          className="flex items-center justify-between px-4 md:px-6 py-4 border-b bg-white shrink-0"
+  1099→        >
+  1100→          <div className="flex items-center gap-3">
+  1101→            <h1 className="text-xl font-bold tracking-tight">Filing Workspace</h1>
+  1102→            <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200 text-xs font-semibold hover:bg-emerald-100">
+  1103→              Jun 2025
+  1104→            </Badge>
+  1105→          </div>
+  1106→          <div className="flex items-center gap-2">
+  1107→            <Button
+  1108→              size="sm"
+  1109→              className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white h-9"
+  1110→              onClick={handleCreateReturn}
+  1111→            >
+  1112→              <Plus className="size-4" />
+  1113→              Create Return
+  1114→            </Button>
+  1115→          </div>
+  1116→        </motion.div>
+  1117→
+  1118→        <div className="flex-1 flex items-center justify-center">
+  1119→          <div className="flex flex-col items-center justify-center text-center space-y-4 py-12">
+  1120→            <div className="size-16 rounded-full bg-muted/30 flex items-center justify-center">
+  1121→              <Inbox className="size-8 text-muted-foreground/40" />
+  1122→            </div>
+  1123→            <h2 className="text-lg font-semibold text-foreground">No filings yet</h2>
+  1124→            <p className="text-sm text-muted-foreground max-w-sm">
+  1125→              Start by creating a new GST return draft. You can upload documents and prepare returns from here.
+  1126→            </p>
+  1127→            <Button
+  1128→              className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white"
+  1129→              onClick={handleCreateReturn}
+  1130→            >
+  1131→              <Plus className="size-4" />
+  1132→              Create First Return
+  1133→            </Button>
+  1134→          </div>
+  1135→        </div>
+  1136→      </div>
+  1137→    );
+  1138→  }
+  1139→
+  1140→  return (
+  1141→    <div className="flex flex-col h-full min-h-0">
+  1142→      {/* ── Minimal Header ──────────────────────────────────────────────── */}
+  1143→      <motion.div
+  1144→        variants={fadeInUp}
+  1145→        initial="hidden"
+  1146→        animate="show"
+  1147→        className="flex items-center justify-between px-4 md:px-6 py-4 border-b bg-white shrink-0"
+  1148→      >
+  1149→        <div className="flex items-center gap-3">
+  1150→          <h1 className="text-xl font-bold tracking-tight">Filing Workspace</h1>
+  1151→          <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200 text-xs font-semibold hover:bg-emerald-100">
+  1152→            Jun 2025
+  1153→          </Badge>
+  1154→        </div>
+  1155→        <div className="flex items-center gap-2">
+  1156→          <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
+  1157→            <SelectTrigger className="h-9 w-[140px] text-xs">
+  1158→              <SelectValue placeholder="Period" />
+  1159→            </SelectTrigger>
+  1160→            <SelectContent>
+  1161→              {PERIOD_OPTIONS.map((opt) => (
+  1162→                <SelectItem key={opt.value} value={opt.value} className="text-xs">
+  1163→                  {opt.label}
+  1164→                </SelectItem>
+  1165→              ))}
+  1166→            </SelectContent>
+  1167→          </Select>
+  1168→          <Button
+  1169→            size="sm"
+  1170→            className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white h-9"
+  1171→            onClick={handleCreateReturn}
+  1172→          >
+  1173→            <Plus className="size-4" />
+  1174→            Create Return
+  1175→          </Button>
+  1176→        </div>
+  1177→      </motion.div>
+  1178→
+  1179→      {/* ── Return Health Score ─────────────────────────────────────── */}
+  1180→      <motion.div
+  1181→        initial={{ opacity: 0, y: 10 }}
+  1182→        animate={{ opacity: 1, y: 0 }}
+  1183→        transition={{ duration: 0.4, delay: 0.1 }}
+  1184→        className="px-4 md:px-6 pt-4"
+  1185→      >
+  1186→        <Card className="border-0 shadow-sm bg-gradient-to-b from-background to-muted/20">
+  1187→          <CardContent className="py-4 px-4 md:px-6">
+  1188→            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 sm:gap-8">
+  1189→              {/* Health Score Ring */}
+  1190→              <div className="relative flex items-center justify-center" style={{ width: 72, height: 72 }}>
+  1191→                <svg width={72} height={72} className="-rotate-90">
+  1192→                  <circle cx={36} cy={36} r={30} fill="none" stroke="#f1f5f9" strokeWidth={6} />
+  1193→                  <motion.circle
+  1194→                    cx={36} cy={36} r={30} fill="none"
+  1195→                    stroke={healthColor}
+  1196→                    strokeWidth={6}
+  1197→                    strokeLinecap="round"
+  1198→                    strokeDasharray={`${(healthScore / 100) * 2 * Math.PI * 30} ${2 * Math.PI * 30}`}
+  1199→                    initial={{ strokeDasharray: `0 ${2 * Math.PI * 30}` }}
+  1200→                    animate={{ strokeDasharray: `${(healthScore / 100) * 2 * Math.PI * 30} ${2 * Math.PI * 30}` }}
+  1201→                    transition={{ duration: 1.2, ease: [0.25, 0.46, 0.45, 0.94] }}
+  1202→                  />
+  1203→                </svg>
+  1204→                <div className="absolute inset-0 flex flex-col items-center justify-center">
+  1205→                  <span className="text-lg font-bold text-foreground">{healthScore}</span>
+  1206→                  <span className="text-[8px] font-medium text-muted-foreground leading-none">/100</span>
+  1207→                </div>
+  1208→              </div>
+  1209→
+  1210→              {/* Breakdown Bars */}
+  1211→              <div className="flex-1 grid grid-cols-1 sm:grid-cols-3 gap-3 w-full">
+  1212→                <div className="space-y-1.5">
+  1213→                  <div className="flex items-center justify-between">
+  1214→                    <span className="text-[11px] font-medium text-muted-foreground">Filing Timeliness</span>
+  1215→                    <span className={`text-[11px] font-bold ${healthMetrics.filingTimeliness > 80 ? 'text-emerald-700' : healthMetrics.filingTimeliness > 50 ? 'text-amber-700' : 'text-red-700'}`}>
+  1216→                      {healthMetrics.filingTimeliness}%
+  1217→                    </span>
+  1218→                  </div>
+  1219→                  <div className="h-1.5 rounded-full bg-slate-100 overflow-hidden">
+  1220→                    <motion.div
+  1221→                      className={`h-full rounded-full ${healthMetrics.filingTimeliness > 80 ? 'bg-emerald-500' : healthMetrics.filingTimeliness > 50 ? 'bg-amber-500' : 'bg-red-500'}`}
+  1222→                      initial={{ width: 0 }}
+  1223→                      animate={{ width: `${healthMetrics.filingTimeliness}%` }}
+  1224→                      transition={{ duration: 1, ease: 'easeOut', delay: 0.3 }}
+  1225→                    />
+  1226→                  </div>
+  1227→                </div>
+  1228→                <div className="space-y-1.5">
+  1229→                  <div className="flex items-center justify-between">
+  1230→                    <span className="text-[11px] font-medium text-muted-foreground">Data Accuracy</span>
+  1231→                    <span className={`text-[11px] font-bold ${healthMetrics.dataAccuracy > 80 ? 'text-emerald-700' : healthMetrics.dataAccuracy > 50 ? 'text-amber-700' : 'text-red-700'}`}>
+  1232→                      {healthMetrics.dataAccuracy}%
+  1233→                    </span>
+  1234→                  </div>
+  1235→                  <div className="h-1.5 rounded-full bg-slate-100 overflow-hidden">
+  1236→                    <motion.div
+  1237→                      className={`h-full rounded-full ${healthMetrics.dataAccuracy > 80 ? 'bg-emerald-500' : healthMetrics.dataAccuracy > 50 ? 'bg-amber-500' : 'bg-red-500'}`}
+  1238→                      initial={{ width: 0 }}
+  1239→                      animate={{ width: `${healthMetrics.dataAccuracy}%` }}
+  1240→                      transition={{ duration: 1, ease: 'easeOut', delay: 0.4 }}
+  1241→                    />
+  1242→                  </div>
+  1243→                </div>
+  1244→                <div className="space-y-1.5">
+  1245→                  <div className="flex items-center justify-between">
+  1246→                    <span className="text-[11px] font-medium text-muted-foreground">Compliance</span>
+  1247→                    <span className={`text-[11px] font-bold ${healthMetrics.compliance > 80 ? 'text-emerald-700' : healthMetrics.compliance > 50 ? 'text-amber-700' : 'text-red-700'}`}>
+  1248→                      {healthMetrics.compliance}%
+  1249→                    </span>
+  1250→                  </div>
+  1251→                  <div className="h-1.5 rounded-full bg-slate-100 overflow-hidden">
+  1252→                    <motion.div
+  1253→                      className={`h-full rounded-full ${healthMetrics.compliance > 80 ? 'bg-emerald-500' : healthMetrics.compliance > 50 ? 'bg-amber-500' : 'bg-red-500'}`}
+  1254→                      initial={{ width: 0 }}
+  1255→                      animate={{ width: `${healthMetrics.compliance}%` }}
+  1256→                      transition={{ duration: 1, ease: 'easeOut', delay: 0.5 }}
+  1257→                    />
+  1258→                  </div>
+  1259→                </div>
+  1260→              </div>
+  1261→
+  1262→              {/* Label */}
+  1263→              <div className="hidden sm:flex flex-col items-end shrink-0">
+  1264→                <span className="text-xs font-semibold text-foreground">Return Health</span>
+  1265→                <span className="text-[10px] text-muted-foreground">Across all clients</span>
+  1266→              </div>
+  1267→            </div>
+  1268→          </CardContent>
+  1269→        </Card>
+  1270→      </motion.div>
+  1271→
+  1272→      {/* ── Bulk Filing Actions ────────────────────────────────────── */}
+  1273→      {kanbanData.ready.length > 0 && (
+  1274→        <motion.div
+  1275→          initial={{ opacity: 0, y: 8 }}
+  1276→          animate={{ opacity: 1, y: 0 }}
+  1277→          transition={{ duration: 0.3, delay: 0.2 }}
+  1278→          className="px-4 md:px-6 pt-3"
+  1279→        >
+  1280→          <div className="flex items-center justify-between rounded-lg border border-emerald-200 bg-emerald-50/60 px-4 py-2.5">
+  1281→            <div className="flex items-center gap-2">
+  1282→              <div className="flex items-center justify-center size-7 rounded-full bg-emerald-100">
+  1283→                <Send className="size-3.5 text-emerald-700" />
+  1284→              </div>
+  1285→              <span className="text-sm font-medium text-emerald-800">
+  1286→                {kanbanData.ready.length} return{kanbanData.ready.length !== 1 ? 's' : ''} ready to file
+  1287→              </span>
+  1288→            </div>
+  1289→            <div className="flex items-center gap-2">
+  1290→              <Button
+  1291→                size="sm"
+  1292→                variant="outline"
+  1293→                className="h-8 text-xs gap-1.5 border-emerald-300 text-emerald-700 hover:bg-emerald-50"
+  1294→                onClick={() => {
+  1295→                  const readyFilings = kanbanData.ready;
+  1296→                  readyFilings.forEach((f) => handleDownloadJSON(f));
+  1297→                }}
+  1298→              >
+  1299→                <FileOutput className="size-3.5" />
+  1300→                Download JSON for All
+  1301→              </Button>
+  1302→              <Button
+  1303→                size="sm"
+  1304→                className="h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm font-semibold"
+  1305→                onClick={() => {
+  1306→                  toast.success(`Filing ${kanbanData.ready.length} returns`, {
+  1307→                    description: 'All ready returns have been submitted for filing',
+  1308→                    duration: 4000,
+  1309→                  });
+  1310→                }}
+  1311→              >
+  1312→                <Send className="size-3.5" />
+  1313→                File All
+  1314→              </Button>
+  1315→            </div>
+  1316→          </div>
+  1317→        </motion.div>
+  1318→      )}
+  1319→
+  1320→      {/* ── Kanban Board ────────────────────────────────────────────────── */}
+  1321→      <div className="flex-1 min-h-0 overflow-hidden">
+  1322→        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 p-4 md:p-6 h-full">
+  1323→          {KANBAN_COLUMNS.map((col, i) => renderKanbanColumn(col, i))}
+  1324→        </div>
+  1325→      </div>
+  1326→
+  1327→      {/* ── Detail Sheet ────────────────────────────────────────────────── */}
+  1328→      <AnimatePresence>
+  1329→        {sheetOpen && renderDetailSheet()}
+  1330→      </AnimatePresence>
+  1331→    </div>
+  1332→  );
+  1333→}
+  1334→

@@ -96,6 +96,7 @@ import {
   useFilings,
 } from '@/hooks/api';
 import { toast } from 'sonner';
+import { EmptyState } from '@/components/shared/EmptyState';
 import type { Client } from '@/types/gst';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -901,6 +902,117 @@ export default function ClientRegistryPage() {
   // ─── Loading Skeleton ──────────────────────────────────────────────────────
   if (isLoading) {
     return <PageSkeleton />;
+  }
+
+  // ─── Empty state when no clients exist ──────────────────────────────────────
+  if (clients.length === 0) {
+    return (
+      <div className="space-y-6 p-4 md:p-6 max-w-[1400px] mx-auto">
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.35, ease: [0.25, 0.46, 0.45, 0.94] }}
+          className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"
+        >
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight text-foreground">Client Portfolio</h1>
+            <p className="text-sm text-muted-foreground mt-0.5">Monitor health and compliance across all clients</p>
+          </div>
+          <Button
+            onClick={openAddDialog}
+            className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm shrink-0"
+          >
+            <Plus className="size-4" />
+            Add Client
+          </Button>
+        </motion.div>
+        <EmptyState
+          icon={UserPlus}
+          title="No clients added yet"
+          description="Add your first client to start managing their GST compliance."
+          action={{
+            label: 'Add Client',
+            onClick: openAddDialog,
+            icon: UserPlus,
+          }}
+        />
+        {/* Dialog must render even in empty state so openAddDialog works */}
+        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+          <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2.5">
+                <div className="flex size-9 items-center justify-center rounded-xl bg-emerald-100">
+                  <Building2 className="size-4 text-emerald-700" />
+                </div>
+                {editingClient ? 'Edit Client' : 'Add New Client'}
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-2">
+              <div className="space-y-2">
+                <Label>GSTIN *</Label>
+                <Input placeholder="e.g. 27AABCS1429B1Z5" value={form.gstin} onChange={e => { setForm(f => ({ ...f, gstin: e.target.value.toUpperCase() })); setGstinError(null); }} className={gstinError ? 'border-red-300 focus:border-red-500' : ''} />
+                {gstinError && <p className="text-xs text-red-600">{gstinError}</p>}
+              </div>
+              <div className="space-y-2">
+                <Label>Trade Name *</Label>
+                <Input placeholder="e.g. Sharma Enterprises" value={form.tradeName} onChange={e => setForm(f => ({ ...f, tradeName: e.target.value }))} />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label>Legal Name</Label>
+                  <Input placeholder="Legal entity name" value={form.legalName} onChange={e => setForm(f => ({ ...f, legalName: e.target.value }))} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Entity Type</Label>
+                  <Select value={form.entityType} onValueChange={v => setForm(f => ({ ...f, entityType: v }))}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="regular">Regular</SelectItem>
+                      <SelectItem value="composition">Composition</SelectItem>
+                      <SelectItem value="casual">Casual Taxable</SelectItem>
+                      <SelectItem value="isdt">ISD</SelectItem>
+                      <SelectItem value="tcs">TCS Collector</SelectItem>
+                      <SelectItem value="tds">TDS Deductor</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>State</Label>
+                <Select value={form.state} onValueChange={v => { const s = INDIAN_STATES.find(st => st.name === v); setForm(f => ({ ...f, state: v, stateCode: s?.code ?? '' })); }}>
+                  <SelectTrigger><SelectValue placeholder="Select state" /></SelectTrigger>
+                  <SelectContent>
+                    {INDIAN_STATES.map(s => <SelectItem key={s.code} value={s.name}>{s.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label>Email</Label>
+                  <Input placeholder="client@email.com" value={form.contactEmail} onChange={e => setForm(f => ({ ...f, contactEmail: e.target.value }))} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Phone</Label>
+                  <Input placeholder="+91 98765 43210" value={form.contactPhone} onChange={e => setForm(f => ({ ...f, contactPhone: e.target.value }))} />
+                </div>
+              </div>
+            </div>
+            <DialogFooter className="gap-2">
+              <Button variant="outline" onClick={() => setDialogOpen(false)} className="h-9">
+                Cancel
+              </Button>
+              <Button
+                onClick={handleSubmit}
+                disabled={!form.gstin || !form.tradeName || !!gstinError}
+                className="h-9 bg-emerald-600 hover:bg-emerald-700 text-white"
+              >
+                {editingClient ? 'Update Client' : 'Add Client'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </div>
+    );
   }
 
   // ─── Render ───────────────────────────────────────────────────────────────

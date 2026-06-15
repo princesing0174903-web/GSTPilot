@@ -1,0 +1,1436 @@
+     1→'use client';
+     2→
+     3→import React, { useState, useMemo } from 'react';
+     4→import { motion, AnimatePresence } from 'framer-motion';
+     5→import {
+     6→  Card,
+     7→  CardContent,
+     8→  CardHeader,
+     9→  CardTitle,
+    10→  CardDescription,
+    11→} from '@/components/ui/card';
+    12→import { Badge } from '@/components/ui/badge';
+    13→import { Button } from '@/components/ui/button';
+    14→import {
+    15→  Select,
+    16→  SelectContent,
+    17→  SelectItem,
+    18→  SelectTrigger,
+    19→  SelectValue,
+    20→} from '@/components/ui/select';
+    21→import { Skeleton } from '@/components/ui/skeleton';
+    22→import { ScrollArea } from '@/components/ui/scroll-area';
+    23→import { Separator } from '@/components/ui/separator';
+    24→import {
+    25→  CheckCircle2,
+    26→  AlertTriangle,
+    27→  XCircle,
+    28→  Play,
+    29→  Loader2,
+    30→  GitCompareArrows,
+    31→  FileSpreadsheet,
+    32→  Search,
+    33→  Sparkles,
+    34→  ShieldCheck,
+    35→  ShieldAlert,
+    36→  ShieldX,
+    37→  Eye,
+    38→  ArrowRight,
+    39→  ChevronRight,
+    40→  Clock,
+    41→  History,
+    42→  FileText,
+    43→  Copy,
+    44→  AlertCircle,
+    45→  CircleDot,
+    46→  MinusCircle,
+    47→  Inbox,
+    48→} from 'lucide-react';
+    49→import { formatCurrency, generateMismatchExplanation } from '@/lib/gst-utils';
+    50→import { useApp } from '@/contexts/AppContext';
+    51→import { toast } from 'sonner';
+    52→import {
+    53→  useReconResults,
+    54→  useReconRuns,
+    55→  useReconStats,
+    56→  useClients,
+    57→  useCreateReconRun,
+    58→  useUpdateReconWorkflow,
+    59→  useActivities,
+    60→} from '@/hooks/api';
+    61→import type { ReconciliationResult, ReconciliationRun } from '@/types/gst';
+    62→
+    63→// ──────────────────────────────────────────────
+    64→// Types
+    65→// ──────────────────────────────────────────────
+    66→interface ClientOption {
+    67→  id: string;
+    68→  tradeName: string;
+    69→  gstin: string;
+    70→}
+    71→
+    72→interface MismatchDetail {
+    73→  field: string;
+    74→  expected: string | number;
+    75→  actual: string | number;
+    76→  difference?: number;
+    77→}
+    78→
+    79→interface MismatchRecord {
+    80→  id: string;
+    81→  invoiceNumber: string;
+    82→  clientName: string;
+    83→  mismatchCategory: string;
+    84→  mismatchType: string;
+    85→  taxDifference: number;
+    86→  confidenceScore: number;
+    87→  aiExplanation: string;
+    88→  aiRecommendation: string;
+    89→  booksData: {
+    90→    invoiceNumber: string;
+    91→    invoiceDate: string;
+    92→    sellerGstin: string;
+    93→    buyerGstin: string;
+    94→    taxableValue: number;
+    95→    cgst: number;
+    96→    sgst: number;
+    97→    igst: number;
+    98→    totalAmount: number;
+    99→  };
+   100→  gstr2bData: {
+   101→    invoiceNumber: string;
+   102→    invoiceDate: string;
+   103→    sellerGstin: string;
+   104→    buyerGstin: string;
+   105→    taxableValue: number;
+   106→    cgst: number;
+   107→    sgst: number;
+   108→    igst: number;
+   109→    totalAmount: number;
+   110→  } | null;
+   111→  diffFields: string[];
+   112→  resolved: boolean;
+   113→  workflowStatus: string;
+   114→}
+   115→
+   116→interface ReconTimelineEntry {
+   117→  id: string;
+   118→  date: string;
+   119→  clients: string;
+   120→  recordsProcessed: number;
+   121→  matchRate: number;
+   122→}
+   123→
+   124→// ──────────────────────────────────────────────
+   125→// Mismatch Category Config
+   126→// ──────────────────────────────────────────────
+   127→type MismatchCategory = 'all' | 'tax_difference' | 'gstin_mismatch' | 'missing_in_gstr' | 'missing_in_books' | 'duplicate';
+   128→
+   129→interface MismatchCategoryConfig {
+   130→  key: MismatchCategory;
+   131→  label: string;
+   132→  icon: React.ReactNode;
+   133→  color: string;
+   134→  activeBorder: string;
+   135→  bgColor: string;
+   136→}
+   137→
+   138→const MISMATCH_CATEGORIES: MismatchCategoryConfig[] = [
+   139→  {
+   140→    key: 'tax_difference',
+   141→    label: 'Tax Amount Difference',
+   142→    icon: <AlertCircle className="h-3.5 w-3.5" />,
+   143→    color: 'text-amber-700',
+   144→    activeBorder: 'border-emerald-500',
+   145→    bgColor: 'bg-amber-50',
+   146→  },
+   147→  {
+   148→    key: 'gstin_mismatch',
+   149→    label: 'GSTIN Mismatch',
+   150→    icon: <ShieldAlert className="h-3.5 w-3.5" />,
+   151→    color: 'text-orange-700',
+   152→    activeBorder: 'border-emerald-500',
+   153→    bgColor: 'bg-orange-50',
+   154→  },
+   155→  {
+   156→    key: 'missing_in_gstr',
+   157→    label: 'Invoice Not in GSTR-2B',
+   158→    icon: <FileText className="h-3.5 w-3.5" />,
+   159→    color: 'text-rose-700',
+   160→    activeBorder: 'border-emerald-500',
+   161→    bgColor: 'bg-rose-50',
+   162→  },
+   163→  {
+   164→    key: 'missing_in_books',
+   165→    label: 'Invoice Not in Books',
+   166→    icon: <Copy className="h-3.5 w-3.5" />,
+   167→    color: 'text-violet-700',
+   168→    activeBorder: 'border-emerald-500',
+   169→    bgColor: 'bg-violet-50',
+   170→  },
+   171→  {
+   172→    key: 'duplicate',
+   173→    label: 'Duplicate Detected',
+   174→    icon: <Copy className="h-3.5 w-3.5" />,
+   175→    color: 'text-pink-700',
+   176→    activeBorder: 'border-emerald-500',
+   177→    bgColor: 'bg-pink-50',
+   178→  },
+   179→];
+   180→
+   181→// ──────────────────────────────────────────────
+   182→// Mismatch type badge styling
+   183→// ──────────────────────────────────────────────
+   184→function getMismatchBadgeClasses(category: string): string {
+   185→  switch (category) {
+   186→    case 'tax_difference':
+   187→      return 'bg-amber-50 text-amber-800 border-amber-200';
+   188→    case 'gstin_mismatch':
+   189→      return 'bg-orange-50 text-orange-800 border-orange-200';
+   190→    case 'missing_in_gstr':
+   191→      return 'bg-rose-50 text-rose-800 border-rose-200';
+   192→    case 'missing_in_books':
+   193→      return 'bg-violet-50 text-violet-800 border-violet-200';
+   194→    case 'duplicate':
+   195→      return 'bg-pink-50 text-pink-800 border-pink-200';
+   196→    default:
+   197→      return 'bg-slate-50 text-slate-800 border-slate-200';
+   198→  }
+   199→}
+   200→
+   201→function getMismatchDotColor(category: string): string {
+   202→  switch (category) {
+   203→    case 'tax_difference': return 'bg-amber-500';
+   204→    case 'gstin_mismatch': return 'bg-orange-500';
+   205→    case 'missing_in_gstr': return 'bg-rose-500';
+   206→    case 'missing_in_books': return 'bg-violet-500';
+   207→    case 'duplicate': return 'bg-pink-500';
+   208→    default: return 'bg-slate-500';
+   209→  }
+   210→}
+   211→
+   212→// ──────────────────────────────────────────────
+   213→// Animated SVG Ring for Match Rate
+   214→// ──────────────────────────────────────────────
+   215→function MatchRateRing({
+   216→  matchPercent,
+   217→  partialPercent,
+   218→  mismatchPercent,
+   219→  size = 160,
+   220→  strokeWidth = 14,
+   221→}: {
+   222→  matchPercent: number;
+   223→  partialPercent: number;
+   224→  mismatchPercent: number;
+   225→  size?: number;
+   226→  strokeWidth?: number;
+   227→}) {
+   228→  const radius = (size - strokeWidth) / 2;
+   229→  const circumference = 2 * Math.PI * radius;
+   230→  const gapAngle = 2; // degrees gap between segments
+   231→
+   232→  const totalGap = gapAngle * 3 * (circumference / 360);
+   233→  const availableCircumference = circumference - totalGap;
+   234→  const gapLen = totalGap / 3;
+   235→
+   236→  const matchLen = (matchPercent / 100) * availableCircumference;
+   237→  const partialLen = (partialPercent / 100) * availableCircumference;
+   238→  const mismatchLen = (mismatchPercent / 100) * availableCircumference;
+   239→
+   240→  const matchOffset = 0;
+   241→  const partialOffset = -(matchLen + gapLen);
+   242→  const mismatchOffset = -(matchLen + gapLen + partialLen + gapLen);
+   243→
+   244→  return (
+   245→    <div className="relative inline-flex items-center justify-center" style={{ width: size, height: size }}>
+   246→      <svg width={size} height={size} className="-rotate-90">
+   247→        {/* Background track */}
+   248→        <circle
+   249→          cx={size / 2}
+   250→          cy={size / 2}
+   251→          r={radius}
+   252→          fill="none"
+   253→          stroke="#f1f5f9"
+   254→          strokeWidth={strokeWidth}
+   255→        />
+   256→        {/* Glow filter */}
+   257→        <defs>
+   258→          <filter id="ringGlow" x="-20%" y="-20%" width="140%" height="140%">
+   259→            <feGaussianBlur stdDeviation="2.5" result="blur" />
+   260→            <feMerge>
+   261→              <feMergeNode in="blur" />
+   262→              <feMergeNode in="SourceGraphic" />
+   263→            </feMerge>
+   264→          </filter>
+   265→        </defs>
+   266→        {/* Green segment — matched */}
+   267→        {matchPercent > 0 && (
+   268→          <motion.circle
+   269→            cx={size / 2}
+   270→            cy={size / 2}
+   271→            r={radius}
+   272→            fill="none"
+   273→            stroke="#10b981"
+   274→            strokeWidth={strokeWidth}
+   275→            strokeLinecap="round"
+   276→            strokeDasharray={`${matchLen} ${circumference - matchLen}`}
+   277→            strokeDashoffset={matchOffset}
+   278→            initial={{ strokeDasharray: `0 ${circumference}` }}
+   279→            animate={{ strokeDasharray: `${matchLen} ${circumference - matchLen}` }}
+   280→            transition={{ duration: 1.4, ease: [0.25, 0.46, 0.45, 0.94] }}
+   281→            filter="url(#ringGlow)"
+   282→          />
+   283→        )}
+   284→        {/* Amber segment — partial */}
+   285→        {partialPercent > 0 && (
+   286→          <motion.circle
+   287→            cx={size / 2}
+   288→            cy={size / 2}
+   289→            r={radius}
+   290→            fill="none"
+   291→            stroke="#f59e0b"
+   292→            strokeWidth={strokeWidth}
+   293→            strokeLinecap="round"
+   294→            strokeDasharray={`${partialLen} ${circumference - partialLen}`}
+   295→            strokeDashoffset={partialOffset}
+   296→            initial={{ strokeDasharray: `0 ${circumference}`, strokeDashoffset: 0 }}
+   297→            animate={{ strokeDasharray: `${partialLen} ${circumference - partialLen}`, strokeDashoffset: partialOffset }}
+   298→            transition={{ duration: 1.4, ease: [0.25, 0.46, 0.45, 0.94], delay: 0.3 }}
+   299→            filter="url(#ringGlow)"
+   300→          />
+   301→        )}
+   302→        {/* Red segment — mismatch/missing */}
+   303→        {mismatchPercent > 0 && (
+   304→          <motion.circle
+   305→            cx={size / 2}
+   306→            cy={size / 2}
+   307→            r={radius}
+   308→            fill="none"
+   309→            stroke="#ef4444"
+   310→            strokeWidth={strokeWidth}
+   311→            strokeLinecap="round"
+   312→            strokeDasharray={`${mismatchLen} ${circumference - mismatchLen}`}
+   313→            strokeDashoffset={mismatchOffset}
+   314→            initial={{ strokeDasharray: `0 ${circumference}`, strokeDashoffset: 0 }}
+   315→            animate={{ strokeDasharray: `${mismatchLen} ${circumference - mismatchLen}`, strokeDashoffset: mismatchOffset }}
+   316→            transition={{ duration: 1.4, ease: [0.25, 0.46, 0.45, 0.94], delay: 0.6 }}
+   317→            filter="url(#ringGlow)"
+   318→          />
+   319→        )}
+   320→      </svg>
+   321→      {/* Center content */}
+   322→      <div className="absolute inset-0 flex flex-col items-center justify-center">
+   323→        <motion.span
+   324→          className="text-4xl font-bold tracking-tight text-foreground"
+   325→          initial={{ opacity: 0, scale: 0.5 }}
+   326→          animate={{ opacity: 1, scale: 1 }}
+   327→          transition={{ delay: 0.8, duration: 0.5, type: 'spring' }}
+   328→        >
+   329→          {matchPercent}%
+   330→        </motion.span>
+   331→        <span className="text-[11px] font-medium text-muted-foreground mt-0.5">Match Rate</span>
+   332→      </div>
+   333→    </div>
+   334→  );
+   335→}
+   336→
+   337→// ──────────────────────────────────────────────
+   338→// Animation variants
+   339→// ──────────────────────────────────────────────
+   340→const pageVariants = {
+   341→  hidden: { opacity: 0 },
+   342→  visible: { opacity: 1, transition: { duration: 0.4 } },
+   343→};
+   344→
+   345→const staggerContainer = {
+   346→  hidden: {},
+   347→  visible: { transition: { staggerChildren: 0.05 } },
+   348→};
+   349→
+   350→const cardEntrance = {
+   351→  hidden: { opacity: 0, y: 12, scale: 0.97 },
+   352→  visible: { opacity: 1, y: 0, scale: 1, transition: { duration: 0.3, ease: 'easeOut' } },
+   353→};
+   354→
+   355→const slideInRight = {
+   356→  hidden: { opacity: 0, x: 20 },
+   357→  visible: { opacity: 1, x: 0, transition: { duration: 0.35, ease: 'easeOut' } },
+   358→};
+   359→
+   360→// ──────────────────────────────────────────────
+   361→// Comparison Field Row
+   362→// ──────────────────────────────────────────────
+   363→function ComparisonField({
+   364→  label,
+   365→  booksValue,
+   366→  gstr2bValue,
+   367→  isDiff = false,
+   368→}: {
+   369→  label: string;
+   370→  booksValue: string | number;
+   371→  gstr2bValue: string | number;
+   372→  isDiff?: boolean;
+   373→}) {
+   374→  return (
+   375→    <div className="grid grid-cols-[1fr_1fr_1fr] gap-0">
+   376→      <div className="px-3 py-2 text-xs font-medium text-muted-foreground border-b border-border/40">
+   377→        {label}
+   378→      </div>
+   379→      <div className={`px-3 py-2 text-xs border-b border-border/40 ${isDiff ? 'bg-emerald-50/70 font-semibold text-emerald-900' : 'text-foreground'}`}>
+   380→        {booksValue || '—'}
+   381→      </div>
+   382→      <div className={`px-3 py-2 text-xs border-b border-border/40 ${isDiff ? 'bg-amber-50/70 font-semibold text-amber-900' : 'text-foreground'}`}>
+   383→        {gstr2bValue || '—'}
+   384→      </div>
+   385→    </div>
+   386→  );
+   387→}
+   388→
+   389→// ─── Map API ReconciliationResult to local MismatchRecord ─────────────────
+   390→function mapReconResultToMismatch(
+   391→  result: ReconciliationResult,
+   392→  clientName: string
+   393→): MismatchRecord {
+   394→  // Parse mismatches JSON string
+   395→  let parsedMismatches: MismatchDetail[] = [];
+   396→  try {
+   397→    if (result.mismatches) {
+   398→      parsedMismatches = JSON.parse(result.mismatches);
+   399→    }
+   400→  } catch {
+   401→    parsedMismatches = [];
+   402→  }
+   403→
+   404→  // Derive category from matchStatus
+   405→  const mismatchCategory =
+   406→    result.matchStatus === 'missing_in_gstr' ? 'missing_in_gstr' :
+   407→    result.matchStatus === 'missing_in_books' ? 'missing_in_books' :
+   408→    result.matchStatus === 'duplicate' ? 'duplicate' :
+   409→    parsedMismatches.some(m => m.field === 'vendor_gstin' || m.field === 'sellerGstin') ? 'gstin_mismatch' :
+   410→    'tax_difference';
+   411→
+   412→  const mismatchType =
+   413→    result.matchStatus === 'perfect_match' ? 'Perfect Match' :
+   414→    result.matchStatus === 'partial_match' ? 'Partial Match' :
+   415→    result.matchStatus === 'missing_in_gstr' ? 'Missing in Portal' :
+   416→    result.matchStatus === 'missing_in_books' ? 'Missing in Books' :
+   417→    result.matchStatus === 'duplicate' ? 'Duplicate' :
+   418→    'Mismatch';
+   419→
+   420→  // Compute tax difference from mismatch details
+   421→  const taxDiff = parsedMismatches.reduce((sum, m) => sum + (m.difference || 0), 0);
+   422→
+   423→  // Extract diff fields for highlighting
+   424→  const diffFields = parsedMismatches.map(m => m.field);
+   425→
+   426→  // Build booksData from invoice if available, else from mismatch details
+   427→  const booksTaxableValue = parsedMismatches.find(m => m.field === 'taxableValue')?.expected as number || 0;
+   428→  const portalTaxableValue = parsedMismatches.find(m => m.field === 'taxableValue')?.actual as number || 0;
+   429→
+   430→  return {
+   431→    id: result.id,
+   432→    invoiceNumber: result.invoice?.invoiceNumber ?? result.sourceGstin ?? 'Unknown',
+   433→    clientName,
+   434→    mismatchCategory,
+   435→    mismatchType,
+   436→    taxDifference: Math.abs(taxDiff),
+   437→    confidenceScore: result.confidenceScore ?? 90,
+   438→    aiExplanation: result.aiExplanation ?? generateMismatchExplanation(diffFields),
+   439→    aiRecommendation: result.aiRecommendation ?? 'Review manually',
+   440→    booksData: {
+   441→      invoiceNumber: result.invoice?.invoiceNumber ?? '—',
+   442→      invoiceDate: result.invoice?.invoiceDate ?? '—',
+   443→      sellerGstin: result.sourceGstin ?? result.invoice?.sellerGstin ?? '—',
+   444→      buyerGstin: result.invoice?.buyerGstin ?? '—',
+   445→      taxableValue: booksTaxableValue || (result.invoice?.taxableValue ?? 0),
+   446→      cgst: result.invoice?.cgst ?? 0,
+   447→      sgst: result.invoice?.sgst ?? 0,
+   448→      igst: result.invoice?.igst ?? 0,
+   449→      totalAmount: result.invoice?.totalAmount ?? 0,
+   450→    },
+   451→    gstr2bData: result.matchStatus === 'missing_in_gstr' ? null : {
+   452→      invoiceNumber: result.matchedGstin ?? result.invoice?.invoiceNumber ?? '—',
+   453→      invoiceDate: result.invoice?.invoiceDate ?? '—',
+   454→      sellerGstin: result.matchedGstin ?? result.sourceGstin ?? '—',
+   455→      buyerGstin: '—',
+   456→      taxableValue: portalTaxableValue,
+   457→      cgst: 0,
+   458→      sgst: 0,
+   459→      igst: 0,
+   460→      totalAmount: portalTaxableValue,
+   461→    },
+   462→    diffFields,
+   463→    resolved: result.resolved,
+   464→    workflowStatus: result.workflowStatus,
+   465→  };
+   466→}
+   467→
+   468→// ──────────────────────────────────────────────
+   469→// Main Component
+   470→// ──────────────────────────────────────────────
+   471→export default function ReconciliationPage() {
+   472→  const { selectedClientId, setCurrentView } = useApp();
+   473→
+   474→  // ── React Query hooks ──
+   475→  const { data: clientsData, isLoading: clientsLoading } = useClients();
+   476→  const { data: reconResultsData, isLoading: resultsLoading } = useReconResults(
+   477→    selectedClientId ? { clientId: selectedClientId } : undefined
+   478→  );
+   479→  const { data: reconStatsData, isLoading: statsLoading } = useReconStats(selectedClientId ?? undefined);
+   480→  const { data: reconRunsData } = useReconRuns(selectedClientId ?? undefined);
+   481→  const { data: activitiesData } = useActivities(selectedClientId ?? undefined);
+   482→
+   483→  // Mutations
+   484→  const createReconRunMutation = useCreateReconRun();
+   485→  const updateWorkflowMutation = useUpdateReconWorkflow();
+   486→
+   487→  // ── Filters ──
+   488→  const [filterClient, setFilterClient] = useState<string>('all');
+   489→  const [activeCategory, setActiveCategory] = useState<MismatchCategory>('all');
+   490→  const [filterSeverity, setFilterSeverity] = useState<string>('all');
+   491→
+   492→  // ── Build client options from API ──
+   493→  const clients: ClientOption[] = useMemo(() =>
+   494→    (clientsData?.clients ?? []).map(c => ({ id: c.id, tradeName: c.tradeName, gstin: c.gstin })),
+   495→    [clientsData]
+   496→  );
+   497→
+   498→  // ── Client map for name lookups ──
+   499→  const clientMap = useMemo(() => {
+   500→    const map = new Map<string, string>();
+   501→    for (const c of clients) {
+   502→      map.set(c.id, c.tradeName);
+   503→    }
+   504→    return map;
+   505→  }, [clients]);
+   506→
+   507→  // ── Determine active client ──
+   508→  const activeClientId = selectedClientId || (filterClient !== 'all' ? filterClient : null);
+   509→
+   510→  // ── Build MismatchRecords from API recon results ──
+   511→  const apiResults = reconResultsData?.results ?? [];
+   512→  const mismatches: MismatchRecord[] = useMemo(() =>
+   513→    apiResults
+   514→      .filter(r => r.matchStatus !== 'perfect_match')
+   515→      .map(r => mapReconResultToMismatch(r, clientMap.get(r.clientId) ?? 'Unknown')),
+   516→    [apiResults, clientMap]
+   517→  );
+   518→
+   519→  // ── Compute match counts from stats ──
+   520→  const stats = reconStatsData?.stats;
+   521→  const perfectMatchCount = stats?.matchBreakdown?.perfect_match ?? 0;
+   522→  const partialMatchCount = stats?.matchBreakdown?.partial_match ?? 0;
+   523→
+   524→  // ── Timeline from recon runs ──
+   525→  const timeline: ReconTimelineEntry[] = useMemo(() => {
+   526→    const runs = reconRunsData?.runs ?? [];
+   527→    return runs.map(run => ({
+   528→      id: run.id,
+   529→      date: run.createdAt,
+   530→      clients: clientMap.get(run.clientId) ?? 'Unknown',
+   531→      recordsProcessed: run.totalRecords,
+   532→      matchRate: run.totalRecords > 0 ? Math.round((run.matched / run.totalRecords) * 100) : 0,
+   533→    }));
+   534→  }, [reconRunsData, clientMap]);
+   535→
+   536→  // ── Loading ──
+   537→  const loading = clientsLoading || resultsLoading || statsLoading;
+   538→  const [runningRecon, setRunningRecon] = useState(false);
+   539→
+   540→  // ── Selection ──
+   541→  const [selectedMismatchId, setSelectedMismatchId] = useState<string | null>(null);
+   542→
+   543→  // ── Sidebar ──
+   544→  const [timelineCollapsed, setTimelineCollapsed] = useState(false);
+   545→
+   546→  // ──────────────────────────────────────────
+   547→  // Helpers
+   548→  // ──────────────────────────────────────────
+   549→  function getMismatchSeverity(m: MismatchRecord): 'critical' | 'high' | 'medium' | 'low' {
+   550→    if (m.mismatchCategory === 'missing_in_gstr' && m.taxDifference > 3000) return 'critical';
+   551→    if (m.taxDifference > 3000) return 'critical';
+   552→    if (m.mismatchCategory === 'gstin_mismatch') return 'high';
+   553→    if (m.taxDifference > 1000) return 'high';
+   554→    if (m.mismatchCategory === 'duplicate') return 'medium';
+   555→    if (m.taxDifference <= 1000 && m.taxDifference > 0) return 'medium';
+   556→    return 'low';
+   557→  }
+   558→
+   559→  function getSeverityConfig(severity: string): { color: string; bgColor: string; dotClass: string; label: string } {
+   560→    switch (severity) {
+   561→      case 'critical': return { color: 'text-red-700', bgColor: 'bg-red-50 border-red-200', dotClass: 'bg-red-500', label: 'Critical' };
+   562→      case 'high': return { color: 'text-orange-700', bgColor: 'bg-orange-50 border-orange-200', dotClass: 'bg-orange-500', label: 'High' };
+   563→      case 'medium': return { color: 'text-amber-700', bgColor: 'bg-amber-50 border-amber-200', dotClass: 'bg-amber-500', label: 'Medium' };
+   564→      case 'low': return { color: 'text-slate-600', bgColor: 'bg-slate-50 border-slate-200', dotClass: 'bg-slate-400', label: 'Low' };
+   565→      default: return { color: 'text-slate-600', bgColor: 'bg-slate-50 border-slate-200', dotClass: 'bg-slate-400', label: 'Low' };
+   566→    }
+   567→  }
+   568→
+   569→  const filteredMismatches = useMemo(() => {
+   570→    let filtered = mismatches;
+   571→    if (filterClient !== 'all') {
+   572→      filtered = filtered.filter(m =>
+   573→        clients.find(c => c.id === filterClient)?.tradeName === m.clientName
+   574→      );
+   575→    }
+   576→    if (activeCategory !== 'all') {
+   577→      filtered = filtered.filter(m => m.mismatchCategory === activeCategory);
+   578→    }
+   579→    if (filterSeverity !== 'all') {
+   580→      filtered = filtered.filter(m => getMismatchSeverity(m) === filterSeverity);
+   581→    }
+   582→    return filtered;
+   583→  }, [mismatches, filterClient, activeCategory, clients, filterSeverity]);
+   584→
+   585→  const selectedMismatch = useMemo(
+   586→    () => mismatches.find(m => m.id === selectedMismatchId) || null,
+   587→    [mismatches, selectedMismatchId]
+   588→  );
+   589→
+   590→  const categoryCounts = useMemo(() => {
+   591→    const counts: Record<string, number> = {
+   592→      tax_difference: 0,
+   593→      gstin_mismatch: 0,
+   594→      missing_in_gstr: 0,
+   595→      missing_in_books: 0,
+   596→      duplicate: 0,
+   597→    };
+   598→    mismatches.forEach(m => {
+   599→      if (counts[m.mismatchCategory] !== undefined) {
+   600→        counts[m.mismatchCategory]++;
+   601→      }
+   602→    });
+   603→    return counts;
+   604→  }, [mismatches]);
+   605→
+   606→  const totalRecords = perfectMatchCount + partialMatchCount + mismatches.length;
+   607→  const totalGstDifference = mismatches.reduce((sum, m) => sum + m.taxDifference, 0);
+   608→
+   609→  const matchPercent = totalRecords > 0 ? Math.round((perfectMatchCount / totalRecords) * 100) : 0;
+   610→  const partialPercent = totalRecords > 0 ? Math.round((partialMatchCount / totalRecords) * 100) : 0;
+   611→  const mismatchPercent = totalRecords > 0 ? 100 - matchPercent - partialPercent : 0;
+   612→
+   613→  const isEmpty = totalRecords === 0 && !loading;
+   614→
+   615→  // ──────────────────────────────────────────
+   616→  // Actions
+   617→  // ──────────────────────────────────────────
+   618→  const handleRunReconciliation = async () => {
+   619→    const clientId = selectedClientId || (filterClient !== 'all' ? filterClient : null);
+   620→    if (!clientId) {
+   621→      toast.error('Select a client first to run reconciliation');
+   622→      return;
+   623→    }
+   624→    setRunningRecon(true);
+   625→    try {
+   626→      await createReconRunMutation.mutateAsync({
+   627→        clientId,
+   628→        period: '2025-06',
+   629→      });
+   630→      toast.success('Reconciliation run completed successfully');
+   631→    } catch (err) {
+   632→      toast.error(err instanceof Error ? err.message : 'Error running reconciliation');
+   633→    } finally {
+   634→      setRunningRecon(false);
+   635→    }
+   636→  };
+   637→
+   638→  const handleAcceptGSTR2B = (id: string) => {
+   639→    updateWorkflowMutation.mutate(
+   640→      { id, workflowStatus: 'resolved' },
+   641→      {
+   642→        onSuccess: () => toast.success('Accepted GSTR-2B value — mismatch resolved'),
+   643→        onError: (err) => toast.error(err.message),
+   644→      }
+   645→    );
+   646→  };
+   647→
+   648→  const handleKeepBooks = (id: string) => {
+   649→    updateWorkflowMutation.mutate(
+   650→      { id, workflowStatus: 'resolved' },
+   651→      {
+   652→        onSuccess: () => toast.success('Kept books value — mismatch resolved'),
+   653→        onError: (err) => toast.error(err.message),
+   654→      }
+   655→    );
+   656→  };
+   657→
+   658→  const handleCustomResolution = (id: string) => {
+   659→    updateWorkflowMutation.mutate(
+   660→      { id, workflowStatus: 'under_review' },
+   661→      {
+   662→        onSuccess: () => toast.info('Marked for custom resolution — under review'),
+   663→        onError: (err) => toast.error(err.message),
+   664→      }
+   665→    );
+   666→  };
+   667→
+   668→  const handleAutoResolve = () => {
+   669→    const toResolve = mismatches.filter(m => !m.resolved && m.confidenceScore >= 93);
+   670→    if (toResolve.length === 0) {
+   671→      toast.info('No high-confidence mismatches to auto-resolve');
+   672→      return;
+   673→    }
+   674→    // Resolve each one
+   675→    for (const m of toResolve) {
+   676→      updateWorkflowMutation.mutate(
+   677→        { id: m.id, workflowStatus: 'resolved' },
+   678→        {
+   679→          onSuccess: () => {},
+   680→          onError: () => {},
+   681→        }
+   682→      );
+   683→    }
+   684→    toast.success(`Auto-resolving ${toResolve.length} mismatches with high confidence`);
+   685→  };
+   686→
+   687→  // ──────────────────────────────────────────
+   688→  // Render: Loading Skeleton
+   689→  // ──────────────────────────────────────────
+   690→  if (loading) {
+   691→    return (
+   692→      <div className="p-4 md:p-6 space-y-6 max-w-[1440px] mx-auto">
+   693→        <div className="flex items-center justify-between">
+   694→          <div className="space-y-2">
+   695→            <Skeleton className="h-8 w-52" />
+   696→            <Skeleton className="h-4 w-64" />
+   697→          </div>
+   698→          <div className="flex gap-3">
+   699→            <Skeleton className="h-9 w-[160px] rounded-lg" />
+   700→            <Skeleton className="h-9 w-40 rounded-lg" />
+   701→          </div>
+   702→        </div>
+   703→
+   704→        <div className="flex flex-col md:flex-row items-center gap-6 py-6">
+   705→          <Skeleton className="h-[160px] w-[160px] rounded-full" />
+   706→          <div className="grid grid-cols-4 gap-3 flex-1 w-full">
+   707→            {Array.from({ length: 4 }).map((_, i) => (
+   708→              <Skeleton key={i} className="h-24 rounded-xl" />
+   709→            ))}
+   710→          </div>
+   711→        </div>
+   712→
+   713→        <Skeleton className="h-12 w-full rounded-lg" />
+   714→
+   715→        <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+   716→          <div className="lg:col-span-2 space-y-3">
+   717→            {Array.from({ length: 4 }).map((_, i) => (
+   718→              <Skeleton key={i} className="h-24 rounded-xl" />
+   719→            ))}
+   720→          </div>
+   721→          <Skeleton className="lg:col-span-3 h-96 rounded-xl" />
+   722→        </div>
+   723→      </div>
+   724→    );
+   725→  }
+   726→
+   727→  // ──────────────────────────────────────────
+   728→  // Render: Empty State
+   729→  // ──────────────────────────────────────────
+   730→  if (isEmpty) {
+   731→    return (
+   732→      <motion.div
+   733→        variants={pageVariants}
+   734→        initial="hidden"
+   735→        animate="visible"
+   736→        className="p-4 md:p-6 max-w-[1440px] mx-auto"
+   737→      >
+   738→        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
+   739→          <div>
+   740→            <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground">
+   741→              Investigation Center
+   742→            </h1>
+   743→            <p className="text-muted-foreground text-sm mt-1">
+   744→              Reconcile books with GST portal
+   745→            </p>
+   746→          </div>
+   747→          <Button
+   748→            onClick={handleRunReconciliation}
+   749→            disabled={runningRecon}
+   750→            className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
+   751→          >
+   752→            {runningRecon ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+   753→            Run Reconciliation
+   754→          </Button>
+   755→        </div>
+   756→
+   757→        <motion.div
+   758→          initial={{ opacity: 0, scale: 0.95 }}
+   759→          animate={{ opacity: 1, scale: 1 }}
+   760→          transition={{ delay: 0.2, duration: 0.5 }}
+   761→          className="flex flex-col items-center justify-center py-24 text-center"
+   762→        >
+   763→          <div className="flex items-center justify-center h-20 w-20 rounded-2xl bg-muted/60 mb-6">
+   764→            <GitCompareArrows className="h-10 w-10 text-muted-foreground/60" />
+   765→          </div>
+   766→          <h3 className="text-lg font-semibold text-foreground mb-2">
+   767→            No reconciliation runs yet
+   768→          </h3>
+   769→          <p className="text-sm text-muted-foreground max-w-sm mb-6">
+   770→            Run your first reconciliation to match your books with GST portal data and identify discrepancies.
+   771→          </p>
+   772→          <Button
+   773→            onClick={handleRunReconciliation}
+   774→            disabled={runningRecon}
+   775→            className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
+   776→          >
+   777→            {runningRecon ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+   778→            Run Your First Reconciliation
+   779→          </Button>
+   780→        </motion.div>
+   781→      </motion.div>
+   782→    );
+   783→  }
+   784→
+   785→  // ──────────────────────────────────────────
+   786→  // Render: Main Investigation Center
+   787→  // ──────────────────────────────────────────
+   788→  return (
+   789→    <motion.div
+   790→      variants={pageVariants}
+   791→      initial="hidden"
+   792→      animate="visible"
+   793→      className="p-4 md:p-6 max-w-[1440px] mx-auto space-y-5"
+   794→    >
+   795→      {/* ════════════════════════════════════════════
+   796→          1. HEADER
+   797→      ════════════════════════════════════════════ */}
+   798→      <motion.div
+   799→        initial={{ opacity: 0, y: -10 }}
+   800→        animate={{ opacity: 1, y: 0 }}
+   801→        transition={{ duration: 0.4 }}
+   802→        className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4"
+   803→      >
+   804→        <div>
+   805→          <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground">
+   806→            Investigation Center
+   807→          </h1>
+   808→          <p className="text-muted-foreground text-sm mt-1">
+   809→            Reconcile books with GST portal
+   810→          </p>
+   811→        </div>
+   812→        <div className="flex items-center gap-3">
+   813→          <Select value={filterClient} onValueChange={setFilterClient}>
+   814→            <SelectTrigger className="w-[180px] h-9 text-sm bg-background">
+   815→              <SelectValue placeholder="All Clients" />
+   816→            </SelectTrigger>
+   817→            <SelectContent>
+   818→              <SelectItem value="all">All Clients</SelectItem>
+   819→              {clients.map(c => (
+   820→                <SelectItem key={c.id} value={c.id}>
+   821→                  {c.tradeName}
+   822→                </SelectItem>
+   823→              ))}
+   824→            </SelectContent>
+   825→          </Select>
+   826→
+   827→          <Button
+   828→            onClick={handleAutoResolve}
+   829→            variant="outline"
+   830→            className="gap-2 border-emerald-200 text-emerald-700 hover:bg-emerald-50 hover:border-emerald-300 shadow-sm"
+   831→            disabled={updateWorkflowMutation.isPending}
+   832→          >
+   833→            <Sparkles className="h-4 w-4" />
+   834→            Auto Resolve
+   835→          </Button>
+   836→          <Button
+   837→            onClick={handleRunReconciliation}
+   838→            disabled={runningRecon}
+   839→            className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
+   840→          >
+   841→            {runningRecon ? (
+   842→              <Loader2 className="h-4 w-4 animate-spin" />
+   843→            ) : (
+   844→              <Play className="h-4 w-4" />
+   845→            )}
+   846→            Run Reconciliation
+   847→          </Button>
+   848→        </div>
+   849→      </motion.div>
+   850→
+   851→      {/* ════════════════════════════════════════════
+   852→          2. MATCH RATE HERO SECTION
+   853→      ════════════════════════════════════════════ */}
+   854→      <motion.div
+   855→        initial={{ opacity: 0, y: 10 }}
+   856→        animate={{ opacity: 1, y: 0 }}
+   857→        transition={{ duration: 0.5, delay: 0.1 }}
+   858→      >
+   859→        <Card className="border-0 shadow-sm bg-gradient-to-b from-background to-muted/20">
+   860→          <CardContent className="py-6 px-4 md:px-6">
+   861→            <div className="flex flex-col md:flex-row items-center gap-6 md:gap-10">
+   862→              {/* SVG Ring */}
+   863→              <MatchRateRing
+   864→                matchPercent={matchPercent}
+   865→                partialPercent={partialPercent}
+   866→                mismatchPercent={mismatchPercent}
+   867→                size={160}
+   868→                strokeWidth={14}
+   869→              />
+   870→
+   871→              {/* 4 Category Cards */}
+   872→              <motion.div
+   873→                variants={staggerContainer}
+   874→                initial="hidden"
+   875→                animate="visible"
+   876→                className="grid grid-cols-2 md:grid-cols-4 gap-3 flex-1 w-full"
+   877→              >
+   878→                {/* Perfect Match */}
+   879→                <motion.div variants={cardEntrance}>
+   880→                  <div className="flex flex-col items-center gap-1.5 p-4 rounded-xl bg-emerald-50/80 border border-emerald-100">
+   881→                    <div className="flex items-center gap-1.5">
+   882→                      <span className="h-2 w-2 rounded-full bg-emerald-500" />
+   883→                      <span className="text-[11px] font-medium text-emerald-700">Perfect Match</span>
+   884→                    </div>
+   885→                    <span className="text-2xl font-bold text-emerald-800">{perfectMatchCount}</span>
+   886→                  </div>
+   887→                </motion.div>
+   888→
+   889→                {/* Partial Match */}
+   890→                <motion.div variants={cardEntrance}>
+   891→                  <div className="flex flex-col items-center gap-1.5 p-4 rounded-xl bg-amber-50/80 border border-amber-100">
+   892→                    <div className="flex items-center gap-1.5">
+   893→                      <span className="h-2 w-2 rounded-full bg-amber-500" />
+   894→                      <span className="text-[11px] font-medium text-amber-700">Partial Match</span>
+   895→                    </div>
+   896→                    <span className="text-2xl font-bold text-amber-800">{partialMatchCount}</span>
+   897→                  </div>
+   898→                </motion.div>
+   899→
+   900→                {/* Mismatch */}
+   901→                <motion.div variants={cardEntrance}>
+   902→                  <div className="flex flex-col items-center gap-1.5 p-4 rounded-xl bg-red-50/80 border border-red-100">
+   903→                    <div className="flex items-center gap-1.5">
+   904→                      <span className="h-2 w-2 rounded-full bg-red-500" />
+   905→                      <span className="text-[11px] font-medium text-red-700">Mismatch</span>
+   906→                    </div>
+   907→                    <span className="text-2xl font-bold text-red-800">{mismatches.length}</span>
+   908→                    {totalGstDifference > 0 && (
+   909→                      <span className="text-[10px] font-semibold text-red-600">
+   910→                        {formatCurrency(totalGstDifference)} diff
+   911→                      </span>
+   912→                    )}
+   913→                  </div>
+   914→                </motion.div>
+   915→
+   916→                {/* Missing */}
+   917→                <motion.div variants={cardEntrance}>
+   918→                  <div className="flex flex-col items-center gap-1.5 p-4 rounded-xl bg-slate-50/80 border border-slate-200">
+   919→                    <div className="flex items-center gap-1.5">
+   920→                      <span className="h-2 w-2 rounded-full bg-slate-400" />
+   921→                      <span className="text-[11px] font-medium text-slate-600">Missing</span>
+   922→                    </div>
+   923→                    <span className="text-2xl font-bold text-slate-700">
+   924→                      {categoryCounts['missing_in_gstr'] + categoryCounts['missing_in_books']}
+   925→                    </span>
+   926→                  </div>
+   927→                </motion.div>
+   928→              </motion.div>
+   929→            </div>
+   930→          </CardContent>
+   931→        </Card>
+   932→      </motion.div>
+   933→
+   934→      {/* ════════════════════════════════════════════
+   935→          3. MISMATCH CATEGORIES (filter strip)
+   936→      ════════════════════════════════════════════ */}
+   937→      <div className="flex items-center gap-3">
+   938→        <motion.div
+   939→          initial={{ opacity: 0 }}
+   940→          animate={{ opacity: 1 }}
+   941→          transition={{ delay: 0.25 }}
+   942→          className="flex gap-2 overflow-x-auto pb-1 scrollbar-none flex-1"
+   943→        >
+   944→        {/* All button */}
+   945→        <button
+   946→          onClick={() => setActiveCategory('all')}
+   947→          className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg border text-xs font-medium whitespace-nowrap transition-all ${
+   948→            activeCategory === 'all'
+   949→              ? 'border-emerald-500 bg-emerald-50 text-emerald-800 shadow-sm'
+   950→              : 'border-border bg-background text-muted-foreground hover:border-emerald-300 hover:bg-emerald-50/30'
+   951→          }`}
+   952→        >
+   953→          <CircleDot className="h-3.5 w-3.5" />
+   954→          All
+   955→          <span className="ml-0.5 text-[10px] opacity-70">({mismatches.length})</span>
+   956→        </button>
+   957→
+   958→          {MISMATCH_CATEGORIES.map(cat => (
+   959→            <button
+   960→              key={cat.key}
+   961→              onClick={() => setActiveCategory(cat.key)}
+   962→              className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg border text-xs font-medium whitespace-nowrap transition-all ${
+   963→                activeCategory === cat.key
+   964→                  ? `${cat.activeBorder} ${cat.bgColor} shadow-sm`
+   965→                  : 'border-border bg-background text-muted-foreground hover:border-emerald-300 hover:bg-emerald-50/30'
+   966→              }`}
+   967→            >
+   968→              {cat.icon}
+   969→              {cat.label}
+   970→              <span className="ml-0.5 text-[10px] opacity-70">({categoryCounts[cat.key] || 0})</span>
+   971→            </button>
+   972→          ))}
+   973→        </motion.div>
+   974→
+   975→        {/* Severity Filter */}
+   976→        <motion.div
+   977→          initial={{ opacity: 0 }}
+   978→          animate={{ opacity: 1 }}
+   979→          transition={{ delay: 0.3 }}
+   980→          className="shrink-0"
+   981→        >
+   982→          <Select value={filterSeverity} onValueChange={setFilterSeverity}>
+   983→            <SelectTrigger className="h-9 w-[140px] text-xs bg-background">
+   984→              <SelectValue placeholder="All Severity" />
+   985→            </SelectTrigger>
+   986→            <SelectContent>
+   987→              <SelectItem value="all">All Severity</SelectItem>
+   988→              <SelectItem value="critical">Critical</SelectItem>
+   989→              <SelectItem value="high">High</SelectItem>
+   990→              <SelectItem value="medium">Medium</SelectItem>
+   991→              <SelectItem value="low">Low</SelectItem>
+   992→            </SelectContent>
+   993→          </Select>
+   994→        </motion.div>
+   995→      </div>
+   996→
+   997→      {/* ════════════════════════════════════════════
+   998→          4 & 5. MAIN CONTENT: TWO-PANEL + TIMELINE
+   999→      ════════════════════════════════════════════ */}
+  1000→      <div className="flex gap-4">
+  1001→        {/* Two-Panel Investigation View */}
+  1002→        <div className="flex-1 grid grid-cols-1 lg:grid-cols-5 gap-4 min-w-0">
+  1003→          {/* ── Left Panel: Mismatch List ── */}
+  1004→          <motion.div
+  1005→            initial={{ opacity: 0, x: -10 }}
+  1006→            animate={{ opacity: 1, x: 0 }}
+  1007→            transition={{ delay: 0.35 }}
+  1008→            className="lg:col-span-2"
+  1009→          >
+  1010→            <Card className="border shadow-sm overflow-hidden h-full">
+  1011→              <CardHeader className="px-4 py-3 border-b border-border/60">
+  1012→                <div className="flex items-center justify-between">
+  1013→                  <CardTitle className="text-sm font-semibold">
+  1014→                    Mismatches
+  1015→                    <span className="ml-2 text-xs font-normal text-muted-foreground">
+  1016→                      ({filteredMismatches.length})
+  1017→                    </span>
+  1018→                  </CardTitle>
+  1019→                  {activeCategory !== 'all' && (
+  1020→                    <button
+  1021→                      onClick={() => setActiveCategory('all')}
+  1022→                      className="text-[11px] text-emerald-600 hover:text-emerald-700 font-medium"
+  1023→                    >
+  1024→                      Clear filter
+  1025→                    </button>
+  1026→                  )}
+  1027→                </div>
+  1028→              </CardHeader>
+  1029→              <ScrollArea className="h-[520px] lg:h-[560px]">
+  1030→                <div className="p-2.5 space-y-2">
+  1031→                  <AnimatePresence mode="popLayout">
+  1032→                    {filteredMismatches.length === 0 ? (
+  1033→                      <motion.div
+  1034→                        initial={{ opacity: 0 }}
+  1035→                        animate={{ opacity: 1 }}
+  1036→                        className="py-12 text-center text-xs text-muted-foreground"
+  1037→                      >
+  1038→                        No mismatches in this category
+  1039→                      </motion.div>
+  1040→                    ) : (
+  1041→                      filteredMismatches.map((m, i) => (
+  1042→                        <motion.div
+  1043→                          key={m.id}
+  1044→                          variants={cardEntrance}
+  1045→                          initial="hidden"
+  1046→                          animate="visible"
+  1047→                          transition={{ delay: i * 0.04 }}
+  1048→                          layout
+  1049→                        >
+  1050→                          <button
+  1051→                            onClick={() => setSelectedMismatchId(m.id)}
+  1052→                            className={`w-full text-left p-3.5 rounded-xl border transition-all group ${
+  1053→                              selectedMismatchId === m.id
+  1054→                                ? 'border-l-4 border-l-emerald-500 border-emerald-200 bg-emerald-50/40 shadow-sm'
+  1055→                                : 'border-border bg-card hover:border-emerald-200 hover:bg-emerald-50/20'
+  1056→                            } ${m.resolved ? 'opacity-60' : ''}`}
+  1057→                          >
+  1058→                            <div className="flex items-center justify-between mb-1.5">
+  1059→                              <span className="text-sm font-mono font-bold text-foreground">
+  1060→                                {m.invoiceNumber}
+  1061→                              </span>
+  1062→                              {m.resolved && (
+  1063→                                <Badge variant="outline" className="h-5 text-[10px] border-emerald-200 bg-emerald-50 text-emerald-700">
+  1064→                                  Resolved
+  1065→                                </Badge>
+  1066→                              )}
+  1067→                            </div>
+  1068→                            <div className="flex items-center gap-2 mb-2 flex-wrap">
+  1069→                              <span className="text-[11px] text-muted-foreground truncate max-w-[120px]">
+  1070→                                {m.clientName}
+  1071→                              </span>
+  1072→                              <Badge
+  1073→                                variant="outline"
+  1074→                                className={`h-5 text-[10px] px-1.5 ${getMismatchBadgeClasses(m.mismatchCategory)}`}
+  1075→                              >
+  1076→                                {m.mismatchType}
+  1077→                              </Badge>
+  1078→                              <span className={`inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded border ${getSeverityConfig(getMismatchSeverity(m)).bgColor} ${getSeverityConfig(getMismatchSeverity(m)).color}`}>
+  1079→                                <span className={`size-1.5 rounded-full ${getSeverityConfig(getMismatchSeverity(m)).dotClass}`} />
+  1080→                                {getSeverityConfig(getMismatchSeverity(m)).label}
+  1081→                              </span>
+  1082→                            </div>
+  1083→                            <div className="flex items-center justify-between">
+  1084→                              {m.taxDifference > 0 ? (
+  1085→                                <span className="text-xs font-semibold text-red-700">
+  1086→                                  {formatCurrency(m.taxDifference)} diff
+  1087→                                </span>
+  1088→                              ) : (
+  1089→                                <span className="text-xs text-muted-foreground">—</span>
+  1090→                              )}
+  1091→                              <div className="flex items-center gap-1">
+  1092→                                <Sparkles className="h-3 w-3 text-emerald-600" />
+  1093→                                <span className="text-[10px] font-semibold text-emerald-700">
+  1094→                                  AI: {m.confidenceScore}%
+  1095→                                </span>
+  1096→                              </div>
+  1097→                            </div>
+  1098→                          </button>
+  1099→                        </motion.div>
+  1100→                      ))
+  1101→                    )}
+  1102→                  </AnimatePresence>
+  1103→                </div>
+  1104→              </ScrollArea>
+  1105→            </Card>
+  1106→          </motion.div>
+  1107→
+  1108→          {/* ── Right Panel: Side-by-Side Comparison ── */}
+  1109→          <motion.div
+  1110→            initial={{ opacity: 0, x: 10 }}
+  1111→            animate={{ opacity: 1, x: 0 }}
+  1112→            transition={{ delay: 0.4 }}
+  1113→            className="lg:col-span-3"
+  1114→          >
+  1115→            <AnimatePresence mode="wait">
+  1116→              {!selectedMismatch ? (
+  1117→                /* Empty state — no mismatch selected */
+  1118→                <motion.div
+  1119→                  key="empty"
+  1120→                  initial={{ opacity: 0, scale: 0.97 }}
+  1121→                  animate={{ opacity: 1, scale: 1 }}
+  1122→                  exit={{ opacity: 0, scale: 0.97 }}
+  1123→                  transition={{ duration: 0.25 }}
+  1124→                >
+  1125→                  <Card className="border shadow-sm h-full min-h-[560px] flex items-center justify-center">
+  1126→                    <CardContent className="flex flex-col items-center text-center py-16">
+  1127→                      <div className="flex items-center justify-center h-16 w-16 rounded-2xl bg-muted/50 mb-4">
+  1128→                        <Eye className="h-8 w-8 text-muted-foreground/50" />
+  1129→                      </div>
+  1130→                      <h3 className="text-sm font-semibold text-foreground mb-1">
+  1131→                        Select a mismatch to investigate
+  1132→                      </h3>
+  1133→                      <p className="text-xs text-muted-foreground max-w-[240px]">
+  1134→                        Click on any mismatch from the list to see a detailed side-by-side comparison
+  1135→                      </p>
+  1136→                    </CardContent>
+  1137→                  </Card>
+  1138→                </motion.div>
+  1139→              ) : (
+  1140→                /* Selected mismatch — comparison view */
+  1141→                <motion.div
+  1142→                  key={selectedMismatch.id}
+  1143→                  initial={{ opacity: 0, y: 12 }}
+  1144→                  animate={{ opacity: 1, y: 0 }}
+  1145→                  exit={{ opacity: 0, y: -12 }}
+  1146→                  transition={{ duration: 0.3 }}
+  1147→                >
+  1148→                  <Card className="border shadow-sm overflow-hidden">
+  1149→                    <CardHeader className="px-4 py-3 border-b border-border/60">
+  1150→                      <div className="flex items-center justify-between">
+  1151→                        <div className="flex items-center gap-3">
+  1152→                          <CardTitle className="text-sm font-semibold font-mono">
+  1153→                            {selectedMismatch.invoiceNumber}
+  1154→                          </CardTitle>
+  1155→                          <Badge
+  1156→                            variant="outline"
+  1157→                            className={`h-5 text-[10px] ${getMismatchBadgeClasses(selectedMismatch.mismatchCategory)}`}
+  1158→                          >
+  1159→                            {selectedMismatch.mismatchType}
+  1160→                          </Badge>
+  1161→                        </div>
+  1162→                        {selectedMismatch.resolved && (
+  1163→                          <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px]">
+  1164→                            <CheckCircle2 className="h-3 w-3 mr-1" />
+  1165→                            Resolved
+  1166→                          </Badge>
+  1167→                        )}
+  1168→                      </div>
+  1169→                      <CardDescription className="text-xs mt-0.5">
+  1170→                        {selectedMismatch.clientName}
+  1171→                        {selectedMismatch.taxDifference > 0 && (
+  1172→                          <span className="text-red-600 font-medium ml-2">
+  1173→                            • {formatCurrency(selectedMismatch.taxDifference)} GST difference
+  1174→                          </span>
+  1175→                        )}
+  1176→                      </CardDescription>
+  1177→                    </CardHeader>
+  1178→
+  1179→                    <ScrollArea className="max-h-[520px]">
+  1180→                      <div className="p-4 space-y-4">
+  1181→                        {/* ── Side-by-Side Comparison ── */}
+  1182→                        <div className="rounded-xl border border-border overflow-hidden">
+  1183→                          {/* Header row */}
+  1184→                          <div className="grid grid-cols-[1fr_1fr_1fr] bg-muted/30">
+  1185→                            <div className="px-3 py-2 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+  1186→                              Field
+  1187→                            </div>
+  1188→                            <div className="px-3 py-2 text-[11px] font-semibold text-emerald-700 uppercase tracking-wider bg-emerald-50/50 flex items-center gap-1.5">
+  1189→                              <ShieldCheck className="h-3 w-3" />
+  1190→                              Your Books
+  1191→                            </div>
+  1192→                            <div className="px-3 py-2 text-[11px] font-semibold text-amber-700 uppercase tracking-wider bg-amber-50/50 flex items-center gap-1.5">
+  1193→                              <ShieldAlert className="h-3 w-3" />
+  1194→                              GSTR-2B Data
+  1195→                            </div>
+  1196→                          </div>
+  1197→
+  1198→                          {/* Data rows */}
+  1199→                          <ComparisonField
+  1200→                            label="Invoice #"
+  1201→                            booksValue={selectedMismatch.booksData.invoiceNumber}
+  1202→                            gstr2bValue={selectedMismatch.gstr2bData?.invoiceNumber || '—'}
+  1203→                            isDiff={selectedMismatch.diffFields.includes('invoice_number')}
+  1204→                          />
+  1205→                          <ComparisonField
+  1206→                            label="Date"
+  1207→                            booksValue={selectedMismatch.booksData.invoiceDate}
+  1208→                            gstr2bValue={selectedMismatch.gstr2bData?.invoiceDate || '—'}
+  1209→                            isDiff={selectedMismatch.diffFields.includes('invoice_date')}
+  1210→                          />
+  1211→                          <ComparisonField
+  1212→                            label="Seller GSTIN"
+  1213→                            booksValue={selectedMismatch.booksData.sellerGstin}
+  1214→                            gstr2bValue={selectedMismatch.gstr2bData?.sellerGstin || '—'}
+  1215→                            isDiff={selectedMismatch.diffFields.includes('sellerGstin') || selectedMismatch.diffFields.includes('vendor_gstin')}
+  1216→                          />
+  1217→                          <ComparisonField
+  1218→                            label="Buyer GSTIN"
+  1219→                            booksValue={selectedMismatch.booksData.buyerGstin || '—'}
+  1220→                            gstr2bValue={selectedMismatch.gstr2bData?.buyerGstin || '—'}
+  1221→                            isDiff={selectedMismatch.diffFields.includes('buyerGstin')}
+  1222→                          />
+  1223→                          <ComparisonField
+  1224→                            label="Taxable Value"
+  1225→                            booksValue={selectedMismatch.booksData.taxableValue > 0 ? formatCurrency(selectedMismatch.booksData.taxableValue) : '—'}
+  1226→                            gstr2bValue={selectedMismatch.gstr2bData && selectedMismatch.gstr2bData.taxableValue > 0 ? formatCurrency(selectedMismatch.gstr2bData.taxableValue) : '—'}
+  1227→                            isDiff={selectedMismatch.diffFields.includes('taxableValue')}
+  1228→                          />
+  1229→                          <ComparisonField
+  1230→                            label="CGST"
+  1231→                            booksValue={selectedMismatch.booksData.cgst > 0 ? formatCurrency(selectedMismatch.booksData.cgst) : '—'}
+  1232→                            gstr2bValue={selectedMismatch.gstr2bData && selectedMismatch.gstr2bData.cgst > 0 ? formatCurrency(selectedMismatch.gstr2bData.cgst) : '—'}
+  1233→                            isDiff={selectedMismatch.diffFields.includes('cgst') || selectedMismatch.diffFields.includes('gst_amount')}
+  1234→                          />
+  1235→                          <ComparisonField
+  1236→                            label="SGST"
+  1237→                            booksValue={selectedMismatch.booksData.sgst > 0 ? formatCurrency(selectedMismatch.booksData.sgst) : '—'}
+  1238→                            gstr2bValue={selectedMismatch.gstr2bData && selectedMismatch.gstr2bData.sgst > 0 ? formatCurrency(selectedMismatch.gstr2bData.sgst) : '—'}
+  1239→                            isDiff={selectedMismatch.diffFields.includes('sgst')}
+  1240→                          />
+  1241→                          <ComparisonField
+  1242→                            label="IGST"
+  1243→                            booksValue={selectedMismatch.booksData.igst > 0 ? formatCurrency(selectedMismatch.booksData.igst) : '—'}
+  1244→                            gstr2bValue={selectedMismatch.gstr2bData && selectedMismatch.gstr2bData.igst > 0 ? formatCurrency(selectedMismatch.gstr2bData.igst) : '—'}
+  1245→                            isDiff={selectedMismatch.diffFields.includes('igst')}
+  1246→                          />
+  1247→                          <ComparisonField
+  1248→                            label="Total"
+  1249→                            booksValue={selectedMismatch.booksData.totalAmount > 0 ? formatCurrency(selectedMismatch.booksData.totalAmount) : '—'}
+  1250→                            gstr2bValue={selectedMismatch.gstr2bData && selectedMismatch.gstr2bData.totalAmount > 0 ? formatCurrency(selectedMismatch.gstr2bData.totalAmount) : '—'}
+  1251→                            isDiff={selectedMismatch.diffFields.includes('totalAmount') || selectedMismatch.diffFields.includes('total_amount')}
+  1252→                          />
+  1253→                        </div>
+  1254→
+  1255→                        {/* ── AI Recommendation Card ── */}
+  1256→                        {!selectedMismatch.resolved && (
+  1257→                          <motion.div
+  1258→                            initial={{ opacity: 0, y: 8 }}
+  1259→                            animate={{ opacity: 1, y: 0 }}
+  1260→                            transition={{ delay: 0.2 }}
+  1261→                          >
+  1262→                            <Card className="border-emerald-200 bg-gradient-to-r from-emerald-50/60 to-teal-50/30">
+  1263→                              <CardContent className="py-3.5 px-4">
+  1264→                                <div className="flex items-start gap-3">
+  1265→                                  <div className="flex items-center justify-center h-8 w-8 rounded-lg bg-emerald-100 mt-0.5 shrink-0">
+  1266→                                    <Sparkles className="h-4 w-4 text-emerald-700" />
+  1267→                                  </div>
+  1268→                                  <div className="flex-1 min-w-0">
+  1269→                                    <div className="flex items-center gap-2 mb-1">
+  1270→                                      <span className="text-xs font-semibold text-emerald-800">
+  1271→                                        AI suggests: {selectedMismatch.aiRecommendation.split('—')[0].trim()}
+  1272→                                      </span>
+  1273→                                      <Badge variant="outline" className="h-5 text-[10px] border-emerald-300 bg-emerald-50 text-emerald-700 shrink-0">
+  1274→                                        {selectedMismatch.confidenceScore}% confidence
+  1275→                                      </Badge>
+  1276→                                    </div>
+  1277→                                    <p className="text-[11px] text-emerald-700/90 leading-relaxed">
+  1278→                                      {selectedMismatch.aiRecommendation}
+  1279→                                    </p>
+  1280→                                  </div>
+  1281→                                </div>
+  1282→                              </CardContent>
+  1283→                            </Card>
+  1284→                          </motion.div>
+  1285→                        )}
+  1286→
+  1287→                        {/* ── AI Explanation ── */}
+  1288→                        <div className="rounded-lg bg-muted/40 border border-border/50 px-3.5 py-2.5">
+  1289→                          <p className="text-[11px] text-muted-foreground leading-relaxed">
+  1290→                            <span className="font-medium text-foreground">AI Summary:</span>{' '}
+  1291→                            {selectedMismatch.aiExplanation}
+  1292→                          </p>
+  1293→                        </div>
+  1294→
+  1295→                        {/* ── Action Buttons ── */}
+  1296→                        {!selectedMismatch.resolved && (
+  1297→                          <motion.div
+  1298→                            initial={{ opacity: 0 }}
+  1299→                            animate={{ opacity: 1 }}
+  1300→                            transition={{ delay: 0.3 }}
+  1301→                            className="flex flex-col sm:flex-row gap-2 pt-1"
+  1302→                          >
+  1303→                            <Button
+  1304→                              onClick={() => handleAcceptGSTR2B(selectedMismatch.id)}
+  1305→                              className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm flex-1"
+  1306→                              size="sm"
+  1307→                              disabled={updateWorkflowMutation.isPending}
+  1308→                            >
+  1309→                              <CheckCircle2 className="h-3.5 w-3.5" />
+  1310→                              Accept GSTR-2B
+  1311→                            </Button>
+  1312→                            <Button
+  1313→                              onClick={() => handleKeepBooks(selectedMismatch.id)}
+  1314→                              variant="secondary"
+  1315→                              className="gap-1.5 flex-1"
+  1316→                              size="sm"
+  1317→                              disabled={updateWorkflowMutation.isPending}
+  1318→                            >
+  1319→                              <ShieldCheck className="h-3.5 w-3.5" />
+  1320→                              Keep Books Value
+  1321→                            </Button>
+  1322→                            <Button
+  1323→                              onClick={() => handleCustomResolution(selectedMismatch.id)}
+  1324→                              variant="outline"
+  1325→                              className="gap-1.5 flex-1"
+  1326→                              size="sm"
+  1327→                              disabled={updateWorkflowMutation.isPending}
+  1328→                            >
+  1329→                              <AlertCircle className="h-3.5 w-3.5" />
+  1330→                              Custom Resolution
+  1331→                            </Button>
+  1332→                          </motion.div>
+  1333→                        )}
+  1334→                      </div>
+  1335→                    </ScrollArea>
+  1336→                  </Card>
+  1337→                </motion.div>
+  1338→              )}
+  1339→            </AnimatePresence>
+  1340→          </motion.div>
+  1341→        </div>
+  1342→
+  1343→        {/* ── Reconciliation Timeline Sidebar ── */}
+  1344→        <motion.div
+  1345→          initial={{ opacity: 0, x: 20 }}
+  1346→          animate={{ opacity: 1, x: 0 }}
+  1347→          transition={{ delay: 0.45 }}
+  1348→          className={`hidden xl:block ${timelineCollapsed ? 'w-10' : 'w-[220px]'} shrink-0 transition-all duration-300`}
+  1349→        >
+  1350→          <Card className="border shadow-sm overflow-hidden h-full">
+  1351→            <CardHeader className="px-3 py-2.5 border-b border-border/60 flex flex-row items-center justify-between space-y-0">
+  1352→              {!timelineCollapsed && (
+  1353→                <CardTitle className="text-xs font-semibold flex items-center gap-1.5">
+  1354→                  <History className="h-3.5 w-3.5 text-muted-foreground" />
+  1355→                  Recon Timeline
+  1356→                </CardTitle>
+  1357→              )}
+  1358→              <button
+  1359→                onClick={() => setTimelineCollapsed(!timelineCollapsed)}
+  1360→                className="text-muted-foreground hover:text-foreground transition-colors"
+  1361→              >
+  1362→                <ChevronRight className={`h-3.5 w-3.5 transition-transform ${timelineCollapsed ? '' : 'rotate-180'}`} />
+  1363→              </button>
+  1364→            </CardHeader>
+  1365→            {!timelineCollapsed && (
+  1366→              <ScrollArea className="h-[560px]">
+  1367→                <div className="p-2.5 space-y-1.5">
+  1368→                  {timeline.length === 0 ? (
+  1369→                    <div className="py-8 text-center text-xs text-muted-foreground">
+  1370→                      No runs yet
+  1371→                    </div>
+  1372→                  ) : (
+  1373→                    timeline.map((entry, i) => {
+  1374→                      const entryDate = new Date(entry.date);
+  1375→                      const formattedDate = entryDate.toLocaleDateString('en-IN', {
+  1376→                        day: '2-digit',
+  1377→                        month: 'short',
+  1378→                        year: '2-digit',
+  1379→                      });
+  1380→                      const formattedTime = entryDate.toLocaleTimeString('en-IN', {
+  1381→                        hour: '2-digit',
+  1382→                        minute: '2-digit',
+  1383→                        hour12: true,
+  1384→                      });
+  1385→
+  1386→                      return (
+  1387→                        <motion.button
+  1388→                          key={entry.id}
+  1389→                          initial={{ opacity: 0, x: 10 }}
+  1390→                          animate={{ opacity: 1, x: 0 }}
+  1391→                          transition={{ delay: 0.5 + i * 0.05 }}
+  1392→                          className="w-full text-left p-2.5 rounded-lg border border-border/50 hover:border-emerald-200 hover:bg-emerald-50/30 transition-all group"
+  1393→                          onClick={() => {
+  1394→                            toast.info(`Loading run from ${formattedDate}...`);
+  1395→                          }}
+  1396→                        >
+  1397→                          <div className="flex items-center gap-1.5 mb-1">
+  1398→                            <Clock className="h-3 w-3 text-muted-foreground group-hover:text-emerald-600 transition-colors" />
+  1399→                            <span className="text-[10px] font-medium text-muted-foreground">
+  1400→                              {formattedDate} · {formattedTime}
+  1401→                            </span>
+  1402→                          </div>
+  1403→                          <p className="text-[11px] font-medium text-foreground truncate mb-0.5">
+  1404→                            {entry.clients}
+  1405→                          </p>
+  1406→                          <div className="flex items-center justify-between">
+  1407→                            <span className="text-[10px] text-muted-foreground">
+  1408→                              {entry.recordsProcessed} records
+  1409→                            </span>
+  1410→                            <Badge
+  1411→                              variant="outline"
+  1412→                              className={`h-4 text-[9px] px-1 ${
+  1413→                                entry.matchRate >= 80
+  1414→                                  ? 'border-emerald-200 text-emerald-700 bg-emerald-50'
+  1415→                                  : entry.matchRate >= 60
+  1416→                                  ? 'border-amber-200 text-amber-700 bg-amber-50'
+  1417→                                  : 'border-red-200 text-red-700 bg-red-50'
+  1418→                              }`}
+  1419→                            >
+  1420→                              {entry.matchRate}%
+  1421→                            </Badge>
+  1422→                          </div>
+  1423→                        </motion.button>
+  1424→                      );
+  1425→                    })
+  1426→                  )}
+  1427→                </div>
+  1428→              </ScrollArea>
+  1429→            )}
+  1430→          </Card>
+  1431→        </motion.div>
+  1432→      </div>
+  1433→    </motion.div>
+  1434→  );
+  1435→}
+  1436→

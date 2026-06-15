@@ -833,21 +833,40 @@ export function useDeleteDocument(
 // ═══════════════════════════════════════════════════════════════════════════════
 // NOTIFICATION HOOKS
 // ═══════════════════════════════════════════════════════════════════════════════
-// Note: Notification API route does not exist yet. These hooks are designed
-// to work once the /api/notifications route is created.
+// Backend: /api/notifications supports GET (list), POST (create), PATCH (update), DELETE (remove)
+// The PATCH handler accepts both `read` and `isRead` fields for compatibility.
+
+interface NotificationClient {
+  id: string;
+  tradeName: string;
+  gstin: string;
+  status: string;
+}
 
 interface Notification {
   id: string;
+  userId: string | null;
+  clientId: string | null;
   type: string;
+  category: string;
   title: string;
   message: string;
-  read: boolean;
+  actionUrl: string | null;
+  isRead: boolean;
+  priority: string;
+  dismissed: boolean;
+  scheduledAt: string | null;
+  sentAt: string | null;
+  readAt: string | null;
   createdAt: string;
+  updatedAt: string;
+  client: NotificationClient | null;
   [key: string]: unknown;
 }
 
 interface NotificationsResponse {
   notifications: Notification[];
+  unreadCount: number;
 }
 
 export function useNotifications(
@@ -869,18 +888,105 @@ export function useMarkNotificationRead(
     UseMutationOptions<
       Record<string, unknown>,
       Error,
-      { id: string; read: boolean }
+      { id: string; isRead: boolean }
     >,
     'mutationFn'
   >
 ) {
   const queryClient = useQueryClient();
 
-  return useMutation<Record<string, unknown>, Error, { id: string; read: boolean }>({
-    mutationFn: ({ id, read }) =>
+  return useMutation<Record<string, unknown>, Error, { id: string; isRead: boolean }>({
+    mutationFn: ({ id, isRead }) =>
       apiFetch<Record<string, unknown>>('/api/notifications', {
         method: 'PATCH',
-        body: JSON.stringify({ id, read }),
+        body: JSON.stringify({ id, isRead }),
+      }),
+    onSuccess: (data, variables, context) => {
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.notifications.all,
+      });
+      options?.onSuccess?.(data, variables, context);
+    },
+    ...options,
+  });
+}
+
+export function useDismissNotification(
+  options?: Omit<
+    UseMutationOptions<
+      Record<string, unknown>,
+      Error,
+      { id: string }
+    >,
+    'mutationFn'
+  >
+) {
+  const queryClient = useQueryClient();
+
+  return useMutation<Record<string, unknown>, Error, { id: string }>({
+    mutationFn: ({ id }) =>
+      apiFetch<Record<string, unknown>>('/api/notifications', {
+        method: 'PATCH',
+        body: JSON.stringify({ id, dismissed: true }),
+      }),
+    onSuccess: (data, variables, context) => {
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.notifications.all,
+      });
+      options?.onSuccess?.(data, variables, context);
+    },
+    ...options,
+  });
+}
+
+export function useCreateNotification(
+  options?: Omit<
+    UseMutationOptions<
+      Record<string, unknown>,
+      Error,
+      Omit<Notification, 'id' | 'createdAt' | 'updatedAt' | 'client'>
+    >,
+    'mutationFn'
+  >
+) {
+  const queryClient = useQueryClient();
+
+  return useMutation<
+    Record<string, unknown>,
+    Error,
+    Omit<Notification, 'id' | 'createdAt' | 'updatedAt' | 'client'>
+  >({
+    mutationFn: (data) =>
+      apiFetch<Record<string, unknown>>('/api/notifications', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    onSuccess: (data, variables, context) => {
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.notifications.all,
+      });
+      options?.onSuccess?.(data, variables, context);
+    },
+    ...options,
+  });
+}
+
+export function useDeleteNotification(
+  options?: Omit<
+    UseMutationOptions<
+      Record<string, unknown>,
+      Error,
+      { id: string }
+    >,
+    'mutationFn'
+  >
+) {
+  const queryClient = useQueryClient();
+
+  return useMutation<Record<string, unknown>, Error, { id: string }>({
+    mutationFn: ({ id }) =>
+      apiFetch<Record<string, unknown>>(`/api/notifications?id=${id}`, {
+        method: 'DELETE',
       }),
     onSuccess: (data, variables, context) => {
       queryClient.invalidateQueries({

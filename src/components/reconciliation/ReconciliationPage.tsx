@@ -59,6 +59,7 @@ import {
   useActivities,
 } from '@/hooks/api';
 import type { ReconciliationResult, ReconciliationRun } from '@/types/gst';
+import { EmptyState } from '@/components/shared/EmptyState';
 
 // ──────────────────────────────────────────────
 // Types
@@ -754,30 +755,16 @@ export default function ReconciliationPage() {
           </Button>
         </div>
 
-        <motion.div
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ delay: 0.2, duration: 0.5 }}
-          className="flex flex-col items-center justify-center py-24 text-center"
-        >
-          <div className="flex items-center justify-center h-20 w-20 rounded-2xl bg-muted/60 mb-6">
-            <GitCompareArrows className="h-10 w-10 text-muted-foreground/60" />
-          </div>
-          <h3 className="text-lg font-semibold text-foreground mb-2">
-            No reconciliation runs yet
-          </h3>
-          <p className="text-sm text-muted-foreground max-w-sm mb-6">
-            Run your first reconciliation to match your books with GST portal data and identify discrepancies.
-          </p>
-          <Button
-            onClick={handleRunReconciliation}
-            disabled={runningRecon}
-            className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
-          >
-            {runningRecon ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
-            Run Your First Reconciliation
-          </Button>
-        </motion.div>
+        <EmptyState
+          icon={GitCompareArrows}
+          title="No reconciliations run yet"
+          description="Run reconciliation to compare your books with GSTR-2B data."
+          action={{
+            label: 'Run Reconciliation',
+            onClick: handleRunReconciliation,
+            icon: Play,
+          }}
+        />
       </motion.div>
     );
   }

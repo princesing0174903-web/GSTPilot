@@ -1,0 +1,1101 @@
+     1→'use client';
+     2→
+     3→import React, { useState, useEffect, useRef, useCallback } from 'react';
+     4→import {
+     5→  Card,
+     6→  CardContent,
+     7→  CardHeader,
+     8→  CardTitle,
+     9→  CardDescription,
+    10→} from '@/components/ui/card';
+    11→import { Badge } from '@/components/ui/badge';
+    12→import { Button } from '@/components/ui/button';
+    13→import { Input } from '@/components/ui/input';
+    14→import { Label } from '@/components/ui/label';
+    15→import { Textarea } from '@/components/ui/textarea';
+    16→import { Skeleton } from '@/components/ui/skeleton';
+    17→import { ScrollArea } from '@/components/ui/scroll-area';
+    18→import {
+    19→  Dialog,
+    20→  DialogContent,
+    21→  DialogDescription,
+    22→  DialogFooter,
+    23→  DialogHeader,
+    24→  DialogTitle,
+    25→} from '@/components/ui/dialog';
+    26→import {
+    27→  Select,
+    28→  SelectContent,
+    29→  SelectItem,
+    30→  SelectTrigger,
+    31→  SelectValue,
+    32→} from '@/components/ui/select';
+    33→import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+    34→import {
+    35→  FolderLock,
+    36→  Upload,
+    37→  Search,
+    38→  FileText,
+    39→  FileSpreadsheet,
+    40→  File,
+    41→  ImageIcon,
+    42→  Download,
+    43→  Eye,
+    44→  History,
+    45→  Plus,
+    46→  HardDrive,
+    47→  CalendarDays,
+    48→  Tag,
+    49→  X,
+    50→  CheckCircle2,
+    51→  Loader2,
+    52→  FolderOpen,
+    53→  AlertCircle,
+    54→  Inbox,
+    55→} from 'lucide-react';
+    56→import { motion, AnimatePresence } from 'framer-motion';
+    57→import { formatCurrency, formatNumber } from '@/lib/gst-utils';
+    58→import {
+    59→  useUploadedFiles,
+    60→  useClients,
+    61→  useUploadFile,
+    62→} from '@/hooks/api';
+    63→import { toast } from 'sonner';
+    64→import { useMutation, useQueryClient } from '@tanstack/react-query';
+    65→
+    66→// ─── Color Palette (Emerald theme) ────────────────────────────────────────
+    67→const COLORS = {
+    68→  emerald: '#10b981',
+    69→  emeraldDark: '#059669',
+    70→  emeraldLight: '#d1fae5',
+    71→  teal: '#14b8a6',
+    72→  tealDark: '#0d9488',
+    73→  amber: '#f59e0b',
+    74→  red: '#ef4444',
+    75→  slate: '#64748b',
+    76→  purple: '#8b5cf6',
+    77→  blue: '#3b82f6',
+    78→};
+    79→
+    80→// ─── Types ─────────────────────────────────────────────────────────────────
+    81→interface DocumentItem {
+    82→  id: string;
+    83→  clientId: string | null;
+    84→  folder: string;
+    85→  name: string;
+    86→  fileType: string;
+    87→  size: number;
+    88→  path: string | null;
+    89→  tags: string | null;
+    90→  description: string | null;
+    91→  uploadedBy: string | null;
+    92→  version: number;
+    93→  isLatest: boolean;
+    94→  parentId: string | null;
+    95→  createdAt: string;
+    96→  updatedAt: string;
+    97→  client?: { id: string; tradeName: string } | null;
+    98→  // Processing status fields (from UploadedFile)
+    99→  status?: string;
+   100→  processingStep?: string;
+   101→  progress?: number;
+   102→}
+   103→
+   104→interface ClientOption {
+   105→  id: string;
+   106→  tradeName: string;
+   107→  gstin: string;
+   108→}
+   109→
+   110→// ─── Folder config ─────────────────────────────────────────────────────────
+   111→const FOLDERS = [
+   112→  { value: 'all', label: 'All Documents', icon: FolderOpen },
+   113→  { value: 'invoices', label: 'Invoices', icon: FileText },
+   114→  { value: 'returns', label: 'Returns', icon: FileText },
+   115→  { value: 'reports', label: 'Reports', icon: FileSpreadsheet },
+   116→  { value: 'client-documents', label: 'Client Documents', icon: FolderOpen },
+   117→  { value: 'notices', label: 'Notices', icon: AlertCircle },
+   118→] as const;
+   119→
+   120→// ─── Helpers ───────────────────────────────────────────────────────────────
+   121→function formatFileSize(bytes: number): string {
+   122→  if (bytes === 0) return '0 B';
+   123→  const k = 1024;
+   124→  const sizes = ['B', 'KB', 'MB', 'GB'];
+   125→  const i = Math.floor(Math.log(bytes) / Math.log(k));
+   126→  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+   127→}
+   128→
+   129→function getFileTypeColor(type: string): string {
+   130→  const t = type.toLowerCase();
+   131→  if (t === 'pdf') return 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400';
+   132→  if (['xlsx', 'xls', 'csv'].includes(t)) return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400';
+   133→  if (['docx', 'doc'].includes(t)) return 'bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-400';
+   134→  if (['jpg', 'jpeg', 'png', 'gif', 'svg', 'webp'].includes(t)) return 'bg-purple-100 text-purple-700 dark:bg-purple-950/40 dark:text-purple-400';
+   135→  if (['pptx', 'ppt'].includes(t)) return 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400';
+   136→  return 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-400';
+   137→}
+   138→
+   139→function getFileTypeIcon(type: string) {
+   140→  const t = type.toLowerCase();
+   141→  if (t === 'pdf') return <FileText className="h-6 w-6 text-red-500" />;
+   142→  if (['xlsx', 'xls', 'csv'].includes(t)) return <FileSpreadsheet className="h-6 w-6 text-emerald-500" />;
+   143→  if (['docx', 'doc'].includes(t)) return <File className="h-6 w-6 text-blue-500" />;
+   144→  if (['jpg', 'jpeg', 'png', 'gif', 'svg', 'webp'].includes(t)) return <ImageIcon className="h-6 w-6 text-purple-500" />;
+   145→  return <File className="h-6 w-6 text-slate-500" />;
+   146→}
+   147→
+   148→function formatDate(dateStr: string): string {
+   149→  try {
+   150→    return new Date(dateStr).toLocaleDateString('en-IN', {
+   151→      day: '2-digit',
+   152→      month: 'short',
+   153→      year: 'numeric',
+   154→    });
+   155→  } catch {
+   156→    return dateStr;
+   157→  }
+   158→}
+   159→
+   160→// ─── Animated Number Hook ──────────────────────────────────────────────────
+   161→function useAnimatedNumber(target: number, duration: number = 1200) {
+   162→  const [current, setCurrent] = useState(0);
+   163→  const ref = useRef<number | null>(null);
+   164→  const startTime = useRef<number | null>(null);
+   165→
+   166→  useEffect(() => {
+   167→    startTime.current = null;
+   168→    const startValue = current;
+   169→
+   170→    function step(timestamp: number) {
+   171→      if (!startTime.current) startTime.current = timestamp;
+   172→      const elapsed = timestamp - startTime.current;
+   173→      const progress = Math.min(elapsed / duration, 1);
+   174→      const eased = 1 - Math.pow(1 - progress, 3);
+   175→      setCurrent(Math.round(startValue + (target - startValue) * eased));
+   176→      if (progress < 1) {
+   177→        ref.current = requestAnimationFrame(step);
+   178→      }
+   179→    }
+   180→
+   181→    ref.current = requestAnimationFrame(step);
+   182→    return () => {
+   183→      if (ref.current) cancelAnimationFrame(ref.current);
+   184→    };
+   185→  }, [target, duration]);
+   186→
+   187→  return current;
+   188→}
+   189→
+   190→// ─── Animated Card Wrapper ─────────────────────────────────────────────────
+   191→function AnimatedCard({
+   192→  children,
+   193→  delay = 0,
+   194→  className = '',
+   195→}: {
+   196→  children: React.ReactNode;
+   197→  delay?: number;
+   198→  className?: string;
+   199→}) {
+   200→  return (
+   201→    <motion.div
+   202→      initial={{ opacity: 0, y: 20 }}
+   203→      animate={{ opacity: 1, y: 0 }}
+   204→      transition={{ delay, duration: 0.5, ease: 'easeOut' }}
+   205→    >
+   206→      <Card className={`hover:shadow-lg hover:shadow-emerald-500/5 transition-all duration-300 border-border/50 backdrop-blur-sm bg-card/80 ${className}`}>
+   207→        {children}
+   208→      </Card>
+   209→    </motion.div>
+   210→  );
+   211→}
+   212→
+   213→// ─── Skeleton Loaders ─────────────────────────────────────────────────────
+   214→function StatCardSkeleton() {
+   215→  return (
+   216→    <div className="p-4 rounded-xl border border-border/30">
+   217→      <div className="flex items-center gap-3 mb-2">
+   218→        <Skeleton className="h-9 w-9 rounded-lg" />
+   219→        <div className="flex-1 space-y-1.5">
+   220→          <Skeleton className="h-3 w-20" />
+   221→          <Skeleton className="h-6 w-16" />
+   222→        </div>
+   223→      </div>
+   224→    </div>
+   225→  );
+   226→}
+   227→
+   228→function DocumentCardSkeleton() {
+   229→  return (
+   230→    <div className="p-4 rounded-xl border border-border/30 space-y-3">
+   231→      <div className="flex items-start gap-3">
+   232→        <Skeleton className="h-10 w-10 rounded-lg" />
+   233→        <div className="flex-1 space-y-1.5">
+   234→          <Skeleton className="h-4 w-3/4" />
+   235→          <Skeleton className="h-3 w-1/2" />
+   236→        </div>
+   237→      </div>
+   238→      <div className="flex gap-1.5">
+   239→        <Skeleton className="h-5 w-12 rounded-full" />
+   240→        <Skeleton className="h-5 w-16 rounded-full" />
+   241→      </div>
+   242→      <div className="flex items-center justify-between">
+   243→        <Skeleton className="h-3 w-20" />
+   244→        <Skeleton className="h-8 w-8 rounded" />
+   245→      </div>
+   246→    </div>
+   247→  );
+   248→}
+   249→
+   250→// ═══════════════════════════════════════════════════════════════════════════
+   251→// MAIN COMPONENT
+   252→// ═══════════════════════════════════════════════════════════════════════════
+   253→export default function DocumentVaultPage() {
+   254→  const queryClient = useQueryClient();
+   255→
+   256→  // ── React Query data hooks ──
+   257→  const { data: documentsData, isLoading: documentsLoading, error: documentsError } = useUploadedFiles(undefined, {
+   258→    refetchInterval: (query) => {
+   259→      const files = (query.state.data as { files: DocumentItem[] } | undefined)?.files ?? [];
+   260→      const hasProcessing = files.some(f => f.status === 'processing' || f.status === 'uploaded');
+   261→      return hasProcessing ? 2000 : false;
+   262→    },
+   263→  });
+   264→  const { data: clientsData, isLoading: clientsLoading } = useClients();
+   265→
+   266→  // ── Derived data ──
+   267→  const documents: DocumentItem[] = (documentsData?.files ?? []) as DocumentItem[];
+   268→  const clients: ClientOption[] = (clientsData?.clients ?? []).map(c => ({
+   269→    id: c.id,
+   270→    tradeName: c.tradeName,
+   271→    gstin: c.gstin,
+   272→  }));
+   273→  const loading = documentsLoading || clientsLoading;
+   274→  const error = documentsError ? (documentsError instanceof Error ? documentsError.message : 'Failed to fetch documents') : null;
+   275→
+   276→  // ── State ────────────────────────────────────────────────────────────────
+   277→  const [activeFolder, setActiveFolder] = useState('all');
+   278→  const [searchQuery, setSearchQuery] = useState('');
+   279→
+   280→  // Upload dialog
+   281→  const [uploadOpen, setUploadOpen] = useState(false);
+   282→  const [uploadForm, setUploadForm] = useState({
+   283→    clientId: '',
+   284→    folder: 'general',
+   285→    name: '',
+   286→    fileType: 'pdf',
+   287→    tags: '',
+   288→    description: '',
+   289→  });
+   290→
+   291→  // Drag and drop upload
+   292→  const [isDragging, setIsDragging] = useState(false);
+   293→  const fileInputRef = useRef<HTMLInputElement>(null);
+   294→
+   295→  // Version history dialog
+   296→  const [versionOpen, setVersionOpen] = useState(false);
+   297→  const [versionDoc, setVersionDoc] = useState<DocumentItem | null>(null);
+   298→  const [versions, setVersions] = useState<DocumentItem[]>([]);
+   299→  const [versionsLoading, setVersionsLoading] = useState(false);
+   300→
+   301→  // Upload success
+   302→  const [uploadSuccess, setUploadSuccess] = useState(false);
+   303→
+   304→  // ── File upload mutation (FormData to /api/upload) ──
+   305→  const fileUploadMutation = useMutation({
+   306→    mutationFn: async (formData: FormData) => {
+   307→      const res = await fetch('/api/upload', {
+   308→        method: 'POST',
+   309→        body: formData,
+   310→      });
+   311→      if (!res.ok) {
+   312→        const error = await res.json().catch(() => ({ error: 'Upload failed' }));
+   313→        throw new Error(error.error || `HTTP ${res.status}`);
+   314→      }
+   315→      return res.json();
+   316→    },
+   317→    onSuccess: () => {
+   318→      queryClient.invalidateQueries({ queryKey: ['documents'] });
+   319→    },
+   320→  });
+   321→
+   322→  // ── Document upload mutation (JSON to /api/documents) ──
+   323→  const documentUploadMutation = useUploadFile();
+   324→
+   325→  // ── Filtered documents ───────────────────────────────────────────────────
+   326→  const filteredDocuments = documents.filter((doc) => {
+   327→    const matchesFolder = activeFolder === 'all' || doc.folder === activeFolder;
+   328→    if (!matchesFolder) return false;
+   329→    if (!searchQuery.trim()) return true;
+   330→    const q = searchQuery.toLowerCase();
+   331→    return (
+   332→      doc.name.toLowerCase().includes(q) ||
+   333→      (doc.description && doc.description.toLowerCase().includes(q)) ||
+   334→      (doc.tags && doc.tags.toLowerCase().includes(q))
+   335→    );
+   336→  });
+   337→
+   338→  // ── Stats ────────────────────────────────────────────────────────────────
+   339→  const totalDocs = documents.length;
+   340→  const totalStorage = documents.reduce((sum, d) => sum + d.size, 0);
+   341→  const now = new Date();
+   342→  const docsThisMonth = documents.filter((d) => {
+   343→    const created = new Date(d.createdAt);
+   344→    return created.getMonth() === now.getMonth() && created.getFullYear() === now.getFullYear();
+   345→  }).length;
+   346→
+   347→  const animTotalDocs = useAnimatedNumber(totalDocs);
+   348→  const animDocsThisMonth = useAnimatedNumber(docsThisMonth);
+   349→
+   350→  // ── Upload handlers ──────────────────────────────────────────────────────
+   351→  const handleUpload = async () => {
+   352→    if (!uploadForm.name.trim()) return;
+   353→    try {
+   354→      await documentUploadMutation.mutateAsync({
+   355→        clientId: uploadForm.clientId || undefined,
+   356→        folder: uploadForm.folder,
+   357→        name: uploadForm.name,
+   358→        fileType: uploadForm.fileType,
+   359→        size: Math.floor(Math.random() * 500000) + 10000,
+   360→        tags: uploadForm.tags,
+   361→        description: uploadForm.description,
+   362→        uploadedBy: 'current-user',
+   363→      } as Record<string, unknown>);
+   364→      setUploadSuccess(true);
+   365→      toast.success('Document uploaded successfully');
+   366→      setTimeout(() => {
+   367→        setUploadOpen(false);
+   368→        setUploadSuccess(false);
+   369→        setUploadForm({
+   370→          clientId: '',
+   371→          folder: 'general',
+   372→          name: '',
+   373→          fileType: 'pdf',
+   374→          tags: '',
+   375→          description: '',
+   376→        });
+   377→      }, 1200);
+   378→    } catch (err) {
+   379→      toast.error(err instanceof Error ? err.message : 'Upload failed');
+   380→    }
+   381→  };
+   382→
+   383→  // File drag-and-drop upload (uses /api/upload with FormData)
+   384→  const handleFileUpload = async (files: FileList | File[]) => {
+   385→    for (const file of files) {
+   386→      const formData = new FormData();
+   387→      formData.append('file', file);
+   388→      formData.append('clientId', uploadForm.clientId || '');
+   389→      formData.append('period', '2025-06');
+   390→      fileUploadMutation.mutate(formData, {
+   391→        onSuccess: () => toast.success(`${file.name} uploaded successfully`),
+   392→        onError: (err) => toast.error(`Failed to upload ${file.name}: ${err.message}`),
+   393→      });
+   394→    }
+   395→  };
+   396→
+   397→  const handleDragOver = (e: React.DragEvent) => {
+   398→    e.preventDefault();
+   399→    e.stopPropagation();
+   400→    setIsDragging(true);
+   401→  };
+   402→
+   403→  const handleDragLeave = (e: React.DragEvent) => {
+   404→    e.preventDefault();
+   405→    e.stopPropagation();
+   406→    setIsDragging(false);
+   407→  };
+   408→
+   409→  const handleDrop = (e: React.DragEvent) => {
+   410→    e.preventDefault();
+   411→    e.stopPropagation();
+   412→    setIsDragging(false);
+   413→    const files = Array.from(e.dataTransfer.files);
+   414→    if (files.length > 0) {
+   415→      handleFileUpload(files);
+   416→    }
+   417→  };
+   418→
+   419→  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+   420→    const files = Array.from(e.target.files || []);
+   421→    if (files.length > 0) {
+   422→      handleFileUpload(files);
+   423→    }
+   424→    e.target.value = '';
+   425→  };
+   426→
+   427→  // ── Version history handler ──────────────────────────────────────────────
+   428→  const handleViewVersions = async (doc: DocumentItem) => {
+   429→    setVersionDoc(doc);
+   430→    setVersionOpen(true);
+   431→    setVersionsLoading(true);
+   432→
+   433→    try {
+   434→      // Find root parent id
+   435→      let rootId = doc.id;
+   436→      if (doc.parentId) rootId = doc.parentId;
+   437→
+   438→      // Fetch all versions: the document itself + children
+   439→      const res = await fetch('/api/documents?search=');
+   440→      if (res.ok) {
+   441→        const data = await res.json();
+   442→        const allDocs: DocumentItem[] = data.documents ?? [];
+   443→        // Find all docs in the same version chain
+   444→        const versionChain = allDocs.filter(
+   445→          (d) => d.id === rootId || d.parentId === rootId || d.id === doc.id || d.parentId === doc.id
+   446→        );
+   447→        // Sort by version
+   448→        versionChain.sort((a, b) => a.version - b.version);
+   449→        setVersions(versionChain.length > 0 ? versionChain : [doc]);
+   450→      } else {
+   451→        setVersions([doc]);
+   452→      }
+   453→    } catch {
+   454→      setVersions([doc]);
+   455→    } finally {
+   456→      setVersionsLoading(false);
+   457→    }
+   458→  };
+   459→
+   460→  // ── Retry handler ──
+   461→  const handleRetry = () => {
+   462→    queryClient.invalidateQueries({ queryKey: ['documents'] });
+   463→    queryClient.invalidateQueries({ queryKey: ['clients'] });
+   464→  };
+   465→
+   466→  // ── Render ───────────────────────────────────────────────────────────────
+   467→  return (
+   468→    <div className="p-4 md:p-6 space-y-4">
+   469→      {/* ═══ HEADER ═══ */}
+   470→      <motion.div
+   471→        initial={{ opacity: 0, y: -10 }}
+   472→        animate={{ opacity: 1, y: 0 }}
+   473→        transition={{ duration: 0.4 }}
+   474→        className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
+   475→      >
+   476→        <div className="flex items-center gap-3">
+   477→          <div className="flex items-center justify-center h-10 w-10 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-600 shadow-lg shadow-emerald-600/20">
+   478→            <FolderLock className="h-5 w-5 text-white" />
+   479→          </div>
+   480→          <div>
+   481→            <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground">
+   482→              Document Vault
+   483→            </h1>
+   484→            <p className="text-sm text-muted-foreground mt-0.5">
+   485→              Secure document repository for your firm
+   486→            </p>
+   487→          </div>
+   488→        </div>
+   489→        <div className="flex items-center gap-3">
+   490→          <Button
+   491→            onClick={() => setUploadOpen(true)}
+   492→            className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg shadow-emerald-600/20"
+   493→          >
+   494→            <Upload className="h-4 w-4" />
+   495→            Upload Document
+   496→          </Button>
+   497→        </div>
+   498→      </motion.div>
+   499→
+   500→      {/* ═══ SEARCH BAR ═══ */}
+   501→      <motion.div
+   502→        initial={{ opacity: 0, y: -5 }}
+   503→        animate={{ opacity: 1, y: 0 }}
+   504→        transition={{ delay: 0.1, duration: 0.3 }}
+   505→        className="relative max-w-md"
+   506→      >
+   507→        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+   508→        <Input
+   509→          placeholder="Search by name, description, or tags..."
+   510→          value={searchQuery}
+   511→          onChange={(e) => setSearchQuery(e.target.value)}
+   512→          className="pl-9 border-border/50 focus:border-emerald-300 dark:focus:border-emerald-700"
+   513→        />
+   514→        {searchQuery && (
+   515→          <button
+   516→            onClick={() => setSearchQuery('')}
+   517→            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+   518→          >
+   519→            <X className="h-4 w-4" />
+   520→          </button>
+   521→        )}
+   522→      </motion.div>
+   523→
+   524→      {/* ═══ STATS ROW ═══ */}
+   525→      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+   526→        <AnimatedCard delay={0.05}>
+   527→          <CardContent className="p-4">
+   528→            {loading ? (
+   529→              <StatCardSkeleton />
+   530→            ) : (
+   531→              <div className="flex items-center gap-3">
+   532→                <div className="flex items-center justify-center h-10 w-10 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-100 dark:border-emerald-900/50">
+   533→                  <FileText className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+   534→                </div>
+   535→                <div>
+   536→                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+   537→                    Total Documents
+   538→                  </p>
+   539→                  <p className="text-xl font-bold text-foreground">{formatNumber(animTotalDocs)}</p>
+   540→                </div>
+   541→              </div>
+   542→            )}
+   543→          </CardContent>
+   544→        </AnimatedCard>
+   545→
+   546→        <AnimatedCard delay={0.1}>
+   547→          <CardContent className="p-4">
+   548→            {loading ? (
+   549→              <StatCardSkeleton />
+   550→            ) : (
+   551→              <div className="flex items-center gap-3">
+   552→                <div className="flex items-center justify-center h-10 w-10 rounded-xl bg-teal-50 dark:bg-teal-950/40 border border-teal-100 dark:border-teal-900/50">
+   553→                  <HardDrive className="h-5 w-5 text-teal-600 dark:text-teal-400" />
+   554→                </div>
+   555→                <div>
+   556→                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+   557→                    Storage Used
+   558→                  </p>
+   559→                  <p className="text-xl font-bold text-foreground">{formatFileSize(totalStorage)}</p>
+   560→                </div>
+   561→              </div>
+   562→            )}
+   563→          </CardContent>
+   564→        </AnimatedCard>
+   565→
+   566→        <AnimatedCard delay={0.15}>
+   567→          <CardContent className="p-4">
+   568→            {loading ? (
+   569→              <StatCardSkeleton />
+   570→            ) : (
+   571→              <div className="flex items-center gap-3">
+   572→                <div className="flex items-center justify-center h-10 w-10 rounded-xl bg-purple-50 dark:bg-purple-950/40 border border-purple-100 dark:border-purple-900/50">
+   573→                  <CalendarDays className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+   574→                </div>
+   575→                <div>
+   576→                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+   577→                    This Month
+   578→                  </p>
+   579→                  <p className="text-xl font-bold text-foreground">{formatNumber(animDocsThisMonth)}</p>
+   580→                </div>
+   581→              </div>
+   582→            )}
+   583→          </CardContent>
+   584→        </AnimatedCard>
+   585→      </div>
+   586→
+   587→      {/* ═══ FOLDER TABS + DOCUMENT GRID ═══ */}
+   588→      <AnimatedCard delay={0.2} className="overflow-hidden">
+   589→        <CardContent className="p-0">
+   590→          <Tabs
+   591→            value={activeFolder}
+   592→            onValueChange={setActiveFolder}
+   593→            className="w-full"
+   594→          >
+   595→            <div className="border-b border-border/50 px-4 pt-4">
+   596→              <TabsList className="bg-muted/50 h-auto flex-wrap gap-1 p-1">
+   597→                {FOLDERS.map((folder) => (
+   598→                  <TabsTrigger
+   599→                    key={folder.value}
+   600→                    value={folder.value}
+   601→                    className="data-[state=active]:bg-emerald-50 data-[state=active]:text-emerald-700 dark:data-[state=active]:bg-emerald-950/40 dark:data-[state=active]:text-emerald-400 text-xs px-3 py-1.5"
+   602→                  >
+   603→                    <folder.icon className="h-3.5 w-3.5 mr-1.5" />
+   604→                    {folder.label}
+   605→                  </TabsTrigger>
+   606→                ))}
+   607→              </TabsList>
+   608→            </div>
+   609→
+   610→            {/* All tabs share the same content, filtered by activeFolder */}
+   611→            {FOLDERS.map((folder) => (
+   612→              <TabsContent key={folder.value} value={folder.value} className="mt-0">
+   613→                <div className="p-4">
+   614→                  {error && (
+   615→                    <div className="flex items-center gap-2 p-3 rounded-xl bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900/50 mb-4">
+   616→                      <AlertCircle className="h-4 w-4 text-red-500 shrink-0" />
+   617→                      <p className="text-sm text-red-700 dark:text-red-400">{error}</p>
+   618→                      <Button
+   619→                        variant="ghost"
+   620→                        size="sm"
+   621→                        onClick={handleRetry}
+   622→                        className="ml-auto text-xs text-red-600 hover:text-red-700"
+   623→                      >
+   624→                        Retry
+   625→                      </Button>
+   626→                    </div>
+   627→                  )}
+   628→
+   629→                  {loading ? (
+   630→                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+   631→                      {Array.from({ length: 6 }).map((_, i) => (
+   632→                        <DocumentCardSkeleton key={i} />
+   633→                      ))}
+   634→                    </div>
+   635→                  ) : filteredDocuments.length === 0 ? (
+   636→                    <motion.div
+   637→                      initial={{ opacity: 0 }}
+   638→                      animate={{ opacity: 1 }}
+   639→                      className="flex flex-col items-center justify-center py-16 text-center"
+   640→                    >
+   641→                      {documents.length === 0 ? (
+   642→                        // Global empty state — no documents at all
+   643→                        <>
+   644→                          <div className="h-16 w-16 rounded-2xl bg-emerald-50 dark:bg-emerald-950/30 flex items-center justify-center mb-4">
+   645→                            <Inbox className="h-8 w-8 text-emerald-400" />
+   646→                          </div>
+   647→                          <h3 className="text-lg font-semibold text-foreground mb-1">
+   648→                            No documents uploaded
+   649→                          </h3>
+   650→                          <p className="text-sm text-muted-foreground mb-4 max-w-sm">
+   651→                            Upload your first document to get started. Drag and drop files or click the button below.
+   652→                          </p>
+   653→                          <div className="flex flex-col items-center gap-3">
+   654→                            <Button
+   655→                              onClick={() => setUploadOpen(true)}
+   656→                              className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg shadow-emerald-600/20"
+   657→                            >
+   658→                              <Plus className="h-4 w-4" />
+   659→                              Upload Your First Document
+   660→                            </Button>
+   661→                            {/* Drag-and-drop area */}
+   662→                            <motion.div
+   663→                              animate={isDragging ? { scale: 1.01 } : { scale: 1 }}
+   664→                              onDragOver={handleDragOver}
+   665→                              onDragLeave={handleDragLeave}
+   666→                              onDrop={handleDrop}
+   667→                              className={`
+   668→                                mt-4 w-full max-w-md relative overflow-hidden rounded-xl border-2 border-dashed transition-all duration-300 cursor-pointer
+   669→                                ${isDragging
+   670→                                  ? 'border-emerald-400 bg-emerald-50/60'
+   671→                                  : 'border-slate-300 bg-gradient-to-br from-slate-50 via-white to-emerald-50/30 hover:border-emerald-300'
+   672→                                }
+   673→                              `}
+   674→                              onClick={() => fileInputRef.current?.click()}
+   675→                            >
+   676→                              <div className="py-8 px-4 flex flex-col items-center">
+   677→                                <Upload className={`h-8 w-8 mb-2 ${isDragging ? 'text-emerald-600' : 'text-slate-400'}`} />
+   678→                                <p className="text-sm text-muted-foreground">
+   679→                                  {isDragging ? 'Drop files here!' : 'Or drag & drop files here'}
+   680→                                </p>
+   681→                              </div>
+   682→                              <input
+   683→                                ref={fileInputRef}
+   684→                                type="file"
+   685→                                accept=".json,.csv,.xlsx,.xls,.pdf"
+   686→                                multiple
+   687→                                className="hidden"
+   688→                                onChange={handleFileSelect}
+   689→                              />
+   690→                            </motion.div>
+   691→                          </div>
+   692→                        </>
+   693→                      ) : (
+   694→                        // Filter empty state — no matches
+   695→                        <>
+   696→                          <div className="h-16 w-16 rounded-2xl bg-emerald-50 dark:bg-emerald-950/30 flex items-center justify-center mb-4">
+   697→                            <FolderOpen className="h-8 w-8 text-emerald-400" />
+   698→                          </div>
+   699→                          <h3 className="text-lg font-semibold text-foreground mb-1">
+   700→                            No documents found
+   701→                          </h3>
+   702→                          <p className="text-sm text-muted-foreground mb-4 max-w-sm">
+   703→                            {searchQuery
+   704→                              ? `No documents match "${searchQuery}"`
+   705→                              : 'Upload your first document to get started'}
+   706→                          </p>
+   707→                          {!searchQuery && (
+   708→                            <Button
+   709→                              onClick={() => setUploadOpen(true)}
+   710→                              variant="outline"
+   711→                              className="gap-2 border-emerald-200 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-800 dark:text-emerald-400 dark:hover:bg-emerald-950/30"
+   712→                            >
+   713→                              <Plus className="h-4 w-4" />
+   714→                              Upload Document
+   715→                            </Button>
+   716→                          )}
+   717→                        </>
+   718→                      )}
+   719→                    </motion.div>
+   720→                  ) : (
+   721→                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+   722→                      <AnimatePresence>
+   723→                        {filteredDocuments.map((doc, index) => (
+   724→                          <motion.div
+   725→                            key={doc.id}
+   726→                            initial={{ opacity: 0, y: 15 }}
+   727→                            animate={{ opacity: 1, y: 0 }}
+   728→                            exit={{ opacity: 0, scale: 0.95 }}
+   729→                            transition={{ delay: index * 0.04, duration: 0.35 }}
+   730→                            whileHover={{ y: -2 }}
+   731→                            className="group p-4 rounded-xl border border-border/30 hover:border-emerald-200/60 dark:hover:border-emerald-800/50 hover:shadow-md hover:shadow-emerald-500/5 transition-all cursor-pointer bg-card/50"
+   732→                          >
+   733→                            {/* Top: icon + name */}
+   734→                            <div className="flex items-start gap-3 mb-3">
+   735→                              <div className="flex items-center justify-center h-10 w-10 rounded-lg bg-muted/50 shrink-0">
+   736→                                {getFileTypeIcon(doc.fileType)}
+   737→                              </div>
+   738→                              <div className="flex-1 min-w-0">
+   739→                                <p className="text-sm font-semibold text-foreground truncate" title={doc.name}>
+   740→                                  {doc.name}
+   741→                                </p>
+   742→                                {doc.client && (
+   743→                                  <p className="text-xs text-muted-foreground truncate mt-0.5">
+   744→                                    {doc.client.tradeName}
+   745→                                  </p>
+   746→                                )}
+   747→                              </div>
+   748→                            </div>
+   749→
+   750→                            {/* File type badge + version + processing status */}
+   751→                            <div className="flex items-center gap-2 mb-3">
+   752→                              <Badge
+   753→                                variant="outline"
+   754→                                className={`text-[10px] px-2 py-0 border-0 font-semibold ${getFileTypeColor(doc.fileType)}`}
+   755→                              >
+   756→                                {doc.fileType.toUpperCase()}
+   757→                              </Badge>
+   758→                              <Badge
+   759→                                variant="outline"
+   760→                                className="text-[10px] px-2 py-0 border-border/30 text-muted-foreground font-medium"
+   761→                              >
+   762→                                v{doc.version}
+   763→                              </Badge>
+   764→                              {/* Processing status badge */}
+   765→                              {(doc.status === 'processing' || doc.status === 'uploaded') && (
+   766→                                <Badge className="text-[10px] px-2 py-0 bg-amber-50 text-amber-700 border-amber-200 border">
+   767→                                  <Loader2 className="h-2.5 w-2.5 mr-1 animate-spin" />
+   768→                                  {doc.processingStep || 'Processing'}
+   769→                                </Badge>
+   770→                              )}
+   771→                              {doc.status === 'completed' && (
+   772→                                <Badge className="text-[10px] px-2 py-0 bg-emerald-50 text-emerald-700 border-emerald-200 border">
+   773→                                  <CheckCircle2 className="h-2.5 w-2.5 mr-1" />
+   774→                                  Processed
+   775→                                </Badge>
+   776→                              )}
+   777→                              <span className="text-[10px] text-muted-foreground ml-auto">
+   778→                                {formatFileSize(doc.size)}
+   779→                              </span>
+   780→                            </div>
+   781→
+   782→                            {/* Processing progress bar */}
+   783→                            {doc.status === 'processing' && typeof doc.progress === 'number' && doc.progress < 100 && (
+   784→                              <div className="mb-3">
+   785→                                <div className="h-1.5 rounded-full bg-slate-100 overflow-hidden">
+   786→                                  <div
+   787→                                    className="h-full rounded-full bg-emerald-500 transition-all duration-500"
+   788→                                    style={{ width: `${doc.progress}%` }}
+   789→                                  />
+   790→                                </div>
+   791→                                <p className="text-[10px] text-muted-foreground mt-1">
+   792→                                  {doc.processingStep}: {doc.progress}%
+   793→                                </p>
+   794→                              </div>
+   795→                            )}
+   796→
+   797→                            {/* Tags */}
+   798→                            {doc.tags && (
+   799→                              <div className="flex flex-wrap gap-1 mb-3">
+   800→                                {doc.tags.split(',').slice(0, 3).map((tag, i) => (
+   801→                                  <Badge
+   802→                                    key={i}
+   803→                                    variant="outline"
+   804→                                    className="text-[10px] px-1.5 py-0 border-emerald-200/50 text-emerald-600 dark:border-emerald-800/50 dark:text-emerald-400 bg-emerald-50/50 dark:bg-emerald-950/20"
+   805→                                  >
+   806→                                    <Tag className="h-2.5 w-2.5 mr-0.5" />
+   807→                                    {tag.trim()}
+   808→                                  </Badge>
+   809→                                ))}
+   810→                                {doc.tags.split(',').length > 3 && (
+   811→                                  <span className="text-[10px] text-muted-foreground self-center">
+   812→                                    +{doc.tags.split(',').length - 3}
+   813→                                  </span>
+   814→                                )}
+   815→                              </div>
+   816→                            )}
+   817→
+   818→                            {/* Date + Actions */}
+   819→                            <div className="flex items-center justify-between pt-2 border-t border-border/20">
+   820→                              <span className="text-[10px] text-muted-foreground">
+   821→                                {formatDate(doc.createdAt)}
+   822→                              </span>
+   823→                              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+   824→                                <Button
+   825→                                  variant="ghost"
+   826→                                  size="sm"
+   827→                                  className="h-7 w-7 p-0 text-muted-foreground hover:text-emerald-600"
+   828→                                  title="Preview"
+   829→                                >
+   830→                                  <Eye className="h-3.5 w-3.5" />
+   831→                                </Button>
+   832→                                <Button
+   833→                                  variant="ghost"
+   834→                                  size="sm"
+   835→                                  className="h-7 w-7 p-0 text-muted-foreground hover:text-emerald-600"
+   836→                                  title="Download"
+   837→                                >
+   838→                                  <Download className="h-3.5 w-3.5" />
+   839→                                </Button>
+   840→                                <Button
+   841→                                  variant="ghost"
+   842→                                  size="sm"
+   843→                                  onClick={(e) => {
+   844→                                    e.stopPropagation();
+   845→                                    handleViewVersions(doc);
+   846→                                  }}
+   847→                                  className="h-7 w-7 p-0 text-muted-foreground hover:text-emerald-600"
+   848→                                  title="Version History"
+   849→                                >
+   850→                                  <History className="h-3.5 w-3.5" />
+   851→                                </Button>
+   852→                              </div>
+   853→                            </div>
+   854→                          </motion.div>
+   855→                        ))}
+   856→                      </AnimatePresence>
+   857→                    </div>
+   858→                  )}
+   859→
+   860→                  {/* Results count */}
+   861→                  {!loading && filteredDocuments.length > 0 && (
+   862→                    <div className="mt-4 text-center">
+   863→                      <p className="text-xs text-muted-foreground">
+   864→                        Showing {filteredDocuments.length} of {documents.length} documents
+   865→                      </p>
+   866→                    </div>
+   867→                  )}
+   868→                </div>
+   869→              </TabsContent>
+   870→            ))}
+   871→          </Tabs>
+   872→        </CardContent>
+   873→      </AnimatedCard>
+   874→
+   875→      {/* ═══ UPLOAD DOCUMENT DIALOG ═══ */}
+   876→      <Dialog open={uploadOpen} onOpenChange={setUploadOpen}>
+   877→        <DialogContent className="sm:max-w-lg">
+   878→          <DialogHeader>
+   879→            <DialogTitle className="flex items-center gap-2">
+   880→              <Upload className="h-5 w-5 text-emerald-500" />
+   881→              Upload Document
+   882→            </DialogTitle>
+   883→            <DialogDescription>
+   884→              Add a new document to the vault
+   885→            </DialogDescription>
+   886→          </DialogHeader>
+   887→
+   888→          {uploadSuccess ? (
+   889→            <motion.div
+   890→              initial={{ opacity: 0, scale: 0.9 }}
+   891→              animate={{ opacity: 1, scale: 1 }}
+   892→              className="flex flex-col items-center py-8"
+   893→            >
+   894→              <div className="h-14 w-14 rounded-full bg-emerald-100 dark:bg-emerald-950/40 flex items-center justify-center mb-3">
+   895→                <CheckCircle2 className="h-7 w-7 text-emerald-600 dark:text-emerald-400" />
+   896→              </div>
+   897→              <p className="text-lg font-semibold text-foreground">Document Uploaded!</p>
+   898→              <p className="text-sm text-muted-foreground mt-1">Your document has been added to the vault.</p>
+   899→            </motion.div>
+   900→          ) : (
+   901→            <div className="space-y-4">
+   902→              <div className="space-y-2">
+   903→                <Label>Client</Label>
+   904→                <Select
+   905→                  value={uploadForm.clientId}
+   906→                  onValueChange={(v) => setUploadForm((f) => ({ ...f, clientId: v }))}
+   907→                >
+   908→                  <SelectTrigger className="w-full">
+   909→                    <SelectValue placeholder="Select client (optional)" />
+   910→                  </SelectTrigger>
+   911→                  <SelectContent>
+   912→                    {clients.map((c) => (
+   913→                      <SelectItem key={c.id} value={c.id}>
+   914→                        {c.tradeName}
+   915→                      </SelectItem>
+   916→                    ))}
+   917→                  </SelectContent>
+   918→                </Select>
+   919→              </div>
+   920→
+   921→              <div className="space-y-2">
+   922→                <Label>Folder</Label>
+   923→                <Select
+   924→                  value={uploadForm.folder}
+   925→                  onValueChange={(v) => setUploadForm((f) => ({ ...f, folder: v }))}
+   926→                >
+   927→                  <SelectTrigger className="w-full">
+   928→                    <SelectValue />
+   929→                  </SelectTrigger>
+   930→                  <SelectContent>
+   931→                    {FOLDERS.filter((f) => f.value !== 'all').map((f) => (
+   932→                      <SelectItem key={f.value} value={f.value}>
+   933→                        {f.label}
+   934→                      </SelectItem>
+   935→                    ))}
+   936→                    <SelectItem value="general">General</SelectItem>
+   937→                  </SelectContent>
+   938→                </Select>
+   939→              </div>
+   940→
+   941→              <div className="space-y-2">
+   942→                <Label>Document Name *</Label>
+   943→                <Input
+   944→                  placeholder="e.g. GSTR-1 Return Q3 2025"
+   945→                  value={uploadForm.name}
+   946→                  onChange={(e) => setUploadForm((f) => ({ ...f, name: e.target.value }))}
+   947→                />
+   948→              </div>
+   949→
+   950→              <div className="grid grid-cols-2 gap-4">
+   951→                <div className="space-y-2">
+   952→                  <Label>File Type</Label>
+   953→                  <Select
+   954→                    value={uploadForm.fileType}
+   955→                    onValueChange={(v) => setUploadForm((f) => ({ ...f, fileType: v }))}
+   956→                  >
+   957→                    <SelectTrigger className="w-full">
+   958→                      <SelectValue />
+   959→                    </SelectTrigger>
+   960→                    <SelectContent>
+   961→                      {['pdf', 'xlsx', 'docx', 'jpg', 'png', 'csv', 'pptx'].map((t) => (
+   962→                        <SelectItem key={t} value={t}>
+   963→                          {t.toUpperCase()}
+   964→                        </SelectItem>
+   965→                      ))}
+   966→                    </SelectContent>
+   967→                  </Select>
+   968→                </div>
+   969→
+   970→                <div className="space-y-2">
+   971→                  <Label>Tags</Label>
+   972→                  <Input
+   973→                    placeholder="gst, return, quarterly"
+   974→                    value={uploadForm.tags}
+   975→                    onChange={(e) => setUploadForm((f) => ({ ...f, tags: e.target.value }))}
+   976→                  />
+   977→                </div>
+   978→              </div>
+   979→
+   980→              <div className="space-y-2">
+   981→                <Label>Description</Label>
+   982→                <Textarea
+   983→                  placeholder="Brief description of the document..."
+   984→                  value={uploadForm.description}
+   985→                  onChange={(e) => setUploadForm((f) => ({ ...f, description: e.target.value }))}
+   986→                  rows={3}
+   987→                />
+   988→              </div>
+   989→            </div>
+   990→          )}
+   991→
+   992→          {!uploadSuccess && (
+   993→            <DialogFooter>
+   994→              <Button
+   995→                variant="outline"
+   996→                onClick={() => setUploadOpen(false)}
+   997→                disabled={documentUploadMutation.isPending}
+   998→              >
+   999→                Cancel
+  1000→              </Button>
+  1001→              <Button
+  1002→                onClick={handleUpload}
+  1003→                disabled={!uploadForm.name.trim() || documentUploadMutation.isPending}
+  1004→                className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white"
+  1005→              >
+  1006→                {documentUploadMutation.isPending ? (
+  1007→                  <>
+  1008→                    <Loader2 className="h-4 w-4 animate-spin" />
+  1009→                    Uploading...
+  1010→                  </>
+  1011→                ) : (
+  1012→                  <>
+  1013→                    <Upload className="h-4 w-4" />
+  1014→                    Upload
+  1015→                  </>
+  1016→                )}
+  1017→              </Button>
+  1018→            </DialogFooter>
+  1019→          )}
+  1020→        </DialogContent>
+  1021→      </Dialog>
+  1022→
+  1023→      {/* ═══ VERSION HISTORY DIALOG ═══ */}
+  1024→      <Dialog open={versionOpen} onOpenChange={setVersionOpen}>
+  1025→        <DialogContent className="sm:max-w-lg">
+  1026→          <DialogHeader>
+  1027→            <DialogTitle className="flex items-center gap-2">
+  1028→              <History className="h-5 w-5 text-emerald-500" />
+  1029→              Version History
+  1030→            </DialogTitle>
+  1031→            <DialogDescription>
+  1032→              {versionDoc ? `All versions of "${versionDoc.name}"` : 'Document versions'}
+  1033→            </DialogDescription>
+  1034→          </DialogHeader>
+  1035→
+  1036→          {versionsLoading ? (
+  1037→            <div className="space-y-3 py-4">
+  1038→              {Array.from({ length: 3 }).map((_, i) => (
+  1039→                <div key={i} className="flex items-center gap-3 p-3 rounded-lg">
+  1040→                  <Skeleton className="h-8 w-8 rounded-lg" />
+  1041→                  <div className="flex-1 space-y-1.5">
+  1042→                    <Skeleton className="h-4 w-3/4" />
+  1043→                    <Skeleton className="h-3 w-1/2" />
+  1044→                  </div>
+  1045→                  <Skeleton className="h-8 w-8 rounded" />
+  1046→                </div>
+  1047→              ))}
+  1048→            </div>
+  1049→          ) : versions.length === 0 ? (
+  1050→            <p className="text-sm text-muted-foreground text-center py-8">
+  1051→              No version history available.
+  1052→            </p>
+  1053→          ) : (
+  1054→            <ScrollArea className="max-h-80">
+  1055→              <div className="space-y-2 pr-2">
+  1056→                {versions.map((v, index) => (
+  1057→                  <motion.div
+  1058→                    key={v.id}
+  1059→                    initial={{ opacity: 0, x: -10 }}
+  1060→                    animate={{ opacity: 1, x: 0 }}
+  1061→                    transition={{ delay: index * 0.06 }}
+  1062→                    className="flex items-center gap-3 p-3 rounded-xl border border-border/30 hover:border-emerald-200/50 dark:hover:border-emerald-800/50 transition-colors"
+  1063→                  >
+  1064→                    <div className="flex items-center justify-center h-9 w-9 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 shrink-0">
+  1065→                      <span className="text-sm font-bold text-emerald-600 dark:text-emerald-400">
+  1066→                        v{v.version}
+  1067→                      </span>
+  1068→                    </div>
+  1069→                    <div className="flex-1 min-w-0">
+  1070→                      <p className="text-sm font-medium text-foreground truncate">
+  1071→                        Version {v.version}
+  1072→                        {v.isLatest && (
+  1073→                          <Badge className="ml-2 text-[9px] px-1.5 py-0 bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 border-0">
+  1074→                            Latest
+  1075→                          </Badge>
+  1076→                        )}
+  1077→                      </p>
+  1078→                      <p className="text-xs text-muted-foreground">
+  1079→                        {formatDate(v.createdAt)}
+  1080→                        {v.uploadedBy && ` by ${v.uploadedBy}`}
+  1081→                      </p>
+  1082→                    </div>
+  1083→                    <Button
+  1084→                      variant="ghost"
+  1085→                      size="sm"
+  1086→                      className="h-8 w-8 p-0 text-muted-foreground hover:text-emerald-600 shrink-0"
+  1087→                      title="Download this version"
+  1088→                    >
+  1089→                      <Download className="h-4 w-4" />
+  1090→                    </Button>
+  1091→                  </motion.div>
+  1092→                ))}
+  1093→              </div>
+  1094→            </ScrollArea>
+  1095→          )}
+  1096→        </DialogContent>
+  1097→      </Dialog>
+  1098→    </div>
+  1099→  );
+  1100→}
+  1101→

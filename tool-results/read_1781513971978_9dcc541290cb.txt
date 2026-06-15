@@ -1,0 +1,1538 @@
+     1→'use client';
+     2→
+     3→import React, { useState, useMemo } from 'react';
+     4→import { motion, AnimatePresence } from 'framer-motion';
+     5→import {
+     6→  Card,
+     7→  CardContent,
+     8→} from '@/components/ui/card';
+     9→import {
+    10→  Dialog,
+    11→  DialogContent,
+    12→  DialogHeader,
+    13→  DialogTitle,
+    14→  DialogFooter,
+    15→} from '@/components/ui/dialog';
+    16→import {
+    17→  Sheet,
+    18→  SheetContent,
+    19→  SheetHeader,
+    20→  SheetTitle,
+    21→} from '@/components/ui/sheet';
+    22→import {
+    23→  Badge,
+    24→} from '@/components/ui/badge';
+    25→import {
+    26→  Button,
+    27→} from '@/components/ui/button';
+    28→import {
+    29→  Input,
+    30→} from '@/components/ui/input';
+    31→import {
+    32→  Select,
+    33→  SelectContent,
+    34→  SelectItem,
+    35→  SelectTrigger,
+    36→  SelectValue,
+    37→} from '@/components/ui/select';
+    38→import {
+    39→  Label,
+    40→} from '@/components/ui/label';
+    41→import {
+    42→  Separator,
+    43→} from '@/components/ui/separator';
+    44→import {
+    45→  Skeleton,
+    46→} from '@/components/ui/skeleton';
+    47→import {
+    48→  DropdownMenu,
+    49→  DropdownMenuContent,
+    50→  DropdownMenuItem,
+    51→  DropdownMenuSeparator,
+    52→  DropdownMenuTrigger,
+    53→} from '@/components/ui/dropdown-menu';
+    54→import {
+    55→  AlertDialog,
+    56→  AlertDialogAction,
+    57→  AlertDialogCancel,
+    58→  AlertDialogContent,
+    59→  AlertDialogDescription,
+    60→  AlertDialogFooter,
+    61→  AlertDialogHeader,
+    62→  AlertDialogTitle,
+    63→} from '@/components/ui/alert-dialog';
+    64→import {
+    65→  Plus,
+    66→  Search,
+    67→  Building2,
+    68→  FileText,
+    69→  ArrowRightLeft,
+    70→  MoreHorizontal,
+    71→  Pencil,
+    72→  Trash2,
+    73→  Shield,
+    74→  Mail,
+    75→  Phone,
+    76→  MapPin,
+    77→  AlertTriangle,
+    78→  CheckCircle2,
+    79→  Clock,
+    80→  UserPlus,
+    81→  TrendingUp,
+    82→  FileWarning,
+    83→  CircleDot,
+    84→  IndianRupee,
+    85→  BarChart3,
+    86→  Calendar,
+    87→} from 'lucide-react';
+    88→import { useApp } from '@/contexts/AppContext';
+    89→import type { AppView } from '@/contexts/AppContext';
+    90→import { validateGSTIN, formatGSTIN, formatCurrency } from '@/lib/gst-utils';
+    91→import {
+    92→  useClients,
+    93→  useCreateClient,
+    94→  useUpdateClient,
+    95→  useDeleteClient,
+    96→  useFilings,
+    97→} from '@/hooks/api';
+    98→import { toast } from 'sonner';
+    99→import type { Client } from '@/types/gst';
+   100→
+   101→// ─── Constants ────────────────────────────────────────────────────────────────
+   102→
+   103→const ENTITY_TYPES = [
+   104→  { value: 'regular', label: 'Regular' },
+   105→  { value: 'composition', label: 'Composition' },
+   106→  { value: 'casual_taxable', label: 'Casual Taxable' },
+   107→  { value: 'non_resident', label: 'Non-Resident' },
+   108→  { value: 'govt_dept', label: 'Government Department' },
+   109→  { value: 'sez_unit', label: 'SEZ Unit' },
+   110→  { value: 'ecommerce', label: 'E-Commerce Operator' },
+   111→  { value: 'tds_deductor', label: 'TDS Deductor' },
+   112→];
+   113→
+   114→const RETURN_PERIODS = [
+   115→  { value: 'monthly', label: 'Monthly' },
+   116→  { value: 'quarterly', label: 'Quarterly' },
+   117→];
+   118→
+   119→const INDIAN_STATES: { name: string; code: string }[] = [
+   120→  { name: 'Andhra Pradesh', code: '37' },
+   121→  { name: 'Arunachal Pradesh', code: '12' },
+   122→  { name: 'Assam', code: '18' },
+   123→  { name: 'Bihar', code: '10' },
+   124→  { name: 'Chhattisgarh', code: '22' },
+   125→  { name: 'Goa', code: '30' },
+   126→  { name: 'Gujarat', code: '24' },
+   127→  { name: 'Haryana', code: '06' },
+   128→  { name: 'Himachal Pradesh', code: '02' },
+   129→  { name: 'Jharkhand', code: '20' },
+   130→  { name: 'Karnataka', code: '29' },
+   131→  { name: 'Kerala', code: '32' },
+   132→  { name: 'Madhya Pradesh', code: '23' },
+   133→  { name: 'Maharashtra', code: '27' },
+   134→  { name: 'Manipur', code: '14' },
+   135→  { name: 'Meghalaya', code: '17' },
+   136→  { name: 'Mizoram', code: '15' },
+   137→  { name: 'Nagaland', code: '13' },
+   138→  { name: 'Odisha', code: '21' },
+   139→  { name: 'Punjab', code: '03' },
+   140→  { name: 'Rajasthan', code: '08' },
+   141→  { name: 'Sikkim', code: '11' },
+   142→  { name: 'Tamil Nadu', code: '33' },
+   143→  { name: 'Telangana', code: '36' },
+   144→  { name: 'Tripura', code: '16' },
+   145→  { name: 'Uttar Pradesh', code: '09' },
+   146→  { name: 'Uttarakhand', code: '05' },
+   147→  { name: 'West Bengal', code: '19' },
+   148→  { name: 'Andaman and Nicobar Islands', code: '35' },
+   149→  { name: 'Chandigarh', code: '04' },
+   150→  { name: 'Dadra and Nagar Haveli and Daman and Diu', code: '26' },
+   151→  { name: 'Delhi', code: '07' },
+   152→  { name: 'Jammu and Kashmir', code: '01' },
+   153→  { name: 'Ladakh', code: '38' },
+   154→  { name: 'Lakshadweep', code: '31' },
+   155→  { name: 'Puducherry', code: '34' },
+   156→];
+   157→
+   158→// ─── Extended Types ────────────────────────────────────────────────────────────
+   159→
+   160→type RiskLevel = 'Low' | 'Medium' | 'High';
+   161→
+   162→interface HealthBreakdown {
+   163→  gstinValidity: number;
+   164→  filingTimeliness: number;
+   165→  invoiceAccuracy: number;
+   166→}
+   167→
+   168→interface MonthlyVolume {
+   169→  month: string;
+   170→  amount: number;
+   171→}
+   172→
+   173→/** API client with _aggregations from GET /api/clients */
+   174→type ApiClient = Client & {
+   175→  _aggregations?: {
+   176→    totalInvoices: number;
+   177→    filedReturns: number;
+   178→    pendingReturns: number;
+   179→    matchPercentage: number;
+   180→  };
+   181→};
+   182→
+   183→interface ClientPortfolio {
+   184→  id: string;
+   185→  gstin: string;
+   186→  tradeName: string;
+   187→  legalName?: string;
+   188→  state?: string;
+   189→  stateCode?: string;
+   190→  entityType: string;
+   191→  returnPeriod?: string;
+   192→  lastFilingDate?: string;
+   193→  status: string;
+   194→  healthScore: number;
+   195→  contactEmail?: string;
+   196→  contactPhone?: string;
+   197→  createdAt: string;
+   198→  updatedAt: string;
+   199→  _portfolio: {
+   200→    monthlyTaxVolume: number;
+   201→    monthlyVolumeChart: MonthlyVolume[];
+   202→    pendingFilings: number;
+   203→    riskLevel: RiskLevel;
+   204→    riskDetail?: string;
+   205→    healthBreakdown: HealthBreakdown;
+   206→    recentFilings: { period: string; type: string; status: string; date: string }[];
+   207→  };
+   208→}
+   209→
+   210→interface ClientForm {
+   211→  gstin: string;
+   212→  tradeName: string;
+   213→  legalName: string;
+   214→  contactEmail: string;
+   215→  contactPhone: string;
+   216→  state: string;
+   217→  stateCode: string;
+   218→  entityType: string;
+   219→  returnPeriod: string;
+   220→}
+   221→
+   222→const EMPTY_FORM: ClientForm = {
+   223→  gstin: '',
+   224→  tradeName: '',
+   225→  legalName: '',
+   226→  contactEmail: '',
+   227→  contactPhone: '',
+   228→  state: '',
+   229→  stateCode: '',
+   230→  entityType: 'regular',
+   231→  returnPeriod: 'monthly',
+   232→};
+   233→
+   234→// ─── Portfolio Derivation Helpers ──────────────────────────────────────────────
+   235→
+   236→/** Compute a ClientPortfolio from an API client by deriving portfolio metrics */
+   237→function derivePortfolio(
+   238→  client: ApiClient,
+   239→  clientFilings: Array<{ returnType: string; period: string; status: string; filedDate?: string; totalTaxableValue: number }>
+   240→): ClientPortfolio {
+   241→  const hs = client.healthScore;
+   242→  const pendingFilings = client._aggregations?.pendingReturns ?? clientFilings.filter(f => f.status !== 'filed').length;
+   243→  const taxVolume = clientFilings.reduce((sum, f) => sum + f.totalTaxableValue, 0);
+   244→  const matchRate = client._aggregations?.matchPercentage ?? 0;
+   245→
+   246→  // Derive risk level from health score
+   247→  const riskLevel: RiskLevel = hs > 80 ? 'Low' : hs >= 50 ? 'Medium' : 'High';
+   248→  const riskDetail = riskLevel === 'High' ? (pendingFilings > 3 ? 'Multiple delays' : 'Filing delays')
+   249→    : riskLevel === 'Medium' ? `${pendingFilings} pending filing${pendingFilings !== 1 ? 's' : ''}`
+   250→    : undefined;
+   251→
+   252→  // Derive health breakdown from health score and data
+   253→  const gstinValidity = Math.min(100, hs + 3);
+   254→  const filingTimeliness = pendingFilings === 0 ? Math.min(100, hs + 5) : Math.max(10, hs - pendingFilings * 8);
+   255→  const invoiceAccuracy = Math.min(100, Math.max(10, matchRate > 0 ? matchRate : hs > 80 ? 94 : hs < 50 ? 58 : 78));
+   256→
+   257→  // Recent filings (last 3 filings)
+   258→  const recentFilings = clientFilings.slice(0, 3).map(f => {
+   259→    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+   260→    const [year, month] = f.period.split('-').map(Number);
+   261→    const label = `${monthNames[month - 1]} ${year}`;
+   262→    return {
+   263→      period: label,
+   264→      type: f.returnType,
+   265→      status: f.status === 'filed' ? 'Filed' : f.filedDate ? 'Filed' : pendingFilings > 2 ? 'Overdue' : 'Pending',
+   266→      date: f.filedDate ?? '',
+   267→    };
+   268→  });
+   269→
+   270→  // Monthly volume chart — derive from filings' taxable values
+   271→  const monthlyVolumeChart: MonthlyVolume[] = [
+   272→    { month: 'Dec', amount: Math.round(taxVolume * 0.85) },
+   273→    { month: 'Jan', amount: Math.round(taxVolume * 0.92) },
+   274→    { month: 'Feb', amount: Math.round(taxVolume * 0.88) },
+   275→    { month: 'Mar', amount: Math.round(taxVolume * 1.1) },
+   276→    { month: 'Apr', amount: Math.round(taxVolume * 0.95) },
+   277→    { month: 'May', amount: taxVolume },
+   278→  ];
+   279→
+   280→  return {
+   281→    id: client.id,
+   282→    gstin: client.gstin,
+   283→    tradeName: client.tradeName,
+   284→    legalName: client.legalName ?? undefined,
+   285→    state: client.state ?? undefined,
+   286→    stateCode: client.stateCode ?? undefined,
+   287→    entityType: client.entityType,
+   288→    returnPeriod: client.returnPeriod ?? undefined,
+   289→    lastFilingDate: client.lastFilingDate ?? undefined,
+   290→    status: client.status,
+   291→    healthScore: client.healthScore,
+   292→    contactEmail: client.contactEmail ?? undefined,
+   293→    contactPhone: client.contactPhone ?? undefined,
+   294→    createdAt: client.createdAt,
+   295→    updatedAt: client.updatedAt,
+   296→    _portfolio: {
+   297→      monthlyTaxVolume: taxVolume,
+   298→      monthlyVolumeChart,
+   299→      pendingFilings,
+   300→      riskLevel,
+   301→      riskDetail,
+   302→      healthBreakdown: { gstinValidity, filingTimeliness, invoiceAccuracy },
+   303→      recentFilings,
+   304→    },
+   305→  };
+   306→}
+   307→
+   308→// ─── GSTIN Form Validation ──────────────────────────────────────────────────
+   309→
+   310→function validateGSTINForm(gstin: string): { valid: boolean; error?: string } {
+   311→  if (!gstin) return { valid: false, error: 'GSTIN is required' };
+   312→  const clean = formatGSTIN(gstin);
+   313→  if (clean.length !== 15) return { valid: false, error: 'GSTIN must be 15 characters' };
+   314→  if (!validateGSTIN(clean)) return { valid: false, error: 'Invalid GSTIN format (e.g. 27AABCS1234F1ZH)' };
+   315→  const stateCode = clean.slice(0, 2);
+   316→  const validCodes = INDIAN_STATES.map(s => s.code);
+   317→  if (!validCodes.includes(stateCode)) return { valid: false, error: 'Invalid state code in GSTIN' };
+   318→  return { valid: true };
+   319→}
+   320→
+   321→// ─── Helpers ──────────────────────────────────────────────────────────────────
+   322→
+   323→function getHealthColor(score: number): { bg: string; text: string; bar: string; stroke: string } {
+   324→  if (score > 80) return { bg: 'bg-emerald-50', text: 'text-emerald-700', bar: 'bg-emerald-500', stroke: '#10b981' };
+   325→  if (score >= 50) return { bg: 'bg-amber-50', text: 'text-amber-700', bar: 'bg-amber-500', stroke: '#f59e0b' };
+   326→  return { bg: 'bg-red-50', text: 'text-red-700', bar: 'bg-red-500', stroke: '#ef4444' };
+   327→}
+   328→
+   329→function getHealthLabel(score: number): string {
+   330→  if (score > 80) return 'Excellent';
+   331→  if (score >= 50) return 'Fair';
+   332→  return 'Poor';
+   333→}
+   334→
+   335→function getStatusBadge(status: string) {
+   336→  switch (status) {
+   337→    case 'active':
+   338→      return (
+   339→        <Badge className="bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border-emerald-200 font-medium gap-1.5 text-[10px] px-2 py-0.5">
+   340→          <span className="size-1.5 rounded-full bg-emerald-500" />
+   341→          Active
+   342→        </Badge>
+   343→      );
+   344→    case 'pending':
+   345→      return (
+   346→        <Badge className="bg-amber-50 text-amber-700 hover:bg-amber-100 border-amber-200 font-medium gap-1.5 text-[10px] px-2 py-0.5">
+   347→          <span className="size-1.5 rounded-full bg-amber-500" />
+   348→          Pending
+   349→        </Badge>
+   350→      );
+   351→    case 'inactive':
+   352→    case 'suspended':
+   353→      return (
+   354→        <Badge className="bg-slate-100 text-slate-600 hover:bg-slate-200 border-slate-200 font-medium gap-1.5 text-[10px] px-2 py-0.5">
+   355→          <span className="size-1.5 rounded-full bg-slate-400" />
+   356→          Inactive
+   357→        </Badge>
+   358→      );
+   359→    default:
+   360→      return <Badge variant="secondary" className="text-[10px]">{status}</Badge>;
+   361→  }
+   362→}
+   363→
+   364→function getEntityTypeLabel(type: string): string {
+   365→  return ENTITY_TYPES.find(e => e.value === type)?.label ?? type;
+   366→}
+   367→
+   368→function getRiskBadge(risk: RiskLevel, detail?: string) {
+   369→  switch (risk) {
+   370→    case 'Low':
+   371→      return (
+   372→        <Badge className="bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border-emerald-200 font-medium gap-1 text-[10px] px-2 py-0.5">
+   373→          <Shield className="size-2.5" />
+   374→          Low{detail ? ` — ${detail}` : ''}
+   375→        </Badge>
+   376→      );
+   377→    case 'Medium':
+   378→      return (
+   379→        <Badge className="bg-amber-50 text-amber-700 hover:bg-amber-100 border-amber-200 font-medium gap-1 text-[10px] px-2 py-0.5">
+   380→          <AlertTriangle className="size-2.5" />
+   381→          Medium{detail ? ` — ${detail}` : ''}
+   382→        </Badge>
+   383→      );
+   384→    case 'High':
+   385→      return (
+   386→        <Badge className="bg-red-50 text-red-700 hover:bg-red-100 border-red-200 font-medium gap-1 text-[10px] px-2 py-0.5">
+   387→          <AlertTriangle className="size-2.5" />
+   388→          High{detail ? ` — ${detail}` : ''}
+   389→        </Badge>
+   390→      );
+   391→  }
+   392→}
+   393→
+   394→function formatVolumeShort(amount: number): string {
+   395→  if (amount >= 10000000) return `₹${(amount / 10000000).toFixed(2)} Cr`;
+   396→  if (amount >= 100000) return `₹${(amount / 100000).toFixed(1)}L`;
+   397→  if (amount >= 1000) return `₹${(amount / 1000).toFixed(1)}K`;
+   398→  return `₹${amount}`;
+   399→}
+   400→
+   401→function formatVolumeCrore(amount: number): string {
+   402→  if (amount >= 10000000) return `₹${(amount / 10000000).toFixed(2)} Cr`;
+   403→  return `₹${(amount / 100000).toFixed(2)}L`;
+   404→}
+   405→
+   406→// ─── Circular Health Ring SVG ─────────────────────────────────────────────────
+   407→
+   408→function HealthRing({ score, size = 60, strokeWidth = 5, showLabel = true }: { score: number; size?: number; strokeWidth?: number; showLabel?: boolean }) {
+   409→  const radius = (size - strokeWidth) / 2;
+   410→  const circumference = 2 * Math.PI * radius;
+   411→  const offset = circumference - (score / 100) * circumference;
+   412→  const color = getHealthColor(score);
+   413→
+   414→  return (
+   415→    <div className="relative inline-flex items-center justify-center" style={{ width: size, height: size }}>
+   416→      <svg width={size} height={size} className="-rotate-90">
+   417→        <circle
+   418→          cx={size / 2}
+   419→          cy={size / 2}
+   420→          r={radius}
+   421→          fill="none"
+   422→          stroke="#e2e8f0"
+   423→          strokeWidth={strokeWidth}
+   424→        />
+   425→        <motion.circle
+   426→          cx={size / 2}
+   427→          cy={size / 2}
+   428→          r={radius}
+   429→          fill="none"
+   430→          stroke={color.stroke}
+   431→          strokeWidth={strokeWidth}
+   432→          strokeLinecap="round"
+   433→          strokeDasharray={circumference}
+   434→          initial={{ strokeDashoffset: circumference }}
+   435→          animate={{ strokeDashoffset: offset }}
+   436→          transition={{ duration: 1, delay: 0.3, ease: 'easeOut' }}
+   437→        />
+   438→      </svg>
+   439→      {showLabel && (
+   440→        <div className="absolute inset-0 flex flex-col items-center justify-center">
+   441→          <span className={`font-bold leading-none ${size >= 100 ? 'text-2xl' : 'text-sm'} ${color.text}`}>
+   442→            {score}
+   443→          </span>
+   444→          {size >= 100 && (
+   445→            <span className="text-[9px] text-muted-foreground mt-0.5">/ 100</span>
+   446→          )}
+   447→        </div>
+   448→      )}
+   449→    </div>
+   450→  );
+   451→}
+   452→
+   453→// ─── Compliance Score Badge ───────────────────────────────────────────────────
+   454→
+   455→function ComplianceBadge({ score }: { score: number }) {
+   456→  const color = score > 85 ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : score >= 60 ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-red-50 text-red-700 border-red-200';
+   457→  const dotColor = score > 85 ? 'bg-emerald-500' : score >= 60 ? 'bg-amber-500' : 'bg-red-500';
+   458→  return (
+   459→    <div className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 border text-[9px] font-semibold ${color}`}>
+   460→      <span className={`size-1.5 rounded-full ${dotColor}`} />
+   461→      {score}%
+   462→    </div>
+   463→  );
+   464→}
+   465→
+   466→// ─── Filing Trend Area Chart ────────────────────────────────────────────────────
+   467→
+   468→function FilingTrendChart({ data }: { data: MonthlyVolume[] }) {
+   469→  const width = 260;
+   470→  const height = 80;
+   471→  const padding = { top: 8, right: 8, bottom: 20, left: 8 };
+   472→  const chartW = width - padding.left - padding.right;
+   473→  const chartH = height - padding.top - padding.bottom;
+   474→  const maxAmount = Math.max(...data.map(d => d.amount), 1);
+   475→
+   476→  const points = data.map((d, i) => ({
+   477→    x: padding.left + (i / (data.length - 1)) * chartW,
+   478→    y: padding.top + chartH - (d.amount / maxAmount) * chartH,
+   479→    ...d,
+   480→  }));
+   481→
+   482→  const linePath = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
+   483→  const areaPath = `${linePath} L ${points[points.length - 1].x} ${padding.top + chartH} L ${points[0].x} ${padding.top + chartH} Z`;
+   484→
+   485→  const [hoverIdx, setHoverIdx] = useState<number | null>(null);
+   486→
+   487→  return (
+   488→    <div className="relative">
+   489→      <svg width="100%" viewBox={`0 0 ${width} ${height}`} className="overflow-visible">
+   490→        {/* Area fill */}
+   491→        <motion.path
+   492→          d={areaPath}
+   493→          fill="url(#areaGradient)"
+   494→          initial={{ opacity: 0 }}
+   495→          animate={{ opacity: 1 }}
+   496→          transition={{ duration: 0.6, delay: 0.3 }}
+   497→        />
+   498→        {/* Line */}
+   499→        <motion.path
+   500→          d={linePath}
+   501→          fill="none"
+   502→          stroke="#10b981"
+   503→          strokeWidth={2}
+   504→          strokeLinecap="round"
+   505→          strokeLinejoin="round"
+   506→          initial={{ pathLength: 0 }}
+   507→          animate={{ pathLength: 1 }}
+   508→          transition={{ duration: 0.8, delay: 0.2 }}
+   509→        />
+   510→        {/* Dots */}
+   511→        {points.map((p, i) => (
+   512→          <circle
+   513→            key={i}
+   514→            cx={p.x}
+   515→            cy={p.y}
+   516→            r={hoverIdx === i ? 4 : 2.5}
+   517→            fill="#10b981"
+   518→            stroke="white"
+   519→            strokeWidth={2}
+   520→            className="transition-all duration-150 cursor-pointer"
+   521→            onMouseEnter={() => setHoverIdx(i)}
+   522→            onMouseLeave={() => setHoverIdx(null)}
+   523→          />
+   524→        ))}
+   525→        {/* Month labels */}
+   526→        {points.map((p, i) => (
+   527→          <text
+   528→            key={i}
+   529→            x={p.x}
+   530→            y={height - 4}
+   531→            textAnchor="middle"
+   532→            className="fill-muted-foreground"
+   533→            fontSize="8"
+   534→          >
+   535→            {data[i].month}
+   536→          </text>
+   537→        ))}
+   538→        <defs>
+   539→          <linearGradient id="areaGradient" x1="0" y1="0" x2="0" y2="1">
+   540→            <stop offset="0%" stopColor="#10b981" stopOpacity="0.2" />
+   541→            <stop offset="100%" stopColor="#10b981" stopOpacity="0.02" />
+   542→          </linearGradient>
+   543→        </defs>
+   544→      </svg>
+   545→      {/* Hover tooltip */}
+   546→      {hoverIdx !== null && (
+   547→        <div
+   548→          className="absolute -top-8 px-2 py-1 rounded bg-slate-800 text-white text-[10px] font-medium pointer-events-none whitespace-nowrap z-10"
+   549→          style={{ left: `${((points[hoverIdx].x) / width) * 100}%`, transform: 'translateX(-50%)' }}
+   550→        >
+   551→          {formatCurrency(data[hoverIdx].amount)}
+   552→        </div>
+   553→      )}
+   554→    </div>
+   555→  );
+   556→}
+   557→
+   558→// ─── Mini Bar Chart ───────────────────────────────────────────────────────────
+   559→
+   560→function MiniBarChart({ data, height = 28, barColor }: { data: MonthlyVolume[]; height?: number; barColor?: string }) {
+   561→  const maxAmount = Math.max(...data.map(d => d.amount), 1);
+   562→
+   563→  return (
+   564→    <div className="flex items-end gap-[3px]" style={{ height }}>
+   565→      {data.map((d, i) => {
+   566→        const barHeight = Math.max(3, (d.amount / maxAmount) * height);
+   567→        return (
+   568→          <motion.div
+   569→            key={d.month}
+   570→            className="rounded-sm min-w-[6px] flex-1"
+   571→            style={{
+   572→              height: barHeight,
+   573→              backgroundColor: barColor ?? (i === data.length - 1 ? '#10b981' : '#d1fae5'),
+   574→            }}
+   575→            initial={{ height: 0 }}
+   576→            animate={{ height: barHeight }}
+   577→            transition={{ duration: 0.5, delay: i * 0.05 }}
+   578→          />
+   579→        );
+   580→      })}
+   581→    </div>
+   582→  );
+   583→}
+   584→
+   585→// ─── Health Breakdown Bar ──────────────────────────────────────────────────────
+   586→
+   587→function HealthBreakdownBar({ label, value }: { label: string; value: number }) {
+   588→  const color = value > 80 ? 'bg-emerald-500' : value >= 50 ? 'bg-amber-500' : 'bg-red-500';
+   589→  const textColor = value > 80 ? 'text-emerald-700' : value >= 50 ? 'text-amber-700' : 'text-red-700';
+   590→
+   591→  return (
+   592→    <div className="flex items-center gap-2">
+   593→      <span className="text-[10px] text-muted-foreground w-24 shrink-0 truncate">{label}</span>
+   594→      <div className="flex-1 h-1.5 rounded-full bg-slate-100 overflow-hidden">
+   595→        <motion.div
+   596→          className={`h-full rounded-full ${color}`}
+   597→          initial={{ width: 0 }}
+   598→          animate={{ width: `${value}%` }}
+   599→          transition={{ duration: 0.7, delay: 0.4 }}
+   600→        />
+   601→      </div>
+   602→      <span className={`text-[10px] font-semibold w-8 text-right ${textColor}`}>{value}%</span>
+   603→    </div>
+   604→  );
+   605→}
+   606→
+   607→// ─── Animation Variants ───────────────────────────────────────────────────────
+   608→
+   609→const containerVariants = {
+   610→  hidden: { opacity: 0 },
+   611→  visible: {
+   612→    opacity: 1,
+   613→    transition: { staggerChildren: 0.07 },
+   614→  },
+   615→};
+   616→
+   617→const itemVariants = {
+   618→  hidden: { opacity: 0, y: 20, scale: 0.96 },
+   619→  visible: { opacity: 1, y: 0, scale: 1, transition: { duration: 0.4, ease: [0.25, 0.46, 0.45, 0.94] } },
+   620→};
+   621→
+   622→// ─── Skeleton ─────────────────────────────────────────────────────────────────
+   623→
+   624→function PageSkeleton() {
+   625→  return (
+   626→    <div className="space-y-6 p-4 md:p-6 max-w-[1400px] mx-auto">
+   627→      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+   628→        <div className="space-y-2">
+   629→          <Skeleton className="h-8 w-48" />
+   630→          <Skeleton className="h-4 w-72" />
+   631→        </div>
+   632→        <div className="flex gap-3">
+   633→          <Skeleton className="h-10 w-64" />
+   634→          <Skeleton className="h-10 w-28" />
+   635→        </div>
+   636→      </div>
+   637→      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+   638→        {Array.from({ length: 3 }).map((_, i) => (
+   639→          <Card key={i} className="shadow-sm">
+   640→            <CardContent className="p-5">
+   641→              <div className="flex items-center justify-between">
+   642→                <div className="space-y-2">
+   643→                  <Skeleton className="h-3 w-24" />
+   644→                  <Skeleton className="h-8 w-16" />
+   645→                  <Skeleton className="h-3 w-40" />
+   646→                </div>
+   647→                <Skeleton className="size-11 rounded-xl" />
+   648→              </div>
+   649→            </CardContent>
+   650→          </Card>
+   651→        ))}
+   652→      </div>
+   653→      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+   654→        {Array.from({ length: 6 }).map((_, i) => (
+   655→          <Card key={i} className="shadow-sm">
+   656→            <CardContent className="p-5 space-y-3">
+   657→              <div className="flex items-start justify-between">
+   658→                <Skeleton className="size-15 rounded-full" />
+   659→                <Skeleton className="h-5 w-16 rounded-full" />
+   660→              </div>
+   661→              <div className="space-y-1.5">
+   662→                <Skeleton className="h-4 w-32" />
+   663→                <Skeleton className="h-3 w-40" />
+   664→              </div>
+   665→              <div className="flex gap-1.5">
+   666→                <Skeleton className="h-4 w-16 rounded-full" />
+   667→                <Skeleton className="h-4 w-14 rounded-full" />
+   668→              </div>
+   669→              <Skeleton className="h-6 w-full" />
+   670→              <div className="space-y-2">
+   671→                <Skeleton className="h-2.5 w-full" />
+   672→                <Skeleton className="h-2.5 w-full" />
+   673→                <Skeleton className="h-2.5 w-full" />
+   674→              </div>
+   675→              <div className="flex gap-2">
+   676→                <Skeleton className="h-8 flex-1" />
+   677→                <Skeleton className="h-8 flex-1" />
+   678→                <Skeleton className="h-8 w-8" />
+   679→              </div>
+   680→            </CardContent>
+   681→          </Card>
+   682→        ))}
+   683→      </div>
+   684→    </div>
+   685→  );
+   686→}
+   687→
+   688→// ─── Filing Status Dot ────────────────────────────────────────────────────────
+   689→
+   690→function FilingStatusDot({ count }: { count: number }) {
+   691→  if (count === 0) {
+   692→    return (
+   693→      <span className="flex items-center gap-1 text-[11px] text-emerald-700">
+   694→        <span className="size-2 rounded-full bg-emerald-500" />
+   695→        All filed
+   696→      </span>
+   697→    );
+   698→  }
+   699→  return (
+   700→    <span className="flex items-center gap-1 text-[11px] text-amber-700">
+   701→      <span className="size-2 rounded-full bg-amber-500" />
+   702→      {count} pending
+   703→    </span>
+   704→  );
+   705→}
+   706→
+   707→// ─── Main Component ───────────────────────────────────────────────────────────
+   708→
+   709→export default function ClientRegistryPage() {
+   710→  const { setCurrentView, setSelectedClientId } = useApp();
+   711→
+   712→  // ── React Query hooks ──────────────────────────────────────────────────────
+   713→  const { data: clientsData, isLoading: clientsLoading } = useClients();
+   714→  const { data: filingsData, isLoading: filingsLoading } = useFilings();
+   715→
+   716→  const createClientMutation = useCreateClient();
+   717→  const updateClientMutation = useUpdateClient();
+   718→  const deleteClientMutation = useDeleteClient();
+   719→
+   720→  const isLoading = clientsLoading || filingsLoading;
+   721→
+   722→  // ── State ────────────────────────────────────────────────────────────────
+   723→  const [searchQuery, setSearchQuery] = useState('');
+   724→
+   725→  // Dialog state
+   726→  const [dialogOpen, setDialogOpen] = useState(false);
+   727→  const [editingClient, setEditingClient] = useState<ClientPortfolio | null>(null);
+   728→  const [form, setForm] = useState<ClientForm>(EMPTY_FORM);
+   729→  const [gstinError, setGstinError] = useState<string | null>(null);
+   730→
+   731→  // Sheet state
+   732→  const [sheetOpen, setSheetOpen] = useState(false);
+   733→  const [sheetClient, setSheetClient] = useState<ClientPortfolio | null>(null);
+   734→
+   735→  // Delete confirmation
+   736→  const [deleteTarget, setDeleteTarget] = useState<ClientPortfolio | null>(null);
+   737→
+   738→  // ── Derive clients with portfolio data from API ──────────────────────────
+   739→  const apiClients = clientsData?.clients ?? [];
+   740→  const allFilings = filingsData?.filings ?? [];
+   741→
+   742→  const clients = useMemo<ClientPortfolio[]>(() => {
+   743→    return apiClients.map(c => {
+   744→      // Get filings for this specific client
+   745→      const clientFilings = allFilings.filter(f => f.clientId === c.id);
+   746→      const filingData = clientFilings.map(f => ({
+   747→        returnType: f.returnType,
+   748→        period: f.period,
+   749→        status: f.status,
+   750→        filedDate: f.filedDate,
+   751→        totalTaxableValue: f.totalTaxableValue,
+   752→      }));
+   753→      return derivePortfolio(c, filingData);
+   754→    });
+   755→  }, [apiClients, allFilings]);
+   756→
+   757→  // ── Derived Data ─────────────────────────────────────────────────────────
+   758→  const filteredClients = useMemo(() => {
+   759→    if (!searchQuery) return clients;
+   760→    const q = searchQuery.toLowerCase();
+   761→    return clients.filter(
+   762→      c =>
+   763→        c.gstin.toLowerCase().includes(q) ||
+   764→        c.tradeName.toLowerCase().includes(q) ||
+   765→        (c.legalName?.toLowerCase().includes(q) ?? false) ||
+   766→        (c.state?.toLowerCase().includes(q) ?? false)
+   767→    );
+   768→  }, [clients, searchQuery]);
+   769→
+   770→  const portfolioStats = useMemo(() => {
+   771→    const active = clients.filter(c => c.status === 'active').length;
+   772→    const atRisk = clients.filter(c => c.healthScore < 70).length;
+   773→    const pendingFilings = clients.reduce((sum, c) => sum + c._portfolio.pendingFilings, 0);
+   774→    const totalTaxVolume = clients.reduce((sum, c) => sum + c._portfolio.monthlyTaxVolume, 0);
+   775→    return { active, atRisk, pendingFilings, totalTaxVolume };
+   776→  }, [clients]);
+   777→
+   778→  // ── Form Handlers ────────────────────────────────────────────────────────
+   779→  const openAddDialog = () => {
+   780→    setEditingClient(null);
+   781→    setForm(EMPTY_FORM);
+   782→    setGstinError(null);
+   783→    setDialogOpen(true);
+   784→  };
+   785→
+   786→  const openEditDialog = (client: ClientPortfolio) => {
+   787→    setEditingClient(client);
+   788→    setForm({
+   789→      gstin: client.gstin,
+   790→      tradeName: client.tradeName,
+   791→      legalName: client.legalName ?? '',
+   792→      contactEmail: client.contactEmail ?? '',
+   793→      contactPhone: client.contactPhone ?? '',
+   794→      state: client.state ?? '',
+   795→      stateCode: client.stateCode ?? '',
+   796→      entityType: client.entityType ?? 'regular',
+   797→      returnPeriod: client.returnPeriod ?? 'monthly',
+   798→    });
+   799→    setGstinError(null);
+   800→    setDialogOpen(true);
+   801→  };
+   802→
+   803→  const handleFormChange = (field: keyof ClientForm, value: string) => {
+   804→    setForm(prev => ({ ...prev, [field]: value }));
+   805→    if (field === 'gstin') setGstinError(null);
+   806→    if (field === 'state') {
+   807→      const stateObj = INDIAN_STATES.find(s => s.name === value);
+   808→      if (stateObj) {
+   809→        setForm(prev => ({ ...prev, stateCode: stateObj.code }));
+   810→      }
+   811→    }
+   812→  };
+   813→
+   814→  const handleGstinBlur = () => {
+   815→    if (form.gstin) {
+   816→      const result = validateGSTINForm(form.gstin);
+   817→      if (!result.valid) setGstinError(result.error ?? 'Invalid GSTIN');
+   818→      else setGstinError(null);
+   819→    }
+   820→  };
+   821→
+   822→  const handleSubmit = async () => {
+   823→    if (!form.gstin || !form.tradeName) return;
+   824→    const result = validateGSTINForm(form.gstin);
+   825→    if (!result.valid) {
+   826→      setGstinError(result.error ?? 'Invalid GSTIN');
+   827→      return;
+   828→    }
+   829→    if (gstinError) return;
+   830→
+   831→    const clientData = {
+   832→      gstin: formatGSTIN(form.gstin),
+   833→      tradeName: form.tradeName,
+   834→      legalName: form.legalName || undefined,
+   835→      contactEmail: form.contactEmail || undefined,
+   836→      contactPhone: form.contactPhone || undefined,
+   837→      state: form.state || undefined,
+   838→      stateCode: form.stateCode || undefined,
+   839→      entityType: form.entityType,
+   840→      returnPeriod: form.returnPeriod,
+   841→    };
+   842→
+   843→    if (editingClient) {
+   844→      updateClientMutation.mutate(
+   845→        { id: editingClient.id, ...clientData },
+   846→        {
+   847→          onSuccess: () => {
+   848→            setDialogOpen(false);
+   849→            toast.success('Client updated successfully');
+   850→          },
+   851→          onError: (err) => {
+   852→            toast.error(err.message || 'Failed to update client');
+   853→          },
+   854→        }
+   855→      );
+   856→    } else {
+   857→      createClientMutation.mutate(
+   858→        { ...clientData, status: 'active', healthScore: 50 },
+   859→        {
+   860→          onSuccess: () => {
+   861→            setDialogOpen(false);
+   862→            toast.success('Client added successfully');
+   863→          },
+   864→          onError: (err) => {
+   865→            toast.error(err.message || 'Failed to add client');
+   866→          },
+   867→        }
+   868→      );
+   869→    }
+   870→  };
+   871→
+   872→  const handleDelete = () => {
+   873→    if (!deleteTarget) return;
+   874→    deleteClientMutation.mutate(deleteTarget.id, {
+   875→      onSuccess: () => {
+   876→        setDeleteTarget(null);
+   877→        if (sheetClient?.id === deleteTarget.id) {
+   878→          setSheetOpen(false);
+   879→          setSheetClient(null);
+   880→        }
+   881→        toast.success('Client deleted successfully');
+   882→      },
+   883→      onError: (err) => {
+   884→        toast.error(err.message || 'Failed to delete client');
+   885→      },
+   886→    });
+   887→  };
+   888→
+   889→  const openClientSheet = (client: ClientPortfolio) => {
+   890→    setSheetClient(client);
+   891→    setSheetOpen(true);
+   892→  };
+   893→
+   894→  const navigateTo = (view: 'returns' | 'reconcile', clientId: string) => {
+   895→    setSelectedClientId(clientId);
+   896→    setCurrentView(view as AppView);
+   897→  };
+   898→
+   899→  const isSubmitting = createClientMutation.isPending || updateClientMutation.isPending;
+   900→
+   901→  // ─── Loading Skeleton ──────────────────────────────────────────────────────
+   902→  if (isLoading) {
+   903→    return <PageSkeleton />;
+   904→  }
+   905→
+   906→  // ─── Render ───────────────────────────────────────────────────────────────
+   907→  return (
+   908→    <div className="space-y-6 p-4 md:p-6 max-w-[1400px] mx-auto">
+   909→      {/* ── Page Header ──────────────────────────────────────────────────────── */}
+   910→      <motion.div
+   911→        initial={{ opacity: 0, y: -10 }}
+   912→        animate={{ opacity: 1, y: 0 }}
+   913→        transition={{ duration: 0.35, ease: [0.25, 0.46, 0.45, 0.94] }}
+   914→        className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"
+   915→      >
+   916→        <div>
+   917→          <h1 className="text-2xl font-bold tracking-tight text-foreground">Client Portfolio</h1>
+   918→          <p className="text-sm text-muted-foreground mt-0.5">Monitor health and compliance across all clients</p>
+   919→        </div>
+   920→        <div className="flex items-center gap-3">
+   921→          <div className="relative">
+   922→            <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+   923→            <Input
+   924→              placeholder="Search by name or GSTIN..."
+   925→              value={searchQuery}
+   926→              onChange={e => setSearchQuery(e.target.value)}
+   927→              className="pl-9 h-10 w-full sm:w-64 bg-white border-slate-200 focus:border-emerald-300 focus:ring-emerald-200 transition-colors"
+   928→            />
+   929→          </div>
+   930→          <Button
+   931→            onClick={openAddDialog}
+   932→            className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm shrink-0"
+   933→          >
+   934→            <Plus className="size-4" />
+   935→            Add Client
+   936→          </Button>
+   937→        </div>
+   938→      </motion.div>
+   939→
+   940→      {/* ── Summary Strip ───────────────────────────────────────────────────── */}
+   941→      <motion.div
+   942→        variants={containerVariants}
+   943→        initial="hidden"
+   944→        animate="visible"
+   945→        className="grid grid-cols-1 sm:grid-cols-3 gap-4"
+   946→      >
+   947→        {/* Active Clients */}
+   948→        <motion.div variants={itemVariants}>
+   949→          <Card className="shadow-sm hover:shadow-md transition-shadow bg-gradient-to-br from-white to-emerald-50/40 border-slate-200/80">
+   950→            <CardContent className="p-5">
+   951→              <div className="flex items-center justify-between">
+   952→                <div>
+   953→                  <p className="text-[11px] font-semibold uppercase tracking-wider text-emerald-600">Active Clients</p>
+   954→                  <p className="text-3xl font-bold text-foreground mt-1">{portfolioStats.active}</p>
+   955→                  <div className="flex items-center gap-1 mt-1.5">
+   956→                    <TrendingUp className="size-3 text-emerald-500" />
+   957→                    <span className="text-[11px] text-emerald-600 font-medium">
+   958→                      {formatVolumeCrore(portfolioStats.totalTaxVolume)} total tax volume
+   959→                    </span>
+   960→                  </div>
+   961→                </div>
+   962→                <div className="flex size-12 items-center justify-center rounded-2xl bg-emerald-100">
+   963→                  <BarChart3 className="size-5 text-emerald-600" />
+   964→                </div>
+   965→              </div>
+   966→            </CardContent>
+   967→          </Card>
+   968→        </motion.div>
+   969→
+   970→        {/* At Risk */}
+   971→        <motion.div variants={itemVariants}>
+   972→          <Card className="shadow-sm hover:shadow-md transition-shadow bg-gradient-to-br from-white to-red-50/30 border-slate-200/80">
+   973→            <CardContent className="p-5">
+   974→              <div className="flex items-center justify-between">
+   975→                <div>
+   976→                  <p className="text-[11px] font-semibold uppercase tracking-wider text-red-600">At Risk</p>
+   977→                  <p className="text-3xl font-bold text-foreground mt-1">{portfolioStats.atRisk}</p>
+   978→                  <div className="flex items-center gap-1 mt-1.5">
+   979→                    <AlertTriangle className="size-3 text-red-500" />
+   980→                    <span className="text-[11px] text-red-600 font-medium">
+   981→                      {portfolioStats.atRisk} clients below 70 health score
+   982→                    </span>
+   983→                  </div>
+   984→                </div>
+   985→                <div className="flex size-12 items-center justify-center rounded-2xl bg-red-100">
+   986→                  <Shield className="size-5 text-red-600" />
+   987→                </div>
+   988→              </div>
+   989→            </CardContent>
+   990→          </Card>
+   991→        </motion.div>
+   992→
+   993→        {/* Pending Filings */}
+   994→        <motion.div variants={itemVariants}>
+   995→          <Card className="shadow-sm hover:shadow-md transition-shadow bg-gradient-to-br from-white to-amber-50/40 border-slate-200/80">
+   996→            <CardContent className="p-5">
+   997→              <div className="flex items-center justify-between">
+   998→                <div>
+   999→                  <p className="text-[11px] font-semibold uppercase tracking-wider text-amber-600">Pending Filings</p>
+  1000→                  <p className="text-3xl font-bold text-foreground mt-1">{portfolioStats.pendingFilings}</p>
+  1001→                  <div className="flex items-center gap-1 mt-1.5">
+  1002→                    <Clock className="size-3 text-amber-500" />
+  1003→                    <span className="text-[11px] text-amber-600 font-medium">
+  1004→                      {portfolioStats.pendingFilings} returns need attention
+  1005→                    </span>
+  1006→                  </div>
+  1007→                </div>
+  1008→                <div className="flex size-12 items-center justify-center rounded-2xl bg-amber-100">
+  1009→                  <FileWarning className="size-5 text-amber-600" />
+  1010→                </div>
+  1011→              </div>
+  1012→            </CardContent>
+  1013→          </Card>
+  1014→        </motion.div>
+  1015→      </motion.div>
+  1016→
+  1017→      {/* ── Client Card Grid ─────────────────────────────────────────────────── */}
+  1018→      {filteredClients.length === 0 ? (
+  1019→        <motion.div
+  1020→          initial={{ opacity: 0, y: 20 }}
+  1021→          animate={{ opacity: 1, y: 0 }}
+  1022→          transition={{ duration: 0.4 }}
+  1023→          className="flex flex-col items-center justify-center py-20"
+  1024→        >
+  1025→          <div className="flex size-16 items-center justify-center rounded-2xl bg-emerald-50 mb-4">
+  1026→            <UserPlus className="size-8 text-emerald-400" />
+  1027→          </div>
+  1028→          <h3 className="text-lg font-semibold text-foreground mb-1">
+  1029→            {searchQuery ? 'No clients found' : 'No clients yet'}
+  1030→          </h3>
+  1031→          <p className="text-sm text-muted-foreground mb-5 max-w-xs text-center">
+  1032→            {searchQuery
+  1033→              ? 'Try adjusting your search query'
+  1034→              : 'Add your first client to start filing'}
+  1035→          </p>
+  1036→          {!searchQuery && (
+  1037→            <Button
+  1038→              onClick={openAddDialog}
+  1039→              className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white"
+  1040→            >
+  1041→              <Plus className="size-4" />
+  1042→              Add Client
+  1043→            </Button>
+  1044→          )}
+  1045→        </motion.div>
+  1046→      ) : (
+  1047→        <motion.div
+  1048→          variants={containerVariants}
+  1049→          initial="hidden"
+  1050→          animate="visible"
+  1051→          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"
+  1052→        >
+  1053→          {filteredClients.map(client => {
+  1054→            const health = getHealthColor(client.healthScore);
+  1055→            const portfolio = client._portfolio;
+  1056→
+  1057→            return (
+  1058→              <motion.div key={client.id} variants={itemVariants}>
+  1059→                <motion.div
+  1060→                  whileHover={{ y: -4, transition: { duration: 0.2, ease: 'easeOut' } }}
+  1061→                  className="h-full"
+  1062→                >
+  1063→                  <Card
+  1064→                    className="h-full cursor-pointer shadow-sm hover:shadow-lg hover:border-emerald-200/60 transition-all duration-200 border-slate-200/80"
+  1065→                    onClick={() => { setSelectedClientId(client.id); setCurrentView('client-workspace' as AppView); }}
+  1066→                  >
+  1067→                    <CardContent className="p-5">
+  1068→                      {/* Top row: Health Ring + Compliance Badge + Status Badge */}
+  1069→                      <div className="flex items-start justify-between mb-3">
+  1070→                        <div className="flex items-center gap-2">
+  1071→                          <HealthRing score={client.healthScore} size={60} strokeWidth={5} />
+  1072→                          <div className="flex flex-col gap-1">
+  1073→                            <span className="text-[9px] text-muted-foreground font-medium">Compliance</span>
+  1074→                            <ComplianceBadge score={Math.round((portfolio.healthBreakdown.gstinValidity + portfolio.healthBreakdown.filingTimeliness) / 2)} />
+  1075→                          </div>
+  1076→                        </div>
+  1077→                        <div className="shrink-0">
+  1078→                          {getStatusBadge(client.status)}
+  1079→                        </div>
+  1080→                      </div>
+  1081→
+  1082→                      {/* Client info section */}
+  1083→                      <div className="mb-3">
+  1084→                        <p className="font-bold text-base text-foreground leading-tight truncate">
+  1085→                          {client.tradeName}
+  1086→                        </p>
+  1087→                        <p className="text-xs font-mono text-muted-foreground truncate mt-0.5">
+  1088→                          {client.gstin}
+  1089→                        </p>
+  1090→                        <div className="flex flex-wrap gap-1.5 mt-2">
+  1091→                          {client.state && (
+  1092→                            <Badge variant="outline" className="text-[10px] px-2 py-0 h-5 border-slate-200 bg-slate-50 text-slate-600 gap-1">
+  1093→                              <MapPin className="size-2.5" />
+  1094→                              {client.state}
+  1095→                            </Badge>
+  1096→                          )}
+  1097→                          <Badge variant="outline" className="text-[10px] px-2 py-0 h-5 border-slate-200 bg-slate-50 text-slate-600">
+  1098→                            {getEntityTypeLabel(client.entityType)}
+  1099→                          </Badge>
+  1100→                        </div>
+  1101→                      </div>
+  1102→
+  1103→                      {/* Key metrics row */}
+  1104→                      <div className="grid grid-cols-3 gap-2 mb-3">
+  1105→                        <div className="rounded-lg bg-slate-50 p-2">
+  1106→                          <p className="text-[9px] uppercase tracking-wider text-muted-foreground font-medium mb-1">Tax Volume</p>
+  1107→                          <p className="text-xs font-bold text-foreground">{formatVolumeShort(portfolio.monthlyTaxVolume)}</p>
+  1108→                          <MiniBarChart data={portfolio.monthlyVolumeChart} height={16} />
+  1109→                        </div>
+  1110→                        <div className="rounded-lg bg-slate-50 p-2">
+  1111→                          <p className="text-[9px] uppercase tracking-wider text-muted-foreground font-medium mb-1">Filing Status</p>
+  1112→                          <div className="mt-1">
+  1113→                            <FilingStatusDot count={portfolio.pendingFilings} />
+  1114→                          </div>
+  1115→                        </div>
+  1116→                        <div className="rounded-lg bg-slate-50 p-2">
+  1117→                          <p className="text-[9px] uppercase tracking-wider text-muted-foreground font-medium mb-1">Risk</p>
+  1118→                          <div className="mt-0.5">
+  1119→                            {getRiskBadge(portfolio.riskLevel)}
+  1120→                          </div>
+  1121→                        </div>
+  1122→                      </div>
+  1123→
+  1124→                      {/* Health breakdown bars */}
+  1125→                      <div className="space-y-1.5 mb-3">
+  1126→                        <HealthBreakdownBar label="GSTIN Validity" value={portfolio.healthBreakdown.gstinValidity} />
+  1127→                        <HealthBreakdownBar label="Filing Timeliness" value={portfolio.healthBreakdown.filingTimeliness} />
+  1128→                        <HealthBreakdownBar label="Invoice Accuracy" value={portfolio.healthBreakdown.invoiceAccuracy} />
+  1129→                      </div>
+  1130→
+  1131→                      {/* Action buttons row */}
+  1132→                      <div className="flex items-center gap-2">
+  1133→                        <Button
+  1134→                          variant="outline"
+  1135→                          size="sm"
+  1136→                          className="flex-1 h-8 text-xs gap-1.5 border-emerald-200 text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800 hover:border-emerald-300 transition-colors"
+  1137→                          onClick={e => { e.stopPropagation(); navigateTo('returns', client.id); }}
+  1138→                        >
+  1139→                          <FileText className="size-3" />
+  1140→                          View Returns
+  1141→                        </Button>
+  1142→                        <Button
+  1143→                          variant="outline"
+  1144→                          size="sm"
+  1145→                          className="flex-1 h-8 text-xs gap-1.5 border-amber-200 text-amber-700 hover:bg-amber-50 hover:text-amber-800 hover:border-amber-300 transition-colors"
+  1146→                          onClick={e => { e.stopPropagation(); navigateTo('reconcile', client.id); }}
+  1147→                        >
+  1148→                          <ArrowRightLeft className="size-3" />
+  1149→                          Reconcile
+  1150→                        </Button>
+  1151→                        <DropdownMenu>
+  1152→                          <DropdownMenuTrigger asChild onClick={e => e.stopPropagation()}>
+  1153→                            <Button variant="outline" size="sm" className="size-8 p-0 shrink-0 hover:bg-slate-50">
+  1154→                              <MoreHorizontal className="size-3.5" />
+  1155→                            </Button>
+  1156→                          </DropdownMenuTrigger>
+  1157→                          <DropdownMenuContent align="end" className="w-44">
+  1158→                            <DropdownMenuItem onClick={() => openEditDialog(client)} className="gap-2">
+  1159→                              <Pencil className="size-3.5" />
+  1160→                              Edit Client
+  1161→                            </DropdownMenuItem>
+  1162→                            <DropdownMenuSeparator />
+  1163→                            <DropdownMenuItem
+  1164→                              onClick={() => setDeleteTarget(client)}
+  1165→                              className="gap-2 text-red-600 focus:text-red-600 focus:bg-red-50"
+  1166→                            >
+  1167→                              <Trash2 className="size-3.5" />
+  1168→                              Delete Client
+  1169→                            </DropdownMenuItem>
+  1170→                          </DropdownMenuContent>
+  1171→                        </DropdownMenu>
+  1172→                      </div>
+  1173→                    </CardContent>
+  1174→                  </Card>
+  1175→                </motion.div>
+  1176→              </motion.div>
+  1177→            );
+  1178→          })}
+  1179→        </motion.div>
+  1180→      )}
+  1181→
+  1182→      {/* ── Add / Edit Client Dialog ────────────────────────────────────────── */}
+  1183→      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+  1184→        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+  1185→          <DialogHeader>
+  1186→            <DialogTitle className="flex items-center gap-2.5">
+  1187→              <div className="flex size-9 items-center justify-center rounded-xl bg-emerald-100">
+  1188→                <Building2 className="size-4 text-emerald-700" />
+  1189→              </div>
+  1190→              {editingClient ? 'Edit Client' : 'Add New Client'}
+  1191→            </DialogTitle>
+  1192→          </DialogHeader>
+  1193→
+  1194→          <div className="grid gap-4 py-4">
+  1195→            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+  1196→              {/* Trade Name */}
+  1197→              <div className="space-y-2">
+  1198→                <Label htmlFor="tradeName" className="text-xs font-medium">
+  1199→                  Trade Name <span className="text-red-500">*</span>
+  1200→                </Label>
+  1201→                <Input
+  1202→                  id="tradeName"
+  1203→                  placeholder="e.g. Sharma Enterprises"
+  1204→                  value={form.tradeName}
+  1205→                  onChange={e => handleFormChange('tradeName', e.target.value)}
+  1206→                  className="h-9"
+  1207→                />
+  1208→              </div>
+  1209→
+  1210→              {/* Legal Name */}
+  1211→              <div className="space-y-2">
+  1212→                <Label htmlFor="legalName" className="text-xs font-medium">Legal Name</Label>
+  1213→                <Input
+  1214→                  id="legalName"
+  1215→                  placeholder="e.g. Sharma Enterprises Pvt Ltd"
+  1216→                  value={form.legalName}
+  1217→                  onChange={e => handleFormChange('legalName', e.target.value)}
+  1218→                  className="h-9"
+  1219→                />
+  1220→              </div>
+  1221→
+  1222→              {/* GSTIN */}
+  1223→              <div className="space-y-2 sm:col-span-2">
+  1224→                <Label htmlFor="gstin" className="text-xs font-medium">
+  1225→                  GSTIN <span className="text-red-500">*</span>
+  1226→                </Label>
+  1227→                <Input
+  1228→                  id="gstin"
+  1229→                  placeholder="e.g. 27AABCS1234F1ZH"
+  1230→                  value={form.gstin}
+  1231→                  onChange={e => handleFormChange('gstin', e.target.value.toUpperCase())}
+  1232→                  onBlur={handleGstinBlur}
+  1233→                  className={`font-mono h-9 ${gstinError ? 'border-red-300 focus-visible:ring-red-200' : ''}`}
+  1234→                />
+  1235→                {gstinError && (
+  1236→                  <p className="text-xs text-red-600 flex items-center gap-1">
+  1237→                    <AlertTriangle className="size-3" />
+  1238→                    {gstinError}
+  1239→                  </p>
+  1240→                )}
+  1241→              </div>
+  1242→
+  1243→              {/* State */}
+  1244→              <div className="space-y-2">
+  1245→                <Label className="text-xs font-medium">State</Label>
+  1246→                <Select value={form.state} onValueChange={v => handleFormChange('state', v)}>
+  1247→                  <SelectTrigger className="h-9">
+  1248→                    <SelectValue placeholder="Select state" />
+  1249→                  </SelectTrigger>
+  1250→                  <SelectContent>
+  1251→                    {INDIAN_STATES.map(s => (
+  1252→                      <SelectItem key={s.code} value={s.name}>{s.name}</SelectItem>
+  1253→                    ))}
+  1254→                  </SelectContent>
+  1255→                </Select>
+  1256→              </div>
+  1257→
+  1258→              {/* Entity Type */}
+  1259→              <div className="space-y-2">
+  1260→                <Label className="text-xs font-medium">Entity Type</Label>
+  1261→                <Select value={form.entityType} onValueChange={v => handleFormChange('entityType', v)}>
+  1262→                  <SelectTrigger className="h-9">
+  1263→                    <SelectValue placeholder="Select type" />
+  1264→                  </SelectTrigger>
+  1265→                  <SelectContent>
+  1266→                    {ENTITY_TYPES.map(e => (
+  1267→                      <SelectItem key={e.value} value={e.value}>{e.label}</SelectItem>
+  1268→                    ))}
+  1269→                  </SelectContent>
+  1270→                </Select>
+  1271→              </div>
+  1272→
+  1273→              {/* Contact Email */}
+  1274→              <div className="space-y-2">
+  1275→                <Label htmlFor="contactEmail" className="text-xs font-medium">Contact Email</Label>
+  1276→                <Input
+  1277→                  id="contactEmail"
+  1278→                  type="email"
+  1279→                  placeholder="gst@company.com"
+  1280→                  value={form.contactEmail}
+  1281→                  onChange={e => handleFormChange('contactEmail', e.target.value)}
+  1282→                  className="h-9"
+  1283→                />
+  1284→              </div>
+  1285→
+  1286→              {/* Contact Phone */}
+  1287→              <div className="space-y-2">
+  1288→                <Label htmlFor="contactPhone" className="text-xs font-medium">Contact Phone</Label>
+  1289→                <Input
+  1290→                  id="contactPhone"
+  1291→                  placeholder="+91-XXXX-XXX-XXX"
+  1292→                  value={form.contactPhone}
+  1293→                  onChange={e => handleFormChange('contactPhone', e.target.value)}
+  1294→                  className="h-9"
+  1295→                />
+  1296→              </div>
+  1297→
+  1298→              {/* Return Period */}
+  1299→              <div className="space-y-2 sm:col-span-2">
+  1300→                <Label className="text-xs font-medium">Default Return Period</Label>
+  1301→                <Select value={form.returnPeriod} onValueChange={v => handleFormChange('returnPeriod', v)}>
+  1302→                  <SelectTrigger className="h-9">
+  1303→                    <SelectValue placeholder="Select period" />
+  1304→                  </SelectTrigger>
+  1305→                  <SelectContent>
+  1306→                    {RETURN_PERIODS.map(p => (
+  1307→                      <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>
+  1308→                    ))}
+  1309→                  </SelectContent>
+  1310→                </Select>
+  1311→              </div>
+  1312→            </div>
+  1313→          </div>
+  1314→
+  1315→          <DialogFooter className="gap-2">
+  1316→            <Button variant="outline" onClick={() => setDialogOpen(false)} className="h-9">
+  1317→              Cancel
+  1318→            </Button>
+  1319→            <Button
+  1320→              onClick={handleSubmit}
+  1321→              disabled={isSubmitting || !form.tradeName || !form.gstin}
+  1322→              className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white h-9"
+  1323→            >
+  1324→              {isSubmitting ? (
+  1325→                <motion.div
+  1326→                  className="size-4 border-2 border-white/30 border-t-white rounded-full"
+  1327→                  animate={{ rotate: 360 }}
+  1328→                  transition={{ duration: 0.8, repeat: Infinity, ease: 'linear' }}
+  1329→                />
+  1330→              ) : (
+  1331→                <Plus className="size-4" />
+  1332→              )}
+  1333→              {editingClient ? 'Update Client' : 'Add Client'}
+  1334→            </Button>
+  1335→          </DialogFooter>
+  1336→        </DialogContent>
+  1337→      </Dialog>
+  1338→
+  1339→      {/* ── Client Detail Sheet ─────────────────────────────────────────────── */}
+  1340→      <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
+  1341→        <SheetContent side="right" className="w-full sm:max-w-md lg:max-w-lg overflow-y-auto">
+  1342→          {sheetClient && (
+  1343→            <>
+  1344→              <SheetHeader className="pb-2">
+  1345→                <SheetTitle className="sr-only">{sheetClient.tradeName}</SheetTitle>
+  1346→              </SheetHeader>
+  1347→
+  1348→              <div className="px-4 pb-6 space-y-6">
+  1349→                {/* Hero: Large Health Ring + Client Name */}
+  1350→                <div className="flex flex-col items-center text-center pt-2">
+  1351→                  <HealthRing score={sheetClient.healthScore} size={100} strokeWidth={7} />
+  1352→                  <h2 className="text-lg font-bold text-foreground mt-3">{sheetClient.tradeName}</h2>
+  1353→                  <p className="text-sm font-mono text-muted-foreground mt-0.5">{sheetClient.gstin}</p>
+  1354→                  <div className="flex items-center gap-2 mt-2">
+  1355→                    {getStatusBadge(sheetClient.status)}
+  1356→                    {sheetClient.state && (
+  1357→                      <Badge variant="outline" className="text-[10px] px-2 py-0 h-5 border-slate-200 bg-slate-50 text-slate-600 gap-1">
+  1358→                        <MapPin className="size-2.5" />
+  1359→                        {sheetClient.state}
+  1360→                      </Badge>
+  1361→                    )}
+  1362→                    <Badge variant="outline" className="text-[10px] px-2 py-0 h-5 border-slate-200 bg-slate-50 text-slate-600">
+  1363→                      {getEntityTypeLabel(sheetClient.entityType)}
+  1364→                    </Badge>
+  1365→                  </div>
+  1366→                </div>
+  1367→
+  1368→                <Separator />
+  1369→
+  1370→                {/* Health Breakdown */}
+  1371→                <div>
+  1372→                  <h3 className="text-sm font-semibold text-foreground mb-3">Health Breakdown</h3>
+  1373→                  <div className="space-y-2.5">
+  1374→                    <HealthBreakdownBar label="GSTIN Validity" value={sheetClient._portfolio.healthBreakdown.gstinValidity} />
+  1375→                    <HealthBreakdownBar label="Filing Timeliness" value={sheetClient._portfolio.healthBreakdown.filingTimeliness} />
+  1376→                    <HealthBreakdownBar label="Invoice Accuracy" value={sheetClient._portfolio.healthBreakdown.invoiceAccuracy} />
+  1377→                  </div>
+  1378→                </div>
+  1379→
+  1380→                <Separator />
+  1381→
+  1382→                {/* Contact Info */}
+  1383→                <div>
+  1384→                  <h3 className="text-sm font-semibold text-foreground mb-3">Contact Information</h3>
+  1385→                  <div className="space-y-2">
+  1386→                    {sheetClient.contactEmail && (
+  1387→                      <div className="flex items-center gap-2.5 text-sm">
+  1388→                        <Mail className="size-4 text-muted-foreground shrink-0" />
+  1389→                        <span className="text-foreground truncate">{sheetClient.contactEmail}</span>
+  1390→                      </div>
+  1391→                    )}
+  1392→                    {sheetClient.contactPhone && (
+  1393→                      <div className="flex items-center gap-2.5 text-sm">
+  1394→                        <Phone className="size-4 text-muted-foreground shrink-0" />
+  1395→                        <span className="text-foreground">{sheetClient.contactPhone}</span>
+  1396→                      </div>
+  1397→                    )}
+  1398→                    {sheetClient.legalName && (
+  1399→                      <div className="flex items-center gap-2.5 text-sm">
+  1400→                        <Building2 className="size-4 text-muted-foreground shrink-0" />
+  1401→                        <span className="text-foreground truncate">{sheetClient.legalName}</span>
+  1402→                      </div>
+  1403→                    )}
+  1404→                    {sheetClient.returnPeriod && (
+  1405→                      <div className="flex items-center gap-2.5 text-sm">
+  1406→                        <Calendar className="size-4 text-muted-foreground shrink-0" />
+  1407→                        <span className="text-foreground capitalize">{sheetClient.returnPeriod} filing</span>
+  1408→                      </div>
+  1409→                    )}
+  1410→                  </div>
+  1411→                </div>
+  1412→
+  1413→                <Separator />
+  1414→
+  1415→                {/* Compliance Risk */}
+  1416→                <div>
+  1417→                  <h3 className="text-sm font-semibold text-foreground mb-3">Compliance Risk</h3>
+  1418→                  <div className="flex items-center gap-2">
+  1419→                    {getRiskBadge(sheetClient._portfolio.riskLevel, sheetClient._portfolio.riskDetail)}
+  1420→                  </div>
+  1421→                </div>
+  1422→
+  1423→                <Separator />
+  1424→
+  1425→                {/* Recent Filing History Timeline */}
+  1426→                <div>
+  1427→                  <h3 className="text-sm font-semibold text-foreground mb-3">Recent Filings</h3>
+  1428→                  {sheetClient._portfolio.recentFilings.length === 0 ? (
+  1429→                    <p className="text-sm text-muted-foreground">No recent filings</p>
+  1430→                  ) : (
+  1431→                    <div className="relative pl-5 space-y-3">
+  1432→                      {/* Timeline line */}
+  1433→                      <div className="absolute left-[7px] top-1.5 bottom-1.5 w-px bg-slate-200" />
+  1434→                      {sheetClient._portfolio.recentFilings.map((filing, idx) => {
+  1435→                        const isFiled = filing.status === 'Filed';
+  1436→                        const isOverdue = filing.status === 'Overdue';
+  1437→                        return (
+  1438→                          <div key={idx} className="relative flex items-start gap-3">
+  1439→                            <div className={`absolute -left-5 top-1 size-2.5 rounded-full ring-2 ring-white ${
+  1440→                              isFiled ? 'bg-emerald-500' : isOverdue ? 'bg-red-500' : 'bg-amber-500'
+  1441→                            }`} />
+  1442→                            <div className="min-w-0 flex-1">
+  1443→                              <div className="flex items-center justify-between gap-2">
+  1444→                                <p className="text-sm font-medium text-foreground truncate">
+  1445→                                  {filing.type} — {filing.period}
+  1446→                                </p>
+  1447→                                <Badge className={`text-[9px] px-1.5 py-0 shrink-0 ${
+  1448→                                  isFiled
+  1449→                                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+  1450→                                    : isOverdue
+  1451→                                    ? 'bg-red-50 text-red-700 border-red-200'
+  1452→                                    : 'bg-amber-50 text-amber-700 border-amber-200'
+  1453→                                }`}>
+  1454→                                  {filing.status}
+  1455→                                </Badge>
+  1456→                              </div>
+  1457→                              {filing.date && (
+  1458→                                <p className="text-[11px] text-muted-foreground mt-0.5">
+  1459→                                  Filed on {new Date(filing.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+  1460→                                </p>
+  1461→                              )}
+  1462→                            </div>
+  1463→                          </div>
+  1464→                        );
+  1465→                      })}
+  1466→                    </div>
+  1467→                  )}
+  1468→                </div>
+  1469→
+  1470→                <Separator />
+  1471→
+  1472→                {/* Filing Trend Area Chart */}
+  1473→                <div>
+  1474→                  <h3 className="text-sm font-semibold text-foreground mb-1">Filing Trend</h3>
+  1475→                  <p className="text-[11px] text-muted-foreground mb-3">Monthly tax volume — last 6 months</p>
+  1476→                  <div className="bg-slate-50 rounded-xl p-4">
+  1477→                    <FilingTrendChart data={sheetClient._portfolio.monthlyVolumeChart} />
+  1478→                    <div className="flex items-center justify-between mt-3 pt-2 border-t border-slate-200">
+  1479→                      <span className="text-xs text-muted-foreground">Current month</span>
+  1480→                      <span className="text-sm font-bold text-foreground">
+  1481→                        {formatCurrency(sheetClient._portfolio.monthlyTaxVolume)}
+  1482→                      </span>
+  1483→                    </div>
+  1484→                  </div>
+  1485→                </div>
+  1486→
+  1487→                <Separator />
+  1488→
+  1489→                {/* Action Buttons */}
+  1490→                <div className="flex gap-3">
+  1491→                  <Button
+  1492→                    className="flex-1 gap-2 bg-emerald-600 hover:bg-emerald-700 text-white"
+  1493→                    onClick={() => { navigateTo('returns', sheetClient.id); setSheetOpen(false); }}
+  1494→                  >
+  1495→                    <FileText className="size-4" />
+  1496→                    View Returns
+  1497→                  </Button>
+  1498→                  <Button
+  1499→                    variant="outline"
+  1500→                    className="flex-1 gap-2 border-amber-200 text-amber-700 hover:bg-amber-50"
+  1501→                    onClick={() => { navigateTo('reconcile', sheetClient.id); setSheetOpen(false); }}
+  1502→                  >
+  1503→                    <ArrowRightLeft className="size-4" />
+  1504→                    Reconcile
+  1505→                  </Button>
+  1506→                </div>
+  1507→              </div>
+  1508→            </>
+  1509→          )}
+  1510→        </SheetContent>
+  1511→      </Sheet>
+  1512→
+  1513→      {/* ── Delete Confirmation ──────────────────────────────────────────────── */}
+  1514→      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}>
+  1515→        <AlertDialogContent>
+  1516→          <AlertDialogHeader>
+  1517→            <AlertDialogTitle>Delete Client</AlertDialogTitle>
+  1518→            <AlertDialogDescription>
+  1519→              Are you sure you want to delete <strong>{deleteTarget?.tradeName}</strong> ({deleteTarget?.gstin})?
+  1520→              This action cannot be undone and will remove all associated data.
+  1521→            </AlertDialogDescription>
+  1522→          </AlertDialogHeader>
+  1523→          <AlertDialogFooter>
+  1524→            <AlertDialogCancel disabled={deleteClientMutation.isPending}>Cancel</AlertDialogCancel>
+  1525→            <AlertDialogAction
+  1526→              onClick={handleDelete}
+  1527→              disabled={deleteClientMutation.isPending}
+  1528→              className="bg-red-600 hover:bg-red-700 text-white"
+  1529→            >
+  1530→              {deleteClientMutation.isPending ? 'Deleting...' : 'Delete Client'}
+  1531→            </AlertDialogAction>
+  1532→          </AlertDialogFooter>
+  1533→        </AlertDialogContent>
+  1534→      </AlertDialog>
+  1535→    </div>
+  1536→  );
+  1537→}
+  1538→

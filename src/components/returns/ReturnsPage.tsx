@@ -46,6 +46,7 @@ import {
   Inbox,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { EmptyState } from '@/components/shared/EmptyState';
 import { useApp } from '@/contexts/AppContext';
 import {
   useFilings,
@@ -1088,7 +1089,7 @@ export default function ReturnsPage() {
   const healthColor = healthScore > 80 ? '#10b981' : healthScore > 50 ? '#f59e0b' : '#ef4444';
 
   // ── Empty state when no filings exist ────────────────────────────────────
-  if (filings.length === 0) {
+  if (filings.length === 0 && !filingsLoading && !clientsLoading) {
     return (
       <div className="flex flex-col h-full min-h-0">
         <motion.div
@@ -1116,22 +1117,16 @@ export default function ReturnsPage() {
         </motion.div>
 
         <div className="flex-1 flex items-center justify-center">
-          <div className="flex flex-col items-center justify-center text-center space-y-4 py-12">
-            <div className="size-16 rounded-full bg-muted/30 flex items-center justify-center">
-              <Inbox className="size-8 text-muted-foreground/40" />
-            </div>
-            <h2 className="text-lg font-semibold text-foreground">No filings yet</h2>
-            <p className="text-sm text-muted-foreground max-w-sm">
-              Start by creating a new GST return draft. You can upload documents and prepare returns from here.
-            </p>
-            <Button
-              className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white"
-              onClick={handleCreateReturn}
-            >
-              <Plus className="size-4" />
-              Create First Return
-            </Button>
-          </div>
+          <EmptyState
+            icon={FileOutput}
+            title="No returns prepared"
+            description="Upload documents and validate invoices to prepare your first GST return."
+            action={{
+              label: 'Create First Return',
+              onClick: handleCreateReturn,
+              icon: Plus,
+            }}
+          />
         </div>
       </div>
     );

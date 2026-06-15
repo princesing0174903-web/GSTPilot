@@ -12,17 +12,9 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
+import { Progress } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
 import {
   Select,
   SelectContent,
@@ -30,7 +22,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import {
   FolderLock,
   Upload,
@@ -40,8 +31,6 @@ import {
   File,
   ImageIcon,
   Download,
-  Eye,
-  History,
   Plus,
   HardDrive,
   CalendarDays,
@@ -49,12 +38,16 @@ import {
   X,
   CheckCircle2,
   Loader2,
-  FolderOpen,
-  AlertCircle,
   Inbox,
+  AlertCircle,
+  Trash2,
+  CloudUpload,
+  FileCheck2,
+  FileWarning,
+  Clock,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { formatCurrency, formatNumber } from '@/lib/gst-utils';
+import { formatNumber } from '@/lib/gst-utils';
 import {
   useUploadedFiles,
   useClients,
@@ -63,42 +56,30 @@ import {
 import { toast } from 'sonner';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
-// ─── Color Palette (Emerald theme) ────────────────────────────────────────
-const COLORS = {
-  emerald: '#10b981',
-  emeraldDark: '#059669',
-  emeraldLight: '#d1fae5',
-  teal: '#14b8a6',
-  tealDark: '#0d9488',
-  amber: '#f59e0b',
-  red: '#ef4444',
-  slate: '#64748b',
-  purple: '#8b5cf6',
-  blue: '#3b82f6',
-};
-
 // ─── Types ─────────────────────────────────────────────────────────────────
-interface DocumentItem {
+interface UploadedFileItem {
   id: string;
   clientId: string | null;
-  folder: string;
-  name: string;
+  originalName: string;
+  storedName: string;
   fileType: string;
-  size: number;
-  path: string | null;
+  fileSize: number;
+  mimeType: string | null;
+  filePath: string | null;
+  status: string;
+  processingStep: string;
+  progress: number;
+  extractedData: string | null;
+  errorMessage: string | null;
+  invoicesCreated: number;
+  errorsCount: number;
+  warningsCount: number;
+  period: string | null;
   tags: string | null;
-  description: string | null;
   uploadedBy: string | null;
-  version: number;
-  isLatest: boolean;
-  parentId: string | null;
   createdAt: string;
   updatedAt: string;
   client?: { id: string; tradeName: string } | null;
-  // Processing status fields (from UploadedFile)
-  status?: string;
-  processingStep?: string;
-  progress?: number;
 }
 
 interface ClientOption {
@@ -107,15 +88,60 @@ interface ClientOption {
   gstin: string;
 }
 
-// ─── Folder config ─────────────────────────────────────────────────────────
-const FOLDERS = [
-  { value: 'all', label: 'All Documents', icon: FolderOpen },
-  { value: 'invoices', label: 'Invoices', icon: FileText },
-  { value: 'returns', label: 'Returns', icon: FileText },
-  { value: 'reports', label: 'Reports', icon: FileSpreadsheet },
-  { value: 'client-documents', label: 'Client Documents', icon: FolderOpen },
-  { value: 'notices', label: 'Notices', icon: AlertCircle },
-] as const;
+// ─── Status Configuration ──────────────────────────────────────────────────
+const STATUS_CONFIG: Record<string, {
+  label: string;
+  badgeClass: string;
+  icon: React.ComponentType<{ className?: string }>;
+  spinIcon?: boolean;
+}> = {
+  uploading: {
+    label: 'Uploading...',
+    badgeClass: 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-400 dark:border-blue-800',
+    icon: Loader2,
+    spinIcon: true,
+  },
+  uploaded: {
+    label: 'Uploaded',
+    badgeClass: 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-400 dark:border-blue-800',
+    icon: Loader2,
+    spinIcon: true,
+  },
+  extracting: {
+    label: 'Extracting...',
+    badgeClass: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-800',
+    icon: Loader2,
+    spinIcon: true,
+  },
+  validating: {
+    label: 'Validating...',
+    badgeClass: 'bg-cyan-50 text-cyan-700 border-cyan-200 dark:bg-cyan-950/40 dark:text-cyan-400 dark:border-cyan-800',
+    icon: Loader2,
+    spinIcon: true,
+  },
+  completed: {
+    label: 'Completed',
+    badgeClass: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800',
+    icon: CheckCircle2,
+  },
+  failed: {
+    label: 'Failed',
+    badgeClass: 'bg-red-50 text-red-700 border-red-200 dark:bg-red-950/40 dark:text-red-400 dark:border-red-800',
+    icon: AlertCircle,
+  },
+};
+
+function getStatusConfig(status: string, processingStep: string) {
+  // Map processingStep to the status for display
+  if (processingStep === 'uploading') return STATUS_CONFIG.uploading;
+  if (processingStep === 'extracting') return STATUS_CONFIG.extracting;
+  if (processingStep === 'validating') return STATUS_CONFIG.validating;
+  if (processingStep === 'completed' || status === 'completed') return STATUS_CONFIG.completed;
+  if (processingStep === 'failed' || status === 'failed') return STATUS_CONFIG.failed;
+  // Fallback based on status
+  if (STATUS_CONFIG[status]) return STATUS_CONFIG[status];
+  return STATUS_CONFIG.uploaded;
+}
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
 function formatFileSize(bytes: number): string {
@@ -126,23 +152,30 @@ function formatFileSize(bytes: number): string {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
 }
 
-function getFileTypeColor(type: string): string {
+function getFileTypeIcon(type: string) {
+  const t = type.toLowerCase();
+  if (t === 'pdf') return <FileText className="h-5 w-5 text-red-500" />;
+  if (['xlsx', 'xls', 'excel'].includes(t)) return <FileSpreadsheet className="h-5 w-5 text-emerald-500" />;
+  if (t === 'csv') return <FileSpreadsheet className="h-5 w-5 text-teal-500" />;
+  if (t === 'json') return <File className="h-5 w-5 text-amber-500" />;
+  if (['jpg', 'jpeg', 'png', 'image'].includes(t)) return <ImageIcon className="h-5 w-5 text-purple-500" />;
+  return <File className="h-5 w-5 text-slate-500" />;
+}
+
+function getFileTypeBadgeColor(type: string): string {
   const t = type.toLowerCase();
   if (t === 'pdf') return 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400';
-  if (['xlsx', 'xls', 'csv'].includes(t)) return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400';
-  if (['docx', 'doc'].includes(t)) return 'bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-400';
-  if (['jpg', 'jpeg', 'png', 'gif', 'svg', 'webp'].includes(t)) return 'bg-purple-100 text-purple-700 dark:bg-purple-950/40 dark:text-purple-400';
-  if (['pptx', 'ppt'].includes(t)) return 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400';
+  if (['xlsx', 'xls', 'excel'].includes(t)) return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400';
+  if (t === 'csv') return 'bg-teal-100 text-teal-700 dark:bg-teal-950/40 dark:text-teal-400';
+  if (t === 'json') return 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400';
+  if (['jpg', 'jpeg', 'png', 'image'].includes(t)) return 'bg-purple-100 text-purple-700 dark:bg-purple-950/40 dark:text-purple-400';
   return 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-400';
 }
 
-function getFileTypeIcon(type: string) {
+function getFileTypeDisplay(type: string): string {
   const t = type.toLowerCase();
-  if (t === 'pdf') return <FileText className="h-6 w-6 text-red-500" />;
-  if (['xlsx', 'xls', 'csv'].includes(t)) return <FileSpreadsheet className="h-6 w-6 text-emerald-500" />;
-  if (['docx', 'doc'].includes(t)) return <File className="h-6 w-6 text-blue-500" />;
-  if (['jpg', 'jpeg', 'png', 'gif', 'svg', 'webp'].includes(t)) return <ImageIcon className="h-6 w-6 text-purple-500" />;
-  return <File className="h-6 w-6 text-slate-500" />;
+  if (t === 'excel') return 'XLSX';
+  return t.toUpperCase();
 }
 
 function formatDate(dateStr: string): string {
@@ -155,6 +188,29 @@ function formatDate(dateStr: string): string {
   } catch {
     return dateStr;
   }
+}
+
+function formatTime(dateStr: string): string {
+  try {
+    return new Date(dateStr).toLocaleTimeString('en-IN', {
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  } catch {
+    return '';
+  }
+}
+
+// Period helper — generates last 12 months
+function getPeriodOptions(): string[] {
+  const options: string[] = [];
+  const now = new Date();
+  for (let i = 0; i < 12; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const month = d.toLocaleString('en-IN', { month: 'short' });
+    options.push(`${month} ${d.getFullYear()}`);
+  }
+  return options;
 }
 
 // ─── Animated Number Hook ──────────────────────────────────────────────────
@@ -187,29 +243,6 @@ function useAnimatedNumber(target: number, duration: number = 1200) {
   return current;
 }
 
-// ─── Animated Card Wrapper ─────────────────────────────────────────────────
-function AnimatedCard({
-  children,
-  delay = 0,
-  className = '',
-}: {
-  children: React.ReactNode;
-  delay?: number;
-  className?: string;
-}) {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay, duration: 0.5, ease: 'easeOut' }}
-    >
-      <Card className={`hover:shadow-lg hover:shadow-emerald-500/5 transition-all duration-300 border-border/50 backdrop-blur-sm bg-card/80 ${className}`}>
-        {children}
-      </Card>
-    </motion.div>
-  );
-}
-
 // ─── Skeleton Loaders ─────────────────────────────────────────────────────
 function StatCardSkeleton() {
   return (
@@ -225,24 +258,16 @@ function StatCardSkeleton() {
   );
 }
 
-function DocumentCardSkeleton() {
+function FileRowSkeleton() {
   return (
-    <div className="p-4 rounded-xl border border-border/30 space-y-3">
-      <div className="flex items-start gap-3">
-        <Skeleton className="h-10 w-10 rounded-lg" />
-        <div className="flex-1 space-y-1.5">
-          <Skeleton className="h-4 w-3/4" />
-          <Skeleton className="h-3 w-1/2" />
-        </div>
+    <div className="flex items-center gap-4 p-4 rounded-xl border border-border/30">
+      <Skeleton className="h-10 w-10 rounded-lg shrink-0" />
+      <div className="flex-1 min-w-0 space-y-2">
+        <Skeleton className="h-4 w-48" />
+        <Skeleton className="h-3 w-32" />
       </div>
-      <div className="flex gap-1.5">
-        <Skeleton className="h-5 w-12 rounded-full" />
-        <Skeleton className="h-5 w-16 rounded-full" />
-      </div>
-      <div className="flex items-center justify-between">
-        <Skeleton className="h-3 w-20" />
-        <Skeleton className="h-8 w-8 rounded" />
-      </div>
+      <Skeleton className="h-6 w-20 rounded-full" />
+      <Skeleton className="h-8 w-8 rounded" />
     </div>
   );
 }
@@ -254,145 +279,138 @@ export default function DocumentVaultPage() {
   const queryClient = useQueryClient();
 
   // ── React Query data hooks ──
-  const { data: documentsData, isLoading: documentsLoading, error: documentsError } = useUploadedFiles(undefined, {
+  const { data: filesData, isLoading: filesLoading, error: filesError } = useUploadedFiles(undefined, {
     refetchInterval: (query) => {
-      const files = (query.state.data as { files: DocumentItem[] } | undefined)?.files ?? [];
-      const hasProcessing = files.some(f => f.status === 'processing' || f.status === 'uploaded');
-      return hasProcessing ? 2000 : false;
+      const files = (query.state.data as { files: UploadedFileItem[] } | undefined)?.files ?? [];
+      const hasProcessing = files.some(
+        f => f.status === 'uploaded' ||
+             f.status === 'processing' ||
+             f.processingStep === 'uploading' ||
+             f.processingStep === 'extracting' ||
+             f.processingStep === 'validating'
+      );
+      return hasProcessing ? 3000 : false;
     },
   });
   const { data: clientsData, isLoading: clientsLoading } = useClients();
 
   // ── Derived data ──
-  const documents: DocumentItem[] = (documentsData?.files ?? []) as DocumentItem[];
-  const clients: ClientOption[] = (clientsData?.clients ?? []).map(c => ({
+  const files: UploadedFileItem[] = (filesData?.files ?? []) as UploadedFileItem[];
+  const clients: ClientOption[] = (clientsData?.clients ?? []).map((c: any) => ({
     id: c.id,
     tradeName: c.tradeName,
     gstin: c.gstin,
   }));
-  const loading = documentsLoading || clientsLoading;
-  const error = documentsError ? (documentsError instanceof Error ? documentsError.message : 'Failed to fetch documents') : null;
+  const loading = filesLoading || clientsLoading;
+  const error = filesError ? (filesError instanceof Error ? filesError.message : 'Failed to fetch files') : null;
 
   // ── State ────────────────────────────────────────────────────────────────
-  const [activeFolder, setActiveFolder] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
-
-  // Upload dialog
-  const [uploadOpen, setUploadOpen] = useState(false);
-  const [uploadForm, setUploadForm] = useState({
-    clientId: '',
-    folder: 'general',
-    name: '',
-    fileType: 'pdf',
-    tags: '',
-    description: '',
-  });
-
-  // Drag and drop upload
+  const [selectedClientId, setSelectedClientId] = useState('');
+  const [selectedPeriod, setSelectedPeriod] = useState('');
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploadingFiles, setUploadingFiles] = useState<Set<string>>(new Set());
 
-  // Version history dialog
-  const [versionOpen, setVersionOpen] = useState(false);
-  const [versionDoc, setVersionDoc] = useState<DocumentItem | null>(null);
-  const [versions, setVersions] = useState<DocumentItem[]>([]);
-  const [versionsLoading, setVersionsLoading] = useState(false);
+  // ── File upload mutation ──
+  const uploadMutation = useUploadFile();
 
-  // Upload success
-  const [uploadSuccess, setUploadSuccess] = useState(false);
-
-  // ── File upload mutation (FormData to /api/upload) ──
-  const fileUploadMutation = useMutation({
-    mutationFn: async (formData: FormData) => {
-      const res = await fetch('/api/upload', {
-        method: 'POST',
-        body: formData,
-      });
+  // ── Delete mutation ──
+  const deleteMutation = useMutation({
+    mutationFn: async (fileId: string) => {
+      const res = await fetch(`/api/upload?id=${fileId}`, { method: 'DELETE' });
       if (!res.ok) {
-        const error = await res.json().catch(() => ({ error: 'Upload failed' }));
-        throw new Error(error.error || `HTTP ${res.status}`);
+        const err = await res.json().catch(() => ({ error: 'Delete failed' }));
+        throw new Error(err.error || `HTTP ${res.status}`);
       }
       return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['documents'] });
+      toast.success('File deleted successfully');
+    },
+    onError: (err) => {
+      toast.error(err instanceof Error ? err.message : 'Failed to delete file');
     },
   });
 
-  // ── Document upload mutation (JSON to /api/documents) ──
-  const documentUploadMutation = useUploadFile();
-
-  // ── Filtered documents ───────────────────────────────────────────────────
-  const filteredDocuments = documents.filter((doc) => {
-    const matchesFolder = activeFolder === 'all' || doc.folder === activeFolder;
-    if (!matchesFolder) return false;
-    if (!searchQuery.trim()) return true;
-    const q = searchQuery.toLowerCase();
-    return (
-      doc.name.toLowerCase().includes(q) ||
-      (doc.description && doc.description.toLowerCase().includes(q)) ||
-      (doc.tags && doc.tags.toLowerCase().includes(q))
-    );
-  });
-
   // ── Stats ────────────────────────────────────────────────────────────────
-  const totalDocs = documents.length;
-  const totalStorage = documents.reduce((sum, d) => sum + d.size, 0);
+  const totalFiles = files.length;
+  const totalStorage = files.reduce((sum, f) => sum + f.fileSize, 0);
+  const completedCount = files.filter(f => f.status === 'completed').length;
+  const processingCount = files.filter(
+    f => f.status !== 'completed' && f.status !== 'failed'
+  ).length;
+  const invoicesExtracted = files.reduce((sum, f) => sum + (f.invoicesCreated || 0), 0);
   const now = new Date();
-  const docsThisMonth = documents.filter((d) => {
-    const created = new Date(d.createdAt);
+  const filesThisMonth = files.filter((f) => {
+    const created = new Date(f.createdAt);
     return created.getMonth() === now.getMonth() && created.getFullYear() === now.getFullYear();
   }).length;
 
-  const animTotalDocs = useAnimatedNumber(totalDocs);
-  const animDocsThisMonth = useAnimatedNumber(docsThisMonth);
+  const animTotalFiles = useAnimatedNumber(totalFiles);
+  const animFilesThisMonth = useAnimatedNumber(filesThisMonth);
+
+  // ── Filtered files ──
+  const filteredFiles = files.filter((file) => {
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.toLowerCase();
+    return (
+      file.originalName.toLowerCase().includes(q) ||
+      (file.tags && file.tags.toLowerCase().includes(q)) ||
+      (file.client?.tradeName && file.client.tradeName.toLowerCase().includes(q))
+    );
+  });
 
   // ── Upload handlers ──────────────────────────────────────────────────────
-  const handleUpload = async () => {
-    if (!uploadForm.name.trim()) return;
-    try {
-      await documentUploadMutation.mutateAsync({
-        clientId: uploadForm.clientId || undefined,
-        folder: uploadForm.folder,
-        name: uploadForm.name,
-        fileType: uploadForm.fileType,
-        size: Math.floor(Math.random() * 500000) + 10000,
-        tags: uploadForm.tags,
-        description: uploadForm.description,
-        uploadedBy: 'current-user',
-      } as Record<string, unknown>);
-      setUploadSuccess(true);
-      toast.success('Document uploaded successfully');
-      setTimeout(() => {
-        setUploadOpen(false);
-        setUploadSuccess(false);
-        setUploadForm({
-          clientId: '',
-          folder: 'general',
-          name: '',
-          fileType: 'pdf',
-          tags: '',
-          description: '',
-        });
-      }, 1200);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Upload failed');
-    }
-  };
+  const handleFileUpload = useCallback(async (fileList: FileList | File[]) => {
+    const filesToUpload = Array.from(fileList);
+    const acceptedTypes = [
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'application/vnd.ms-excel',
+      'text/csv',
+      'application/pdf',
+      'application/json',
+      'image/jpeg',
+      'image/png',
+    ];
+    const acceptedExtensions = ['.xlsx', '.xls', '.csv', '.pdf', '.json', '.jpg', '.jpeg', '.png'];
 
-  // File drag-and-drop upload (uses /api/upload with FormData)
-  const handleFileUpload = async (files: FileList | File[]) => {
-    for (const file of files) {
+    for (const file of filesToUpload) {
+      const ext = '.' + (file.name.split('.').pop()?.toLowerCase() ?? '');
+      const isAccepted =
+        acceptedTypes.includes(file.type) ||
+        acceptedExtensions.includes(ext);
+
+      if (!isAccepted) {
+        toast.error(`Unsupported file type: ${file.name}`);
+        continue;
+      }
+
       const formData = new FormData();
       formData.append('file', file);
-      formData.append('clientId', uploadForm.clientId || '');
-      formData.append('period', '2025-06');
-      fileUploadMutation.mutate(formData, {
-        onSuccess: () => toast.success(`${file.name} uploaded successfully`),
-        onError: (err) => toast.error(`Failed to upload ${file.name}: ${err.message}`),
+      if (selectedClientId) formData.append('clientId', selectedClientId);
+      if (selectedPeriod) formData.append('period', selectedPeriod);
+
+      setUploadingFiles(prev => new Set(prev).add(file.name));
+
+      uploadMutation.mutate(formData, {
+        onSuccess: () => {
+          toast.success(`${file.name} uploaded successfully`);
+        },
+        onError: (err) => {
+          toast.error(`Failed to upload ${file.name}: ${err.message}`);
+        },
+        onSettled: () => {
+          setUploadingFiles(prev => {
+            const next = new Set(prev);
+            next.delete(file.name);
+            return next;
+          });
+        },
       });
     }
-  };
+  }, [selectedClientId, selectedPeriod, uploadMutation]);
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -410,57 +428,26 @@ export default function DocumentVaultPage() {
     e.preventDefault();
     e.stopPropagation();
     setIsDragging(false);
-    const files = Array.from(e.dataTransfer.files);
-    if (files.length > 0) {
-      handleFileUpload(files);
+    const droppedFiles = Array.from(e.dataTransfer.files);
+    if (droppedFiles.length > 0) {
+      handleFileUpload(droppedFiles);
     }
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
-    if (files.length > 0) {
-      handleFileUpload(files);
+    const selectedFiles = Array.from(e.target.files || []);
+    if (selectedFiles.length > 0) {
+      handleFileUpload(selectedFiles);
     }
     e.target.value = '';
   };
 
-  // ── Version history handler ──────────────────────────────────────────────
-  const handleViewVersions = async (doc: DocumentItem) => {
-    setVersionDoc(doc);
-    setVersionOpen(true);
-    setVersionsLoading(true);
-
-    try {
-      // Find root parent id
-      let rootId = doc.id;
-      if (doc.parentId) rootId = doc.parentId;
-
-      // Fetch all versions: the document itself + children
-      const res = await fetch('/api/documents?search=');
-      if (res.ok) {
-        const data = await res.json();
-        const allDocs: DocumentItem[] = data.documents ?? [];
-        // Find all docs in the same version chain
-        const versionChain = allDocs.filter(
-          (d) => d.id === rootId || d.parentId === rootId || d.id === doc.id || d.parentId === doc.id
-        );
-        // Sort by version
-        versionChain.sort((a, b) => a.version - b.version);
-        setVersions(versionChain.length > 0 ? versionChain : [doc]);
-      } else {
-        setVersions([doc]);
-      }
-    } catch {
-      setVersions([doc]);
-    } finally {
-      setVersionsLoading(false);
-    }
+  const handleDelete = (fileId: string, fileName: string) => {
+    deleteMutation.mutate(fileId);
   };
 
-  // ── Retry handler ──
   const handleRetry = () => {
     queryClient.invalidateQueries({ queryKey: ['documents'] });
-    queryClient.invalidateQueries({ queryKey: ['clients'] });
   };
 
   // ── Render ───────────────────────────────────────────────────────────────
@@ -482,433 +469,48 @@ export default function DocumentVaultPage() {
               Document Vault
             </h1>
             <p className="text-sm text-muted-foreground mt-0.5">
-              Secure document repository for your firm
+              Upload &amp; process GST documents, invoices, and returns
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
+          {processingCount > 0 && (
+            <Badge className="gap-1.5 bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-800">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              {processingCount} processing
+            </Badge>
+          )}
           <Button
-            onClick={() => setUploadOpen(true)}
+            onClick={() => fileInputRef.current?.click()}
             className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg shadow-emerald-600/20"
           >
             <Upload className="h-4 w-4" />
-            Upload Document
+            Upload Files
           </Button>
         </div>
       </motion.div>
 
-      {/* ═══ SEARCH BAR ═══ */}
+      {/* ═══ UPLOAD ZONE ═══ */}
       <motion.div
-        initial={{ opacity: 0, y: -5 }}
+        initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.1, duration: 0.3 }}
-        className="relative max-w-md"
+        transition={{ delay: 0.1, duration: 0.4 }}
       >
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input
-          placeholder="Search by name, description, or tags..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="pl-9 border-border/50 focus:border-emerald-300 dark:focus:border-emerald-700"
-        />
-        {searchQuery && (
-          <button
-            onClick={() => setSearchQuery('')}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        )}
-      </motion.div>
-
-      {/* ═══ STATS ROW ═══ */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <AnimatedCard delay={0.05}>
-          <CardContent className="p-4">
-            {loading ? (
-              <StatCardSkeleton />
-            ) : (
-              <div className="flex items-center gap-3">
-                <div className="flex items-center justify-center h-10 w-10 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-100 dark:border-emerald-900/50">
-                  <FileText className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
-                </div>
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Total Documents
-                  </p>
-                  <p className="text-xl font-bold text-foreground">{formatNumber(animTotalDocs)}</p>
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </AnimatedCard>
-
-        <AnimatedCard delay={0.1}>
-          <CardContent className="p-4">
-            {loading ? (
-              <StatCardSkeleton />
-            ) : (
-              <div className="flex items-center gap-3">
-                <div className="flex items-center justify-center h-10 w-10 rounded-xl bg-teal-50 dark:bg-teal-950/40 border border-teal-100 dark:border-teal-900/50">
-                  <HardDrive className="h-5 w-5 text-teal-600 dark:text-teal-400" />
-                </div>
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Storage Used
-                  </p>
-                  <p className="text-xl font-bold text-foreground">{formatFileSize(totalStorage)}</p>
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </AnimatedCard>
-
-        <AnimatedCard delay={0.15}>
-          <CardContent className="p-4">
-            {loading ? (
-              <StatCardSkeleton />
-            ) : (
-              <div className="flex items-center gap-3">
-                <div className="flex items-center justify-center h-10 w-10 rounded-xl bg-purple-50 dark:bg-purple-950/40 border border-purple-100 dark:border-purple-900/50">
-                  <CalendarDays className="h-5 w-5 text-purple-600 dark:text-purple-400" />
-                </div>
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    This Month
-                  </p>
-                  <p className="text-xl font-bold text-foreground">{formatNumber(animDocsThisMonth)}</p>
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </AnimatedCard>
-      </div>
-
-      {/* ═══ FOLDER TABS + DOCUMENT GRID ═══ */}
-      <AnimatedCard delay={0.2} className="overflow-hidden">
-        <CardContent className="p-0">
-          <Tabs
-            value={activeFolder}
-            onValueChange={setActiveFolder}
-            className="w-full"
-          >
-            <div className="border-b border-border/50 px-4 pt-4">
-              <TabsList className="bg-muted/50 h-auto flex-wrap gap-1 p-1">
-                {FOLDERS.map((folder) => (
-                  <TabsTrigger
-                    key={folder.value}
-                    value={folder.value}
-                    className="data-[state=active]:bg-emerald-50 data-[state=active]:text-emerald-700 dark:data-[state=active]:bg-emerald-950/40 dark:data-[state=active]:text-emerald-400 text-xs px-3 py-1.5"
-                  >
-                    <folder.icon className="h-3.5 w-3.5 mr-1.5" />
-                    {folder.label}
-                  </TabsTrigger>
-                ))}
-              </TabsList>
-            </div>
-
-            {/* All tabs share the same content, filtered by activeFolder */}
-            {FOLDERS.map((folder) => (
-              <TabsContent key={folder.value} value={folder.value} className="mt-0">
-                <div className="p-4">
-                  {error && (
-                    <div className="flex items-center gap-2 p-3 rounded-xl bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900/50 mb-4">
-                      <AlertCircle className="h-4 w-4 text-red-500 shrink-0" />
-                      <p className="text-sm text-red-700 dark:text-red-400">{error}</p>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={handleRetry}
-                        className="ml-auto text-xs text-red-600 hover:text-red-700"
-                      >
-                        Retry
-                      </Button>
-                    </div>
-                  )}
-
-                  {loading ? (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {Array.from({ length: 6 }).map((_, i) => (
-                        <DocumentCardSkeleton key={i} />
-                      ))}
-                    </div>
-                  ) : filteredDocuments.length === 0 ? (
-                    <motion.div
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      className="flex flex-col items-center justify-center py-16 text-center"
-                    >
-                      {documents.length === 0 ? (
-                        // Global empty state — no documents at all
-                        <>
-                          <div className="h-16 w-16 rounded-2xl bg-emerald-50 dark:bg-emerald-950/30 flex items-center justify-center mb-4">
-                            <Inbox className="h-8 w-8 text-emerald-400" />
-                          </div>
-                          <h3 className="text-lg font-semibold text-foreground mb-1">
-                            No documents uploaded
-                          </h3>
-                          <p className="text-sm text-muted-foreground mb-4 max-w-sm">
-                            Upload your first document to get started. Drag and drop files or click the button below.
-                          </p>
-                          <div className="flex flex-col items-center gap-3">
-                            <Button
-                              onClick={() => setUploadOpen(true)}
-                              className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg shadow-emerald-600/20"
-                            >
-                              <Plus className="h-4 w-4" />
-                              Upload Your First Document
-                            </Button>
-                            {/* Drag-and-drop area */}
-                            <motion.div
-                              animate={isDragging ? { scale: 1.01 } : { scale: 1 }}
-                              onDragOver={handleDragOver}
-                              onDragLeave={handleDragLeave}
-                              onDrop={handleDrop}
-                              className={`
-                                mt-4 w-full max-w-md relative overflow-hidden rounded-xl border-2 border-dashed transition-all duration-300 cursor-pointer
-                                ${isDragging
-                                  ? 'border-emerald-400 bg-emerald-50/60'
-                                  : 'border-slate-300 bg-gradient-to-br from-slate-50 via-white to-emerald-50/30 hover:border-emerald-300'
-                                }
-                              `}
-                              onClick={() => fileInputRef.current?.click()}
-                            >
-                              <div className="py-8 px-4 flex flex-col items-center">
-                                <Upload className={`h-8 w-8 mb-2 ${isDragging ? 'text-emerald-600' : 'text-slate-400'}`} />
-                                <p className="text-sm text-muted-foreground">
-                                  {isDragging ? 'Drop files here!' : 'Or drag & drop files here'}
-                                </p>
-                              </div>
-                              <input
-                                ref={fileInputRef}
-                                type="file"
-                                accept=".json,.csv,.xlsx,.xls,.pdf"
-                                multiple
-                                className="hidden"
-                                onChange={handleFileSelect}
-                              />
-                            </motion.div>
-                          </div>
-                        </>
-                      ) : (
-                        // Filter empty state — no matches
-                        <>
-                          <div className="h-16 w-16 rounded-2xl bg-emerald-50 dark:bg-emerald-950/30 flex items-center justify-center mb-4">
-                            <FolderOpen className="h-8 w-8 text-emerald-400" />
-                          </div>
-                          <h3 className="text-lg font-semibold text-foreground mb-1">
-                            No documents found
-                          </h3>
-                          <p className="text-sm text-muted-foreground mb-4 max-w-sm">
-                            {searchQuery
-                              ? `No documents match "${searchQuery}"`
-                              : 'Upload your first document to get started'}
-                          </p>
-                          {!searchQuery && (
-                            <Button
-                              onClick={() => setUploadOpen(true)}
-                              variant="outline"
-                              className="gap-2 border-emerald-200 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-800 dark:text-emerald-400 dark:hover:bg-emerald-950/30"
-                            >
-                              <Plus className="h-4 w-4" />
-                              Upload Document
-                            </Button>
-                          )}
-                        </>
-                      )}
-                    </motion.div>
-                  ) : (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                      <AnimatePresence>
-                        {filteredDocuments.map((doc, index) => (
-                          <motion.div
-                            key={doc.id}
-                            initial={{ opacity: 0, y: 15 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, scale: 0.95 }}
-                            transition={{ delay: index * 0.04, duration: 0.35 }}
-                            whileHover={{ y: -2 }}
-                            className="group p-4 rounded-xl border border-border/30 hover:border-emerald-200/60 dark:hover:border-emerald-800/50 hover:shadow-md hover:shadow-emerald-500/5 transition-all cursor-pointer bg-card/50"
-                          >
-                            {/* Top: icon + name */}
-                            <div className="flex items-start gap-3 mb-3">
-                              <div className="flex items-center justify-center h-10 w-10 rounded-lg bg-muted/50 shrink-0">
-                                {getFileTypeIcon(doc.fileType)}
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <p className="text-sm font-semibold text-foreground truncate" title={doc.name}>
-                                  {doc.name}
-                                </p>
-                                {doc.client && (
-                                  <p className="text-xs text-muted-foreground truncate mt-0.5">
-                                    {doc.client.tradeName}
-                                  </p>
-                                )}
-                              </div>
-                            </div>
-
-                            {/* File type badge + version + processing status */}
-                            <div className="flex items-center gap-2 mb-3">
-                              <Badge
-                                variant="outline"
-                                className={`text-[10px] px-2 py-0 border-0 font-semibold ${getFileTypeColor(doc.fileType)}`}
-                              >
-                                {doc.fileType.toUpperCase()}
-                              </Badge>
-                              <Badge
-                                variant="outline"
-                                className="text-[10px] px-2 py-0 border-border/30 text-muted-foreground font-medium"
-                              >
-                                v{doc.version}
-                              </Badge>
-                              {/* Processing status badge */}
-                              {(doc.status === 'processing' || doc.status === 'uploaded') && (
-                                <Badge className="text-[10px] px-2 py-0 bg-amber-50 text-amber-700 border-amber-200 border">
-                                  <Loader2 className="h-2.5 w-2.5 mr-1 animate-spin" />
-                                  {doc.processingStep || 'Processing'}
-                                </Badge>
-                              )}
-                              {doc.status === 'completed' && (
-                                <Badge className="text-[10px] px-2 py-0 bg-emerald-50 text-emerald-700 border-emerald-200 border">
-                                  <CheckCircle2 className="h-2.5 w-2.5 mr-1" />
-                                  Processed
-                                </Badge>
-                              )}
-                              <span className="text-[10px] text-muted-foreground ml-auto">
-                                {formatFileSize(doc.size)}
-                              </span>
-                            </div>
-
-                            {/* Processing progress bar */}
-                            {doc.status === 'processing' && typeof doc.progress === 'number' && doc.progress < 100 && (
-                              <div className="mb-3">
-                                <div className="h-1.5 rounded-full bg-slate-100 overflow-hidden">
-                                  <div
-                                    className="h-full rounded-full bg-emerald-500 transition-all duration-500"
-                                    style={{ width: `${doc.progress}%` }}
-                                  />
-                                </div>
-                                <p className="text-[10px] text-muted-foreground mt-1">
-                                  {doc.processingStep}: {doc.progress}%
-                                </p>
-                              </div>
-                            )}
-
-                            {/* Tags */}
-                            {doc.tags && (
-                              <div className="flex flex-wrap gap-1 mb-3">
-                                {doc.tags.split(',').slice(0, 3).map((tag, i) => (
-                                  <Badge
-                                    key={i}
-                                    variant="outline"
-                                    className="text-[10px] px-1.5 py-0 border-emerald-200/50 text-emerald-600 dark:border-emerald-800/50 dark:text-emerald-400 bg-emerald-50/50 dark:bg-emerald-950/20"
-                                  >
-                                    <Tag className="h-2.5 w-2.5 mr-0.5" />
-                                    {tag.trim()}
-                                  </Badge>
-                                ))}
-                                {doc.tags.split(',').length > 3 && (
-                                  <span className="text-[10px] text-muted-foreground self-center">
-                                    +{doc.tags.split(',').length - 3}
-                                  </span>
-                                )}
-                              </div>
-                            )}
-
-                            {/* Date + Actions */}
-                            <div className="flex items-center justify-between pt-2 border-t border-border/20">
-                              <span className="text-[10px] text-muted-foreground">
-                                {formatDate(doc.createdAt)}
-                              </span>
-                              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-7 w-7 p-0 text-muted-foreground hover:text-emerald-600"
-                                  title="Preview"
-                                >
-                                  <Eye className="h-3.5 w-3.5" />
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-7 w-7 p-0 text-muted-foreground hover:text-emerald-600"
-                                  title="Download"
-                                >
-                                  <Download className="h-3.5 w-3.5" />
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleViewVersions(doc);
-                                  }}
-                                  className="h-7 w-7 p-0 text-muted-foreground hover:text-emerald-600"
-                                  title="Version History"
-                                >
-                                  <History className="h-3.5 w-3.5" />
-                                </Button>
-                              </div>
-                            </div>
-                          </motion.div>
-                        ))}
-                      </AnimatePresence>
-                    </div>
-                  )}
-
-                  {/* Results count */}
-                  {!loading && filteredDocuments.length > 0 && (
-                    <div className="mt-4 text-center">
-                      <p className="text-xs text-muted-foreground">
-                        Showing {filteredDocuments.length} of {documents.length} documents
-                      </p>
-                    </div>
-                  )}
-                </div>
-              </TabsContent>
-            ))}
-          </Tabs>
-        </CardContent>
-      </AnimatedCard>
-
-      {/* ═══ UPLOAD DOCUMENT DIALOG ═══ */}
-      <Dialog open={uploadOpen} onOpenChange={setUploadOpen}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Upload className="h-5 w-5 text-emerald-500" />
-              Upload Document
-            </DialogTitle>
-            <DialogDescription>
-              Add a new document to the vault
-            </DialogDescription>
-          </DialogHeader>
-
-          {uploadSuccess ? (
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              className="flex flex-col items-center py-8"
-            >
-              <div className="h-14 w-14 rounded-full bg-emerald-100 dark:bg-emerald-950/40 flex items-center justify-center mb-3">
-                <CheckCircle2 className="h-7 w-7 text-emerald-600 dark:text-emerald-400" />
-              </div>
-              <p className="text-lg font-semibold text-foreground">Document Uploaded!</p>
-              <p className="text-sm text-muted-foreground mt-1">Your document has been added to the vault.</p>
-            </motion.div>
-          ) : (
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label>Client</Label>
+        <Card className="border-border/50 bg-card/80 backdrop-blur-sm overflow-hidden">
+          <CardContent className="p-4 md:p-6">
+            {/* Client & Period selectors */}
+            <div className="flex flex-col sm:flex-row gap-3 mb-4">
+              <div className="flex-1 min-w-0">
+                <Label className="text-xs text-muted-foreground mb-1.5 block">Assign to Client (optional)</Label>
                 <Select
-                  value={uploadForm.clientId}
-                  onValueChange={(v) => setUploadForm((f) => ({ ...f, clientId: v }))}
+                  value={selectedClientId}
+                  onValueChange={setSelectedClientId}
                 >
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Select client (optional)" />
+                  <SelectTrigger className="w-full border-border/50 focus:border-emerald-300 dark:focus:border-emerald-700">
+                    <SelectValue placeholder="All clients" />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="all">All clients</SelectItem>
                     {clients.map((c) => (
                       <SelectItem key={c.id} value={c.id}>
                         {c.tradeName}
@@ -917,184 +519,434 @@ export default function DocumentVaultPage() {
                   </SelectContent>
                 </Select>
               </div>
-
-              <div className="space-y-2">
-                <Label>Folder</Label>
+              <div className="flex-1 min-w-0">
+                <Label className="text-xs text-muted-foreground mb-1.5 block">Period (optional)</Label>
                 <Select
-                  value={uploadForm.folder}
-                  onValueChange={(v) => setUploadForm((f) => ({ ...f, folder: v }))}
+                  value={selectedPeriod}
+                  onValueChange={setSelectedPeriod}
                 >
-                  <SelectTrigger className="w-full">
-                    <SelectValue />
+                  <SelectTrigger className="w-full border-border/50 focus:border-emerald-300 dark:focus:border-emerald-700">
+                    <SelectValue placeholder="Select period" />
                   </SelectTrigger>
                   <SelectContent>
-                    {FOLDERS.filter((f) => f.value !== 'all').map((f) => (
-                      <SelectItem key={f.value} value={f.value}>
-                        {f.label}
+                    {getPeriodOptions().map((p) => (
+                      <SelectItem key={p} value={p}>
+                        {p}
                       </SelectItem>
                     ))}
-                    <SelectItem value="general">General</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
-
-              <div className="space-y-2">
-                <Label>Document Name *</Label>
-                <Input
-                  placeholder="e.g. GSTR-1 Return Q3 2025"
-                  value={uploadForm.name}
-                  onChange={(e) => setUploadForm((f) => ({ ...f, name: e.target.value }))}
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>File Type</Label>
-                  <Select
-                    value={uploadForm.fileType}
-                    onValueChange={(v) => setUploadForm((f) => ({ ...f, fileType: v }))}
-                  >
-                    <SelectTrigger className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {['pdf', 'xlsx', 'docx', 'jpg', 'png', 'csv', 'pptx'].map((t) => (
-                        <SelectItem key={t} value={t}>
-                          {t.toUpperCase()}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Tags</Label>
-                  <Input
-                    placeholder="gst, return, quarterly"
-                    value={uploadForm.tags}
-                    onChange={(e) => setUploadForm((f) => ({ ...f, tags: e.target.value }))}
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label>Description</Label>
-                <Textarea
-                  placeholder="Brief description of the document..."
-                  value={uploadForm.description}
-                  onChange={(e) => setUploadForm((f) => ({ ...f, description: e.target.value }))}
-                  rows={3}
-                />
-              </div>
             </div>
-          )}
 
-          {!uploadSuccess && (
-            <DialogFooter>
-              <Button
-                variant="outline"
-                onClick={() => setUploadOpen(false)}
-                disabled={documentUploadMutation.isPending}
-              >
-                Cancel
-              </Button>
-              <Button
-                onClick={handleUpload}
-                disabled={!uploadForm.name.trim() || documentUploadMutation.isPending}
-                className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white"
-              >
-                {documentUploadMutation.isPending ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Uploading...
-                  </>
-                ) : (
-                  <>
-                    <Upload className="h-4 w-4" />
-                    Upload
-                  </>
-                )}
-              </Button>
-            </DialogFooter>
-          )}
-        </DialogContent>
-      </Dialog>
-
-      {/* ═══ VERSION HISTORY DIALOG ═══ */}
-      <Dialog open={versionOpen} onOpenChange={setVersionOpen}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <History className="h-5 w-5 text-emerald-500" />
-              Version History
-            </DialogTitle>
-            <DialogDescription>
-              {versionDoc ? `All versions of "${versionDoc.name}"` : 'Document versions'}
-            </DialogDescription>
-          </DialogHeader>
-
-          {versionsLoading ? (
-            <div className="space-y-3 py-4">
-              {Array.from({ length: 3 }).map((_, i) => (
-                <div key={i} className="flex items-center gap-3 p-3 rounded-lg">
-                  <Skeleton className="h-8 w-8 rounded-lg" />
-                  <div className="flex-1 space-y-1.5">
-                    <Skeleton className="h-4 w-3/4" />
-                    <Skeleton className="h-3 w-1/2" />
+            {/* Drag & Drop Zone */}
+            <motion.div
+              animate={isDragging ? { scale: 1.005 } : { scale: 1 }}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+              onClick={() => fileInputRef.current?.click()}
+              className={`
+                relative overflow-hidden rounded-xl border-2 border-dashed transition-all duration-300 cursor-pointer
+                ${isDragging
+                  ? 'border-emerald-400 bg-emerald-50/60 dark:bg-emerald-950/20'
+                  : 'border-border/50 bg-gradient-to-br from-slate-50/80 via-white to-emerald-50/20 dark:from-slate-900/50 dark:via-card dark:to-emerald-950/10 hover:border-emerald-300 dark:hover:border-emerald-700'
+                }
+              `}
+            >
+              <div className="py-8 md:py-10 px-4 flex flex-col items-center text-center">
+                <div className={`
+                  h-14 w-14 rounded-2xl flex items-center justify-center mb-3 transition-colors
+                  ${isDragging
+                    ? 'bg-emerald-100 dark:bg-emerald-900/40'
+                    : 'bg-muted/50'
+                  }
+                `}>
+                  <CloudUpload className={`h-7 w-7 transition-colors ${isDragging ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground'}`} />
+                </div>
+                <p className="text-sm font-medium text-foreground mb-1">
+                  {isDragging ? 'Drop files here to upload' : 'Drag & drop files here, or click to browse'}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Supports Excel (.xlsx), CSV, PDF, JSON, and Images (.jpg, .png)
+                </p>
+                {uploadingFiles.size > 0 && (
+                  <div className="mt-3 flex items-center gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin text-emerald-600" />
+                    <span className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">
+                      Uploading {uploadingFiles.size} file{uploadingFiles.size > 1 ? 's' : ''}...
+                    </span>
                   </div>
-                  <Skeleton className="h-8 w-8 rounded" />
+                )}
+              </div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".xlsx,.xls,.csv,.pdf,.json,.jpg,.jpeg,.png"
+                multiple
+                className="hidden"
+                onChange={handleFileSelect}
+              />
+            </motion.div>
+          </CardContent>
+        </Card>
+      </motion.div>
+
+      {/* ═══ STATS ROW ═══ */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 md:gap-4">
+        <motion.div
+          initial={{ opacity: 0, y: 15 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.15, duration: 0.4 }}
+        >
+          <Card className="border-border/50 bg-card/80 backdrop-blur-sm hover:shadow-lg hover:shadow-emerald-500/5 transition-all duration-300">
+            <CardContent className="p-4">
+              {loading ? (
+                <StatCardSkeleton />
+              ) : (
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center justify-center h-10 w-10 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-100 dark:border-emerald-900/50">
+                    <FileText className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                      Total Files
+                    </p>
+                    <p className="text-xl font-bold text-foreground">{formatNumber(animTotalFiles)}</p>
+                  </div>
                 </div>
-              ))}
-            </div>
-          ) : versions.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-8">
-              No version history available.
-            </p>
-          ) : (
-            <ScrollArea className="max-h-80">
-              <div className="space-y-2 pr-2">
-                {versions.map((v, index) => (
-                  <motion.div
-                    key={v.id}
-                    initial={{ opacity: 0, x: -10 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: index * 0.06 }}
-                    className="flex items-center gap-3 p-3 rounded-xl border border-border/30 hover:border-emerald-200/50 dark:hover:border-emerald-800/50 transition-colors"
+              )}
+            </CardContent>
+          </Card>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 15 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2, duration: 0.4 }}
+        >
+          <Card className="border-border/50 bg-card/80 backdrop-blur-sm hover:shadow-lg hover:shadow-emerald-500/5 transition-all duration-300">
+            <CardContent className="p-4">
+              {loading ? (
+                <StatCardSkeleton />
+              ) : (
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center justify-center h-10 w-10 rounded-xl bg-teal-50 dark:bg-teal-950/40 border border-teal-100 dark:border-teal-900/50">
+                    <HardDrive className="h-5 w-5 text-teal-600 dark:text-teal-400" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                      Storage
+                    </p>
+                    <p className="text-xl font-bold text-foreground">{formatFileSize(totalStorage)}</p>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 15 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.25, duration: 0.4 }}
+        >
+          <Card className="border-border/50 bg-card/80 backdrop-blur-sm hover:shadow-lg hover:shadow-emerald-500/5 transition-all duration-300">
+            <CardContent className="p-4">
+              {loading ? (
+                <StatCardSkeleton />
+              ) : (
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center justify-center h-10 w-10 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-100 dark:border-emerald-900/50">
+                    <FileCheck2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                      Processed
+                    </p>
+                    <p className="text-xl font-bold text-foreground">{completedCount}</p>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 15 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3, duration: 0.4 }}
+        >
+          <Card className="border-border/50 bg-card/80 backdrop-blur-sm hover:shadow-lg hover:shadow-emerald-500/5 transition-all duration-300">
+            <CardContent className="p-4">
+              {loading ? (
+                <StatCardSkeleton />
+              ) : (
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center justify-center h-10 w-10 rounded-xl bg-purple-50 dark:bg-purple-950/40 border border-purple-100 dark:border-purple-900/50">
+                    <CalendarDays className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                      This Month
+                    </p>
+                    <p className="text-xl font-bold text-foreground">{formatNumber(animFilesThisMonth)}</p>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </motion.div>
+      </div>
+
+      {/* ═══ FILE LIST ═══ */}
+      <motion.div
+        initial={{ opacity: 0, y: 15 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.35, duration: 0.4 }}
+      >
+        <Card className="border-border/50 bg-card/80 backdrop-blur-sm">
+          <CardHeader className="pb-3">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div>
+                <CardTitle className="text-lg">Uploaded Files</CardTitle>
+                <CardDescription className="text-sm mt-1">
+                  {invoicesExtracted > 0
+                    ? `${invoicesExtracted} invoice${invoicesExtracted !== 1 ? 's' : ''} extracted across all files`
+                    : 'Upload files to extract and process invoices'
+                  }
+                </CardDescription>
+              </div>
+              <div className="relative w-full sm:w-64">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search files..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-9 border-border/50 focus:border-emerald-300 dark:focus:border-emerald-700"
+                />
+                {searchQuery && (
+                  <button
+                    onClick={() => setSearchQuery('')}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                   >
-                    <div className="flex items-center justify-center h-9 w-9 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 shrink-0">
-                      <span className="text-sm font-bold text-emerald-600 dark:text-emerald-400">
-                        v{v.version}
-                      </span>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-foreground truncate">
-                        Version {v.version}
-                        {v.isLatest && (
-                          <Badge className="ml-2 text-[9px] px-1.5 py-0 bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 border-0">
-                            Latest
-                          </Badge>
-                        )}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {formatDate(v.createdAt)}
-                        {v.uploadedBy && ` by ${v.uploadedBy}`}
-                      </p>
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-8 w-8 p-0 text-muted-foreground hover:text-emerald-600 shrink-0"
-                      title="Download this version"
-                    >
-                      <Download className="h-4 w-4" />
-                    </Button>
-                  </motion.div>
+                    <X className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="pt-0">
+            {error && (
+              <div className="flex items-center gap-2 p-3 rounded-xl bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900/50 mb-4">
+                <AlertCircle className="h-4 w-4 text-red-500 shrink-0" />
+                <p className="text-sm text-red-700 dark:text-red-400">{error}</p>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleRetry}
+                  className="ml-auto text-xs text-red-600 hover:text-red-700"
+                >
+                  Retry
+                </Button>
+              </div>
+            )}
+
+            {loading ? (
+              <div className="space-y-3">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <FileRowSkeleton key={i} />
                 ))}
               </div>
-            </ScrollArea>
-          )}
-        </DialogContent>
-      </Dialog>
+            ) : files.length === 0 ? (
+              /* ═══ EMPTY STATE ═══ */
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="flex flex-col items-center justify-center py-12 text-center"
+              >
+                <div className="h-16 w-16 rounded-2xl bg-emerald-50 dark:bg-emerald-950/30 flex items-center justify-center mb-4">
+                  <Inbox className="h-8 w-8 text-emerald-400" />
+                </div>
+                <h3 className="text-lg font-semibold text-foreground mb-1">
+                  No documents uploaded
+                </h3>
+                <p className="text-sm text-muted-foreground mb-4 max-w-sm">
+                  Upload GST documents, invoices, or returns to start processing.
+                </p>
+                <Button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg shadow-emerald-600/20"
+                >
+                  <Upload className="h-4 w-4" />
+                  Upload Documents
+                </Button>
+              </motion.div>
+            ) : filteredFiles.length === 0 ? (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="flex flex-col items-center justify-center py-12 text-center"
+              >
+                <div className="h-16 w-16 rounded-2xl bg-muted/50 flex items-center justify-center mb-4">
+                  <Search className="h-8 w-8 text-muted-foreground" />
+                </div>
+                <h3 className="text-lg font-semibold text-foreground mb-1">
+                  No files found
+                </h3>
+                <p className="text-sm text-muted-foreground">
+                  {searchQuery ? `No files match "${searchQuery}"` : 'No files to display'}
+                </p>
+              </motion.div>
+            ) : (
+              <ScrollArea className="max-h-[600px]">
+                <div className="space-y-2 pr-1">
+                  <AnimatePresence>
+                    {filteredFiles.map((file, index) => {
+                      const statusCfg = getStatusConfig(file.status, file.processingStep);
+                      const StatusIcon = statusCfg.icon;
+                      const isProcessing = file.status !== 'completed' && file.status !== 'failed';
+                      const progressValue = file.progress ?? 0;
+
+                      return (
+                        <motion.div
+                          key={file.id}
+                          initial={{ opacity: 0, x: -10 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          exit={{ opacity: 0, scale: 0.95 }}
+                          transition={{ delay: index * 0.03, duration: 0.3 }}
+                          className={`
+                            group flex flex-col sm:flex-row sm:items-center gap-3 p-4 rounded-xl border transition-all
+                            ${isProcessing
+                              ? 'border-amber-200/50 bg-amber-50/30 dark:border-amber-800/30 dark:bg-amber-950/10'
+                              : file.status === 'failed'
+                                ? 'border-red-200/50 bg-red-50/20 dark:border-red-800/30 dark:bg-red-950/10'
+                                : 'border-border/30 hover:border-emerald-200/60 dark:hover:border-emerald-800/50 hover:shadow-md hover:shadow-emerald-500/5 bg-card/50'
+                            }
+                          `}
+                        >
+                          {/* File icon */}
+                          <div className="flex items-center justify-center h-10 w-10 rounded-lg bg-muted/50 shrink-0">
+                            {getFileTypeIcon(file.fileType)}
+                          </div>
+
+                          {/* File info */}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-0.5">
+                              <p className="text-sm font-semibold text-foreground truncate" title={file.originalName}>
+                                {file.originalName}
+                              </p>
+                              {file.invoicesCreated > 0 && (
+                                <Badge className="text-[9px] px-1.5 py-0 bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 border-0 shrink-0">
+                                  {file.invoicesCreated} invoice{file.invoicesCreated !== 1 ? 's' : ''}
+                                </Badge>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <Badge
+                                variant="outline"
+                                className={`text-[10px] px-2 py-0 border-0 font-semibold ${getFileTypeBadgeColor(file.fileType)}`}
+                              >
+                                {getFileTypeDisplay(file.fileType)}
+                              </Badge>
+                              {file.client && (
+                                <span className="text-[10px] text-muted-foreground">
+                                  {file.client.tradeName}
+                                </span>
+                              )}
+                              {file.period && (
+                                <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
+                                  <Clock className="h-2.5 w-2.5" />
+                                  {file.period}
+                                </span>
+                              )}
+                              <span className="text-[10px] text-muted-foreground">
+                                {formatFileSize(file.fileSize)}
+                              </span>
+                              <span className="text-[10px] text-muted-foreground">
+                                {formatDate(file.createdAt)} {formatTime(file.createdAt)}
+                              </span>
+                            </div>
+
+                            {/* Processing progress bar */}
+                            {isProcessing && (
+                              <div className="mt-2">
+                                <Progress value={progressValue} className="h-1.5" />
+                                <p className="text-[10px] text-muted-foreground mt-1">
+                                  {statusCfg.label} {progressValue}%
+                                </p>
+                              </div>
+                            )}
+
+                            {/* Error message */}
+                            {file.status === 'failed' && file.errorMessage && (
+                              <p className="text-[10px] text-red-600 dark:text-red-400 mt-1 flex items-start gap-1">
+                                <AlertCircle className="h-3 w-3 shrink-0 mt-0.5" />
+                                {file.errorMessage}
+                              </p>
+                            )}
+
+                            {/* Tags */}
+                            {file.tags && (
+                              <div className="flex flex-wrap gap-1 mt-1.5">
+                                {file.tags.split(',').slice(0, 4).map((tag, i) => (
+                                  <Badge
+                                    key={i}
+                                    variant="outline"
+                                    className="text-[9px] px-1.5 py-0 border-emerald-200/50 text-emerald-600 dark:border-emerald-800/50 dark:text-emerald-400 bg-emerald-50/50 dark:bg-emerald-950/20"
+                                  >
+                                    <Tag className="h-2 w-2 mr-0.5" />
+                                    {tag.trim()}
+                                  </Badge>
+                                ))}
+                                {file.tags.split(',').length > 4 && (
+                                  <span className="text-[9px] text-muted-foreground self-center">
+                                    +{file.tags.split(',').length - 4}
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Status badge + actions */}
+                          <div className="flex items-center gap-2 shrink-0 sm:ml-auto">
+                            <Badge className={`text-[10px] px-2.5 py-0.5 border font-medium ${statusCfg.badgeClass}`}>
+                              <StatusIcon className={`h-3 w-3 mr-1 ${statusCfg.spinIcon ? 'animate-spin' : ''}`} />
+                              {statusCfg.label}
+                            </Badge>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDelete(file.id, file.originalName);
+                              }}
+                              disabled={deleteMutation.isPending}
+                              className="h-8 w-8 p-0 text-muted-foreground hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity"
+                              title="Delete file"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        </motion.div>
+                      );
+                    })}
+                  </AnimatePresence>
+                </div>
+              </ScrollArea>
+            )}
+
+            {/* Results count */}
+            {!loading && filteredFiles.length > 0 && (
+              <div className="mt-3 text-center">
+                <p className="text-xs text-muted-foreground">
+                  Showing {filteredFiles.length} of {files.length} file{files.length !== 1 ? 's' : ''}
+                </p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </motion.div>
     </div>
   );
 }

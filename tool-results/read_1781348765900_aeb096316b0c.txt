@@ -1,0 +1,1695 @@
+     1→'use client'
+     2→
+     3→import React, { useState } from 'react'
+     4→import {
+     5→  Card,
+     6→  CardContent,
+     7→  CardHeader,
+     8→  CardTitle,
+     9→  CardDescription,
+    10→} from '@/components/ui/card'
+    11→import { Button } from '@/components/ui/button'
+    12→import { Input } from '@/components/ui/input'
+    13→import { Label } from '@/components/ui/label'
+    14→import { Switch } from '@/components/ui/switch'
+    15→import { Separator } from '@/components/ui/separator'
+    16→import { Badge } from '@/components/ui/badge'
+    17→import { Textarea } from '@/components/ui/textarea'
+    18→import { Progress } from '@/components/ui/progress'
+    19→import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+    20→import {
+    21→  Select,
+    22→  SelectContent,
+    23→  SelectItem,
+    24→  SelectTrigger,
+    25→  SelectValue,
+    26→} from '@/components/ui/select'
+    27→import {
+    28→  AlertDialog,
+    29→  AlertDialogContent,
+    30→  AlertDialogHeader,
+    31→  AlertDialogTitle,
+    32→  AlertDialogDescription,
+    33→  AlertDialogFooter,
+    34→  AlertDialogAction,
+    35→  AlertDialogCancel,
+    36→} from '@/components/ui/alert-dialog'
+    37→import {
+    38→  Dialog,
+    39→  DialogContent,
+    40→  DialogHeader,
+    41→  DialogTitle,
+    42→  DialogFooter,
+    43→} from '@/components/ui/dialog'
+    44→import {
+    45→  Building2,
+    46→  ClipboardList,
+    47→  Users,
+    48→  Bell,
+    49→  Lock,
+    50→  CreditCard,
+    51→  Save,
+    52→  Check,
+    53→  Loader2,
+    54→  Camera,
+    55→  AlertTriangle,
+    56→  CalendarClock,
+    57→  Mail,
+    58→  Activity,
+    59→  Upload,
+    60→  Shield,
+    61→  Smartphone,
+    62→  Monitor,
+    63→  Globe,
+    64→  ChevronRight,
+    65→  Download,
+    66→  LockKeyhole,
+    67→} from 'lucide-react'
+    68→import { motion, AnimatePresence } from 'framer-motion'
+    69→import { useAuth } from '@/contexts/AuthContext'
+    70→import { useIsMobile } from '@/hooks/use-mobile'
+    71→
+    72→// ─── Indian States ──────────────────────────────────────────────────────
+    73→const INDIAN_STATES = [
+    74→  'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh',
+    75→  'Goa', 'Gujarat', 'Haryana', 'Himachal Pradesh', 'Jharkhand',
+    76→  'Karnataka', 'Kerala', 'Madhya Pradesh', 'Maharashtra', 'Manipur',
+    77→  'Meghalaya', 'Mizoram', 'Nagaland', 'Odisha', 'Punjab',
+    78→  'Rajasthan', 'Sikkim', 'Tamil Nadu', 'Telangana', 'Tripura',
+    79→  'Uttar Pradesh', 'Uttarakhand', 'West Bengal',
+    80→  'Andaman and Nicobar Islands', 'Chandigarh', 'Dadra and Nagar Haveli',
+    81→  'Daman and Diu', 'Delhi', 'Jammu and Kashmir', 'Ladakh', 'Puducherry',
+    82→]
+    83→
+    84→const ENTITY_TYPES = ['Proprietorship', 'Partnership', 'LLP', 'Pvt Ltd', 'Ltd']
+    85→
+    86→// ─── Section IDs ────────────────────────────────────────────────────────
+    87→type SectionId = 'firm' | 'gst' | 'team' | 'notifications' | 'security' | 'billing' | 'api' | 'audit'
+    88→
+    89→interface NavSection {
+    90→  id: SectionId
+    91→  label: string
+    92→  icon: React.ReactNode
+    93→}
+    94→
+    95→const SECTIONS: NavSection[] = [
+    96→  { id: 'firm', label: 'Firm Profile', icon: <Building2 className="h-4 w-4" /> },
+    97→  { id: 'gst', label: 'GST Configuration', icon: <ClipboardList className="h-4 w-4" /> },
+    98→  { id: 'api', label: 'GST API Connections', icon: <Globe className="h-4 w-4" /> },
+    99→  { id: 'team', label: 'Team Members', icon: <Users className="h-4 w-4" /> },
+   100→  { id: 'notifications', label: 'Notifications', icon: <Bell className="h-4 w-4" /> },
+   101→  { id: 'security', label: 'Security', icon: <Lock className="h-4 w-4" /> },
+   102→  { id: 'billing', label: 'Billing', icon: <CreditCard className="h-4 w-4" /> },
+   103→  { id: 'audit', label: 'Audit Logs', icon: <ClipboardList className="h-4 w-4" /> },
+   104→]
+   105→
+   106→// ─── Team Member Type ───────────────────────────────────────────────────
+   107→interface TeamMember {
+   108→  id: string
+   109→  name: string
+   110→  email: string
+   111→  role: 'Admin' | 'Manager' | 'Staff' | 'Viewer'
+   112→  status: 'Active' | 'Invited'
+   113→  initials: string
+   114→}
+   115→
+   116→const INITIAL_TEAM: TeamMember[] = []
+   117→
+   118→// ─── Session Type ───────────────────────────────────────────────────────
+   119→interface Session {
+   120→  id: string
+   121→  device: string
+   122→  location: string
+   123→  lastActive: string
+   124→  icon: React.ReactNode
+   125→  current?: boolean
+   126→}
+   127→
+   128→const MOCK_SESSIONS: Session[] = []
+   129→
+   130→// ─── Billing History ────────────────────────────────────────────────────
+   131→interface BillingInvoice {
+   132→  id: string
+   133→  date: string
+   134→  amount: string
+   135→  status: 'Paid' | 'Pending' | 'Failed'
+   136→}
+   137→
+   138→const BILLING_HISTORY: BillingInvoice[] = []
+   139→
+   140→// ─── GST API Connection Status ──────────────────────────────────────────
+   141→interface ApiConnection {
+   142→  id: string
+   143→  name: string
+   144→  description: string
+   145→  status: 'Connected' | 'Disconnected' | 'Not Configured'
+   146→  lastSync?: string
+   147→  icon: React.ReactNode
+   148→}
+   149→
+   150→const MOCK_API_CONNECTIONS: ApiConnection[] = []
+   151→
+   152→// ─── Audit Log Entry ──────────────────────────────────────────────────
+   153→interface AuditLogEntry {
+   154→  id: string
+   155→  timestamp: string
+   156→  user: string
+   157→  action: string
+   158→  entity: string
+   159→  actionType: 'filing' | 'client_update' | 'invoice' | 'settings' | 'reconciliation'
+   160→}
+   161→
+   162→const MOCK_AUDIT_LOGS: AuditLogEntry[] = []
+   163→
+   164→// ─── Save Button with Animated States ──────────────────────────────────
+   165→function SaveButton({ onSave }: { onSave: () => Promise<void> }) {
+   166→  const [state, setState] = useState<'idle' | 'saving' | 'saved'>('idle')
+   167→
+   168→  const handleClick = async () => {
+   169→    setState('saving')
+   170→    try {
+   171→      await onSave()
+   172→      setState('saved')
+   173→      setTimeout(() => setState('idle'), 2000)
+   174→    } catch {
+   175→      setState('idle')
+   176→    }
+   177→  }
+   178→
+   179→  return (
+   180→    <Button
+   181→      onClick={handleClick}
+   182→      disabled={state === 'saving'}
+   183→      className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2 min-w-[110px]"
+   184→    >
+   185→      <AnimatePresence mode="wait">
+   186→        {state === 'idle' && (
+   187→          <motion.span
+   188→            key="idle"
+   189→            initial={{ opacity: 0, scale: 0.8 }}
+   190→            animate={{ opacity: 1, scale: 1 }}
+   191→            exit={{ opacity: 0, scale: 0.8 }}
+   192→            className="flex items-center gap-2"
+   193→          >
+   194→            <Save className="h-4 w-4" />
+   195→            Save
+   196→          </motion.span>
+   197→        )}
+   198→        {state === 'saving' && (
+   199→          <motion.span
+   200→            key="saving"
+   201→            initial={{ opacity: 0, scale: 0.8 }}
+   202→            animate={{ opacity: 1, scale: 1 }}
+   203→            exit={{ opacity: 0, scale: 0.8 }}
+   204→            className="flex items-center gap-2"
+   205→          >
+   206→            <Loader2 className="h-4 w-4 animate-spin" />
+   207→            Saving...
+   208→          </motion.span>
+   209→        )}
+   210→        {state === 'saved' && (
+   211→          <motion.span
+   212→            key="saved"
+   213→            initial={{ opacity: 0, scale: 0.8 }}
+   214→            animate={{ opacity: 1, scale: 1 }}
+   215→            exit={{ opacity: 0, scale: 0.8 }}
+   216→            className="flex items-center gap-2"
+   217→          >
+   218→            <Check className="h-4 w-4" />
+   219→            Saved
+   220→          </motion.span>
+   221→        )}
+   222→      </AnimatePresence>
+   223→    </Button>
+   224→  )
+   225→}
+   226→
+   227→// ─── Password Strength Helper ──────────────────────────────────────────
+   228→function getPasswordStrength(password: string): { score: number; label: string; color: string } {
+   229→  if (!password) return { score: 0, label: '', color: '' }
+   230→  let score = 0
+   231→  if (password.length >= 8) score++
+   232→  if (password.length >= 12) score++
+   233→  if (/[A-Z]/.test(password)) score++
+   234→  if (/[0-9]/.test(password)) score++
+   235→  if (/[^A-Za-z0-9]/.test(password)) score++
+   236→
+   237→  if (score <= 1) return { score: 20, label: 'Weak', color: 'bg-red-500' }
+   238→  if (score <= 2) return { score: 40, label: 'Fair', color: 'bg-orange-500' }
+   239→  if (score <= 3) return { score: 60, label: 'Good', color: 'bg-yellow-500' }
+   240→  if (score <= 4) return { score: 80, label: 'Strong', color: 'bg-emerald-500' }
+   241→  return { score: 100, label: 'Excellent', color: 'bg-emerald-600' }
+   242→}
+   243→
+   244→// ─── Section Content Animation Variants ─────────────────────────────────
+   245→const contentVariants = {
+   246→  hidden: { opacity: 0, x: 12 },
+   247→  visible: { opacity: 1, x: 0, transition: { duration: 0.3, ease: 'easeOut' } },
+   248→  exit: { opacity: 0, x: -12, transition: { duration: 0.15 } },
+   249→}
+   250→
+   251→// ═══════════════════════════════════════════════════════════════════════
+   252→// MAIN COMPONENT
+   253→// ═══════════════════════════════════════════════════════════════════════
+   254→export default function SettingsPage() {
+   255→  const { user } = useAuth()
+   256→  const isMobile = useIsMobile()
+   257→
+   258→  // ── Active Section ──────────────────────────────────────────────────
+   259→  const [activeSection, setActiveSection] = useState<SectionId>('firm')
+   260→
+   261→  // ── Firm Profile State ──────────────────────────────────────────────
+   262→  const [firmName, setFirmName] = useState('Sharma & Associates')
+   263→  const [legalName, setLegalName] = useState('Sharma & Associates Chartered Accountants LLP')
+   264→  const [firmGstin, setFirmGstin] = useState('27AAACR5055K1ZB')
+   265→  const [firmState, setFirmState] = useState('Maharashtra')
+   266→  const [entityType, setEntityType] = useState('LLP')
+   267→  const [caRegNumber, setCaRegNumber] = useState('ICAI/M/042817')
+   268→  const [officeAddress, setOfficeAddress] = useState('302, Lotus Business Park, Link Road, Andheri West, Mumbai - 400053')
+   269→
+   270→  // ── GST Config State ────────────────────────────────────────────────
+   271→  const [returnPeriod, setReturnPeriod] = useState<'monthly' | 'quarterly'>('monthly')
+   272→  const [fyStart, setFyStart] = useState<'april' | 'january'>('april')
+   273→  const [gstr1Pref, setGstr1Pref] = useState<'auto' | 'manual'>('auto')
+   274→  const [gstr3bPref, setGstr3bPref] = useState<'auto' | 'manual'>('auto')
+   275→  const [itcMethod, setItcMethod] = useState<'auto-match' | 'manual-review'>('auto-match')
+   276→  const [lateFilingAlert, setLateFilingAlert] = useState(true)
+   277→  const [dueDateReminderDays, setDueDateReminderDays] = useState('3')
+   278→
+   279→  // ── Team State ──────────────────────────────────────────────────────
+   280→  const [teamMembers, setTeamMembers] = useState<TeamMember[]>(INITIAL_TEAM)
+   281→  const [showInviteDialog, setShowInviteDialog] = useState(false)
+   282→  const [inviteEmail, setInviteEmail] = useState('')
+   283→  const [inviteRole, setInviteRole] = useState<'Manager' | 'Staff' | 'Viewer'>('Staff')
+   284→  const [showRemoveDialog, setShowRemoveDialog] = useState(false)
+   285→  const [memberToRemove, setMemberToRemove] = useState<TeamMember | null>(null)
+   286→  const [editingMemberId, setEditingMemberId] = useState<string | null>(null)
+   287→  const [editRole, setEditRole] = useState<string>('')
+   288→
+   289→  // ── Notifications State ─────────────────────────────────────────────
+   290→  const [filingDeadline, setFilingDeadline] = useState(true)
+   291→  const [mismatchAlerts, setMismatchAlerts] = useState(true)
+   292→  const [weeklySummary, setWeeklySummary] = useState(false)
+   293→  const [healthScoreChanges, setHealthScoreChanges] = useState(true)
+   294→  const [teamActivity, setTeamActivity] = useState(false)
+   295→  const [newInvoiceUploaded, setNewInvoiceUploaded] = useState(true)
+   296→
+   297→  // ── Security State ──────────────────────────────────────────────────
+   298→  const [currentPassword, setCurrentPassword] = useState('')
+   299→  const [newPassword, setNewPassword] = useState('')
+   300→  const [confirmPassword, setConfirmPassword] = useState('')
+   301→  const [twoFactorEnabled, setTwoFactorEnabled] = useState(false)
+   302→
+   303→  // ── Audit Log Filter ──────────────────────────────────────────────
+   304→  const [auditFilter, setAuditFilter] = useState<string>('all')
+   305→
+   306→  // ── GSTIN Validation ────────────────────────────────────────────────
+   307→  const isGstinValid = (gstin: string) => {
+   308→    const regex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/
+   309→    return regex.test(gstin.toUpperCase())
+   310→  }
+   311→  const gstinValidation = firmGstin ? isGstinValid(firmGstin) : null
+   312→
+   313→  // ── Handlers ────────────────────────────────────────────────────────
+   314→  const handleSave = async () => {
+   315→    await new Promise(resolve => setTimeout(resolve, 1200))
+   316→  }
+   317→
+   318→  const handleInviteMember = () => {
+   319→    if (!inviteEmail.trim()) return
+   320→    const initials = inviteEmail.split('@')[0].slice(0, 2).toUpperCase()
+   321→    const newMember: TeamMember = {
+   322→      id: Date.now().toString(),
+   323→      name: inviteEmail.split('@')[0],
+   324→      email: inviteEmail,
+   325→      role: inviteRole,
+   326→      status: 'Invited',
+   327→      initials,
+   328→    }
+   329→    setTeamMembers(prev => [...prev, newMember])
+   330→    setInviteEmail('')
+   331→    setInviteRole('Staff')
+   332→    setShowInviteDialog(false)
+   333→  }
+   334→
+   335→  const handleRemoveMember = () => {
+   336→    if (memberToRemove) {
+   337→      setTeamMembers(prev => prev.filter(m => m.id !== memberToRemove.id))
+   338→    }
+   339→    setShowRemoveDialog(false)
+   340→    setMemberToRemove(null)
+   341→  }
+   342→
+   343→  const handleUpdateRole = (memberId: string, role: string) => {
+   344→    setTeamMembers(prev => prev.map(m =>
+   345→      m.id === memberId ? { ...m, role: role as TeamMember['role'] } : m
+   346→    ))
+   347→    setEditingMemberId(null)
+   348→    setEditRole('')
+   349→  }
+   350→
+   351→  // ── Password strength ───────────────────────────────────────────────
+   352→  const passwordStrength = getPasswordStrength(newPassword)
+   353→
+   354→  // ── Role Badge Color ────────────────────────────────────────────────
+   355→  const getRoleBadgeClass = (role: string) => {
+   356→    switch (role) {
+   357→      case 'Admin': return 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800'
+   358→      case 'Manager': return 'bg-teal-50 text-teal-700 border-teal-200 dark:bg-teal-950/40 dark:text-teal-400 dark:border-teal-800'
+   359→      case 'Staff': return 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-800'
+   360→      case 'Viewer': return 'bg-slate-50 text-slate-600 border-slate-200 dark:bg-slate-900/40 dark:text-slate-400 dark:border-slate-700'
+   361→      default: return ''
+   362→    }
+   363→  }
+   364→
+   365→  const getStatusBadgeClass = (status: string) => {
+   366→    return status === 'Active'
+   367→      ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800'
+   368→      : 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-800'
+   369→  }
+   370→
+   371→  // ═══════════════════════════════════════════════════════════════════
+   372→  // RENDER SECTION CONTENT
+   373→  // ═══════════════════════════════════════════════════════════════════
+   374→  const renderSection = () => {
+   375→    switch (activeSection) {
+   376→      // ───────────────────────────────────────────────────────────────
+   377→      // SECTION 1: FIRM PROFILE
+   378→      // ───────────────────────────────────────────────────────────────
+   379→      case 'firm':
+   380→        return (
+   381→          <motion.div
+   382→            key="firm"
+   383→            initial="hidden"
+   384→            animate="visible"
+   385→            exit="exit"
+   386→            variants={contentVariants}
+   387→            className="space-y-6"
+   388→          >
+   389→            <div>
+   390→              <h2 className="text-xl font-semibold text-foreground">Firm Profile</h2>
+   391→              <p className="text-sm text-muted-foreground mt-1">Manage your CA firm details used across all GST filings</p>
+   392→            </div>
+   393→
+   394→            <Card className="border-border/50">
+   395→              <CardContent className="pt-6 space-y-6">
+   396→                {/* Logo Upload */}
+   397→                <div className="flex items-center gap-5">
+   398→                  <div className="relative group">
+   399→                    <div className="h-20 w-20 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white font-bold text-xl shadow-lg shadow-emerald-600/20">
+   400→                      {firmName.split(' ').filter(w => w === '&' || w.length > 1).map(w => w[0]).join('').slice(0, 2).toUpperCase()}
+   401→                    </div>
+   402→                    <button className="absolute inset-0 rounded-full bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
+   403→                      <Camera className="h-5 w-5 text-white" />
+   404→                    </button>
+   405→                  </div>
+   406→                  <div>
+   407→                    <p className="text-sm font-medium text-foreground">Firm Logo</p>
+   408→                    <p className="text-xs text-muted-foreground mt-0.5">Click the avatar to upload a logo</p>
+   409→                    <p className="text-[11px] text-muted-foreground">Recommended: 200×200px, PNG or JPG</p>
+   410→                  </div>
+   411→                </div>
+   412→
+   413→                <Separator />
+   414→
+   415→                {/* Firm Name & Legal Name */}
+   416→                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+   417→                  <div className="space-y-2">
+   418→                    <Label htmlFor="firmName" className="text-sm font-medium">Firm Name</Label>
+   419→                    <Input
+   420→                      id="firmName"
+   421→                      value={firmName}
+   422→                      onChange={(e) => setFirmName(e.target.value)}
+   423→                      placeholder="Enter firm name"
+   424→                      className="h-10"
+   425→                    />
+   426→                  </div>
+   427→                  <div className="space-y-2">
+   428→                    <Label htmlFor="legalName" className="text-sm font-medium">Legal Name</Label>
+   429→                    <Input
+   430→                      id="legalName"
+   431→                      value={legalName}
+   432→                      onChange={(e) => setLegalName(e.target.value)}
+   433→                      placeholder="Enter legal name as per registration"
+   434→                      className="h-10"
+   435→                    />
+   436→                  </div>
+   437→                </div>
+   438→
+   439→                {/* GSTIN & State */}
+   440→                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+   441→                  <div className="space-y-2">
+   442→                    <Label htmlFor="firmGstin" className="text-sm font-medium">Firm GSTIN</Label>
+   443→                    <div className="relative">
+   444→                      <Input
+   445→                        id="firmGstin"
+   446→                        value={firmGstin}
+   447→                        onChange={(e) => setFirmGstin(e.target.value.toUpperCase())}
+   448→                        placeholder="22AAAAA0000A1Z5"
+   449→                        className={`h-10 pr-10 ${gstinValidation === false ? 'border-red-300 focus-visible:ring-red-400' : gstinValidation === true ? 'border-emerald-300 focus-visible:ring-emerald-400' : ''}`}
+   450→                        maxLength={15}
+   451→                      />
+   452→                      {gstinValidation !== null && (
+   453→                        <div className={`absolute right-3 top-1/2 -translate-y-1/2 ${gstinValidation ? 'text-emerald-500' : 'text-red-500'}`}>
+   454→                          {gstinValidation ? <Check className="h-4 w-4" /> : <AlertTriangle className="h-4 w-4" />}
+   455→                        </div>
+   456→                      )}
+   457→                    </div>
+   458→                    {gstinValidation === false && (
+   459→                      <p className="text-[11px] text-red-500">Invalid GSTIN format</p>
+   460→                    )}
+   461→                    {gstinValidation === true && (
+   462→                      <p className="text-[11px] text-emerald-600 dark:text-emerald-400">Valid GSTIN format</p>
+   463→                    )}
+   464→                  </div>
+   465→                  <div className="space-y-2">
+   466→                    <Label className="text-sm font-medium">Registration State</Label>
+   467→                    <Select value={firmState} onValueChange={setFirmState}>
+   468→                      <SelectTrigger className="h-10">
+   469→                        <SelectValue />
+   470→                      </SelectTrigger>
+   471→                      <SelectContent>
+   472→                        {INDIAN_STATES.map((state) => (
+   473→                          <SelectItem key={state} value={state}>{state}</SelectItem>
+   474→                        ))}
+   475→                      </SelectContent>
+   476→                    </Select>
+   477→                  </div>
+   478→                </div>
+   479→
+   480→                {/* Entity Type & CA Reg Number */}
+   481→                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+   482→                  <div className="space-y-2">
+   483→                    <Label className="text-sm font-medium">Entity Type</Label>
+   484→                    <Select value={entityType} onValueChange={setEntityType}>
+   485→                      <SelectTrigger className="h-10">
+   486→                        <SelectValue />
+   487→                      </SelectTrigger>
+   488→                      <SelectContent>
+   489→                        {ENTITY_TYPES.map((type) => (
+   490→                          <SelectItem key={type} value={type}>{type}</SelectItem>
+   491→                        ))}
+   492→                      </SelectContent>
+   493→                    </Select>
+   494→                  </div>
+   495→                  <div className="space-y-2">
+   496→                    <Label htmlFor="caRegNumber" className="text-sm font-medium">CA Registration Number</Label>
+   497→                    <Input
+   498→                      id="caRegNumber"
+   499→                      value={caRegNumber}
+   500→                      onChange={(e) => setCaRegNumber(e.target.value)}
+   501→                      placeholder="ICAI/M/000000"
+   502→                      className="h-10"
+   503→                    />
+   504→                  </div>
+   505→                </div>
+   506→
+   507→                {/* Office Address */}
+   508→                <div className="space-y-2">
+   509→                  <Label htmlFor="officeAddress" className="text-sm font-medium">Office Address</Label>
+   510→                  <Textarea
+   511→                    id="officeAddress"
+   512→                    value={officeAddress}
+   513→                    onChange={(e) => setOfficeAddress(e.target.value)}
+   514→                    placeholder="Enter complete office address"
+   515→                    className="min-h-[80px] resize-none"
+   516→                  />
+   517→                </div>
+   518→
+   519→                {/* Save */}
+   520→                <div className="flex justify-end pt-2">
+   521→                  <SaveButton onSave={handleSave} />
+   522→                </div>
+   523→              </CardContent>
+   524→            </Card>
+   525→          </motion.div>
+   526→        )
+   527→
+   528→      // ───────────────────────────────────────────────────────────────
+   529→      // SECTION 2: GST CONFIGURATION
+   530→      // ───────────────────────────────────────────────────────────────
+   531→      case 'gst':
+   532→        return (
+   533→          <motion.div
+   534→            key="gst"
+   535→            initial="hidden"
+   536→            animate="visible"
+   537→            exit="exit"
+   538→            variants={contentVariants}
+   539→            className="space-y-6"
+   540→          >
+   541→            <div>
+   542→              <h2 className="text-xl font-semibold text-foreground">GST Configuration</h2>
+   543→              <p className="text-sm text-muted-foreground mt-1">Configure default GST filing preferences and automation rules</p>
+   544→            </div>
+   545→
+   546→            <Card className="border-border/50">
+   547→              <CardContent className="pt-6 space-y-6">
+   548→                {/* Default Return Period */}
+   549→                <div className="space-y-3">
+   550→                  <div>
+   551→                    <Label className="text-sm font-medium">Default Return Period</Label>
+   552→                    <p className="text-xs text-muted-foreground mt-0.5">Set the default filing frequency for new clients</p>
+   553→                  </div>
+   554→                  <div className="flex gap-2">
+   555→                    <button
+   556→                      onClick={() => setReturnPeriod('monthly')}
+   557→                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-all cursor-pointer ${
+   558→                        returnPeriod === 'monthly'
+   559→                          ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
+   560→                          : 'bg-slate-100 dark:bg-slate-800 text-muted-foreground hover:bg-slate-200 dark:hover:bg-slate-700'
+   561→                      }`}
+   562→                    >
+   563→                      Monthly
+   564→                    </button>
+   565→                    <button
+   566→                      onClick={() => setReturnPeriod('quarterly')}
+   567→                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-all cursor-pointer ${
+   568→                        returnPeriod === 'quarterly'
+   569→                          ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
+   570→                          : 'bg-slate-100 dark:bg-slate-800 text-muted-foreground hover:bg-slate-200 dark:hover:bg-slate-700'
+   571→                      }`}
+   572→                    >
+   573→                      Quarterly
+   574→                    </button>
+   575→                  </div>
+   576→                </div>
+   577→
+   578→                <Separator />
+   579→
+   580→                {/* Financial Year Start */}
+   581→                <div className="space-y-3">
+   582→                  <div>
+   583→                    <Label className="text-sm font-medium">Financial Year Start</Label>
+   584→                    <p className="text-xs text-muted-foreground mt-0.5">Start month for financial year calculations</p>
+   585→                  </div>
+   586→                  <div className="flex gap-2">
+   587→                    <button
+   588→                      onClick={() => setFyStart('april')}
+   589→                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-all cursor-pointer ${
+   590→                        fyStart === 'april'
+   591→                          ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
+   592→                          : 'bg-slate-100 dark:bg-slate-800 text-muted-foreground hover:bg-slate-200 dark:hover:bg-slate-700'
+   593→                      }`}
+   594→                    >
+   595→                      April
+   596→                    </button>
+   597→                    <button
+   598→                      onClick={() => setFyStart('january')}
+   599→                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-all cursor-pointer ${
+   600→                        fyStart === 'january'
+   601→                          ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
+   602→                          : 'bg-slate-100 dark:bg-slate-800 text-muted-foreground hover:bg-slate-200 dark:hover:bg-slate-700'
+   603→                      }`}
+   604→                    >
+   605→                      January
+   606→                    </button>
+   607→                  </div>
+   608→                </div>
+   609→
+   610→                <Separator />
+   611→
+   612→                {/* GSTR-1 Filing Preference */}
+   613→                <div className="flex items-center justify-between">
+   614→                  <div>
+   615→                    <Label className="text-sm font-medium">GSTR-1 Filing Preference</Label>
+   616→                    <p className="text-xs text-muted-foreground mt-0.5">Auto-fill from sales register or manual entry</p>
+   617→                  </div>
+   618→                  <Select value={gstr1Pref} onValueChange={(v) => setGstr1Pref(v as 'auto' | 'manual')}>
+   619→                    <SelectTrigger className="w-[140px] h-9">
+   620→                      <SelectValue />
+   621→                    </SelectTrigger>
+   622→                    <SelectContent>
+   623→                      <SelectItem value="auto">Auto</SelectItem>
+   624→                      <SelectItem value="manual">Manual</SelectItem>
+   625→                    </SelectContent>
+   626→                  </Select>
+   627→                </div>
+   628→
+   629→                {/* GSTR-3B Filing Preference */}
+   630→                <div className="flex items-center justify-between">
+   631→                  <div>
+   632→                    <Label className="text-sm font-medium">GSTR-3B Filing Preference</Label>
+   633→                    <p className="text-xs text-muted-foreground mt-0.5">Auto-compute liability or manual entry</p>
+   634→                  </div>
+   635→                  <Select value={gstr3bPref} onValueChange={(v) => setGstr3bPref(v as 'auto' | 'manual')}>
+   636→                    <SelectTrigger className="w-[140px] h-9">
+   637→                      <SelectValue />
+   638→                    </SelectTrigger>
+   639→                    <SelectContent>
+   640→                      <SelectItem value="auto">Auto</SelectItem>
+   641→                      <SelectItem value="manual">Manual</SelectItem>
+   642→                    </SelectContent>
+   643→                  </Select>
+   644→                </div>
+   645→
+   646→                {/* ITC Claiming Method */}
+   647→                <div className="flex items-center justify-between">
+   648→                  <div>
+   649→                    <Label className="text-sm font-medium">ITC Claiming Method</Label>
+   650→                    <p className="text-xs text-muted-foreground mt-0.5">Auto-match with GSTR-2A or manual review</p>
+   651→                  </div>
+   652→                  <Select value={itcMethod} onValueChange={(v) => setItcMethod(v as 'auto-match' | 'manual-review')}>
+   653→                    <SelectTrigger className="w-[160px] h-9">
+   654→                      <SelectValue />
+   655→                    </SelectTrigger>
+   656→                    <SelectContent>
+   657→                      <SelectItem value="auto-match">Auto-match</SelectItem>
+   658→                      <SelectItem value="manual-review">Manual review</SelectItem>
+   659→                    </SelectContent>
+   660→                  </Select>
+   661→                </div>
+   662→
+   663→                <Separator />
+   664→
+   665→                {/* Late Filing Penalty Alert */}
+   666→                <div className="flex items-center justify-between">
+   667→                  <div className="flex items-center gap-3">
+   668→                    <div className="flex items-center justify-center h-8 w-8 rounded-lg bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 shrink-0">
+   669→                      <AlertTriangle className="h-4 w-4" />
+   670→                    </div>
+   671→                    <div>
+   672→                      <Label className="text-sm font-medium">Late Filing Penalty Alert</Label>
+   673→                      <p className="text-xs text-muted-foreground mt-0.5">Get notified when penalty is applicable</p>
+   674→                    </div>
+   675→                  </div>
+   676→                  <Switch
+   677→                    checked={lateFilingAlert}
+   678→                    onCheckedChange={setLateFilingAlert}
+   679→                    className="data-[state=checked]:bg-emerald-600"
+   680→                  />
+   681→                </div>
+   682→
+   683→                {/* Due Date Reminder Days */}
+   684→                <div className="flex items-center justify-between">
+   685→                  <div>
+   686→                    <Label className="text-sm font-medium">Due Date Reminder Days</Label>
+   687→                    <p className="text-xs text-muted-foreground mt-0.5">Days before due date to send reminder</p>
+   688→                  </div>
+   689→                  <Input
+   690→                    type="number"
+   691→                    value={dueDateReminderDays}
+   692→                    onChange={(e) => setDueDateReminderDays(e.target.value)}
+   693→                    min={1}
+   694→                    max={30}
+   695→                    className="w-[80px] h-9 text-center"
+   696→                  />
+   697→                </div>
+   698→
+   699→                {/* Save */}
+   700→                <div className="flex justify-end pt-2">
+   701→                  <SaveButton onSave={handleSave} />
+   702→                </div>
+   703→              </CardContent>
+   704→            </Card>
+   705→          </motion.div>
+   706→        )
+   707→
+   708→      // ───────────────────────────────────────────────────────────────
+   709→      // SECTION 3: TEAM MEMBERS
+   710→      // ───────────────────────────────────────────────────────────────
+   711→      case 'team':
+   712→        return (
+   713→          <motion.div
+   714→            key="team"
+   715→            initial="hidden"
+   716→            animate="visible"
+   717→            exit="exit"
+   718→            variants={contentVariants}
+   719→            className="space-y-6"
+   720→          >
+   721→            <div className="flex items-center justify-between">
+   722→              <div>
+   723→                <h2 className="text-xl font-semibold text-foreground">Team Members</h2>
+   724→                <p className="text-sm text-muted-foreground mt-1">Manage your team and their access levels</p>
+   725→              </div>
+   726→              <Button
+   727→                onClick={() => setShowInviteDialog(true)}
+   728→                className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2"
+   729→              >
+   730→                <Users className="h-4 w-4" />
+   731→                Invite Team Member
+   732→              </Button>
+   733→            </div>
+   734→
+   735→            <div className="space-y-3">
+   736→              {teamMembers.map((member) => (
+   737→                <Card key={member.id} className="border-border/50 hover:shadow-md hover:shadow-emerald-500/5 transition-all duration-200">
+   738→                  <CardContent className="pt-0 py-4">
+   739→                    <div className="flex items-center gap-4">
+   740→                      <Avatar className="h-10 w-10">
+   741→                        <AvatarFallback className="bg-gradient-to-br from-emerald-500 to-teal-600 text-white text-sm font-semibold">
+   742→                          {member.initials}
+   743→                        </AvatarFallback>
+   744→                      </Avatar>
+   745→                      <div className="flex-1 min-w-0">
+   746→                        <div className="flex items-center gap-2 flex-wrap">
+   747→                          <p className="text-sm font-semibold text-foreground">{member.name}</p>
+   748→                          <Badge className={`text-[11px] px-2 py-0 border ${getRoleBadgeClass(member.role)}`}>
+   749→                            {member.role}
+   750→                          </Badge>
+   751→                          <Badge className={`text-[11px] px-2 py-0 border ${getStatusBadgeClass(member.status)}`}>
+   752→                            {member.status}
+   753→                          </Badge>
+   754→                        </div>
+   755→                        <p className="text-xs text-muted-foreground mt-0.5">{member.email}</p>
+   756→                      </div>
+   757→
+   758→                      {/* Edit Role */}
+   759→                      {editingMemberId === member.id ? (
+   760→                        <div className="flex items-center gap-2">
+   761→                          <Select value={editRole} onValueChange={(v) => setEditRole(v)}>
+   762→                            <SelectTrigger className="w-[110px] h-8 text-xs">
+   763→                              <SelectValue />
+   764→                            </SelectTrigger>
+   765→                            <SelectContent>
+   766→                              <SelectItem value="Admin">Admin</SelectItem>
+   767→                              <SelectItem value="Manager">Manager</SelectItem>
+   768→                              <SelectItem value="Staff">Staff</SelectItem>
+   769→                              <SelectItem value="Viewer">Viewer</SelectItem>
+   770→                            </SelectContent>
+   771→                          </Select>
+   772→                          <Button
+   773→                            size="sm"
+   774→                            variant="ghost"
+   775→                            className="h-8 w-8 p-0 text-emerald-600 hover:text-emerald-700"
+   776→                            onClick={() => handleUpdateRole(member.id, editRole)}
+   777→                          >
+   778→                            <Check className="h-4 w-4" />
+   779→                          </Button>
+   780→                        </div>
+   781→                      ) : (
+   782→                        <div className="flex items-center gap-1">
+   783→                          {member.role !== 'Admin' && (
+   784→                            <>
+   785→                              <Button
+   786→                                size="sm"
+   787→                                variant="ghost"
+   788→                                className="h-8 px-2 text-xs text-muted-foreground hover:text-foreground"
+   789→                                onClick={() => {
+   790→                                  setEditingMemberId(member.id)
+   791→                                  setEditRole(member.role)
+   792→                                }}
+   793→                              >
+   794→                                Edit role
+   795→                              </Button>
+   796→                              <Button
+   797→                                size="sm"
+   798→                                variant="ghost"
+   799→                                className="h-8 px-2 text-xs text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30"
+   800→                                onClick={() => {
+   801→                                  setMemberToRemove(member)
+   802→                                  setShowRemoveDialog(true)
+   803→                                }}
+   804→                              >
+   805→                                Remove
+   806→                              </Button>
+   807→                            </>
+   808→                          )}
+   809→                        </div>
+   810→                      )}
+   811→                    </div>
+   812→                  </CardContent>
+   813→                </Card>
+   814→              ))}
+   815→            </div>
+   816→
+   817→            {teamMembers.length === 0 && (
+   818→              <Card className="border-border/50 border-dashed">
+   819→                <CardContent className="pt-6 text-center py-12">
+   820→                  <Users className="h-10 w-10 text-muted-foreground/40 mx-auto mb-3" />
+   821→                  <p className="text-sm text-muted-foreground">No team members yet</p>
+   822→                  <p className="text-xs text-muted-foreground mt-1">Invite your first team member to get started</p>
+   823→                </CardContent>
+   824→              </Card>
+   825→            )}
+   826→
+   827→            {/* Invite Dialog */}
+   828→            <Dialog open={showInviteDialog} onOpenChange={setShowInviteDialog}>
+   829→              <DialogContent>
+   830→                <DialogHeader>
+   831→                  <DialogTitle className="flex items-center gap-2">
+   832→                    <Users className="h-5 w-5 text-emerald-600" />
+   833→                    Invite Team Member
+   834→                  </DialogTitle>
+   835→                </DialogHeader>
+   836→                <div className="space-y-4 py-2">
+   837→                  <div className="space-y-2">
+   838→                    <Label className="text-sm font-medium">Email Address</Label>
+   839→                    <Input
+   840→                      value={inviteEmail}
+   841→                      onChange={(e) => setInviteEmail(e.target.value)}
+   842→                      placeholder="colleague@firm.com"
+   843→                      type="email"
+   844→                      className="h-10"
+   845→                    />
+   846→                  </div>
+   847→                  <div className="space-y-2">
+   848→                    <Label className="text-sm font-medium">Role</Label>
+   849→                    <Select value={inviteRole} onValueChange={(v) => setInviteRole(v as 'Manager' | 'Staff' | 'Viewer')}>
+   850→                      <SelectTrigger className="h-10">
+   851→                        <SelectValue />
+   852→                      </SelectTrigger>
+   853→                      <SelectContent>
+   854→                        <SelectItem value="Manager">Manager</SelectItem>
+   855→                        <SelectItem value="Staff">Staff</SelectItem>
+   856→                        <SelectItem value="Viewer">Viewer</SelectItem>
+   857→                      </SelectContent>
+   858→                    </Select>
+   859→                    <p className="text-[11px] text-muted-foreground">Admin role can only be assigned by existing admins</p>
+   860→                  </div>
+   861→                </div>
+   862→                <DialogFooter>
+   863→                  <Button variant="outline" onClick={() => setShowInviteDialog(false)}>Cancel</Button>
+   864→                  <Button
+   865→                    onClick={handleInviteMember}
+   866→                    disabled={!inviteEmail.trim()}
+   867→                    className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2"
+   868→                  >
+   869→                    <Mail className="h-4 w-4" />
+   870→                    Send Invite
+   871→                  </Button>
+   872→                </DialogFooter>
+   873→              </DialogContent>
+   874→            </Dialog>
+   875→
+   876→            {/* Remove Confirmation */}
+   877→            <AlertDialog open={showRemoveDialog} onOpenChange={setShowRemoveDialog}>
+   878→              <AlertDialogContent>
+   879→                <AlertDialogHeader>
+   880→                  <AlertDialogTitle className="flex items-center gap-2 text-red-700 dark:text-red-400">
+   881→                    <AlertTriangle className="h-5 w-5" />
+   882→                    Remove Team Member?
+   883→                  </AlertDialogTitle>
+   884→                  <AlertDialogDescription>
+   885→                    {memberToRemove && (
+   886→                      <>Are you sure you want to remove <strong>{memberToRemove.name}</strong> from your team? They will lose access to all firm data immediately.</>
+   887→                    )}
+   888→                  </AlertDialogDescription>
+   889→                </AlertDialogHeader>
+   890→                <AlertDialogFooter>
+   891→                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+   892→                  <AlertDialogAction
+   893→                    onClick={handleRemoveMember}
+   894→                    className="bg-red-600 hover:bg-red-700 text-white"
+   895→                  >
+   896→                    Remove Member
+   897→                  </AlertDialogAction>
+   898→                </AlertDialogFooter>
+   899→              </AlertDialogContent>
+   900→            </AlertDialog>
+   901→          </motion.div>
+   902→        )
+   903→
+   904→      // ───────────────────────────────────────────────────────────────
+   905→      // SECTION 4: NOTIFICATIONS
+   906→      // ───────────────────────────────────────────────────────────────
+   907→      case 'notifications':
+   908→        return (
+   909→          <motion.div
+   910→            key="notifications"
+   911→            initial="hidden"
+   912→            animate="visible"
+   913→            exit="exit"
+   914→            variants={contentVariants}
+   915→            className="space-y-6"
+   916→          >
+   917→            <div>
+   918→              <h2 className="text-xl font-semibold text-foreground">Notifications</h2>
+   919→              <p className="text-sm text-muted-foreground mt-1">Choose what notifications you want to receive</p>
+   920→            </div>
+   921→
+   922→            <Card className="border-border/50">
+   923→              <CardContent className="pt-6 space-y-1">
+   924→                {/* Filing Deadline Reminders */}
+   925→                <div className="flex items-center justify-between py-4">
+   926→                  <div className="flex items-center gap-3">
+   927→                    <div className="flex items-center justify-center h-9 w-9 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 shrink-0">
+   928→                      <CalendarClock className="h-4.5 w-4.5" />
+   929→                    </div>
+   930→                    <div>
+   931→                      <p className="text-sm font-medium text-foreground">Filing Deadline Reminders</p>
+   932→                      <p className="text-xs text-muted-foreground mt-0.5">Get notified before GST filing due dates</p>
+   933→                    </div>
+   934→                  </div>
+   935→                  <Switch
+   936→                    checked={filingDeadline}
+   937→                    onCheckedChange={setFilingDeadline}
+   938→                    className="data-[state=checked]:bg-emerald-600"
+   939→                  />
+   940→                </div>
+   941→
+   942→                <Separator />
+   943→
+   944→                {/* Mismatch Alerts */}
+   945→                <div className="flex items-center justify-between py-4">
+   946→                  <div className="flex items-center gap-3">
+   947→                    <div className="flex items-center justify-center h-9 w-9 rounded-lg bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 shrink-0">
+   948→                      <AlertTriangle className="h-4.5 w-4.5" />
+   949→                    </div>
+   950→                    <div>
+   951→                      <p className="text-sm font-medium text-foreground">Mismatch Alerts</p>
+   952→                      <p className="text-xs text-muted-foreground mt-0.5">Alert when GSTR-2A vs books mismatches are detected</p>
+   953→                    </div>
+   954→                  </div>
+   955→                  <Switch
+   956→                    checked={mismatchAlerts}
+   957→                    onCheckedChange={setMismatchAlerts}
+   958→                    className="data-[state=checked]:bg-emerald-600"
+   959→                  />
+   960→                </div>
+   961→
+   962→                <Separator />
+   963→
+   964→                {/* Weekly Summary Email */}
+   965→                <div className="flex items-center justify-between py-4">
+   966→                  <div className="flex items-center gap-3">
+   967→                    <div className="flex items-center justify-center h-9 w-9 rounded-lg bg-teal-50 dark:bg-teal-950/40 text-teal-600 dark:text-teal-400 shrink-0">
+   968→                      <Mail className="h-4.5 w-4.5" />
+   969→                    </div>
+   970→                    <div>
+   971→                      <p className="text-sm font-medium text-foreground">Weekly Summary Email</p>
+   972→                      <p className="text-xs text-muted-foreground mt-0.5">Receive a weekly digest of filing statuses and activity</p>
+   973→                    </div>
+   974→                  </div>
+   975→                  <Switch
+   976→                    checked={weeklySummary}
+   977→                    onCheckedChange={setWeeklySummary}
+   978→                    className="data-[state=checked]:bg-emerald-600"
+   979→                  />
+   980→                </div>
+   981→
+   982→                <Separator />
+   983→
+   984→                {/* Client Health Score Changes */}
+   985→                <div className="flex items-center justify-between py-4">
+   986→                  <div className="flex items-center gap-3">
+   987→                    <div className="flex items-center justify-center h-9 w-9 rounded-lg bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 shrink-0">
+   988→                      <Activity className="h-4.5 w-4.5" />
+   989→                    </div>
+   990→                    <div>
+   991→                      <p className="text-sm font-medium text-foreground">Client Health Score Changes</p>
+   992→                      <p className="text-xs text-muted-foreground mt-0.5">Alert when a client&apos;s health score drops significantly</p>
+   993→                    </div>
+   994→                  </div>
+   995→                  <Switch
+   996→                    checked={healthScoreChanges}
+   997→                    onCheckedChange={setHealthScoreChanges}
+   998→                    className="data-[state=checked]:bg-emerald-600"
+   999→                  />
+  1000→                </div>
+  1001→
+  1002→                <Separator />
+  1003→
+  1004→                {/* Team Activity Updates */}
+  1005→                <div className="flex items-center justify-between py-4">
+  1006→                  <div className="flex items-center gap-3">
+  1007→                    <div className="flex items-center justify-center h-9 w-9 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 shrink-0">
+  1008→                      <Users className="h-4.5 w-4.5" />
+  1009→                    </div>
+  1010→                    <div>
+  1011→                      <p className="text-sm font-medium text-foreground">Team Activity Updates</p>
+  1012→                      <p className="text-xs text-muted-foreground mt-0.5">Notifications when team members complete filings or actions</p>
+  1013→                    </div>
+  1014→                  </div>
+  1015→                  <Switch
+  1016→                    checked={teamActivity}
+  1017→                    onCheckedChange={setTeamActivity}
+  1018→                    className="data-[state=checked]:bg-emerald-600"
+  1019→                  />
+  1020→                </div>
+  1021→
+  1022→                <Separator />
+  1023→
+  1024→                {/* New Invoice Uploaded */}
+  1025→                <div className="flex items-center justify-between py-4">
+  1026→                  <div className="flex items-center gap-3">
+  1027→                    <div className="flex items-center justify-center h-9 w-9 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 shrink-0">
+  1028→                      <Upload className="h-4.5 w-4.5" />
+  1029→                    </div>
+  1030→                    <div>
+  1031→                      <p className="text-sm font-medium text-foreground">New Invoice Uploaded</p>
+  1032→                      <p className="text-xs text-muted-foreground mt-0.5">Notify when clients upload new invoices or documents</p>
+  1033→                    </div>
+  1034→                  </div>
+  1035→                  <Switch
+  1036→                    checked={newInvoiceUploaded}
+  1037→                    onCheckedChange={setNewInvoiceUploaded}
+  1038→                    className="data-[state=checked]:bg-emerald-600"
+  1039→                  />
+  1040→                </div>
+  1041→
+  1042→                {/* Save */}
+  1043→                <div className="flex justify-end pt-4">
+  1044→                  <SaveButton onSave={handleSave} />
+  1045→                </div>
+  1046→              </CardContent>
+  1047→            </Card>
+  1048→          </motion.div>
+  1049→        )
+  1050→
+  1051→      // ───────────────────────────────────────────────────────────────
+  1052→      // SECTION 5: SECURITY
+  1053→      // ───────────────────────────────────────────────────────────────
+  1054→      case 'security':
+  1055→        return (
+  1056→          <motion.div
+  1057→            key="security"
+  1058→            initial="hidden"
+  1059→            animate="visible"
+  1060→            exit="exit"
+  1061→            variants={contentVariants}
+  1062→            className="space-y-6"
+  1063→          >
+  1064→            <div>
+  1065→              <h2 className="text-xl font-semibold text-foreground">Security</h2>
+  1066→              <p className="text-sm text-muted-foreground mt-1">Manage your password, two-factor authentication, and sessions</p>
+  1067→            </div>
+  1068→
+  1069→            {/* Change Password */}
+  1070→            <Card className="border-border/50">
+  1071→              <CardHeader className="pb-0">
+  1072→                <div className="flex items-center gap-3">
+  1073→                  <div className="flex items-center justify-center h-9 w-9 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 shrink-0">
+  1074→                    <Lock className="h-4.5 w-4.5" />
+  1075→                  </div>
+  1076→                  <div>
+  1077→                    <CardTitle className="text-base">Change Password</CardTitle>
+  1078→                    <CardDescription>Update your account password</CardDescription>
+  1079→                  </div>
+  1080→                </div>
+  1081→              </CardHeader>
+  1082→              <CardContent className="space-y-4 pt-4">
+  1083→                <div className="space-y-2">
+  1084→                  <Label className="text-sm font-medium">Current Password</Label>
+  1085→                  <Input
+  1086→                    type="password"
+  1087→                    value={currentPassword}
+  1088→                    onChange={(e) => setCurrentPassword(e.target.value)}
+  1089→                    placeholder="Enter current password"
+  1090→                    className="h-10"
+  1091→                  />
+  1092→                </div>
+  1093→                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+  1094→                  <div className="space-y-2">
+  1095→                    <Label className="text-sm font-medium">New Password</Label>
+  1096→                    <Input
+  1097→                      type="password"
+  1098→                      value={newPassword}
+  1099→                      onChange={(e) => setNewPassword(e.target.value)}
+  1100→                      placeholder="Enter new password"
+  1101→                      className="h-10"
+  1102→                    />
+  1103→                    {newPassword && (
+  1104→                      <div className="space-y-1.5">
+  1105→                        <div className="flex items-center justify-between">
+  1106→                          <span className="text-[11px] text-muted-foreground">Strength</span>
+  1107→                          <span className={`text-[11px] font-medium ${
+  1108→                            passwordStrength.score <= 40 ? 'text-red-500' :
+  1109→                            passwordStrength.score <= 60 ? 'text-yellow-600' :
+  1110→                            'text-emerald-600'
+  1111→                          }`}>{passwordStrength.label}</span>
+  1112→                        </div>
+  1113→                        <Progress value={passwordStrength.score} className={`h-1.5 ${passwordStrength.color}`} />
+  1114→                      </div>
+  1115→                    )}
+  1116→                  </div>
+  1117→                  <div className="space-y-2">
+  1118→                    <Label className="text-sm font-medium">Confirm Password</Label>
+  1119→                    <Input
+  1120→                      type="password"
+  1121→                      value={confirmPassword}
+  1122→                      onChange={(e) => setConfirmPassword(e.target.value)}
+  1123→                      placeholder="Confirm new password"
+  1124→                      className={`h-10 ${confirmPassword && newPassword !== confirmPassword ? 'border-red-300 focus-visible:ring-red-400' : confirmPassword && newPassword === confirmPassword ? 'border-emerald-300 focus-visible:ring-emerald-400' : ''}`}
+  1125→                    />
+  1126→                    {confirmPassword && newPassword !== confirmPassword && (
+  1127→                      <p className="text-[11px] text-red-500">Passwords do not match</p>
+  1128→                    )}
+  1129→                    {confirmPassword && newPassword === confirmPassword && newPassword.length > 0 && (
+  1130→                      <p className="text-[11px] text-emerald-600 dark:text-emerald-400">Passwords match</p>
+  1131→                    )}
+  1132→                  </div>
+  1133→                </div>
+  1134→                {newPassword && confirmPassword && newPassword === confirmPassword && newPassword.length >= 8 && (
+  1135→                  <div className="flex justify-end">
+  1136→                    <SaveButton onSave={handleSave} />
+  1137→                  </div>
+  1138→                )}
+  1139→              </CardContent>
+  1140→            </Card>
+  1141→
+  1142→            {/* Two-Factor Authentication */}
+  1143→            <Card className="border-border/50">
+  1144→              <CardHeader className="pb-0">
+  1145→                <div className="flex items-center gap-3">
+  1146→                  <div className="flex items-center justify-center h-9 w-9 rounded-lg bg-teal-50 dark:bg-teal-950/40 text-teal-600 dark:text-teal-400 shrink-0">
+  1147→                    <Shield className="h-4.5 w-4.5" />
+  1148→                  </div>
+  1149→                  <div className="flex-1">
+  1150→                    <CardTitle className="text-base">Two-Factor Authentication</CardTitle>
+  1151→                    <CardDescription>Add an extra layer of security to your account</CardDescription>
+  1152→                  </div>
+  1153→                  <Badge className={`text-[11px] px-2.5 py-0.5 border ${
+  1154→                    twoFactorEnabled
+  1155→                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800'
+  1156→                      : 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700'
+  1157→                  }`}>
+  1158→                    {twoFactorEnabled ? 'Enabled' : 'Disabled'}
+  1159→                  </Badge>
+  1160→                </div>
+  1161→              </CardHeader>
+  1162→              <CardContent className="pt-4">
+  1163→                <div className="flex items-center justify-between p-4 rounded-xl bg-slate-50 dark:bg-slate-900/50">
+  1164→                  <div>
+  1165→                    <p className="text-sm font-medium text-foreground">
+  1166→                      {twoFactorEnabled ? 'Two-factor authentication is enabled' : 'Enable two-factor authentication'}
+  1167→                    </p>
+  1168→                    <p className="text-xs text-muted-foreground mt-0.5">
+  1169→                      {twoFactorEnabled
+  1170→                        ? 'Your account is protected with an additional verification step'
+  1171→                        : 'Protect your account with OTP verification on login'}
+  1172→                    </p>
+  1173→                  </div>
+  1174→                  <Switch
+  1175→                    checked={twoFactorEnabled}
+  1176→                    onCheckedChange={setTwoFactorEnabled}
+  1177→                    className="data-[state=checked]:bg-emerald-600"
+  1178→                  />
+  1179→                </div>
+  1180→              </CardContent>
+  1181→            </Card>
+  1182→
+  1183→            {/* Active Sessions */}
+  1184→            <Card className="border-border/50">
+  1185→              <CardHeader className="pb-0">
+  1186→                <div className="flex items-center gap-3">
+  1187→                  <div className="flex items-center justify-center h-9 w-9 rounded-lg bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 shrink-0">
+  1188→                    <Smartphone className="h-4.5 w-4.5" />
+  1189→                  </div>
+  1190→                  <div>
+  1191→                    <CardTitle className="text-base">Active Sessions</CardTitle>
+  1192→                    <CardDescription>Devices currently signed in to your account</CardDescription>
+  1193→                  </div>
+  1194→                </div>
+  1195→              </CardHeader>
+  1196→              <CardContent className="pt-4">
+  1197→                <div className="space-y-3">
+  1198→                  {MOCK_SESSIONS.length === 0 && (
+  1199→                    <div className="py-8 text-center">
+  1200→                      <Monitor className="h-8 w-8 text-muted-foreground/40 mx-auto mb-2" />
+  1201→                      <p className="text-sm text-muted-foreground">No active sessions</p>
+  1202→                      <p className="text-xs text-muted-foreground/70 mt-1">Sessions will appear here when you sign in from other devices</p>
+  1203→                    </div>
+  1204→                  )}
+  1205→                  {MOCK_SESSIONS.map((session) => (
+  1206→                    <div
+  1207→                      key={session.id}
+  1208→                      className={`flex items-center gap-3 p-3 rounded-xl transition-colors ${
+  1209→                        session.current
+  1210→                          ? 'bg-emerald-50/80 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800'
+  1211→                          : 'bg-slate-50 dark:bg-slate-900/50 border border-transparent'
+  1212→                      }`}
+  1213→                    >
+  1214→                      <div className={`flex items-center justify-center h-8 w-8 rounded-lg shrink-0 ${
+  1215→                        session.current
+  1216→                          ? 'bg-emerald-100 dark:bg-emerald-900/50 text-emerald-600 dark:text-emerald-400'
+  1217→                          : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'
+  1218→                      }`}>
+  1219→                        {session.icon}
+  1220→                      </div>
+  1221→                      <div className="flex-1 min-w-0">
+  1222→                        <div className="flex items-center gap-2">
+  1223→                          <p className="text-sm font-medium text-foreground">{session.device}</p>
+  1224→                          {session.current && (
+  1225→                            <Badge className="text-[10px] px-1.5 py-0 border bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800">
+  1226→                              Current
+  1227→                            </Badge>
+  1228→                          )}
+  1229→                        </div>
+  1230→                        <p className="text-xs text-muted-foreground">{session.location} · {session.lastActive}</p>
+  1231→                      </div>
+  1232→                      {!session.current && (
+  1233→                        <Button variant="ghost" size="sm" className="text-xs text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 h-8">
+  1234→                          Revoke
+  1235→                        </Button>
+  1236→                      )}
+  1237→                    </div>
+  1238→                  ))}
+  1239→                </div>
+  1240→              </CardContent>
+  1241→            </Card>
+  1242→
+  1243→            {/* Data Encryption */}
+  1244→            <Card className="border-border/50">
+  1245→              <CardContent className="pt-6">
+  1246→                <div className="flex items-center gap-3 p-4 rounded-xl bg-emerald-50/60 dark:bg-emerald-950/30 border border-emerald-100 dark:border-emerald-900/50">
+  1247→                  <div className="flex items-center justify-center h-9 w-9 rounded-lg bg-emerald-100 dark:bg-emerald-900/60 text-emerald-600 dark:text-emerald-400 shrink-0">
+  1248→                    <LockKeyhole className="h-4.5 w-4.5" />
+  1249→                  </div>
+  1250→                  <div>
+  1251→                    <p className="text-sm font-medium text-emerald-800 dark:text-emerald-300">Your data is encrypted at rest and in transit</p>
+  1252→                    <p className="text-xs text-emerald-600/80 dark:text-emerald-400/70 mt-0.5">All sensitive data is protected using AES-256 encryption with TLS 1.3 for data in transit</p>
+  1253→                  </div>
+  1254→                </div>
+  1255→              </CardContent>
+  1256→            </Card>
+  1257→          </motion.div>
+  1258→        )
+  1259→
+  1260→      // ───────────────────────────────────────────────────────────────
+  1261→      // SECTION 6: BILLING
+  1262→      // ───────────────────────────────────────────────────────────────
+  1263→      case 'billing':
+  1264→        return (
+  1265→          <motion.div
+  1266→            key="billing"
+  1267→            initial="hidden"
+  1268→            animate="visible"
+  1269→            exit="exit"
+  1270→            variants={contentVariants}
+  1271→            className="space-y-6"
+  1272→          >
+  1273→            <div>
+  1274→              <h2 className="text-xl font-semibold text-foreground">Billing</h2>
+  1275→              <p className="text-sm text-muted-foreground mt-1">Manage your subscription, payment methods, and invoices</p>
+  1276→            </div>
+  1277→
+  1278→            {/* Current Plan */}
+  1279→            <Card className="border-border/50 overflow-hidden">
+  1280→              <div className="h-1 bg-gradient-to-r from-emerald-500 to-teal-500" />
+  1281→              <CardContent className="pt-6">
+  1282→                <div className="flex items-start justify-between">
+  1283→                  <div>
+  1284→                    <div className="flex items-center gap-2">
+  1285→                      <h3 className="text-lg font-semibold text-foreground">Professional Plan</h3>
+  1286→                      <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800 text-[11px]">
+  1287→                        Active
+  1288→                      </Badge>
+  1289→                    </div>
+  1290→                    <div className="flex items-baseline gap-1 mt-2">
+  1291→                      <span className="text-3xl font-bold text-foreground">₹1,499</span>
+  1292→                      <span className="text-sm text-muted-foreground">/month</span>
+  1293→                    </div>
+  1294→                    <p className="text-xs text-muted-foreground mt-1">
+  1295→                      Next billing date: <span className="font-medium text-foreground">1 July 2025</span>
+  1296→                    </p>
+  1297→                  </div>
+  1298→                  <Button className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2">
+  1299→                    <ChevronRight className="h-4 w-4" />
+  1300→                    Upgrade Plan
+  1301→                  </Button>
+  1302→                </div>
+  1303→              </CardContent>
+  1304→            </Card>
+  1305→
+  1306→            {/* Usage This Month */}
+  1307→            <Card className="border-border/50">
+  1308→              <CardHeader className="pb-0">
+  1309→                <CardTitle className="text-base">Usage This Month</CardTitle>
+  1310→                <CardDescription>Your current usage against plan limits</CardDescription>
+  1311→              </CardHeader>
+  1312→              <CardContent className="pt-4 space-y-5">
+  1313→                {/* Clients */}
+  1314→                <div className="space-y-2">
+  1315→                  <div className="flex items-center justify-between">
+  1316→                    <div className="flex items-center gap-2">
+  1317→                      <Users className="h-4 w-4 text-muted-foreground" />
+  1318→                      <span className="text-sm font-medium text-foreground">Clients</span>
+  1319→                    </div>
+  1320→                    <span className="text-sm text-muted-foreground">12 / 25</span>
+  1321→                  </div>
+  1322→                  <Progress value={48} className="h-2 bg-emerald-100 dark:bg-emerald-950 [&>div]:bg-emerald-500" />
+  1323→                </div>
+  1324→
+  1325→                {/* Invoices Processed */}
+  1326→                <div className="space-y-2">
+  1327→                  <div className="flex items-center justify-between">
+  1328→                    <div className="flex items-center gap-2">
+  1329→                      <ClipboardList className="h-4 w-4 text-muted-foreground" />
+  1330→                      <span className="text-sm font-medium text-foreground">Invoices Processed</span>
+  1331→                    </div>
+  1332→                    <span className="text-sm text-muted-foreground">347 / 1,000</span>
+  1333→                  </div>
+  1334→                  <Progress value={34.7} className="h-2 bg-teal-100 dark:bg-teal-950 [&>div]:bg-teal-500" />
+  1335→                </div>
+  1336→
+  1337→                {/* Reconciliation Runs */}
+  1338→                <div className="space-y-2">
+  1339→                  <div className="flex items-center justify-between">
+  1340→                    <div className="flex items-center gap-2">
+  1341→                      <Activity className="h-4 w-4 text-muted-foreground" />
+  1342→                      <span className="text-sm font-medium text-foreground">Reconciliation Runs</span>
+  1343→                    </div>
+  1344→                    <span className="text-sm text-muted-foreground">23 / 50</span>
+  1345→                  </div>
+  1346→                  <Progress value={46} className="h-2 bg-amber-100 dark:bg-amber-950 [&>div]:bg-amber-500" />
+  1347→                </div>
+  1348→              </CardContent>
+  1349→            </Card>
+  1350→
+  1351→            {/* Payment Method */}
+  1352→            <Card className="border-border/50">
+  1353→              <CardHeader className="pb-0">
+  1354→                <CardTitle className="text-base">Payment Method</CardTitle>
+  1355→              </CardHeader>
+  1356→              <CardContent className="pt-4">
+  1357→                <div className="flex items-center justify-between p-4 rounded-xl bg-slate-50 dark:bg-slate-900/50">
+  1358→                  <div className="flex items-center gap-3">
+  1359→                    <div className="flex items-center justify-center h-10 w-14 rounded-md bg-gradient-to-br from-slate-700 to-slate-900 text-white text-[10px] font-bold tracking-wider">
+  1360→                      VISA
+  1361→                    </div>
+  1362→                    <div>
+  1363→                      <p className="text-sm font-medium text-foreground">•••• •••• •••• 4242</p>
+  1364→                      <p className="text-xs text-muted-foreground">Expires 12/2025</p>
+  1365→                    </div>
+  1366→                  </div>
+  1367→                  <Button variant="ghost" size="sm" className="text-xs text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 h-8">
+  1368→                    Update Payment Method
+  1369→                  </Button>
+  1370→                </div>
+  1371→              </CardContent>
+  1372→            </Card>
+  1373→
+  1374→            {/* Billing History */}
+  1375→            <Card className="border-border/50">
+  1376→              <CardHeader className="pb-0">
+  1377→                <CardTitle className="text-base">Billing History</CardTitle>
+  1378→                <CardDescription>Download past invoices</CardDescription>
+  1379→              </CardHeader>
+  1380→              <CardContent className="pt-4">
+  1381→                <div className="space-y-2 max-h-64 overflow-y-auto">
+  1382→                  {BILLING_HISTORY.length === 0 && (
+  1383→                    <div className="py-8 text-center">
+  1384→                      <CreditCard className="h-8 w-8 text-muted-foreground/40 mx-auto mb-2" />
+  1385→                      <p className="text-sm text-muted-foreground">No billing history yet</p>
+  1386→                      <p className="text-xs text-muted-foreground/70 mt-1">Invoices will appear here once your subscription is active</p>
+  1387→                    </div>
+  1388→                  )}
+  1389→                  {BILLING_HISTORY.map((invoice) => (
+  1390→                    <div
+  1391→                      key={invoice.id}
+  1392→                      className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-900/50 hover:bg-slate-100 dark:hover:bg-slate-800/50 transition-colors"
+  1393→                    >
+  1394→                      <div className="flex items-center gap-3">
+  1395→                        <div className="flex items-center justify-center h-8 w-8 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 shrink-0">
+  1396→                          <CreditCard className="h-4 w-4" />
+  1397→                        </div>
+  1398→                        <div>
+  1399→                          <p className="text-sm font-medium text-foreground">{invoice.date}</p>
+  1400→                          <p className="text-xs text-muted-foreground">{invoice.amount}</p>
+  1401→                        </div>
+  1402→                      </div>
+  1403→                      <div className="flex items-center gap-3">
+  1404→                        <Badge className={`text-[11px] px-2 py-0 border ${
+  1405→                          invoice.status === 'Paid'
+  1406→                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800'
+  1407→                            : invoice.status === 'Pending'
+  1408→                              ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-800'
+  1409→                              : 'bg-red-50 text-red-700 border-red-200 dark:bg-red-950/40 dark:text-red-400 dark:border-red-800'
+  1410→                        }`}>
+  1411→                          {invoice.status}
+  1412→                        </Badge>
+  1413→                        <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground">
+  1414→                          <Download className="h-4 w-4" />
+  1415→                        </Button>
+  1416→                      </div>
+  1417→                    </div>
+  1418→                  ))}
+  1419→                </div>
+  1420→              </CardContent>
+  1421→            </Card>
+  1422→          </motion.div>
+  1423→        )
+  1424→
+  1425→      // ───────────────────────────────────────────────────────────────
+  1426→      // SECTION: GST API CONNECTIONS
+  1427→      // ───────────────────────────────────────────────────────────────
+  1428→      case 'api':
+  1429→        return (
+  1430→          <motion.div
+  1431→            key="api"
+  1432→            initial="hidden"
+  1433→            animate="visible"
+  1434→            exit="exit"
+  1435→            variants={contentVariants}
+  1436→            className="space-y-6"
+  1437→          >
+  1438→            <div>
+  1439→              <h2 className="text-xl font-semibold text-foreground">GST API Connections</h2>
+  1440→              <p className="text-sm text-muted-foreground mt-1">Manage connections to GST portal and government APIs</p>
+  1441→            </div>
+  1442→
+  1443→            <div className="space-y-4">
+  1444→              {MOCK_API_CONNECTIONS.length === 0 && (
+  1445→                <Card className="border-border/50">
+  1446→                  <CardContent className="pt-6">
+  1447→                    <div className="py-8 text-center">
+  1448→                      <Globe className="h-8 w-8 text-muted-foreground/40 mx-auto mb-2" />
+  1449→                      <p className="text-sm text-muted-foreground">No API connections configured</p>
+  1450→                      <p className="text-xs text-muted-foreground/70 mt-1">Connect to GST Portal, E-Way Bill, and E-Invoice APIs to get started</p>
+  1451→                    </div>
+  1452→                  </CardContent>
+  1453→                </Card>
+  1454→              )}
+  1455→              {MOCK_API_CONNECTIONS.map((connection) => (
+  1456→                <Card key={connection.id} className="border-border/50 hover:shadow-md hover:shadow-emerald-500/5 transition-all duration-200">
+  1457→                  <CardContent className="pt-0 py-4">
+  1458→                    <div className="flex items-center gap-4">
+  1459→                      <div className={`flex items-center justify-center h-10 w-10 rounded-xl shrink-0 ${
+  1460→                        connection.status === 'Connected'
+  1461→                          ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400'
+  1462→                          : connection.status === 'Disconnected'
+  1463→                          ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400'
+  1464→                          : 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500'
+  1465→                      }`}>
+  1466→                        {connection.icon}
+  1467→                      </div>
+  1468→                      <div className="flex-1 min-w-0">
+  1469→                        <div className="flex items-center gap-2 flex-wrap">
+  1470→                          <p className="text-sm font-semibold text-foreground">{connection.name}</p>
+  1471→                          <Badge className={`text-[10px] px-2 py-0 border ${
+  1472→                            connection.status === 'Connected'
+  1473→                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800'
+  1474→                              : connection.status === 'Disconnected'
+  1475→                              ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-800'
+  1476→                              : 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700'
+  1477→                          }`}>
+  1478→                            <span className={`size-1.5 rounded-full mr-1 ${
+  1479→                              connection.status === 'Connected' ? 'bg-emerald-500' : connection.status === 'Disconnected' ? 'bg-amber-500' : 'bg-slate-400'
+  1480→                            }`} />
+  1481→                            {connection.status}
+  1482→                          </Badge>
+  1483→                        </div>
+  1484→                        <p className="text-xs text-muted-foreground mt-0.5">{connection.description}</p>
+  1485→                        {connection.lastSync && (
+  1486→                          <p className="text-[11px] text-muted-foreground mt-0.5">
+  1487→                            Last synced: {connection.lastSync}
+  1488→                          </p>
+  1489→                        )}
+  1490→                      </div>
+  1491→                      <div className="flex items-center gap-2 shrink-0">
+  1492→                        <Button
+  1493→                          variant="outline"
+  1494→                          size="sm"
+  1495→                          className="h-8 text-xs gap-1.5"
+  1496→                          onClick={async () => {
+  1497→                            // Simulate test connection
+  1498→                            await new Promise(resolve => setTimeout(resolve, 1500))
+  1499→                          }}
+  1500→                        >
+  1501→                          <Activity className="h-3.5 w-3.5" />
+  1502→                          Test Connection
+  1503→                        </Button>
+  1504→                        <Button
+  1505→                          variant="ghost"
+  1506→                          size="sm"
+  1507→                          className="h-8 text-xs text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/30"
+  1508→                        >
+  1509→                          Configure
+  1510→                        </Button>
+  1511→                      </div>
+  1512→                    </div>
+  1513→                  </CardContent>
+  1514→                </Card>
+  1515→              ))}
+  1516→            </div>
+  1517→          </motion.div>
+  1518→        )
+  1519→
+  1520→      // ───────────────────────────────────────────────────────────────
+  1521→      // SECTION: AUDIT LOGS
+  1522→      // ───────────────────────────────────────────────────────────────
+  1523→      case 'audit':
+  1524→        return (
+  1525→          <motion.div
+  1526→            key="audit"
+  1527→            initial="hidden"
+  1528→            animate="visible"
+  1529→            exit="exit"
+  1530→            variants={contentVariants}
+  1531→            className="space-y-6"
+  1532→          >
+  1533→            <div className="flex items-center justify-between">
+  1534→              <div>
+  1535→                <h2 className="text-xl font-semibold text-foreground">Audit Logs</h2>
+  1536→                <p className="text-sm text-muted-foreground mt-1">Track all actions performed across your firm</p>
+  1537→              </div>
+  1538→              <Select value={auditFilter} onValueChange={setAuditFilter}>
+  1539→                <SelectTrigger className="w-[160px] h-9">
+  1540→                  <SelectValue placeholder="Filter by type" />
+  1541→                </SelectTrigger>
+  1542→                <SelectContent>
+  1543→                  <SelectItem value="all">All Actions</SelectItem>
+  1544→                  <SelectItem value="filing">Filing</SelectItem>
+  1545→                  <SelectItem value="client_update">Client Updates</SelectItem>
+  1546→                  <SelectItem value="invoice">Invoices</SelectItem>
+  1547→                  <SelectItem value="settings">Settings</SelectItem>
+  1548→                  <SelectItem value="reconciliation">Reconciliation</SelectItem>
+  1549→                </SelectContent>
+  1550→              </Select>
+  1551→            </div>
+  1552→
+  1553→            <Card className="border-border/50">
+  1554→              <CardContent className="pt-6 p-0">
+  1555→                <div className="max-h-[520px] overflow-y-auto">
+  1556→                  <div className="divide-y divide-border/50">
+  1557→                    {MOCK_AUDIT_LOGS
+  1558→                      .filter(log => auditFilter === 'all' || log.actionType === auditFilter)
+  1559→                      .map((log, idx) => (
+  1560→                      <motion.div
+  1561→                        key={log.id}
+  1562→                        initial={{ opacity: 0, y: 4 }}
+  1563→                        animate={{ opacity: 1, y: 0 }}
+  1564→                        transition={{ duration: 0.2, delay: idx * 0.03 }}
+  1565→                        className="flex items-start gap-3 px-6 py-3.5 hover:bg-slate-50/80 dark:hover:bg-slate-900/30 transition-colors"
+  1566→                      >
+  1567→                        <div className={`flex items-center justify-center h-8 w-8 rounded-lg shrink-0 mt-0.5 ${
+  1568→                          log.actionType === 'filing'
+  1569→                            ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400'
+  1570→                            : log.actionType === 'client_update'
+  1571→                            ? 'bg-teal-50 dark:bg-teal-950/40 text-teal-600 dark:text-teal-400'
+  1572→                            : log.actionType === 'invoice'
+  1573→                            ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400'
+  1574→                            : log.actionType === 'reconciliation'
+  1575→                            ? 'bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400'
+  1576→                            : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'
+  1577→                        }`}>
+  1578→                          {log.actionType === 'filing' ? <ClipboardList className="h-4 w-4" /> :
+  1579→                           log.actionType === 'invoice' ? <Upload className="h-4 w-4" /> :
+  1580→                           log.actionType === 'reconciliation' ? <Activity className="h-4 w-4" /> :
+  1581→                           <Shield className="h-4 w-4" />}
+  1582→                        </div>
+  1583→                        <div className="flex-1 min-w-0">
+  1584→                          <p className="text-sm font-medium text-foreground">{log.action}</p>
+  1585→                          <div className="flex items-center gap-2 mt-0.5">
+  1586→                            <span className="text-xs text-muted-foreground">{log.entity}</span>
+  1587→                            <span className="text-muted-foreground/40">·</span>
+  1588→                            <span className="text-xs text-muted-foreground">{log.user}</span>
+  1589→                          </div>
+  1590→                        </div>
+  1591→                        <span className="text-[11px] text-muted-foreground shrink-0 whitespace-nowrap">
+  1592→                          {log.timestamp}
+  1593→                        </span>
+  1594→                      </motion.div>
+  1595→                    ))}
+  1596→                  </div>
+  1597→                </div>
+  1598→                {MOCK_AUDIT_LOGS.filter(log => auditFilter === 'all' || log.actionType === auditFilter).length === 0 && (
+  1599→                  <div className="py-12 text-center">
+  1600→                    <ClipboardList className="h-8 w-8 text-muted-foreground/40 mx-auto mb-2" />
+  1601→                    <p className="text-sm text-muted-foreground">No audit logs match this filter</p>
+  1602→                  </div>
+  1603→                )}
+  1604→              </CardContent>
+  1605→            </Card>
+  1606→          </motion.div>
+  1607→        )
+  1608→
+  1609→      default:
+  1610→        return null
+  1611→    }
+  1612→  }
+  1613→
+  1614→  // ═══════════════════════════════════════════════════════════════════
+  1615→  // MAIN LAYOUT
+  1616→  // ═══════════════════════════════════════════════════════════════════
+  1617→  return (
+  1618→    <div className="h-full flex flex-col">
+  1619→      {/* ── Mobile: Horizontal Scrollable Tabs ── */}
+  1620→      {isMobile && (
+  1621→        <div className="border-b border-border bg-background px-4 pt-4">
+  1622→          <h1 className="text-xl font-bold text-foreground mb-3">Settings</h1>
+  1623→          <div className="flex gap-1 overflow-x-auto pb-0 -mb-px scrollbar-hide">
+  1624→            {SECTIONS.map((section) => (
+  1625→              <button
+  1626→                key={section.id}
+  1627→                onClick={() => setActiveSection(section.id)}
+  1628→                className={`flex items-center gap-1.5 px-3 py-2.5 text-xs font-medium whitespace-nowrap border-b-2 transition-all cursor-pointer ${
+  1629→                  activeSection === section.id
+  1630→                    ? 'border-emerald-600 text-emerald-700 dark:text-emerald-400'
+  1631→                    : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border'
+  1632→                }`}
+  1633→              >
+  1634→                {section.icon}
+  1635→                {section.label}
+  1636→              </button>
+  1637→            ))}
+  1638→          </div>
+  1639→        </div>
+  1640→      )}
+  1641→
+  1642→      <div className="flex-1 flex min-h-0">
+  1643→        {/* ── Desktop: Left Navigation ── */}
+  1644→        {!isMobile && (
+  1645→          <aside className="w-[220px] shrink-0 border-r border-border bg-slate-50/50 dark:bg-slate-900/30 flex flex-col">
+  1646→            <div className="p-5 pb-4">
+  1647→              <h1 className="text-lg font-bold text-foreground">Settings</h1>
+  1648→            </div>
+  1649→
+  1650→            <nav className="flex-1 px-3 space-y-0.5">
+  1651→              {SECTIONS.map((section) => (
+  1652→                <button
+  1653→                  key={section.id}
+  1654→                  onClick={() => setActiveSection(section.id)}
+  1655→                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all cursor-pointer ${
+  1656→                    activeSection === section.id
+  1657→                      ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border-l-[3px] border-emerald-600 pl-[9px]'
+  1658→                      : 'text-muted-foreground hover:text-foreground hover:bg-slate-100 dark:hover:bg-slate-800/50 border-l-[3px] border-transparent'
+  1659→                  }`}
+  1660→                >
+  1661→                  {section.icon}
+  1662→                  {section.label}
+  1663→                </button>
+  1664→              ))}
+  1665→            </nav>
+  1666→
+  1667→            {/* Version & Status */}
+  1668→            <div className="p-4 border-t border-border mt-auto">
+  1669→              <div className="flex items-center gap-2 mb-1">
+  1670→                <span className="text-xs text-muted-foreground font-medium">GSTPilot</span>
+  1671→                <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-emerald-200 text-emerald-700 bg-emerald-50 dark:border-emerald-800 dark:text-emerald-400 dark:bg-emerald-950/40">
+  1672→                  v1.0.0
+  1673→                </Badge>
+  1674→              </div>
+  1675→              <div className="flex items-center gap-1.5">
+  1676→                <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+  1677→                <span className="text-[11px] text-muted-foreground">Online</span>
+  1678→              </div>
+  1679→            </div>
+  1680→          </aside>
+  1681→        )}
+  1682→
+  1683→        {/* ── Right Content Area ── */}
+  1684→        <main className="flex-1 overflow-y-auto">
+  1685→          <div className="max-w-2xl mx-auto p-4 md:p-6 lg:p-8">
+  1686→            <AnimatePresence mode="wait">
+  1687→              {renderSection()}
+  1688→            </AnimatePresence>
+  1689→          </div>
+  1690→        </main>
+  1691→      </div>
+  1692→    </div>
+  1693→  )
+  1694→}
+  1695→

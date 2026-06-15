@@ -1,34 +1,140 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 // GSTPilot — Centralized Zustand Store with Persistence
-// Single source of truth for all business data. All components read/write here.
-// State persists to localStorage. No Math.random(). No auto-generation.
-// All data comes from sample-data.ts on first load.
+// Starts empty — all data comes from the API via React Query hooks.
+// Only used by legacy components pending migration (ClientDetailPage, GlobalSearch).
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import {
-  SAMPLE_CLIENTS,
-  SAMPLE_FILINGS,
-  SAMPLE_INVOICES,
-  SAMPLE_ISSUES,
-  SAMPLE_AI_INSIGHTS,
-  SAMPLE_RECON_DRILLDOWNS,
-  SAMPLE_RECON_SUMMARY,
-  SAMPLE_BLOCKING_ISSUES,
-  SAMPLE_UPLOADS,
-  SAMPLE_ACTIVITIES,
-  type SampleClient,
-  type SampleFiling,
-  type SampleInvoice,
-  type SampleValidationIssue,
-  type SampleAIInsight,
-  type SampleReconDrilldown,
-  type SampleReconCategory,
-  type SampleBlockingIssue,
-  type SampleUpload,
-  type SampleActivity,
-} from '@/data/sample-data';
+import type { FilingStatus } from '@/types/gst';
+
+// ─── Inline Types (previously in @/data/sample-data) ──────────────────────────
+
+export interface SampleClient {
+  id: string;
+  gstin: string;
+  tradeName: string;
+  legalName: string;
+  state: string;
+  stateCode: string;
+  entityType: string;
+  returnPeriod: string;
+  lastFilingDate: string;
+  status: 'active' | 'inactive' | 'suspended';
+  healthScore: number;
+  contactEmail?: string;
+  contactPhone?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SampleFiling {
+  id: string;
+  clientId: string;
+  returnType: 'GSTR-1' | 'GSTR-3B';
+  period: string;
+  status: FilingStatus;
+  filedDate?: string;
+  acknowledgmentNumber?: string;
+  totalInvoices: number;
+  readyForFiling: number;
+  issuesFound: number;
+  criticalErrors: number;
+  warnings: number;
+  totalTaxableValue: number;
+  totalTax: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SampleInvoice {
+  id: string;
+  clientId: string;
+  invoiceNumber: string;
+  date: string;
+  customer: string;
+  customerGstin?: string;
+  taxableValue: number;
+  cgst: number;
+  sgst: number;
+  igst: number;
+  status: 'validated' | 'warning' | 'error';
+  errorDetail?: string;
+  hsnCode?: string;
+  placeOfSupply?: string;
+}
+
+export interface SampleValidationIssue {
+  id: string;
+  clientId: string;
+  severity: 'critical' | 'warning' | 'info';
+  category: string;
+  description: string;
+  invoiceRef: string;
+  fixAction: string;
+  resolved: boolean;
+}
+
+export interface SampleReconDrilldown {
+  invoiceNumber: string;
+  date: string;
+  vendor: string;
+  booksAmount: number;
+  portalAmount: number;
+  difference: number;
+  reason: string;
+}
+
+export interface SampleReconCategory {
+  label: string;
+  count: number;
+  amount: number;
+  color: string;
+  bgColor: string;
+}
+
+export interface SampleAIInsight {
+  id: string;
+  clientId: string;
+  type: 'risk_alert' | 'missing_doc' | 'tax_anomaly' | 'filing_rec';
+  title: string;
+  description: string;
+  suggestedAction: string;
+  urgency: 'high' | 'medium' | 'info';
+  dismissed: boolean;
+}
+
+export interface SampleActivity {
+  id: string;
+  clientId: string;
+  type: 'invoice_uploaded' | 'return_prepared' | 'return_filed' | 'mismatch_resolved' | 'validation_completed' | 'document_uploaded' | 'payment_received';
+  description: string;
+  timestamp: string;
+  amount?: number;
+}
+
+export interface SampleBlockingIssue {
+  id: string;
+  clientId: string;
+  clientName: string;
+  category: 'gstin_error' | 'missing_invoice' | 'recon_mismatch' | 'validation_failure';
+  title: string;
+  detail: string;
+  invoiceRef?: string;
+  amount?: number;
+}
+
+export interface SampleUpload {
+  id: string;
+  filename: string;
+  uploadTime: string;
+  status: 'processing' | 'extracted' | 'failed';
+  clientName: string;
+  clientId: string;
+  rowCount?: number;
+  invoiceCount?: number;
+  accuracy?: number;
+}
 
 // ─── Counter for generating sequential IDs ────────────────────────────────────
 let idCounter = Date.now();
@@ -118,32 +224,30 @@ interface GSTStore {
   resetStore: () => void;
 }
 
-// ─── Initial State Factory ────────────────────────────────────────────────────
+// ─── Empty Initial State ──────────────────────────────────────────────────────
 
-function getInitialState() {
-  return {
-    clients: [...SAMPLE_CLIENTS],
-    filings: [...SAMPLE_FILINGS],
-    invoices: { ...SAMPLE_INVOICES },
-    issues: { ...SAMPLE_ISSUES },
-    aiInsights: { ...SAMPLE_AI_INSIGHTS },
-    reconDrilldowns: { ...SAMPLE_RECON_DRILLDOWNS },
-    reconSummary: { ...SAMPLE_RECON_SUMMARY },
-    blockingIssues: [...SAMPLE_BLOCKING_ISSUES],
-    uploads: [...SAMPLE_UPLOADS],
-    activities: [...SAMPLE_ACTIVITIES],
-    filedReturnIds: [] as string[],
-    filingInProgressIds: [] as string[],
-    prepWorkflowStep: {} as Record<string, number>,
-  };
-}
+const EMPTY_STATE = {
+  clients: [] as SampleClient[],
+  filings: [] as SampleFiling[],
+  invoices: {} as Record<string, SampleInvoice[]>,
+  issues: {} as Record<string, SampleValidationIssue[]>,
+  aiInsights: {} as Record<string, SampleAIInsight[]>,
+  reconDrilldowns: {} as Record<string, Record<string, SampleReconDrilldown[]>>,
+  reconSummary: {} as Record<string, SampleReconCategory[]>,
+  blockingIssues: [] as SampleBlockingIssue[],
+  uploads: [] as SampleUpload[],
+  activities: [] as SampleActivity[],
+  filedReturnIds: [] as string[],
+  filingInProgressIds: [] as string[],
+  prepWorkflowStep: {} as Record<string, number>,
+};
 
 // ─── Store Implementation ─────────────────────────────────────────────────────
 
 export const useGSTStore = create<GSTStore>()(
   persist(
     (set, get) => ({
-      ...getInitialState(),
+      ...EMPTY_STATE,
 
       // ── Client Actions ──
       getClient: (id) => get().clients.find(c => c.id === id),
@@ -525,10 +629,10 @@ export const useGSTStore = create<GSTStore>()(
         ),
 
       // ── Reset ──
-      resetStore: () => set(getInitialState()),
+      resetStore: () => set(EMPTY_STATE),
     }),
     {
-      name: 'gstpilot-store',
+      name: 'gstpilot-store-v3',
       partialize: (state) => ({
         clients: state.clients,
         filings: state.filings,

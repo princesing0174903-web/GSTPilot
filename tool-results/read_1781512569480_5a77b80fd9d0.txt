@@ -1,0 +1,743 @@
+     1→     1→'use client';
+     2→     2→
+     3→     3→import React, { useState, useMemo, useCallback } from 'react';
+     4→     4→import { motion, AnimatePresence } from 'framer-motion';
+     5→     5→import { useGSTStore } from '@/stores/gst-store';
+     6→     6→import { useApp } from '@/contexts/AppContext';
+     7→     7→import { toast } from 'sonner';
+     8→     8→import { EmptyState } from '@/components/shared';
+     9→     9→import { INDIAN_STATES } from '@/lib/constants';
+    10→    10→import { Button } from '@/components/ui/button';
+    11→    11→import { Badge } from '@/components/ui/badge';
+    12→    12→import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+    13→    13→import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+    14→    14→import { Separator } from '@/components/ui/separator';
+    15→    15→import { Input } from '@/components/ui/input';
+    16→    16→import { Textarea } from '@/components/ui/textarea';
+    17→    17→import { Label } from '@/components/ui/label';
+    18→    18→import {
+    19→    19→  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+    20→    20→} from '@/components/ui/dialog';
+    21→    21→import {
+    22→    22→  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+    23→    23→} from '@/components/ui/select';
+    24→    24→import {
+    25→    25→  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+    26→    26→} from '@/components/ui/table';
+    27→    27→import {
+    28→    28→  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+    29→    29→} from '@/components/ui/alert-dialog';
+    30→    30→import {
+    31→    31→  ArrowLeft, Building2, MapPin, Mail, Phone, Clock, FileText, Upload,
+    32→    32→  GitCompareArrows, Activity, CheckCircle2, AlertTriangle, XCircle,
+    33→    33→  Plus, Trash2, Loader2, CloudUpload, FileSpreadsheet, FileJson,
+    34→    34→  File as FileIcon, Image as ImageIcon, Send, Download, Pencil, ShieldCheck,
+    35→    35→  Search, Users, Inbox, Play, ChevronRight, StickyNote, Bell,
+    36→    36→} from 'lucide-react';
+    37→    37→import type { ReturnType, DocumentType, DocumentStatus, FilingStatus, MatchStatus } from '@/types/gst';
+    38→    38→import { FILING_STATUS_CONFIG, DOCUMENT_STATUS_CONFIG, MATCH_STATUS_CONFIG } from '@/types/gst';
+    39→    39→import { formatCurrency } from '@/lib/gst-utils';
+    40→    40→
+    41→    41→// ─── Helpers ─────────────────────────────────────────────────────────────────
+    42→    42→function formatRelativeTime(ts: string) {
+    43→    43→  const diff = Date.now() - new Date(ts).getTime();
+    44→    44→  const m = Math.floor(diff / 60000);
+    45→    45→  if (m < 1) return 'Just now';
+    46→    46→  if (m < 60) return `${m}m ago`;
+    47→    47→  const h = Math.floor(m / 60);
+    48→    48→  if (h < 24) return `${h}h ago`;
+    49→    49→  const d = Math.floor(h / 24);
+    50→    50→  if (d < 7) return `${d}d ago`;
+    51→    51→  return new Date(ts).toLocaleDateString();
+    52→    52→}
+    53→    53→
+    54→    54→function formatFileSize(bytes: number) {
+    55→    55→  if (bytes < 1024) return `${bytes} B`;
+    56→    56→  if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} KB`;
+    57→    57→  return `${(bytes / 1048576).toFixed(1)} MB`;
+    58→    58→}
+    59→    59→
+    60→    60→function getFileIcon(ft: DocumentType) {
+    61→    61→  switch (ft) {
+    62→    62→    case 'pdf': return <FileText className="h-4 w-4 text-red-500" />;
+    63→    63→    case 'excel': case 'csv': return <FileSpreadsheet className="h-4 w-4 text-emerald-600" />;
+    64→    64→    case 'json': return <FileJson className="h-4 w-4 text-amber-500" />;
+    65→    65→    case 'image': return <ImageIcon className="h-4 w-4 text-purple-500" />;
+    66→    66→    default: return <FileIcon className="h-4 w-4 text-slate-400" />;
+    67→    67→  }
+    68→    68→}
+    69→    69→
+    70→    70→function getActivityIcon(type: string) {
+    71→    71→  if (type.includes('client')) return <Building2 className="h-3.5 w-3.5" />;
+    72→    72→  if (type.includes('document') || type.includes('upload')) return <Upload className="h-3.5 w-3.5" />;
+    73→    73→  if (type.includes('return') && type.includes('filed')) return <Send className="h-3.5 w-3.5" />;
+    74→    74→  if (type.includes('return')) return <FileText className="h-3.5 w-3.5" />;
+    75→    75→  if (type.includes('recon')) return <GitCompareArrows className="h-3.5 w-3.5" />;
+    76→    76→  if (type.includes('mismatch')) return <CheckCircle2 className="h-3.5 w-3.5" />;
+    77→    77→  return <Activity className="h-3.5 w-3.5" />;
+    78→    78→}
+    79→    79→
+    80→    80→function getActivityColor(type: string) {
+    81→    81→  if (type.includes('added') || type.includes('filed') || type.includes('resolved') || type.includes('processed')) return 'text-emerald-600 bg-emerald-50';
+    82→    82→  if (type.includes('deleted') || type.includes('failed')) return 'text-red-600 bg-red-50';
+    83→    83→  if (type.includes('updated') || type.includes('uploaded')) return 'text-blue-600 bg-blue-50';
+    84→    84→  return 'text-slate-600 bg-slate-50';
+    85→    85→}
+    86→    86→
+    87→    87→// ═══════════════════════════════════════════════════════════════════════════════
+    88→    88→// Circular Progress Component for Compliance Score
+    89→    89→// ═══════════════════════════════════════════════════════════════════════════════
+    90→    90→function CircularProgress({ value, size = 80, strokeWidth = 6 }: { value: number; size?: number; strokeWidth?: number }) {
+    91→    91→  const radius = (size - strokeWidth) / 2;
+    92→    92→  const circumference = 2 * Math.PI * radius;
+    93→    93→  const offset = circumference - (value / 100) * circumference;
+    94→    94→  const color = value >= 80 ? '#10b981' : value >= 50 ? '#f59e0b' : '#ef4444';
+    95→    95→  const textColor = value >= 80 ? 'text-emerald-600' : value >= 50 ? 'text-amber-600' : 'text-red-600';
+    96→    96→
+    97→    97→  return (
+    98→    98→    <div className="relative shrink-0" style={{ width: size, height: size }}>
+    99→    99→      <svg width={size} height={size} className="-rotate-90">
+   100→   100→        <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="currentColor" strokeWidth={strokeWidth} className="text-slate-100" />
+   101→   101→        <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke={color} strokeWidth={strokeWidth} strokeDasharray={circumference} strokeDashoffset={offset} strokeLinecap="round" className="transition-all duration-700 ease-out" />
+   102→   102→      </svg>
+   103→   103→      <div className="absolute inset-0 flex items-center justify-center">
+   104→   104→        <span className={`text-lg font-bold ${textColor}`}>{value > 0 ? `${value}%` : '—'}</span>
+   105→   105→      </div>
+   106→   106→    </div>
+   107→   107→  );
+   108→   108→}
+   109→   109→
+   110→   110→// ═══════════════════════════════════════════════════════════════════════════════
+   111→   111→// Main Component
+   112→   112→// ═══════════════════════════════════════════════════════════════════════════════
+   113→   113→
+   114→   114→export default function ClientDetailPage() {
+   115→   115→  const store = useGSTStore();
+   116→   116→  const { selectedClientId, setCurrentView } = useApp();
+   117→   117→  const [tab, setTab] = useState('overview');
+   118→   118→  const [editOpen, setEditOpen] = useState(false);
+   119→   119→  const [addReturnOpen, setAddReturnOpen] = useState(false);
+   120→   120→  const [newRetType, setNewRetType] = useState<ReturnType>('GSTR-1');
+   121→   121→  const [newRetPeriod, setNewRetPeriod] = useState('2025-06');
+   122→   122→  const [uploadOpen, setUploadOpen] = useState(false);
+   123→   123→  const [reconOpen, setReconOpen] = useState(false);
+   124→   124→  const [reconPeriod, setReconPeriod] = useState('2025-06');
+   125→   125→  const [reconType, setReconType] = useState<ReturnType>('GSTR-1');
+   126→   126→  const [notes, setNotes] = useState('');
+   127→   127→
+   128→   128→  // Edit form
+   129→   129→  const [ef, setEf] = useState({ businessName: '', gstin: '', state: '', filingFrequency: 'monthly' as const, contactPerson: '', email: '', phone: '' });
+   130→   130→
+   131→   131→  const client = useMemo(() => selectedClientId ? store.getClient(selectedClientId) : undefined, [selectedClientId, store.clients]);
+   132→   132→  const docs = useMemo(() => selectedClientId ? store.getDocumentsForClient(selectedClientId) : [], [selectedClientId, store.documents]);
+   133→   133→  const returns = useMemo(() => selectedClientId ? store.getReturnsForClient(selectedClientId) : [], [selectedClientId, store.returns]);
+   134→   134→  const recons = useMemo(() => selectedClientId ? store.getReconRunsForClient(selectedClientId) : [], [selectedClientId, store.reconRuns]);
+   135→   135→  const acts = useMemo(() => selectedClientId ? store.getActivitiesForClient(selectedClientId) : [], [selectedClientId, store.activities]);
+   136→   136→
+   137→   137→  // ─── Computed ─────────────────────────────────────────────────────────────
+   138→   138→  const filedCount = returns.filter(r => r.status === 'filed').length;
+   139→   139→  const pendingCount = returns.filter(r => r.status !== 'filed').length;
+   140→   140→  const docValidated = docs.filter(d => d.status === 'validated').length;
+   141→   141→  const lastActivity = acts.length > 0 ? acts[0] : null;
+   142→   142→
+   143→   143→  // Compliance score from store
+   144→   144→  const complianceScore = selectedClientId ? store.getComplianceScore(selectedClientId) : 0;
+   145→   145→  const unresolvedMismatches = useMemo(() =>
+   146→   146→    store.reconMismatches.filter(m => m.clientId === selectedClientId && !m.resolved).length,
+   147→   147→    [store.reconMismatches, selectedClientId]
+   148→   148→  );
+   149→   149→
+   150→   150→  // Client notifications
+   151→   151→  const clientNotifications = useMemo(() =>
+   152→   152→    store.notifications.slice(0, 5),
+   153→   153→    [store.notifications]
+   154→   154→  );
+   155→   155→
+   156→   156→  // Initialize notes when client changes
+   157→   157→  React.useEffect(() => {
+   158→   158→    setNotes('');
+   159→   159→  }, [client?.id]);
+   160→   160→
+   161→   161→  // ─── Handlers ──────────────────────────────────────────────────────────────
+   162→   162→  const openEdit = () => {
+   163→   163→    if (!client) return;
+   164→   164→    setEf({ businessName: client.businessName, gstin: client.gstin, state: client.state, filingFrequency: client.filingFrequency, contactPerson: client.contactPerson, email: client.email, phone: client.phone });
+   165→   165→    setEditOpen(true);
+   166→   166→  };
+   167→   167→
+   168→   168→  const saveEdit = async () => {
+   169→   169→    if (!selectedClientId || !ef.businessName.trim()) { toast.error('Business name is required'); return; }
+   170→   170→    const sc = INDIAN_STATES.find(s => s.name === ef.state)?.code ?? '27';
+   171→   171→    await store.updateClient(selectedClientId, { ...ef, stateCode: sc });
+   172→   172→    toast.success('Client updated');
+   173→   173→    setEditOpen(false);
+   174→   174→  };
+   175→   175→
+   176→   176→  const handleUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+   177→   177→    const files = e.target.files;
+   178→   178→    if (!files || !selectedClientId) return;
+   179→   179→    for (const f of Array.from(files)) {
+   180→   180→      const ext = f.name.split('.').pop()?.toLowerCase() ?? '';
+   181→   181→      const ft: DocumentType = ext === 'pdf' ? 'pdf' : ext === 'xlsx' || ext === 'xls' ? 'excel' : ext === 'csv' ? 'csv' : ext === 'json' ? 'json' : ['png', 'jpg', 'jpeg', 'webp'].includes(ext) ? 'image' : 'other';
+   182→   182→      store.addDocument({ clientId: selectedClientId, fileName: f.name, fileSize: f.size, fileType: ft });
+   183→   183→    }
+   184→   184→    toast.success(`${files.length} document(s) uploaded`);
+   185→   185→    setUploadOpen(false);
+   186→   186→  };
+   187→   187→
+   188→   188→  const handleAddReturn = async () => {
+   189→   189→    if (!selectedClientId) return;
+   190→   190→    await store.addReturn({ clientId: selectedClientId, returnType: newRetType, period: newRetPeriod });
+   191→   191→    toast.success(`${newRetType} for ${newRetPeriod} prepared`);
+   192→   192→    setAddReturnOpen(false);
+   193→   193→  };
+   194→   194→
+   195→   195→  const handleFileReturn = async (id: string) => {
+   196→   196→    await store.updateReturnStatus(id, 'filed', { filedDate: new Date().toISOString().split('T')[0], acknowledgmentNumber: `ARN${Date.now().toString(36).toUpperCase()}` });
+   197→   197→    toast.success('Return filed successfully');
+   198→   198→  };
+   199→   199→
+   200→   200→  const handleMarkReady = async (id: string) => {
+   201→   201→    await store.updateReturnStatus(id, 'ready');
+   202→   202→    toast.success('Return marked as ready for filing');
+   203→   203→  };
+   204→   204→
+   205→   205→  const handleSaveNotes = useCallback(() => {
+   206→   206→    if (!selectedClientId || !notes.trim()) return;
+   207→   207→    // Store notes locally for now; will persist when Client type supports notes field
+   208→   208→    store.updateClient(selectedClientId, { notes } as Record<string, unknown>);
+   209→   209→  }, [selectedClientId, notes, store]);
+   210→   210→
+   211→   211→  const handleRunRecon = () => {
+   212→   212→    if (!selectedClientId) return;
+   213→   213→    const run = store.createReconRun({ clientId: selectedClientId, period: reconPeriod, returnType: reconType });
+   214→   214→    setReconOpen(false);
+   215→   215→    toast.info('Reconciliation running...');
+   216→   216→    // Simulate completion
+   217→   217→    setTimeout(() => {
+   218→   218→      const tot = 12 + Math.floor(Math.random() * 25);
+   219→   219→      const mat = Math.floor(tot * 0.7);
+   220→   220→      const mis = Math.floor((tot - mat) * 0.5);
+   221→   221→      const mib = Math.floor((tot - mat - mis) * 0.6);
+   222→   222→      const mip = tot - mat - mis - mib;
+   223→   223→      const mms: Omit<import('@/types/gst').ReconciliationMismatch, 'id' | 'runId' | 'clientId' | 'resolved' | 'resolvedAt'>[] = [];
+   224→   224→      const statuses: MatchStatus[] = ['mismatched', 'missing_in_books', 'missing_in_portal'];
+   225→   225→      for (let i = 0; i < mis + mib + mip; i++) {
+   226→   226→        mms.push({ invoiceNumber: `INV-${String(1000 + i).padStart(4, '0')}`, gstin: client?.gstin ?? '', matchStatus: statuses[i % 3], booksAmount: i % 3 !== 1 ? 5000 + i * 1000 : null, portalAmount: i % 3 !== 2 ? 5000 + i * 1100 : null, difference: i * 100 });
+   227→   227→      }
+   228→   228→      store.completeReconRun(run.id, { totalRecords: tot, matched: mat, mismatched: mis, missingInBooks: mib, missingInPortal: mip, taxDifference: mis * 1500, mismatches: mms });
+   229→   229→      toast.success('Reconciliation completed');
+   230→   230→    }, 3000);
+   231→   231→  };
+   232→   232→
+   233→   233→  // ─── Not Found ─────────────────────────────────────────────────────────────
+   234→   234→  if (!client) {
+   235→   235→    return (
+   236→   236→      <div className="p-6 flex flex-col items-center justify-center py-24 text-center">
+   237→   237→        <Building2 className="h-12 w-12 text-muted-foreground mb-4" />
+   238→   238→        <h3 className="text-lg font-semibold">Client not found</h3>
+   239→   239→        <Button variant="outline" className="mt-4" onClick={() => setCurrentView('clients')}>Back to Clients</Button>
+   240→   240→      </div>
+   241→   241→    );
+   242→   242→  }
+   243→   243→
+   244→   244→  const initials = client.businessName.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+   245→   245→  const statusCls = client.status === 'active' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : client.status === 'inactive' ? 'bg-slate-100 text-slate-600 border-slate-200' : 'bg-red-50 text-red-700 border-red-200';
+   246→   246→
+   247→   247→  // ─── Render ────────────────────────────────────────────────────────────────
+   248→   248→  return (
+   249→   249→    <div className="p-4 md:p-6 space-y-6 max-w-6xl">
+   250→   250→      {/* ═══ HEADER ═══ */}
+   251→   251→      <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
+   252→   252→        {/* Breadcrumb + Back */}
+   253→   253→        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+   254→   254→          <button onClick={() => setCurrentView('clients')} className="hover:text-foreground transition-colors flex items-center gap-1">
+   255→   255→            <ArrowLeft className="h-3.5 w-3.5" /> Clients
+   256→   256→          </button>
+   257→   257→          <ChevronRight className="h-3 w-3" />
+   258→   258→          <span className="text-foreground font-medium">{client.businessName}</span>
+   259→   259→        </div>
+   260→   260→
+   261→   261→        {/* Client Header Card */}
+   262→   262→        <Card className="border-border/60 overflow-hidden">
+   263→   263→          <div className="bg-gradient-to-r from-emerald-600 to-emerald-700 h-2" />
+   264→   264→          <CardContent className="p-5 md:p-6">
+   265→   265→            <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
+   266→   266→              {/* Left: Identity */}
+   267→   267→              <div className="flex items-start gap-4">
+   268→   268→                <div className="flex items-center justify-center h-14 w-14 rounded-xl bg-emerald-100 text-emerald-700 text-lg font-bold shrink-0">
+   269→   269→                  {initials}
+   270→   270→                </div>
+   271→   271→                <div className="space-y-2">
+   272→   272→                  <div className="flex items-center gap-2.5">
+   273→   273→                    <h1 className="text-xl font-bold text-foreground">{client.businessName}</h1>
+   274→   274→                    <Badge variant="outline" className={statusCls}>{client.status}</Badge>
+   275→   275→                  </div>
+   276→   276→                  <p className="text-xs font-mono text-muted-foreground tracking-wide">{client.gstin}</p>
+   277→   277→                  <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 text-xs text-muted-foreground">
+   278→   278→                    <span className="flex items-center gap-1.5"><MapPin className="h-3.5 w-3.5" />{client.state}</span>
+   279→   279→                    <span className="flex items-center gap-1.5"><Clock className="h-3.5 w-3.5" />{client.filingFrequency === 'monthly' ? 'Monthly Filing' : 'Quarterly Filing'}</span>
+   280→   280→                    <span className="flex items-center gap-1.5"><Users className="h-3.5 w-3.5" />{client.contactPerson}</span>
+   281→   281→                  </div>
+   282→   282→                  <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-xs text-muted-foreground">
+   283→   283→                    <span className="flex items-center gap-1.5"><Mail className="h-3.5 w-3.5" />{client.email}</span>
+   284→   284→                    <span className="flex items-center gap-1.5"><Phone className="h-3.5 w-3.5" />{client.phone}</span>
+   285→   285→                  </div>
+   286→   286→                </div>
+   287→   287→              </div>
+   288→   288→              {/* Right: Edit Button */}
+   289→   289→              <Button variant="outline" className="gap-2 shrink-0" onClick={openEdit}>
+   290→   290→                <Pencil className="h-3.5 w-3.5" /> Edit Client
+   291→   291→              </Button>
+   292→   292→            </div>
+   293→   293→          </CardContent>
+   294→   294→        </Card>
+   295→   295→      </motion.div>
+   296→   296→
+   297→   297→      {/* ═══ TABBED CONTENT ═══ */}
+   298→   298→      <Tabs value={tab} onValueChange={setTab}>
+   299→   299→        <TabsList className="bg-slate-50 border">
+   300→   300→          <TabsTrigger value="overview" className="gap-1.5 text-xs"><ShieldCheck className="h-3.5 w-3.5" />Overview</TabsTrigger>
+   301→   301→          <TabsTrigger value="documents" className="gap-1.5 text-xs"><FileText className="h-3.5 w-3.5" />Documents</TabsTrigger>
+   302→   302→          <TabsTrigger value="returns" className="gap-1.5 text-xs"><FileText className="h-3.5 w-3.5" />Returns</TabsTrigger>
+   303→   303→          <TabsTrigger value="reconciliation" className="gap-1.5 text-xs"><GitCompareArrows className="h-3.5 w-3.5" />Reconciliation</TabsTrigger>
+   304→   304→          <TabsTrigger value="activity" className="gap-1.5 text-xs"><Activity className="h-3.5 w-3.5" />Activity</TabsTrigger>
+   305→   305→        </TabsList>
+   306→   306→
+   307→   307→        {/* ═══════════════════════════════════════════════════════════════════
+   308→   308→            OVERVIEW TAB
+   309→   309→        ═══════════════════════════════════════════════════════════════════ */}
+   310→   310→        <TabsContent value="overview" className="space-y-4 mt-4">
+   311→   311→          {/* Metric Cards */}
+   312→   312→          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+   313→   313→            {/* Compliance Score - Circular Progress with Breakdown */}
+   314→   314→            <Card className="border-border/60 col-span-2">
+   315→   315→              <CardContent className="p-4">
+   316→   316→                <div className="flex items-center gap-4">
+   317→   317→                  <CircularProgress value={complianceScore} />
+   318→   318→                  <div className="flex-1 min-w-0">
+   319→   319→                    <div className="flex items-center gap-2 mb-2">
+   320→   320→                      <div className="flex items-center justify-center h-7 w-7 rounded-lg bg-emerald-50"><ShieldCheck className="h-3.5 w-3.5 text-emerald-600" /></div>
+   321→   321→                      <span className="text-xs text-muted-foreground">Compliance Score</span>
+   322→   322→                    </div>
+   323→   323→                    <div className="space-y-1.5">
+   324→   324→                      <div className="flex items-center justify-between text-xs">
+   325→   325→                        <span className="text-muted-foreground">Filed Returns</span>
+   326→   326→                        <span className="font-medium text-foreground">{filedCount}/{returns.length}</span>
+   327→   327→                      </div>
+   328→   328→                      <div className="flex items-center justify-between text-xs">
+   329→   329→                        <span className="text-muted-foreground">Validated Documents</span>
+   330→   330→                        <span className="font-medium text-foreground">{docValidated}/{docs.length}</span>
+   331→   331→                      </div>
+   332→   332→                      <div className="flex items-center justify-between text-xs">
+   333→   333→                        <span className="text-muted-foreground">Unresolved Mismatches</span>
+   334→   334→                        <span className={`font-medium ${unresolvedMismatches > 0 ? 'text-red-600' : 'text-emerald-600'}`}>{unresolvedMismatches}</span>
+   335→   335→                      </div>
+   336→   336→                      <div className="flex items-center justify-between text-xs">
+   337→   337→                        <span className="text-muted-foreground">Pending Returns</span>
+   338→   338→                        <span className={`font-medium ${pendingCount > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>{pendingCount}</span>
+   339→   339→                      </div>
+   340→   340→                    </div>
+   341→   341→                  </div>
+   342→   342→                </div>
+   343→   343→              </CardContent>
+   344→   344→            </Card>
+   345→   345→            <Card className="border-border/60">
+   346→   346→              <CardContent className="p-4">
+   347→   347→                <div className="flex items-center gap-2 mb-2">
+   348→   348→                  <div className="flex items-center justify-center h-8 w-8 rounded-lg bg-emerald-50"><CheckCircle2 className="h-4 w-4 text-emerald-600" /></div>
+   349→   349→                  <span className="text-xs text-muted-foreground">Filed Returns</span>
+   350→   350→                </div>
+   351→   351→                <p className="text-2xl font-bold text-foreground">{filedCount > 0 ? filedCount : '—'}</p>
+   352→   352→              </CardContent>
+   353→   353→            </Card>
+   354→   354→            <Card className="border-border/60">
+   355→   355→              <CardContent className="p-4">
+   356→   356→                <div className="flex items-center gap-2 mb-2">
+   357→   357→                  <div className="flex items-center justify-center h-8 w-8 rounded-lg bg-blue-50"><FileText className="h-4 w-4 text-blue-600" /></div>
+   358→   358→                  <span className="text-xs text-muted-foreground">Documents</span>
+   359→   359→                </div>
+   360→   360→                <p className="text-2xl font-bold text-foreground">{docs.length > 0 ? docs.length : '—'}</p>
+   361→   361→              </CardContent>
+   362→   362→            </Card>
+   363→   363→          </div>
+   364→   364→
+   365→   365→          {/* Last Activity + Recent Notifications */}
+   366→   366→          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+   367→   367→            <Card className="border-border/60">
+   368→   368→              <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Last Activity</CardTitle></CardHeader>
+   369→   369→              <CardContent>
+   370→   370→                {lastActivity ? (
+   371→   371→                  <div className="flex items-start gap-3">
+   372→   372→                    <div className={`flex items-center justify-center h-7 w-7 rounded-full shrink-0 ${getActivityColor(lastActivity.type)}`}>
+   373→   373→                      {getActivityIcon(lastActivity.type)}
+   374→   374→                    </div>
+   375→   375→                    <div>
+   376→   376→                      <p className="text-sm text-foreground">{lastActivity.description}</p>
+   377→   377→                      <p className="text-[10px] text-muted-foreground mt-0.5">{formatRelativeTime(lastActivity.timestamp)}</p>
+   378→   378→                    </div>
+   379→   379→                  </div>
+   380→   380→                ) : (
+   381→   381→                  <p className="text-sm text-muted-foreground">No activity available.</p>
+   382→   382→                )}
+   383→   383→              </CardContent>
+   384→   384→            </Card>
+   385→   385→            <Card className="border-border/60">
+   386→   386→              <CardHeader className="pb-2">
+   387→   387→                <div className="flex items-center justify-between">
+   388→   388→                  <CardTitle className="text-sm font-medium text-muted-foreground">Recent Notifications</CardTitle>
+   389→   389→                  <Bell className="h-3.5 w-3.5 text-muted-foreground" />
+   390→   390→                </div>
+   391→   391→              </CardHeader>
+   392→   392→              <CardContent>
+   393→   393→                {clientNotifications.length > 0 ? (
+   394→   394→                  <div className="space-y-2 max-h-32 overflow-y-auto">
+   395→   395→                    {clientNotifications.map(n => (
+   396→   396→                      <div key={n.id} className="flex items-center gap-2 text-xs">
+   397→   397→                        <div className={`h-1.5 w-1.5 rounded-full shrink-0 ${n.type === 'success' ? 'bg-emerald-500' : n.type === 'error' ? 'bg-red-500' : n.type === 'warning' ? 'bg-amber-500' : 'bg-blue-500'}`} />
+   398→   398→                        <span className={`text-foreground truncate ${n.read ? 'opacity-60' : 'font-medium'}`}>{n.title}: {n.message}</span>
+   399→   399→                      </div>
+   400→   400→                    ))}
+   401→   401→                  </div>
+   402→   402→                ) : (
+   403→   403→                  <p className="text-sm text-muted-foreground">No notifications yet.</p>
+   404→   404→                )}
+   405→   405→              </CardContent>
+   406→   406→            </Card>
+   407→   407→          </div>
+   408→   408→
+   409→   409→          {/* Notes Section */}
+   410→   410→          <Card className="border-border/60">
+   411→   411→            <CardHeader className="pb-2">
+   412→   412→              <div className="flex items-center gap-2">
+   413→   413→                <StickyNote className="h-4 w-4 text-muted-foreground" />
+   414→   414→                <CardTitle className="text-sm font-medium text-muted-foreground">Notes</CardTitle>
+   415→   415→              </div>
+   416→   416→            </CardHeader>
+   417→   417→            <CardContent>
+   418→   418→              <Textarea
+   419→   419→                placeholder="Add notes about this client..."
+   420→   420→                value={notes}
+   421→   421→                onChange={e => setNotes(e.target.value)}
+   422→   422→                onBlur={handleSaveNotes}
+   423→   423→                className="min-h-[80px] resize-y text-sm"
+   424→   424→              />
+   425→   425→            </CardContent>
+   426→   426→          </Card>
+   427→   427→        </TabsContent>
+   428→   428→
+   429→   429→        {/* ═══════════════════════════════════════════════════════════════════
+   430→   430→            DOCUMENTS TAB
+   431→   431→        ═══════════════════════════════════════════════════════════════════ */}
+   432→   432→        <TabsContent value="documents" className="space-y-4 mt-4">
+   433→   433→          <div className="flex items-center justify-between">
+   434→   434→            <h3 className="text-sm font-medium text-muted-foreground">Uploaded Documents ({docs.length})</h3>
+   435→   435→            <Button onClick={() => setUploadOpen(true)} className="bg-emerald-600 hover:bg-emerald-700 gap-2" size="sm"><Upload className="h-3.5 w-3.5" /> Upload Document</Button>
+   436→   436→          </div>
+   437→   437→
+   438→   438→          {docs.length === 0 ? (
+   439→   439→            <EmptyState
+   440→   440→              icon={CloudUpload}
+   441→   441→              title="No documents uploaded yet."
+   442→   442→              description="Upload invoices, purchase registers, or GST data files."
+   443→   443→              action={{ label: 'Upload Document', onClick: () => setUploadOpen(true), variant: 'outline', icon: Upload }}
+   444→   444→            />
+   445→   445→          ) : (
+   446→   446→            <div className="border rounded-lg overflow-hidden">
+   447→   447→              <Table>
+   448→   448→                <TableHeader>
+   449→   449→                  <TableRow>
+   450→   450→                    <TableHead>File Name</TableHead>
+   451→   451→                    <TableHead>Type</TableHead>
+   452→   452→                    <TableHead>Upload Date</TableHead>
+   453→   453→                    <TableHead>Status</TableHead>
+   454→   454→                    <TableHead className="w-10" />
+   455→   455→                  </TableRow>
+   456→   456→                </TableHeader>
+   457→   457→                <TableBody>
+   458→   458→                  {docs.map(d => {
+   459→   459→                    const cfg = DOCUMENT_STATUS_CONFIG[d.status];
+   460→   460→                    return (
+   461→   461→                      <TableRow key={d.id}>
+   462→   462→                        <TableCell>
+   463→   463→                          <div className="flex items-center gap-2">
+   464→   464→                            {getFileIcon(d.fileType)}
+   465→   465→                            <span className="text-sm font-medium">{d.fileName}</span>
+   466→   466→                          </div>
+   467→   467→                        </TableCell>
+   468→   468→                        <TableCell className="text-xs text-muted-foreground uppercase">{d.fileType}</TableCell>
+   469→   469→                        <TableCell className="text-xs text-muted-foreground">{formatRelativeTime(d.uploadedAt)}</TableCell>
+   470→   470→                        <TableCell>
+   471→   471→                          <Badge variant="outline" className={`${cfg?.bgColor ?? ''} ${cfg?.color ?? ''} text-[10px]`}>
+   472→   472→                            {d.status === 'processing' && <Loader2 className="h-3 w-3 animate-spin mr-1" />}
+   473→   473→                            {cfg?.label ?? d.status}
+   474→   474→                          </Badge>
+   475→   475→                        </TableCell>
+   476→   476→                        <TableCell>
+   477→   477→                          <Button variant="ghost" size="icon" className="h-7 w-7 text-red-500" onClick={() => { store.deleteDocument(d.id); toast.success('Document removed'); }}><Trash2 className="h-3.5 w-3.5" /></Button>
+   478→   478→                        </TableCell>
+   479→   479→                      </TableRow>
+   480→   480→                    );
+   481→   481→                  })}
+   482→   482→                </TableBody>
+   483→   483→              </Table>
+   484→   484→            </div>
+   485→   485→          )}
+   486→   486→
+   487→   487→          {/* Upload Dialog */}
+   488→   488→          <Dialog open={uploadOpen} onOpenChange={setUploadOpen}>
+   489→   489→            <DialogContent className="sm:max-w-md">
+   490→   490→              <DialogHeader><DialogTitle>Upload Document</DialogTitle></DialogHeader>
+   491→   491→              <div className="space-y-4 py-2">
+   492→   492→                <p className="text-sm text-muted-foreground">Upload files for {client.businessName}</p>
+   493→   493→                <div className="border-2 border-dashed border-border/60 rounded-xl p-8 text-center hover:border-emerald-300 hover:bg-emerald-50/30 transition-colors cursor-pointer relative">
+   494→   494→                  <CloudUpload className="h-8 w-8 text-muted-foreground/40 mx-auto mb-3" />
+   495→   495→                  <p className="text-sm font-medium">Click to browse files</p>
+   496→   496→                  <p className="text-xs text-muted-foreground mt-1">PDF, Excel, CSV, JSON</p>
+   497→   497→                  <input type="file" className="absolute inset-0 opacity-0 cursor-pointer" multiple accept=".pdf,.xlsx,.xls,.csv,.json" onChange={handleUpload} onClick={e => { e.currentTarget.value = ''; }} />
+   498→   498→                </div>
+   499→   499→              </div>
+   500→   500→              <DialogFooter><Button variant="outline" onClick={() => setUploadOpen(false)}>Cancel</Button></DialogFooter>
+   501→   501→            </DialogContent>
+   502→   502→          </Dialog>
+   503→   503→        </TabsContent>
+   504→   504→
+   505→   505→        {/* ═══════════════════════════════════════════════════════════════════
+   506→   506→            RETURNS TAB
+   507→   507→        ═══════════════════════════════════════════════════════════════════ */}
+   508→   508→        <TabsContent value="returns" className="space-y-4 mt-4">
+   509→   509→          <div className="flex items-center justify-between">
+   510→   510→            <h3 className="text-sm font-medium text-muted-foreground">GST Returns ({returns.length})</h3>
+   511→   511→            <Button onClick={() => setAddReturnOpen(true)} className="bg-emerald-600 hover:bg-emerald-700 gap-2" size="sm"><Plus className="h-3.5 w-3.5" /> Prepare Return</Button>
+   512→   512→          </div>
+   513→   513→
+   514→   514→          {returns.length === 0 ? (
+   515→   515→            <EmptyState
+   516→   516→              icon={FileText}
+   517→   517→              title="No GST returns prepared."
+   518→   518→              description="Prepare a GSTR-1 or GSTR-3B return for this client."
+   519→   519→              action={{ label: 'Prepare Return', onClick: () => setAddReturnOpen(true), variant: 'outline', icon: Plus }}
+   520→   520→            />
+   521→   521→          ) : (
+   522→   522→            <div className="border rounded-lg overflow-hidden">
+   523→   523→              <Table>
+   524→   524→                <TableHeader>
+   525→   525→                  <TableRow>
+   526→   526→                    <TableHead>Period</TableHead>
+   527→   527→                    <TableHead>Return Type</TableHead>
+   528→   528→                    <TableHead>Status</TableHead>
+   529→   529→                    <TableHead>Actions</TableHead>
+   530→   530→                  </TableRow>
+   531→   531→                </TableHeader>
+   532→   532→                <TableBody>
+   533→   533→                  {returns.map(r => {
+   534→   534→                    const cfg = FILING_STATUS_CONFIG[r.status];
+   535→   535→                    return (
+   536→   536→                      <TableRow key={r.id}>
+   537→   537→                        <TableCell className="text-sm font-medium">{r.period}</TableCell>
+   538→   538→                        <TableCell><Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 font-semibold text-xs">{r.returnType}</Badge></TableCell>
+   539→   539→                        <TableCell><Badge variant="outline" className={`${cfg?.bgColor ?? ''} ${cfg?.color ?? ''} text-[10px]`}>{cfg?.label ?? r.status}</Badge></TableCell>
+   540→   540→                        <TableCell>
+   541→   541→                          <div className="flex items-center gap-1.5">
+   542→   542→                            {r.status === 'draft' && <Button size="sm" variant="outline" className="h-7 text-[10px] gap-1" onClick={() => handleMarkReady(r.id)}><CheckCircle2 className="h-3 w-3" /> Mark Ready</Button>}
+   543→   543→                            {r.status === 'ready' && <Button size="sm" className="h-7 text-[10px] gap-1 bg-emerald-600 hover:bg-emerald-700" onClick={() => handleFileReturn(r.id)}><Send className="h-3 w-3" /> File</Button>}
+   544→   544→                            {r.status === 'filed' && <span className="text-[10px] text-emerald-600 flex items-center gap-1"><CheckCircle2 className="h-3 w-3" /> Filed</span>}
+   545→   545→                            <Button size="sm" variant="ghost" className="h-7 text-[10px] gap-1" onClick={() => toast.info('JSON download coming soon')}><Download className="h-3 w-3" /> JSON</Button>
+   546→   546→                          </div>
+   547→   547→                        </TableCell>
+   548→   548→                      </TableRow>
+   549→   549→                    );
+   550→   550→                  })}
+   551→   551→                </TableBody>
+   552→   552→              </Table>
+   553→   553→            </div>
+   554→   554→          )}
+   555→   555→
+   556→   556→          {/* Add Return Dialog */}
+   557→   557→          <Dialog open={addReturnOpen} onOpenChange={setAddReturnOpen}>
+   558→   558→            <DialogContent className="sm:max-w-md">
+   559→   559→              <DialogHeader><DialogTitle>Prepare Return</DialogTitle></DialogHeader>
+   560→   560→              <div className="grid gap-4 py-4">
+   561→   561→                <div className="grid gap-2"><Label>Return Type</Label>
+   562→   562→                  <Select value={newRetType} onValueChange={v => setNewRetType(v as ReturnType)}>
+   563→   563→                    <SelectTrigger><SelectValue /></SelectTrigger>
+   564→   564→                    <SelectContent><SelectItem value="GSTR-1">GSTR-1 (Outward Supplies)</SelectItem><SelectItem value="GSTR-3B">GSTR-3B (Summary Return)</SelectItem></SelectContent>
+   565→   565→                  </Select>
+   566→   566→                </div>
+   567→   567→                <div className="grid gap-2"><Label>Period</Label><Input type="month" value={newRetPeriod} onChange={e => setNewRetPeriod(e.target.value)} /></div>
+   568→   568→              </div>
+   569→   569→              <DialogFooter><Button variant="outline" onClick={() => setAddReturnOpen(false)}>Cancel</Button><Button onClick={handleAddReturn} className="bg-emerald-600 hover:bg-emerald-700">Prepare</Button></DialogFooter>
+   570→   570→            </DialogContent>
+   571→   571→          </Dialog>
+   572→   572→        </TabsContent>
+   573→   573→
+   574→   574→        {/* ═══════════════════════════════════════════════════════════════════
+   575→   575→            RECONCILIATION TAB
+   576→   576→        ═══════════════════════════════════════════════════════════════════ */}
+   577→   577→        <TabsContent value="reconciliation" className="space-y-4 mt-4">
+   578→   578→          <div className="flex items-center justify-between">
+   579→   579→            <h3 className="text-sm font-medium text-muted-foreground">Reconciliation Runs ({recons.length})</h3>
+   580→   580→            <Button onClick={() => setReconOpen(true)} className="bg-emerald-600 hover:bg-emerald-700 gap-2" size="sm"><Play className="h-3.5 w-3.5" /> Run Reconciliation</Button>
+   581→   581→          </div>
+   582→   582→
+   583→   583→          {recons.length === 0 ? (
+   584→   584→            <EmptyState
+   585→   585→              icon={GitCompareArrows}
+   586→   586→              title="No reconciliation data available."
+   587→   587→              description="Run a reconciliation to match your books with the GST portal."
+   588→   588→              action={{ label: 'Run Reconciliation', onClick: () => setReconOpen(true), variant: 'outline', icon: Play }}
+   589→   589→            />
+   590→   590→          ) : (
+   591→   591→            <div className="space-y-4">
+   592→   592→              {recons.map(run => {
+   593→   593→                const mms = store.getMismatchesForRun(run.id);
+   594→   594→                const unresolved = mms.filter(m => !m.resolved);
+   595→   595→                return (
+   596→   596→                  <Card key={run.id} className="border-border/60">
+   597→   597→                    <CardContent className="p-4">
+   598→   598→                      <div className="flex items-center justify-between mb-3">
+   599→   599→                        <div className="flex items-center gap-2">
+   600→   600→                          <Badge className="bg-emerald-50 text-emerald-700 text-xs">{run.returnType}</Badge>
+   601→   601→                          <span className="text-sm font-medium">{run.period}</span>
+   602→   602→                        </div>
+   603→   603→                        <Badge variant="outline" className={run.status === 'completed' ? 'bg-emerald-50 text-emerald-700' : run.status === 'running' ? 'bg-blue-50 text-blue-700' : 'bg-red-50 text-red-700'}>
+   604→   604→                          {run.status === 'running' && <Loader2 className="h-3 w-3 animate-spin mr-1" />}
+   605→   605→                          {run.status.charAt(0).toUpperCase() + run.status.slice(1)}
+   606→   606→                        </Badge>
+   607→   607→                      </div>
+   608→   608→
+   609→   609→                      {run.status === 'completed' && (
+   610→   610→                        <div className="grid grid-cols-3 gap-3 mb-3">
+   611→   611→                          <div className="bg-emerald-50 rounded-lg p-3 text-center">
+   612→   612→                            <p className="text-lg font-bold text-emerald-700">{run.matched}</p>
+   613→   613→                            <p className="text-[10px] text-emerald-600 uppercase font-medium">Matched</p>
+   614→   614→                          </div>
+   615→   615→                          <div className="bg-red-50 rounded-lg p-3 text-center">
+   616→   616→                            <p className="text-lg font-bold text-red-700">{run.mismatched}</p>
+   617→   617→                            <p className="text-[10px] text-red-600 uppercase font-medium">Mismatched</p>
+   618→   618→                          </div>
+   619→   619→                          <div className="bg-orange-50 rounded-lg p-3 text-center">
+   620→   620→                            <p className="text-lg font-bold text-orange-700">{run.missingInBooks + run.missingInPortal}</p>
+   621→   621→                            <p className="text-[10px] text-orange-600 uppercase font-medium">Missing</p>
+   622→   622→                          </div>
+   623→   623→                        </div>
+   624→   624→                      )}
+   625→   625→
+   626→   626→                      {unresolved.length > 0 && (
+   627→   627→                        <div className="border-t pt-3">
+   628→   628→                          <p className="text-xs font-medium text-muted-foreground mb-2">Unresolved Mismatches ({unresolved.length})</p>
+   629→   629→                          <div className="space-y-1.5 max-h-40 overflow-y-auto">
+   630→   630→                            {unresolved.map(mm => (
+   631→   631→                              <div key={mm.id} className="flex items-center justify-between text-xs">
+   632→   632→                                <div className="flex items-center gap-2">
+   633→   633→                                  <AlertTriangle className="h-3 w-3 text-amber-500" />
+   634→   634→                                  <span className="font-mono">{mm.invoiceNumber}</span>
+   635→   635→                                  <Badge variant="outline" className="text-[10px]">{MATCH_STATUS_CONFIG[mm.matchStatus]?.label ?? mm.matchStatus}</Badge>
+   636→   636→                                </div>
+   637→   637→                                <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1" onClick={() => { store.resolveMismatch(mm.id); toast.success('Mismatch resolved'); }}>
+   638→   638→                                  <CheckCircle2 className="h-3 w-3" /> Resolve
+   639→   639→                                </Button>
+   640→   640→                              </div>
+   641→   641→                            ))}
+   642→   642→                          </div>
+   643→   643→                        </div>
+   644→   644→                      )}
+   645→   645→                    </CardContent>
+   646→   646→                  </Card>
+   647→   647→                );
+   648→   648→              })}
+   649→   649→            </div>
+   650→   650→          )}
+   651→   651→
+   652→   652→          {/* Run Reconciliation Dialog */}
+   653→   653→          <Dialog open={reconOpen} onOpenChange={setReconOpen}>
+   654→   654→            <DialogContent className="sm:max-w-md">
+   655→   655→              <DialogHeader><DialogTitle>Run Reconciliation</DialogTitle></DialogHeader>
+   656→   656→              <div className="grid gap-4 py-4">
+   657→   657→                <div className="grid gap-2"><Label>Return Type</Label>
+   658→   658→                  <Select value={reconType} onValueChange={v => setReconType(v as ReturnType)}>
+   659→   659→                    <SelectTrigger><SelectValue /></SelectTrigger>
+   660→   660→                    <SelectContent><SelectItem value="GSTR-1">GSTR-1 vs GSTR-2B</SelectItem><SelectItem value="GSTR-3B">GSTR-3B vs Books</SelectItem></SelectContent>
+   661→   661→                  </Select>
+   662→   662→                </div>
+   663→   663→                <div className="grid gap-2"><Label>Period</Label><Input type="month" value={reconPeriod} onChange={e => setReconPeriod(e.target.value)} /></div>
+   664→   664→                <p className="text-[10px] text-muted-foreground">Simulation mode: Results are generated for demonstration.</p>
+   665→   665→              </div>
+   666→   666→              <DialogFooter><Button variant="outline" onClick={() => setReconOpen(false)}>Cancel</Button><Button onClick={handleRunRecon} className="bg-emerald-600 hover:bg-emerald-700 gap-2"><Play className="h-4 w-4" /> Run</Button></DialogFooter>
+   667→   667→            </DialogContent>
+   668→   668→          </Dialog>
+   669→   669→        </TabsContent>
+   670→   670→
+   671→   671→        {/* ═══════════════════════════════════════════════════════════════════
+   672→   672→            ACTIVITY TAB
+   673→   673→        ═══════════════════════════════════════════════════════════════════ */}
+   674→   674→        <TabsContent value="activity" className="space-y-4 mt-4">
+   675→   675→          <h3 className="text-sm font-medium text-muted-foreground">Activity Timeline</h3>
+   676→   676→
+   677→   677→          {acts.length === 0 ? (
+   678→   678→            <EmptyState icon={Activity} title="No activity recorded." description="Actions will appear here as you work with this client." />
+   679→   679→          ) : (
+   680→   680→            <div className="relative">
+   681→   681→              {/* Timeline line */}
+   682→   682→              <div className="absolute left-[14px] top-2 bottom-2 w-px bg-border" />
+   683→   683→              <div className="space-y-0">
+   684→   684→                {acts.map((a, i) => (
+   685→   685→                  <motion.div
+   686→   686→                    key={a.id}
+   687→   687→                    initial={{ opacity: 0, x: -8 }}
+   688→   688→                    animate={{ opacity: 1, x: 0 }}
+   689→   689→                    transition={{ delay: i * 0.03 }}
+   690→   690→                    className="flex items-start gap-3 py-3 relative"
+   691→   691→                  >
+   692→   692→                    <div className={`flex items-center justify-center h-7 w-7 rounded-full shrink-0 z-10 ${getActivityColor(a.type)}`}>
+   693→   693→                      {getActivityIcon(a.type)}
+   694→   694→                    </div>
+   695→   695→                    <div className="flex-1 min-w-0 pt-0.5">
+   696→   696→                      <p className="text-sm text-foreground">{a.description}</p>
+   697→   697→                      <p className="text-[10px] text-muted-foreground mt-0.5">{formatRelativeTime(a.timestamp)}</p>
+   698→   698→                    </div>
+   699→   699→                  </motion.div>
+   700→   700→                ))}
+   701→   701→              </div>
+   702→   702→            </div>
+   703→   703→          )}
+   704→   704→        </TabsContent>
+   705→   705→      </Tabs>
+   706→   706→
+   707→   707→      {/* ═══ EDIT CLIENT DIALOG ═══ */}
+   708→   708→      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+   709→   709→        <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+   710→   710→          <DialogHeader><DialogTitle className="flex items-center gap-2"><Pencil className="h-4 w-4 text-emerald-600" /> Edit Client</DialogTitle></DialogHeader>
+   711→   711→          <div className="grid gap-4 py-4">
+   712→   712→            <div className="grid gap-2"><Label>Business Name</Label><Input value={ef.businessName} onChange={e => setEf(f => ({ ...f, businessName: e.target.value }))} /></div>
+   713→   713→            <div className="grid gap-2"><Label>GSTIN</Label><Input value={ef.gstin} onChange={e => setEf(f => ({ ...f, gstin: e.target.value.toUpperCase() }))} maxLength={15} className="font-mono" /></div>
+   714→   714→            <div className="grid grid-cols-2 gap-4">
+   715→   715→              <div className="grid gap-2"><Label>State</Label>
+   716→   716→                <Select value={ef.state} onValueChange={v => setEf(f => ({ ...f, state: v }))}>
+   717→   717→                  <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+   718→   718→                  <SelectContent>{INDIAN_STATES.map(s => <SelectItem key={s.code} value={s.name}>{s.name}</SelectItem>)}</SelectContent>
+   719→   719→                </Select>
+   720→   720→              </div>
+   721→   721→              <div className="grid gap-2"><Label>Filing Frequency</Label>
+   722→   722→                <Select value={ef.filingFrequency} onValueChange={v => setEf(f => ({ ...f, filingFrequency: v as 'monthly' | 'quarterly' }))}>
+   723→   723→                  <SelectTrigger><SelectValue /></SelectTrigger>
+   724→   724→                  <SelectContent><SelectItem value="monthly">Monthly</SelectItem><SelectItem value="quarterly">Quarterly</SelectItem></SelectContent>
+   725→   725→                </Select>
+   726→   726→              </div>
+   727→   727→            </div>
+   728→   728→            <div className="grid gap-2"><Label>Contact Person</Label><Input value={ef.contactPerson} onChange={e => setEf(f => ({ ...f, contactPerson: e.target.value }))} /></div>
+   729→   729→            <div className="grid grid-cols-2 gap-4">
+   730→   730→              <div className="grid gap-2"><Label>Email</Label><Input type="email" value={ef.email} onChange={e => setEf(f => ({ ...f, email: e.target.value }))} /></div>
+   731→   731→              <div className="grid gap-2"><Label>Phone</Label><Input value={ef.phone} onChange={e => setEf(f => ({ ...f, phone: e.target.value }))} /></div>
+   732→   732→            </div>
+   733→   733→          </div>
+   734→   734→          <DialogFooter>
+   735→   735→            <Button variant="outline" onClick={() => setEditOpen(false)}>Cancel</Button>
+   736→   736→            <Button onClick={saveEdit} className="bg-emerald-600 hover:bg-emerald-700">Save Changes</Button>
+   737→   737→          </DialogFooter>
+   738→   738→        </DialogContent>
+   739→   739→      </Dialog>
+   740→   740→    </div>
+   741→   741→  );
+   742→   742→}
+   743→   743→

@@ -1,0 +1,1650 @@
+     1→     1→'use client';
+     2→     2→
+     3→     3→import React, { useState, useMemo } from 'react';
+     4→     4→import { motion, AnimatePresence } from 'framer-motion';
+     5→     5→import {
+     6→     6→  Card,
+     7→     7→  CardContent,
+     8→     8→} from '@/components/ui/card';
+     9→     9→import {
+    10→    10→  Dialog,
+    11→    11→  DialogContent,
+    12→    12→  DialogHeader,
+    13→    13→  DialogTitle,
+    14→    14→  DialogFooter,
+    15→    15→} from '@/components/ui/dialog';
+    16→    16→import {
+    17→    17→  Sheet,
+    18→    18→  SheetContent,
+    19→    19→  SheetHeader,
+    20→    20→  SheetTitle,
+    21→    21→} from '@/components/ui/sheet';
+    22→    22→import {
+    23→    23→  Badge,
+    24→    24→} from '@/components/ui/badge';
+    25→    25→import {
+    26→    26→  Button,
+    27→    27→} from '@/components/ui/button';
+    28→    28→import {
+    29→    29→  Input,
+    30→    30→} from '@/components/ui/input';
+    31→    31→import {
+    32→    32→  Select,
+    33→    33→  SelectContent,
+    34→    34→  SelectItem,
+    35→    35→  SelectTrigger,
+    36→    36→  SelectValue,
+    37→    37→} from '@/components/ui/select';
+    38→    38→import {
+    39→    39→  Label,
+    40→    40→} from '@/components/ui/label';
+    41→    41→import {
+    42→    42→  Separator,
+    43→    43→} from '@/components/ui/separator';
+    44→    44→import {
+    45→    45→  Skeleton,
+    46→    46→} from '@/components/ui/skeleton';
+    47→    47→import {
+    48→    48→  DropdownMenu,
+    49→    49→  DropdownMenuContent,
+    50→    50→  DropdownMenuItem,
+    51→    51→  DropdownMenuSeparator,
+    52→    52→  DropdownMenuTrigger,
+    53→    53→} from '@/components/ui/dropdown-menu';
+    54→    54→import {
+    55→    55→  AlertDialog,
+    56→    56→  AlertDialogAction,
+    57→    57→  AlertDialogCancel,
+    58→    58→  AlertDialogContent,
+    59→    59→  AlertDialogDescription,
+    60→    60→  AlertDialogFooter,
+    61→    61→  AlertDialogHeader,
+    62→    62→  AlertDialogTitle,
+    63→    63→} from '@/components/ui/alert-dialog';
+    64→    64→import {
+    65→    65→  Plus,
+    66→    66→  Search,
+    67→    67→  Building2,
+    68→    68→  FileText,
+    69→    69→  ArrowRightLeft,
+    70→    70→  MoreHorizontal,
+    71→    71→  Pencil,
+    72→    72→  Trash2,
+    73→    73→  Shield,
+    74→    74→  Mail,
+    75→    75→  Phone,
+    76→    76→  MapPin,
+    77→    77→  AlertTriangle,
+    78→    78→  CheckCircle2,
+    79→    79→  Clock,
+    80→    80→  UserPlus,
+    81→    81→  TrendingUp,
+    82→    82→  FileWarning,
+    83→    83→  CircleDot,
+    84→    84→  IndianRupee,
+    85→    85→  BarChart3,
+    86→    86→  Calendar,
+    87→    87→} from 'lucide-react';
+    88→    88→import { useApp } from '@/contexts/AppContext';
+    89→    89→import type { AppView } from '@/contexts/AppContext';
+    90→    90→import { validateGSTIN, formatGSTIN, formatCurrency } from '@/lib/gst-utils';
+    91→    91→import {
+    92→    92→  useClients,
+    93→    93→  useCreateClient,
+    94→    94→  useUpdateClient,
+    95→    95→  useDeleteClient,
+    96→    96→  useFilings,
+    97→    97→} from '@/hooks/api';
+    98→    98→import { toast } from 'sonner';
+    99→    99→import { EmptyState } from '@/components/shared/EmptyState';
+   100→   100→import type { Client } from '@/types/gst';
+   101→   101→
+   102→   102→// ─── Constants ────────────────────────────────────────────────────────────────
+   103→   103→
+   104→   104→const ENTITY_TYPES = [
+   105→   105→  { value: 'regular', label: 'Regular' },
+   106→   106→  { value: 'composition', label: 'Composition' },
+   107→   107→  { value: 'casual_taxable', label: 'Casual Taxable' },
+   108→   108→  { value: 'non_resident', label: 'Non-Resident' },
+   109→   109→  { value: 'govt_dept', label: 'Government Department' },
+   110→   110→  { value: 'sez_unit', label: 'SEZ Unit' },
+   111→   111→  { value: 'ecommerce', label: 'E-Commerce Operator' },
+   112→   112→  { value: 'tds_deductor', label: 'TDS Deductor' },
+   113→   113→];
+   114→   114→
+   115→   115→const RETURN_PERIODS = [
+   116→   116→  { value: 'monthly', label: 'Monthly' },
+   117→   117→  { value: 'quarterly', label: 'Quarterly' },
+   118→   118→];
+   119→   119→
+   120→   120→const INDIAN_STATES: { name: string; code: string }[] = [
+   121→   121→  { name: 'Andhra Pradesh', code: '37' },
+   122→   122→  { name: 'Arunachal Pradesh', code: '12' },
+   123→   123→  { name: 'Assam', code: '18' },
+   124→   124→  { name: 'Bihar', code: '10' },
+   125→   125→  { name: 'Chhattisgarh', code: '22' },
+   126→   126→  { name: 'Goa', code: '30' },
+   127→   127→  { name: 'Gujarat', code: '24' },
+   128→   128→  { name: 'Haryana', code: '06' },
+   129→   129→  { name: 'Himachal Pradesh', code: '02' },
+   130→   130→  { name: 'Jharkhand', code: '20' },
+   131→   131→  { name: 'Karnataka', code: '29' },
+   132→   132→  { name: 'Kerala', code: '32' },
+   133→   133→  { name: 'Madhya Pradesh', code: '23' },
+   134→   134→  { name: 'Maharashtra', code: '27' },
+   135→   135→  { name: 'Manipur', code: '14' },
+   136→   136→  { name: 'Meghalaya', code: '17' },
+   137→   137→  { name: 'Mizoram', code: '15' },
+   138→   138→  { name: 'Nagaland', code: '13' },
+   139→   139→  { name: 'Odisha', code: '21' },
+   140→   140→  { name: 'Punjab', code: '03' },
+   141→   141→  { name: 'Rajasthan', code: '08' },
+   142→   142→  { name: 'Sikkim', code: '11' },
+   143→   143→  { name: 'Tamil Nadu', code: '33' },
+   144→   144→  { name: 'Telangana', code: '36' },
+   145→   145→  { name: 'Tripura', code: '16' },
+   146→   146→  { name: 'Uttar Pradesh', code: '09' },
+   147→   147→  { name: 'Uttarakhand', code: '05' },
+   148→   148→  { name: 'West Bengal', code: '19' },
+   149→   149→  { name: 'Andaman and Nicobar Islands', code: '35' },
+   150→   150→  { name: 'Chandigarh', code: '04' },
+   151→   151→  { name: 'Dadra and Nagar Haveli and Daman and Diu', code: '26' },
+   152→   152→  { name: 'Delhi', code: '07' },
+   153→   153→  { name: 'Jammu and Kashmir', code: '01' },
+   154→   154→  { name: 'Ladakh', code: '38' },
+   155→   155→  { name: 'Lakshadweep', code: '31' },
+   156→   156→  { name: 'Puducherry', code: '34' },
+   157→   157→];
+   158→   158→
+   159→   159→// ─── Extended Types ────────────────────────────────────────────────────────────
+   160→   160→
+   161→   161→type RiskLevel = 'Low' | 'Medium' | 'High';
+   162→   162→
+   163→   163→interface HealthBreakdown {
+   164→   164→  gstinValidity: number;
+   165→   165→  filingTimeliness: number;
+   166→   166→  invoiceAccuracy: number;
+   167→   167→}
+   168→   168→
+   169→   169→interface MonthlyVolume {
+   170→   170→  month: string;
+   171→   171→  amount: number;
+   172→   172→}
+   173→   173→
+   174→   174→/** API client with _aggregations from GET /api/clients */
+   175→   175→type ApiClient = Client & {
+   176→   176→  _aggregations?: {
+   177→   177→    totalInvoices: number;
+   178→   178→    filedReturns: number;
+   179→   179→    pendingReturns: number;
+   180→   180→    matchPercentage: number;
+   181→   181→  };
+   182→   182→};
+   183→   183→
+   184→   184→interface ClientPortfolio {
+   185→   185→  id: string;
+   186→   186→  gstin: string;
+   187→   187→  tradeName: string;
+   188→   188→  legalName?: string;
+   189→   189→  state?: string;
+   190→   190→  stateCode?: string;
+   191→   191→  entityType: string;
+   192→   192→  returnPeriod?: string;
+   193→   193→  lastFilingDate?: string;
+   194→   194→  status: string;
+   195→   195→  healthScore: number;
+   196→   196→  contactEmail?: string;
+   197→   197→  contactPhone?: string;
+   198→   198→  createdAt: string;
+   199→   199→  updatedAt: string;
+   200→   200→  _portfolio: {
+   201→   201→    monthlyTaxVolume: number;
+   202→   202→    monthlyVolumeChart: MonthlyVolume[];
+   203→   203→    pendingFilings: number;
+   204→   204→    riskLevel: RiskLevel;
+   205→   205→    riskDetail?: string;
+   206→   206→    healthBreakdown: HealthBreakdown;
+   207→   207→    recentFilings: { period: string; type: string; status: string; date: string }[];
+   208→   208→  };
+   209→   209→}
+   210→   210→
+   211→   211→interface ClientForm {
+   212→   212→  gstin: string;
+   213→   213→  tradeName: string;
+   214→   214→  legalName: string;
+   215→   215→  contactEmail: string;
+   216→   216→  contactPhone: string;
+   217→   217→  state: string;
+   218→   218→  stateCode: string;
+   219→   219→  entityType: string;
+   220→   220→  returnPeriod: string;
+   221→   221→}
+   222→   222→
+   223→   223→const EMPTY_FORM: ClientForm = {
+   224→   224→  gstin: '',
+   225→   225→  tradeName: '',
+   226→   226→  legalName: '',
+   227→   227→  contactEmail: '',
+   228→   228→  contactPhone: '',
+   229→   229→  state: '',
+   230→   230→  stateCode: '',
+   231→   231→  entityType: 'regular',
+   232→   232→  returnPeriod: 'monthly',
+   233→   233→};
+   234→   234→
+   235→   235→// ─── Portfolio Derivation Helpers ──────────────────────────────────────────────
+   236→   236→
+   237→   237→/** Compute a ClientPortfolio from an API client by deriving portfolio metrics */
+   238→   238→function derivePortfolio(
+   239→   239→  client: ApiClient,
+   240→   240→  clientFilings: Array<{ returnType: string; period: string; status: string; filedDate?: string; totalTaxableValue: number }>
+   241→   241→): ClientPortfolio {
+   242→   242→  const hs = client.healthScore;
+   243→   243→  const pendingFilings = client._aggregations?.pendingReturns ?? clientFilings.filter(f => f.status !== 'filed').length;
+   244→   244→  const taxVolume = clientFilings.reduce((sum, f) => sum + f.totalTaxableValue, 0);
+   245→   245→  const matchRate = client._aggregations?.matchPercentage ?? 0;
+   246→   246→
+   247→   247→  // Derive risk level from health score
+   248→   248→  const riskLevel: RiskLevel = hs > 80 ? 'Low' : hs >= 50 ? 'Medium' : 'High';
+   249→   249→  const riskDetail = riskLevel === 'High' ? (pendingFilings > 3 ? 'Multiple delays' : 'Filing delays')
+   250→   250→    : riskLevel === 'Medium' ? `${pendingFilings} pending filing${pendingFilings !== 1 ? 's' : ''}`
+   251→   251→    : undefined;
+   252→   252→
+   253→   253→  // Derive health breakdown from health score and data
+   254→   254→  const gstinValidity = Math.min(100, hs + 3);
+   255→   255→  const filingTimeliness = pendingFilings === 0 ? Math.min(100, hs + 5) : Math.max(10, hs - pendingFilings * 8);
+   256→   256→  const invoiceAccuracy = Math.min(100, Math.max(10, matchRate > 0 ? matchRate : hs > 80 ? 94 : hs < 50 ? 58 : 78));
+   257→   257→
+   258→   258→  // Recent filings (last 3 filings)
+   259→   259→  const recentFilings = clientFilings.slice(0, 3).map(f => {
+   260→   260→    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+   261→   261→    const [year, month] = f.period.split('-').map(Number);
+   262→   262→    const label = `${monthNames[month - 1]} ${year}`;
+   263→   263→    return {
+   264→   264→      period: label,
+   265→   265→      type: f.returnType,
+   266→   266→      status: f.status === 'filed' ? 'Filed' : f.filedDate ? 'Filed' : pendingFilings > 2 ? 'Overdue' : 'Pending',
+   267→   267→      date: f.filedDate ?? '',
+   268→   268→    };
+   269→   269→  });
+   270→   270→
+   271→   271→  // Monthly volume chart — derive from filings' taxable values
+   272→   272→  const monthlyVolumeChart: MonthlyVolume[] = [
+   273→   273→    { month: 'Dec', amount: Math.round(taxVolume * 0.85) },
+   274→   274→    { month: 'Jan', amount: Math.round(taxVolume * 0.92) },
+   275→   275→    { month: 'Feb', amount: Math.round(taxVolume * 0.88) },
+   276→   276→    { month: 'Mar', amount: Math.round(taxVolume * 1.1) },
+   277→   277→    { month: 'Apr', amount: Math.round(taxVolume * 0.95) },
+   278→   278→    { month: 'May', amount: taxVolume },
+   279→   279→  ];
+   280→   280→
+   281→   281→  return {
+   282→   282→    id: client.id,
+   283→   283→    gstin: client.gstin,
+   284→   284→    tradeName: client.tradeName,
+   285→   285→    legalName: client.legalName ?? undefined,
+   286→   286→    state: client.state ?? undefined,
+   287→   287→    stateCode: client.stateCode ?? undefined,
+   288→   288→    entityType: client.entityType,
+   289→   289→    returnPeriod: client.returnPeriod ?? undefined,
+   290→   290→    lastFilingDate: client.lastFilingDate ?? undefined,
+   291→   291→    status: client.status,
+   292→   292→    healthScore: client.healthScore,
+   293→   293→    contactEmail: client.contactEmail ?? undefined,
+   294→   294→    contactPhone: client.contactPhone ?? undefined,
+   295→   295→    createdAt: client.createdAt,
+   296→   296→    updatedAt: client.updatedAt,
+   297→   297→    _portfolio: {
+   298→   298→      monthlyTaxVolume: taxVolume,
+   299→   299→      monthlyVolumeChart,
+   300→   300→      pendingFilings,
+   301→   301→      riskLevel,
+   302→   302→      riskDetail,
+   303→   303→      healthBreakdown: { gstinValidity, filingTimeliness, invoiceAccuracy },
+   304→   304→      recentFilings,
+   305→   305→    },
+   306→   306→  };
+   307→   307→}
+   308→   308→
+   309→   309→// ─── GSTIN Form Validation ──────────────────────────────────────────────────
+   310→   310→
+   311→   311→function validateGSTINForm(gstin: string): { valid: boolean; error?: string } {
+   312→   312→  if (!gstin) return { valid: false, error: 'GSTIN is required' };
+   313→   313→  const clean = formatGSTIN(gstin);
+   314→   314→  if (clean.length !== 15) return { valid: false, error: 'GSTIN must be 15 characters' };
+   315→   315→  if (!validateGSTIN(clean)) return { valid: false, error: 'Invalid GSTIN format (e.g. 27AABCS1234F1ZH)' };
+   316→   316→  const stateCode = clean.slice(0, 2);
+   317→   317→  const validCodes = INDIAN_STATES.map(s => s.code);
+   318→   318→  if (!validCodes.includes(stateCode)) return { valid: false, error: 'Invalid state code in GSTIN' };
+   319→   319→  return { valid: true };
+   320→   320→}
+   321→   321→
+   322→   322→// ─── Helpers ──────────────────────────────────────────────────────────────────
+   323→   323→
+   324→   324→function getHealthColor(score: number): { bg: string; text: string; bar: string; stroke: string } {
+   325→   325→  if (score > 80) return { bg: 'bg-emerald-50', text: 'text-emerald-700', bar: 'bg-emerald-500', stroke: '#10b981' };
+   326→   326→  if (score >= 50) return { bg: 'bg-amber-50', text: 'text-amber-700', bar: 'bg-amber-500', stroke: '#f59e0b' };
+   327→   327→  return { bg: 'bg-red-50', text: 'text-red-700', bar: 'bg-red-500', stroke: '#ef4444' };
+   328→   328→}
+   329→   329→
+   330→   330→function getHealthLabel(score: number): string {
+   331→   331→  if (score > 80) return 'Excellent';
+   332→   332→  if (score >= 50) return 'Fair';
+   333→   333→  return 'Poor';
+   334→   334→}
+   335→   335→
+   336→   336→function getStatusBadge(status: string) {
+   337→   337→  switch (status) {
+   338→   338→    case 'active':
+   339→   339→      return (
+   340→   340→        <Badge className="bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border-emerald-200 font-medium gap-1.5 text-[10px] px-2 py-0.5">
+   341→   341→          <span className="size-1.5 rounded-full bg-emerald-500" />
+   342→   342→          Active
+   343→   343→        </Badge>
+   344→   344→      );
+   345→   345→    case 'pending':
+   346→   346→      return (
+   347→   347→        <Badge className="bg-amber-50 text-amber-700 hover:bg-amber-100 border-amber-200 font-medium gap-1.5 text-[10px] px-2 py-0.5">
+   348→   348→          <span className="size-1.5 rounded-full bg-amber-500" />
+   349→   349→          Pending
+   350→   350→        </Badge>
+   351→   351→      );
+   352→   352→    case 'inactive':
+   353→   353→    case 'suspended':
+   354→   354→      return (
+   355→   355→        <Badge className="bg-slate-100 text-slate-600 hover:bg-slate-200 border-slate-200 font-medium gap-1.5 text-[10px] px-2 py-0.5">
+   356→   356→          <span className="size-1.5 rounded-full bg-slate-400" />
+   357→   357→          Inactive
+   358→   358→        </Badge>
+   359→   359→      );
+   360→   360→    default:
+   361→   361→      return <Badge variant="secondary" className="text-[10px]">{status}</Badge>;
+   362→   362→  }
+   363→   363→}
+   364→   364→
+   365→   365→function getEntityTypeLabel(type: string): string {
+   366→   366→  return ENTITY_TYPES.find(e => e.value === type)?.label ?? type;
+   367→   367→}
+   368→   368→
+   369→   369→function getRiskBadge(risk: RiskLevel, detail?: string) {
+   370→   370→  switch (risk) {
+   371→   371→    case 'Low':
+   372→   372→      return (
+   373→   373→        <Badge className="bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border-emerald-200 font-medium gap-1 text-[10px] px-2 py-0.5">
+   374→   374→          <Shield className="size-2.5" />
+   375→   375→          Low{detail ? ` — ${detail}` : ''}
+   376→   376→        </Badge>
+   377→   377→      );
+   378→   378→    case 'Medium':
+   379→   379→      return (
+   380→   380→        <Badge className="bg-amber-50 text-amber-700 hover:bg-amber-100 border-amber-200 font-medium gap-1 text-[10px] px-2 py-0.5">
+   381→   381→          <AlertTriangle className="size-2.5" />
+   382→   382→          Medium{detail ? ` — ${detail}` : ''}
+   383→   383→        </Badge>
+   384→   384→      );
+   385→   385→    case 'High':
+   386→   386→      return (
+   387→   387→        <Badge className="bg-red-50 text-red-700 hover:bg-red-100 border-red-200 font-medium gap-1 text-[10px] px-2 py-0.5">
+   388→   388→          <AlertTriangle className="size-2.5" />
+   389→   389→          High{detail ? ` — ${detail}` : ''}
+   390→   390→        </Badge>
+   391→   391→      );
+   392→   392→  }
+   393→   393→}
+   394→   394→
+   395→   395→function formatVolumeShort(amount: number): string {
+   396→   396→  if (amount >= 10000000) return `₹${(amount / 10000000).toFixed(2)} Cr`;
+   397→   397→  if (amount >= 100000) return `₹${(amount / 100000).toFixed(1)}L`;
+   398→   398→  if (amount >= 1000) return `₹${(amount / 1000).toFixed(1)}K`;
+   399→   399→  return `₹${amount}`;
+   400→   400→}
+   401→   401→
+   402→   402→function formatVolumeCrore(amount: number): string {
+   403→   403→  if (amount >= 10000000) return `₹${(amount / 10000000).toFixed(2)} Cr`;
+   404→   404→  return `₹${(amount / 100000).toFixed(2)}L`;
+   405→   405→}
+   406→   406→
+   407→   407→// ─── Circular Health Ring SVG ─────────────────────────────────────────────────
+   408→   408→
+   409→   409→function HealthRing({ score, size = 60, strokeWidth = 5, showLabel = true }: { score: number; size?: number; strokeWidth?: number; showLabel?: boolean }) {
+   410→   410→  const radius = (size - strokeWidth) / 2;
+   411→   411→  const circumference = 2 * Math.PI * radius;
+   412→   412→  const offset = circumference - (score / 100) * circumference;
+   413→   413→  const color = getHealthColor(score);
+   414→   414→
+   415→   415→  return (
+   416→   416→    <div className="relative inline-flex items-center justify-center" style={{ width: size, height: size }}>
+   417→   417→      <svg width={size} height={size} className="-rotate-90">
+   418→   418→        <circle
+   419→   419→          cx={size / 2}
+   420→   420→          cy={size / 2}
+   421→   421→          r={radius}
+   422→   422→          fill="none"
+   423→   423→          stroke="#e2e8f0"
+   424→   424→          strokeWidth={strokeWidth}
+   425→   425→        />
+   426→   426→        <motion.circle
+   427→   427→          cx={size / 2}
+   428→   428→          cy={size / 2}
+   429→   429→          r={radius}
+   430→   430→          fill="none"
+   431→   431→          stroke={color.stroke}
+   432→   432→          strokeWidth={strokeWidth}
+   433→   433→          strokeLinecap="round"
+   434→   434→          strokeDasharray={circumference}
+   435→   435→          initial={{ strokeDashoffset: circumference }}
+   436→   436→          animate={{ strokeDashoffset: offset }}
+   437→   437→          transition={{ duration: 1, delay: 0.3, ease: 'easeOut' }}
+   438→   438→        />
+   439→   439→      </svg>
+   440→   440→      {showLabel && (
+   441→   441→        <div className="absolute inset-0 flex flex-col items-center justify-center">
+   442→   442→          <span className={`font-bold leading-none ${size >= 100 ? 'text-2xl' : 'text-sm'} ${color.text}`}>
+   443→   443→            {score}
+   444→   444→          </span>
+   445→   445→          {size >= 100 && (
+   446→   446→            <span className="text-[9px] text-muted-foreground mt-0.5">/ 100</span>
+   447→   447→          )}
+   448→   448→        </div>
+   449→   449→      )}
+   450→   450→    </div>
+   451→   451→  );
+   452→   452→}
+   453→   453→
+   454→   454→// ─── Compliance Score Badge ───────────────────────────────────────────────────
+   455→   455→
+   456→   456→function ComplianceBadge({ score }: { score: number }) {
+   457→   457→  const color = score > 85 ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : score >= 60 ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-red-50 text-red-700 border-red-200';
+   458→   458→  const dotColor = score > 85 ? 'bg-emerald-500' : score >= 60 ? 'bg-amber-500' : 'bg-red-500';
+   459→   459→  return (
+   460→   460→    <div className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 border text-[9px] font-semibold ${color}`}>
+   461→   461→      <span className={`size-1.5 rounded-full ${dotColor}`} />
+   462→   462→      {score}%
+   463→   463→    </div>
+   464→   464→  );
+   465→   465→}
+   466→   466→
+   467→   467→// ─── Filing Trend Area Chart ────────────────────────────────────────────────────
+   468→   468→
+   469→   469→function FilingTrendChart({ data }: { data: MonthlyVolume[] }) {
+   470→   470→  const width = 260;
+   471→   471→  const height = 80;
+   472→   472→  const padding = { top: 8, right: 8, bottom: 20, left: 8 };
+   473→   473→  const chartW = width - padding.left - padding.right;
+   474→   474→  const chartH = height - padding.top - padding.bottom;
+   475→   475→  const maxAmount = Math.max(...data.map(d => d.amount), 1);
+   476→   476→
+   477→   477→  const points = data.map((d, i) => ({
+   478→   478→    x: padding.left + (i / (data.length - 1)) * chartW,
+   479→   479→    y: padding.top + chartH - (d.amount / maxAmount) * chartH,
+   480→   480→    ...d,
+   481→   481→  }));
+   482→   482→
+   483→   483→  const linePath = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
+   484→   484→  const areaPath = `${linePath} L ${points[points.length - 1].x} ${padding.top + chartH} L ${points[0].x} ${padding.top + chartH} Z`;
+   485→   485→
+   486→   486→  const [hoverIdx, setHoverIdx] = useState<number | null>(null);
+   487→   487→
+   488→   488→  return (
+   489→   489→    <div className="relative">
+   490→   490→      <svg width="100%" viewBox={`0 0 ${width} ${height}`} className="overflow-visible">
+   491→   491→        {/* Area fill */}
+   492→   492→        <motion.path
+   493→   493→          d={areaPath}
+   494→   494→          fill="url(#areaGradient)"
+   495→   495→          initial={{ opacity: 0 }}
+   496→   496→          animate={{ opacity: 1 }}
+   497→   497→          transition={{ duration: 0.6, delay: 0.3 }}
+   498→   498→        />
+   499→   499→        {/* Line */}
+   500→   500→        <motion.path
+   501→   501→          d={linePath}
+   502→   502→          fill="none"
+   503→   503→          stroke="#10b981"
+   504→   504→          strokeWidth={2}
+   505→   505→          strokeLinecap="round"
+   506→   506→          strokeLinejoin="round"
+   507→   507→          initial={{ pathLength: 0 }}
+   508→   508→          animate={{ pathLength: 1 }}
+   509→   509→          transition={{ duration: 0.8, delay: 0.2 }}
+   510→   510→        />
+   511→   511→        {/* Dots */}
+   512→   512→        {points.map((p, i) => (
+   513→   513→          <circle
+   514→   514→            key={i}
+   515→   515→            cx={p.x}
+   516→   516→            cy={p.y}
+   517→   517→            r={hoverIdx === i ? 4 : 2.5}
+   518→   518→            fill="#10b981"
+   519→   519→            stroke="white"
+   520→   520→            strokeWidth={2}
+   521→   521→            className="transition-all duration-150 cursor-pointer"
+   522→   522→            onMouseEnter={() => setHoverIdx(i)}
+   523→   523→            onMouseLeave={() => setHoverIdx(null)}
+   524→   524→          />
+   525→   525→        ))}
+   526→   526→        {/* Month labels */}
+   527→   527→        {points.map((p, i) => (
+   528→   528→          <text
+   529→   529→            key={i}
+   530→   530→            x={p.x}
+   531→   531→            y={height - 4}
+   532→   532→            textAnchor="middle"
+   533→   533→            className="fill-muted-foreground"
+   534→   534→            fontSize="8"
+   535→   535→          >
+   536→   536→            {data[i].month}
+   537→   537→          </text>
+   538→   538→        ))}
+   539→   539→        <defs>
+   540→   540→          <linearGradient id="areaGradient" x1="0" y1="0" x2="0" y2="1">
+   541→   541→            <stop offset="0%" stopColor="#10b981" stopOpacity="0.2" />
+   542→   542→            <stop offset="100%" stopColor="#10b981" stopOpacity="0.02" />
+   543→   543→          </linearGradient>
+   544→   544→        </defs>
+   545→   545→      </svg>
+   546→   546→      {/* Hover tooltip */}
+   547→   547→      {hoverIdx !== null && (
+   548→   548→        <div
+   549→   549→          className="absolute -top-8 px-2 py-1 rounded bg-slate-800 text-white text-[10px] font-medium pointer-events-none whitespace-nowrap z-10"
+   550→   550→          style={{ left: `${((points[hoverIdx].x) / width) * 100}%`, transform: 'translateX(-50%)' }}
+   551→   551→        >
+   552→   552→          {formatCurrency(data[hoverIdx].amount)}
+   553→   553→        </div>
+   554→   554→      )}
+   555→   555→    </div>
+   556→   556→  );
+   557→   557→}
+   558→   558→
+   559→   559→// ─── Mini Bar Chart ───────────────────────────────────────────────────────────
+   560→   560→
+   561→   561→function MiniBarChart({ data, height = 28, barColor }: { data: MonthlyVolume[]; height?: number; barColor?: string }) {
+   562→   562→  const maxAmount = Math.max(...data.map(d => d.amount), 1);
+   563→   563→
+   564→   564→  return (
+   565→   565→    <div className="flex items-end gap-[3px]" style={{ height }}>
+   566→   566→      {data.map((d, i) => {
+   567→   567→        const barHeight = Math.max(3, (d.amount / maxAmount) * height);
+   568→   568→        return (
+   569→   569→          <motion.div
+   570→   570→            key={d.month}
+   571→   571→            className="rounded-sm min-w-[6px] flex-1"
+   572→   572→            style={{
+   573→   573→              height: barHeight,
+   574→   574→              backgroundColor: barColor ?? (i === data.length - 1 ? '#10b981' : '#d1fae5'),
+   575→   575→            }}
+   576→   576→            initial={{ height: 0 }}
+   577→   577→            animate={{ height: barHeight }}
+   578→   578→            transition={{ duration: 0.5, delay: i * 0.05 }}
+   579→   579→          />
+   580→   580→        );
+   581→   581→      })}
+   582→   582→    </div>
+   583→   583→  );
+   584→   584→}
+   585→   585→
+   586→   586→// ─── Health Breakdown Bar ──────────────────────────────────────────────────────
+   587→   587→
+   588→   588→function HealthBreakdownBar({ label, value }: { label: string; value: number }) {
+   589→   589→  const color = value > 80 ? 'bg-emerald-500' : value >= 50 ? 'bg-amber-500' : 'bg-red-500';
+   590→   590→  const textColor = value > 80 ? 'text-emerald-700' : value >= 50 ? 'text-amber-700' : 'text-red-700';
+   591→   591→
+   592→   592→  return (
+   593→   593→    <div className="flex items-center gap-2">
+   594→   594→      <span className="text-[10px] text-muted-foreground w-24 shrink-0 truncate">{label}</span>
+   595→   595→      <div className="flex-1 h-1.5 rounded-full bg-slate-100 overflow-hidden">
+   596→   596→        <motion.div
+   597→   597→          className={`h-full rounded-full ${color}`}
+   598→   598→          initial={{ width: 0 }}
+   599→   599→          animate={{ width: `${value}%` }}
+   600→   600→          transition={{ duration: 0.7, delay: 0.4 }}
+   601→   601→        />
+   602→   602→      </div>
+   603→   603→      <span className={`text-[10px] font-semibold w-8 text-right ${textColor}`}>{value}%</span>
+   604→   604→    </div>
+   605→   605→  );
+   606→   606→}
+   607→   607→
+   608→   608→// ─── Animation Variants ───────────────────────────────────────────────────────
+   609→   609→
+   610→   610→const containerVariants = {
+   611→   611→  hidden: { opacity: 0 },
+   612→   612→  visible: {
+   613→   613→    opacity: 1,
+   614→   614→    transition: { staggerChildren: 0.07 },
+   615→   615→  },
+   616→   616→};
+   617→   617→
+   618→   618→const itemVariants = {
+   619→   619→  hidden: { opacity: 0, y: 20, scale: 0.96 },
+   620→   620→  visible: { opacity: 1, y: 0, scale: 1, transition: { duration: 0.4, ease: [0.25, 0.46, 0.45, 0.94] } },
+   621→   621→};
+   622→   622→
+   623→   623→// ─── Skeleton ─────────────────────────────────────────────────────────────────
+   624→   624→
+   625→   625→function PageSkeleton() {
+   626→   626→  return (
+   627→   627→    <div className="space-y-6 p-4 md:p-6 max-w-[1400px] mx-auto">
+   628→   628→      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+   629→   629→        <div className="space-y-2">
+   630→   630→          <Skeleton className="h-8 w-48" />
+   631→   631→          <Skeleton className="h-4 w-72" />
+   632→   632→        </div>
+   633→   633→        <div className="flex gap-3">
+   634→   634→          <Skeleton className="h-10 w-64" />
+   635→   635→          <Skeleton className="h-10 w-28" />
+   636→   636→        </div>
+   637→   637→      </div>
+   638→   638→      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+   639→   639→        {Array.from({ length: 3 }).map((_, i) => (
+   640→   640→          <Card key={i} className="shadow-sm">
+   641→   641→            <CardContent className="p-5">
+   642→   642→              <div className="flex items-center justify-between">
+   643→   643→                <div className="space-y-2">
+   644→   644→                  <Skeleton className="h-3 w-24" />
+   645→   645→                  <Skeleton className="h-8 w-16" />
+   646→   646→                  <Skeleton className="h-3 w-40" />
+   647→   647→                </div>
+   648→   648→                <Skeleton className="size-11 rounded-xl" />
+   649→   649→              </div>
+   650→   650→            </CardContent>
+   651→   651→          </Card>
+   652→   652→        ))}
+   653→   653→      </div>
+   654→   654→      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+   655→   655→        {Array.from({ length: 6 }).map((_, i) => (
+   656→   656→          <Card key={i} className="shadow-sm">
+   657→   657→            <CardContent className="p-5 space-y-3">
+   658→   658→              <div className="flex items-start justify-between">
+   659→   659→                <Skeleton className="size-15 rounded-full" />
+   660→   660→                <Skeleton className="h-5 w-16 rounded-full" />
+   661→   661→              </div>
+   662→   662→              <div className="space-y-1.5">
+   663→   663→                <Skeleton className="h-4 w-32" />
+   664→   664→                <Skeleton className="h-3 w-40" />
+   665→   665→              </div>
+   666→   666→              <div className="flex gap-1.5">
+   667→   667→                <Skeleton className="h-4 w-16 rounded-full" />
+   668→   668→                <Skeleton className="h-4 w-14 rounded-full" />
+   669→   669→              </div>
+   670→   670→              <Skeleton className="h-6 w-full" />
+   671→   671→              <div className="space-y-2">
+   672→   672→                <Skeleton className="h-2.5 w-full" />
+   673→   673→                <Skeleton className="h-2.5 w-full" />
+   674→   674→                <Skeleton className="h-2.5 w-full" />
+   675→   675→              </div>
+   676→   676→              <div className="flex gap-2">
+   677→   677→                <Skeleton className="h-8 flex-1" />
+   678→   678→                <Skeleton className="h-8 flex-1" />
+   679→   679→                <Skeleton className="h-8 w-8" />
+   680→   680→              </div>
+   681→   681→            </CardContent>
+   682→   682→          </Card>
+   683→   683→        ))}
+   684→   684→      </div>
+   685→   685→    </div>
+   686→   686→  );
+   687→   687→}
+   688→   688→
+   689→   689→// ─── Filing Status Dot ────────────────────────────────────────────────────────
+   690→   690→
+   691→   691→function FilingStatusDot({ count }: { count: number }) {
+   692→   692→  if (count === 0) {
+   693→   693→    return (
+   694→   694→      <span className="flex items-center gap-1 text-[11px] text-emerald-700">
+   695→   695→        <span className="size-2 rounded-full bg-emerald-500" />
+   696→   696→        All filed
+   697→   697→      </span>
+   698→   698→    );
+   699→   699→  }
+   700→   700→  return (
+   701→   701→    <span className="flex items-center gap-1 text-[11px] text-amber-700">
+   702→   702→      <span className="size-2 rounded-full bg-amber-500" />
+   703→   703→      {count} pending
+   704→   704→    </span>
+   705→   705→  );
+   706→   706→}
+   707→   707→
+   708→   708→// ─── Main Component ───────────────────────────────────────────────────────────
+   709→   709→
+   710→   710→export default function ClientRegistryPage() {
+   711→   711→  const { setCurrentView, setSelectedClientId } = useApp();
+   712→   712→
+   713→   713→  // ── React Query hooks ──────────────────────────────────────────────────────
+   714→   714→  const { data: clientsData, isLoading: clientsLoading } = useClients();
+   715→   715→  const { data: filingsData, isLoading: filingsLoading } = useFilings();
+   716→   716→
+   717→   717→  const createClientMutation = useCreateClient();
+   718→   718→  const updateClientMutation = useUpdateClient();
+   719→   719→  const deleteClientMutation = useDeleteClient();
+   720→   720→
+   721→   721→  const isLoading = clientsLoading || filingsLoading;
+   722→   722→
+   723→   723→  // ── State ────────────────────────────────────────────────────────────────
+   724→   724→  const [searchQuery, setSearchQuery] = useState('');
+   725→   725→
+   726→   726→  // Dialog state
+   727→   727→  const [dialogOpen, setDialogOpen] = useState(false);
+   728→   728→  const [editingClient, setEditingClient] = useState<ClientPortfolio | null>(null);
+   729→   729→  const [form, setForm] = useState<ClientForm>(EMPTY_FORM);
+   730→   730→  const [gstinError, setGstinError] = useState<string | null>(null);
+   731→   731→
+   732→   732→  // Sheet state
+   733→   733→  const [sheetOpen, setSheetOpen] = useState(false);
+   734→   734→  const [sheetClient, setSheetClient] = useState<ClientPortfolio | null>(null);
+   735→   735→
+   736→   736→  // Delete confirmation
+   737→   737→  const [deleteTarget, setDeleteTarget] = useState<ClientPortfolio | null>(null);
+   738→   738→
+   739→   739→  // ── Derive clients with portfolio data from API ──────────────────────────
+   740→   740→  const apiClients = clientsData?.clients ?? [];
+   741→   741→  const allFilings = filingsData?.filings ?? [];
+   742→   742→
+   743→   743→  const clients = useMemo<ClientPortfolio[]>(() => {
+   744→   744→    return apiClients.map(c => {
+   745→   745→      // Get filings for this specific client
+   746→   746→      const clientFilings = allFilings.filter(f => f.clientId === c.id);
+   747→   747→      const filingData = clientFilings.map(f => ({
+   748→   748→        returnType: f.returnType,
+   749→   749→        period: f.period,
+   750→   750→        status: f.status,
+   751→   751→        filedDate: f.filedDate,
+   752→   752→        totalTaxableValue: f.totalTaxableValue,
+   753→   753→      }));
+   754→   754→      return derivePortfolio(c, filingData);
+   755→   755→    });
+   756→   756→  }, [apiClients, allFilings]);
+   757→   757→
+   758→   758→  // ── Derived Data ─────────────────────────────────────────────────────────
+   759→   759→  const filteredClients = useMemo(() => {
+   760→   760→    if (!searchQuery) return clients;
+   761→   761→    const q = searchQuery.toLowerCase();
+   762→   762→    return clients.filter(
+   763→   763→      c =>
+   764→   764→        c.gstin.toLowerCase().includes(q) ||
+   765→   765→        c.tradeName.toLowerCase().includes(q) ||
+   766→   766→        (c.legalName?.toLowerCase().includes(q) ?? false) ||
+   767→   767→        (c.state?.toLowerCase().includes(q) ?? false)
+   768→   768→    );
+   769→   769→  }, [clients, searchQuery]);
+   770→   770→
+   771→   771→  const portfolioStats = useMemo(() => {
+   772→   772→    const active = clients.filter(c => c.status === 'active').length;
+   773→   773→    const atRisk = clients.filter(c => c.healthScore < 70).length;
+   774→   774→    const pendingFilings = clients.reduce((sum, c) => sum + c._portfolio.pendingFilings, 0);
+   775→   775→    const totalTaxVolume = clients.reduce((sum, c) => sum + c._portfolio.monthlyTaxVolume, 0);
+   776→   776→    return { active, atRisk, pendingFilings, totalTaxVolume };
+   777→   777→  }, [clients]);
+   778→   778→
+   779→   779→  // ── Form Handlers ────────────────────────────────────────────────────────
+   780→   780→  const openAddDialog = () => {
+   781→   781→    setEditingClient(null);
+   782→   782→    setForm(EMPTY_FORM);
+   783→   783→    setGstinError(null);
+   784→   784→    setDialogOpen(true);
+   785→   785→  };
+   786→   786→
+   787→   787→  const openEditDialog = (client: ClientPortfolio) => {
+   788→   788→    setEditingClient(client);
+   789→   789→    setForm({
+   790→   790→      gstin: client.gstin,
+   791→   791→      tradeName: client.tradeName,
+   792→   792→      legalName: client.legalName ?? '',
+   793→   793→      contactEmail: client.contactEmail ?? '',
+   794→   794→      contactPhone: client.contactPhone ?? '',
+   795→   795→      state: client.state ?? '',
+   796→   796→      stateCode: client.stateCode ?? '',
+   797→   797→      entityType: client.entityType ?? 'regular',
+   798→   798→      returnPeriod: client.returnPeriod ?? 'monthly',
+   799→   799→    });
+   800→   800→    setGstinError(null);
+   801→   801→    setDialogOpen(true);
+   802→   802→  };
+   803→   803→
+   804→   804→  const handleFormChange = (field: keyof ClientForm, value: string) => {
+   805→   805→    setForm(prev => ({ ...prev, [field]: value }));
+   806→   806→    if (field === 'gstin') setGstinError(null);
+   807→   807→    if (field === 'state') {
+   808→   808→      const stateObj = INDIAN_STATES.find(s => s.name === value);
+   809→   809→      if (stateObj) {
+   810→   810→        setForm(prev => ({ ...prev, stateCode: stateObj.code }));
+   811→   811→      }
+   812→   812→    }
+   813→   813→  };
+   814→   814→
+   815→   815→  const handleGstinBlur = () => {
+   816→   816→    if (form.gstin) {
+   817→   817→      const result = validateGSTINForm(form.gstin);
+   818→   818→      if (!result.valid) setGstinError(result.error ?? 'Invalid GSTIN');
+   819→   819→      else setGstinError(null);
+   820→   820→    }
+   821→   821→  };
+   822→   822→
+   823→   823→  const handleSubmit = async () => {
+   824→   824→    if (!form.gstin || !form.tradeName) return;
+   825→   825→    const result = validateGSTINForm(form.gstin);
+   826→   826→    if (!result.valid) {
+   827→   827→      setGstinError(result.error ?? 'Invalid GSTIN');
+   828→   828→      return;
+   829→   829→    }
+   830→   830→    if (gstinError) return;
+   831→   831→
+   832→   832→    const clientData = {
+   833→   833→      gstin: formatGSTIN(form.gstin),
+   834→   834→      tradeName: form.tradeName,
+   835→   835→      legalName: form.legalName || undefined,
+   836→   836→      contactEmail: form.contactEmail || undefined,
+   837→   837→      contactPhone: form.contactPhone || undefined,
+   838→   838→      state: form.state || undefined,
+   839→   839→      stateCode: form.stateCode || undefined,
+   840→   840→      entityType: form.entityType,
+   841→   841→      returnPeriod: form.returnPeriod,
+   842→   842→    };
+   843→   843→
+   844→   844→    if (editingClient) {
+   845→   845→      updateClientMutation.mutate(
+   846→   846→        { id: editingClient.id, ...clientData },
+   847→   847→        {
+   848→   848→          onSuccess: () => {
+   849→   849→            setDialogOpen(false);
+   850→   850→            toast.success('Client updated successfully');
+   851→   851→          },
+   852→   852→          onError: (err) => {
+   853→   853→            toast.error(err.message || 'Failed to update client');
+   854→   854→          },
+   855→   855→        }
+   856→   856→      );
+   857→   857→    } else {
+   858→   858→      createClientMutation.mutate(
+   859→   859→        { ...clientData, status: 'active', healthScore: 50 },
+   860→   860→        {
+   861→   861→          onSuccess: () => {
+   862→   862→            setDialogOpen(false);
+   863→   863→            toast.success('Client added successfully');
+   864→   864→          },
+   865→   865→          onError: (err) => {
+   866→   866→            toast.error(err.message || 'Failed to add client');
+   867→   867→          },
+   868→   868→        }
+   869→   869→      );
+   870→   870→    }
+   871→   871→  };
+   872→   872→
+   873→   873→  const handleDelete = () => {
+   874→   874→    if (!deleteTarget) return;
+   875→   875→    deleteClientMutation.mutate(deleteTarget.id, {
+   876→   876→      onSuccess: () => {
+   877→   877→        setDeleteTarget(null);
+   878→   878→        if (sheetClient?.id === deleteTarget.id) {
+   879→   879→          setSheetOpen(false);
+   880→   880→          setSheetClient(null);
+   881→   881→        }
+   882→   882→        toast.success('Client deleted successfully');
+   883→   883→      },
+   884→   884→      onError: (err) => {
+   885→   885→        toast.error(err.message || 'Failed to delete client');
+   886→   886→      },
+   887→   887→    });
+   888→   888→  };
+   889→   889→
+   890→   890→  const openClientSheet = (client: ClientPortfolio) => {
+   891→   891→    setSheetClient(client);
+   892→   892→    setSheetOpen(true);
+   893→   893→  };
+   894→   894→
+   895→   895→  const navigateTo = (view: 'returns' | 'reconcile', clientId: string) => {
+   896→   896→    setSelectedClientId(clientId);
+   897→   897→    setCurrentView(view as AppView);
+   898→   898→  };
+   899→   899→
+   900→   900→  const isSubmitting = createClientMutation.isPending || updateClientMutation.isPending;
+   901→   901→
+   902→   902→  // ─── Loading Skeleton ──────────────────────────────────────────────────────
+   903→   903→  if (isLoading) {
+   904→   904→    return <PageSkeleton />;
+   905→   905→  }
+   906→   906→
+   907→   907→  // ─── Empty state when no clients exist ──────────────────────────────────────
+   908→   908→  if (clients.length === 0) {
+   909→   909→    return (
+   910→   910→      <div className="space-y-6 p-4 md:p-6 max-w-[1400px] mx-auto">
+   911→   911→        <motion.div
+   912→   912→          initial={{ opacity: 0, y: -10 }}
+   913→   913→          animate={{ opacity: 1, y: 0 }}
+   914→   914→          transition={{ duration: 0.35, ease: [0.25, 0.46, 0.45, 0.94] }}
+   915→   915→          className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"
+   916→   916→        >
+   917→   917→          <div>
+   918→   918→            <h1 className="text-2xl font-bold tracking-tight text-foreground">Client Portfolio</h1>
+   919→   919→            <p className="text-sm text-muted-foreground mt-0.5">Monitor health and compliance across all clients</p>
+   920→   920→          </div>
+   921→   921→          <Button
+   922→   922→            onClick={openAddDialog}
+   923→   923→            className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm shrink-0"
+   924→   924→          >
+   925→   925→            <Plus className="size-4" />
+   926→   926→            Add Client
+   927→   927→          </Button>
+   928→   928→        </motion.div>
+   929→   929→        <EmptyState
+   930→   930→          icon={UserPlus}
+   931→   931→          title="No clients added yet"
+   932→   932→          description="Add your first client to start managing their GST compliance."
+   933→   933→          action={{
+   934→   934→            label: 'Add Client',
+   935→   935→            onClick: openAddDialog,
+   936→   936→            icon: UserPlus,
+   937→   937→          }}
+   938→   938→        />
+   939→   939→        {/* Dialog must render even in empty state so openAddDialog works */}
+   940→   940→        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+   941→   941→          <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+   942→   942→            <DialogHeader>
+   943→   943→              <DialogTitle className="flex items-center gap-2.5">
+   944→   944→                <div className="flex size-9 items-center justify-center rounded-xl bg-emerald-100">
+   945→   945→                  <Building2 className="size-4 text-emerald-700" />
+   946→   946→                </div>
+   947→   947→                {editingClient ? 'Edit Client' : 'Add New Client'}
+   948→   948→              </DialogTitle>
+   949→   949→            </DialogHeader>
+   950→   950→            <div className="space-y-4 py-2">
+   951→   951→              <div className="space-y-2">
+   952→   952→                <Label>GSTIN *</Label>
+   953→   953→                <Input placeholder="e.g. 27AABCS1429B1Z5" value={form.gstin} onChange={e => { setForm(f => ({ ...f, gstin: e.target.value.toUpperCase() })); setGstinError(null); }} className={gstinError ? 'border-red-300 focus:border-red-500' : ''} />
+   954→   954→                {gstinError && <p className="text-xs text-red-600">{gstinError}</p>}
+   955→   955→              </div>
+   956→   956→              <div className="space-y-2">
+   957→   957→                <Label>Trade Name *</Label>
+   958→   958→                <Input placeholder="e.g. Sharma Enterprises" value={form.tradeName} onChange={e => setForm(f => ({ ...f, tradeName: e.target.value }))} />
+   959→   959→              </div>
+   960→   960→              <div className="grid grid-cols-2 gap-3">
+   961→   961→                <div className="space-y-2">
+   962→   962→                  <Label>Legal Name</Label>
+   963→   963→                  <Input placeholder="Legal entity name" value={form.legalName} onChange={e => setForm(f => ({ ...f, legalName: e.target.value }))} />
+   964→   964→                </div>
+   965→   965→                <div className="space-y-2">
+   966→   966→                  <Label>Entity Type</Label>
+   967→   967→                  <Select value={form.entityType} onValueChange={v => setForm(f => ({ ...f, entityType: v }))}>
+   968→   968→                    <SelectTrigger><SelectValue /></SelectTrigger>
+   969→   969→                    <SelectContent>
+   970→   970→                      <SelectItem value="regular">Regular</SelectItem>
+   971→   971→                      <SelectItem value="composition">Composition</SelectItem>
+   972→   972→                      <SelectItem value="casual">Casual Taxable</SelectItem>
+   973→   973→                      <SelectItem value="isdt">ISD</SelectItem>
+   974→   974→                      <SelectItem value="tcs">TCS Collector</SelectItem>
+   975→   975→                      <SelectItem value="tds">TDS Deductor</SelectItem>
+   976→   976→                    </SelectContent>
+   977→   977→                  </Select>
+   978→   978→                </div>
+   979→   979→              </div>
+   980→   980→              <div className="space-y-2">
+   981→   981→                <Label>State</Label>
+   982→   982→                <Select value={form.state} onValueChange={v => { const s = INDIAN_STATES.find(st => st.name === v); setForm(f => ({ ...f, state: v, stateCode: s?.code ?? '' })); }}>
+   983→   983→                  <SelectTrigger><SelectValue placeholder="Select state" /></SelectTrigger>
+   984→   984→                  <SelectContent>
+   985→   985→                    {INDIAN_STATES.map(s => <SelectItem key={s.code} value={s.name}>{s.name}</SelectItem>)}
+   986→   986→                  </SelectContent>
+   987→   987→                </Select>
+   988→   988→              </div>
+   989→   989→              <div className="grid grid-cols-2 gap-3">
+   990→   990→                <div className="space-y-2">
+   991→   991→                  <Label>Email</Label>
+   992→   992→                  <Input placeholder="client@email.com" value={form.contactEmail} onChange={e => setForm(f => ({ ...f, contactEmail: e.target.value }))} />
+   993→   993→                </div>
+   994→   994→                <div className="space-y-2">
+   995→   995→                  <Label>Phone</Label>
+   996→   996→                  <Input placeholder="+91 98765 43210" value={form.contactPhone} onChange={e => setForm(f => ({ ...f, contactPhone: e.target.value }))} />
+   997→   997→                </div>
+   998→   998→              </div>
+   999→   999→            </div>
+  1000→  1000→            <DialogFooter className="gap-2">
+  1001→  1001→              <Button variant="outline" onClick={() => setDialogOpen(false)} className="h-9">
+  1002→  1002→                Cancel
+  1003→  1003→              </Button>
+  1004→  1004→              <Button
+  1005→  1005→                onClick={handleSubmit}
+  1006→  1006→                disabled={!form.gstin || !form.tradeName || !!gstinError}
+  1007→  1007→                className="h-9 bg-emerald-600 hover:bg-emerald-700 text-white"
+  1008→  1008→              >
+  1009→  1009→                {editingClient ? 'Update Client' : 'Add Client'}
+  1010→  1010→              </Button>
+  1011→  1011→            </DialogFooter>
+  1012→  1012→          </DialogContent>
+  1013→  1013→        </Dialog>
+  1014→  1014→      </div>
+  1015→  1015→    );
+  1016→  1016→  }
+  1017→  1017→
+  1018→  1018→  // ─── Render ───────────────────────────────────────────────────────────────
+  1019→  1019→  return (
+  1020→  1020→    <div className="space-y-6 p-4 md:p-6 max-w-[1400px] mx-auto">
+  1021→  1021→      {/* ── Page Header ──────────────────────────────────────────────────────── */}
+  1022→  1022→      <motion.div
+  1023→  1023→        initial={{ opacity: 0, y: -10 }}
+  1024→  1024→        animate={{ opacity: 1, y: 0 }}
+  1025→  1025→        transition={{ duration: 0.35, ease: [0.25, 0.46, 0.45, 0.94] }}
+  1026→  1026→        className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"
+  1027→  1027→      >
+  1028→  1028→        <div>
+  1029→  1029→          <h1 className="text-2xl font-bold tracking-tight text-foreground">Client Portfolio</h1>
+  1030→  1030→          <p className="text-sm text-muted-foreground mt-0.5">Monitor health and compliance across all clients</p>
+  1031→  1031→        </div>
+  1032→  1032→        <div className="flex items-center gap-3">
+  1033→  1033→          <div className="relative">
+  1034→  1034→            <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+  1035→  1035→            <Input
+  1036→  1036→              placeholder="Search by name or GSTIN..."
+  1037→  1037→              value={searchQuery}
+  1038→  1038→              onChange={e => setSearchQuery(e.target.value)}
+  1039→  1039→              className="pl-9 h-10 w-full sm:w-64 bg-white border-slate-200 focus:border-emerald-300 focus:ring-emerald-200 transition-colors"
+  1040→  1040→            />
+  1041→  1041→          </div>
+  1042→  1042→          <Button
+  1043→  1043→            onClick={openAddDialog}
+  1044→  1044→            className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm shrink-0"
+  1045→  1045→          >
+  1046→  1046→            <Plus className="size-4" />
+  1047→  1047→            Add Client
+  1048→  1048→          </Button>
+  1049→  1049→        </div>
+  1050→  1050→      </motion.div>
+  1051→  1051→
+  1052→  1052→      {/* ── Summary Strip ───────────────────────────────────────────────────── */}
+  1053→  1053→      <motion.div
+  1054→  1054→        variants={containerVariants}
+  1055→  1055→        initial="hidden"
+  1056→  1056→        animate="visible"
+  1057→  1057→        className="grid grid-cols-1 sm:grid-cols-3 gap-4"
+  1058→  1058→      >
+  1059→  1059→        {/* Active Clients */}
+  1060→  1060→        <motion.div variants={itemVariants}>
+  1061→  1061→          <Card className="shadow-sm hover:shadow-md transition-shadow bg-gradient-to-br from-white to-emerald-50/40 border-slate-200/80">
+  1062→  1062→            <CardContent className="p-5">
+  1063→  1063→              <div className="flex items-center justify-between">
+  1064→  1064→                <div>
+  1065→  1065→                  <p className="text-[11px] font-semibold uppercase tracking-wider text-emerald-600">Active Clients</p>
+  1066→  1066→                  <p className="text-3xl font-bold text-foreground mt-1">{portfolioStats.active}</p>
+  1067→  1067→                  <div className="flex items-center gap-1 mt-1.5">
+  1068→  1068→                    <TrendingUp className="size-3 text-emerald-500" />
+  1069→  1069→                    <span className="text-[11px] text-emerald-600 font-medium">
+  1070→  1070→                      {formatVolumeCrore(portfolioStats.totalTaxVolume)} total tax volume
+  1071→  1071→                    </span>
+  1072→  1072→                  </div>
+  1073→  1073→                </div>
+  1074→  1074→                <div className="flex size-12 items-center justify-center rounded-2xl bg-emerald-100">
+  1075→  1075→                  <BarChart3 className="size-5 text-emerald-600" />
+  1076→  1076→                </div>
+  1077→  1077→              </div>
+  1078→  1078→            </CardContent>
+  1079→  1079→          </Card>
+  1080→  1080→        </motion.div>
+  1081→  1081→
+  1082→  1082→        {/* At Risk */}
+  1083→  1083→        <motion.div variants={itemVariants}>
+  1084→  1084→          <Card className="shadow-sm hover:shadow-md transition-shadow bg-gradient-to-br from-white to-red-50/30 border-slate-200/80">
+  1085→  1085→            <CardContent className="p-5">
+  1086→  1086→              <div className="flex items-center justify-between">
+  1087→  1087→                <div>
+  1088→  1088→                  <p className="text-[11px] font-semibold uppercase tracking-wider text-red-600">At Risk</p>
+  1089→  1089→                  <p className="text-3xl font-bold text-foreground mt-1">{portfolioStats.atRisk}</p>
+  1090→  1090→                  <div className="flex items-center gap-1 mt-1.5">
+  1091→  1091→                    <AlertTriangle className="size-3 text-red-500" />
+  1092→  1092→                    <span className="text-[11px] text-red-600 font-medium">
+  1093→  1093→                      {portfolioStats.atRisk} clients below 70 health score
+  1094→  1094→                    </span>
+  1095→  1095→                  </div>
+  1096→  1096→                </div>
+  1097→  1097→                <div className="flex size-12 items-center justify-center rounded-2xl bg-red-100">
+  1098→  1098→                  <Shield className="size-5 text-red-600" />
+  1099→  1099→                </div>
+  1100→  1100→              </div>
+  1101→  1101→            </CardContent>
+  1102→  1102→          </Card>
+  1103→  1103→        </motion.div>
+  1104→  1104→
+  1105→  1105→        {/* Pending Filings */}
+  1106→  1106→        <motion.div variants={itemVariants}>
+  1107→  1107→          <Card className="shadow-sm hover:shadow-md transition-shadow bg-gradient-to-br from-white to-amber-50/40 border-slate-200/80">
+  1108→  1108→            <CardContent className="p-5">
+  1109→  1109→              <div className="flex items-center justify-between">
+  1110→  1110→                <div>
+  1111→  1111→                  <p className="text-[11px] font-semibold uppercase tracking-wider text-amber-600">Pending Filings</p>
+  1112→  1112→                  <p className="text-3xl font-bold text-foreground mt-1">{portfolioStats.pendingFilings}</p>
+  1113→  1113→                  <div className="flex items-center gap-1 mt-1.5">
+  1114→  1114→                    <Clock className="size-3 text-amber-500" />
+  1115→  1115→                    <span className="text-[11px] text-amber-600 font-medium">
+  1116→  1116→                      {portfolioStats.pendingFilings} returns need attention
+  1117→  1117→                    </span>
+  1118→  1118→                  </div>
+  1119→  1119→                </div>
+  1120→  1120→                <div className="flex size-12 items-center justify-center rounded-2xl bg-amber-100">
+  1121→  1121→                  <FileWarning className="size-5 text-amber-600" />
+  1122→  1122→                </div>
+  1123→  1123→              </div>
+  1124→  1124→            </CardContent>
+  1125→  1125→          </Card>
+  1126→  1126→        </motion.div>
+  1127→  1127→      </motion.div>
+  1128→  1128→
+  1129→  1129→      {/* ── Client Card Grid ─────────────────────────────────────────────────── */}
+  1130→  1130→      {filteredClients.length === 0 ? (
+  1131→  1131→        <motion.div
+  1132→  1132→          initial={{ opacity: 0, y: 20 }}
+  1133→  1133→          animate={{ opacity: 1, y: 0 }}
+  1134→  1134→          transition={{ duration: 0.4 }}
+  1135→  1135→          className="flex flex-col items-center justify-center py-20"
+  1136→  1136→        >
+  1137→  1137→          <div className="flex size-16 items-center justify-center rounded-2xl bg-emerald-50 mb-4">
+  1138→  1138→            <UserPlus className="size-8 text-emerald-400" />
+  1139→  1139→          </div>
+  1140→  1140→          <h3 className="text-lg font-semibold text-foreground mb-1">
+  1141→  1141→            {searchQuery ? 'No clients found' : 'No clients yet'}
+  1142→  1142→          </h3>
+  1143→  1143→          <p className="text-sm text-muted-foreground mb-5 max-w-xs text-center">
+  1144→  1144→            {searchQuery
+  1145→  1145→              ? 'Try adjusting your search query'
+  1146→  1146→              : 'Add your first client to start filing'}
+  1147→  1147→          </p>
+  1148→  1148→          {!searchQuery && (
+  1149→  1149→            <Button
+  1150→  1150→              onClick={openAddDialog}
+  1151→  1151→              className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white"
+  1152→  1152→            >
+  1153→  1153→              <Plus className="size-4" />
+  1154→  1154→              Add Client
+  1155→  1155→            </Button>
+  1156→  1156→          )}
+  1157→  1157→        </motion.div>
+  1158→  1158→      ) : (
+  1159→  1159→        <motion.div
+  1160→  1160→          variants={containerVariants}
+  1161→  1161→          initial="hidden"
+  1162→  1162→          animate="visible"
+  1163→  1163→          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"
+  1164→  1164→        >
+  1165→  1165→          {filteredClients.map(client => {
+  1166→  1166→            const health = getHealthColor(client.healthScore);
+  1167→  1167→            const portfolio = client._portfolio;
+  1168→  1168→
+  1169→  1169→            return (
+  1170→  1170→              <motion.div key={client.id} variants={itemVariants}>
+  1171→  1171→                <motion.div
+  1172→  1172→                  whileHover={{ y: -4, transition: { duration: 0.2, ease: 'easeOut' } }}
+  1173→  1173→                  className="h-full"
+  1174→  1174→                >
+  1175→  1175→                  <Card
+  1176→  1176→                    className="h-full cursor-pointer shadow-sm hover:shadow-lg hover:border-emerald-200/60 transition-all duration-200 border-slate-200/80"
+  1177→  1177→                    onClick={() => { setSelectedClientId(client.id); setCurrentView('client-workspace' as AppView); }}
+  1178→  1178→                  >
+  1179→  1179→                    <CardContent className="p-5">
+  1180→  1180→                      {/* Top row: Health Ring + Compliance Badge + Status Badge */}
+  1181→  1181→                      <div className="flex items-start justify-between mb-3">
+  1182→  1182→                        <div className="flex items-center gap-2">
+  1183→  1183→                          <HealthRing score={client.healthScore} size={60} strokeWidth={5} />
+  1184→  1184→                          <div className="flex flex-col gap-1">
+  1185→  1185→                            <span className="text-[9px] text-muted-foreground font-medium">Compliance</span>
+  1186→  1186→                            <ComplianceBadge score={Math.round((portfolio.healthBreakdown.gstinValidity + portfolio.healthBreakdown.filingTimeliness) / 2)} />
+  1187→  1187→                          </div>
+  1188→  1188→                        </div>
+  1189→  1189→                        <div className="shrink-0">
+  1190→  1190→                          {getStatusBadge(client.status)}
+  1191→  1191→                        </div>
+  1192→  1192→                      </div>
+  1193→  1193→
+  1194→  1194→                      {/* Client info section */}
+  1195→  1195→                      <div className="mb-3">
+  1196→  1196→                        <p className="font-bold text-base text-foreground leading-tight truncate">
+  1197→  1197→                          {client.tradeName}
+  1198→  1198→                        </p>
+  1199→  1199→                        <p className="text-xs font-mono text-muted-foreground truncate mt-0.5">
+  1200→  1200→                          {client.gstin}
+  1201→  1201→                        </p>
+  1202→  1202→                        <div className="flex flex-wrap gap-1.5 mt-2">
+  1203→  1203→                          {client.state && (
+  1204→  1204→                            <Badge variant="outline" className="text-[10px] px-2 py-0 h-5 border-slate-200 bg-slate-50 text-slate-600 gap-1">
+  1205→  1205→                              <MapPin className="size-2.5" />
+  1206→  1206→                              {client.state}
+  1207→  1207→                            </Badge>
+  1208→  1208→                          )}
+  1209→  1209→                          <Badge variant="outline" className="text-[10px] px-2 py-0 h-5 border-slate-200 bg-slate-50 text-slate-600">
+  1210→  1210→                            {getEntityTypeLabel(client.entityType)}
+  1211→  1211→                          </Badge>
+  1212→  1212→                        </div>
+  1213→  1213→                      </div>
+  1214→  1214→
+  1215→  1215→                      {/* Key metrics row */}
+  1216→  1216→                      <div className="grid grid-cols-3 gap-2 mb-3">
+  1217→  1217→                        <div className="rounded-lg bg-slate-50 p-2">
+  1218→  1218→                          <p className="text-[9px] uppercase tracking-wider text-muted-foreground font-medium mb-1">Tax Volume</p>
+  1219→  1219→                          <p className="text-xs font-bold text-foreground">{formatVolumeShort(portfolio.monthlyTaxVolume)}</p>
+  1220→  1220→                          <MiniBarChart data={portfolio.monthlyVolumeChart} height={16} />
+  1221→  1221→                        </div>
+  1222→  1222→                        <div className="rounded-lg bg-slate-50 p-2">
+  1223→  1223→                          <p className="text-[9px] uppercase tracking-wider text-muted-foreground font-medium mb-1">Filing Status</p>
+  1224→  1224→                          <div className="mt-1">
+  1225→  1225→                            <FilingStatusDot count={portfolio.pendingFilings} />
+  1226→  1226→                          </div>
+  1227→  1227→                        </div>
+  1228→  1228→                        <div className="rounded-lg bg-slate-50 p-2">
+  1229→  1229→                          <p className="text-[9px] uppercase tracking-wider text-muted-foreground font-medium mb-1">Risk</p>
+  1230→  1230→                          <div className="mt-0.5">
+  1231→  1231→                            {getRiskBadge(portfolio.riskLevel)}
+  1232→  1232→                          </div>
+  1233→  1233→                        </div>
+  1234→  1234→                      </div>
+  1235→  1235→
+  1236→  1236→                      {/* Health breakdown bars */}
+  1237→  1237→                      <div className="space-y-1.5 mb-3">
+  1238→  1238→                        <HealthBreakdownBar label="GSTIN Validity" value={portfolio.healthBreakdown.gstinValidity} />
+  1239→  1239→                        <HealthBreakdownBar label="Filing Timeliness" value={portfolio.healthBreakdown.filingTimeliness} />
+  1240→  1240→                        <HealthBreakdownBar label="Invoice Accuracy" value={portfolio.healthBreakdown.invoiceAccuracy} />
+  1241→  1241→                      </div>
+  1242→  1242→
+  1243→  1243→                      {/* Action buttons row */}
+  1244→  1244→                      <div className="flex items-center gap-2">
+  1245→  1245→                        <Button
+  1246→  1246→                          variant="outline"
+  1247→  1247→                          size="sm"
+  1248→  1248→                          className="flex-1 h-8 text-xs gap-1.5 border-emerald-200 text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800 hover:border-emerald-300 transition-colors"
+  1249→  1249→                          onClick={e => { e.stopPropagation(); navigateTo('returns', client.id); }}
+  1250→  1250→                        >
+  1251→  1251→                          <FileText className="size-3" />
+  1252→  1252→                          View Returns
+  1253→  1253→                        </Button>
+  1254→  1254→                        <Button
+  1255→  1255→                          variant="outline"
+  1256→  1256→                          size="sm"
+  1257→  1257→                          className="flex-1 h-8 text-xs gap-1.5 border-amber-200 text-amber-700 hover:bg-amber-50 hover:text-amber-800 hover:border-amber-300 transition-colors"
+  1258→  1258→                          onClick={e => { e.stopPropagation(); navigateTo('reconcile', client.id); }}
+  1259→  1259→                        >
+  1260→  1260→                          <ArrowRightLeft className="size-3" />
+  1261→  1261→                          Reconcile
+  1262→  1262→                        </Button>
+  1263→  1263→                        <DropdownMenu>
+  1264→  1264→                          <DropdownMenuTrigger asChild onClick={e => e.stopPropagation()}>
+  1265→  1265→                            <Button variant="outline" size="sm" className="size-8 p-0 shrink-0 hover:bg-slate-50">
+  1266→  1266→                              <MoreHorizontal className="size-3.5" />
+  1267→  1267→                            </Button>
+  1268→  1268→                          </DropdownMenuTrigger>
+  1269→  1269→                          <DropdownMenuContent align="end" className="w-44">
+  1270→  1270→                            <DropdownMenuItem onClick={() => openEditDialog(client)} className="gap-2">
+  1271→  1271→                              <Pencil className="size-3.5" />
+  1272→  1272→                              Edit Client
+  1273→  1273→                            </DropdownMenuItem>
+  1274→  1274→                            <DropdownMenuSeparator />
+  1275→  1275→                            <DropdownMenuItem
+  1276→  1276→                              onClick={() => setDeleteTarget(client)}
+  1277→  1277→                              className="gap-2 text-red-600 focus:text-red-600 focus:bg-red-50"
+  1278→  1278→                            >
+  1279→  1279→                              <Trash2 className="size-3.5" />
+  1280→  1280→                              Delete Client
+  1281→  1281→                            </DropdownMenuItem>
+  1282→  1282→                          </DropdownMenuContent>
+  1283→  1283→                        </DropdownMenu>
+  1284→  1284→                      </div>
+  1285→  1285→                    </CardContent>
+  1286→  1286→                  </Card>
+  1287→  1287→                </motion.div>
+  1288→  1288→              </motion.div>
+  1289→  1289→            );
+  1290→  1290→          })}
+  1291→  1291→        </motion.div>
+  1292→  1292→      )}
+  1293→  1293→
+  1294→  1294→      {/* ── Add / Edit Client Dialog ────────────────────────────────────────── */}
+  1295→  1295→      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+  1296→  1296→        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+  1297→  1297→          <DialogHeader>
+  1298→  1298→            <DialogTitle className="flex items-center gap-2.5">
+  1299→  1299→              <div className="flex size-9 items-center justify-center rounded-xl bg-emerald-100">
+  1300→  1300→                <Building2 className="size-4 text-emerald-700" />
+  1301→  1301→              </div>
+  1302→  1302→              {editingClient ? 'Edit Client' : 'Add New Client'}
+  1303→  1303→            </DialogTitle>
+  1304→  1304→          </DialogHeader>
+  1305→  1305→
+  1306→  1306→          <div className="grid gap-4 py-4">
+  1307→  1307→            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+  1308→  1308→              {/* Trade Name */}
+  1309→  1309→              <div className="space-y-2">
+  1310→  1310→                <Label htmlFor="tradeName" className="text-xs font-medium">
+  1311→  1311→                  Trade Name <span className="text-red-500">*</span>
+  1312→  1312→                </Label>
+  1313→  1313→                <Input
+  1314→  1314→                  id="tradeName"
+  1315→  1315→                  placeholder="e.g. Sharma Enterprises"
+  1316→  1316→                  value={form.tradeName}
+  1317→  1317→                  onChange={e => handleFormChange('tradeName', e.target.value)}
+  1318→  1318→                  className="h-9"
+  1319→  1319→                />
+  1320→  1320→              </div>
+  1321→  1321→
+  1322→  1322→              {/* Legal Name */}
+  1323→  1323→              <div className="space-y-2">
+  1324→  1324→                <Label htmlFor="legalName" className="text-xs font-medium">Legal Name</Label>
+  1325→  1325→                <Input
+  1326→  1326→                  id="legalName"
+  1327→  1327→                  placeholder="e.g. Sharma Enterprises Pvt Ltd"
+  1328→  1328→                  value={form.legalName}
+  1329→  1329→                  onChange={e => handleFormChange('legalName', e.target.value)}
+  1330→  1330→                  className="h-9"
+  1331→  1331→                />
+  1332→  1332→              </div>
+  1333→  1333→
+  1334→  1334→              {/* GSTIN */}
+  1335→  1335→              <div className="space-y-2 sm:col-span-2">
+  1336→  1336→                <Label htmlFor="gstin" className="text-xs font-medium">
+  1337→  1337→                  GSTIN <span className="text-red-500">*</span>
+  1338→  1338→                </Label>
+  1339→  1339→                <Input
+  1340→  1340→                  id="gstin"
+  1341→  1341→                  placeholder="e.g. 27AABCS1234F1ZH"
+  1342→  1342→                  value={form.gstin}
+  1343→  1343→                  onChange={e => handleFormChange('gstin', e.target.value.toUpperCase())}
+  1344→  1344→                  onBlur={handleGstinBlur}
+  1345→  1345→                  className={`font-mono h-9 ${gstinError ? 'border-red-300 focus-visible:ring-red-200' : ''}`}
+  1346→  1346→                />
+  1347→  1347→                {gstinError && (
+  1348→  1348→                  <p className="text-xs text-red-600 flex items-center gap-1">
+  1349→  1349→                    <AlertTriangle className="size-3" />
+  1350→  1350→                    {gstinError}
+  1351→  1351→                  </p>
+  1352→  1352→                )}
+  1353→  1353→              </div>
+  1354→  1354→
+  1355→  1355→              {/* State */}
+  1356→  1356→              <div className="space-y-2">
+  1357→  1357→                <Label className="text-xs font-medium">State</Label>
+  1358→  1358→                <Select value={form.state} onValueChange={v => handleFormChange('state', v)}>
+  1359→  1359→                  <SelectTrigger className="h-9">
+  1360→  1360→                    <SelectValue placeholder="Select state" />
+  1361→  1361→                  </SelectTrigger>
+  1362→  1362→                  <SelectContent>
+  1363→  1363→                    {INDIAN_STATES.map(s => (
+  1364→  1364→                      <SelectItem key={s.code} value={s.name}>{s.name}</SelectItem>
+  1365→  1365→                    ))}
+  1366→  1366→                  </SelectContent>
+  1367→  1367→                </Select>
+  1368→  1368→              </div>
+  1369→  1369→
+  1370→  1370→              {/* Entity Type */}
+  1371→  1371→              <div className="space-y-2">
+  1372→  1372→                <Label className="text-xs font-medium">Entity Type</Label>
+  1373→  1373→                <Select value={form.entityType} onValueChange={v => handleFormChange('entityType', v)}>
+  1374→  1374→                  <SelectTrigger className="h-9">
+  1375→  1375→                    <SelectValue placeholder="Select type" />
+  1376→  1376→                  </SelectTrigger>
+  1377→  1377→                  <SelectContent>
+  1378→  1378→                    {ENTITY_TYPES.map(e => (
+  1379→  1379→                      <SelectItem key={e.value} value={e.value}>{e.label}</SelectItem>
+  1380→  1380→                    ))}
+  1381→  1381→                  </SelectContent>
+  1382→  1382→                </Select>
+  1383→  1383→              </div>
+  1384→  1384→
+  1385→  1385→              {/* Contact Email */}
+  1386→  1386→              <div className="space-y-2">
+  1387→  1387→                <Label htmlFor="contactEmail" className="text-xs font-medium">Contact Email</Label>
+  1388→  1388→                <Input
+  1389→  1389→                  id="contactEmail"
+  1390→  1390→                  type="email"
+  1391→  1391→                  placeholder="gst@company.com"
+  1392→  1392→                  value={form.contactEmail}
+  1393→  1393→                  onChange={e => handleFormChange('contactEmail', e.target.value)}
+  1394→  1394→                  className="h-9"
+  1395→  1395→                />
+  1396→  1396→              </div>
+  1397→  1397→
+  1398→  1398→              {/* Contact Phone */}
+  1399→  1399→              <div className="space-y-2">
+  1400→  1400→                <Label htmlFor="contactPhone" className="text-xs font-medium">Contact Phone</Label>
+  1401→  1401→                <Input
+  1402→  1402→                  id="contactPhone"
+  1403→  1403→                  placeholder="+91-XXXX-XXX-XXX"
+  1404→  1404→                  value={form.contactPhone}
+  1405→  1405→                  onChange={e => handleFormChange('contactPhone', e.target.value)}
+  1406→  1406→                  className="h-9"
+  1407→  1407→                />
+  1408→  1408→              </div>
+  1409→  1409→
+  1410→  1410→              {/* Return Period */}
+  1411→  1411→              <div className="space-y-2 sm:col-span-2">
+  1412→  1412→                <Label className="text-xs font-medium">Default Return Period</Label>
+  1413→  1413→                <Select value={form.returnPeriod} onValueChange={v => handleFormChange('returnPeriod', v)}>
+  1414→  1414→                  <SelectTrigger className="h-9">
+  1415→  1415→                    <SelectValue placeholder="Select period" />
+  1416→  1416→                  </SelectTrigger>
+  1417→  1417→                  <SelectContent>
+  1418→  1418→                    {RETURN_PERIODS.map(p => (
+  1419→  1419→                      <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>
+  1420→  1420→                    ))}
+  1421→  1421→                  </SelectContent>
+  1422→  1422→                </Select>
+  1423→  1423→              </div>
+  1424→  1424→            </div>
+  1425→  1425→          </div>
+  1426→  1426→
+  1427→  1427→          <DialogFooter className="gap-2">
+  1428→  1428→            <Button variant="outline" onClick={() => setDialogOpen(false)} className="h-9">
+  1429→  1429→              Cancel
+  1430→  1430→            </Button>
+  1431→  1431→            <Button
+  1432→  1432→              onClick={handleSubmit}
+  1433→  1433→              disabled={isSubmitting || !form.tradeName || !form.gstin}
+  1434→  1434→              className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white h-9"
+  1435→  1435→            >
+  1436→  1436→              {isSubmitting ? (
+  1437→  1437→                <motion.div
+  1438→  1438→                  className="size-4 border-2 border-white/30 border-t-white rounded-full"
+  1439→  1439→                  animate={{ rotate: 360 }}
+  1440→  1440→                  transition={{ duration: 0.8, repeat: Infinity, ease: 'linear' }}
+  1441→  1441→                />
+  1442→  1442→              ) : (
+  1443→  1443→                <Plus className="size-4" />
+  1444→  1444→              )}
+  1445→  1445→              {editingClient ? 'Update Client' : 'Add Client'}
+  1446→  1446→            </Button>
+  1447→  1447→          </DialogFooter>
+  1448→  1448→        </DialogContent>
+  1449→  1449→      </Dialog>
+  1450→  1450→
+  1451→  1451→      {/* ── Client Detail Sheet ─────────────────────────────────────────────── */}
+  1452→  1452→      <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
+  1453→  1453→        <SheetContent side="right" className="w-full sm:max-w-md lg:max-w-lg overflow-y-auto">
+  1454→  1454→          {sheetClient && (
+  1455→  1455→            <>
+  1456→  1456→              <SheetHeader className="pb-2">
+  1457→  1457→                <SheetTitle className="sr-only">{sheetClient.tradeName}</SheetTitle>
+  1458→  1458→              </SheetHeader>
+  1459→  1459→
+  1460→  1460→              <div className="px-4 pb-6 space-y-6">
+  1461→  1461→                {/* Hero: Large Health Ring + Client Name */}
+  1462→  1462→                <div className="flex flex-col items-center text-center pt-2">
+  1463→  1463→                  <HealthRing score={sheetClient.healthScore} size={100} strokeWidth={7} />
+  1464→  1464→                  <h2 className="text-lg font-bold text-foreground mt-3">{sheetClient.tradeName}</h2>
+  1465→  1465→                  <p className="text-sm font-mono text-muted-foreground mt-0.5">{sheetClient.gstin}</p>
+  1466→  1466→                  <div className="flex items-center gap-2 mt-2">
+  1467→  1467→                    {getStatusBadge(sheetClient.status)}
+  1468→  1468→                    {sheetClient.state && (
+  1469→  1469→                      <Badge variant="outline" className="text-[10px] px-2 py-0 h-5 border-slate-200 bg-slate-50 text-slate-600 gap-1">
+  1470→  1470→                        <MapPin className="size-2.5" />
+  1471→  1471→                        {sheetClient.state}
+  1472→  1472→                      </Badge>
+  1473→  1473→                    )}
+  1474→  1474→                    <Badge variant="outline" className="text-[10px] px-2 py-0 h-5 border-slate-200 bg-slate-50 text-slate-600">
+  1475→  1475→                      {getEntityTypeLabel(sheetClient.entityType)}
+  1476→  1476→                    </Badge>
+  1477→  1477→                  </div>
+  1478→  1478→                </div>
+  1479→  1479→
+  1480→  1480→                <Separator />
+  1481→  1481→
+  1482→  1482→                {/* Health Breakdown */}
+  1483→  1483→                <div>
+  1484→  1484→                  <h3 className="text-sm font-semibold text-foreground mb-3">Health Breakdown</h3>
+  1485→  1485→                  <div className="space-y-2.5">
+  1486→  1486→                    <HealthBreakdownBar label="GSTIN Validity" value={sheetClient._portfolio.healthBreakdown.gstinValidity} />
+  1487→  1487→                    <HealthBreakdownBar label="Filing Timeliness" value={sheetClient._portfolio.healthBreakdown.filingTimeliness} />
+  1488→  1488→                    <HealthBreakdownBar label="Invoice Accuracy" value={sheetClient._portfolio.healthBreakdown.invoiceAccuracy} />
+  1489→  1489→                  </div>
+  1490→  1490→                </div>
+  1491→  1491→
+  1492→  1492→                <Separator />
+  1493→  1493→
+  1494→  1494→                {/* Contact Info */}
+  1495→  1495→                <div>
+  1496→  1496→                  <h3 className="text-sm font-semibold text-foreground mb-3">Contact Information</h3>
+  1497→  1497→                  <div className="space-y-2">
+  1498→  1498→                    {sheetClient.contactEmail && (
+  1499→  1499→                      <div className="flex items-center gap-2.5 text-sm">
+  1500→  1500→                        <Mail className="size-4 text-muted-foreground shrink-0" />
+  1501→  1501→                        <span className="text-foreground truncate">{sheetClient.contactEmail}</span>
+  1502→  1502→                      </div>
+  1503→  1503→                    )}
+  1504→  1504→                    {sheetClient.contactPhone && (
+  1505→  1505→                      <div className="flex items-center gap-2.5 text-sm">
+  1506→  1506→                        <Phone className="size-4 text-muted-foreground shrink-0" />
+  1507→  1507→                        <span className="text-foreground">{sheetClient.contactPhone}</span>
+  1508→  1508→                      </div>
+  1509→  1509→                    )}
+  1510→  1510→                    {sheetClient.legalName && (
+  1511→  1511→                      <div className="flex items-center gap-2.5 text-sm">
+  1512→  1512→                        <Building2 className="size-4 text-muted-foreground shrink-0" />
+  1513→  1513→                        <span className="text-foreground truncate">{sheetClient.legalName}</span>
+  1514→  1514→                      </div>
+  1515→  1515→                    )}
+  1516→  1516→                    {sheetClient.returnPeriod && (
+  1517→  1517→                      <div className="flex items-center gap-2.5 text-sm">
+  1518→  1518→                        <Calendar className="size-4 text-muted-foreground shrink-0" />
+  1519→  1519→                        <span className="text-foreground capitalize">{sheetClient.returnPeriod} filing</span>
+  1520→  1520→                      </div>
+  1521→  1521→                    )}
+  1522→  1522→                  </div>
+  1523→  1523→                </div>
+  1524→  1524→
+  1525→  1525→                <Separator />
+  1526→  1526→
+  1527→  1527→                {/* Compliance Risk */}
+  1528→  1528→                <div>
+  1529→  1529→                  <h3 className="text-sm font-semibold text-foreground mb-3">Compliance Risk</h3>
+  1530→  1530→                  <div className="flex items-center gap-2">
+  1531→  1531→                    {getRiskBadge(sheetClient._portfolio.riskLevel, sheetClient._portfolio.riskDetail)}
+  1532→  1532→                  </div>
+  1533→  1533→                </div>
+  1534→  1534→
+  1535→  1535→                <Separator />
+  1536→  1536→
+  1537→  1537→                {/* Recent Filing History Timeline */}
+  1538→  1538→                <div>
+  1539→  1539→                  <h3 className="text-sm font-semibold text-foreground mb-3">Recent Filings</h3>
+  1540→  1540→                  {sheetClient._portfolio.recentFilings.length === 0 ? (
+  1541→  1541→                    <p className="text-sm text-muted-foreground">No recent filings</p>
+  1542→  1542→                  ) : (
+  1543→  1543→                    <div className="relative pl-5 space-y-3">
+  1544→  1544→                      {/* Timeline line */}
+  1545→  1545→                      <div className="absolute left-[7px] top-1.5 bottom-1.5 w-px bg-slate-200" />
+  1546→  1546→                      {sheetClient._portfolio.recentFilings.map((filing, idx) => {
+  1547→  1547→                        const isFiled = filing.status === 'Filed';
+  1548→  1548→                        const isOverdue = filing.status === 'Overdue';
+  1549→  1549→                        return (
+  1550→  1550→                          <div key={idx} className="relative flex items-start gap-3">
+  1551→  1551→                            <div className={`absolute -left-5 top-1 size-2.5 rounded-full ring-2 ring-white ${
+  1552→  1552→                              isFiled ? 'bg-emerald-500' : isOverdue ? 'bg-red-500' : 'bg-amber-500'
+  1553→  1553→                            }`} />
+  1554→  1554→                            <div className="min-w-0 flex-1">
+  1555→  1555→                              <div className="flex items-center justify-between gap-2">
+  1556→  1556→                                <p className="text-sm font-medium text-foreground truncate">
+  1557→  1557→                                  {filing.type} — {filing.period}
+  1558→  1558→                                </p>
+  1559→  1559→                                <Badge className={`text-[9px] px-1.5 py-0 shrink-0 ${
+  1560→  1560→                                  isFiled
+  1561→  1561→                                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+  1562→  1562→                                    : isOverdue
+  1563→  1563→                                    ? 'bg-red-50 text-red-700 border-red-200'
+  1564→  1564→                                    : 'bg-amber-50 text-amber-700 border-amber-200'
+  1565→  1565→                                }`}>
+  1566→  1566→                                  {filing.status}
+  1567→  1567→                                </Badge>
+  1568→  1568→                              </div>
+  1569→  1569→                              {filing.date && (
+  1570→  1570→                                <p className="text-[11px] text-muted-foreground mt-0.5">
+  1571→  1571→                                  Filed on {new Date(filing.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+  1572→  1572→                                </p>
+  1573→  1573→                              )}
+  1574→  1574→                            </div>
+  1575→  1575→                          </div>
+  1576→  1576→                        );
+  1577→  1577→                      })}
+  1578→  1578→                    </div>
+  1579→  1579→                  )}
+  1580→  1580→                </div>
+  1581→  1581→
+  1582→  1582→                <Separator />
+  1583→  1583→
+  1584→  1584→                {/* Filing Trend Area Chart */}
+  1585→  1585→                <div>
+  1586→  1586→                  <h3 className="text-sm font-semibold text-foreground mb-1">Filing Trend</h3>
+  1587→  1587→                  <p className="text-[11px] text-muted-foreground mb-3">Monthly tax volume — last 6 months</p>
+  1588→  1588→                  <div className="bg-slate-50 rounded-xl p-4">
+  1589→  1589→                    <FilingTrendChart data={sheetClient._portfolio.monthlyVolumeChart} />
+  1590→  1590→                    <div className="flex items-center justify-between mt-3 pt-2 border-t border-slate-200">
+  1591→  1591→                      <span className="text-xs text-muted-foreground">Current month</span>
+  1592→  1592→                      <span className="text-sm font-bold text-foreground">
+  1593→  1593→                        {formatCurrency(sheetClient._portfolio.monthlyTaxVolume)}
+  1594→  1594→                      </span>
+  1595→  1595→                    </div>
+  1596→  1596→                  </div>
+  1597→  1597→                </div>
+  1598→  1598→
+  1599→  1599→                <Separator />
+  1600→  1600→
+  1601→  1601→                {/* Action Buttons */}
+  1602→  1602→                <div className="flex gap-3">
+  1603→  1603→                  <Button
+  1604→  1604→                    className="flex-1 gap-2 bg-emerald-600 hover:bg-emerald-700 text-white"
+  1605→  1605→                    onClick={() => { navigateTo('returns', sheetClient.id); setSheetOpen(false); }}
+  1606→  1606→                  >
+  1607→  1607→                    <FileText className="size-4" />
+  1608→  1608→                    View Returns
+  1609→  1609→                  </Button>
+  1610→  1610→                  <Button
+  1611→  1611→                    variant="outline"
+  1612→  1612→                    className="flex-1 gap-2 border-amber-200 text-amber-700 hover:bg-amber-50"
+  1613→  1613→                    onClick={() => { navigateTo('reconcile', sheetClient.id); setSheetOpen(false); }}
+  1614→  1614→                  >
+  1615→  1615→                    <ArrowRightLeft className="size-4" />
+  1616→  1616→                    Reconcile
+  1617→  1617→                  </Button>
+  1618→  1618→                </div>
+  1619→  1619→              </div>
+  1620→  1620→            </>
+  1621→  1621→          )}
+  1622→  1622→        </SheetContent>
+  1623→  1623→      </Sheet>
+  1624→  1624→
+  1625→  1625→      {/* ── Delete Confirmation ──────────────────────────────────────────────── */}
+  1626→  1626→      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}>
+  1627→  1627→        <AlertDialogContent>
+  1628→  1628→          <AlertDialogHeader>
+  1629→  1629→            <AlertDialogTitle>Delete Client</AlertDialogTitle>
+  1630→  1630→            <AlertDialogDescription>
+  1631→  1631→              Are you sure you want to delete <strong>{deleteTarget?.tradeName}</strong> ({deleteTarget?.gstin})?
+  1632→  1632→              This action cannot be undone and will remove all associated data.
+  1633→  1633→            </AlertDialogDescription>
+  1634→  1634→          </AlertDialogHeader>
+  1635→  1635→          <AlertDialogFooter>
+  1636→  1636→            <AlertDialogCancel disabled={deleteClientMutation.isPending}>Cancel</AlertDialogCancel>
+  1637→  1637→            <AlertDialogAction
+  1638→  1638→              onClick={handleDelete}
+  1639→  1639→              disabled={deleteClientMutation.isPending}
+  1640→  1640→              className="bg-red-600 hover:bg-red-700 text-white"
+  1641→  1641→            >
+  1642→  1642→              {deleteClientMutation.isPending ? 'Deleting...' : 'Delete Client'}
+  1643→  1643→            </AlertDialogAction>
+  1644→  1644→          </AlertDialogFooter>
+  1645→  1645→        </AlertDialogContent>
+  1646→  1646→      </AlertDialog>
+  1647→  1647→    </div>
+  1648→  1648→  );
+  1649→  1649→}
+  1650→  1650→

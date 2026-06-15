@@ -1,0 +1,1138 @@
+     1→'use client';
+     2→
+     3→import React, { useState, useMemo } from 'react';
+     4→import { motion, AnimatePresence } from 'framer-motion';
+     5→import { Badge } from '@/components/ui/badge';
+     6→import { Button } from '@/components/ui/button';
+     7→import { Card, CardContent } from '@/components/ui/card';
+     8→import { Skeleton } from '@/components/ui/skeleton';
+     9→import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+    10→import {
+    11→  ArrowLeft,
+    12→  Upload,
+    13→  FileText,
+    14→  GitCompareArrows,
+    15→  Send,
+    16→  Shield,
+    17→  AlertTriangle,
+    18→  CheckCircle2,
+    19→  Clock,
+    20→  Calendar,
+    21→  Eye,
+    22→  RefreshCw,
+    23→  Download,
+    24→  AlertCircle,
+    25→  XCircle,
+    26→  UploadCloud,
+    27→  Activity,
+    28→  MapPin,
+    29→  Building2,
+    30→  ChevronRight,
+    31→  ArrowRight,
+    32→  Sparkles,
+    33→  FileCheck,
+    34→  Gauge,
+    35→  FolderOpen,
+    36→  IndianRupee,
+    37→  CircleDot,
+    38→  Inbox,
+    39→} from 'lucide-react';
+    40→import { Separator } from '@/components/ui/separator';
+    41→import { useApp } from '@/contexts/AppContext';
+    42→import type { AppView } from '@/contexts/AppContext';
+    43→import { formatCurrency, periodToLabel, getFilingDueDate } from '@/lib/gst-utils';
+    44→import { toast } from 'sonner';
+    45→import {
+    46→  useClient,
+    47→  useFilings,
+    48→  useInvoices,
+    49→  useIssues,
+    50→  useUploadedFiles,
+    51→  useAuditLogs,
+    52→  useReconRuns,
+    53→  useUploadFile,
+    54→  useCreateReconRun,
+    55→} from '@/hooks/api';
+    56→import type {
+    57→  Client,
+    58→  GSTRFiling,
+    59→  Invoice,
+    60→  Issue,
+    61→  AuditLogEntry,
+    62→  ReconciliationRun,
+    63→  FilingStatus,
+    64→} from '@/types/gst';
+    65→
+    66→// ═══════════════════════════════════════════════════════════════════════════════
+    67→// TYPES
+    68→// ═══════════════════════════════════════════════════════════════════════════════
+    69→
+    70→interface ReturnEntry {
+    71→  id: string;
+    72→  type: string;
+    73→  period: string;
+    74→  filingDate: string;
+    75→  arn: string;
+    76→  status: 'Filed' | 'Pending' | 'Overdue' | 'Draft' | 'Ready to File' | 'In Review';
+    77→  taxAmount: number;
+    78→}
+    79→
+    80→interface PendingAction {
+    81→  id: string;
+    82→  type: 'missing_documents' | 'gstin_error' | 'recon_mismatch' | 'awaiting_review' | 'ready_to_file';
+    83→  title: string;
+    84→  description: string;
+    85→  dueDate?: string;
+    86→  actionLabel: string;
+    87→  targetView: AppView;
+    88→  priority: 'high' | 'medium' | 'low';
+    89→}
+    90→
+    91→interface DocumentEntry {
+    92→  id: string;
+    93→  name: string;
+    94→  type: string;
+    95→  uploadDate: string;
+    96→  status: 'Processed' | 'Processing' | 'Uploaded' | 'Error';
+    97→  invoicesExtracted: number;
+    98→  totalRows: number;
+    99→  accuracy: number;
+   100→  size: string;
+   101→}
+   102→
+   103→interface ReconRun {
+   104→  id: string;
+   105→  period: string;
+   106→  matchRate: number;
+   107→  mismatches: number;
+   108→  missingInvoices: number;
+   109→  taxDifference: number;
+   110→  runDate: string;
+   111→  status: 'Completed' | 'Running' | 'Failed';
+   112→}
+   113→
+   114→interface AIInsight {
+   115→  id: string;
+   116→  severity: 'critical' | 'warning' | 'info';
+   117→  title: string;
+   118→  description: string;
+   119→  suggestedAction: string;
+   120→  actionView: AppView;
+   121→  category: string;
+   122→}
+   123→
+   124→interface ActivityEvent {
+   125→  id: string;
+   126→  type: 'upload' | 'return_created' | 'filing_submitted' | 'recon_run' | 'user_action' | 'ai_action';
+   127→  description: string;
+   128→  timestamp: string;
+   129→}
+   130→
+   131→// ═══════════════════════════════════════════════════════════════════════════════
+   132→// HELPER FUNCTIONS
+   133→// ═══════════════════════════════════════════════════════════════════════════════
+   134→
+   135→function getHealthColor(score: number): { bg: string; text: string; stroke: string } {
+   136→  if (score > 80) return { bg: 'bg-emerald-50', text: 'text-emerald-700', stroke: '#10b981' };
+   137→  if (score >= 50) return { bg: 'bg-amber-50', text: 'text-amber-700', stroke: '#f59e0b' };
+   138→  return { bg: 'bg-red-50', text: 'text-red-700', stroke: '#ef4444' };
+   139→}
+   140→
+   141→function getRiskBadge(risk: string) {
+   142→  switch (risk) {
+   143→    case 'Low': return <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 gap-1 text-[10px] px-2 py-0.5"><Shield className="size-2.5" />Low</Badge>;
+   144→    case 'Medium': return <Badge className="bg-amber-50 text-amber-700 border-amber-200 gap-1 text-[10px] px-2 py-0.5"><AlertTriangle className="size-2.5" />Medium</Badge>;
+   145→    case 'High': return <Badge className="bg-orange-50 text-orange-700 border-orange-200 gap-1 text-[10px] px-2 py-0.5"><AlertTriangle className="size-2.5" />High</Badge>;
+   146→    case 'Critical': return <Badge className="bg-red-50 text-red-700 border-red-200 gap-1 text-[10px] px-2 py-0.5"><XCircle className="size-2.5" />Critical</Badge>;
+   147→    default: return <Badge variant="secondary" className="text-[10px]">{risk}</Badge>;
+   148→  }
+   149→}
+   150→
+   151→function getReturnStatusBadge(status: string) {
+   152→  switch (status) {
+   153→    case 'Filed': return <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px] px-1.5 py-0"><CheckCircle2 className="size-2.5 mr-0.5" />Filed</Badge>;
+   154→    case 'Pending': return <Badge className="bg-amber-50 text-amber-700 border-amber-200 text-[10px] px-1.5 py-0"><Clock className="size-2.5 mr-0.5" />Pending</Badge>;
+   155→    case 'Overdue': return <Badge className="bg-red-50 text-red-700 border-red-200 text-[10px] px-1.5 py-0"><AlertCircle className="size-2.5 mr-0.5" />Overdue</Badge>;
+   156→    case 'Draft': return <Badge className="bg-slate-100 text-slate-600 border-slate-200 text-[10px] px-1.5 py-0"><FileText className="size-2.5 mr-0.5" />Draft</Badge>;
+   157→    case 'Ready to File': return <Badge className="bg-teal-50 text-teal-700 border-teal-200 text-[10px] px-1.5 py-0"><CheckCircle2 className="size-2.5 mr-0.5" />Ready</Badge>;
+   158→    case 'In Review': return <Badge className="bg-blue-50 text-blue-700 border-blue-200 text-[10px] px-1.5 py-0"><Eye className="size-2.5 mr-0.5" />Review</Badge>;
+   159→    default: return <Badge variant="secondary" className="text-[10px]">{status}</Badge>;
+   160→  }
+   161→}
+   162→
+   163→function getDocStatusBadge(status: string) {
+   164→  switch (status) {
+   165→    case 'Processed': return <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px] px-1.5 py-0">Processed</Badge>;
+   166→    case 'Processing': return <Badge className="bg-blue-50 text-blue-700 border-blue-200 text-[10px] px-1.5 py-0">Processing</Badge>;
+   167→    case 'Uploaded': return <Badge className="bg-slate-100 text-slate-600 border-slate-200 text-[10px] px-1.5 py-0">Uploaded</Badge>;
+   168→    case 'Error': return <Badge className="bg-red-50 text-red-700 border-red-200 text-[10px] px-1.5 py-0">Error</Badge>;
+   169→    default: return <Badge variant="secondary" className="text-[10px]">{status}</Badge>;
+   170→  }
+   171→}
+   172→
+   173→function getActionTypeIcon(type: string) {
+   174→  switch (type) {
+   175→    case 'missing_documents': return UploadCloud;
+   176→    case 'gstin_error': return XCircle;
+   177→    case 'recon_mismatch': return GitCompareArrows;
+   178→    case 'awaiting_review': return Eye;
+   179→    case 'ready_to_file': return CheckCircle2;
+   180→    default: return AlertCircle;
+   181→  }
+   182→}
+   183→
+   184→function getActivityIcon(type: string) {
+   185→  switch (type) {
+   186→    case 'upload': return UploadCloud;
+   187→    case 'return_created': return FileText;
+   188→    case 'filing_submitted': return FileCheck;
+   189→    case 'recon_run': return GitCompareArrows;
+   190→    case 'user_action': return Activity;
+   191→    case 'ai_action': return Sparkles;
+   192→    default: return CircleDot;
+   193→  }
+   194→}
+   195→
+   196→function getActivityColor(type: string) {
+   197→  switch (type) {
+   198→    case 'upload': return 'bg-blue-50 text-blue-600';
+   199→    case 'return_created': return 'bg-purple-50 text-purple-600';
+   200→    case 'filing_submitted': return 'bg-emerald-50 text-emerald-600';
+   201→    case 'recon_run': return 'bg-teal-50 text-teal-600';
+   202→    case 'user_action': return 'bg-slate-100 text-slate-600';
+   203→    case 'ai_action': return 'bg-amber-50 text-amber-600';
+   204→    default: return 'bg-slate-100 text-slate-500';
+   205→  }
+   206→}
+   207→
+   208→function formatRelativeTime(timestamp: string): string {
+   209→  const now = new Date();
+   210→  const date = new Date(timestamp);
+   211→  const diffMs = now.getTime() - date.getTime();
+   212→  const diffMins = Math.floor(diffMs / 60000);
+   213→  const diffHours = Math.floor(diffMins / 60);
+   214→  const diffDays = Math.floor(diffHours / 24);
+   215→
+   216→  if (diffMins < 60) return `${diffMins}m ago`;
+   217→  if (diffHours < 24) return `${diffHours}h ago`;
+   218→  if (diffDays < 7) return `${diffDays}d ago`;
+   219→  return date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+   220→}
+   221→
+   222→// ═══════════════════════════════════════════════════════════════════════════════
+   223→// MAPPING HELPERS (API data → UI types)
+   224→// ═══════════════════════════════════════════════════════════════════════════════
+   225→
+   226→const SIMULATED_NOW = new Date('2025-07-08T12:00:00Z');
+   227→
+   228→/** Check if a filing period is overdue relative to current date */
+   229→function isFilingOverdue(period: string): boolean {
+   230→  const dueDate = new Date(getFilingDueDate('GSTR-1', period));
+   231→  return SIMULATED_NOW > dueDate;
+   232→}
+   233→
+   234→/** Map API filing status to UI ReturnEntry status */
+   235→function mapFilingStatus(status: FilingStatus, period: string): ReturnEntry['status'] {
+   236→  if (status === 'filed') return 'Filed';
+   237→  const readyStatuses: FilingStatus[] = ['validated', 'reviewed', 'generated'];
+   238→  if (readyStatuses.includes(status)) {
+   239→    return isFilingOverdue(period) ? 'Overdue' : 'Ready to File';
+   240→  }
+   241→  return isFilingOverdue(period) ? 'Overdue' : 'Draft';
+   242→}
+   243→
+   244→/** Map an API document to a DocumentEntry for the UI */
+   245→function mapApiDocument(doc: Record<string, unknown>): DocumentEntry {
+   246→  const statusStr = (doc.processingStep as string) ?? (doc.status as string) ?? 'uploaded';
+   247→  const statusMap: Record<string, DocumentEntry['status']> = {
+   248→    extracted: 'Processed',
+   249→    processing: 'Processing',
+   250→    processed: 'Processed',
+   251→    uploaded: 'Uploaded',
+   252→    failed: 'Error',
+   253→    error: 'Error',
+   254→  };
+   255→  const sizeBytes = (doc.size as number) ?? 0;
+   256→  const sizeStr = sizeBytes > 1048576
+   257→    ? `${(sizeBytes / 1048576).toFixed(1)} MB`
+   258→    : sizeBytes > 1024
+   259→      ? `${(sizeBytes / 1024).toFixed(0)} KB`
+   260→      : sizeBytes > 0
+   261→        ? `${sizeBytes} B`
+   262→        : '1.0 MB';
+   263→
+   264→  return {
+   265→    id: (doc.id as string) ?? '',
+   266→    name: (doc.name as string) ?? (doc.filename as string) ?? 'Document',
+   267→    type: (doc.fileType as string) ?? (doc.folder as string) ?? 'Document',
+   268→    uploadDate: ((doc.createdAt as string) ?? new Date().toISOString()).split('T')[0],
+   269→    status: statusMap[statusStr.toLowerCase()] ?? 'Uploaded',
+   270→    invoicesExtracted: (doc.invoiceCount as number) ?? 0,
+   271→    totalRows: (doc.rowCount as number) ?? 0,
+   272→    accuracy: (doc.accuracy as number) ?? 0,
+   273→    size: sizeStr,
+   274→  };
+   275→}
+   276→
+   277→/** Map an API reconciliation run to a UI ReconRun */
+   278→function mapApiReconRun(run: ReconciliationRun): ReconRun {
+   279→  const matchRate = run.totalRecords > 0 ? Math.round((run.matched / run.totalRecords) * 100) : 0;
+   280→  return {
+   281→    id: run.id,
+   282→    period: periodToLabel(run.period),
+   283→    matchRate,
+   284→    mismatches: run.unmatched + run.partialMatches,
+   285→    missingInvoices: run.unmatched,
+   286→    taxDifference: run.gstDifference,
+   287→    runDate: run.createdAt.split('T')[0],
+   288→    status: run.status === 'completed' ? 'Completed' as const : run.status === 'running' ? 'Running' as const : 'Failed' as const,
+   289→  };
+   290→}
+   291→
+   292→/** Map an API audit log to an ActivityEvent for the UI */
+   293→function mapAuditLogToEvent(log: AuditLogEntry): ActivityEvent {
+   294→  const action = log.action?.toLowerCase() ?? '';
+   295→  let type: ActivityEvent['type'] = 'user_action';
+   296→  if (action.includes('upload') || action.includes('import')) type = 'upload';
+   297→  else if (action.includes('file') || action.includes('submit')) type = 'filing_submitted';
+   298→  else if (action.includes('reconcil')) type = 'recon_run';
+   299→  else if (action.includes('valid') || action.includes('generat')) type = 'ai_action';
+   300→  else if (action.includes('return') || action.includes('creat')) type = 'return_created';
+   301→
+   302→  return {
+   303→    id: log.id,
+   304→    type,
+   305→    description: log.details ?? log.action,
+   306→    timestamp: log.timestamp,
+   307→  };
+   308→}
+   309→
+   310→/** Map issue category to pending action type */
+   311→function issueCategoryToActionType(category: string): PendingAction['type'] {
+   312→  const lower = category.toLowerCase();
+   313→  if (lower.includes('gstin') || lower.includes('invalid')) return 'gstin_error';
+   314→  if (lower.includes('missing') || lower.includes('mandatory') || lower.includes('hsn')) return 'missing_documents';
+   315→  if (lower.includes('duplicate') || lower.includes('calculation') || lower.includes('tax')) return 'recon_mismatch';
+   316→  return 'awaiting_review';
+   317→}
+   318→
+   319→/** Map API issue to AIInsight */
+   320→function mapIssueToInsight(issue: Issue): AIInsight {
+   321→  const severity: AIInsight['severity'] =
+   322→    issue.severity === 'critical' ? 'critical' : issue.severity === 'warning' ? 'warning' : 'info';
+   323→  const category = issue.category ?? 'General';
+   324→
+   325→  let actionView: AppView = 'dashboard';
+   326→  let suggestedAction = 'Review';
+   327→  if (category.toLowerCase().includes('gstin') || category.toLowerCase().includes('tax')) {
+   328→    actionView = 'reconcile';
+   329→    suggestedAction = 'Review Details';
+   330→  } else if (category.toLowerCase().includes('missing') || category.toLowerCase().includes('document')) {
+   331→    actionView = 'invoices';
+   332→    suggestedAction = 'Upload Documents';
+   333→  } else if (category.toLowerCase().includes('filing') || category.toLowerCase().includes('deadline')) {
+   334→    actionView = 'returns';
+   335→    suggestedAction = 'File Return';
+   336→  }
+   337→
+   338→  return {
+   339→    id: issue.id,
+   340→    severity,
+   341→    title: issue.title ?? category,
+   342→    description: issue.description ?? '',
+   343→    suggestedAction,
+   344→    actionView,
+   345→    category,
+   346→  };
+   347→}
+   348→
+   349→// ═══════════════════════════════════════════════════════════════════════════════
+   350→// SVG Health Ring
+   351→// ═══════════════════════════════════════════════════════════════════════════════
+   352→
+   353→function HealthRing({ score, size = 72, strokeWidth = 5 }: { score: number; size?: number; strokeWidth?: number }) {
+   354→  const radius = (size - strokeWidth) / 2;
+   355→  const circumference = 2 * Math.PI * radius;
+   356→  const offset = circumference - (score / 100) * circumference;
+   357→  const color = getHealthColor(score);
+   358→
+   359→  return (
+   360→    <div className="relative inline-flex items-center justify-center" style={{ width: size, height: size }}>
+   361→      <svg width={size} height={size} className="-rotate-90">
+   362→        <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="#e2e8f0" strokeWidth={strokeWidth} />
+   363→        <motion.circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke={color.stroke} strokeWidth={strokeWidth} strokeLinecap="round" strokeDasharray={circumference} initial={{ strokeDashoffset: circumference }} animate={{ strokeDashoffset: offset }} transition={{ duration: 1, delay: 0.3, ease: 'easeOut' }} />
+   364→      </svg>
+   365→      <div className="absolute inset-0 flex flex-col items-center justify-center">
+   366→        <span className={`font-bold text-lg ${color.text}`}>{score}</span>
+   367→        <span className="text-[8px] text-muted-foreground">/ 100</span>
+   368→      </div>
+   369→    </div>
+   370→  );
+   371→}
+   372→
+   373→// ═══════════════════════════════════════════════════════════════════════════════
+   374→// ANIMATION
+   375→// ═══════════════════════════════════════════════════════════════════════════════
+   376→
+   377→const stagger = {
+   378→  hidden: { opacity: 0 },
+   379→  visible: { opacity: 1, transition: { staggerChildren: 0.05 } },
+   380→};
+   381→
+   382→const fadeUp = {
+   383→  hidden: { opacity: 0, y: 12 },
+   384→  visible: { opacity: 1, y: 0, transition: { duration: 0.35 } },
+   385→};
+   386→
+   387→// ═══════════════════════════════════════════════════════════════════════════════
+   388→// MAIN COMPONENT
+   389→// ═══════════════════════════════════════════════════════════════════════════════
+   390→
+   391→export default function ClientWorkspacePage() {
+   392→  const { selectedClientId, setCurrentView, setSelectedClientId, setReturnPrepCtx } = useApp();
+   393→  const [returnFilter, setReturnFilter] = useState('all');
+   394→
+   395→  // ─── React Query hooks ─────────────────────────────────────────────────
+   396→  const { data: clientData, isLoading: clientLoading, error: clientError } = useClient(selectedClientId ?? undefined);
+   397→  const { data: filingsData, isLoading: filingsLoading } = useFilings(selectedClientId ?? undefined);
+   398→  const { data: invoicesData, isLoading: invoicesLoading } = useInvoices(selectedClientId ?? undefined);
+   399→  const { data: issuesData, isLoading: issuesLoading } = useIssues(selectedClientId ?? undefined);
+   400→  const { data: docsData, isLoading: docsLoading } = useUploadedFiles(selectedClientId ?? undefined);
+   401→  const { data: auditData, isLoading: auditLoading } = useAuditLogs(selectedClientId ?? undefined);
+   402→  const { data: reconData, isLoading: reconLoading } = useReconRuns(selectedClientId ?? undefined);
+   403→
+   404→  // Mutations
+   405→  const uploadFileMutation = useUploadFile();
+   406→  const createReconRunMutation = useCreateReconRun();
+   407→
+   408→  // ─── Extract data from query responses ──────────────────────────────────
+   409→  const client = clientData?.clients?.[0] as (Client & { _aggregations?: { totalInvoices: number; filedReturns: number; pendingReturns: number; matchPercentage: number } }) | undefined;
+   410→  // Filter filings/issues/reconRuns by clientId (API may return all records)
+   411→  const allFilings: GSTRFiling[] = filingsData?.filings ?? [];
+   412→  const filings = useMemo(() => allFilings.filter(f => f.clientId === selectedClientId), [allFilings, selectedClientId]);
+   413→  const allInvoices: Invoice[] = invoicesData?.invoices ?? [];
+   414→  const invoices = useMemo(() => allInvoices.filter(inv => inv.clientId === selectedClientId), [allInvoices, selectedClientId]);
+   415→  const allIssues: Issue[] = issuesData?.issues ?? [];
+   416→  const issues = useMemo(() => allIssues.filter(i => i.clientId === selectedClientId), [allIssues, selectedClientId]);
+   417→  const rawDocuments: Array<Record<string, unknown>> = docsData?.documents ?? [];
+   418→  const allAuditLogs: AuditLogEntry[] = auditData?.logs ?? [];
+   419→  const auditLogs = useMemo(() => allAuditLogs.filter(l => l.clientId === selectedClientId), [allAuditLogs, selectedClientId]);
+   420→  const allReconRuns: ReconciliationRun[] = reconData?.runs ?? [];
+   421→  const reconRuns = useMemo(() => allReconRuns.filter(r => r.clientId === selectedClientId), [allReconRuns, selectedClientId]);
+   422→
+   423→  const isLoading = clientLoading || filingsLoading;
+   424→
+   425→  // ─── Derive workspace data from API responses ─────────────────────────
+   426→  const name = client?.tradeName ?? 'Unknown Client';
+   427→
+   428→  // Map filings → ReturnEntry[]
+   429→  const returns: ReturnEntry[] = useMemo(() => {
+   430→    return filings.map(f => ({
+   431→      id: f.id,
+   432→      type: f.returnType,
+   433→      period: periodToLabel(f.period),
+   434→      filingDate: f.filedDate ?? '',
+   435→      arn: f.acknowledgmentNumber ?? '',
+   436→      status: mapFilingStatus(f.status, f.period),
+   437→      taxAmount: f.totalTax,
+   438→    }));
+   439→  }, [filings]);
+   440→
+   441→  // Filter returns
+   442→  const filteredReturns = useMemo(() => {
+   443→    if (returnFilter === 'all') return returns;
+   444→    return returns.filter(r => r.type === returnFilter);
+   445→  }, [returns, returnFilter]);
+   446→
+   447→  // Map issues → Pending Actions
+   448→  const pendingActions: PendingAction[] = useMemo(() => {
+   449→    const openIssues = issues.filter(i => i.status === 'open');
+   450→
+   451→    const issueActions: PendingAction[] = openIssues.map(i => {
+   452→      const actionType = issueCategoryToActionType(i.category);
+   453→      const priority: PendingAction['priority'] =
+   454→        i.severity === 'critical' ? 'high' : i.severity === 'warning' ? 'medium' : 'low';
+   455→      const targetView: AppView =
+   456→        actionType === 'gstin_error' || actionType === 'recon_mismatch' ? 'reconcile'
+   457→        : actionType === 'missing_documents' ? 'invoices'
+   458→        : 'returns';
+   459→      return {
+   460→        id: i.id,
+   461→        type: actionType,
+   462→        title: i.category,
+   463→        description: i.description ?? i.title,
+   464→        actionLabel: actionType === 'gstin_error' ? 'Fix Error' : actionType === 'missing_documents' ? 'Upload' : 'Review',
+   465→        targetView,
+   466→        priority,
+   467→      };
+   468→    });
+   469→
+   470→    // Ready-to-file actions from filings
+   471→    const readyStatuses: FilingStatus[] = ['validated', 'reviewed', 'generated'];
+   472→    const readyFilings = filings.filter(f => readyStatuses.includes(f.status));
+   473→    const readyActions: PendingAction[] = readyFilings.map(f => ({
+   474→      id: `ready-${f.id}`,
+   475→      type: 'ready_to_file' as const,
+   476→      title: `${f.returnType} ${periodToLabel(f.period)} ready to file`,
+   477→      description: `${f.readyForFiling} invoices validated, ${formatCurrency(f.totalTax)} total tax`,
+   478→      dueDate: getFilingDueDate(f.returnType, f.period),
+   479→      actionLabel: 'File Return',
+   480→      targetView: 'returns' as AppView,
+   481→      priority: 'high' as const,
+   482→    }));
+   483→
+   484→    // Overdue filing actions
+   485→    const overdueFilings = filings.filter(f => f.status !== 'filed' && isFilingOverdue(f.period) && !readyStatuses.includes(f.status));
+   486→    const overdueActions: PendingAction[] = overdueFilings.map(f => ({
+   487→      id: `overdue-${f.id}`,
+   488→      type: 'awaiting_review' as const,
+   489→      title: `${f.returnType} ${periodToLabel(f.period)} overdue`,
+   490→      description: `Return was due ${new Date(getFilingDueDate(f.returnType, f.period)).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}. Late fee may be accruing.`,
+   491→      dueDate: getFilingDueDate(f.returnType, f.period),
+   492→      actionLabel: 'Prepare Return',
+   493→      targetView: 'returns' as AppView,
+   494→      priority: 'high' as const,
+   495→    }));
+   496→
+   497→    return [
+   498→      ...readyActions,
+   499→      ...issueActions.sort((a, b) => (a.priority === 'high' ? -1 : b.priority === 'high' ? 1 : 0)),
+   500→      ...overdueActions,
+   501→    ];
+   502→  }, [issues, filings]);
+   503→
+   504→  // Map documents
+   505→  const documents: DocumentEntry[] = useMemo(() => {
+   506→    return rawDocuments.map(mapApiDocument);
+   507→  }, [rawDocuments]);
+   508→
+   509→  // Map recon runs
+   510→  const mappedReconRuns: ReconRun[] = useMemo(() => {
+   511→    return reconRuns.map(mapApiReconRun);
+   512→  }, [reconRuns]);
+   513→
+   514→  // Map audit logs → ActivityEvent[]
+   515→  const activities: ActivityEvent[] = useMemo(() => {
+   516→    return auditLogs.map(mapAuditLogToEvent);
+   517→  }, [auditLogs]);
+   518→
+   519→  // Map issues → AI insights
+   520→  const insights: AIInsight[] = useMemo(() => {
+   521→    return issues.filter(i => i.status === 'open').map(mapIssueToInsight);
+   522→  }, [issues]);
+   523→
+   524→  // Computed metrics
+   525→  const healthScore = client?.healthScore ?? 0;
+   526→  const isLowRisk = healthScore > 80;
+   527→  const isHighRisk = healthScore < 50;
+   528→  const riskLevel: 'Low' | 'Medium' | 'High' | 'Critical' =
+   529→    isLowRisk ? 'Low' : healthScore >= 50 ? 'Medium' : healthScore >= 30 ? 'High' : 'Critical';
+   530→  const matchRate = client?._aggregations?.matchPercentage ?? (healthScore > 80 ? 94 : healthScore < 50 ? 58 : 78);
+   531→  const pendingReturnsCount = filings.filter(f => f.status !== 'filed').length;
+   532→  const openIssuesCount = issues.filter(i => i.status === 'open').length;
+   533→  const taxVolume = filings.reduce((sum, f) => sum + f.totalTaxableValue, 0);
+   534→
+   535→  // ─── Handlers ─────────────────────────────────────────────────────────
+   536→  const handleBack = () => { setSelectedClientId(null); setCurrentView('clients'); };
+   537→  const handleAction = (view: AppView) => setCurrentView(view);
+   538→
+   539→  const handleOpenReturnPrep = (returnType: 'GSTR-1' | 'GSTR-3B' = 'GSTR-1') => {
+   540→    const resolvedId = client?.id ?? selectedClientId ?? 'client-1';
+   541→    setReturnPrepCtx({
+   542→      clientId: resolvedId,
+   543→      returnType,
+   544→      period: '2025-06',
+   545→    });
+   546→    setCurrentView('return-prep');
+   547→  };
+   548→
+   549→  const handleUploadDocument = () => {
+   550→    // Trigger file input
+   551→    const input = document.createElement('input');
+   552→    input.type = 'file';
+   553→    input.accept = '.xlsx,.xls,.csv,.pdf,.json';
+   554→    input.onchange = (e) => {
+   555→      const file = (e.target as HTMLInputElement).files?.[0];
+   556→      if (file && selectedClientId) {
+   557→        uploadFileMutation.mutate(
+   558→          { clientId: selectedClientId, name: file.name, fileType: file.name.split('.').pop(), size: file.size },
+   559→          {
+   560→            onSuccess: () => toast.success('Document uploaded', { description: file.name }),
+   561→            onError: (err) => toast.error('Upload failed', { description: err.message }),
+   562→          }
+   563→        );
+   564→      }
+   565→    };
+   566→    input.click();
+   567→  };
+   568→
+   569→  const handleRunReconciliation = () => {
+   570→    if (!selectedClientId) return;
+   571→    createReconRunMutation.mutate(
+   572→      { clientId: selectedClientId, period: '2025-06' },
+   573→      {
+   574→        onSuccess: () => toast.success('Reconciliation started', { description: 'Results will appear shortly' }),
+   575→        onError: (err) => toast.error('Reconciliation failed', { description: err.message }),
+   576→      }
+   577→    );
+   578→  };
+   579→
+   580→  // ─── No client selected ───────────────────────────────────────────────
+   581→  if (!selectedClientId) {
+   582→    return (
+   583→      <div className="max-w-6xl mx-auto px-4 md:px-6 py-6 space-y-6">
+   584→        <Skeleton className="h-6 w-40" />
+   585→        <div className="border rounded-xl p-6 space-y-4">
+   586→          <div className="flex gap-4"><Skeleton className="h-16 w-16 rounded-full" /><div className="space-y-2 flex-1"><Skeleton className="h-6 w-48" /><Skeleton className="h-4 w-64" /></div></div>
+   587→        </div>
+   588→        <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">{Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-20 rounded-lg" />)}</div>
+   589→      </div>
+   590→    );
+   591→  }
+   592→
+   593→  // ─── Loading state ────────────────────────────────────────────────────
+   594→  if (isLoading && !client) {
+   595→    return (
+   596→      <div className="max-w-6xl mx-auto px-4 md:px-6 py-6 space-y-6">
+   597→        <Skeleton className="h-6 w-40" />
+   598→        <div className="border rounded-xl p-6 space-y-4">
+   599→          <div className="flex gap-4"><Skeleton className="h-16 w-16 rounded-full" /><div className="space-y-2 flex-1"><Skeleton className="h-6 w-48" /><Skeleton className="h-4 w-64" /></div></div>
+   600→        </div>
+   601→        <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">{Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-20 rounded-lg" />)}</div>
+   602→      </div>
+   603→    );
+   604→  }
+   605→
+   606→  // ─── Error state ──────────────────────────────────────────────────────
+   607→  if (clientError) {
+   608→    return (
+   609→      <div className="max-w-6xl mx-auto px-4 md:px-6 py-12 text-center space-y-4">
+   610→        <AlertCircle className="size-12 text-red-400 mx-auto" />
+   611→        <h2 className="text-lg font-semibold text-foreground">Failed to load client</h2>
+   612→        <p className="text-sm text-muted-foreground">{clientError.message}</p>
+   613→        <Button variant="outline" onClick={handleBack}>Go Back</Button>
+   614→      </div>
+   615→    );
+   616→  }
+   617→
+   618→  // ─── Client not found ─────────────────────────────────────────────────
+   619→  if (!client) {
+   620→    return (
+   621→      <div className="max-w-6xl mx-auto px-4 md:px-6 py-12 text-center space-y-4">
+   622→        <Building2 className="size-12 text-muted-foreground/40 mx-auto" />
+   623→        <h2 className="text-lg font-semibold text-foreground">Client not found</h2>
+   624→        <p className="text-sm text-muted-foreground">The selected client could not be found.</p>
+   625→        <Button variant="outline" onClick={handleBack}>Back to Clients</Button>
+   626→      </div>
+   627→    );
+   628→  }
+   629→
+   630→  const healthColor = getHealthColor(healthScore);
+   631→
+   632→  return (
+   633→    <div className="max-w-6xl mx-auto px-4 md:px-6 py-6 space-y-8">
+   634→
+   635→      {/* ═══════════════════════════════════════════════════════════════════════
+   636→          HEADER
+   637→          ═══════════════════════════════════════════════════════════════════════ */}
+   638→      <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
+   639→        {/* Breadcrumb */}
+   640→        <div className="flex items-center gap-2 mb-4">
+   641→          <Button variant="ghost" size="sm" className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground gap-1" onClick={handleBack}>
+   642→            <ArrowLeft className="h-3.5 w-3.5" />
+   643→            Client Portfolio
+   644→          </Button>
+   645→          <ChevronRight className="h-3 w-3 text-muted-foreground" />
+   646→          <span className="text-xs text-muted-foreground">{name}</span>
+   647→        </div>
+   648→
+   649→        {/* Main header */}
+   650→        <div className="border border-border/60 rounded-xl p-5">
+   651→          <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-5">
+   652→            {/* Left: Identity */}
+   653→            <div className="flex items-start gap-4">
+   654→              <HealthRing score={healthScore} size={72} strokeWidth={5} />
+   655→              <div className="min-w-0">
+   656→                <div className="flex items-center gap-2 flex-wrap">
+   657→                  <h1 className="text-xl font-semibold text-foreground tracking-tight">{name}</h1>
+   658→                  {getRiskBadge(riskLevel)}
+   659→                </div>
+   660→                {client.legalName && <p className="text-sm text-muted-foreground mt-0.5">{client.legalName}</p>}
+   661→
+   662→                {/* Key info row */}
+   663→                <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 mt-2.5">
+   664→                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+   665→                    <Building2 className="size-3 text-slate-400" />
+   666→                    <span className="font-mono font-medium text-foreground">{client.gstin}</span>
+   667→                  </div>
+   668→                  <Separator orientation="vertical" className="h-3.5" />
+   669→                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+   670→                    <MapPin className="size-3 text-slate-400" />
+   671→                    <span>{client.state}</span>
+   672→                  </div>
+   673→                  <Separator orientation="vertical" className="h-3.5" />
+   674→                  <span className="text-xs text-muted-foreground">
+   675→                    {client.returnPeriod === 'quarterly' ? 'Quarterly' : 'Monthly'} Filing
+   676→                  </span>
+   677→                  <Separator orientation="vertical" className="h-3.5" />
+   678→                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+   679→                    <Calendar className="size-3 text-slate-400" />
+   680→                    <span>Last Filed: {client.lastFilingDate ? new Date(client.lastFilingDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: '2-digit' }) : '—'}</span>
+   681→                  </div>
+   682→                </div>
+   683→              </div>
+   684→            </div>
+   685→
+   686→            {/* Right: Quick actions */}
+   687→            <div className="flex flex-wrap items-center gap-2 shrink-0">
+   688→              <Button size="sm" className="h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white" onClick={handleUploadDocument}>
+   689→                <Upload className="size-3.5" />
+   690→                Upload Documents
+   691→              </Button>
+   692→              <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5" onClick={() => handleOpenReturnPrep('GSTR-1')}>
+   693→                <FileText className="size-3.5" />
+   694→                Create Return
+   695→              </Button>
+   696→              <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5" onClick={handleRunReconciliation} disabled={createReconRunMutation.isPending}>
+   697→                <GitCompareArrows className="size-3.5" />
+   698→                {createReconRunMutation.isPending ? 'Running...' : 'Run Reconciliation'}
+   699→              </Button>
+   700→              <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5" onClick={() => handleOpenReturnPrep('GSTR-3B')}>
+   701→                <Send className="size-3.5" />
+   702→                File Return
+   703→              </Button>
+   704→            </div>
+   705→          </div>
+   706→        </div>
+   707→      </motion.div>
+   708→
+   709→      {/* ═══════════════════════════════════════════════════════════════════════
+   710→          SECTION 1: CLIENT HEALTH OVERVIEW
+   711→          ═══════════════════════════════════════════════════════════════════════ */}
+   712→      <motion.section initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1, duration: 0.4 }}>
+   713→        <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider mb-3">Client Health Overview</h2>
+   714→        <motion.div variants={stagger} initial="hidden" animate="visible" className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+   715→          {[
+   716→            { label: 'Compliance Score', value: `${healthScore}%`, icon: Gauge, color: healthColor.text, bg: healthColor.bg },
+   717→            { label: 'Pending Returns', value: String(pendingReturnsCount), icon: Clock, color: 'text-amber-600', bg: 'bg-amber-50' },
+   718→            { label: 'Open Issues', value: String(openIssuesCount), icon: AlertCircle, color: 'text-red-600', bg: 'bg-red-50' },
+   719→            { label: 'Tax Volume', value: formatCurrency(taxVolume), icon: IndianRupee, color: 'text-emerald-600', bg: 'bg-emerald-50' },
+   720→            { label: 'Match Rate', value: `${matchRate}%`, icon: GitCompareArrows, color: 'text-teal-600', bg: 'bg-teal-50' },
+   721→            { label: 'Documents', value: String(documents.length), icon: FolderOpen, color: 'text-slate-600', bg: 'bg-slate-50' },
+   722→          ].map((item) => (
+   723→            <motion.div key={item.label} variants={fadeUp} whileHover={{ y: -2 }} transition={{ type: 'spring', stiffness: 400, damping: 25 }}>
+   724→              <div className="border border-border/60 rounded-xl p-4 hover:border-border transition-colors">
+   725→                <div className="flex items-center gap-2 mb-2.5">
+   726→                  <div className={`flex items-center justify-center h-7 w-7 rounded-md ${item.bg}`}>
+   727→                    <item.icon className={`size-3.5 ${item.color}`} />
+   728→                  </div>
+   729→                </div>
+   730→                <p className="text-lg font-bold text-foreground leading-tight">{item.value}</p>
+   731→                <p className="text-[11px] text-muted-foreground mt-1">{item.label}</p>
+   732→              </div>
+   733→            </motion.div>
+   734→          ))}
+   735→        </motion.div>
+   736→      </motion.section>
+   737→
+   738→      {/* ═══════════════════════════════════════════════════════════════════════
+   739→          SECTION 2: GST RETURN TIMELINE
+   740→          ═══════════════════════════════════════════════════════════════════════ */}
+   741→      <motion.section initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2, duration: 0.4 }}>
+   742→        <div className="flex items-center justify-between mb-3">
+   743→          <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">GST Return Timeline</h2>
+   744→          <Select value={returnFilter} onValueChange={setReturnFilter}>
+   745→            <SelectTrigger className="h-7 w-32 text-xs border-border/60">
+   746→              <SelectValue />
+   747→            </SelectTrigger>
+   748→            <SelectContent>
+   749→              <SelectItem value="all">All Returns</SelectItem>
+   750→              <SelectItem value="GSTR-1">GSTR-1</SelectItem>
+   751→              <SelectItem value="GSTR-3B">GSTR-3B</SelectItem>
+   752→            </SelectContent>
+   753→          </Select>
+   754→        </div>
+   755→
+   756→        {filteredReturns.length === 0 ? (
+   757→          <div className="border border-border/60 rounded-xl p-8 flex flex-col items-center justify-center text-center">
+   758→            <FileText className="size-10 text-muted-foreground/30 mb-3" />
+   759→            <p className="text-sm font-medium text-muted-foreground">No returns filed yet</p>
+   760→            <p className="text-xs text-muted-foreground/70 mt-1">Start by preparing your first GST return</p>
+   761→            <Button size="sm" className="mt-4 h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => handleOpenReturnPrep('GSTR-1')}>
+   762→              <FileText className="size-3.5" />
+   763→              Prepare First Return
+   764→            </Button>
+   765→          </div>
+   766→        ) : (
+   767→          <div className="border border-border/60 rounded-xl overflow-hidden">
+   768→            {/* Table header */}
+   769→            <div className="grid grid-cols-12 gap-2 px-4 py-2.5 bg-muted/30 text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
+   770→              <div className="col-span-2">Type</div>
+   771→              <div className="col-span-2">Period</div>
+   772→              <div className="col-span-2">Status</div>
+   773→              <div className="col-span-2">Filed Date</div>
+   774→              <div className="col-span-2">ARN</div>
+   775→              <div className="col-span-2 text-right">Tax Amount</div>
+   776→            </div>
+   777→            {/* Table rows */}
+   778→            <div className="divide-y divide-border/40">
+   779→              <AnimatePresence>
+   780→                {filteredReturns.map((ret, index) => (
+   781→                  <motion.div
+   782→                    key={ret.id}
+   783→                    initial={{ opacity: 0, y: 8 }}
+   784→                    animate={{ opacity: 1, y: 0 }}
+   785→                    transition={{ delay: 0.25 + index * 0.04, duration: 0.3 }}
+   786→                    className="grid grid-cols-12 gap-2 px-4 py-3 hover:bg-muted/20 transition-colors items-center"
+   787→                  >
+   788→                    <div className="col-span-2 text-sm font-medium text-foreground">{ret.type}</div>
+   789→                    <div className="col-span-2 text-sm text-muted-foreground">{ret.period}</div>
+   790→                    <div className="col-span-2">{getReturnStatusBadge(ret.status)}</div>
+   791→                    <div className="col-span-2 text-xs text-muted-foreground">{ret.filingDate ? new Date(ret.filingDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : '—'}</div>
+   792→                    <div className="col-span-2 text-xs font-mono text-muted-foreground">{ret.arn || '—'}</div>
+   793→                    <div className="col-span-2 text-sm font-medium text-foreground text-right">{formatCurrency(ret.taxAmount)}</div>
+   794→                  </motion.div>
+   795→                ))}
+   796→              </AnimatePresence>
+   797→            </div>
+   798→          </div>
+   799→        )}
+   800→      </motion.section>
+   801→
+   802→      {/* ═══════════════════════════════════════════════════════════════════════
+   803→          SECTION 3: PENDING ACTIONS
+   804→          ═══════════════════════════════════════════════════════════════════════ */}
+   805→      <motion.section initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3, duration: 0.4 }}>
+   806→        <div className="flex items-center justify-between mb-3">
+   807→          <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">Pending Actions</h2>
+   808→          <Badge variant="outline" className="text-[11px] text-muted-foreground">
+   809→            {pendingActions.filter(a => a.priority === 'high').length} urgent
+   810→          </Badge>
+   811→        </div>
+   812→
+   813→        {pendingActions.length === 0 ? (
+   814→          <div className="border border-border/60 rounded-xl p-6 flex flex-col items-center justify-center text-center">
+   815→            <CheckCircle2 className="size-10 text-emerald-300 mb-3" />
+   816→            <p className="text-sm font-medium text-muted-foreground">All caught up!</p>
+   817→            <p className="text-xs text-muted-foreground/70 mt-1">No pending actions for this client</p>
+   818→          </div>
+   819→        ) : (
+   820→          <div className="border border-border/60 rounded-xl divide-y divide-border/40 overflow-hidden">
+   821→            <AnimatePresence>
+   822→              {pendingActions.map((action, index) => {
+   823→                const IconComp = getActionTypeIcon(action.type);
+   824→                const priorityStripe = action.priority === 'high' ? 'bg-red-500' : action.priority === 'medium' ? 'bg-amber-500' : 'bg-slate-300';
+   825→                return (
+   826→                  <motion.div
+   827→                    key={action.id}
+   828→                    initial={{ opacity: 0, x: -8 }}
+   829→                    animate={{ opacity: 1, x: 0 }}
+   830→                    transition={{ delay: 0.35 + index * 0.05, duration: 0.3 }}
+   831→                    className="flex items-center gap-3 px-4 py-3.5 hover:bg-muted/20 transition-colors group"
+   832→                  >
+   833→                    <div className={`h-8 w-1 rounded-full shrink-0 ${priorityStripe}`} />
+   834→                    <div className={`flex items-center justify-center h-8 w-8 rounded-lg shrink-0 ${
+   835→                      action.priority === 'high' ? 'bg-red-50 text-red-600'
+   836→                      : action.priority === 'medium' ? 'bg-amber-50 text-amber-600'
+   837→                      : 'bg-slate-100 text-slate-500'
+   838→                    }`}>
+   839→                      <IconComp className="size-4" />
+   840→                    </div>
+   841→                    <div className="flex-1 min-w-0">
+   842→                      <p className="text-sm font-medium text-foreground">{action.title}</p>
+   843→                      <p className="text-xs text-muted-foreground mt-0.5 truncate">{action.description}</p>
+   844→                    </div>
+   845→                    {action.dueDate && (
+   846→                      <span className="text-xs text-muted-foreground shrink-0">
+   847→                        Due {new Date(action.dueDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+   848→                      </span>
+   849→                    )}
+   850→                    <Button
+   851→                      size="sm"
+   852→                      className={`h-7 text-xs font-medium px-3 shrink-0 ${
+   853→                        action.priority === 'high' ? 'bg-red-600 hover:bg-red-700 text-white'
+   854→                        : action.type === 'ready_to_file' ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+   855→                        : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+   856→                      }`}
+   857→                      onClick={() => {
+   858→                        if (action.targetView === 'returns' || action.type === 'ready_to_file') {
+   859→                          handleOpenReturnPrep('GSTR-1');
+   860→                        } else {
+   861→                          handleAction(action.targetView);
+   862→                        }
+   863→                      }}
+   864→                    >
+   865→                      {action.actionLabel}
+   866→                    </Button>
+   867→                  </motion.div>
+   868→                );
+   869→              })}
+   870→            </AnimatePresence>
+   871→          </div>
+   872→        )}
+   873→      </motion.section>
+   874→
+   875→      {/* ═══════════════════════════════════════════════════════════════════════
+   876→          SECTION 4: UPLOADED DOCUMENTS
+   877→          ═══════════════════════════════════════════════════════════════════════ */}
+   878→      <motion.section initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4, duration: 0.4 }}>
+   879→        <div className="flex items-center justify-between mb-3">
+   880→          <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">Uploaded Documents</h2>
+   881→          <Button variant="ghost" size="sm" className="text-xs font-medium text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 h-7 gap-1" onClick={() => handleAction('invoices')}>
+   882→            View All <ChevronRight className="h-3.5 w-3.5" />
+   883→          </Button>
+   884→        </div>
+   885→
+   886→        {documents.length === 0 ? (
+   887→          <div className="border border-border/60 rounded-xl p-8 flex flex-col items-center justify-center text-center">
+   888→            <UploadCloud className="size-10 text-muted-foreground/30 mb-3" />
+   889→            <p className="text-sm font-medium text-muted-foreground">No documents uploaded yet</p>
+   890→            <p className="text-xs text-muted-foreground/70 mt-1">Upload sales registers, purchase data, or GST portal exports</p>
+   891→            <Button size="sm" className="mt-4 h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white" onClick={handleUploadDocument} disabled={uploadFileMutation.isPending}>
+   892→              <Upload className="size-3.5" />
+   893→              {uploadFileMutation.isPending ? 'Uploading...' : 'Upload Document'}
+   894→            </Button>
+   895→          </div>
+   896→        ) : (
+   897→          <div className="border border-border/60 rounded-xl overflow-hidden">
+   898→            {/* Table header */}
+   899→            <div className="grid grid-cols-12 gap-2 px-4 py-2.5 bg-muted/30 text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
+   900→              <div className="col-span-3">File Name</div>
+   901→              <div className="col-span-2">Upload Date</div>
+   902→              <div className="col-span-2">Type</div>
+   903→              <div className="col-span-2">Status</div>
+   904→              <div className="col-span-1 text-center">Invoices</div>
+   905→              <div className="col-span-2 text-right">Actions</div>
+   906→            </div>
+   907→            <div className="divide-y divide-border/40">
+   908→              {documents.map((doc, index) => (
+   909→                <motion.div
+   910→                  key={doc.id}
+   911→                  initial={{ opacity: 0, y: 8 }}
+   912→                  animate={{ opacity: 1, y: 0 }}
+   913→                  transition={{ delay: 0.45 + index * 0.04, duration: 0.3 }}
+   914→                  className="grid grid-cols-12 gap-2 px-4 py-3 hover:bg-muted/20 transition-colors items-center"
+   915→                >
+   916→                  <div className="col-span-3 flex items-center gap-2 min-w-0">
+   917→                    <FileText className="size-4 text-muted-foreground shrink-0" />
+   918→                    <span className="text-sm font-medium text-foreground truncate" title={doc.name}>{doc.name}</span>
+   919→                  </div>
+   920→                  <div className="col-span-2 text-xs text-muted-foreground">
+   921→                    {new Date(doc.uploadDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+   922→                  </div>
+   923→                  <div className="col-span-2 text-xs text-muted-foreground">{doc.type}</div>
+   924→                  <div className="col-span-2">{getDocStatusBadge(doc.status)}</div>
+   925→                  <div className="col-span-1 text-center">
+   926→                    {doc.invoicesExtracted > 0 ? (
+   927→                      <span className="text-xs font-medium text-foreground">{doc.invoicesExtracted}</span>
+   928→                    ) : (
+   929→                      <span className="text-xs text-muted-foreground">—</span>
+   930→                    )}
+   931→                  </div>
+   932→                  <div className="col-span-2 flex items-center justify-end gap-1">
+   933→                    <Button variant="ghost" size="sm" className="h-6 text-[11px] px-1.5 text-muted-foreground hover:text-foreground" onClick={() => handleAction('invoices')}>
+   934→                      <Eye className="size-3" />
+   935→                    </Button>
+   936→                    {doc.status === 'Error' && (
+   937→                      <Button variant="ghost" size="sm" className="h-6 text-[11px] px-1.5 text-red-600 hover:text-red-700 hover:bg-red-50" onClick={() => handleAction('invoices')}>
+   938→                        <RefreshCw className="size-3" />
+   939→                      </Button>
+   940→                    )}
+   941→                    <Button variant="ghost" size="sm" className="h-6 text-[11px] px-1.5 text-muted-foreground hover:text-foreground" onClick={() => handleAction('invoices')}>
+   942→                      <Download className="size-3" />
+   943→                    </Button>
+   944→                  </div>
+   945→                </motion.div>
+   946→              ))}
+   947→            </div>
+   948→          </div>
+   949→        )}
+   950→      </motion.section>
+   951→
+   952→      {/* ═══════════════════════════════════════════════════════════════════════
+   953→          TWO-COLUMN: RECONCILIATION HISTORY + AI COMPLIANCE ADVISOR
+   954→          ═══════════════════════════════════════════════════════════════════════ */}
+   955→      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+   956→
+   957→        {/* SECTION 5: RECONCILIATION HISTORY */}
+   958→        <motion.section initial={{ opacity: 0, x: -12 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.5, duration: 0.4 }}>
+   959→          <div className="flex items-center justify-between mb-3">
+   960→            <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">Reconciliation History</h2>
+   961→            <Button variant="ghost" size="sm" className="text-xs font-medium text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 h-7 gap-1" onClick={handleRunReconciliation} disabled={createReconRunMutation.isPending}>
+   962→              {createReconRunMutation.isPending ? 'Running...' : 'Run Reconciliation'} <ArrowRight className="h-3.5 w-3.5" />
+   963→            </Button>
+   964→          </div>
+   965→
+   966→          {mappedReconRuns.length === 0 ? (
+   967→            <div className="border border-border/60 rounded-xl p-8 flex flex-col items-center justify-center text-center">
+   968→              <GitCompareArrows className="size-10 text-muted-foreground/30 mb-3" />
+   969→              <p className="text-sm font-medium text-muted-foreground">No reconciliation runs yet</p>
+   970→              <p className="text-xs text-muted-foreground/70 mt-1">Run reconciliation to match your books with GST portal data</p>
+   971→              <Button size="sm" className="mt-4 h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white" onClick={handleRunReconciliation} disabled={createReconRunMutation.isPending}>
+   972→                <GitCompareArrows className="size-3.5" />
+   973→                {createReconRunMutation.isPending ? 'Running...' : 'Run Reconciliation'}
+   974→              </Button>
+   975→            </div>
+   976→          ) : (
+   977→            <div className="border border-border/60 rounded-xl divide-y divide-border/40 overflow-hidden">
+   978→              {mappedReconRuns.map((run, index) => (
+   979→                <motion.div
+   980→                  key={run.id}
+   981→                  initial={{ opacity: 0, y: 8 }}
+   982→                  animate={{ opacity: 1, y: 0 }}
+   983→                  transition={{ delay: 0.55 + index * 0.05, duration: 0.3 }}
+   984→                  className="px-4 py-3.5 hover:bg-muted/20 transition-colors"
+   985→                >
+   986→                  <div className="flex items-center justify-between mb-2">
+   987→                    <span className="text-sm font-medium text-foreground">{run.period}</span>
+   988→                    <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${
+   989→                      run.matchRate >= 90 ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+   990→                      : run.matchRate >= 70 ? 'bg-amber-50 text-amber-700 border-amber-200'
+   991→                      : 'bg-red-50 text-red-700 border-red-200'
+   992→                    }`}>
+   993→                      {run.matchRate}% match
+   994→                    </Badge>
+   995→                  </div>
+   996→                  <div className="grid grid-cols-4 gap-2 text-xs">
+   997→                    <div>
+   998→                      <p className="text-muted-foreground">Mismatches</p>
+   999→                      <p className="font-medium text-foreground">{run.mismatches}</p>
+  1000→                    </div>
+  1001→                    <div>
+  1002→                      <p className="text-muted-foreground">Missing</p>
+  1003→                      <p className="font-medium text-foreground">{run.missingInvoices}</p>
+  1004→                    </div>
+  1005→                    <div>
+  1006→                      <p className="text-muted-foreground">Tax Diff</p>
+  1007→                      <p className="font-medium text-foreground">{formatCurrency(run.taxDifference)}</p>
+  1008→                    </div>
+  1009→                    <div>
+  1010→                      <p className="text-muted-foreground">Run Date</p>
+  1011→                      <p className="font-medium text-foreground">{new Date(run.runDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</p>
+  1012→                    </div>
+  1013→                  </div>
+  1014→                </motion.div>
+  1015→              ))}
+  1016→            </div>
+  1017→          )}
+  1018→        </motion.section>
+  1019→
+  1020→        {/* SECTION 6: AI COMPLIANCE ADVISOR */}
+  1021→        <motion.section initial={{ opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.55, duration: 0.4 }}>
+  1022→          <div className="flex items-center justify-between mb-3">
+  1023→            <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider flex items-center gap-2">
+  1024→              <Sparkles className="size-3.5 text-emerald-600" />
+  1025→              AI Compliance Advisor
+  1026→            </h2>
+  1027→            <Badge variant="outline" className="text-[11px] text-muted-foreground">
+  1028→              {insights.filter(i => i.severity === 'critical').length} critical
+  1029→            </Badge>
+  1030→          </div>
+  1031→
+  1032→          {insights.length === 0 ? (
+  1033→            <div className="border border-border/60 rounded-xl p-8 flex flex-col items-center justify-center text-center">
+  1034→              <CheckCircle2 className="size-10 text-emerald-300 mb-3" />
+  1035→              <p className="text-sm font-medium text-muted-foreground">No compliance issues detected</p>
+  1036→              <p className="text-xs text-muted-foreground/70 mt-1">Your client data looks clean</p>
+  1037→            </div>
+  1038→          ) : (
+  1039→            <div className="border border-border/60 rounded-xl divide-y divide-border/40 overflow-hidden">
+  1040→              {insights.map((insight, index) => {
+  1041→                const severityConfig = {
+  1042→                  critical: { icon: XCircle, color: 'text-red-600', bg: 'bg-red-50', badge: 'bg-red-100 text-red-700 border-red-200' },
+  1043→                  warning: { icon: AlertTriangle, color: 'text-amber-600', bg: 'bg-amber-50', badge: 'bg-amber-100 text-amber-700 border-amber-200' },
+  1044→                  info: { icon: CheckCircle2, color: 'text-blue-600', bg: 'bg-blue-50', badge: 'bg-blue-100 text-blue-700 border-blue-200' },
+  1045→                }[insight.severity];
+  1046→                const SevIcon = severityConfig.icon;
+  1047→
+  1048→                return (
+  1049→                  <motion.div
+  1050→                    key={insight.id}
+  1051→                    initial={{ opacity: 0, y: 8 }}
+  1052→                    animate={{ opacity: 1, y: 0 }}
+  1053→                    transition={{ delay: 0.6 + index * 0.05, duration: 0.3 }}
+  1054→                    className="px-4 py-3.5 hover:bg-muted/20 transition-colors group"
+  1055→                  >
+  1056→                    <div className="flex gap-3">
+  1057→                      <div className={`flex items-center justify-center h-7 w-7 rounded-lg shrink-0 ${severityConfig.bg}`}>
+  1058→                        <SevIcon className={`size-3.5 ${severityConfig.color}`} />
+  1059→                      </div>
+  1060→                      <div className="flex-1 min-w-0">
+  1061→                        <div className="flex items-start justify-between gap-2">
+  1062→                          <p className="text-sm font-medium text-foreground leading-snug">{insight.title}</p>
+  1063→                          {insight.severity === 'critical' && (
+  1064→                            <span className="text-[9px] font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded shrink-0">URGENT</span>
+  1065→                          )}
+  1066→                        </div>
+  1067→                        <p className="text-xs text-muted-foreground mt-1 leading-relaxed line-clamp-2">{insight.description}</p>
+  1068→                        <div className="flex items-center gap-2 mt-2">
+  1069→                          <Badge variant="outline" className={`text-[9px] px-1.5 py-0 ${severityConfig.badge}`}>{insight.category}</Badge>
+  1070→                          <button
+  1071→                            className="text-xs font-semibold text-emerald-600 hover:text-emerald-700 flex items-center gap-1 group-hover:gap-1.5 transition-all"
+  1072→                            onClick={() => {
+  1073→                              if (insight.actionView === 'returns') {
+  1074→                                handleOpenReturnPrep('GSTR-1');
+  1075→                              } else {
+  1076→                                handleAction(insight.actionView);
+  1077→                              }
+  1078→                            }}
+  1079→                          >
+  1080→                            {insight.suggestedAction}
+  1081→                            <ArrowRight className="h-3 w-3" />
+  1082→                          </button>
+  1083→                        </div>
+  1084→                      </div>
+  1085→                    </div>
+  1086→                  </motion.div>
+  1087→                );
+  1088→              })}
+  1089→            </div>
+  1090→          )}
+  1091→        </motion.section>
+  1092→      </div>
+  1093→
+  1094→      {/* ═══════════════════════════════════════════════════════════════════════
+  1095→          SECTION 7: ACTIVITY TIMELINE
+  1096→          ═══════════════════════════════════════════════════════════════════════ */}
+  1097→      <motion.section initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.6, duration: 0.4 }}>
+  1098→        <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider mb-3">Activity Timeline</h2>
+  1099→
+  1100→        {activities.length === 0 ? (
+  1101→          <div className="border border-border/60 rounded-xl p-8 flex flex-col items-center justify-center text-center">
+  1102→            <Inbox className="size-10 text-muted-foreground/30 mb-3" />
+  1103→            <p className="text-sm font-medium text-muted-foreground">No activity recorded yet</p>
+  1104→            <p className="text-xs text-muted-foreground/70 mt-1">Activities will appear as you upload documents, file returns, and run reconciliation</p>
+  1105→          </div>
+  1106→        ) : (
+  1107→          <div className="border border-border/60 rounded-xl overflow-hidden">
+  1108→            <div className="divide-y divide-border/40">
+  1109→              {activities.map((event, index) => {
+  1110→                const IconComp = getActivityIcon(event.type);
+  1111→                const iconColor = getActivityColor(event.type);
+  1112→                return (
+  1113→                  <motion.div
+  1114→                    key={event.id}
+  1115→                    initial={{ opacity: 0, x: -8 }}
+  1116→                    animate={{ opacity: 1, x: 0 }}
+  1117→                    transition={{ delay: 0.65 + index * 0.04, duration: 0.3 }}
+  1118→                    className="flex items-center gap-3 px-4 py-3 hover:bg-muted/20 transition-colors"
+  1119→                  >
+  1120→                    <div className={`flex items-center justify-center h-7 w-7 rounded-lg shrink-0 ${iconColor}`}>
+  1121→                      <IconComp className="size-3.5" />
+  1122→                    </div>
+  1123→                    <div className="flex-1 min-w-0">
+  1124→                      <p className="text-sm text-foreground">{event.description}</p>
+  1125→                    </div>
+  1126→                    <span className="text-xs text-muted-foreground shrink-0">{formatRelativeTime(event.timestamp)}</span>
+  1127→                  </motion.div>
+  1128→                );
+  1129→              })}
+  1130→            </div>
+  1131→          </div>
+  1132→        )}
+  1133→      </motion.section>
+  1134→
+  1135→    </div>
+  1136→  );
+  1137→}
+  1138→

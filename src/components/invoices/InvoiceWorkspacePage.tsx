@@ -22,9 +22,6 @@ import {
   ScrollArea,
 } from '@/components/ui/scroll-area';
 import {
-  Progress,
-} from '@/components/ui/progress';
-import {
   Select,
   SelectContent,
   SelectItem,
@@ -32,101 +29,67 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import {
-  Collapsible,
-  CollapsibleTrigger,
-  CollapsibleContent,
-} from '@/components/ui/collapsible';
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import {
   CloudUpload,
-  FileJson,
-  FileSpreadsheet,
   FileText,
   CheckCircle2,
   AlertTriangle,
   XCircle,
-  ArrowRight,
-  Edit3,
   ShieldCheck,
-  ChevronDown,
   FileUp,
-  Bot,
-  X,
   Upload,
   AlertCircle,
-  Sparkles,
-  FileCheck2,
-  Clock,
-  Eye,
   ThumbsUp,
   Inbox,
   Loader2,
+  Search,
+  Trash2,
+  FileSpreadsheet,
+  FileJson,
+  TrendingUp,
+  Clock,
+  ShieldAlert,
 } from 'lucide-react';
 import type {
-  Invoice,
-  Client,
-  GSTR1Section,
-  Issue,
+  FirestoreInvoice,
+  FirestoreClient,
+  FirestoreDocument,
+} from '@/lib/firestore-schema';
+import type {
+  InvoiceStatus,
+  RiskLevel,
+  MatchStatus,
+  InvoiceType,
 } from '@/types/gst';
 import {
-  GSTR1_SECTION_LABELS,
+  MATCH_STATUS_CONFIG,
+  RISK_LEVEL_CONFIG,
+  INVOICE_TYPE_TO_SECTION,
 } from '@/types/gst';
 import {
   formatCurrency,
   formatNumber,
 } from '@/lib/gst-utils';
-import { useApp } from '@/contexts/AppContext';
 import {
-  useInvoices,
-  useClients,
-  useUpdateInvoice,
-  useIssues,
-} from '@/hooks/api';
+  useFireInvoices,
+  useFireClients,
+  useFireDocuments,
+} from '@/hooks/use-firestore';
+import {
+  createInvoice,
+  approveInvoice,
+  deleteInvoice,
+  createDocument,
+} from '@/lib/firestore-service';
 import { toast } from 'sonner';
 import { EmptyState } from '@/components/shared/EmptyState';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-
-// ─── Local Types ──────────────────────────────────────────────────────────────
-
-interface ProcessingFile {
-  id: string;
-  name: string;
-  size: number;
-  format: string;
-  progress: number;
-  status: 'uploading' | 'extracting' | 'validating' | 'complete' | 'error';
-  invoiceCount: number;
-  ocrConfidence: number;
-  errorMsg?: string;
-}
-
-type ValidationStatus = 'validated' | 'warning' | 'error';
-
-interface ExtractedInvoice {
-  id: string;
-  invoiceNumber: string;
-  clientName: string;
-  invoiceDate: string;
-  section: GSTR1Section;
-  sectionLabel: string;
-  taxableValue: number;
-  cgst: number;
-  sgst: number;
-  igst: number;
-  totalTax: number;
-  totalAmount: number;
-  validationStatus: ValidationStatus;
-  ocrConfidence: number;
-  missingFields: string[];
-  validationMessages: string[];
-}
-
-interface ValidationIssueItem {
-  id: string;
-  severity: 'critical' | 'warning';
-  description: string;
-  invoiceNumber: string;
-  invoiceId: string;
-}
 
 // ─── Animation Variants ───────────────────────────────────────────────────────
 
@@ -148,15 +111,20 @@ const staggerItem = {
   visible: { opacity: 1, y: 0, transition: { duration: 0.35, ease: 'easeOut' } },
 };
 
-const pulseGlow = {
-  pulse: {
-    boxShadow: [
-      '0 0 0 0 rgba(16, 185, 129, 0)',
-      '0 0 0 8px rgba(16, 185, 129, 0.15)',
-      '0 0 0 0 rgba(16, 185, 129, 0)',
-    ],
-    transition: { duration: 2, repeat: Infinity, ease: 'easeInOut' },
-  },
+// ─── Status Badge Configs ─────────────────────────────────────────────────────
+
+const STATUS_BADGE: Record<InvoiceStatus, { label: string; className: string }> = {
+  draft: { label: 'Draft', className: 'bg-slate-100 text-slate-700 border-slate-200' },
+  approved: { label: 'Approved', className: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+  filed: { label: 'Filed', className: 'bg-blue-50 text-blue-700 border-blue-200' },
+  cancelled: { label: 'Cancelled', className: 'bg-red-50 text-red-700 border-red-200' },
+};
+
+const RISK_BADGE: Record<RiskLevel, { label: string; className: string }> = {
+  low: { label: 'Low', className: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+  medium: { label: 'Medium', className: 'bg-amber-50 text-amber-700 border-amber-200' },
+  high: { label: 'High', className: 'bg-orange-50 text-orange-700 border-orange-200' },
+  critical: { label: 'Critical', className: 'bg-red-50 text-red-700 border-red-200' },
 };
 
 // ─── Helper ───────────────────────────────────────────────────────────────────
@@ -167,307 +135,134 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / 1048576).toFixed(1)} MB`;
 }
 
-function getConfidenceColor(confidence: number): string {
-  if (confidence >= 95) return 'text-emerald-600';
-  if (confidence >= 80) return 'text-amber-600';
-  return 'text-red-600';
-}
-
-function getConfidenceBarColor(confidence: number): string {
-  if (confidence >= 95) return 'bg-emerald-500';
-  if (confidence >= 80) return 'bg-amber-500';
-  return 'bg-red-500';
-}
-
-function getSectionBadgeStyle(section: string): string {
-  const styles: Record<string, string> = {
-    b2b: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-    b2cl: 'bg-teal-50 text-teal-700 border-teal-200',
-    b2cs: 'bg-cyan-50 text-cyan-700 border-cyan-200',
-    exp: 'bg-amber-50 text-amber-700 border-amber-200',
-    cdnr: 'bg-orange-50 text-orange-700 border-orange-200',
-    cdnur: 'bg-rose-50 text-rose-700 border-rose-200',
-  };
-  return styles[section] || 'bg-slate-50 text-slate-700 border-slate-200';
-}
-
-function getValidationIcon(status: ValidationStatus) {
-  switch (status) {
-    case 'validated':
-      return <CheckCircle2 className="size-4 text-emerald-500" />;
-    case 'warning':
-      return <AlertTriangle className="size-4 text-amber-500" />;
-    case 'error':
-      return <XCircle className="size-4 text-red-500" />;
-  }
-}
-
-function getValidationBadge(status: ValidationStatus): string {
-  switch (status) {
-    case 'validated':
-      return 'bg-emerald-50 text-emerald-700 border-emerald-200';
-    case 'warning':
-      return 'bg-amber-50 text-amber-700 border-amber-200';
-    case 'error':
-      return 'bg-red-50 text-red-700 border-red-200';
-  }
-}
-
-function getValidationLabel(status: ValidationStatus): string {
-  switch (status) {
-    case 'validated':
-      return 'Validated';
-    case 'warning':
-      return 'Warning';
-    case 'error':
-      return 'Error';
-  }
-}
-
-// ─── Map API Invoice to local ExtractedInvoice ────────────────────────────────
-
-function mapInvoiceStatus(status: string): ValidationStatus {
-  if (status === 'approved' || status === 'filed') return 'validated';
-  if (status === 'draft') return 'warning';
-  return 'error';
-}
-
-function mapInvoiceToExtracted(inv: Invoice, clientName: string): ExtractedInvoice {
-  const vStatus = mapInvoiceStatus(inv.status);
-  return {
-    id: inv.id,
-    invoiceNumber: inv.invoiceNumber,
-    clientName,
-    invoiceDate: inv.invoiceDate,
-    section: inv.gstr1Section,
-    sectionLabel: GSTR1_SECTION_LABELS[inv.gstr1Section] ?? inv.gstr1Section.toUpperCase(),
-    taxableValue: inv.taxableValue,
-    cgst: inv.cgst,
-    sgst: inv.sgst,
-    igst: inv.igst,
-    totalTax: inv.cgst + inv.sgst + inv.igst,
-    totalAmount: inv.totalAmount,
-    validationStatus: vStatus,
-    ocrConfidence: vStatus === 'error' ? 75.0 : vStatus === 'warning' ? 92.0 : 98.5,
-    missingFields: inv.aiExplanation ? [inv.aiExplanation.split(' ').slice(0, 2).join(' ')] : [],
-    validationMessages: inv.aiExplanation ? [inv.aiExplanation] : [],
-  };
+function getFileIcon(fileName: string) {
+  const ext = fileName.split('.').pop()?.toLowerCase();
+  if (ext === 'json') return <FileJson className="size-4 text-amber-500" />;
+  if (ext === 'csv' || ext === 'xlsx') return <FileSpreadsheet className="size-4 text-emerald-500" />;
+  return <FileText className="size-4 text-slate-500" />;
 }
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function InvoiceWorkspacePage() {
-  const { selectedClientId, setSelectedClientId } = useApp();
-  const queryClient = useQueryClient();
-
-  // ── React Query data hooks ──
-  const { data: invoicesData, isLoading: invoicesLoading } = useInvoices(selectedClientId ?? undefined);
-  const { data: clientsData, isLoading: clientsLoading } = useClients();
-  const { data: issuesData } = useIssues(selectedClientId ?? undefined);
-
-  // ── Mutations ──
-  const updateInvoiceMutation = useUpdateInvoice();
-
-  // File upload mutation — sends FormData to /api/upload
-  const uploadMutation = useMutation({
-    mutationFn: async (formData: FormData) => {
-      const res = await fetch('/api/upload', {
-        method: 'POST',
-        body: formData,
-      });
-      if (!res.ok) {
-        const error = await res.json().catch(() => ({ error: 'Upload failed' }));
-        throw new Error(error.error || `HTTP ${res.status}`);
-      }
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['invoices'] });
-      queryClient.invalidateQueries({ queryKey: ['documents'] });
-    },
-  });
-
-  // ── Clients from API ──
-  const clients = clientsData?.clients ?? [];
+  // ── Firestore data hooks ──
+  const { data: invoices, loading: invoicesLoading, error: invoicesError } = useFireInvoices();
+  const { data: clients, loading: clientsLoading, error: clientsError } = useFireClients();
+  const { data: documents, loading: documentsLoading } = useFireDocuments();
 
   // ── Client map for name lookups ──
   const clientMap = useMemo(() => {
-    const map = new Map<string, Client>();
+    const map = new Map<string, FirestoreClient & { id: string }>();
     for (const c of clients) {
-      map.set(c.id, c);
+      map.set(c.clientId, c);
     }
     return map;
   }, [clients]);
 
   // ── Upload State ──
   const [isDragging, setIsDragging] = useState(false);
-  const [processingFiles, setProcessingFiles] = useState<ProcessingFile[]>([]);
+  const [uploadingFiles, setUploadingFiles] = useState<Array<{ id: string; name: string; progress: number }>>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // ── Invoices from API ──
-  const apiInvoices = invoicesData?.invoices ?? [];
-
-  // Map API invoices to the local ExtractedInvoice type for the UI
-  const invoices: ExtractedInvoice[] = useMemo(() =>
-    apiInvoices.map(inv => {
-      const clientName = clientMap.get(inv.clientId)?.tradeName ?? 'Unknown';
-      return mapInvoiceToExtracted(inv, clientName);
-    }),
-    [apiInvoices, clientMap]
-  );
-
-  const hasInvoices = invoices.length > 0;
-
   // ── Filter State ──
-  const [sectionFilter, setSectionFilter] = useState<string>('all');
+  const [clientFilter, setClientFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [riskFilter, setRiskFilter] = useState<string>('all');
+  const [typeFilter, setTypeFilter] = useState<string>('all');
+  const [searchQuery, setSearchQuery] = useState('');
 
-  // ── Collapsible ──
-  const [issuesOpen, setIssuesOpen] = useState(true);
-
-  // ── AI Review Queue ──
-  const [reviewingInvoiceId, setReviewingInvoiceId] = useState<string | null>(null);
+  // ── Action State ──
+  const [approvingId, setApprovingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   // ── Loading ──
   const loading = invoicesLoading || clientsLoading;
 
-  // ── Pipeline Counts ──
-  const pipelineCounts = useMemo(() => {
-    const uploading = processingFiles.filter(f => f.status === 'uploading').length;
-    const extracting = processingFiles.filter(f => f.status === 'extracting' || f.status === 'validating').length;
-    const validated = invoices.filter(i => i.validationStatus === 'validated').length;
-    const errors = invoices.filter(i => i.validationStatus === 'error').length;
-    return { uploading, extracting, validated, errors };
-  }, [processingFiles, invoices]);
-
-  // ── Validation Issues from API ──
-  const apiIssues = issuesData?.issues ?? [];
-
-  const validationIssues: ValidationIssueItem[] = useMemo(() => {
-    // First, derive issues from invoice validation status
-    const issues: ValidationIssueItem[] = [];
-    for (const inv of invoices) {
-      if (inv.validationStatus === 'error') {
-        for (const msg of inv.validationMessages) {
-          issues.push({
-            id: `${inv.id}-err-${issues.length}`,
-            severity: 'critical',
-            description: msg,
-            invoiceNumber: inv.invoiceNumber,
-            invoiceId: inv.id,
-          });
-        }
-      }
-      if (inv.validationStatus === 'warning') {
-        for (const msg of inv.validationMessages) {
-          issues.push({
-            id: `${inv.id}-warn-${issues.length}`,
-            severity: 'warning',
-            description: msg,
-            invoiceNumber: inv.invoiceNumber,
-            invoiceId: inv.id,
-          });
-        }
-      }
-      for (const field of inv.missingFields) {
-        issues.push({
-          id: `${inv.id}-missing-${field}`,
-          severity: 'warning',
-          description: `Missing: ${field}`,
-          invoiceNumber: inv.invoiceNumber,
-          invoiceId: inv.id,
-        });
-      }
-    }
-    // Also include API issues
-    for (const issue of apiIssues) {
-      if (issue.status === 'open') {
-        issues.push({
-          id: issue.id,
-          severity: issue.severity === 'critical' ? 'critical' : 'warning',
-          description: issue.title + (issue.description ? `: ${issue.description}` : ''),
-          invoiceNumber: issue.invoiceId ? 'See details' : 'N/A',
-          invoiceId: issue.invoiceId ?? '',
-        });
-      }
-    }
-    return issues;
-  }, [invoices, apiIssues]);
-
-  const criticalCount = validationIssues.filter(i => i.severity === 'critical').length;
-  const warningCount = validationIssues.filter(i => i.severity === 'warning').length;
+  // ── Summary Metrics ──
+  const summary = useMemo(() => {
+    const total = invoices.length;
+    const approved = invoices.filter(i => i.status === 'approved').length;
+    const pending = invoices.filter(i => i.status === 'draft').length;
+    const taxVolume = invoices.reduce((sum, i) => sum + i.totalAmount, 0);
+    const riskItems = invoices.filter(i => i.riskLevel === 'high' || i.riskLevel === 'critical').length;
+    return { total, approved, pending, taxVolume, riskItems };
+  }, [invoices]);
 
   // ── Filtered Invoices ──
   const filteredInvoices = useMemo(() => {
     return invoices.filter(inv => {
-      if (sectionFilter !== 'all' && inv.section !== sectionFilter) return false;
-      if (statusFilter !== 'all' && inv.validationStatus !== statusFilter) return false;
+      if (clientFilter !== 'all' && inv.clientId !== clientFilter) return false;
+      if (statusFilter !== 'all' && inv.status !== statusFilter) return false;
+      if (riskFilter !== 'all' && inv.riskLevel !== riskFilter) return false;
+      if (typeFilter !== 'all' && inv.invoiceType !== typeFilter) return false;
+      if (searchQuery) {
+        const q = searchQuery.toLowerCase();
+        const clientName = clientMap.get(inv.clientId)?.tradeName ?? '';
+        const matchesNumber = inv.invoiceNumber.toLowerCase().includes(q);
+        const matchesBuyer = (inv.buyerName ?? '').toLowerCase().includes(q);
+        const matchesClient = clientName.toLowerCase().includes(q);
+        if (!matchesNumber && !matchesBuyer && !matchesClient) return false;
+      }
       return true;
     });
-  }, [invoices, sectionFilter, statusFilter]);
-
-  // ── Active Pipeline Stage ──
-  const activePipelineStage = useMemo(() => {
-    if (pipelineCounts.uploading > 0) return 'uploading';
-    if (pipelineCounts.extracting > 0) return 'extracting';
-    return 'idle';
-  }, [pipelineCounts]);
+  }, [invoices, clientFilter, statusFilter, riskFilter, typeFilter, searchQuery, clientMap]);
 
   // ── Upload Handlers ──
   const handleUpload = useCallback(async (files: File[]) => {
     for (const file of files) {
-      const fileId = `file-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-      const newFile: ProcessingFile = {
-        id: fileId,
-        name: file.name,
-        size: file.size,
-        format: file.name.split('.').pop()?.toUpperCase() || 'JSON',
-        progress: 0,
-        status: 'uploading',
-        invoiceCount: 0,
-        ocrConfidence: 0,
-      };
+      const fileId = `upload-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+      setUploadingFiles(prev => [...prev, { id: fileId, name: file.name, progress: 0 }]);
 
-      setProcessingFiles(prev => [...prev, newFile]);
+      try {
+        // Simulate upload progress
+        setUploadingFiles(prev =>
+          prev.map(f => f.id === fileId ? { ...f, progress: 30 } : f)
+        );
 
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('clientId', selectedClientId ?? '');
-      formData.append('period', '2025-06');
+        // Determine document type from file extension
+        const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
+        let docType: 'purchase_register' | 'sales_register' | 'gstr1' | 'gstr2b' | 'gstr3b' | 'invoice' | 'other' = 'other';
+        if (ext === 'json') docType = 'gstr1';
+        else if (ext === 'csv' || ext === 'xlsx') docType = 'sales_register';
+        else docType = 'invoice';
 
-      // Animate upload progress
-      setProcessingFiles(prev =>
-        prev.map(f => f.id === fileId ? { ...f, progress: 30 } : f)
-      );
+        // Use first client if available, otherwise empty string
+        const clientId = clients[0]?.clientId ?? '';
 
-      uploadMutation.mutate(formData, {
-        onSuccess: () => {
-          // Update to extracting phase
-          setProcessingFiles(prev =>
-            prev.map(f => f.id === fileId ? { ...f, progress: 60, status: 'extracting' } : f)
-          );
-          // Simulate extracting → validating → complete
-          setTimeout(() => {
-            setProcessingFiles(prev =>
-              prev.map(f => f.id === fileId ? { ...f, progress: 85, status: 'validating', invoiceCount: 8, ocrConfidence: 96.5 } : f)
-            );
-            setTimeout(() => {
-              setProcessingFiles(prev =>
-                prev.map(f => f.id === fileId ? { ...f, progress: 100, status: 'complete' } : f)
-              );
-            }, 1200);
-          }, 1800);
-          toast.success(`${file.name} uploaded successfully`);
-        },
-        onError: (err) => {
-          setProcessingFiles(prev =>
-            prev.map(f => f.id === fileId ? { ...f, status: 'error', errorMsg: err.message } : f)
-          );
-          toast.error(`Failed to upload ${file.name}: ${err.message}`);
-        },
-      });
+        setUploadingFiles(prev =>
+          prev.map(f => f.id === fileId ? { ...f, progress: 60 } : f)
+        );
+
+        await createDocument({
+          clientId,
+          fileName: file.name,
+          fileSize: file.size,
+          fileType: file.type || 'application/octet-stream',
+          documentType: docType,
+          period: '2025-06',
+        });
+
+        setUploadingFiles(prev =>
+          prev.map(f => f.id === fileId ? { ...f, progress: 100 } : f)
+        );
+
+        toast.success(`${file.name} uploaded successfully`);
+
+        // Remove from uploading list after a short delay
+        setTimeout(() => {
+          setUploadingFiles(prev => prev.filter(f => f.id !== fileId));
+        }, 1500);
+      } catch (err) {
+        setUploadingFiles(prev =>
+          prev.map(f => f.id === fileId ? { ...f, progress: 0 } : f)
+        );
+        toast.error(`Failed to upload ${file.name}: ${err instanceof Error ? err.message : 'Unknown error'}`);
+        setTimeout(() => {
+          setUploadingFiles(prev => prev.filter(f => f.id !== fileId));
+        }, 2000);
+      }
     }
-  }, [selectedClientId, uploadMutation]);
+  }, [clients]);
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -486,55 +281,38 @@ export default function InvoiceWorkspacePage() {
     e.stopPropagation();
     setIsDragging(false);
     const files = Array.from(e.dataTransfer.files);
-    if (files.length > 0) {
-      handleUpload(files);
-    }
+    if (files.length > 0) handleUpload(files);
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
-    if (files.length > 0) {
-      handleUpload(files);
-    }
+    if (files.length > 0) handleUpload(files);
     e.target.value = '';
   };
 
-  const handleBrowseClick = () => {
-    fileInputRef.current?.click();
-  };
-
-  const handleDemoUpload = () => {
-    // Demo upload: create synthetic file objects
-    const demoFiles = [
-      new File(['demo'], 'GSTR1_Jun2025_SharmaEnt.json', { type: 'application/json' }),
-      new File(['demo'], 'SalesRegister_Jun2025.csv', { type: 'text/csv' }),
-    ];
-    handleUpload(demoFiles);
-  };
-
-  const removeFile = (fileId: string) => {
-    setProcessingFiles(prev => prev.filter(f => f.id !== fileId));
-  };
-
   // ── Invoice action handlers ──
-  const handleApproveInvoice = (inv: ExtractedInvoice) => {
-    updateInvoiceMutation.mutate(
-      { id: inv.id, status: 'approved', clientId: selectedClientId ?? undefined },
-      {
-        onSuccess: () => toast.success(`Invoice ${inv.invoiceNumber} approved`),
-        onError: (err) => toast.error(`Failed to approve: ${err.message}`),
-      }
-    );
+  const handleApprove = async (invoiceId: string, invoiceNumber: string) => {
+    setApprovingId(invoiceId);
+    try {
+      await approveInvoice(invoiceId);
+      toast.success(`Invoice ${invoiceNumber} approved`);
+    } catch (err) {
+      toast.error(`Failed to approve: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    } finally {
+      setApprovingId(null);
+    }
   };
 
-  const handleFixInvoice = (inv: ExtractedInvoice) => {
-    updateInvoiceMutation.mutate(
-      { id: inv.id, status: 'draft', clientId: selectedClientId ?? undefined },
-      {
-        onSuccess: () => toast.info(`Invoice ${inv.invoiceNumber} marked for editing`),
-        onError: (err) => toast.error(`Failed to update: ${err.message}`),
-      }
-    );
+  const handleDelete = async (invoiceId: string, invoiceNumber: string) => {
+    setDeletingId(invoiceId);
+    try {
+      await deleteInvoice(invoiceId);
+      toast.success(`Invoice ${invoiceNumber} deleted`);
+    } catch (err) {
+      toast.error(`Failed to delete: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    } finally {
+      setDeletingId(null);
+    }
   };
 
   // ── Loading Skeleton ──
@@ -548,18 +326,31 @@ export default function InvoiceWorkspacePage() {
           </div>
           <Skeleton className="h-9 w-48" />
         </div>
-        <Skeleton className="h-56 rounded-2xl" />
-        <div className="grid grid-cols-4 gap-4">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <Skeleton key={i} className="h-20 rounded-xl" />
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <Skeleton key={i} className="h-24 rounded-xl" />
           ))}
         </div>
+        <Skeleton className="h-96 rounded-xl" />
+      </div>
+    );
+  }
+
+  // ── Error state ──
+  if (invoicesError || clientsError) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 text-center">
+        <AlertCircle className="size-10 text-red-400 mb-4" />
+        <h3 className="text-lg font-semibold text-foreground">Failed to load data</h3>
+        <p className="text-sm text-muted-foreground mt-1 max-w-md">
+          {invoicesError || clientsError}
+        </p>
       </div>
     );
   }
 
   // ── Empty state when no invoices exist ──
-  if (invoices.length === 0 && processingFiles.length === 0) {
+  if (invoices.length === 0 && uploadingFiles.length === 0) {
     return (
       <div className="min-h-screen bg-gradient-to-b from-slate-50/80 to-white">
         <div className="space-y-6 p-4 md:p-6 lg:p-8">
@@ -571,49 +362,81 @@ export default function InvoiceWorkspacePage() {
           >
             <div>
               <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
-                Document Processing
+                Invoice Workspace
               </h1>
               <p className="mt-1 text-sm text-muted-foreground">
-                Upload, extract, and validate invoices
+                Upload, extract, and validate GST invoices
               </p>
             </div>
           </motion.div>
+
           <EmptyState
             icon={FileUp}
-            title="No invoices uploaded"
-            description="Upload invoices to start processing and validating GST data."
+            title="No invoices yet"
+            description="Upload your first document to start processing and validating GST invoices."
             action={{
-              label: 'Upload Invoice',
+              label: 'Upload your first document',
               onClick: () => fileInputRef.current?.click(),
               icon: Upload,
             }}
           />
         </div>
-        {/* Hidden file input for empty state upload action */}
         <input
           ref={fileInputRef}
           type="file"
           multiple
           accept=".csv,.xlsx,.xls,.json,.pdf"
           className="hidden"
-          onChange={(e) => {
-            if (e.target.files) {
-              handleUpload(Array.from(e.target.files));
-            }
-          }}
+          onChange={handleFileSelect}
         />
       </div>
     );
   }
 
-  // ── Render ──
+  // ─── Summary Cards ────────────────────────────────────────────────────────────
+
+  const summaryCards = [
+    {
+      title: 'Total Invoices',
+      value: formatNumber(summary.total),
+      icon: FileText,
+      color: 'text-slate-600',
+      bgColor: 'bg-slate-50',
+    },
+    {
+      title: 'Approved',
+      value: formatNumber(summary.approved),
+      icon: CheckCircle2,
+      color: 'text-emerald-600',
+      bgColor: 'bg-emerald-50',
+    },
+    {
+      title: 'Pending',
+      value: formatNumber(summary.pending),
+      icon: Clock,
+      color: 'text-amber-600',
+      bgColor: 'bg-amber-50',
+    },
+    {
+      title: 'Tax Volume',
+      value: formatCurrency(summary.taxVolume),
+      icon: TrendingUp,
+      color: 'text-teal-600',
+      bgColor: 'bg-teal-50',
+    },
+    {
+      title: 'Risk Items',
+      value: formatNumber(summary.riskItems),
+      icon: ShieldAlert,
+      color: summary.riskItems > 0 ? 'text-red-600' : 'text-slate-600',
+      bgColor: summary.riskItems > 0 ? 'bg-red-50' : 'bg-slate-50',
+    },
+  ];
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50/80 to-white">
       <div className="space-y-6 p-4 md:p-6 lg:p-8">
-
-        {/* ════════════════════════════════════════════════════════════════════
-            1. HEADER
-        ════════════════════════════════════════════════════════════════════ */}
+        {/* ── Header ── */}
         <motion.div
           initial={{ opacity: 0, y: -12 }}
           animate={{ opacity: 1, y: 0 }}
@@ -622,945 +445,369 @@ export default function InvoiceWorkspacePage() {
         >
           <div>
             <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
-              Document Processing
+              Invoice Workspace
             </h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              Upload, extract, and validate invoices
+              {invoices.length} invoice{invoices.length !== 1 ? 's' : ''} &middot; {documents.length} document{documents.length !== 1 ? 's' : ''}
             </p>
           </div>
-          <div className="flex items-center gap-3">
-            <Select
-              value={selectedClientId ?? 'all'}
-              onValueChange={(v) => setSelectedClientId(v === 'all' ? null : v)}
-            >
-              <SelectTrigger className="w-[200px] h-9 text-sm border-slate-200">
-                <SelectValue placeholder="Select client" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Clients</SelectItem>
-                {clients.map(c => (
-                  <SelectItem key={c.id} value={c.id}>
-                    {c.tradeName}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          <Button
+            onClick={() => fileInputRef.current?.click()}
+            className="bg-emerald-600 hover:bg-emerald-700 gap-2"
+          >
+            <Upload className="size-4" />
+            Upload Document
+          </Button>
         </motion.div>
 
-        {/* ════════════════════════════════════════════════════════════════════
-            2. UPLOAD HERO ZONE
-        ════════════════════════════════════════════════════════════════════ */}
+        {/* ── Summary Cards ── */}
         <motion.div
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.1 }}
+          variants={staggerContainer}
+          initial="hidden"
+          animate="visible"
+          className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4"
         >
-          <motion.div
-            animate={isDragging ? { scale: 1.01 } : { scale: 1 }}
-            transition={{ duration: 0.2 }}
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
-            onDrop={handleDrop}
-            className={`
-              relative overflow-hidden rounded-2xl border-2 border-dashed transition-all duration-300 cursor-pointer
-              ${isDragging
-                ? 'border-emerald-400 bg-emerald-50/60'
-                : 'border-slate-300 bg-gradient-to-br from-slate-50 via-white to-emerald-50/30 hover:border-emerald-300 hover:bg-emerald-50/20'
-              }
-            `}
-            onClick={handleBrowseClick}
-          >
-            {/* Background decoration */}
-            <div className="absolute inset-0 pointer-events-none">
-              <div className="absolute -top-20 -right-20 size-64 rounded-full bg-emerald-100/30 blur-3xl" />
-              <div className="absolute -bottom-20 -left-20 size-64 rounded-full bg-teal-100/20 blur-3xl" />
-            </div>
-
-            <div className="relative z-10 flex flex-col items-center justify-center py-12 px-6 md:py-16">
-              <motion.div
-                animate={isDragging ? { y: -6, scale: 1.1 } : { y: 0, scale: 1 }}
-                transition={{ duration: 0.3, ease: 'easeOut' }}
-                className={`
-                  mb-4 flex size-16 items-center justify-center rounded-2xl transition-colors duration-300
-                  ${isDragging ? 'bg-emerald-200 text-emerald-700' : 'bg-emerald-100 text-emerald-600'}
-                `}
-              >
-                <CloudUpload className="size-8" />
-              </motion.div>
-
-              <h2 className="text-lg font-semibold text-slate-800 sm:text-xl">
-                {isDragging ? 'Drop your files here!' : 'Drop GST documents here'}
-              </h2>
-              <p className="mt-1 text-sm text-muted-foreground">
-                or click to browse
-              </p>
-
-              {/* Format badges */}
-              <div className="mt-4 flex items-center gap-2">
-                <Badge variant="outline" className="gap-1.5 border-slate-200 bg-white/80 text-slate-600 text-xs font-medium">
-                  <FileJson className="size-3" />
-                  JSON
-                </Badge>
-                <span className="text-xs text-slate-300">·</span>
-                <Badge variant="outline" className="gap-1.5 border-slate-200 bg-white/80 text-slate-600 text-xs font-medium">
-                  <FileSpreadsheet className="size-3" />
-                  CSV
-                </Badge>
-                <span className="text-xs text-slate-300">·</span>
-                <Badge variant="outline" className="gap-1.5 border-slate-200 bg-white/80 text-slate-600 text-xs font-medium">
-                  <FileText className="size-3" />
-                  Excel
-                </Badge>
-              </div>
-
-              {/* Demo button */}
-              {!hasInvoices && processingFiles.length === 0 && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="mt-5 gap-2 border-emerald-200 text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800 text-xs"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleDemoUpload();
-                  }}
-                >
-                  <Sparkles className="size-3.5" />
-                  Try with sample data
-                </Button>
-              )}
-            </div>
-
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".json,.csv,.xlsx,.xls"
-              multiple
-              className="hidden"
-              onChange={handleFileSelect}
-            />
-          </motion.div>
-        </motion.div>
-
-        {/* ════════════════════════════════════════════════════════════════════
-            3. PROCESSING PIPELINE
-        ════════════════════════════════════════════════════════════════════ */}
-        {(processingFiles.length > 0 || hasInvoices) && (
-          <motion.div
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, delay: 0.15 }}
-          >
-            <div className="flex items-stretch gap-2 sm:gap-3 overflow-x-auto pb-2">
-              {[
-                {
-                  key: 'uploaded',
-                  icon: <Upload className="size-4" />,
-                  label: 'Uploaded',
-                  count: processingFiles.length,
-                  color: 'text-slate-600',
-                  bgColor: 'bg-slate-50 border-slate-200',
-                  active: activePipelineStage === 'uploading',
-                },
-                {
-                  key: 'extracting',
-                  icon: <Bot className="size-4" />,
-                  label: 'AI Extracting',
-                  count: pipelineCounts.extracting,
-                  color: 'text-teal-600',
-                  bgColor: 'bg-teal-50 border-teal-200',
-                  active: activePipelineStage === 'extracting',
-                },
-                {
-                  key: 'validated',
-                  icon: <ShieldCheck className="size-4" />,
-                  label: 'Validated',
-                  count: pipelineCounts.validated,
-                  color: 'text-emerald-600',
-                  bgColor: 'bg-emerald-50 border-emerald-200',
-                  active: false,
-                },
-                {
-                  key: 'errors',
-                  icon: <XCircle className="size-4" />,
-                  label: 'Has Errors',
-                  count: pipelineCounts.errors,
-                  color: 'text-red-600',
-                  bgColor: 'bg-red-50 border-red-200',
-                  active: false,
-                },
-              ].map((stage, idx) => (
-                <React.Fragment key={stage.key}>
-                  <motion.div
-                    variants={staggerItem}
-                    initial="hidden"
-                    animate="visible"
-                    className="flex-1 min-w-[120px]"
-                  >
-                    <motion.div
-                      animate={stage.active ? 'pulse' : undefined}
-                      variants={stage.active ? pulseGlow : undefined}
-                    >
-                      <Card className={`border transition-all ${stage.bgColor} ${stage.active ? 'ring-2 ring-teal-300/50' : ''}`}>
-                        <CardContent className="p-3 sm:p-4">
-                          <div className="flex items-center gap-2">
-                            <div className={`${stage.color}`}>
-                              {stage.icon}
-                            </div>
-                            <div className="min-w-0">
-                              <p className={`text-[10px] sm:text-xs font-medium uppercase tracking-wider ${stage.color} truncate`}>
-                                {stage.label}
-                              </p>
-                              <p className={`text-lg sm:text-xl font-bold ${stage.color}`}>
-                                {stage.count}
-                              </p>
-                            </div>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    </motion.div>
-                  </motion.div>
-
-                  {idx < 3 && (
-                    <div className="flex items-center text-slate-300 shrink-0">
-                      <ArrowRight className="size-4 sm:size-5" />
+          {summaryCards.map((card) => (
+            <motion.div key={card.title} variants={staggerItem}>
+              <Card className="border-0 shadow-sm">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className={`flex items-center justify-center size-9 rounded-lg ${card.bgColor}`}>
+                      <card.icon className={`size-4 ${card.color}`} />
                     </div>
-                  )}
-                </React.Fragment>
-              ))}
-            </div>
-          </motion.div>
-        )}
-
-        {/* ════════════════════════════════════════════════════════════════════
-            3.5. PROCESSING TIMELINE
-        ════════════════════════════════════════════════════════════════════ */}
-        {(processingFiles.length > 0 || hasInvoices) && (
-          <motion.div
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, delay: 0.18 }}
-          >
-            <Card className="border-slate-200/60 shadow-sm">
-              <CardContent className="p-4 sm:p-6">
-                <h3 className="text-sm font-semibold text-slate-700 mb-4 flex items-center gap-2">
-                  <Clock className="size-4 text-teal-600" />
-                  Processing Timeline
-                </h3>
-                <div className="relative pl-6">
-                  {/* Timeline vertical line */}
-                  <div className="absolute left-[9px] top-1 bottom-1 w-px bg-slate-200" />
-
-                  {[
-                    {
-                      key: 'upload',
-                      label: 'Upload',
-                      time: '10:32 AM',
-                      status: 'complete' as const,
-                      icon: <Upload className="size-3" />,
-                    },
-                    {
-                      key: 'extraction',
-                      label: 'AI Extraction',
-                      time: '10:33 AM',
-                      status: activePipelineStage === 'extracting' ? ('active' as const) : hasInvoices || processingFiles.some(f => f.status !== 'uploading') ? ('complete' as const) : ('pending' as const),
-                      icon: <Bot className="size-3" />,
-                    },
-                    {
-                      key: 'validation',
-                      label: 'Validation',
-                      time: '10:34 AM',
-                      status: hasInvoices && invoices.length > 0 ? ('complete' as const) : activePipelineStage === 'extracting' ? ('active' as const) : ('pending' as const),
-                      icon: <ShieldCheck className="size-3" />,
-                    },
-                    {
-                      key: 'complete',
-                      label: 'Complete',
-                      time: '10:35 AM',
-                      status: hasInvoices && invoices.length > 0 ? ('complete' as const) : ('pending' as const),
-                      icon: <CheckCircle2 className="size-3" />,
-                    },
-                  ].map((step) => {
-                    const isComplete = step.status === 'complete';
-                    const isActive = step.status === 'active';
-                    const isPending = step.status === 'pending';
-
-                    return (
-                      <div key={step.key} className="relative flex items-start gap-3 pb-4 last:pb-0">
-                        {/* Timeline dot */}
-                        <div className={`
-                          absolute -left-6 top-0.5 flex size-[18px] items-center justify-center rounded-full ring-2 ring-white shrink-0
-                          ${isComplete ? 'bg-emerald-500 text-white' : isActive ? 'bg-teal-500 text-white' : 'bg-slate-200 text-slate-400'}
-                        `}>
-                          {isActive ? (
-                            <motion.div
-                              animate={{ scale: [1, 1.2, 1] }}
-                              transition={{ duration: 1.5, repeat: Infinity, ease: 'easeInOut' }}
-                            >
-                              {step.icon}
-                            </motion.div>
-                          ) : (
-                            step.icon
-                          )}
-                        </div>
-
-                        {/* Step content */}
-                        <div className="flex items-center gap-3 min-w-0">
-                          <div>
-                            <p className={`text-xs font-semibold ${isComplete ? 'text-emerald-700' : isActive ? 'text-teal-700' : 'text-slate-400'}`}>
-                              {step.label}
-                            </p>
-                          </div>
-                          <div className="flex items-center gap-1.5">
-                            <span className={`text-[10px] ${isComplete ? 'text-emerald-600' : isActive ? 'text-teal-600' : 'text-slate-400'}`}>
-                              {step.time}
-                            </span>
-                            {isComplete && <CheckCircle2 className="size-3 text-emerald-500" />}
-                            {isActive && (
-                              <motion.div
-                                animate={{ opacity: [1, 0.3, 1] }}
-                                transition={{ duration: 1.2, repeat: Infinity }}
-                              >
-                                <div className="size-2 rounded-full bg-teal-500" />
-                              </motion.div>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
-        )}
-
-        {/* ════════════════════════════════════════════════════════════════════
-            4. PROCESSING QUEUE
-        ════════════════════════════════════════════════════════════════════ */}
-        <AnimatePresence>
-          {processingFiles.length > 0 && (
-            <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: 'auto' }}
-              exit={{ opacity: 0, height: 0 }}
-              transition={{ duration: 0.3 }}
-            >
-              <Card className="border-slate-200/60 shadow-sm">
-                <CardContent className="p-4 sm:p-6">
-                  <h3 className="text-sm font-semibold text-slate-700 mb-4 flex items-center gap-2">
-                    <FileUp className="size-4 text-teal-600" />
-                    Processing Queue
-                  </h3>
-                  <div className="space-y-3">
-                    <AnimatePresence>
-                      {processingFiles.map((file) => (
-                        <motion.div
-                          key={file.id}
-                          initial={{ opacity: 0, x: -16 }}
-                          animate={{ opacity: 1, x: 0 }}
-                          exit={{ opacity: 0, x: 16, height: 0 }}
-                          transition={{ duration: 0.3 }}
-                        >
-                          <Card className={`border transition-colors ${
-                            file.status === 'complete'
-                              ? 'border-emerald-200 bg-emerald-50/30'
-                              : file.status === 'error'
-                              ? 'border-red-200 bg-red-50/30'
-                              : 'border-slate-200 bg-white'
-                          }`}>
-                            <CardContent className="p-3 sm:p-4">
-                              <div className="flex items-start gap-3">
-                                {/* File icon */}
-                                <div className={`
-                                  shrink-0 flex size-9 items-center justify-center rounded-lg
-                                  ${file.status === 'complete'
-                                    ? 'bg-emerald-100 text-emerald-600'
-                                    : file.status === 'error'
-                                    ? 'bg-red-100 text-red-600'
-                                    : 'bg-slate-100 text-slate-600'
-                                  }
-                                `}>
-                                  {file.status === 'complete' ? (
-                                    <CheckCircle2 className="size-4" />
-                                  ) : file.status === 'error' ? (
-                                    <XCircle className="size-4" />
-                                  ) : (
-                                    <FileText className="size-4" />
-                                  )}
-                                </div>
-
-                                {/* File info */}
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex items-center justify-between gap-2">
-                                    <p className="text-sm font-medium text-slate-800 truncate">
-                                      {file.name}
-                                    </p>
-                                    <div className="flex items-center gap-2 shrink-0">
-                                      {file.status !== 'complete' && file.status !== 'error' && (
-                                        <Badge variant="outline" className="text-[10px] border-teal-200 bg-teal-50 text-teal-700">
-                                          {file.format}
-                                        </Badge>
-                                      )}
-                                      <button
-                                        onClick={() => removeFile(file.id)}
-                                        className="text-slate-400 hover:text-slate-600 transition-colors"
-                                      >
-                                        <X className="size-3.5" />
-                                      </button>
-                                    </div>
-                                  </div>
-
-                                  {/* Progress bar */}
-                                  {(file.status === 'uploading' || file.status === 'extracting' || file.status === 'validating') && (
-                                    <div className="mt-2 space-y-1.5">
-                                      <Progress
-                                        value={file.progress}
-                                        className="h-1.5 bg-slate-100"
-                                      />
-                                      <p className="text-xs text-muted-foreground flex items-center gap-1.5">
-                                        {file.status === 'uploading' && (
-                                          <>
-                                            <motion.span
-                                              animate={{ opacity: [1, 0.4, 1] }}
-                                              transition={{ duration: 1.5, repeat: Infinity }}
-                                            >
-                                              Uploading...
-                                            </motion.span>
-                                            <span>{Math.round(file.progress)}%</span>
-                                          </>
-                                        )}
-                                        {file.status === 'extracting' && (
-                                          <motion.span
-                                            animate={{ opacity: [1, 0.4, 1] }}
-                                            transition={{ duration: 1.5, repeat: Infinity }}
-                                            className="flex items-center gap-1"
-                                          >
-                                            <Bot className="size-3" />
-                                            Extracting invoices...
-                                          </motion.span>
-                                        )}
-                                        {file.status === 'validating' && (
-                                          <motion.span
-                                            animate={{ opacity: [1, 0.4, 1] }}
-                                            transition={{ duration: 1.5, repeat: Infinity }}
-                                            className="flex items-center gap-1"
-                                          >
-                                            <ShieldCheck className="size-3" />
-                                            Validating data...
-                                          </motion.span>
-                                        )}
-                                      </p>
-                                    </div>
-                                  )}
-
-                                  {/* Completed file info */}
-                                  {file.status === 'complete' && (
-                                    <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
-                                      <span className="text-xs text-emerald-700 font-medium">
-                                        {file.invoiceCount} invoices extracted
-                                      </span>
-                                      {/* OCR confidence bar */}
-                                      <div className="flex items-center gap-1.5">
-                                        <span className="text-[10px] text-muted-foreground">OCR</span>
-                                        <div className="h-1 w-16 rounded-full bg-slate-100 overflow-hidden">
-                                          <div
-                                            className={`h-full rounded-full ${getConfidenceBarColor(file.ocrConfidence)}`}
-                                            style={{ width: `${file.ocrConfidence}%` }}
-                                          />
-                                        </div>
-                                        <span className={`text-[10px] font-medium ${getConfidenceColor(file.ocrConfidence)}`}>
-                                          {file.ocrConfidence}%
-                                        </span>
-                                      </div>
-                                    </div>
-                                  )}
-
-                                  {/* Error info */}
-                                  {file.status === 'error' && (
-                                    <p className="mt-1 text-xs text-red-600">
-                                      {file.errorMsg || 'Unable to parse — try CSV format'}
-                                    </p>
-                                  )}
-                                </div>
-                              </div>
-                            </CardContent>
-                          </Card>
-                        </motion.div>
-                      ))}
-                    </AnimatePresence>
+                    <div>
+                      <p className="text-xs text-muted-foreground font-medium">{card.title}</p>
+                      <p className="text-lg font-bold tracking-tight">{card.value}</p>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
             </motion.div>
-          )}
-        </AnimatePresence>
+          ))}
+        </motion.div>
 
-        {/* ════════════════════════════════════════════════════════════════════
-            5. EXTRACTED INVOICES
-        ════════════════════════════════════════════════════════════════════ */}
-        {hasInvoices && invoices.length > 0 && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.4 }}
-          >
-            {/* Filter pills: Section */}
-            <div className="space-y-4">
-              <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  {[
-                    { key: 'all', label: 'All' },
-                    { key: 'b2b', label: 'B2B' },
-                    { key: 'b2cl', label: 'B2C Large' },
-                    { key: 'b2cs', label: 'B2C Small' },
-                    { key: 'exp', label: 'Export' },
-                    { key: 'cdnr', label: 'CDNR' },
-                  ].map(pill => (
-                    <button
-                      key={pill.key}
-                      onClick={() => setSectionFilter(pill.key)}
-                      className={`
-                        px-3 py-1.5 rounded-full text-xs font-medium transition-all
-                        ${sectionFilter === pill.key
-                          ? 'bg-emerald-600 text-white shadow-sm'
-                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                        }
-                      `}
-                    >
-                      {pill.label}
-                    </button>
-                  ))}
-                </div>
-
-                <div className="flex items-center gap-1.5">
-                  {[
-                    { key: 'all', label: 'All Status' },
-                    { key: 'validated', label: 'Validated' },
-                    { key: 'warning', label: 'Warning' },
-                    { key: 'error', label: 'Error' },
-                  ].map(pill => (
-                    <button
-                      key={pill.key}
-                      onClick={() => setStatusFilter(pill.key)}
-                      className={`
-                        px-3 py-1.5 rounded-full text-xs font-medium transition-all
-                        ${statusFilter === pill.key
-                          ? pill.key === 'error'
-                            ? 'bg-red-600 text-white shadow-sm'
-                            : pill.key === 'warning'
-                            ? 'bg-amber-500 text-white shadow-sm'
-                            : pill.key === 'validated'
-                            ? 'bg-emerald-600 text-white shadow-sm'
-                            : 'bg-slate-800 text-white shadow-sm'
-                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                        }
-                      `}
-                    >
-                      {pill.label}
-                    </button>
-                  ))}
-                </div>
-
-                <p className="text-xs text-muted-foreground ml-auto shrink-0">
-                  {filteredInvoices.length} invoice{filteredInvoices.length !== 1 ? 's' : ''}
-                </p>
-              </div>
-
-              {/* Invoice card grid */}
-              <motion.div
-                variants={staggerContainer}
-                initial="hidden"
-                animate="visible"
-                className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"
+        {/* ── Upload Area ── */}
+        <motion.div variants={fadeInUp} initial="hidden" animate="visible">
+          <Card className={`border-2 border-dashed transition-colors ${
+            isDragging ? 'border-emerald-400 bg-emerald-50/50' : 'border-slate-200 bg-white'
+          }`}>
+            <CardContent className="p-6">
+              <div
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+                className="flex flex-col items-center gap-3 text-center"
               >
-                <AnimatePresence mode="popLayout">
-                  {filteredInvoices.map(inv => (
-                    <motion.div
-                      key={inv.id}
-                      variants={staggerItem}
-                      layout
-                      exit={{ opacity: 0, scale: 0.95 }}
-                    >
-                      <Card className={`
-                        border shadow-sm hover:shadow-md transition-all duration-200 overflow-hidden
-                        ${inv.validationStatus === 'error'
-                          ? 'border-red-200/80 hover:border-red-300'
-                          : inv.validationStatus === 'warning'
-                          ? 'border-amber-200/80 hover:border-amber-300'
-                          : 'border-slate-200/60 hover:border-emerald-200'
-                        }
-                      `}>
-                        <CardContent className="p-4 sm:p-5">
-                          {/* Header: Invoice # + section badge */}
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="min-w-0">
-                              <p className="text-sm font-bold text-slate-900 truncate">
-                                {inv.invoiceNumber}
-                              </p>
-                              <p className="text-xs text-muted-foreground mt-0.5 truncate">
-                                {inv.clientName}
-                              </p>
-                            </div>
-                            <div className="flex items-center gap-1.5 shrink-0">
-                              <Badge
-                                variant="outline"
-                                className={`text-[10px] font-medium ${getSectionBadgeStyle(inv.section)}`}
-                              >
-                                {inv.sectionLabel}
-                              </Badge>
-                            </div>
-                          </div>
-
-                          {/* Date */}
-                          <p className="mt-2 text-[11px] text-muted-foreground">
-                            {inv.invoiceDate}
-                          </p>
-
-                          {/* Tax breakdown */}
-                          <div className="mt-3 space-y-1.5">
-                            <div className="flex items-center justify-between text-xs">
-                              <span className="text-muted-foreground">Taxable Amount</span>
-                              <span className="font-semibold text-slate-800">
-                                {formatCurrency(inv.taxableValue)}
-                              </span>
-                            </div>
-                            {inv.cgst > 0 && (
-                              <div className="flex items-center justify-between text-[11px]">
-                                <span className="text-muted-foreground">CGST</span>
-                                <span className="text-slate-600">{formatCurrency(inv.cgst)}</span>
-                              </div>
-                            )}
-                            {inv.sgst > 0 && (
-                              <div className="flex items-center justify-between text-[11px]">
-                                <span className="text-muted-foreground">SGST</span>
-                                <span className="text-slate-600">{formatCurrency(inv.sgst)}</span>
-                              </div>
-                            )}
-                            {inv.igst > 0 && (
-                              <div className="flex items-center justify-between text-[11px]">
-                                <span className="text-muted-foreground">IGST</span>
-                                <span className="text-slate-600">{formatCurrency(inv.igst)}</span>
-                              </div>
-                            )}
-                            <div className="flex items-center justify-between text-xs border-t border-slate-100 pt-1.5">
-                              <span className="text-muted-foreground font-medium">Total</span>
-                              <span className="font-bold text-slate-900">
-                                {formatCurrency(inv.totalAmount)}
-                              </span>
-                            </div>
-                          </div>
-
-                          {/* Validation status + OCR confidence */}
-                          <div className="mt-3 flex items-center justify-between gap-2">
-                            <div className="flex items-center gap-1.5">
-                              {getValidationIcon(inv.validationStatus)}
-                              <Badge
-                                variant="outline"
-                                className={`text-[10px] font-medium ${getValidationBadge(inv.validationStatus)}`}
-                              >
-                                {getValidationLabel(inv.validationStatus)}
-                              </Badge>
-                            </div>
-                            <div className="flex items-center gap-1">
-                              <div className="h-1 w-10 rounded-full bg-slate-100 overflow-hidden">
-                                <div
-                                  className={`h-full rounded-full ${getConfidenceBarColor(inv.ocrConfidence)}`}
-                                  style={{ width: `${inv.ocrConfidence}%` }}
-                                />
-                              </div>
-                              <span className={`text-[10px] font-medium ${getConfidenceColor(inv.ocrConfidence)}`}>
-                                {inv.ocrConfidence}%
-                              </span>
-                            </div>
-                          </div>
-
-                          {/* Missing fields indicator */}
-                          {inv.missingFields.length > 0 && (
-                            <div className="mt-2 flex items-center gap-1">
-                              <AlertCircle className="size-3 text-amber-500 shrink-0" />
-                              <p className="text-[10px] text-amber-700 truncate">
-                                Missing: {inv.missingFields.join(', ')}
-                              </p>
-                            </div>
-                          )}
-
-                          {/* Validation messages */}
-                          {inv.validationMessages.length > 0 && (
-                            <div className="mt-1.5 space-y-0.5">
-                              {inv.validationMessages.map((msg, i) => (
-                                <p
-                                  key={i}
-                                  className={`text-[10px] truncate ${
-                                    inv.validationStatus === 'error'
-                                      ? 'text-red-600'
-                                      : 'text-amber-600'
-                                  }`}
-                                >
-                                  {msg}
-                                </p>
-                              ))}
-                            </div>
-                          )}
-
-                          {/* Action buttons */}
-                          <div className="mt-3 pt-3 border-t border-slate-100 flex items-center gap-2">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="flex-1 h-7 text-xs gap-1.5 border-slate-200 hover:border-emerald-300 hover:text-emerald-700 hover:bg-emerald-50"
-                              onClick={() => handleFixInvoice(inv)}
-                              disabled={updateInvoiceMutation.isPending}
-                            >
-                              <Edit3 className="size-3" />
-                              Edit
-                            </Button>
-                            <Button
-                              size="sm"
-                              className="flex-1 h-7 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
-                              disabled={inv.validationStatus === 'error' || updateInvoiceMutation.isPending}
-                              onClick={() => handleApproveInvoice(inv)}
-                            >
-                              <FileCheck2 className="size-3" />
-                              Approve
-                            </Button>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    </motion.div>
-                  ))}
-                </AnimatePresence>
-              </motion.div>
-            </div>
-          </motion.div>
-        )}
-
-        {/* ════════════════════════════════════════════════════════════════════
-            5.5. AI REVIEW QUEUE
-        ════════════════════════════════════════════════════════════════════ */}
-        {hasInvoices && invoices.some(i => i.validationStatus === 'warning' || i.validationStatus === 'error') && (
-          <motion.div
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, delay: 0.1 }}
-          >
-            <Card className="border-slate-200/60 shadow-sm">
-              <CardContent className="p-4 sm:p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-sm font-semibold text-slate-700 flex items-center gap-2">
-                    <Eye className="size-4 text-teal-600" />
-                    AI Review Queue
-                  </h3>
-                  <Badge className="text-[10px] font-semibold bg-amber-50 text-amber-700 border-amber-200 px-2.5 py-0.5">
-                    {invoices.filter(i => i.validationStatus === 'warning' || i.validationStatus === 'error').length} items
-                  </Badge>
+                <div className="flex items-center justify-center size-12 rounded-xl bg-slate-50">
+                  <CloudUpload className="size-6 text-slate-400" />
                 </div>
-                <div className="space-y-2">
-                  {invoices
-                    .filter(i => i.validationStatus === 'warning' || i.validationStatus === 'error')
-                    .map((inv, idx) => (
-                      <motion.div
-                        key={inv.id}
-                        initial={{ opacity: 0, x: -8 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ duration: 0.25, delay: idx * 0.05 }}
-                        className={`
-                          flex items-start gap-3 rounded-lg border p-3 transition-all
-                          ${reviewingInvoiceId === inv.id
-                            ? 'border-teal-300 bg-teal-50/50 ring-1 ring-teal-200'
-                            : inv.validationStatus === 'error'
-                            ? 'border-red-100 bg-red-50/30'
-                            : 'border-amber-100 bg-amber-50/30'
-                          }
-                        `}
-                      >
-                        <div className={`shrink-0 mt-0.5 flex size-7 items-center justify-center rounded-lg ${
-                          inv.validationStatus === 'error' ? 'bg-red-100 text-red-600' : 'bg-amber-100 text-amber-600'
-                        }`}>
-                          {inv.validationStatus === 'error' ? <XCircle className="size-3.5" /> : <AlertTriangle className="size-3.5" />}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <p className="text-xs font-semibold text-slate-800">{inv.invoiceNumber}</p>
-                            <Badge variant="outline" className={`text-[9px] font-medium ${getValidationBadge(inv.validationStatus)}`}>
-                              {getValidationLabel(inv.validationStatus)}
-                            </Badge>
-                          </div>
-                          <p className="text-[11px] text-muted-foreground mt-0.5">{inv.clientName}</p>
-                          <p className={`text-[10px] mt-1 ${inv.validationStatus === 'error' ? 'text-red-600' : 'text-amber-600'}`}>
-                            {inv.validationMessages.length > 0 ? inv.validationMessages[0] : inv.missingFields.length > 0 ? `Missing: ${inv.missingFields.join(', ')}` : 'Requires review'}
-                          </p>
-                          <div className="flex items-center gap-1.5 mt-1.5">
-                            <span className="text-[9px] text-muted-foreground">Confidence</span>
-                            <div className="h-1 w-12 rounded-full bg-slate-100 overflow-hidden">
-                              <div
-                                className={`h-full rounded-full ${getConfidenceBarColor(inv.ocrConfidence)}`}
-                                style={{ width: `${inv.ocrConfidence}%` }}
+                <div>
+                  <p className="text-sm font-medium text-foreground">
+                    Drag & drop files here, or{' '}
+                    <button
+                      onClick={() => fileInputRef.current?.click()}
+                      className="text-emerald-600 hover:text-emerald-700 font-semibold underline underline-offset-2"
+                    >
+                      browse
+                    </button>
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Supports JSON, CSV, XLSX, PDF &middot; Max 10MB per file
+                  </p>
+                </div>
+
+                {/* Uploading files indicator */}
+                <AnimatePresence>
+                  {uploadingFiles.length > 0 && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                      className="w-full max-w-md mt-2 space-y-2"
+                    >
+                      {uploadingFiles.map(f => (
+                        <div key={f.id} className="flex items-center gap-2 bg-slate-50 rounded-lg px-3 py-2">
+                          {getFileIcon(f.name)}
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-medium truncate">{f.name}</p>
+                            <div className="w-full h-1.5 bg-slate-200 rounded-full mt-1">
+                              <motion.div
+                                className="h-full bg-emerald-500 rounded-full"
+                                initial={{ width: 0 }}
+                                animate={{ width: `${f.progress}%` }}
+                                transition={{ duration: 0.3 }}
                               />
                             </div>
-                            <span className={`text-[9px] font-medium ${getConfidenceColor(inv.ocrConfidence)}`}>
-                              {inv.ocrConfidence}%
-                            </span>
                           </div>
+                          <span className="text-xs text-muted-foreground">{f.progress}%</span>
                         </div>
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className={`h-7 text-[10px] gap-1 ${
-                              reviewingInvoiceId === inv.id
-                                ? 'border-teal-300 text-teal-700 bg-teal-50'
-                                : 'border-slate-200 text-slate-600 hover:border-teal-300 hover:text-teal-700 hover:bg-teal-50'
-                            }`}
-                            onClick={() => setReviewingInvoiceId(reviewingInvoiceId === inv.id ? null : inv.id)}
-                          >
-                            <Eye className="size-3" />
-                            Review
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-7 text-[10px] gap-1 border-emerald-200 text-emerald-700 hover:bg-emerald-50 hover:border-emerald-300"
-                            disabled={updateInvoiceMutation.isPending}
-                            onClick={() => handleApproveInvoice(inv)}
-                          >
-                            <ThumbsUp className="size-3" />
-                            Approve
-                          </Button>
-                        </div>
-                      </motion.div>
-                    ))}
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
-        )}
+                      ))}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            </CardContent>
+          </Card>
+        </motion.div>
 
-        {/* ════════════════════════════════════════════════════════════════════
-            6. VALIDATION ISSUES PANEL
-        ════════════════════════════════════════════════════════════════════ */}
-        {hasInvoices && validationIssues.length > 0 && (
-          <motion.div
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, delay: 0.2 }}
-          >
-            <Collapsible open={issuesOpen} onOpenChange={setIssuesOpen}>
-              <Card className="border-slate-200/60 shadow-sm">
-                <CollapsibleTrigger asChild>
-                  <button className="w-full text-left">
-                    <CardContent className="p-4 sm:p-5 flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className="flex size-8 items-center justify-center rounded-lg bg-red-50">
-                          <AlertTriangle className="size-4 text-red-500" />
-                        </div>
-                        <div>
-                          <h3 className="text-sm font-semibold text-slate-800">Validation Issues</h3>
-                          <p className="text-xs text-muted-foreground mt-0.5">
-                            <span className="text-red-600 font-medium">{criticalCount} Critical</span>
-                            <span className="mx-1.5">·</span>
-                            <span className="text-amber-600 font-medium">{warningCount} Warnings</span>
-                          </p>
-                        </div>
-                      </div>
-                      <motion.div
-                        animate={{ rotate: issuesOpen ? 180 : 0 }}
-                        transition={{ duration: 0.2 }}
-                      >
-                        <ChevronDown className="size-5 text-slate-400" />
-                      </motion.div>
-                    </CardContent>
-                  </button>
-                </CollapsibleTrigger>
-                <CollapsibleContent>
-                  <div className="px-4 sm:px-5 pb-4 sm:pb-5">
-                    <ScrollArea className="max-h-64">
-                      <div className="space-y-2">
-                        {validationIssues.map((issue, idx) => (
-                          <motion.div
-                            key={issue.id}
-                            initial={{ opacity: 0, x: -8 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            transition={{ duration: 0.2, delay: idx * 0.03 }}
-                            className={`
-                              flex items-start gap-3 rounded-lg border p-3 transition-colors
-                              ${issue.severity === 'critical'
-                                ? 'border-red-100 bg-red-50/50'
-                                : 'border-amber-100 bg-amber-50/50'
-                              }
-                            `}
-                          >
-                            <div className="shrink-0 mt-0.5">
-                              {issue.severity === 'critical' ? (
-                                <XCircle className="size-4 text-red-500" />
-                              ) : (
-                                <AlertTriangle className="size-4 text-amber-500" />
-                              )}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-xs font-medium text-slate-800">
-                                {issue.description}
-                              </p>
-                              <p className="text-[10px] text-muted-foreground mt-0.5">
-                                Invoice: {issue.invoiceNumber}
-                              </p>
-                            </div>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className={`
-                                shrink-0 h-6 text-[10px] gap-1
-                                ${issue.severity === 'critical'
-                                  ? 'border-red-200 text-red-700 hover:bg-red-50'
-                                  : 'border-amber-200 text-amber-700 hover:bg-amber-50'
-                                }
-                              `}
-                              onClick={() => {
-                                const inv = invoices.find(i => i.id === issue.invoiceId);
-                                if (inv) handleFixInvoice(inv);
-                              }}
-                              disabled={updateInvoiceMutation.isPending}
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          accept=".csv,.xlsx,.xls,.json,.pdf"
+          className="hidden"
+          onChange={handleFileSelect}
+        />
+
+        {/* ── Filters ── */}
+        <motion.div
+          variants={fadeInUp}
+          initial="hidden"
+          animate="visible"
+          className="flex flex-col sm:flex-row gap-3"
+        >
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+            <Input
+              placeholder="Search by invoice # or buyer name..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9 bg-white"
+            />
+          </div>
+          <Select value={clientFilter} onValueChange={setClientFilter}>
+            <SelectTrigger className="w-full sm:w-[180px] bg-white">
+              <SelectValue placeholder="All Clients" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Clients</SelectItem>
+              {clients.map(c => (
+                <SelectItem key={c.clientId} value={c.clientId}>
+                  {c.tradeName}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="w-full sm:w-[150px] bg-white">
+              <SelectValue placeholder="All Status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Status</SelectItem>
+              <SelectItem value="draft">Draft</SelectItem>
+              <SelectItem value="approved">Approved</SelectItem>
+              <SelectItem value="filed">Filed</SelectItem>
+              <SelectItem value="cancelled">Cancelled</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={riskFilter} onValueChange={setRiskFilter}>
+            <SelectTrigger className="w-full sm:w-[150px] bg-white">
+              <SelectValue placeholder="All Risk" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Risk</SelectItem>
+              <SelectItem value="low">Low</SelectItem>
+              <SelectItem value="medium">Medium</SelectItem>
+              <SelectItem value="high">High</SelectItem>
+              <SelectItem value="critical">Critical</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={typeFilter} onValueChange={setTypeFilter}>
+            <SelectTrigger className="w-full sm:w-[150px] bg-white">
+              <SelectValue placeholder="All Types" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Types</SelectItem>
+              {Object.keys(INVOICE_TYPE_TO_SECTION).map(t => (
+                <SelectItem key={t} value={t}>{t}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </motion.div>
+
+        {/* ── Invoice Table ── */}
+        <motion.div variants={fadeInUp} initial="hidden" animate="visible">
+          <Card className="border-0 shadow-sm">
+            <CardContent className="p-0">
+              {filteredInvoices.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-16 text-center">
+                  <Inbox className="size-10 text-slate-300 mb-3" />
+                  <p className="text-sm font-medium text-foreground">No invoices match your filters</p>
+                  <p className="text-xs text-muted-foreground mt-1">Try adjusting your search or filter criteria</p>
+                </div>
+              ) : (
+                <ScrollArea className="max-h-[600px]">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-slate-50/50">
+                        <TableHead className="text-xs font-semibold">Invoice #</TableHead>
+                        <TableHead className="text-xs font-semibold">Date</TableHead>
+                        <TableHead className="text-xs font-semibold">Client</TableHead>
+                        <TableHead className="text-xs font-semibold">Type</TableHead>
+                        <TableHead className="text-xs font-semibold text-right">Taxable Value</TableHead>
+                        <TableHead className="text-xs font-semibold text-right">Tax</TableHead>
+                        <TableHead className="text-xs font-semibold text-right">Total</TableHead>
+                        <TableHead className="text-xs font-semibold">Status</TableHead>
+                        <TableHead className="text-xs font-semibold">Risk</TableHead>
+                        <TableHead className="text-xs font-semibold text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      <AnimatePresence>
+                        {filteredInvoices.map((inv) => {
+                          const client = clientMap.get(inv.clientId);
+                          const clientName = client?.tradeName ?? inv.buyerName ?? 'Unknown';
+                          const statusCfg = STATUS_BADGE[inv.status as InvoiceStatus] ?? STATUS_BADGE.draft;
+                          const riskCfg = RISK_BADGE[inv.riskLevel as RiskLevel] ?? RISK_BADGE.low;
+                          const matchCfg = MATCH_STATUS_CONFIG[inv.matchStatus as MatchStatus];
+                          const totalTax = inv.cgst + inv.sgst + inv.igst + inv.cess;
+                          const isApproving = approvingId === inv.id;
+                          const isDeleting = deletingId === inv.id;
+                          const isActionLoading = isApproving || isDeleting;
+
+                          return (
+                            <motion.tr
+                              key={inv.id}
+                              initial={{ opacity: 0, y: 8 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              exit={{ opacity: 0, x: -20 }}
+                              transition={{ duration: 0.2 }}
+                              className="hover:bg-slate-50/50 border-b transition-colors"
                             >
-                              Fix
-                            </Button>
-                          </motion.div>
-                        ))}
-                      </div>
-                    </ScrollArea>
-                  </div>
-                </CollapsibleContent>
-              </Card>
-            </Collapsible>
-          </motion.div>
-        )}
+                              <TableCell>
+                                <div className="flex flex-col">
+                                  <span className="font-medium text-sm">{inv.invoiceNumber}</span>
+                                  {matchCfg && (
+                                    <span className={`text-[10px] px-1.5 py-0.5 rounded border inline-block w-fit mt-0.5 ${matchCfg.bgColor} ${matchCfg.color}`}>
+                                      {matchCfg.label}
+                                    </span>
+                                  )}
+                                </div>
+                              </TableCell>
+                              <TableCell className="text-sm text-muted-foreground">
+                                {inv.invoiceDate ? new Date(inv.invoiceDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
+                              </TableCell>
+                              <TableCell>
+                                <div className="flex flex-col">
+                                  <span className="text-sm font-medium">{clientName}</span>
+                                  {inv.buyerGstin && (
+                                    <span className="text-[10px] text-muted-foreground">{inv.buyerGstin}</span>
+                                  )}
+                                </div>
+                              </TableCell>
+                              <TableCell>
+                                <Badge variant="outline" className="text-[10px] font-medium bg-slate-50">
+                                  {inv.invoiceType}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="text-right text-sm">
+                                {formatCurrency(inv.taxableValue)}
+                              </TableCell>
+                              <TableCell className="text-right text-sm">
+                                {formatCurrency(totalTax)}
+                              </TableCell>
+                              <TableCell className="text-right text-sm font-semibold">
+                                {formatCurrency(inv.totalAmount)}
+                              </TableCell>
+                              <TableCell>
+                                <Badge variant="outline" className={`text-[10px] font-medium ${statusCfg.className}`}>
+                                  {statusCfg.label}
+                                </Badge>
+                              </TableCell>
+                              <TableCell>
+                                <Badge variant="outline" className={`text-[10px] font-medium ${riskCfg.className}`}>
+                                  {RISK_LEVEL_CONFIG[inv.riskLevel as RiskLevel]?.icon ?? ''} {riskCfg.label}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="text-right">
+                                <div className="flex items-center justify-end gap-1">
+                                  {inv.status === 'draft' && (
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      className="h-7 px-2 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
+                                      onClick={() => handleApprove(inv.id, inv.invoiceNumber)}
+                                      disabled={isActionLoading}
+                                    >
+                                      {isApproving ? (
+                                        <Loader2 className="size-3.5 animate-spin" />
+                                      ) : (
+                                        <ThumbsUp className="size-3.5" />
+                                      )}
+                                    </Button>
+                                  )}
+                                  {(inv.status === 'draft' || inv.status === 'approved') && (
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      className="h-7 px-2 text-red-500 hover:text-red-600 hover:bg-red-50"
+                                      onClick={() => handleDelete(inv.id, inv.invoiceNumber)}
+                                      disabled={isActionLoading}
+                                    >
+                                      {isDeleting ? (
+                                        <Loader2 className="size-3.5 animate-spin" />
+                                      ) : (
+                                        <Trash2 className="size-3.5" />
+                                      )}
+                                    </Button>
+                                  )}
+                                </div>
+                              </TableCell>
+                            </motion.tr>
+                          );
+                        })}
+                      </AnimatePresence>
+                    </TableBody>
+                  </Table>
+                </ScrollArea>
+              )}
+            </CardContent>
+          </Card>
+        </motion.div>
 
-        {/* ════════════════════════════════════════════════════════════════════
-            7. EMPTY STATE
-        ════════════════════════════════════════════════════════════════════ */}
-        {!hasInvoices && processingFiles.length === 0 && (
-          <motion.div
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.2 }}
-          >
-            <Card className="border-slate-200/60 shadow-sm">
-              <CardContent className="py-16 px-6 flex flex-col items-center text-center">
-                <div className="flex size-16 items-center justify-center rounded-2xl bg-slate-100 mb-4">
-                  <Inbox className="size-7 text-slate-400" />
-                </div>
-                <h3 className="text-base font-semibold text-slate-700">
-                  No invoices yet
-                </h3>
-                <p className="mt-1.5 text-sm text-muted-foreground max-w-sm">
-                  Upload invoices from documents to start processing — we&apos;ll extract and validate them automatically
-                </p>
-                <Button
-                  className="mt-5 gap-2 bg-emerald-600 hover:bg-emerald-700 text-white"
-                  onClick={handleBrowseClick}
-                >
-                  <Upload className="size-4" />
-                  Upload Documents
-                </Button>
+        {/* ── Recent Documents ── */}
+        {documents.length > 0 && (
+          <motion.div variants={fadeInUp} initial="hidden" animate="visible">
+            <Card className="border-0 shadow-sm">
+              <CardContent className="p-4">
+                <h3 className="text-sm font-semibold text-foreground mb-3">Recent Documents</h3>
+                <ScrollArea className="max-h-48">
+                  <div className="space-y-2">
+                    {documents.slice(0, 10).map((doc) => {
+                      const client = clientMap.get(doc.clientId);
+                      return (
+                        <div key={doc.id} className="flex items-center gap-3 py-2 px-3 rounded-lg bg-slate-50/50 hover:bg-slate-50 transition-colors">
+                          {getFileIcon(doc.fileName)}
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium truncate">{doc.fileName}</p>
+                            <p className="text-[10px] text-muted-foreground">
+                              {client?.tradeName ?? 'Unknown'} &middot; {formatFileSize(doc.fileSize)} &middot; {doc.documentType.replace(/_/g, ' ')}
+                            </p>
+                          </div>
+                          <Badge
+                            variant="outline"
+                            className={`text-[10px] ${
+                              doc.status === 'extracted'
+                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                : doc.status === 'processing'
+                                ? 'bg-amber-50 text-amber-700 border-amber-200'
+                                : doc.status === 'failed'
+                                ? 'bg-red-50 text-red-700 border-red-200'
+                                : 'bg-slate-50 text-slate-700 border-slate-200'
+                            }`}
+                          >
+                            {doc.status}
+                          </Badge>
+                          {doc.extractedInvoiceCount > 0 && (
+                            <span className="text-[10px] text-muted-foreground">
+                              {doc.extractedInvoiceCount} invoice{doc.extractedInvoiceCount !== 1 ? 's' : ''}
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </ScrollArea>
               </CardContent>
             </Card>
           </motion.div>

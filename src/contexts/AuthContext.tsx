@@ -86,6 +86,7 @@ interface AuthContextType {
   setError: (error: string | null) => void;
   logout: () => Promise<void>;
   refreshUserProfile: () => Promise<void>;
+  markOnboardingComplete: (firmId?: string, firmName?: string) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -212,6 +213,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  // ── Mark onboarding complete locally (instant, no Firestore round-trip) ──
+  const markOnboardingComplete = useCallback((firmId?: string, firmName?: string) => {
+    setUser(prev => {
+      if (!prev) return prev;
+      const updated = { ...prev, onboardingCompleted: true, firmId: firmId || prev.firmId, firmName: firmName || prev.firmName };
+      localStorage.setItem(SESSION_KEY, JSON.stringify(updated));
+      return updated;
+    });
+  }, []);
+
   // ── Derived flags ──
   const needsOnboarding = user !== null && !user.onboardingCompleted;
   const needsEmailVerification = user !== null && !user.emailVerified && user.provider === 'email';
@@ -229,6 +240,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setError,
         logout,
         refreshUserProfile,
+        markOnboardingComplete,
       }}
     >
       {children}

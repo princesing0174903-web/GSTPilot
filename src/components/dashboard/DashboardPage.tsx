@@ -1,10 +1,11 @@
 'use client';
 
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Upload,
   CheckCircle2,
@@ -18,106 +19,31 @@ import {
   ShieldCheck,
   AlertOctagon,
   ClipboardCheck,
-  GitCompareArrows,
-  XCircle,
-  Search,
-  FileWarning,
-  ArrowRight,
-  RefreshCw,
-  ExternalLink,
-  Loader2,
-  X,
   Users,
   IndianRupee,
   TrendingUp,
+  Plus,
+  ArrowRight,
+  Loader2,
+  Rocket,
+  Activity,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useApp } from '@/contexts/AppContext';
-import type { AppView } from '@/contexts/AppContext';
 import {
-  useDashboardMetrics,
-  useClients,
-  useFilings,
-  useIssues,
-  useUploadedFiles,
-  useActivities,
-  useUpdateFilingStatus,
-} from '@/hooks/api';
+  useLiveDashboardMetrics,
+  useFireClients,
+  useFireReturns,
+  useFireRecentActivities,
+} from '@/hooks/use-firestore';
+import type {
+  FirestoreClient,
+  FirestoreReturn,
+  LiveDashboardMetrics,
+} from '@/lib/firestore-schema';
+import { fileReturn } from '@/lib/firestore-service';
 import { formatCurrency, periodToLabel, isOverdue, getFilingDueDate } from '@/lib/gst-utils';
 import { toast } from 'sonner';
-import { EmptyState } from '@/components/shared/EmptyState';
-import type { Client, GSTRFiling, Issue } from '@/types/gst';
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// TYPES
-// ═══════════════════════════════════════════════════════════════════════════════
-
-interface MetricCard {
-  id: string;
-  label: string;
-  value: number;
-  icon: React.ReactNode;
-  iconColor: string;
-  iconBg: string;
-  subtitle: string;
-}
-
-interface PriorityItem {
-  id: string;
-  clientName: string;
-  clientInitials: string;
-  clientId: string;
-  returnType: string;
-  period: string;
-  dueDate: string;
-  daysRemaining: number;
-  urgency: 'overdue' | 'due-soon' | 'upcoming';
-  reason: string;
-  actionLabel: string;
-  actionView: string;
-}
-
-interface ReadyToFileItem {
-  id: string;
-  clientId: string;
-  clientName: string;
-  clientInitials: string;
-  returnType: string;
-  invoiceCount: number;
-  taxAmount: number;
-  period: string;
-}
-
-interface BlockingIssue {
-  id: string;
-  clientId: string;
-  clientName: string;
-  clientInitials: string;
-  category: 'gstin_error' | 'missing_invoice' | 'recon_mismatch' | 'validation_failure';
-  title: string;
-  detail: string;
-  invoiceRef?: string;
-  amount?: number;
-  actionLabel: string;
-  actionView: string;
-}
-
-interface RecentUpload {
-  id: string;
-  filename: string;
-  uploadTime: string;
-  status: 'processing' | 'extracted' | 'failed';
-  clientName: string;
-  rowCount?: number;
-  invoiceCount?: number;
-  accuracy?: number;
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// CONSTANTS & STATIC DATA
-// ═══════════════════════════════════════════════════════════════════════════════
-
-const CURRENT_PERIOD = '2025-06';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // HELPERS
@@ -125,7 +51,7 @@ const CURRENT_PERIOD = '2025-06';
 
 function getDaysRemaining(dueDateStr: string): number {
   const dueDate = new Date(dueDateStr);
-  const today = new Date('2025-07-08');
+  const today = new Date();
   today.setHours(0, 0, 0, 0);
   dueDate.setHours(0, 0, 0, 0);
   return Math.ceil((dueDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
@@ -139,54 +65,165 @@ function formatDaysRemaining(days: number): string {
 }
 
 function getInitials(name: string): string {
-  return name
-    .split(' ')
-    .map(w => w[0])
-    .join('')
-    .slice(0, 2)
-    .toUpperCase();
+  return name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
 }
 
-const issueCategoryConfig: Record<BlockingIssue['category'], { label: string; icon: React.ReactNode; color: string; bg: string }> = {
-  gstin_error: {
-    label: 'GSTIN Error',
-    icon: <XCircle className="h-3.5 w-3.5" />,
-    color: 'text-red-700',
-    bg: 'bg-red-50 border-red-200',
-  },
-  missing_invoice: {
-    label: 'Missing Invoice',
-    icon: <FileWarning className="h-3.5 w-3.5" />,
-    color: 'text-orange-700',
-    bg: 'bg-orange-50 border-orange-200',
-  },
-  recon_mismatch: {
-    label: 'Recon Mismatch',
-    icon: <GitCompareArrows className="h-3.5 w-3.5" />,
-    color: 'text-amber-700',
-    bg: 'bg-amber-50 border-amber-200',
-  },
-  validation_failure: {
-    label: 'Validation Failure',
-    icon: <AlertTriangle className="h-3.5 w-3.5" />,
-    color: 'text-purple-700',
-    bg: 'bg-purple-50 border-purple-200',
-  },
-};
+function formatINR(amount: number): string {
+  return amount.toLocaleString('en-IN');
+}
 
-const uploadStatusConfig: Record<RecentUpload['status'], { label: string; icon: React.ReactNode; color: string; bg: string }> = {
-  processing: { label: 'Processing', icon: <Clock className="h-3.5 w-3.5" />, color: 'text-amber-600', bg: 'bg-amber-50' },
-  extracted: { label: 'Extracted', icon: <CheckCircle2 className="h-3.5 w-3.5" />, color: 'text-emerald-600', bg: 'bg-emerald-50' },
-  failed: { label: 'Failed', icon: <AlertTriangle className="h-3.5 w-3.5" />, color: 'text-red-600', bg: 'bg-red-50' },
-};
+function timeAgo(dateStr: string): string {
+  const now = new Date();
+  const date = new Date(dateStr);
+  const seconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+  if (seconds < 60) return 'just now';
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d ago`;
+  return date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+}
 
-// Map Issue category to BlockingIssue category
-function mapIssueCategory(issue: Issue): BlockingIssue['category'] {
-  const cat = issue.category?.toLowerCase() ?? '';
-  if (cat.includes('gstin')) return 'gstin_error';
-  if (cat.includes('missing') || cat.includes('invoice')) return 'missing_invoice';
-  if (cat.includes('recon') || cat.includes('mismatch')) return 'recon_mismatch';
-  return 'validation_failure';
+// ═══════════════════════════════════════════════════════════════════════════════
+// METRIC CARD
+// ═══════════════════════════════════════════════════════════════════════════════
+
+interface MetricCardProps {
+  label: string;
+  value: string | number;
+  icon: React.ReactNode;
+  iconColor: string;
+  iconBg: string;
+  subtitle: string;
+  index: number;
+}
+
+function MetricCard({ label, value, icon, iconColor, iconBg, subtitle, index }: MetricCardProps) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 16 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.35, delay: index * 0.06 }}
+    >
+      <Card className="hover:shadow-md transition-shadow">
+        <CardContent className="p-4">
+          <div className="flex items-start justify-between">
+            <div className="space-y-1">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                {label}
+              </p>
+              <p className="text-2xl font-bold text-foreground tracking-tight">{value}</p>
+              <p className="text-[11px] text-muted-foreground">{subtitle}</p>
+            </div>
+            <div className={`flex items-center justify-center h-9 w-9 rounded-lg ${iconBg}`}>
+              <span className={iconColor}>{icon}</span>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    </motion.div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ACTIVITY ICON
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function activityIcon(type: string): { icon: React.ReactNode; color: string; bg: string } {
+  if (type.includes('filed')) return { icon: <CheckCircle2 className="h-3.5 w-3.5" />, color: 'text-emerald-600', bg: 'bg-emerald-50' };
+  if (type.includes('upload') || type.includes('document')) return { icon: <Upload className="h-3.5 w-3.5" />, color: 'text-blue-600', bg: 'bg-blue-50' };
+  if (type.includes('review')) return { icon: <ClipboardCheck className="h-3.5 w-3.5" />, color: 'text-violet-600', bg: 'bg-violet-50' };
+  if (type.includes('client')) return { icon: <Users className="h-3.5 w-3.5" />, color: 'text-sky-600', bg: 'bg-sky-50' };
+  if (type.includes('reconcil') || type.includes('mismatch')) return { icon: <AlertTriangle className="h-3.5 w-3.5" />, color: 'text-amber-600', bg: 'bg-amber-50' };
+  if (type.includes('invoice') || type.includes('extract')) return { icon: <FileText className="h-3.5 w-3.5" />, color: 'text-teal-600', bg: 'bg-teal-50' };
+  return { icon: <Activity className="h-3.5 w-3.5" />, color: 'text-slate-500', bg: 'bg-slate-50' };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// LOADING SKELETON
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function DashboardSkeleton() {
+  return (
+    <div className="max-w-6xl mx-auto px-4 md:px-6 py-6 space-y-8">
+      <div className="flex items-center justify-between">
+        <div className="space-y-2">
+          <Skeleton className="h-7 w-48" />
+          <Skeleton className="h-4 w-64" />
+        </div>
+        <Skeleton className="h-9 w-28" />
+      </div>
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <Skeleton key={i} className="h-28 rounded-xl" />
+        ))}
+      </div>
+      <div className="grid lg:grid-cols-3 gap-6">
+        <Skeleton className="lg:col-span-2 h-64 rounded-xl" />
+        <Skeleton className="h-64 rounded-xl" />
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// EMPTY STATE — Fresh onboarding
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function WelcomeEmptyState({ onAddClient, onUploadDoc }: { onAddClient: () => void; onUploadDoc: () => void }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 24 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5, ease: 'easeOut' }}
+      className="flex flex-col items-center justify-center text-center py-20 px-4"
+    >
+      <div className="relative mb-6">
+        <div className="flex items-center justify-center h-20 w-20 rounded-2xl bg-gradient-to-br from-emerald-50 to-emerald-100 border border-emerald-200">
+          <Rocket className="h-10 w-10 text-emerald-600" />
+        </div>
+        <div className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-emerald-500 flex items-center justify-center">
+          <Sparkles className="h-3 w-3 text-white" />
+        </div>
+      </div>
+      <h2 className="text-2xl font-bold text-foreground tracking-tight">
+        Welcome to GSTPilot
+      </h2>
+      <p className="text-sm text-muted-foreground mt-2 max-w-md">
+        Start by adding your first client to unlock the full workflow —
+        from document upload to automated GST filing.
+      </p>
+      <div className="flex items-center gap-3 mt-6">
+        <Button
+          onClick={onAddClient}
+          className="bg-emerald-600 hover:bg-emerald-700 gap-1.5"
+        >
+          <Plus className="h-4 w-4" />
+          Add Client
+        </Button>
+        <Button variant="outline" onClick={onUploadDoc} className="gap-1.5">
+          <Upload className="h-4 w-4" />
+          Upload Document
+        </Button>
+      </div>
+      <div className="grid grid-cols-3 gap-6 mt-10 text-center max-w-sm">
+        {[
+          { icon: <Users className="h-5 w-5" />, label: 'Add Clients' },
+          { icon: <FileText className="h-5 w-5" />, label: 'Upload Docs' },
+          { icon: <CheckCircle2 className="h-5 w-5" />, label: 'File Returns' },
+        ].map((step, i) => (
+          <div key={i} className="flex flex-col items-center gap-1.5">
+            <div className="flex items-center justify-center h-10 w-10 rounded-lg bg-slate-100 text-slate-500">
+              {step.icon}
+            </div>
+            <span className="text-[11px] text-muted-foreground">{step.label}</span>
+          </div>
+        ))}
+      </div>
+    </motion.div>
+  );
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -196,381 +233,178 @@ function mapIssueCategory(issue: Issue): BlockingIssue['category'] {
 export default function DashboardPage() {
   const { setCurrentView, setSelectedClientId, setReturnPrepCtx } = useApp();
 
-  // ── React Query hooks ────────────────────────────────────────────────────
-  const { data: dashData, isLoading: dashLoading } = useDashboardMetrics();
-  const { data: clientsData, isLoading: clientsLoading } = useClients();
-  const { data: filingsData, isLoading: filingsLoading } = useFilings();
-  const { data: issuesData, isLoading: issuesLoading } = useIssues();
-  const { data: uploadsData, isLoading: uploadsLoading } = useUploadedFiles();
-  const { data: activitiesData } = useActivities();
+  // ── Firebase Firestore hooks ──────────────────────────────────────────
+  const { metrics, loading, error } = useLiveDashboardMetrics();
+  const { data: clients } = useFireClients();
+  const { data: returns } = useFireReturns();
+  const { data: recentActivities } = useFireRecentActivities(10);
 
-  const fileReturnMutation = useUpdateFilingStatus();
+  // ── Filing state ──────────────────────────────────────────────────────
+  const [filingInProgress, setFilingInProgress] = useState<Set<string>>(new Set());
 
-  // ── Track which filing IDs have been toasted ─────────────────────────────
-  const toastedFilingIds = useRef<Set<string>>(new Set());
-
-  // ── Derived data ─────────────────────────────────────────────────────────
-  const isLoading = dashLoading || filingsLoading;
-
-  const clients = clientsData?.clients ?? [];
+  // ── Client lookup map ─────────────────────────────────────────────────
   const clientMap = useMemo(() => {
-    const map = new Map<string, Client & { _aggregations?: { totalInvoices: number; filedReturns: number; pendingReturns: number; matchPercentage: number } }>();
-    for (const c of clients) {
-      map.set(c.id, c);
-    }
+    const map = new Map<string, FirestoreClient & { id: string }>();
+    for (const c of clients) map.set(c.clientId, c);
     return map;
   }, [clients]);
 
-  const filings = filingsData?.filings ?? [];
-  const issues = issuesData?.issues ?? [];
-
-  const currentPeriodLabel = periodToLabel(CURRENT_PERIOD);
-
-  // ── Metrics from dashboard API ───────────────────────────────────────────
-  const metrics: MetricCard[] = useMemo(() => {
-    const readyCount = filings.filter(f => f.status === 'reviewed' || f.status === 'generated').length;
-    const criticalCount = dashData?.criticalIssues ?? 0;
-    const pendingCount = dashData?.pendingReturns ?? 0;
-    const filedCount = dashData?.filedReturns ?? 0;
-    const totalReturns = filedCount + pendingCount;
+  // ── Metric cards from LiveDashboardMetrics ────────────────────────────
+  const metricCards = useMemo(() => {
+    const complianceScore = metrics.averageHealthScore > 0
+      ? Math.round(metrics.averageHealthScore)
+      : metrics.totalClients > 0 ? 0 : 100;
 
     return [
       {
-        id: 'ready',
+        label: 'Active Clients',
+        value: metrics.activeClients,
+        icon: <Users className="h-4 w-4" />,
+        iconColor: 'text-sky-600',
+        iconBg: 'bg-sky-50',
+        subtitle: `of ${metrics.totalClients} total`,
+      },
+      {
         label: 'Ready to File',
-        value: readyCount,
+        value: metrics.readyToFile,
         icon: <ShieldCheck className="h-4 w-4" />,
         iconColor: 'text-emerald-600',
         iconBg: 'bg-emerald-50',
-        subtitle: 'Validated & approved',
+        subtitle: 'Validated & reviewed',
       },
       {
-        id: 'critical',
         label: 'Critical Issues',
-        value: criticalCount,
+        value: metrics.criticalIssues,
         icon: <AlertOctagon className="h-4 w-4" />,
         iconColor: 'text-red-600',
         iconBg: 'bg-red-50',
-        subtitle: `Blocking ${Math.min(criticalCount, pendingCount)} filings`,
+        subtitle: `+ ${metrics.warnings} warnings`,
       },
       {
-        id: 'pending',
-        label: 'Pending Returns',
-        value: pendingCount,
-        icon: <Clock className="h-4 w-4" />,
-        iconColor: 'text-amber-600',
-        iconBg: 'bg-amber-50',
-        subtitle: 'Due this month',
-      },
-      {
-        id: 'filed',
-        label: 'Filed This Month',
-        value: filedCount,
-        icon: <CheckCircle2 className="h-4 w-4" />,
+        label: 'Tax Volume',
+        value: formatCurrency(metrics.totalTaxVolume),
+        icon: <IndianRupee className="h-4 w-4" />,
         iconColor: 'text-emerald-600',
         iconBg: 'bg-emerald-50',
-        subtitle: `of ${totalReturns} total`,
+        subtitle: `${formatINR(metrics.totalInvoices)} invoices`,
+      },
+      {
+        label: 'Filed Returns',
+        value: metrics.filedReturns,
+        icon: <FileCheck2 className="h-4 w-4" />,
+        iconColor: 'text-teal-600',
+        iconBg: 'bg-teal-50',
+        subtitle: `${metrics.pendingReturns} pending`,
+      },
+      {
+        label: 'Compliance',
+        value: `${complianceScore}%`,
+        icon: <TrendingUp className="h-4 w-4" />,
+        iconColor: complianceScore >= 80 ? 'text-emerald-600' : complianceScore >= 50 ? 'text-amber-600' : 'text-red-600',
+        iconBg: complianceScore >= 80 ? 'bg-emerald-50' : complianceScore >= 50 ? 'bg-amber-50' : 'bg-red-50',
+        subtitle: 'Avg health score',
       },
     ];
-  }, [dashData, filings]);
+  }, [metrics]);
 
-  // ── Additional summary metrics ───────────────────────────────────────────
-  const totalTaxVolume = useMemo(() => {
-    return filings.reduce((sum, f) => sum + f.totalTax, 0);
-  }, [filings]);
+  // ── Ready-to-file returns ─────────────────────────────────────────────
+  const readyReturns = useMemo(() => {
+    return returns
+      .filter(r => ['validated', 'reviewed', 'generated'].includes(r.status))
+      .slice(0, 5);
+  }, [returns]);
 
-  const avgCompliance = dashData?.averageHealthScore ?? 0;
-
-  // ── Priorities: unfiled filings sorted by urgency ────────────────────────
-  const priorities: PriorityItem[] = useMemo(() => {
-    const unfiled = filings
-      .filter(f => f.status !== 'filed')
+  // ── Upcoming filings (unfiled, sorted by urgency) ────────────────────
+  const upcomingFilings = useMemo(() => {
+    return returns
+      .filter(r => r.status !== 'filed')
       .sort((a, b) => {
         const aOverdue = isOverdue(a.period) ? 0 : 1;
         const bOverdue = isOverdue(b.period) ? 0 : 1;
         return aOverdue - bOverdue || a.period.localeCompare(b.period);
-      });
+      })
+      .slice(0, 5);
+  }, [returns]);
 
-    return unfiled.slice(0, 5).map((f) => {
-      const client = clientMap.get(f.clientId);
-      const name = client?.tradeName ?? f.client?.tradeName ?? 'Unknown';
-      const dueDateStr = getFilingDueDate(f.returnType, f.period);
-      const days = getDaysRemaining(dueDateStr);
-
-      let urgency: PriorityItem['urgency'] = 'upcoming';
-      if (days < 0) urgency = 'overdue';
-      else if (days <= 5) urgency = 'due-soon';
-
-      return {
-        id: f.id,
-        clientName: name,
-        clientInitials: getInitials(name),
-        clientId: f.clientId,
-        returnType: f.returnType,
-        period: f.period,
-        dueDate: dueDateStr,
-        daysRemaining: days,
-        urgency,
-        reason: urgency === 'overdue'
-          ? `${f.returnType} overdue — late fee accruing`
-          : urgency === 'due-soon'
-          ? `${f.returnType} due in ${days} days`
-          : `${f.totalInvoices} invoices pending`,
-        actionLabel: urgency === 'overdue' ? 'File Now' : urgency === 'due-soon' ? 'File Return' : 'Prepare',
-        actionView: 'returns',
-      };
-    });
-  }, [filings, clientMap]);
-
-  // ── Ready to File: filings in reviewed/generated status ──────────────────
-  const readyToFile: ReadyToFileItem[] = useMemo(() => {
-    return filings
-      .filter(f => f.status === 'reviewed' || f.status === 'generated')
-      .slice(0, 5)
-      .map((f) => {
-        const client = clientMap.get(f.clientId);
-        const name = client?.tradeName ?? f.client?.tradeName ?? 'Unknown';
-        return {
-          id: f.id,
-          clientId: f.clientId,
-          clientName: name,
-          clientInitials: getInitials(name),
-          returnType: f.returnType,
-          invoiceCount: f.totalInvoices,
-          taxAmount: f.totalTax,
-          period: f.period,
-        };
-      });
-  }, [filings, clientMap]);
-
-  // ── Blocking Issues from API ─────────────────────────────────────────────
-  const blockingIssues: BlockingIssue[] = useMemo(() => {
-    return issues
-      .filter(i => i.severity === 'critical' && i.status === 'open')
-      .slice(0, 10)
-      .map((issue) => {
-        const client = clientMap.get(issue.clientId ?? '');
-        const name = client?.tradeName ?? issue.client?.tradeName ?? 'Unknown';
-        const category = mapIssueCategory(issue);
-
-        let actionLabel = 'Review Issue';
-        let actionView = 'returns';
-
-        if (category === 'recon_mismatch') {
-          actionLabel = 'Run Reconciliation';
-          actionView = 'reconcile';
-        } else if (category === 'missing_invoice') {
-          actionLabel = 'Upload Missing Document';
-          actionView = 'invoices';
-        } else if (category === 'gstin_error') {
-          actionLabel = 'Review Issue';
-          actionView = 'reconcile';
-        }
-
-        return {
-          id: issue.id,
-          clientId: issue.clientId ?? '',
-          clientName: name,
-          clientInitials: getInitials(name),
-          category,
-          title: issue.title,
-          detail: issue.description ?? '',
-          invoiceRef: issue.invoiceId,
-          actionLabel,
-          actionView,
-        };
-      });
-  }, [issues, clientMap]);
-
-  // ── Recent Uploads from API ──────────────────────────────────────────────
-  const recentUploads: RecentUpload[] = useMemo(() => {
-    const docs = uploadsData?.documents ?? [];
-    return docs.slice(0, 4).map((doc: Record<string, unknown>) => ({
-      id: (doc.id as string) ?? '',
-      filename: (doc.filename as string) ?? (doc.name as string) ?? 'Upload',
-      uploadTime: doc.createdAt ? new Date(doc.createdAt as string).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : '',
-      status: ((doc.status as string) === 'completed' ? 'extracted' : (doc.status as string) === 'failed' ? 'failed' : 'processing') as RecentUpload['status'],
-      clientName: (doc.clientName as string) ?? 'Unknown',
-      rowCount: doc.rowCount as number | undefined,
-      invoiceCount: doc.invoiceCount as number | undefined,
-      accuracy: doc.accuracy as number | undefined,
-    }));
-  }, [uploadsData]);
-
-  // ── AI Recommendations derived from issues ──────────────────────────────
-  const aiRecommendations = useMemo(() => {
-    const recs: Array<{
-      id: string;
-      title: string;
-      description: string;
-      icon: React.ReactNode;
-      iconBg: string;
-      iconColor: string;
-      actionLabel: string;
-      actionView: string;
-      urgency: 'high' | 'medium' | 'info';
-      clientName?: string;
-    }> = [];
-
-    // Generate recommendations from open issues
-    const openIssues = issues.filter(i => i.status === 'open');
-    const seenCategories = new Set<string>();
-
-    for (const issue of openIssues.slice(0, 6)) {
-      const client = clientMap.get(issue.clientId ?? '');
-      const cat = mapIssueCategory(issue);
-      const key = `${issue.clientId}-${cat}`;
-      if (seenCategories.has(key)) continue;
-      seenCategories.add(key);
-
-      const config = issueCategoryConfig[cat];
-      let actionView: string = 'returns';
-      let actionLabel = 'Review';
-
-      if (cat === 'recon_mismatch') {
-        actionView = 'reconcile';
-        actionLabel = 'Run Reconciliation';
-      } else if (cat === 'missing_invoice') {
-        actionView = 'invoices';
-        actionLabel = 'Upload Document';
-      } else if (cat === 'gstin_error') {
-        actionView = 'reconcile';
-        actionLabel = 'Fix GSTIN';
-      }
-
-      recs.push({
-        id: issue.id,
-        title: issue.title,
-        description: issue.description ?? `Issue detected for ${client?.tradeName ?? 'client'}`,
-        icon: config.icon,
-        iconBg: config.bg,
-        iconColor: config.color,
-        actionLabel,
-        actionView,
-        urgency: issue.severity === 'critical' ? 'high' : issue.severity === 'warning' ? 'medium' : 'info',
-        clientName: client?.tradeName,
-      });
-    }
-
-    // If no issues, add filing recommendations from pending filings
-    if (recs.length === 0) {
-      const pendingFilings = filings.filter(f => f.status !== 'filed').slice(0, 3);
-      for (const f of pendingFilings) {
-        const client = clientMap.get(f.clientId);
-        const overdue = isOverdue(f.period);
-        recs.push({
-          id: `rec-${f.id}`,
-          title: overdue ? `${f.returnType} Overdue for ${client?.tradeName ?? 'Client'}` : `${f.returnType} Due Soon`,
-          description: overdue
-            ? `${f.returnType} for period ${periodToLabel(f.period)} is overdue. Late fees may apply.`
-            : `${f.returnType} for period ${periodToLabel(f.period)} needs to be filed.`,
-          icon: <CalendarClock className="h-4 w-4" />,
-          iconBg: 'bg-emerald-50',
-          iconColor: 'text-emerald-600',
-          actionLabel: 'File Return',
-          actionView: 'returns',
-          urgency: overdue ? 'high' : 'medium',
-          clientName: client?.tradeName,
-        });
-      }
-    }
-
-    return recs;
-  }, [issues, filings, clientMap]);
-
-  // ── Recent Activities from audit logs ────────────────────────────────────
-  const recentActivities = activitiesData?.logs ?? [];
-
-  // ── Filing in-progress tracking (local state) ───────────────────────────
-  const [filingInProgressIds, setFilingInProgressIds] = useState<Set<string>>(new Set());
-  const [filedReturnIds, setFiledReturnIds] = useState<Set<string>>(new Set());
-
-  // ── Helpers ───────────────────────────────────────────────────────────────
+  // ── Handlers ──────────────────────────────────────────────────────────
   const handleOpenClient = (clientId: string) => {
-    const resolvedId = clientMap.has(clientId) ? clientId : (clients[0]?.id ?? clientId);
-    setSelectedClientId(resolvedId);
+    setSelectedClientId(clientId);
     setCurrentView('client-workspace');
   };
 
   const handleFileReturn = (clientId: string, returnType: string, period: string) => {
-    const resolvedId = clientMap.has(clientId) ? clientId : (clients[0]?.id ?? clientId);
-    setSelectedClientId(resolvedId);
+    setSelectedClientId(clientId);
     setReturnPrepCtx({
-      clientId: resolvedId,
+      clientId,
       returnType: (returnType === 'GSTR-3B' ? 'GSTR-3B' : 'GSTR-1') as 'GSTR-1' | 'GSTR-3B',
       period,
     });
     setCurrentView('return-prep');
   };
 
-  const handleQuickFile = (filingId: string, clientName: string, returnType: string) => {
-    if (filingInProgressIds.has(filingId) || filedReturnIds.has(filingId)) return;
-
-    setFilingInProgressIds(prev => new Set(prev).add(filingId));
-
-    fileReturnMutation.mutate(
-      { id: filingId, status: 'filed' },
-      {
-        onSuccess: () => {
-          setFilingInProgressIds(prev => {
-            const next = new Set(prev);
-            next.delete(filingId);
-            return next;
-          });
-          setFiledReturnIds(prev => new Set(prev).add(filingId));
-          const arn = `AA${String(new Date().getDate()).padStart(2, '0')}${String(new Date().getMonth() + 1).padStart(2, '0')}25${String(Date.now() % 999999).padStart(6, '0')}`;
-          toast.success(`${returnType} Filed Successfully`, {
-            description: `${clientName} — ARN: ${arn}`,
-          });
-        },
-        onError: (err) => {
-          setFilingInProgressIds(prev => {
-            const next = new Set(prev);
-            next.delete(filingId);
-            return next;
-          });
-          toast.error('Filing Failed', {
-            description: err.message,
-          });
-        },
-      }
-    );
+  const handleQuickFile = async (returnId: string, clientName: string, returnType: string) => {
+    if (filingInProgress.has(returnId)) return;
+    setFilingInProgress(prev => new Set(prev).add(returnId));
+    try {
+      const arn = await fileReturn(returnId);
+      toast.success(`${returnType} Filed Successfully`, {
+        description: `${clientName} — ARN: ${arn}`,
+      });
+    } catch (err) {
+      toast.error('Filing Failed', {
+        description: err instanceof Error ? err.message : 'Unknown error',
+      });
+    } finally {
+      setFilingInProgress(prev => {
+        const next = new Set(prev);
+        next.delete(returnId);
+        return next;
+      });
+    }
   };
 
-  // ── Animation ─────────────────────────────────────────────────────────────
+  // ── Animations ────────────────────────────────────────────────────────
   const stagger = {
     hidden: { opacity: 0 },
     visible: { opacity: 1, transition: { staggerChildren: 0.06 } },
   };
-
   const fadeUp = {
     hidden: { opacity: 0, y: 12 },
     visible: { opacity: 1, y: 0, transition: { duration: 0.4, ease: 'easeOut' } },
   };
 
-  // ═══════════════════════════════════════════════════════════════════════════════
+  // ═══════════════════════════════════════════════════════════════════════════
   // RENDER
-  // ═══════════════════════════════════════════════════════════════════════════════
+  // ═══════════════════════════════════════════════════════════════════════════
 
-  // ── Hero empty state when no clients exist (fresh start) ─────────────────
-  if (clients.length === 0 && !isLoading) {
+  // ── Loading ───────────────────────────────────────────────────────────
+  if (loading) return <DashboardSkeleton />;
+
+  // ── Error ─────────────────────────────────────────────────────────────
+  if (error) {
     return (
       <div className="max-w-6xl mx-auto px-4 md:px-6 py-6">
-        <EmptyState
-          icon={Sparkles}
-          title="Welcome to GSTPilot"
-          description="No GST documents uploaded yet. Start by adding a client or uploading your first document."
-          action={{
-            label: 'Upload Documents',
-            onClick: () => setCurrentView('invoices'),
-            icon: Upload,
-          }}
-          secondaryAction={{
-            label: 'Add Client',
-            onClick: () => setCurrentView('clients'),
-            icon: Users,
-            variant: 'outline',
-          }}
+        <Card className="border-red-200 bg-red-50">
+          <CardContent className="p-6 text-center">
+            <AlertTriangle className="h-8 w-8 text-red-500 mx-auto mb-2" />
+            <h3 className="font-semibold text-red-800">Failed to load dashboard</h3>
+            <p className="text-sm text-red-600 mt-1">{error}</p>
+            <Button variant="outline" className="mt-4" onClick={() => window.location.reload()}>
+              Retry
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // ── Empty state — no clients at all ───────────────────────────────────
+  if (metrics.totalClients === 0) {
+    return (
+      <div className="max-w-6xl mx-auto px-4 md:px-6 py-6">
+        <WelcomeEmptyState
+          onAddClient={() => setCurrentView('clients')}
+          onUploadDoc={() => setCurrentView('invoices')}
         />
       </div>
     );
@@ -579,9 +413,7 @@ export default function DashboardPage() {
   return (
     <div className="max-w-6xl mx-auto px-4 md:px-6 py-6 space-y-8">
 
-      {/* ═══════════════════════════════════════════════════════════════════════
-          HEADER
-          ═══════════════════════════════════════════════════════════════════════ */}
+      {/* ═══ HEADER ═══ */}
       <motion.div
         initial={{ opacity: 0, y: -8 }}
         animate={{ opacity: 1, y: 0 }}
@@ -597,14 +429,19 @@ export default function DashboardPage() {
           </p>
         </div>
         <div className="flex items-center gap-2.5">
-          <Badge variant="outline" className="text-xs font-medium px-3 py-1.5 gap-1.5 text-muted-foreground">
-            <CalendarClock className="h-3.5 w-3.5" />
-            {currentPeriodLabel}
-          </Badge>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setCurrentView('clients')}
+            className="gap-1.5"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Add Client
+          </Button>
           <Button
             size="sm"
             onClick={() => setCurrentView('invoices')}
-            className="h-8 gap-2 text-xs font-medium bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
+            className="bg-emerald-600 hover:bg-emerald-700 gap-1.5"
           >
             <Upload className="h-3.5 w-3.5" />
             Upload
@@ -612,750 +449,318 @@ export default function DashboardPage() {
         </div>
       </motion.div>
 
-      {/* ═══════════════════════════════════════════════════════════════════════
-          SUMMARY STRIP — Tax Volume + Avg Compliance
-          ═══════════════════════════════════════════════════════════════════════ */}
-      <motion.div
-        initial={{ opacity: 0, y: 8 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.05, duration: 0.35 }}
-        className="grid grid-cols-2 gap-3"
-      >
-        <div className="border border-border/60 rounded-xl p-4 hover:border-border transition-colors cursor-default group">
-          <div className="flex items-center gap-2.5 mb-3">
-            <div className="flex items-center justify-center h-8 w-8 rounded-lg bg-emerald-50 transition-transform group-hover:scale-105">
-              <IndianRupee className="h-4 w-4 text-emerald-600" />
-            </div>
-            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-              Total Tax Volume
-            </span>
-          </div>
-          <div className="text-2xl font-bold text-foreground leading-none">
-            {isLoading ? <Skeleton className="h-7 w-24 inline-block" /> : formatCurrency(totalTaxVolume)}
-          </div>
-          <p className="text-xs text-muted-foreground mt-1.5">
-            Across all filings
-          </p>
-        </div>
-        <div className="border border-border/60 rounded-xl p-4 hover:border-border transition-colors cursor-default group">
-          <div className="flex items-center gap-2.5 mb-3">
-            <div className="flex items-center justify-center h-8 w-8 rounded-lg bg-emerald-50 transition-transform group-hover:scale-105">
-              <TrendingUp className="h-4 w-4 text-emerald-600" />
-            </div>
-            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-              Avg Compliance
-            </span>
-          </div>
-          <div className="text-2xl font-bold text-foreground leading-none">
-            {isLoading ? <Skeleton className="h-7 w-8 inline-block" /> : avgCompliance}
-          </div>
-          <p className="text-xs text-muted-foreground mt-1.5">
-            Health score average
-          </p>
-        </div>
-      </motion.div>
-
-      {/* ═══════════════════════════════════════════════════════════════════════
-          TOP ROW — 4 METRICS
-          ═══════════════════════════════════════════════════════════════════════ */}
-      <motion.div
-        variants={stagger}
-        initial="hidden"
-        animate="visible"
-        className="grid grid-cols-2 lg:grid-cols-4 gap-3"
-      >
-        {isLoading
-          ? Array.from({ length: 4 }).map((_, i) => (
-              <motion.div key={i} variants={fadeUp}>
-                <div className="border border-border/60 rounded-xl p-4 space-y-2.5">
-                  <div className="flex items-center gap-2.5">
-                    <Skeleton className="h-8 w-8 rounded-lg" />
-                    <Skeleton className="h-3 w-20" />
-                  </div>
-                  <Skeleton className="h-7 w-8" />
-                  <Skeleton className="h-3 w-24" />
-                </div>
-              </motion.div>
-            ))
-          : metrics.map((metric) => (
-              <motion.div
-                key={metric.id}
-                variants={fadeUp}
-                whileHover={{ y: -2 }}
-                transition={{ type: 'spring', stiffness: 400, damping: 25 }}
-              >
-                <div className="border border-border/60 rounded-xl p-4 hover:border-border transition-colors cursor-default group">
-                  <div className="flex items-center gap-2.5 mb-3">
-                    <div className={`flex items-center justify-center h-8 w-8 rounded-lg ${metric.iconBg} transition-transform group-hover:scale-105`}>
-                      <span className={metric.iconColor}>{metric.icon}</span>
-                    </div>
-                    <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                      {metric.label}
-                    </span>
-                  </div>
-                  <div className="text-2xl font-bold text-foreground leading-none">
-                    {metric.value}
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-1.5">
-                    {metric.subtitle}
-                  </p>
-                </div>
-              </motion.div>
-            ))
-        }
-      </motion.div>
-
-      {/* ═══════════════════════════════════════════════════════════════════════
-          SECTION 1: TODAY'S PRIORITIES
-          ═══════════════════════════════════════════════════════════════════════ */}
-      <motion.section
-        initial={{ opacity: 0, y: 16 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.15, duration: 0.45, ease: 'easeOut' }}
-      >
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">
-            Today&apos;s Priorities
-          </h2>
-          <Badge variant="outline" className="text-[11px] font-medium text-muted-foreground">
-            {priorities.filter(p => p.urgency === 'overdue').length} overdue
-          </Badge>
-        </div>
-
-        {isLoading ? (
-          <div className="space-y-2">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="border border-border/40 rounded-lg p-3.5 flex gap-3">
-                <Skeleton className="h-8 w-8 rounded-lg shrink-0" />
-                <div className="flex-1 space-y-1.5">
-                  <Skeleton className="h-4 w-48" />
-                  <Skeleton className="h-3 w-32" />
-                </div>
-                <Skeleton className="h-7 w-20 rounded-md" />
-              </div>
-            ))}
-          </div>
-        ) : priorities.length === 0 ? (
-          <div className="border border-border/60 rounded-xl p-8 flex flex-col items-center justify-center text-center">
-            <div className="flex items-center justify-center h-10 w-10 rounded-lg bg-emerald-50 mb-3">
-              <CheckCircle2 className="h-5 w-5 text-emerald-500" />
-            </div>
-            <p className="text-sm font-medium text-foreground">All caught up!</p>
-            <p className="text-xs text-muted-foreground mt-1">No pending filings require attention</p>
-          </div>
-        ) : (
-          <div className="border border-border/60 rounded-xl divide-y divide-border/40 overflow-hidden">
-            <AnimatePresence>
-              {priorities.map((priority, index) => (
-                <motion.div
-                  key={priority.id}
-                  initial={{ opacity: 0, x: -8 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: 0.2 + index * 0.05, duration: 0.35 }}
-                  className="flex items-center gap-3 px-4 py-3.5 hover:bg-muted/30 transition-colors group"
-                >
-                  {/* Urgency indicator */}
-                  <div className={`h-8 w-1 rounded-full shrink-0 ${
-                    priority.urgency === 'overdue' ? 'bg-red-500'
-                    : priority.urgency === 'due-soon' ? 'bg-amber-500'
-                    : 'bg-slate-300'
-                  }`} />
-
-                  {/* Client avatar */}
-                  <button
-                    onClick={() => handleOpenClient(priority.clientId)}
-                    className={`flex items-center justify-center h-8 w-8 rounded-lg text-xs font-bold shrink-0 transition-colors ${
-                      priority.urgency === 'overdue'
-                        ? 'bg-red-50 text-red-700 hover:bg-red-100'
-                        : priority.urgency === 'due-soon'
-                        ? 'bg-amber-50 text-amber-700 hover:bg-amber-100'
-                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                    }`}
-                  >
-                    {priority.clientInitials}
-                  </button>
-
-                  {/* Content */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => handleOpenClient(priority.clientId)}
-                        className="text-sm font-medium text-foreground hover:text-emerald-600 transition-colors"
-                      >
-                        {priority.clientName}
-                      </button>
-                      <span className="text-xs text-muted-foreground">
-                        {priority.returnType} · {periodToLabel(priority.period)}
-                      </span>
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-0.5 truncate">
-                      {priority.reason}
-                    </p>
-                  </div>
-
-                  {/* Days remaining */}
-                  <span className={`text-xs font-medium shrink-0 ${
-                    priority.urgency === 'overdue' ? 'text-red-600'
-                    : priority.urgency === 'due-soon' ? 'text-amber-600'
-                    : 'text-muted-foreground'
-                  }`}>
-                    {formatDaysRemaining(priority.daysRemaining)}
-                  </span>
-
-                  {/* Action button */}
-                  <Button
-                    size="sm"
-                    className={`h-7 text-xs font-medium px-3 shrink-0 ${
-                      priority.urgency === 'overdue'
-                        ? 'bg-red-600 hover:bg-red-700 text-white'
-                        : priority.urgency === 'due-soon'
-                        ? 'bg-amber-600 hover:bg-amber-700 text-white'
-                        : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
-                    }`}
-                    onClick={() => {
-                      if (priority.actionView === 'returns') {
-                        handleFileReturn(priority.clientId, priority.returnType, priority.period);
-                      } else {
-                        setCurrentView(priority.actionView as AppView);
-                      }
-                    }}
-                  >
-                    {priority.actionLabel}
-                  </Button>
-                </motion.div>
-              ))}
-            </AnimatePresence>
-          </div>
-        )}
-      </motion.section>
-
-      {/* ═══════════════════════════════════════════════════════════════════════
-          TWO-COLUMN: READY TO FILE + ISSUES BLOCKING
-          ═══════════════════════════════════════════════════════════════════════ */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-
-        {/* SECTION 2: READY TO FILE QUEUE */}
-        <motion.section
-          initial={{ opacity: 0, x: -12 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ delay: 0.25, duration: 0.45, ease: 'easeOut' }}
-        >
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">
-              Ready to File
-            </h2>
-            <Badge variant="outline" className="text-[11px] font-medium text-emerald-700 bg-emerald-50 border-emerald-200">
-              {readyToFile.length} returns
-            </Badge>
-          </div>
-
-          {isLoading ? (
-            <div className="space-y-2">
-              {Array.from({ length: 4 }).map((_, i) => (
-                <div key={i} className="border border-border/40 rounded-lg p-3.5 flex gap-3">
-                  <Skeleton className="h-8 w-8 rounded-lg shrink-0" />
-                  <div className="flex-1 space-y-1.5">
-                    <Skeleton className="h-4 w-36" />
-                    <Skeleton className="h-3 w-28" />
-                  </div>
-                  <Skeleton className="h-7 w-16 rounded-md" />
-                </div>
-              ))}
-            </div>
-          ) : readyToFile.length === 0 ? (
-            <div className="border border-border/60 rounded-xl p-8 flex flex-col items-center justify-center text-center">
-              <div className="flex items-center justify-center h-10 w-10 rounded-lg bg-slate-50 mb-3">
-                <FileCheck2 className="h-5 w-5 text-slate-400" />
-              </div>
-              <p className="text-sm font-medium text-foreground">No returns ready to file</p>
-              <p className="text-xs text-muted-foreground mt-1">
-                Filings will appear here once validated
-              </p>
-              <Button
-                variant="outline"
-                size="sm"
-                className="mt-3 text-xs text-emerald-600 border-emerald-200 hover:bg-emerald-50"
-                onClick={() => setCurrentView('returns')}
-              >
-                View All Returns
-              </Button>
-            </div>
-          ) : (
-            <div className="border border-border/60 rounded-xl divide-y divide-border/40 overflow-hidden">
-              <AnimatePresence>
-                {readyToFile.map((item, index) => (
-                  <motion.div
-                    key={item.id}
-                    initial={{ opacity: 0, y: 8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.3 + index * 0.05, duration: 0.35 }}
-                    className="flex items-center gap-3 px-4 py-3.5 hover:bg-emerald-50/30 transition-colors group"
-                  >
-                    {/* Client avatar */}
-                    <button
-                      onClick={() => handleOpenClient(item.clientId)}
-                      className="flex items-center justify-center h-8 w-8 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-bold shrink-0 hover:bg-emerald-100 transition-colors"
-                    >
-                      {item.clientInitials}
-                    </button>
-
-                    {/* Content */}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => handleOpenClient(item.clientId)}
-                          className="text-sm font-medium text-foreground hover:text-emerald-600 transition-colors"
-                        >
-                          {item.clientName}
-                        </button>
-                        <span className="text-xs text-muted-foreground">
-                          {item.returnType} · {periodToLabel(item.period)}
-                        </span>
-                      </div>
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        {item.invoiceCount} invoices · {formatCurrency(item.taxAmount)} tax
-                      </p>
-                    </div>
-
-                    {/* File button */}
-                    {filedReturnIds.has(item.id) ? (
-                      <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px] px-2 py-0.5 gap-1 shrink-0">
-                        <CheckCircle2 className="size-2.5" /> Filed
-                      </Badge>
-                    ) : (
-                      <Button
-                        size="sm"
-                        className={`h-7 text-xs font-medium px-3 shrink-0 ${filingInProgressIds.has(item.id) ? 'bg-amber-500 text-white' : 'bg-emerald-600 hover:bg-emerald-700 text-white'}`}
-                        disabled={filingInProgressIds.has(item.id)}
-                        onClick={() => handleQuickFile(item.id, item.clientName, item.returnType)}
-                      >
-                        {filingInProgressIds.has(item.id) ? (
-                          <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Filing...</>
-                        ) : (
-                          'File Return'
-                        )}
-                      </Button>
-                    )}
-                  </motion.div>
-                ))}
-              </AnimatePresence>
-            </div>
-          )}
-
-          {/* View All */}
-          <div className="mt-2">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="w-full text-xs font-medium text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 h-8 gap-1"
-              onClick={() => setCurrentView('returns')}
-            >
-              View All Returns
-              <ChevronRight className="h-3.5 w-3.5" />
-            </Button>
-          </div>
-        </motion.section>
-
-        {/* SECTION 3: ISSUES BLOCKING FILING */}
-        <motion.section
-          initial={{ opacity: 0, x: 12 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ delay: 0.3, duration: 0.45, ease: 'easeOut' }}
-        >
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">
-              Issues Blocking Filing
-            </h2>
-            <Badge variant="outline" className="text-[11px] font-medium text-red-700 bg-red-50 border-red-200">
-              {blockingIssues.length} issues
-            </Badge>
-          </div>
-
-          {isLoading ? (
-            <div className="space-y-2">
-              {Array.from({ length: 4 }).map((_, i) => (
-                <div key={i} className="border border-border/40 rounded-lg p-3.5 flex gap-3">
-                  <Skeleton className="h-8 w-8 rounded-lg shrink-0" />
-                  <div className="flex-1 space-y-1.5">
-                    <Skeleton className="h-4 w-40" />
-                    <Skeleton className="h-3 w-32" />
-                  </div>
-                  <Skeleton className="h-7 w-20 rounded-md" />
-                </div>
-              ))}
-            </div>
-          ) : blockingIssues.length === 0 ? (
-            <div className="border border-border/60 rounded-xl p-8 flex flex-col items-center justify-center text-center">
-              <div className="flex items-center justify-center h-10 w-10 rounded-lg bg-emerald-50 mb-3">
-                <CheckCircle2 className="h-5 w-5 text-emerald-500" />
-              </div>
-              <p className="text-sm font-medium text-foreground">No blocking issues</p>
-              <p className="text-xs text-muted-foreground mt-1">All filings are clear of critical errors</p>
-            </div>
-          ) : (
-            <ScrollArea className="max-h-[420px]">
-              <div className="border border-border/60 rounded-xl divide-y divide-border/40 overflow-hidden">
-                <AnimatePresence>
-                  {blockingIssues.map((issue, index) => {
-                    const catConfig = issueCategoryConfig[issue.category];
-                    return (
-                      <motion.div
-                        key={issue.id}
-                        initial={{ opacity: 0, y: 8 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: 0.35 + index * 0.05, duration: 0.35 }}
-                        className="px-4 py-3.5 hover:bg-red-50/20 transition-colors group"
-                      >
-                        <div className="flex items-start gap-3">
-                          {/* Client avatar */}
-                          <button
-                            onClick={() => handleOpenClient(issue.clientId)}
-                            className="flex items-center justify-center h-8 w-8 rounded-lg bg-slate-100 text-slate-600 text-xs font-bold shrink-0 hover:bg-slate-200 transition-colors mt-0.5"
-                          >
-                            {issue.clientInitials}
-                          </button>
-
-                          {/* Content */}
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 mb-1">
-                              <button
-                                onClick={() => handleOpenClient(issue.clientId)}
-                                className="text-sm font-medium text-foreground hover:text-emerald-600 transition-colors"
-                              >
-                                {issue.clientName}
-                              </button>
-                              <Badge variant="outline" className={`text-[10px] font-medium px-1.5 py-0 h-4 border ${catConfig.bg} ${catConfig.color}`}>
-                                {catConfig.label}
-                              </Badge>
-                            </div>
-                            <p className="text-xs font-medium text-foreground/80 leading-snug">
-                              {issue.title}
-                            </p>
-                            <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed line-clamp-2">
-                              {issue.detail}
-                            </p>
-                          </div>
-
-                          {/* Action button */}
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="h-7 text-xs font-medium px-3 shrink-0 border-border/60 hover:bg-red-50 hover:text-red-700 hover:border-red-200"
-                            onClick={() => setCurrentView(issue.actionView as AppView)}
-                          >
-                            {issue.actionLabel}
-                          </Button>
-                        </div>
-                      </motion.div>
-                    );
-                  })}
-                </AnimatePresence>
-              </div>
-            </ScrollArea>
-          )}
-        </motion.section>
+      {/* ═══ METRIC CARDS ═══ */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+        {metricCards.map((m, i) => (
+          <MetricCard key={m.label} {...m} index={i} />
+        ))}
       </div>
 
-      {/* ═══════════════════════════════════════════════════════════════════════
-          SECTION 4: RECENT UPLOADS
-          ═══════════════════════════════════════════════════════════════════════ */}
-      <motion.section
-        initial={{ opacity: 0, y: 16 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.4, duration: 0.45, ease: 'easeOut' }}
-      >
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">
-            Recent Uploads
-          </h2>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-xs font-medium text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 h-7 gap-1"
-            onClick={() => setCurrentView('invoices')}
-          >
-            View All
-            <ChevronRight className="h-3.5 w-3.5" />
-          </Button>
-        </div>
+      {/* ═══ MAIN CONTENT GRID ═══ */}
+      <div className="grid lg:grid-cols-3 gap-6">
 
-        {isLoading ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="border border-border/40 rounded-lg p-4 space-y-2.5">
-                <Skeleton className="h-4 w-full" />
-                <Skeleton className="h-3 w-2/3" />
-                <Skeleton className="h-6 w-16 rounded-md" />
-              </div>
-            ))}
-          </div>
-        ) : recentUploads.length === 0 ? (
-          <div className="border border-border/60 rounded-xl p-8 flex flex-col items-center justify-center text-center">
-            <div className="flex items-center justify-center h-10 w-10 rounded-lg bg-slate-50 mb-3">
-              <Upload className="h-5 w-5 text-slate-400" />
-            </div>
-            <p className="text-sm font-medium text-foreground">No uploads yet</p>
-            <p className="text-xs text-muted-foreground mt-1">Upload invoices to get started</p>
-            <Button
-              size="sm"
-              className="mt-3 gap-2 text-xs bg-emerald-600 hover:bg-emerald-700 text-white"
-              onClick={() => setCurrentView('invoices')}
-            >
-              <Upload className="h-3.5 w-3.5" />
-              Upload Documents
-            </Button>
-          </div>
-        ) : (
-          <motion.div
-            variants={stagger}
-            initial="hidden"
-            animate="visible"
-            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3"
-          >
-            {recentUploads.map((upload) => {
-              const statusConfig = uploadStatusConfig[upload.status];
-              return (
-                <motion.div
-                  key={upload.id}
-                  variants={fadeUp}
-                  whileHover={{ y: -2 }}
-                  transition={{ type: 'spring', stiffness: 400, damping: 25 }}
-                >
-                  <div className="border border-border/60 rounded-xl p-4 hover:border-border transition-colors cursor-pointer group"
-                    onClick={() => setCurrentView('invoices')}
-                  >
-                    <div className="flex items-start gap-3 mb-3">
-                      <div className={`flex items-center justify-center h-8 w-8 rounded-lg shrink-0 ${statusConfig.bg}`}>
-                        <span className={statusConfig.color}>{statusConfig.icon}</span>
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-foreground truncate" title={upload.filename}>
-                          {upload.filename}
-                        </p>
-                        <p className="text-xs text-muted-foreground mt-0.5">
-                          {upload.clientName} · {upload.uploadTime}
-                        </p>
-                      </div>
-                    </div>
+        {/* ── Left: Ready to File + Upcoming ──────────────────────────── */}
+        <div className="lg:col-span-2 space-y-6">
 
-                    {/* Extraction metadata */}
-                    {upload.status === 'extracted' && (
-                      <div className="flex items-center gap-3 text-[11px] text-muted-foreground mb-3">
-                        {upload.rowCount && <span>{upload.rowCount} rows</span>}
-                        {upload.invoiceCount && <span>{upload.invoiceCount} invoices</span>}
-                        {upload.accuracy && <span className="text-emerald-600 font-medium">{upload.accuracy}% accuracy</span>}
-                      </div>
-                    )}
-
-                    {upload.status === 'processing' && (
-                      <div className="flex items-center gap-2 mb-3">
-                        <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                          <motion.div
-                            className="h-full bg-amber-500 rounded-full"
-                            initial={{ width: '0%' }}
-                            animate={{ width: '72%' }}
-                            transition={{ duration: 2, repeat: Infinity, repeatType: 'reverse' }}
-                          />
-                        </div>
-                        <span className="text-[11px] text-amber-600 font-medium">72%</span>
-                      </div>
-                    )}
-
-                    <div className="flex items-center justify-between">
-                      <Badge
-                        variant="outline"
-                        className={`text-[10px] font-semibold px-2 py-0 h-5 border ${statusConfig.bg} ${statusConfig.color}`}
-                      >
-                        {statusConfig.label}
+          {/* Ready to File */}
+          <motion.div variants={fadeUp} initial="hidden" animate="visible">
+            <Card>
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                    <ShieldCheck className="h-4 w-4 text-emerald-600" />
+                    Ready to File
+                    {metrics.readyToFile > 0 && (
+                      <Badge variant="secondary" className="text-[10px] bg-emerald-50 text-emerald-700">
+                        {metrics.readyToFile}
                       </Badge>
-                      {upload.status === 'failed' ? (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="h-6 text-[11px] font-medium text-red-600 hover:text-red-700 hover:bg-red-50 px-2"
-                          onClick={(e) => { e.stopPropagation(); setCurrentView('invoices'); }}
-                        >
-                          <RefreshCw className="h-3 w-3 mr-1" />
-                          Retry
-                        </Button>
-                      ) : upload.status === 'extracted' ? (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="h-6 text-[11px] font-medium text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 px-2"
-                          onClick={(e) => { e.stopPropagation(); setCurrentView('returns'); }}
-                        >
-                          File Return
-                          <ArrowRight className="h-3 w-3 ml-0.5" />
-                        </Button>
-                      ) : null}
-                    </div>
-                  </div>
-                </motion.div>
-              );
-            })}
-          </motion.div>
-        )}
-      </motion.section>
-
-      {/* ═══════════════════════════════════════════════════════════════════════
-          SECTION 5: AI RECOMMENDATIONS
-          ═══════════════════════════════════════════════════════════════════════ */}
-      <motion.section
-        initial={{ opacity: 0, y: 16 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.5, duration: 0.45, ease: 'easeOut' }}
-      >
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider flex items-center gap-2">
-            <Sparkles className="h-3.5 w-3.5 text-emerald-600" />
-            AI Recommendations
-          </h2>
-          <Badge variant="outline" className="text-[11px] font-medium text-muted-foreground">
-            {aiRecommendations.filter(r => r.urgency === 'high').length} urgent
-          </Badge>
-        </div>
-
-        {isLoading ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="border border-border/40 rounded-lg p-4 flex gap-3">
-                <Skeleton className="h-8 w-8 rounded-lg shrink-0" />
-                <div className="flex-1 space-y-1.5">
-                  <Skeleton className="h-4 w-full" />
-                  <Skeleton className="h-3 w-3/4" />
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : aiRecommendations.length === 0 ? (
-          <div className="border border-border/60 rounded-xl p-8 flex flex-col items-center justify-center text-center">
-            <div className="flex items-center justify-center h-10 w-10 rounded-lg bg-emerald-50 mb-3">
-              <Sparkles className="h-5 w-5 text-emerald-400" />
-            </div>
-            <p className="text-sm font-medium text-foreground">No recommendations</p>
-            <p className="text-xs text-muted-foreground mt-1">
-              AI insights will appear as you add clients and process filings
-            </p>
-            <Button
-              size="sm"
-              className="mt-3 gap-2 text-xs bg-emerald-600 hover:bg-emerald-700 text-white"
-              onClick={() => setCurrentView('clients')}
-            >
-              <Users className="h-3.5 w-3.5" />
-              Add Your First Client
-            </Button>
-          </div>
-        ) : (
-          <motion.div
-            variants={stagger}
-            initial="hidden"
-            animate="visible"
-            className="grid grid-cols-1 sm:grid-cols-2 gap-3"
-          >
-            {aiRecommendations.map((rec) => (
-              <motion.div
-                key={rec.id}
-                variants={fadeUp}
-                whileHover={{ y: -2 }}
-                transition={{ type: 'spring', stiffness: 400, damping: 25 }}
-                className="border border-border/60 rounded-xl p-4 hover:border-border transition-colors cursor-pointer group"
-                onClick={() => setCurrentView(rec.actionView as AppView)}
-              >
-                <div className="flex gap-3">
-                  <div className={`flex items-center justify-center h-8 w-8 rounded-lg shrink-0 ${rec.iconBg} transition-transform group-hover:scale-105`}>
-                    <span className={rec.iconColor}>{rec.icon}</span>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-start justify-between gap-2">
-                      <p className="text-sm font-medium text-foreground leading-snug">
-                        {rec.title}
-                      </p>
-                      {rec.urgency === 'high' && (
-                        <span className="text-[10px] font-semibold text-red-600 bg-red-50 px-1.5 py-0.5 rounded shrink-0">
-                          URGENT
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-1 leading-relaxed line-clamp-2">
-                      {rec.description}
-                    </p>
-                    <button
-                      className="mt-2.5 text-xs font-semibold text-emerald-600 hover:text-emerald-700 flex items-center gap-1 group-hover:gap-1.5 transition-all"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setCurrentView(rec.actionView as AppView);
-                      }}
+                    )}
+                  </CardTitle>
+                  {returns.length > 0 && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-xs h-7 gap-1"
+                      onClick={() => setCurrentView('returns')}
                     >
-                      {rec.actionLabel}
-                      <ArrowRight className="h-3 w-3" />
-                    </button>
-                  </div>
+                      View all <ChevronRight className="h-3 w-3" />
+                    </Button>
+                  )}
                 </div>
-              </motion.div>
-            ))}
+              </CardHeader>
+              <CardContent>
+                {readyReturns.length === 0 ? (
+                  <div className="py-6 text-center">
+                    <FileCheck2 className="h-8 w-8 text-slate-300 mx-auto mb-2" />
+                    <p className="text-xs text-muted-foreground">
+                      No returns ready for filing yet
+                    </p>
+                    <Button
+                      variant="link"
+                      size="sm"
+                      className="text-xs text-emerald-600 mt-1"
+                      onClick={() => setCurrentView('returns')}
+                    >
+                      Go to Returns →
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {readyReturns.map((r) => {
+                      const client = clientMap.get(r.clientId);
+                      const name = client?.tradeName ?? 'Unknown';
+                      return (
+                        <div
+                          key={r.id}
+                          className="flex items-center justify-between p-3 rounded-lg bg-slate-50 hover:bg-slate-100 transition-colors"
+                        >
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className="flex items-center justify-center h-8 w-8 rounded-full bg-emerald-100 text-emerald-700 text-xs font-semibold shrink-0">
+                              {getInitials(name)}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium text-foreground truncate">
+                                {name}
+                              </p>
+                              <p className="text-[11px] text-muted-foreground">
+                                {r.returnType} · {periodToLabel(r.period)} · {r.totalInvoices} invoices
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <Badge
+                              variant="outline"
+                              className="text-[10px] bg-emerald-50 text-emerald-700 border-emerald-200"
+                            >
+                              {r.status}
+                            </Badge>
+                            <Button
+                              size="sm"
+                              className="h-7 text-xs bg-emerald-600 hover:bg-emerald-700 gap-1"
+                              onClick={() => handleQuickFile(r.id, name, r.returnType)}
+                              disabled={filingInProgress.has(r.id)}
+                            >
+                              {filingInProgress.has(r.id) ? (
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                              ) : (
+                                <FileCheck2 className="h-3 w-3" />
+                              )}
+                              File
+                            </Button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </motion.div>
-        )}
-      </motion.section>
 
-      {/* ═══════════════════════════════════════════════════════════════════════
-          SECTION 6: RECENT ACTIVITY
-          ═══════════════════════════════════════════════════════════════════════ */}
-      <motion.section
-        initial={{ opacity: 0, y: 16 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.55, duration: 0.45, ease: 'easeOut' }}
-      >
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">
-            Recent Activity
-          </h2>
+          {/* Upcoming Filing Deadlines */}
+          <motion.div variants={fadeUp} initial="hidden" animate="visible">
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                  <CalendarClock className="h-4 w-4 text-amber-600" />
+                  Upcoming Deadlines
+                  {metrics.overdueReturns > 0 && (
+                    <Badge variant="secondary" className="text-[10px] bg-red-50 text-red-700">
+                      {metrics.overdueReturns} overdue
+                    </Badge>
+                  )}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {upcomingFilings.length === 0 ? (
+                  <div className="py-6 text-center">
+                    <CheckCircle2 className="h-8 w-8 text-slate-300 mx-auto mb-2" />
+                    <p className="text-xs text-muted-foreground">All returns filed — you&apos;re all caught up!</p>
+                  </div>
+                ) : (
+                  <ScrollArea className="max-h-64">
+                    <div className="space-y-2">
+                      {upcomingFilings.map((r) => {
+                        const client = clientMap.get(r.clientId);
+                        const name = client?.tradeName ?? 'Unknown';
+                        const dueDateStr = getFilingDueDate(r.returnType, r.period);
+                        const days = getDaysRemaining(dueDateStr);
+                        const overdue = days < 0;
+                        const dueSoon = days >= 0 && days <= 5;
+
+                        return (
+                          <div
+                            key={r.id}
+                            className={`flex items-center justify-between p-3 rounded-lg border ${
+                              overdue ? 'border-red-200 bg-red-50/50' : dueSoon ? 'border-amber-200 bg-amber-50/50' : 'border-slate-100 bg-slate-50'
+                            }`}
+                          >
+                            <div className="flex items-center gap-3 min-w-0">
+                              <div className={`flex items-center justify-center h-8 w-8 rounded-full text-xs font-semibold shrink-0 ${
+                                overdue ? 'bg-red-100 text-red-700' : dueSoon ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600'
+                              }`}>
+                                {getInitials(name)}
+                              </div>
+                              <div className="min-w-0">
+                                <p className="text-sm font-medium text-foreground truncate">{name}</p>
+                                <p className="text-[11px] text-muted-foreground">
+                                  {r.returnType} · {periodToLabel(r.period)} · {r.status}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                              <span className={`text-xs font-medium ${
+                                overdue ? 'text-red-600' : dueSoon ? 'text-amber-600' : 'text-muted-foreground'
+                              }`}>
+                                {formatDaysRemaining(days)}
+                              </span>
+                              <Button
+                                variant={overdue ? 'default' : 'outline'}
+                                size="sm"
+                                className={`h-7 text-xs gap-1 ${
+                                  overdue ? 'bg-red-600 hover:bg-red-700' : ''
+                                }`}
+                                onClick={() => handleFileReturn(r.clientId, r.returnType, r.period)}
+                              >
+                                <ArrowRight className="h-3 w-3" />
+                                {overdue ? 'File Now' : 'Prepare'}
+                              </Button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </ScrollArea>
+                )}
+              </CardContent>
+            </Card>
+          </motion.div>
         </div>
 
-        {isLoading ? (
-          <div className="space-y-2">
-            {Array.from({ length: 3 }).map((_, i) => (
-              <div key={i} className="border border-border/40 rounded-lg p-3.5 flex gap-3">
-                <Skeleton className="h-8 w-8 rounded-lg shrink-0" />
-                <div className="flex-1 space-y-1.5">
-                  <Skeleton className="h-4 w-48" />
-                  <Skeleton className="h-3 w-32" />
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : recentActivities.length === 0 ? (
-          <div className="border border-border/60 rounded-xl p-8 flex flex-col items-center justify-center text-center">
-            <div className="flex items-center justify-center h-10 w-10 rounded-lg bg-slate-50 mb-3">
-              <ClipboardCheck className="h-5 w-5 text-slate-400" />
-            </div>
-            <p className="text-sm font-medium text-foreground">No activity yet</p>
-            <p className="text-xs text-muted-foreground mt-1">Actions will appear here as you work</p>
-          </div>
-        ) : (
-          <div className="border border-border/60 rounded-xl divide-y divide-border/40 overflow-hidden">
-            {recentActivities.slice(0, 5).map((activity, index) => (
-              <div key={activity.id} className="flex items-center gap-3 px-4 py-3 hover:bg-muted/30 transition-colors">
-                <div className="flex items-center justify-center h-8 w-8 rounded-lg bg-slate-50 text-slate-500 shrink-0">
-                  <ClipboardCheck className="h-4 w-4" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-foreground truncate">
-                    {activity.action}
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-0.5 truncate">
-                    {activity.details ?? activity.entity ?? ''} · {activity.client?.tradeName ?? ''}
-                  </p>
-                </div>
-                <span className="text-[11px] text-muted-foreground shrink-0">
-                  {new Date(activity.timestamp).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
-      </motion.section>
+        {/* ── Right Sidebar: Activity + Quick Actions ─────────────────── */}
+        <div className="space-y-6">
 
+          {/* Recent Activity */}
+          <motion.div variants={fadeUp} initial="hidden" animate="visible">
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                  <Activity className="h-4 w-4 text-violet-600" />
+                  Recent Activity
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {recentActivities.length === 0 ? (
+                  <div className="py-6 text-center">
+                    <Activity className="h-8 w-8 text-slate-300 mx-auto mb-2" />
+                    <p className="text-xs text-muted-foreground">No activity yet</p>
+                  </div>
+                ) : (
+                  <ScrollArea className="max-h-72">
+                    <div className="space-y-3">
+                      {recentActivities.map((a) => {
+                        const { icon, color, bg } = activityIcon(a.type);
+                        return (
+                          <div key={a.id} className="flex items-start gap-2.5">
+                            <div className={`flex items-center justify-center h-7 w-7 rounded-full shrink-0 mt-0.5 ${bg}`}>
+                              <span className={color}>{icon}</span>
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="text-xs font-medium text-foreground leading-tight">
+                                {a.title}
+                              </p>
+                              {a.description && (
+                                <p className="text-[11px] text-muted-foreground mt-0.5 line-clamp-2">
+                                  {a.description}
+                                </p>
+                              )}
+                              <p className="text-[10px] text-muted-foreground/60 mt-0.5">
+                                {a.createdAt ? timeAgo(a.createdAt as string) : ''}
+                              </p>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </ScrollArea>
+                )}
+              </CardContent>
+            </Card>
+          </motion.div>
+
+          {/* Quick Actions */}
+          <motion.div variants={fadeUp} initial="hidden" animate="visible">
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm font-semibold">Quick Actions</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { label: 'Add Client', icon: <Plus className="h-4 w-4" />, view: 'clients' as const, color: 'text-sky-600 bg-sky-50 hover:bg-sky-100' },
+                    { label: 'Upload Doc', icon: <Upload className="h-4 w-4" />, view: 'invoices' as const, color: 'text-emerald-600 bg-emerald-50 hover:bg-emerald-100' },
+                    { label: 'File Return', icon: <FileCheck2 className="h-4 w-4" />, view: 'returns' as const, color: 'text-violet-600 bg-violet-50 hover:bg-violet-100' },
+                    { label: 'Reconcile', icon: <ClipboardCheck className="h-4 w-4" />, view: 'reconcile' as const, color: 'text-amber-600 bg-amber-50 hover:bg-amber-100' },
+                  ].map((action) => (
+                    <button
+                      key={action.label}
+                      onClick={() => setCurrentView(action.view)}
+                      className={`flex flex-col items-center gap-1.5 p-3 rounded-lg transition-colors ${action.color}`}
+                    >
+                      {action.icon}
+                      <span className="text-[11px] font-medium">{action.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
+
+          {/* Summary Stats */}
+          {metrics.documentsProcessed > 0 && (
+            <motion.div variants={fadeUp} initial="hidden" animate="visible">
+              <Card>
+                <CardContent className="p-4">
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-muted-foreground">Documents Processed</span>
+                      <span className="font-semibold">{metrics.documentsProcessed}</span>
+                    </div>
+                    {metrics.extractionsPending > 0 && (
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-muted-foreground">Extractions Pending</span>
+                        <Badge variant="secondary" className="text-[10px] bg-amber-50 text-amber-700">
+                          {metrics.extractionsPending}
+                        </Badge>
+                      </div>
+                    )}
+                    {metrics.matchPercentage < 100 && (
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-muted-foreground">Match Rate</span>
+                        <span className="font-semibold">{metrics.matchPercentage}%</span>
+                      </div>
+                    )}
+                    {metrics.riskPercentage > 0 && (
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-muted-foreground">Risk Rate</span>
+                        <span className={`font-semibold ${metrics.riskPercentage > 20 ? 'text-red-600' : 'text-amber-600'}`}>
+                          {metrics.riskPercentage}%
+                        </span>
+                      </div>
+                    )}
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-muted-foreground">Overdue Returns</span>
+                      <span className={`font-semibold ${metrics.overdueReturns > 0 ? 'text-red-600' : 'text-emerald-600'}`}>
+                        {metrics.overdueReturns}
+                      </span>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </motion.div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

@@ -1,0 +1,1163 @@
+     1→'use client';
+     2→
+     3→import { useState, useCallback } from 'react';
+     4→import { motion, AnimatePresence } from 'framer-motion';
+     5→import {
+     6→  Zap,
+     7→  ArrowRight,
+     8→  ArrowLeft,
+     9→  Check,
+    10→  Building2,
+    11→  User,
+    12→  Briefcase,
+    13→  Target,
+    14→  Sparkles,
+    15→  Upload,
+    16→  Rocket,
+    17→  X,
+    18→  AlertCircle,
+    19→} from 'lucide-react';
+    20→import { Button } from '@/components/ui/button';
+    21→import { Input } from '@/components/ui/input';
+    22→import { Label } from '@/components/ui/label';
+    23→import {
+    24→  Select,
+    25→  SelectContent,
+    26→  SelectItem,
+    27→  SelectTrigger,
+    28→  SelectValue,
+    29→} from '@/components/ui/select';
+    30→import { Card, CardContent } from '@/components/ui/card';
+    31→import { Badge } from '@/components/ui/badge';
+    32→import { Separator } from '@/components/ui/separator';
+    33→import { Textarea } from '@/components/ui/textarea';
+    34→import { Switch } from '@/components/ui/switch';
+    35→import { INDIAN_STATES } from '@/lib/constants';
+    36→
+    37→// ─── Types ────────────────────────────────────────────────────────────────────
+    38→
+    39→export interface OnboardingData {
+    40→  fullName: string;
+    41→  email: string;
+    42→  phone: string;
+    43→  ageGroup: string;
+    44→  profession: string;
+    45→  experience: string;
+    46→  firmName: string;
+    47→  organizationType: string;
+    48→  gstin: string;
+    49→  state: string;
+    50→  stateCode: string;
+    51→  icaiMembershipNo: string;
+    52→  officeAddress: string;
+    53→  clientCount: string;
+    54→  monthlyReturns: string;
+    55→  gstServices: string[];
+    56→  painPoints: string[];
+    57→  referralSource: string;
+    58→  trialReasons: string[];
+    59→  wantsUpdates: boolean;
+    60→}
+    61→
+    62→export type OnboardingDestination = 'dashboard' | 'invoices';
+    63→
+    64→interface OnboardingFlowProps {
+    65→  onComplete: (data: OnboardingData, destination?: OnboardingDestination) => void;
+    66→  onSkip?: () => void;
+    67→  userEmail?: string;
+    68→  userName?: string;
+    69→  saving?: boolean;
+    70→  error?: string | null;
+    71→  onDismissError?: () => void;
+    72→}
+    73→
+    74→// ─── Constants ────────────────────────────────────────────────────────────────
+    75→
+    76→const AGE_GROUPS = ['18-24', '25-34', '35-44', '45-54', '55+'];
+    77→
+    78→const PROFESSIONS = [
+    79→  'Chartered Accountant (CA)',
+    80→  'CA Firm Owner',
+    81→  'GST Practitioner',
+    82→  'Accountant',
+    83→  'Tax Consultant',
+    84→  'Business Owner',
+    85→  'Finance Manager',
+    86→  'Student',
+    87→  'Other',
+    88→];
+    89→
+    90→const EXPERIENCE_LEVELS = [
+    91→  '0-1 years',
+    92→  '1-3 years',
+    93→  '3-5 years',
+    94→  '5-10 years',
+    95→  '10+ years',
+    96→];
+    97→
+    98→const ORGANIZATION_TYPES = [
+    99→  'Solo CA Practice',
+   100→  'CA Partnership Firm',
+   101→  'LLP',
+   102→  'Private Limited Company',
+   103→  'GST Consultancy',
+   104→  'Freelancer',
+   105→  'Business Owner',
+   106→];
+   107→
+   108→const CLIENT_COUNTS = ['1-10', '11-25', '26-50', '51-100', '100+'];
+   109→
+   110→const MONTHLY_RETURNS = ['1-50', '51-100', '101-250', '251-500', '500+'];
+   111→
+   112→const GST_SERVICES = [
+   113→  'GSTR-1',
+   114→  'GSTR-3B',
+   115→  'GSTR-9',
+   116→  'GSTR-9C',
+   117→  'Reconciliation',
+   118→  'Invoice Processing',
+   119→  'ITC Management',
+   120→];
+   121→
+   122→const PAIN_POINTS = [
+   123→  'Manual Excel Work',
+   124→  'Invoice Extraction',
+   125→  'GST Reconciliation',
+   126→  'Late Filings',
+   127→  'Client Management',
+   128→  'Finding Errors',
+   129→  'Data Entry',
+   130→  'Team Collaboration',
+   131→];
+   132→
+   133→const REFERRAL_SOURCES = [
+   134→  'Google Search',
+   135→  'YouTube',
+   136→  'LinkedIn',
+   137→  'Instagram',
+   138→  'Facebook',
+   139→  'Friend/Colleague',
+   140→  'CA Community',
+   141→  'WhatsApp',
+   142→  'Advertisement',
+   143→  'Other',
+   144→];
+   145→
+   146→const TRIAL_REASONS = [
+   147→  'Save Time',
+   148→  'Reduce Errors',
+   149→  'Manage More Clients',
+   150→  'Automate GST Filing',
+   151→  'Scale My CA Firm',
+   152→  'Replace Excel',
+   153→  'Curious About AI',
+   154→];
+   155→
+   156→const GSTIN_REGEX = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
+   157→
+   158→// ─── Animation Variants ──────────────────────────────────────────────────────
+   159→
+   160→const slideVariants = {
+   161→  enter: (direction: number) => ({
+   162→    x: direction > 0 ? 300 : -300,
+   163→    opacity: 0,
+   164→  }),
+   165→  center: {
+   166→    x: 0,
+   167→    opacity: 1,
+   168→  },
+   169→  exit: (direction: number) => ({
+   170→    x: direction < 0 ? 300 : -300,
+   171→    opacity: 0,
+   172→  }),
+   173→};
+   174→
+   175→const stepTransition = {
+   176→  type: 'spring' as const,
+   177→  stiffness: 300,
+   178→  damping: 30,
+   179→};
+   180→
+   181→// ─── Multi-Select Chip ────────────────────────────────────────────────────────
+   182→
+   183→function MultiSelectChip({
+   184→  label,
+   185→  selected,
+   186→  onToggle,
+   187→}: {
+   188→  label: string;
+   189→  selected: boolean;
+   190→  onToggle: () => void;
+   191→}) {
+   192→  return (
+   193→    <button
+   194→      type="button"
+   195→      onClick={onToggle}
+   196→      className={`rounded-full border px-3 py-1.5 text-sm cursor-pointer transition-all duration-150 ${
+   197→        selected
+   198→          ? 'bg-emerald-50 border-emerald-300 text-emerald-700'
+   199→          : 'bg-background border-input text-muted-foreground hover:border-emerald-200 hover:text-foreground'
+   200→      }`}
+   201→    >
+   202→      {selected && <Check className="inline size-3 mr-1 -mt-0.5" />}
+   203→      {label}
+   204→    </button>
+   205→  );
+   206→}
+   207→
+   208→// ─── Main Component ──────────────────────────────────────────────────────────
+   209→
+   210→export function OnboardingFlow({
+   211→  onComplete,
+   212→  onSkip,
+   213→  userEmail = '',
+   214→  userName = '',
+   215→  saving = false,
+   216→  error = null,
+   217→  onDismissError,
+   218→}: OnboardingFlowProps) {
+   219→  const [currentStep, setCurrentStep] = useState(0); // 0=welcome, 1-4=steps, 5=final
+   220→  const [direction, setDirection] = useState(1);
+   221→
+   222→  const [formData, setFormData] = useState<OnboardingData>({
+   223→    fullName: userName,
+   224→    email: userEmail,
+   225→    phone: '',
+   226→    ageGroup: '',
+   227→    profession: '',
+   228→    experience: '',
+   229→    firmName: '',
+   230→    organizationType: '',
+   231→    gstin: '',
+   232→    state: '',
+   233→    stateCode: '',
+   234→    icaiMembershipNo: '',
+   235→    officeAddress: '',
+   236→    clientCount: '',
+   237→    monthlyReturns: '',
+   238→    gstServices: [],
+   239→    painPoints: [],
+   240→    referralSource: '',
+   241→    trialReasons: [],
+   242→    wantsUpdates: true,
+   243→  });
+   244→
+   245→  const [errors, setErrors] = useState<Record<string, string>>({});
+   246→
+   247→  // ─── Helpers ──────────────────────────────────────────────────────────────
+   248→
+   249→  const updateField = useCallback(
+   250→    <K extends keyof OnboardingData>(field: K, value: OnboardingData[K]) => {
+   251→      setFormData((prev) => ({ ...prev, [field]: value }));
+   252→      // Clear error on change
+   253→      setErrors((prev) => {
+   254→        const next = { ...prev };
+   255→        delete next[field];
+   256→        return next;
+   257→      });
+   258→    },
+   259→    []
+   260→  );
+   261→
+   262→  const toggleArrayItem = useCallback(
+   263→    (field: 'gstServices' | 'painPoints' | 'trialReasons', item: string) => {
+   264→      setFormData((prev) => {
+   265→        const arr = prev[field] as string[];
+   266→        const next = arr.includes(item)
+   267→          ? arr.filter((i) => i !== item)
+   268→          : [...arr, item];
+   269→        return { ...prev, [field]: next };
+   270→      });
+   271→    },
+   272→    []
+   273→  );
+   274→
+   275→  const goNext = useCallback(() => {
+   276→    setDirection(1);
+   277→    setCurrentStep((prev) => Math.min(prev + 1, 5));
+   278→  }, []);
+   279→
+   280→  const goBack = useCallback(() => {
+   281→    setDirection(-1);
+   282→    setCurrentStep((prev) => Math.max(prev - 1, 0));
+   283→  }, []);
+   284→
+   285→  // ─── Validation ───────────────────────────────────────────────────────────
+   286→
+   287→  const validateStep = useCallback(
+   288→    (step: number): boolean => {
+   289→      const newErrors: Record<string, string> = {};
+   290→
+   291→      if (step === 1) {
+   292→        if (!formData.fullName.trim()) newErrors.fullName = 'Full name is required';
+   293→        if (!formData.email.trim()) newErrors.email = 'Email is required';
+   294→        else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email))
+   295→          newErrors.email = 'Enter a valid email';
+   296→        if (!formData.phone.trim()) newErrors.phone = 'Mobile number is required';
+   297→        else if (!/^\d{10}$/.test(formData.phone.replace(/\s/g, '')))
+   298→          newErrors.phone = 'Enter a valid 10-digit mobile number';
+   299→      }
+   300→
+   301→      if (step === 2) {
+   302→        if (!formData.firmName.trim()) newErrors.firmName = 'Firm name is required';
+   303→      }
+   304→
+   305→      setErrors(newErrors);
+   306→      return Object.keys(newErrors).length === 0;
+   307→    },
+   308→    [formData]
+   309→  );
+   310→
+   311→  const handleNext = useCallback(() => {
+   312→    if (validateStep(currentStep)) {
+   313→      goNext();
+   314→    }
+   315→  }, [currentStep, validateStep, goNext]);
+   316→
+   317→  // ─── GSTIN Validation ─────────────────────────────────────────────────────
+   318→
+   319→  const getGstinStatus = useCallback(() => {
+   320→    const val = formData.gstin.trim();
+   321→    if (!val) return null;
+   322→    return GSTIN_REGEX.test(val) ? 'valid' : 'invalid';
+   323→  }, [formData.gstin]);
+   324→
+   325→  // ─── State Code Lookup ────────────────────────────────────────────────────
+   326→
+   327→  const handleStateChange = useCallback(
+   328→    (stateName: string) => {
+   329→      const stateObj = INDIAN_STATES.find((s) => s.name === stateName);
+   330→      setFormData((prev) => ({
+   331→        ...prev,
+   332→        state: stateName,
+   333→        stateCode: stateObj?.code ?? '',
+   334→      }));
+   335→      setErrors((prev) => {
+   336→        const next = { ...prev };
+   337→        delete next.state;
+   338→        return next;
+   339→      });
+   340→    },
+   341→    []
+   342→  );
+   343→
+   344→  // ─── Progress ─────────────────────────────────────────────────────────────
+   345→
+   346→  const totalSteps = 5;
+   347→  const progressPercent =
+   348→    currentStep === 0 ? 0 : (currentStep / totalSteps) * 100;
+   349→
+   350→  // ─── Step Icons ───────────────────────────────────────────────────────────
+   351→
+   352→  const stepIcons = [Zap, User, Building2, Briefcase, Target];
+   353→
+   354→  // ─── Render Step Content ──────────────────────────────────────────────────
+   355→
+   356→  const renderStep = () => {
+   357→    // Step 0 — Welcome
+   358→    if (currentStep === 0) {
+   359→      return (
+   360→        <motion.div
+   361→          key="step-0"
+   362→          custom={direction}
+   363→          variants={slideVariants}
+   364→          initial="enter"
+   365→          animate="center"
+   366→          exit="exit"
+   367→          transition={stepTransition}
+   368→          className="flex flex-col items-center justify-center text-center py-8"
+   369→        >
+   370→          <motion.div
+   371→            initial={{ scale: 0.5, opacity: 0 }}
+   372→            animate={{ scale: 1, opacity: 1 }}
+   373→            transition={{ type: 'spring', stiffness: 200, damping: 15, delay: 0.1 }}
+   374→            className="mb-8"
+   375→          >
+   376→            <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-emerald-400 to-teal-600 flex items-center justify-center shadow-lg shadow-emerald-200">
+   377→              <Zap className="size-10 text-white" />
+   378→            </div>
+   379→          </motion.div>
+   380→          <motion.h1
+   381→            initial={{ y: 20, opacity: 0 }}
+   382→            animate={{ y: 0, opacity: 1 }}
+   383→            transition={{ delay: 0.2 }}
+   384→            className="text-2xl font-bold tracking-tight text-foreground"
+   385→          >
+   386→            Welcome to GSTPilot
+   387→          </motion.h1>
+   388→          <motion.p
+   389→            initial={{ y: 20, opacity: 0 }}
+   390→            animate={{ y: 0, opacity: 1 }}
+   391→            transition={{ delay: 0.3 }}
+   392→            className="text-muted-foreground mt-2 max-w-sm"
+   393→          >
+   394→            Let&apos;s set up your workspace in less than 2 minutes.
+   395→          </motion.p>
+   396→          <motion.div
+   397→            initial={{ y: 20, opacity: 0 }}
+   398→            animate={{ y: 0, opacity: 1 }}
+   399→            transition={{ delay: 0.4 }}
+   400→            className="mt-8"
+   401→          >
+   402→            <Button
+   403→              onClick={goNext}
+   404→              size="lg"
+   405→              className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2 px-8"
+   406→            >
+   407→              Get Started
+   408→              <ArrowRight className="size-4" />
+   409→            </Button>
+   410→          </motion.div>
+   411→        </motion.div>
+   412→      );
+   413→    }
+   414→
+   415→    // Step 1 — About You
+   416→    if (currentStep === 1) {
+   417→      return (
+   418→        <motion.div
+   419→          key="step-1"
+   420→          custom={direction}
+   421→          variants={slideVariants}
+   422→          initial="enter"
+   423→          animate="center"
+   424→          exit="exit"
+   425→          transition={stepTransition}
+   426→          className="py-4"
+   427→        >
+   428→          <div className="flex items-center gap-3 mb-6">
+   429→            <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center">
+   430→              <User className="size-5 text-emerald-600" />
+   431→            </div>
+   432→            <div>
+   433→              <h2 className="text-2xl font-bold">About You</h2>
+   434→              <p className="text-sm text-muted-foreground">
+   435→                Tell us about yourself so we can personalize your experience
+   436→              </p>
+   437→            </div>
+   438→          </div>
+   439→
+   440→          <div className="space-y-5">
+   441→            {/* Full Name */}
+   442→            <div className="space-y-2">
+   443→              <Label htmlFor="fullName">
+   444→                Full Name <span className="text-destructive">*</span>
+   445→              </Label>
+   446→              <Input
+   447→                id="fullName"
+   448→                placeholder="Rajesh Kumar Sharma"
+   449→                value={formData.fullName}
+   450→                onChange={(e) => updateField('fullName', e.target.value)}
+   451→                aria-invalid={!!errors.fullName}
+   452→                className={errors.fullName ? 'border-destructive' : ''}
+   453→              />
+   454→              {errors.fullName && (
+   455→                <p className="text-xs text-destructive">{errors.fullName}</p>
+   456→              )}
+   457→            </div>
+   458→
+   459→            {/* Work Email */}
+   460→            <div className="space-y-2">
+   461→              <Label htmlFor="email">
+   462→                Work Email <span className="text-destructive">*</span>
+   463→              </Label>
+   464→              <Input
+   465→                id="email"
+   466→                type="email"
+   467→                placeholder="rajesh@yourfirm.com"
+   468→                value={formData.email}
+   469→                onChange={(e) => updateField('email', e.target.value)}
+   470→                aria-invalid={!!errors.email}
+   471→                className={errors.email ? 'border-destructive' : ''}
+   472→              />
+   473→              {errors.email && (
+   474→                <p className="text-xs text-destructive">{errors.email}</p>
+   475→              )}
+   476→            </div>
+   477→
+   478→            {/* Mobile Number */}
+   479→            <div className="space-y-2">
+   480→              <Label htmlFor="phone">
+   481→                Mobile Number <span className="text-destructive">*</span>
+   482→              </Label>
+   483→              <div className="flex">
+   484→                <div className="flex items-center rounded-l-md border border-r-0 bg-muted px-3 text-sm text-muted-foreground h-9">
+   485→                  +91
+   486→                </div>
+   487→                <Input
+   488→                  id="phone"
+   489→                  type="tel"
+   490→                  placeholder="9876543210"
+   491→                  value={formData.phone}
+   492→                  onChange={(e) =>
+   493→                    updateField('phone', e.target.value.replace(/[^\d]/g, '').slice(0, 10))
+   494→                  }
+   495→                  aria-invalid={!!errors.phone}
+   496→                  className={`rounded-l-none ${errors.phone ? 'border-destructive' : ''}`}
+   497→                />
+   498→              </div>
+   499→              {errors.phone && (
+   500→                <p className="text-xs text-destructive">{errors.phone}</p>
+   501→              )}
+   502→            </div>
+   503→
+   504→            {/* Age Group */}
+   505→            <div className="space-y-2">
+   506→              <Label>Age Group</Label>
+   507→              <Select
+   508→                value={formData.ageGroup}
+   509→                onValueChange={(v) => updateField('ageGroup', v)}
+   510→              >
+   511→                <SelectTrigger className="w-full">
+   512→                  <SelectValue placeholder="Select age group" />
+   513→                </SelectTrigger>
+   514→                <SelectContent>
+   515→                  {AGE_GROUPS.map((g) => (
+   516→                    <SelectItem key={g} value={g}>
+   517→                      {g}
+   518→                    </SelectItem>
+   519→                  ))}
+   520→                </SelectContent>
+   521→              </Select>
+   522→            </div>
+   523→
+   524→            {/* Profession */}
+   525→            <div className="space-y-2">
+   526→              <Label>Profession</Label>
+   527→              <Select
+   528→                value={formData.profession}
+   529→                onValueChange={(v) => updateField('profession', v)}
+   530→              >
+   531→                <SelectTrigger className="w-full">
+   532→                  <SelectValue placeholder="Select your profession" />
+   533→                </SelectTrigger>
+   534→                <SelectContent>
+   535→                  {PROFESSIONS.map((p) => (
+   536→                    <SelectItem key={p} value={p}>
+   537→                      {p}
+   538→                    </SelectItem>
+   539→                  ))}
+   540→                </SelectContent>
+   541→              </Select>
+   542→            </div>
+   543→
+   544→            {/* Years of Experience */}
+   545→            <div className="space-y-2">
+   546→              <Label>Years of Experience</Label>
+   547→              <Select
+   548→                value={formData.experience}
+   549→                onValueChange={(v) => updateField('experience', v)}
+   550→              >
+   551→                <SelectTrigger className="w-full">
+   552→                  <SelectValue placeholder="Select experience" />
+   553→                </SelectTrigger>
+   554→                <SelectContent>
+   555→                  {EXPERIENCE_LEVELS.map((e) => (
+   556→                    <SelectItem key={e} value={e}>
+   557→                      {e}
+   558→                    </SelectItem>
+   559→                  ))}
+   560→                </SelectContent>
+   561→              </Select>
+   562→            </div>
+   563→          </div>
+   564→        </motion.div>
+   565→      );
+   566→    }
+   567→
+   568→    // Step 2 — Firm Information
+   569→    if (currentStep === 2) {
+   570→      const gstinStatus = getGstinStatus();
+   571→      return (
+   572→        <motion.div
+   573→          key="step-2"
+   574→          custom={direction}
+   575→          variants={slideVariants}
+   576→          initial="enter"
+   577→          animate="center"
+   578→          exit="exit"
+   579→          transition={stepTransition}
+   580→          className="py-4"
+   581→        >
+   582→          <div className="flex items-center gap-3 mb-6">
+   583→            <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center">
+   584→              <Building2 className="size-5 text-emerald-600" />
+   585→            </div>
+   586→            <div>
+   587→              <h2 className="text-2xl font-bold">Firm Information</h2>
+   588→              <p className="text-sm text-muted-foreground">
+   589→                Details about your CA firm or practice
+   590→              </p>
+   591→            </div>
+   592→          </div>
+   593→
+   594→          <div className="space-y-5">
+   595→            {/* Firm Name */}
+   596→            <div className="space-y-2">
+   597→              <Label htmlFor="firmName">
+   598→                Firm Name <span className="text-destructive">*</span>
+   599→              </Label>
+   600→              <Input
+   601→                id="firmName"
+   602→                placeholder="Sharma & Associates"
+   603→                value={formData.firmName}
+   604→                onChange={(e) => updateField('firmName', e.target.value)}
+   605→                aria-invalid={!!errors.firmName}
+   606→                className={errors.firmName ? 'border-destructive' : ''}
+   607→              />
+   608→              {errors.firmName && (
+   609→                <p className="text-xs text-destructive">{errors.firmName}</p>
+   610→              )}
+   611→            </div>
+   612→
+   613→            {/* Type of Organization */}
+   614→            <div className="space-y-2">
+   615→              <Label>Type of Organization</Label>
+   616→              <Select
+   617→                value={formData.organizationType}
+   618→                onValueChange={(v) => updateField('organizationType', v)}
+   619→              >
+   620→                <SelectTrigger className="w-full">
+   621→                  <SelectValue placeholder="Select organization type" />
+   622→                </SelectTrigger>
+   623→                <SelectContent>
+   624→                  {ORGANIZATION_TYPES.map((t) => (
+   625→                    <SelectItem key={t} value={t}>
+   626→                      {t}
+   627→                    </SelectItem>
+   628→                  ))}
+   629→                </SelectContent>
+   630→              </Select>
+   631→            </div>
+   632→
+   633→            {/* GSTIN */}
+   634→            <div className="space-y-2">
+   635→              <Label htmlFor="gstin">GSTIN</Label>
+   636→              <div className="relative">
+   637→                <Input
+   638→                  id="gstin"
+   639→                  placeholder="22AAAAA0000A1Z5"
+   640→                  value={formData.gstin}
+   641→                  onChange={(e) =>
+   642→                    updateField(
+   643→                      'gstin',
+   644→                      e.target.value.toUpperCase().slice(0, 15)
+   645→                    )
+   646→                  }
+   647→                  className={`pr-10 ${
+   648→                    gstinStatus === 'invalid'
+   649→                      ? 'border-red-400'
+   650→                      : gstinStatus === 'valid'
+   651→                      ? 'border-emerald-400'
+   652→                      : ''
+   653→                  }`}
+   654→                />
+   655→                {gstinStatus === 'valid' && (
+   656→                  <Check className="absolute right-3 top-1/2 -translate-y-1/2 size-4 text-emerald-500" />
+   657→                )}
+   658→                {gstinStatus === 'invalid' && (
+   659→                  <X className="absolute right-3 top-1/2 -translate-y-1/2 size-4 text-red-500" />
+   660→                )}
+   661→              </div>
+   662→              {gstinStatus === 'invalid' && (
+   663→                <p className="text-xs text-destructive">
+   664→                  Invalid GSTIN format (e.g., 22AAAAA0000A1Z5)
+   665→                </p>
+   666→              )}
+   667→            </div>
+   668→
+   669→            {/* State */}
+   670→            <div className="space-y-2">
+   671→              <Label>State</Label>
+   672→              <Select
+   673→                value={formData.state}
+   674→                onValueChange={handleStateChange}
+   675→              >
+   676→                <SelectTrigger className="w-full">
+   677→                  <SelectValue placeholder="Select your state" />
+   678→                </SelectTrigger>
+   679→                <SelectContent>
+   680→                  {INDIAN_STATES.map((s) => (
+   681→                    <SelectItem key={s.code} value={s.name}>
+   682→                      {s.name}
+   683→                    </SelectItem>
+   684→                  ))}
+   685→                </SelectContent>
+   686→              </Select>
+   687→            </div>
+   688→
+   689→            {/* ICAI Membership Number */}
+   690→            <div className="space-y-2">
+   691→              <Label htmlFor="icaiMembershipNo">
+   692→                ICAI Membership Number{' '}
+   693→                <span className="text-muted-foreground font-normal">
+   694→                  (optional)
+   695→                </span>
+   696→              </Label>
+   697→              <Input
+   698→                id="icaiMembershipNo"
+   699→                placeholder="e.g., 123456"
+   700→                value={formData.icaiMembershipNo}
+   701→                onChange={(e) =>
+   702→                  updateField('icaiMembershipNo', e.target.value)
+   703→                }
+   704→              />
+   705→            </div>
+   706→
+   707→            {/* Office Address */}
+   708→            <div className="space-y-2">
+   709→              <Label htmlFor="officeAddress">
+   710→                Office Address{' '}
+   711→                <span className="text-muted-foreground font-normal">
+   712→                  (optional)
+   713→                </span>
+   714→              </Label>
+   715→              <Textarea
+   716→                id="officeAddress"
+   717→                placeholder="123, MG Road, Mumbai, Maharashtra - 400001"
+   718→                value={formData.officeAddress}
+   719→                onChange={(e) =>
+   720→                  updateField('officeAddress', e.target.value)
+   721→                }
+   722→                rows={3}
+   723→              />
+   724→            </div>
+   725→          </div>
+   726→        </motion.div>
+   727→      );
+   728→    }
+   729→
+   730→    // Step 3 — Business Usage
+   731→    if (currentStep === 3) {
+   732→      return (
+   733→        <motion.div
+   734→          key="step-3"
+   735→          custom={direction}
+   736→          variants={slideVariants}
+   737→          initial="enter"
+   738→          animate="center"
+   739→          exit="exit"
+   740→          transition={stepTransition}
+   741→          className="py-4"
+   742→        >
+   743→          <div className="flex items-center gap-3 mb-6">
+   744→            <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center">
+   745→              <Briefcase className="size-5 text-emerald-600" />
+   746→            </div>
+   747→            <div>
+   748→              <h2 className="text-2xl font-bold">Business Usage</h2>
+   749→              <p className="text-sm text-muted-foreground">
+   750→                Help us understand how you work with GST
+   751→              </p>
+   752→            </div>
+   753→          </div>
+   754→
+   755→          <div className="space-y-6">
+   756→            {/* Client Count */}
+   757→            <div className="space-y-2">
+   758→              <Label>How many clients do you manage?</Label>
+   759→              <Select
+   760→                value={formData.clientCount}
+   761→                onValueChange={(v) => updateField('clientCount', v)}
+   762→              >
+   763→                <SelectTrigger className="w-full">
+   764→                  <SelectValue placeholder="Select range" />
+   765→                </SelectTrigger>
+   766→                <SelectContent>
+   767→                  {CLIENT_COUNTS.map((c) => (
+   768→                    <SelectItem key={c} value={c}>
+   769→                      {c}
+   770→                    </SelectItem>
+   771→                  ))}
+   772→                </SelectContent>
+   773→              </Select>
+   774→            </div>
+   775→
+   776→            {/* Monthly Returns */}
+   777→            <div className="space-y-2">
+   778→              <Label>How many GST returns do you file every month?</Label>
+   779→              <Select
+   780→                value={formData.monthlyReturns}
+   781→                onValueChange={(v) => updateField('monthlyReturns', v)}
+   782→              >
+   783→                <SelectTrigger className="w-full">
+   784→                  <SelectValue placeholder="Select range" />
+   785→                </SelectTrigger>
+   786→                <SelectContent>
+   787→                  {MONTHLY_RETURNS.map((r) => (
+   788→                    <SelectItem key={r} value={r}>
+   789→                      {r}
+   790→                    </SelectItem>
+   791→                  ))}
+   792→                </SelectContent>
+   793→              </Select>
+   794→            </div>
+   795→
+   796→            {/* GST Services */}
+   797→            <div className="space-y-3">
+   798→              <Label>Which GST services do you use most?</Label>
+   799→              <div className="flex flex-wrap gap-2">
+   800→                {GST_SERVICES.map((service) => (
+   801→                  <MultiSelectChip
+   802→                    key={service}
+   803→                    label={service}
+   804→                    selected={formData.gstServices.includes(service)}
+   805→                    onToggle={() => toggleArrayItem('gstServices', service)}
+   806→                  />
+   807→                ))}
+   808→              </div>
+   809→            </div>
+   810→
+   811→            {/* Pain Points */}
+   812→            <div className="space-y-3">
+   813→              <Label>What is your biggest pain point?</Label>
+   814→              <div className="flex flex-wrap gap-2">
+   815→                {PAIN_POINTS.map((point) => (
+   816→                  <MultiSelectChip
+   817→                    key={point}
+   818→                    label={point}
+   819→                    selected={formData.painPoints.includes(point)}
+   820→                    onToggle={() => toggleArrayItem('painPoints', point)}
+   821→                  />
+   822→                ))}
+   823→              </div>
+   824→            </div>
+   825→          </div>
+   826→        </motion.div>
+   827→      );
+   828→    }
+   829→
+   830→    // Step 4 — Marketing & Personalization
+   831→    if (currentStep === 4) {
+   832→      return (
+   833→        <motion.div
+   834→          key="step-4"
+   835→          custom={direction}
+   836→          variants={slideVariants}
+   837→          initial="enter"
+   838→          animate="center"
+   839→          exit="exit"
+   840→          transition={stepTransition}
+   841→          className="py-4"
+   842→        >
+   843→          <div className="flex items-center gap-3 mb-6">
+   844→            <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center">
+   845→              <Target className="size-5 text-emerald-600" />
+   846→            </div>
+   847→            <div>
+   848→              <h2 className="text-2xl font-bold">
+   849→                Marketing &amp; Personalization
+   850→              </h2>
+   851→              <p className="text-sm text-muted-foreground">
+   852→                Almost there! Just a few more details
+   853→              </p>
+   854→            </div>
+   855→          </div>
+   856→
+   857→          <div className="space-y-6">
+   858→            {/* Referral Source */}
+   859→            <div className="space-y-2">
+   860→              <Label>How did you hear about GSTPilot?</Label>
+   861→              <Select
+   862→                value={formData.referralSource}
+   863→                onValueChange={(v) => updateField('referralSource', v)}
+   864→              >
+   865→                <SelectTrigger className="w-full">
+   866→                  <SelectValue placeholder="Select a source" />
+   867→                </SelectTrigger>
+   868→                <SelectContent>
+   869→                  {REFERRAL_SOURCES.map((s) => (
+   870→                    <SelectItem key={s} value={s}>
+   871→                      {s}
+   872→                    </SelectItem>
+   873→                  ))}
+   874→                </SelectContent>
+   875→              </Select>
+   876→            </div>
+   877→
+   878→            {/* Trial Reasons */}
+   879→            <div className="space-y-3">
+   880→              <Label>Why are you trying GSTPilot?</Label>
+   881→              <div className="flex flex-wrap gap-2">
+   882→                {TRIAL_REASONS.map((reason) => (
+   883→                  <MultiSelectChip
+   884→                    key={reason}
+   885→                    label={reason}
+   886→                    selected={formData.trialReasons.includes(reason)}
+   887→                    onToggle={() =>
+   888→                      toggleArrayItem('trialReasons', reason)
+   889→                    }
+   890→                  />
+   891→                ))}
+   892→              </div>
+   893→            </div>
+   894→
+   895→            {/* Updates Toggle */}
+   896→            <div className="flex items-center justify-between rounded-lg border p-4">
+   897→              <div className="space-y-0.5">
+   898→                <Label className="text-base">
+   899→                  Product updates &amp; GST reminders
+   900→                </Label>
+   901→                <p className="text-sm text-muted-foreground">
+   902→                  Stay informed about new features and filing deadlines
+   903→                </p>
+   904→              </div>
+   905→              <Switch
+   906→                checked={formData.wantsUpdates}
+   907→                onCheckedChange={(v) => updateField('wantsUpdates', v)}
+   908→              />
+   909→            </div>
+   910→          </div>
+   911→        </motion.div>
+   912→      );
+   913→    }
+   914→
+   915→    // Step 5 — Final Screen
+   916→    return (
+   917→      <motion.div
+   918→        key="step-5"
+   919→        custom={direction}
+   920→        variants={slideVariants}
+   921→        initial="enter"
+   922→        animate="center"
+   923→        exit="exit"
+   924→        transition={stepTransition}
+   925→        className="flex flex-col items-center justify-center text-center py-8"
+   926→      >
+   927→        <motion.div
+   928→          initial={{ scale: 0.5, opacity: 0 }}
+   929→          animate={{ scale: 1, opacity: 1 }}
+   930→          transition={{ type: 'spring', stiffness: 200, damping: 15, delay: 0.1 }}
+   931→          className="mb-6"
+   932→        >
+   933→          <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-emerald-400 to-teal-600 flex items-center justify-center shadow-lg shadow-emerald-200">
+   934→            <Rocket className="size-10 text-white" />
+   935→          </div>
+   936→        </motion.div>
+   937→
+   938→        <motion.h2
+   939→          initial={{ y: 20, opacity: 0 }}
+   940→          animate={{ y: 0, opacity: 1 }}
+   941→          transition={{ delay: 0.2 }}
+   942→          className="text-2xl font-bold tracking-tight"
+   943→        >
+   944→          Your GSTPilot Workspace Is Ready
+   945→        </motion.h2>
+   946→        <motion.p
+   947→          initial={{ y: 20, opacity: 0 }}
+   948→          animate={{ y: 0, opacity: 1 }}
+   949→          transition={{ delay: 0.3 }}
+   950→          className="text-muted-foreground mt-2 max-w-sm"
+   951→        >
+   952→          Here&apos;s a summary of your setup
+   953→        </motion.p>
+   954→
+   955→        <motion.div
+   956→          initial={{ y: 20, opacity: 0 }}
+   957→          animate={{ y: 0, opacity: 1 }}
+   958→          transition={{ delay: 0.4 }}
+   959→          className="w-full mt-6"
+   960→        >
+   961→          <Card className="text-left">
+   962→            <CardContent className="p-4 space-y-3">
+   963→              <div className="grid grid-cols-2 gap-3 text-sm">
+   964→                <div>
+   965→                  <p className="text-muted-foreground text-xs">Name</p>
+   966→                  <p className="font-medium truncate">
+   967→                    {formData.fullName || '—'}
+   968→                  </p>
+   969→                </div>
+   970→                <div>
+   971→                  <p className="text-muted-foreground text-xs">Firm Name</p>
+   972→                  <p className="font-medium truncate">
+   973→                    {formData.firmName || '—'}
+   974→                  </p>
+   975→                </div>
+   976→                <div>
+   977→                  <p className="text-muted-foreground text-xs">Profession</p>
+   978→                  <p className="font-medium truncate">
+   979→                    {formData.profession || '—'}
+   980→                  </p>
+   981→                </div>
+   982→                <div>
+   983→                  <p className="text-muted-foreground text-xs">Clients</p>
+   984→                  <p className="font-medium truncate">
+   985→                    {formData.clientCount || '—'}
+   986→                  </p>
+   987→                </div>
+   988→                <div className="col-span-2">
+   989→                  <p className="text-muted-foreground text-xs">State</p>
+   990→                  <p className="font-medium truncate">
+   991→                    {formData.state || '—'}
+   992→                  </p>
+   993→                </div>
+   994→              </div>
+   995→            </CardContent>
+   996→          </Card>
+   997→        </motion.div>
+   998→
+   999→        {/* Error display — shows exact Firestore/API error instead of infinite loading */}
+  1000→        {error && (
+  1001→          <motion.div
+  1002→            initial={{ opacity: 0, y: 10 }}
+  1003→            animate={{ opacity: 1, y: 0 }}
+  1004→            className="mt-4 rounded-lg bg-red-50 border border-red-200 p-3.5 flex items-start gap-3 w-full"
+  1005→          >
+  1006→            <AlertCircle className="h-5 w-5 text-red-500 mt-0.5 shrink-0" />
+  1007→            <div className="flex-1">
+  1008→              <p className="text-sm font-medium text-red-800">Setup failed</p>
+  1009→              <p className="text-xs text-red-600 mt-0.5">{error}</p>
+  1010→              <button
+  1011→                type="button"
+  1012→                onClick={onDismissError}
+  1013→                className="text-xs text-red-600 hover:text-red-800 mt-1.5 underline font-medium"
+  1014→              >
+  1015→                Dismiss and try again
+  1016→              </button>
+  1017→            </div>
+  1018→          </motion.div>
+  1019→        )}
+  1020→
+  1021→        <motion.div
+  1022→          initial={{ y: 20, opacity: 0 }}
+  1023→          animate={{ y: 0, opacity: 1 }}
+  1024→          transition={{ delay: 0.5 }}
+  1025→          className="flex flex-col sm:flex-row gap-3 mt-8 w-full"
+  1026→        >
+  1027→          <Button
+  1028→            type="button"
+  1029→            onClick={() => onComplete(formData, 'dashboard')}
+  1030→            disabled={saving}
+  1031→            size="lg"
+  1032→            className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white gap-2"
+  1033→          >
+  1034→            {saving ? <><span className="size-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Setting up...</> : <>Go to Dashboard<ArrowRight className="size-4" /></>}
+  1035→          </Button>
+  1036→          <Button
+  1037→            type="button"
+  1038→            onClick={() => onComplete(formData, 'invoices')}
+  1039→            disabled={saving}
+  1040→            variant="outline"
+  1041→            size="lg"
+  1042→            className="flex-1 gap-2 border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+  1043→          >
+  1044→            {saving ? <><span className="size-4 border-2 border-emerald-300/30 border-t-emerald-600 rounded-full animate-spin" /> Setting up...</> : <><Upload className="size-4" />Upload First Document</>}
+  1045→          </Button>
+  1046→        </motion.div>
+  1047→      </motion.div>
+  1048→    );
+  1049→  };
+  1050→
+  1051→  // ─── Main Render ──────────────────────────────────────────────────────────
+  1052→
+  1053→  return (
+  1054→    <div className="min-h-screen bg-white flex flex-col">
+  1055→      {/* Progress Bar */}
+  1056→      <div className="sticky top-0 z-10 bg-white border-b">
+  1057→        <div className="max-w-[640px] mx-auto px-6 py-3">
+  1058→          <div className="flex items-center justify-between mb-2">
+  1059→            <div className="flex items-center gap-2">
+  1060→              {currentStep > 0 && (
+  1061→                <span className="text-xs font-medium text-muted-foreground">
+  1062→                  Step {currentStep} of {totalSteps}
+  1063→                </span>
+  1064→              )}
+  1065→            </div>
+  1066→            {currentStep > 0 && currentStep < 5 && (
+  1067→              <div className="flex gap-1">
+  1068→                {Array.from({ length: totalSteps }, (_, i) => (
+  1069→                  <div
+  1070→                    key={i}
+  1071→                    className={`h-1.5 rounded-full transition-all duration-300 ${
+  1072→                      i < currentStep
+  1073→                        ? 'w-8 bg-emerald-500'
+  1074→                        : i === currentStep
+  1075→                        ? 'w-8 bg-emerald-300'
+  1076→                        : 'w-4 bg-emerald-100'
+  1077→                    }`}
+  1078→                  />
+  1079→                ))}
+  1080→              </div>
+  1081→            )}
+  1082→          </div>
+  1083→          {currentStep > 0 && (
+  1084→            <div className="h-1 w-full bg-emerald-100 rounded-full overflow-hidden">
+  1085→              <motion.div
+  1086→                className="h-full bg-emerald-500 rounded-full"
+  1087→                initial={false}
+  1088→                animate={{ width: `${progressPercent}%` }}
+  1089→                transition={{ duration: 0.3, ease: 'easeOut' }}
+  1090→              />
+  1091→            </div>
+  1092→          )}
+  1093→        </div>
+  1094→      </div>
+  1095→
+  1096→      {/* Content Area */}
+  1097→      <div className="flex-1 flex flex-col">
+  1098→        <div className="max-w-[640px] mx-auto w-full px-6 flex-1">
+  1099→          <AnimatePresence mode="wait" custom={direction}>
+  1100→            {renderStep()}
+  1101→          </AnimatePresence>
+  1102→        </div>
+  1103→      </div>
+  1104→
+  1105→      {/* Footer */}
+  1106→      <div className="border-t bg-white">
+  1107→        <div className="max-w-[640px] mx-auto px-6 py-4 flex items-center justify-between">
+  1108→          {currentStep > 0 && currentStep < 5 ? (
+  1109→            <Button
+  1110→              variant="ghost"
+  1111→              size="sm"
+  1112→              onClick={goBack}
+  1113→              className="gap-1 text-muted-foreground hover:text-foreground"
+  1114→            >
+  1115→              <ArrowLeft className="size-4" />
+  1116→              Back
+  1117→            </Button>
+  1118→          ) : currentStep === 5 ? (
+  1119→            <Button
+  1120→              variant="ghost"
+  1121→              size="sm"
+  1122→              onClick={goBack}
+  1123→              className="gap-1 text-muted-foreground hover:text-foreground"
+  1124→            >
+  1125→              <ArrowLeft className="size-4" />
+  1126→              Back
+  1127→            </Button>
+  1128→          ) : (
+  1129→            <div />
+  1130→          )}
+  1131→
+  1132→          {onSkip && currentStep < 5 && (
+  1133→            <button
+  1134→              type="button"
+  1135→              onClick={onSkip}
+  1136→              className="text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+  1137→            >
+  1138→              Skip for now
+  1139→            </button>
+  1140→          )}
+  1141→
+  1142→          {currentStep > 0 && currentStep < 5 && (
+  1143→            <Button
+  1144→              onClick={handleNext}
+  1145→              size="sm"
+  1146→              className="bg-emerald-600 hover:bg-emerald-700 text-white gap-1"
+  1147→            >
+  1148→              {currentStep === 4 ? 'Complete Setup' : 'Continue'}
+  1149→              {currentStep === 4 ? (
+  1150→                <Sparkles className="size-4" />
+  1151→              ) : (
+  1152→                <ArrowRight className="size-4" />
+  1153→              )}
+  1154→            </Button>
+  1155→          )}
+  1156→
+  1157→          {currentStep === 5 && <div />}
+  1158→        </div>
+  1159→      </div>
+  1160→    </div>
+  1161→  );
+  1162→}
+  1163→

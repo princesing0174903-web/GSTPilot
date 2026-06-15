@@ -66,7 +66,6 @@ interface OnboardingFlowProps {
   onSkip?: () => void;
   userEmail?: string;
   userName?: string;
-  saving?: boolean;
   error?: string | null;
   onDismissError?: () => void;
 }
@@ -212,7 +211,6 @@ export function OnboardingFlow({
   onSkip,
   userEmail = '',
   userName = '',
-  saving = false,
   error = null,
   onDismissError,
 }: OnboardingFlowProps) {
@@ -1027,21 +1025,19 @@ export function OnboardingFlow({
           <Button
             type="button"
             onClick={() => onComplete(formData, 'dashboard')}
-            disabled={saving}
             size="lg"
             className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white gap-2"
           >
-            {saving ? <><span className="size-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Setting up...</> : <>Go to Dashboard<ArrowRight className="size-4" /></>}
+            Go to Dashboard <ArrowRight className="size-4" />
           </Button>
           <Button
             type="button"
             onClick={() => onComplete(formData, 'invoices')}
-            disabled={saving}
             variant="outline"
             size="lg"
             className="flex-1 gap-2 border-emerald-200 text-emerald-700 hover:bg-emerald-50"
           >
-            {saving ? <><span className="size-4 border-2 border-emerald-300/30 border-t-emerald-600 rounded-full animate-spin" /> Setting up...</> : <><Upload className="size-4" />Upload First Document</>}
+            <Upload className="size-4" />Upload First Document
           </Button>
         </motion.div>
       </motion.div>

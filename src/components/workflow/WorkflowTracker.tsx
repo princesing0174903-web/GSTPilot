@@ -16,7 +16,7 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { useApp, type AppView } from '@/contexts/AppContext';
-import { useDashboardMetrics, useInvoices } from '@/hooks/api';
+import { useLiveDashboardMetrics, useFireInvoices } from '@/hooks/use-firestore';
 import {
   Tooltip,
   TooltipContent,
@@ -247,31 +247,21 @@ export default function WorkflowTracker({
 }: WorkflowTrackerProps) {
   const { currentView, setCurrentView } = useApp();
 
-  // Fetch real metrics from database
-  const { data: dashboardData } = useDashboardMetrics();
-  const { data: invoicesData } = useInvoices();
+  // Fetch real metrics from Firebase
+  const { metrics: dashboardMetrics } = useLiveDashboardMetrics();
+  const { data: invoicesData } = useFireInvoices();
 
-  // Calculate real workflow progress from DB data
-  const metrics = dashboardData ? {
-    totalClients: dashboardData.totalClients,
-    totalInvoices: dashboardData.totalInvoices,
-    totalFiles: 0, // not in dashboard metrics yet
-    validatedInvoices: invoicesData?.invoices?.filter((i: { status: string }) => i.status === 'validated' || i.status === 'approved').length ?? 0,
-    perfectMatchInvoices: 0,
-    totalMatchedInvoices: 0,
-    pendingReturns: dashboardData.pendingReturns,
-    filedReturns: dashboardData.filedReturns,
-    totalReturns: dashboardData.pendingReturns + dashboardData.filedReturns,
-  } : {
-    totalClients: 0,
-    totalInvoices: 0,
-    totalFiles: 0,
-    validatedInvoices: 0,
-    perfectMatchInvoices: 0,
-    totalMatchedInvoices: 0,
-    pendingReturns: 0,
-    filedReturns: 0,
-    totalReturns: 0,
+  // Calculate real workflow progress from live Firestore data
+  const metrics = {
+    totalClients: dashboardMetrics.totalClients,
+    totalInvoices: dashboardMetrics.totalInvoices,
+    totalFiles: dashboardMetrics.documentsProcessed + dashboardMetrics.extractionsPending,
+    validatedInvoices: invoicesData.filter((i: { status: string }) => i.status === 'approved').length,
+    perfectMatchInvoices: invoicesData.filter((i: { matchStatus: string }) => i.matchStatus === 'perfect_match').length,
+    totalMatchedInvoices: invoicesData.filter((i: { matchStatus: string }) => ['perfect_match', 'partial_match'].includes(i.matchStatus)).length,
+    pendingReturns: dashboardMetrics.pendingReturns,
+    filedReturns: dashboardMetrics.filedReturns,
+    totalReturns: dashboardMetrics.pendingReturns + dashboardMetrics.filedReturns,
   };
 
   const progress = externalProgress ?? calculateWorkflowProgress(metrics);

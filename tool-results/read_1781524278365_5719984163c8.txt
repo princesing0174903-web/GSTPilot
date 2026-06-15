@@ -1,0 +1,997 @@
+     1→     1→'use client';
+     2→     2→
+     3→     3→import React, { useState, useMemo, useCallback } from 'react';
+     4→     4→import { motion, AnimatePresence } from 'framer-motion';
+     5→     5→import { Badge } from '@/components/ui/badge';
+     6→     6→import { Button } from '@/components/ui/button';
+     7→     7→import { Card, CardContent } from '@/components/ui/card';
+     8→     8→import { Skeleton } from '@/components/ui/skeleton';
+     9→     9→import { ScrollArea } from '@/components/ui/scroll-area';
+    10→    10→import { Separator } from '@/components/ui/separator';
+    11→    11→import {
+    12→    12→  Dialog,
+    13→    13→  DialogContent,
+    14→    14→  DialogHeader,
+    15→    15→  DialogTitle,
+    16→    16→} from '@/components/ui/dialog';
+    17→    17→import {
+    18→    18→  ArrowLeft,
+    19→    19→  ShieldCheck,
+    20→    20→  GitCompareArrows,
+    21→    21→  CheckCircle2,
+    22→    22→  Send,
+    23→    23→  FileText,
+    24→    24→  AlertTriangle,
+    25→    25→  AlertCircle,
+    26→    26→  XCircle,
+    27→    27→  Clock,
+    28→    28→  Eye,
+    29→    29→  Check,
+    30→    30→  Sparkles,
+    31→    31→  Building2,
+    32→    32→  FileWarning,
+    33→    33→  IndianRupee,
+    34→    34→  TrendingUp,
+    35→    35→  TrendingDown,
+    36→    36→  AlertOctagon,
+    37→    37→  FilePlus2,
+    38→    38→  Shield,
+    39→    39→  Zap,
+    40→    40→  X,
+    41→    41→  Loader2,
+    42→    42→  PartyPopper,
+    43→    43→  ArrowRight,
+    44→    44→  ClipboardCheck,
+    45→    45→} from 'lucide-react';
+    46→    46→import { useApp } from '@/contexts/AppContext';
+    47→    47→import type { AppView } from '@/contexts/AppContext';
+    48→    48→import { useClient, useFilings, useInvoices, useIssues, useReconRuns, useUpdateFilingStatus, useFileReturn } from '@/hooks/api';
+    49→    49→import { formatCurrency, periodToLabel } from '@/lib/gst-utils';
+    50→    50→import { toast } from 'sonner';
+    51→    51→import type { Invoice, Issue, GSTRFiling } from '@/types/gst';
+    52→    52→
+    53→    53→// ═══════════════════════════════════════════════════════════════════════════════
+    54→    54→// TYPES
+    55→    55→// ═══════════════════════════════════════════════════════════════════════════════
+    56→    56→
+    57→    57→interface ToastMessage {
+    58→    58→  id: string;
+    59→    59→  title: string;
+    60→    60→  description: string;
+    61→    61→  type: 'success' | 'info' | 'warning';
+    62→    62→}
+    63→    63→
+    64→    64→// ═══════════════════════════════════════════════════════════════════════════════
+    65→    65→// STEP DEFINITIONS
+    66→    66→// ═══════════════════════════════════════════════════════════════════════════════
+    67→    67→
+    68→    68→const PREP_STEPS = [
+    69→    69→  { id: 's0', label: 'Uploaded', shortLabel: 'Upload' },
+    70→    70→  { id: 's1', label: 'Extracted', shortLabel: 'Extraction' },
+    71→    71→  { id: 's2', label: 'Validated', shortLabel: 'Validation' },
+    72→    72→  { id: 's3', label: 'Reviewed', shortLabel: 'Reconciliation' },
+    73→    73→  { id: 's4', label: 'Generated', shortLabel: 'Prepared' },
+    74→    74→  { id: 's5', label: 'Filed', shortLabel: 'Ready' },
+    75→    75→  { id: 's6', label: 'Complete', shortLabel: 'Filed' },
+    76→    76→] as const;
+    77→    77→
+    78→    78→// ═══════════════════════════════════════════════════════════════════════════════
+    79→    79→// HELPERS
+    80→    80→// ═══════════════════════════════════════════════════════════════════════════════
+    81→    81→
+    82→    82→function getStatusBadge(status: string) {
+    83→    83→  switch (status) {
+    84→    84→    case 'validated': return <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px] px-1.5 py-0 h-5 gap-0.5"><CheckCircle2 className="size-2.5" />Validated</Badge>;
+    85→    85→    case 'warning': return <Badge className="bg-amber-50 text-amber-700 border-amber-200 text-[10px] px-1.5 py-0 h-5 gap-0.5"><AlertTriangle className="size-2.5" />Warning</Badge>;
+    86→    86→    case 'error': return <Badge className="bg-red-50 text-red-700 border-red-200 text-[10px] px-1.5 py-0 h-5 gap-0.5"><XCircle className="size-2.5" />Error</Badge>;
+    87→    87→    default: return <Badge variant="secondary" className="text-[10px]">{status}</Badge>;
+    88→    88→  }
+    89→    89→}
+    90→    90→
+    91→    91→function getSeverityIcon(severity: string) {
+    92→    92→  switch (severity) {
+    93→    93→    case 'critical': return <XCircle className="h-4 w-4 text-red-600" />;
+    94→    94→    case 'warning': return <AlertTriangle className="h-4 w-4 text-amber-600" />;
+    95→    95→    case 'info': return <AlertCircle className="h-4 w-4 text-blue-600" />;
+    96→    96→    default: return <AlertCircle className="h-4 w-4 text-slate-500" />;
+    97→    97→  }
+    98→    98→}
+    99→    99→
+   100→   100→function getSeverityBadge(severity: string) {
+   101→   101→  switch (severity) {
+   102→   102→    case 'critical': return <Badge className="bg-red-50 text-red-700 border-red-200 text-[10px] px-1.5 py-0">Critical</Badge>;
+   103→   103→    case 'warning': return <Badge className="bg-amber-50 text-amber-700 border-amber-200 text-[10px] px-1.5 py-0">Warning</Badge>;
+   104→   104→    case 'info': return <Badge className="bg-blue-50 text-blue-700 border-blue-200 text-[10px] px-1.5 py-0">Info</Badge>;
+   105→   105→    default: return <Badge variant="secondary" className="text-[10px]">{severity}</Badge>;
+   106→   106→  }
+   107→   107→}
+   108→   108→
+   109→   109→function getAIInsightIcon(type: string) {
+   110→   110→  switch (type) {
+   111→   111→    case 'risk_alert': return <AlertOctagon className="h-4 w-4" />;
+   112→   112→    case 'missing_doc': return <FileWarning className="h-4 w-4" />;
+   113→   113→    case 'tax_anomaly': return <IndianRupee className="h-4 w-4" />;
+   114→   114→    case 'filing_rec': return <Sparkles className="h-4 w-4" />;
+   115→   115→    default: return <AlertCircle className="h-4 w-4" />;
+   116→   116→  }
+   117→   117→}
+   118→   118→
+   119→   119→function getAIInsightColors(type: string) {
+   120→   120→  switch (type) {
+   121→   121→    case 'risk_alert': return { bg: 'bg-red-50', color: 'text-red-600', border: 'border-red-200' };
+   122→   122→    case 'missing_doc': return { bg: 'bg-orange-50', color: 'text-orange-600', border: 'border-orange-200' };
+   123→   123→    case 'tax_anomaly': return { bg: 'bg-amber-50', color: 'text-amber-600', border: 'border-amber-200' };
+   124→   124→    case 'filing_rec': return { bg: 'bg-emerald-50', color: 'text-emerald-600', border: 'border-emerald-200' };
+   125→   125→    default: return { bg: 'bg-slate-50', color: 'text-slate-600', border: 'border-slate-200' };
+   126→   126→  }
+   127→   127→}
+   128→   128→
+   129→   129→function getUrgencyBadge(urgency: string) {
+   130→   130→  switch (urgency) {
+   131→   131→    case 'high': return <Badge className="bg-red-50 text-red-700 border-red-200 text-[10px] px-1.5 py-0">High</Badge>;
+   132→   132→    case 'medium': return <Badge className="bg-amber-50 text-amber-700 border-amber-200 text-[10px] px-1.5 py-0">Medium</Badge>;
+   133→   133→    case 'info': return <Badge className="bg-blue-50 text-blue-700 border-blue-200 text-[10px] px-1.5 py-0">Info</Badge>;
+   134→   134→    default: return null;
+   135→   135→  }
+   136→   136→}
+   137→   137→
+   138→   138→// ═══════════════════════════════════════════════════════════════════════════════
+   139→   139→// ANIMATION
+   140→   140→// ═══════════════════════════════════════════════════════════════════════════════
+   141→   141→
+   142→   142→const fadeUp = {
+   143→   143→  hidden: { opacity: 0, y: 12 },
+   144→   144→  visible: { opacity: 1, y: 0, transition: { duration: 0.35 } },
+   145→   145→};
+   146→   146→
+   147→   147→// ═══════════════════════════════════════════════════════════════════════════════
+   148→   148→// TOAST SYSTEM
+   149→   149→// ═══════════════════════════════════════════════════════════════════════════════
+   150→   150→
+   151→   151→function ToastContainer({ toasts, onDismiss }: { toasts: ToastMessage[]; onDismiss: (id: string) => void }) {
+   152→   152→  return (
+   153→   153→    <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2 max-w-sm">
+   154→   154→      <AnimatePresence>
+   155→   155→        {toasts.map((toast) => (
+   156→   156→          <motion.div
+   157→   157→            key={toast.id}
+   158→   158→            initial={{ opacity: 0, y: 20, scale: 0.95 }}
+   159→   159→            animate={{ opacity: 1, y: 0, scale: 1 }}
+   160→   160→            exit={{ opacity: 0, y: 10, scale: 0.95 }}
+   161→   161→            transition={{ duration: 0.25 }}
+   162→   162→            className={`flex items-start gap-3 p-3.5 rounded-xl border shadow-lg backdrop-blur-sm ${
+   163→   163→              toast.type === 'success' ? 'bg-emerald-50/95 border-emerald-200' :
+   164→   164→              toast.type === 'warning' ? 'bg-amber-50/95 border-amber-200' :
+   165→   165→              'bg-white/95 border-border'
+   166→   166→            }`}
+   167→   167→          >
+   168→   168→            <div className={`mt-0.5 shrink-0 ${
+   169→   169→              toast.type === 'success' ? 'text-emerald-600' :
+   170→   170→              toast.type === 'warning' ? 'text-amber-600' :
+   171→   171→              'text-blue-600'
+   172→   172→            }`}>
+   173→   173→              {toast.type === 'success' ? <CheckCircle2 className="h-4 w-4" /> : toast.type === 'warning' ? <AlertTriangle className="h-4 w-4" /> : <Sparkles className="h-4 w-4" />}
+   174→   174→            </div>
+   175→   175→            <div className="flex-1 min-w-0">
+   176→   176→              <p className="text-xs font-semibold text-foreground">{toast.title}</p>
+   177→   177→              <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">{toast.description}</p>
+   178→   178→            </div>
+   179→   179→            <button className="shrink-0 text-muted-foreground hover:text-foreground" onClick={() => onDismiss(toast.id)}>
+   180→   180→              <X className="h-3.5 w-3.5" />
+   181→   181→            </button>
+   182→   182→          </motion.div>
+   183→   183→        ))}
+   184→   184→      </AnimatePresence>
+   185→   185→    </div>
+   186→   186→  );
+   187→   187→}
+   188→   188→
+   189→   189→// ═══════════════════════════════════════════════════════════════════════════════
+   190→   190→// PROGRESS BAR COMPONENTS
+   191→   191→// ═══════════════════════════════════════════════════════════════════════════════
+   192→   192→
+   193→   193→function DesktopProgressBar({ completedStep }: { completedStep: number }) {
+   194→   194→  const completedCount = completedStep + 1;
+   195→   195→  const percent = Math.round((completedCount / PREP_STEPS.length) * 100);
+   196→   196→
+   197→   197→  return (
+   198→   198→    <div className="hidden md:block border border-border/60 rounded-xl p-6">
+   199→   199→      <div className="flex items-center justify-between mb-4">
+   200→   200→        <h3 className="text-sm font-semibold text-foreground uppercase tracking-wider">Preparation Progress</h3>
+   201→   201→        <span className="text-xs font-medium text-muted-foreground">{percent}% Complete</span>
+   202→   202→      </div>
+   203→   203→      <div className="h-2 rounded-full bg-slate-100 mb-6 overflow-hidden">
+   204→   204→        <motion.div
+   205→   205→          className="h-full rounded-full bg-emerald-500"
+   206→   206→          animate={{ width: `${percent}%` }}
+   207→   207→          transition={{ duration: 0.6, ease: 'easeOut' }}
+   208→   208→        />
+   209→   209→      </div>
+   210→   210→      <div className="flex items-start">
+   211→   211→        {PREP_STEPS.map((step, idx) => {
+   212→   212→          const isCompleted = idx <= completedStep;
+   213→   213→          const isActive = idx === completedStep + 1 && idx < PREP_STEPS.length;
+   214→   214→          const isFuture = idx > completedStep + 1;
+   215→   215→          return (
+   216→   216→            <React.Fragment key={step.id}>
+   217→   217→              <div className="flex flex-col items-center" style={{ minWidth: idx === 0 || idx === PREP_STEPS.length - 1 ? '80px' : '100px', flex: '1 1 0' }}>
+   218→   218→                <motion.div
+   219→   219→                  className={`flex items-center justify-center h-9 w-9 rounded-full shrink-0 text-sm font-semibold transition-all duration-500 ${
+   220→   220→                    isCompleted
+   221→   221→                      ? 'bg-emerald-500 text-white shadow-sm shadow-emerald-500/30'
+   222→   222→                      : isActive
+   223→   223→                        ? 'bg-emerald-50 text-emerald-700 border-2 border-emerald-500 shadow-sm shadow-emerald-200/50'
+   224→   224→                        : 'bg-slate-100 text-slate-400'
+   225→   225→                  }`}
+   226→   226→                  animate={isActive ? { scale: [1, 1.08, 1] } : {}}
+   227→   227→                  transition={isActive ? { duration: 2, repeat: Infinity, ease: 'easeInOut' } : {}}
+   228→   228→                >
+   229→   229→                  {isCompleted ? <Check className="h-4 w-4" /> : idx + 1}
+   230→   230→                </motion.div>
+   231→   231→                <span className={`text-xs text-center leading-tight mt-2 whitespace-nowrap ${
+   232→   232→                  isCompleted ? 'text-emerald-700 font-medium' : isActive ? 'text-foreground font-semibold' : 'text-muted-foreground'
+   233→   233→                }`}>
+   234→   234→                  {step.label}
+   235→   235→                </span>
+   236→   236→              </div>
+   237→   237→              {idx < PREP_STEPS.length - 1 && (
+   238→   238→                <div className="flex items-center pt-[18px] flex-1 min-w-[16px]">
+   239→   239→                  <motion.div
+   240→   240→                    className={`h-[3px] w-full rounded-full transition-colors duration-500 ${isCompleted ? 'bg-emerald-400' : 'bg-slate-200'}`}
+   241→   241→                    animate={isActive ? { opacity: [0.5, 1, 0.5] } : {}}
+   242→   242→                    transition={isActive ? { duration: 2, repeat: Infinity, ease: 'easeInOut' } : {}}
+   243→   243→                  />
+   244→   244→                </div>
+   245→   245→              )}
+   246→   246→            </React.Fragment>
+   247→   247→          );
+   248→   248→        })}
+   249→   249→      </div>
+   250→   250→    </div>
+   251→   251→  );
+   252→   252→}
+   253→   253→
+   254→   254→function MobileProgressBar({ completedStep }: { completedStep: number }) {
+   255→   255→  const completedCount = completedStep + 1;
+   256→   256→  const total = PREP_STEPS.length;
+   257→   257→  const percent = Math.round((completedCount / total) * 100);
+   258→   258→
+   259→   259→  return (
+   260→   260→    <div className="md:hidden border border-border/60 rounded-xl p-4">
+   261→   261→      <div className="flex items-center justify-between mb-2">
+   262→   262→        <h3 className="text-xs font-semibold text-foreground uppercase tracking-wider">Progress</h3>
+   263→   263→        <span className="text-xs font-medium text-emerald-700">{completedCount}/{total} steps</span>
+   264→   264→      </div>
+   265→   265→      <div className="h-2.5 rounded-full bg-slate-100 overflow-hidden">
+   266→   266→        <motion.div
+   267→   267→          className="h-full rounded-full bg-emerald-500"
+   268→   268→          animate={{ width: `${percent}%` }}
+   269→   269→          transition={{ duration: 0.6, ease: 'easeOut' }}
+   270→   270→        />
+   271→   271→      </div>
+   272→   272→      <div className="flex items-center justify-between mt-1.5">
+   273→   273→        <span className="text-[10px] text-muted-foreground">{PREP_STEPS[completedStep]?.label ?? 'Start'} complete</span>
+   274→   274→        <span className="text-[10px] font-medium text-foreground">{percent}%</span>
+   275→   275→      </div>
+   276→   276→    </div>
+   277→   277→  );
+   278→   278→}
+   279→   279→
+   280→   280→// ═══════════════════════════════════════════════════════════════════════════════
+   281→   281→// MAIN COMPONENT
+   282→   282→// ═══════════════════════════════════════════════════════════════════════════════
+   283→   283→
+   284→   284→export default function ReturnPrepWorkspace() {
+   285→   285→  const { selectedClientId, returnPrepCtx, setCurrentView } = useApp();
+   286→   286→  const updateFilingStatus = useUpdateFilingStatus();
+   287→   287→  const fileReturnMutation = useFileReturn();
+   288→   288→
+   289→   289→  // Resolve client ID
+   290→   290→  const rawClientId = selectedClientId ?? returnPrepCtx.clientId ?? '';
+   291→   291→  const clientId = rawClientId;
+   292→   292→
+   293→   293→  const returnType = returnPrepCtx.returnType;
+   294→   294→  const period = returnPrepCtx.period;
+   295→   295→
+   296→   296→  // ── API data via React Query ──
+   297→   297→  const { data: clientData, isLoading: clientLoading } = useClient(clientId);
+   298→   298→  const { data: invoicesData, isLoading: invoicesLoading } = useInvoices(clientId);
+   299→   299→  const { data: issuesData, isLoading: issuesLoading } = useIssues(clientId);
+   300→   300→  const { data: filingsData } = useFilings(clientId);
+   301→   301→  const { data: reconData } = useReconRuns(clientId);
+   302→   302→
+   303→   303→  const client = clientData?.client ?? null;
+   304→   304→  const invoices: Invoice[] = invoicesData?.invoices?.filter((i: Invoice) => i.clientId === clientId) ?? [];
+   305→   305→  const validationIssues: Issue[] = issuesData?.issues?.filter((i: Issue) => i.clientId === clientId) ?? [];
+   306→   306→  const filings = filingsData?.filings?.filter((f: GSTRFiling) => f.clientId === clientId) ?? [];
+   307→   307→  const reconRuns = reconData?.runs ?? [];
+   308→   308→
+   309→   309→  // ── Local UI state ──
+   310→   310→  const [currentPrepStep, setCurrentPrepStep] = useState(1);
+   311→   311→  const [invoiceFilter, setInvoiceFilter] = useState<'all' | 'validated' | 'warning' | 'error'>('all');
+   312→   312→  const [toasts, setToasts] = useState<ToastMessage[]>([]);
+   313→   313→  const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
+   314→   314→  const [selectedReconCategory, setSelectedReconCategory] = useState<string | null>(null);
+   315→   315→  const [filingModalOpen, setFilingModalOpen] = useState(false);
+   316→   316→  const [filingProgress, setFilingProgress] = useState<'idle' | 'validating' | 'generating' | 'submitting' | 'success'>('idle');
+   317→   317→
+   318→   318→  // ── Derived state ──
+   319→   319→  const clientName = client?.tradeName ?? 'Select a Client';
+   320→   320→  const clientGSTIN = client?.gstin ?? '';
+   321→   321→
+   322→   322→  const filteredInvoices = useMemo(() => {
+   323→   323→    if (invoiceFilter === 'all') return invoices;
+   324→   324→    return invoices.filter(inv => inv.status === invoiceFilter);
+   325→   325→  }, [invoices, invoiceFilter]);
+   326→   326→
+   327→   327→  // Derived from API data
+   328→   328→  const unresolvedIssues = validationIssues.filter(i => i.status === 'open').length;
+   329→   329→
+   330→   330→  const totalTaxable = invoices.reduce((sum, inv) => sum + inv.taxableValue, 0);
+   331→   331→  const totalCGST = invoices.reduce((sum, inv) => sum + inv.cgst, 0);
+   332→   332→  const totalSGST = invoices.reduce((sum, inv) => sum + inv.sgst, 0);
+   333→   333→  const totalIGST = invoices.reduce((sum, inv) => sum + inv.igst, 0);
+   334→   334→  const totalTax = totalCGST + totalSGST + totalIGST;
+   335→   335→
+   336→   336→  const errorCount = invoices.filter(i => i.status === 'error').length;
+   337→   337→  const warningCount = invoices.filter(i => i.status === 'warning').length;
+   338→   338→  const validatedCount = invoices.filter(i => i.status === 'validated' || i.status === 'approved').length;
+   339→   339→  const allValidated = errorCount === 0 && warningCount === 0;
+   340→   340→
+   341→   341→  const validationScore = invoices.length > 0 ? Math.min(100, Math.round((validatedCount / invoices.length) * 100)) : 100;
+   342→   342→
+   343→   343→  // Compute match rate from reconciliation runs
+   344→   344→  const matchRate = useMemo(() => {
+   345→   345→    if (reconRuns.length === 0) return 0;
+   346→   346→    const latestRun = reconRuns[0];
+   347→   347→    return latestRun.totalRecords > 0 ? Math.round((latestRun.matched / latestRun.totalRecords) * 100) : 0;
+   348→   348→  }, [reconRuns]);
+   349→   349→
+   350→   350→  // Compute compliance score from client health and validation score
+   351→   351→  const complianceScore = client?.healthScore ?? validationScore;
+   352→   352→
+   353→   353→  const allChecksPass = validationScore >= 95 && unresolvedIssues === 0;
+   354→   354→  const isGSTR1 = returnType === 'GSTR-1';
+   355→   355→
+   356→   356→  // Use local step state
+   357→   357→  const effectiveCompletedStep = currentPrepStep;
+   358→   358→
+   359→   359→  // ── Toast helper ──
+   360→   360→  const addToast = useCallback((title: string, description: string, type: ToastMessage['type'] = 'success') => {
+   361→   361→    const id = `toast-${Date.now()}`;
+   362→   362→    setToasts(prev => [...prev, { id, title, description, type }]);
+   363→   363→    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 4000);
+   364→   364→  }, []);
+   365→   365→
+   366→   366→  const dismissToast = useCallback((id: string) => {
+   367→   367→    setToasts(prev => prev.filter(t => t.id !== id));
+   368→   368→  }, []);
+   369→   369→
+   370→   370→  // ── Actions ──
+   371→   371→  const handleBack = () => setCurrentView('client-workspace');
+   372→   372→
+   373→   373→  const handleApproveInvoice = (invId: string) => {
+   374→   374→    const inv = invoices.find(i => i.id === invId);
+   375→   375→    if (!inv || inv.status === 'validated') return;
+   376→   376→    updateFilingStatus.mutate({ id: invId, status: 'validated' } as any, {
+   377→   377→      onSuccess: () => toast.success(`${inv.invoiceNumber} approved`),
+   378→   378→      onError: (err: Error) => toast.error(err.message),
+   379→   379→    });
+   380→   380→  };
+   381→   381→
+   382→   382→  const handleFixIssue = (issueId: string) => {
+   383→   383→    const issue = validationIssues.find(i => i.id === issueId);
+   384→   384→    if (!issue || issue.status === 'resolved') return;
+   385→   385→    updateFilingStatus.mutate({ id: issueId, status: 'resolved' } as any, {
+   386→   386→      onSuccess: () => toast.success(`${issue.category} resolved`),
+   387→   387→      onError: (err: Error) => toast.error(err.message),
+   388→   388→    });
+   389→   389→  };
+   390→   390→
+   391→   391→  const handleDismissInsight = (insightId: string) => {
+   392→   392→    toast.info('Insight dismissed');
+   393→   393→  };
+   394→   394→
+   395→   395→  // Run Validation: mark all invoices as validated via API
+   396→   396→  const handleRunValidation = () => {
+   397→   397→    const unresolved = validationIssues.filter(i => i.status === 'open');
+   398→   398→    // Mark all non-validated invoices as validated
+   399→   399→    invoices.forEach(inv => {
+   400→   400→      if (inv.status !== 'validated' && inv.status !== 'approved') {
+   401→   401→        updateFilingStatus.mutate({ id: inv.id, status: 'validated' } as any);
+   402→   402→      }
+   403→   403→    });
+   404→   404→    setCurrentPrepStep(2);
+   405→   405→    toast.success('Validation Complete', { description: `All ${unresolved.length} issues resolved. ${invoices.length - validatedCount} invoices updated.` });
+   406→   406→  };
+   407→   407→
+   408→   408→  // Run Reconciliation: advance step to 3
+   409→   409→  const handleRunReconciliation = () => {
+   410→   410→    if (currentPrepStep < 2) {
+   411→   411→      toast.warning('Complete validation first', { description: 'All invoices must be validated before reconciliation' });
+   412→   412→      return;
+   413→   413→    }
+   414→   414→    setCurrentPrepStep(3);
+   415→   415→    toast.success('Reconciliation Complete', { description: 'Books vs GSTR-2B matching finished.' });
+   416→   416→  };
+   417→   417→
+   418→   418→  // Mark Ready: advance step to 5 (Ready to File)
+   419→   419→  const handleMarkReady = () => {
+   420→   420→    if (errorCount > 0 || warningCount > 0) {
+   421→   421→      toast.warning('Cannot mark ready', { description: `${errorCount} errors and ${warningCount} warnings must be resolved first` });
+   422→   422→      return;
+   423→   423→    }
+   424→   424→    setCurrentPrepStep(5);
+   425→   425→    toast.success('Return marked as Ready to File', { description: 'All validations passed. You can now file this return.' });
+   426→   426→  };
+   427→   427→
+   428→   428→  // File Return Simulation
+   429→   429→  const handleFileReturn = () => {
+   430→   430→    if (!allChecksPass) return;
+   431→   431→    setFilingModalOpen(true);
+   432→   432→    setFilingProgress('validating');
+   433→   433→
+   434→   434→    setTimeout(() => setFilingProgress('generating'), 1500);
+   435→   435→    setTimeout(() => setFilingProgress('submitting'), 3000);
+   436→   436→    setTimeout(() => {
+   437→   437→      setFilingProgress('success');
+   438→   438→      setCurrentPrepStep(6);
+   439→   439→      // Find the matching filing and file it via API
+   440→   440→      const matchingFiling = filings.find(f => f.returnType === returnType && f.period === period);
+   441→   441→      if (matchingFiling) {
+   442→   442→        fileReturnMutation.mutate(matchingFiling.id, {
+   443→   443→          onSuccess: () => toast.success(`${returnType} Filed Successfully!`, { description: `Period: ${periodToLabel(period)} · Tax: ${formatCurrency(totalTax)}` }),
+   444→   444→          onError: (err: Error) => toast.error(err.message),
+   445→   445→        });
+   446→   446→      } else {
+   447→   447→        toast.success(`${returnType} Filed Successfully!`, { description: `Period: ${periodToLabel(period)} · Tax: ${formatCurrency(totalTax)}` });
+   448→   448→      }
+   449→   449→    }, 4500);
+   450→   450→  };
+   451→   451→
+   452→   452→  // ── Return Summary calculated from store invoices ──
+   453→   453→  const gstr1Summary = useMemo(() => {
+   454→   454→    const b2bSales = invoices.filter(i => !i.igst || i.igst === 0).reduce((s, i) => s + i.taxableValue, 0);
+   455→   455→    const b2cSales = invoices.filter(i => i.igst > 0).reduce((s, i) => s + i.taxableValue, 0);
+   456→   456→    const exports = invoices.filter(i => !i.customerGstin).reduce((s, i) => s + i.taxableValue, 0);
+   457→   457→    return { b2bSales, b2cSales, exports, creditNotes: -Math.round(totalTaxable * 0.04), debitNotes: Math.round(totalTaxable * 0.02) };
+   458→   458→  }, [invoices, totalTaxable]);
+   459→   459→
+   460→   460→  const gstr3bSummary = useMemo(() => {
+   461→   461→    const taxableSupplies = totalTaxable;
+   462→   462→    const outputTax = totalTax;
+   463→   463→    const itcAvailable = Math.round(outputTax * 0.65);
+   464→   464→    const netTaxPayable = Math.max(0, outputTax - itcAvailable);
+   465→   465→    return { taxableSupplies, itcAvailable, outputTax, netTaxPayable };
+   466→   466→  }, [totalTaxable, totalTax]);
+   467→   467→
+   468→   468→  // Loading skeleton (only if client not yet available)
+   469→   469→  if (!client && !selectedClientId) {
+   470→   470→    return (
+   471→   471→      <div className="max-w-7xl mx-auto px-4 md:px-6 py-6 space-y-6">
+   472→   472→        <Skeleton className="h-6 w-40" />
+   473→   473→        <div className="border rounded-xl p-6 space-y-4">
+   474→   474→          <div className="flex gap-4"><Skeleton className="h-10 w-10 rounded-lg" /><div className="space-y-2 flex-1"><Skeleton className="h-6 w-64" /><Skeleton className="h-4 w-48" /></div></div>
+   475→   475→        </div>
+   476→   476→        <div className="flex gap-2">{Array.from({ length: 7 }).map((_, i) => <Skeleton key={i} className="h-10 flex-1 rounded-lg" />)}</div>
+   477→   477→      </div>
+   478→   478→    );
+   479→   479→  }
+   480→   480→
+   481→   481→  return (
+   482→   482→    <div className="max-w-7xl mx-auto px-4 md:px-6 py-6 space-y-8">
+   483→   483→
+   484→   484→      {/* ═══ TOAST CONTAINER ═══ */}
+   485→   485→      <ToastContainer toasts={toasts} onDismiss={dismissToast} />
+   486→   486→
+   487→   487→      {/* ═══ INVOICE DETAIL DRILL-DOWN ═══ */}
+   488→   488→      <Dialog open={!!selectedInvoice} onOpenChange={(open) => { if (!open) setSelectedInvoice(null); }}>
+   489→   489→        <DialogContent className="sm:max-w-lg">
+   490→   490→          <DialogHeader>
+   491→   491→            <DialogTitle className="flex items-center gap-2">
+   492→   492→              <FileText className="h-4 w-4 text-emerald-600" />
+   493→   493→              Invoice Detail
+   494→   494→            </DialogTitle>
+   495→   495→          </DialogHeader>
+   496→   496→          {selectedInvoice && (
+   497→   497→            <div className="space-y-4 mt-2">
+   498→   498→              <div className="grid grid-cols-2 gap-3">
+   499→   499→                <div><span className="text-[10px] text-muted-foreground uppercase tracking-wider">Invoice Number</span><p className="text-sm font-mono font-semibold">{selectedInvoice.invoiceNumber}</p></div>
+   500→   500→                <div><span className="text-[10px] text-muted-foreground uppercase tracking-wider">Date</span><p className="text-sm">{new Date(selectedInvoice.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</p></div>
+   501→   501→                <div><span className="text-[10px] text-muted-foreground uppercase tracking-wider">Customer</span><p className="text-sm font-medium">{selectedInvoice.customer}</p></div>
+   502→   502→                <div><span className="text-[10px] text-muted-foreground uppercase tracking-wider">Customer GSTIN</span><p className="text-sm font-mono">{selectedInvoice.customerGstin || '—'}</p></div>
+   503→   503→                <div><span className="text-[10px] text-muted-foreground uppercase tracking-wider">HSN Code</span><p className="text-sm font-mono">{selectedInvoice.hsnCode || 'Missing'}</p></div>
+   504→   504→                <div><span className="text-[10px] text-muted-foreground uppercase tracking-wider">Place of Supply</span><p className="text-sm">{selectedInvoice.placeOfSupply || '—'}</p></div>
+   505→   505→              </div>
+   506→   506→              <Separator />
+   507→   507→              <div className="grid grid-cols-2 gap-3">
+   508→   508→                <div><span className="text-[10px] text-muted-foreground uppercase tracking-wider">Taxable Value</span><p className="text-sm font-bold">{formatCurrency(selectedInvoice.taxableValue)}</p></div>
+   509→   509→                <div><span className="text-[10px] text-muted-foreground uppercase tracking-wider">Status</span><div className="mt-0.5">{getStatusBadge(selectedInvoice.status)}</div></div>
+   510→   510→                <div><span className="text-[10px] text-muted-foreground uppercase tracking-wider">CGST (9%)</span><p className="text-sm">{selectedInvoice.cgst > 0 ? formatCurrency(selectedInvoice.cgst) : '—'}</p></div>
+   511→   511→                <div><span className="text-[10px] text-muted-foreground uppercase tracking-wider">SGST (9%)</span><p className="text-sm">{selectedInvoice.sgst > 0 ? formatCurrency(selectedInvoice.sgst) : '—'}</p></div>
+   512→   512→                <div><span className="text-[10px] text-muted-foreground uppercase tracking-wider">IGST (18%)</span><p className="text-sm">{selectedInvoice.igst > 0 ? formatCurrency(selectedInvoice.igst) : '—'}</p></div>
+   513→   513→                <div><span className="text-[10px] text-muted-foreground uppercase tracking-wider">Total Amount</span><p className="text-sm font-bold text-emerald-700">{formatCurrency(selectedInvoice.taxableValue + selectedInvoice.cgst + selectedInvoice.sgst + selectedInvoice.igst)}</p></div>
+   514→   514→              </div>
+   515→   515→              {selectedInvoice.errorDetail && (
+   516→   516→                <>
+   517→   517→                  <Separator />
+   518→   518→                  <div className="p-3 rounded-lg bg-amber-50 border border-amber-200">
+   519→   519→                    <p className="text-xs font-semibold text-amber-700 mb-1">Issue Detected</p>
+   520→   520→                    <p className="text-[11px] text-amber-800 leading-relaxed">{selectedInvoice.errorDetail}</p>
+   521→   521→                  </div>
+   522→   522→                </>
+   523→   523→              )}
+   524→   524→              {selectedInvoice.status !== 'validated' && (
+   525→   525→                <Button className="w-full h-9 text-xs font-medium gap-2 bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => { handleApproveInvoice(selectedInvoice.id); setSelectedInvoice(null); }}>
+   526→   526→                  <Check className="h-3.5 w-3.5" />
+   527→   527→                  Approve & Validate Invoice
+   528→   528→                </Button>
+   529→   529→              )}
+   530→   530→            </div>
+   531→   531→          )}
+   532→   532→        </DialogContent>
+   533→   533→      </Dialog>
+   534→   534→
+   535→   535→      {/* ═══ RECONCILIATION DRILL-DOWN ═══ */}
+   536→   536→      <Dialog open={!!selectedReconCategory} onOpenChange={(open) => { if (!open) setSelectedReconCategory(null); }}>
+   537→   537→        <DialogContent className="sm:max-w-2xl">
+   538→   538→          <DialogHeader>
+   539→   539→            <DialogTitle className="flex items-center gap-2">
+   540→   540→              <GitCompareArrows className="h-4 w-4 text-emerald-600" />
+   541→   541→              {selectedReconCategory} — Books vs GSTR-2B
+   542→   542→            </DialogTitle>
+   543→   543→          </DialogHeader>
+   544→   544→          <div className="py-8 text-center">
+   545→   545→            <GitCompareArrows className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
+   546→   546→            <p className="text-sm text-muted-foreground">Run reconciliation to see detailed results</p>
+   547→   547→          </div>
+   548→   548→        </DialogContent>
+   549→   549→      </Dialog>
+   550→   550→
+   551→   551→      {/* ═══ FILING SIMULATION MODAL ═══ */}
+   552→   552→      <Dialog open={filingModalOpen} onOpenChange={(open) => { if (!open && filingProgress !== 'submitting') { setFilingModalOpen(false); setFilingProgress('idle'); } }}>
+   553→   553→        <DialogContent className="sm:max-w-md">
+   554→   554→          <div className="py-8 text-center space-y-4">
+   555→   555→            {filingProgress === 'validating' && (
+   556→   556→              <>
+   557→   557→                <Loader2 className="h-10 w-10 animate-spin text-emerald-600 mx-auto" />
+   558→   558→                <div>
+   559→   559→                  <p className="text-sm font-semibold text-foreground">Validating return data...</p>
+   560→   560→                  <p className="text-xs text-muted-foreground mt-1">Checking JSON schema compliance</p>
+   561→   561→                </div>
+   562→   562→              </>
+   563→   563→            )}
+   564→   564→            {filingProgress === 'generating' && (
+   565→   565→              <>
+   566→   566→                <Loader2 className="h-10 w-10 animate-spin text-emerald-600 mx-auto" />
+   567→   567→                <div>
+   568→   568→                  <p className="text-sm font-semibold text-foreground">Generating JSON payload...</p>
+   569→   569→                  <p className="text-xs text-muted-foreground mt-1">{invoices.length} invoices being packaged for GST portal</p>
+   570→   570→                </div>
+   571→   571→              </>
+   572→   572→            )}
+   573→   573→            {filingProgress === 'submitting' && (
+   574→   574→              <>
+   575→   575→                <Loader2 className="h-10 w-10 animate-spin text-emerald-600 mx-auto" />
+   576→   576→                <div>
+   577→   577→                  <p className="text-sm font-semibold text-foreground">Submitting to GST portal...</p>
+   578→   578→                  <p className="text-xs text-muted-foreground mt-1">Connecting to GSTN via APIs</p>
+   579→   579→                </div>
+   580→   580→              </>
+   581→   581→            )}
+   582→   582→            {filingProgress === 'success' && (
+   583→   583→              <>
+   584→   584→                <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', stiffness: 200 }}>
+   585→   585→                  <PartyPopper className="h-12 w-12 text-emerald-600 mx-auto" />
+   586→   586→                </motion.div>
+   587→   587→                <div>
+   588→   588→                  <p className="text-lg font-bold text-emerald-700">Filed Successfully!</p>
+   589→   589→                  <div className="mt-3 p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-left space-y-1.5">
+   590→   590→                    <div className="flex justify-between text-xs"><span className="text-muted-foreground">Return Type</span><span className="font-medium">{returnType}</span></div>
+   591→   591→                    <div className="flex justify-between text-xs"><span className="text-muted-foreground">Period</span><span className="font-medium">{periodToLabel(period)}</span></div>
+   592→   592→                    <div className="flex justify-between text-xs"><span className="text-muted-foreground">Total Tax</span><span className="font-bold">{formatCurrency(totalTax)}</span></div>
+   593→   593→                    <div className="flex justify-between text-xs"><span className="text-muted-foreground">Filed On</span><span className="font-medium">{new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</span></div>
+   594→   594→                  </div>
+   595→   595→                  <Button className="mt-4 bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => { setFilingModalOpen(false); setFilingProgress('idle'); }}>
+   596→   596→                    Done
+   597→   597→                  </Button>
+   598→   598→                </div>
+   599→   599→              </>
+   600→   600→            )}
+   601→   601→          </div>
+   602→   602→        </DialogContent>
+   603→   603→      </Dialog>
+   604→   604→
+   605→   605→      {/* ═══ HEADER ═══ */}
+   606→   606→      <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
+   607→   607→        <div className="border border-border/60 rounded-xl p-5">
+   608→   608→          <div className="flex items-center justify-between flex-wrap gap-3">
+   609→   609→            <div className="flex items-center gap-3">
+   610→   610→              <Button variant="ghost" size="sm" className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground gap-1" onClick={handleBack}>
+   611→   611→                <ArrowLeft className="h-3.5 w-3.5" /> Client Workspace
+   612→   612→              </Button>
+   613→   613→            </div>
+   614→   614→            <div className="flex items-center gap-2">
+   615→   615→              <div className="flex items-center gap-2 mr-3">
+   616→   616→                <div className="flex items-center justify-center h-9 w-9 rounded-lg bg-emerald-50 text-emerald-700">
+   617→   617→                  <Building2 className="h-4 w-4" />
+   618→   618→                </div>
+   619→   619→                <div>
+   620→   620→                  <p className="text-sm font-semibold text-foreground leading-tight">{clientName}</p>
+   621→   621→                  <p className="text-[10px] font-mono text-muted-foreground">{clientGSTIN}</p>
+   622→   622→                </div>
+   623→   623→              </div>
+   624→   624→              <Badge variant="outline" className="text-xs font-medium">{returnType}</Badge>
+   625→   625→              <Badge variant="outline" className="text-xs font-medium">{periodToLabel(period)}</Badge>
+   626→   626→            </div>
+   627→   627→            <div className="flex items-center gap-2 flex-wrap">
+   628→   628→              <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 border-amber-200 text-amber-700 hover:bg-amber-50" onClick={handleRunValidation} disabled={effectiveCompletedStep >= 2}>
+   629→   629→                <ShieldCheck className="size-3.5" /> Run Validation
+   630→   630→              </Button>
+   631→   631→              <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 border-blue-200 text-blue-700 hover:bg-blue-50" onClick={handleRunReconciliation} disabled={effectiveCompletedStep < 2 || effectiveCompletedStep >= 3}>
+   632→   632→                <GitCompareArrows className="size-3.5" /> Run Reconciliation
+   633→   633→              </Button>
+   634→   634→              <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 border-emerald-200 text-emerald-700 hover:bg-emerald-50" onClick={handleMarkReady} disabled={effectiveCompletedStep < 3 || effectiveCompletedStep >= 5}>
+   635→   635→                <CheckCircle2 className="size-3.5" /> Mark Ready
+   636→   636→              </Button>
+   637→   637→              <Button size="sm" className={`h-8 text-xs gap-1.5 ${allChecksPass ? 'bg-emerald-600 hover:bg-emerald-700 text-white' : 'bg-slate-200 text-slate-500 cursor-not-allowed'}`} disabled={!allChecksPass} onClick={handleFileReturn}>
+   638→   638→                <Send className="size-3.5" /> File Return
+   639→   639→              </Button>
+   640→   640→            </div>
+   641→   641→          </div>
+   642→   642→        </div>
+   643→   643→      </motion.div>
+   644→   644→
+   645→   645→      {/* ═══ SECTION 1: PREPARATION PROGRESS ═══ */}
+   646→   646→      <motion.section initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1, duration: 0.4 }}>
+   647→   647→        <DesktopProgressBar completedStep={effectiveCompletedStep} />
+   648→   648→        <MobileProgressBar completedStep={effectiveCompletedStep} />
+   649→   649→      </motion.section>
+   650→   650→
+   651→   651→      {/* ═══ SECTION 2: INVOICE REVIEW TABLE ═══ */}
+   652→   652→      <motion.section initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15, duration: 0.4 }}>
+   653→   653→        <div className="flex items-center justify-between mb-3">
+   654→   654→          <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">Invoice Review</h2>
+   655→   655→          <div className="flex items-center gap-1.5">
+   656→   656→            <span className="text-xs text-muted-foreground">{invoices.length} invoices · {formatCurrency(totalTaxable)} taxable</span>
+   657→   657→          </div>
+   658→   658→        </div>
+   659→   659→
+   660→   660→        <div className="border border-border/60 rounded-xl overflow-hidden">
+   661→   661→          <div className="flex items-center gap-1.5 px-4 py-2.5 border-b border-border/40 bg-slate-50/50 overflow-x-auto">
+   662→   662→            {(['all', 'validated', 'warning', 'error'] as const).map(filter => {
+   663→   663→              const count = filter === 'all' ? invoices.length : invoices.filter(i => i.status === filter).length;
+   664→   664→              const isActive = invoiceFilter === filter;
+   665→   665→              return (
+   666→   666→                <Button key={filter} variant={isActive ? 'secondary' : 'ghost'} size="sm"
+   667→   667→                  className={`h-7 text-xs font-medium px-2.5 gap-1 capitalize shrink-0 ${isActive ? 'bg-white shadow-sm border border-border/60' : 'text-muted-foreground hover:text-foreground'}`}
+   668→   668→                  onClick={() => setInvoiceFilter(filter)}
+   669→   669→                >
+   670→   670→                  {filter === 'all' ? 'All' : filter.charAt(0).toUpperCase() + filter.slice(1)}
+   671→   671→                  <span className={`text-[10px] px-1 py-0 rounded-full ${isActive ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-muted-foreground'}`}>{count}</span>
+   672→   672→                </Button>
+   673→   673→              );
+   674→   674→            })}
+   675→   675→            <div className="flex-1" />
+   676→   676→            <div className="hidden md:flex items-center gap-2 text-xs text-muted-foreground shrink-0">
+   677→   677→              <span>CGST: <span className="font-medium text-foreground">{formatCurrency(totalCGST)}</span></span>
+   678→   678→              <span>SGST: <span className="font-medium text-foreground">{formatCurrency(totalSGST)}</span></span>
+   679→   679→              <span>IGST: <span className="font-medium text-foreground">{formatCurrency(totalIGST)}</span></span>
+   680→   680→            </div>
+   681→   681→          </div>
+   682→   682→
+   683→   683→          <ScrollArea className="max-h-[400px]">
+   684→   684→            <table className="w-full">
+   685→   685→              <thead className="sticky top-0 bg-white z-10">
+   686→   686→                <tr className="border-b border-border/40">
+   687→   687→                  <th className="text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-4 py-2.5">Invoice #</th>
+   688→   688→                  <th className="text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-4 py-2.5 hidden sm:table-cell">Date</th>
+   689→   689→                  <th className="text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-4 py-2.5">Customer</th>
+   690→   690→                  <th className="text-right text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-4 py-2.5 hidden md:table-cell">Taxable Value</th>
+   691→   691→                  <th className="text-right text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-4 py-2.5 hidden lg:table-cell">CGST</th>
+   692→   692→                  <th className="text-right text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-4 py-2.5 hidden lg:table-cell">SGST</th>
+   693→   693→                  <th className="text-right text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-4 py-2.5 hidden lg:table-cell">IGST</th>
+   694→   694→                  <th className="text-center text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-4 py-2.5">Status</th>
+   695→   695→                  <th className="text-center text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-4 py-2.5">Actions</th>
+   696→   696→                </tr>
+   697→   697→              </thead>
+   698→   698→              <tbody>
+   699→   699→                <AnimatePresence mode="popLayout">
+   700→   700→                  {filteredInvoices.map((inv) => (
+   701→   701→                    <motion.tr key={inv.id} layout
+   702→   702→                      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, scale: 0.98 }}
+   703→   703→                      className={`border-b border-border/20 hover:bg-muted/30 transition-colors cursor-pointer ${inv.status === 'error' ? 'bg-red-50/30' : inv.status === 'warning' ? 'bg-amber-50/30' : ''}`}
+   704→   704→                      onClick={() => setSelectedInvoice(inv)}
+   705→   705→                    >
+   706→   706→                      <td className="px-4 py-2.5 text-xs font-mono font-medium text-foreground">{inv.invoiceNumber}</td>
+   707→   707→                      <td className="px-4 py-2.5 text-xs text-muted-foreground hidden sm:table-cell">{new Date(inv.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' })}</td>
+   708→   708→                      <td className="px-4 py-2.5 text-xs text-foreground max-w-[180px] truncate">{inv.customer}</td>
+   709→   709→                      <td className="px-4 py-2.5 text-xs text-right font-medium text-foreground hidden md:table-cell">{formatCurrency(inv.taxableValue)}</td>
+   710→   710→                      <td className="px-4 py-2.5 text-xs text-right text-muted-foreground hidden lg:table-cell">{inv.cgst > 0 ? formatCurrency(inv.cgst) : '—'}</td>
+   711→   711→                      <td className="px-4 py-2.5 text-xs text-right text-muted-foreground hidden lg:table-cell">{inv.sgst > 0 ? formatCurrency(inv.sgst) : '—'}</td>
+   712→   712→                      <td className="px-4 py-2.5 text-xs text-right text-muted-foreground hidden lg:table-cell">{inv.igst > 0 ? formatCurrency(inv.igst) : '—'}</td>
+   713→   713→                      <td className="px-4 py-2.5 text-center">{getStatusBadge(inv.status)}</td>
+   714→   714→                      <td className="px-4 py-2.5" onClick={(e) => e.stopPropagation()}>
+   715→   715→                        <div className="flex items-center justify-center gap-1">
+   716→   716→                          <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground" onClick={() => setSelectedInvoice(inv)}><Eye className="h-3 w-3" /></Button>
+   717→   717→                          {inv.status !== 'validated' && (
+   718→   718→                            <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50" onClick={() => handleApproveInvoice(inv.id)}><Check className="h-3 w-3" /></Button>
+   719→   719→                          )}
+   720→   720→                        </div>
+   721→   721→                      </td>
+   722→   722→                    </motion.tr>
+   723→   723→                  ))}
+   724→   724→                </AnimatePresence>
+   725→   725→              </tbody>
+   726→   726→            </table>
+   727→   727→          </ScrollArea>
+   728→   728→
+   729→   729→          <div className="flex items-center justify-between px-4 py-2.5 border-t border-border/40 bg-slate-50/50">
+   730→   730→            <span className="text-xs text-muted-foreground">Showing {filteredInvoices.length} of {invoices.length} invoices</span>
+   731→   731→            <span className="text-xs font-medium text-foreground">Total Tax: {formatCurrency(totalTax)}</span>
+   732→   732→          </div>
+   733→   733→        </div>
+   734→   734→      </motion.section>
+   735→   735→
+   736→   736→      {/* ═══ TWO-COLUMN: VALIDATION CENTER + RECONCILIATION ═══ */}
+   737→   737→      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+   738→   738→
+   739→   739→        {/* SECTION 3: VALIDATION CENTER */}
+   740→   740→        <motion.section initial={{ opacity: 0, x: -12 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.2, duration: 0.4 }}>
+   741→   741→          <div className="flex items-center justify-between mb-3">
+   742→   742→            <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">Validation Center</h2>
+   743→   743→            <Badge variant="outline" className={`text-[10px] font-medium ${unresolvedIssues > 0 ? 'text-red-700 bg-red-50 border-red-200' : 'text-emerald-700 bg-emerald-50 border-emerald-200'}`}>
+   744→   744→              {unresolvedIssues > 0 ? `${unresolvedIssues} issues` : 'All clear'}
+   745→   745→            </Badge>
+   746→   746→          </div>
+   747→   747→
+   748→   748→          <div className="border border-border/60 rounded-xl divide-y divide-border/40 overflow-hidden">
+   749→   749→            <AnimatePresence mode="popLayout">
+   750→   750→              {validationIssues.map((issue) => (
+   751→   751→                <motion.div key={issue.id} layout
+   752→   752→                  initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, height: 0 }}
+   753→   753→                  className={`px-4 py-3.5 transition-all ${issue.status === 'resolved' ? 'bg-emerald-50/30' : 'hover:bg-muted/20'}`}
+   754→   754→                >
+   755→   755→                  <div className="flex items-start gap-3">
+   756→   756→                    <div className="mt-0.5 shrink-0">
+   757→   757→                      {issue.status === 'resolved' ? <CheckCircle2 className="h-4 w-4 text-emerald-600" /> : getSeverityIcon(issue.severity)}
+   758→   758→                    </div>
+   759→   759→                    <div className="flex-1 min-w-0">
+   760→   760→                      <div className="flex items-center gap-2 mb-1">
+   761→   761→                        {issue.status === 'resolved' ? <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px] px-1.5 py-0">Resolved</Badge> : getSeverityBadge(issue.severity)}
+   762→   762→                        <Badge variant="outline" className="text-[10px] px-1.5 py-0">{issue.category}</Badge>
+   763→   763→                      </div>
+   764→   764→                      <p className={`text-xs leading-snug ${issue.status === 'resolved' ? 'text-muted-foreground line-through' : 'text-foreground'}`}>{issue.description}</p>
+   765→   765→                      {issue.invoiceId && <p className="text-[10px] text-muted-foreground mt-1">Invoice ID: <span className="font-mono font-medium">{issue.invoiceId}</span></p>}
+   766→   766→                    </div>
+   767→   767→                    {issue.status !== 'resolved' && (
+   768→   768→                      <Button size="sm" variant="outline" className="h-7 text-xs font-medium px-3 shrink-0 border-border/60 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200" onClick={() => handleFixIssue(issue.id)}>
+   769→   769→                        Fix Issue
+   770→   770→                      </Button>
+   771→   771→                    )}
+   772→   772→                  </div>
+   773→   773→                </motion.div>
+   774→   774→              ))}
+   775→   775→            </AnimatePresence>
+   776→   776→            {unresolvedIssues === 0 && (
+   777→   777→              <div className="p-8 text-center">
+   778→   778→                <CheckCircle2 className="h-8 w-8 text-emerald-500 mx-auto mb-2" />
+   779→   779→                <p className="text-sm font-semibold text-emerald-700">All validation issues resolved</p>
+   780→   780→                <p className="text-xs text-muted-foreground mt-1">Your return data passes all GST validation rules</p>
+   781→   781→              </div>
+   782→   782→            )}
+   783→   783→          </div>
+   784→   784→        </motion.section>
+   785→   785→
+   786→   786→        {/* SECTION 4: GST RECONCILIATION */}
+   787→   787→        <motion.section initial={{ opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.25, duration: 0.4 }}>
+   788→   788→          <div className="flex items-center justify-between mb-3">
+   789→   789→            <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">GST Reconciliation</h2>
+   790→   790→            <Badge variant="outline" className="text-[10px] font-medium text-muted-foreground">Books vs GSTR-2B</Badge>
+   791→   791→          </div>
+   792→   792→
+   793→   793→          <div className="border border-border/60 rounded-xl p-5 space-y-3">
+   794→   794→            {reconRuns.length > 0 ? (
+   795→   795→              reconRuns.map((run: any, idx: number) => (
+   796→   796→                <motion.div key={run.id} initial={{ opacity: 0, x: 8 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.3 + idx * 0.06, duration: 0.3 }}
+   797→   797→                  className="flex items-center justify-between p-3 rounded-lg border bg-slate-50 border-slate-200 cursor-pointer hover:shadow-sm transition-shadow"
+   798→   798→                >
+   799→   799→                  <div className="flex items-center gap-2.5">
+   800→   800→                    <span className="text-xs font-semibold text-foreground">Reconciliation Run</span>
+   801→   801→                    <span className="text-[10px] text-muted-foreground">{run.period} · {run.totalRecords} records</span>
+   802→   802→                  </div>
+   803→   803→                  <div className="flex items-center gap-3">
+   804→   804→                    <span className="text-xs text-emerald-700">{run.matched} matched</span>
+   805→   805→                    <span className="text-xs text-amber-700">{run.partialMatches} partial</span>
+   806→   806→                    <span className="text-xs text-red-700">{run.unmatched} unmatched</span>
+   807→   807→                  </div>
+   808→   808→                </motion.div>
+   809→   809→              ))
+   810→   810→            ) : (
+   811→   811→              <div className="py-8 text-center">
+   812→   812→                <GitCompareArrows className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
+   813→   813→                <p className="text-sm font-medium text-muted-foreground">No reconciliation runs yet</p>
+   814→   814→                <p className="text-xs text-muted-foreground mt-1">Run reconciliation to compare books with GSTR-2B</p>
+   815→   815→              </div>
+   816→   816→            )}
+   817→   817→
+   818→   818→            <Separator className="my-2" />
+   819→   819→
+   820→   820→            <div className="flex items-center justify-between">
+   821→   821→              <span className="text-xs font-medium text-muted-foreground">Total Records Compared</span>
+   822→   822→              <span className="text-sm font-bold text-foreground">{invoices.length} invoices · {formatCurrency(totalTaxable)}</span>
+   823→   823→            </div>
+   824→   824→
+   825→   825→            <p className="text-[10px] text-muted-foreground text-center">Click any category to view detailed breakdown</p>
+   826→   826→          </div>
+   827→   827→        </motion.section>
+   828→   828→      </div>
+   829→   829→
+   830→   830→      {/* ═══ SECTION 5: RETURN SUMMARY ═══ */}
+   831→   831→      <motion.section initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3, duration: 0.4 }}>
+   832→   832→        <div className="flex items-center justify-between mb-3">
+   833→   833→          <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">Return Summary — {returnType}</h2>
+   834→   834→          <Badge variant="outline" className="text-[10px] font-medium text-muted-foreground">{periodToLabel(period)}</Badge>
+   835→   835→        </div>
+   836→   836→
+   837→   837→        {isGSTR1 ? (
+   838→   838→          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+   839→   839→            {[
+   840→   840→              { label: 'B2B Sales', value: gstr1Summary.b2bSales, icon: <Building2 className="h-4 w-4" />, color: 'text-emerald-700', bg: 'bg-emerald-50' },
+   841→   841→              { label: 'B2C Sales', value: gstr1Summary.b2cSales, icon: <IndianRupee className="h-4 w-4" />, color: 'text-teal-700', bg: 'bg-teal-50' },
+   842→   842→              { label: 'Exports', value: gstr1Summary.exports, icon: <TrendingUp className="h-4 w-4" />, color: 'text-blue-700', bg: 'bg-blue-50' },
+   843→   843→              { label: 'Credit Notes', value: gstr1Summary.creditNotes, icon: <TrendingDown className="h-4 w-4" />, color: 'text-orange-700', bg: 'bg-orange-50' },
+   844→   844→              { label: 'Debit Notes', value: gstr1Summary.debitNotes, icon: <FilePlus2 className="h-4 w-4" />, color: 'text-purple-700', bg: 'bg-purple-50' },
+   845→   845→            ].map((item, idx) => (
+   846→   846→              <motion.div key={item.label} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.35 + idx * 0.05, duration: 0.3 }}
+   847→   847→                className="border border-border/60 rounded-xl p-4 hover:border-border transition-colors"
+   848→   848→              >
+   849→   849→                <div className="flex items-center gap-2 mb-2">
+   850→   850→                  <div className={`flex items-center justify-center h-7 w-7 rounded-lg ${item.bg} ${item.color}`}>{item.icon}</div>
+   851→   851→                  <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">{item.label}</span>
+   852→   852→                </div>
+   853→   853→                <p className={`text-lg font-bold ${item.color}`}>{formatCurrency(item.value)}</p>
+   854→   854→              </motion.div>
+   855→   855→            ))}
+   856→   856→          </div>
+   857→   857→        ) : (
+   858→   858→          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+   859→   859→            {[
+   860→   860→              { label: 'Taxable Supplies', value: gstr3bSummary.taxableSupplies, icon: <IndianRupee className="h-4 w-4" />, color: 'text-emerald-700', bg: 'bg-emerald-50' },
+   861→   861→              { label: 'ITC Available', value: gstr3bSummary.itcAvailable, icon: <Shield className="h-4 w-4" />, color: 'text-teal-700', bg: 'bg-teal-50' },
+   862→   862→              { label: 'Output Tax', value: gstr3bSummary.outputTax, icon: <FileText className="h-4 w-4" />, color: 'text-amber-700', bg: 'bg-amber-50' },
+   863→   863→              { label: 'Net Tax Payable', value: gstr3bSummary.netTaxPayable, icon: <Zap className="h-4 w-4" />, color: 'text-violet-700', bg: 'bg-violet-50' },
+   864→   864→            ].map((item, idx) => (
+   865→   865→              <motion.div key={item.label} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.35 + idx * 0.05, duration: 0.3 }}
+   866→   866→                className="border border-border/60 rounded-xl p-4 hover:border-border transition-colors"
+   867→   867→              >
+   868→   868→                <div className="flex items-center gap-2 mb-2">
+   869→   869→                  <div className={`flex items-center justify-center h-7 w-7 rounded-lg ${item.bg} ${item.color}`}>{item.icon}</div>
+   870→   870→                  <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">{item.label}</span>
+   871→   871→                </div>
+   872→   872→                <p className={`text-lg font-bold ${item.color}`}>{formatCurrency(item.value)}</p>
+   873→   873→              </motion.div>
+   874→   874→            ))}
+   875→   875→          </div>
+   876→   876→        )}
+   877→   877→      </motion.section>
+   878→   878→
+   879→   879→      {/* ═══ TWO-COLUMN: AI REVIEW + READY TO FILE ═══ */}
+   880→   880→      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+   881→   881→
+   882→   882→        {/* SECTION 6: AI REVIEW */}
+   883→   883→        <motion.section initial={{ opacity: 0, x: -12 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.35, duration: 0.4 }} className="lg:col-span-3">
+   884→   884→          <div className="flex items-center justify-between mb-3">
+   885→   885→            <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">AI Review</h2>
+   886→   886→            <Badge variant="outline" className="text-[10px] font-medium text-emerald-700 bg-emerald-50 border-emerald-200 gap-1">
+   887→   887→              <Sparkles className="size-2.5" /> {validationIssues.filter(i => i.status === 'open').length} open issues
+   888→   888→            </Badge>
+   889→   889→          </div>
+   890→   890→
+   891→   891→          <ScrollArea className="max-h-[480px]">
+   892→   892→            <div className="space-y-2.5">
+   893→   893→              <AnimatePresence mode="popLayout">
+   894→   894→                {validationIssues.filter(i => i.status === 'open').map((issue) => {
+   895→   895→                  return (
+   896→   896→                    <motion.div key={issue.id} layout initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, height: 0 }}
+   897→   897→                      className="border border-border/60 rounded-lg p-3.5 hover:border-border transition-colors"
+   898→   898→                    >
+   899→   899→                      <div className="flex items-start gap-3">
+   900→   900→                        <div className="flex items-center justify-center h-8 w-8 rounded-lg shrink-0 bg-amber-50 text-amber-700">
+   901→   901→                          <AlertTriangle className="h-4 w-4" />
+   902→   902→                        </div>
+   903→   903→                        <div className="flex-1 min-w-0">
+   904→   904→                          <div className="flex items-center gap-2 mb-1">
+   905→   905→                            <span className="text-xs font-semibold text-foreground">{issue.title}</span>
+   906→   906→                            <Badge variant="outline" className="text-[9px] px-1.5">{issue.severity}</Badge>
+   907→   907→                          </div>
+   908→   908→                          <p className="text-[11px] text-muted-foreground leading-relaxed line-clamp-2">{issue.description}</p>
+   909→   909→                          <div className="flex items-center gap-2 mt-2">
+   910→   910→                            <Button size="sm" variant="outline" className="h-6 text-[10px] font-medium px-2.5 shrink-0 border-border/60 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200"
+   911→   911→                              onClick={() => handleFixIssue(issue.id)}
+   912→   912→                            >
+   913→   913→                              Fix Issue
+   914→   914→                            </Button>
+   915→   915→                            <Button size="sm" variant="ghost" className="h-6 text-[10px] px-2 text-muted-foreground hover:text-foreground"
+   916→   916→                              onClick={() => handleDismissInsight(issue.id)}
+   917→   917→                            >
+   918→   918→                              Dismiss
+   919→   919→                            </Button>
+   920→   920→                          </div>
+   921→   921→                        </div>
+   922→   922→                      </div>
+   923→   923→                    </motion.div>
+   924→   924→                  );
+   925→   925→                })}
+   926→   926→              </AnimatePresence>
+   927→   927→              {validationIssues.filter(i => i.status === 'open').length === 0 && (
+   928→   928→                <div className="p-8 text-center border border-border/60 rounded-xl">
+   929→   929→                  <CheckCircle2 className="h-8 w-8 text-emerald-500 mx-auto mb-2" />
+   930→   930→                  <p className="text-sm font-semibold text-emerald-700">All issues resolved</p>
+   931→   931→                  <p className="text-xs text-muted-foreground mt-1">No outstanding risk alerts or validation issues</p>
+   932→   932→                </div>
+   933→   933→              )}
+   934→   934→            </div>
+   935→   935→          </ScrollArea>
+   936→   936→        </motion.section>
+   937→   937→
+   938→   938→        {/* SECTION 7: READY TO FILE PANEL */}
+   939→   939→        <motion.section initial={{ opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.4, duration: 0.4 }} className="lg:col-span-2">
+   940→   940→          <div className="flex items-center justify-between mb-3">
+   941→   941→            <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">Filing Readiness</h2>
+   942→   942→          </div>
+   943→   943→
+   944→   944→          <div className="border border-border/60 rounded-xl p-5 space-y-5">
+   945→   945→            <div className="grid grid-cols-2 gap-3">
+   946→   946→              {[
+   947→   947→                { label: 'Validation Score', value: validationScore, target: 95, icon: <ClipboardCheck className="h-4 w-4" />, color: validationScore >= 95 ? 'text-emerald-700' : validationScore >= 80 ? 'text-amber-700' : 'text-red-700', bg: validationScore >= 95 ? 'bg-emerald-50' : validationScore >= 80 ? 'bg-amber-50' : 'bg-red-50', stroke: validationScore >= 95 ? '#10b981' : validationScore >= 80 ? '#f59e0b' : '#ef4444' },
+   948→   948→                { label: 'Match Rate', value: matchRate, target: 90, icon: <GitCompareArrows className="h-4 w-4" />, color: matchRate >= 90 ? 'text-emerald-700' : matchRate >= 70 ? 'text-amber-700' : 'text-red-700', bg: matchRate >= 90 ? 'bg-emerald-50' : matchRate >= 70 ? 'bg-amber-50' : 'bg-red-50', stroke: matchRate >= 90 ? '#10b981' : matchRate >= 70 ? '#f59e0b' : '#ef4444' },
+   949→   949→                { label: 'Compliance', value: complianceScore, target: 85, icon: <ShieldCheck className="h-4 w-4" />, color: complianceScore >= 85 ? 'text-emerald-700' : complianceScore >= 65 ? 'text-amber-700' : 'text-red-700', bg: complianceScore >= 85 ? 'bg-emerald-50' : complianceScore >= 65 ? 'bg-amber-50' : 'bg-red-50', stroke: complianceScore >= 85 ? '#10b981' : complianceScore >= 65 ? '#f59e0b' : '#ef4444' },
+   950→   950→              ].map((score) => (
+   951→   951→                <div key={score.label} className="border border-border/40 rounded-lg p-3 text-center">
+   952→   952→                  <div className={`flex items-center justify-center h-7 w-7 rounded-lg mx-auto mb-1.5 ${score.bg} ${score.color}`}>{score.icon}</div>
+   953→   953→                  <p className="text-xl font-bold text-foreground">{score.value}%</p>
+   954→   954→                  <p className="text-[10px] text-muted-foreground">{score.label}</p>
+   955→   955→                  <div className="h-1.5 rounded-full bg-slate-100 mt-2 overflow-hidden">
+   956→   956→                    <motion.div className="h-full rounded-full" style={{ backgroundColor: score.stroke }}
+   957→   957→                      animate={{ width: `${score.value}%` }} transition={{ duration: 0.8, delay: 0.5 }}
+   958→   958→                    />
+   959→   959→                  </div>
+   960→   960→                  <p className="text-[9px] text-muted-foreground mt-1">Target: {score.target}%</p>
+   961→   961→                </div>
+   962→   962→              ))}
+   963→   963→            </div>
+   964→   964→
+   965→   965→            <div className={`rounded-lg p-4 border ${allChecksPass ? 'bg-emerald-50 border-emerald-200' : 'bg-amber-50 border-amber-200'}`}>
+   966→   966→              <div className="flex items-center gap-2 mb-2">
+   967→   967→                {allChecksPass ? <CheckCircle2 className="h-5 w-5 text-emerald-600" /> : <AlertTriangle className="h-5 w-5 text-amber-600" />}
+   968→   968→                <span className={`text-sm font-semibold ${allChecksPass ? 'text-emerald-700' : 'text-amber-700'}`}>
+   969→   969→                  {allChecksPass ? 'All Checks Passed' : 'Action Required Before Filing'}
+   970→   970→                </span>
+   971→   971→              </div>
+   972→   972→              {!allChecksPass && (
+   973→   973→                <ul className="text-xs text-amber-700 space-y-1 ml-7">
+   974→   974→                  {errorCount > 0 && <li>• {errorCount} invoice{errorCount > 1 ? 's' : ''} with errors need fixing</li>}
+   975→   975→                  {warningCount > 0 && <li>• {warningCount} invoice{warningCount > 1 ? 's' : ''} with warnings need approval</li>}
+   976→   976→                  {unresolvedIssues > 0 && <li>• {unresolvedIssues} validation issue{unresolvedIssues > 1 ? 's' : ''} unresolved</li>}
+   977→   977→                </ul>
+   978→   978→              )}
+   979→   979→            </div>
+   980→   980→
+   981→   981→            <Button className={`w-full h-12 text-sm font-semibold gap-2 shadow-lg ${allChecksPass ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/20' : 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'}`}
+   982→   982→              disabled={!allChecksPass} onClick={handleFileReturn}
+   983→   983→            >
+   984→   984→              {allChecksPass ? <><Send className="h-4 w-4" /> File GST Return</> : <><Clock className="h-4 w-4" /> Resolve Issues to File</>}
+   985→   985→            </Button>
+   986→   986→
+   987→   987→            {!allChecksPass && (
+   988→   988→              <p className="text-[10px] text-center text-muted-foreground">Fix all issues above to unlock filing</p>
+   989→   989→            )}
+   990→   990→          </div>
+   991→   991→        </motion.section>
+   992→   992→      </div>
+   993→   993→
+   994→   994→    </div>
+   995→   995→  );
+   996→   996→}
+   997→   997→

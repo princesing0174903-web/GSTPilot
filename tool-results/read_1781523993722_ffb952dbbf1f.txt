@@ -1,0 +1,802 @@
+     1→     1→     1→'use client';
+     2→     2→     2→
+     3→     3→     3→import React, { useState, useMemo } from 'react';
+     4→     4→     4→import { motion, AnimatePresence } from 'framer-motion';
+     5→     5→     5→import { Badge } from '@/components/ui/badge';
+     6→     6→     6→import { Button } from '@/components/ui/button';
+     7→     7→     7→import { Card, CardContent } from '@/components/ui/card';
+     8→     8→     8→import { Skeleton } from '@/components/ui/skeleton';
+     9→     9→     9→import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+    10→    10→    10→import {
+    11→    11→    11→  ArrowLeft,
+    12→    12→    12→  Upload,
+    13→    13→    13→  FileText,
+    14→    14→    14→  GitCompareArrows,
+    15→    15→    15→  Send,
+    16→    16→    16→  Shield,
+    17→    17→    17→  AlertTriangle,
+    18→    18→    18→  CheckCircle2,
+    19→    19→    19→  Clock,
+    20→    20→    20→  Calendar,
+    21→    21→    21→  Eye,
+    22→    22→    22→  RefreshCw,
+    23→    23→    23→  Download,
+    24→    24→    24→  AlertCircle,
+    25→    25→    25→  XCircle,
+    26→    26→    26→  UploadCloud,
+    27→    27→    27→  Activity,
+    28→    28→    28→  MapPin,
+    29→    29→    29→  Building2,
+    30→    30→    30→  ChevronRight,
+    31→    31→    31→  ArrowRight,
+    32→    32→    32→  Sparkles,
+    33→    33→    33→  FileCheck,
+    34→    34→    34→  Gauge,
+    35→    35→    35→  FolderOpen,
+    36→    36→    36→  IndianRupee,
+    37→    37→    37→  CircleDot,
+    38→    38→    38→  Inbox,
+    39→    39→    39→} from 'lucide-react';
+    40→    40→    40→import { Separator } from '@/components/ui/separator';
+    41→    41→    41→import { useApp } from '@/contexts/AppContext';
+    42→    42→    42→import type { AppView } from '@/contexts/AppContext';
+    43→    43→    43→import { formatCurrency, periodToLabel, getFilingDueDate } from '@/lib/gst-utils';
+    44→    44→    44→import { toast } from 'sonner';
+    45→    45→    45→import {
+    46→    46→    46→  useClient,
+    47→    47→    47→  useFilings,
+    48→    48→    48→  useInvoices,
+    49→    49→    49→  useIssues,
+    50→    50→    50→  useUploadedFiles,
+    51→    51→    51→  useAuditLogs,
+    52→    52→    52→  useReconRuns,
+    53→    53→    53→  useUploadFile,
+    54→    54→    54→  useCreateReconRun,
+    55→    55→    55→} from '@/hooks/api';
+    56→    56→    56→import type {
+    57→    57→    57→  Client,
+    58→    58→    58→  GSTRFiling,
+    59→    59→    59→  Invoice,
+    60→    60→    60→  Issue,
+    61→    61→    61→  AuditLogEntry,
+    62→    62→    62→  ReconciliationRun,
+    63→    63→    63→  FilingStatus,
+    64→    64→    64→} from '@/types/gst';
+    65→    65→    65→
+    66→    66→    66→// ═══════════════════════════════════════════════════════════════════════════════
+    67→    67→    67→// TYPES
+    68→    68→    68→// ═══════════════════════════════════════════════════════════════════════════════
+    69→    69→    69→
+    70→    70→    70→interface ReturnEntry {
+    71→    71→    71→  id: string;
+    72→    72→    72→  type: string;
+    73→    73→    73→  period: string;
+    74→    74→    74→  filingDate: string;
+    75→    75→    75→  arn: string;
+    76→    76→    76→  status: 'Filed' | 'Pending' | 'Overdue' | 'Draft' | 'Ready to File' | 'In Review';
+    77→    77→    77→  taxAmount: number;
+    78→    78→    78→}
+    79→    79→    79→
+    80→    80→    80→interface PendingAction {
+    81→    81→    81→  id: string;
+    82→    82→    82→  type: 'missing_documents' | 'gstin_error' | 'recon_mismatch' | 'awaiting_review' | 'ready_to_file';
+    83→    83→    83→  title: string;
+    84→    84→    84→  description: string;
+    85→    85→    85→  dueDate?: string;
+    86→    86→    86→  actionLabel: string;
+    87→    87→    87→  targetView: AppView;
+    88→    88→    88→  priority: 'high' | 'medium' | 'low';
+    89→    89→    89→}
+    90→    90→    90→
+    91→    91→    91→interface DocumentEntry {
+    92→    92→    92→  id: string;
+    93→    93→    93→  name: string;
+    94→    94→    94→  type: string;
+    95→    95→    95→  uploadDate: string;
+    96→    96→    96→  status: 'Processed' | 'Processing' | 'Uploaded' | 'Error';
+    97→    97→    97→  invoicesExtracted: number;
+    98→    98→    98→  totalRows: number;
+    99→    99→    99→  accuracy: number;
+   100→   100→   100→  size: string;
+   101→   101→   101→}
+   102→   102→   102→
+   103→   103→   103→interface ReconRun {
+   104→   104→   104→  id: string;
+   105→   105→   105→  period: string;
+   106→   106→   106→  matchRate: number;
+   107→   107→   107→  mismatches: number;
+   108→   108→   108→  missingInvoices: number;
+   109→   109→   109→  taxDifference: number;
+   110→   110→   110→  runDate: string;
+   111→   111→   111→  status: 'Completed' | 'Running' | 'Failed';
+   112→   112→   112→}
+   113→   113→   113→
+   114→   114→   114→interface AIInsight {
+   115→   115→   115→  id: string;
+   116→   116→   116→  severity: 'critical' | 'warning' | 'info';
+   117→   117→   117→  title: string;
+   118→   118→   118→  description: string;
+   119→   119→   119→  suggestedAction: string;
+   120→   120→   120→  actionView: AppView;
+   121→   121→   121→  category: string;
+   122→   122→   122→}
+   123→   123→   123→
+   124→   124→   124→interface ActivityEvent {
+   125→   125→   125→  id: string;
+   126→   126→   126→  type: 'upload' | 'return_created' | 'filing_submitted' | 'recon_run' | 'user_action' | 'ai_action';
+   127→   127→   127→  description: string;
+   128→   128→   128→  timestamp: string;
+   129→   129→   129→}
+   130→   130→   130→
+   131→   131→   131→// ═══════════════════════════════════════════════════════════════════════════════
+   132→   132→   132→// HELPER FUNCTIONS
+   133→   133→   133→// ═══════════════════════════════════════════════════════════════════════════════
+   134→   134→   134→
+   135→   135→   135→function getHealthColor(score: number): { bg: string; text: string; stroke: string } {
+   136→   136→   136→  if (score > 80) return { bg: 'bg-emerald-50', text: 'text-emerald-700', stroke: '#10b981' };
+   137→   137→   137→  if (score >= 50) return { bg: 'bg-amber-50', text: 'text-amber-700', stroke: '#f59e0b' };
+   138→   138→   138→  return { bg: 'bg-red-50', text: 'text-red-700', stroke: '#ef4444' };
+   139→   139→   139→}
+   140→   140→   140→
+   141→   141→   141→function getRiskBadge(risk: string) {
+   142→   142→   142→  switch (risk) {
+   143→   143→   143→    case 'Low': return <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 gap-1 text-[10px] px-2 py-0.5"><Shield className="size-2.5" />Low</Badge>;
+   144→   144→   144→    case 'Medium': return <Badge className="bg-amber-50 text-amber-700 border-amber-200 gap-1 text-[10px] px-2 py-0.5"><AlertTriangle className="size-2.5" />Medium</Badge>;
+   145→   145→   145→    case 'High': return <Badge className="bg-orange-50 text-orange-700 border-orange-200 gap-1 text-[10px] px-2 py-0.5"><AlertTriangle className="size-2.5" />High</Badge>;
+   146→   146→   146→    case 'Critical': return <Badge className="bg-red-50 text-red-700 border-red-200 gap-1 text-[10px] px-2 py-0.5"><XCircle className="size-2.5" />Critical</Badge>;
+   147→   147→   147→    default: return <Badge variant="secondary" className="text-[10px]">{risk}</Badge>;
+   148→   148→   148→  }
+   149→   149→   149→}
+   150→   150→   150→
+   151→   151→   151→function getReturnStatusBadge(status: string) {
+   152→   152→   152→  switch (status) {
+   153→   153→   153→    case 'Filed': return <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px] px-1.5 py-0"><CheckCircle2 className="size-2.5 mr-0.5" />Filed</Badge>;
+   154→   154→   154→    case 'Pending': return <Badge className="bg-amber-50 text-amber-700 border-amber-200 text-[10px] px-1.5 py-0"><Clock className="size-2.5 mr-0.5" />Pending</Badge>;
+   155→   155→   155→    case 'Overdue': return <Badge className="bg-red-50 text-red-700 border-red-200 text-[10px] px-1.5 py-0"><AlertCircle className="size-2.5 mr-0.5" />Overdue</Badge>;
+   156→   156→   156→    case 'Draft': return <Badge className="bg-slate-100 text-slate-600 border-slate-200 text-[10px] px-1.5 py-0"><FileText className="size-2.5 mr-0.5" />Draft</Badge>;
+   157→   157→   157→    case 'Ready to File': return <Badge className="bg-teal-50 text-teal-700 border-teal-200 text-[10px] px-1.5 py-0"><CheckCircle2 className="size-2.5 mr-0.5" />Ready</Badge>;
+   158→   158→   158→    case 'In Review': return <Badge className="bg-blue-50 text-blue-700 border-blue-200 text-[10px] px-1.5 py-0"><Eye className="size-2.5 mr-0.5" />Review</Badge>;
+   159→   159→   159→    default: return <Badge variant="secondary" className="text-[10px]">{status}</Badge>;
+   160→   160→   160→  }
+   161→   161→   161→}
+   162→   162→   162→
+   163→   163→   163→function getDocStatusBadge(status: string) {
+   164→   164→   164→  switch (status) {
+   165→   165→   165→    case 'Processed': return <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px] px-1.5 py-0">Processed</Badge>;
+   166→   166→   166→    case 'Processing': return <Badge className="bg-blue-50 text-blue-700 border-blue-200 text-[10px] px-1.5 py-0">Processing</Badge>;
+   167→   167→   167→    case 'Uploaded': return <Badge className="bg-slate-100 text-slate-600 border-slate-200 text-[10px] px-1.5 py-0">Uploaded</Badge>;
+   168→   168→   168→    case 'Error': return <Badge className="bg-red-50 text-red-700 border-red-200 text-[10px] px-1.5 py-0">Error</Badge>;
+   169→   169→   169→    default: return <Badge variant="secondary" className="text-[10px]">{status}</Badge>;
+   170→   170→   170→  }
+   171→   171→   171→}
+   172→   172→   172→
+   173→   173→   173→function getActionTypeIcon(type: string) {
+   174→   174→   174→  switch (type) {
+   175→   175→   175→    case 'missing_documents': return UploadCloud;
+   176→   176→   176→    case 'gstin_error': return XCircle;
+   177→   177→   177→    case 'recon_mismatch': return GitCompareArrows;
+   178→   178→   178→    case 'awaiting_review': return Eye;
+   179→   179→   179→    case 'ready_to_file': return CheckCircle2;
+   180→   180→   180→    default: return AlertCircle;
+   181→   181→   181→  }
+   182→   182→   182→}
+   183→   183→   183→
+   184→   184→   184→function getActivityIcon(type: string) {
+   185→   185→   185→  switch (type) {
+   186→   186→   186→    case 'upload': return UploadCloud;
+   187→   187→   187→    case 'return_created': return FileText;
+   188→   188→   188→    case 'filing_submitted': return FileCheck;
+   189→   189→   189→    case 'recon_run': return GitCompareArrows;
+   190→   190→   190→    case 'user_action': return Activity;
+   191→   191→   191→    case 'ai_action': return Sparkles;
+   192→   192→   192→    default: return CircleDot;
+   193→   193→   193→  }
+   194→   194→   194→}
+   195→   195→   195→
+   196→   196→   196→function getActivityColor(type: string) {
+   197→   197→   197→  switch (type) {
+   198→   198→   198→    case 'upload': return 'bg-blue-50 text-blue-600';
+   199→   199→   199→    case 'return_created': return 'bg-purple-50 text-purple-600';
+   200→   200→   200→    case 'filing_submitted': return 'bg-emerald-50 text-emerald-600';
+   201→   201→   201→    case 'recon_run': return 'bg-teal-50 text-teal-600';
+   202→   202→   202→    case 'user_action': return 'bg-slate-100 text-slate-600';
+   203→   203→   203→    case 'ai_action': return 'bg-amber-50 text-amber-600';
+   204→   204→   204→    default: return 'bg-slate-100 text-slate-500';
+   205→   205→   205→  }
+   206→   206→   206→}
+   207→   207→   207→
+   208→   208→   208→function formatRelativeTime(timestamp: string): string {
+   209→   209→   209→  const now = new Date();
+   210→   210→   210→  const date = new Date(timestamp);
+   211→   211→   211→  const diffMs = now.getTime() - date.getTime();
+   212→   212→   212→  const diffMins = Math.floor(diffMs / 60000);
+   213→   213→   213→  const diffHours = Math.floor(diffMins / 60);
+   214→   214→   214→  const diffDays = Math.floor(diffHours / 24);
+   215→   215→   215→
+   216→   216→   216→  if (diffMins < 60) return `${diffMins}m ago`;
+   217→   217→   217→  if (diffHours < 24) return `${diffHours}h ago`;
+   218→   218→   218→  if (diffDays < 7) return `${diffDays}d ago`;
+   219→   219→   219→  return date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+   220→   220→   220→}
+   221→   221→   221→
+   222→   222→   222→// ═══════════════════════════════════════════════════════════════════════════════
+   223→   223→   223→// MAPPING HELPERS (API data → UI types)
+   224→   224→   224→// ═══════════════════════════════════════════════════════════════════════════════
+   225→   225→   225→
+   226→   226→   226→const SIMULATED_NOW = new Date('2025-07-08T12:00:00Z');
+   227→   227→   227→
+   228→   228→   228→/** Check if a filing period is overdue relative to current date */
+   229→   229→   229→function isFilingOverdue(period: string): boolean {
+   230→   230→   230→  const dueDate = new Date(getFilingDueDate('GSTR-1', period));
+   231→   231→   231→  return SIMULATED_NOW > dueDate;
+   232→   232→   232→}
+   233→   233→   233→
+   234→   234→   234→/** Map API filing status to UI ReturnEntry status */
+   235→   235→   235→function mapFilingStatus(status: FilingStatus, period: string): ReturnEntry['status'] {
+   236→   236→   236→  if (status === 'filed') return 'Filed';
+   237→   237→   237→  const readyStatuses: FilingStatus[] = ['validated', 'reviewed', 'generated'];
+   238→   238→   238→  if (readyStatuses.includes(status)) {
+   239→   239→   239→    return isFilingOverdue(period) ? 'Overdue' : 'Ready to File';
+   240→   240→   240→  }
+   241→   241→   241→  return isFilingOverdue(period) ? 'Overdue' : 'Draft';
+   242→   242→   242→}
+   243→   243→   243→
+   244→   244→   244→/** Map an API document to a DocumentEntry for the UI */
+   245→   245→   245→function mapApiDocument(doc: Record<string, unknown>): DocumentEntry {
+   246→   246→   246→  const statusStr = (doc.processingStep as string) ?? (doc.status as string) ?? 'uploaded';
+   247→   247→   247→  const statusMap: Record<string, DocumentEntry['status']> = {
+   248→   248→   248→    extracted: 'Processed',
+   249→   249→   249→    processing: 'Processing',
+   250→   250→   250→    processed: 'Processed',
+   251→   251→   251→    uploaded: 'Uploaded',
+   252→   252→   252→    failed: 'Error',
+   253→   253→   253→    error: 'Error',
+   254→   254→   254→  };
+   255→   255→   255→  const sizeBytes = (doc.size as number) ?? 0;
+   256→   256→   256→  const sizeStr = sizeBytes > 1048576
+   257→   257→   257→    ? `${(sizeBytes / 1048576).toFixed(1)} MB`
+   258→   258→   258→    : sizeBytes > 1024
+   259→   259→   259→      ? `${(sizeBytes / 1024).toFixed(0)} KB`
+   260→   260→   260→      : sizeBytes > 0
+   261→   261→   261→        ? `${sizeBytes} B`
+   262→   262→   262→        : '1.0 MB';
+   263→   263→   263→
+   264→   264→   264→  return {
+   265→   265→   265→    id: (doc.id as string) ?? '',
+   266→   266→   266→    name: (doc.name as string) ?? (doc.filename as string) ?? 'Document',
+   267→   267→   267→    type: (doc.fileType as string) ?? (doc.folder as string) ?? 'Document',
+   268→   268→   268→    uploadDate: ((doc.createdAt as string) ?? new Date().toISOString()).split('T')[0],
+   269→   269→   269→    status: statusMap[statusStr.toLowerCase()] ?? 'Uploaded',
+   270→   270→   270→    invoicesExtracted: (doc.invoiceCount as number) ?? 0,
+   271→   271→   271→    totalRows: (doc.rowCount as number) ?? 0,
+   272→   272→   272→    accuracy: (doc.accuracy as number) ?? 0,
+   273→   273→   273→    size: sizeStr,
+   274→   274→   274→  };
+   275→   275→   275→}
+   276→   276→   276→
+   277→   277→   277→/** Map an API reconciliation run to a UI ReconRun */
+   278→   278→   278→function mapApiReconRun(run: ReconciliationRun): ReconRun {
+   279→   279→   279→  const matchRate = run.totalRecords > 0 ? Math.round((run.matched / run.totalRecords) * 100) : 0;
+   280→   280→   280→  return {
+   281→   281→   281→    id: run.id,
+   282→   282→   282→    period: periodToLabel(run.period),
+   283→   283→   283→    matchRate,
+   284→   284→   284→    mismatches: run.unmatched + run.partialMatches,
+   285→   285→   285→    missingInvoices: run.unmatched,
+   286→   286→   286→    taxDifference: run.gstDifference,
+   287→   287→   287→    runDate: run.createdAt.split('T')[0],
+   288→   288→   288→    status: run.status === 'completed' ? 'Completed' as const : run.status === 'running' ? 'Running' as const : 'Failed' as const,
+   289→   289→   289→  };
+   290→   290→   290→}
+   291→   291→   291→
+   292→   292→   292→/** Map an API audit log to an ActivityEvent for the UI */
+   293→   293→   293→function mapAuditLogToEvent(log: AuditLogEntry): ActivityEvent {
+   294→   294→   294→  const action = log.action?.toLowerCase() ?? '';
+   295→   295→   295→  let type: ActivityEvent['type'] = 'user_action';
+   296→   296→   296→  if (action.includes('upload') || action.includes('import')) type = 'upload';
+   297→   297→   297→  else if (action.includes('file') || action.includes('submit')) type = 'filing_submitted';
+   298→   298→   298→  else if (action.includes('reconcil')) type = 'recon_run';
+   299→   299→   299→  else if (action.includes('valid') || action.includes('generat')) type = 'ai_action';
+   300→   300→   300→  else if (action.includes('return') || action.includes('creat')) type = 'return_created';
+   301→   301→   301→
+   302→   302→   302→  return {
+   303→   303→   303→    id: log.id,
+   304→   304→   304→    type,
+   305→   305→   305→    description: log.details ?? log.action,
+   306→   306→   306→    timestamp: log.timestamp,
+   307→   307→   307→  };
+   308→   308→   308→}
+   309→   309→   309→
+   310→   310→   310→/** Map issue category to pending action type */
+   311→   311→   311→function issueCategoryToActionType(category: string): PendingAction['type'] {
+   312→   312→   312→  const lower = category.toLowerCase();
+   313→   313→   313→  if (lower.includes('gstin') || lower.includes('invalid')) return 'gstin_error';
+   314→   314→   314→  if (lower.includes('missing') || lower.includes('mandatory') || lower.includes('hsn')) return 'missing_documents';
+   315→   315→   315→  if (lower.includes('duplicate') || lower.includes('calculation') || lower.includes('tax')) return 'recon_mismatch';
+   316→   316→   316→  return 'awaiting_review';
+   317→   317→   317→}
+   318→   318→   318→
+   319→   319→   319→/** Map API issue to AIInsight */
+   320→   320→   320→function mapIssueToInsight(issue: Issue): AIInsight {
+   321→   321→   321→  const severity: AIInsight['severity'] =
+   322→   322→   322→    issue.severity === 'critical' ? 'critical' : issue.severity === 'warning' ? 'warning' : 'info';
+   323→   323→   323→  const category = issue.category ?? 'General';
+   324→   324→   324→
+   325→   325→   325→  let actionView: AppView = 'dashboard';
+   326→   326→   326→  let suggestedAction = 'Review';
+   327→   327→   327→  if (category.toLowerCase().includes('gstin') || category.toLowerCase().includes('tax')) {
+   328→   328→   328→    actionView = 'reconcile';
+   329→   329→   329→    suggestedAction = 'Review Details';
+   330→   330→   330→  } else if (category.toLowerCase().includes('missing') || category.toLowerCase().includes('document')) {
+   331→   331→   331→    actionView = 'invoices';
+   332→   332→   332→    suggestedAction = 'Upload Documents';
+   333→   333→   333→  } else if (category.toLowerCase().includes('filing') || category.toLowerCase().includes('deadline')) {
+   334→   334→   334→    actionView = 'returns';
+   335→   335→   335→    suggestedAction = 'File Return';
+   336→   336→   336→  }
+   337→   337→   337→
+   338→   338→   338→  return {
+   339→   339→   339→    id: issue.id,
+   340→   340→   340→    severity,
+   341→   341→   341→    title: issue.title ?? category,
+   342→   342→   342→    description: issue.description ?? '',
+   343→   343→   343→    suggestedAction,
+   344→   344→   344→    actionView,
+   345→   345→   345→    category,
+   346→   346→   346→  };
+   347→   347→   347→}
+   348→   348→   348→
+   349→   349→   349→// ═══════════════════════════════════════════════════════════════════════════════
+   350→   350→   350→// SVG Health Ring
+   351→   351→   351→// ═══════════════════════════════════════════════════════════════════════════════
+   352→   352→   352→
+   353→   353→   353→function HealthRing({ score, size = 72, strokeWidth = 5 }: { score: number; size?: number; strokeWidth?: number }) {
+   354→   354→   354→  const radius = (size - strokeWidth) / 2;
+   355→   355→   355→  const circumference = 2 * Math.PI * radius;
+   356→   356→   356→  const offset = circumference - (score / 100) * circumference;
+   357→   357→   357→  const color = getHealthColor(score);
+   358→   358→   358→
+   359→   359→   359→  return (
+   360→   360→   360→    <div className="relative inline-flex items-center justify-center" style={{ width: size, height: size }}>
+   361→   361→   361→      <svg width={size} height={size} className="-rotate-90">
+   362→   362→   362→        <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="#e2e8f0" strokeWidth={strokeWidth} />
+   363→   363→   363→        <motion.circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke={color.stroke} strokeWidth={strokeWidth} strokeLinecap="round" strokeDasharray={circumference} initial={{ strokeDashoffset: circumference }} animate={{ strokeDashoffset: offset }} transition={{ duration: 1, delay: 0.3, ease: 'easeOut' }} />
+   364→   364→   364→      </svg>
+   365→   365→   365→      <div className="absolute inset-0 flex flex-col items-center justify-center">
+   366→   366→   366→        <span className={`font-bold text-lg ${color.text}`}>{score}</span>
+   367→   367→   367→        <span className="text-[8px] text-muted-foreground">/ 100</span>
+   368→   368→   368→      </div>
+   369→   369→   369→    </div>
+   370→   370→   370→  );
+   371→   371→   371→}
+   372→   372→   372→
+   373→   373→   373→// ═══════════════════════════════════════════════════════════════════════════════
+   374→   374→   374→// ANIMATION
+   375→   375→   375→// ═══════════════════════════════════════════════════════════════════════════════
+   376→   376→   376→
+   377→   377→   377→const stagger = {
+   378→   378→   378→  hidden: { opacity: 0 },
+   379→   379→   379→  visible: { opacity: 1, transition: { staggerChildren: 0.05 } },
+   380→   380→   380→};
+   381→   381→   381→
+   382→   382→   382→const fadeUp = {
+   383→   383→   383→  hidden: { opacity: 0, y: 12 },
+   384→   384→   384→  visible: { opacity: 1, y: 0, transition: { duration: 0.35 } },
+   385→   385→   385→};
+   386→   386→   386→
+   387→   387→   387→// ═══════════════════════════════════════════════════════════════════════════════
+   388→   388→   388→// MAIN COMPONENT
+   389→   389→   389→// ═══════════════════════════════════════════════════════════════════════════════
+   390→   390→   390→
+   391→   391→   391→export default function ClientWorkspacePage() {
+   392→   392→   392→  const { selectedClientId, setCurrentView, setSelectedClientId, setReturnPrepCtx } = useApp();
+   393→   393→   393→  const [returnFilter, setReturnFilter] = useState('all');
+   394→   394→   394→
+   395→   395→   395→  // ─── React Query hooks ─────────────────────────────────────────────────
+   396→   396→   396→  const { data: clientData, isLoading: clientLoading, error: clientError } = useClient(selectedClientId ?? undefined);
+   397→   397→   397→  const { data: filingsData, isLoading: filingsLoading } = useFilings(selectedClientId ?? undefined);
+   398→   398→   398→  const { data: invoicesData, isLoading: invoicesLoading } = useInvoices(selectedClientId ?? undefined);
+   399→   399→   399→  const { data: issuesData, isLoading: issuesLoading } = useIssues(selectedClientId ?? undefined);
+   400→   400→   400→  const { data: docsData, isLoading: docsLoading } = useUploadedFiles(selectedClientId ?? undefined);
+   401→   401→   401→  const { data: auditData, isLoading: auditLoading } = useAuditLogs(selectedClientId ?? undefined);
+   402→   402→   402→  const { data: reconData, isLoading: reconLoading } = useReconRuns(selectedClientId ?? undefined);
+   403→   403→   403→
+   404→   404→   404→  // Mutations
+   405→   405→   405→  const uploadFileMutation = useUploadFile();
+   406→   406→   406→  const createReconRunMutation = useCreateReconRun();
+   407→   407→   407→
+   408→   408→   408→  // ─── Extract data from query responses ──────────────────────────────────
+   409→   409→   409→  const client = clientData?.clients?.[0] as (Client & { _aggregations?: { totalInvoices: number; filedReturns: number; pendingReturns: number; matchPercentage: number } }) | undefined;
+   410→   410→   410→  // Filter filings/issues/reconRuns by clientId (API may return all records)
+   411→   411→   411→  const allFilings: GSTRFiling[] = filingsData?.filings ?? [];
+   412→   412→   412→  const filings = useMemo(() => allFilings.filter(f => f.clientId === selectedClientId), [allFilings, selectedClientId]);
+   413→   413→   413→  const allInvoices: Invoice[] = invoicesData?.invoices ?? [];
+   414→   414→   414→  const invoices = useMemo(() => allInvoices.filter(inv => inv.clientId === selectedClientId), [allInvoices, selectedClientId]);
+   415→   415→   415→  const allIssues: Issue[] = issuesData?.issues ?? [];
+   416→   416→   416→  const issues = useMemo(() => allIssues.filter(i => i.clientId === selectedClientId), [allIssues, selectedClientId]);
+   417→   417→   417→  const rawDocuments: Array<Record<string, unknown>> = docsData?.documents ?? [];
+   418→   418→   418→  const allAuditLogs: AuditLogEntry[] = auditData?.logs ?? [];
+   419→   419→   419→  const auditLogs = useMemo(() => allAuditLogs.filter(l => l.clientId === selectedClientId), [allAuditLogs, selectedClientId]);
+   420→   420→   420→  const allReconRuns: ReconciliationRun[] = reconData?.runs ?? [];
+   421→   421→   421→  const reconRuns = useMemo(() => allReconRuns.filter(r => r.clientId === selectedClientId), [allReconRuns, selectedClientId]);
+   422→   422→   422→
+   423→   423→   423→  const isLoading = clientLoading || filingsLoading;
+   424→   424→   424→
+   425→   425→   425→  // ─── Derive workspace data from API responses ─────────────────────────
+   426→   426→   426→  const name = client?.tradeName ?? 'Unknown Client';
+   427→   427→   427→
+   428→   428→   428→  // Map filings → ReturnEntry[]
+   429→   429→   429→  const returns: ReturnEntry[] = useMemo(() => {
+   430→   430→   430→    return filings.map(f => ({
+   431→   431→   431→      id: f.id,
+   432→   432→   432→      type: f.returnType,
+   433→   433→   433→      period: periodToLabel(f.period),
+   434→   434→   434→      filingDate: f.filedDate ?? '',
+   435→   435→   435→      arn: f.acknowledgmentNumber ?? '',
+   436→   436→   436→      status: mapFilingStatus(f.status, f.period),
+   437→   437→   437→      taxAmount: f.totalTax,
+   438→   438→   438→    }));
+   439→   439→   439→  }, [filings]);
+   440→   440→   440→
+   441→   441→   441→  // Filter returns
+   442→   442→   442→  const filteredReturns = useMemo(() => {
+   443→   443→   443→    if (returnFilter === 'all') return returns;
+   444→   444→   444→    return returns.filter(r => r.type === returnFilter);
+   445→   445→   445→  }, [returns, returnFilter]);
+   446→   446→   446→
+   447→   447→   447→  // Map issues → Pending Actions
+   448→   448→   448→  const pendingActions: PendingAction[] = useMemo(() => {
+   449→   449→   449→    const openIssues = issues.filter(i => i.status === 'open');
+   450→   450→   450→
+   451→   451→   451→    const issueActions: PendingAction[] = openIssues.map(i => {
+   452→   452→   452→      const actionType = issueCategoryToActionType(i.category);
+   453→   453→   453→      const priority: PendingAction['priority'] =
+   454→   454→   454→        i.severity === 'critical' ? 'high' : i.severity === 'warning' ? 'medium' : 'low';
+   455→   455→   455→      const targetView: AppView =
+   456→   456→   456→        actionType === 'gstin_error' || actionType === 'recon_mismatch' ? 'reconcile'
+   457→   457→   457→        : actionType === 'missing_documents' ? 'invoices'
+   458→   458→   458→        : 'returns';
+   459→   459→   459→      return {
+   460→   460→   460→        id: i.id,
+   461→   461→   461→        type: actionType,
+   462→   462→   462→        title: i.category,
+   463→   463→   463→        description: i.description ?? i.title,
+   464→   464→   464→        actionLabel: actionType === 'gstin_error' ? 'Fix Error' : actionType === 'missing_documents' ? 'Upload' : 'Review',
+   465→   465→   465→        targetView,
+   466→   466→   466→        priority,
+   467→   467→   467→      };
+   468→   468→   468→    });
+   469→   469→   469→
+   470→   470→   470→    // Ready-to-file actions from filings
+   471→   471→   471→    const readyStatuses: FilingStatus[] = ['validated', 'reviewed', 'generated'];
+   472→   472→   472→    const readyFilings = filings.filter(f => readyStatuses.includes(f.status));
+   473→   473→   473→    const readyActions: PendingAction[] = readyFilings.map(f => ({
+   474→   474→   474→      id: `ready-${f.id}`,
+   475→   475→   475→      type: 'ready_to_file' as const,
+   476→   476→   476→      title: `${f.returnType} ${periodToLabel(f.period)} ready to file`,
+   477→   477→   477→      description: `${f.readyForFiling} invoices validated, ${formatCurrency(f.totalTax)} total tax`,
+   478→   478→   478→      dueDate: getFilingDueDate(f.returnType, f.period),
+   479→   479→   479→      actionLabel: 'File Return',
+   480→   480→   480→      targetView: 'returns' as AppView,
+   481→   481→   481→      priority: 'high' as const,
+   482→   482→   482→    }));
+   483→   483→   483→
+   484→   484→   484→    // Overdue filing actions
+   485→   485→   485→    const overdueFilings = filings.filter(f => f.status !== 'filed' && isFilingOverdue(f.period) && !readyStatuses.includes(f.status));
+   486→   486→   486→    const overdueActions: PendingAction[] = overdueFilings.map(f => ({
+   487→   487→   487→      id: `overdue-${f.id}`,
+   488→   488→   488→      type: 'awaiting_review' as const,
+   489→   489→   489→      title: `${f.returnType} ${periodToLabel(f.period)} overdue`,
+   490→   490→   490→      description: `Return was due ${new Date(getFilingDueDate(f.returnType, f.period)).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}. Late fee may be accruing.`,
+   491→   491→   491→      dueDate: getFilingDueDate(f.returnType, f.period),
+   492→   492→   492→      actionLabel: 'Prepare Return',
+   493→   493→   493→      targetView: 'returns' as AppView,
+   494→   494→   494→      priority: 'high' as const,
+   495→   495→   495→    }));
+   496→   496→   496→
+   497→   497→   497→    return [
+   498→   498→   498→      ...readyActions,
+   499→   499→   499→      ...issueActions.sort((a, b) => (a.priority === 'high' ? -1 : b.priority === 'high' ? 1 : 0)),
+   500→   500→   500→      ...overdueActions,
+   501→   501→   501→    ];
+   502→   502→   502→  }, [issues, filings]);
+   503→   503→   503→
+   504→   504→   504→  // Map documents
+   505→   505→   505→  const documents: DocumentEntry[] = useMemo(() => {
+   506→   506→   506→    return rawDocuments.map(mapApiDocument);
+   507→   507→   507→  }, [rawDocuments]);
+   508→   508→   508→
+   509→   509→   509→  // Map recon runs
+   510→   510→   510→  const mappedReconRuns: ReconRun[] = useMemo(() => {
+   511→   511→   511→    return reconRuns.map(mapApiReconRun);
+   512→   512→   512→  }, [reconRuns]);
+   513→   513→   513→
+   514→   514→   514→  // Map audit logs → ActivityEvent[]
+   515→   515→   515→  const activities: ActivityEvent[] = useMemo(() => {
+   516→   516→   516→    return auditLogs.map(mapAuditLogToEvent);
+   517→   517→   517→  }, [auditLogs]);
+   518→   518→   518→
+   519→   519→   519→  // Map issues → AI insights
+   520→   520→   520→  const insights: AIInsight[] = useMemo(() => {
+   521→   521→   521→    return issues.filter(i => i.status === 'open').map(mapIssueToInsight);
+   522→   522→   522→  }, [issues]);
+   523→   523→   523→
+   524→   524→   524→  // Computed metrics
+   525→   525→   525→  const healthScore = client?.healthScore ?? 0;
+   526→   526→   526→  const isLowRisk = healthScore > 80;
+   527→   527→   527→  const isHighRisk = healthScore < 50;
+   528→   528→   528→  const riskLevel: 'Low' | 'Medium' | 'High' | 'Critical' =
+   529→   529→   529→    isLowRisk ? 'Low' : healthScore >= 50 ? 'Medium' : healthScore >= 30 ? 'High' : 'Critical';
+   530→   530→   530→  const matchRate = client?._aggregations?.matchPercentage ?? (healthScore > 80 ? 94 : healthScore < 50 ? 58 : 78);
+   531→   531→   531→  const pendingReturnsCount = filings.filter(f => f.status !== 'filed').length;
+   532→   532→   532→  const openIssuesCount = issues.filter(i => i.status === 'open').length;
+   533→   533→   533→  const taxVolume = filings.reduce((sum, f) => sum + f.totalTaxableValue, 0);
+   534→   534→   534→
+   535→   535→   535→  // ─── Handlers ─────────────────────────────────────────────────────────
+   536→   536→   536→  const handleBack = () => { setSelectedClientId(null); setCurrentView('clients'); };
+   537→   537→   537→  const handleAction = (view: AppView) => setCurrentView(view);
+   538→   538→   538→
+   539→   539→   539→  const handleOpenReturnPrep = (returnType: 'GSTR-1' | 'GSTR-3B' = 'GSTR-1') => {
+   540→   540→   540→    const resolvedId = client?.id ?? selectedClientId ?? 'client-1';
+   541→   541→   541→    setReturnPrepCtx({
+   542→   542→   542→      clientId: resolvedId,
+   543→   543→   543→      returnType,
+   544→   544→   544→      period: '2025-06',
+   545→   545→   545→    });
+   546→   546→   546→    setCurrentView('return-prep');
+   547→   547→   547→  };
+   548→   548→   548→
+   549→   549→   549→  const handleUploadDocument = () => {
+   550→   550→   550→    // Trigger file input
+   551→   551→   551→    const input = document.createElement('input');
+   552→   552→   552→    input.type = 'file';
+   553→   553→   553→    input.accept = '.xlsx,.xls,.csv,.pdf,.json';
+   554→   554→   554→    input.onchange = (e) => {
+   555→   555→   555→      const file = (e.target as HTMLInputElement).files?.[0];
+   556→   556→   556→      if (file && selectedClientId) {
+   557→   557→   557→        uploadFileMutation.mutate(
+   558→   558→   558→          { clientId: selectedClientId, name: file.name, fileType: file.name.split('.').pop(), size: file.size },
+   559→   559→   559→          {
+   560→   560→   560→            onSuccess: () => toast.success('Document uploaded', { description: file.name }),
+   561→   561→   561→            onError: (err) => toast.error('Upload failed', { description: err.message }),
+   562→   562→   562→          }
+   563→   563→   563→        );
+   564→   564→   564→      }
+   565→   565→   565→    };
+   566→   566→   566→    input.click();
+   567→   567→   567→  };
+   568→   568→   568→
+   569→   569→   569→  const handleRunReconciliation = () => {
+   570→   570→   570→    if (!selectedClientId) return;
+   571→   571→   571→    createReconRunMutation.mutate(
+   572→   572→   572→      { clientId: selectedClientId, period: '2025-06' },
+   573→   573→   573→      {
+   574→   574→   574→        onSuccess: () => toast.success('Reconciliation started', { description: 'Results will appear shortly' }),
+   575→   575→   575→        onError: (err) => toast.error('Reconciliation failed', { description: err.message }),
+   576→   576→   576→      }
+   577→   577→   577→    );
+   578→   578→   578→  };
+   579→   579→   579→
+   580→   580→   580→  // ─── No client selected ───────────────────────────────────────────────
+   581→   581→   581→  if (!selectedClientId) {
+   582→   582→   582→    return (
+   583→   583→   583→      <div className="max-w-6xl mx-auto px-4 md:px-6 py-6 space-y-6">
+   584→   584→   584→        <Skeleton className="h-6 w-40" />
+   585→   585→   585→        <div className="border rounded-xl p-6 space-y-4">
+   586→   586→   586→          <div className="flex gap-4"><Skeleton className="h-16 w-16 rounded-full" /><div className="space-y-2 flex-1"><Skeleton className="h-6 w-48" /><Skeleton className="h-4 w-64" /></div></div>
+   587→   587→   587→        </div>
+   588→   588→   588→        <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">{Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-20 rounded-lg" />)}</div>
+   589→   589→   589→      </div>
+   590→   590→   590→    );
+   591→   591→   591→  }
+   592→   592→   592→
+   593→   593→   593→  // ─── Loading state ────────────────────────────────────────────────────
+   594→   594→   594→  if (isLoading && !client) {
+   595→   595→   595→    return (
+   596→   596→   596→      <div className="max-w-6xl mx-auto px-4 md:px-6 py-6 space-y-6">
+   597→   597→   597→        <Skeleton className="h-6 w-40" />
+   598→   598→   598→        <div className="border rounded-xl p-6 space-y-4">
+   599→   599→   599→          <div className="flex gap-4"><Skeleton className="h-16 w-16 rounded-full" /><div className="space-y-2 flex-1"><Skeleton className="h-6 w-48" /><Skeleton className="h-4 w-64" /></div></div>
+   600→   600→   600→        </div>
+   601→   601→   601→        <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">{Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-20 rounded-lg" />)}</div>
+   602→   602→   602→      </div>
+   603→   603→   603→    );
+   604→   604→   604→  }
+   605→   605→   605→
+   606→   606→   606→  // ─── Error state ──────────────────────────────────────────────────────
+   607→   607→   607→  if (clientError) {
+   608→   608→   608→    return (
+   609→   609→   609→      <div className="max-w-6xl mx-auto px-4 md:px-6 py-12 text-center space-y-4">
+   610→   610→   610→        <AlertCircle className="size-12 text-red-400 mx-auto" />
+   611→   611→   611→        <h2 className="text-lg font-semibold text-foreground">Failed to load client</h2>
+   612→   612→   612→        <p className="text-sm text-muted-foreground">{clientError.message}</p>
+   613→   613→   613→        <Button variant="outline" onClick={handleBack}>Go Back</Button>
+   614→   614→   614→      </div>
+   615→   615→   615→    );
+   616→   616→   616→  }
+   617→   617→   617→
+   618→   618→   618→  // ─── Client not found ─────────────────────────────────────────────────
+   619→   619→   619→  if (!client) {
+   620→   620→   620→    return (
+   621→   621→   621→      <div className="max-w-6xl mx-auto px-4 md:px-6 py-12 text-center space-y-4">
+   622→   622→   622→        <Building2 className="size-12 text-muted-foreground/40 mx-auto" />
+   623→   623→   623→        <h2 className="text-lg font-semibold text-foreground">Client not found</h2>
+   624→   624→   624→        <p className="text-sm text-muted-foreground">The selected client could not be found.</p>
+   625→   625→   625→        <Button variant="outline" onClick={handleBack}>Back to Clients</Button>
+   626→   626→   626→      </div>
+   627→   627→   627→    );
+   628→   628→   628→  }
+   629→   629→   629→
+   630→   630→   630→  const healthColor = getHealthColor(healthScore);
+   631→   631→   631→
+   632→   632→   632→  return (
+   633→   633→   633→    <div className="max-w-6xl mx-auto px-4 md:px-6 py-6 space-y-8">
+   634→   634→   634→
+   635→   635→   635→      {/* ═══════════════════════════════════════════════════════════════════════
+   636→   636→   636→          HEADER
+   637→   637→   637→          ═══════════════════════════════════════════════════════════════════════ */}
+   638→   638→   638→      <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
+   639→   639→   639→        {/* Breadcrumb */}
+   640→   640→   640→        <div className="flex items-center gap-2 mb-4">
+   641→   641→   641→          <Button variant="ghost" size="sm" className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground gap-1" onClick={handleBack}>
+   642→   642→   642→            <ArrowLeft className="h-3.5 w-3.5" />
+   643→   643→   643→            Client Portfolio
+   644→   644→   644→          </Button>
+   645→   645→   645→          <ChevronRight className="h-3 w-3 text-muted-foreground" />
+   646→   646→   646→          <span className="text-xs text-muted-foreground">{name}</span>
+   647→   647→   647→        </div>
+   648→   648→   648→
+   649→   649→   649→        {/* Main header */}
+   650→   650→   650→        <div className="border border-border/60 rounded-xl p-5">
+   651→   651→   651→          <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-5">
+   652→   652→   652→            {/* Left: Identity */}
+   653→   653→   653→            <div className="flex items-start gap-4">
+   654→   654→   654→              <HealthRing score={healthScore} size={72} strokeWidth={5} />
+   655→   655→   655→              <div className="min-w-0">
+   656→   656→   656→                <div className="flex items-center gap-2 flex-wrap">
+   657→   657→   657→                  <h1 className="text-xl font-semibold text-foreground tracking-tight">{name}</h1>
+   658→   658→   658→                  {getRiskBadge(riskLevel)}
+   659→   659→   659→                </div>
+   660→   660→   660→                {client.legalName && <p className="text-sm text-muted-foreground mt-0.5">{client.legalName}</p>}
+   661→   661→   661→
+   662→   662→   662→                {/* Key info row */}
+   663→   663→   663→                <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 mt-2.5">
+   664→   664→   664→                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+   665→   665→   665→                    <Building2 className="size-3 text-slate-400" />
+   666→   666→   666→                    <span className="font-mono font-medium text-foreground">{client.gstin}</span>
+   667→   667→   667→                  </div>
+   668→   668→   668→                  <Separator orientation="vertical" className="h-3.5" />
+   669→   669→   669→                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+   670→   670→   670→                    <MapPin className="size-3 text-slate-400" />
+   671→   671→   671→                    <span>{client.state}</span>
+   672→   672→   672→                  </div>
+   673→   673→   673→                  <Separator orientation="vertical" className="h-3.5" />
+   674→   674→   674→                  <span className="text-xs text-muted-foreground">
+   675→   675→   675→                    {client.returnPeriod === 'quarterly' ? 'Quarterly' : 'Monthly'} Filing
+   676→   676→   676→                  </span>
+   677→   677→   677→                  <Separator orientation="vertical" className="h-3.5" />
+   678→   678→   678→                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+   679→   679→   679→                    <Calendar className="size-3 text-slate-400" />
+   680→   680→   680→                    <span>Last Filed: {client.lastFilingDate ? new Date(client.lastFilingDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: '2-digit' }) : '—'}</span>
+   681→   681→   681→                  </div>
+   682→   682→   682→                </div>
+   683→   683→   683→              </div>
+   684→   684→   684→            </div>
+   685→   685→   685→
+   686→   686→   686→            {/* Right: Quick actions */}
+   687→   687→   687→            <div className="flex flex-wrap items-center gap-2 shrink-0">
+   688→   688→   688→              <Button size="sm" className="h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white" onClick={handleUploadDocument}>
+   689→   689→   689→                <Upload className="size-3.5" />
+   690→   690→   690→                Upload Documents
+   691→   691→   691→              </Button>
+   692→   692→   692→              <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5" onClick={() => handleOpenReturnPrep('GSTR-1')}>
+   693→   693→   693→                <FileText className="size-3.5" />
+   694→   694→   694→                Create Return
+   695→   695→   695→              </Button>
+   696→   696→   696→              <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5" onClick={handleRunReconciliation} disabled={createReconRunMutation.isPending}>
+   697→   697→   697→                <GitCompareArrows className="size-3.5" />
+   698→   698→   698→                {createReconRunMutation.isPending ? 'Running...' : 'Run Reconciliation'}
+   699→   699→   699→              </Button>
+   700→   700→   700→              <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5" onClick={() => handleOpenReturnPrep('GSTR-3B')}>
+   701→   701→   701→                <Send className="size-3.5" />
+   702→   702→   702→                File Return
+   703→   703→   703→              </Button>
+   704→   704→   704→            </div>
+   705→   705→   705→          </div>
+   706→   706→   706→        </div>
+   707→   707→   707→      </motion.div>
+   708→   708→   708→
+   709→   709→   709→      {/* ═══════════════════════════════════════════════════════════════════════
+   710→   710→   710→          SECTION 1: CLIENT HEALTH OVERVIEW
+   711→   711→   711→          ═══════════════════════════════════════════════════════════════════════ */}
+   712→   712→   712→      <motion.section initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1, duration: 0.4 }}>
+   713→   713→   713→        <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider mb-3">Client Health Overview</h2>
+   714→   714→   714→        <motion.div variants={stagger} initial="hidden" animate="visible" className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+   715→   715→   715→          {[
+   716→   716→   716→            { label: 'Compliance Score', value: `${healthScore}%`, icon: Gauge, color: healthColor.text, bg: healthColor.bg },
+   717→   717→   717→            { label: 'Pending Returns', value: String(pendingReturnsCount), icon: Clock, color: 'text-amber-600', bg: 'bg-amber-50' },
+   718→   718→   718→            { label: 'Open Issues', value: String(openIssuesCount), icon: AlertCircle, color: 'text-red-600', bg: 'bg-red-50' },
+   719→   719→   719→            { label: 'Tax Volume', value: formatCurrency(taxVolume), icon: IndianRupee, color: 'text-emerald-600', bg: 'bg-emerald-50' },
+   720→   720→   720→            { label: 'Match Rate', value: `${matchRate}%`, icon: GitCompareArrows, color: 'text-teal-600', bg: 'bg-teal-50' },
+   721→   721→   721→            { label: 'Documents', value: String(documents.length), icon: FolderOpen, color: 'text-slate-600', bg: 'bg-slate-50' },
+   722→   722→   722→          ].map((item) => (
+   723→   723→   723→            <motion.div key={item.label} variants={fadeUp} whileHover={{ y: -2 }} transition={{ type: 'spring', stiffness: 400, damping: 25 }}>
+   724→   724→   724→              <div className="border border-border/60 rounded-xl p-4 hover:border-border transition-colors">
+   725→   725→   725→                <div className="flex items-center gap-2 mb-2.5">
+   726→   726→   726→                  <div className={`flex items-center justify-center h-7 w-7 rounded-md ${item.bg}`}>
+   727→   727→   727→                    <item.icon className={`size-3.5 ${item.color}`} />
+   728→   728→   728→                  </div>
+   729→   729→   729→                </div>
+   730→   730→   730→                <p className="text-lg font-bold text-foreground leading-tight">{item.value}</p>
+   731→   731→   731→                <p className="text-[11px] text-muted-foreground mt-1">{item.label}</p>
+   732→   732→   732→              </div>
+   733→   733→   733→            </motion.div>
+   734→   734→   734→          ))}
+   735→   735→   735→        </motion.div>
+   736→   736→   736→      </motion.section>
+   737→   737→   737→
+   738→   738→   738→      {/* ═══════════════════════════════════════════════════════════════════════
+   739→   739→   739→          SECTION 2: GST RETURN TIMELINE
+   740→   740→   740→          ═══════════════════════════════════════════════════════════════════════ */}
+   741→   741→   741→      <motion.section initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2, duration: 0.4 }}>
+   742→   742→   742→        <div className="flex items-center justify-between mb-3">
+   743→   743→   743→          <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">GST Return Timeline</h2>
+   744→   744→   744→          <Select value={returnFilter} onValueChange={setReturnFilter}>
+   745→   745→   745→            <SelectTrigger className="h-7 w-32 text-xs border-border/60">
+   746→   746→   746→              <SelectValue />
+   747→   747→   747→            </SelectTrigger>
+   748→   748→   748→            <SelectContent>
+   749→   749→   749→              <SelectItem value="all">All Returns</SelectItem>
+   750→   750→   750→              <SelectItem value="GSTR-1">GSTR-1</SelectItem>
+   751→   751→   751→              <SelectItem value="GSTR-3B">GSTR-3B</SelectItem>
+   752→   752→   752→            </SelectContent>
+   753→   753→   753→          </Select>
+   754→   754→   754→        </div>
+   755→   755→   755→
+   756→   756→   756→        {filteredReturns.length === 0 ? (
+   757→   757→   757→          <div className="border border-border/60 rounded-xl p-8 flex flex-col items-center justify-center text-center">
+   758→   758→   758→            <FileText className="size-10 text-muted-foreground/30 mb-3" />
+   759→   759→   759→            <p className="text-sm font-medium text-muted-foreground">No returns filed yet</p>
+   760→   760→   760→            <p className="text-xs text-muted-foreground/70 mt-1">Start by preparing your first GST return</p>
+   761→   761→   761→            <Button size="sm" className="mt-4 h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => handleOpenReturnPrep('GSTR-1')}>
+   762→   762→   762→              <FileText className="size-3.5" />
+   763→   763→   763→              Prepare First Return
+   764→   764→   764→            </Button>
+   765→   765→   765→          </div>
+   766→   766→   766→        ) : (
+   767→   767→   767→          <div className="border border-border/60 rounded-xl overflow-hidden">
+   768→   768→   768→            {/* Table header */}
+   769→   769→   769→            <div className="grid grid-cols-12 gap-2 px-4 py-2.5 bg-muted/30 text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
+   770→   770→   770→              <div className="col-span-2">Type</div>
+   771→   771→   771→              <div className="col-span-2">Period</div>
+   772→   772→   772→              <div className="col-span-2">Status</div>
+   773→   773→   773→              <div className="col-span-2">Filed Date</div>
+   774→   774→   774→              <div className="col-span-2">ARN</div>
+   775→   775→   775→              <div className="col-span-2 text-right">Tax Amount</div>
+   776→   776→   776→            </div>
+   777→   777→   777→            {/* Table rows */}
+   778→   778→   778→            <div className="divide-y divide-border/40">
+   779→   779→   779→              <AnimatePresence>
+   780→   780→   780→                {filteredReturns.map((ret, index) => (
+   781→   781→   781→                  <motion.div
+   782→   782→   782→                    key={ret.id}
+   783→   783→   783→                    initial={{ opacity: 0, y: 8 }}
+   784→   784→   784→                    animate={{ opacity: 1, y: 0 }}
+   785→   785→   785→                    transition={{ delay: 0.25 + index * 0.04, duration: 0.3 }}
+   786→   786→   786→                    className="grid grid-cols-12 gap-2 px-4 py-3 hover:bg-muted/20 transition-colors items-center"
+   787→   787→   787→                  >
+   788→   788→   788→                    <div className="col-span-2 text-sm font-medium text-foreground">{ret.type}</div>
+   789→   789→   789→                    <div className="col-span-2 text-sm text-muted-foreground">{ret.period}</div>
+   790→   790→   790→                    <div className="col-span-2">{getReturnStatusBadge(ret.status)}</div>
+   791→   791→   791→                    <div className="col-span-2 text-xs text-muted-foreground">{ret.filingDate ? new Date(ret.filingDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : '—'}</div>
+   792→   792→   792→                    <div className="col-span-2 text-xs font-mono text-muted-foreground">{ret.arn || '—'}</div>
+   793→   793→   793→                    <div className="col-span-2 text-sm font-medium text-foreground text-right">{formatCurrency(ret.taxAmount)}</div>
+   794→   794→   794→                  </motion.div>
+   795→   795→   795→                ))}
+   796→   796→   796→              </AnimatePresence>
+   797→   797→   797→            </div>
+   798→   798→   798→          </div>
+   799→   799→   799→        )}
+   800→   800→   800→      </motion.section>
+
+[showing lines 1-800 of 1138; use offset=801 with limit to continue reading]

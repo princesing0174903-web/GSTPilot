@@ -24,10 +24,13 @@ import {
   Zap,
   Building2,
   LogOut,
+  Bell,
 } from 'lucide-react'
 import { useApp, type AppView } from '@/contexts/AppContext'
 import { useAuth } from '@/contexts/AuthContext'
+import { useFireUnreadNotifications } from '@/hooks/use-firestore'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { Badge } from '@/components/ui/badge'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -59,6 +62,8 @@ function SidebarNav() {
   const { currentView, setCurrentView } = useApp()
   const { user, logout } = useAuth()
   const { setOpenMobile } = useSidebar()
+  const { data: unreadNotifs } = useFireUnreadNotifications()
+  const unreadCount = unreadNotifs.length
 
   const handleNavClick = (view: AppView) => {
     setCurrentView(view)
@@ -210,13 +215,21 @@ function SidebarNav() {
         </DropdownMenu>
         <div className="flex items-center justify-between mt-2 px-1 hidden group-data-[collapsible=icon]:hidden">
           <span className="text-[10px] font-medium text-sidebar-foreground/30">
-            GSTPilot v1.0
+            GSTPilot v2.0
           </span>
-          <div className="flex items-center gap-1">
-            <div className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-            <span className="text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
-              Online
-            </span>
+          <div className="flex items-center gap-2">
+            {unreadCount > 0 && (
+              <div className="flex items-center gap-1">
+                <Bell className="h-3 w-3 text-amber-500" />
+                <span className="text-[10px] font-medium text-amber-600">{unreadCount}</span>
+              </div>
+            )}
+            <div className="flex items-center gap-1">
+              <div className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+              <span className="text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
+                Live
+              </span>
+            </div>
           </div>
         </div>
       </SidebarFooter>

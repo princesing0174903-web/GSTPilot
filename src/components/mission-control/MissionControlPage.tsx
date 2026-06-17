@@ -1,19 +1,29 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ V15 — Mission Control
-// The main workspace hero: Greeting · AI Insight · Business Score · 3 KPI · 5 Widgets.
-// The global Command Bar (bottom) + Oracle Panel (right) are separate surfaces,
-// built by other agents. This file is purely the focused home workspace.
-// No clutter. No menus. No fake data. Calm, premium, expensive.
+// GSTPilot Infinity™ V16 — Mission Control
+// Obsidian Black 2.0 · Glass 28px blur · Emerald → Cyan → Blue accent
+//
+// Sections:
+//   1. Hero — Greeting + Business Status pill + "X steps away" line + 4 checklist cards
+//   2. Business Health Score — Gauge OR premium empty state with [ Connect Data ] CTA
+//   3. KPI — exactly 3 cards (Revenue / Cash Position / Compliance), premium empty states
+//   4. Widgets — exactly 5 (Today's Priorities · Timeline · Services · Team · AI Recommendations)
+//
+// Design principles:
+//   • No red / orange / purple anywhere. Only Emerald / Cyan / Blue.
+//   • Every empty state is helpful, premium, and has a clear CTA button.
+//   • Calm framer-motion fade-up (opacity 0, y 12 → 1, 0), staggered 0–0.56s.
+//   • 3.5s graceful loading timeout — never make the user stare at a skeleton.
+//   • Honest data: never fake connected services, team members, or AI insights.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { useMemo, useState, useEffect, type ReactNode } from 'react';
 import { motion } from 'framer-motion';
 import {
-  Sparkles, TrendingDown, AlertTriangle, Clock, Brain,
-  Wallet, ArrowRight, IndianRupee, ShieldAlert,
-  ListTodo, Plug, Users, Lightbulb, CheckCircle2,
+  Brain, ListTodo, Clock, Plug, Users, Lightbulb, CheckCircle2, ArrowRight,
+  Sparkles, TrendingDown, AlertTriangle, Wallet, IndianRupee, ShieldAlert,
+  type LucideIcon,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -21,7 +31,6 @@ import { useApp, type AppView } from '@/contexts/AppContext';
 import { useAuth } from '@/contexts/AuthContext';
 import {
   useLiveDashboardMetrics,
-  useFireClients,
   useFireActivities,
 } from '@/hooks/use-firestore';
 import type { FirestoreClient, FirestoreReturn } from '@/lib/firestore-schema';
@@ -45,10 +54,7 @@ function firstName(name?: string): string {
   return name.split(' ')[0];
 }
 
-// ─── Relative time formatter (for Business Timeline widget) ───────────────────
-// Firestore timestamps are converted to ISO strings by use-firestore's convertDoc,
-// but we defensively handle Date objects and raw Firestore Timestamps too.
-
+// Relative time formatter — defensively handles ISO string / Date / Firestore Timestamp.
 function timeAgo(createdAt: unknown): string {
   if (!createdAt) return 'just now';
   let date: Date;
@@ -85,7 +91,7 @@ function timeAgo(createdAt: unknown): string {
 
 // ─── Business Score computation ───────────────────────────────────────────────
 // Start at 100. Subtract weighted penalties for risk signals. Clamp 0–100.
-// If there is no data at all, return null (UI shows welcoming state).
+// If there is no data at all, return null (UI shows premium empty state).
 
 function computeBusinessScore(opts: {
   totalClients: number;
@@ -100,34 +106,33 @@ function computeBusinessScore(opts: {
   if (totalClients === 0 && pendingReturns === 0 && overdueReturns === 0) return null;
 
   let score = 100;
-  score -= criticalIssues * 6;      // critical issues are serious
-  score -= warnings * 2;            // warnings are minor
-  score -= overdueReturns * 8;      // overdue returns hurt most
-  score -= pendingReturns * 2;      // pending returns are a mild drag
-  // Health score gap: if avg health < 80, drag down
+  score -= criticalIssues * 6;
+  score -= warnings * 2;
+  score -= overdueReturns * 8;
+  score -= pendingReturns * 2;
   if (averageHealthScore > 0) {
     score -= Math.max(0, 80 - averageHealthScore) * 0.6;
   }
-  // Reconciliation gap: if match % < 100, mild drag
   score -= Math.max(0, 100 - matchPercentage) * 0.3;
   return Math.max(0, Math.min(100, Math.round(score)));
 }
 
+// V16 palette — only Emerald / Cyan / Blue. No amber, no red.
 function scoreTier(score: number | null): { label: string; color: string } {
   if (score === null) return { label: '—', color: 'text-muted-foreground' };
   if (score >= 85) return { label: 'Excellent', color: 'text-emerald-400' };
   if (score >= 70) return { label: 'Healthy', color: 'text-cyan-400' };
-  if (score >= 50) return { label: 'At Risk', color: 'text-amber-400' };
-  return { label: 'Critical', color: 'text-red-400' };
+  if (score >= 50) return { label: 'At Risk', color: 'text-blue-400' };
+  return { label: 'Critical', color: 'text-blue-300' };
 }
 
 // ─── AI Insight engine ────────────────────────────────────────────────────────
-// Each insight: { icon, what (the observation), why (reasoning), action (label + view) }
+// Each insight: { icon, tone, what, why, action (label + view) }
 // Answers the 3 questions: What happened? Why? What should I do next?
 
 interface AIInsight {
   id: string;
-  icon: typeof Sparkles;
+  icon: LucideIcon;
   tone: 'risk' | 'info' | 'success';
   what: string;
   why: string;
@@ -165,7 +170,7 @@ function buildInsights(opts: {
     });
   }
 
-  // 2. Pending returns due soon (next filing in upcomingFilings)
+  // 2. Pending returns due soon
   const nextFiling = metrics.upcomingFilings[0];
   if (nextFiling && metrics.pendingReturns > 0 && metrics.overdueReturns === 0) {
     insights.push({
@@ -237,7 +242,7 @@ function buildInsights(opts: {
       icon: Sparkles,
       tone: 'success',
       what: 'Everything looks good today',
-      why: 'No urgent issues. Hand control to AI and let it run the routine work.',
+      why: 'No urgent issues. Hand control to Oracle and let it run the routine work.',
       actionLabel: 'Run My Business',
       actionView: 'run-my-business',
     });
@@ -266,7 +271,6 @@ function ScoreGauge({ score }: { score: number | null }) {
             <stop offset="100%" stopColor="#3b82f6" />
           </linearGradient>
         </defs>
-        {/* Track */}
         <circle
           cx={size / 2}
           cy={size / 2}
@@ -275,7 +279,6 @@ function ScoreGauge({ score }: { score: number | null }) {
           stroke="rgba(255,255,255,0.06)"
           strokeWidth={stroke}
         />
-        {/* Progress arc */}
         {score !== null && (
           <motion.circle
             cx={size / 2}
@@ -313,27 +316,152 @@ function ScoreGauge({ score }: { score: number | null }) {
   );
 }
 
-// ─── Mini Stat (KPI card) ─────────────────────────────────────────────────────
+// ─── Premium Empty State (V16 differentiator) ─────────────────────────────────
+// Helpful · Premium · Intentional. Every empty state has a clear CTA.
 
-function MiniStat({
-  label, value, icon: Icon, hint,
+function PremiumEmptyState({
+  icon: Icon,
+  title,
+  description,
+  ctaLabel,
+  onCta,
 }: {
-  label: string;
-  value: string;
-  icon: typeof IndianRupee;
-  hint?: string;
+  icon: LucideIcon;
+  title: string;
+  description: string;
+  ctaLabel?: string;
+  onCta?: () => void;
 }) {
   return (
-    <div className="glass-surface rounded-2xl p-4 flex items-center gap-3">
-      <div className="flex h-9 w-9 items-center justify-center rounded-lg accent-gradient-soft shrink-0">
-        <Icon className="h-4 w-4 accent-text" />
+    <div className="flex flex-col items-center justify-center gap-3 py-8 px-4 text-center">
+      <div className="flex h-12 w-12 items-center justify-center rounded-2xl glass-surface">
+        <Icon className="h-5 w-5 text-muted-foreground" />
       </div>
-      <div className="min-w-0">
-        <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground truncate">{label}</p>
-        <p className="text-lg font-bold text-foreground leading-tight truncate">{value}</p>
-        {hint && <p className="text-[10px] text-muted-foreground truncate">{hint}</p>}
+      <div className="space-y-1">
+        <p className="text-sm font-medium text-foreground">{title}</p>
+        <p className="text-xs text-muted-foreground max-w-[240px] mx-auto leading-relaxed">{description}</p>
       </div>
+      {ctaLabel && onCta && (
+        <button
+          type="button"
+          onClick={onCta}
+          className="accent-gradient rounded-2xl px-4 py-2 text-xs font-semibold text-white hover-lift mt-1"
+        >
+          {ctaLabel}
+        </button>
+      )}
     </div>
+  );
+}
+
+// ─── Checklist Card (Hero Getting Started) ────────────────────────────────────
+// Clickable card. Checkbox state is derived from live data — clicking navigates
+// the user to the right place to complete that step (it never fakes completion).
+
+function ChecklistCard({
+  label,
+  description,
+  checked,
+  delay,
+  onClick,
+}: {
+  label: string;
+  description: string;
+  checked: boolean;
+  delay: number;
+  onClick: () => void;
+}) {
+  return (
+    <motion.button
+      type="button"
+      onClick={onClick}
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5, delay, ease: 'easeOut' }}
+      className={`group glass-surface rounded-2xl p-4 text-left hover-lift transition-colors w-full ${
+        checked ? 'ring-1 ring-emerald-400/20' : 'hover:bg-white/[0.05]'
+      }`}
+    >
+      <div className="flex items-start gap-3">
+        <div
+          className={`flex h-6 w-6 items-center justify-center rounded-lg shrink-0 transition-all ${
+            checked
+              ? 'accent-gradient'
+              : 'border border-white/[0.15] bg-white/[0.02] group-hover:border-emerald-400/40'
+          }`}
+        >
+          {checked && <CheckCircle2 className="h-4 w-4 text-white" />}
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-sm font-semibold text-foreground truncate">{label}</p>
+            <ArrowRight className="h-3.5 w-3.5 text-muted-foreground/40 group-hover:text-emerald-400/70 transition-colors shrink-0" />
+          </div>
+          <p className={`text-[11px] mt-0.5 truncate ${checked ? 'text-emerald-400/80' : 'text-muted-foreground'}`}>
+            {checked ? 'Connected' : description}
+          </p>
+        </div>
+      </div>
+    </motion.button>
+  );
+}
+
+// ─── KPI Card ─────────────────────────────────────────────────────────────────
+// Tall card with header (icon + label) and either the value or premium empty state.
+
+function KpiCard({
+  icon: Icon,
+  label,
+  value,
+  hint,
+  delay,
+  hasData,
+  emptyTitle,
+  emptyDescription,
+  ctaLabel,
+  onCta,
+}: {
+  icon: LucideIcon;
+  label: string;
+  value: string;
+  hint?: string;
+  delay: number;
+  hasData: boolean;
+  emptyTitle: string;
+  emptyDescription: string;
+  ctaLabel: string;
+  onCta: () => void;
+}) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5, delay, ease: 'easeOut' }}
+      className="glass-surface rounded-3xl p-5 flex flex-col min-h-[160px]"
+    >
+      <div className="flex items-center gap-2 mb-2">
+        <div className="flex h-9 w-9 items-center justify-center rounded-xl accent-gradient-soft shrink-0">
+          <Icon className="h-4 w-4 accent-text" />
+        </div>
+        <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{label}</p>
+      </div>
+      {hasData ? (
+        <div className="flex-1 flex flex-col justify-end">
+          <p className="text-2xl font-bold text-foreground tracking-tight leading-tight">{value}</p>
+          {hint && <p className="text-[11px] text-muted-foreground mt-1">{hint}</p>}
+        </div>
+      ) : (
+        <div className="flex-1 flex items-center justify-center">
+          <PremiumEmptyState
+            icon={Icon}
+            title={emptyTitle}
+            description={emptyDescription}
+            ctaLabel={ctaLabel}
+            onCta={onCta}
+          />
+        </div>
+      )}
+    </motion.div>
   );
 }
 
@@ -342,7 +470,7 @@ function MiniStat({
 function WidgetCard({
   icon: Icon, title, children, delay = 0, className,
 }: {
-  icon: typeof Sparkles;
+  icon: LucideIcon;
   title: string;
   children: ReactNode;
   delay?: number;
@@ -366,54 +494,32 @@ function WidgetCard({
   );
 }
 
-// ─── Calm Empty State ─────────────────────────────────────────────────────────
-
-function EmptyState({
-  icon: Icon, title, subtitle, actionLabel, onAction,
-}: {
-  icon: typeof Sparkles;
-  title: string;
-  subtitle?: string;
-  actionLabel?: string;
-  onAction?: () => void;
-}) {
-  return (
-    <div className="flex flex-col items-center justify-center text-center py-8 px-4">
-      <div className="flex h-10 w-10 items-center justify-center rounded-full accent-gradient-soft mb-3">
-        <Icon className="h-5 w-5 accent-text" />
-      </div>
-      <p className="text-sm text-foreground font-medium">{title}</p>
-      {subtitle && <p className="text-xs text-muted-foreground mt-1 max-w-[240px]">{subtitle}</p>}
-      {actionLabel && onAction && (
-        <button
-          onClick={onAction}
-          className="mt-3 inline-flex items-center gap-1 rounded-full border border-emerald-400/20 bg-emerald-500/10 px-3 py-1.5 text-xs font-medium text-emerald-300 transition-colors hover:border-emerald-400/40 hover:bg-emerald-500/20"
-        >
-          {actionLabel}
-          <ArrowRight className="h-3 w-3" />
-        </button>
-      )}
-    </div>
-  );
-}
-
 // ─── Loading Skeleton ─────────────────────────────────────────────────────────
 
 function MissionControlSkeleton() {
   return (
-    <div className="max-w-6xl mx-auto px-4 md:px-8 py-8 md:py-12 space-y-10">
-      <div className="space-y-3">
+    <div className="relative max-w-6xl mx-auto px-4 md:px-8 py-8 md:py-12 space-y-12">
+      {/* Hero skeleton */}
+      <div className="space-y-4">
         <Skeleton className="h-10 w-72" />
-        <Skeleton className="h-24 rounded-3xl" />
+        <Skeleton className="h-5 w-96" />
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-2">
+          {[1, 2, 3, 4].map(i => (
+            <Skeleton key={i} className="h-20 rounded-2xl" />
+          ))}
+        </div>
       </div>
+      {/* Score skeleton */}
       <div className="flex justify-center">
         <Skeleton className="h-56 w-56 rounded-full" />
       </div>
+      {/* KPI skeleton */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <Skeleton className="h-20 rounded-2xl" />
-        <Skeleton className="h-20 rounded-2xl" />
-        <Skeleton className="h-20 rounded-2xl" />
+        {[1, 2, 3].map(i => (
+          <Skeleton key={i} className="h-40 rounded-3xl" />
+        ))}
       </div>
+      {/* Widgets skeleton */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         <Skeleton className="h-48 rounded-3xl" />
         <Skeleton className="h-48 rounded-3xl" />
@@ -425,15 +531,16 @@ function MissionControlSkeleton() {
   );
 }
 
-// ─── Connected Services catalog (honest: all not-connected by default) ────────
+// ─── Connected Services catalog ───────────────────────────────────────────────
+// Honest: all "Not connected" by default. V16 does not fake integrations.
 
 const CONNECTED_SERVICES: Array<{ id: string; name: string; initial: string }> = [
-  { id: 'google', name: 'Google', initial: 'G' },
-  { id: 'gmail', name: 'Gmail', initial: 'M' },
-  { id: 'outlook', name: 'Outlook', initial: 'O' },
-  { id: 'gstn', name: 'GSTN', initial: 'G' },
-  { id: 'whatsapp', name: 'WhatsApp', initial: 'W' },
-  { id: 'bank', name: 'Bank APIs', initial: 'B' },
+  { id: 'google',   name: 'Google',     initial: 'G' },
+  { id: 'gmail',    name: 'Gmail',      initial: 'M' },
+  { id: 'outlook',  name: 'Outlook',    initial: 'O' },
+  { id: 'gstn',     name: 'GSTN',       initial: 'G' },
+  { id: 'whatsapp', name: 'WhatsApp',   initial: 'W' },
+  { id: 'bank',     name: 'Bank APIs',  initial: 'B' },
 ];
 
 // ─── Main Component ───────────────────────────────────────────────────────────
@@ -442,16 +549,15 @@ export default function MissionControlPage() {
   const { setCurrentView } = useApp();
   const { user } = useAuth();
   const { metrics, loading, error } = useLiveDashboardMetrics();
-  const { data: clients } = useFireClients();
   const { data: activities } = useFireActivities();
 
-  // ── Priority checkbox toggle state (visual only, local) ──
+  // ── Priority checkbox toggle state (visual only, local to Today's Priorities widget) ──
   const [done, setDone] = useState<Record<string, boolean>>({});
 
   // ── Graceful loading timeout ──
   // If live data hasn't arrived in 3.5s (e.g. slow backend or offline), stop
   // blocking the UI — render with whatever metrics we have (empty → null score
-  // + welcoming state). Premium UX never makes the user stare at a skeleton.
+  // + premium empty states). Premium UX never makes the user stare at a skeleton.
   const [loadingTimedOut, setLoadingTimedOut] = useState(false);
   useEffect(() => {
     if (!loading) return;
@@ -484,22 +590,65 @@ export default function MissionControlPage() {
       matchPercentage: metrics.matchPercentage,
       upcomingFilings: metrics.upcomingFilings,
     },
-    clients: clients as unknown as Array<FirestoreClient & { id: string }>,
-  }), [metrics, clients]);
+    clients: [] as Array<FirestoreClient & { id: string }>,
+  }), [metrics]);
 
-  // Hero insight (first) + compact recommendations (up to 4 more)
-  const heroInsight = insights[0];
-  const recommendations = useMemo(() => insights.slice(1, 5), [insights]);
+  // V16: AI Recommendations widget shows up to 4 insights (no hero insight slice —
+  // the hero is now the Getting Started checklist, so all insights go to the widget).
+  const recommendations = useMemo(() => insights.slice(0, 4), [insights]);
 
   const tier = scoreTier(businessScore);
 
-  // ── "Has data" flag — drives honest empty vs welcoming states ──
+  // ── "Has data" flag — drives honest empty vs premium states ──
   const hasData = useMemo(() => (
     metrics.totalClients > 0 ||
     metrics.pendingReturns > 0 ||
     metrics.overdueReturns > 0 ||
     metrics.totalTaxVolume > 0
   ), [metrics]);
+
+  // ── Getting Started checklist (derived from live data per spec) ──
+  // totalClients > 0 → "Connect GSTN" is checked as a proxy for "GSTN connected".
+  // The other three (Connect Bank, Invite Team, Activate Oracle) are never checked
+  // in this version — we don't fabricate connection state.
+  const checklist = useMemo(() => {
+    const gstnConnected = metrics.totalClients > 0;
+    return [
+      {
+        id: 'gstn',
+        label: 'Connect GSTN',
+        description: 'Link your GST account',
+        checked: gstnConnected,
+        view: 'returns' as AppView,
+      },
+      {
+        id: 'bank',
+        label: 'Connect Bank',
+        description: 'Link your bank account',
+        checked: false,
+        view: 'banking' as AppView,
+      },
+      {
+        id: 'team',
+        label: 'Invite Team',
+        description: 'Add team members',
+        checked: false,
+        view: 'team' as AppView,
+      },
+      {
+        id: 'oracle',
+        label: 'Activate Oracle',
+        description: 'Turn on AI autopilot',
+        checked: false,
+        view: 'ai-operating-room' as AppView,
+      },
+    ];
+  }, [metrics.totalClients]);
+
+  const completedCount = checklist.filter(c => c.checked).length;
+  const stepsAway = checklist.length - completedCount;
+  const allComplete = completedCount === checklist.length;
+  const businessStatus = allComplete ? 'Operational' : 'Getting Started';
 
   // ── Cash position label ──
   const cashLabel = useMemo(() => {
@@ -536,11 +685,13 @@ export default function MissionControlPage() {
   if (error) {
     return (
       <div className="max-w-2xl mx-auto px-4 py-20 text-center">
-        <div className="glass-surface rounded-2xl p-8">
-          <AlertTriangle className="h-10 w-10 text-amber-400 mx-auto mb-3" />
+        <div className="glass-surface rounded-3xl p-8">
+          <div className="flex h-12 w-12 items-center justify-center rounded-2xl glass-surface mx-auto mb-4">
+            <AlertTriangle className="h-5 w-5 text-blue-300" />
+          </div>
           <h3 className="text-lg font-semibold text-foreground">Couldn&apos;t load your mission control</h3>
-          <p className="text-sm text-muted-foreground mt-1">{error}</p>
-          <Button variant="outline" className="mt-4" onClick={() => window.location.reload()}>
+          <p className="text-sm text-muted-foreground mt-1.5">{error}</p>
+          <Button variant="outline" className="mt-5" onClick={() => window.location.reload()}>
             Retry
           </Button>
         </div>
@@ -548,207 +699,248 @@ export default function MissionControlPage() {
     );
   }
 
+  // ── Helpers for navigation ──
+  const goToSettings = () => setCurrentView('settings');
+
   return (
-    <div className="relative min-h-[calc(100vh-8rem)]">
-      {/* Subtle radial glow at top — adds depth, premium feel */}
-      <div
-        className="pointer-events-none absolute inset-x-0 top-0 h-[480px] bg-[radial-gradient(ellipse_at_top,_rgba(16,185,129,0.10),_transparent_60%)]"
-        aria-hidden
-      />
+    <div className="relative max-w-6xl mx-auto px-4 md:px-8 py-8 md:py-12 space-y-12">
 
-      <div className="relative max-w-6xl mx-auto px-4 md:px-8 py-8 md:py-12 space-y-10">
+      {/* ═══ 1. HERO — Greeting + Business Status + Getting Started checklist ═══ */}
+      <motion.section
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, ease: 'easeOut' }}
+        className="space-y-6"
+      >
+        {/* Eyebrow + status pill */}
+        <div className="flex items-center gap-2.5">
+          <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+            Business Status
+          </span>
+          <span
+            className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[10px] font-semibold ${
+              allComplete
+                ? 'border-emerald-400/25 bg-emerald-500/10 text-emerald-300'
+                : 'border-cyan-400/25 bg-cyan-500/10 text-cyan-300'
+            }`}
+          >
+            <span
+              className={`h-1.5 w-1.5 rounded-full ${
+                allComplete ? 'bg-emerald-400' : 'bg-cyan-400 animate-pulse'
+              }`}
+            />
+            {businessStatus}
+          </span>
+        </div>
 
-        {/* ═══ 1. HERO — Greeting + AI Insight ═══ */}
-        <motion.section
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, ease: 'easeOut' }}
-          className="space-y-6"
-        >
-          <h1 className="text-3xl md:text-4xl font-bold tracking-tight text-foreground">
-            {greeting()}, {firstName(user?.name)} 👋
-          </h1>
+        {/* Greeting */}
+        <h1 className="text-3xl md:text-4xl font-bold tracking-tight text-foreground">
+          {greeting()}, {firstName(user?.name)} <span className="inline-block">👋</span>
+        </h1>
 
-          <div className="glass-surface rounded-3xl p-5">
-            <div className="flex items-start gap-4">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl accent-gradient shrink-0">
-                <Brain className="h-5 w-5 text-white" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                  AI Insight
+        {/* Steps-away line */}
+        <p className="text-base md:text-lg text-muted-foreground leading-relaxed">
+          You are{' '}
+          <span className="accent-text font-semibold">
+            {stepsAway} step{stepsAway !== 1 ? 's' : ''}
+          </span>
+          {' '}away from activating your Financial Brain.
+        </p>
+
+        {/* 4 clickable checklist cards */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {checklist.map((item, i) => (
+            <ChecklistCard
+              key={item.id}
+              label={item.label}
+              description={item.description}
+              checked={item.checked}
+              delay={0.05 * (i + 1)}
+              onClick={() => setCurrentView(item.view)}
+            />
+          ))}
+        </div>
+      </motion.section>
+
+      {/* ═══ 2. BUSINESS HEALTH SCORE ═══ */}
+      <motion.section
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, delay: 0.08, ease: 'easeOut' }}
+      >
+        <div className="glass-surface rounded-3xl p-6 md:p-8 flex flex-col items-center justify-center min-h-[260px]">
+          {businessScore === null || businessScore === 0 ? (
+            <PremiumEmptyState
+              icon={Brain}
+              title="Activate your Financial Brain"
+              description="Connect your business data to unlock AI insights and your real-time business health score."
+              ctaLabel="[ Connect Data ]"
+              onCta={goToSettings}
+            />
+          ) : (
+            <>
+              <ScoreGauge score={businessScore} />
+              <div className="text-center mt-3">
+                <span className={`text-sm font-semibold ${tier.color}`}>{tier.label}</span>
+                <p className="text-[11px] text-muted-foreground mt-0.5 tracking-wider uppercase">
+                  Business Health Score
                 </p>
-                {hasData && heroInsight ? (
-                  <>
-                    <p className="text-base font-medium text-foreground leading-snug mt-1">
-                      {heroInsight.what}
-                    </p>
-                    <p className="text-sm text-muted-foreground mt-1.5 leading-relaxed">
-                      {heroInsight.why}
-                    </p>
-                  </>
-                ) : (
-                  <p className="text-base font-medium text-foreground leading-snug mt-1">
-                    Connect your business data to unlock AI insights.
-                  </p>
-                )}
               </div>
-            </div>
-          </div>
-        </motion.section>
-
-        {/* ═══ 2. BUSINESS HEALTH SCORE ═══ */}
-        <motion.section
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.08, ease: 'easeOut' }}
-          className="flex flex-col items-center gap-2"
-        >
-          <ScoreGauge score={businessScore} />
-          <div className="text-center">
-            <span className={`text-sm font-semibold ${tier.color}`}>{tier.label}</span>
-          </div>
-          {businessScore === null && (
-            <p className="text-xs text-muted-foreground text-center max-w-[260px] mt-1">
-              Connect your business data to unlock AI insights.
-            </p>
+            </>
           )}
-        </motion.section>
+        </div>
+      </motion.section>
 
-        {/* ═══ 3. KPI SECTION — exactly 3 cards ═══ */}
-        <motion.section
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.16, ease: 'easeOut' }}
-          className="grid grid-cols-1 sm:grid-cols-3 gap-4"
-        >
-          <MiniStat
-            label="Revenue"
-            value={metrics.totalTaxVolume > 0 ? formatINR(metrics.totalTaxVolume) : '—'}
-            icon={IndianRupee}
-            hint="Total tax volume"
-          />
-          <MiniStat
-            label="Cash Position"
-            value={cashLabel}
-            icon={Wallet}
-            hint={hasData
-              ? (metrics.matchPercentage < 100
-                ? `${metrics.matchPercentage.toFixed(0)}% reconciled`
-                : 'Fully reconciled')
-              : 'Awaiting data'}
-          />
-          <MiniStat
-            label="Compliance"
-            value={metrics.pendingReturns + metrics.overdueReturns > 0
-              ? `${metrics.pendingReturns + metrics.overdueReturns} pending`
-              : (hasData ? 'Safe' : '—')}
-            icon={ShieldAlert}
-            hint={hasData
-              ? (metrics.overdueReturns > 0
-                ? `${metrics.overdueReturns} overdue`
-                : `${metrics.filedReturns} filed`)
-              : 'Awaiting data'}
-          />
-        </motion.section>
+      {/* ═══ 3. KPI SECTION — exactly 3 cards ═══ */}
+      <section className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <KpiCard
+          icon={IndianRupee}
+          label="Revenue"
+          value={metrics.totalTaxVolume > 0 ? formatINR(metrics.totalTaxVolume) : '—'}
+          hint={metrics.totalTaxVolume > 0 ? 'Total tax volume' : undefined}
+          delay={0.16}
+          hasData={metrics.totalTaxVolume > 0}
+          emptyTitle="Revenue awaits your data"
+          emptyDescription="Connect GSTN and Banking to unlock live financial insights."
+          ctaLabel="[ Connect Data ]"
+          onCta={goToSettings}
+        />
+        <KpiCard
+          icon={Wallet}
+          label="Cash Position"
+          value={cashLabel}
+          hint={hasData
+            ? (metrics.matchPercentage < 100
+              ? `${metrics.matchPercentage.toFixed(0)}% reconciled`
+              : 'Fully reconciled')
+            : undefined}
+          delay={0.24}
+          hasData={hasData && businessScore !== null}
+          emptyTitle="Cash position awaits"
+          emptyDescription="Connect your bank account to monitor cash position."
+          ctaLabel="[ Connect Bank ]"
+          onCta={goToSettings}
+        />
+        <KpiCard
+          icon={ShieldAlert}
+          label="Compliance"
+          value={metrics.pendingReturns + metrics.overdueReturns > 0
+            ? `${metrics.pendingReturns + metrics.overdueReturns} pending`
+            : (hasData ? 'Safe' : '—')}
+          hint={hasData
+            ? (metrics.overdueReturns > 0
+              ? `${metrics.overdueReturns} overdue`
+              : `${metrics.filedReturns} filed`)
+            : undefined}
+          delay={0.32}
+          hasData={hasData}
+          emptyTitle="Compliance awaits GSTN"
+          emptyDescription="Connect GSTN to track compliance score."
+          ctaLabel="[ Connect GSTN ]"
+          onCta={goToSettings}
+        />
+      </section>
 
-        {/* ═══ 4. WIDGETS — exactly 5 ═══ */}
-        <section className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+      {/* ═══ 4. WIDGETS — exactly 5 (2-col grid, 5th spans full width) ═══ */}
+      <section className="grid grid-cols-1 lg:grid-cols-2 gap-5">
 
-          {/* Widget 1: Today's Priorities */}
-          <WidgetCard icon={ListTodo} title="Today's Priorities" delay={0.24}>
-            {priorities.length > 0 ? (
-              <div className="space-y-1">
-                {priorities.map((p) => {
-                  const isDone = !!done[p.id];
-                  return (
-                    <div
-                      key={p.id}
-                      onClick={() => setCurrentView(p.view)}
-                      className="group flex items-center gap-3 rounded-xl px-3 py-2.5 hover:bg-white/[0.03] transition-colors cursor-pointer"
-                    >
-                      <button
-                        type="button"
-                        aria-label={`Mark ${p.label} as ${isDone ? 'incomplete' : 'complete'}`}
-                        aria-pressed={isDone}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setDone((d) => ({ ...d, [p.id]: !d[p.id] }));
-                        }}
-                        className={`flex h-5 w-5 items-center justify-center rounded-full border shrink-0 transition-colors ${
-                          isDone
-                            ? 'accent-gradient border-transparent'
-                            : 'border-white/[0.15] hover:border-emerald-400/40'
-                        }`}
-                      >
-                        {isDone && <CheckCircle2 className="h-3 w-3 text-white" />}
-                      </button>
-                      <span className={`text-sm flex-1 ${isDone ? 'text-muted-foreground line-through' : 'text-foreground'}`}>
-                        {p.label}
-                      </span>
-                      <ArrowRight className="h-3.5 w-3.5 text-muted-foreground/40 group-hover:text-emerald-400/70 transition-colors shrink-0" />
-                    </div>
-                  );
-                })}
-              </div>
-            ) : hasData ? (
-              <EmptyState
-                icon={ListTodo}
-                title="You're all caught up"
-                subtitle="No priorities right now."
-              />
-            ) : (
-              <EmptyState
-                icon={ListTodo}
-                title="No priorities yet"
-                subtitle="Connect your business data to see priorities."
-              />
-            )}
-          </WidgetCard>
-
-          {/* Widget 2: Business Timeline */}
-          <WidgetCard icon={Clock} title="Business Timeline" delay={0.32}>
-            {timelineActivities.length > 0 ? (
-              <div className="relative">
-                {timelineActivities.map((act, i) => {
-                  const isLast = i === timelineActivities.length - 1;
-                  return (
-                    <div key={act.id} className="relative flex gap-3 pb-4 last:pb-0">
-                      {!isLast && (
-                        <span
-                          className="absolute left-[9px] top-6 bottom-0 w-px bg-white/[0.08]"
-                          aria-hidden
-                        />
-                      )}
-                      <span className="relative z-10 flex h-[18px] w-[18px] items-center justify-center rounded-full border border-emerald-400/30 bg-[#09090B] shrink-0 mt-0.5">
-                        <span className="h-1.5 w-1.5 rounded-full accent-gradient" />
-                      </span>
-                      <div className="flex-1 min-w-0 pt-0.5">
-                        <p className="text-sm text-foreground leading-snug">{act.title}</p>
-                        <p className="text-[11px] text-muted-foreground mt-0.5">{timeAgo(act.createdAt)}</p>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <EmptyState
-                icon={Clock}
-                title="No recent activity"
-                subtitle="Actions across your firm will appear here."
-              />
-            )}
-          </WidgetCard>
-
-          {/* Widget 3: Connected Services */}
-          <WidgetCard icon={Plug} title="Connected Services" delay={0.40}>
-            <div className="space-y-3">
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                {CONNECTED_SERVICES.map((s) => (
+        {/* Widget 1: Today's Priorities */}
+        <WidgetCard icon={ListTodo} title="Today's Priorities" delay={0.40}>
+          {hasData && priorities.length > 0 ? (
+            <div className="space-y-1">
+              {priorities.map((p) => {
+                const isDone = !!done[p.id];
+                return (
                   <div
-                    key={s.id}
-                    className="flex items-center gap-2 rounded-xl border border-white/[0.06] bg-white/[0.02] px-3 py-2.5"
+                    key={p.id}
+                    onClick={() => setCurrentView(p.view)}
+                    className="group flex items-center gap-3 rounded-xl px-3 py-2.5 hover:bg-white/[0.03] transition-colors cursor-pointer"
                   >
+                    <button
+                      type="button"
+                      aria-label={`Mark ${p.label} as ${isDone ? 'incomplete' : 'complete'}`}
+                      aria-pressed={isDone}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setDone((d) => ({ ...d, [p.id]: !d[p.id] }));
+                      }}
+                      className={`flex h-5 w-5 items-center justify-center rounded-full border shrink-0 transition-colors ${
+                        isDone
+                          ? 'accent-gradient border-transparent'
+                          : 'border-white/[0.15] hover:border-emerald-400/40'
+                      }`}
+                    >
+                      {isDone && <CheckCircle2 className="h-3 w-3 text-white" />}
+                    </button>
+                    <span className={`text-sm flex-1 ${isDone ? 'text-muted-foreground line-through' : 'text-foreground'}`}>
+                      {p.label}
+                    </span>
+                    <ArrowRight className="h-3.5 w-3.5 text-muted-foreground/40 group-hover:text-emerald-400/70 transition-colors shrink-0" />
+                  </div>
+                );
+              })}
+            </div>
+          ) : hasData ? (
+            <PremiumEmptyState
+              icon={CheckCircle2}
+              title="You're all caught up"
+              description="No priorities right now. Oracle will surface new ones as your business changes."
+            />
+          ) : (
+            <PremiumEmptyState
+              icon={ListTodo}
+              title="GSTPilot Oracle is ready"
+              description="Connect your business data to receive priorities."
+              ctaLabel="[ Connect Services ]"
+              onCta={goToSettings}
+            />
+          )}
+        </WidgetCard>
+
+        {/* Widget 2: Business Timeline */}
+        <WidgetCard icon={Clock} title="Business Timeline" delay={0.48}>
+          {timelineActivities.length > 0 ? (
+            <div className="relative">
+              {timelineActivities.map((act, i) => {
+                const isLast = i === timelineActivities.length - 1;
+                return (
+                  <div key={act.id} className="relative flex gap-3 pb-4 last:pb-0">
+                    {!isLast && (
+                      <span
+                        className="absolute left-[9px] top-6 bottom-0 w-px bg-white/[0.08]"
+                        aria-hidden
+                      />
+                    )}
+                    <span className="relative z-10 flex h-[18px] w-[18px] items-center justify-center rounded-full border border-emerald-400/30 bg-[#050505] shrink-0 mt-0.5">
+                      <span className="h-1.5 w-1.5 rounded-full accent-gradient" />
+                    </span>
+                    <div className="flex-1 min-w-0 pt-0.5">
+                      <p className="text-sm text-foreground leading-snug">{act.title}</p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">{timeAgo(act.createdAt)}</p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <PremiumEmptyState
+              icon={Clock}
+              title="No activity yet"
+              description="Connect your services to see live business timeline."
+            />
+          )}
+        </WidgetCard>
+
+        {/* Widget 3: Connected Services */}
+        <WidgetCard icon={Plug} title="Connected Services" delay={0.56}>
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              {CONNECTED_SERVICES.map((s) => (
+                <div
+                  key={s.id}
+                  className="flex flex-col gap-2 rounded-xl border border-white/[0.06] bg-white/[0.02] px-3 py-3"
+                >
+                  <div className="flex items-center gap-2">
                     <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-white/[0.04] text-[11px] font-bold text-muted-foreground shrink-0">
                       {s.initial}
                     </div>
@@ -760,74 +952,88 @@ export default function MissionControlPage() {
                       </div>
                     </div>
                   </div>
-                ))}
-              </div>
-              <p className="text-[11px] text-muted-foreground text-center pt-1">
-                Connect services to sync automatically.
-              </p>
+                  <button
+                    type="button"
+                    onClick={goToSettings}
+                    className="self-start text-[11px] font-medium text-cyan-300 hover:text-cyan-200 transition-colors"
+                  >
+                    [ Connect ]
+                  </button>
+                </div>
+              ))}
             </div>
-          </WidgetCard>
+            <p className="text-[11px] text-muted-foreground text-center pt-1">
+              Connect services to sync automatically.
+            </p>
+          </div>
+        </WidgetCard>
 
-          {/* Widget 4: Team Status */}
-          <WidgetCard icon={Users} title="Team Status" delay={0.48}>
-            {/* Honest empty state — we don't have team data yet */}
-            <EmptyState
-              icon={Users}
-              title="No team members yet"
-              subtitle="Invite your team to collaborate on clients, returns, and reconciliations."
-              actionLabel="Invite your team"
-              onAction={() => setCurrentView('team')}
-            />
-          </WidgetCard>
+        {/* Widget 4: Team Status */}
+        <WidgetCard icon={Users} title="Team Status" delay={0.64}>
+          {/* Honest empty state — we don't have team data yet */}
+          <PremiumEmptyState
+            icon={Users}
+            title="No team members yet"
+            description="Invite your team to collaborate on clients, returns, and reconciliations."
+            ctaLabel="[ Invite your team ]"
+            onCta={() => setCurrentView('team')}
+          />
+        </WidgetCard>
 
-          {/* Widget 5: AI Recommendations — full width */}
-          <WidgetCard icon={Lightbulb} title="AI Recommendations" delay={0.56} className="lg:col-span-2">
-            {hasData && recommendations.length > 0 ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {recommendations.map((insight) => {
-                  const Icon = insight.icon;
-                  const toneColor =
-                    insight.tone === 'risk' ? 'text-amber-400' :
-                    insight.tone === 'success' ? 'text-emerald-400' :
-                    'text-cyan-400';
-                  return (
-                    <div
-                      key={insight.id}
-                      className="flex flex-col gap-3 rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4 hover:bg-white/[0.04] transition-colors"
-                    >
-                      <div className="flex items-start gap-3">
-                        <div className="flex h-8 w-8 items-center justify-center rounded-lg accent-gradient-soft shrink-0">
-                          <Icon className={`h-4 w-4 ${toneColor}`} />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-foreground leading-snug">{insight.what}</p>
-                          <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{insight.why}</p>
-                        </div>
+        {/* Widget 5: AI Recommendations — full width */}
+        <WidgetCard icon={Lightbulb} title="AI Recommendations" delay={0.72} className="lg:col-span-2">
+          {hasData && recommendations.length > 0 ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {recommendations.map((insight) => {
+                const Icon = insight.icon;
+                // V16 palette: only Emerald / Cyan / Blue. No amber, no red.
+                const toneColor =
+                  insight.tone === 'risk' ? 'text-blue-400' :
+                  insight.tone === 'success' ? 'text-emerald-400' :
+                  'text-cyan-400';
+                return (
+                  <div
+                    key={insight.id}
+                    className="flex flex-col gap-3 rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4 hover:bg-white/[0.04] transition-colors"
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className="flex h-8 w-8 items-center justify-center rounded-lg accent-gradient-soft shrink-0">
+                        <Icon className={`h-4 w-4 ${toneColor}`} />
                       </div>
-                      <button
-                        onClick={() => setCurrentView(insight.actionView)}
-                        className="self-start inline-flex items-center gap-1 rounded-full border border-emerald-400/20 bg-emerald-500/10 px-3 py-1.5 text-xs font-medium text-emerald-300 transition-colors hover:border-emerald-400/40 hover:bg-emerald-500/20"
-                      >
-                        {insight.actionLabel}
-                        <ArrowRight className="h-3 w-3" />
-                      </button>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-foreground leading-snug">{insight.what}</p>
+                        <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{insight.why}</p>
+                      </div>
                     </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <EmptyState
-                icon={Lightbulb}
-                title={hasData ? 'No recommendations right now' : 'No recommendations yet'}
-                subtitle={hasData
-                  ? 'Your business is in good shape — check back later for new guidance.'
-                  : 'Connect your business data for personalized AI guidance.'}
-              />
-            )}
-          </WidgetCard>
+                    <button
+                      onClick={() => setCurrentView(insight.actionView)}
+                      className="self-start inline-flex items-center gap-1 rounded-full border border-emerald-400/20 bg-emerald-500/10 px-3 py-1.5 text-xs font-medium text-emerald-300 transition-colors hover:border-emerald-400/40 hover:bg-emerald-500/20"
+                    >
+                      {insight.actionLabel}
+                      <ArrowRight className="h-3 w-3" />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          ) : hasData ? (
+            <PremiumEmptyState
+              icon={CheckCircle2}
+              title="No recommendations right now"
+              description="Your business is in good shape — Oracle will surface new guidance as it learns."
+            />
+          ) : (
+            <PremiumEmptyState
+              icon={Lightbulb}
+              title="GSTPilot Oracle is ready"
+              description="Connect your business data to receive AI recommendations."
+              ctaLabel="[ Connect Services ]"
+              onCta={goToSettings}
+            />
+          )}
+        </WidgetCard>
 
-        </section>
-      </div>
+      </section>
     </div>
   );
 }

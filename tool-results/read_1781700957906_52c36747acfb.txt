@@ -1,0 +1,1192 @@
+     1→'use client'
+     2→
+     3→import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+     4→import { motion, AnimatePresence, useAnimation } from 'framer-motion'
+     5→import { useApp } from '@/contexts/AppContext'
+     6→import {
+     7→  Sparkles,
+     8→  X,
+     9→  Minus,
+    10→  Maximize2,
+    11→  Minimize2,
+    12→  Mic,
+    13→  MicOff,
+    14→  Volume2,
+    15→  VolumeX,
+    16→  Send,
+    17→  Brain,
+    18→  Zap,
+    19→  FileText,
+    20→  AlertTriangle,
+    21→  CreditCard,
+    22→  Bell,
+    23→  Activity,
+    24→  Rocket,
+    25→  TrendingUp,
+    26→  Users,
+    27→  Briefcase,
+    28→  Wallet,
+    29→  BookOpen,
+    30→  Banknote,
+    31→  Package,
+    32→  ShieldCheck,
+    33→  Network,
+    34→  Settings,
+    35→  Trash2,
+    36→  Square,
+    37→} from 'lucide-react'
+    38→
+    39→// ═════════════════════════════════════════════════════════════════════════════
+    40→// GSTPilot Intelligence™ — Global Floating AI Assistant
+    41→// "The AI Brain of Your Business."
+    42→// Jarvis + ChatGPT + Palantir + Cursor for Indian CAs and Businesses
+    43→// ═════════════════════════════════════════════════════════════════════════════
+    44→
+    45→interface Message {
+    46→  id: string
+    47→  role: 'user' | 'assistant' | 'system'
+    48→  content: string
+    49→  timestamp: number
+    50→  actions?: ActionSuggestion[]
+    51→  isTyping?: boolean
+    52→}
+    53→
+    54→interface ActionSuggestion {
+    55→  type: 'navigate' | 'task' | 'reminder' | 'report'
+    56→  label: string
+    57→  view?: string
+    58→  icon?: string
+    59→}
+    60→
+    61→interface LiveStats {
+    62→  totalClients: number
+    63→  pendingReturns: number
+    64→  pendingCollections: number
+    65→  complianceScore: number
+    66→  atRiskClients: number
+    67→  unreadNotifications: number
+    68→}
+    69→
+    70→// --- Helpers ---------------------------------------------------------------
+    71→
+    72→const formatINR = (n: number) => `₹${n.toLocaleString('en-IN')}`
+    73→
+    74→const SUGGESTED_QUESTIONS = [
+    75→  { label: 'Show pending returns', icon: FileText, color: 'text-amber-600' },
+    76→  { label: 'Which clients are risky?', icon: AlertTriangle, color: 'text-red-600' },
+    77→  { label: 'What revenue will I make next month?', icon: TrendingUp, color: 'text-emerald-600' },
+    78→  { label: 'Run my firm', icon: Rocket, color: 'text-violet-600' },
+    79→  { label: 'Run my business', icon: Zap, color: 'text-cyan-600' },
+    80→  { label: 'Who is overloaded?', icon: Users, color: 'text-orange-600' },
+    81→  { label: 'Why did collections drop?', icon: Wallet, color: 'text-rose-600' },
+    82→  { label: 'Open War Room', icon: Activity, color: 'text-emerald-700' },
+    83→]
+    84→
+    85→const MODULE_SHORTCUTS = [
+    86→  { label: 'GST', view: 'returns', icon: FileText },
+    87→  { label: 'Accounting', view: 'accounting', icon: BookOpen },
+    88→  { label: 'Payroll', view: 'payroll', icon: Wallet },
+    89→  { label: 'CRM', view: 'crm', icon: Briefcase },
+    90→  { label: 'Banking', view: 'banking', icon: Banknote },
+    91→  { label: 'Payments', view: 'payments', icon: CreditCard },
+    92→  { label: 'Inventory', view: 'inventory', icon: Package },
+    93→  { label: 'Compliance', view: 'roc-compliance', icon: ShieldCheck },
+    94→  { label: 'Business Graph', view: 'business-graph', icon: Network },
+    95→  { label: 'Predictions', view: 'ai-predictions', icon: TrendingUp },
+    96→]
+    97→
+    98→const ICON_MAP: Record<string, React.ElementType> = {
+    99→  FileText,
+   100→  AlertTriangle,
+   101→  CreditCard,
+   102→  Bell,
+   103→  Activity,
+   104→  Rocket,
+   105→  Brain,
+   106→  Zap,
+   107→  TrendingUp,
+   108→  Users,
+   109→  Wallet,
+   110→}
+   111→
+   112→// --- Animated Particles (around the orb) -----------------------------------
+   113→
+   114→function OrbParticles({ active }: { active: boolean }) {
+   115→  const particles = useMemo(
+   116→    () =>
+   117→      Array.from({ length: 12 }).map((_, i) => ({
+   118→        id: i,
+   119→        angle: (i / 12) * Math.PI * 2,
+   120→        radius: 38 + Math.random() * 18,
+   121→        size: 2 + Math.random() * 3,
+   122→        duration: 3 + Math.random() * 2,
+   123→        delay: Math.random() * 2,
+   124→      })),
+   125→    []
+   126→  )
+   127→
+   128→  return (
+   129→    <div className="absolute inset-0 pointer-events-none">
+   130→      {particles.map((p) => (
+   131→        <motion.div
+   132→          key={p.id}
+   133→          className="absolute rounded-full"
+   134→          style={{
+   135→            width: p.size,
+   136→            height: p.size,
+   137→            background: 'linear-gradient(135deg, #10b981, #06b6d4)',
+   138→            boxShadow: '0 0 8px rgba(16, 185, 129, 0.8)',
+   139→            left: '50%',
+   140→            top: '50%',
+   141→          }}
+   142→          animate={
+   143→            active
+   144→              ? {
+   145→                  x: [
+   146→                    Math.cos(p.angle) * 20,
+   147→                    Math.cos(p.angle) * p.radius,
+   148→                    Math.cos(p.angle + 0.3) * 20,
+   149→                  ],
+   150→                  y: [
+   151→                    Math.sin(p.angle) * 20,
+   152→                    Math.sin(p.angle) * p.radius,
+   153→                    Math.sin(p.angle + 0.3) * 20,
+   154→                  ],
+   155→                  opacity: [0, 1, 0],
+   156→                  scale: [0.5, 1, 0.5],
+   157→                }
+   158→              : { opacity: 0 }
+   159→          }
+   160→          transition={{
+   161→            duration: p.duration,
+   162→            delay: p.delay,
+   163→            repeat: Infinity,
+   164→            ease: 'easeInOut',
+   165→          }}
+   166→        />
+   167→      ))}
+   168→    </div>
+   169→  )
+   170→}
+   171→
+   172→// --- Floating Orb Button (draggable) ---------------------------------------
+   173→
+   174→interface OrbProps {
+   175→  onClick: () => void
+   176→  isOpen: boolean
+   177→  isListening: boolean
+   178→  isThinking: boolean
+   179→}
+   180→
+   181→function FloatingOrb({ onClick, isOpen, isListening, isThinking }: OrbProps) {
+   182→  const [position, setPosition] = useState({ x: 0, y: 0 })
+   183→  const [isDragging, setIsDragging] = useState(false)
+   184→  const [hasMoved, setHasMoved] = useState(false)
+   185→  const dragStart = useRef({ x: 0, y: 0, posX: 0, posY: 0 })
+   186→  const orbRef = useRef<HTMLDivElement>(null)
+   187→
+   188→  const handlePointerDown = (e: React.PointerEvent) => {
+   189→    setIsDragging(true)
+   190→    setHasMoved(false)
+   191→    dragStart.current = {
+   192→      x: e.clientX,
+   193→      y: e.clientY,
+   194→      posX: position.x,
+   195→      posY: position.y,
+   196→    }
+   197→    ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
+   198→  }
+   199→
+   200→  const handlePointerMove = (e: React.PointerEvent) => {
+   201→    if (!isDragging) return
+   202→    const dx = e.clientX - dragStart.current.x
+   203→    const dy = e.clientY - dragStart.current.y
+   204→    if (Math.abs(dx) > 4 || Math.abs(dy) > 4) setHasMoved(true)
+   205→    setPosition({
+   206→      x: dragStart.current.posX + dx,
+   207→      y: dragStart.current.posY + dy,
+   208→    })
+   209→  }
+   210→
+   211→  const handlePointerUp = (e: React.PointerEvent) => {
+   212→    setIsDragging(false)
+   213→    ;(e.target as HTMLElement).releasePointerCapture(e.pointerId)
+   214→    if (!hasMoved) onClick()
+   215→  }
+   216→
+   217→  return (
+   218→    <motion.div
+   219→      ref={orbRef}
+   220→      className="fixed z-[9998] cursor-grab active:cursor-grabbing"
+   221→      style={{
+   222→        right: '24px',
+   223→        bottom: '24px',
+   224→        x: position.x,
+   225→        y: position.y,
+   226→        touchAction: 'none',
+   227→      }}
+   228→      onPointerDown={handlePointerDown}
+   229→      onPointerMove={handlePointerMove}
+   230→      onPointerUp={handlePointerUp}
+   231→      whileHover={{ scale: 1.08 }}
+   232→      whileTap={{ scale: 0.95 }}
+   233→      title="GSTPilot Intelligence™ — Ctrl+K"
+   234→    >
+   235→      <div className="relative h-16 w-16">
+   236→        {/* Outer pulsing glow ring */}
+   237→        <motion.div
+   238→          className="absolute inset-0 rounded-full"
+   239→          style={{
+   240→            background:
+   241→              'radial-gradient(circle, rgba(16,185,129,0.4) 0%, rgba(6,182,212,0.2) 50%, transparent 70%)',
+   242→          }}
+   243→          animate={{
+   244→            scale: [1, 1.4, 1],
+   245→            opacity: [0.6, 0.2, 0.6],
+   246→          }}
+   247→          transition={{
+   248→            duration: 4,
+   249→            repeat: Infinity,
+   250→            ease: 'easeInOut',
+   251→          }}
+   252→        />
+   253→
+   254→        {/* Breathing aura */}
+   255→        <motion.div
+   256→          className="absolute -inset-2 rounded-full blur-md"
+   257→          style={{
+   258→            background: 'linear-gradient(135deg, #10b981, #06b6d4, #3b82f6)',
+   259→            opacity: 0.5,
+   260→          }}
+   261→          animate={{
+   262→            scale: [1, 1.15, 1],
+   263→            opacity: [0.3, 0.6, 0.3],
+   264→          }}
+   265→          transition={{
+   266→            duration: 3,
+   267→            repeat: Infinity,
+   268→            ease: 'easeInOut',
+   269→          }}
+   270→        />
+   271→
+   272→        {/* Animated particles */}
+   273→        <OrbParticles active={!isOpen || isListening || isThinking} />
+   274→
+   275→        {/* Main orb with gradient */}
+   276→        <motion.div
+   277→          className="relative h-16 w-16 rounded-full overflow-hidden"
+   278→          style={{
+   279→            background:
+   280→              'conic-gradient(from 0deg, #10b981, #06b6d4, #3b82f6, #06b6d4, #10b981)',
+   281→            boxShadow:
+   282→              '0 8px 32px rgba(16, 185, 129, 0.5), 0 0 0 2px rgba(255,255,255,0.2) inset, 0 0 20px rgba(6, 182, 212, 0.4) inset',
+   283→          }}
+   284→          animate={{
+   285→            rotate: isOpen ? 0 : 360,
+   286→          }}
+   287→          transition={{
+   288→            duration: 8,
+   289→            repeat: isOpen ? 0 : Infinity,
+   290→            ease: 'linear',
+   291→          }}
+   292→        >
+   293→          {/* Inner glossy sphere */}
+   294→          <div
+   295→            className="absolute inset-1.5 rounded-full"
+   296→            style={{
+   297→              background:
+   298→                'radial-gradient(circle at 30% 25%, rgba(255,255,255,0.7) 0%, rgba(255,255,255,0.1) 30%, transparent 60%)',
+   299→            }}
+   300→          />
+   301→
+   302→          {/* Center icon */}
+   303→          <div className="absolute inset-0 flex items-center justify-center">
+   304→            <AnimatePresence mode="wait">
+   305→              {isThinking ? (
+   306→                <motion.div
+   307→                  key="thinking"
+   308→                  initial={{ scale: 0, rotate: -90 }}
+   309→                  animate={{ scale: 1, rotate: 0 }}
+   310→                  exit={{ scale: 0, rotate: 90 }}
+   311→                >
+   312→                  <Brain className="h-6 w-6 text-white drop-shadow-lg" />
+   313→                </motion.div>
+   314→              ) : isListening ? (
+   315→                <motion.div
+   316→                  key="listening"
+   317→                  initial={{ scale: 0 }}
+   318→                  animate={{ scale: 1 }}
+   319→                  exit={{ scale: 0 }}
+   320→                >
+   321→                  <Mic className="h-6 w-6 text-white drop-shadow-lg" />
+   322→                </motion.div>
+   323→              ) : isOpen ? (
+   324→                <motion.div
+   325→                  key="open"
+   326→                  initial={{ scale: 0, rotate: 90 }}
+   327→                  animate={{ scale: 1, rotate: 0 }}
+   328→                  exit={{ scale: 0, rotate: -90 }}
+   329→                >
+   330→                  <Sparkles className="h-6 w-6 text-white drop-shadow-lg" />
+   331→                </motion.div>
+   332→              ) : (
+   333→                <motion.div
+   334→                  key="closed"
+   335→                  initial={{ scale: 0, rotate: -90 }}
+   336→                  animate={{ scale: 1, rotate: 0 }}
+   337→                  exit={{ scale: 0, rotate: 90 }}
+   338→                >
+   339→                  <Sparkles className="h-6 w-6 text-white drop-shadow-lg" />
+   340→                </motion.div>
+   341→              )}
+   342→            </AnimatePresence>
+   343→          </div>
+   344→
+   345→          {/* Listening pulse rings */}
+   346→          {isListening && (
+   347→            <>
+   348→              <motion.div
+   349→                className="absolute inset-0 rounded-full border-2 border-white"
+   350→                animate={{ scale: [1, 1.6], opacity: [0.8, 0] }}
+   351→                transition={{ duration: 1.2, repeat: Infinity, ease: 'easeOut' }}
+   352→              />
+   353→              <motion.div
+   354→                className="absolute inset-0 rounded-full border-2 border-white"
+   355→                animate={{ scale: [1, 1.6], opacity: [0.6, 0] }}
+   356→                transition={{ duration: 1.2, repeat: Infinity, ease: 'easeOut', delay: 0.4 }}
+   357→              />
+   358→            </>
+   359→          )}
+   360→        </motion.div>
+   361→
+   362→        {/* Tooltip label */}
+   363→        <motion.div
+   364→          className="absolute right-full top-1/2 -translate-y-1/2 mr-3 pointer-events-none whitespace-nowrap"
+   365→          initial={{ opacity: 0, x: 10 }}
+   366→          whileHover={{ opacity: 1, x: 0 }}
+   367→        >
+   368→          <div className="bg-slate-900/90 backdrop-blur-md text-white text-xs font-medium px-3 py-1.5 rounded-lg shadow-xl border border-white/10">
+   369→            GSTPilot Intelligence™
+   370→            <span className="block text-[10px] text-emerald-400 font-normal">Ctrl + K</span>
+   371→          </div>
+   372→        </motion.div>
+   373→      </div>
+   374→    </motion.div>
+   375→  )
+   376→}
+   377→
+   378→// --- AI Thinking Indicator -------------------------------------------------
+   379→
+   380→function ThinkingIndicator() {
+   381→  return (
+   382→    <div className="flex items-center gap-2 px-4 py-3">
+   383→      <div className="flex gap-1">
+   384→        {[0, 1, 2].map((i) => (
+   385→          <motion.div
+   386→            key={i}
+   387→            className="h-2 w-2 rounded-full bg-emerald-500"
+   388→            animate={{
+   389→              scale: [1, 1.4, 1],
+   390→              opacity: [0.4, 1, 0.4],
+   391→            }}
+   392→            transition={{
+   393→              duration: 1,
+   394→              repeat: Infinity,
+   395→              delay: i * 0.2,
+   396→              ease: 'easeInOut',
+   397→            }}
+   398→          />
+   399→        ))}
+   400→      </div>
+   401→      <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+   402→        GSTPilot Intelligence is thinking…
+   403→      </span>
+   404→    </div>
+   405→  )
+   406→}
+   407→
+   408→// --- Typing Animation Hook -------------------------------------------------
+   409→
+   410→function useTypewriter(text: string, enabled: boolean, speed = 12) {
+   411→  const [displayed, setDisplayed] = useState('')
+   412→  const [done, setDone] = useState(false)
+   413→
+   414→  useEffect(() => {
+   415→    if (!enabled) {
+   416→      setDisplayed(text)
+   417→      setDone(true)
+   418→      return
+   419→    }
+   420→    setDisplayed('')
+   421→    setDone(false)
+   422→    let i = 0
+   423→    const interval = setInterval(() => {
+   424→      i++
+   425→      setDisplayed(text.slice(0, i))
+   426→      if (i >= text.length) {
+   427→        clearInterval(interval)
+   428→        setDone(true)
+   429→      }
+   430→    }, speed)
+   431→    return () => clearInterval(interval)
+   432→  }, [text, enabled, speed])
+   433→
+   434→  return { displayed, done }
+   435→}
+   436→
+   437→// --- Markdown-ish renderer (lightweight) -----------------------------------
+   438→
+   439→function renderMarkdown(text: string) {
+   440→  // Split by lines, render basic formatting
+   441→  const lines = text.split('\n')
+   442→  const elements: React.ReactNode[] = []
+   443→  lines.forEach((line, idx) => {
+   444→    if (!line.trim()) {
+   445→      elements.push(<div key={idx} className="h-2" />)
+   446→      return
+   447→    }
+   448→    // Headings (## or #)
+   449→    if (line.startsWith('## ')) {
+   450→      elements.push(
+   451→        <div key={idx} className="font-bold text-sm mt-2 mb-1 text-slate-900 dark:text-slate-100">
+   452→          {line.replace(/^##\s+/, '')}
+   453→        </div>
+   454→      )
+   455→      return
+   456→    }
+   457→    if (line.startsWith('# ')) {
+   458→      elements.push(
+   459→        <div key={idx} className="font-bold text-base mt-2 mb-1 text-slate-900 dark:text-slate-100">
+   460→          {line.replace(/^#\s+/, '')}
+   461→        </div>
+   462→      )
+   463→      return
+   464→    }
+   465→    // Bullet points
+   466→    if (line.startsWith('• ') || line.startsWith('- ')) {
+   467→      const content = line.replace(/^[•-]\s+/, '')
+   468→      elements.push(
+   469→        <div key={idx} className="flex gap-2 text-sm leading-relaxed">
+   470→          <span className="text-emerald-500 mt-0.5">•</span>
+   471→          <span className="flex-1">{renderInline(content)}</span>
+   472→        </div>
+   473→      )
+   474→      return
+   475→    }
+   476→    // Numbered list
+   477→    const numMatch = line.match(/^(\d+)\.\s+(.*)/)
+   478→    if (numMatch) {
+   479→      elements.push(
+   480→        <div key={idx} className="flex gap-2 text-sm leading-relaxed">
+   481→          <span className="font-bold text-emerald-600 dark:text-emerald-400 min-w-[1.2rem]">{numMatch[1]}.</span>
+   482→          <span className="flex-1">{renderInline(numMatch[2])}</span>
+   483→        </div>
+   484→      )
+   485→      return
+   486→    }
+   487→    // Regular paragraph
+   488→    elements.push(
+   489→      <div key={idx} className="text-sm leading-relaxed">
+   490→        {renderInline(line)}
+   491→      </div>
+   492→    )
+   493→  })
+   494→  return elements
+   495→}
+   496→
+   497→function renderInline(text: string): React.ReactNode {
+   498→  // Handle **bold** and `code`
+   499→  const parts: React.ReactNode[] = []
+   500→  const regex = /(\*\*[^*]+\*\*|`[^`]+`)/g
+   501→  let lastIndex = 0
+   502→  let match
+   503→  let key = 0
+   504→  while ((match = regex.exec(text)) !== null) {
+   505→    if (match.index > lastIndex) {
+   506→      parts.push(text.slice(lastIndex, match.index))
+   507→    }
+   508→    const token = match[0]
+   509→    if (token.startsWith('**')) {
+   510→      parts.push(
+   511→        <strong key={key++} className="font-bold text-slate-900 dark:text-slate-100">
+   512→          {token.slice(2, -2)}
+   513→        </strong>
+   514→      )
+   515→    } else if (token.startsWith('`')) {
+   516→      parts.push(
+   517→        <code key={key++} className="px-1 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 text-xs font-mono">
+   518→          {token.slice(1, -1)}
+   519→        </code>
+   520→      )
+   521→    }
+   522→    lastIndex = match.index + token.length
+   523→  }
+   524→  if (lastIndex < text.length) {
+   525→    parts.push(text.slice(lastIndex))
+   526→  }
+   527→  return parts.length > 0 ? parts : text
+   528→}
+   529→
+   530→// --- Message Bubble --------------------------------------------------------
+   531→
+   532→interface MessageBubbleProps {
+   533→  message: Message
+   534→  onAction: (action: ActionSuggestion) => void
+   535→  voiceEnabled: boolean
+   536→}
+   537→
+   538→function MessageBubble({ message, onAction, voiceEnabled }: MessageBubbleProps) {
+   539→  const isUser = message.role === 'user'
+   540→  const { displayed, done } = useTypewriter(
+   541→    message.content,
+   542→    !isUser && message.isTyping ? true : false,
+   543→    8
+   544→  )
+   545→
+   546→  // Speak the response when voice is enabled and message arrives
+   547→  useEffect(() => {
+   548→    if (!isUser && voiceEnabled && message.content && !message.isTyping) {
+   549→      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+   550→        const utter = new SpeechSynthesisUtterance(message.content.replace(/[*#`•]/g, ''))
+   551→        utter.rate = 1
+   552→        utter.pitch = 1
+   553→        utter.lang = 'en-IN'
+   554→        try {
+   555→          window.speechSynthesis.cancel()
+   556→          window.speechSynthesis.speak(utter)
+   557→        } catch {
+   558→          // ignore
+   559→        }
+   560→      }
+   561→    }
+   562→    return () => {
+   563→      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+   564→        window.speechSynthesis.cancel()
+   565→      }
+   566→    }
+   567→  }, [message.id])
+   568→
+   569→  if (isUser) {
+   570→    return (
+   571→      <motion.div
+   572→        initial={{ opacity: 0, x: 20 }}
+   573→        animate={{ opacity: 1, x: 0 }}
+   574→        className="flex justify-end"
+   575→      >
+   576→        <div className="max-w-[85%] rounded-2xl rounded-tr-sm bg-gradient-to-br from-emerald-500 to-cyan-600 text-white px-4 py-2.5 shadow-lg">
+   577→          <p className="text-sm leading-relaxed whitespace-pre-wrap">{message.content}</p>
+   578→        </div>
+   579→      </motion.div>
+   580→    )
+   581→  }
+   582→
+   583→  return (
+   584→    <motion.div
+   585→      initial={{ opacity: 0, x: -20 }}
+   586→      animate={{ opacity: 1, x: 0 }}
+   587→      className="flex gap-2.5"
+   588→    >
+   589→      <div className="shrink-0 h-8 w-8 rounded-full bg-gradient-to-br from-emerald-500 via-cyan-500 to-blue-500 flex items-center justify-center shadow-md">
+   590→        <Brain className="h-4 w-4 text-white" />
+   591→      </div>
+   592→      <div className="flex-1 max-w-[88%]">
+   593→        <div className="rounded-2xl rounded-tl-sm bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm border border-slate-200/50 dark:border-slate-700/50 px-4 py-3 shadow-sm">
+   594→          <div className="text-slate-700 dark:text-slate-200 space-y-0.5">
+   595→            {renderMarkdown(displayed)}
+   596→            {!done && <span className="inline-block w-1.5 h-3.5 bg-emerald-500 ml-0.5 animate-pulse" />}
+   597→          </div>
+   598→        </div>
+   599→        {done && message.actions && message.actions.length > 0 && (
+   600→          <motion.div
+   601→            initial={{ opacity: 0, y: 8 }}
+   602→            animate={{ opacity: 1, y: 0 }}
+   603→            transition={{ delay: 0.2 }}
+   604→            className="mt-2 flex flex-wrap gap-1.5"
+   605→          >
+   606→            {message.actions.map((action, idx) => {
+   607→              const Icon = ICON_MAP[action.icon || ''] || Zap
+   608→              return (
+   609→                <button
+   610→                  key={idx}
+   611→                  onClick={() => onAction(action)}
+   612→                  className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/50 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 transition-colors"
+   613→                >
+   614→                  <Icon className="h-3 w-3" />
+   615→                  {action.label}
+   616→                </button>
+   617→              )
+   618→            })}
+   619→          </motion.div>
+   620→        )}
+   621→      </div>
+   622→    </motion.div>
+   623→  )
+   624→}
+   625→
+   626→// --- Live Stats Bar --------------------------------------------------------
+   627→
+   628→function LiveStatsBar({ stats }: { stats: LiveStats | null }) {
+   629→  if (!stats) return null
+   630→  const items = [
+   631→    { label: 'Clients', value: stats.totalClients, icon: Users, color: 'text-emerald-600' },
+   632→    { label: 'Pending', value: stats.pendingReturns, icon: FileText, color: 'text-amber-600' },
+   633→    { label: 'Collections', value: formatINR(stats.pendingCollections), icon: CreditCard, color: 'text-cyan-600' },
+   634→    { label: 'Compliance', value: `${stats.complianceScore}%`, icon: ShieldCheck, color: 'text-violet-600' },
+   635→    { label: 'At Risk', value: stats.atRiskClients, icon: AlertTriangle, color: 'text-red-600' },
+   636→    { label: 'Alerts', value: stats.unreadNotifications, icon: Bell, color: 'text-orange-600' },
+   637→  ]
+   638→  return (
+   639→    <div className="flex gap-2 overflow-x-auto px-3 py-2 border-b border-slate-200/50 dark:border-slate-700/50 bg-white/40 dark:bg-slate-900/40 backdrop-blur-sm">
+   640→      {items.map((item) => (
+   641→        <div
+   642→          key={item.label}
+   643→          className="flex items-center gap-1.5 shrink-0 px-2.5 py-1 rounded-md bg-white/60 dark:bg-slate-800/60 border border-slate-200/50 dark:border-slate-700/50"
+   644→        >
+   645→          <item.icon className={`h-3 w-3 ${item.color}`} />
+   646→          <span className="text-[11px] font-semibold text-slate-700 dark:text-slate-300">{item.value}</span>
+   647→          <span className="text-[10px] text-slate-500 dark:text-slate-400">{item.label}</span>
+   648→        </div>
+   649→      ))}
+   650→    </div>
+   651→  )
+   652→}
+   653→
+   654→// --- Command Center Panel --------------------------------------------------
+   655→
+   656→interface CommandCenterProps {
+   657→  isOpen: boolean
+   658→  isFullscreen: boolean
+   659→  isListening: boolean
+   660→  setIsListening: (v: boolean) => void
+   661→  isThinking: boolean
+   662→  setIsThinking: (v: boolean) => void
+   663→  onClose: () => void
+   664→  onToggleFullscreen: () => void
+   665→  onMinimize: () => void
+   666→}
+   667→
+   668→function CommandCenter({
+   669→  isOpen,
+   670→  isFullscreen,
+   671→  isListening,
+   672→  setIsListening,
+   673→  isThinking,
+   674→  setIsThinking,
+   675→  onClose,
+   676→  onToggleFullscreen,
+   677→  onMinimize,
+   678→}: CommandCenterProps) {
+   679→  const { setCurrentView } = useApp()
+   680→  const [messages, setMessages] = useState<Message[]>([
+   681→    {
+   682→      id: 'welcome',
+   683→      role: 'assistant',
+   684→      content:
+   685→        "🧠 **GSTPilot Intelligence™**\n\nThe AI Brain of Your Business.\n\nI'm connected to your live data — clients, invoices, returns, payments, predictions, and priorities across every module.\n\nAsk me anything, or tap a suggestion below.",
+   686→      timestamp: Date.now(),
+   687→    },
+   688→  ])
+   689→  const [input, setInput] = useState('')
+   690→  const [voiceEnabled, setVoiceEnabled] = useState(false)
+   691→  const [liveStats, setLiveStats] = useState<LiveStats | null>(null)
+   692→  const [showSettings, setShowSettings] = useState(false)
+   693→  const messagesEndRef = useRef<HTMLDivElement>(null)
+   694→  const inputRef = useRef<HTMLInputElement>(null)
+   695→  const recognitionRef = useRef<any>(null)
+   696→  const historyRef = useRef<Array<{ role: string; content: string }>>([])
+   697→
+   698→  // Auto-scroll to bottom on new message
+   699→  useEffect(() => {
+   700→    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+   701→  }, [messages, isThinking])
+   702→
+   703→  // Focus input when opened
+   704→  useEffect(() => {
+   705→    if (isOpen) {
+   706→      setTimeout(() => inputRef.current?.focus(), 200)
+   707→    }
+   708→  }, [isOpen, isFullscreen])
+   709→
+   710→  // Initialize speech recognition
+   711→  useEffect(() => {
+   712→    if (typeof window === 'undefined') return
+   713→    const SpeechRecognition =
+   714→      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+   715→    if (SpeechRecognition) {
+   716→      const recognition = new SpeechRecognition()
+   717→      recognition.continuous = false
+   718→      recognition.interimResults = false
+   719→      recognition.lang = 'en-IN'
+   720→      recognition.onresult = (event: any) => {
+   721→        const transcript = event.results[0][0].transcript
+   722→        setInput(transcript)
+   723→        setIsListening(false)
+   724→        // Auto-send after voice input
+   725→        setTimeout(() => handleSend(transcript), 200)
+   726→      }
+   727→      recognition.onerror = () => setIsListening(false)
+   728→      recognition.onend = () => setIsListening(false)
+   729→      recognitionRef.current = recognition
+   730→    }
+   731→  }, [])
+   732→
+   733→  const toggleListening = () => {
+   734→    if (!recognitionRef.current) return
+   735→    if (isListening) {
+   736→      recognitionRef.current.stop()
+   737→      setIsListening(false)
+   738→    } else {
+   739→      try {
+   740→        recognitionRef.current.start()
+   741→        setIsListening(true)
+   742→      } catch {
+   743→        // already started
+   744→      }
+   745→    }
+   746→  }
+   747→
+   748→  const handleSend = async (overrideText?: string) => {
+   749→    const text = (overrideText ?? input).trim()
+   750→    if (!text || isThinking) return
+   751→
+   752→    const userMsg: Message = {
+   753→      id: `u-${Date.now()}`,
+   754→      role: 'user',
+   755→      content: text,
+   756→      timestamp: Date.now(),
+   757→    }
+   758→    setMessages((prev) => [...prev, userMsg])
+   759→    setInput('')
+   760→    setIsThinking(true)
+   761→    historyRef.current.push({ role: 'user', content: text })
+   762→
+   763→    try {
+   764→      const res = await fetch('/api/intelligence', {
+   765→        method: 'POST',
+   766→        headers: { 'Content-Type': 'application/json' },
+   767→        body: JSON.stringify({
+   768→          question: text,
+   769→          history: historyRef.current.slice(-6),
+   770→        }),
+   771→      })
+   772→      const data = await res.json()
+   773→
+   774→      // Mark previous assistant message as fully typed
+   775→      setMessages((prev) =>
+   776→        prev.map((m) => (m.isTyping ? { ...m, isTyping: false, content: m.content } : m))
+   777→      )
+   778→
+   779→      const assistantMsg: Message = {
+   780→        id: `a-${Date.now()}`,
+   781→        role: 'assistant',
+   782→        content: data.answer || 'I could not process that request.',
+   783→        timestamp: Date.now(),
+   784→        actions: data.actions || [],
+   785→        isTyping: true,
+   786→      }
+   787→      setMessages((prev) => [...prev, assistantMsg])
+   788→      historyRef.current.push({ role: 'assistant', content: data.answer })
+   789→
+   790→      // Update live stats
+   791→      if (data.stats) {
+   792→        setLiveStats(data.stats)
+   793→      }
+   794→
+   795→      // After typing completes, mark as done
+   796→      setTimeout(() => {
+   797→        setMessages((prev) =>
+   798→          prev.map((m) => (m.id === assistantMsg.id ? { ...m, isTyping: false } : m))
+   799→        )
+   800→      }, Math.min(8000, (data.answer?.length || 100) * 8))
+   801→    } catch (err) {
+   802→      setMessages((prev) => [
+   803→        ...prev,
+   804→        {
+   805→          id: `e-${Date.now()}`,
+   806→          role: 'assistant',
+   807→          content:
+   808→            '⚠️ I had trouble connecting to your live data. Please try again in a moment.',
+   809→          timestamp: Date.now(),
+   810→        },
+   811→      ])
+   812→    } finally {
+   813→      setIsThinking(false)
+   814→    }
+   815→  }
+   816→
+   817→  const handleAction = (action: ActionSuggestion) => {
+   818→    if (action.type === 'navigate' && action.view) {
+   819→      setCurrentView(action.view as any)
+   820→      onMinimize()
+   821→    }
+   822→  }
+   823→
+   824→  const handleModuleShortcut = (view: string) => {
+   825→    setCurrentView(view as any)
+   826→    onMinimize()
+   827→  }
+   828→
+   829→  const handleSuggested = (q: string) => {
+   830→    handleSend(q)
+   831→  }
+   832→
+   833→  const clearConversation = () => {
+   834→    setMessages([
+   835→      {
+   836→        id: 'welcome-reset',
+   837→        role: 'assistant',
+   838→        content: "🧠 Conversation cleared. How can I help you now?",
+   839→        timestamp: Date.now(),
+   840→      },
+   841→    ])
+   842→    historyRef.current = []
+   843→  }
+   844→
+   845→  const toggleVoice = () => {
+   846→    if (voiceEnabled && typeof window !== 'undefined' && 'speechSynthesis' in window) {
+   847→      window.speechSynthesis.cancel()
+   848→    }
+   849→    setVoiceEnabled(!voiceEnabled)
+   850→  }
+   851→
+   852→  // Panel sizing
+   853→  const panelSize = isFullscreen
+   854→    ? { width: '100vw', height: '100vh', maxWidth: '100vw', maxHeight: '100vh', borderRadius: '0' }
+   855→    : {
+   856→        width: 'min(440px, calc(100vw - 32px))',
+   857→        height: 'min(640px, calc(100vh - 120px))',
+   858→        maxWidth: '440px',
+   859→        maxHeight: '640px',
+   860→        borderRadius: '1.25rem',
+   861→      }
+   862→
+   863→  return (
+   864→    <AnimatePresence>
+   865→      {isOpen && (
+   866→        <motion.div
+   867→          initial={{ opacity: 0, scale: 0.85, y: 30 }}
+   868→          animate={{ opacity: 1, scale: 1, y: 0 }}
+   869→          exit={{ opacity: 0, scale: 0.85, y: 30 }}
+   870→          transition={{ type: 'spring', stiffness: 350, damping: 30 }}
+   871→          className="fixed z-[9999] right-4 bottom-4 md:right-6 md:bottom-6"
+   872→          style={{
+   873→            width: panelSize.width,
+   874→            height: panelSize.height,
+   875→            maxWidth: panelSize.maxWidth,
+   876→            maxHeight: panelSize.maxHeight,
+   877→          }}
+   878→        >
+   879→          <div
+   880→            className="relative w-full h-full flex flex-col overflow-hidden shadow-2xl"
+   881→            style={{
+   882→              borderRadius: panelSize.borderRadius,
+   883→              background:
+   884→                'linear-gradient(180deg, rgba(255,255,255,0.95) 0%, rgba(248,250,252,0.95) 100%)',
+   885→              backdropFilter: 'blur(20px) saturate(180%)',
+   886→              WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+   887→              border: '1px solid rgba(255,255,255,0.4)',
+   888→              boxShadow:
+   889→                '0 24px 64px -12px rgba(16, 185, 129, 0.25), 0 0 0 1px rgba(16, 185, 129, 0.08)',
+   890→            }}
+   891→          >
+   892→            {/* Decorative gradient header bar */}
+   893→            <div
+   894→              className="absolute top-0 left-0 right-0 h-1"
+   895→              style={{
+   896→                background: 'linear-gradient(90deg, #10b981, #06b6d4, #3b82f6)',
+   897→              }}
+   898→            />
+   899→
+   900→            {/* Header */}
+   901→            <div className="flex items-center justify-between px-4 pt-3 pb-2 border-b border-slate-200/50 dark:border-slate-700/50 bg-white/60 dark:bg-slate-900/60 backdrop-blur-sm">
+   902→              <div className="flex items-center gap-2.5">
+   903→                <div className="relative h-9 w-9">
+   904→                  <motion.div
+   905→                    className="absolute inset-0 rounded-full"
+   906→                    style={{
+   907→                      background: 'conic-gradient(from 0deg, #10b981, #06b6d4, #3b82f6, #10b981)',
+   908→                      boxShadow: '0 4px 12px rgba(16,185,129,0.4)',
+   909→                    }}
+   910→                    animate={{ rotate: 360 }}
+   911→                    transition={{ duration: 6, repeat: Infinity, ease: 'linear' }}
+   912→                  />
+   913→                  <div className="absolute inset-0.5 rounded-full bg-white dark:bg-slate-900 flex items-center justify-center">
+   914→                    <Brain className="h-4 w-4 text-emerald-600" />
+   915→                  </div>
+   916→                </div>
+   917→                <div>
+   918→                  <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100 leading-tight">
+   919→                    GSTPilot Intelligence™
+   920→                  </h2>
+   921→                  <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-tight">
+   922→                    The AI Brain of Your Business
+   923→                  </p>
+   924→                </div>
+   925→              </div>
+   926→              <div className="flex items-center gap-1">
+   927→                <button
+   928→                  onClick={toggleVoice}
+   929→                  className={`p-1.5 rounded-lg transition-colors ${
+   930→                    voiceEnabled
+   931→                      ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600'
+   932→                      : 'text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+   933→                  }`}
+   934→                  title={voiceEnabled ? 'Voice output on' : 'Voice output off'}
+   935→                >
+   936→                  {voiceEnabled ? <Volume2 className="h-3.5 w-3.5" /> : <VolumeX className="h-3.5 w-3.5" />}
+   937→                </button>
+   938→                <button
+   939→                  onClick={clearConversation}
+   940→                  className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+   941→                  title="Clear conversation"
+   942→                >
+   943→                  <Trash2 className="h-3.5 w-3.5" />
+   944→                </button>
+   945→                <button
+   946→                  onClick={() => setShowSettings(!showSettings)}
+   947→                  className={`p-1.5 rounded-lg transition-colors ${
+   948→                    showSettings
+   949→                      ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600'
+   950→                      : 'text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+   951→                  }`}
+   952→                  title="Settings"
+   953→                >
+   954→                  <Settings className="h-3.5 w-3.5" />
+   955→                </button>
+   956→                <button
+   957→                  onClick={onToggleFullscreen}
+   958→                  className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+   959→                  title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+   960→                >
+   961→                  {isFullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
+   962→                </button>
+   963→                <button
+   964→                  onClick={onMinimize}
+   965→                  className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+   966→                  title="Minimize"
+   967→                >
+   968→                  <Minus className="h-3.5 w-3.5" />
+   969→                </button>
+   970→                <button
+   971→                  onClick={onClose}
+   972→                  className="p-1.5 rounded-lg text-slate-400 hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-900/30 transition-colors"
+   973→                  title="Close"
+   974→                >
+   975→                  <X className="h-3.5 w-3.5" />
+   976→                </button>
+   977→              </div>
+   978→            </div>
+   979→
+   980→            {/* Live Stats Bar */}
+   981→            <LiveStatsBar stats={liveStats} />
+   982→
+   983→            {/* Module Shortcuts */}
+   984→            <div className="flex gap-1.5 overflow-x-auto px-3 py-2 border-b border-slate-200/50 dark:border-slate-700/50 bg-white/30 dark:bg-slate-900/30">
+   985→              {MODULE_SHORTCUTS.map((m) => (
+   986→                <button
+   987→                  key={m.view}
+   988→                  onClick={() => handleModuleShortcut(m.view)}
+   989→                  className="flex items-center gap-1 shrink-0 px-2 py-1 rounded-md bg-white/60 dark:bg-slate-800/60 border border-slate-200/50 dark:border-slate-700/50 hover:border-emerald-300 dark:hover:border-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 transition-colors"
+   990→                  title={m.label}
+   991→                >
+   992→                  <m.icon className="h-3 w-3 text-emerald-600" />
+   993→                  <span className="text-[10px] font-medium text-slate-600 dark:text-slate-300">{m.label}</span>
+   994→                </button>
+   995→              ))}
+   996→            </div>
+   997→
+   998→            {/* Settings panel (collapsible) */}
+   999→            <AnimatePresence>
+  1000→              {showSettings && (
+  1001→                <motion.div
+  1002→                  initial={{ height: 0, opacity: 0 }}
+  1003→                  animate={{ height: 'auto', opacity: 1 }}
+  1004→                  exit={{ height: 0, opacity: 0 }}
+  1005→                  className="overflow-hidden border-b border-slate-200/50 dark:border-slate-700/50 bg-slate-50/80 dark:bg-slate-900/80 backdrop-blur-sm"
+  1006→                >
+  1007→                  <div className="px-4 py-3 space-y-2">
+  1008→                    <div className="flex items-center justify-between">
+  1009→                      <div>
+  1010→                        <p className="text-xs font-semibold text-slate-700 dark:text-slate-200">Voice Output</p>
+  1011→                        <p className="text-[10px] text-slate-500 dark:text-slate-400">Speak AI responses aloud</p>
+  1012→                      </div>
+  1013→                      <button
+  1014→                        onClick={toggleVoice}
+  1015→                        className={`relative h-5 w-9 rounded-full transition-colors ${
+  1016→                          voiceEnabled ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-700'
+  1017→                        }`}
+  1018→                      >
+  1019→                        <motion.div
+  1020→                          className="absolute top-0.5 h-4 w-4 rounded-full bg-white shadow"
+  1021→                          animate={{ left: voiceEnabled ? '18px' : '2px' }}
+  1022→                          transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+  1023→                        />
+  1024→                      </button>
+  1025→                    </div>
+  1026→                    <div className="text-[10px] text-slate-500 dark:text-slate-400 pt-1 border-t border-slate-200/50 dark:border-slate-700/50">
+  1027→                      <span className="font-semibold text-slate-600 dark:text-slate-300">Keyboard:</span> Ctrl+K to toggle ·
+  1028→                      <span className="font-semibold text-slate-600 dark:text-slate-300"> Voice:</span> Mic button for speech input
+  1029→                    </div>
+  1030→                  </div>
+  1031→                </motion.div>
+  1032→              )}
+  1033→            </AnimatePresence>
+  1034→
+  1035→            {/* Messages area */}
+  1036→            <div className="flex-1 overflow-y-auto px-3 py-3 space-y-3 custom-scrollbar">
+  1037→              {messages.map((msg) => (
+  1038→                <MessageBubble
+  1039→                  key={msg.id}
+  1040→                  message={msg}
+  1041→                  onAction={handleAction}
+  1042→                  voiceEnabled={voiceEnabled}
+  1043→                />
+  1044→              ))}
+  1045→              {isThinking && <ThinkingIndicator />}
+  1046→              <div ref={messagesEndRef} />
+  1047→            </div>
+  1048→
+  1049→            {/* Suggested questions (only when few messages) */}
+  1050→            {messages.length <= 2 && !isThinking && (
+  1051→              <div className="px-3 py-2 border-t border-slate-200/50 dark:border-slate-700/50 bg-white/40 dark:bg-slate-900/40">
+  1052→                <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-1.5">
+  1053→                  Try asking
+  1054→                </p>
+  1055→                <div className="flex flex-wrap gap-1.5">
+  1056→                  {SUGGESTED_QUESTIONS.map((q) => (
+  1057→                    <button
+  1058→                      key={q.label}
+  1059→                      onClick={() => handleSuggested(q.label)}
+  1060→                      className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1.5 rounded-lg bg-white/70 dark:bg-slate-800/70 border border-slate-200/60 dark:border-slate-700/60 hover:border-emerald-300 dark:hover:border-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 transition-colors"
+  1061→                    >
+  1062→                      <q.icon className={`h-3 w-3 ${q.color}`} />
+  1063→                      <span className="text-slate-600 dark:text-slate-300">{q.label}</span>
+  1064→                    </button>
+  1065→                  ))}
+  1066→                </div>
+  1067→              </div>
+  1068→            )}
+  1069→
+  1070→            {/* Input area */}
+  1071→            <div className="px-3 py-3 border-t border-slate-200/50 dark:border-slate-700/50 bg-white/70 dark:bg-slate-900/70 backdrop-blur-sm">
+  1072→              <div className="flex items-end gap-2">
+  1073→                <button
+  1074→                  onClick={toggleListening}
+  1075→                  className={`shrink-0 p-2.5 rounded-xl transition-all ${
+  1076→                    isListening
+  1077→                      ? 'bg-red-500 text-white shadow-lg shadow-red-500/40'
+  1078→                      : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
+  1079→                  }`}
+  1080→                  title={isListening ? 'Stop listening' : 'Voice input'}
+  1081→                >
+  1082→                  {isListening ? <Square className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+  1083→                </button>
+  1084→                <div className="flex-1 relative">
+  1085→                  <input
+  1086→                    ref={inputRef}
+  1087→                    type="text"
+  1088→                    value={input}
+  1089→                    onChange={(e) => setInput(e.target.value)}
+  1090→                    onKeyDown={(e) => {
+  1091→                      if (e.key === 'Enter' && !e.shiftKey) {
+  1092→                        e.preventDefault()
+  1093→                        handleSend()
+  1094→                      }
+  1095→                    }}
+  1096→                    placeholder={isListening ? 'Listening…' : 'Ask GSTPilot Intelligence anything…'}
+  1097→                    className="w-full px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-400 transition-all"
+  1098→                    disabled={isThinking}
+  1099→                  />
+  1100→                  {isListening && (
+  1101→                    <motion.div
+  1102→                      className="absolute right-3 top-1/2 -translate-y-1/2 flex gap-0.5"
+  1103→                      animate={{ opacity: [0.4, 1, 0.4] }}
+  1104→                      transition={{ duration: 0.8, repeat: Infinity }}
+  1105→                    >
+  1106→                      {[0, 1, 2, 3].map((i) => (
+  1107→                        <motion.div
+  1108→                          key={i}
+  1109→                          className="w-0.5 bg-red-500 rounded-full"
+  1110→                          animate={{ height: [4, 12, 4] }}
+  1111→                          transition={{ duration: 0.5, repeat: Infinity, delay: i * 0.1 }}
+  1112→                        />
+  1113→                      ))}
+  1114→                    </motion.div>
+  1115→                  )}
+  1116→                </div>
+  1117→                <button
+  1118→                  onClick={() => handleSend()}
+  1119→                  disabled={!input.trim() || isThinking}
+  1120→                  className="shrink-0 p-2.5 rounded-xl bg-gradient-to-br from-emerald-500 to-cyan-600 text-white shadow-lg shadow-emerald-500/30 hover:shadow-emerald-500/50 disabled:opacity-40 disabled:shadow-none transition-all hover:scale-105 active:scale-95"
+  1121→                  title="Send"
+  1122→                >
+  1123→                  <Send className="h-4 w-4" />
+  1124→                </button>
+  1125→              </div>
+  1126→              <p className="text-[9px] text-slate-400 dark:text-slate-500 mt-1.5 text-center">
+  1127→                GSTPilot Intelligence™ reads live data · Ctrl+K to toggle · Voice + Speech enabled
+  1128→              </p>
+  1129→            </div>
+  1130→          </div>
+  1131→        </motion.div>
+  1132→      )}
+  1133→    </AnimatePresence>
+  1134→  )
+  1135→}
+  1136→
+  1137→// --- Main Component --------------------------------------------------------
+  1138→
+  1139→export function GSTPilotIntelligence() {
+  1140→  const [isOpen, setIsOpen] = useState(false)
+  1141→  const [isFullscreen, setIsFullscreen] = useState(false)
+  1142→  const [isListening, setIsListening] = useState(false)
+  1143→  const [isThinking, setIsThinking] = useState(false)
+  1144→
+  1145→  // Ctrl+K shortcut
+  1146→  useEffect(() => {
+  1147→    const handler = (e: KeyboardEvent) => {
+  1148→      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+  1149→        e.preventDefault()
+  1150→        setIsOpen((prev) => !prev)
+  1151→      }
+  1152→      if (e.key === 'Escape' && isOpen) {
+  1153→        setIsOpen(false)
+  1154→      }
+  1155→    }
+  1156→    window.addEventListener('keydown', handler)
+  1157→    return () => window.removeEventListener('keydown', handler)
+  1158→  }, [isOpen])
+  1159→
+  1160→  const handleMinimize = () => {
+  1161→    setIsOpen(false)
+  1162→    setIsFullscreen(false)
+  1163→  }
+  1164→
+  1165→  return (
+  1166→    <>
+  1167→      <FloatingOrb
+  1168→        onClick={() => setIsOpen((prev) => !prev)}
+  1169→        isOpen={isOpen}
+  1170→        isListening={isListening}
+  1171→        isThinking={isThinking}
+  1172→      />
+  1173→      <CommandCenter
+  1174→        isOpen={isOpen}
+  1175→        isFullscreen={isFullscreen}
+  1176→        isListening={isListening}
+  1177→        setIsListening={setIsListening}
+  1178→        isThinking={isThinking}
+  1179→        setIsThinking={setIsThinking}
+  1180→        onClose={() => {
+  1181→          setIsOpen(false)
+  1182→          setIsFullscreen(false)
+  1183→        }}
+  1184→        onToggleFullscreen={() => setIsFullscreen((prev) => !prev)}
+  1185→        onMinimize={handleMinimize}
+  1186→      />
+  1187→    </>
+  1188→  )
+  1189→}
+  1190→
+  1191→export default GSTPilotIntelligence
+  1192→

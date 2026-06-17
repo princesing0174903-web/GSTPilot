@@ -26,6 +26,8 @@ import { useTheme } from 'next-themes'
 import { LeftNav } from '@/components/layout/LeftNav'
 import { CommandBar } from '@/components/layout/CommandBar'
 import { OraclePanel } from '@/components/oracle/OraclePanel'
+import { InfinitySymbol } from '@/components/layout/InfinityMark'
+import { AmbientBackground } from '@/components/layout/AmbientBackground'
 import FirmCommandCenterPage from '@/components/firm-command-center/FirmCommandCenterPage'
 import MultiFirmPage from '@/components/multi-firm/MultiFirmPage'
 import AutopilotPage from '@/components/autopilot/AutopilotPage'
@@ -223,18 +225,19 @@ function DashboardContent() {
     : 'U'
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-background">
+    <div className="relative flex h-screen flex-col overflow-hidden bg-background">
+      {/* ═══ V16 Ambient Background — aurora + particles + network lines ═══ */}
+      <AmbientBackground />
+
       {/* ═══ TOP BAR ═══ */}
-      <header className="flex h-14 shrink-0 items-center gap-3 border-b border-white/[0.06] bg-background/80 px-4 backdrop-blur-xl md:px-6">
-        {/* Brand + subtitle */}
+      <header className="relative z-10 flex h-14 shrink-0 items-center gap-3 border-b border-white/[0.06] bg-background/60 px-4 backdrop-blur-xl md:px-6">
+        {/* Brand + subtitle — V16 InfinityMark™ */}
         <button
           onClick={() => setCurrentView('dashboard')}
           className="flex items-center gap-2.5 rounded-lg outline-none transition-opacity hover:opacity-80"
           aria-label="GSTPilot Infinity — Home"
         >
-          <span className="flex h-7 w-7 items-center justify-center rounded-lg accent-gradient shadow-lg shadow-emerald-500/20">
-            <Zap className="h-4 w-4 text-white" fill="currentColor" />
-          </span>
+          <InfinitySymbol size={28} />
           <div className="hidden flex-col items-start leading-none sm:flex">
             <span className="text-sm font-semibold tracking-tight text-foreground">
               GSTPilot Infinity<span className="accent-text">™</span>
@@ -309,7 +312,7 @@ function DashboardContent() {
       </header>
 
       {/* ═══ THREE-COLUMN WORKSPACE ═══ */}
-      <div className="flex min-h-0 flex-1 gap-3 p-3">
+      <div className="relative z-10 flex min-h-0 flex-1 gap-3 p-3">
         {/* LEFT NAV */}
         <div className="shrink-0">
           <LeftNav />

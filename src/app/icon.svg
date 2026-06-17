@@ -1,0 +1,31 @@
+<svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="g1" x1="0" y1="0" x2="48" y2="48">
+      <stop offset="0%" stop-color="#10b981"/>
+      <stop offset="100%" stop-color="#06b6d4"/>
+    </linearGradient>
+    <linearGradient id="g2" x1="48" y1="0" x2="0" y2="48">
+      <stop offset="0%" stop-color="#06b6d4"/>
+      <stop offset="100%" stop-color="#3b82f6"/>
+    </linearGradient>
+    <linearGradient id="g3" x1="0" y1="48" x2="48" y2="0">
+      <stop offset="0%" stop-color="#3b82f6"/>
+      <stop offset="100%" stop-color="#10b981"/>
+    </linearGradient>
+    <linearGradient id="ln" x1="0" y1="0" x2="48" y2="48">
+      <stop offset="0%" stop-color="#10b981" stop-opacity="0.6"/>
+      <stop offset="50%" stop-color="#06b6d4" stop-opacity="0.6"/>
+      <stop offset="100%" stop-color="#3b82f6" stop-opacity="0.6"/>
+    </linearGradient>
+  </defs>
+  <rect width="48" height="48" rx="10" fill="#050505"/>
+  <g stroke="url(#ln)" stroke-width="1.5" fill="none" stroke-linecap="round">
+    <path d="M 12 14 Q 24 6, 36 14"/>
+    <path d="M 36 14 Q 42 24, 24 36"/>
+    <path d="M 24 36 Q 6 24, 12 14"/>
+    <path d="M 16 18 Q 24 28, 32 18" stroke-opacity="0.4"/>
+  </g>
+  <circle cx="12" cy="14" r="4.5" fill="url(#g1)"/>
+  <circle cx="36" cy="14" r="4.5" fill="url(#g2)"/>
+  <circle cx="24" cy="36" r="4.5" fill="url(#g3)"/>
+</svg>

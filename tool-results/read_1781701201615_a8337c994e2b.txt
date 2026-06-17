@@ -1,0 +1,834 @@
+     1→'use client';
+     2→
+     3→// ═══════════════════════════════════════════════════════════════════════════════
+     4→// GSTPilot Infinity™ V15 — Mission Control
+     5→// The main workspace hero: Greeting · AI Insight · Business Score · 3 KPI · 5 Widgets.
+     6→// The global Command Bar (bottom) + Oracle Panel (right) are separate surfaces,
+     7→// built by other agents. This file is purely the focused home workspace.
+     8→// No clutter. No menus. No fake data. Calm, premium, expensive.
+     9→// ═══════════════════════════════════════════════════════════════════════════════
+    10→
+    11→import { useMemo, useState, useEffect, type ReactNode } from 'react';
+    12→import { motion } from 'framer-motion';
+    13→import {
+    14→  Sparkles, TrendingDown, AlertTriangle, Clock, Brain,
+    15→  Wallet, ArrowRight, IndianRupee, ShieldAlert,
+    16→  ListTodo, Plug, Users, Lightbulb, CheckCircle2,
+    17→} from 'lucide-react';
+    18→import { Button } from '@/components/ui/button';
+    19→import { Skeleton } from '@/components/ui/skeleton';
+    20→import { useApp, type AppView } from '@/contexts/AppContext';
+    21→import { useAuth } from '@/contexts/AuthContext';
+    22→import {
+    23→  useLiveDashboardMetrics,
+    24→  useFireClients,
+    25→  useFireActivities,
+    26→} from '@/hooks/use-firestore';
+    27→import type { FirestoreClient, FirestoreReturn } from '@/lib/firestore-schema';
+    28→
+    29→// ─── Helpers ──────────────────────────────────────────────────────────────────
+    30→
+    31→function formatINR(amount: number): string {
+    32→  if (!isFinite(amount) || isNaN(amount)) return '₹0';
+    33→  return '₹' + Math.round(amount).toLocaleString('en-IN');
+    34→}
+    35→
+    36→function greeting(): string {
+    37→  const h = new Date().getHours();
+    38→  if (h < 12) return 'Good Morning';
+    39→  if (h < 17) return 'Good Afternoon';
+    40→  return 'Good Evening';
+    41→}
+    42→
+    43→function firstName(name?: string): string {
+    44→  if (!name) return 'there';
+    45→  return name.split(' ')[0];
+    46→}
+    47→
+    48→// ─── Relative time formatter (for Business Timeline widget) ───────────────────
+    49→// Firestore timestamps are converted to ISO strings by use-firestore's convertDoc,
+    50→// but we defensively handle Date objects and raw Firestore Timestamps too.
+    51→
+    52→function timeAgo(createdAt: unknown): string {
+    53→  if (!createdAt) return 'just now';
+    54→  let date: Date;
+    55→  if (createdAt instanceof Date) {
+    56→    date = createdAt;
+    57→  } else if (typeof createdAt === 'string') {
+    58→    date = new Date(createdAt);
+    59→  } else if (
+    60→    typeof createdAt === 'object' &&
+    61→    createdAt !== null &&
+    62→    'toDate' in createdAt &&
+    63→    typeof (createdAt as { toDate: () => Date }).toDate === 'function'
+    64→  ) {
+    65→    date = (createdAt as { toDate: () => Date }).toDate();
+    66→  } else {
+    67→    return 'just now';
+    68→  }
+    69→  if (isNaN(date.getTime())) return 'just now';
+    70→  const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
+    71→  if (seconds < 60) return 'just now';
+    72→  const minutes = Math.floor(seconds / 60);
+    73→  if (minutes < 60) return `${minutes}m ago`;
+    74→  const hours = Math.floor(minutes / 60);
+    75→  if (hours < 24) return `${hours}h ago`;
+    76→  const days = Math.floor(hours / 24);
+    77→  if (days < 7) return `${days}d ago`;
+    78→  const weeks = Math.floor(days / 7);
+    79→  if (weeks < 5) return `${weeks}w ago`;
+    80→  const months = Math.floor(days / 30);
+    81→  if (months < 12) return `${months}mo ago`;
+    82→  const years = Math.floor(days / 365);
+    83→  return `${years}y ago`;
+    84→}
+    85→
+    86→// ─── Business Score computation ───────────────────────────────────────────────
+    87→// Start at 100. Subtract weighted penalties for risk signals. Clamp 0–100.
+    88→// If there is no data at all, return null (UI shows welcoming state).
+    89→
+    90→function computeBusinessScore(opts: {
+    91→  totalClients: number;
+    92→  criticalIssues: number;
+    93→  warnings: number;
+    94→  pendingReturns: number;
+    95→  overdueReturns: number;
+    96→  averageHealthScore: number;
+    97→  matchPercentage: number;
+    98→}): number | null {
+    99→  const { totalClients, criticalIssues, warnings, pendingReturns, overdueReturns, averageHealthScore, matchPercentage } = opts;
+   100→  if (totalClients === 0 && pendingReturns === 0 && overdueReturns === 0) return null;
+   101→
+   102→  let score = 100;
+   103→  score -= criticalIssues * 6;      // critical issues are serious
+   104→  score -= warnings * 2;            // warnings are minor
+   105→  score -= overdueReturns * 8;      // overdue returns hurt most
+   106→  score -= pendingReturns * 2;      // pending returns are a mild drag
+   107→  // Health score gap: if avg health < 80, drag down
+   108→  if (averageHealthScore > 0) {
+   109→    score -= Math.max(0, 80 - averageHealthScore) * 0.6;
+   110→  }
+   111→  // Reconciliation gap: if match % < 100, mild drag
+   112→  score -= Math.max(0, 100 - matchPercentage) * 0.3;
+   113→  return Math.max(0, Math.min(100, Math.round(score)));
+   114→}
+   115→
+   116→function scoreTier(score: number | null): { label: string; color: string } {
+   117→  if (score === null) return { label: '—', color: 'text-muted-foreground' };
+   118→  if (score >= 85) return { label: 'Excellent', color: 'text-emerald-400' };
+   119→  if (score >= 70) return { label: 'Healthy', color: 'text-cyan-400' };
+   120→  if (score >= 50) return { label: 'At Risk', color: 'text-amber-400' };
+   121→  return { label: 'Critical', color: 'text-red-400' };
+   122→}
+   123→
+   124→// ─── AI Insight engine ────────────────────────────────────────────────────────
+   125→// Each insight: { icon, what (the observation), why (reasoning), action (label + view) }
+   126→// Answers the 3 questions: What happened? Why? What should I do next?
+   127→
+   128→interface AIInsight {
+   129→  id: string;
+   130→  icon: typeof Sparkles;
+   131→  tone: 'risk' | 'info' | 'success';
+   132→  what: string;
+   133→  why: string;
+   134→  actionLabel: string;
+   135→  actionView: AppView;
+   136→}
+   137→
+   138→function buildInsights(opts: {
+   139→  metrics: {
+   140→    totalClients: number;
+   141→    pendingReturns: number;
+   142→    overdueReturns: number;
+   143→    criticalIssues: number;
+   144→    warnings: number;
+   145→    totalTaxVolume: number;
+   146→    averageHealthScore: number;
+   147→    matchPercentage: number;
+   148→    upcomingFilings: FirestoreReturn[];
+   149→  };
+   150→  clients: Array<FirestoreClient & { id: string }>;
+   151→}): AIInsight[] {
+   152→  const { metrics, clients } = opts;
+   153→  const insights: AIInsight[] = [];
+   154→
+   155→  // 1. Overdue returns — most urgent
+   156→  if (metrics.overdueReturns > 0) {
+   157→    insights.push({
+   158→      id: 'overdue-returns',
+   159→      icon: AlertTriangle,
+   160→      tone: 'risk',
+   161→      what: `${metrics.overdueReturns} GST return${metrics.overdueReturns > 1 ? 's are' : ' is'} overdue`,
+   162→      why: 'Overdue returns trigger notices and late fees. File immediately to avoid penalties.',
+   163→      actionLabel: 'File Now',
+   164→      actionView: 'returns',
+   165→    });
+   166→  }
+   167→
+   168→  // 2. Pending returns due soon (next filing in upcomingFilings)
+   169→  const nextFiling = metrics.upcomingFilings[0];
+   170→  if (nextFiling && metrics.pendingReturns > 0 && metrics.overdueReturns === 0) {
+   171→    insights.push({
+   172→      id: 'gst-due',
+   173→      icon: Clock,
+   174→      tone: 'info',
+   175→      what: `GST filing due — ${nextFiling.returnType} for ${nextFiling.period}`,
+   176→      why: `${metrics.pendingReturns} return${metrics.pendingReturns > 1 ? 's' : ''} pending. Filing on time keeps compliance score high.`,
+   177→      actionLabel: 'File GST',
+   178→      actionView: 'returns',
+   179→    });
+   180→  }
+   181→
+   182→  // 3. Critical issues / risky clients
+   183→  const riskyClients = clients.filter(c => (c.healthScore ?? 100) < 60);
+   184→  if (metrics.criticalIssues > 0 || riskyClients.length > 0) {
+   185→    insights.push({
+   186→      id: 'churn-risk',
+   187→      icon: TrendingDown,
+   188→      tone: 'risk',
+   189→      what: riskyClients.length > 0
+   190→        ? `${riskyClients.length} client${riskyClients.length > 1 ? 's may' : ' may'} churn`
+   191→        : `${metrics.criticalIssues} critical issue${metrics.criticalIssues > 1 ? 's' : ''} need attention`,
+   192→      why: riskyClients.length > 0
+   193→        ? 'Low health scores signal dissatisfaction. Reach out before they leave.'
+   194→        : 'Critical issues compound into bigger problems if left unaddressed.',
+   195→      actionLabel: riskyClients.length > 0 ? 'View Clients' : 'Review Issues',
+   196→      actionView: riskyClients.length > 0 ? 'clients' : 'ai-operating-room',
+   197→    });
+   198→  }
+   199→
+   200→  // 4. Cash position / collections
+   201→  if (metrics.totalTaxVolume > 0) {
+   202→    insights.push({
+   203→      id: 'collections',
+   204→      icon: Wallet,
+   205→      tone: metrics.matchPercentage < 90 ? 'risk' : 'info',
+   206→      what: metrics.matchPercentage < 90
+   207→        ? 'Collections may drop — reconciliation gaps detected'
+   208→        : 'Cash position is healthy',
+   209→      why: metrics.matchPercentage < 90
+   210→        ? `${metrics.matchPercentage.toFixed(0)}% of invoices reconciled. Unmatched invoices mean uncollected revenue.`
+   211→        : `${metrics.matchPercentage.toFixed(0)}% invoice match rate. Keep chasing pending collections to maintain runway.`,
+   212→      actionLabel: 'Fix Collections',
+   213→      actionView: 'reconcile',
+   214→    });
+   215→  }
+   216→
+   217→  // 5. Compliance score insight
+   218→  if (metrics.averageHealthScore > 0) {
+   219→    const tier = metrics.averageHealthScore >= 80 ? 'success' : 'info';
+   220→    insights.push({
+   221→      id: 'compliance',
+   222→      icon: ShieldAlert,
+   223→      tone: tier,
+   224→      what: `Compliance health at ${metrics.averageHealthScore.toFixed(0)}%`,
+   225→      why: metrics.averageHealthScore >= 80
+   226→        ? 'Strong compliance posture. Maintain by filing on time and resolving warnings.'
+   227→        : 'Below optimal. Address pending returns and warnings to lift your score.',
+   228→      actionLabel: 'View Compliance',
+   229→      actionView: 'returns',
+   230→    });
+   231→  }
+   232→
+   233→  // 6. Always-on "all clear" nudge if nothing urgent
+   234→  if (insights.length === 0) {
+   235→    insights.push({
+   236→      id: 'all-clear',
+   237→      icon: Sparkles,
+   238→      tone: 'success',
+   239→      what: 'Everything looks good today',
+   240→      why: 'No urgent issues. Hand control to AI and let it run the routine work.',
+   241→      actionLabel: 'Run My Business',
+   242→      actionView: 'run-my-business',
+   243→    });
+   244→  }
+   245→
+   246→  return insights.slice(0, 6);
+   247→}
+   248→
+   249→// ─── Business Score Gauge (SVG) ───────────────────────────────────────────────
+   250→
+   251→function ScoreGauge({ score }: { score: number | null }) {
+   252→  const size = 220;
+   253→  const stroke = 14;
+   254→  const r = (size - stroke) / 2;
+   255→  const c = 2 * Math.PI * r;
+   256→  const pct = score === null ? 0 : score / 100;
+   257→  const offset = c * (1 - pct);
+   258→
+   259→  return (
+   260→    <div className="relative" style={{ width: size, height: size }}>
+   261→      <svg width={size} height={size} className="-rotate-90">
+   262→        <defs>
+   263→          <linearGradient id="missionScoreGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+   264→            <stop offset="0%" stopColor="#10b981" />
+   265→            <stop offset="50%" stopColor="#06b6d4" />
+   266→            <stop offset="100%" stopColor="#3b82f6" />
+   267→          </linearGradient>
+   268→        </defs>
+   269→        {/* Track */}
+   270→        <circle
+   271→          cx={size / 2}
+   272→          cy={size / 2}
+   273→          r={r}
+   274→          fill="none"
+   275→          stroke="rgba(255,255,255,0.06)"
+   276→          strokeWidth={stroke}
+   277→        />
+   278→        {/* Progress arc */}
+   279→        {score !== null && (
+   280→          <motion.circle
+   281→            cx={size / 2}
+   282→            cy={size / 2}
+   283→            r={r}
+   284→            fill="none"
+   285→            stroke="url(#missionScoreGradient)"
+   286→            strokeWidth={stroke}
+   287→            strokeLinecap="round"
+   288→            strokeDasharray={c}
+   289→            initial={{ strokeDashoffset: c }}
+   290→            animate={{ strokeDashoffset: offset }}
+   291→            transition={{ duration: 1.2, ease: 'easeOut', delay: 0.2 }}
+   292→          />
+   293→        )}
+   294→      </svg>
+   295→      <div className="absolute inset-0 flex flex-col items-center justify-center">
+   296→        {score === null ? (
+   297→          <span className="text-4xl font-bold text-muted-foreground">—</span>
+   298→        ) : (
+   299→          <motion.span
+   300→            initial={{ opacity: 0, scale: 0.8 }}
+   301→            animate={{ opacity: 1, scale: 1 }}
+   302→            transition={{ duration: 0.5, delay: 0.6 }}
+   303→            className={`text-6xl font-bold tracking-tight ${scoreTier(score).color}`}
+   304→          >
+   305→            {score}
+   306→          </motion.span>
+   307→        )}
+   308→        <span className="text-xs text-muted-foreground tracking-wider uppercase mt-1">
+   309→          / 100
+   310→        </span>
+   311→      </div>
+   312→    </div>
+   313→  );
+   314→}
+   315→
+   316→// ─── Mini Stat (KPI card) ─────────────────────────────────────────────────────
+   317→
+   318→function MiniStat({
+   319→  label, value, icon: Icon, hint,
+   320→}: {
+   321→  label: string;
+   322→  value: string;
+   323→  icon: typeof IndianRupee;
+   324→  hint?: string;
+   325→}) {
+   326→  return (
+   327→    <div className="glass-surface rounded-2xl p-4 flex items-center gap-3">
+   328→      <div className="flex h-9 w-9 items-center justify-center rounded-lg accent-gradient-soft shrink-0">
+   329→        <Icon className="h-4 w-4 accent-text" />
+   330→      </div>
+   331→      <div className="min-w-0">
+   332→        <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground truncate">{label}</p>
+   333→        <p className="text-lg font-bold text-foreground leading-tight truncate">{value}</p>
+   334→        {hint && <p className="text-[10px] text-muted-foreground truncate">{hint}</p>}
+   335→      </div>
+   336→    </div>
+   337→  );
+   338→}
+   339→
+   340→// ─── Widget Card wrapper ──────────────────────────────────────────────────────
+   341→
+   342→function WidgetCard({
+   343→  icon: Icon, title, children, delay = 0, className,
+   344→}: {
+   345→  icon: typeof Sparkles;
+   346→  title: string;
+   347→  children: ReactNode;
+   348→  delay?: number;
+   349→  className?: string;
+   350→}) {
+   351→  return (
+   352→    <motion.div
+   353→      initial={{ opacity: 0, y: 12 }}
+   354→      animate={{ opacity: 1, y: 0 }}
+   355→      transition={{ duration: 0.5, delay, ease: 'easeOut' }}
+   356→      className={`glass-surface rounded-3xl p-5 flex flex-col ${className ?? ''}`}
+   357→    >
+   358→      <div className="flex items-center gap-2 mb-4">
+   359→        <div className="flex h-7 w-7 items-center justify-center rounded-lg accent-gradient-soft shrink-0">
+   360→          <Icon className="h-4 w-4 accent-text" />
+   361→        </div>
+   362→        <h3 className="text-sm font-semibold text-foreground">{title}</h3>
+   363→      </div>
+   364→      <div className="flex-1 min-h-0">{children}</div>
+   365→    </motion.div>
+   366→  );
+   367→}
+   368→
+   369→// ─── Calm Empty State ─────────────────────────────────────────────────────────
+   370→
+   371→function EmptyState({
+   372→  icon: Icon, title, subtitle, actionLabel, onAction,
+   373→}: {
+   374→  icon: typeof Sparkles;
+   375→  title: string;
+   376→  subtitle?: string;
+   377→  actionLabel?: string;
+   378→  onAction?: () => void;
+   379→}) {
+   380→  return (
+   381→    <div className="flex flex-col items-center justify-center text-center py-8 px-4">
+   382→      <div className="flex h-10 w-10 items-center justify-center rounded-full accent-gradient-soft mb-3">
+   383→        <Icon className="h-5 w-5 accent-text" />
+   384→      </div>
+   385→      <p className="text-sm text-foreground font-medium">{title}</p>
+   386→      {subtitle && <p className="text-xs text-muted-foreground mt-1 max-w-[240px]">{subtitle}</p>}
+   387→      {actionLabel && onAction && (
+   388→        <button
+   389→          onClick={onAction}
+   390→          className="mt-3 inline-flex items-center gap-1 rounded-full border border-emerald-400/20 bg-emerald-500/10 px-3 py-1.5 text-xs font-medium text-emerald-300 transition-colors hover:border-emerald-400/40 hover:bg-emerald-500/20"
+   391→        >
+   392→          {actionLabel}
+   393→          <ArrowRight className="h-3 w-3" />
+   394→        </button>
+   395→      )}
+   396→    </div>
+   397→  );
+   398→}
+   399→
+   400→// ─── Loading Skeleton ─────────────────────────────────────────────────────────
+   401→
+   402→function MissionControlSkeleton() {
+   403→  return (
+   404→    <div className="max-w-6xl mx-auto px-4 md:px-8 py-8 md:py-12 space-y-10">
+   405→      <div className="space-y-3">
+   406→        <Skeleton className="h-10 w-72" />
+   407→        <Skeleton className="h-24 rounded-3xl" />
+   408→      </div>
+   409→      <div className="flex justify-center">
+   410→        <Skeleton className="h-56 w-56 rounded-full" />
+   411→      </div>
+   412→      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+   413→        <Skeleton className="h-20 rounded-2xl" />
+   414→        <Skeleton className="h-20 rounded-2xl" />
+   415→        <Skeleton className="h-20 rounded-2xl" />
+   416→      </div>
+   417→      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+   418→        <Skeleton className="h-48 rounded-3xl" />
+   419→        <Skeleton className="h-48 rounded-3xl" />
+   420→        <Skeleton className="h-48 rounded-3xl" />
+   421→        <Skeleton className="h-48 rounded-3xl" />
+   422→        <Skeleton className="h-56 rounded-3xl lg:col-span-2" />
+   423→      </div>
+   424→    </div>
+   425→  );
+   426→}
+   427→
+   428→// ─── Connected Services catalog (honest: all not-connected by default) ────────
+   429→
+   430→const CONNECTED_SERVICES: Array<{ id: string; name: string; initial: string }> = [
+   431→  { id: 'google', name: 'Google', initial: 'G' },
+   432→  { id: 'gmail', name: 'Gmail', initial: 'M' },
+   433→  { id: 'outlook', name: 'Outlook', initial: 'O' },
+   434→  { id: 'gstn', name: 'GSTN', initial: 'G' },
+   435→  { id: 'whatsapp', name: 'WhatsApp', initial: 'W' },
+   436→  { id: 'bank', name: 'Bank APIs', initial: 'B' },
+   437→];
+   438→
+   439→// ─── Main Component ───────────────────────────────────────────────────────────
+   440→
+   441→export default function MissionControlPage() {
+   442→  const { setCurrentView } = useApp();
+   443→  const { user } = useAuth();
+   444→  const { metrics, loading, error } = useLiveDashboardMetrics();
+   445→  const { data: clients } = useFireClients();
+   446→  const { data: activities } = useFireActivities();
+   447→
+   448→  // ── Priority checkbox toggle state (visual only, local) ──
+   449→  const [done, setDone] = useState<Record<string, boolean>>({});
+   450→
+   451→  // ── Graceful loading timeout ──
+   452→  // If live data hasn't arrived in 3.5s (e.g. slow backend or offline), stop
+   453→  // blocking the UI — render with whatever metrics we have (empty → null score
+   454→  // + welcoming state). Premium UX never makes the user stare at a skeleton.
+   455→  const [loadingTimedOut, setLoadingTimedOut] = useState(false);
+   456→  useEffect(() => {
+   457→    if (!loading) return;
+   458→    const t = setTimeout(() => setLoadingTimedOut(true), 3500);
+   459→    return () => clearTimeout(t);
+   460→  }, [loading]);
+   461→  const showLoading = loading && !loadingTimedOut;
+   462→
+   463→  // ── Business Score ──
+   464→  const businessScore = useMemo(() => computeBusinessScore({
+   465→    totalClients: metrics.totalClients,
+   466→    criticalIssues: metrics.criticalIssues,
+   467→    warnings: metrics.warnings,
+   468→    pendingReturns: metrics.pendingReturns,
+   469→    overdueReturns: metrics.overdueReturns,
+   470→    averageHealthScore: metrics.averageHealthScore,
+   471→    matchPercentage: metrics.matchPercentage,
+   472→  }), [metrics]);
+   473→
+   474→  // ── AI Insights ──
+   475→  const insights = useMemo(() => buildInsights({
+   476→    metrics: {
+   477→      totalClients: metrics.totalClients,
+   478→      pendingReturns: metrics.pendingReturns,
+   479→      overdueReturns: metrics.overdueReturns,
+   480→      criticalIssues: metrics.criticalIssues,
+   481→      warnings: metrics.warnings,
+   482→      totalTaxVolume: metrics.totalTaxVolume,
+   483→      averageHealthScore: metrics.averageHealthScore,
+   484→      matchPercentage: metrics.matchPercentage,
+   485→      upcomingFilings: metrics.upcomingFilings,
+   486→    },
+   487→    clients: clients as unknown as Array<FirestoreClient & { id: string }>,
+   488→  }), [metrics, clients]);
+   489→
+   490→  // Hero insight (first) + compact recommendations (up to 4 more)
+   491→  const heroInsight = insights[0];
+   492→  const recommendations = useMemo(() => insights.slice(1, 5), [insights]);
+   493→
+   494→  const tier = scoreTier(businessScore);
+   495→
+   496→  // ── "Has data" flag — drives honest empty vs welcoming states ──
+   497→  const hasData = useMemo(() => (
+   498→    metrics.totalClients > 0 ||
+   499→    metrics.pendingReturns > 0 ||
+   500→    metrics.overdueReturns > 0 ||
+   501→    metrics.totalTaxVolume > 0
+   502→  ), [metrics]);
+   503→
+   504→  // ── Cash position label ──
+   505→  const cashLabel = useMemo(() => {
+   506→    if (!hasData) return '—';
+   507→    if (businessScore === null) return '—';
+   508→    if (businessScore >= 80) return 'Healthy';
+   509→    if (businessScore >= 60) return 'Stable';
+   510→    if (businessScore >= 40) return 'Tight';
+   511→    return 'Strained';
+   512→  }, [hasData, businessScore]);
+   513→
+   514→  // ── Today's Priorities (derived from live data) ──
+   515→  const priorities = useMemo<Array<{ id: string; label: string; view: AppView }>>(() => {
+   516→    if (!hasData) return [];
+   517→    const list: Array<{ id: string; label: string; view: AppView }> = [];
+   518→    if (metrics.matchPercentage < 95 || metrics.criticalIssues > 0) {
+   519→      list.push({ id: 'collections', label: 'Recover Collections', view: 'reconcile' });
+   520→    }
+   521→    if (metrics.pendingReturns > 0 || metrics.overdueReturns > 0) {
+   522→      list.push({ id: 'gst', label: 'File GST Returns', view: 'returns' });
+   523→    }
+   524→    // Gentle nudge — always shown when there's data
+   525→    list.push({ id: 'expenses', label: 'Review Expenses', view: 'invoices' });
+   526→    return list.slice(0, 4);
+   527→  }, [hasData, metrics.matchPercentage, metrics.criticalIssues, metrics.pendingReturns, metrics.overdueReturns]);
+   528→
+   529→  // ── Business Timeline (top 5 recent activities) ──
+   530→  const timelineActivities = useMemo(() => activities.slice(0, 5), [activities]);
+   531→
+   532→  // ── Loading ──
+   533→  if (showLoading) return <MissionControlSkeleton />;
+   534→
+   535→  // ── Error ──
+   536→  if (error) {
+   537→    return (
+   538→      <div className="max-w-2xl mx-auto px-4 py-20 text-center">
+   539→        <div className="glass-surface rounded-2xl p-8">
+   540→          <AlertTriangle className="h-10 w-10 text-amber-400 mx-auto mb-3" />
+   541→          <h3 className="text-lg font-semibold text-foreground">Couldn&apos;t load your mission control</h3>
+   542→          <p className="text-sm text-muted-foreground mt-1">{error}</p>
+   543→          <Button variant="outline" className="mt-4" onClick={() => window.location.reload()}>
+   544→            Retry
+   545→          </Button>
+   546→        </div>
+   547→      </div>
+   548→    );
+   549→  }
+   550→
+   551→  return (
+   552→    <div className="relative min-h-[calc(100vh-8rem)]">
+   553→      {/* Subtle radial glow at top — adds depth, premium feel */}
+   554→      <div
+   555→        className="pointer-events-none absolute inset-x-0 top-0 h-[480px] bg-[radial-gradient(ellipse_at_top,_rgba(16,185,129,0.10),_transparent_60%)]"
+   556→        aria-hidden
+   557→      />
+   558→
+   559→      <div className="relative max-w-6xl mx-auto px-4 md:px-8 py-8 md:py-12 space-y-10">
+   560→
+   561→        {/* ═══ 1. HERO — Greeting + AI Insight ═══ */}
+   562→        <motion.section
+   563→          initial={{ opacity: 0, y: 12 }}
+   564→          animate={{ opacity: 1, y: 0 }}
+   565→          transition={{ duration: 0.5, ease: 'easeOut' }}
+   566→          className="space-y-6"
+   567→        >
+   568→          <h1 className="text-3xl md:text-4xl font-bold tracking-tight text-foreground">
+   569→            {greeting()}, {firstName(user?.name)} 👋
+   570→          </h1>
+   571→
+   572→          <div className="glass-surface rounded-3xl p-5">
+   573→            <div className="flex items-start gap-4">
+   574→              <div className="flex h-9 w-9 items-center justify-center rounded-xl accent-gradient shrink-0">
+   575→                <Brain className="h-5 w-5 text-white" />
+   576→              </div>
+   577→              <div className="flex-1 min-w-0">
+   578→                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+   579→                  AI Insight
+   580→                </p>
+   581→                {hasData && heroInsight ? (
+   582→                  <>
+   583→                    <p className="text-base font-medium text-foreground leading-snug mt-1">
+   584→                      {heroInsight.what}
+   585→                    </p>
+   586→                    <p className="text-sm text-muted-foreground mt-1.5 leading-relaxed">
+   587→                      {heroInsight.why}
+   588→                    </p>
+   589→                  </>
+   590→                ) : (
+   591→                  <p className="text-base font-medium text-foreground leading-snug mt-1">
+   592→                    Connect your business data to unlock AI insights.
+   593→                  </p>
+   594→                )}
+   595→              </div>
+   596→            </div>
+   597→          </div>
+   598→        </motion.section>
+   599→
+   600→        {/* ═══ 2. BUSINESS HEALTH SCORE ═══ */}
+   601→        <motion.section
+   602→          initial={{ opacity: 0, y: 12 }}
+   603→          animate={{ opacity: 1, y: 0 }}
+   604→          transition={{ duration: 0.5, delay: 0.08, ease: 'easeOut' }}
+   605→          className="flex flex-col items-center gap-2"
+   606→        >
+   607→          <ScoreGauge score={businessScore} />
+   608→          <div className="text-center">
+   609→            <span className={`text-sm font-semibold ${tier.color}`}>{tier.label}</span>
+   610→          </div>
+   611→          {businessScore === null && (
+   612→            <p className="text-xs text-muted-foreground text-center max-w-[260px] mt-1">
+   613→              Connect your business data to unlock AI insights.
+   614→            </p>
+   615→          )}
+   616→        </motion.section>
+   617→
+   618→        {/* ═══ 3. KPI SECTION — exactly 3 cards ═══ */}
+   619→        <motion.section
+   620→          initial={{ opacity: 0, y: 12 }}
+   621→          animate={{ opacity: 1, y: 0 }}
+   622→          transition={{ duration: 0.5, delay: 0.16, ease: 'easeOut' }}
+   623→          className="grid grid-cols-1 sm:grid-cols-3 gap-4"
+   624→        >
+   625→          <MiniStat
+   626→            label="Revenue"
+   627→            value={metrics.totalTaxVolume > 0 ? formatINR(metrics.totalTaxVolume) : '—'}
+   628→            icon={IndianRupee}
+   629→            hint="Total tax volume"
+   630→          />
+   631→          <MiniStat
+   632→            label="Cash Position"
+   633→            value={cashLabel}
+   634→            icon={Wallet}
+   635→            hint={hasData
+   636→              ? (metrics.matchPercentage < 100
+   637→                ? `${metrics.matchPercentage.toFixed(0)}% reconciled`
+   638→                : 'Fully reconciled')
+   639→              : 'Awaiting data'}
+   640→          />
+   641→          <MiniStat
+   642→            label="Compliance"
+   643→            value={metrics.pendingReturns + metrics.overdueReturns > 0
+   644→              ? `${metrics.pendingReturns + metrics.overdueReturns} pending`
+   645→              : (hasData ? 'Safe' : '—')}
+   646→            icon={ShieldAlert}
+   647→            hint={hasData
+   648→              ? (metrics.overdueReturns > 0
+   649→                ? `${metrics.overdueReturns} overdue`
+   650→                : `${metrics.filedReturns} filed`)
+   651→              : 'Awaiting data'}
+   652→          />
+   653→        </motion.section>
+   654→
+   655→        {/* ═══ 4. WIDGETS — exactly 5 ═══ */}
+   656→        <section className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+   657→
+   658→          {/* Widget 1: Today's Priorities */}
+   659→          <WidgetCard icon={ListTodo} title="Today's Priorities" delay={0.24}>
+   660→            {priorities.length > 0 ? (
+   661→              <div className="space-y-1">
+   662→                {priorities.map((p) => {
+   663→                  const isDone = !!done[p.id];
+   664→                  return (
+   665→                    <div
+   666→                      key={p.id}
+   667→                      onClick={() => setCurrentView(p.view)}
+   668→                      className="group flex items-center gap-3 rounded-xl px-3 py-2.5 hover:bg-white/[0.03] transition-colors cursor-pointer"
+   669→                    >
+   670→                      <button
+   671→                        type="button"
+   672→                        aria-label={`Mark ${p.label} as ${isDone ? 'incomplete' : 'complete'}`}
+   673→                        aria-pressed={isDone}
+   674→                        onClick={(e) => {
+   675→                          e.stopPropagation();
+   676→                          setDone((d) => ({ ...d, [p.id]: !d[p.id] }));
+   677→                        }}
+   678→                        className={`flex h-5 w-5 items-center justify-center rounded-full border shrink-0 transition-colors ${
+   679→                          isDone
+   680→                            ? 'accent-gradient border-transparent'
+   681→                            : 'border-white/[0.15] hover:border-emerald-400/40'
+   682→                        }`}
+   683→                      >
+   684→                        {isDone && <CheckCircle2 className="h-3 w-3 text-white" />}
+   685→                      </button>
+   686→                      <span className={`text-sm flex-1 ${isDone ? 'text-muted-foreground line-through' : 'text-foreground'}`}>
+   687→                        {p.label}
+   688→                      </span>
+   689→                      <ArrowRight className="h-3.5 w-3.5 text-muted-foreground/40 group-hover:text-emerald-400/70 transition-colors shrink-0" />
+   690→                    </div>
+   691→                  );
+   692→                })}
+   693→              </div>
+   694→            ) : hasData ? (
+   695→              <EmptyState
+   696→                icon={ListTodo}
+   697→                title="You're all caught up"
+   698→                subtitle="No priorities right now."
+   699→              />
+   700→            ) : (
+   701→              <EmptyState
+   702→                icon={ListTodo}
+   703→                title="No priorities yet"
+   704→                subtitle="Connect your business data to see priorities."
+   705→              />
+   706→            )}
+   707→          </WidgetCard>
+   708→
+   709→          {/* Widget 2: Business Timeline */}
+   710→          <WidgetCard icon={Clock} title="Business Timeline" delay={0.32}>
+   711→            {timelineActivities.length > 0 ? (
+   712→              <div className="relative">
+   713→                {timelineActivities.map((act, i) => {
+   714→                  const isLast = i === timelineActivities.length - 1;
+   715→                  return (
+   716→                    <div key={act.id} className="relative flex gap-3 pb-4 last:pb-0">
+   717→                      {!isLast && (
+   718→                        <span
+   719→                          className="absolute left-[9px] top-6 bottom-0 w-px bg-white/[0.08]"
+   720→                          aria-hidden
+   721→                        />
+   722→                      )}
+   723→                      <span className="relative z-10 flex h-[18px] w-[18px] items-center justify-center rounded-full border border-emerald-400/30 bg-[#09090B] shrink-0 mt-0.5">
+   724→                        <span className="h-1.5 w-1.5 rounded-full accent-gradient" />
+   725→                      </span>
+   726→                      <div className="flex-1 min-w-0 pt-0.5">
+   727→                        <p className="text-sm text-foreground leading-snug">{act.title}</p>
+   728→                        <p className="text-[11px] text-muted-foreground mt-0.5">{timeAgo(act.createdAt)}</p>
+   729→                      </div>
+   730→                    </div>
+   731→                  );
+   732→                })}
+   733→              </div>
+   734→            ) : (
+   735→              <EmptyState
+   736→                icon={Clock}
+   737→                title="No recent activity"
+   738→                subtitle="Actions across your firm will appear here."
+   739→              />
+   740→            )}
+   741→          </WidgetCard>
+   742→
+   743→          {/* Widget 3: Connected Services */}
+   744→          <WidgetCard icon={Plug} title="Connected Services" delay={0.40}>
+   745→            <div className="space-y-3">
+   746→              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+   747→                {CONNECTED_SERVICES.map((s) => (
+   748→                  <div
+   749→                    key={s.id}
+   750→                    className="flex items-center gap-2 rounded-xl border border-white/[0.06] bg-white/[0.02] px-3 py-2.5"
+   751→                  >
+   752→                    <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-white/[0.04] text-[11px] font-bold text-muted-foreground shrink-0">
+   753→                      {s.initial}
+   754→                    </div>
+   755→                    <div className="flex-1 min-w-0">
+   756→                      <p className="text-xs font-medium text-foreground truncate">{s.name}</p>
+   757→                      <div className="flex items-center gap-1 mt-0.5">
+   758→                        <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/40" />
+   759→                        <span className="text-[10px] text-muted-foreground">Not connected</span>
+   760→                      </div>
+   761→                    </div>
+   762→                  </div>
+   763→                ))}
+   764→              </div>
+   765→              <p className="text-[11px] text-muted-foreground text-center pt-1">
+   766→                Connect services to sync automatically.
+   767→              </p>
+   768→            </div>
+   769→          </WidgetCard>
+   770→
+   771→          {/* Widget 4: Team Status */}
+   772→          <WidgetCard icon={Users} title="Team Status" delay={0.48}>
+   773→            {/* Honest empty state — we don't have team data yet */}
+   774→            <EmptyState
+   775→              icon={Users}
+   776→              title="No team members yet"
+   777→              subtitle="Invite your team to collaborate on clients, returns, and reconciliations."
+   778→              actionLabel="Invite your team"
+   779→              onAction={() => setCurrentView('team')}
+   780→            />
+   781→          </WidgetCard>
+   782→
+   783→          {/* Widget 5: AI Recommendations — full width */}
+   784→          <WidgetCard icon={Lightbulb} title="AI Recommendations" delay={0.56} className="lg:col-span-2">
+   785→            {hasData && recommendations.length > 0 ? (
+   786→              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+   787→                {recommendations.map((insight) => {
+   788→                  const Icon = insight.icon;
+   789→                  const toneColor =
+   790→                    insight.tone === 'risk' ? 'text-amber-400' :
+   791→                    insight.tone === 'success' ? 'text-emerald-400' :
+   792→                    'text-cyan-400';
+   793→                  return (
+   794→                    <div
+   795→                      key={insight.id}
+   796→                      className="flex flex-col gap-3 rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4 hover:bg-white/[0.04] transition-colors"
+   797→                    >
+   798→                      <div className="flex items-start gap-3">
+   799→                        <div className="flex h-8 w-8 items-center justify-center rounded-lg accent-gradient-soft shrink-0">
+   800→                          <Icon className={`h-4 w-4 ${toneColor}`} />
+   801→                        </div>
+   802→                        <div className="flex-1 min-w-0">
+   803→                          <p className="text-sm font-medium text-foreground leading-snug">{insight.what}</p>
+   804→                          <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{insight.why}</p>
+   805→                        </div>
+   806→                      </div>
+   807→                      <button
+   808→                        onClick={() => setCurrentView(insight.actionView)}
+   809→                        className="self-start inline-flex items-center gap-1 rounded-full border border-emerald-400/20 bg-emerald-500/10 px-3 py-1.5 text-xs font-medium text-emerald-300 transition-colors hover:border-emerald-400/40 hover:bg-emerald-500/20"
+   810→                      >
+   811→                        {insight.actionLabel}
+   812→                        <ArrowRight className="h-3 w-3" />
+   813→                      </button>
+   814→                    </div>
+   815→                  );
+   816→                })}
+   817→              </div>
+   818→            ) : (
+   819→              <EmptyState
+   820→                icon={Lightbulb}
+   821→                title={hasData ? 'No recommendations right now' : 'No recommendations yet'}
+   822→                subtitle={hasData
+   823→                  ? 'Your business is in good shape — check back later for new guidance.'
+   824→                  : 'Connect your business data for personalized AI guidance.'}
+   825→              />
+   826→            )}
+   827→          </WidgetCard>
+   828→
+   829→        </section>
+   830→      </div>
+   831→    </div>
+   832→  );
+   833→}
+   834→

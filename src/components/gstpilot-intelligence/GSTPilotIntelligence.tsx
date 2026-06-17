@@ -49,13 +49,20 @@ interface Message {
   timestamp: number
   actions?: ActionSuggestion[]
   isTyping?: boolean
+  // V16 structured response fields
+  insights?: Array<{ text: string; tone: 'positive' | 'neutral' | 'warning' }>
+  sources?: Array<{ name: string; count: number; icon?: string }>
+  thinkingSteps?: Array<{ label: string; duration: number }>
 }
 
 interface ActionSuggestion {
-  type: 'navigate' | 'task' | 'reminder' | 'report'
+  type: 'navigate' | 'task' | 'reminder' | 'report' | 'create_task' | 'send_reminder' | 'generate_report' | 'execute_workflow'
   label: string
+  title?: string
+  description?: string
   view?: string
   icon?: string
+  payload?: Record<string, unknown>
 }
 
 interface LiveStats {
@@ -366,7 +373,7 @@ function FloatingOrb({ onClick, isOpen, isListening, isThinking }: OrbProps) {
           whileHover={{ opacity: 1, x: 0 }}
         >
           <div className="bg-slate-900/90 backdrop-blur-md text-white text-xs font-medium px-3 py-1.5 rounded-lg shadow-xl border border-white/10">
-            GSTPilot Intelligence™
+            GSTPilot Oracle™
             <span className="block text-[10px] text-emerald-400 font-normal">Ctrl + K</span>
           </div>
         </motion.div>
@@ -375,33 +382,85 @@ function FloatingOrb({ onClick, isOpen, isListening, isThinking }: OrbProps) {
   )
 }
 
-// --- AI Thinking Indicator -------------------------------------------------
+// --- AI Thinking Indicator (V16 — Perplexity-style multi-step) ----------------
 
-function ThinkingIndicator() {
+function ThinkingIndicator({ steps }: { steps?: Array<{ label: string; duration: number }> }) {
+  const [currentStep, setCurrentStep] = useState(0)
+  const stepLabels = steps && steps.length > 0
+    ? steps.map(s => s.label)
+    : ['Thinking...', 'Generating answer...']
+
+  useEffect(() => {
+    if (!steps || steps.length === 0) return
+    let stepIdx = 0
+    const runStep = () => {
+      if (stepIdx >= steps.length - 1) return
+      setTimeout(() => {
+        stepIdx++
+        setCurrentStep(stepIdx)
+        runStep()
+      }, steps[stepIdx]?.duration || 500)
+    }
+    runStep()
+    return () => setCurrentStep(0)
+  }, [steps])
+
   return (
-    <div className="flex items-center gap-2 px-4 py-3">
-      <div className="flex gap-1">
-        {[0, 1, 2].map((i) => (
-          <motion.div
-            key={i}
-            className="h-2 w-2 rounded-full bg-emerald-500"
-            animate={{
-              scale: [1, 1.4, 1],
-              opacity: [0.4, 1, 0.4],
-            }}
-            transition={{
-              duration: 1,
-              repeat: Infinity,
-              delay: i * 0.2,
-              ease: 'easeInOut',
-            }}
-          />
-        ))}
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="flex gap-2.5"
+    >
+      <div className="shrink-0 h-8 w-8 rounded-full bg-gradient-to-br from-emerald-500 via-cyan-500 to-blue-500 flex items-center justify-center shadow-md">
+        <Brain className="h-4 w-4 text-white animate-pulse" />
       </div>
-      <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-        GSTPilot Intelligence is thinking…
-      </span>
-    </div>
+      <div className="flex-1">
+        <div className="rounded-2xl rounded-tl-sm glass-surface px-4 py-3">
+          <div className="flex items-center gap-2">
+            <div className="flex gap-1">
+              {[0, 1, 2].map((i) => (
+                <motion.div
+                  key={i}
+                  className="h-1.5 w-1.5 rounded-full bg-emerald-400"
+                  animate={{
+                    scale: [1, 1.4, 1],
+                    opacity: [0.4, 1, 0.4],
+                  }}
+                  transition={{
+                    duration: 1,
+                    repeat: Infinity,
+                    delay: i * 0.2,
+                    ease: 'easeInOut',
+                  }}
+                />
+              ))}
+            </div>
+            <motion.span
+              key={currentStep}
+              initial={{ opacity: 0, x: -4 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.3 }}
+              className="text-xs font-medium accent-text"
+            >
+              {stepLabels[currentStep] || stepLabels[0]}
+            </motion.span>
+          </div>
+          {/* Step progress dots */}
+          {stepLabels.length > 1 && (
+            <div className="mt-2 flex gap-1">
+              {stepLabels.map((_, i) => (
+                <div
+                  key={i}
+                  className={`h-0.5 flex-1 rounded-full transition-all duration-300 ${
+                    i <= currentStep ? 'accent-gradient' : 'bg-white/[0.08]'
+                  }`}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </motion.div>
   )
 }
 
@@ -590,29 +649,78 @@ function MessageBubble({ message, onAction, voiceEnabled }: MessageBubbleProps) 
         <Brain className="h-4 w-4 text-white" />
       </div>
       <div className="flex-1 max-w-[88%]">
-        <div className="rounded-2xl rounded-tl-sm bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm border border-slate-200/50 dark:border-slate-700/50 px-4 py-3 shadow-sm">
-          <div className="text-slate-700 dark:text-slate-200 space-y-0.5">
+        {/* V16 Answer card — Obsidian Black 2.0 glass */}
+        <div className="rounded-2xl rounded-tl-sm glass-surface px-4 py-3">
+          {/* Answer section */}
+          <div className="text-zinc-200 space-y-0.5">
             {renderMarkdown(displayed)}
             {!done && <span className="inline-block w-1.5 h-3.5 bg-emerald-500 ml-0.5 animate-pulse" />}
           </div>
         </div>
+
+        {/* V16 Insights section */}
+        {done && message.insights && message.insights.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3 }}
+            className="mt-2 rounded-2xl glass-surface px-4 py-2.5"
+          >
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">Insights</p>
+            <div className="space-y-1">
+              {message.insights.map((insight, i) => (
+                <div key={i} className="flex items-start gap-2">
+                  <span className={`mt-1 h-1.5 w-1.5 shrink-0 rounded-full ${
+                    insight.tone === 'warning' ? 'bg-amber-400' :
+                    insight.tone === 'positive' ? 'bg-emerald-400' : 'bg-cyan-400'
+                  }`} />
+                  <span className="text-xs text-zinc-300 leading-relaxed">{insight.text}</span>
+                </div>
+              ))}
+            </div>
+          </motion.div>
+        )}
+
+        {/* V16 Sources section */}
+        {done && message.sources && message.sources.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.4 }}
+            className="mt-2 flex flex-wrap items-center gap-1.5"
+          >
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Sources:</span>
+            {message.sources.map((src, i) => (
+              <span
+                key={i}
+                className="inline-flex items-center gap-1 rounded-full border border-white/[0.08] bg-white/[0.03] px-2 py-0.5 text-[10px] font-medium text-zinc-400"
+              >
+                {src.name}
+                {src.count > 0 && <span className="accent-text">{src.count}</span>}
+              </span>
+            ))}
+          </motion.div>
+        )}
+
+        {/* V16 Actions section */}
         {done && message.actions && message.actions.length > 0 && (
           <motion.div
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
+            transition={{ delay: 0.5 }}
             className="mt-2 flex flex-wrap gap-1.5"
           >
             {message.actions.map((action, idx) => {
               const Icon = ICON_MAP[action.icon || ''] || Zap
+              const label = action.label || action.title || 'Action'
               return (
                 <button
                   key={idx}
                   onClick={() => onAction(action)}
-                  className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/50 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 transition-colors"
+                  className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg accent-gradient-soft accent-text border border-white/[0.08] hover:bg-white/[0.06] transition-colors hover-lift"
                 >
                   <Icon className="h-3 w-3" />
-                  {action.label}
+                  {label}
                 </button>
               )
             })}
@@ -682,7 +790,7 @@ function CommandCenter({
       id: 'welcome',
       role: 'assistant',
       content:
-        "🧠 **GSTPilot Intelligence™**\n\nThe AI Brain of Your Business.\n\nI'm connected to your live data — clients, invoices, returns, payments, predictions, and priorities across every module.\n\nAsk me anything, or tap a suggestion below.",
+        "**GSTPilot Oracle™**\n\nThe Financial Brain of Your Business.\n\nI'm connected to your live data — clients, invoices, returns, payments, predictions, and priorities across every module.\n\nAsk me anything, or tap a suggestion below.",
       timestamp: Date.now(),
     },
   ])
@@ -745,6 +853,8 @@ function CommandCenter({
     }
   }
 
+  const [thinkingSteps, setThinkingSteps] = useState<Array<{ label: string; duration: number }>>([])
+
   const handleSend = async (overrideText?: string) => {
     const text = (overrideText ?? input).trim()
     if (!text || isThinking) return
@@ -758,6 +868,11 @@ function CommandCenter({
     setMessages((prev) => [...prev, userMsg])
     setInput('')
     setIsThinking(true)
+    // Start with default thinking steps; will update when API responds
+    setThinkingSteps([
+      { label: 'Thinking...', duration: 400 },
+      { label: 'Generating answer...', duration: 500 },
+    ])
     historyRef.current.push({ role: 'user', content: text })
 
     try {
@@ -766,22 +881,45 @@ function CommandCenter({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           question: text,
-          history: historyRef.current.slice(-6),
+          context: '', // Live context is gathered server-side
+          conversationHistory: historyRef.current.slice(-6),
         }),
       })
       const data = await res.json()
+
+      // Update thinking steps from API response (V16)
+      if (data.thinkingSteps && data.thinkingSteps.length > 0) {
+        setThinkingSteps(data.thinkingSteps)
+      }
 
       // Mark previous assistant message as fully typed
       setMessages((prev) =>
         prev.map((m) => (m.isTyping ? { ...m, isTyping: false, content: m.content } : m))
       )
 
+      // Build V16 actions from API response — map new action types to ActionSuggestion
+      const apiActions = (data.actions || []).map((a: any) => ({
+        type: a.type || 'navigate',
+        label: a.title || a.label || 'Action',
+        title: a.title,
+        description: a.description,
+        view: a.payload?.view || a.view,
+        icon: a.type === 'send_reminder' ? 'Bell' :
+              a.type === 'generate_report' ? 'FileText' :
+              a.type === 'execute_workflow' ? 'Rocket' :
+              a.type === 'create_task' ? 'Activity' : 'Zap',
+        payload: a.payload,
+      }))
+
       const assistantMsg: Message = {
         id: `a-${Date.now()}`,
         role: 'assistant',
         content: data.answer || 'I could not process that request.',
         timestamp: Date.now(),
-        actions: data.actions || [],
+        actions: apiActions,
+        insights: data.insights || [],
+        sources: data.sources || [],
+        thinkingSteps: data.thinkingSteps || [],
         isTyping: true,
       }
       setMessages((prev) => [...prev, assistantMsg])
@@ -804,8 +942,7 @@ function CommandCenter({
         {
           id: `e-${Date.now()}`,
           role: 'assistant',
-          content:
-            '⚠️ I had trouble connecting to your live data. Please try again in a moment.',
+          content: 'I had trouble connecting to your live data. Please try again in a moment.',
           timestamp: Date.now(),
         },
       ])
@@ -815,7 +952,14 @@ function CommandCenter({
   }
 
   const handleAction = (action: ActionSuggestion) => {
-    if (action.type === 'navigate' && action.view) {
+    // V16: support all action types
+    if ((action.type === 'navigate' || action.type === 'execute_workflow') && action.view) {
+      setCurrentView(action.view as any)
+      onMinimize()
+    }
+    // For other action types (send_reminder, generate_report, create_task),
+    // we could trigger workflows here in the future. For now, navigate if view exists.
+    if (action.view && action.type !== 'navigate' && action.type !== 'execute_workflow') {
       setCurrentView(action.view as any)
       onMinimize()
     }
@@ -835,7 +979,7 @@ function CommandCenter({
       {
         id: 'welcome-reset',
         role: 'assistant',
-        content: "🧠 Conversation cleared. How can I help you now?",
+        content: "**Conversation cleared.** How can I help you now?",
         timestamp: Date.now(),
       },
     ])
@@ -916,10 +1060,10 @@ function CommandCenter({
                 </div>
                 <div>
                   <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100 leading-tight">
-                    GSTPilot Intelligence™
+                    GSTPilot Oracle™
                   </h2>
                   <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-tight">
-                    The AI Brain of Your Business
+                    Ask anything. Run everything.
                   </p>
                 </div>
               </div>
@@ -1042,7 +1186,7 @@ function CommandCenter({
                   voiceEnabled={voiceEnabled}
                 />
               ))}
-              {isThinking && <ThinkingIndicator />}
+              {isThinking && <ThinkingIndicator steps={thinkingSteps} />}
               <div ref={messagesEndRef} />
             </div>
 
@@ -1093,7 +1237,7 @@ function CommandCenter({
                         handleSend()
                       }
                     }}
-                    placeholder={isListening ? 'Listening…' : 'Ask GSTPilot Intelligence anything…'}
+                    placeholder={isListening ? 'Listening…' : 'Ask GSTPilot Oracle anything…'}
                     className="w-full px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-400 transition-all"
                     disabled={isThinking}
                   />
@@ -1124,7 +1268,7 @@ function CommandCenter({
                 </button>
               </div>
               <p className="text-[9px] text-slate-400 dark:text-slate-500 mt-1.5 text-center">
-                GSTPilot Intelligence™ reads live data · Ctrl+K to toggle · Voice + Speech enabled
+                GSTPilot Oracle™ reads live data · Ctrl+K to toggle · Voice + Speech enabled
               </p>
             </div>
           </div>

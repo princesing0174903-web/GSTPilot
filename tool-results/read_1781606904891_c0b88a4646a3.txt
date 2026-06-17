@@ -1,0 +1,2002 @@
+     1→'use client';
+     2→
+     3→import React, { useState, useMemo, useCallback } from 'react';
+     4→import {
+     5→  Card,
+     6→  CardContent,
+     7→  CardHeader,
+     8→  CardTitle,
+     9→} from '@/components/ui/card';
+    10→import { Badge } from '@/components/ui/badge';
+    11→import { Button } from '@/components/ui/button';
+    12→import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+    13→import { ScrollArea } from '@/components/ui/scroll-area';
+    14→import { Separator } from '@/components/ui/separator';
+    15→import { Progress } from '@/components/ui/progress';
+    16→import { Input } from '@/components/ui/input';
+    17→import {
+    18→  Database,
+    19→  Shield,
+    20→  Brain,
+    21→  Lock,
+    22→  Eye,
+    23→  EyeOff,
+    24→  BarChart3,
+    25→  TrendingUp,
+    26→  FileText,
+    27→  Users,
+    28→  Building2,
+    29→  Zap,
+    30→  Search,
+    31→  Sparkles,
+    32→  Key,
+    33→  HardDrive,
+    34→  Fingerprint,
+    35→  Layers,
+    36→  Activity,
+    37→  ChevronDown,
+    38→  ChevronUp,
+    39→  CheckCircle2,
+    40→  AlertTriangle,
+    41→  Clock,
+    42→  ArrowUpRight,
+    43→  ArrowDownRight,
+    44→  Globe,
+    45→  CalendarDays,
+    46→  Phone,
+    47→  Mail,
+    48→  MapPin,
+    49→  IndianRupee,
+    50→  Scale,
+    51→  HeartPulse,
+    52→  Cpu,
+    53→  Network,
+    54→  ShieldCheck,
+    55→  FileCheck,
+    56→  RefreshCw,
+    57→  Layers2,
+    58→  Link2,
+    59→  CircleDot,
+    60→  BarChart4,
+    61→} from 'lucide-react';
+    62→import { motion, AnimatePresence } from 'framer-motion';
+    63→import {
+    64→  useFireClients,
+    65→  useFireInvoices,
+    66→  useFireReturns,
+    67→  useFireDocuments,
+    68→  useFireActivities,
+    69→} from '@/hooks/use-firestore';
+    70→
+    71→// ═══════════════════════════════════════════════════════════════════════════════
+    72→// UTILITIES
+    73→// ═══════════════════════════════════════════════════════════════════════════════
+    74→
+    75→const formatINR = (num: number): string => {
+    76→  const str = num.toLocaleString('en-IN');
+    77→  return '₹' + str;
+    78→};
+    79→
+    80→const formatDate = (dateStr: string | null): string => {
+    81→  if (!dateStr) return '—';
+    82→  const d = new Date(dateStr);
+    83→  const dd = String(d.getDate()).padStart(2, '0');
+    84→  const mm = String(d.getMonth() + 1).padStart(2, '0');
+    85→  const yyyy = d.getFullYear();
+    86→  return `${dd}/${mm}/${yyyy}`;
+    87→};
+    88→
+    89→// ═══════════════════════════════════════════════════════════════════════════════
+    90→// DEMO DATA — 8+ Client Profiles
+    91→// ═══════════════════════════════════════════════════════════════════════════════
+    92→
+    93→interface DemoClientProfile {
+    94→  id: string;
+    95→  tradeName: string;
+    96→  legalName: string;
+    97→  gstin: string;
+    98→  pan: string;
+    99→  industry: string;
+   100→  location: string;
+   101→  state: string;
+   102→  registrationDate: string;
+   103→  entityType: string;
+   104→  annualRevenue: number;
+   105→  taxPaid: number;
+   106→  invoiceVolume: number;
+   107→  paymentBehavior: 'Excellent' | 'Good' | 'Average' | 'Poor';
+   108→  filingRegularity: number;
+   109→  noticesReceived: number;
+   110→  returnsFiled: number;
+   111→  complianceScore: number;
+   112→  clientSince: string;
+   113→  totalInteractions: number;
+   114→  lastActivity: string;
+   115→  healthScore: number;
+   116→  revenueTrend: number[];
+   117→  clientCountTrend: number[];
+   118→  taxGrowthPct: number;
+   119→  avgResponseTime: string;
+   120→  preferredChannel: string;
+   121→  lastContact: string;
+   122→  profileCompleteness: number;
+   123→  // data sources
+   124→  gstReturnsCount: number;
+   125→  invoicesCount: number;
+   126→  noticesCount: number;
+   127→  documentsCount: number;
+   128→  // memory data
+   129→  avgInvoiceValue: number;
+   130→  topClientsByValue: string[];
+   131→  paymentPatterns: string;
+   132→  filingHistory: string;
+   133→  compliancePatterns: string;
+   134→  taxPaymentRegularity: string;
+   135→  noticeHistory: string;
+   136→  resolutionPatterns: string;
+   137→  riskFactors: string;
+   138→  onTimeRate: number;
+   139→  avgDelay: string;
+   140→  seasonalPatterns: string;
+   141→  scoreHistory: number[];
+   142→  keyEvents: string[];
+   143→  riskEpisodes: number;
+   144→  revenueGrowthRate: number;
+   145→  clientAcquisition: string;
+   146→  marketExpansion: string;
+   147→  cashFlowCycles: string;
+   148→  peakPeriods: string;
+   149→  lowPeriods: string;
+   150→  // vault data
+   151→  dataQualityScore: number;
+   152→  recordsLastUpdated: string;
+   153→  dataFreshness: 'fresh' | 'stale' | 'outdated';
+   154→}
+   155→
+   156→const DEMO_CLIENTS: DemoClientProfile[] = [
+   157→  {
+   158→    id: 'c1',
+   159→    tradeName: 'Sharma Enterprises',
+   160→    legalName: 'Sharma Enterprises Pvt. Ltd.',
+   161→    gstin: '07AABCS1234F1ZH',
+   162→    pan: 'AABCS1234F',
+   163→    industry: 'Manufacturing',
+   164→    location: 'New Delhi, Delhi',
+   165→    state: 'Delhi',
+   166→    registrationDate: '2018-03-15',
+   167→    entityType: 'Private Limited',
+   168→    annualRevenue: 45600000,
+   169→    taxPaid: 5472000,
+   170→    invoiceVolume: 1234,
+   171→    paymentBehavior: 'Excellent',
+   172→    filingRegularity: 96,
+   173→    noticesReceived: 1,
+   174→    returnsFiled: 48,
+   175→    complianceScore: 94,
+   176→    clientSince: '2020-06-10',
+   177→    totalInteractions: 342,
+   178→    lastActivity: '2025-03-04',
+   179→    healthScore: 92,
+   180→    revenueTrend: [32, 35, 38, 42, 40, 45],
+   181→    clientCountTrend: [12, 14, 16, 18, 20, 22],
+   182→    taxGrowthPct: 18.5,
+   183→    avgResponseTime: '2 hours',
+   184→    preferredChannel: 'WhatsApp',
+   185→    lastContact: '04/03/2025',
+   186→    profileCompleteness: 92,
+   187→    gstReturnsCount: 48,
+   188→    invoicesCount: 1234,
+   189→    noticesCount: 1,
+   190→    documentsCount: 289,
+   191→    avgInvoiceValue: 36950,
+   192→    topClientsByValue: ['Rajesh Textiles', 'Metro Distributors', 'Singh & Sons'],
+   193→    paymentPatterns: 'Consistent payer, 95% on-time',
+   194→    filingHistory: 'Regular monthly filer since 2020',
+   195→    compliancePatterns: 'Proactive compliance, never missed deadline',
+   196→    taxPaymentRegularity: '98% on-time DRC-03 payments',
+   197→    noticeHistory: '1 notice in 2023 — resolved within 15 days',
+   198→    resolutionPatterns: 'Fast resolver — avg 12 days',
+   199→    riskFactors: 'Seasonal cash flow dip in Q2',
+   200→    onTimeRate: 95,
+   201→    avgDelay: '3 days',
+   202→    seasonalPatterns: 'Higher volume Oct-Mar, lower Apr-Sep',
+   203→    scoreHistory: [78, 82, 85, 88, 90, 92],
+   204→    keyEvents: ['GST audit passed 2023', 'New branch opened 2024', 'Revenue milestone ₹5Cr'],
+   205→    riskEpisodes: 1,
+   206→    revenueGrowthRate: 18.5,
+   207→    clientAcquisition: '+4 clients in last quarter',
+   208→    marketExpansion: 'Expanded to NCR region',
+   209→    cashFlowCycles: '45-day operating cycle',
+   210→    peakPeriods: 'October–March',
+   211→    lowPeriods: 'April–June',
+   212→    dataQualityScore: 96,
+   213→    recordsLastUpdated: '2025-03-04',
+   214→    dataFreshness: 'fresh',
+   215→  },
+   216→  {
+   217→    id: 'c2',
+   218→    tradeName: 'Patel & Associates',
+   219→    legalName: 'Patel & Associates LLP',
+   220→    gstin: '24AABCP5678G2ZK',
+   221→    pan: 'AABCP5678G',
+   222→    industry: 'Professional Services',
+   223→    location: 'Ahmedabad, Gujarat',
+   224→    state: 'Gujarat',
+   225→    registrationDate: '2019-07-22',
+   226→    entityType: 'LLP',
+   227→    annualRevenue: 12800000,
+   228→    taxPaid: 1536000,
+   229→    invoiceVolume: 456,
+   230→    paymentBehavior: 'Good',
+   231→    filingRegularity: 88,
+   232→    noticesReceived: 2,
+   233→    returnsFiled: 36,
+   234→    complianceScore: 85,
+   235→    clientSince: '2021-01-15',
+   236→    totalInteractions: 198,
+   237→    lastActivity: '2025-03-03',
+   238→    healthScore: 84,
+   239→    revenueTrend: [8, 9, 10, 11, 12, 13],
+   240→    clientCountTrend: [8, 9, 10, 11, 12, 12],
+   241→    taxGrowthPct: 12.3,
+   242→    avgResponseTime: '4 hours',
+   243→    preferredChannel: 'Email',
+   244→    lastContact: '03/03/2025',
+   245→    profileCompleteness: 78,
+   246→    gstReturnsCount: 36,
+   247→    invoicesCount: 456,
+   248→    noticesCount: 2,
+   249→    documentsCount: 156,
+   250→    avgInvoiceValue: 28070,
+   251→    topClientsByValue: ['Gujarat Corp', 'Adani Infra', 'Reliance Retail'],
+   252→    paymentPatterns: 'Generally on-time, occasional 5-7 day delays',
+   253→    filingHistory: 'Consistent quarterly filer',
+   254→    compliancePatterns: 'Good compliance, missed 2 deadlines in 2023',
+   255→    taxPaymentRegularity: '88% on-time DRC-03 payments',
+   256→    noticeHistory: '2 notices — both related to late filing penalties',
+   257→    resolutionPatterns: 'Moderate resolver — avg 25 days',
+   258→    riskFactors: 'Cash flow constraints in Q1',
+   259→    onTimeRate: 88,
+   260→    avgDelay: '5 days',
+   261→    seasonalPatterns: 'Steady year-round, slight dip in Q1',
+   262→    scoreHistory: [70, 74, 78, 80, 82, 84],
+   263→    keyEvents: ['LLP conversion 2022', 'New partner onboarded 2024'],
+   264→    riskEpisodes: 2,
+   265→    revenueGrowthRate: 12.3,
+   266→    clientAcquisition: '+2 clients in last quarter',
+   267→    marketExpansion: 'Considering Surat expansion',
+   268→    cashFlowCycles: '60-day operating cycle',
+   269→    peakPeriods: 'January–March',
+   270→    lowPeriods: 'July–September',
+   271→    dataQualityScore: 82,
+   272→    recordsLastUpdated: '2025-03-03',
+   273→    dataFreshness: 'fresh',
+   274→  },
+   275→  {
+   276→    id: 'c3',
+   277→    tradeName: 'Krishna Trading Co.',
+   278→    legalName: 'Krishna Trading Company',
+   279→    gstin: '27AABCK9012H3ZL',
+   280→    pan: 'AABCK9012H',
+   281→    industry: 'Trading',
+   282→    location: 'Mumbai, Maharashtra',
+   283→    state: 'Maharashtra',
+   284→    registrationDate: '2017-11-05',
+   285→    entityType: 'Proprietorship',
+   286→    annualRevenue: 8900000,
+   287→    taxPaid: 1068000,
+   288→    invoiceVolume: 876,
+   289→    paymentBehavior: 'Average',
+   290→    filingRegularity: 72,
+   291→    noticesReceived: 4,
+   292→    returnsFiled: 30,
+   293→    complianceScore: 68,
+   294→    clientSince: '2020-09-20',
+   295→    totalInteractions: 156,
+   296→    lastActivity: '2025-02-28',
+   297→    healthScore: 65,
+   298→    revenueTrend: [7, 6, 8, 7, 9, 9],
+   299→    clientCountTrend: [5, 5, 6, 6, 7, 7],
+   300→    taxGrowthPct: 5.2,
+   301→    avgResponseTime: '1 day',
+   302→    preferredChannel: 'Phone',
+   303→    lastContact: '28/02/2025',
+   304→    profileCompleteness: 65,
+   305→    gstReturnsCount: 30,
+   306→    invoicesCount: 876,
+   307→    noticesCount: 4,
+   308→    documentsCount: 98,
+   309→    avgInvoiceValue: 10160,
+   310→    topClientsByValue: ['Metro Mart', 'City Wholesale', 'Quick Trade'],
+   311→    paymentPatterns: 'Irregular — avg 15 day delays',
+   312→    filingHistory: 'Inconsistent — missed 4 filings in 2024',
+   313→    compliancePatterns: 'Reactive compliance, responds to notices only',
+   314→    taxPaymentRegularity: '72% on-time',
+   315→    noticeHistory: '4 notices — 2 for late filing, 1 for ITC mismatch, 1 for non-filing',
+   316→    resolutionPatterns: 'Slow resolver — avg 45 days',
+   317→    riskFactors: 'Chronic late filer, ITC mismatch issues',
+   318→    onTimeRate: 65,
+   319→    avgDelay: '15 days',
+   320→    seasonalPatterns: 'High volume during Diwali season',
+   321→    scoreHistory: [80, 72, 68, 64, 66, 65],
+   322→    keyEvents: ['ITC audit 2023', 'Penalty for non-filing 2024'],
+   323→    riskEpisodes: 4,
+   324→    revenueGrowthRate: 5.2,
+   325→    clientAcquisition: 'Stable — no new clients',
+   326→    marketExpansion: 'No expansion plans',
+   327→    cashFlowCycles: '90-day operating cycle',
+   328→    peakPeriods: 'October–November',
+   329→    lowPeriods: 'March–May',
+   330→    dataQualityScore: 68,
+   331→    recordsLastUpdated: '2025-02-28',
+   332→    dataFreshness: 'stale',
+   333→  },
+   334→  {
+   335→    id: 'c4',
+   336→    tradeName: 'Gupta Infrastructure',
+   337→    legalName: 'Gupta Infrastructure Ltd.',
+   338→    gstin: '06AABCG3456I4ZM',
+   339→    pan: 'AABCG3456I',
+   340→    industry: 'Construction',
+   341→    location: 'Gurugram, Haryana',
+   342→    state: 'Haryana',
+   343→    registrationDate: '2018-01-10',
+   344→    entityType: 'Limited Company',
+   345→    annualRevenue: 124000000,
+   346→    taxPaid: 14880000,
+   347→    invoiceVolume: 2340,
+   348→    paymentBehavior: 'Excellent',
+   349→    filingRegularity: 98,
+   350→    noticesReceived: 0,
+   351→    returnsFiled: 54,
+   352→    complianceScore: 98,
+   353→    clientSince: '2019-04-01',
+   354→    totalInteractions: 489,
+   355→    lastActivity: '2025-03-05',
+   356→    healthScore: 97,
+   357→    revenueTrend: [85, 92, 98, 105, 112, 124],
+   358→    clientCountTrend: [25, 28, 32, 35, 38, 42],
+   359→    taxGrowthPct: 22.8,
+   360→    avgResponseTime: '1 hour',
+   361→    preferredChannel: 'Portal',
+   362→    lastContact: '05/03/2025',
+   363→    profileCompleteness: 98,
+   364→    gstReturnsCount: 54,
+   365→    invoicesCount: 2340,
+   366→    noticesCount: 0,
+   367→    documentsCount: 567,
+   368→    avgInvoiceValue: 52990,
+   369→    topClientsByValue: ['DLF Group', 'Godrej Properties', 'Sobha Ltd.'],
+   370→    paymentPatterns: 'Exemplary — 99% on-time, early payer',
+   371→    filingHistory: 'Never missed a filing since 2018',
+   372→    compliancePatterns: 'Best-in-class, proactive compliance posture',
+   373→    taxPaymentRegularity: '99% on-time, often pays before due date',
+   374→    noticeHistory: 'Zero notices in 7 years',
+   375→    resolutionPatterns: 'N/A — no issues to resolve',
+   376→    riskFactors: 'Minimal — diversified client base reduces risk',
+   377→    onTimeRate: 99,
+   378→    avgDelay: '0 days',
+   379→    seasonalPatterns: 'Consistent high volume, peaks in Q4',
+   380→    scoreHistory: [88, 90, 92, 94, 96, 97],
+   381→    keyEvents: ['₹100Cr revenue milestone 2024', 'ISO certification', 'Green building projects'],
+   382→    riskEpisodes: 0,
+   383→    revenueGrowthRate: 22.8,
+   384→    clientAcquisition: '+6 clients in last quarter',
+   385→    marketExpansion: 'Pan-India expansion, Noida & Pune offices',
+   386→    cashFlowCycles: '30-day operating cycle',
+   387→    peakPeriods: 'October–March',
+   388→    lowPeriods: 'July–August (monsoon)',
+   389→    dataQualityScore: 98,
+   390→    recordsLastUpdated: '2025-03-05',
+   391→    dataFreshness: 'fresh',
+   392→  },
+   393→  {
+   394→    id: 'c5',
+   395→    tradeName: 'Mehta Textiles',
+   396→    legalName: 'Mehta Textiles Pvt. Ltd.',
+   397→    gstin: '33AABCM7890J5ZN',
+   398→    pan: 'AABCM7890J',
+   399→    industry: 'Textiles',
+   400→    location: 'Coimbatore, Tamil Nadu',
+   401→    state: 'Tamil Nadu',
+   402→    registrationDate: '2019-05-18',
+   403→    entityType: 'Private Limited',
+   404→    annualRevenue: 67800000,
+   405→    taxPaid: 8136000,
+   406→    invoiceVolume: 1876,
+   407→    paymentBehavior: 'Good',
+   408→    filingRegularity: 91,
+   409→    noticesReceived: 1,
+   410→    returnsFiled: 42,
+   411→    complianceScore: 88,
+   412→    clientSince: '2020-12-01',
+   413→    totalInteractions: 267,
+   414→    lastActivity: '2025-03-02',
+   415→    healthScore: 86,
+   416→    revenueTrend: [48, 52, 55, 58, 62, 68],
+   417→    clientCountTrend: [15, 16, 18, 19, 21, 23],
+   418→    taxGrowthPct: 14.7,
+   419→    avgResponseTime: '3 hours',
+   420→    preferredChannel: 'Email',
+   421→    lastContact: '02/03/2025',
+   422→    profileCompleteness: 85,
+   423→    gstReturnsCount: 42,
+   424→    invoicesCount: 1876,
+   425→    noticesCount: 1,
+   426→    documentsCount: 345,
+   427→    avgInvoiceValue: 36140,
+   428→    topClientsByValue: ['Nalli Silks', "Pothy's Silks", 'RMKV'],
+   429→    paymentPatterns: 'Good — occasional 3-5 day delays in Q1',
+   430→    filingHistory: 'Regular filer, one late filing in 2023',
+   431→    compliancePatterns: 'Strong compliance culture, dedicated GST team',
+   432→    taxPaymentRegularity: '93% on-time',
+   433→    noticeHistory: '1 notice — minor ITC discrepancy, resolved quickly',
+   434→    resolutionPatterns: 'Good resolver — avg 10 days',
+   435→    riskFactors: 'Export dependency creates GST refund complexity',
+   436→    onTimeRate: 91,
+   437→    avgDelay: '4 days',
+   438→    seasonalPatterns: 'Festival season peaks (Diwali, Pongal)',
+   439→    scoreHistory: [72, 76, 80, 83, 85, 86],
+   440→    keyEvents: ['Export house status 2023', 'New weaving unit 2024'],
+   441→    riskEpisodes: 1,
+   442→    revenueGrowthRate: 14.7,
+   443→    clientAcquisition: '+3 clients in last quarter',
+   444→    marketExpansion: 'International exports growing',
+   445→    cashFlowCycles: '60-day cycle, longer for export receivables',
+   446→    peakPeriods: 'September–February',
+   447→    lowPeriods: 'April–June',
+   448→    dataQualityScore: 89,
+   449→    recordsLastUpdated: '2025-03-02',
+   450→    dataFreshness: 'fresh',
+   451→  },
+   452→  {
+   453→    id: 'c6',
+   454→    tradeName: 'Reddy Pharma Distributors',
+   455→    legalName: 'Reddy Pharma Distribution Pvt. Ltd.',
+   456→    gstin: '29AABCR1234K6ZP',
+   457→    pan: 'AABCR1234K',
+   458→    industry: 'Pharmaceutical Distribution',
+   459→    location: 'Bengaluru, Karnataka',
+   460→    state: 'Karnataka',
+   461→    registrationDate: '2020-02-14',
+   462→    entityType: 'Private Limited',
+   463→    annualRevenue: 34500000,
+   464→    taxPaid: 4140000,
+   465→    invoiceVolume: 3456,
+   466→    paymentBehavior: 'Good',
+   467→    filingRegularity: 85,
+   468→    noticesReceived: 2,
+   469→    returnsFiled: 36,
+   470→    complianceScore: 82,
+   471→    clientSince: '2021-07-01',
+   472→    totalInteractions: 210,
+   473→    lastActivity: '2025-03-01',
+   474→    healthScore: 80,
+   475→    revenueTrend: [24, 26, 28, 30, 32, 35],
+   476→    clientCountTrend: [10, 11, 12, 13, 14, 15],
+   477→    taxGrowthPct: 10.8,
+   478→    avgResponseTime: '6 hours',
+   479→    preferredChannel: 'WhatsApp',
+   480→    lastContact: '01/03/2025',
+   481→    profileCompleteness: 72,
+   482→    gstReturnsCount: 36,
+   483→    invoicesCount: 3456,
+   484→    noticesCount: 2,
+   485→    documentsCount: 234,
+   486→    avgInvoiceValue: 9982,
+   487→    topClientsByValue: ['Apollo Pharmacy', 'MedPlus', 'Netmeds'],
+   488→    paymentPatterns: 'High volume, small ticket — net 30 terms',
+   489→    filingHistory: 'Consistent, 2 late filings in 2024',
+   490→    compliancePatterns: 'Adequate compliance, room for improvement',
+   491→    taxPaymentRegularity: '85% on-time',
+   492→    noticeHistory: '2 notices — HSN code mismatch issues',
+   493→    resolutionPatterns: 'Moderate — avg 20 days',
+   494→    riskFactors: 'CDSCO compliance overlap, HSN code accuracy',
+   495→    onTimeRate: 82,
+   496→    avgDelay: '7 days',
+   497→    seasonalPatterns: 'Flu season peaks (Jul-Sep, Jan-Feb)',
+   498→    scoreHistory: [68, 72, 74, 77, 79, 80],
+   499→    keyEvents: ['Cold chain facility 2023', 'WHO-GDP certification 2024'],
+   500→    riskEpisodes: 2,
+   501→    revenueGrowthRate: 10.8,
+   502→    clientAcquisition: '+2 hospital chains in 2024',
+   503→    marketExpansion: 'Mysore & Hubli expansion planned',
+   504→    cashFlowCycles: '45-day cycle with distributor credit',
+   505→    peakPeriods: 'January–March, July–September',
+   506→    lowPeriods: 'April–June',
+   507→    dataQualityScore: 75,
+   508→    recordsLastUpdated: '2025-03-01',
+   509→    dataFreshness: 'stale',
+   510→  },
+   511→  {
+   512→    id: 'c7',
+   513→    tradeName: 'Singh Agro Industries',
+   514→    legalName: 'Singh Agro Industries Ltd.',
+   515→    gstin: '10AABCS5678L7ZQ',
+   516→    pan: 'AABCS5678L',
+   517→    industry: 'Agriculture & Food Processing',
+   518→    location: 'Patna, Bihar',
+   519→    state: 'Bihar',
+   520→    registrationDate: '2021-09-01',
+   521→    entityType: 'Limited Company',
+   522→    annualRevenue: 28900000,
+   523→    taxPaid: 2312000,
+   524→    invoiceVolume: 567,
+   525→    paymentBehavior: 'Average',
+   526→    filingRegularity: 78,
+   527→    noticesReceived: 3,
+   528→    returnsFiled: 24,
+   529→    complianceScore: 72,
+   530→    clientSince: '2022-03-15',
+   531→    totalInteractions: 98,
+   532→    lastActivity: '2025-02-25',
+   533→    healthScore: 70,
+   534→    revenueTrend: [18, 20, 22, 24, 26, 29],
+   535→    clientCountTrend: [6, 7, 7, 8, 8, 9],
+   536→    taxGrowthPct: 8.4,
+   537→    avgResponseTime: '2 days',
+   538→    preferredChannel: 'Phone',
+   539→    lastContact: '25/02/2025',
+   540→    profileCompleteness: 58,
+   541→    gstReturnsCount: 24,
+   542→    invoicesCount: 567,
+   543→    noticesCount: 3,
+   544→    documentsCount: 78,
+   545→    avgInvoiceValue: 50970,
+   546→    topClientsByValue: ['Bihar State Co-op', 'APMC Mandi', 'ITC Foods'],
+   547→    paymentPatterns: 'Seasonal — delayed during harvest season',
+   548→    filingHistory: 'Irregular — often files in last week',
+   549→    compliancePatterns: 'Reactive compliance approach',
+   550→    taxPaymentRegularity: '78% on-time',
+   551→    noticeHistory: '3 notices — e-way bill violations, ITC mismatch',
+   552→    resolutionPatterns: 'Slow — avg 35 days',
+   553→    riskFactors: 'E-way bill compliance, seasonal cash crunch',
+   554→    onTimeRate: 72,
+   555→    avgDelay: '12 days',
+   556→    seasonalPatterns: 'Kharif & Rabi harvest peaks',
+   557→    scoreHistory: [55, 60, 64, 67, 69, 70],
+   558→    keyEvents: ['MSP policy impact 2024', 'New cold storage unit'],
+   559→    riskEpisodes: 3,
+   560→    revenueGrowthRate: 8.4,
+   561→    clientAcquisition: '+1 client in last quarter',
+   562→    marketExpansion: 'Planning Jharkhand entry',
+   563→    cashFlowCycles: '120-day cycle, heavily seasonal',
+   564→    peakPeriods: 'October–February (Rabi harvest)',
+   565→    lowPeriods: 'March–June',
+   566→    dataQualityScore: 65,
+   567→    recordsLastUpdated: '2025-02-25',
+   568→    dataFreshness: 'stale',
+   569→  },
+   570→  {
+   571→    id: 'c8',
+   572→    tradeName: 'Desai Tech Solutions',
+   573→    legalName: 'Desai Tech Solutions Pvt. Ltd.',
+   574→    gstin: '27AABCD9012M8ZR',
+   575→    pan: 'AABCD9012M',
+   576→    industry: 'IT & Software Services',
+   577→    location: 'Pune, Maharashtra',
+   578→    state: 'Maharashtra',
+   579→    registrationDate: '2020-06-08',
+   580→    entityType: 'Private Limited',
+   581→    annualRevenue: 18900000,
+   582→    taxPaid: 2268000,
+   583→    invoiceVolume: 324,
+   584→    paymentBehavior: 'Excellent',
+   585→    filingRegularity: 100,
+   586→    noticesReceived: 0,
+   587→    returnsFiled: 48,
+   588→    complianceScore: 96,
+   589→    clientSince: '2021-03-01',
+   590→    totalInteractions: 178,
+   591→    lastActivity: '2025-03-05',
+   592→    healthScore: 95,
+   593→    revenueTrend: [10, 12, 14, 15, 17, 19],
+   594→    clientCountTrend: [4, 5, 6, 7, 8, 9],
+   595→    taxGrowthPct: 19.2,
+   596→    avgResponseTime: '1 hour',
+   597→    preferredChannel: 'Portal',
+   598→    lastContact: '05/03/2025',
+   599→    profileCompleteness: 95,
+   600→    gstReturnsCount: 48,
+   601→    invoicesCount: 324,
+   602→    noticesCount: 0,
+   603→    documentsCount: 198,
+   604→    avgInvoiceValue: 58330,
+   605→    topClientsByValue: ['TCS', 'Infosys', 'Wipro'],
+   606→    paymentPatterns: 'Always on-time, automated payments',
+   607→    filingHistory: 'Perfect filing record — never missed',
+   608→    compliancePatterns: 'Tech-forward, automated compliance workflows',
+   609→    taxPaymentRegularity: '100% on-time',
+   610→    noticeHistory: 'Zero notices',
+   611→    resolutionPatterns: 'N/A — no issues',
+   612→    riskFactors: 'Minimal — export services have zero GST liability',
+   613→    onTimeRate: 100,
+   614→    avgDelay: '0 days',
+   615→    seasonalPatterns: 'Steady — subscription-based revenue',
+   616→    scoreHistory: [85, 88, 90, 92, 94, 95],
+   617→    keyEvents: ['CMMi Level 3 certification', 'US client acquisition 2024'],
+   618→    riskEpisodes: 0,
+   619→    revenueGrowthRate: 19.2,
+   620→    clientAcquisition: '+2 international clients',
+   621→    marketExpansion: 'US & UK market expansion',
+   622→    cashFlowCycles: '30-day cycle, subscription revenue',
+   623→    peakPeriods: 'Consistent year-round',
+   624→    lowPeriods: 'None',
+   625→    dataQualityScore: 94,
+   626→    recordsLastUpdated: '2025-03-05',
+   627→    dataFreshness: 'fresh',
+   628→  },
+   629→  {
+   630→    id: 'c9',
+   631→    tradeName: 'Joshi Metal Works',
+   632→    legalName: 'Joshi Metal Works Pvt. Ltd.',
+   633→    gstin: '09AABCJ3456N9ZS',
+   634→    pan: 'AABCJ3456N',
+   635→    industry: 'Metal & Steel',
+   636→    location: 'Lucknow, Uttar Pradesh',
+   637→    state: 'Uttar Pradesh',
+   638→    registrationDate: '2018-08-20',
+   639→    entityType: 'Private Limited',
+   640→    annualRevenue: 56700000,
+   641→    taxPaid: 6804000,
+   642→    invoiceVolume: 1589,
+   643→    paymentBehavior: 'Good',
+   644→    filingRegularity: 90,
+   645→    noticesReceived: 1,
+   646→    returnsFiled: 45,
+   647→    complianceScore: 89,
+   648→    clientSince: '2019-11-01',
+   649→    totalInteractions: 312,
+   650→    lastActivity: '2025-03-04',
+   651→    healthScore: 88,
+   652→    revenueTrend: [38, 42, 45, 48, 52, 57],
+   653→    clientCountTrend: [10, 12, 14, 15, 17, 19],
+   654→    taxGrowthPct: 16.3,
+   655→    avgResponseTime: '3 hours',
+   656→    preferredChannel: 'Email',
+   657→    lastContact: '04/03/2025',
+   658→    profileCompleteness: 82,
+   659→    gstReturnsCount: 45,
+   660→    invoicesCount: 1589,
+   661→    noticesCount: 1,
+   662→    documentsCount: 267,
+   663→    avgInvoiceValue: 35680,
+   664→    topClientsByValue: ['Tata Steel', 'JSW Steel', 'SAIL'],
+   665→    paymentPatterns: 'Reliable — 90% on-time, some Q4 delays',
+   666→    filingHistory: 'Consistent monthly filer',
+   667→    compliancePatterns: 'Good compliance, dedicated accounts team',
+   668→    taxPaymentRegularity: '90% on-time',
+   669→    noticeHistory: '1 notice — minor e-way bill discrepancy',
+   670→    resolutionPatterns: 'Fast — avg 8 days',
+   671→    riskFactors: 'Steel price volatility affects cash flow',
+   672→    onTimeRate: 90,
+   673→    avgDelay: '4 days',
+   674→    seasonalPatterns: 'Construction season drives peaks',
+   675→    scoreHistory: [75, 78, 82, 84, 86, 88],
+   676→    keyEvents: ['New furnace installed 2024', 'ISI certification renewed'],
+   677→    riskEpisodes: 1,
+   678→    revenueGrowthRate: 16.3,
+   679→    clientAcquisition: '+3 infrastructure clients',
+   680→    marketExpansion: 'Kanpur unit planned',
+   681→    cashFlowCycles: '45-day cycle',
+   682→    peakPeriods: 'October–March',
+   683→    lowPeriods: 'July–September',
+   684→    dataQualityScore: 87,
+   685→    recordsLastUpdated: '2025-03-04',
+   686→    dataFreshness: 'fresh',
+   687→  },
+   688→];
+   689→
+   690→// ═══════════════════════════════════════════════════════════════════════════════
+   691→// SVG SPARKLINE COMPONENT
+   692→// ═══════════════════════════════════════════════════════════════════════════════
+   693→
+   694→function Sparkline({ data, color = '#10b981', width = 120, height = 36 }: {
+   695→  data: number[];
+   696→  color?: string;
+   697→  width?: number;
+   698→  height?: number;
+   699→}) {
+   700→  if (data.length < 2) return null;
+   701→  const max = Math.max(...data);
+   702→  const min = Math.min(...data);
+   703→  const range = max - min || 1;
+   704→  const points = data.map((v, i) => {
+   705→    const x = (i / (data.length - 1)) * width;
+   706→    const y = height - ((v - min) / range) * (height - 4) - 2;
+   707→    return `${x},${y}`;
+   708→  }).join(' ');
+   709→
+   710→  return (
+   711→    <svg width={width} height={height} className="inline-block">
+   712→      <polyline
+   713→        points={points}
+   714→        fill="none"
+   715→        stroke={color}
+   716→        strokeWidth="2"
+   717→        strokeLinecap="round"
+   718→        strokeLinejoin="round"
+   719→      />
+   720→      {data.length > 0 && (
+   721→        <circle
+   722→          cx={(data.length - 1) / (data.length - 1) * width}
+   723→          cy={height - ((data[data.length - 1] - min) / range) * (height - 4) - 2}
+   724→          r="3"
+   725→          fill={color}
+   726→        />
+   727→      )}
+   728→    </svg>
+   729→  );
+   730→}
+   731→
+   732→// ═══════════════════════════════════════════════════════════════════════════════
+   733→// SVG BAR CHART COMPONENT
+   734→// ═══════════════════════════════════════════════════════════════════════════════
+   735→
+   736→function BarChart({ data, labels, color = '#10b981', width = 300, height = 140 }: {
+   737→  data: number[];
+   738→  labels: string[];
+   739→  color?: string;
+   740→  width?: number;
+   741→  height?: number;
+   742→}) {
+   743→  const max = Math.max(...data, 1);
+   744→  const barWidth = (width - 40) / data.length - 8;
+   745→  const chartHeight = height - 30;
+   746→
+   747→  return (
+   748→    <svg width={width} height={height} className="inline-block">
+   749→      {data.map((v, i) => {
+   750→        const barH = (v / max) * (chartHeight - 10);
+   751→        const x = 30 + i * ((width - 40) / data.length) + 4;
+   752→        const y = chartHeight - barH;
+   753→        return (
+   754→          <g key={i}>
+   755→            <rect
+   756→              x={x}
+   757→              y={y}
+   758→              width={barWidth}
+   759→              height={barH}
+   760→              fill={color}
+   761→              opacity={0.7 + (i / data.length) * 0.3}
+   762→              rx="3"
+   763→            />
+   764→            <text
+   765→              x={x + barWidth / 2}
+   766→              y={height - 5}
+   767→              textAnchor="middle"
+   768→              className="text-[9px] fill-slate-500"
+   769→            >
+   770→              {labels[i]}
+   771→            </text>
+   772→            <text
+   773→              x={x + barWidth / 2}
+   774→              y={y - 3}
+   775→              textAnchor="middle"
+   776→              className="text-[8px] fill-slate-600 font-medium"
+   777→            >
+   778→              {(v / 1000).toFixed(0)}K
+   779→            </text>
+   780→          </g>
+   781→        );
+   782→      })}
+   783→    </svg>
+   784→  );
+   785→}
+   786→
+   787→// ═══════════════════════════════════════════════════════════════════════════════
+   788→// SVG GAUGE COMPONENT
+   789→// ═══════════════════════════════════════════════════════════════════════════════
+   790→
+   791→function GaugeChart({ value, maxValue = 100, size = 180 }: {
+   792→  value: number;
+   793→  maxValue?: number;
+   794→  size?: number;
+   795→}) {
+   796→  const pct = value / maxValue;
+   797→  const cx = size / 2;
+   798→  const cy = size / 2 + 10;
+   799→  const r = size / 2 - 20;
+   800→  const startAngle = -225;
+   801→  const endAngle = 45;
+   802→  const totalAngle = endAngle - startAngle;
+   803→  const currentAngle = startAngle + pct * totalAngle;
+   804→
+   805→  const polarToCartesian = (angle: number) => {
+   806→    const rad = (angle * Math.PI) / 180;
+   807→    return {
+   808→      x: cx + r * Math.cos(rad),
+   809→      y: cy + r * Math.sin(rad),
+   810→    };
+   811→  };
+   812→
+   813→  const pStart = polarToCartesian(startAngle);
+   814→  const pEnd = polarToCartesian(endAngle);
+   815→  const pCurrent = polarToCartesian(currentAngle);
+   816→  const largeArcFlag = pct > 0.5 ? 1 : 0;
+   817→
+   818→  const bgColor = '#e2e8f0';
+   819→  const fillColor = value >= 80 ? '#10b981' : value >= 60 ? '#f59e0b' : '#ef4444';
+   820→
+   821→  return (
+   822→    <svg width={size} height={size / 2 + 30}>
+   823→      {/* Background arc */}
+   824→      <path
+   825→        d={`M ${pStart.x} ${pStart.y} A ${r} ${r} 0 1 1 ${pEnd.x} ${pEnd.y}`}
+   826→        fill="none"
+   827→        stroke={bgColor}
+   828→        strokeWidth="14"
+   829→        strokeLinecap="round"
+   830→      />
+   831→      {/* Value arc */}
+   832→      <path
+   833→        d={`M ${pStart.x} ${pStart.y} A ${r} ${r} 0 ${largeArcFlag} 1 ${pCurrent.x} ${pCurrent.y}`}
+   834→        fill="none"
+   835→        stroke={fillColor}
+   836→        strokeWidth="14"
+   837→        strokeLinecap="round"
+   838→        className="transition-all duration-1000"
+   839→      />
+   840→      {/* Value text */}
+   841→      <text
+   842→        x={cx}
+   843→        y={cy - 5}
+   844→        textAnchor="middle"
+   845→        className="text-3xl font-bold"
+   846→        fill={fillColor}
+   847→      >
+   848→        {value}
+   849→      </text>
+   850→      <text
+   851→        x={cx}
+   852→        y={cy + 15}
+   853→        textAnchor="middle"
+   854→        className="text-[10px] fill-slate-400"
+   855→      >
+   856→        Moat Strength
+   857→      </text>
+   858→    </svg>
+   859→  );
+   860→}
+   861→
+   862→// ═══════════════════════════════════════════════════════════════════════════════
+   863→// ANIMATED DATA FLOW VISUALIZATION
+   864→// ═══════════════════════════════════════════════════════════════════════════════
+   865→
+   866→function DataFlowVisualization() {
+   867→  const sources = [
+   868→    { label: 'GST Returns', icon: FileCheck, x: 40, y: 30 },
+   869→    { label: 'Invoices', icon: FileText, x: 40, y: 90 },
+   870→    { label: 'E-Way Bills', icon: Layers, x: 40, y: 150 },
+   871→    { label: 'Notices', icon: Scale, x: 40, y: 210 },
+   872→    { label: 'Bank Statements', icon: Building2, x: 40, y: 270 },
+   873→    { label: 'TDS Data', icon: IndianRupee, x: 40, y: 330 },
+   874→  ];
+   875→
+   876→  return (
+   877→    <div className="relative w-full h-[380px] overflow-hidden rounded-xl border border-slate-200 bg-gradient-to-br from-slate-50 to-emerald-50/30">
+   878→      <svg className="absolute inset-0 w-full h-full">
+   879→        {/* Connection lines from sources to center */}
+   880→        {sources.map((s, i) => (
+   881→          <g key={i}>
+   882→            <line
+   883→              x1={s.x + 90}
+   884→              y1={s.y + 15}
+   885→              x2="280"
+   886→              y2="180"
+   887→              stroke="#10b981"
+   888→              strokeWidth="1.5"
+   889→              strokeDasharray="6,4"
+   890→              opacity="0.3"
+   891→            />
+   892→            {/* Animated dot */}
+   893→            <circle r="3" fill="#10b981" opacity="0.8">
+   894→              <animateMotion
+   895→                dur={`${2 + i * 0.3}s`}
+   896→                repeatCount="indefinite"
+   897→                path={`M${s.x + 90},${s.y + 15} L280,180`}
+   898→              />
+   899→            </circle>
+   900→          </g>
+   901→        ))}
+   902→        {/* Center hub */}
+   903→        <circle cx="280" cy="180" r="45" fill="#10b981" opacity="0.1" />
+   904→        <circle cx="280" cy="180" r="35" fill="#10b981" opacity="0.15" />
+   905→        <circle cx="280" cy="180" r="25" fill="#10b981" opacity="0.2" />
+   906→        {/* Outgoing lines to insights */}
+   907→        <line x1="325" y1="155" x2="460" y2="60" stroke="#059669" strokeWidth="1.5" strokeDasharray="6,4" opacity="0.3" />
+   908→        <line x1="325" y1="180" x2="460" y2="140" stroke="#059669" strokeWidth="1.5" strokeDasharray="6,4" opacity="0.3" />
+   909→        <line x1="325" y1="205" x2="460" y2="220" stroke="#059669" strokeWidth="1.5" strokeDasharray="6,4" opacity="0.3" />
+   910→        <line x1="325" y1="180" x2="460" y2="300" stroke="#059669" strokeWidth="1.5" strokeDasharray="6,4" opacity="0.3" />
+   911→        {/* Animated outgoing dots */}
+   912→        <circle r="3" fill="#059669" opacity="0.8">
+   913→          <animateMotion dur="3s" repeatCount="indefinite" path="M325,155 L460,60" />
+   914→        </circle>
+   915→        <circle r="3" fill="#059669" opacity="0.8">
+   916→          <animateMotion dur="2.5s" repeatCount="indefinite" path="M325,180 L460,140" />
+   917→        </circle>
+   918→        <circle r="3" fill="#059669" opacity="0.8">
+   919→          <animateMotion dur="3.5s" repeatCount="indefinite" path="M325,205 L460,220" />
+   920→        </circle>
+   921→        <circle r="3" fill="#059669" opacity="0.8">
+   922→          <animateMotion dur="2.8s" repeatCount="indefinite" path="M325,180 L460,300" />
+   923→        </circle>
+   924→      </svg>
+   925→      {/* Source labels */}
+   926→      {sources.map((s, i) => (
+   927→        <div
+   928→          key={i}
+   929→          className="absolute flex items-center gap-2 text-xs font-medium text-slate-600"
+   930→          style={{ left: s.x, top: s.y }}
+   931→        >
+   932→          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-white shadow-sm border border-slate-100">
+   933→            <s.icon className="h-3.5 w-3.5 text-emerald-600" />
+   934→          </div>
+   935→          <span>{s.label}</span>
+   936→        </div>
+   937→      ))}
+   938→      {/* Center label */}
+   939→      <div className="absolute flex flex-col items-center justify-center" style={{ left: 248, top: 158 }}>
+   940→        <Database className="h-6 w-6 text-emerald-600 mb-1" />
+   941→        <span className="text-[10px] font-bold text-emerald-700">DATA MOAT</span>
+   942→      </div>
+   943→      {/* Output labels */}
+   944→      {[
+   945→        { label: 'Predictions', top: 42, icon: TrendingUp },
+   946→        { label: 'Risk Scores', top: 122, icon: ShieldCheck },
+   947→        { label: 'Compliance AI', top: 202, icon: Brain },
+   948→        { label: 'Revenue Intel', top: 282, icon: BarChart3 },
+   949→      ].map((o, i) => (
+   950→        <div
+   951→          key={i}
+   952→          className="absolute flex items-center gap-2 text-xs font-medium text-emerald-700"
+   953→          style={{ left: 460, top: o.top }}
+   954→        >
+   955→          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-100 shadow-sm border border-emerald-200">
+   956→            <o.icon className="h-3.5 w-3.5 text-emerald-600" />
+   957→          </div>
+   958→          <span>{o.label}</span>
+   959→        </div>
+   960→      ))}
+   961→    </div>
+   962→  );
+   963→}
+   964→
+   965→// ═══════════════════════════════════════════════════════════════════════════════
+   966→// EXPANDABLE MEMORY SECTION
+   967→// ═══════════════════════════════════════════════════════════════════════════════
+   968→
+   969→function MemorySection({ title, icon: Icon, color, insights, isExpanded, onToggle }: {
+   970→  title: string;
+   971→  icon: React.ElementType;
+   972→  color: string;
+   973→  insights: { label: string; value: string }[];
+   974→  isExpanded: boolean;
+   975→  onToggle: () => void;
+   976→}) {
+   977→  return (
+   978→    <motion.div
+   979→      initial={{ opacity: 0, y: 10 }}
+   980→      animate={{ opacity: 1, y: 0 }}
+   981→      className="border border-slate-200 rounded-xl overflow-hidden"
+   982→    >
+   983→      <button
+   984→        onClick={onToggle}
+   985→        className="w-full flex items-center gap-3 p-4 hover:bg-slate-50/80 transition-colors"
+   986→      >
+   987→        <div
+   988→          className="flex h-9 w-9 items-center justify-center rounded-lg"
+   989→          style={{ backgroundColor: color + '15' }}
+   990→        >
+   991→          <Icon className="h-4 w-4" style={{ color }} />
+   992→        </div>
+   993→        <span className="font-semibold text-sm text-slate-800 flex-1 text-left">{title}</span>
+   994→        <Badge variant="secondary" className="text-[10px] bg-slate-100">
+   995→          {insights.length} insights
+   996→        </Badge>
+   997→        {isExpanded ? (
+   998→          <ChevronUp className="h-4 w-4 text-slate-400" />
+   999→        ) : (
+  1000→          <ChevronDown className="h-4 w-4 text-slate-400" />
+  1001→        )}
+  1002→      </button>
+  1003→      <AnimatePresence>
+  1004→        {isExpanded && (
+  1005→          <motion.div
+  1006→            initial={{ height: 0, opacity: 0 }}
+  1007→            animate={{ height: 'auto', opacity: 1 }}
+  1008→            exit={{ height: 0, opacity: 0 }}
+  1009→            transition={{ duration: 0.2 }}
+  1010→            className="overflow-hidden"
+  1011→          >
+  1012→            <div className="px-4 pb-4 space-y-2">
+  1013→              {insights.map((insight, i) => (
+  1014→                <div key={i} className="flex items-center justify-between py-2 px-3 rounded-lg bg-slate-50/80">
+  1015→                  <span className="text-xs text-slate-600">{insight.label}</span>
+  1016→                  <span className="text-xs font-semibold text-slate-800">{insight.value}</span>
+  1017→                </div>
+  1018→              ))}
+  1019→            </div>
+  1020→          </motion.div>
+  1021→        )}
+  1022→      </AnimatePresence>
+  1023→    </motion.div>
+  1024→  );
+  1025→}
+  1026→
+  1027→// ═══════════════════════════════════════════════════════════════════════════════
+  1028→// TAB 1: 360° BUSINESS PROFILE
+  1029→// ═══════════════════════════════════════════════════════════════════════════════
+  1030→
+  1031→function BusinessProfileTab({ selectedClient }: { selectedClient: DemoClientProfile }) {
+  1032→  const c = selectedClient;
+  1033→
+  1034→  const healthColor = c.healthScore >= 90 ? 'text-emerald-600' : c.healthScore >= 70 ? 'text-amber-600' : 'text-red-600';
+  1035→  const healthBg = c.healthScore >= 90 ? 'bg-emerald-50 border-emerald-200' : c.healthScore >= 70 ? 'bg-amber-50 border-amber-200' : 'bg-red-50 border-red-200';
+  1036→
+  1037→  return (
+  1038→    <div className="space-y-4">
+  1039→      {/* Data Completeness + Sources Bar */}
+  1040→      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+  1041→        <Card className="border-slate-200">
+  1042→          <CardContent className="p-4">
+  1043→            <div className="flex items-center justify-between mb-2">
+  1044→              <span className="text-sm font-semibold text-slate-700">Profile Completeness</span>
+  1045→              <span className="text-lg font-bold text-emerald-600">{c.profileCompleteness}%</span>
+  1046→            </div>
+  1047→            <Progress value={c.profileCompleteness} className="h-2" />
+  1048→            <p className="text-[11px] text-slate-500 mt-1.5">
+  1049→              Profile {c.profileCompleteness}% Complete
+  1050→            </p>
+  1051→          </CardContent>
+  1052→        </Card>
+  1053→        <Card className="border-slate-200">
+  1054→          <CardContent className="p-4">
+  1055→            <div className="text-sm font-semibold text-slate-700 mb-2">Data Sources</div>
+  1056→            <div className="flex flex-wrap gap-2">
+  1057→              <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 text-[11px]">
+  1058→                <FileCheck className="h-3 w-3 mr-1" />
+  1059→                GST Returns ({c.gstReturnsCount})
+  1060→              </Badge>
+  1061→              <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 text-[11px]">
+  1062→                <FileText className="h-3 w-3 mr-1" />
+  1063→                Invoices ({c.invoicesCount})
+  1064→              </Badge>
+  1065→              <Badge className="bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100 text-[11px]">
+  1066→                <Scale className="h-3 w-3 mr-1" />
+  1067→                Notices ({c.noticesCount})
+  1068→              </Badge>
+  1069→              <Badge className="bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100 text-[11px]">
+  1070→                <Layers className="h-3 w-3 mr-1" />
+  1071→                Documents ({c.documentsCount})
+  1072→              </Badge>
+  1073→            </div>
+  1074→          </CardContent>
+  1075→        </Card>
+  1076→      </div>
+  1077→
+  1078→      {/* Profile Cards Grid */}
+  1079→      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+  1080→        {/* Business Identity */}
+  1081→        <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}>
+  1082→          <Card className="border-slate-200 h-full">
+  1083→            <CardHeader className="pb-2 pt-4 px-4">
+  1084→              <CardTitle className="text-sm flex items-center gap-2 text-slate-800">
+  1085→                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-50">
+  1086→                  <Building2 className="h-3.5 w-3.5 text-emerald-600" />
+  1087→                </div>
+  1088→                Business Identity
+  1089→              </CardTitle>
+  1090→            </CardHeader>
+  1091→            <CardContent className="px-4 pb-4 space-y-2.5">
+  1092→              {[
+  1093→                { label: 'Name', value: c.tradeName },
+  1094→                { label: 'Legal Name', value: c.legalName },
+  1095→                { label: 'GSTIN', value: c.gstin },
+  1096→                { label: 'PAN', value: c.pan },
+  1097→                { label: 'Industry', value: c.industry },
+  1098→                { label: 'Location', value: c.location },
+  1099→                { label: 'Entity Type', value: c.entityType },
+  1100→                { label: 'Reg. Date', value: formatDate(c.registrationDate) },
+  1101→              ].map((item, i) => (
+  1102→                <div key={i} className="flex justify-between items-center">
+  1103→                  <span className="text-[11px] text-slate-500">{item.label}</span>
+  1104→                  <span className="text-[11px] font-medium text-slate-800 text-right max-w-[180px] truncate">{item.value}</span>
+  1105→                </div>
+  1106→              ))}
+  1107→            </CardContent>
+  1108→          </Card>
+  1109→        </motion.div>
+  1110→
+  1111→        {/* Financial Profile */}
+  1112→        <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
+  1113→          <Card className="border-slate-200 h-full">
+  1114→            <CardHeader className="pb-2 pt-4 px-4">
+  1115→              <CardTitle className="text-sm flex items-center gap-2 text-slate-800">
+  1116→                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-50">
+  1117→                  <IndianRupee className="h-3.5 w-3.5 text-emerald-600" />
+  1118→                </div>
+  1119→                Financial Profile
+  1120→              </CardTitle>
+  1121→            </CardHeader>
+  1122→            <CardContent className="px-4 pb-4 space-y-2.5">
+  1123→              {[
+  1124→                { label: 'Annual Revenue', value: formatINR(c.annualRevenue) },
+  1125→                { label: 'Tax Paid (FY)', value: formatINR(c.taxPaid) },
+  1126→                { label: 'Invoice Volume', value: c.invoiceVolume.toLocaleString('en-IN') },
+  1127→                { label: 'Payment Behavior', value: c.paymentBehavior, highlight: true },
+  1128→                { label: 'Avg Invoice Value', value: formatINR(c.avgInvoiceValue) },
+  1129→              ].map((item, i) => (
+  1130→                <div key={i} className="flex justify-between items-center">
+  1131→                  <span className="text-[11px] text-slate-500">{item.label}</span>
+  1132→                  {item.highlight ? (
+  1133→                    <Badge className={`text-[10px] ${c.paymentBehavior === 'Excellent' ? 'bg-emerald-50 text-emerald-700' : c.paymentBehavior === 'Good' ? 'bg-blue-50 text-blue-700' : c.paymentBehavior === 'Average' ? 'bg-amber-50 text-amber-700' : 'bg-red-50 text-red-700'}`}>
+  1134→                      {item.value}
+  1135→                    </Badge>
+  1136→                  ) : (
+  1137→                    <span className="text-[11px] font-medium text-slate-800">{item.value}</span>
+  1138→                  )}
+  1139→                </div>
+  1140→              ))}
+  1141→              <div className="flex justify-between items-center pt-1">
+  1142→                <span className="text-[11px] text-slate-500">Revenue Trend</span>
+  1143→                <Sparkline data={c.revenueTrend} color="#10b981" width={100} height={28} />
+  1144→              </div>
+  1145→            </CardContent>
+  1146→          </Card>
+  1147→        </motion.div>
+  1148→
+  1149→        {/* Compliance Profile */}
+  1150→        <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}>
+  1151→          <Card className="border-slate-200 h-full">
+  1152→            <CardHeader className="pb-2 pt-4 px-4">
+  1153→              <CardTitle className="text-sm flex items-center gap-2 text-slate-800">
+  1154→                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-50">
+  1155→                  <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
+  1156→                </div>
+  1157→                Compliance Profile
+  1158→              </CardTitle>
+  1159→            </CardHeader>
+  1160→            <CardContent className="px-4 pb-4 space-y-2.5">
+  1161→              {[
+  1162→                { label: 'Filing Regularity', value: `${c.filingRegularity}%` },
+  1163→                { label: 'Notices Received', value: c.noticesReceived.toString() },
+  1164→                { label: 'Returns Filed', value: c.returnsFiled.toString() },
+  1165→                { label: 'Compliance Score', value: `${c.complianceScore}/100` },
+  1166→              ].map((item, i) => (
+  1167→                <div key={i} className="flex justify-between items-center">
+  1168→                  <span className="text-[11px] text-slate-500">{item.label}</span>
+  1169→                  <span className="text-[11px] font-medium text-slate-800">{item.value}</span>
+  1170→                </div>
+  1171→              ))}
+  1172→              <div className="mt-2">
+  1173→                <div className="flex items-center justify-between mb-1">
+  1174→                  <span className="text-[10px] text-slate-500">Compliance Score</span>
+  1175→                  <span className="text-[10px] font-semibold text-emerald-600">{c.complianceScore}%</span>
+  1176→                </div>
+  1177→                <Progress value={c.complianceScore} className="h-1.5" />
+  1178→              </div>
+  1179→            </CardContent>
+  1180→          </Card>
+  1181→        </motion.div>
+  1182→
+  1183→        {/* Relationship Profile */}
+  1184→        <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
+  1185→          <Card className="border-slate-200 h-full">
+  1186→            <CardHeader className="pb-2 pt-4 px-4">
+  1187→              <CardTitle className="text-sm flex items-center gap-2 text-slate-800">
+  1188→                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-50">
+  1189→                  <HeartPulse className="h-3.5 w-3.5 text-emerald-600" />
+  1190→                </div>
+  1191→                Relationship Profile
+  1192→              </CardTitle>
+  1193→            </CardHeader>
+  1194→            <CardContent className="px-4 pb-4 space-y-2.5">
+  1195→              {[
+  1196→                { label: 'Client Since', value: formatDate(c.clientSince) },
+  1197→                { label: 'Total Interactions', value: c.totalInteractions.toLocaleString('en-IN') },
+  1198→                { label: 'Last Activity', value: formatDate(c.lastActivity) },
+  1199→                { label: 'Health Score', value: `${c.healthScore}/100` },
+  1200→              ].map((item, i) => (
+  1201→                <div key={i} className="flex justify-between items-center">
+  1202→                  <span className="text-[11px] text-slate-500">{item.label}</span>
+  1203→                  <span className="text-[11px] font-medium text-slate-800">{item.value}</span>
+  1204→                </div>
+  1205→              ))}
+  1206→              <div className={`mt-2 p-3 rounded-lg border ${healthBg}`}>
+  1207→                <div className="flex items-center gap-2">
+  1208→                  <Activity className={`h-4 w-4 ${healthColor}`} />
+  1209→                  <span className={`text-lg font-bold ${healthColor}`}>{c.healthScore}</span>
+  1210→                  <span className="text-[10px] text-slate-500">/100</span>
+  1211→                </div>
+  1212→                <p className="text-[10px] text-slate-500 mt-1">
+  1213→                  {c.healthScore >= 90 ? 'Excellent health — low risk' : c.healthScore >= 70 ? 'Good health — monitor regularly' : 'Needs attention — elevated risk'}
+  1214→                </p>
+  1215→              </div>
+  1216→            </CardContent>
+  1217→          </Card>
+  1218→        </motion.div>
+  1219→
+  1220→        {/* Growth Profile */}
+  1221→        <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}>
+  1222→          <Card className="border-slate-200 h-full">
+  1223→            <CardHeader className="pb-2 pt-4 px-4">
+  1224→              <CardTitle className="text-sm flex items-center gap-2 text-slate-800">
+  1225→                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-50">
+  1226→                  <TrendingUp className="h-3.5 w-3.5 text-emerald-600" />
+  1227→                </div>
+  1228→                Growth Profile
+  1229→              </CardTitle>
+  1230→            </CardHeader>
+  1231→            <CardContent className="px-4 pb-4 space-y-2.5">
+  1232→              <div className="flex justify-between items-center">
+  1233→                <span className="text-[11px] text-slate-500">Revenue Trend</span>
+  1234→                <Sparkline data={c.revenueTrend} color="#10b981" />
+  1235→              </div>
+  1236→              <div className="flex justify-between items-center">
+  1237→                <span className="text-[11px] text-slate-500">Client Count Trend</span>
+  1238→                <Sparkline data={c.clientCountTrend} color="#14b8a6" />
+  1239→              </div>
+  1240→              <div className="flex justify-between items-center">
+  1241→                <span className="text-[11px] text-slate-500">Tax Growth</span>
+  1242→                <span className="text-[11px] font-semibold text-emerald-600 flex items-center gap-1">
+  1243→                  <ArrowUpRight className="h-3 w-3" />
+  1244→                  {c.taxGrowthPct}%
+  1245→                </span>
+  1246→              </div>
+  1247→              <div className="flex justify-between items-center">
+  1248→                <span className="text-[11px] text-slate-500">Revenue Growth</span>
+  1249→                <span className="text-[11px] font-semibold text-emerald-600 flex items-center gap-1">
+  1250→                  <ArrowUpRight className="h-3 w-3" />
+  1251→                  {c.revenueGrowthRate}%
+  1252→                </span>
+  1253→              </div>
+  1254→              <div className="flex justify-between items-center">
+  1255→                <span className="text-[11px] text-slate-500">Market Expansion</span>
+  1256→                <span className="text-[11px] font-medium text-slate-700 text-right max-w-[160px] truncate">{c.marketExpansion}</span>
+  1257→              </div>
+  1258→            </CardContent>
+  1259→          </Card>
+  1260→        </motion.div>
+  1261→
+  1262→        {/* Communication Profile */}
+  1263→        <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
+  1264→          <Card className="border-slate-200 h-full">
+  1265→            <CardHeader className="pb-2 pt-4 px-4">
+  1266→              <CardTitle className="text-sm flex items-center gap-2 text-slate-800">
+  1267→                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-50">
+  1268→                  <Phone className="h-3.5 w-3.5 text-emerald-600" />
+  1269→                </div>
+  1270→                Communication Profile
+  1271→              </CardTitle>
+  1272→            </CardHeader>
+  1273→            <CardContent className="px-4 pb-4 space-y-2.5">
+  1274→              {[
+  1275→                { label: 'Avg Response Time', value: c.avgResponseTime },
+  1276→                { label: 'Preferred Channel', value: c.preferredChannel },
+  1277→                { label: 'Last Contact', value: c.lastContact },
+  1278→                { label: 'Client Acquisition', value: c.clientAcquisition },
+  1279→                { label: 'Score History', value: `${c.scoreHistory[0]} → ${c.scoreHistory[c.scoreHistory.length - 1]}` },
+  1280→              ].map((item, i) => (
+  1281→                <div key={i} className="flex justify-between items-center">
+  1282→                  <span className="text-[11px] text-slate-500">{item.label}</span>
+  1283→                  <span className="text-[11px] font-medium text-slate-800 text-right max-w-[160px] truncate">{item.value}</span>
+  1284→                </div>
+  1285→              ))}
+  1286→              <div className="flex justify-between items-center pt-1">
+  1287→                <span className="text-[11px] text-slate-500">Health Trend</span>
+  1288→                <Sparkline data={c.scoreHistory} color="#10b981" width={90} height={24} />
+  1289→              </div>
+  1290→            </CardContent>
+  1291→          </Card>
+  1292→        </motion.div>
+  1293→      </div>
+  1294→
+  1295→      {/* Key Events & Risk Summary */}
+  1296→      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+  1297→        <Card className="border-slate-200">
+  1298→          <CardHeader className="pb-2 pt-4 px-4">
+  1299→            <CardTitle className="text-sm flex items-center gap-2 text-slate-800">
+  1300→              <Zap className="h-3.5 w-3.5 text-amber-500" />
+  1301→              Key Events
+  1302→            </CardTitle>
+  1303→          </CardHeader>
+  1304→          <CardContent className="px-4 pb-4">
+  1305→            <div className="space-y-2">
+  1306→              {c.keyEvents.map((event, i) => (
+  1307→                <div key={i} className="flex items-center gap-2 text-xs text-slate-600">
+  1308→                  <CircleDot className="h-3 w-3 text-amber-500 shrink-0" />
+  1309→                  {event}
+  1310→                </div>
+  1311→              ))}
+  1312→            </div>
+  1313→          </CardContent>
+  1314→        </Card>
+  1315→        <Card className="border-slate-200">
+  1316→          <CardHeader className="pb-2 pt-4 px-4">
+  1317→            <CardTitle className="text-sm flex items-center gap-2 text-slate-800">
+  1318→              <AlertTriangle className="h-3.5 w-3.5 text-red-500" />
+  1319→              Risk Summary
+  1320→            </CardTitle>
+  1321→          </CardHeader>
+  1322→          <CardContent className="px-4 pb-4 space-y-2.5">
+  1323→            <div className="flex justify-between items-center">
+  1324→              <span className="text-[11px] text-slate-500">Risk Episodes</span>
+  1325→              <span className={`text-[11px] font-semibold ${c.riskEpisodes === 0 ? 'text-emerald-600' : c.riskEpisodes <= 2 ? 'text-amber-600' : 'text-red-600'}`}>{c.riskEpisodes}</span>
+  1326→            </div>
+  1327→            <div className="flex justify-between items-center">
+  1328→              <span className="text-[11px] text-slate-500">Risk Factors</span>
+  1329→              <span className="text-[11px] font-medium text-slate-700 text-right max-w-[200px] truncate">{c.riskFactors}</span>
+  1330→            </div>
+  1331→            <div className="flex justify-between items-center">
+  1332→              <span className="text-[11px] text-slate-500">On-time Rate</span>
+  1333→              <span className={`text-[11px] font-semibold ${c.onTimeRate >= 90 ? 'text-emerald-600' : c.onTimeRate >= 70 ? 'text-amber-600' : 'text-red-600'}`}>{c.onTimeRate}%</span>
+  1334→            </div>
+  1335→            <div className="flex justify-between items-center">
+  1336→              <span className="text-[11px] text-slate-500">Avg Delay</span>
+  1337→              <span className="text-[11px] font-medium text-slate-700">{c.avgDelay}</span>
+  1338→            </div>
+  1339→          </CardContent>
+  1340→        </Card>
+  1341→      </div>
+  1342→    </div>
+  1343→  );
+  1344→}
+  1345→
+  1346→// ═══════════════════════════════════════════════════════════════════════════════
+  1347→// TAB 2: AI BUSINESS MEMORY
+  1348→// ═══════════════════════════════════════════════════════════════════════════════
+  1349→
+  1350→function AIMemoryTab({ selectedClient }: { selectedClient: DemoClientProfile }) {
+  1351→  const c = selectedClient;
+  1352→  const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['invoices']));
+  1353→  const [searchQuery, setSearchQuery] = useState('');
+  1354→
+  1355→  const toggleSection = (key: string) => {
+  1356→    setExpandedSections(prev => {
+  1357→      const next = new Set(prev);
+  1358→      if (next.has(key)) next.delete(key);
+  1359→      else next.add(key);
+  1360→      return next;
+  1361→    });
+  1362→  };
+  1363→
+  1364→  const memorySections = [
+  1365→    {
+  1366→      key: 'invoices',
+  1367→      title: 'Invoices Memory',
+  1368→      icon: FileText,
+  1369→      color: '#10b981',
+  1370→      insights: [
+  1371→        { label: 'Total invoices processed', value: c.invoicesCount.toLocaleString('en-IN') },
+  1372→        { label: 'Average invoice value', value: formatINR(c.avgInvoiceValue) },
+  1373→        { label: 'Top clients by value', value: c.topClientsByValue.join(', ') },
+  1374→        { label: 'Payment patterns', value: c.paymentPatterns },
+  1375→      ],
+  1376→    },
+  1377→    {
+  1378→      key: 'returns',
+  1379→      title: 'Returns Memory',
+  1380→      icon: FileCheck,
+  1381→      color: '#14b8a6',
+  1382→      insights: [
+  1383→        { label: 'Filing history', value: c.filingHistory },
+  1384→        { label: 'Compliance patterns', value: c.compliancePatterns },
+  1385→        { label: 'Tax payment regularity', value: c.taxPaymentRegularity },
+  1386→        { label: 'Returns filed', value: c.returnsFiled.toString() },
+  1387→      ],
+  1388→    },
+  1389→    {
+  1390→      key: 'compliance',
+  1391→      title: 'Compliance Memory',
+  1392→      icon: Shield,
+  1393→      color: '#f59e0b',
+  1394→      insights: [
+  1395→        { label: 'Notice history', value: c.noticeHistory },
+  1396→        { label: 'Resolution patterns', value: c.resolutionPatterns },
+  1397→        { label: 'Risk factors', value: c.riskFactors },
+  1398→        { label: 'Notices received', value: c.noticesReceived.toString() },
+  1399→      ],
+  1400→    },
+  1401→    {
+  1402→      key: 'payment',
+  1403→      title: 'Payment Behavior',
+  1404→      icon: IndianRupee,
+  1405→      color: '#8b5cf6',
+  1406→      insights: [
+  1407→        { label: 'On-time rate', value: `${c.onTimeRate}%` },
+  1408→        { label: 'Average delay', value: c.avgDelay },
+  1409→        { label: 'Seasonal patterns', value: c.seasonalPatterns },
+  1410→        { label: 'Payment behavior', value: c.paymentBehavior },
+  1411→      ],
+  1412→    },
+  1413→    {
+  1414→      key: 'health',
+  1415→      title: 'Client Health',
+  1416→      icon: HeartPulse,
+  1417→      color: '#ef4444',
+  1418→      insights: [
+  1419→        { label: 'Current score', value: `${c.healthScore}/100` },
+  1420→        { label: 'Score history', value: c.scoreHistory.join(' → ') },
+  1421→        { label: 'Key events', value: c.keyEvents.join('; ') },
+  1422→        { label: 'Risk episodes', value: c.riskEpisodes.toString() },
+  1423→      ],
+  1424→    },
+  1425→    {
+  1426→      key: 'growth',
+  1427→      title: 'Growth Trends',
+  1428→      icon: TrendingUp,
+  1429→      color: '#06b6d4',
+  1430→      insights: [
+  1431→        { label: 'Revenue growth rate', value: `${c.revenueGrowthRate}%` },
+  1432→        { label: 'Client acquisition', value: c.clientAcquisition },
+  1433→        { label: 'Market expansion', value: c.marketExpansion },
+  1434→        { label: 'Tax growth', value: `${c.taxGrowthPct}%` },
+  1435→      ],
+  1436→    },
+  1437→    {
+  1438→      key: 'banking',
+  1439→      title: 'Banking Patterns',
+  1440→      icon: Building2,
+  1441→      color: '#64748b',
+  1442→      insights: [
+  1443→        { label: 'Cash flow cycles', value: c.cashFlowCycles },
+  1444→        { label: 'Peak periods', value: c.peakPeriods },
+  1445→        { label: 'Low periods', value: c.lowPeriods },
+  1446→        { label: 'Operating cycle', value: c.cashFlowCycles },
+  1447→      ],
+  1448→    },
+  1449→  ];
+  1450→
+  1451→  const filteredSections = searchQuery
+  1452→    ? memorySections.filter(s =>
+  1453→        s.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+  1454→        s.insights.some(i =>
+  1455→          i.label.toLowerCase().includes(searchQuery.toLowerCase()) ||
+  1456→          i.value.toLowerCase().includes(searchQuery.toLowerCase())
+  1457→        )
+  1458→      )
+  1459→    : memorySections;
+  1460→
+  1461→  return (
+  1462→    <div className="space-y-4">
+  1463→      {/* Search + Query Box */}
+  1464→      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+  1465→        <div className="relative">
+  1466→          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+  1467→          <Input
+  1468→            placeholder="Search across all memories..."
+  1469→            value={searchQuery}
+  1470→            onChange={(e) => setSearchQuery(e.target.value)}
+  1471→            className="pl-9 h-10"
+  1472→          />
+  1473→        </div>
+  1474→        <div className="relative">
+  1475→          <Sparkles className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-emerald-500" />
+  1476→          <Input
+  1477→            placeholder="Ask about this business... (e.g., &quot;What are the compliance risks?&quot;)"
+  1478→            className="pl-9 h-10"
+  1479→            disabled
+  1480→          />
+  1481→          <Badge className="absolute right-3 top-1/2 -translate-y-1/2 bg-emerald-50 text-emerald-600 text-[9px] border-emerald-200">
+  1482→            AI Ready
+  1483→          </Badge>
+  1484→        </div>
+  1485→      </div>
+  1486→
+  1487→      {/* Memory Summary */}
+  1488→      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+  1489→        {[
+  1490→          { label: 'Total Insights', value: memorySections.reduce((s, sec) => s + sec.insights.length, 0).toString(), icon: Brain, color: '#10b981' },
+  1491→          { label: 'Memory Categories', value: memorySections.length.toString(), icon: Layers, color: '#14b8a6' },
+  1492→          { label: 'Data Points', value: (c.invoicesCount + c.gstReturnsCount + c.documentsCount).toLocaleString('en-IN'), icon: Database, color: '#f59e0b' },
+  1493→          { label: 'Last Computed', value: formatDate(c.lastActivity), icon: Clock, color: '#64748b' },
+  1494→        ].map((stat, i) => (
+  1495→          <Card key={i} className="border-slate-200">
+  1496→            <CardContent className="p-3 flex items-center gap-3">
+  1497→              <div className="flex h-9 w-9 items-center justify-center rounded-lg" style={{ backgroundColor: stat.color + '12' }}>
+  1498→                <stat.icon className="h-4 w-4" style={{ color: stat.color }} />
+  1499→              </div>
+  1500→              <div>
+  1501→                <p className="text-[10px] text-slate-500">{stat.label}</p>
+  1502→                <p className="text-sm font-bold text-slate-800">{stat.value}</p>
+  1503→              </div>
+  1504→            </CardContent>
+  1505→          </Card>
+  1506→        ))}
+  1507→      </div>
+  1508→
+  1509→      {/* Expandable Memory Sections */}
+  1510→      <div className="space-y-3">
+  1511→        {filteredSections.map(section => (
+  1512→          <MemorySection
+  1513→            key={section.key}
+  1514→            title={section.title}
+  1515→            icon={section.icon}
+  1516→            color={section.color}
+  1517→            insights={section.insights}
+  1518→            isExpanded={expandedSections.has(section.key)}
+  1519→            onToggle={() => toggleSection(section.key)}
+  1520→          />
+  1521→        ))}
+  1522→      </div>
+  1523→    </div>
+  1524→  );
+  1525→}
+  1526→
+  1527→// ═══════════════════════════════════════════════════════════════════════════════
+  1528→// TAB 3: DATA VAULT
+  1529→// ═══════════════════════════════════════════════════════════════════════════════
+  1530→
+  1531→function DataVaultTab({ selectedClient }: { selectedClient: DemoClientProfile }) {
+  1532→  const c = selectedClient;
+  1533→
+  1534→  const dataInventory = [
+  1535→    { type: 'GST Returns', records: c.gstReturnsCount, lastUpdated: c.recordsLastUpdated, quality: c.dataQualityScore, icon: FileCheck },
+  1536→    { type: 'Invoices', records: c.invoicesCount, lastUpdated: c.recordsLastUpdated, quality: Math.min(98, c.dataQualityScore + 2), icon: FileText },
+  1537→    { type: 'E-Way Bills', records: Math.round(c.invoicesCount * 0.6), lastUpdated: c.recordsLastUpdated, quality: Math.max(65, c.dataQualityScore - 10), icon: Layers },
+  1538→    { type: 'Notices', records: c.noticesCount, lastUpdated: c.recordsLastUpdated, quality: Math.min(99, c.dataQualityScore + 5), icon: Scale },
+  1539→    { type: 'Documents', records: c.documentsCount, lastUpdated: c.recordsLastUpdated, quality: Math.max(70, c.dataQualityScore - 5), icon: FolderOpen },
+  1540→    { type: 'Bank Statements', records: 36, lastUpdated: c.recordsLastUpdated, quality: Math.max(72, c.dataQualityScore - 8), icon: Building2 },
+  1541→    { type: 'TDS Data', records: 24, lastUpdated: c.recordsLastUpdated, quality: Math.max(68, c.dataQualityScore - 12), icon: IndianRupee },
+  1542→    { type: 'Compliance Records', records: c.returnsFiled + c.noticesReceived, lastUpdated: c.recordsLastUpdated, quality: c.dataQualityScore, icon: ShieldCheck },
+  1543→  ];
+  1544→
+  1545→  const totalDataPoints = dataInventory.reduce((s, d) => s + d.records, 0);
+  1546→
+  1547→  const freshnessColor = c.dataFreshness === 'fresh' ? 'text-emerald-600 bg-emerald-50 border-emerald-200' : c.dataFreshness === 'stale' ? 'text-amber-600 bg-amber-50 border-amber-200' : 'text-red-600 bg-red-50 border-red-200';
+  1548→  const freshnessLabel = c.dataFreshness === 'fresh' ? 'Fresh (<7 days)' : c.dataFreshness === 'stale' ? 'Stale (7-30 days)' : 'Outdated (>30 days)';
+  1549→
+  1550→  const qualityMetrics = [
+  1551→    { label: 'Completeness', value: c.profileCompleteness, color: '#10b981' },
+  1552→    { label: 'Accuracy', value: c.dataQualityScore, color: '#14b8a6' },
+  1553→    { label: 'Timeliness', value: c.dataFreshness === 'fresh' ? 95 : c.dataFreshness === 'stale' ? 65 : 35, color: '#f59e0b' },
+  1554→    { label: 'Consistency', value: Math.max(70, c.dataQualityScore - 5), color: '#64748b' },
+  1555→  ];
+  1556→
+  1557→  // Data coverage matrix
+  1558→  const coverageClients = DEMO_CLIENTS.slice(0, 6);
+  1559→  const coverageTypes = ['GST Returns', 'Invoices', 'E-Way Bills', 'Notices', 'Documents', 'Bank Stmt'];
+  1560→
+  1561→  return (
+  1562→    <div className="space-y-4">
+  1563→      {/* Header Stats */}
+  1564→      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+  1565→        {[
+  1566→          { label: 'Total Data Points', value: `${(totalDataPoints).toLocaleString('en-IN')} data points across 156 businesses`, icon: Database, color: '#10b981' },
+  1567→          { label: 'Data Quality', value: `${c.dataQualityScore}%`, icon: Shield, color: '#14b8a6' },
+  1568→          { label: 'Data Freshness', value: freshnessLabel, isFreshness: true, icon: RefreshCw, color: c.dataFreshness === 'fresh' ? '#10b981' : c.dataFreshness === 'stale' ? '#f59e0b' : '#ef4444' },
+  1569→          { label: 'Data Types', value: `${dataInventory.length} categories`, icon: Layers2, color: '#64748b' },
+  1570→        ].map((stat, i) => (
+  1571→          <Card key={i} className="border-slate-200">
+  1572→            <CardContent className="p-3">
+  1573→              <div className="flex items-center gap-2 mb-1">
+  1574→                <stat.icon className="h-4 w-4" style={{ color: stat.color }} />
+  1575→                <span className="text-[10px] text-slate-500">{stat.label}</span>
+  1576→              </div>
+  1577→              {stat.isFreshness ? (
+  1578→                <Badge className={`text-[10px] ${freshnessColor}`}>{stat.value}</Badge>
+  1579→              ) : (
+  1580→                <p className="text-xs font-bold text-slate-800">{stat.value}</p>
+  1581→              )}
+  1582→            </CardContent>
+  1583→          </Card>
+  1584→        ))}
+  1585→      </div>
+  1586→
+  1587→      {/* Data Inventory Table */}
+  1588→      <Card className="border-slate-200">
+  1589→        <CardHeader className="pb-2 pt-4 px-4">
+  1590→          <CardTitle className="text-sm flex items-center gap-2 text-slate-800">
+  1591→            <HardDrive className="h-4 w-4 text-emerald-600" />
+  1592→            Data Inventory
+  1593→          </CardTitle>
+  1594→        </CardHeader>
+  1595→        <CardContent className="px-4 pb-4">
+  1596→          <ScrollArea className="max-h-72">
+  1597→            <div className="space-y-2">
+  1598→              {dataInventory.map((item, i) => (
+  1599→                <div key={i} className="flex items-center gap-3 p-3 rounded-lg bg-slate-50/80 hover:bg-slate-100/80 transition-colors">
+  1600→                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white shadow-sm border border-slate-100">
+  1601→                    <item.icon className="h-3.5 w-3.5 text-emerald-600" />
+  1602→                  </div>
+  1603→                  <div className="flex-1 min-w-0">
+  1604→                    <p className="text-xs font-semibold text-slate-800">{item.type}</p>
+  1605→                    <p className="text-[10px] text-slate-500">Updated {formatDate(item.lastUpdated)}</p>
+  1606→                  </div>
+  1607→                  <div className="text-right">
+  1608→                    <p className="text-xs font-bold text-slate-800">{item.records.toLocaleString('en-IN')}</p>
+  1609→                    <div className="flex items-center gap-1">
+  1610→                      <span className="text-[10px] text-slate-500">Quality:</span>
+  1611→                      <span className={`text-[10px] font-semibold ${item.quality >= 90 ? 'text-emerald-600' : item.quality >= 75 ? 'text-amber-600' : 'text-red-600'}`}>
+  1612→                        {item.quality}%
+  1613→                      </span>
+  1614→                    </div>
+  1615→                  </div>
+  1616→                  <div className="w-16">
+  1617→                    <Progress value={item.quality} className="h-1.5" />
+  1618→                  </div>
+  1619→                </div>
+  1620→              ))}
+  1621→            </div>
+  1622→          </ScrollArea>
+  1623→        </CardContent>
+  1624→      </Card>
+  1625→
+  1626→      {/* Data Quality + Growth Chart */}
+  1627→      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+  1628→        {/* Quality Metrics */}
+  1629→        <Card className="border-slate-200">
+  1630→          <CardHeader className="pb-2 pt-4 px-4">
+  1631→            <CardTitle className="text-sm flex items-center gap-2 text-slate-800">
+  1632→              <Fingerprint className="h-4 w-4 text-emerald-600" />
+  1633→              Data Quality Metrics
+  1634→            </CardTitle>
+  1635→          </CardHeader>
+  1636→          <CardContent className="px-4 pb-4 space-y-3">
+  1637→            {qualityMetrics.map((metric, i) => (
+  1638→              <div key={i}>
+  1639→                <div className="flex items-center justify-between mb-1">
+  1640→                  <span className="text-[11px] text-slate-600">{metric.label}</span>
+  1641→                  <span className="text-[11px] font-semibold" style={{ color: metric.color }}>{metric.value}%</span>
+  1642→                </div>
+  1643→                <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+  1644→                  <motion.div
+  1645→                    initial={{ width: 0 }}
+  1646→                    animate={{ width: `${metric.value}%` }}
+  1647→                    transition={{ duration: 0.8, delay: i * 0.1 }}
+  1648→                    className="h-full rounded-full"
+  1649→                    style={{ backgroundColor: metric.color }}
+  1650→                  />
+  1651→                </div>
+  1652→              </div>
+  1653→            ))}
+  1654→          </CardContent>
+  1655→        </Card>
+  1656→
+  1657→        {/* Data Growth Chart */}
+  1658→        <Card className="border-slate-200">
+  1659→          <CardHeader className="pb-2 pt-4 px-4">
+  1660→            <CardTitle className="text-sm flex items-center gap-2 text-slate-800">
+  1661→              <BarChart4 className="h-4 w-4 text-emerald-600" />
+  1662→              Data Growth (Last 6 Months)
+  1663→            </CardTitle>
+  1664→          </CardHeader>
+  1665→          <CardContent className="px-4 pb-4 flex items-center justify-center">
+  1666→            <BarChart
+  1667→              data={[28000, 34000, 42000, 51000, 63000, 78000]}
+  1668→              labels={['Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar']}
+  1669→              color="#10b981"
+  1670→              width={280}
+  1671→              height={140}
+  1672→            />
+  1673→          </CardContent>
+  1674→        </Card>
+  1675→      </div>
+  1676→
+  1677→      {/* Data Coverage Matrix */}
+  1678→      <Card className="border-slate-200">
+  1679→        <CardHeader className="pb-2 pt-4 px-4">
+  1680→          <CardTitle className="text-sm flex items-center gap-2 text-slate-800">
+  1681→            <Layers2 className="h-4 w-4 text-emerald-600" />
+  1682→            Data Coverage Matrix
+  1683→          </CardTitle>
+  1684→        </CardHeader>
+  1685→        <CardContent className="px-4 pb-4">
+  1686→          <ScrollArea className="max-h-64 overflow-auto">
+  1687→            <div className="min-w-[500px]">
+  1688→              <div className="grid grid-cols-7 gap-1 mb-2">
+  1689→                <div className="text-[10px] font-semibold text-slate-500 px-2">Client</div>
+  1690→                {coverageTypes.map(t => (
+  1691→                  <div key={t} className="text-[9px] font-medium text-slate-500 text-center px-1">{t}</div>
+  1692→                ))}
+  1693→              </div>
+  1694→              {coverageClients.map(client => (
+  1695→                <div key={client.id} className="grid grid-cols-7 gap-1 mb-1">
+  1696→                  <div className="text-[10px] text-slate-700 font-medium px-2 truncate">{client.tradeName.split(' ')[0]}</div>
+  1697→                  {coverageTypes.map((_, ti) => {
+  1698→                    const hasData = Math.random() > 0.2;
+  1699→                    const quality = hasData ? (Math.random() > 0.3 ? 'high' : Math.random() > 0.5 ? 'medium' : 'low') : 'none';
+  1700→                    return (
+  1701→                      <div key={ti} className="flex items-center justify-center">
+  1702→                        {quality === 'high' ? (
+  1703→                          <div className="h-5 w-5 rounded bg-emerald-500 flex items-center justify-center">
+  1704→                            <CheckCircle2 className="h-3 w-3 text-white" />
+  1705→                          </div>
+  1706→                        ) : quality === 'medium' ? (
+  1707→                          <div className="h-5 w-5 rounded bg-amber-400 flex items-center justify-center">
+  1708→                            <Clock className="h-3 w-3 text-white" />
+  1709→                          </div>
+  1710→                        ) : quality === 'low' ? (
+  1711→                          <div className="h-5 w-5 rounded bg-red-400 flex items-center justify-center">
+  1712→                            <AlertTriangle className="h-3 w-3 text-white" />
+  1713→                          </div>
+  1714→                        ) : (
+  1715→                          <div className="h-5 w-5 rounded bg-slate-200" />
+  1716→                        )}
+  1717→                      </div>
+  1718→                    );
+  1719→                  })}
+  1720→                </div>
+  1721→              ))}
+  1722→            </div>
+  1723→          </ScrollArea>
+  1724→          <div className="flex items-center gap-4 mt-3 pt-3 border-t border-slate-100">
+  1725→            <div className="flex items-center gap-1.5"><div className="h-3 w-3 rounded bg-emerald-500" /><span className="text-[9px] text-slate-500">Complete</span></div>
+  1726→            <div className="flex items-center gap-1.5"><div className="h-3 w-3 rounded bg-amber-400" /><span className="text-[9px] text-slate-500">Partial</span></div>
+  1727→            <div className="flex items-center gap-1.5"><div className="h-3 w-3 rounded bg-red-400" /><span className="text-[9px] text-slate-500">Low Quality</span></div>
+  1728→            <div className="flex items-center gap-1.5"><div className="h-3 w-3 rounded bg-slate-200" /><span className="text-[9px] text-slate-500">No Data</span></div>
+  1729→          </div>
+  1730→        </CardContent>
+  1731→      </Card>
+  1732→    </div>
+  1733→  );
+  1734→}
+  1735→
+  1736→// ═══════════════════════════════════════════════════════════════════════════════
+  1737→// TAB 4: COMPETITIVE MOAT
+  1738→// ═══════════════════════════════════════════════════════════════════════════════
+  1739→
+  1740→function CompetitiveMoatTab({ selectedClient }: { selectedClient: DemoClientProfile }) {
+  1741→  const c = selectedClient;
+  1742→  const moatStrength = Math.round(
+  1743→    (c.dataQualityScore * 0.3 + c.complianceScore * 0.2 + c.healthScore * 0.2 + c.profileCompleteness * 0.15 + c.onTimeRate * 0.15)
+  1744→  );
+  1745→
+  1746→  const defensibilityScores = [
+  1747→    { category: 'Transaction Data', score: 92, color: '#10b981' },
+  1748→    { category: 'Compliance History', score: 88, color: '#14b8a6' },
+  1749→    { category: 'Filing Patterns', score: 85, color: '#06b6d4' },
+  1750→    { category: 'Client Relationships', score: 78, color: '#f59e0b' },
+  1751→    { category: 'Notice Resolution', score: 72, color: '#8b5cf6' },
+  1752→    { category: 'Banking Intelligence', score: 68, color: '#64748b' },
+  1753→  ];
+  1754→
+  1755→  return (
+  1756→    <div className="space-y-4">
+  1757→      {/* Moat Strength + Uniqueness */}
+  1758→      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+  1759→        <Card className="border-slate-200">
+  1760→          <CardContent className="p-6 flex flex-col items-center">
+  1761→            <GaugeChart value={moatStrength} size={200} />
+  1762→            <div className="mt-2 text-center">
+  1763→              <p className="text-sm font-semibold text-slate-800">Your Data Moat Strength</p>
+  1764→              <p className="text-[11px] text-slate-500 mt-1">
+  1765→                {moatStrength >= 85 ? 'Exceptional — nearly impossible to replicate' : moatStrength >= 70 ? 'Strong — significant competitive advantage' : 'Building — keep accumulating data'}
+  1766→              </p>
+  1767→            </div>
+  1768→          </CardContent>
+  1769→        </Card>
+  1770→
+  1771→        <Card className="border-slate-200 bg-gradient-to-br from-emerald-50/50 to-white">
+  1772→          <CardContent className="p-6 space-y-4">
+  1773→            <div className="flex items-center gap-3">
+  1774→              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-100">
+  1775→                <Fingerprint className="h-5 w-5 text-emerald-600" />
+  1776→              </div>
+  1777→              <div>
+  1778→                <p className="text-sm font-bold text-slate-800">Data Uniqueness Score</p>
+  1779→                <p className="text-2xl font-bold text-emerald-600">87%</p>
+  1780→              </div>
+  1781→            </div>
+  1782→            <p className="text-xs text-slate-600 leading-relaxed">
+  1783→              Your data is <span className="font-bold text-emerald-700">87% unique</span> — no competitor can replicate this. Every transaction, filing, and interaction creates an irreplaceable intelligence asset.
+  1784→            </p>
+  1785→            <div className="grid grid-cols-2 gap-2 pt-2">
+  1786→              <div className="p-3 rounded-lg bg-white border border-slate-100">
+  1787→                <p className="text-[10px] text-slate-500">Your avg data points/client</p>
+  1788→                <p className="text-lg font-bold text-emerald-600">1,567</p>
+  1789→              </div>
+  1790→              <div className="p-3 rounded-lg bg-white border border-slate-100">
+  1791→                <p className="text-[10px] text-slate-500">Industry avg data points/client</p>
+  1792→                <p className="text-lg font-bold text-slate-400">234</p>
+  1793→              </div>
+  1794→            </div>
+  1795→          </CardContent>
+  1796→        </Card>
+  1797→      </div>
+  1798→
+  1799→      {/* Network Depth + Switching Cost */}
+  1800→      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+  1801→        <Card className="border-slate-200">
+  1802→          <CardHeader className="pb-2 pt-4 px-4">
+  1803→            <CardTitle className="text-sm flex items-center gap-2 text-slate-800">
+  1804→              <Network className="h-4 w-4 text-emerald-600" />
+  1805→              Network Depth
+  1806→            </CardTitle>
+  1807→          </CardHeader>
+  1808→          <CardContent className="px-4 pb-4 space-y-3">
+  1809→            {[
+  1810→              { degree: '1st degree', count: '156 clients', desc: 'Direct relationships', color: '#10b981' },
+  1811→              { degree: '2nd degree', count: '2,340 businesses', desc: 'Connected through clients', color: '#14b8a6' },
+  1812→              { degree: '3rd degree', count: '35,100 entities', desc: 'Extended network reach', color: '#06b6d4' },
+  1813→            ].map((level, i) => (
+  1814→              <div key={i} className="flex items-center gap-3">
+  1815→                <div className="flex h-8 w-8 items-center justify-center rounded-full" style={{ backgroundColor: level.color + '15' }}>
+  1816→                  <span className="text-xs font-bold" style={{ color: level.color }}>{i + 1}</span>
+  1817→                </div>
+  1818→                <div className="flex-1">
+  1819→                  <div className="flex items-center justify-between">
+  1820→                    <span className="text-xs font-semibold text-slate-800">{level.degree}</span>
+  1821→                    <span className="text-xs font-bold" style={{ color: level.color }}>{level.count}</span>
+  1822→                  </div>
+  1823→                  <p className="text-[10px] text-slate-500">{level.desc}</p>
+  1824→                </div>
+  1825→              </div>
+  1826→            ))}
+  1827→            <div className="mt-2 p-3 rounded-lg bg-emerald-50 border border-emerald-100">
+  1828→              <p className="text-[10px] text-emerald-700 font-medium">
+  1829→                Network effect: Each new client adds ~15 connected entities to your data moat
+  1830→              </p>
+  1831→            </div>
+  1832→          </CardContent>
+  1833→        </Card>
+  1834→
+  1835→        <Card className="border-slate-200">
+  1836→          <CardHeader className="pb-2 pt-4 px-4">
+  1837→            <CardTitle className="text-sm flex items-center gap-2 text-slate-800">
+  1838→              <Lock className="h-4 w-4 text-emerald-600" />
+  1839→              Switching Cost Analysis
+  1840→            </CardTitle>
+  1841→          </CardHeader>
+  1842→          <CardContent className="px-4 pb-4 space-y-3">
+  1843→            <div className="p-4 rounded-xl bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-100">
+  1844→              <p className="text-sm font-bold text-emerald-800">High Switching Cost</p>
+  1845→              <p className="text-2xl font-bold text-emerald-600">89%</p>
+  1846→              <p className="text-[10px] text-emerald-600 mt-1">of clients would lose data history by switching</p>
+  1847→            </div>
+  1848→            {[
+  1849→              { label: 'Historical Data Loss', value: '3+ years of records', risk: 'high' },
+  1850→              { label: 'Compliance Context Loss', value: 'All filing patterns', risk: 'high' },
+  1851→              { label: 'Relationship Memory', value: 'Interaction history', risk: 'medium' },
+  1852→              { label: 'AI Model Accuracy', value: 'Trained on your data', risk: 'high' },
+  1853→              { label: 'Process Customization', value: 'Workflow templates', risk: 'medium' },
+  1854→            ].map((item, i) => (
+  1855→              <div key={i} className="flex items-center justify-between py-2 px-3 rounded-lg bg-slate-50/80">
+  1856→                <span className="text-[11px] text-slate-600">{item.label}</span>
+  1857→                <div className="flex items-center gap-2">
+  1858→                  <span className="text-[10px] text-slate-500">{item.value}</span>
+  1859→                  <Badge className={`text-[9px] ${item.risk === 'high' ? 'bg-red-50 text-red-600 border-red-200' : 'bg-amber-50 text-amber-600 border-amber-200'}`}>
+  1860→                    {item.risk === 'high' ? 'Critical' : 'Important'}
+  1861→                  </Badge>
+  1862→                </div>
+  1863→              </div>
+  1864→            ))}
+  1865→          </CardContent>
+  1866→        </Card>
+  1867→      </div>
+  1868→
+  1869→      {/* Data Defensibility Scores */}
+  1870→      <Card className="border-slate-200">
+  1871→        <CardHeader className="pb-2 pt-4 px-4">
+  1872→          <CardTitle className="text-sm flex items-center gap-2 text-slate-800">
+  1873→            <Shield className="h-4 w-4 text-emerald-600" />
+  1874→            Data Defensibility Score by Category
+  1875→          </CardTitle>
+  1876→        </CardHeader>
+  1877→        <CardContent className="px-4 pb-4">
+  1878→          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+  1879→            {defensibilityScores.map((item, i) => (
+  1880→              <motion.div
+  1881→                key={i}
+  1882→                initial={{ opacity: 0, scale: 0.95 }}
+  1883→                animate={{ opacity: 1, scale: 1 }}
+  1884→                transition={{ delay: i * 0.05 }}
+  1885→                className="p-3 rounded-xl border border-slate-100 bg-white"
+  1886→              >
+  1887→                <div className="flex items-center gap-2 mb-2">
+  1888→                  <div className="h-2 w-2 rounded-full" style={{ backgroundColor: item.color }} />
+  1889→                  <span className="text-[11px] font-medium text-slate-700">{item.category}</span>
+  1890→                </div>
+  1891→                <div className="flex items-end gap-1">
+  1892→                  <span className="text-xl font-bold" style={{ color: item.color }}>{item.score}</span>
+  1893→                  <span className="text-[10px] text-slate-400 mb-1">/100</span>
+  1894→                </div>
+  1895→                <Progress value={item.score} className="h-1.5 mt-2" />
+  1896→              </motion.div>
+  1897→            ))}
+  1898→          </div>
+  1899→        </CardContent>
+  1900→      </Card>
+  1901→
+  1902→      {/* Revenue from Data Insights + Animated Data Flow */}
+  1903→      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+  1904→        <Card className="border-slate-200">
+  1905→          <CardHeader className="pb-2 pt-4 px-4">
+  1906→            <CardTitle className="text-sm flex items-center gap-2 text-slate-800">
+  1907→              <IndianRupee className="h-4 w-4 text-emerald-600" />
+  1908→              Revenue from Data Insights
+  1909→            </CardTitle>
+  1910→          </CardHeader>
+  1911→          <CardContent className="px-4 pb-4 space-y-3">
+  1912→            {[
+  1913→              { label: 'Proactive compliance savings', value: formatINR(1240000), pct: '+34%' },
+  1914→              { label: 'Late penalty avoidance', value: formatINR(890000), pct: '+28%' },
+  1915→              { label: 'ITC optimization', value: formatINR(2100000), pct: '+45%' },
+  1916→              { label: 'Client retention value', value: formatINR(3500000), pct: '+52%' },
+  1917→            ].map((item, i) => (
+  1918→              <div key={i} className="flex items-center justify-between py-2 px-3 rounded-lg bg-slate-50/80">
+  1919→                <span className="text-[11px] text-slate-600">{item.label}</span>
+  1920→                <div className="flex items-center gap-2">
+  1921→                  <span className="text-[11px] font-semibold text-slate-800">{item.value}</span>
+  1922→                  <Badge className="bg-emerald-50 text-emerald-600 text-[9px] border-emerald-200">{item.pct}</Badge>
+  1923→                </div>
+  1924→              </div>
+  1925→            ))}
+  1926→            <div className="mt-2 p-3 rounded-xl bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-100">
+  1927→              <p className="text-[10px] text-slate-500">Total data-driven revenue impact</p>
+  1928→              <p className="text-xl font-bold text-emerald-600">{formatINR(7730000)}</p>
+  1929→              <p className="text-[10px] text-emerald-600">This fiscal year</p>
+  1930→            </div>
+  1931→          </CardContent>
+  1932→        </Card>
+  1933→
+  1934→        <Card className="border-slate-200">
+  1935→          <CardHeader className="pb-2 pt-4 px-4">
+  1936→            <CardTitle className="text-sm flex items-center gap-2 text-slate-800">
+  1937→              <Cpu className="h-4 w-4 text-emerald-600" />
+  1938→              Data Flow Visualization
+  1939→            </CardTitle>
+  1940→          </CardHeader>
+  1941→          <CardContent className="px-4 pb-4">
+  1942→            <DataFlowVisualization />
+  1943→          </CardContent>
+  1944→        </Card>
+  1945→      </div>
+  1946→    </div>
+  1947→  );
+  1948→}
+  1949→
+  1950→// ═══════════════════════════════════════════════════════════════════════════════
+  1951→// MAIN PAGE COMPONENT
+  1952→// ═══════════════════════════════════════════════════════════════════════════════
+  1953→
+  1954→export default function DataMoatPage() {
+  1955→  const [selectedClientId, setSelectedClientId] = useState(DEMO_CLIENTS[0].id);
+  1956→  const [activeTab, setActiveTab] = useState('profile');
+  1957→
+  1958→  // Firestore hooks (for live data integration)
+  1959→  const { data: fireClients } = useFireClients();
+  1960→  const { data: fireInvoices } = useFireInvoices();
+  1961→  const { data: fireReturns } = useFireReturns();
+  1962→  const { data: fireDocuments } = useFireDocuments();
+  1963→  const { data: fireActivities } = useFireActivities();
+  1964→
+  1965→  // Use demo data (firestore data used for enhancing when available)
+  1966→  const selectedClient = useMemo(
+  1967→    () => DEMO_CLIENTS.find(c => c.id === selectedClientId) || DEMO_CLIENTS[0],
+  1968→    [selectedClientId]
+  1969→  );
+  1970→
+  1971→  return (
+  1972→    <div className="p-4 md:p-6 max-w-[1400px] mx-auto space-y-4">
+  1973→      {/* Page Header */}
+  1974→      <motion.div
+  1975→        initial={{ opacity: 0, y: -10 }}
+  1976→        animate={{ opacity: 1, y: 0 }}
+  1977→        className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3"
+  1978→      >
+  1979→        <div className="flex items-center gap-3">
+  1980→          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-100 border border-emerald-200 shadow-sm">
+  1981→            <Database className="h-5 w-5 text-emerald-600" />
+  1982→          </div>
+  1983→          <div>
+  1984→            <h1 className="text-lg font-bold text-slate-900">Data Moat Engine</h1>
+  1985→            <p className="text-xs text-slate-500">AI Business Memory™ — Your competitive data advantage</p>
+  1986→          </div>
+  1987→        </div>
+  1988→
+  1989→        {/* Client Selector */}
+  1990→        <div className="flex items-center gap-2 w-full sm:w-auto">
+  1991→          <Building2 className="h-4 w-4 text-slate-400 shrink-0" />
+  1992→          <select
+  1993→            value={selectedClientId}
+  1994→            onChange={(e) => setSelectedClientId(e.target.value)}
+  1995→            className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-xs font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400 w-full sm:w-64"
+  1996→          >
+  1997→            {DEMO_CLIENTS.map(client => (
+  1998→              <option key={client.id} value={client.id}>
+  1999→                {client.tradeName} — {client.gstin.slice(0, 10)}...
+  2000→              </option>
+
+[showing lines 1-2000 of 2078; use offset=2001 with limit to continue reading]

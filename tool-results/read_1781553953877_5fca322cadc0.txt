@@ -1,0 +1,1377 @@
+     1→'use client'
+     2→
+     3→import React, { useState, useCallback, useMemo, useRef } from 'react'
+     4→import { motion, AnimatePresence } from 'framer-motion'
+     5→import {
+     6→  Card, CardContent, CardHeader, CardTitle, CardDescription,
+     7→} from '@/components/ui/card'
+     8→import { Badge } from '@/components/ui/badge'
+     9→import { Button } from '@/components/ui/button'
+    10→import { Input } from '@/components/ui/input'
+    11→import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+    12→import { ScrollArea } from '@/components/ui/scroll-area'
+    13→import { Separator } from '@/components/ui/separator'
+    14→import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog'
+    15→import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+    16→import {
+    17→  Upload, FileText, Download, Bell, Shield, Clock,
+    18→  CheckCircle2, AlertTriangle, Globe,
+    19→  Calendar, MessageSquare, Send, CreditCard, Sparkles,
+    20→  AlertCircle, FileCheck, CalendarClock, Eye,
+    21→  Users, ChevronRight,
+    22→  X, IndianRupee, ShieldCheck,
+    23→  FileUp, FileDown, ThumbsUp, MessagesSquare,
+    24→  Receipt, Gavel,
+    25→  Loader2, ExternalLink, KeyRound, Smartphone,
+    26→} from 'lucide-react'
+    27→import { formatCurrency } from '@/lib/gst-utils'
+    28→import {
+    29→  useFireClients, useFireReturns, useFireDocuments,
+    30→  useFireInvoices, useFireReconciliations,
+    31→  useFireFirm,
+    32→} from '@/hooks/use-firestore'
+    33→import { useAuth } from '@/contexts/AuthContext'
+    34→
+    35→// ─── Types ──────────────────────────────────────────────────────────────────────
+    36→
+    37→type PortalTab = 'overview' | 'documents' | 'returns' | 'approvals' | 'invoices' | 'chat' | 'notices' | 'compliance'
+    38→
+    39→interface ChatMessage {
+    40→  id: string
+    41→  role: 'user' | 'assistant'
+    42→  content: string
+    43→  timestamp: Date
+    44→}
+    45→
+    46→// ─── Utility ────────────────────────────────────────────────────────────────────
+    47→
+    48→function timeAgo(dateStr: string | null | undefined): string {
+    49→  if (!dateStr) return 'Never'
+    50→  const d = new Date(dateStr)
+    51→  const now = new Date()
+    52→  const diffMs = now.getTime() - d.getTime()
+    53→  const diffMins = Math.floor(diffMs / 60000)
+    54→  if (diffMins < 1) return 'Just now'
+    55→  if (diffMins < 60) return `${diffMins}m ago`
+    56→  const diffHrs = Math.floor(diffMins / 60)
+    57→  if (diffHrs < 24) return `${diffHrs}h ago`
+    58→  const diffDays = Math.floor(diffHrs / 24)
+    59→  if (diffDays < 7) return `${diffDays}d ago`
+    60→  return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
+    61→}
+    62→
+    63→function formatDate(dateStr: string | null | undefined): string {
+    64→  if (!dateStr) return '—'
+    65→  return new Date(dateStr).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+    66→}
+    67→
+    68→// ─── Main Component ─────────────────────────────────────────────────────────────
+    69→
+    70→export default function ClientPortalPage() {
+    71→  const { user } = useAuth()
+    72→
+    73→  // Live Firestore data
+    74→  const clients = useFireClients()
+    75→  const returns = useFireReturns()
+    76→  const documents = useFireDocuments()
+    77→  const invoices = useFireInvoices()
+    78→  const reconciliations = useFireReconciliations()
+    79→  const firm = useFireFirm()
+    80→
+    81→  const isLoading = clients.loading || returns.loading || invoices.loading
+    82→
+    83→  // Portal state
+    84→  const [activeTab, setActiveTab] = useState<PortalTab>('overview')
+    85→  const [selectedClient, setSelectedClient] = useState<string | null>(null)
+    86→  const [otpDialog, setOtpDialog] = useState(false)
+    87→  const [otpValue, setOtpValue] = useState('')
+    88→  const [otpSent, setOtpSent] = useState(false)
+    89→  const [portalAuthenticated, setPortalAuthenticated] = useState(true) // CA view = always authed
+    90→  const [uploadDialog, setUploadDialog] = useState(false)
+    91→  const [approvalDialog, setApprovalDialog] = useState(false)
+    92→  const [approvalItem, setApprovalItem] = useState<{ type: string; id: string; title: string } | null>(null)
+    93→  const [paymentDialog, setPaymentDialog] = useState(false)
+    94→  const [paymentInvoice, setPaymentInvoice] = useState<string | null>(null)
+    95→
+    96→  // Chat state
+    97→  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
+    98→    {
+    99→      id: 'welcome',
+   100→      role: 'assistant',
+   101→      content: 'Hello! I\'m your AI assistant. I can help you understand your GST returns, compliance score, invoices, and documents. What would you like to know?',
+   102→      timestamp: new Date(),
+   103→    },
+   104→  ])
+   105→  const [chatInput, setChatInput] = useState('')
+   106→  const [chatLoading, setChatLoading] = useState(false)
+   107→  const chatEndRef = useRef<HTMLDivElement>(null)
+   108→
+   109→  // ─── Computed Portal Data ──────────────────────────────────────────────────
+   110→
+   111→  const portalData = useMemo(() => {
+   112→    const activeClients = clients.data.filter(c => c.status === 'active')
+   113→    const firstClient = activeClients[0] || clients.data[0]
+   114→    const clientId = selectedClient || firstClient?.clientId || null
+   115→
+   116→    const clientReturns = clientId ? returns.data.filter(r => r.clientId === clientId) : returns.data
+   117→    const clientDocs = clientId ? documents.data.filter(d => d.clientId === clientId) : documents.data
+   118→    const clientInvoices = clientId ? invoices.data.filter(i => i.clientId === clientId) : invoices.data
+   119→    const clientRecons = clientId ? reconciliations.data.filter(r => r.clientId === clientId) : reconciliations.data
+   120→
+   121→    const pendingReturns = clientReturns.filter(r => !['filed', 'acknowledged'].includes(r.status))
+   122→    const filedReturns = clientReturns.filter(r => r.status === 'filed' || r.status === 'acknowledged')
+   123→    const overdueReturns = clientReturns.filter(r => r.status === 'overdue')
+   124→    const readyForApproval = clientReturns.filter(r => ['reviewed', 'validated', 'generated'].includes(r.status))
+   125→    const pendingDocs = clientDocs.filter(d => d.status === 'processing' || d.extractionStatus === 'pending')
+   126→    const processedDocs = clientDocs.filter(d => d.extractionStatus === 'completed')
+   127→    const unpaidInvoices = clientInvoices.filter(i => i.status !== 'paid')
+   128→    const paidInvoices = clientInvoices.filter(i => i.status === 'paid')
+   129→    const totalOutstanding = unpaidInvoices.reduce((s, i) => s + (i.totalAmount || 0), 0)
+   130→    const totalPaid = paidInvoices.reduce((s, i) => s + (i.totalAmount || 0), 0)
+   131→
+   132→    const client = firstClient
+   133→    const complianceScore = client?.complianceProfile?.filingCompliance || 0
+   134→    const healthScore = client?.healthScore || 0
+   135→    const gstinValid = client?.complianceProfile?.gstinValidity ?? true
+   136→    const overdueCount = client?.complianceProfile?.overdueReturns || 0
+   137→    const avgDelay = client?.complianceProfile?.averageFilingDelay || 0
+   138→
+   139→    // Generate portal notices from data
+   140→    const portalNotices: Array<{ id: string; type: string; title: string; message: string; date: string; priority: string }> = []
+   141→    overdueReturns.forEach(r => {
+   142→      portalNotices.push({
+   143→        id: `notice-overdue-${r.id}`,
+   144→        type: 'overdue',
+   145→        title: `${r.returnType} Overdue — ${r.period}`,
+   146→        message: `Your ${r.returnType} for period ${r.period} is overdue. Late fees of ₹200/day are accumulating.`,
+   147→        date: r.createdAt as string || new Date().toISOString(),
+   148→        priority: 'urgent',
+   149→      })
+   150→    })
+   151→    if (overdueCount > 0) {
+   152→      portalNotices.push({
+   153→        id: 'notice-compliance',
+   154→        type: 'compliance',
+   155→        title: 'Compliance Alert',
+   156→        message: `You have ${overdueCount} overdue return(s). This impacts your compliance score.`,
+   157→        date: new Date().toISOString(),
+   158→        priority: 'high',
+   159→      })
+   160→    }
+   161→    if (!gstinValid) {
+   162→      portalNotices.push({
+   163→        id: 'notice-gstin',
+   164→        type: 'gstin',
+   165→        title: 'GSTIN Status Alert',
+   166→        message: 'Your GSTIN may be inactive or cancelled. Please verify with your CA.',
+   167→        date: new Date().toISOString(),
+   168→        priority: 'urgent',
+   169→      })
+   170→    }
+   171→
+   172→    return {
+   173→      client,
+   174→      clientId,
+   175→      activeClients,
+   176→      clientReturns,
+   177→      clientDocs,
+   178→      clientInvoices,
+   179→      clientRecons,
+   180→      pendingReturns,
+   181→      filedReturns,
+   182→      overdueReturns,
+   183→      readyForApproval,
+   184→      pendingDocs,
+   185→      processedDocs,
+   186→      unpaidInvoices,
+   187→      paidInvoices,
+   188→      totalOutstanding,
+   189→      totalPaid,
+   190→      complianceScore,
+   191→      healthScore,
+   192→      gstinValid,
+   193→      overdueCount,
+   194→      avgDelay,
+   195→      portalNotices,
+   196→      totalClients: activeClients.length,
+   197→    }
+   198→  }, [clients.data, returns.data, documents.data, invoices.data, reconciliations.data, selectedClient])
+   199→
+   200→  // ─── Chat Handler ────────────────────────────────────────────────────────
+   201→
+   202→  const handleSendMessage = useCallback(async () => {
+   203→    if (!chatInput.trim()) return
+   204→
+   205→    const userMsg: ChatMessage = {
+   206→      id: `msg-${Date.now()}`,
+   207→      role: 'user',
+   208→      content: chatInput.trim(),
+   209→      timestamp: new Date(),
+   210→    }
+   211→    setChatMessages(prev => [...prev, userMsg])
+   212→    setChatInput('')
+   213→    setChatLoading(true)
+   214→
+   215→    try {
+   216→      const clientContext = portalData.client ? {
+   217→        tradeName: portalData.client.tradeName,
+   218→        gstin: portalData.client.gstin,
+   219→        complianceScore: portalData.complianceScore,
+   220→        healthScore: portalData.healthScore,
+   221→        pendingReturns: portalData.pendingReturns.length,
+   222→        filedReturns: portalData.filedReturns.length,
+   223→        outstanding: portalData.totalOutstanding,
+   224→      } : null
+   225→
+   226→      const res = await fetch('/api/portal/chat', {
+   227→        method: 'POST',
+   228→        headers: { 'Content-Type': 'application/json' },
+   229→        body: JSON.stringify({
+   230→          message: userMsg.content,
+   231→          clientContext,
+   232→          history: chatMessages.slice(-6).map(m => ({ role: m.role, content: m.content })),
+   233→        }),
+   234→      })
+   235→
+   236→      const data = await res.json()
+   237→      const assistantMsg: ChatMessage = {
+   238→        id: `msg-${Date.now()}-ai`,
+   239→        role: 'assistant',
+   240→        content: data.success ? data.response : 'Sorry, I couldn\'t process that. Please try again.',
+   241→        timestamp: new Date(),
+   242→      }
+   243→      setChatMessages(prev => [...prev, assistantMsg])
+   244→    } catch {
+   245→      const errorMsg: ChatMessage = {
+   246→        id: `msg-${Date.now()}-err`,
+   247→        role: 'assistant',
+   248→        content: 'I\'m having trouble connecting. Please try again in a moment.',
+   249→        timestamp: new Date(),
+   250→      }
+   251→      setChatMessages(prev => [...prev, errorMsg])
+   252→    } finally {
+   253→      setChatLoading(false)
+   254→      setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100)
+   255→    }
+   256→  }, [chatInput, chatMessages, portalData])
+   257→
+   258→  // ─── Render Helpers ──────────────────────────────────────────────────────
+   259→
+   260→  const scoreColor = (score: number) => {
+   261→    if (score >= 80) return 'text-emerald-600 dark:text-emerald-400'
+   262→    if (score >= 60) return 'text-amber-600 dark:text-amber-400'
+   263→    return 'text-red-600 dark:text-red-400'
+   264→  }
+   265→
+   266→  const scoreBg = (score: number) => {
+   267→    if (score >= 80) return 'bg-emerald-500/10 border-emerald-500/20'
+   268→    if (score >= 60) return 'bg-amber-500/10 border-amber-500/20'
+   269→    return 'bg-red-500/10 border-red-500/20'
+   270→  }
+   271→
+   272→  const statusBadge = (status: string) => {
+   273→    const map: Record<string, { class: string; label: string }> = {
+   274→      filed: { class: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-400 dark:border-emerald-800', label: 'Filed' },
+   275→      acknowledged: { class: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-400 dark:border-emerald-800', label: 'Acknowledged' },
+   276→      reviewed: { class: 'bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-900/20 dark:text-sky-400 dark:border-sky-800', label: 'Ready for Approval' },
+   277→      validated: { class: 'bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-900/20 dark:text-sky-400 dark:border-sky-800', label: 'Validated' },
+   278→      generated: { class: 'bg-violet-50 text-violet-700 border-violet-200 dark:bg-violet-900/20 dark:text-violet-400 dark:border-violet-800', label: 'Generated' },
+   279→      overdue: { class: 'bg-red-50 text-red-700 border-red-200 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800', label: 'Overdue' },
+   280→      draft: { class: 'bg-slate-50 text-slate-700 border-slate-200 dark:bg-slate-900/20 dark:text-slate-400 dark:border-slate-800', label: 'Draft' },
+   281→      processing: { class: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/20 dark:text-amber-400 dark:border-amber-800', label: 'Processing' },
+   282→      paid: { class: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-400 dark:border-emerald-800', label: 'Paid' },
+   283→    }
+   284→    const s = map[status] || { class: 'bg-slate-50 text-slate-700 border-slate-200', label: status }
+   285→    return <Badge variant="outline" className={`text-[10px] ${s.class}`}>{s.label}</Badge>
+   286→  }
+   287→
+   288→  const noticePriorityBadge = (priority: string) => {
+   289→    switch (priority) {
+   290→      case 'urgent': return <Badge className="text-[9px] bg-red-500 text-white">Urgent</Badge>
+   291→      case 'high': return <Badge className="text-[9px] bg-amber-500 text-white">High</Badge>
+   292→      default: return <Badge variant="secondary" className="text-[9px]">Info</Badge>
+   293→    }
+   294→  }
+   295→
+   296→  // ─── Render ──────────────────────────────────────────────────────────────
+   297→
+   298→  if (isLoading) {
+   299→    return (
+   300→      <div className="flex items-center justify-center h-full min-h-[60vh]">
+   301→        <div className="flex flex-col items-center gap-3">
+   302→          <Loader2 className="h-8 w-8 animate-spin text-emerald-500" />
+   303→          <span className="text-sm text-muted-foreground">Loading Client Portal...</span>
+   304→        </div>
+   305→      </div>
+   306→    )
+   307→  }
+   308→
+   309→  return (
+   310→    <div className="p-4 md:p-6 space-y-6 max-w-[1600px] mx-auto">
+   311→      {/* ─── Header ─────────────────────────────────────────────────────────── */}
+   312→      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+   313→        <div className="flex items-center gap-2.5">
+   314→          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 shadow-md shadow-emerald-500/20">
+   315→            <Globe className="h-5 w-5 text-white" />
+   316→          </div>
+   317→          <div>
+   318→            <h1 className="text-xl font-bold text-foreground">Client Portal</h1>
+   319→            <p className="text-xs text-muted-foreground">
+   320→              {portalData.totalClients} client{portalData.totalClients !== 1 ? 's' : ''} connected · Network effects engine
+   321→            </p>
+   322→          </div>
+   323→        </div>
+   324→        <div className="flex items-center gap-2">
+   325→          <Button variant="outline" size="sm" onClick={() => setOtpDialog(true)} className="gap-1.5 text-xs">
+   326→            <Smartphone className="h-3.5 w-3.5" />
+   327→            OTP Login
+   328→          </Button>
+   329→          <Button variant="outline" size="sm" className="gap-1.5 text-xs">
+   330→            <KeyRound className="h-3.5 w-3.5" />
+   331→            Invite Clients
+   332→          </Button>
+   333→        </div>
+   334→      </div>
+   335→
+   336→      {/* ─── Client Selector Bar ─────────────────────────────────────────────── */}
+   337→      {portalData.activeClients.length > 0 && (
+   338→        <Card className="border-border/50 shadow-sm">
+   339→          <CardContent className="p-3">
+   340→            <div className="flex items-center gap-2">
+   341→              <span className="text-xs font-medium text-muted-foreground shrink-0">Viewing as:</span>
+   342→              <div className="flex gap-1.5 overflow-x-auto pb-0.5">
+   343→                {portalData.activeClients.slice(0, 8).map(client => (
+   344→                  <button
+   345→                    key={client.clientId}
+   346→                    onClick={() => setSelectedClient(client.clientId === selectedClient ? null : client.clientId)}
+   347→                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap ${
+   348→                      (selectedClient || portalData.activeClients[0]?.clientId) === client.clientId
+   349→                        ? 'bg-emerald-500/10 text-emerald-700 border border-emerald-500/25 dark:text-emerald-400'
+   350→                        : 'bg-muted/50 text-muted-foreground hover:bg-muted border border-transparent'
+   351→                    }`}
+   352→                  >
+   353→                    {client.tradeName}
+   354→                  </button>
+   355→                ))}
+   356→              </div>
+   357→            </div>
+   358→          </CardContent>
+   359→        </Card>
+   360→      )}
+   361→
+   362→      {/* ─── Portal Tabs ──────────────────────────────────────────────────────── */}
+   363→      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as PortalTab)} className="space-y-4">
+   364→        <TabsList className="bg-muted/50 flex-wrap h-auto gap-1 p-1">
+   365→          <TabsTrigger value="overview" className="text-xs gap-1.5 data-[state=active]:bg-emerald-500/10 data-[state=active]:text-emerald-700">
+   366→            <Eye className="h-3.5 w-3.5" /> Overview
+   367→          </TabsTrigger>
+   368→          <TabsTrigger value="documents" className="text-xs gap-1.5 data-[state=active]:bg-emerald-500/10 data-[state=active]:text-emerald-700">
+   369→            <FileUp className="h-3.5 w-3.5" /> Documents
+   370→          </TabsTrigger>
+   371→          <TabsTrigger value="returns" className="text-xs gap-1.5 data-[state=active]:bg-emerald-500/10 data-[state=active]:text-emerald-700">
+   372→            <FileText className="h-3.5 w-3.5" /> Returns
+   373→          </TabsTrigger>
+   374→          <TabsTrigger value="approvals" className="text-xs gap-1.5 data-[state=active]:bg-emerald-500/10 data-[state=active]:text-emerald-700">
+   375→            <ThumbsUp className="h-3.5 w-3.5" /> Approvals
+   376→            {portalData.readyForApproval.length > 0 && (
+   377→              <Badge className="h-4 min-w-4 px-1 text-[9px] bg-amber-500 text-white">{portalData.readyForApproval.length}</Badge>
+   378→            )}
+   379→          </TabsTrigger>
+   380→          <TabsTrigger value="invoices" className="text-xs gap-1.5 data-[state=active]:bg-emerald-500/10 data-[state=active]:text-emerald-700">
+   381→            <CreditCard className="h-3.5 w-3.5" /> Invoices
+   382→            {portalData.unpaidInvoices.length > 0 && (
+   383→              <Badge className="h-4 min-w-4 px-1 text-[9px] bg-red-500 text-white">{portalData.unpaidInvoices.length}</Badge>
+   384→            )}
+   385→          </TabsTrigger>
+   386→          <TabsTrigger value="chat" className="text-xs gap-1.5 data-[state=active]:bg-emerald-500/10 data-[state=active]:text-emerald-700">
+   387→            <MessagesSquare className="h-3.5 w-3.5" /> Chat with CA
+   388→          </TabsTrigger>
+   389→          <TabsTrigger value="notices" className="text-xs gap-1.5 data-[state=active]:bg-emerald-500/10 data-[state=active]:text-emerald-700">
+   390→            <Gavel className="h-3.5 w-3.5" /> Notices
+   391→            {portalData.portalNotices.length > 0 && (
+   392→              <Badge className="h-4 min-w-4 px-1 text-[9px] bg-red-500 text-white">{portalData.portalNotices.length}</Badge>
+   393→            )}
+   394→          </TabsTrigger>
+   395→          <TabsTrigger value="compliance" className="text-xs gap-1.5 data-[state=active]:bg-emerald-500/10 data-[state=active]:text-emerald-700">
+   396→            <ShieldCheck className="h-3.5 w-3.5" /> Compliance
+   397→          </TabsTrigger>
+   398→        </TabsList>
+   399→
+   400→        {/* ─── Overview Tab ────────────────────────────────────────────────── */}
+   401→        <TabsContent value="overview" className="space-y-4">
+   402→          {/* Quick Stats Grid */}
+   403→          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+   404→            {[
+   405→              { label: 'Compliance Score', value: `${portalData.complianceScore}%`, icon: Shield, color: scoreColor(portalData.complianceScore), bg: scoreBg(portalData.complianceScore) },
+   406→              { label: 'Pending Returns', value: `${portalData.pendingReturns.length}`, icon: FileText, color: 'text-amber-600', bg: 'bg-amber-500/10 border-amber-500/20' },
+   407→              { label: 'Outstanding', value: formatCurrency(portalData.totalOutstanding), icon: IndianRupee, color: 'text-red-600', bg: 'bg-red-500/10 border-red-500/20' },
+   408→              { label: 'Documents', value: `${portalData.clientDocs.length}`, icon: FileUp, color: 'text-sky-600', bg: 'bg-sky-500/10 border-sky-500/20' },
+   409→            ].map(stat => (
+   410→              <Card key={stat.label} className={`border shadow-sm ${stat.bg}`}>
+   411→                <CardContent className="p-4 flex items-center gap-3">
+   412→                  <stat.icon className={`h-5 w-5 ${stat.color}`} />
+   413→                  <div>
+   414→                    <p className={`text-lg font-bold ${stat.color}`}>{stat.value}</p>
+   415→                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider">{stat.label}</p>
+   416→                  </div>
+   417→                </CardContent>
+   418→              </Card>
+   419→            ))}
+   420→          </div>
+   421→
+   422→          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+   423→            {/* Compliance Health Card */}
+   424→            <Card className="border-border/50 shadow-sm">
+   425→              <CardHeader className="pb-3 px-4 pt-4">
+   426→                <CardTitle className="text-sm font-semibold flex items-center gap-2">
+   427→                  <ShieldCheck className="h-4 w-4 text-emerald-500" />
+   428→                  Compliance Health
+   429→                </CardTitle>
+   430→              </CardHeader>
+   431→              <CardContent className="px-4 pb-4 space-y-3">
+   432→                <div className="flex items-center justify-center">
+   433→                  <div className="relative h-28 w-28">
+   434→                    <svg className="h-28 w-28 -rotate-90" viewBox="0 0 100 100">
+   435→                      <circle cx="50" cy="50" r="42" fill="none" stroke="currentColor" strokeWidth="8" className="text-muted/20" />
+   436→                      <circle cx="50" cy="50" r="42" fill="none" strokeWidth="8" strokeLinecap="round"
+   437→                        strokeDasharray={`${portalData.complianceScore * 2.64} 264`}
+   438→                        className={portalData.complianceScore >= 80 ? 'text-emerald-500' : portalData.complianceScore >= 60 ? 'text-amber-500' : 'text-red-500'}
+   439→                      />
+   440→                    </svg>
+   441→                    <div className="absolute inset-0 flex flex-col items-center justify-center">
+   442→                      <span className={`text-2xl font-bold ${scoreColor(portalData.complianceScore)}`}>{portalData.complianceScore}</span>
+   443→                      <span className="text-[9px] text-muted-foreground">SCORE</span>
+   444→                    </div>
+   445→                  </div>
+   446→                </div>
+   447→                <div className="space-y-2">
+   448→                  <div className="flex items-center justify-between text-xs">
+   449→                    <span className="text-muted-foreground">GSTIN Status</span>
+   450→                    <Badge variant="outline" className={portalData.gstinValid ? 'text-[9px] text-emerald-600 border-emerald-200' : 'text-[9px] text-red-600 border-red-200'}>
+   451→                      {portalData.gstinValid ? 'Active' : 'Inactive'}
+   452→                    </Badge>
+   453→                  </div>
+   454→                  <div className="flex items-center justify-between text-xs">
+   455→                    <span className="text-muted-foreground">Overdue Returns</span>
+   456→                    <span className="font-medium text-foreground">{portalData.overdueCount}</span>
+   457→                  </div>
+   458→                  <div className="flex items-center justify-between text-xs">
+   459→                    <span className="text-muted-foreground">Avg Filing Delay</span>
+   460→                    <span className="font-medium text-foreground">{portalData.avgDelay} days</span>
+   461→                  </div>
+   462→                  <div className="flex items-center justify-between text-xs">
+   463→                    <span className="text-muted-foreground">Returns Filed</span>
+   464→                    <span className="font-medium text-emerald-600">{portalData.filedReturns.length}</span>
+   465→                  </div>
+   466→                </div>
+   467→              </CardContent>
+   468→            </Card>
+   469→
+   470→            {/* Recent Returns */}
+   471→            <Card className="border-border/50 shadow-sm">
+   472→              <CardHeader className="pb-3 px-4 pt-4">
+   473→                <div className="flex items-center justify-between">
+   474→                  <CardTitle className="text-sm font-semibold flex items-center gap-2">
+   475→                    <FileText className="h-4 w-4 text-emerald-500" />
+   476→                    Recent Returns
+   477→                  </CardTitle>
+   478→                  <Button variant="ghost" size="sm" className="text-[10px] text-emerald-600 h-6" onClick={() => setActiveTab('returns')}>
+   479→                    View All <ChevronRight className="h-3 w-3" />
+   480→                  </Button>
+   481→                </div>
+   482→              </CardHeader>
+   483→              <CardContent className="px-4 pb-4">
+   484→                <ScrollArea className="max-h-56">
+   485→                  {portalData.clientReturns.length === 0 ? (
+   486→                    <div className="text-center py-6 text-muted-foreground text-xs">
+   487→                      No returns yet
+   488→                    </div>
+   489→                  ) : (
+   490→                    <div className="space-y-2">
+   491→                      {portalData.clientReturns.slice(0, 5).map(ret => (
+   492→                        <div key={ret.id} className="flex items-center justify-between py-2 px-2 rounded-lg hover:bg-muted/30 transition-colors">
+   493→                          <div className="flex items-center gap-2.5">
+   494→                            <div className={`flex h-8 w-8 items-center justify-center rounded-lg ${
+   495→                              ret.status === 'filed' ? 'bg-emerald-500/10' :
+   496→                              ret.status === 'overdue' ? 'bg-red-500/10' :
+   497→                              'bg-amber-500/10'
+   498→                            }`}>
+   499→                              <FileText className={`h-4 w-4 ${
+   500→                                ret.status === 'filed' ? 'text-emerald-500' :
+   501→                                ret.status === 'overdue' ? 'text-red-500' :
+   502→                                'text-amber-500'
+   503→                              }`} />
+   504→                            </div>
+   505→                            <div>
+   506→                              <p className="text-xs font-medium text-foreground">{ret.returnType} · {ret.period}</p>
+   507→                              <p className="text-[10px] text-muted-foreground">
+   508→                                {ret.totalTax ? formatCurrency(ret.totalTax) : '—'} tax
+   509→                              </p>
+   510→                            </div>
+   511→                          </div>
+   512→                          {statusBadge(ret.status)}
+   513→                        </div>
+   514→                      ))}
+   515→                    </div>
+   516→                  )}
+   517→                </ScrollArea>
+   518→              </CardContent>
+   519→            </Card>
+   520→
+   521→            {/* Pending Actions & Notices */}
+   522→            <Card className="border-border/50 shadow-sm">
+   523→              <CardHeader className="pb-3 px-4 pt-4">
+   524→                <div className="flex items-center justify-between">
+   525→                  <CardTitle className="text-sm font-semibold flex items-center gap-2">
+   526→                    <Bell className="h-4 w-4 text-amber-500" />
+   527→                    Action Required
+   528→                  </CardTitle>
+   529→                  <Badge variant="secondary" className="text-[9px]">
+   530→                    {portalData.readyForApproval.length + portalData.portalNotices.length} items
+   531→                  </Badge>
+   532→                </div>
+   533→              </CardHeader>
+   534→              <CardContent className="px-4 pb-4">
+   535→                <ScrollArea className="max-h-56">
+   536→                  <div className="space-y-2">
+   537→                    {portalData.readyForApproval.map(ret => (
+   538→                      <div key={ret.id} className="flex items-center gap-2 py-2 px-2 rounded-lg bg-sky-50/50 dark:bg-sky-900/10 border border-sky-200/50 dark:border-sky-800/30">
+   539→                        <FileCheck className="h-4 w-4 text-sky-500" />
+   540→                        <div className="flex-1 min-w-0">
+   541→                          <p className="text-xs font-medium text-foreground">{ret.returnType} · {ret.period}</p>
+   542→                          <p className="text-[10px] text-muted-foreground">Ready for your approval</p>
+   543→                        </div>
+   544→                        <Button size="sm" className="h-6 text-[10px] bg-sky-500 hover:bg-sky-600 text-white"
+   545→                          onClick={() => {
+   546→                            setApprovalItem({ type: 'return', id: ret.id, title: `${ret.returnType} · ${ret.period}` })
+   547→                            setApprovalDialog(true)
+   548→                          }}
+   549→                        >
+   550→                          Approve
+   551→                        </Button>
+   552→                      </div>
+   553→                    ))}
+   554→                    {portalData.portalNotices.slice(0, 3).map(notice => (
+   555→                      <div key={notice.id} className="flex items-center gap-2 py-2 px-2 rounded-lg bg-red-50/50 dark:bg-red-900/10 border border-red-200/50 dark:border-red-800/30">
+   556→                        <AlertTriangle className="h-4 w-4 text-red-500" />
+   557→                        <div className="flex-1 min-w-0">
+   558→                          <p className="text-xs font-medium text-foreground">{notice.title}</p>
+   559→                          <p className="text-[10px] text-muted-foreground truncate">{notice.message}</p>
+   560→                        </div>
+   561→                        {noticePriorityBadge(notice.priority)}
+   562→                      </div>
+   563→                    ))}
+   564→                    {portalData.readyForApproval.length === 0 && portalData.portalNotices.length === 0 && (
+   565→                      <div className="text-center py-6 text-muted-foreground text-xs">
+   566→                        <CheckCircle2 className="h-6 w-6 mx-auto mb-2 text-emerald-500" />
+   567→                        All caught up! No actions required.
+   568→                      </div>
+   569→                    )}
+   570→                  </div>
+   571→                </ScrollArea>
+   572→              </CardContent>
+   573→            </Card>
+   574→          </div>
+   575→
+   576→          {/* Network Effects Banner */}
+   577→          <Card className="border-emerald-500/20 bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-950/20 dark:to-teal-950/20 shadow-sm">
+   578→            <CardContent className="p-4">
+   579→              <div className="flex items-center gap-4">
+   580→                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 shadow-md shadow-emerald-500/20">
+   581→                  <Users className="h-6 w-6 text-white" />
+   582→                </div>
+   583→                <div className="flex-1">
+   584→                  <h3 className="text-sm font-semibold text-foreground">Network Effects Engine</h3>
+   585→                  <p className="text-xs text-muted-foreground mt-0.5">
+   586→                    Every client you invite strengthens your firm. Clients who use the portal have 40% higher retention and 60% faster payment cycles.
+   587→                    {portalData.totalClients === 0 ? ' Start by inviting your first client!' : ` ${portalData.totalClients} client${portalData.totalClients !== 1 ? 's' : ''} already connected.`}
+   588→                  </p>
+   589→                </div>
+   590→                <Button size="sm" className="gap-1.5 text-xs bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-sm">
+   591→                  <ExternalLink className="h-3.5 w-3.5" />
+   592→                  Invite Clients
+   593→                </Button>
+   594→              </div>
+   595→            </CardContent>
+   596→          </Card>
+   597→        </TabsContent>
+   598→
+   599→        {/* ─── Documents Tab ─────────────────────────────────────────────── */}
+   600→        <TabsContent value="documents" className="space-y-4">
+   601→          <div className="flex items-center justify-between">
+   602→            <div>
+   603→              <h2 className="text-sm font-semibold text-foreground">Document Center</h2>
+   604→              <p className="text-xs text-muted-foreground">{portalData.clientDocs.length} documents · {portalData.pendingDocs.length} processing</p>
+   605→            </div>
+   606→            <Button size="sm" onClick={() => setUploadDialog(true)} className="gap-1.5 text-xs bg-emerald-500 hover:bg-emerald-600 text-white">
+   607→              <Upload className="h-3.5 w-3.5" />
+   608→              Upload Document
+   609→            </Button>
+   610→          </div>
+   611→
+   612→          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+   613→            {portalData.clientDocs.length === 0 ? (
+   614→              <Card className="col-span-full border-border/50">
+   615→                <CardContent className="py-12 text-center">
+   616→                  <FileUp className="h-10 w-10 text-muted-foreground/20 mx-auto mb-3" />
+   617→                  <p className="text-sm text-muted-foreground">No documents yet</p>
+   618→                  <p className="text-xs text-muted-foreground/60 mt-1">Upload your first document to get started</p>
+   619→                  <Button size="sm" onClick={() => setUploadDialog(true)} className="mt-3 gap-1.5 text-xs bg-emerald-500 text-white">
+   620→                    <Upload className="h-3.5 w-3.5" /> Upload
+   621→                  </Button>
+   622→                </CardContent>
+   623→              </Card>
+   624→            ) : (
+   625→              portalData.clientDocs.map(doc => (
+   626→                <motion.div key={doc.id} initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }}>
+   627→                  <Card className="border-border/50 shadow-sm hover:shadow-md transition-shadow">
+   628→                    <CardContent className="p-4 space-y-2.5">
+   629→                      <div className="flex items-start justify-between">
+   630→                        <div className="flex items-center gap-2.5">
+   631→                          <div className={`flex h-9 w-9 items-center justify-center rounded-lg ${
+   632→                            doc.extractionStatus === 'completed' ? 'bg-emerald-500/10' :
+   633→                            doc.extractionStatus === 'in_progress' ? 'bg-amber-500/10' :
+   634→                            'bg-slate-500/10'
+   635→                          }`}>
+   636→                            {doc.extractionStatus === 'completed' ? (
+   637→                              <FileCheck className="h-4 w-4 text-emerald-500" />
+   638→                            ) : doc.extractionStatus === 'in_progress' ? (
+   639→                              <Loader2 className="h-4 w-4 text-amber-500 animate-spin" />
+   640→                            ) : (
+   641→                              <FileText className="h-4 w-4 text-slate-500" />
+   642→                            )}
+   643→                          </div>
+   644→                          <div>
+   645→                            <p className="text-xs font-medium text-foreground truncate max-w-[180px]">{doc.fileName}</p>
+   646→                            <p className="text-[10px] text-muted-foreground">{doc.documentType} · {doc.period || '—'}</p>
+   647→                          </div>
+   648→                        </div>
+   649→                        <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
+   650→                          <Download className="h-3.5 w-3.5 text-muted-foreground" />
+   651→                        </Button>
+   652→                      </div>
+   653→                      <div className="flex items-center justify-between">
+   654→                        {statusBadge(doc.status)}
+   655→                        <span className="text-[10px] text-muted-foreground">{formatDate(doc.createdAt as string)}</span>
+   656→                      </div>
+   657→                      {doc.extractionStatus === 'completed' && (
+   658→                        <div className="flex items-center gap-1.5 text-[10px] text-emerald-600">
+   659→                          <CheckCircle2 className="h-3 w-3" />
+   660→                          {doc.extractedInvoiceCount} invoice{doc.extractedInvoiceCount !== 1 ? 's' : ''} extracted · {doc.extractionAccuracy}% accuracy
+   661→                        </div>
+   662→                      )}
+   663→                    </CardContent>
+   664→                  </Card>
+   665→                </motion.div>
+   666→              ))
+   667→            )}
+   668→          </div>
+   669→        </TabsContent>
+   670→
+   671→        {/* ─── Returns Tab ─────────────────────────────────────────────── */}
+   672→        <TabsContent value="returns" className="space-y-4">
+   673→          <div className="flex items-center justify-between">
+   674→            <div>
+   675→              <h2 className="text-sm font-semibold text-foreground">GST Returns</h2>
+   676→              <p className="text-xs text-muted-foreground">{portalData.filedReturns.length} filed · {portalData.pendingReturns.length} pending · {portalData.overdueReturns.length} overdue</p>
+   677→            </div>
+   678→            <Button variant="outline" size="sm" className="gap-1.5 text-xs">
+   679→              <Download className="h-3.5 w-3.5" />
+   680→              Download Report
+   681→            </Button>
+   682→          </div>
+   683→
+   684→          <div className="space-y-2">
+   685→            {portalData.clientReturns.length === 0 ? (
+   686→              <Card className="border-border/50">
+   687→                <CardContent className="py-12 text-center">
+   688→                  <FileText className="h-10 w-10 text-muted-foreground/20 mx-auto mb-3" />
+   689→                  <p className="text-sm text-muted-foreground">No returns filed yet</p>
+   690→                </CardContent>
+   691→              </Card>
+   692→            ) : (
+   693→              portalData.clientReturns.map(ret => (
+   694→                <Card key={ret.id} className="border-border/50 shadow-sm hover:shadow-md transition-shadow">
+   695→                  <CardContent className="p-4">
+   696→                    <div className="flex items-center justify-between">
+   697→                      <div className="flex items-center gap-3">
+   698→                        <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${
+   699→                          ret.status === 'filed' || ret.status === 'acknowledged' ? 'bg-emerald-500/10' :
+   700→                          ret.status === 'overdue' ? 'bg-red-500/10' :
+   701→                          ['reviewed', 'validated', 'generated'].includes(ret.status) ? 'bg-sky-500/10' :
+   702→                          'bg-amber-500/10'
+   703→                        }`}>
+   704→                          <FileText className={`h-5 w-5 ${
+   705→                            ret.status === 'filed' || ret.status === 'acknowledged' ? 'text-emerald-500' :
+   706→                            ret.status === 'overdue' ? 'text-red-500' :
+   707→                            ['reviewed', 'validated', 'generated'].includes(ret.status) ? 'text-sky-500' :
+   708→                            'text-amber-500'
+   709→                          }`} />
+   710→                        </div>
+   711→                        <div>
+   712→                          <p className="text-sm font-medium text-foreground">{ret.returnType} — {ret.period}</p>
+   713→                          <div className="flex items-center gap-3 mt-0.5">
+   714→                            <span className="text-[10px] text-muted-foreground">FY {ret.financialYear}</span>
+   715→                            <span className="text-[10px] text-muted-foreground">{ret.totalInvoices} invoices</span>
+   716→                            <span className="text-[10px] text-muted-foreground">Tax: {formatCurrency(ret.totalTax)}</span>
+   717→                          </div>
+   718→                        </div>
+   719→                      </div>
+   720→                      <div className="flex items-center gap-2">
+   721→                        {statusBadge(ret.status)}
+   722→                        {['reviewed', 'validated', 'generated'].includes(ret.status) && (
+   723→                          <Button size="sm" className="h-7 text-[10px] bg-sky-500 hover:bg-sky-600 text-white"
+   724→                            onClick={() => {
+   725→                              setApprovalItem({ type: 'return', id: ret.id, title: `${ret.returnType} · ${ret.period}` })
+   726→                              setApprovalDialog(true)
+   727→                            }}
+   728→                          >
+   729→                            Approve
+   730→                          </Button>
+   731→                        )}
+   732→                        {ret.status === 'filed' && ret.acknowledgmentNumber && (
+   733→                          <Button variant="ghost" size="sm" className="h-7 text-[10px] text-emerald-600 gap-1">
+   734→                            <Download className="h-3 w-3" /> ARN
+   735→                          </Button>
+   736→                        )}
+   737→                      </div>
+   738→                    </div>
+   739→                    {ret.issuesFound > 0 && (
+   740→                      <div className="mt-2 flex items-center gap-1.5 text-[10px] text-amber-600 bg-amber-50/50 dark:bg-amber-900/10 px-2 py-1 rounded">
+   741→                        <AlertTriangle className="h-3 w-3" />
+   742→                        {ret.issuesFound} issues found · {ret.criticalErrors} critical · {ret.warnings} warnings
+   743→                      </div>
+   744→                    )}
+   745→                    {ret.filedDate && (
+   746→                      <div className="mt-2 flex items-center gap-1.5 text-[10px] text-emerald-600">
+   747→                        <CheckCircle2 className="h-3 w-3" />
+   748→                        Filed on {formatDate(ret.filedDate)} · ARN: {ret.acknowledgmentNumber || '—'}
+   749→                      </div>
+   750→                    )}
+   751→                  </CardContent>
+   752→                </Card>
+   753→              ))
+   754→            )}
+   755→          </div>
+   756→        </TabsContent>
+   757→
+   758→        {/* ─── Approvals Tab ────────────────────────────────────────────── */}
+   759→        <TabsContent value="approvals" className="space-y-4">
+   760→          <div>
+   761→            <h2 className="text-sm font-semibold text-foreground">Approval Workflow</h2>
+   762→            <p className="text-xs text-muted-foreground">{portalData.readyForApproval.length} returns awaiting your approval</p>
+   763→          </div>
+   764→
+   765→          {portalData.readyForApproval.length === 0 ? (
+   766→            <Card className="border-border/50">
+   767→              <CardContent className="py-12 text-center">
+   768→                <CheckCircle2 className="h-10 w-10 text-emerald-500/30 mx-auto mb-3" />
+   769→                <p className="text-sm text-muted-foreground">No pending approvals</p>
+   770→                <p className="text-xs text-muted-foreground/60 mt-1">Returns ready for filing will appear here for your approval</p>
+   771→              </CardContent>
+   772→            </Card>
+   773→          ) : (
+   774→            <div className="space-y-3">
+   775→              {portalData.readyForApproval.map(ret => (
+   776→                <Card key={ret.id} className="border-sky-500/20 shadow-sm">
+   777→                  <CardContent className="p-4">
+   778→                    <div className="flex items-center justify-between mb-3">
+   779→                      <div className="flex items-center gap-3">
+   780→                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-sky-500/10">
+   781→                          <FileCheck className="h-5 w-5 text-sky-500" />
+   782→                        </div>
+   783→                        <div>
+   784→                          <p className="text-sm font-semibold text-foreground">{ret.returnType} — {ret.period}</p>
+   785→                          <p className="text-[10px] text-muted-foreground">Reviewed by your CA · Ready for filing</p>
+   786→                        </div>
+   787→                      </div>
+   788→                      {statusBadge(ret.status)}
+   789→                    </div>
+   790→                    <div className="grid grid-cols-4 gap-2 mb-3">
+   791→                      <div className="rounded-md bg-muted/30 p-2 text-center">
+   792→                        <p className="text-xs font-semibold">{ret.totalInvoices}</p>
+   793→                        <p className="text-[8px] text-muted-foreground">Invoices</p>
+   794→                      </div>
+   795→                      <div className="rounded-md bg-muted/30 p-2 text-center">
+   796→                        <p className="text-xs font-semibold">{formatCurrency(ret.totalTaxableValue)}</p>
+   797→                        <p className="text-[8px] text-muted-foreground">Taxable Value</p>
+   798→                      </div>
+   799→                      <div className="rounded-md bg-muted/30 p-2 text-center">
+   800→                        <p className="text-xs font-semibold">{formatCurrency(ret.totalTax)}</p>
+   801→                        <p className="text-[8px] text-muted-foreground">Total Tax</p>
+   802→                      </div>
+   803→                      <div className="rounded-md bg-muted/30 p-2 text-center">
+   804→                        <p className="text-xs font-semibold">{ret.issuesFound}</p>
+   805→                        <p className="text-[8px] text-muted-foreground">Issues</p>
+   806→                      </div>
+   807→                    </div>
+   808→                    <div className="flex items-center gap-2">
+   809→                      <Button size="sm" className="flex-1 gap-1.5 text-xs bg-emerald-500 hover:bg-emerald-600 text-white"
+   810→                        onClick={() => {
+   811→                          setApprovalItem({ type: 'return', id: ret.id, title: `${ret.returnType} · ${ret.period}` })
+   812→                          setApprovalDialog(true)
+   813→                        }}
+   814→                      >
+   815→                        <CheckCircle2 className="h-3.5 w-3.5" /> Approve & File
+   816→                      </Button>
+   817→                      <Button variant="outline" size="sm" className="gap-1.5 text-xs">
+   818→                        <Eye className="h-3.5 w-3.5" /> Review
+   819→                      </Button>
+   820→                      <Button variant="outline" size="sm" className="gap-1.5 text-xs text-red-600 hover:text-red-700">
+   821→                        <X className="h-3.5 w-3.5" /> Reject
+   822→                      </Button>
+   823→                    </div>
+   824→                  </CardContent>
+   825→                </Card>
+   826→              ))}
+   827→            </div>
+   828→          )}
+   829→        </TabsContent>
+   830→
+   831→        {/* ─── Invoices Tab ─────────────────────────────────────────────── */}
+   832→        <TabsContent value="invoices" className="space-y-4">
+   833→          <div className="flex items-center justify-between">
+   834→            <div>
+   835→              <h2 className="text-sm font-semibold text-foreground">Invoices & Payments</h2>
+   836→              <p className="text-xs text-muted-foreground">
+   837→                {portalData.paidInvoices.length} paid · {portalData.unpaidInvoices.length} unpaid · Outstanding: {formatCurrency(portalData.totalOutstanding)}
+   838→              </p>
+   839→            </div>
+   840→          </div>
+   841→
+   842→          {/* Payment Summary Cards */}
+   843→          <div className="grid grid-cols-3 gap-3">
+   844→            <Card className="border-emerald-500/20 bg-emerald-50/50 dark:bg-emerald-950/20">
+   845→              <CardContent className="p-3 text-center">
+   846→                <p className="text-lg font-bold text-emerald-600">{formatCurrency(portalData.totalPaid)}</p>
+   847→                <p className="text-[10px] text-muted-foreground">Paid</p>
+   848→              </CardContent>
+   849→            </Card>
+   850→            <Card className="border-red-500/20 bg-red-50/50 dark:bg-red-950/20">
+   851→              <CardContent className="p-3 text-center">
+   852→                <p className="text-lg font-bold text-red-600">{formatCurrency(portalData.totalOutstanding)}</p>
+   853→                <p className="text-[10px] text-muted-foreground">Outstanding</p>
+   854→              </CardContent>
+   855→            </Card>
+   856→            <Card className="border-sky-500/20 bg-sky-50/50 dark:bg-sky-950/20">
+   857→              <CardContent className="p-3 text-center">
+   858→                <p className="text-lg font-bold text-sky-600">{portalData.clientInvoices.length}</p>
+   859→                <p className="text-[10px] text-muted-foreground">Total Invoices</p>
+   860→              </CardContent>
+   861→            </Card>
+   862→          </div>
+   863→
+   864→          <div className="space-y-2">
+   865→            {portalData.clientInvoices.length === 0 ? (
+   866→              <Card className="border-border/50">
+   867→                <CardContent className="py-12 text-center">
+   868→                  <Receipt className="h-10 w-10 text-muted-foreground/20 mx-auto mb-3" />
+   869→                  <p className="text-sm text-muted-foreground">No invoices yet</p>
+   870→                </CardContent>
+   871→              </Card>
+   872→            ) : (
+   873→              portalData.clientInvoices.slice(0, 20).map(inv => (
+   874→                <Card key={inv.id} className="border-border/50 shadow-sm">
+   875→                  <CardContent className="p-3">
+   876→                    <div className="flex items-center justify-between">
+   877→                      <div className="flex items-center gap-3">
+   878→                        <div className={`flex h-9 w-9 items-center justify-center rounded-lg ${
+   879→                          inv.status === 'paid' ? 'bg-emerald-500/10' : 'bg-red-500/10'
+   880→                        }`}>
+   881→                          {inv.status === 'paid' ? (
+   882→                            <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+   883→                          ) : (
+   884→                            <IndianRupee className="h-4 w-4 text-red-500" />
+   885→                          )}
+   886→                        </div>
+   887→                        <div>
+   888→                          <p className="text-xs font-medium text-foreground">#{inv.invoiceNumber}</p>
+   889→                          <p className="text-[10px] text-muted-foreground">
+   890→                            {inv.invoiceDate ? formatDate(inv.invoiceDate) : '—'} · {inv.sellerGstin?.slice(0, 10)}...
+   891→                          </p>
+   892→                        </div>
+   893→                      </div>
+   894→                      <div className="flex items-center gap-3">
+   895→                        <div className="text-right">
+   896→                          <p className="text-sm font-semibold text-foreground">{formatCurrency(inv.totalAmount)}</p>
+   897→                          <p className="text-[10px] text-muted-foreground">Tax: {formatCurrency(inv.cgst + inv.sgst + inv.igst + inv.cess)}</p>
+   898→                        </div>
+   899→                        {inv.status !== 'paid' ? (
+   900→                          <Button size="sm" className="h-7 text-[10px] bg-emerald-500 hover:bg-emerald-600 text-white"
+   901→                            onClick={() => {
+   902→                              setPaymentInvoice(inv.id)
+   903→                              setPaymentDialog(true)
+   904→                            }}
+   905→                          >
+   906→                            Pay Now
+   907→                          </Button>
+   908→                        ) : (
+   909→                          statusBadge(inv.status)
+   910→                        )}
+   911→                      </div>
+   912→                    </div>
+   913→                  </CardContent>
+   914→                </Card>
+   915→              ))
+   916→            )}
+   917→          </div>
+   918→        </TabsContent>
+   919→
+   920→        {/* ─── Chat Tab ─────────────────────────────────────────────────── */}
+   921→        <TabsContent value="chat" className="space-y-4">
+   922→          <Card className="border-border/50 shadow-sm">
+   923→            <CardHeader className="pb-3 px-4 pt-4">
+   924→              <div className="flex items-center justify-between">
+   925→                <div className="flex items-center gap-2">
+   926→                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 shadow-sm">
+   927→                    <Sparkles className="h-4 w-4 text-white" />
+   928→                  </div>
+   929→                  <div>
+   930→                    <CardTitle className="text-sm font-semibold">AI Chat Assistant</CardTitle>
+   931→                    <CardDescription className="text-[10px]">Ask about your GST returns, compliance, or invoices</CardDescription>
+   932→                  </div>
+   933→                </div>
+   934→                <Badge variant="secondary" className="text-[9px] bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">
+   935→                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse mr-1" />
+   936→                  AI Powered
+   937→                </Badge>
+   938→              </div>
+   939→            </CardHeader>
+   940→            <CardContent className="px-4 pb-4">
+   941→              <ScrollArea className="h-[400px] pr-2">
+   942→                <div className="space-y-3">
+   943→                  {chatMessages.map(msg => (
+   944→                    <motion.div
+   945→                      key={msg.id}
+   946→                      initial={{ opacity: 0, y: 5 }}
+   947→                      animate={{ opacity: 1, y: 0 }}
+   948→                      className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+   949→                    >
+   950→                      <div className={`max-w-[80%] rounded-2xl px-4 py-2.5 ${
+   951→                        msg.role === 'user'
+   952→                          ? 'bg-emerald-500 text-white rounded-tr-sm'
+   953→                          : 'bg-muted/50 text-foreground rounded-tl-sm'
+   954→                      }`}>
+   955→                        {msg.role === 'assistant' && (
+   956→                          <div className="flex items-center gap-1.5 mb-1">
+   957→                            <Sparkles className="h-3 w-3 text-emerald-500" />
+   958→                            <span className="text-[10px] font-medium text-emerald-600 dark:text-emerald-400">AI Assistant</span>
+   959→                          </div>
+   960→                        )}
+   961→                        <p className="text-xs leading-relaxed whitespace-pre-wrap">{msg.content}</p>
+   962→                        <p className={`text-[9px] mt-1 ${msg.role === 'user' ? 'text-emerald-100' : 'text-muted-foreground'}`}>
+   963→                          {msg.timestamp.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+   964→                        </p>
+   965→                      </div>
+   966→                    </motion.div>
+   967→                  ))}
+   968→                  {chatLoading && (
+   969→                    <div className="flex justify-start">
+   970→                      <div className="bg-muted/50 rounded-2xl px-4 py-3 rounded-tl-sm">
+   971→                        <div className="flex items-center gap-1.5">
+   972→                          <Loader2 className="h-3 w-3 animate-spin text-emerald-500" />
+   973→                          <span className="text-xs text-muted-foreground">AI is typing...</span>
+   974→                        </div>
+   975→                      </div>
+   976→                    </div>
+   977→                  )}
+   978→                  <div ref={chatEndRef} />
+   979→                </div>
+   980→              </ScrollArea>
+   981→
+   982→              <div className="mt-3 flex items-center gap-2">
+   983→                <Input
+   984→                  value={chatInput}
+   985→                  onChange={(e) => setChatInput(e.target.value)}
+   986→                  onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSendMessage()}
+   987→                  placeholder="Ask about your returns, compliance, invoices..."
+   988→                  className="flex-1 text-xs h-9"
+   989→                  disabled={chatLoading}
+   990→                />
+   991→                <Button
+   992→                  size="sm"
+   993→                  onClick={handleSendMessage}
+   994→                  disabled={chatLoading || !chatInput.trim()}
+   995→                  className="h-9 px-3 bg-emerald-500 hover:bg-emerald-600 text-white"
+   996→                >
+   997→                  <Send className="h-3.5 w-3.5" />
+   998→                </Button>
+   999→              </div>
+  1000→            </CardContent>
+  1001→          </Card>
+  1002→        </TabsContent>
+  1003→
+  1004→        {/* ─── Notices Tab ───────────────────────────────────────────────── */}
+  1005→        <TabsContent value="notices" className="space-y-4">
+  1006→          <div>
+  1007→            <h2 className="text-sm font-semibold text-foreground">GST Notices & Alerts</h2>
+  1008→            <p className="text-xs text-muted-foreground">{portalData.portalNotices.length} active notices</p>
+  1009→          </div>
+  1010→
+  1011→          {portalData.portalNotices.length === 0 ? (
+  1012→            <Card className="border-border/50">
+  1013→              <CardContent className="py-12 text-center">
+  1014→                <ShieldCheck className="h-10 w-10 text-emerald-500/30 mx-auto mb-3" />
+  1015→                <p className="text-sm text-muted-foreground">No notices or alerts</p>
+  1016→                <p className="text-xs text-muted-foreground/60 mt-1">GST notices and compliance alerts will appear here</p>
+  1017→              </CardContent>
+  1018→            </Card>
+  1019→          ) : (
+  1020→            <div className="space-y-3">
+  1021→              {portalData.portalNotices.map(notice => (
+  1022→                <Card key={notice.id} className={`border shadow-sm ${
+  1023→                  notice.priority === 'urgent' ? 'border-red-500/20 bg-red-50/30 dark:bg-red-950/10' :
+  1024→                  'border-amber-500/20 bg-amber-50/30 dark:bg-amber-950/10'
+  1025→                }`}>
+  1026→                  <CardContent className="p-4">
+  1027→                    <div className="flex items-start gap-3">
+  1028→                      <div className={`flex h-9 w-9 items-center justify-center rounded-lg shrink-0 ${
+  1029→                        notice.priority === 'urgent' ? 'bg-red-500/10' : 'bg-amber-500/10'
+  1030→                      }`}>
+  1031→                        {notice.priority === 'urgent' ? (
+  1032→                          <AlertTriangle className="h-4 w-4 text-red-500" />
+  1033→                        ) : (
+  1034→                          <AlertCircle className="h-4 w-4 text-amber-500" />
+  1035→                        )}
+  1036→                      </div>
+  1037→                      <div className="flex-1 min-w-0">
+  1038→                        <div className="flex items-center justify-between mb-1">
+  1039→                          <p className="text-sm font-medium text-foreground">{notice.title}</p>
+  1040→                          {noticePriorityBadge(notice.priority)}
+  1041→                        </div>
+  1042→                        <p className="text-xs text-muted-foreground leading-relaxed">{notice.message}</p>
+  1043→                        <p className="text-[10px] text-muted-foreground/60 mt-2">{formatDate(notice.date)}</p>
+  1044→                      </div>
+  1045→                    </div>
+  1046→                    <div className="mt-3 flex items-center gap-2">
+  1047→                      <Button size="sm" className="gap-1.5 text-xs bg-emerald-500 text-white">
+  1048→                        <MessageSquare className="h-3.5 w-3.5" /> Contact CA
+  1049→                      </Button>
+  1050→                      <Button variant="outline" size="sm" className="gap-1.5 text-xs">
+  1051→                        <Eye className="h-3.5 w-3.5" /> View Details
+  1052→                      </Button>
+  1053→                    </div>
+  1054→                  </CardContent>
+  1055→                </Card>
+  1056→              ))}
+  1057→            </div>
+  1058→          )}
+  1059→        </TabsContent>
+  1060→
+  1061→        {/* ─── Compliance Tab ────────────────────────────────────────────── */}
+  1062→        <TabsContent value="compliance" className="space-y-4">
+  1063→          <div>
+  1064→            <h2 className="text-sm font-semibold text-foreground">Compliance Dashboard</h2>
+  1065→            <p className="text-xs text-muted-foreground">Track your GST compliance score and filing history</p>
+  1066→          </div>
+  1067→
+  1068→          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+  1069→            {/* Compliance Score */}
+  1070→            <Card className="border-border/50 shadow-sm">
+  1071→              <CardHeader className="pb-3 px-4 pt-4">
+  1072→                <CardTitle className="text-sm font-semibold flex items-center gap-2">
+  1073→                  <ShieldCheck className="h-4 w-4 text-emerald-500" />
+  1074→                  Filing Compliance Score
+  1075→                </CardTitle>
+  1076→              </CardHeader>
+  1077→              <CardContent className="px-4 pb-4 space-y-4">
+  1078→                <div className="flex items-center justify-center">
+  1079→                  <div className="relative h-36 w-36">
+  1080→                    <svg className="h-36 w-36 -rotate-90" viewBox="0 0 100 100">
+  1081→                      <circle cx="50" cy="50" r="42" fill="none" stroke="currentColor" strokeWidth="8" className="text-muted/20" />
+  1082→                      <circle cx="50" cy="50" r="42" fill="none" strokeWidth="8" strokeLinecap="round"
+  1083→                        strokeDasharray={`${portalData.complianceScore * 2.64} 264`}
+  1084→                        className={portalData.complianceScore >= 80 ? 'text-emerald-500' : portalData.complianceScore >= 60 ? 'text-amber-500' : 'text-red-500'}
+  1085→                      />
+  1086→                    </svg>
+  1087→                    <div className="absolute inset-0 flex flex-col items-center justify-center">
+  1088→                      <span className={`text-3xl font-bold ${scoreColor(portalData.complianceScore)}`}>{portalData.complianceScore}%</span>
+  1089→                      <span className="text-[10px] text-muted-foreground">COMPLIANCE</span>
+  1090→                    </div>
+  1091→                  </div>
+  1092→                </div>
+  1093→                <div className="space-y-2.5">
+  1094→                  {[
+  1095→                    { label: 'GSTIN Validity', value: portalData.gstinValid ? 'Active' : 'Inactive', ok: portalData.gstinValid },
+  1096→                    { label: 'Overdue Returns', value: `${portalData.overdueCount}`, ok: portalData.overdueCount === 0 },
+  1097→                    { label: 'Total Returns Filed', value: `${portalData.filedReturns.length}`, ok: true },
+  1098→                    { label: 'Avg Filing Delay', value: `${portalData.avgDelay} days`, ok: portalData.avgDelay <= 5 },
+  1099→                  ].map(item => (
+  1100→                    <div key={item.label} className="flex items-center justify-between py-1.5">
+  1101→                      <span className="text-xs text-muted-foreground">{item.label}</span>
+  1102→                      <div className="flex items-center gap-1.5">
+  1103→                        {item.ok ? (
+  1104→                          <CheckCircle2 className="h-3 w-3 text-emerald-500" />
+  1105→                        ) : (
+  1106→                          <AlertCircle className="h-3 w-3 text-red-500" />
+  1107→                        )}
+  1108→                        <span className={`text-xs font-medium ${item.ok ? 'text-foreground' : 'text-red-600'}`}>{item.value}</span>
+  1109→                      </div>
+  1110→                    </div>
+  1111→                  ))}
+  1112→                </div>
+  1113→              </CardContent>
+  1114→            </Card>
+  1115→
+  1116→            {/* Filing History & Tips */}
+  1117→            <Card className="border-border/50 shadow-sm">
+  1118→              <CardHeader className="pb-3 px-4 pt-4">
+  1119→                <CardTitle className="text-sm font-semibold flex items-center gap-2">
+  1120→                  <CalendarClock className="h-4 w-4 text-emerald-500" />
+  1121→                  Filing Status Breakdown
+  1122→                </CardTitle>
+  1123→              </CardHeader>
+  1124→              <CardContent className="px-4 pb-4 space-y-3">
+  1125→                {[
+  1126→                  { label: 'Filed', count: portalData.filedReturns.length, color: 'bg-emerald-500', total: portalData.clientReturns.length || 1 },
+  1127→                  { label: 'Pending', count: portalData.pendingReturns.length, color: 'bg-amber-500', total: portalData.clientReturns.length || 1 },
+  1128→                  { label: 'Overdue', count: portalData.overdueReturns.length, color: 'bg-red-500', total: portalData.clientReturns.length || 1 },
+  1129→                  { label: 'Ready for Approval', count: portalData.readyForApproval.length, color: 'bg-sky-500', total: portalData.clientReturns.length || 1 },
+  1130→                ].map(item => (
+  1131→                  <div key={item.label} className="space-y-1.5">
+  1132→                    <div className="flex items-center justify-between">
+  1133→                      <span className="text-xs text-muted-foreground">{item.label}</span>
+  1134→                      <span className="text-xs font-semibold text-foreground">{item.count}</span>
+  1135→                    </div>
+  1136→                    <div className="h-2 rounded-full bg-muted/30 overflow-hidden">
+  1137→                      <div
+  1138→                        className={`h-full rounded-full ${item.color} transition-all duration-500`}
+  1139→                        style={{ width: `${(item.count / item.total) * 100}%` }}
+  1140→                      />
+  1141→                    </div>
+  1142→                  </div>
+  1143→                ))}
+  1144→
+  1145→                <Separator className="my-3" />
+  1146→
+  1147→                <div className="space-y-2">
+  1148→                  <p className="text-xs font-semibold text-foreground">Compliance Tips</p>
+  1149→                  {portalData.complianceScore < 80 && (
+  1150→                    <div className="flex items-start gap-2 py-1.5 px-2 rounded-lg bg-amber-50/50 dark:bg-amber-900/10">
+  1151→                      <AlertTriangle className="h-3.5 w-3.5 text-amber-500 mt-0.5 shrink-0" />
+  1152→                      <p className="text-[11px] text-foreground/70">File overdue returns immediately to improve your compliance score. Late fees accumulate at ₹200/day for GSTR-3B.</p>
+  1153→                    </div>
+  1154→                  )}
+  1155→                  {portalData.avgDelay > 5 && (
+  1156→                    <div className="flex items-start gap-2 py-1.5 px-2 rounded-lg bg-amber-50/50 dark:bg-amber-900/10">
+  1157→                      <Clock className="h-3.5 w-3.5 text-amber-500 mt-0.5 shrink-0" />
+  1158→                      <p className="text-[11px] text-foreground/70">Your average filing delay is {portalData.avgDelay} days. Try to file within the first week of each month.</p>
+  1159→                    </div>
+  1160→                  )}
+  1161→                  {portalData.complianceScore >= 80 && (
+  1162→                    <div className="flex items-start gap-2 py-1.5 px-2 rounded-lg bg-emerald-50/50 dark:bg-emerald-900/10">
+  1163→                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 mt-0.5 shrink-0" />
+  1164→                      <p className="text-[11px] text-foreground/70">Great compliance score! Keep filing on time to maintain your excellent record.</p>
+  1165→                    </div>
+  1166→                  )}
+  1167→                </div>
+  1168→              </CardContent>
+  1169→            </Card>
+  1170→          </div>
+  1171→
+  1172→          {/* Download Reports Section */}
+  1173→          <Card className="border-border/50 shadow-sm">
+  1174→            <CardHeader className="pb-3 px-4 pt-4">
+  1175→              <CardTitle className="text-sm font-semibold flex items-center gap-2">
+  1176→                <FileDown className="h-4 w-4 text-emerald-500" />
+  1177→                Download Reports
+  1178→              </CardTitle>
+  1179→            </CardHeader>
+  1180→            <CardContent className="px-4 pb-4">
+  1181→              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+  1182→                {[
+  1183→                  { label: 'Compliance Report', icon: Shield, desc: 'Full compliance history' },
+  1184→                  { label: 'Filing Summary', icon: FileText, desc: 'All returns filed' },
+  1185→                  { label: 'Tax Statement', icon: IndianRupee, desc: 'Tax paid summary' },
+  1186→                  { label: 'ITC Report', icon: Receipt, desc: 'Input tax credit' },
+  1187→                ].map(report => (
+  1188→                  <button key={report.label} className="flex flex-col items-center gap-2 p-3 rounded-lg border border-border/50 hover:border-emerald-500/30 hover:bg-emerald-50/30 dark:hover:bg-emerald-950/10 transition-all">
+  1189→                    <report.icon className="h-5 w-5 text-emerald-500" />
+  1190→                    <span className="text-xs font-medium text-foreground">{report.label}</span>
+  1191→                    <span className="text-[9px] text-muted-foreground">{report.desc}</span>
+  1192→                  </button>
+  1193→                ))}
+  1194→              </div>
+  1195→            </CardContent>
+  1196→          </Card>
+  1197→        </TabsContent>
+  1198→      </Tabs>
+  1199→
+  1200→      {/* ─── OTP Login Dialog ──────────────────────────────────────────────── */}
+  1201→      <Dialog open={otpDialog} onOpenChange={setOtpDialog}>
+  1202→        <DialogContent className="max-w-sm">
+  1203→          <DialogHeader>
+  1204→            <DialogTitle className="flex items-center gap-2">
+  1205→              <Smartphone className="h-5 w-5 text-emerald-500" />
+  1206→              Client OTP Login
+  1207→            </DialogTitle>
+  1208→            <DialogDescription>
+  1209→              Clients can log in using their registered mobile number and OTP
+  1210→            </DialogDescription>
+  1211→          </DialogHeader>
+  1212→          <div className="space-y-4 py-2">
+  1213→            <div className="space-y-2">
+  1214→              <label className="text-xs font-medium text-foreground">Mobile Number</label>
+  1215→              <div className="flex items-center gap-2">
+  1216→                <span className="text-xs text-muted-foreground">+91</span>
+  1217→                <Input placeholder="Enter 10-digit mobile number" className="flex-1 text-xs" />
+  1218→              </div>
+  1219→            </div>
+  1220→            {otpSent && (
+  1221→              <div className="space-y-2">
+  1222→                <label className="text-xs font-medium text-foreground">Enter OTP</label>
+  1223→                <Input
+  1224→                  value={otpValue}
+  1225→                  onChange={(e) => setOtpValue(e.target.value)}
+  1226→                  placeholder="6-digit OTP"
+  1227→                  className="text-center text-lg tracking-widest"
+  1228→                  maxLength={6}
+  1229→                />
+  1230→                <p className="text-[10px] text-muted-foreground text-center">OTP sent to your mobile number</p>
+  1231→              </div>
+  1232→            )}
+  1233→            <div className="flex items-center gap-2 rounded-lg bg-emerald-50/50 dark:bg-emerald-900/10 p-3">
+  1234→              <Shield className="h-4 w-4 text-emerald-500" />
+  1235→              <p className="text-[10px] text-muted-foreground">Secure OTP authentication. No passwords needed.</p>
+  1236→            </div>
+  1237→          </div>
+  1238→          <DialogFooter>
+  1239→            <Button variant="outline" size="sm" onClick={() => setOtpDialog(false)} className="text-xs">Cancel</Button>
+  1240→            <Button
+  1241→              size="sm"
+  1242→              onClick={() => {
+  1243→                if (!otpSent) { setOtpSent(true) } else { setOtpDialog(false); setOtpSent(false) }
+  1244→              }}
+  1245→              className="text-xs bg-emerald-500 hover:bg-emerald-600 text-white"
+  1246→            >
+  1247→              {otpSent ? 'Verify & Login' : 'Send OTP'}
+  1248→            </Button>
+  1249→          </DialogFooter>
+  1250→        </DialogContent>
+  1251→      </Dialog>
+  1252→
+  1253→      {/* ─── Upload Document Dialog ────────────────────────────────────────── */}
+  1254→      <Dialog open={uploadDialog} onOpenChange={setUploadDialog}>
+  1255→        <DialogContent className="max-w-md">
+  1256→          <DialogHeader>
+  1257→            <DialogTitle className="flex items-center gap-2">
+  1258→              <Upload className="h-5 w-5 text-emerald-500" />
+  1259→              Upload Document
+  1260→            </DialogTitle>
+  1261→            <DialogDescription>
+  1262→              Upload purchase registers, sales registers, or other GST documents
+  1263→            </DialogDescription>
+  1264→          </DialogHeader>
+  1265→          <div className="space-y-4 py-2">
+  1266→            <div className="border-2 border-dashed border-emerald-500/30 rounded-xl p-8 text-center hover:border-emerald-500/50 transition-colors cursor-pointer">
+  1267→              <FileUp className="h-10 w-10 text-emerald-500/40 mx-auto mb-3" />
+  1268→              <p className="text-sm font-medium text-foreground">Drag & drop files here</p>
+  1269→              <p className="text-xs text-muted-foreground mt-1">or click to browse</p>
+  1270→              <p className="text-[10px] text-muted-foreground/60 mt-2">PDF, Excel, CSV, JPG up to 10MB</p>
+  1271→            </div>
+  1272→            <div className="space-y-2">
+  1273→              <label className="text-xs font-medium text-foreground">Document Type</label>
+  1274→              <Select defaultValue="purchase_register">
+  1275→                <SelectTrigger className="text-xs">
+  1276→                  <SelectValue />
+  1277→                </SelectTrigger>
+  1278→                <SelectContent>
+  1279→                  <SelectItem value="purchase_register">Purchase Register</SelectItem>
+  1280→                  <SelectItem value="sales_register">Sales Register</SelectItem>
+  1281→                  <SelectItem value="gstr1">GSTR-1 Data</SelectItem>
+  1282→                  <SelectItem value="gstr2b">GSTR-2B Data</SelectItem>
+  1283→                  <SelectItem value="invoice">Invoice</SelectItem>
+  1284→                  <SelectItem value="other">Other</SelectItem>
+  1285→                </SelectContent>
+  1286→              </Select>
+  1287→            </div>
+  1288→            <div className="space-y-2">
+  1289→              <label className="text-xs font-medium text-foreground">Period</label>
+  1290→              <Input placeholder="MM-YYYY" className="text-xs" />
+  1291→            </div>
+  1292→          </div>
+  1293→          <DialogFooter>
+  1294→            <Button variant="outline" size="sm" onClick={() => setUploadDialog(false)} className="text-xs">Cancel</Button>
+  1295→            <Button size="sm" onClick={() => setUploadDialog(false)} className="text-xs bg-emerald-500 hover:bg-emerald-600 text-white gap-1.5">
+  1296→              <Upload className="h-3.5 w-3.5" /> Upload
+  1297→            </Button>
+  1298→          </DialogFooter>
+  1299→        </DialogContent>
+  1300→      </Dialog>
+  1301→
+  1302→      {/* ─── Approval Dialog ──────────────────────────────────────────────── */}
+  1303→      <Dialog open={approvalDialog} onOpenChange={setApprovalDialog}>
+  1304→        <DialogContent className="max-w-sm">
+  1305→          <DialogHeader>
+  1306→            <DialogTitle className="flex items-center gap-2">
+  1307→              <ThumbsUp className="h-5 w-5 text-sky-500" />
+  1308→              Approve Filing
+  1309→            </DialogTitle>
+  1310→            <DialogDescription>
+  1311→              You are about to approve the filing for {approvalItem?.title}
+  1312→            </DialogDescription>
+  1313→          </DialogHeader>
+  1314→          <div className="space-y-3 py-2">
+  1315→            <div className="rounded-lg bg-sky-50/50 dark:bg-sky-900/10 border border-sky-200/50 dark:border-sky-800/30 p-3">
+  1316→              <p className="text-xs text-foreground/80">
+  1317→                By approving, you authorize your CA to file this return with the GST portal. Please review the return details before approving.
+  1318→              </p>
+  1319→            </div>
+  1320→            <div className="flex items-center gap-2 rounded-lg bg-amber-50/50 dark:bg-amber-900/10 p-3">
+  1321→              <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0" />
+  1322→              <p className="text-[10px] text-muted-foreground">This action authorizes filing. Make sure all details are correct.</p>
+  1323→            </div>
+  1324→          </div>
+  1325→          <DialogFooter>
+  1326→            <Button variant="outline" size="sm" onClick={() => setApprovalDialog(false)} className="text-xs">Cancel</Button>
+  1327→            <Button size="sm" onClick={() => setApprovalDialog(false)} className="text-xs bg-emerald-500 hover:bg-emerald-600 text-white gap-1.5">
+  1328→              <CheckCircle2 className="h-3.5 w-3.5" /> Approve & Authorize
+  1329→            </Button>
+  1330→          </DialogFooter>
+  1331→        </DialogContent>
+  1332→      </Dialog>
+  1333→
+  1334→      {/* ─── Payment Dialog ──────────────────────────────────────────────── */}
+  1335→      <Dialog open={paymentDialog} onOpenChange={setPaymentDialog}>
+  1336→        <DialogContent className="max-w-sm">
+  1337→          <DialogHeader>
+  1338→            <DialogTitle className="flex items-center gap-2">
+  1339→              <CreditCard className="h-5 w-5 text-emerald-500" />
+  1340→              Pay Invoice
+  1341→            </DialogTitle>
+  1342→            <DialogDescription>
+  1343→              Complete your payment securely through the portal
+  1344→            </DialogDescription>
+  1345→          </DialogHeader>
+  1346→          <div className="space-y-3 py-2">
+  1347→            <div className="rounded-lg bg-muted/30 p-3 text-center">
+  1348→              <p className="text-[10px] text-muted-foreground">Amount Due</p>
+  1349→              <p className="text-2xl font-bold text-foreground">{formatCurrency(portalData.totalOutstanding)}</p>
+  1350→            </div>
+  1351→            <div className="space-y-2">
+  1352→              <p className="text-xs font-medium text-foreground">Payment Method</p>
+  1353→              <div className="grid grid-cols-2 gap-2">
+  1354→                {['UPI / QR', 'Net Banking', 'Credit Card', 'Debit Card'].map(method => (
+  1355→                  <button key={method} className="py-2 px-3 rounded-lg border border-border/50 text-xs text-foreground hover:border-emerald-500/30 hover:bg-emerald-50/30 dark:hover:bg-emerald-950/10 transition-all">
+  1356→                    {method}
+  1357→                  </button>
+  1358→                ))}
+  1359→              </div>
+  1360→            </div>
+  1361→            <div className="flex items-center gap-2 rounded-lg bg-emerald-50/50 dark:bg-emerald-900/10 p-2">
+  1362→              <Shield className="h-3.5 w-3.5 text-emerald-500" />
+  1363→              <p className="text-[10px] text-muted-foreground">Secured by Razorpay. 256-bit SSL encryption.</p>
+  1364→            </div>
+  1365→          </div>
+  1366→          <DialogFooter>
+  1367→            <Button variant="outline" size="sm" onClick={() => setPaymentDialog(false)} className="text-xs">Cancel</Button>
+  1368→            <Button size="sm" onClick={() => setPaymentDialog(false)} className="text-xs bg-emerald-500 hover:bg-emerald-600 text-white gap-1.5">
+  1369→              <IndianRupee className="h-3.5 w-3.5" /> Pay Now
+  1370→            </Button>
+  1371→          </DialogFooter>
+  1372→        </DialogContent>
+  1373→      </Dialog>
+  1374→    </div>
+  1375→  )
+  1376→}
+  1377→

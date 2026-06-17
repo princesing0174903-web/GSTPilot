@@ -1,0 +1,1634 @@
+     1→'use client'
+     2→
+     3→import React, { useState, useRef, useMemo } from 'react'
+     4→import { motion } from 'framer-motion'
+     5→import {
+     6→  Card,
+     7→  CardContent,
+     8→  CardHeader,
+     9→  CardTitle,
+    10→  CardDescription,
+    11→} from '@/components/ui/card'
+    12→import { Badge } from '@/components/ui/badge'
+    13→import { Button } from '@/components/ui/button'
+    14→import { Input } from '@/components/ui/input'
+    15→import { Skeleton } from '@/components/ui/skeleton'
+    16→import { Progress } from '@/components/ui/progress'
+    17→import { Switch } from '@/components/ui/switch'
+    18→import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+    19→import { ScrollArea } from '@/components/ui/scroll-area'
+    20→import { Separator } from '@/components/ui/separator'
+    21→import {
+    22→  Upload,
+    23→  FileText,
+    24→  Download,
+    25→  Copy,
+    26→  Share2,
+    27→  Bell,
+    28→  Shield,
+    29→  Clock,
+    30→  CheckCircle2,
+    31→  AlertTriangle,
+    32→  TrendingUp,
+    33→  ArrowUpRight,
+    34→  FileDown,
+    35→  FileUp,
+    36→  Globe,
+    37→  Calendar,
+    38→  MessageSquare,
+    39→  Send,
+    40→  Paperclip,
+    41→  CreditCard,
+    42→  IndianRupee,
+    43→  ChevronRight,
+    44→  Plus,
+    45→  Search,
+    46→  Sparkles,
+    47→  AlertCircle,
+    48→  FileCheck,
+    49→  CalendarClock,
+    50→  Eye,
+    51→  Zap,
+    52→  Users,
+    53→} from 'lucide-react'
+    54→import { formatCurrency } from '@/lib/gst-utils'
+    55→import { useApp } from '@/contexts/AppContext'
+    56→import { useFireClients, useFireReturns, useFireDocuments } from '@/hooks/use-firestore'
+    57→
+    58→// ═══════════════════════════════════════════════════════════════════════════════
+    59→// MOCK DATA (for portal-specific features not in Firestore)
+    60→// ═══════════════════════════════════════════════════════════════════════════════
+    61→
+    62→interface PortalNotice {
+    63→  id: string
+    64→  noticeType: string
+    65→  issueDate: string
+    66→  responseDue: string
+    67→  status: 'Open' | 'Responded' | 'Closed'
+    68→  description: string
+    69→}
+    70→
+    71→interface PortalInvoice {
+    72→  id: string
+    73→  invoiceNumber: string
+    74→  amount: number
+    75→  date: string
+    76→  status: 'Paid' | 'Pending' | 'Overdue'
+    77→}
+    78→
+    79→interface PortalReport {
+    80→  id: string
+    81→  name: string
+    82→  period: string
+    83→  generatedDate: string
+    84→  type: string
+    85→}
+    86→
+    87→interface ChatMessage {
+    88→  id: string
+    89→  sender: 'client' | 'ca'
+    90→  senderName: string
+    91→  message: string
+    92→  timestamp: string
+    93→  attachment?: string
+    94→}
+    95→
+    96→interface ComplianceEvent {
+    97→  id: string
+    98→  date: string
+    99→  title: string
+   100→  type: 'filing' | 'notice' | 'payment' | 'document'
+   101→  status: 'completed' | 'pending' | 'overdue'
+   102→}
+   103→
+   104→const MOCK_NOTICES: PortalNotice[] = [
+   105→  { id: 'n1', noticeType: 'GST Assessment', issueDate: '15/01/2026', responseDue: '15/03/2026', status: 'Open', description: 'GST Assessment Notice for FY 2024-25 — discrepancy in ITC claims' },
+   106→  { id: 'n2', noticeType: 'SCR Notice', issueDate: '02/01/2026', responseDue: '02/02/2026', status: 'Responded', description: 'Show Cause Notice for short payment of CGST in GSTR-3B' },
+   107→  { id: 'n3', noticeType: 'E-Way Bill', issueDate: '10/12/2025', responseDue: '10/01/2026', status: 'Closed', description: 'E-Way Bill extension notice for consignment delay' },
+   108→  { id: 'n4', noticeType: 'ITC Reversal', issueDate: '28/11/2025', responseDue: '28/12/2025', status: 'Open', description: 'ITC reversal required for ineligible credit claims in Q2 FY25' },
+   109→]
+   110→
+   111→const MOCK_INVOICES: PortalInvoice[] = [
+   112→  { id: 'inv1', invoiceNumber: 'GP-2026-001', amount: 25000, date: '01/02/2026', status: 'Paid' },
+   113→  { id: 'inv2', invoiceNumber: 'GP-2026-002', amount: 18000, date: '01/03/2026', status: 'Pending' },
+   114→  { id: 'inv3', invoiceNumber: 'GP-2025-012', amount: 32000, date: '01/01/2026', status: 'Overdue' },
+   115→  { id: 'inv4', invoiceNumber: 'GP-2025-011', amount: 25000, date: '01/12/2025', status: 'Paid' },
+   116→  { id: 'inv5', invoiceNumber: 'GP-2025-010', amount: 15000, date: '01/11/2025', status: 'Paid' },
+   117→]
+   118→
+   119→const MOCK_REPORTS: PortalReport[] = [
+   120→  { id: 'r1', name: 'GSTR-1 Summary', period: 'Jan 2026', generatedDate: '12/02/2026', type: 'gstr1' },
+   121→  { id: 'r2', name: 'GSTR-3B Summary', period: 'Jan 2026', generatedDate: '20/02/2026', type: 'gstr3b' },
+   122→  { id: 'r3', name: 'Reconciliation Report', period: 'Q3 FY25-26', generatedDate: '15/01/2026', type: 'recon' },
+   123→  { id: 'r4', name: 'Compliance Report', period: 'FY 2025-26', generatedDate: '01/02/2026', type: 'compliance' },
+   124→  { id: 'r5', name: 'ITC Summary', period: 'Jan 2026', generatedDate: '18/02/2026', type: 'itc' },
+   125→]
+   126→
+   127→const MOCK_CHAT: ChatMessage[] = [
+   128→  { id: 'c1', sender: 'ca', senderName: 'CA Rajesh Kumar', message: 'Hi! I\'ve reviewed your GSTR-1 for January 2026. There are a few discrepancies we need to discuss.', timestamp: '10/02/2026 10:30 AM' },
+   129→  { id: 'c2', sender: 'client', senderName: 'Sharma Enterprises', message: 'Sure, what are the issues? We want to file before the due date.', timestamp: '10/02/2026 11:15 AM' },
+   130→  { id: 'c3', sender: 'ca', senderName: 'CA Rajesh Kumar', message: 'There are 3 invoices with GSTIN mismatches in B2B section. Also, some credit notes are not reflecting. I\'ll share the detailed report.', timestamp: '10/02/2026 11:45 AM', attachment: 'GSTR1_Jan2026_Discrepancy.pdf' },
+   131→  { id: 'c4', sender: 'client', senderName: 'Sharma Enterprises', message: 'Noted. We\'ll provide the corrected purchase register by tomorrow.', timestamp: '10/02/2026 02:00 PM' },
+   132→  { id: 'c5', sender: 'ca', senderName: 'CA Rajesh Kumar', message: 'Perfect! Also, please upload the bank statements for December 2025 and January 2026 for reconciliation.', timestamp: '10/02/2026 02:15 PM' },
+   133→]
+   134→
+   135→const COMPLIANCE_EVENTS: ComplianceEvent[] = [
+   136→  { id: 'ce1', date: '11/01/2026', title: 'GSTR-1 Filed for Dec 2025', type: 'filing', status: 'completed' },
+   137→  { id: 'ce2', date: '20/01/2026', title: 'GSTR-3B Filed for Dec 2025', type: 'filing', status: 'completed' },
+   138→  { id: 'ce3', date: '15/01/2026', title: 'GST Assessment Notice Received', type: 'notice', status: 'pending' },
+   139→  { id: 'ce4', date: '01/02/2026', title: 'Tax Payment ₹2,45,000', type: 'payment', status: 'completed' },
+   140→  { id: 'ce5', date: '11/02/2026', title: 'GSTR-1 Due for Jan 2026', type: 'filing', status: 'pending' },
+   141→  { id: 'ce6', date: '20/02/2026', title: 'GSTR-3B Due for Jan 2026', type: 'filing', status: 'pending' },
+   142→  { id: 'ce7', date: '15/03/2026', title: 'Assessment Response Due', type: 'notice', status: 'overdue' },
+   143→]
+   144→
+   145→const QUICK_REPLIES = [
+   146→  'I\'ll upload the documents today',
+   147→  'When is the next filing due?',
+   148→  'Please share the reconciliation report',
+   149→  'Can we schedule a call?',
+   150→]
+   151→
+   152→const SCORE_TIPS = [
+   153→  'File GSTR-1 within 7 days of month-end to improve Filing Timeliness',
+   154→  'Ensure all purchase invoices are uploaded within 15 days of receipt',
+   155→  'Regular ITC reconciliation reduces mismatch penalties',
+   156→  'Respond to GST notices within 15 days to maintain good standing',
+   157→]
+   158→
+   159→// ═══════════════════════════════════════════════════════════════════════════════
+   160→// ANIMATION VARIANTS
+   161→// ═══════════════════════════════════════════════════════════════════════════════
+   162→
+   163→const fadeIn = {
+   164→  initial: { opacity: 0, y: 12 },
+   165→  animate: { opacity: 1, y: 0 },
+   166→  exit: { opacity: 0, y: -12 },
+   167→}
+   168→
+   169→const staggerContainer = {
+   170→  animate: { transition: { staggerChildren: 0.05 } },
+   171→}
+   172→
+   173→const staggerItem = {
+   174→  initial: { opacity: 0, y: 8 },
+   175→  animate: { opacity: 1, y: 0 },
+   176→}
+   177→
+   178→// ═══════════════════════════════════════════════════════════════════════════════
+   179→// HELPER FUNCTIONS
+   180→// ═══════════════════════════════════════════════════════════════════════════════
+   181→
+   182→function formatDateIndian(dateStr: string): string {
+   183→  return dateStr // Already in DD/MM/YYYY format for mock data
+   184→}
+   185→
+   186→function getScoreColor(score: number): string {
+   187→  if (score >= 80) return 'text-emerald-600'
+   188→  if (score >= 60) return 'text-amber-600'
+   189→  return 'text-red-600'
+   190→}
+   191→
+   192→function getScoreStroke(score: number): string {
+   193→  if (score >= 80) return '#10b981'
+   194→  if (score >= 60) return '#f59e0b'
+   195→  return '#ef4444'
+   196→}
+   197→
+   198→function getScoreBg(score: number): string {
+   199→  if (score >= 80) return 'bg-emerald-50'
+   200→  if (score >= 60) return 'bg-amber-50'
+   201→  return 'bg-red-50'
+   202→}
+   203→
+   204→function getReturnStatusConfig(status: string) {
+   205→  switch (status) {
+   206→    case 'filed': return { label: 'Filed', color: 'text-emerald-700', bg: 'bg-emerald-50 border-emerald-200', icon: CheckCircle2 }
+   207→    case 'generated': return { label: 'Ready', color: 'text-blue-700', bg: 'bg-blue-50 border-blue-200', icon: FileCheck }
+   208→    case 'reviewed': return { label: 'Reviewed', color: 'text-cyan-700', bg: 'bg-cyan-50 border-cyan-200', icon: Eye }
+   209→    case 'validated': return { label: 'Validated', color: 'text-sky-700', bg: 'bg-sky-50 border-sky-200', icon: Shield }
+   210→    case 'prepared': return { label: 'Prepared', color: 'text-violet-700', bg: 'bg-violet-50 border-violet-200', icon: FileText }
+   211→    case 'draft': return { label: 'Draft', color: 'text-slate-700', bg: 'bg-slate-50 border-slate-200', icon: FileText }
+   212→    case 'reopened': return { label: 'Reopened', color: 'text-orange-700', bg: 'bg-orange-50 border-orange-200', icon: AlertCircle }
+   213→    default: return { label: status, color: 'text-slate-700', bg: 'bg-slate-50 border-slate-200', icon: FileText }
+   214→  }
+   215→}
+   216→
+   217→function getNoticeStatusConfig(status: string) {
+   218→  switch (status) {
+   219→    case 'Open': return { color: 'text-red-700', bg: 'bg-red-50 border-red-200' }
+   220→    case 'Responded': return { color: 'text-amber-700', bg: 'bg-amber-50 border-amber-200' }
+   221→    case 'Closed': return { color: 'text-emerald-700', bg: 'bg-emerald-50 border-emerald-200' }
+   222→    default: return { color: 'text-slate-700', bg: 'bg-slate-50 border-slate-200' }
+   223→  }
+   224→}
+   225→
+   226→function getInvoiceStatusConfig(status: string) {
+   227→  switch (status) {
+   228→    case 'Paid': return { color: 'text-emerald-700', bg: 'bg-emerald-50 border-emerald-200' }
+   229→    case 'Pending': return { color: 'text-amber-700', bg: 'bg-amber-50 border-amber-200' }
+   230→    case 'Overdue': return { color: 'text-red-700', bg: 'bg-red-50 border-red-200' }
+   231→    default: return { color: 'text-slate-700', bg: 'bg-slate-50 border-slate-200' }
+   232→  }
+   233→}
+   234→
+   235→function daysUntil(dateStr: string): number {
+   236→  const parts = dateStr.split('/')
+   237→  const date = new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0]))
+   238→  const now = new Date()
+   239→  const diff = date.getTime() - now.getTime()
+   240→  return Math.ceil(diff / (1000 * 60 * 60 * 24))
+   241→}
+   242→
+   243→// Circular gauge SVG component
+   244→function ComplianceGauge({ score, size = 80 }: { score: number; size?: number }) {
+   245→  const strokeWidth = 6
+   246→  const radius = (size - strokeWidth) / 2
+   247→  const circumference = 2 * Math.PI * radius
+   248→  const offset = circumference - (score / 100) * circumference
+   249→  const color = getScoreStroke(score)
+   250→
+   251→  return (
+   252→    <div className="relative" style={{ width: size, height: size }}>
+   253→      <svg width={size} height={size} className="-rotate-90">
+   254→        <circle
+   255→          cx={size / 2}
+   256→          cy={size / 2}
+   257→          r={radius}
+   258→          fill="none"
+   259→          stroke="currentColor"
+   260→          strokeWidth={strokeWidth}
+   261→          className="text-slate-100 dark:text-slate-800"
+   262→        />
+   263→        <circle
+   264→          cx={size / 2}
+   265→          cy={size / 2}
+   266→          r={radius}
+   267→          fill="none"
+   268→          stroke={color}
+   269→          strokeWidth={strokeWidth}
+   270→          strokeDasharray={circumference}
+   271→          strokeDashoffset={offset}
+   272→          strokeLinecap="round"
+   273→          className="transition-all duration-1000 ease-out"
+   274→        />
+   275→      </svg>
+   276→      <div className="absolute inset-0 flex items-center justify-center">
+   277→        <span className={`text-lg font-bold ${getScoreColor(score)}`}>{score}</span>
+   278→      </div>
+   279→    </div>
+   280→  )
+   281→}
+   282→
+   283→// ═══════════════════════════════════════════════════════════════════════════════
+   284→// CLIENT SELECTOR (when no client is selected)
+   285→// ═══════════════════════════════════════════════════════════════════════════════
+   286→
+   287→function ClientSelector({ onSelect }: { onSelect: (id: string) => void }) {
+   288→  const { data: clients, loading } = useFireClients()
+   289→  const [search, setSearch] = useState('')
+   290→
+   291→  const filtered = useMemo(() => {
+   292→    if (!clients) return []
+   293→    if (!search) return clients
+   294→    const q = search.toLowerCase()
+   295→    return clients.filter(
+   296→      c =>
+   297→        c.tradeName?.toLowerCase().includes(q) ||
+   298→        c.gstin?.toLowerCase().includes(q)
+   299→    )
+   300→  }, [clients, search])
+   301→
+   302→  return (
+   303→    <div className="min-h-[calc(100vh-52px)] bg-gradient-to-br from-slate-50 via-white to-emerald-50/30 dark:from-gray-950 dark:via-gray-900 dark:to-emerald-950/20 p-6">
+   304→      <motion.div {...fadeIn} className="max-w-4xl mx-auto">
+   305→        <div className="text-center mb-8">
+   306→          <div className="inline-flex items-center justify-center h-14 w-14 rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-600 shadow-lg shadow-emerald-600/20 mb-4">
+   307→            <Globe className="h-7 w-7 text-white" />
+   308→          </div>
+   309→          <h2 className="text-2xl font-bold text-foreground">Client Portal</h2>
+   310→          <p className="text-muted-foreground mt-1">Select a client to preview and manage their portal</p>
+   311→        </div>
+   312→
+   313→        <Card className="border shadow-sm">
+   314→          <CardContent className="p-4">
+   315→            <div className="relative mb-4">
+   316→              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+   317→              <Input
+   318→                placeholder="Search by client name or GSTIN..."
+   319→                value={search}
+   320→                onChange={(e) => setSearch(e.target.value)}
+   321→                className="pl-9 h-10"
+   322→              />
+   323→            </div>
+   324→
+   325→            {loading ? (
+   326→              <div className="space-y-3">
+   327→                {[1, 2, 3].map(i => (
+   328→                  <div key={i} className="flex items-center gap-4 p-3">
+   329→                    <Skeleton className="h-10 w-10 rounded-lg" />
+   330→                    <div className="flex-1 space-y-2">
+   331→                      <Skeleton className="h-4 w-40" />
+   332→                      <Skeleton className="h-3 w-28" />
+   333→                    </div>
+   334→                  </div>
+   335→                ))}
+   336→              </div>
+   337→            ) : filtered.length === 0 ? (
+   338→              <div className="text-center py-12">
+   339→                <Users className="h-12 w-12 text-muted-foreground/30 mx-auto mb-3" />
+   340→                <p className="text-sm text-muted-foreground">No clients found</p>
+   341→                <p className="text-xs text-muted-foreground/60 mt-1">Add clients from the Clients section first</p>
+   342→              </div>
+   343→            ) : (
+   344→              <ScrollArea className="max-h-[400px]">
+   345→                <div className="space-y-1">
+   346→                  {filtered.map((client, idx) => (
+   347→                    <motion.button
+   348→                      key={client.id}
+   349→                      initial={{ opacity: 0, x: -10 }}
+   350→                      animate={{ opacity: 1, x: 0 }}
+   351→                      transition={{ delay: idx * 0.03 }}
+   352→                      onClick={() => onSelect(client.id)}
+   353→                      className="w-full flex items-center gap-4 p-3 rounded-xl hover:bg-emerald-50/80 dark:hover:bg-emerald-950/20 transition-all text-left group"
+   354→                    >
+   355→                      <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-800 group-hover:bg-emerald-100 dark:group-hover:bg-emerald-900/30 transition-colors">
+   356→                        <span className="text-sm font-semibold text-emerald-600 dark:text-emerald-400">
+   357→                          {client.tradeName?.charAt(0)?.toUpperCase() || '?'}
+   358→                        </span>
+   359→                      </div>
+   360→                      <div className="flex-1 min-w-0">
+   361→                        <p className="text-sm font-medium text-foreground truncate">{client.tradeName}</p>
+   362→                        <p className="text-xs text-muted-foreground">{client.gstin}</p>
+   363→                      </div>
+   364→                      <div className="flex items-center gap-3">
+   365→                        <ComplianceGauge score={client.healthScore || 0} size={36} />
+   366→                        <ChevronRight className="h-4 w-4 text-muted-foreground/40 group-hover:text-emerald-600 transition-colors" />
+   367→                      </div>
+   368→                    </motion.button>
+   369→                  ))}
+   370→                </div>
+   371→              </ScrollArea>
+   372→            )}
+   373→          </CardContent>
+   374→        </Card>
+   375→      </motion.div>
+   376→    </div>
+   377→  )
+   378→}
+   379→
+   380→// ═══════════════════════════════════════════════════════════════════════════════
+   381→// MAIN PORTAL VIEW (once a client is selected)
+   382→// ═══════════════════════════════════════════════════════════════════════════════
+   383→
+   384→function PortalView({ clientId, onBack }: { clientId: string; onBack: () => void }) {
+   385→  const { data: client, loading: clientLoading } = useFireClient(clientId)
+   386→  const { data: returns, loading: returnsLoading } = useFireReturns(clientId)
+   387→  const { data: documents, loading: docsLoading } = useFireDocuments(clientId)
+   388→
+   389→  const [portalActive, setPortalActive] = useState(true)
+   390→  const [copied, setCopied] = useState(false)
+   391→  const [activeTab, setActiveTab] = useState('overview')
+   392→  const [chatMessages, setChatMessages] = useState<ChatMessage[]>(MOCK_CHAT)
+   393→  const [newMessage, setNewMessage] = useState('')
+   394→  const [isDragging, setIsDragging] = useState(false)
+   395→  const fileInputRef = useRef<HTMLInputElement>(null)
+   396→  const chatEndRef = useRef<HTMLDivElement>(null)
+   397→
+   398→  const isLoading = clientLoading || returnsLoading || docsLoading
+   399→
+   400→  const portalUrl = `gstpilot.in/portal/${clientId.slice(0, 12).toLowerCase()}`
+   401→  const complianceScore = client?.healthScore || 0
+   402→
+   403→  // Compliance score breakdown
+   404→  const scoreBreakdown = useMemo(() => {
+   405→    const score = complianceScore
+   406→    return {
+   407→      filingTimeliness: Math.min(100, Math.round(score * 1.05)),
+   408→      documentCompliance: Math.min(100, Math.round(score * 0.95)),
+   409→      itcMatching: Math.min(100, Math.round(score * 0.88)),
+   410→      returnAccuracy: Math.min(100, Math.round(score * 1.02)),
+   411→    }
+   412→  }, [complianceScore])
+   413→
+   414→  // Score trend (last 6 months)
+   415→  const scoreTrend = useMemo(() => {
+   416→    const base = complianceScore
+   417→    return [
+   418→      Math.max(0, base - 12),
+   419→      Math.max(0, base - 8),
+   420→      Math.max(0, base - 5),
+   421→      Math.max(0, base - 2),
+   422→      Math.min(100, base + 1),
+   423→      base,
+   424→    ]
+   425→  }, [complianceScore])
+   426→
+   427→  // Filing calendar data
+   428→  const calendarEvents = useMemo(() => {
+   429→    const now = new Date()
+   430→    const months = []
+   431→    for (let i = -1; i <= 2; i++) {
+   432→      const d = new Date(now.getFullYear(), now.getMonth() + i, 1)
+   433→      months.push({
+   434→        label: d.toLocaleDateString('en-IN', { month: 'short', year: 'numeric' }),
+   435→        gstr1Due: new Date(d.getFullYear(), d.getMonth(), 11),
+   436→        gstr3bDue: new Date(d.getFullYear(), d.getMonth(), 20),
+   437→      })
+   438→    }
+   439→    return months
+   440→  }, [])
+   441→
+   442→  const outstandingBalance = MOCK_INVOICES.filter(i => i.status !== 'Paid').reduce((sum, i) => sum + i.amount, 0)
+   443→
+   444→  // ─── Handlers ───
+   445→
+   446→  const handleCopyLink = async () => {
+   447→    try {
+   448→      await navigator.clipboard.writeText(`https://${portalUrl}`)
+   449→      setCopied(true)
+   450→      setTimeout(() => setCopied(false), 2000)
+   451→    } catch {
+   452→      // Fallback
+   453→    }
+   454→  }
+   455→
+   456→  const handleSendMessage = () => {
+   457→    if (!newMessage.trim()) return
+   458→    const msg: ChatMessage = {
+   459→      id: `c${Date.now()}`,
+   460→      sender: 'ca',
+   461→      senderName: 'CA Rajesh Kumar',
+   462→      message: newMessage.trim(),
+   463→      timestamp: new Date().toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
+   464→    }
+   465→    setChatMessages(prev => [...prev, msg])
+   466→    setNewMessage('')
+   467→    setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100)
+   468→  }
+   469→
+   470→  const handleQuickReply = (reply: string) => {
+   471→    setNewMessage(reply)
+   472→  }
+   473→
+   474→  const handleDragOver = (e: React.DragEvent) => {
+   475→    e.preventDefault()
+   476→    setIsDragging(true)
+   477→  }
+   478→
+   479→  const handleDragLeave = () => {
+   480→    setIsDragging(false)
+   481→  }
+   482→
+   483→  const handleDrop = (e: React.DragEvent) => {
+   484→    e.preventDefault()
+   485→    setIsDragging(false)
+   486→    // Handle file drop
+   487→  }
+   488→
+   489→  // ─── Loading State ───
+   490→
+   491→  if (isLoading) {
+   492→    return (
+   493→      <div className="min-h-[calc(100vh-52px)] p-6 space-y-6">
+   494→        <div className="flex items-center gap-4">
+   495→          <Skeleton className="h-16 w-16 rounded-2xl" />
+   496→          <div className="space-y-2">
+   497→            <Skeleton className="h-6 w-48" />
+   498→            <Skeleton className="h-4 w-32" />
+   499→          </div>
+   500→        </div>
+   501→        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+   502→          {[1, 2, 3].map(i => (
+   503→            <Skeleton key={i} className="h-40 rounded-xl" />
+   504→          ))}
+   505→        </div>
+   506→        <Skeleton className="h-64 rounded-xl" />
+   507→      </div>
+   508→    )
+   509→  }
+   510→
+   511→  if (!client) {
+   512→    return (
+   513→      <div className="min-h-[calc(100vh-52px)] flex items-center justify-center">
+   514→        <div className="text-center">
+   515→          <AlertCircle className="h-12 w-12 text-muted-foreground/30 mx-auto mb-3" />
+   516→          <p className="text-muted-foreground">Client not found</p>
+   517→          <Button variant="outline" onClick={onBack} className="mt-4">Go Back</Button>
+   518→        </div>
+   519→      </div>
+   520→    )
+   521→  }
+   522→
+   523→  // ─── Render Sections ───
+   524→
+   525→  return (
+   526→    <div className="min-h-[calc(100vh-52px)] bg-gradient-to-br from-slate-50/50 via-white to-emerald-50/20 dark:from-gray-950 dark:via-gray-900 dark:to-emerald-950/10">
+   527→      {/* ─── A. Client Portal Header ─── */}
+   528→      <motion.div {...fadeIn} className="border-b bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm sticky top-0 z-10">
+   529→        <div className="p-4 sm:p-6">
+   530→          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+   531→            <div className="flex items-center gap-4">
+   532→              <button
+   533→                onClick={onBack}
+   534→                className="text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
+   535→              >
+   536→                ← All Clients
+   537→              </button>
+   538→              <Separator orientation="vertical" className="h-8 hidden sm:block" />
+   539→              <div className="flex items-center gap-3">
+   540→                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-600 shadow-md shadow-emerald-600/20">
+   541→                  <span className="text-lg font-bold text-white">
+   542→                    {client.tradeName?.charAt(0)?.toUpperCase() || '?'}
+   543→                  </span>
+   544→                </div>
+   545→                <div>
+   546→                  <h1 className="text-lg font-bold text-foreground">{client.tradeName}</h1>
+   547→                  <p className="text-sm text-muted-foreground font-mono">{client.gstin}</p>
+   548→                </div>
+   549→              </div>
+   550→            </div>
+   551→
+   552→            <div className="flex items-center gap-3 flex-wrap">
+   553→              <ComplianceGauge score={complianceScore} size={56} />
+   554→              <div className="mr-2">
+   555→                <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-medium">Compliance</p>
+   556→                <p className={`text-lg font-bold ${getScoreColor(complianceScore)}`}>{complianceScore}/100</p>
+   557→              </div>
+   558→              <Separator orientation="vertical" className="h-8" />
+   559→              <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-800 rounded-lg px-3 py-1.5">
+   560→                <Globe className="h-3.5 w-3.5 text-muted-foreground" />
+   561→                <span className="text-xs font-mono text-muted-foreground">{portalUrl}</span>
+   562→                <button
+   563→                  onClick={handleCopyLink}
+   564→                  className="text-muted-foreground hover:text-emerald-600 transition-colors"
+   565→                  title="Copy Link"
+   566→                >
+   567→                  {copied ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
+   568→                </button>
+   569→              </div>
+   570→              <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5">
+   571→                <Share2 className="h-3.5 w-3.5" />
+   572→                Share Portal
+   573→              </Button>
+   574→              <div className="flex items-center gap-2">
+   575→                <Switch
+   576→                  checked={portalActive}
+   577→                  onCheckedChange={setPortalActive}
+   578→                />
+   579→                <span className="text-xs font-medium text-muted-foreground">
+   580→                  {portalActive ? 'Active' : 'Inactive'}
+   581→                </span>
+   582→              </div>
+   583→            </div>
+   584→          </div>
+   585→        </div>
+   586→      </motion.div>
+   587→
+   588→      {/* ─── Main Content ─── */}
+   589→      <div className="p-4 sm:p-6 max-w-[1400px] mx-auto">
+   590→        <Tabs value={activeTab} onValueChange={setActiveTab}>
+   591→          <TabsList className="mb-6 bg-slate-100/80 dark:bg-slate-800/80 h-auto flex-wrap gap-1 p-1">
+   592→            <TabsTrigger value="overview" className="text-xs gap-1.5 data-[state=active]:bg-white data-[state=active]:shadow-sm">
+   593→              <Eye className="h-3.5 w-3.5" /> Overview
+   594→            </TabsTrigger>
+   595→            <TabsTrigger value="documents" className="text-xs gap-1.5 data-[state=active]:bg-white data-[state=active]:shadow-sm">
+   596→              <FileUp className="h-3.5 w-3.5" /> Documents
+   597→            </TabsTrigger>
+   598→            <TabsTrigger value="notices" className="text-xs gap-1.5 data-[state=active]:bg-white data-[state=active]:shadow-sm">
+   599→              <Bell className="h-3.5 w-3.5" /> Notices
+   600→            </TabsTrigger>
+   601→            <TabsTrigger value="returns" className="text-xs gap-1.5 data-[state=active]:bg-white data-[state=active]:shadow-sm">
+   602→              <FileText className="h-3.5 w-3.5" /> Returns
+   603→            </TabsTrigger>
+   604→            <TabsTrigger value="chat" className="text-xs gap-1.5 data-[state=active]:bg-white data-[state=active]:shadow-sm">
+   605→              <MessageSquare className="h-3.5 w-3.5" /> Chat
+   606→            </TabsTrigger>
+   607→            <TabsTrigger value="billing" className="text-xs gap-1.5 data-[state=active]:bg-white data-[state=active]:shadow-sm">
+   608→              <CreditCard className="h-3.5 w-3.5" /> Billing
+   609→            </TabsTrigger>
+   610→            <TabsTrigger value="reports" className="text-xs gap-1.5 data-[state=active]:bg-white data-[state=active]:shadow-sm">
+   611→              <FileDown className="h-3.5 w-3.5" /> Reports
+   612→            </TabsTrigger>
+   613→            <TabsTrigger value="calendar" className="text-xs gap-1.5 data-[state=active]:bg-white data-[state=active]:shadow-sm">
+   614→              <Calendar className="h-3.5 w-3.5" /> Calendar
+   615→            </TabsTrigger>
+   616→            <TabsTrigger value="score" className="text-xs gap-1.5 data-[state=active]:bg-white data-[state=active]:shadow-sm">
+   617→              <Shield className="h-3.5 w-3.5" /> Score
+   618→            </TabsTrigger>
+   619→          </TabsList>
+   620→
+   621→          {/* ═══ OVERVIEW TAB ═══ */}
+   622→          <TabsContent value="overview" className="mt-0">
+   623→            <motion.div variants={staggerContainer} initial="initial" animate="animate" className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+   624→              {/* Quick Stats */}
+   625→              <motion.div variants={staggerItem} className="lg:col-span-3 grid grid-cols-2 sm:grid-cols-4 gap-4">
+   626→                <Card className="border-0 shadow-sm bg-gradient-to-br from-emerald-50 to-emerald-100/50 dark:from-emerald-950/30 dark:to-emerald-900/20">
+   627→                  <CardContent className="p-4">
+   628→                    <div className="flex items-center gap-2 mb-2">
+   629→                      <FileText className="h-4 w-4 text-emerald-600" />
+   630→                      <span className="text-xs font-medium text-emerald-700 dark:text-emerald-400">Filed Returns</span>
+   631→                    </div>
+   632→                    <p className="text-2xl font-bold text-emerald-700 dark:text-emerald-300">
+   633→                      {returns?.filter(r => r.status === 'filed').length || 0}
+   634→                    </p>
+   635→                  </CardContent>
+   636→                </Card>
+   637→                <Card className="border-0 shadow-sm bg-gradient-to-br from-amber-50 to-amber-100/50 dark:from-amber-950/30 dark:to-amber-900/20">
+   638→                  <CardContent className="p-4">
+   639→                    <div className="flex items-center gap-2 mb-2">
+   640→                      <Clock className="h-4 w-4 text-amber-600" />
+   641→                      <span className="text-xs font-medium text-amber-700 dark:text-amber-400">Pending</span>
+   642→                    </div>
+   643→                    <p className="text-2xl font-bold text-amber-700 dark:text-amber-300">
+   644→                      {returns?.filter(r => !['filed', 'reopened'].includes(r.status)).length || 0}
+   645→                    </p>
+   646→                  </CardContent>
+   647→                </Card>
+   648→                <Card className="border-0 shadow-sm bg-gradient-to-br from-red-50 to-red-100/50 dark:from-red-950/30 dark:to-red-900/20">
+   649→                  <CardContent className="p-4">
+   650→                    <div className="flex items-center gap-2 mb-2">
+   651→                      <Bell className="h-4 w-4 text-red-600" />
+   652→                      <span className="text-xs font-medium text-red-700 dark:text-red-400">Open Notices</span>
+   653→                    </div>
+   654→                    <p className="text-2xl font-bold text-red-700 dark:text-red-300">
+   655→                      {MOCK_NOTICES.filter(n => n.status === 'Open').length}
+   656→                    </p>
+   657→                  </CardContent>
+   658→                </Card>
+   659→                <Card className="border-0 shadow-sm bg-gradient-to-br from-violet-50 to-violet-100/50 dark:from-violet-950/30 dark:to-violet-900/20">
+   660→                  <CardContent className="p-4">
+   661→                    <div className="flex items-center gap-2 mb-2">
+   662→                      <IndianRupee className="h-4 w-4 text-violet-600" />
+   663→                      <span className="text-xs font-medium text-violet-700 dark:text-violet-400">Outstanding</span>
+   664→                    </div>
+   665→                    <p className="text-2xl font-bold text-violet-700 dark:text-violet-300">
+   666→                      {formatCurrency(outstandingBalance)}
+   667→                    </p>
+   668→                  </CardContent>
+   669→                </Card>
+   670→              </motion.div>
+   671→
+   672→              {/* Compliance Score Card (mini) */}
+   673→              <motion.div variants={staggerItem}>
+   674→                <Card className="border shadow-sm h-full">
+   675→                  <CardHeader className="pb-3">
+   676→                    <CardTitle className="text-sm font-semibold flex items-center gap-2">
+   677→                      <Shield className="h-4 w-4 text-emerald-600" /> Compliance Score
+   678→                    </CardTitle>
+   679→                  </CardHeader>
+   680→                  <CardContent className="flex flex-col items-center">
+   681→                    <ComplianceGauge score={complianceScore} size={100} />
+   682→                    <p className={`mt-2 text-sm font-semibold ${getScoreColor(complianceScore)}`}>
+   683→                      {complianceScore >= 80 ? 'Excellent' : complianceScore >= 60 ? 'Good' : 'Needs Attention'}
+   684→                    </p>
+   685→                    <div className="w-full mt-4 space-y-2">
+   686→                      {Object.entries(scoreBreakdown).map(([key, val]) => (
+   687→                        <div key={key} className="flex items-center justify-between text-xs">
+   688→                          <span className="text-muted-foreground capitalize">{key.replace(/([A-Z])/g, ' $1').trim()}</span>
+   689→                          <div className="flex items-center gap-2">
+   690→                            <Progress value={val} className="h-1.5 w-16" />
+   691→                            <span className="font-medium w-8 text-right">{val}</span>
+   692→                          </div>
+   693→                        </div>
+   694→                      ))}
+   695→                    </div>
+   696→                  </CardContent>
+   697→                </Card>
+   698→              </motion.div>
+   699→
+   700→              {/* Recent Returns */}
+   701→              <motion.div variants={staggerItem}>
+   702→                <Card className="border shadow-sm h-full">
+   703→                  <CardHeader className="pb-3">
+   704→                    <CardTitle className="text-sm font-semibold flex items-center justify-between">
+   705→                      <span className="flex items-center gap-2">
+   706→                        <FileText className="h-4 w-4 text-emerald-600" /> Recent Returns
+   707→                      </span>
+   708→                      <Button variant="ghost" size="sm" className="h-6 text-[10px]" onClick={() => setActiveTab('returns')}>
+   709→                        View All →
+   710→                      </Button>
+   711→                    </CardTitle>
+   712→                  </CardHeader>
+   713→                  <CardContent>
+   714→                    <div className="space-y-2">
+   715→                      {returns?.slice(0, 4).map(ret => {
+   716→                        const cfg = getReturnStatusConfig(ret.status)
+   717→                        const StatusIcon = cfg.icon
+   718→                        return (
+   719→                          <div key={ret.id} className="flex items-center gap-3 p-2 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+   720→                            <StatusIcon className="h-4 w-4 text-muted-foreground shrink-0" />
+   721→                            <div className="flex-1 min-w-0">
+   722→                              <p className="text-xs font-medium truncate">{ret.returnType} — {ret.period}</p>
+   723→                            </div>
+   724→                            <Badge variant="outline" className={`${cfg.color} ${cfg.bg} text-[9px] shrink-0`}>
+   725→                              {cfg.label}
+   726→                            </Badge>
+   727→                          </div>
+   728→                        )
+   729→                      }) || (
+   730→                        <p className="text-xs text-muted-foreground text-center py-4">No returns found</p>
+   731→                      )}
+   732→                    </div>
+   733→                  </CardContent>
+   734→                </Card>
+   735→              </motion.div>
+   736→
+   737→              {/* Active Notices */}
+   738→              <motion.div variants={staggerItem}>
+   739→                <Card className="border shadow-sm h-full">
+   740→                  <CardHeader className="pb-3">
+   741→                    <CardTitle className="text-sm font-semibold flex items-center justify-between">
+   742→                      <span className="flex items-center gap-2">
+   743→                        <Bell className="h-4 w-4 text-red-500" /> Active Notices
+   744→                      </span>
+   745→                      <Button variant="ghost" size="sm" className="h-6 text-[10px]" onClick={() => setActiveTab('notices')}>
+   746→                        View All →
+   747→                      </Button>
+   748→                    </CardTitle>
+   749→                  </CardHeader>
+   750→                  <CardContent>
+   751→                    <div className="space-y-2">
+   752→                      {MOCK_NOTICES.filter(n => n.status !== 'Closed').map(notice => {
+   753→                        const cfg = getNoticeStatusConfig(notice.status)
+   754→                        const days = daysUntil(notice.responseDue)
+   755→                        return (
+   756→                          <div key={notice.id} className="p-2.5 rounded-lg border border-slate-100 dark:border-slate-800 hover:border-slate-200 dark:hover:border-slate-700 transition-colors">
+   757→                            <div className="flex items-center justify-between mb-1">
+   758→                              <p className="text-xs font-medium">{notice.noticeType}</p>
+   759→                              <Badge variant="outline" className={`${cfg.color} ${cfg.bg} text-[9px]`}>
+   760→                                {notice.status}
+   761→                              </Badge>
+   762→                            </div>
+   763→                            <p className="text-[10px] text-muted-foreground line-clamp-1">{notice.description}</p>
+   764→                            {notice.status === 'Open' && (
+   765→                              <p className={`text-[10px] mt-1 font-medium ${days < 15 ? 'text-red-600' : 'text-amber-600'}`}>
+   766→                                {days > 0 ? `${days} days remaining` : 'Overdue'}
+   767→                              </p>
+   768→                            )}
+   769→                          </div>
+   770→                        )
+   771→                      })}
+   772→                    </div>
+   773→                  </CardContent>
+   774→                </Card>
+   775→              </motion.div>
+   776→
+   777→              {/* Upcoming Filings */}
+   778→              <motion.div variants={staggerItem} className="lg:col-span-2">
+   779→                <Card className="border shadow-sm h-full">
+   780→                  <CardHeader className="pb-3">
+   781→                    <CardTitle className="text-sm font-semibold flex items-center gap-2">
+   782→                      <CalendarClock className="h-4 w-4 text-emerald-600" /> Upcoming Filings
+   783→                    </CardTitle>
+   784→                  </CardHeader>
+   785→                  <CardContent>
+   786→                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+   787→                      {calendarEvents.map((m, idx) => (
+   788→                        <div key={idx} className="p-3 rounded-xl border border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900/50">
+   789→                          <p className="text-xs font-semibold text-foreground mb-2">{m.label}</p>
+   790→                          <div className="space-y-1.5">
+   791→                            <div className="flex items-center justify-between text-xs">
+   792→                              <span className="text-muted-foreground">GSTR-1 Due</span>
+   793→                              <span className="font-medium">{m.gstr1Due.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}</span>
+   794→                            </div>
+   795→                            <div className="flex items-center justify-between text-xs">
+   796→                              <span className="text-muted-foreground">GSTR-3B Due</span>
+   797→                              <span className="font-medium">{m.gstr3bDue.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}</span>
+   798→                            </div>
+   799→                          </div>
+   800→                        </div>
+   801→                      ))}
+   802→                    </div>
+   803→                  </CardContent>
+   804→                </Card>
+   805→              </motion.div>
+   806→
+   807→              {/* Latest Chat */}
+   808→              <motion.div variants={staggerItem}>
+   809→                <Card className="border shadow-sm h-full">
+   810→                  <CardHeader className="pb-3">
+   811→                    <CardTitle className="text-sm font-semibold flex items-center justify-between">
+   812→                      <span className="flex items-center gap-2">
+   813→                        <MessageSquare className="h-4 w-4 text-emerald-600" /> Latest Message
+   814→                      </span>
+   815→                      <Button variant="ghost" size="sm" className="h-6 text-[10px]" onClick={() => setActiveTab('chat')}>
+   816→                        Chat →
+   817→                      </Button>
+   818→                    </CardTitle>
+   819→                  </CardHeader>
+   820→                  <CardContent>
+   821→                    {chatMessages.length > 0 ? (
+   822→                      <div>
+   823→                        <div className="p-3 rounded-lg bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/30">
+   824→                          <p className="text-xs text-emerald-700 dark:text-emerald-300 font-medium mb-1">
+   825→                            {chatMessages[chatMessages.length - 1].senderName}
+   826→                          </p>
+   827→                          <p className="text-xs text-foreground line-clamp-2">
+   828→                            {chatMessages[chatMessages.length - 1].message}
+   829→                          </p>
+   830→                          <p className="text-[10px] text-muted-foreground mt-1">
+   831→                            {chatMessages[chatMessages.length - 1].timestamp}
+   832→                          </p>
+   833→                        </div>
+   834→                      </div>
+   835→                    ) : (
+   836→                      <p className="text-xs text-muted-foreground text-center py-4">No messages yet</p>
+   837→                    )}
+   838→                  </CardContent>
+   839→                </Card>
+   840→              </motion.div>
+   841→            </motion.div>
+   842→          </TabsContent>
+   843→
+   844→          {/* ═══ B. DOCUMENT UPLOAD CENTER ═══ */}
+   845→          <TabsContent value="documents" className="mt-0">
+   846→            <motion.div {...fadeIn} className="space-y-4">
+   847→              {/* Upload Zone */}
+   848→              <Card className="border shadow-sm">
+   849→                <CardHeader className="pb-3">
+   850→                  <CardTitle className="text-sm font-semibold flex items-center justify-between">
+   851→                    <span className="flex items-center gap-2">
+   852→                      <Upload className="h-4 w-4 text-emerald-600" /> Document Upload Center
+   853→                    </span>
+   854→                    <Button size="sm" className="h-7 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700">
+   855→                      <Plus className="h-3.5 w-3.5" /> Bulk Upload
+   856→                    </Button>
+   857→                  </CardTitle>
+   858→                </CardHeader>
+   859→                <CardContent>
+   860→                  <div
+   861→                    onDragOver={handleDragOver}
+   862→                    onDragLeave={handleDragLeave}
+   863→                    onDrop={handleDrop}
+   864→                    className={`
+   865→                      relative border-2 border-dashed rounded-xl p-8 text-center transition-all
+   866→                      ${isDragging
+   867→                        ? 'border-emerald-400 bg-emerald-50 dark:bg-emerald-950/20 scale-[1.01]'
+   868→                        : 'border-slate-200 dark:border-slate-700 hover:border-emerald-300 dark:hover:border-emerald-700 bg-slate-50/50 dark:bg-slate-800/30'
+   869→                      }
+   870→                    `}
+   871→                  >
+   872→                    <input
+   873→                      ref={fileInputRef}
+   874→                      type="file"
+   875→                      multiple
+   876→                      className="hidden"
+   877→                      onChange={() => {}}
+   878→                    />
+   879→                    <div className="flex flex-col items-center gap-3">
+   880→                      <div className={`h-12 w-12 rounded-xl flex items-center justify-center transition-colors ${isDragging ? 'bg-emerald-100 dark:bg-emerald-900/30' : 'bg-slate-100 dark:bg-slate-800'}`}>
+   881→                        <Upload className={`h-6 w-6 ${isDragging ? 'text-emerald-600' : 'text-muted-foreground'}`} />
+   882→                      </div>
+   883→                      <div>
+   884→                        <p className="text-sm font-medium text-foreground">
+   885→                          {isDragging ? 'Drop files here' : 'Drag & drop files here'}
+   886→                        </p>
+   887→                        <p className="text-xs text-muted-foreground mt-1">
+   888→                          or <button onClick={() => fileInputRef.current?.click()} className="text-emerald-600 hover:text-emerald-700 font-medium">browse files</button>
+   889→                        </p>
+   890→                      </div>
+   891→                      <div className="flex flex-wrap gap-1.5 mt-2">
+   892→                        {['Purchase Register', 'Sales Register', 'Invoices', 'GST Notices', 'Bank Statements', 'Others'].map(cat => (
+   893→                          <Badge key={cat} variant="outline" className="text-[10px] cursor-pointer hover:bg-emerald-50 hover:border-emerald-200 hover:text-emerald-700 transition-colors">
+   894→                            {cat}
+   895→                          </Badge>
+   896→                        ))}
+   897→                      </div>
+   898→                    </div>
+   899→                  </div>
+   900→                </CardContent>
+   901→              </Card>
+   902→
+   903→              {/* Recent Uploads */}
+   904→              <Card className="border shadow-sm">
+   905→                <CardHeader className="pb-3">
+   906→                  <CardTitle className="text-sm font-semibold">Recent Uploads</CardTitle>
+   907→                </CardHeader>
+   908→                <CardContent>
+   909→                  {documents && documents.length > 0 ? (
+   910→                    <ScrollArea className="max-h-96">
+   911→                      <div className="space-y-2">
+   912→                        {documents.map(doc => {
+   913→                          const statusConfig: Record<string, { color: string; bg: string; label: string }> = {
+   914→                            uploading: { color: 'text-blue-700', bg: 'bg-blue-50 border-blue-200', label: 'Uploading' },
+   915→                            processing: { color: 'text-amber-700', bg: 'bg-amber-50 border-amber-200', label: 'Processing' },
+   916→                            extracted: { color: 'text-emerald-700', bg: 'bg-emerald-50 border-emerald-200', label: 'Extracted' },
+   917→                            reviewed: { color: 'text-cyan-700', bg: 'bg-cyan-50 border-cyan-200', label: 'Reviewed' },
+   918→                            archived: { color: 'text-slate-700', bg: 'bg-slate-50 border-slate-200', label: 'Archived' },
+   919→                            failed: { color: 'text-red-700', bg: 'bg-red-50 border-red-200', label: 'Failed' },
+   920→                          }
+   921→                          const cfg = statusConfig[doc.status] || statusConfig.archived
+   922→                          return (
+   923→                            <div key={doc.id} className="flex items-center gap-3 p-3 rounded-lg border border-slate-100 dark:border-slate-800 hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
+   924→                              <div className="h-9 w-9 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center shrink-0">
+   925→                                <FileText className="h-4 w-4 text-muted-foreground" />
+   926→                              </div>
+   927→                              <div className="flex-1 min-w-0">
+   928→                                <p className="text-xs font-medium truncate">{doc.fileName}</p>
+   929→                                <p className="text-[10px] text-muted-foreground">
+   930→                                  {doc.documentType?.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())} • {doc.period || 'No period'}
+   931→                                </p>
+   932→                              </div>
+   933→                              <Badge variant="outline" className={`${cfg.color} ${cfg.bg} text-[9px] shrink-0`}>
+   934→                                {cfg.label}
+   935→                              </Badge>
+   936→                            </div>
+   937→                          )
+   938→                        })}
+   939→                      </div>
+   940→                    </ScrollArea>
+   941→                  ) : (
+   942→                    <div className="text-center py-8">
+   943→                      <FileUp className="h-10 w-10 text-muted-foreground/20 mx-auto mb-2" />
+   944→                      <p className="text-sm text-muted-foreground">No documents uploaded yet</p>
+   945→                      <p className="text-xs text-muted-foreground/60 mt-1">Upload your first document to get started</p>
+   946→                    </div>
+   947→                  )}
+   948→                </CardContent>
+   949→              </Card>
+   950→            </motion.div>
+   951→          </TabsContent>
+   952→
+   953→          {/* ═══ C. NOTICES & COMPLIANCE ═══ */}
+   954→          <TabsContent value="notices" className="mt-0">
+   955→            <motion.div {...fadeIn} className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+   956→              {/* Active Notices */}
+   957→              <Card className="border shadow-sm">
+   958→                <CardHeader className="pb-3">
+   959→                  <CardTitle className="text-sm font-semibold flex items-center gap-2">
+   960→                    <Bell className="h-4 w-4 text-red-500" /> GST Notices
+   961→                  </CardTitle>
+   962→                </CardHeader>
+   963→                <CardContent>
+   964→                  <div className="space-y-3">
+   965→                    {MOCK_NOTICES.map(notice => {
+   966→                      const cfg = getNoticeStatusConfig(notice.status)
+   967→                      const days = daysUntil(notice.responseDue)
+   968→                      return (
+   969→                        <div key={notice.id} className="p-4 rounded-xl border border-slate-100 dark:border-slate-800 hover:border-slate-200 dark:hover:border-slate-700 transition-colors">
+   970→                          <div className="flex items-center justify-between mb-2">
+   971→                            <p className="text-sm font-semibold">{notice.noticeType}</p>
+   972→                            <Badge variant="outline" className={`${cfg.color} ${cfg.bg} text-[10px]`}>
+   973→                              {notice.status}
+   974→                            </Badge>
+   975→                          </div>
+   976→                          <p className="text-xs text-muted-foreground mb-2">{notice.description}</p>
+   977→                          <div className="flex items-center justify-between text-[10px]">
+   978→                            <span className="text-muted-foreground">Issued: {notice.issueDate}</span>
+   979→                            <span className={`font-medium ${notice.status === 'Open' ? (days < 15 ? 'text-red-600' : 'text-amber-600') : 'text-muted-foreground'}`}>
+   980→                              Due: {notice.responseDue}
+   981→                              {notice.status === 'Open' && days > 0 && ` (${days}d left)`}
+   982→                              {notice.status === 'Open' && days <= 0 && ' (Overdue!)'}
+   983→                            </span>
+   984→                          </div>
+   985→                        </div>
+   986→                      )
+   987→                    })}
+   988→                  </div>
+   989→                </CardContent>
+   990→              </Card>
+   991→
+   992→              {/* Compliance Timeline */}
+   993→              <Card className="border shadow-sm">
+   994→                <CardHeader className="pb-3">
+   995→                  <CardTitle className="text-sm font-semibold flex items-center gap-2">
+   996→                    <Clock className="h-4 w-4 text-emerald-600" /> Compliance Timeline
+   997→                  </CardTitle>
+   998→                </CardHeader>
+   999→                <CardContent>
+  1000→                  <ScrollArea className="max-h-96">
+  1001→                    <div className="relative pl-6">
+  1002→                      {/* Timeline line */}
+  1003→                      <div className="absolute left-[9px] top-2 bottom-2 w-0.5 bg-slate-200 dark:bg-slate-700" />
+  1004→
+  1005→                      {COMPLIANCE_EVENTS.map((event, idx) => {
+  1006→                        const iconMap: Record<string, React.ElementType> = {
+  1007→                          filing: FileText,
+  1008→                          notice: Bell,
+  1009→                          payment: IndianRupee,
+  1010→                          document: FileCheck,
+  1011→                        }
+  1012→                        const colorMap: Record<string, string> = {
+  1013→                          completed: 'bg-emerald-100 text-emerald-600 border-emerald-300',
+  1014→                          pending: 'bg-amber-100 text-amber-600 border-amber-300',
+  1015→                          overdue: 'bg-red-100 text-red-600 border-red-300',
+  1016→                        }
+  1017→                        const Icon = iconMap[event.type] || FileText
+  1018→                        const colorClass = colorMap[event.status]
+  1019→
+  1020→                        return (
+  1021→                          <motion.div
+  1022→                            key={event.id}
+  1023→                            initial={{ opacity: 0, x: -10 }}
+  1024→                            animate={{ opacity: 1, x: 0 }}
+  1025→                            transition={{ delay: idx * 0.05 }}
+  1026→                            className="relative pb-4 last:pb-0"
+  1027→                          >
+  1028→                            <div className={`absolute -left-6 top-0.5 h-5 w-5 rounded-full border-2 flex items-center justify-center ${colorClass}`}>
+  1029→                              <Icon className="h-2.5 w-2.5" />
+  1030→                            </div>
+  1031→                            <div className="ml-2">
+  1032→                              <div className="flex items-center justify-between">
+  1033→                                <p className="text-xs font-medium">{event.title}</p>
+  1034→                                <Badge variant="outline" className={`${colorClass} text-[9px] h-5`}>
+  1035→                                  {event.status}
+  1036→                                </Badge>
+  1037→                              </div>
+  1038→                              <p className="text-[10px] text-muted-foreground mt-0.5">{event.date}</p>
+  1039→                            </div>
+  1040→                          </motion.div>
+  1041→                        )
+  1042→                      })}
+  1043→                    </div>
+  1044→                  </ScrollArea>
+  1045→                </CardContent>
+  1046→
+  1047→                {/* Risk Indicators */}
+  1048→                <div className="px-6 pb-4">
+  1049→                  <Separator className="mb-4" />
+  1050→                  <p className="text-xs font-semibold mb-2 flex items-center gap-2">
+  1051→                    <AlertTriangle className="h-3.5 w-3.5 text-amber-500" /> Risk Indicators
+  1052→                  </p>
+  1053→                  <div className="space-y-1.5">
+  1054→                    <div className="flex items-center gap-2 text-xs">
+  1055→                      <div className="h-2 w-2 rounded-full bg-red-500" />
+  1056→                      <span className="text-red-700 dark:text-red-400 font-medium">ITC Reversal</span>
+  1057→                      <span className="text-muted-foreground">— Potential ₹1.2L impact</span>
+  1058→                    </div>
+  1059→                    <div className="flex items-center gap-2 text-xs">
+  1060→                      <div className="h-2 w-2 rounded-full bg-amber-500" />
+  1061→                      <span className="text-amber-700 dark:text-amber-400 font-medium">Assessment Pending</span>
+  1062→                      <span className="text-muted-foreground">— Response due by 15/03/2026</span>
+  1063→                    </div>
+  1064→                  </div>
+  1065→                </div>
+  1066→              </Card>
+  1067→            </motion.div>
+  1068→          </TabsContent>
+  1069→
+  1070→          {/* ═══ D. RETURN TRACKING ═══ */}
+  1071→          <TabsContent value="returns" className="mt-0">
+  1072→            <motion.div {...fadeIn} className="space-y-4">
+  1073→              {/* Filing Pipeline */}
+  1074→              <Card className="border shadow-sm">
+  1075→                <CardHeader className="pb-3">
+  1076→                  <CardTitle className="text-sm font-semibold flex items-center gap-2">
+  1077→                    <FileText className="h-4 w-4 text-emerald-600" /> Filing Pipeline
+  1078→                  </CardTitle>
+  1079→                </CardHeader>
+  1080→                <CardContent>
+  1081→                  <div className="flex items-center gap-1 sm:gap-2 overflow-x-auto pb-2">
+  1082→                    {['Draft', 'Prepared', 'Validated', 'Reviewed', 'Generated', 'Filed'].map((stage, idx) => {
+  1083→                      const count = returns?.filter(r => {
+  1084→                        const s = r.status
+  1085→                        if (stage === 'Draft') return s === 'draft'
+  1086→                        if (stage === 'Prepared') return s === 'prepared'
+  1087→                        if (stage === 'Validated') return s === 'validated'
+  1088→                        if (stage === 'Reviewed') return s === 'reviewed'
+  1089→                        if (stage === 'Generated') return s === 'generated'
+  1090→                        if (stage === 'Filed') return s === 'filed'
+  1091→                        return false
+  1092→                      }).length || 0
+  1093→                      const stageColors = [
+  1094→                        'bg-slate-100 text-slate-600 border-slate-300',
+  1095→                        'bg-violet-50 text-violet-600 border-violet-300',
+  1096→                        'bg-sky-50 text-sky-600 border-sky-300',
+  1097→                        'bg-cyan-50 text-cyan-600 border-cyan-300',
+  1098→                        'bg-blue-50 text-blue-600 border-blue-300',
+  1099→                        'bg-emerald-50 text-emerald-600 border-emerald-300',
+  1100→                      ]
+  1101→                      return (
+  1102→                        <div key={stage} className="flex items-center">
+  1103→                          <div className={`flex flex-col items-center px-2 sm:px-4 py-2 rounded-lg border-2 ${stageColors[idx]} min-w-[60px]`}>
+  1104→                            <span className="text-lg font-bold">{count}</span>
+  1105→                            <span className="text-[9px] font-medium">{stage}</span>
+  1106→                          </div>
+  1107→                          {idx < 5 && <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/30 shrink-0 mx-0.5" />}
+  1108→                        </div>
+  1109→                      )
+  1110→                    })}
+  1111→                  </div>
+  1112→                </CardContent>
+  1113→              </Card>
+  1114→
+  1115→              {/* Returns Table */}
+  1116→              <Card className="border shadow-sm">
+  1117→                <CardHeader className="pb-3">
+  1118→                  <CardTitle className="text-sm font-semibold">All Returns</CardTitle>
+  1119→                </CardHeader>
+  1120→                <CardContent>
+  1121→                  {returns && returns.length > 0 ? (
+  1122→                    <ScrollArea className="max-h-96">
+  1123→                      <div className="space-y-2">
+  1124→                        {returns.map(ret => {
+  1125→                          const cfg = getReturnStatusConfig(ret.status)
+  1126→                          const StatusIcon = cfg.icon
+  1127→                          const pipelineProgress = ['draft', 'prepared', 'validated', 'reviewed', 'generated', 'filed'].indexOf(ret.status)
+  1128→                          const progressPct = Math.max(5, ((pipelineProgress + 1) / 6) * 100)
+  1129→                          return (
+  1130→                            <div key={ret.id} className="p-3 rounded-xl border border-slate-100 dark:border-slate-800 hover:border-slate-200 dark:hover:border-slate-700 transition-colors">
+  1131→                              <div className="flex items-center justify-between mb-2">
+  1132→                                <div className="flex items-center gap-2">
+  1133→                                  <StatusIcon className="h-4 w-4 text-muted-foreground" />
+  1134→                                  <span className="text-sm font-medium">{ret.returnType}</span>
+  1135→                                  <span className="text-xs text-muted-foreground">— {ret.period}</span>
+  1136→                                </div>
+  1137→                                <div className="flex items-center gap-2">
+  1138→                                  <Badge variant="outline" className={`${cfg.color} ${cfg.bg} text-[10px]`}>
+  1139→                                    {cfg.label}
+  1140→                                  </Badge>
+  1141→                                  <Button variant="ghost" size="sm" className="h-6 text-[10px] gap-1 text-emerald-600 hover:text-emerald-700">
+  1142→                                    Track <ArrowUpRight className="h-3 w-3" />
+  1143→                                  </Button>
+  1144→                                </div>
+  1145→                              </div>
+  1146→                              <Progress value={progressPct} className="h-1.5 mb-2" />
+  1147→                              <div className="flex items-center gap-4 text-[10px] text-muted-foreground">
+  1148→                                {ret.filedDate && <span>Filed: {new Date(ret.filedDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</span>}
+  1149→                                {ret.acknowledgmentNumber && <span>ARN: {ret.acknowledgmentNumber}</span>}
+  1150→                                {ret.totalTax > 0 && <span>Tax: {formatCurrency(ret.totalTax)}</span>}
+  1151→                              </div>
+  1152→                            </div>
+  1153→                          )
+  1154→                        })}
+  1155→                      </div>
+  1156→                    </ScrollArea>
+  1157→                  ) : (
+  1158→                    <div className="text-center py-8">
+  1159→                      <FileText className="h-10 w-10 text-muted-foreground/20 mx-auto mb-2" />
+  1160→                      <p className="text-sm text-muted-foreground">No returns found</p>
+  1161→                      <p className="text-xs text-muted-foreground/60 mt-1">Returns will appear here once they are created</p>
+  1162→                    </div>
+  1163→                  )}
+  1164→                </CardContent>
+  1165→              </Card>
+  1166→            </motion.div>
+  1167→          </TabsContent>
+  1168→
+  1169→          {/* ═══ E. CA CHAT ═══ */}
+  1170→          <TabsContent value="chat" className="mt-0">
+  1171→            <motion.div {...fadeIn}>
+  1172→              <Card className="border shadow-sm max-w-3xl mx-auto">
+  1173→                <CardHeader className="pb-3 border-b">
+  1174→                  <CardTitle className="text-sm font-semibold flex items-center gap-2">
+  1175→                    <MessageSquare className="h-4 w-4 text-emerald-600" /> CA-Client Chat
+  1176→                  </CardTitle>
+  1177→                  <CardDescription className="text-xs">Conversation with {client.tradeName}</CardDescription>
+  1178→                </CardHeader>
+  1179→                <CardContent className="p-4">
+  1180→                  <ScrollArea className="h-[400px] pr-4">
+  1181→                    <div className="space-y-4">
+  1182→                      {chatMessages.map(msg => (
+  1183→                        <div key={msg.id} className={`flex ${msg.sender === 'ca' ? 'justify-end' : 'justify-start'}`}>
+  1184→                          <div className={`max-w-[80%] rounded-2xl px-4 py-2.5 ${
+  1185→                            msg.sender === 'ca'
+  1186→                              ? 'bg-emerald-600 text-white rounded-br-md'
+  1187→                              : 'bg-slate-100 dark:bg-slate-800 text-foreground rounded-bl-md'
+  1188→                          }`}>
+  1189→                            <p className="text-xs font-medium mb-0.5 opacity-70">{msg.senderName}</p>
+  1190→                            <p className="text-sm leading-relaxed">{msg.message}</p>
+  1191→                            {msg.attachment && (
+  1192→                              <div className={`mt-2 flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs ${
+  1193→                                msg.sender === 'ca'
+  1194→                                  ? 'bg-emerald-700/50 text-emerald-100'
+  1195→                                  : 'bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600'
+  1196→                              }`}>
+  1197→                                <Paperclip className="h-3.5 w-3.5" />
+  1198→                                <span>{msg.attachment}</span>
+  1199→                                <Download className="h-3.5 w-3.5 ml-auto cursor-pointer" />
+  1200→                              </div>
+  1201→                            )}
+  1202→                            <p className={`text-[9px] mt-1 ${msg.sender === 'ca' ? 'text-emerald-200' : 'text-muted-foreground'}`}>
+  1203→                              {msg.timestamp}
+  1204→                            </p>
+  1205→                          </div>
+  1206→                        </div>
+  1207→                      ))}
+  1208→                      <div ref={chatEndRef} />
+  1209→                    </div>
+  1210→                  </ScrollArea>
+  1211→
+  1212→                  {/* Quick Replies */}
+  1213→                  <div className="flex flex-wrap gap-1.5 mt-3 mb-3">
+  1214→                    {QUICK_REPLIES.map(reply => (
+  1215→                      <button
+  1216→                        key={reply}
+  1217→                        onClick={() => handleQuickReply(reply)}
+  1218→                        className="text-[10px] px-2.5 py-1 rounded-full border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 transition-colors"
+  1219→                      >
+  1220→                        {reply}
+  1221→                      </button>
+  1222→                    ))}
+  1223→                  </div>
+  1224→
+  1225→                  {/* Message Input */}
+  1226→                  <div className="flex items-center gap-2">
+  1227→                    <Button variant="ghost" size="sm" className="h-8 w-8 p-0 shrink-0">
+  1228→                      <Paperclip className="h-4 w-4 text-muted-foreground" />
+  1229→                    </Button>
+  1230→                    <Input
+  1231→                      placeholder="Type a message..."
+  1232→                      value={newMessage}
+  1233→                      onChange={(e) => setNewMessage(e.target.value)}
+  1234→                      onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
+  1235→                      className="h-9 text-sm"
+  1236→                    />
+  1237→                    <Button
+  1238→                      size="sm"
+  1239→                      onClick={handleSendMessage}
+  1240→                      disabled={!newMessage.trim()}
+  1241→                      className="h-8 px-3 bg-emerald-600 hover:bg-emerald-700 shrink-0"
+  1242→                    >
+  1243→                      <Send className="h-3.5 w-3.5" />
+  1244→                    </Button>
+  1245→                  </div>
+  1246→                </CardContent>
+  1247→              </Card>
+  1248→            </motion.div>
+  1249→          </TabsContent>
+  1250→
+  1251→          {/* ═══ F. BILLING & PAYMENTS ═══ */}
+  1252→          <TabsContent value="billing" className="mt-0">
+  1253→            <motion.div {...fadeIn} className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+  1254→              {/* Outstanding Balance */}
+  1255→              <Card className="border shadow-sm bg-gradient-to-br from-slate-900 to-slate-800 text-white">
+  1256→                <CardContent className="p-6">
+  1257→                  <p className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-1">Outstanding Balance</p>
+  1258→                  <p className="text-3xl font-bold">{formatCurrency(outstandingBalance)}</p>
+  1259→                  <div className="flex items-center gap-2 mt-3">
+  1260→                    <Badge className="bg-amber-500/20 text-amber-300 border-amber-500/30 text-[10px]">
+  1261→                      {MOCK_INVOICES.filter(i => i.status === 'Pending').length} Pending
+  1262→                    </Badge>
+  1263→                    <Badge className="bg-red-500/20 text-red-300 border-red-500/30 text-[10px]">
+  1264→                      {MOCK_INVOICES.filter(i => i.status === 'Overdue').length} Overdue
+  1265→                    </Badge>
+  1266→                  </div>
+  1267→                  <Button className="mt-4 w-full bg-emerald-600 hover:bg-emerald-700 h-9 text-xs gap-1.5">
+  1268→                    <IndianRupee className="h-3.5 w-3.5" /> Pay Now
+  1269→                  </Button>
+  1270→                </CardContent>
+  1271→              </Card>
+  1272→
+  1273→              {/* Invoice List */}
+  1274→              <Card className="border shadow-sm lg:col-span-2">
+  1275→                <CardHeader className="pb-3">
+  1276→                  <CardTitle className="text-sm font-semibold flex items-center gap-2">
+  1277→                    <CreditCard className="h-4 w-4 text-emerald-600" /> Invoices
+  1278→                  </CardTitle>
+  1279→                </CardHeader>
+  1280→                <CardContent>
+  1281→                  <ScrollArea className="max-h-96">
+  1282→                    <div className="space-y-2">
+  1283→                      {MOCK_INVOICES.map(inv => {
+  1284→                        const cfg = getInvoiceStatusConfig(inv.status)
+  1285→                        return (
+  1286→                          <div key={inv.id} className="flex items-center gap-3 p-3 rounded-lg border border-slate-100 dark:border-slate-800 hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
+  1287→                            <div className={`h-9 w-9 rounded-lg flex items-center justify-center shrink-0 ${
+  1288→                              inv.status === 'Paid' ? 'bg-emerald-50 dark:bg-emerald-950/30' : inv.status === 'Overdue' ? 'bg-red-50 dark:bg-red-950/30' : 'bg-amber-50 dark:bg-amber-950/30'
+  1289→                            }`}>
+  1290→                              <CreditCard className={`h-4 w-4 ${
+  1291→                                inv.status === 'Paid' ? 'text-emerald-600' : inv.status === 'Overdue' ? 'text-red-600' : 'text-amber-600'
+  1292→                              }`} />
+  1293→                            </div>
+  1294→                            <div className="flex-1 min-w-0">
+  1295→                              <p className="text-xs font-medium">{inv.invoiceNumber}</p>
+  1296→                              <p className="text-[10px] text-muted-foreground">{inv.date}</p>
+  1297→                            </div>
+  1298→                            <div className="text-right">
+  1299→                              <p className="text-sm font-semibold">{formatCurrency(inv.amount)}</p>
+  1300→                              <Badge variant="outline" className={`${cfg.color} ${cfg.bg} text-[9px]`}>
+  1301→                                {inv.status}
+  1302→                              </Badge>
+  1303→                            </div>
+  1304→                          </div>
+  1305→                        )
+  1306→                      })}
+  1307→                    </div>
+  1308→                  </ScrollArea>
+  1309→                </CardContent>
+  1310→              </Card>
+  1311→
+  1312→              {/* Payment History */}
+  1313→              <Card className="border shadow-sm lg:col-span-3">
+  1314→                <CardHeader className="pb-3">
+  1315→                  <CardTitle className="text-sm font-semibold">Payment History</CardTitle>
+  1316→                </CardHeader>
+  1317→                <CardContent>
+  1318→                  <div className="space-y-2">
+  1319→                    {MOCK_INVOICES.filter(i => i.status === 'Paid').map(inv => (
+  1320→                      <div key={`ph-${inv.id}`} className="flex items-center gap-3 p-3 rounded-lg bg-emerald-50/50 dark:bg-emerald-950/10 border border-emerald-100 dark:border-emerald-900/30">
+  1321→                        <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+  1322→                        <div className="flex-1">
+  1323→                          <p className="text-xs font-medium">{inv.invoiceNumber}</p>
+  1324→                          <p className="text-[10px] text-muted-foreground">Paid on {inv.date}</p>
+  1325→                        </div>
+  1326→                        <p className="text-sm font-semibold text-emerald-700 dark:text-emerald-400">{formatCurrency(inv.amount)}</p>
+  1327→                      </div>
+  1328→                    ))}
+  1329→                  </div>
+  1330→                </CardContent>
+  1331→              </Card>
+  1332→            </motion.div>
+  1333→          </TabsContent>
+  1334→
+  1335→          {/* ═══ G. REPORTS & DOWNLOADS ═══ */}
+  1336→          <TabsContent value="reports" className="mt-0">
+  1337→            <motion.div {...fadeIn} className="space-y-4">
+  1338→              <div className="flex items-center justify-between">
+  1339→                <h3 className="text-sm font-semibold text-foreground">Available Reports</h3>
+  1340→                <Button size="sm" className="h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700">
+  1341→                  <Sparkles className="h-3.5 w-3.5" /> Generate Report
+  1342→                </Button>
+  1343→              </div>
+  1344→
+  1345→              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+  1346→                {MOCK_REPORTS.map(report => {
+  1347→                  const iconMap: Record<string, React.ElementType> = {
+  1348→                    gstr1: FileText,
+  1349→                    gstr3b: FileText,
+  1350→                    recon: Search,
+  1351→                    compliance: Shield,
+  1352→                    itc: IndianRupee,
+  1353→                  }
+  1354→                  const colorMap: Record<string, string> = {
+  1355→                    gstr1: 'bg-blue-50 dark:bg-blue-950/30 text-blue-600',
+  1356→                    gstr3b: 'bg-violet-50 dark:bg-violet-950/30 text-violet-600',
+  1357→                    recon: 'bg-amber-50 dark:bg-amber-950/30 text-amber-600',
+  1358→                    compliance: 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600',
+  1359→                    itc: 'bg-cyan-50 dark:bg-cyan-950/30 text-cyan-600',
+  1360→                  }
+  1361→                  const Icon = iconMap[report.type] || FileText
+  1362→                  const color = colorMap[report.type] || 'bg-slate-50 text-slate-600'
+  1363→
+  1364→                  return (
+  1365→                    <Card key={report.id} className="border shadow-sm hover:shadow-md transition-shadow">
+  1366→                      <CardContent className="p-4">
+  1367→                        <div className="flex items-start justify-between mb-3">
+  1368→                          <div className={`h-10 w-10 rounded-xl flex items-center justify-center ${color}`}>
+  1369→                            <Icon className="h-5 w-5" />
+  1370→                          </div>
+  1371→                          <Button variant="ghost" size="sm" className="h-7 w-7 p-0 hover:bg-emerald-50 dark:hover:bg-emerald-950/30">
+  1372→                            <Download className="h-3.5 w-3.5 text-emerald-600" />
+  1373→                          </Button>
+  1374→                        </div>
+  1375→                        <p className="text-sm font-semibold">{report.name}</p>
+  1376→                        <div className="flex items-center justify-between mt-1">
+  1377→                          <span className="text-xs text-muted-foreground">{report.period}</span>
+  1378→                          <span className="text-[10px] text-muted-foreground/60">{report.generatedDate}</span>
+  1379→                        </div>
+  1380→                      </CardContent>
+  1381→                    </Card>
+  1382→                  )
+  1383→                })}
+  1384→              </div>
+  1385→            </motion.div>
+  1386→          </TabsContent>
+  1387→
+  1388→          {/* ═══ H. FILING CALENDAR ═══ */}
+  1389→          <TabsContent value="calendar" className="mt-0">
+  1390→            <motion.div {...fadeIn} className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+  1391→              {/* Mini Calendar */}
+  1392→              <Card className="border shadow-sm">
+  1393→                <CardHeader className="pb-3">
+  1394→                  <CardTitle className="text-sm font-semibold flex items-center gap-2">
+  1395→                    <Calendar className="h-4 w-4 text-emerald-600" /> Filing Calendar
+  1396→                  </CardTitle>
+  1397→                </CardHeader>
+  1398→                <CardContent>
+  1399→                  <div className="space-y-3">
+  1400→                    {calendarEvents.map((m, idx) => {
+  1401→                      const gstr1Days = Math.ceil((m.gstr1Due.getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+  1402→                      const gstr3bDays = Math.ceil((m.gstr3bDue.getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+  1403→                      const isCurrentMonth = idx === 1
+  1404→                      return (
+  1405→                        <div
+  1406→                          key={idx}
+  1407→                          className={`p-4 rounded-xl border transition-colors ${
+  1408→                            isCurrentMonth
+  1409→                              ? 'border-emerald-200 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-950/20'
+  1410→                              : 'border-slate-100 dark:border-slate-800'
+  1411→                          }`}
+  1412→                        >
+  1413→                          <div className="flex items-center justify-between mb-3">
+  1414→                            <p className="text-sm font-semibold">{m.label}</p>
+  1415→                            {isCurrentMonth && (
+  1416→                              <Badge className="bg-emerald-100 text-emerald-700 text-[9px] border-emerald-200">Current</Badge>
+  1417→                            )}
+  1418→                          </div>
+  1419→                          <div className="space-y-2">
+  1420→                            <div className="flex items-center justify-between">
+  1421→                              <div className="flex items-center gap-2 text-xs">
+  1422→                                <FileText className="h-3.5 w-3.5 text-blue-500" />
+  1423→                                <span>GSTR-1</span>
+  1424→                              </div>
+  1425→                              <div className="flex items-center gap-2">
+  1426→                                <span className="text-xs font-medium">
+  1427→                                  {m.gstr1Due.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
+  1428→                                </span>
+  1429→                                {gstr1Days > 0 && gstr1Days <= 30 && (
+  1430→                                  <Badge variant="outline" className={`text-[9px] h-5 ${gstr1Days <= 7 ? 'text-red-600 bg-red-50 border-red-200' : gstr1Days <= 15 ? 'text-amber-600 bg-amber-50 border-amber-200' : 'text-emerald-600 bg-emerald-50 border-emerald-200'}`}>
+  1431→                                    {gstr1Days}d
+  1432→                                  </Badge>
+  1433→                                )}
+  1434→                                {gstr1Days <= 0 && (
+  1435→                                  <Badge variant="outline" className="text-[9px] h-5 text-red-600 bg-red-50 border-red-200">Overdue</Badge>
+  1436→                                )}
+  1437→                              </div>
+  1438→                            </div>
+  1439→                            <div className="flex items-center justify-between">
+  1440→                              <div className="flex items-center gap-2 text-xs">
+  1441→                                <FileText className="h-3.5 w-3.5 text-violet-500" />
+  1442→                                <span>GSTR-3B</span>
+  1443→                              </div>
+  1444→                              <div className="flex items-center gap-2">
+  1445→                                <span className="text-xs font-medium">
+  1446→                                  {m.gstr3bDue.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
+  1447→                                </span>
+  1448→                                {gstr3bDays > 0 && gstr3bDays <= 30 && (
+  1449→                                  <Badge variant="outline" className={`text-[9px] h-5 ${gstr3bDays <= 7 ? 'text-red-600 bg-red-50 border-red-200' : gstr3bDays <= 15 ? 'text-amber-600 bg-amber-50 border-amber-200' : 'text-emerald-600 bg-emerald-50 border-emerald-200'}`}>
+  1450→                                    {gstr3bDays}d
+  1451→                                  </Badge>
+  1452→                                )}
+  1453→                                {gstr3bDays <= 0 && (
+  1454→                                  <Badge variant="outline" className="text-[9px] h-5 text-red-600 bg-red-50 border-red-200">Overdue</Badge>
+  1455→                                )}
+  1456→                              </div>
+  1457→                            </div>
+  1458→                          </div>
+  1459→                        </div>
+  1460→                      )
+  1461→                    })}
+  1462→                  </div>
+  1463→                </CardContent>
+  1464→              </Card>
+  1465→
+  1466→              {/* Upcoming & Past Filings */}
+  1467→              <Card className="border shadow-sm">
+  1468→                <CardHeader className="pb-3">
+  1469→                  <CardTitle className="text-sm font-semibold">Filing Status</CardTitle>
+  1470→                </CardHeader>
+  1471→                <CardContent>
+  1472→                  <div className="space-y-2">
+  1473→                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Upcoming</p>
+  1474→                    {returns?.filter(r => r.status !== 'filed').slice(0, 3).map(ret => (
+  1475→                      <div key={ret.id} className="flex items-center gap-3 p-2.5 rounded-lg border border-amber-100 dark:border-amber-900/30 bg-amber-50/30 dark:bg-amber-950/10">
+  1476→                        <Clock className="h-4 w-4 text-amber-500 shrink-0" />
+  1477→                        <div className="flex-1 min-w-0">
+  1478→                          <p className="text-xs font-medium">{ret.returnType} — {ret.period}</p>
+  1479→                          <p className="text-[10px] text-muted-foreground capitalize">{ret.status}</p>
+  1480→                        </div>
+  1481→                        <Badge variant="outline" className="text-[9px] text-amber-700 bg-amber-50 border-amber-200">Pending</Badge>
+  1482→                      </div>
+  1483→                    )) || (
+  1484→                      <p className="text-xs text-muted-foreground text-center py-2">No upcoming filings</p>
+  1485→                    )}
+  1486→
+  1487→                    <Separator className="my-3" />
+  1488→
+  1489→                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Filed</p>
+  1490→                    {returns?.filter(r => r.status === 'filed').slice(0, 3).map(ret => (
+  1491→                      <div key={ret.id} className="flex items-center gap-3 p-2.5 rounded-lg border border-emerald-100 dark:border-emerald-900/30 bg-emerald-50/30 dark:bg-emerald-950/10">
+  1492→                        <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
+  1493→                        <div className="flex-1 min-w-0">
+  1494→                          <p className="text-xs font-medium">{ret.returnType} — {ret.period}</p>
+  1495→                          <p className="text-[10px] text-muted-foreground">
+  1496→                            {ret.filedDate ? `Filed: ${new Date(ret.filedDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}` : 'Filed'}
+  1497→                          </p>
+  1498→                        </div>
+  1499→                        <Badge variant="outline" className="text-[9px] text-emerald-700 bg-emerald-50 border-emerald-200">Filed</Badge>
+  1500→                      </div>
+  1501→                    )) || (
+  1502→                      <p className="text-xs text-muted-foreground text-center py-2">No filed returns</p>
+  1503→                    )}
+  1504→                  </div>
+  1505→                </CardContent>
+  1506→              </Card>
+  1507→            </motion.div>
+  1508→          </TabsContent>
+  1509→
+  1510→          {/* ═══ I. COMPLIANCE SCORE CARD ═══ */}
+  1511→          <TabsContent value="score" className="mt-0">
+  1512→            <motion.div {...fadeIn} className="space-y-4">
+  1513→              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+  1514→                {/* Large Score Gauge */}
+  1515→                <Card className="border shadow-sm">
+  1516→                  <CardHeader className="pb-3">
+  1517→                    <CardTitle className="text-sm font-semibold flex items-center gap-2">
+  1518→                      <Shield className="h-4 w-4 text-emerald-600" /> Compliance Score
+  1519→                    </CardTitle>
+  1520→                  </CardHeader>
+  1521→                  <CardContent className="flex flex-col items-center">
+  1522→                    <ComplianceGauge score={complianceScore} size={160} />
+  1523→                    <p className={`mt-3 text-xl font-bold ${getScoreColor(complianceScore)}`}>
+  1524→                      {complianceScore}/100
+  1525→                    </p>
+  1526→                    <p className="text-sm text-muted-foreground">
+  1527→                      {complianceScore >= 80 ? 'Excellent Compliance' : complianceScore >= 60 ? 'Good Compliance' : 'Needs Improvement'}
+  1528→                    </p>
+  1529→
+  1530→                    <Separator className="my-4 w-full" />
+  1531→
+  1532→                    {/* Score Breakdown */}
+  1533→                    <div className="w-full space-y-3">
+  1534→                      {Object.entries(scoreBreakdown).map(([key, val]) => (
+  1535→                        <div key={key}>
+  1536→                          <div className="flex items-center justify-between text-xs mb-1">
+  1537→                            <span className="text-muted-foreground capitalize">{key.replace(/([A-Z])/g, ' $1').trim()}</span>
+  1538→                            <span className={`font-semibold ${getScoreColor(val)}`}>{val}/100</span>
+  1539→                          </div>
+  1540→                          <Progress value={val} className="h-2" />
+  1541→                        </div>
+  1542→                      ))}
+  1543→                    </div>
+  1544→                  </CardContent>
+  1545→                </Card>
+  1546→
+  1547→                {/* Trend & Tips */}
+  1548→                <div className="space-y-4">
+  1549→                  {/* Trend Chart (CSS-based) */}
+  1550→                  <Card className="border shadow-sm">
+  1551→                    <CardHeader className="pb-3">
+  1552→                      <CardTitle className="text-sm font-semibold flex items-center gap-2">
+  1553→                        <TrendingUp className="h-4 w-4 text-emerald-600" /> Score Trend (6 Months)
+  1554→                      </CardTitle>
+  1555→                    </CardHeader>
+  1556→                    <CardContent>
+  1557→                      <div className="flex items-end gap-2 h-32">
+  1558→                        {scoreTrend.map((score, idx) => {
+  1559→                          const months = ['Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb']
+  1560→                          const height = Math.max(10, score)
+  1561→                          return (
+  1562→                            <div key={idx} className="flex-1 flex flex-col items-center gap-1">
+  1563→                              <span className={`text-[10px] font-bold ${getScoreColor(score)}`}>{score}</span>
+  1564→                              <motion.div
+  1565→                                initial={{ height: 0 }}
+  1566→                                animate={{ height: `${height}%` }}
+  1567→                                transition={{ delay: idx * 0.1, duration: 0.5 }}
+  1568→                                className={`w-full rounded-t-md ${
+  1569→                                  score >= 80 ? 'bg-emerald-400' : score >= 60 ? 'bg-amber-400' : 'bg-red-400'
+  1570→                                }`}
+  1571→                                style={{ maxHeight: '100px' }}
+  1572→                              />
+  1573→                              <span className="text-[9px] text-muted-foreground">{months[idx]}</span>
+  1574→                            </div>
+  1575→                          )
+  1576→                        })}
+  1577→                      </div>
+  1578→                    </CardContent>
+  1579→                  </Card>
+  1580→
+  1581→                  {/* Tips to Improve */}
+  1582→                  <Card className="border shadow-sm">
+  1583→                    <CardHeader className="pb-3">
+  1584→                      <CardTitle className="text-sm font-semibold flex items-center gap-2">
+  1585→                        <Sparkles className="h-4 w-4 text-emerald-600" /> Tips to Improve
+  1586→                      </CardTitle>
+  1587→                    </CardHeader>
+  1588→                    <CardContent>
+  1589→                      <div className="space-y-2">
+  1590→                        {SCORE_TIPS.map((tip, idx) => (
+  1591→                          <div key={idx} className="flex items-start gap-2 p-2 rounded-lg bg-emerald-50/50 dark:bg-emerald-950/10">
+  1592→                            <div className="h-5 w-5 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center shrink-0 mt-0.5">
+  1593→                              <Zap className="h-3 w-3 text-emerald-600" />
+  1594→                            </div>
+  1595→                            <p className="text-xs text-foreground leading-relaxed">{tip}</p>
+  1596→                          </div>
+  1597→                        ))}
+  1598→                      </div>
+  1599→                    </CardContent>
+  1600→                  </Card>
+  1601→                </div>
+  1602→              </div>
+  1603→            </motion.div>
+  1604→          </TabsContent>
+  1605→        </Tabs>
+  1606→      </div>
+  1607→    </div>
+  1608→  )
+  1609→}
+  1610→
+  1611→// ═══════════════════════════════════════════════════════════════════════════════
+  1612→// MAIN EXPORT — Client Portal Page
+  1613→// ═══════════════════════════════════════════════════════════════════════════════
+  1614→
+  1615→export default function ClientPortalPage() {
+  1616→  const { selectedClientId, setSelectedClientId, setCurrentView } = useApp()
+  1617→  const [localClientId, setLocalClientId] = useState<string | null>(selectedClientId)
+  1618→
+  1619→  const handleSelectClient = (id: string) => {
+  1620→    setLocalClientId(id)
+  1621→    setSelectedClientId(id)
+  1622→  }
+  1623→
+  1624→  const handleBack = () => {
+  1625→    setLocalClientId(null)
+  1626→  }
+  1627→
+  1628→  if (!localClientId) {
+  1629→    return <ClientSelector onSelect={handleSelectClient} />
+  1630→  }
+  1631→
+  1632→  return <PortalView clientId={localClientId} onBack={handleBack} />
+  1633→}
+  1634→

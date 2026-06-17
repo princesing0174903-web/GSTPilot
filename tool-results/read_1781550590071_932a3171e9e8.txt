@@ -1,0 +1,1977 @@
+     1→'use client'
+     2→
+     3→import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react'
+     4→import { useApp } from '@/contexts/AppContext'
+     5→import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+     6→import { Button } from '@/components/ui/button'
+     7→import { Badge } from '@/components/ui/badge'
+     8→import { Progress } from '@/components/ui/progress'
+     9→import { ScrollArea } from '@/components/ui/scroll-area'
+    10→import { Input } from '@/components/ui/input'
+    11→import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+    12→import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog'
+    13→import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+    14→import { Switch } from '@/components/ui/switch'
+    15→import { Checkbox } from '@/components/ui/checkbox'
+    16→import { Separator } from '@/components/ui/separator'
+    17→import { Textarea } from '@/components/ui/textarea'
+    18→import { motion, AnimatePresence } from 'framer-motion'
+    19→import {
+    20→  FileScan,
+    21→  ShieldCheck,
+    22→  Bell,
+    23→  HandCoins,
+    24→  GitCompareArrows,
+    25→  HeartHandshake,
+    26→  BarChart3,
+    27→  Play,
+    28→  Loader2,
+    29→  CheckCircle2,
+    30→  AlertCircle,
+    31→  Clock,
+    32→  Activity,
+    33→  Zap,
+    34→  Bot,
+    35→  Sparkles,
+    36→  CalendarClock,
+    37→  List,
+    38→  Brain,
+    39→  MessageSquare,
+    40→  Gauge,
+    41→  Send,
+    42→  Trash2,
+    43→  Pause,
+    44→  RotateCcw,
+    45→  Search,
+    46→  Filter,
+    47→  ChevronDown,
+    48→  ChevronRight,
+    49→  TrendingUp,
+    50→  TrendingDown,
+    51→  Minus,
+    52→  Timer,
+    53→  ArrowRight,
+    54→  X,
+    55→} from 'lucide-react'
+    56→
+    57→// ─── Types ──────────────────────────────────────────────────────────────────────
+    58→
+    59→type AgentStatus = 'idle' | 'running' | 'completed' | 'error'
+    60→type AgentId = 'invoice' | 'compliance' | 'notice' | 'recovery' | 'collection' | 'client-success' | 'analytics'
+    61→
+    62→interface AgentLog {
+    63→  id: string
+    64→  timestamp: Date
+    65→  agentId: AgentId
+    66→  agentName: string
+    67→  level: 'info' | 'warn' | 'error'
+    68→  message: string
+    69→}
+    70→
+    71→interface AgentMemory {
+    72→  id: string
+    73→  agentId: AgentId
+    74→  insight: string
+    75→  confidence: number
+    76→  createdAt: Date
+    77→  source: string
+    78→}
+    79→
+    80→interface AgentSchedule {
+    81→  id: string
+    82→  agentId: AgentId
+    83→  frequency: 'one-time' | 'daily' | 'weekly' | 'monthly'
+    84→  timeOfDay: string
+    85→  dayOfWeek?: string
+    86→  dayOfMonth?: number
+    87→  nextRun: Date
+    88→  active: boolean
+    89→}
+    90→
+    91→interface ChatMessage {
+    92→  id: string
+    93→  role: 'user' | 'agent'
+    94→  content: string
+    95→  timestamp: Date
+    96→}
+    97→
+    98→interface AgentConversation {
+    99→  id: string
+   100→  agentId: AgentId
+   101→  title: string
+   102→  messages: ChatMessage[]
+   103→  createdAt: Date
+   104→}
+   105→
+   106→interface AgentRunStep {
+   107→  label: string
+   108→  status: 'pending' | 'running' | 'completed' | 'error'
+   109→}
+   110→
+   111→interface AgentConfig {
+   112→  id: AgentId
+   113→  name: string
+   114→  description: string
+   115→  icon: React.ElementType
+   116→  colorClass: string
+   117→  colorBg: string
+   118→  colorBorder: string
+   119→  colorText: string
+   120→  colorGlow: string
+   121→  gradientFrom: string
+   122→  gradientTo: string
+   123→  successRate: number
+   124→  tasksToday: number
+   125→  tasksWeek: number
+   126→  lastRun: Date | null
+   127→  nextScheduled: Date | null
+   128→  status: AgentStatus
+   129→  runCount: number
+   130→  avgDuration: number // seconds
+   131→  errorCount: number
+   132→  quickStats: { label: string; value: string }[]
+   133→  runSteps: string[]
+   134→}
+   135→
+   136→// ─── Agent Configs ──────────────────────────────────────────────────────────────
+   137→
+   138→function createAgentConfigs(): AgentConfig[] {
+   139→  const now = Date.now()
+   140→  return [
+   141→    {
+   142→      id: 'invoice',
+   143→      name: 'Invoice Agent',
+   144→      description: 'Extracts, validates, and processes invoices with OCR and GSTIN detection',
+   145→      icon: FileScan,
+   146→      colorClass: 'emerald',
+   147→      colorBg: 'bg-emerald-500/10',
+   148→      colorBorder: 'border-emerald-500/25',
+   149→      colorText: 'text-emerald-600',
+   150→      colorGlow: 'shadow-emerald-500/25',
+   151→      gradientFrom: 'from-emerald-500',
+   152→      gradientTo: 'to-emerald-600',
+   153→      successRate: 96,
+   154→      tasksToday: 14,
+   155→      tasksWeek: 67,
+   156→      lastRun: new Date(now - 1800000),
+   157→      nextScheduled: new Date(now + 3600000),
+   158→      status: 'idle',
+   159→      runCount: 342,
+   160→      avgDuration: 45,
+   161→      errorCount: 8,
+   162→      quickStats: [
+   163→        { label: 'Queue', value: '14' },
+   164→        { label: 'Processed Today', value: '23' },
+   165→        { label: 'Avg Accuracy', value: '98.2%' },
+   166→      ],
+   167→      runSteps: ['Scanning uploads', 'OCR extraction', 'GSTIN validation', 'Tax calculation', 'Classification', 'Complete'],
+   168→    },
+   169→    {
+   170→      id: 'compliance',
+   171→      name: 'Compliance Agent',
+   172→      description: 'Monitors filing deadlines, late fees, and compliance status across all clients',
+   173→      icon: ShieldCheck,
+   174→      colorClass: 'amber',
+   175→      colorBg: 'bg-amber-500/10',
+   176→      colorBorder: 'border-amber-500/25',
+   177→      colorText: 'text-amber-600',
+   178→      colorGlow: 'shadow-amber-500/25',
+   179→      gradientFrom: 'from-amber-500',
+   180→      gradientTo: 'to-amber-600',
+   181→      successRate: 99,
+   182→      tasksToday: 5,
+   183→      tasksWeek: 28,
+   184→      lastRun: new Date(now - 3600000),
+   185→      nextScheduled: new Date(now + 7200000),
+   186→      status: 'idle',
+   187→      runCount: 518,
+   188→      avgDuration: 30,
+   189→      errorCount: 3,
+   190→      quickStats: [
+   191→        { label: 'At Risk', value: '3' },
+   192→        { label: 'Due This Week', value: '8' },
+   193→        { label: 'Overdue', value: '2' },
+   194→      ],
+   195→      runSteps: ['Scanning client list', 'Checking due dates', 'Calculating late fees', 'Risk assessment', 'Generating alerts', 'Complete'],
+   196→    },
+   197→    {
+   198→      id: 'notice',
+   199→      name: 'Notice Agent',
+   200→      description: 'Tracks GST notices, generates responses, and manages follow-up timelines',
+   201→      icon: Bell,
+   202→      colorClass: 'red',
+   203→      colorBg: 'bg-red-500/10',
+   204→      colorBorder: 'border-red-500/25',
+   205→      colorText: 'text-red-600',
+   206→      colorGlow: 'shadow-red-500/25',
+   207→      gradientFrom: 'from-red-500',
+   208→      gradientTo: 'to-red-600',
+   209→      successRate: 92,
+   210→      tasksToday: 3,
+   211→      tasksWeek: 12,
+   212→      lastRun: new Date(now - 7200000),
+   213→      nextScheduled: new Date(now + 14400000),
+   214→      status: 'idle',
+   215→      runCount: 156,
+   216→      avgDuration: 60,
+   217→      errorCount: 12,
+   218→      quickStats: [
+   219→        { label: 'Open Notices', value: '7' },
+   220→        { label: 'Responses Due', value: '3' },
+   221→        { label: 'Resolved Today', value: '1' },
+   222→      ],
+   223→      runSteps: ['Fetching notices', 'Categorizing by type', 'Drafting responses', 'Timeline check', 'Follow-up queue', 'Complete'],
+   224→    },
+   225→    {
+   226→      id: 'recovery',
+   227→      name: 'Recovery Agent',
+   228→      description: 'Follows up on pending payments, sends reminders, and tracks client responses',
+   229→      icon: HandCoins,
+   230→      colorClass: 'sky',
+   231→      colorBg: 'bg-sky-500/10',
+   232→      colorBorder: 'border-sky-500/25',
+   233→      colorText: 'text-sky-600',
+   234→      colorGlow: 'shadow-sky-500/25',
+   235→      gradientFrom: 'from-sky-500',
+   236→      gradientTo: 'to-sky-600',
+   237→      successRate: 88,
+   238→      tasksToday: 8,
+   239→      tasksWeek: 34,
+   240→      lastRun: new Date(now - 5400000),
+   241→      nextScheduled: new Date(now + 10800000),
+   242→      status: 'idle',
+   243→      runCount: 278,
+   244→      avgDuration: 35,
+   245→      errorCount: 21,
+   246→      quickStats: [
+   247→        { label: 'Pending ₹', value: '4.2L' },
+   248→        { label: 'Reminders Sent', value: '8' },
+   249→        { label: 'Recovered', value: '₹1.8L' },
+   250→      ],
+   251→      runSteps: ['Scanning receivables', 'Prioritizing by amount', 'Sending reminders', 'Tracking responses', 'Escalation check', 'Complete'],
+   252→    },
+   253→    {
+   254→      id: 'collection',
+   255→      name: 'Collection Agent',
+   256→      description: 'Manages ITC collection, reconciliation mismatches, and ITC optimization',
+   257→      icon: GitCompareArrows,
+   258→      colorClass: 'violet',
+   259→      colorBg: 'bg-violet-500/10',
+   260→      colorBorder: 'border-violet-500/25',
+   261→      colorText: 'text-violet-600',
+   262→      colorGlow: 'shadow-violet-500/25',
+   263→      gradientFrom: 'from-violet-500',
+   264→      gradientTo: 'to-violet-600',
+   265→      successRate: 94,
+   266→      tasksToday: 6,
+   267→      tasksWeek: 22,
+   268→      lastRun: new Date(now - 9000000),
+   269→      nextScheduled: new Date(now + 18000000),
+   270→      status: 'idle',
+   271→      runCount: 198,
+   272→      avgDuration: 55,
+   273→      errorCount: 9,
+   274→      quickStats: [
+   275→        { label: 'ITC Pending', value: '₹6.7L' },
+   276→        { label: 'Mismatches', value: '12' },
+   277→        { label: 'Matched Today', value: '34' },
+   278→      ],
+   279→      runSteps: ['Loading GSTR-2B', 'Comparing books', 'Identifying mismatches', 'ITC calculation', 'Optimization scan', 'Complete'],
+   280→    },
+   281→    {
+   282→      id: 'client-success',
+   283→      name: 'Client Success Agent',
+   284→      description: 'Monitors client health, suggests improvements, and manages onboarding workflows',
+   285→      icon: HeartHandshake,
+   286→      colorClass: 'rose',
+   287→      colorBg: 'bg-rose-500/10',
+   288→      colorBorder: 'border-rose-500/25',
+   289→      colorText: 'text-rose-600',
+   290→      colorGlow: 'shadow-rose-500/25',
+   291→      gradientFrom: 'from-rose-500',
+   292→      gradientTo: 'to-rose-600',
+   293→      successRate: 97,
+   294→      tasksToday: 4,
+   295→      tasksWeek: 18,
+   296→      lastRun: new Date(now - 10800000),
+   297→      nextScheduled: new Date(now + 21600000),
+   298→      status: 'idle',
+   299→      runCount: 145,
+   300→      avgDuration: 40,
+   301→      errorCount: 4,
+   302→      quickStats: [
+   303→        { label: 'Health Score', value: '87' },
+   304→        { label: 'At Risk', value: '2' },
+   305→        { label: 'Onboarding', value: '3' },
+   306→      ],
+   307→      runSteps: ['Health check', 'Scoring clients', 'Risk detection', 'Onboarding progress', 'Suggestions', 'Complete'],
+   308→    },
+   309→    {
+   310→      id: 'analytics',
+   311→      name: 'Analytics Agent',
+   312→      description: 'Generates reports, identifies trends, and produces actionable business insights',
+   313→      icon: BarChart3,
+   314→      colorClass: 'teal',
+   315→      colorBg: 'bg-teal-500/10',
+   316→      colorBorder: 'border-teal-500/25',
+   317→      colorText: 'text-teal-600',
+   318→      colorGlow: 'shadow-teal-500/25',
+   319→      gradientFrom: 'from-teal-500',
+   320→      gradientTo: 'to-teal-600',
+   321→      successRate: 95,
+   322→      tasksToday: 2,
+   323→      tasksWeek: 9,
+   324→      lastRun: new Date(now - 14400000),
+   325→      nextScheduled: new Date(now + 28800000),
+   326→      status: 'idle',
+   327→      runCount: 87,
+   328→      avgDuration: 70,
+   329→      errorCount: 5,
+   330→      quickStats: [
+   331→        { label: 'Reports', value: '12' },
+   332→        { label: 'Trends', value: '5' },
+   333→        { label: 'Insights', value: '8' },
+   334→      ],
+   335→      runSteps: ['Data aggregation', 'Trend analysis', 'Revenue forecast', 'Compliance trends', 'Report generation', 'Complete'],
+   336→    },
+   337→  ]
+   338→}
+   339→
+   340→// ─── Initial Data ───────────────────────────────────────────────────────────────
+   341→
+   342→function createInitialLogs(): AgentLog[] {
+   343→  const now = Date.now()
+   344→  return [
+   345→    { id: 'l1', timestamp: new Date(now - 120000), agentId: 'invoice', agentName: 'Invoice Agent', level: 'info', message: 'Processed 23 invoices from Acme Industries' },
+   346→    { id: 'l2', timestamp: new Date(now - 300000), agentId: 'compliance', agentName: 'Compliance Agent', level: 'warn', message: 'GSTR-3B due in 2 days for 8 clients' },
+   347→    { id: 'l3', timestamp: new Date(now - 480000), agentId: 'notice', agentName: 'Notice Agent', level: 'error', message: 'Failed to fetch notices from GST portal — API timeout' },
+   348→    { id: 'l4', timestamp: new Date(now - 600000), agentId: 'recovery', agentName: 'Recovery Agent', level: 'info', message: 'Sent 8 payment reminders to overdue clients' },
+   349→    { id: 'l5', timestamp: new Date(now - 780000), agentId: 'collection', agentName: 'Collection Agent', level: 'warn', message: '12 ITC mismatches detected in June reconciliation' },
+   350→    { id: 'l6', timestamp: new Date(now - 960000), agentId: 'client-success', agentName: 'Client Success Agent', level: 'info', message: 'Client health scores updated for all 45 clients' },
+   351→    { id: 'l7', timestamp: new Date(now - 1200000), agentId: 'analytics', agentName: 'Analytics Agent', level: 'info', message: 'Monthly revenue report generated: ₹18.4L' },
+   352→    { id: 'l8', timestamp: new Date(now - 1500000), agentId: 'invoice', agentName: 'Invoice Agent', level: 'warn', message: 'GSTIN validation failed for 1 invoice — manual review needed' },
+   353→    { id: 'l9', timestamp: new Date(now - 1800000), agentId: 'compliance', agentName: 'Compliance Agent', level: 'error', message: 'Late fee risk detected for 2 clients — immediate action required' },
+   354→    { id: 'l10', timestamp: new Date(now - 2100000), agentId: 'recovery', agentName: 'Recovery Agent', level: 'info', message: '₹1.8L recovered from 3 clients via automated follow-ups' },
+   355→  ]
+   356→}
+   357→
+   358→function createInitialMemories(): AgentMemory[] {
+   359→  const now = Date.now()
+   360→  return [
+   361→    { id: 'm1', agentId: 'invoice', insight: 'Acme Industries always uploads invoices on the 5th of each month', confidence: 92, createdAt: new Date(now - 86400000 * 14), source: 'Pattern Analysis' },
+   362→    { id: 'm2', agentId: 'compliance', insight: 'TechCorp Solutions frequently files 2 days late — risk of penalties', confidence: 87, createdAt: new Date(now - 86400000 * 7), source: 'Filing History' },
+   363→    { id: 'm3', agentId: 'recovery', insight: 'Global Traders responds to reminders after 3 days on average', confidence: 78, createdAt: new Date(now - 86400000 * 10), source: 'Response Tracking' },
+   364→    { id: 'm4', agentId: 'invoice', insight: 'Invoices with HSN code 8471 have 15% higher error rate', confidence: 85, createdAt: new Date(now - 86400000 * 5), source: 'Error Pattern' },
+   365→    { id: 'm5', agentId: 'collection', insight: 'ITC mismatches peak in March and September', confidence: 91, createdAt: new Date(now - 86400000 * 20), source: 'Seasonal Analysis' },
+   366→    { id: 'm6', agentId: 'client-success', insight: 'Clients with health score below 70 are 3x more likely to churn', confidence: 94, createdAt: new Date(now - 86400000 * 3), source: 'Churn Prediction' },
+   367→    { id: 'm7', agentId: 'notice', insight: 'GST ASMT-10 notices typically arrive within 15 days of filing', confidence: 82, createdAt: new Date(now - 86400000 * 12), source: 'Notice Timeline' },
+   368→    { id: 'm8', agentId: 'analytics', insight: 'Revenue per client trending up 8% QoQ', confidence: 89, createdAt: new Date(now - 86400000 * 2), source: 'Revenue Analysis' },
+   369→    { id: 'm9', agentId: 'compliance', insight: 'Clients with >5 returns filed on time have 99.2% compliance score', confidence: 96, createdAt: new Date(now - 86400000 * 8), source: 'Compliance Scoring' },
+   370→    { id: 'm10', agentId: 'recovery', insight: 'Email reminders have 40% response rate; SMS reminders have 65%', confidence: 83, createdAt: new Date(now - 86400000 * 6), source: 'Channel Analysis' },
+   371→  ]
+   372→}
+   373→
+   374→function createInitialSchedules(): AgentSchedule[] {
+   375→  const now = Date.now()
+   376→  return [
+   377→    { id: 's1', agentId: 'invoice', frequency: 'daily', timeOfDay: '09:00', nextRun: new Date(now + 3600000), active: true },
+   378→    { id: 's2', agentId: 'compliance', frequency: 'daily', timeOfDay: '08:00', nextRun: new Date(now + 7200000), active: true },
+   379→    { id: 's3', agentId: 'analytics', frequency: 'weekly', timeOfDay: '10:00', dayOfWeek: 'Monday', nextRun: new Date(now + 86400000), active: true },
+   380→    { id: 's4', agentId: 'collection', frequency: 'monthly', timeOfDay: '09:00', dayOfMonth: 1, nextRun: new Date(now + 86400000 * 5), active: false },
+   381→  ]
+   382→}
+   383→
+   384→// ─── Helper Functions ───────────────────────────────────────────────────────────
+   385→
+   386→function formatTime(date: Date): string {
+   387→  return date.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+   388→}
+   389→
+   390→function formatDate(date: Date): string {
+   391→  return date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+   392→}
+   393→
+   394→function formatTimeAgo(date: Date): string {
+   395→  const diff = Date.now() - date.getTime()
+   396→  const mins = Math.floor(diff / 60000)
+   397→  if (mins < 1) return 'Just now'
+   398→  if (mins < 60) return `${mins}m ago`
+   399→  const hrs = Math.floor(mins / 60)
+   400→  if (hrs < 24) return `${hrs}h ago`
+   401→  return `${Math.floor(hrs / 24)}d ago`
+   402→}
+   403→
+   404→function formatDuration(seconds: number): string {
+   405→  if (seconds < 60) return `${seconds}s`
+   406→  const m = Math.floor(seconds / 60)
+   407→  const s = seconds % 60
+   408→  return `${m}m ${s}s`
+   409→}
+   410→
+   411→function statusBadge(status: AgentStatus) {
+   412→  switch (status) {
+   413→    case 'idle':
+   414→      return <Badge variant="secondary" className="gap-1 text-xs"><Clock className="h-3 w-3" />Idle</Badge>
+   415→    case 'running':
+   416→      return <Badge className="gap-1 text-xs bg-sky-500/10 text-sky-600 border-sky-500/20 hover:bg-sky-500/15"><Loader2 className="h-3 w-3 animate-spin" />Running</Badge>
+   417→    case 'completed':
+   418→      return <Badge className="gap-1 text-xs bg-emerald-500/10 text-emerald-600 border-emerald-500/20 hover:bg-emerald-500/15"><CheckCircle2 className="h-3 w-3" />Completed</Badge>
+   419→    case 'error':
+   420→      return <Badge variant="destructive" className="gap-1 text-xs"><AlertCircle className="h-3 w-3" />Error</Badge>
+   421→  }
+   422→}
+   423→
+   424→function logLevelColor(level: AgentLog['level']) {
+   425→  switch (level) {
+   426→    case 'info': return 'text-emerald-500'
+   427→    case 'warn': return 'text-amber-500'
+   428→    case 'error': return 'text-red-500'
+   429→  }
+   430→}
+   431→
+   432→function logLevelBg(level: AgentLog['level']) {
+   433→  switch (level) {
+   434→    case 'info': return 'bg-emerald-500'
+   435→    case 'warn': return 'bg-amber-500'
+   436→    case 'error': return 'bg-red-500'
+   437→  }
+   438→}
+   439→
+   440→// Simulated agent responses for conversations
+   441→function getAgentResponse(agentId: AgentId, question: string): string {
+   442→  const q = question.toLowerCase()
+   443→  switch (agentId) {
+   444→    case 'invoice':
+   445→      if (q.includes('how many') || q.includes('queue')) return 'There are 14 invoices in the queue waiting to be processed. 8 are from Acme Industries, 4 from TechCorp Solutions, and 2 from Global Traders. The average processing time is 45 seconds per invoice.'
+   446→      if (q.includes('error') || q.includes('fail')) return 'There are 2 invoices with validation errors — both have GSTIN format issues. One is missing the state code, and the other has an invalid check digit. I\'ve flagged them for manual review.'
+   447→      if (q.includes('accuracy') || q.includes('quality')) return 'Current OCR accuracy is 98.2%. The most common extraction error is in HSN code recognition (1.8% error rate). I recommend manual verification for invoices with HSN codes starting with 8471.'
+   448→      return 'I\'m your Invoice Agent. I can help with invoice processing, OCR accuracy, queue status, and extraction details. What would you like to know?'
+   449→    case 'compliance':
+   450→      if (q.includes('risk') || q.includes('overdue')) return '3 clients are currently at compliance risk: TechCorp Solutions (2 overdue filings), Sunrise Ltd (late fee pending), and Metro Industries (filing due tomorrow). I recommend prioritizing these immediately.'
+   451→      if (q.includes('due') || q.includes('deadline')) return '8 clients have GSTR-3B filings due this week. The most urgent are: Metro Industries (due tomorrow), Patel & Sons (due in 2 days), and KR Enterprises (due in 3 days).'
+   452→      if (q.includes('late fee')) return 'Current late fee exposure is ₹12,400 across 2 clients. TechCorp Solutions owes ₹8,200 and Sunrise Ltd owes ₹4,200. Both can be avoided if filed within the next 48 hours.'
+   453→      return 'I\'m your Compliance Agent. I track filing deadlines, late fees, and compliance status. I can identify at-risk clients and help prioritize filings. What would you like to check?'
+   454→    case 'notice':
+   455→      if (q.includes('open') || q.includes('pending')) return 'There are 7 open GST notices. 3 are ASMT-10 (scrutiny), 2 are ASN (show cause), and 2 are intimation notices. The most urgent is an ASN for Global Traders — response due in 5 days.'
+   456→      if (q.includes('response') || q.includes('draft')) return 'I\'ve drafted responses for 3 notices. The ASMT-10 response for TechCorp is ready for review. I need additional documents for the other 2 — purchase registers for June and July.'
+   457→      return 'I\'m your Notice Agent. I track GST notices, generate response drafts, and manage follow-up timelines. Ask me about open notices, response status, or deadlines.'
+   458→    case 'recovery':
+   459→      if (q.includes('pending') || q.includes('outstanding')) return 'Total outstanding receivables: ₹4.2L across 12 clients. Top 3: Global Traders (₹1.2L), Sunrise Ltd (₹89K), and Metro Industries (₹65K). All have been sent reminders in the last 48 hours.'
+   460→      if (q.includes('remind') || q.includes('follow')) return '8 automated reminders were sent today. 3 clients responded — Global Traders committed to payment by Friday, and 2 others requested payment extensions.'
+   461→      return 'I\'m your Recovery Agent. I track pending payments, send automated reminders, and escalate overdue accounts. Ask about outstanding amounts, reminder history, or recovery status.'
+   462→    case 'collection':
+   463→      if (q.includes('itc') || q.includes('mismatch')) return 'ITC pending: ₹6.7L. There are 12 mismatches in the June reconciliation — 7 are amount differences, 3 are missing in GSTR-2B, and 2 are GSTIN mismatches. I can auto-resolve 5 of these.'
+   464→      if (q.includes('reconcil')) return 'Latest reconciliation shows 94% match rate. The remaining 6% has ₹1.2L in ITC at risk. I recommend resolving the GSTIN mismatches first as they affect the largest amounts.'
+   465→      return 'I\'m your Collection Agent. I manage ITC collection, track reconciliation mismatches, and optimize ITC claims. Ask about ITC status, mismatches, or optimization opportunities.'
+   466→    case 'client-success':
+   467→      if (q.includes('health') || q.includes('score')) return 'Average client health score: 87/100. 2 clients are below the risk threshold (70): Sunrise Ltd (62) and Metro Industries (68). Both show declining engagement and delayed document submissions.'
+   468→      if (q.includes('onboard')) return '3 clients are currently in onboarding: Nova Corp (Day 5 — documents collected), Ace Trading (Day 2 — awaiting GSTIN verification), and Prime Solutions (Day 1 — just started).'
+   469→      return 'I\'m your Client Success Agent. I monitor client health scores, manage onboarding workflows, and suggest improvements. Ask about health scores, at-risk clients, or onboarding status.'
+   470→    case 'analytics':
+   471→      if (q.includes('revenue') || q.includes('trend')) return 'Revenue is trending up 8% QoQ. This quarter: ₹18.4L (vs ₹16.9L last quarter). Top growth drivers: 3 new enterprise clients and increased filing volume from existing clients.'
+   472→      if (q.includes('report')) return '12 reports generated this month: 4 revenue analyses, 3 compliance summaries, 3 client health reports, and 2 workflow efficiency reports. The latest revenue forecast is available for review.'
+   473→      return 'I\'m your Analytics Agent. I generate reports, identify trends, and produce business insights. Ask about revenue trends, compliance reports, or performance metrics.'
+   474→  }
+   475→}
+   476→
+   477→// ─── Agent Card Component ───────────────────────────────────────────────────────
+   478→
+   479→function AgentCard({
+   480→  agent,
+   481→  onRun,
+   482→  selected,
+   483→  onToggleSelect,
+   484→  runProgress,
+   485→  runSteps,
+   486→}: {
+   487→  agent: AgentConfig
+   488→  onRun: (id: AgentId) => void
+   489→  selected: boolean
+   490→  onToggleSelect: (id: AgentId) => void
+   491→  runProgress: number
+   492→  runSteps: AgentRunStep[]
+   493→}) {
+   494→  const Icon = agent.icon
+   495→  const isRunning = agent.status === 'running'
+   496→  const currentStep = runSteps.find(s => s.status === 'running')
+   497→
+   498→  return (
+   499→    <motion.div
+   500→      layout
+   501→      initial={{ opacity: 0, y: 20 }}
+   502→      animate={{ opacity: 1, y: 0 }}
+   503→      exit={{ opacity: 0, y: -20 }}
+   504→      whileHover={{ y: -2 }}
+   505→      transition={{ duration: 0.3 }}
+   506→    >
+   507→      <Card className={`relative overflow-hidden border ${agent.colorBorder} ${agent.colorBg} backdrop-blur-sm transition-all duration-300 hover:shadow-lg ${isRunning ? `shadow-lg ${agent.colorGlow}` : ''}`}>
+   508→        {/* Gradient top bar */}
+   509→        <div className={`absolute top-0 left-0 right-0 h-0.5 ${
+   510→          isRunning
+   511→            ? `bg-gradient-to-r from-transparent ${agent.gradientFrom} ${agent.gradientTo} to-transparent animate-pulse`
+   512→            : `bg-gradient-to-r from-transparent via-border to-transparent`
+   513→        }`} />
+   514→
+   515→        <CardHeader className="pb-3">
+   516→          <div className="flex items-start justify-between">
+   517→            <div className="flex items-center gap-3">
+   518→              <div className={`relative p-2.5 rounded-xl ${agent.colorBg} border ${agent.colorBorder}`}>
+   519→                {isRunning && (
+   520→                  <div className={`absolute inset-0 rounded-xl ${agent.colorBg} animate-ping opacity-30`} />
+   521→                )}
+   522→                <Icon className={`h-5 w-5 ${agent.colorText}`} />
+   523→              </div>
+   524→              <div>
+   525→                <CardTitle className="text-base font-semibold flex items-center gap-2">
+   526→                  {agent.name}
+   527→                  <Checkbox
+   528→                    checked={selected}
+   529→                    onCheckedChange={() => onToggleSelect(agent.id)}
+   530→                    className="ml-1"
+   531→                  />
+   532→                </CardTitle>
+   533→                <CardDescription className="text-xs mt-0.5 line-clamp-1">{agent.description}</CardDescription>
+   534→              </div>
+   535→            </div>
+   536→            {statusBadge(agent.status)}
+   537→          </div>
+   538→        </CardHeader>
+   539→
+   540→        <CardContent className="space-y-3">
+   541→          {/* Success rate + mini progress bar */}
+   542→          <div className="space-y-1">
+   543→            <div className="flex items-center justify-between text-xs">
+   544→              <span className="text-muted-foreground">Success Rate</span>
+   545→              <span className={`font-semibold ${agent.colorText}`}>{agent.successRate}%</span>
+   546→            </div>
+   547→            <Progress value={agent.successRate} className="h-1.5" />
+   548→          </div>
+   549→
+   550→          {/* Quick stats */}
+   551→          <div className="grid grid-cols-3 gap-2">
+   552→            {agent.quickStats.map(stat => (
+   553→              <div key={stat.label} className={`rounded-lg ${agent.colorBg} border ${agent.colorBorder} p-2 text-center`}>
+   554→                <p className={`text-sm font-bold ${agent.colorText}`}>{stat.value}</p>
+   555→                <p className="text-[10px] text-muted-foreground">{stat.label}</p>
+   556→              </div>
+   557→            ))}
+   558→          </div>
+   559→
+   560→          {/* Info row */}
+   561→          <div className="flex items-center justify-between text-xs text-muted-foreground">
+   562→            <div className="flex items-center gap-1.5">
+   563→              <Activity className="h-3.5 w-3.5" />
+   564→              <span>{agent.runCount} runs</span>
+   565→            </div>
+   566→            <div className="flex items-center gap-1.5">
+   567→              <Clock className="h-3.5 w-3.5" />
+   568→              <span>{agent.lastRun ? formatTimeAgo(agent.lastRun) : 'Never'}</span>
+   569→            </div>
+   570→            <div className="flex items-center gap-1.5">
+   571→              <Timer className="h-3.5 w-3.5" />
+   572→              <span>~{formatDuration(agent.avgDuration)}</span>
+   573→            </div>
+   574→          </div>
+   575→
+   576→          {/* Next scheduled */}
+   577→          {agent.nextScheduled && (
+   578→            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+   579→              <CalendarClock className="h-3.5 w-3.5" />
+   580→              <span>Next: {formatTimeAgo(agent.nextScheduled)}</span>
+   581→            </div>
+   582→          )}
+   583→
+   584→          {/* Running progress with step counter */}
+   585→          {isRunning && (
+   586→            <motion.div
+   587→              initial={{ opacity: 0, height: 0 }}
+   588→              animate={{ opacity: 1, height: 'auto' }}
+   589→              exit={{ opacity: 0, height: 0 }}
+   590→              className="space-y-2"
+   591→            >
+   592→              <Progress value={runProgress} className="h-2" />
+   593→              <div className="flex items-center justify-between">
+   594→                <p className="text-[11px] text-muted-foreground">
+   595→                  {currentStep ? currentStep.label : 'Processing...'}
+   596→                </p>
+   597→                <p className="text-[11px] font-mono text-muted-foreground">
+   598→                  {runSteps.filter(s => s.status === 'completed').length}/{runSteps.length}
+   599→                </p>
+   600→              </div>
+   601→            </motion.div>
+   602→          )}
+   603→
+   604→          {/* Tasks counter */}
+   605→          <div className="flex items-center justify-between text-xs">
+   606→            <span className="text-muted-foreground">
+   607→              Today: <span className="font-medium text-foreground">{agent.tasksToday}</span>
+   608→            </span>
+   609→            <span className="text-muted-foreground">
+   610→              This week: <span className="font-medium text-foreground">{agent.tasksWeek}</span>
+   611→            </span>
+   612→          </div>
+   613→
+   614→          {/* Action buttons */}
+   615→          <div className="flex items-center gap-2">
+   616→            <Button
+   617→              size="sm"
+   618→              onClick={() => onRun(agent.id)}
+   619→              disabled={isRunning}
+   620→              className={`gap-1.5 flex-1 ${isRunning ? '' : `bg-gradient-to-r ${agent.gradientFrom} ${agent.gradientTo} text-white hover:opacity-90`}`}
+   621→            >
+   622→              {isRunning ? (
+   623→                <><Loader2 className="h-3.5 w-3.5 animate-spin" />Running...</>
+   624→              ) : (
+   625→                <><Play className="h-3.5 w-3.5" />Run Now</>
+   626→              )}
+   627→            </Button>
+   628→          </div>
+   629→        </CardContent>
+   630→      </Card>
+   631→    </motion.div>
+   632→  )
+   633→}
+   634→
+   635→// ─── Schedule Dialog Component ──────────────────────────────────────────────────
+   636→
+   637→function ScheduleDialog({
+   638→  open,
+   639→  onOpenChange,
+   640→  agentId,
+   641→  agents,
+   642→  onSave,
+   643→}: {
+   644→  open: boolean
+   645→  onOpenChange: (open: boolean) => void
+   646→  agentId: AgentId | null
+   647→  agents: AgentConfig[]
+   648→  onSave: (schedule: Omit<AgentSchedule, 'id' | 'nextRun'>) => void
+   649→}) {
+   650→  const [frequency, setFrequency] = useState<'one-time' | 'daily' | 'weekly' | 'monthly'>('daily')
+   651→  const [timeOfDay, setTimeOfDay] = useState('09:00')
+   652→  const [dayOfWeek, setDayOfWeek] = useState('Monday')
+   653→  const [dayOfMonth, setDayOfMonth] = useState(1)
+   654→
+   655→  const agent = agents.find(a => a.id === agentId)
+   656→
+   657→  const handleSave = () => {
+   658→    if (!agentId) return
+   659→    onSave({
+   660→      agentId,
+   661→      frequency,
+   662→      timeOfDay,
+   663→      ...(frequency === 'weekly' ? { dayOfWeek } : {}),
+   664→      ...(frequency === 'monthly' ? { dayOfMonth } : {}),
+   665→      active: true,
+   666→    })
+   667→    onOpenChange(false)
+   668→  }
+   669→
+   670→  return (
+   671→    <Dialog open={open} onOpenChange={onOpenChange}>
+   672→      <DialogContent className="sm:max-w-md">
+   673→        <DialogHeader>
+   674→          <DialogTitle className="flex items-center gap-2">
+   675→            <CalendarClock className="h-5 w-5 text-violet-500" />
+   676→            Schedule {agent?.name || 'Agent'}
+   677→          </DialogTitle>
+   678→          <DialogDescription>
+   679→            Set up automated scheduling for this agent
+   680→          </DialogDescription>
+   681→        </DialogHeader>
+   682→
+   683→        <div className="space-y-4 py-2">
+   684→          <div className="space-y-2">
+   685→            <label className="text-sm font-medium">Frequency</label>
+   686→            <Select value={frequency} onValueChange={(v) => setFrequency(v as typeof frequency)}>
+   687→              <SelectTrigger>
+   688→                <SelectValue />
+   689→              </SelectTrigger>
+   690→              <SelectContent>
+   691→                <SelectItem value="one-time">One-time</SelectItem>
+   692→                <SelectItem value="daily">Daily</SelectItem>
+   693→                <SelectItem value="weekly">Weekly</SelectItem>
+   694→                <SelectItem value="monthly">Monthly</SelectItem>
+   695→              </SelectContent>
+   696→            </Select>
+   697→          </div>
+   698→
+   699→          <div className="space-y-2">
+   700→            <label className="text-sm font-medium">Time of Day</label>
+   701→            <Input type="time" value={timeOfDay} onChange={(e) => setTimeOfDay(e.target.value)} />
+   702→          </div>
+   703→
+   704→          {frequency === 'weekly' && (
+   705→            <div className="space-y-2">
+   706→              <label className="text-sm font-medium">Day of Week</label>
+   707→              <Select value={dayOfWeek} onValueChange={setDayOfWeek}>
+   708→                <SelectTrigger>
+   709→                  <SelectValue />
+   710→                </SelectTrigger>
+   711→                <SelectContent>
+   712→                  {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map(d => (
+   713→                    <SelectItem key={d} value={d}>{d}</SelectItem>
+   714→                  ))}
+   715→                </SelectContent>
+   716→              </Select>
+   717→            </div>
+   718→          )}
+   719→
+   720→          {frequency === 'monthly' && (
+   721→            <div className="space-y-2">
+   722→              <label className="text-sm font-medium">Day of Month</label>
+   723→              <Select value={String(dayOfMonth)} onValueChange={(v) => setDayOfMonth(Number(v))}>
+   724→                <SelectTrigger>
+   725→                  <SelectValue />
+   726→                </SelectTrigger>
+   727→                <SelectContent>
+   728→                  {Array.from({ length: 28 }, (_, i) => i + 1).map(d => (
+   729→                    <SelectItem key={d} value={String(d)}>{d}</SelectItem>
+   730→                  ))}
+   731→                </SelectContent>
+   732→              </Select>
+   733→            </div>
+   734→          )}
+   735→        </div>
+   736→
+   737→        <DialogFooter>
+   738→          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+   739→          <Button onClick={handleSave} className="bg-gradient-to-r from-violet-500 to-purple-600 text-white hover:opacity-90">
+   740→            Schedule
+   741→          </Button>
+   742→        </DialogFooter>
+   743→      </DialogContent>
+   744→    </Dialog>
+   745→  )
+   746→}
+   747→
+   748→// ─── Agent Logs Panel ───────────────────────────────────────────────────────────
+   749→
+   750→function AgentLogsPanel({
+   751→  logs,
+   752→  onClear,
+   753→}: {
+   754→  logs: AgentLog[]
+   755→  onClear: () => void
+   756→}) {
+   757→  const [filterAgent, setFilterAgent] = useState<AgentId | 'all'>('all')
+   758→  const [filterLevel, setFilterLevel] = useState<'all' | 'info' | 'warn' | 'error'>('all')
+   759→  const [searchQuery, setSearchQuery] = useState('')
+   760→  const scrollRef = useRef<HTMLDivElement>(null)
+   761→
+   762→  const filteredLogs = useMemo(() => {
+   763→    return logs.filter(log => {
+   764→      if (filterAgent !== 'all' && log.agentId !== filterAgent) return false
+   765→      if (filterLevel !== 'all' && log.level !== filterLevel) return false
+   766→      if (searchQuery && !log.message.toLowerCase().includes(searchQuery.toLowerCase())) return false
+   767→      return true
+   768→    })
+   769→  }, [logs, filterAgent, filterLevel, searchQuery])
+   770→
+   771→  useEffect(() => {
+   772→    if (scrollRef.current) {
+   773→      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+   774→    }
+   775→  }, [filteredLogs.length])
+   776→
+   777→  const agentOptions: { value: AgentId | 'all'; label: string }[] = [
+   778→    { value: 'all', label: 'All Agents' },
+   779→    { value: 'invoice', label: 'Invoice' },
+   780→    { value: 'compliance', label: 'Compliance' },
+   781→    { value: 'notice', label: 'Notice' },
+   782→    { value: 'recovery', label: 'Recovery' },
+   783→    { value: 'collection', label: 'Collection' },
+   784→    { value: 'client-success', label: 'Client Success' },
+   785→    { value: 'analytics', label: 'Analytics' },
+   786→  ]
+   787→
+   788→  return (
+   789→    <div className="space-y-4">
+   790→      {/* Filters */}
+   791→      <div className="flex flex-col sm:flex-row gap-2">
+   792→        <div className="relative flex-1">
+   793→          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+   794→          <Input
+   795→            placeholder="Search logs..."
+   796→            value={searchQuery}
+   797→            onChange={(e) => setSearchQuery(e.target.value)}
+   798→            className="pl-9"
+   799→          />
+   800→        </div>
+   801→        <Select value={filterAgent} onValueChange={(v) => setFilterAgent(v as AgentId | 'all')}>
+   802→          <SelectTrigger className="w-[160px]">
+   803→            <Filter className="h-4 w-4 mr-2" />
+   804→            <SelectValue />
+   805→          </SelectTrigger>
+   806→          <SelectContent>
+   807→            {agentOptions.map(opt => (
+   808→              <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+   809→            ))}
+   810→          </SelectContent>
+   811→        </Select>
+   812→        <Select value={filterLevel} onValueChange={(v) => setFilterLevel(v as typeof filterLevel)}>
+   813→          <SelectTrigger className="w-[130px]">
+   814→            <SelectValue />
+   815→          </SelectTrigger>
+   816→          <SelectContent>
+   817→            <SelectItem value="all">All Levels</SelectItem>
+   818→            <SelectItem value="info">Info</SelectItem>
+   819→            <SelectItem value="warn">Warning</SelectItem>
+   820→            <SelectItem value="error">Error</SelectItem>
+   821→          </SelectContent>
+   822→        </Select>
+   823→        <Button variant="outline" size="icon" onClick={onClear} title="Clear logs">
+   824→          <Trash2 className="h-4 w-4" />
+   825→        </Button>
+   826→      </div>
+   827→
+   828→      {/* Log entries */}
+   829→      <Card className="border-border/50">
+   830→        <div ref={scrollRef} className="max-h-[500px] overflow-y-auto p-1" style={{ scrollbarGutter: 'stable' }}>
+   831→          {filteredLogs.length === 0 ? (
+   832→            <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+   833→              <List className="h-8 w-8 mb-2 opacity-50" />
+   834→              <p className="text-sm">No logs to display</p>
+   835→            </div>
+   836→          ) : (
+   837→            <div className="space-y-0.5">
+   838→              {filteredLogs.map((log) => (
+   839→                <motion.div
+   840→                  key={log.id}
+   841→                  initial={{ opacity: 0, x: -10 }}
+   842→                  animate={{ opacity: 1, x: 0 }}
+   843→                  className="flex items-start gap-2 px-3 py-2 rounded-md hover:bg-muted/50 transition-colors text-xs font-mono"
+   844→                >
+   845→                  <span className={`mt-1 shrink-0 h-2 w-2 rounded-full ${logLevelBg(log.level)}`} />
+   846→                  <span className="shrink-0 text-muted-foreground w-20">{formatTime(log.timestamp)}</span>
+   847→                  <span className={`shrink-0 font-medium w-28 ${logLevelColor(log.level)}`}>{log.agentName}</span>
+   848→                  <span className="text-foreground flex-1">{log.message}</span>
+   849→                </motion.div>
+   850→              ))}
+   851→            </div>
+   852→          )}
+   853→        </div>
+   854→      </Card>
+   855→    </div>
+   856→  )
+   857→}
+   858→
+   859→// ─── Agent Memory Panel ─────────────────────────────────────────────────────────
+   860→
+   861→function AgentMemoryPanel({
+   862→  memories,
+   863→  agents,
+   864→  onForget,
+   865→}: {
+   866→  memories: AgentMemory[]
+   867→  agents: AgentConfig[]
+   868→  onForget: (id: string) => void
+   869→}) {
+   870→  const [expandedAgent, setExpandedAgent] = useState<AgentId | 'all'>('all')
+   871→
+   872→  const groupedMemories = useMemo(() => {
+   873→    const groups: Record<string, AgentMemory[]> = {}
+   874→    memories.forEach(m => {
+   875→      if (expandedAgent !== 'all' && m.agentId !== expandedAgent) return
+   876→      if (!groups[m.agentId]) groups[m.agentId] = []
+   877→      groups[m.agentId].push(m)
+   878→    })
+   879→    return groups
+   880→  }, [memories, expandedAgent])
+   881→
+   882→  const getAgentConfig = (id: AgentId) => agents.find(a => a.id === id)!
+   883→
+   884→  return (
+   885→    <div className="space-y-4">
+   886→      {/* Filter */}
+   887→      <div className="flex items-center gap-2">
+   888→        <Select value={expandedAgent} onValueChange={(v) => setExpandedAgent(v as AgentId | 'all')}>
+   889→          <SelectTrigger className="w-[180px]">
+   890→            <Brain className="h-4 w-4 mr-2" />
+   891→            <SelectValue />
+   892→          </SelectTrigger>
+   893→          <SelectContent>
+   894→            <SelectItem value="all">All Agents</SelectItem>
+   895→            {agents.map(a => (
+   896→              <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
+   897→            ))}
+   898→          </SelectContent>
+   899→        </Select>
+   900→        <span className="text-sm text-muted-foreground">{memories.length} insights</span>
+   901→      </div>
+   902→
+   903→      {/* Memories */}
+   904→      <div className="space-y-3">
+   905→        {Object.entries(groupedMemories).map(([agentId, agentMemories]) => {
+   906→          const config = getAgentConfig(agentId as AgentId)
+   907→          const Icon = config.icon
+   908→          return (
+   909→            <div key={agentId} className="space-y-2">
+   910→              <div className="flex items-center gap-2 px-1">
+   911→                <Icon className={`h-4 w-4 ${config.colorText}`} />
+   912→                <span className="text-sm font-semibold">{config.name}</span>
+   913→                <Badge variant="secondary" className="text-[10px]">{agentMemories.length}</Badge>
+   914→              </div>
+   915→              <div className="space-y-2 pl-2">
+   916→                {agentMemories.map(memory => (
+   917→                  <motion.div
+   918→                    key={memory.id}
+   919→                    initial={{ opacity: 0, y: 10 }}
+   920→                    animate={{ opacity: 1, y: 0 }}
+   921→                    className="group"
+   922→                  >
+   923→                    <Card className={`border ${config.colorBorder} ${config.colorBg}`}>
+   924→                      <CardContent className="p-3">
+   925→                        <div className="flex items-start justify-between gap-2">
+   926→                          <div className="flex-1 space-y-1">
+   927→                            <p className="text-sm text-foreground">{memory.insight}</p>
+   928→                            <div className="flex items-center gap-3 text-xs text-muted-foreground">
+   929→                              <span>Confidence: <span className={`font-medium ${config.colorText}`}>{memory.confidence}%</span></span>
+   930→                              <span>Source: {memory.source}</span>
+   931→                              <span>{formatDate(memory.createdAt)}</span>
+   932→                            </div>
+   933→                            {/* Confidence mini-bar */}
+   934→                            <div className="flex items-center gap-2">
+   935→                              <Progress value={memory.confidence} className="h-1 flex-1 max-w-[120px]" />
+   936→                            </div>
+   937→                          </div>
+   938→                          <Button
+   939→                            variant="ghost"
+   940→                            size="sm"
+   941→                            onClick={() => onForget(memory.id)}
+   942→                            className="opacity-0 group-hover:opacity-100 transition-opacity h-7 text-muted-foreground hover:text-red-500"
+   943→                          >
+   944→                            <X className="h-3.5 w-3.5" />
+   945→                          </Button>
+   946→                        </div>
+   947→                      </CardContent>
+   948→                    </Card>
+   949→                  </motion.div>
+   950→                ))}
+   951→              </div>
+   952→            </div>
+   953→          )
+   954→        })}
+   955→        {memories.length === 0 && (
+   956→          <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+   957→            <Brain className="h-8 w-8 mb-2 opacity-50" />
+   958→            <p className="text-sm">No memories yet</p>
+   959→            <p className="text-xs">Agents will learn patterns as they run</p>
+   960→          </div>
+   961→        )}
+   962→      </div>
+   963→    </div>
+   964→  )
+   965→}
+   966→
+   967→// ─── Agent Conversations Panel ──────────────────────────────────────────────────
+   968→
+   969→function AgentConversationsPanel({
+   970→  agents,
+   971→}: {
+   972→  agents: AgentConfig[]
+   973→}) {
+   974→  const [selectedAgent, setSelectedAgent] = useState<AgentId | null>(null)
+   975→  const [conversations, setConversations] = useState<AgentConversation[]>([])
+   976→  const [activeConversation, setActiveConversation] = useState<string | null>(null)
+   977→  const [inputMessage, setInputMessage] = useState('')
+   978→  const [isTyping, setIsTyping] = useState(false)
+   979→  const messagesEndRef = useRef<HTMLDivElement>(null)
+   980→
+   981→  const activeConv = conversations.find(c => c.id === activeConversation)
+   982→  const activeAgentConfig = agents.find(a => a.id === selectedAgent)
+   983→
+   984→  useEffect(() => {
+   985→    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+   986→  }, [activeConv?.messages.length])
+   987→
+   988→  const handleNewConversation = (agentId: AgentId) => {
+   989→    setSelectedAgent(agentId)
+   990→    const convId = `conv-${Date.now()}`
+   991→    const agentConfig = agents.find(a => a.id === agentId)!
+   992→    const newConv: AgentConversation = {
+   993→      id: convId,
+   994→      agentId,
+   995→      title: `Chat with ${agentConfig.name}`,
+   996→      messages: [
+   997→        {
+   998→          id: `msg-${Date.now()}`,
+   999→          role: 'agent',
+  1000→          content: `Hello! I'm your ${agentConfig.name}. I can help you with ${agentConfig.description.toLowerCase()}. What would you like to know?`,
+  1001→          timestamp: new Date(),
+  1002→        },
+  1003→      ],
+  1004→      createdAt: new Date(),
+  1005→    }
+  1006→    setConversations(prev => [newConv, ...prev])
+  1007→    setActiveConversation(convId)
+  1008→  }
+  1009→
+  1010→  const handleSendMessage = () => {
+  1011→    if (!inputMessage.trim() || !activeConversation) return
+  1012→
+  1013→    const userMsg: ChatMessage = {
+  1014→      id: `msg-${Date.now()}`,
+  1015→      role: 'user',
+  1016→      content: inputMessage.trim(),
+  1017→      timestamp: new Date(),
+  1018→    }
+  1019→
+  1020→    setConversations(prev =>
+  1021→      prev.map(c =>
+  1022→        c.id === activeConversation
+  1023→          ? { ...c, messages: [...c.messages, userMsg] }
+  1024→          : c
+  1025→      )
+  1026→    )
+  1027→    setInputMessage('')
+  1028→    setIsTyping(true)
+  1029→
+  1030→    // Simulate agent response
+  1031→    setTimeout(() => {
+  1032→      const conv = conversations.find(c => c.id === activeConversation)
+  1033→      if (!conv) { setIsTyping(false); return }
+  1034→      const response = getAgentResponse(conv.agentId, userMsg.content)
+  1035→      const agentMsg: ChatMessage = {
+  1036→        id: `msg-${Date.now()}`,
+  1037→        role: 'agent',
+  1038→        content: response,
+  1039→        timestamp: new Date(),
+  1040→      }
+  1041→      setConversations(prev =>
+  1042→        prev.map(c =>
+  1043→          c.id === activeConversation
+  1044→            ? { ...c, messages: [...c.messages, agentMsg] }
+  1045→            : c
+  1046→        )
+  1047→      )
+  1048→      setIsTyping(false)
+  1049→    }, 1200 + Math.random() * 800)
+  1050→  }
+  1051→
+  1052→  const agentConvs = conversations.filter(c => !selectedAgent || c.agentId === selectedAgent)
+  1053→
+  1054→  return (
+  1055→    <div className="space-y-4">
+  1056→      {/* New Conversation */}
+  1057→      <div className="flex items-center gap-2">
+  1058→        <Select value={selectedAgent || ''} onValueChange={(v) => {
+  1059→          const aid = v as AgentId
+  1060→          setSelectedAgent(aid)
+  1061→          handleNewConversation(aid)
+  1062→        }}>
+  1063→          <SelectTrigger className="w-[220px]">
+  1064→            <MessageSquare className="h-4 w-4 mr-2" />
+  1065→            <SelectValue placeholder="New Conversation..." />
+  1066→          </SelectTrigger>
+  1067→          <SelectContent>
+  1068→            {agents.map(a => (
+  1069→              <SelectItem key={a.id} value={a.id}>
+  1070→                <div className="flex items-center gap-2">
+  1071→                  <a.icon className={`h-4 w-4 ${a.colorText}`} />
+  1072→                  {a.name}
+  1073→                </div>
+  1074→              </SelectItem>
+  1075→            ))}
+  1076→          </SelectContent>
+  1077→        </Select>
+  1078→        {activeConversation && (
+  1079→          <Button variant="outline" size="sm" onClick={() => { setActiveConversation(null); setSelectedAgent(null) }}>
+  1080→            <X className="h-4 w-4 mr-1" />Close
+  1081→          </Button>
+  1082→        )}
+  1083→      </div>
+  1084→
+  1085→      <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
+  1086→        {/* Conversations list */}
+  1087→        <div className="lg:col-span-1 space-y-1">
+  1088→          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">History</p>
+  1089→          {agentConvs.length === 0 ? (
+  1090→            <p className="text-xs text-muted-foreground italic py-4 text-center">No conversations yet</p>
+  1091→          ) : (
+  1092→            agentConvs.map(conv => {
+  1093→              const config = agents.find(a => a.id === conv.agentId)!
+  1094→              const Icon = config.icon
+  1095→              return (
+  1096→                <button
+  1097→                  key={conv.id}
+  1098→                  onClick={() => {
+  1099→                    setActiveConversation(conv.id)
+  1100→                    setSelectedAgent(conv.agentId)
+  1101→                  }}
+  1102→                  className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${
+  1103→                    activeConversation === conv.id
+  1104→                      ? `${config.colorBg} border ${config.colorBorder}`
+  1105→                      : 'hover:bg-muted/50'
+  1106→                  }`}
+  1107→                >
+  1108→                  <div className="flex items-center gap-2">
+  1109→                    <Icon className={`h-3.5 w-3.5 ${config.colorText}`} />
+  1110→                    <span className="font-medium truncate">{config.name}</span>
+  1111→                  </div>
+  1112→                  <p className="text-[10px] text-muted-foreground mt-0.5">
+  1113→                    {conv.messages.length} messages · {formatTimeAgo(conv.createdAt)}
+  1114→                  </p>
+  1115→                </button>
+  1116→              )
+  1117→            })
+  1118→          )}
+  1119→        </div>
+  1120→
+  1121→        {/* Chat area */}
+  1122→        <div className="lg:col-span-3">
+  1123→          {activeConv && activeAgentConfig ? (
+  1124→            <Card className="border-border/50 flex flex-col" style={{ height: '420px' }}>
+  1125→              {/* Chat header */}
+  1126→              <div className={`px-4 py-3 border-b ${activeAgentConfig.colorBg} flex items-center gap-2`}>
+  1127→                <activeAgentConfig.icon className={`h-5 w-5 ${activeAgentConfig.colorText}`} />
+  1128→                <span className="font-semibold">{activeAgentConfig.name}</span>
+  1129→                <Badge variant="secondary" className="text-[10px]">AI</Badge>
+  1130→              </div>
+  1131→
+  1132→              {/* Messages */}
+  1133→              <ScrollArea className="flex-1 p-4">
+  1134→                <div className="space-y-3">
+  1135→                  {activeConv.messages.map(msg => (
+  1136→                    <motion.div
+  1137→                      key={msg.id}
+  1138→                      initial={{ opacity: 0, y: 5 }}
+  1139→                      animate={{ opacity: 1, y: 0 }}
+  1140→                      className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+  1141→                    >
+  1142→                      <div className={`max-w-[80%] rounded-xl px-3 py-2 text-sm ${
+  1143→                        msg.role === 'user'
+  1144→                          ? 'bg-primary text-primary-foreground'
+  1145→                          : `${activeAgentConfig.colorBg} border ${activeAgentConfig.colorBorder} text-foreground`
+  1146→                      }`}>
+  1147→                        <p className="whitespace-pre-wrap">{msg.content}</p>
+  1148→                        <p className={`text-[10px] mt-1 ${
+  1149→                          msg.role === 'user' ? 'text-primary-foreground/60' : 'text-muted-foreground'
+  1150→                        }`}>
+  1151→                          {formatTime(msg.timestamp)}
+  1152→                        </p>
+  1153→                      </div>
+  1154→                    </motion.div>
+  1155→                  ))}
+  1156→                  {isTyping && (
+  1157→                    <div className="flex justify-start">
+  1158→                      <div className={`${activeAgentConfig.colorBg} border ${activeAgentConfig.colorBorder} rounded-xl px-4 py-2`}>
+  1159→                        <div className="flex gap-1">
+  1160→                          <span className="h-2 w-2 rounded-full bg-muted-foreground/40 animate-bounce [animation-delay:0ms]" />
+  1161→                          <span className="h-2 w-2 rounded-full bg-muted-foreground/40 animate-bounce [animation-delay:150ms]" />
+  1162→                          <span className="h-2 w-2 rounded-full bg-muted-foreground/40 animate-bounce [animation-delay:300ms]" />
+  1163→                        </div>
+  1164→                      </div>
+  1165→                    </div>
+  1166→                  )}
+  1167→                  <div ref={messagesEndRef} />
+  1168→                </div>
+  1169→              </ScrollArea>
+  1170→
+  1171→              {/* Input */}
+  1172→              <div className="px-4 py-3 border-t flex gap-2">
+  1173→                <Input
+  1174→                  placeholder={`Ask ${activeAgentConfig.name}...`}
+  1175→                  value={inputMessage}
+  1176→                  onChange={(e) => setInputMessage(e.target.value)}
+  1177→                  onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendMessage() } }}
+  1178→                  disabled={isTyping}
+  1179→                  className="flex-1"
+  1180→                />
+  1181→                <Button
+  1182→                  onClick={handleSendMessage}
+  1183→                  disabled={isTyping || !inputMessage.trim()}
+  1184→                  className={`bg-gradient-to-r ${activeAgentConfig.gradientFrom} ${activeAgentConfig.gradientTo} text-white hover:opacity-90`}
+  1185→                  size="icon"
+  1186→                >
+  1187→                  <Send className="h-4 w-4" />
+  1188→                </Button>
+  1189→              </div>
+  1190→            </Card>
+  1191→          ) : (
+  1192→            <Card className="border-border/50 flex items-center justify-center" style={{ height: '420px' }}>
+  1193→              <div className="text-center text-muted-foreground">
+  1194→                <MessageSquare className="h-10 w-10 mx-auto mb-3 opacity-30" />
+  1195→                <p className="text-sm font-medium">Select an agent to start a conversation</p>
+  1196→                <p className="text-xs mt-1">Ask questions, get insights, and interact with your AI agents</p>
+  1197→              </div>
+  1198→            </Card>
+  1199→          )}
+  1200→        </div>
+  1201→      </div>
+  1202→    </div>
+  1203→  )
+  1204→}
+  1205→
+  1206→// ─── Agent Performance Panel ────────────────────────────────────────────────────
+  1207→
+  1208→function AgentPerformancePanel({ agents }: { agents: AgentConfig[] }) {
+  1209→  const overallHealth = Math.round(
+  1210→    agents.reduce((sum, a) => sum + a.successRate, 0) / agents.length
+  1211→  )
+  1212→
+  1213→  const totalRuns = agents.reduce((sum, a) => sum + a.runCount, 0)
+  1214→  const totalErrors = agents.reduce((sum, a) => sum + a.errorCount, 0)
+  1215→  const avgSuccessRate = Math.round(agents.reduce((sum, a) => sum + a.successRate, 0) / agents.length)
+  1216→  const avgDuration = Math.round(agents.reduce((sum, a) => sum + a.avgDuration, 0) / agents.length)
+  1217→
+  1218→  // Simulated 7-day trend data
+  1219→  const trendData = useMemo(() => {
+  1220→    const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+  1221→    return days.map((day, i) => ({
+  1222→      day,
+  1223→      runs: Math.floor(20 + Math.random() * 30 + (i < 5 ? 15 : 0)),
+  1224→      success: Math.floor(85 + Math.random() * 15),
+  1225→      errors: Math.floor(Math.random() * 5),
+  1226→    }))
+  1227→  }, [])
+  1228→
+  1229→  const maxRuns = Math.max(...trendData.map(d => d.runs))
+  1230→
+  1231→  return (
+  1232→    <div className="space-y-6">
+  1233→      {/* Overall Health */}
+  1234→      <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+  1235→        <Card className="bg-gradient-to-br from-emerald-500/5 to-emerald-600/5 border-emerald-500/15">
+  1236→          <CardContent className="p-4 flex items-center gap-3">
+  1237→            <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
+  1238→              <Gauge className="h-5 w-5 text-emerald-600" />
+  1239→            </div>
+  1240→            <div>
+  1241→              <p className="text-2xl font-bold">{overallHealth}</p>
+  1242→              <p className="text-xs text-muted-foreground">Health Score</p>
+  1243→            </div>
+  1244→          </CardContent>
+  1245→        </Card>
+  1246→        <Card className="bg-gradient-to-br from-sky-500/5 to-sky-600/5 border-sky-500/15">
+  1247→          <CardContent className="p-4 flex items-center gap-3">
+  1248→            <div className="p-2.5 rounded-xl bg-sky-500/10 border border-sky-500/20">
+  1249→              <Activity className="h-5 w-5 text-sky-600" />
+  1250→            </div>
+  1251→            <div>
+  1252→              <p className="text-2xl font-bold">{totalRuns.toLocaleString()}</p>
+  1253→              <p className="text-xs text-muted-foreground">Total Runs</p>
+  1254→            </div>
+  1255→          </CardContent>
+  1256→        </Card>
+  1257→        <Card className="bg-gradient-to-br from-violet-500/5 to-violet-600/5 border-violet-500/15">
+  1258→          <CardContent className="p-4 flex items-center gap-3">
+  1259→            <div className="p-2.5 rounded-xl bg-violet-500/10 border border-violet-500/20">
+  1260→              <TrendingUp className="h-5 w-5 text-violet-600" />
+  1261→            </div>
+  1262→            <div>
+  1263→              <p className="text-2xl font-bold">{avgSuccessRate}%</p>
+  1264→              <p className="text-xs text-muted-foreground">Avg Success Rate</p>
+  1265→            </div>
+  1266→          </CardContent>
+  1267→        </Card>
+  1268→        <Card className="bg-gradient-to-br from-amber-500/5 to-amber-600/5 border-amber-500/15">
+  1269→          <CardContent className="p-4 flex items-center gap-3">
+  1270→            <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20">
+  1271→              <Timer className="h-5 w-5 text-amber-600" />
+  1272→            </div>
+  1273→            <div>
+  1274→              <p className="text-2xl font-bold">{formatDuration(avgDuration)}</p>
+  1275→              <p className="text-xs text-muted-foreground">Avg Duration</p>
+  1276→            </div>
+  1277→          </CardContent>
+  1278→        </Card>
+  1279→      </div>
+  1280→
+  1281→      {/* Performance Trend Chart */}
+  1282→      <Card className="border-border/50">
+  1283→        <CardHeader className="pb-3">
+  1284→          <CardTitle className="text-base flex items-center gap-2">
+  1285→            <TrendingUp className="h-4 w-4 text-emerald-500" />
+  1286→            Performance Trend (Last 7 Days)
+  1287→          </CardTitle>
+  1288→        </CardHeader>
+  1289→        <CardContent>
+  1290→          <div className="flex items-end gap-2 h-40">
+  1291→            {trendData.map((d, i) => (
+  1292→              <div key={d.day} className="flex-1 flex flex-col items-center gap-1">
+  1293→                <div className="w-full flex flex-col items-center gap-0.5">
+  1294→                  {/* Success rate bar */}
+  1295→                  <motion.div
+  1296→                    initial={{ height: 0 }}
+  1297→                    animate={{ height: `${(d.runs / maxRuns) * 100}%` }}
+  1298→                    transition={{ duration: 0.5, delay: i * 0.08 }}
+  1299→                    className="w-full max-w-[32px] bg-gradient-to-t from-emerald-500 to-emerald-400 rounded-t-md min-h-[4px] relative group"
+  1300→                  >
+  1301→                    <div className="absolute -top-6 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-foreground text-background text-[10px] px-1.5 py-0.5 rounded whitespace-nowrap z-10">
+  1302→                      {d.runs} runs · {d.success}%
+  1303→                    </div>
+  1304→                  </motion.div>
+  1305→                </div>
+  1306→                <span className="text-[10px] text-muted-foreground">{d.day}</span>
+  1307→              </div>
+  1308→            ))}
+  1309→          </div>
+  1310→          <div className="flex items-center justify-between mt-3 text-xs text-muted-foreground">
+  1311→            <div className="flex items-center gap-1">
+  1312→              <div className="h-2 w-2 rounded-full bg-emerald-500" />
+  1313→              <span>Runs</span>
+  1314→            </div>
+  1315→            <span>Total Errors: {totalErrors}</span>
+  1316→          </div>
+  1317→        </CardContent>
+  1318→      </Card>
+  1319→
+  1320→      {/* Per-Agent Metrics Table */}
+  1321→      <Card className="border-border/50">
+  1322→        <CardHeader className="pb-3">
+  1323→          <CardTitle className="text-base flex items-center gap-2">
+  1324→            <Gauge className="h-4 w-4 text-violet-500" />
+  1325→            Per-Agent Metrics
+  1326→          </CardTitle>
+  1327→        </CardHeader>
+  1328→        <CardContent>
+  1329→          <div className="space-y-3">
+  1330→            {agents.map((agent, i) => {
+  1331→              const Icon = agent.icon
+  1332→              const trend = i % 3 === 0 ? 'up' : i % 3 === 1 ? 'down' : 'stable'
+  1333→              return (
+  1334→                <motion.div
+  1335→                  key={agent.id}
+  1336→                  initial={{ opacity: 0, x: -10 }}
+  1337→                  animate={{ opacity: 1, x: 0 }}
+  1338→                  transition={{ delay: i * 0.05 }}
+  1339→                  className="flex items-center gap-4 p-3 rounded-lg border border-border/50 hover:bg-muted/30 transition-colors"
+  1340→                >
+  1341→                  <div className={`p-2 rounded-lg ${agent.colorBg} border ${agent.colorBorder}`}>
+  1342→                    <Icon className={`h-4 w-4 ${agent.colorText}`} />
+  1343→                  </div>
+  1344→                  <div className="flex-1 min-w-0">
+  1345→                    <p className="text-sm font-medium">{agent.name}</p>
+  1346→                    <p className="text-xs text-muted-foreground">{agent.runCount} runs · {formatDuration(agent.avgDuration)} avg</p>
+  1347→                  </div>
+  1348→                  <div className="flex items-center gap-4 text-xs">
+  1349→                    <div className="text-right">
+  1350→                      <p className="font-semibold">{agent.successRate}%</p>
+  1351→                      <p className="text-muted-foreground">Success</p>
+  1352→                    </div>
+  1353→                    <div className="text-right">
+  1354→                      <p className="font-semibold">{agent.errorCount}</p>
+  1355→                      <p className="text-muted-foreground">Errors</p>
+  1356→                    </div>
+  1357→                    <div className="text-right">
+  1358→                      {trend === 'up' && <TrendingUp className="h-4 w-4 text-emerald-500" />}
+  1359→                      {trend === 'down' && <TrendingDown className="h-4 w-4 text-red-500" />}
+  1360→                      {trend === 'stable' && <Minus className="h-4 w-4 text-amber-500" />}
+  1361→                    </div>
+  1362→                    <Progress value={agent.successRate} className="w-20 h-2" />
+  1363→                  </div>
+  1364→                </motion.div>
+  1365→              )
+  1366→            })}
+  1367→          </div>
+  1368→        </CardContent>
+  1369→      </Card>
+  1370→
+  1371→      {/* Resource Usage */}
+  1372→      <Card className="border-border/50">
+  1373→        <CardHeader className="pb-3">
+  1374→          <CardTitle className="text-base flex items-center gap-2">
+  1375→            <Zap className="h-4 w-4 text-amber-500" />
+  1376→            Resource Usage Summary
+  1377→          </CardTitle>
+  1378→        </CardHeader>
+  1379→        <CardContent>
+  1380→          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+  1381→            <div className="space-y-1">
+  1382→              <div className="flex items-center justify-between text-xs">
+  1383→                <span className="text-muted-foreground">CPU</span>
+  1384→                <span className="font-medium">23%</span>
+  1385→              </div>
+  1386→              <Progress value={23} className="h-2" />
+  1387→            </div>
+  1388→            <div className="space-y-1">
+  1389→              <div className="flex items-center justify-between text-xs">
+  1390→                <span className="text-muted-foreground">Memory</span>
+  1391→                <span className="font-medium">45%</span>
+  1392→              </div>
+  1393→              <Progress value={45} className="h-2" />
+  1394→            </div>
+  1395→            <div className="space-y-1">
+  1396→              <div className="flex items-center justify-between text-xs">
+  1397→                <span className="text-muted-foreground">API Calls</span>
+  1398→                <span className="font-medium">67%</span>
+  1399→              </div>
+  1400→              <Progress value={67} className="h-2" />
+  1401→            </div>
+  1402→            <div className="space-y-1">
+  1403→              <div className="flex items-center justify-between text-xs">
+  1404→                <span className="text-muted-foreground">Storage</span>
+  1405→                <span className="font-medium">31%</span>
+  1406→              </div>
+  1407→              <Progress value={31} className="h-2" />
+  1408→            </div>
+  1409→          </div>
+  1410→        </CardContent>
+  1411→      </Card>
+  1412→    </div>
+  1413→  )
+  1414→}
+  1415→
+  1416→// ─── Schedules Panel ────────────────────────────────────────────────────────────
+  1417→
+  1418→function SchedulesPanel({
+  1419→  schedules,
+  1420→  agents,
+  1421→  onToggleSchedule,
+  1422→  onDeleteSchedule,
+  1423→  onOpenScheduleDialog,
+  1424→}: {
+  1425→  schedules: AgentSchedule[]
+  1426→  agents: AgentConfig[]
+  1427→  onToggleSchedule: (id: string) => void
+  1428→  onDeleteSchedule: (id: string) => void
+  1429→  onOpenScheduleDialog: (agentId: AgentId) => void
+  1430→}) {
+  1431→  const getAgentConfig = (id: AgentId) => agents.find(a => a.id === id)!
+  1432→
+  1433→  return (
+  1434→    <div className="space-y-4">
+  1435→      {/* Quick schedule buttons */}
+  1436→      <div className="flex flex-wrap gap-2">
+  1437→        {agents.map(agent => {
+  1438→          const Icon = agent.icon
+  1439→          return (
+  1440→            <Button
+  1441→              key={agent.id}
+  1442→              variant="outline"
+  1443→              size="sm"
+  1444→              onClick={() => onOpenScheduleDialog(agent.id)}
+  1445→              className={`gap-1.5 ${agent.colorBorder} hover:${agent.colorBg}`}
+  1446→            >
+  1447→              <Icon className={`h-3.5 w-3.5 ${agent.colorText}`} />
+  1448→              {agent.name}
+  1449→            </Button>
+  1450→          )
+  1451→        })}
+  1452→      </div>
+  1453→
+  1454→      {/* Active schedules */}
+  1455→      <Card className="border-border/50">
+  1456→        <CardHeader className="pb-3">
+  1457→          <CardTitle className="text-base flex items-center gap-2">
+  1458→            <CalendarClock className="h-4 w-4 text-violet-500" />
+  1459→            Active Schedules
+  1460→          </CardTitle>
+  1461→        </CardHeader>
+  1462→        <CardContent>
+  1463→          {schedules.length === 0 ? (
+  1464→            <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
+  1465→              <CalendarClock className="h-8 w-8 mb-2 opacity-50" />
+  1466→              <p className="text-sm">No schedules configured</p>
+  1467→              <p className="text-xs">Click an agent button above to create one</p>
+  1468→            </div>
+  1469→          ) : (
+  1470→            <div className="space-y-2">
+  1471→              {schedules.map(schedule => {
+  1472→                const config = getAgentConfig(schedule.agentId)
+  1473→                const Icon = config.icon
+  1474→                return (
+  1475→                  <motion.div
+  1476→                    key={schedule.id}
+  1477→                    initial={{ opacity: 0, y: 10 }}
+  1478→                    animate={{ opacity: 1, y: 0 }}
+  1479→                    className={`flex items-center gap-3 p-3 rounded-lg border ${config.colorBorder} ${config.colorBg}`}
+  1480→                  >
+  1481→                    <div className={`p-2 rounded-lg ${config.colorBg} border ${config.colorBorder}`}>
+  1482→                      <Icon className={`h-4 w-4 ${config.colorText}`} />
+  1483→                    </div>
+  1484→                    <div className="flex-1 min-w-0">
+  1485→                      <p className="text-sm font-medium">{config.name}</p>
+  1486→                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+  1487→                        <span className="capitalize">{schedule.frequency}</span>
+  1488→                        <span>·</span>
+  1489→                        <span>{schedule.timeOfDay}</span>
+  1490→                        {schedule.dayOfWeek && <><span>·</span><span>{schedule.dayOfWeek}</span></>}
+  1491→                        {schedule.dayOfMonth && <><span>·</span><span>Day {schedule.dayOfMonth}</span></>}
+  1492→                      </div>
+  1493→                    </div>
+  1494→                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+  1495→                      <span>Next: {formatTimeAgo(schedule.nextRun)}</span>
+  1496→                    </div>
+  1497→                    <div className="flex items-center gap-2">
+  1498→                      <Switch
+  1499→                        checked={schedule.active}
+  1500→                        onCheckedChange={() => onToggleSchedule(schedule.id)}
+  1501→                      />
+  1502→                      <Button
+  1503→                        variant="ghost"
+  1504→                        size="sm"
+  1505→                        onClick={() => onDeleteSchedule(schedule.id)}
+  1506→                        className="h-7 text-muted-foreground hover:text-red-500"
+  1507→                      >
+  1508→                        <Trash2 className="h-3.5 w-3.5" />
+  1509→                      </Button>
+  1510→                    </div>
+  1511→                  </motion.div>
+  1512→                )
+  1513→              })}
+  1514→            </div>
+  1515→          )}
+  1516→        </CardContent>
+  1517→      </Card>
+  1518→    </div>
+  1519→  )
+  1520→}
+  1521→
+  1522→// ─── Main Agents Page ───────────────────────────────────────────────────────────
+  1523→
+  1524→export default function AgentsPage() {
+  1525→  const { setCurrentView } = useApp()
+  1526→  const [agents, setAgents] = useState<AgentConfig[]>(createAgentConfigs)
+  1527→  const [logs, setLogs] = useState<AgentLog[]>(createInitialLogs)
+  1528→  const [memories, setMemories] = useState<AgentMemory[]>(createInitialMemories)
+  1529→  const [schedules, setSchedules] = useState<AgentSchedule[]>(createInitialSchedules)
+  1530→  const [selectedAgents, setSelectedAgents] = useState<Set<AgentId>>(new Set())
+  1531→  const [activeTab, setActiveTab] = useState('dashboard')
+  1532→
+  1533→  // Schedule dialog state
+  1534→  const [scheduleDialogOpen, setScheduleDialogOpen] = useState(false)
+  1535→  const [scheduleAgentId, setScheduleAgentId] = useState<AgentId | null>(null)
+  1536→
+  1537→  // Run progress state per agent
+  1538→  const [runProgressMap, setRunProgressMap] = useState<Record<AgentId, number>>({} as Record<AgentId, number>)
+  1539→  const [runStepsMap, setRunStepsMap] = useState<Record<AgentId, AgentRunStep[]>>({} as Record<AgentId, AgentRunStep[]>)
+  1540→
+  1541→  // Toggle agent selection for multi-run
+  1542→  const handleToggleSelect = useCallback((agentId: AgentId) => {
+  1543→    setSelectedAgents(prev => {
+  1544→      const next = new Set(prev)
+  1545→      if (next.has(agentId)) next.delete(agentId)
+  1546→      else next.add(agentId)
+  1547→      return next
+  1548→    })
+  1549→  }, [])
+  1550→
+  1551→  // Select all / deselect all
+  1552→  const handleSelectAll = useCallback(() => {
+  1553→    if (selectedAgents.size === agents.length) {
+  1554→      setSelectedAgents(new Set())
+  1555→    } else {
+  1556→      setSelectedAgents(new Set(agents.map(a => a.id)))
+  1557→    }
+  1558→  }, [selectedAgents.size, agents.length])
+  1559→
+  1560→  // Run a single agent
+  1561→  const handleRunAgent = useCallback((agentId: AgentId) => {
+  1562→    const agent = agents.find(a => a.id === agentId)
+  1563→    if (!agent) return
+  1564→
+  1565→    // Set running state
+  1566→    setAgents(prev => prev.map(a =>
+  1567→      a.id === agentId ? { ...a, status: 'running' as AgentStatus, lastRun: new Date() } : a
+  1568→    ))
+  1569→
+  1570→    // Initialize steps
+  1571→    const steps: AgentRunStep[] = agent.runSteps.map(s => ({
+  1572→      label: s,
+  1573→      status: 'pending' as const,
+  1574→    }))
+  1575→    setRunStepsMap(prev => ({ ...prev, [agentId]: steps }))
+  1576→    setRunProgressMap(prev => ({ ...prev, [agentId]: 0 }))
+  1577→
+  1578→    // Simulate step-by-step execution
+  1579→    let currentStep = 0
+  1580→    const stepInterval = setInterval(() => {
+  1581→      currentStep++
+  1582→      if (currentStep > agent.runSteps.length) {
+  1583→        clearInterval(stepInterval)
+  1584→        return
+  1585→      }
+  1586→
+  1587→      setRunStepsMap(prev => {
+  1588→        const prevSteps = prev[agentId] || []
+  1589→        return {
+  1590→          ...prev,
+  1591→          [agentId]: prevSteps.map((s, i) => ({
+  1592→            ...s,
+  1593→            status: i < currentStep - 1 ? 'completed' as const
+  1594→              : i === currentStep - 1 ? 'running' as const
+  1595→              : 'pending' as const,
+  1596→          })),
+  1597→        }
+  1598→      })
+  1599→
+  1600→      setRunProgressMap(prev => ({
+  1601→        ...prev,
+  1602→        [agentId]: Math.round((currentStep / agent.runSteps.length) * 100),
+  1603→      }))
+  1604→
+  1605→      // Add log for each step
+  1606→      const stepLabel = agent.runSteps[currentStep - 1]
+  1607→      setLogs(prev => [{
+  1608→        id: `log-${Date.now()}-${Math.random()}`,
+  1609→        timestamp: new Date(),
+  1610→        agentId,
+  1611→        agentName: agent.name,
+  1612→        level: 'info' as const,
+  1613→        message: `${stepLabel}...`,
+  1614→      }, ...prev].slice(0, 100))
+  1615→    }, 700)
+  1616→
+  1617→    // Complete after all steps
+  1618→    const totalDuration = agent.runSteps.length * 700 + 500
+  1619→    setTimeout(() => {
+  1620→      clearInterval(stepInterval)
+  1621→
+  1622→      setAgents(prev => prev.map(a => {
+  1623→        if (a.id !== agentId) return a
+  1624→        return {
+  1625→          ...a,
+  1626→          status: 'completed' as AgentStatus,
+  1627→          runCount: a.runCount + 1,
+  1628→          tasksToday: a.tasksToday + 1,
+  1629→          tasksWeek: a.tasksWeek + 1,
+  1630→        }
+  1631→      }))
+  1632→
+  1633→      setRunProgressMap(prev => ({ ...prev, [agentId]: 100 }))
+  1634→
+  1635→      setLogs(prev => [{
+  1636→        id: `log-${Date.now()}-complete`,
+  1637→        timestamp: new Date(),
+  1638→        agentId,
+  1639→        agentName: agent.name,
+  1640→        level: 'info' as const,
+  1641→        message: `Agent run completed successfully in ${formatDuration(agent.avgDuration)}`,
+  1642→      }, ...prev].slice(0, 100))
+  1643→
+  1644→      // Reset to idle after 2 seconds
+  1645→      setTimeout(() => {
+  1646→        setAgents(prev => prev.map(a =>
+  1647→          a.id === agentId ? { ...a, status: 'idle' as AgentStatus } : a
+  1648→        ))
+  1649→        setRunProgressMap(prev => {
+  1650→          const next = { ...prev }
+  1651→          delete next[agentId]
+  1652→          return next
+  1653→        })
+  1654→        setRunStepsMap(prev => {
+  1655→          const next = { ...prev }
+  1656→          delete next[agentId]
+  1657→          return next
+  1658→        })
+  1659→      }, 2000)
+  1660→    }, totalDuration)
+  1661→  }, [agents])
+  1662→
+  1663→  // Run multiple agents in sequence
+  1664→  const handleRunSelected = useCallback(() => {
+  1665→    const toRun = Array.from(selectedAgents)
+  1666→    if (toRun.length === 0) return
+  1667→
+  1668→    toRun.reduce((promise, agentId, index) => {
+  1669→      return promise.then(() => {
+  1670→        return new Promise<void>(resolve => {
+  1671→          handleRunAgent(agentId)
+  1672→          // Wait for agent to complete before starting next
+  1673→          const agent = agents.find(a => a.id === agentId)!
+  1674→          const totalDuration = agent.runSteps.length * 700 + 2500
+  1675→          setTimeout(resolve, index < toRun.length - 1 ? totalDuration : 0)
+  1676→        })
+  1677→      })
+  1678→    }, Promise.resolve())
+  1679→
+  1680→    setSelectedAgents(new Set())
+  1681→  }, [selectedAgents, handleRunAgent, agents])
+  1682→
+  1683→  // Run all agents
+  1684→  const handleRunAll = useCallback(() => {
+  1685→    setSelectedAgents(new Set(agents.map(a => a.id)))
+  1686→    const allIds = agents.map(a => a.id)
+  1687→
+  1688→    allIds.reduce((promise, agentId, index) => {
+  1689→      return promise.then(() => {
+  1690→        return new Promise<void>(resolve => {
+  1691→          handleRunAgent(agentId)
+  1692→          const agent = agents.find(a => a.id === agentId)!
+  1693→          const totalDuration = agent.runSteps.length * 700 + 2500
+  1694→          setTimeout(resolve, index < allIds.length - 1 ? totalDuration : 0)
+  1695→        })
+  1696→      })
+  1697→    }, Promise.resolve())
+  1698→
+  1699→    setSelectedAgents(new Set())
+  1700→  }, [agents, handleRunAgent])
+  1701→
+  1702→  // Schedule management
+  1703→  const handleOpenScheduleDialog = useCallback((agentId: AgentId) => {
+  1704→    setScheduleAgentId(agentId)
+  1705→    setScheduleDialogOpen(true)
+  1706→  }, [])
+  1707→
+  1708→  const handleSaveSchedule = useCallback((schedule: Omit<AgentSchedule, 'id' | 'nextRun'>) => {
+  1709→    const newSchedule: AgentSchedule = {
+  1710→      ...schedule,
+  1711→      id: `sch-${Date.now()}`,
+  1712→      nextRun: new Date(Date.now() + 3600000),
+  1713→    }
+  1714→    setSchedules(prev => [...prev, newSchedule])
+  1715→  }, [])
+  1716→
+  1717→  const handleToggleSchedule = useCallback((id: string) => {
+  1718→    setSchedules(prev => prev.map(s =>
+  1719→      s.id === id ? { ...s, active: !s.active } : s
+  1720→    ))
+  1721→  }, [])
+  1722→
+  1723→  const handleDeleteSchedule = useCallback((id: string) => {
+  1724→    setSchedules(prev => prev.filter(s => s.id !== id))
+  1725→  }, [])
+  1726→
+  1727→  // Clear logs
+  1728→  const handleClearLogs = useCallback(() => {
+  1729→    setLogs([])
+  1730→  }, [])
+  1731→
+  1732→  // Forget memory
+  1733→  const handleForgetC = useCallback((id: string) => {
+  1734→    setMemories(prev => prev.filter(m => m.id !== id))
+  1735→  }, [])
+  1736→
+  1737→  // Compute summary stats
+  1738→  const totalRuns = agents.reduce((sum, a) => sum + a.runCount, 0)
+  1739→  const activeAgents = agents.filter(a => a.status === 'running').length
+  1740→  const avgSuccessRate = Math.round(agents.reduce((sum, a) => sum + a.successRate, 0) / agents.length)
+  1741→
+  1742→  return (
+  1743→    <div className="space-y-6 p-4 md:p-6 max-w-7xl mx-auto">
+  1744→      {/* Header */}
+  1745→      <motion.div
+  1746→        initial={{ opacity: 0, y: -10 }}
+  1747→        animate={{ opacity: 1, y: 0 }}
+  1748→        transition={{ duration: 0.4 }}
+  1749→      >
+  1750→        <div className="flex items-center justify-between flex-wrap gap-3">
+  1751→          <div className="flex items-center gap-3">
+  1752→            <div className="p-2 rounded-xl bg-gradient-to-br from-violet-500/10 to-fuchsia-500/10 border border-violet-500/20">
+  1753→              <Bot className="h-5 w-5 text-violet-600" />
+  1754→            </div>
+  1755→            <div>
+  1756→              <h1 className="text-2xl font-bold tracking-tight">Agent Management Center</h1>
+  1757→              <p className="text-sm text-muted-foreground">7 autonomous agents powering your GST workflow</p>
+  1758→            </div>
+  1759→          </div>
+  1760→          <div className="flex items-center gap-2">
+  1761→            {selectedAgents.size > 0 && (
+  1762→              <Button
+  1763→                onClick={handleRunSelected}
+  1764→                className="gap-1.5 bg-gradient-to-r from-violet-500 to-purple-600 text-white hover:opacity-90"
+  1765→              >
+  1766→                <Play className="h-3.5 w-3.5" />
+  1767→                Run Selected ({selectedAgents.size})
+  1768→              </Button>
+  1769→            )}
+  1770→            <Button
+  1771→              onClick={handleRunAll}
+  1772→              className="gap-1.5 bg-gradient-to-r from-emerald-500 to-teal-600 text-white hover:opacity-90"
+  1773→            >
+  1774→              <Sparkles className="h-3.5 w-3.5" />
+  1775→              Run All
+  1776→            </Button>
+  1777→          </div>
+  1778→        </div>
+  1779→      </motion.div>
+  1780→
+  1781→      {/* Summary Stats */}
+  1782→      <motion.div
+  1783→        initial={{ opacity: 0, y: 10 }}
+  1784→        animate={{ opacity: 1, y: 0 }}
+  1785→        transition={{ duration: 0.4, delay: 0.1 }}
+  1786→        className="grid grid-cols-2 sm:grid-cols-4 gap-3"
+  1787→      >
+  1788→        <Card className="bg-gradient-to-br from-sky-500/5 to-sky-600/5 border-sky-500/10 backdrop-blur-sm">
+  1789→          <CardContent className="p-4 flex items-center gap-3">
+  1790→            <div className="p-2 rounded-lg bg-sky-500/10 border border-sky-500/20">
+  1791→              <Zap className="h-4 w-4 text-sky-600" />
+  1792→            </div>
+  1793→            <div>
+  1794→              <p className="text-2xl font-bold">{totalRuns.toLocaleString()}</p>
+  1795→              <p className="text-xs text-muted-foreground">Total Runs</p>
+  1796→            </div>
+  1797→          </CardContent>
+  1798→        </Card>
+  1799→        <Card className="bg-gradient-to-br from-emerald-500/5 to-emerald-600/5 border-emerald-500/10 backdrop-blur-sm">
+  1800→          <CardContent className="p-4 flex items-center gap-3">
+  1801→            <div className="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+  1802→              <Activity className="h-4 w-4 text-emerald-600" />
+  1803→            </div>
+  1804→            <div>
+  1805→              <p className="text-2xl font-bold">{activeAgents}</p>
+  1806→              <p className="text-xs text-muted-foreground">Active Now</p>
+  1807→            </div>
+  1808→          </CardContent>
+  1809→        </Card>
+  1810→        <Card className="bg-gradient-to-br from-violet-500/5 to-violet-600/5 border-violet-500/10 backdrop-blur-sm">
+  1811→          <CardContent className="p-4 flex items-center gap-3">
+  1812→            <div className="p-2 rounded-lg bg-violet-500/10 border border-violet-500/20">
+  1813→              <TrendingUp className="h-4 w-4 text-violet-600" />
+  1814→            </div>
+  1815→            <div>
+  1816→              <p className="text-2xl font-bold">{avgSuccessRate}%</p>
+  1817→              <p className="text-xs text-muted-foreground">Success Rate</p>
+  1818→            </div>
+  1819→          </CardContent>
+  1820→        </Card>
+  1821→        <Card className="bg-gradient-to-br from-rose-500/5 to-rose-600/5 border-rose-500/10 backdrop-blur-sm">
+  1822→          <CardContent className="p-4 flex items-center gap-3">
+  1823→            <div className="p-2 rounded-lg bg-rose-500/10 border border-rose-500/20">
+  1824→              <Bot className="h-4 w-4 text-rose-600" />
+  1825→            </div>
+  1826→            <div>
+  1827→              <p className="text-2xl font-bold">7</p>
+  1828→              <p className="text-xs text-muted-foreground">Agents Online</p>
+  1829→            </div>
+  1830→          </CardContent>
+  1831→        </Card>
+  1832→      </motion.div>
+  1833→
+  1834→      {/* Tabs */}
+  1835→      <Tabs value={activeTab} onValueChange={setActiveTab}>
+  1836→        <TabsList className="grid w-full grid-cols-3 sm:grid-cols-6 lg:w-auto lg:inline-grid">
+  1837→          <TabsTrigger value="dashboard" className="gap-1.5 text-xs">
+  1838→            <Bot className="h-3.5 w-3.5 hidden sm:block" />Dashboard
+  1839→          </TabsTrigger>
+  1840→          <TabsTrigger value="schedules" className="gap-1.5 text-xs">
+  1841→            <CalendarClock className="h-3.5 w-3.5 hidden sm:block" />Schedules
+  1842→          </TabsTrigger>
+  1843→          <TabsTrigger value="logs" className="gap-1.5 text-xs">
+  1844→            <List className="h-3.5 w-3.5 hidden sm:block" />Logs
+  1845→          </TabsTrigger>
+  1846→          <TabsTrigger value="memory" className="gap-1.5 text-xs">
+  1847→            <Brain className="h-3.5 w-3.5 hidden sm:block" />Memory
+  1848→          </TabsTrigger>
+  1849→          <TabsTrigger value="conversations" className="gap-1.5 text-xs">
+  1850→            <MessageSquare className="h-3.5 w-3.5 hidden sm:block" />Chat
+  1851→          </TabsTrigger>
+  1852→          <TabsTrigger value="performance" className="gap-1.5 text-xs">
+  1853→            <Gauge className="h-3.5 w-3.5 hidden sm:block" />Metrics
+  1854→          </TabsTrigger>
+  1855→        </TabsList>
+  1856→
+  1857→        {/* Dashboard Tab */}
+  1858→        <TabsContent value="dashboard">
+  1859→          <div className="space-y-4">
+  1860→            {/* Selection controls */}
+  1861→            <div className="flex items-center justify-between">
+  1862→              <div className="flex items-center gap-2">
+  1863→                <Checkbox
+  1864→                  checked={selectedAgents.size === agents.length}
+  1865→                  onCheckedChange={handleSelectAll}
+  1866→                />
+  1867→                <span className="text-sm text-muted-foreground">
+  1868→                  {selectedAgents.size > 0 ? `${selectedAgents.size} selected` : 'Select all'}
+  1869→                </span>
+  1870→              </div>
+  1871→              {selectedAgents.size > 0 && (
+  1872→                <Button
+  1873→                  variant="outline"
+  1874→                  size="sm"
+  1875→                  onClick={() => setSelectedAgents(new Set())}
+  1876→                >
+  1877→                  Clear Selection
+  1878→                </Button>
+  1879→              )}
+  1880→            </div>
+  1881→
+  1882→            {/* Agent Cards Grid */}
+  1883→            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+  1884→              <AnimatePresence mode="popLayout">
+  1885→                {agents.map((agent, i) => (
+  1886→                  <motion.div
+  1887→                    key={agent.id}
+  1888→                    initial={{ opacity: 0, y: 20 }}
+  1889→                    animate={{ opacity: 1, y: 0 }}
+  1890→                    transition={{ duration: 0.3, delay: i * 0.06 }}
+  1891→                  >
+  1892→                    <AgentCard
+  1893→                      agent={agent}
+  1894→                      onRun={handleRunAgent}
+  1895→                      selected={selectedAgents.has(agent.id)}
+  1896→                      onToggleSelect={handleToggleSelect}
+  1897→                      runProgress={runProgressMap[agent.id] || 0}
+  1898→                      runSteps={runStepsMap[agent.id] || []}
+  1899→                    />
+  1900→                  </motion.div>
+  1901→                ))}
+  1902→              </AnimatePresence>
+  1903→            </div>
+  1904→
+  1905→            {/* Autopilot CTA */}
+  1906→            <motion.div
+  1907→              initial={{ opacity: 0, y: 20 }}
+  1908→              animate={{ opacity: 1, y: 0 }}
+  1909→              transition={{ duration: 0.4, delay: 0.5 }}
+  1910→            >
+  1911→              <Card className="bg-gradient-to-br from-emerald-500/5 via-teal-500/5 to-cyan-500/5 border-emerald-500/15 backdrop-blur-sm overflow-hidden relative">
+  1912→                <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/5 via-transparent to-teal-500/5 animate-pulse" />
+  1913→                <CardContent className="p-6 flex flex-col sm:flex-row items-center gap-4 relative">
+  1914→                  <div className="p-3 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white shadow-lg shadow-emerald-500/20">
+  1915→                    <Sparkles className="h-6 w-6" />
+  1916→                  </div>
+  1917→                  <div className="flex-1 text-center sm:text-left">
+  1918→                    <h3 className="text-lg font-semibold">Run All Agents with Autopilot</h3>
+  1919→                    <p className="text-sm text-muted-foreground">Launch GSTPilot Autopilot™ to orchestrate all agents in one click</p>
+  1920→                  </div>
+  1921→                  <Button
+  1922→                    onClick={() => setCurrentView('autopilot')}
+  1923→                    className="bg-gradient-to-r from-emerald-500 to-teal-600 text-white hover:opacity-90 gap-2 shadow-lg shadow-emerald-500/20"
+  1924→                  >
+  1925→                    <Play className="h-4 w-4" />
+  1926→                    Launch Autopilot
+  1927→                  </Button>
+  1928→                </CardContent>
+  1929→              </Card>
+  1930→            </motion.div>
+  1931→          </div>
+  1932→        </TabsContent>
+  1933→
+  1934→        {/* Schedules Tab */}
+  1935→        <TabsContent value="schedules">
+  1936→          <SchedulesPanel
+  1937→            schedules={schedules}
+  1938→            agents={agents}
+  1939→            onToggleSchedule={handleToggleSchedule}
+  1940→            onDeleteSchedule={handleDeleteSchedule}
+  1941→            onOpenScheduleDialog={handleOpenScheduleDialog}
+  1942→          />
+  1943→        </TabsContent>
+  1944→
+  1945→        {/* Logs Tab */}
+  1946→        <TabsContent value="logs">
+  1947→          <AgentLogsPanel logs={logs} onClear={handleClearLogs} />
+  1948→        </TabsContent>
+  1949→
+  1950→        {/* Memory Tab */}
+  1951→        <TabsContent value="memory">
+  1952→          <AgentMemoryPanel memories={memories} agents={agents} onForget={handleForgetC} />
+  1953→        </TabsContent>
+  1954→
+  1955→        {/* Conversations Tab */}
+  1956→        <TabsContent value="conversations">
+  1957→          <AgentConversationsPanel agents={agents} />
+  1958→        </TabsContent>
+  1959→
+  1960→        {/* Performance Tab */}
+  1961→        <TabsContent value="performance">
+  1962→          <AgentPerformancePanel agents={agents} />
+  1963→        </TabsContent>
+  1964→      </Tabs>
+  1965→
+  1966→      {/* Schedule Dialog */}
+  1967→      <ScheduleDialog
+  1968→        open={scheduleDialogOpen}
+  1969→        onOpenChange={setScheduleDialogOpen}
+  1970→        agentId={scheduleAgentId}
+  1971→        agents={agents}
+  1972→        onSave={handleSaveSchedule}
+  1973→      />
+  1974→    </div>
+  1975→  )
+  1976→}
+  1977→

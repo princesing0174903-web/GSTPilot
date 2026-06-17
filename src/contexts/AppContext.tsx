@@ -10,7 +10,82 @@ export type AppView =
   | 'clients' 
   | 'settings'
   | 'client-workspace'
-  | 'return-prep';
+  | 'return-prep'
+  | 'analytics'
+  | 'notifications'
+  | 'billing'
+  | 'timeline'
+  | 'team'
+  | 'tasks'
+  | 'autopilot'
+  | 'agents'
+  | 'automations'
+  | 'documents'
+  | 'collaboration'
+  | 'crm'
+  | 'ai-cfo'
+  | 'client-portal'
+  | 'marketplace'
+  | 'white-label'
+  | 'audit-trail'
+  | 'approvals'
+  | 'api-platform'
+  | 'version-history'
+  | 'esignatures'
+  | 'firm-command-center'
+  // Business OS Modules
+  | 'accounting'
+  | 'payroll'
+  | 'hrms'
+  | 'inventory'
+  | 'banking'
+  | 'payments'
+  | 'e-invoicing'
+  | 'tds'
+  | 'roc-compliance'
+  | 'legal-notices'
+  // AI Workforce OS
+  | 'ai-ca-manager'
+  | 'ai-account-manager'
+  | 'ai-document-employee'
+  | 'ai-deadline-engine'
+  | 'ai-voice-assistant'
+  | 'ai-firm-memory'
+  | 'multi-firm'
+  // AI Executive Layer
+  | 'ai-operating-room'
+  | 'ai-priority-engine'
+  | 'ai-predictions'
+  // Financial Infrastructure Layer
+  | 'business-graph'
+  | 'embedded-finance'
+  | 'working-capital'
+  | 'data-moat'
+  | 'industry-benchmark'
+  | 'ai-business-copilot'
+  | 'network-effects'
+  | 'executive-war-room'
+  | 'run-my-business'
+  // Financial Network Layer
+  | 'api-platform-v2'
+  | 'app-store'
+  | 'agent-os'
+  | 'event-engine'
+  | 'digital-twin'
+  | 'decision-engine'
+  | 'data-cloud'
+  | 'gstpilot-network'
+  | 'run-india-business'
+  // Financial Exchange Layer (GFX)
+  | 'universal-business-id'
+  | 'credit-scoring-engine'
+  | 'invoice-exchange'
+  | 'financing-marketplace'
+  | 'economic-graph'
+  | 'economic-war-room'
+  | 'run-my-company'
+  // GSTPilot Infinity™ Layer
+  | 'business-dna';
 
 export interface ReturnPrepContext {
   clientId: string | null;
@@ -26,11 +101,13 @@ interface AppContextType {
   sidebarOpen: boolean;
   currentScreen: AppScreen;
   returnPrepCtx: ReturnPrepContext;
+  commandPaletteOpen: boolean;
   setCurrentView: (view: AppView) => void;
   setSelectedClientId: (id: string | null) => void;
   setSidebarOpen: (open: boolean) => void;
   setCurrentScreen: (screen: AppScreen) => void;
   setReturnPrepCtx: (ctx: ReturnPrepContext) => void;
+  setCommandPaletteOpen: (open: boolean) => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -45,6 +122,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     returnType: 'GSTR-1',
     period: '2025-06',
   });
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState<boolean>(false);
 
   const handleSetCurrentView = useCallback((view: AppView) => {
     setCurrentView(view);
@@ -66,6 +144,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setReturnPrepCtx(ctx);
   }, []);
 
+  const handleSetCommandPaletteOpen = useCallback((open: boolean) => {
+    setCommandPaletteOpen(open);
+  }, []);
+
   return (
     <AppContext.Provider
       value={{
@@ -74,11 +156,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         sidebarOpen,
         currentScreen,
         returnPrepCtx,
+        commandPaletteOpen,
         setCurrentView: handleSetCurrentView,
         setSelectedClientId: handleSetSelectedClientId,
         setSidebarOpen: handleSetSidebarOpen,
         setCurrentScreen: handleSetCurrentScreen,
         setReturnPrepCtx: handleSetReturnPrepCtx,
+        setCommandPaletteOpen: handleSetCommandPaletteOpen,
       }}
     >
       {children}

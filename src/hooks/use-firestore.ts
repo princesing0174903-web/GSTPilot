@@ -17,7 +17,8 @@ import {
   type FirestoreClient, type FirestoreDocument, type FirestoreInvoice,
   type FirestoreReturn, type FirestoreReconciliation, type FirestoreNotification,
   type FirestoreActivity, type FirestoreAIRecommendation, type FirestoreFirm,
-  type LiveDashboardMetrics, type CollectionName,
+  type FirestorePrediction, type FirestorePriority, type FirestoreOrganization, type FirestoreMembership,
+  type LiveDashboardMetrics, type FirmExecutiveScores, type CollectionName,
 } from '@/lib/firestore-schema';
 import { computeDashboardMetrics } from '@/lib/firestore-service';
 
@@ -297,4 +298,101 @@ export function useLiveDashboardMetrics(): {
   }, [clients.data, invoices.data, returns.data, documents.data, activities.data, loading]);
 
   return { metrics, loading, error };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// AI EXECUTIVE LAYER HOOKS
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ─── Predictions ────────────────────────────────────────────────────────────
+
+export function useFirePredictions(type?: string) {
+  const constraints: QueryConstraint[] = [orderBy('createdAt', 'desc')];
+  if (type) {
+    constraints.unshift(where('type', '==', type));
+  }
+  return useFirestoreCollection<FirestorePrediction>(COLLECTIONS.PREDICTIONS, constraints, [type]);
+}
+
+// ─── Priority Queue ─────────────────────────────────────────────────────────
+
+export function useFirePriorities(status?: string) {
+  const constraints: QueryConstraint[] = [orderBy('priorityScore', 'desc')];
+  if (status) {
+    constraints.unshift(where('status', '==', status));
+  }
+  return useFirestoreCollection<FirestorePriority>(COLLECTIONS.PRIORITY_QUEUE, constraints, [status]);
+}
+
+// ─── Organizations ──────────────────────────────────────────────────────────
+
+export function useFireOrganizations() {
+  return useFirestoreCollection<FirestoreOrganization>(COLLECTIONS.ORGANIZATIONS, [orderBy('createdAt', 'desc')]);
+}
+
+// ─── Memberships ────────────────────────────────────────────────────────────
+
+export function useFireMemberships(firmId?: string | null) {
+  const constraints: QueryConstraint[] = [orderBy('createdAt', 'desc')];
+  if (firmId) {
+    constraints.unshift(where('firmId', '==', firmId));
+  }
+  return useFirestoreCollection<FirestoreMembership>(COLLECTIONS.MEMBERSHIPS, constraints, [firmId]);
+}
+
+// ─── Executive Scores (computed from live data) ─────────────────────────────
+
+export function useFirmExecutiveScores(): { scores: FirmExecutiveScores; loading: boolean } {
+  const { data: clients } = useFireClients();
+  const { data: returns } = useFireReturns();
+  const { data: invoices } = useFireInvoices();
+  const { data: reconciliations } = useFireReconciliations();
+  const { data: activities } = useFireRecentActivities(50);
+
+  const loading = clients.length === 0 && returns.length === 0;
+
+  const scores = useMemo<FirmExecutiveScores>(() => {
+    if (loading) {
+      return { firmHealth: 0, revenue: 0, compliance: 0, teamEfficiency: 0, clientSatisfaction: 0, cashFlow: 0 };
+    }
+
+    // Firm Health: weighted avg of client health scores
+    const activeClients = clients.filter(c => c.status === 'active');
+    const avgHealth = activeClients.length > 0
+      ? activeClients.reduce((s, c) => s + (c.healthScore || 0), 0) / activeClients.length
+      : 50;
+
+    // Revenue Score: based on tax volume
+    const totalTax = invoices.reduce((s, i) => s + (i.totalTax || 0) + (i.cgst || 0) + (i.sgst || 0) + (i.igst || 0), 0);
+    const revenueScore = Math.min(100, Math.round((totalTax / 1000000) * 100));
+
+    // Compliance Score: filed vs total returns
+    const filedReturns = returns.filter(r => r.status === 'filed').length;
+    const complianceScore = returns.length > 0 ? Math.round((filedReturns / returns.length) * 100) : 50;
+
+    // Team Efficiency: based on completed activities
+    const completedActivities = activities.filter(a => a.type.includes('filed') || a.type.includes('completed') || a.type.includes('resolved')).length;
+    const teamEfficiency = activities.length > 0 ? Math.min(100, Math.round((completedActivities / Math.max(activities.length, 1)) * 100)) : 50;
+
+    // Client Satisfaction: inverse of overdue + health
+    const overdueClients = activeClients.filter(c => (c.pendingReturnCount || 0) > 0).length;
+    const clientSatisfaction = activeClients.length > 0 ? Math.round(((activeClients.length - overdueClients) / activeClients.length) * 100) : 50;
+
+    // Cash Flow: based on reconciliation match rate
+    const matchedRecons = reconciliations.filter(r => r.matched > 0);
+    const totalMatched = matchedRecons.reduce((s, r) => s + r.matched, 0);
+    const totalRecords = matchedRecons.reduce((s, r) => s + r.totalRecords, 0);
+    const cashFlow = totalRecords > 0 ? Math.round((totalMatched / totalRecords) * 100) : 50;
+
+    return {
+      firmHealth: Math.round(avgHealth) || 50,
+      revenue: revenueScore || 50,
+      compliance: complianceScore || 50,
+      teamEfficiency: teamEfficiency || 50,
+      clientSatisfaction: clientSatisfaction || 50,
+      cashFlow: cashFlow || 50,
+    };
+  }, [clients, returns, invoices, reconciliations, activities, loading]);
+
+  return { scores, loading };
 }

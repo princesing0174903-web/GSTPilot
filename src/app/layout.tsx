@@ -1,21 +1,23 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Inter, JetBrains_Mono } from "next/font/google";
 import { Providers } from "@/components/providers";
 import "./globals.css";
 
-const geistSans = Geist({
+const inter = Inter({
   variable: "--font-geist-sans",
   subsets: ["latin"],
+  display: "swap",
 });
 
-const geistMono = Geist_Mono({
+const jetbrainsMono = JetBrains_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
+  display: "swap",
 });
 
 export const metadata: Metadata = {
-  title: "GSTPilot AI - GST Compliance Platform",
-  description: "AI-powered GST compliance platform for seamless tax management, return filing, and regulatory adherence.",
+  title: "GSTPilot Intelligence™ — The Financial Brain of India",
+  description: "The world's most premium Financial Operating System for Chartered Accountants and Indian Businesses.",
 };
 
 export default function RootLayout({
@@ -24,9 +26,9 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" suppressHydrationWarning className="dark">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} min-h-screen bg-background antialiased`}
+        className={`${inter.variable} ${jetbrainsMono.variable} min-h-screen bg-background text-foreground antialiased font-sans`}
       >
         <Providers>{children}</Providers>
       </body>

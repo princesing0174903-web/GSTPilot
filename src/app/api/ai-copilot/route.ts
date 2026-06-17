@@ -1,0 +1,228 @@
+import { NextResponse } from 'next/server'
+import ZAI from 'z-ai-web-dev-sdk'
+
+// ─── Context Types ───────────────────────────────────────────────────────────
+
+interface ClientSummary {
+  name: string
+  gstin: string
+  healthScore: number
+  status: string
+  pendingReturns?: number
+}
+
+interface ReturnSummary {
+  type: string
+  period: string
+  status: string
+  client?: string
+}
+
+interface InvoiceStats {
+  total: number
+  totalAmount: number
+  mismatched: number
+  highRisk: number
+}
+
+interface ReconStats {
+  total: number
+  avgMatchRate: number
+  totalMismatches: number
+}
+
+interface DashboardMetrics {
+  totalClients?: number
+  activeClients?: number
+  filedReturns?: number
+  pendingReturns?: number
+  overdueReturns?: number
+  readyToFile?: number
+  averageHealthScore?: number
+  totalTaxVolume?: number
+  criticalIssues?: number
+  warnings?: number
+}
+
+interface CopilotContext {
+  clients?: ClientSummary[]
+  returns?: ReturnSummary[]
+  invoiceStats?: InvoiceStats
+  reconStats?: ReconStats
+  dashboardMetrics?: DashboardMetrics
+}
+
+interface CopilotRequestBody {
+  message: string
+  context?: CopilotContext
+}
+
+// ─── System Prompt Builder ───────────────────────────────────────────────────
+
+function buildSystemPrompt(context: CopilotContext): string {
+  const now = new Date().toISOString()
+  const currentMonth = new Date().toLocaleString('en-IN', { month: 'long', year: 'numeric' })
+
+  let liveDataSection = ''
+
+  if (context.dashboardMetrics) {
+    const m = context.dashboardMetrics
+    liveDataSection += `
+## Live Dashboard Metrics (as of ${now})
+- Total Clients: ${m.totalClients ?? 'N/A'}
+- Active Clients: ${m.activeClients ?? 'N/A'}
+- Filed Returns: ${m.filedReturns ?? 'N/A'}
+- Pending Returns: ${m.pendingReturns ?? 'N/A'}
+- Overdue Returns: ${m.overdueReturns ?? 'N/A'}
+- Ready to File: ${m.readyToFile ?? 'N/A'}
+- Average Client Health Score: ${m.averageHealthScore ?? 'N/A'}/100
+- Total Tax Volume: ₹${(m.totalTaxVolume ?? 0).toLocaleString('en-IN')}
+- Critical Issues: ${m.criticalIssues ?? 'N/A'}
+- Warnings: ${m.warnings ?? 'N/A'}
+`
+  }
+
+  if (context.clients && context.clients.length > 0) {
+    const atRisk = context.clients.filter(c => c.healthScore < 60)
+    const needsAttention = context.clients.filter(c => c.healthScore >= 60 && c.healthScore < 80)
+
+    liveDataSection += `
+## Client Health Overview (${context.clients.length} clients)
+### At-Risk Clients (Health Score < 60):
+${atRisk.length > 0 ? atRisk.slice(0, 10).map(c => `- ${c.name} (${c.gstin}): Score ${c.healthScore}/100, Status: ${c.status}, Pending: ${c.pendingReturns ?? 0}`).join('\n') : '- None currently at risk'}
+
+### Needs Attention (Score 60-79):
+${needsAttention.length > 0 ? needsAttention.slice(0, 5).map(c => `- ${c.name} (${c.gstin}): Score ${c.healthScore}/100`).join('\n') : '- All clients in good standing'}
+`
+  }
+
+  if (context.returns && context.returns.length > 0) {
+    const overdue = context.returns.filter(r => r.status === 'overdue')
+    const gstr1 = context.returns.filter(r => r.type === 'GSTR-1')
+    const gstr3b = context.returns.filter(r => r.type === 'GSTR-3B')
+
+    liveDataSection += `
+## Pending Returns (${context.returns.length} total)
+### Overdue:
+${overdue.length > 0 ? overdue.slice(0, 10).map(r => `- ${r.type} for ${r.client ?? 'Unknown'} — Period: ${r.period}`).join('\n') : '- No overdue returns'}
+
+### Pending GSTR-1: ${gstr1.length}
+### Pending GSTR-3B: ${gstr3b.length}
+`
+  }
+
+  if (context.invoiceStats) {
+    const inv = context.invoiceStats
+    liveDataSection += `
+## Invoice Overview
+- Total Invoices: ${inv.total}
+- Total Amount: ₹${inv.totalAmount.toLocaleString('en-IN')}
+- Mismatched: ${inv.mismatched}
+- High Risk: ${inv.highRisk}
+`
+  }
+
+  if (context.reconStats) {
+    const r = context.reconStats
+    liveDataSection += `
+## Reconciliation Summary
+- Total Runs: ${r.total}
+- Average Match Rate: ${r.avgMatchRate}%
+- Total Mismatches: ${r.totalMismatches}
+`
+  }
+
+  return `You are GSTPilot AI Copilot — an expert GST (Goods & Services Tax) compliance assistant for Indian Chartered Accountants and tax professionals. You are embedded in the GSTPilot practice management platform.
+
+## Your Expertise
+You have deep knowledge of:
+- **GSTR-1** (Outward Supplies Return): Filing workflow, B2B/B2C sections, HSN/SAC summaries, amendments
+- **GSTR-3B** (Summary Return): Tax liability, ITC claims, reverse charge, late fee calculation
+- **GSTR-2B** (Auto-drafted ITC Statement): Auto-populated from suppliers' GSTR-1, ITC eligibility
+- **GST Reconciliation**: 2A/2B vs books matching, mismatch resolution, ITC optimization
+- **ITC (Input Tax Credit)**: Eligibility rules, blocked credits, matching requirements, time limits
+- **Late Fees & Penalties**: ₹50/day (₹20 for nil returns), interest at 18% p.a., penalty provisions
+- **Compliance Deadlines**: GSTR-1 by 11th, GSTR-3B by 20th, GSTR-2B auto-generated by 13th/14th
+- **Client Health Scoring**: Based on filing compliance, ITC match rate, return timeliness
+
+## Your Role
+- Provide accurate, actionable GST compliance guidance based on LIVE data from the user's practice
+- Identify at-risk clients, pending filings, and reconciliation gaps proactively
+- Answer questions about specific clients, returns, invoices, and reconciliation status
+- Generate summaries, compliance reports, and filing recommendations
+- Always reference the live data when answering — use actual numbers, client names, and dates
+- Use Indian number formatting (lakhs/crores) and ₹ symbol for monetary values
+- Keep responses concise but thorough — use bullet points and structured formatting
+
+## Current Period
+Current month: ${currentMonth}
+
+${liveDataSection}
+
+## Response Guidelines
+1. **Be data-driven**: Always reference the live metrics and client data above when answering
+2. **Prioritize urgency**: Highlight overdue filings, at-risk clients, and critical issues first
+3. **Be specific**: Use actual client names, GSTINs, and numbers — never generic placeholders
+4. **Offer next steps**: After identifying issues, suggest concrete actions
+5. **Stay current**: Reference current GST rules, deadlines, and rates
+6. **Be professional**: You're assisting CAs and tax professionals — use precise terminology
+7. **Format clearly**: Use markdown with headers, bullets, and bold text for readability
+
+If no live data is available, provide general GST compliance guidance while noting the absence of specific data.`
+}
+
+// ─── POST Handler ────────────────────────────────────────────────────────────
+
+export async function POST(request: Request) {
+  try {
+    const body: CopilotRequestBody = await request.json()
+    const { message, context: clientContext } = body
+
+    if (!message || typeof message !== 'string' || message.trim().length === 0) {
+      return NextResponse.json(
+        { error: 'message is required and must be a non-empty string' },
+        { status: 400 }
+      )
+    }
+
+    // Use client-provided Firestore context (live data from onSnapshot listeners)
+    const context: CopilotContext = clientContext || {}
+
+    // Build the system prompt with live context
+    const systemPrompt = buildSystemPrompt(context)
+
+    // Call the AI SDK
+    const zai = await ZAI.create()
+    const completion = await zai.chat.completions.create({
+      messages: [
+        { role: 'assistant', content: systemPrompt },
+        { role: 'user', content: message.trim() },
+      ],
+      thinking: { type: 'disabled' },
+    })
+
+    const response = completion.choices[0]?.message?.content
+
+    if (!response) {
+      return NextResponse.json(
+        {
+          response:
+            'I apologize, but I was unable to generate a response. Please try rephrasing your question or ask about a specific GST compliance topic.',
+        },
+        { status: 200 }
+      )
+    }
+
+    return NextResponse.json({ response })
+  } catch (error) {
+    console.error('[AI-COPILOT] Error:', error)
+
+    const fallbackMessage =
+      'I\'m currently unable to process your request due to a technical issue. Please try again in a moment. For urgent GST compliance queries, refer to the GST portal (gst.gov.in) or consult the CBIC notifications.'
+
+    return NextResponse.json(
+      { response: fallbackMessage },
+      { status: 500 }
+    )
+  }
+}

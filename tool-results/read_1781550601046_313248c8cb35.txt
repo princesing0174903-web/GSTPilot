@@ -1,0 +1,675 @@
+     1→'use client'
+     2→
+     3→import React, { useEffect, useState, useRef } from 'react'
+     4→import {
+     5→  SidebarProvider,
+     6→  SidebarTrigger,
+     7→  SidebarInset,
+     8→} from '@/components/ui/sidebar'
+     9→import { AppSidebar } from '@/components/app-sidebar'
+    10→import { useApp } from '@/contexts/AppContext'
+    11→import { useAuth } from '@/contexts/AuthContext'
+    12→import DashboardPage from '@/components/dashboard/DashboardPage'
+    13→import ReturnsPage from '@/components/returns/ReturnsPage'
+    14→import ReconciliationPage from '@/components/reconciliation/ReconciliationPage'
+    15→import InvoiceWorkspacePage from '@/components/invoices/InvoiceWorkspacePage'
+    16→import ClientRegistryPage from '@/components/clients/ClientRegistryPage'
+    17→import ClientWorkspacePage from '@/components/clients/ClientWorkspacePage'
+    18→import ReturnPrepWorkspace from '@/components/returns/ReturnPrepWorkspace'
+    19→import SettingsPage from '@/components/settings/SettingsPage'
+    20→import LandingPage from '@/components/landing/LandingPage'
+    21→import LoginPage from '@/components/auth/LoginPage'
+    22→import { OnboardingFlow } from '@/components/onboarding/OnboardingFlow'
+    23→import { Separator } from '@/components/ui/separator'
+    24→import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+    25→import { Badge } from '@/components/ui/badge'
+    26→import {
+    27→  DropdownMenu,
+    28→  DropdownMenuContent,
+    29→  DropdownMenuItem,
+    30→  DropdownMenuSeparator,
+    31→  DropdownMenuTrigger,
+    32→} from '@/components/ui/dropdown-menu'
+    33→import {
+    34→  Popover,
+    35→  PopoverContent,
+    36→  PopoverTrigger,
+    37→} from '@/components/ui/popover'
+    38→import { Button } from '@/components/ui/button'
+    39→import { ScrollArea } from '@/components/ui/scroll-area'
+    40→import {
+    41→  Zap, LogOut, User, Settings, MailCheck, Search, Bell, BellRing,
+    42→  Command, Check, AlertTriangle, Clock,
+    43→  FileText, Users, Sparkles,
+    44→} from 'lucide-react'
+    45→
+    46→import WorkflowTracker from '@/components/workflow/WorkflowTracker'
+    47→import AICopilot from '@/components/copilot/AICopilot'
+    48→import CommandPalette from '@/components/command-palette/CommandPalette'
+    49→import {
+    50→  useFireUnreadNotifications,
+    51→  useFireNotifications,
+    52→} from '@/hooks/use-firestore'
+    53→import { markNotificationRead } from '@/lib/firestore-service'
+    54→import type { FirestoreNotification } from '@/lib/firestore-schema'
+    55→
+    56→// ═══════════════════════════════════════════════════════════════════════════════
+    57→// LAZY-LOADED PAGES
+    58→// ═══════════════════════════════════════════════════════════════════════════════
+    59→
+    60→import AnalyticsPage from '@/components/analytics/AnalyticsPage'
+    61→import TimelinePage from '@/components/timeline/TimelinePage'
+    62→import BillingPage from '@/components/billing/BillingPage'
+    63→import TeamPage from '@/components/team/TeamPage'
+    64→import TasksPage from '@/components/tasks/TasksPage'
+    65→import AutomationsPage from '@/components/automations/AutomationsPage'
+    66→import AgentsPage from '@/components/agents/AgentsPage'
+    67→import AutopilotPage from '@/components/autopilot/AutopilotPage'
+    68→import DocumentsPage from '@/components/documents/DocumentsPage'
+    69→import CollaborationPage from '@/components/collaboration/CollaborationPage'
+    70→import CRMPage from '@/components/crm/CRMPage'
+    71→import ClientPortalPage from '@/components/client-portal/ClientPortalPage'
+    72→import AICFODashboardPage from '@/components/ai-cfo/AICFODashboardPage'
+    73→import WhiteLabelPage from '@/components/white-label/WhiteLabelPage'
+    74→import MarketplacePage from '@/components/marketplace/MarketplacePage'
+    75→import AuditLogsPage from '@/components/audit-logs/AuditLogsPage'
+    76→import ApprovalsPage from '@/components/approvals/ApprovalsPage'
+    77→import APIPlatformPage from '@/components/api-platform/APIPlatformPage'
+    78→import VersionHistoryPage from '@/components/version-history/VersionHistoryPage'
+    79→import ESignaturesPage from '@/components/esignatures/ESignaturesPage'
+    80→import FirmCommandCenterPage from '@/components/firm-command-center/FirmCommandCenterPage'
+    81→
+    82→const VIEW_TITLES: Record<string, string> = {
+    83→  dashboard: 'Dashboard',
+    84→  returns: 'Returns',
+    85→  reconcile: 'Reconcile',
+    86→  invoices: 'Invoices',
+    87→  clients: 'Clients',
+    88→  settings: 'Settings',
+    89→  'client-workspace': 'Client Workspace',
+    90→  'return-prep': 'Return Preparation',
+    91→  analytics: 'Analytics',
+    92→  notifications: 'Notifications',
+    93→  billing: 'Billing',
+    94→  timeline: 'Timeline',
+    95→  team: 'Team',
+    96→  tasks: 'Tasks',
+    97→  automations: 'Automations',
+    98→  agents: 'AI Agents',
+    99→  autopilot: 'Autopilot',
+   100→  documents: 'Document Intelligence',
+   101→  collaboration: 'Collaboration',
+   102→  crm: 'CRM',
+   103→  'ai-cfo': 'AI CFO',
+   104→  'client-portal': 'Client Portal',
+   105→  marketplace: 'Marketplace',
+   106→  'white-label': 'White Label',
+   107→  'audit-trail': 'Audit Trail',
+   108→  approvals: 'Approvals',
+   109→  'api-platform': 'API Platform',
+   110→  'version-history': 'Version History',
+   111→  esignatures: 'E-Signatures',
+   112→  'firm-command-center': 'Firm Command Center',
+   113→}
+   114→
+   115→// ═══════════════════════════════════════════════════════════════════════════════
+   116→// NOTIFICATION DROPDOWN
+   117→// ═══════════════════════════════════════════════════════════════════════════════
+   118→
+   119→function NotificationBell() {
+   120→  const { data: unreadNotifs } = useFireUnreadNotifications()
+   121→  const { data: allNotifs } = useFireNotifications()
+   122→  const unreadCount = unreadNotifs.length
+   123→  const [open, setOpen] = useState(false)
+   124→
+   125→  const handleMarkRead = async (notifId: string) => {
+   126→    try { await markNotificationRead(notifId) } catch {}
+   127→  }
+   128→
+   129→  const handleMarkAllRead = async () => {
+   130→    try {
+   131→      for (const n of unreadNotifs) {
+   132→        await markNotificationRead(n.notifId || n.id)
+   133→      }
+   134→    } catch {}
+   135→  }
+   136→
+   137→  const priorityColor = (p: string) => {
+   138→    switch (p) {
+   139→      case 'urgent': return 'text-red-600 bg-red-50 border-red-200'
+   140→      case 'high': return 'text-orange-600 bg-orange-50 border-orange-200'
+   141→      case 'normal': return 'text-blue-600 bg-blue-50 border-blue-200'
+   142→      default: return 'text-slate-600 bg-slate-50 border-slate-200'
+   143→    }
+   144→  }
+   145→
+   146→  const priorityBadge = (p: string) => {
+   147→    switch (p) {
+   148→      case 'urgent': return 'bg-red-500'
+   149→      case 'high': return 'bg-orange-500'
+   150→      case 'normal': return 'bg-blue-500'
+   151→      default: return 'bg-slate-400'
+   152→    }
+   153→  }
+   154→
+   155→  const typeIcon = (t: string) => {
+   156→    switch (t) {
+   157→      case 'filing_due': case 'filing_overdue': return <Clock className="h-3.5 w-3.5" />
+   158→      case 'mismatch_found': return <AlertTriangle className="h-3.5 w-3.5" />
+   159→      case 'filing_completed': return <Check className="h-3.5 w-3.5" />
+   160→      case 'extraction_complete': return <FileText className="h-3.5 w-3.5" />
+   161→      case 'issue_detected': return <AlertTriangle className="h-3.5 w-3.5" />
+   162→      case 'ai_insight': return <Sparkles className="h-3.5 w-3.5" />
+   163→      default: return <Bell className="h-3.5 w-3.5" />
+   164→    }
+   165→  }
+   166→
+   167→  const displayed = (allNotifs || []).slice(0, 15)
+   168→
+   169→  return (
+   170→    <Popover open={open} onOpenChange={setOpen}>
+   171→      <PopoverTrigger asChild>
+   172→        <Button variant="ghost" size="sm" className="relative h-8 w-8 p-0 rounded-lg hover:bg-accent">
+   173→          {unreadCount > 0 ? (
+   174→            <BellRing className="h-4 w-4 text-amber-600" />
+   175→          ) : (
+   176→            <Bell className="h-4 w-4 text-muted-foreground" />
+   177→          )}
+   178→          {unreadCount > 0 && (
+   179→            <span className="absolute -top-0.5 -right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[9px] font-bold text-white">
+   180→              {unreadCount > 9 ? '9+' : unreadCount}
+   181→            </span>
+   182→          )}
+   183→        </Button>
+   184→      </PopoverTrigger>
+   185→      <PopoverContent align="end" className="w-80 sm:w-96 p-0 gap-0" sideOffset={8}>
+   186→        <div className="flex items-center justify-between px-4 py-3 border-b">
+   187→          <div className="flex items-center gap-2">
+   188→            <h3 className="text-sm font-semibold">Notifications</h3>
+   189→            {unreadCount > 0 && (
+   190→              <Badge variant="secondary" className="h-5 px-1.5 text-[10px] bg-red-100 text-red-700">
+   191→                {unreadCount} new
+   192→              </Badge>
+   193→            )}
+   194→          </div>
+   195→          {unreadCount > 0 && (
+   196→            <Button variant="ghost" size="sm" onClick={handleMarkAllRead} className="h-6 text-[10px] text-emerald-600 hover:text-emerald-700 px-2">
+   197→              Mark all read
+   198→            </Button>
+   199→          )}
+   200→        </div>
+   201→        <ScrollArea className="max-h-80">
+   202→          {displayed.length === 0 ? (
+   203→            <div className="flex flex-col items-center justify-center py-8 px-4 text-center">
+   204→              <Bell className="h-8 w-8 text-muted-foreground/30 mb-2" />
+   205→              <p className="text-sm text-muted-foreground">No notifications yet</p>
+   206→              <p className="text-xs text-muted-foreground/60 mt-1">Notifications will appear here when returns are due, mismatches are found, or documents are processed.</p>
+   207→            </div>
+   208→          ) : (
+   209→            <div className="divide-y">
+   210→              {displayed.map((notif: FirestoreNotification & { id: string }) => (
+   211→                <div
+   212→                  key={notif.id}
+   213→                  className={`flex gap-3 px-4 py-3 hover:bg-accent/50 transition-colors cursor-pointer ${!notif.read ? 'bg-emerald-50/50 dark:bg-emerald-950/20' : ''}`}
+   214→                  onClick={() => !notif.read && handleMarkRead(notif.notifId || notif.id)}
+   215→                >
+   216→                  <div className={`mt-0.5 flex items-center justify-center h-7 w-7 rounded-full shrink-0 ${priorityColor(notif.priority)}`}>
+   217→                    {typeIcon(notif.type)}
+   218→                  </div>
+   219→                  <div className="flex-1 min-w-0">
+   220→                    <div className="flex items-center gap-1.5">
+   221→                      <p className={`text-xs font-medium truncate ${!notif.read ? 'text-foreground' : 'text-muted-foreground'}`}>
+   222→                        {notif.title}
+   223→                      </p>
+   224→                      {!notif.read && <span className={`h-1.5 w-1.5 rounded-full ${priorityBadge(notif.priority)} shrink-0`} />}
+   225→                    </div>
+   226→                    <p className="text-[11px] text-muted-foreground line-clamp-2 mt-0.5">{notif.message}</p>
+   227→                    <div className="flex items-center gap-2 mt-1">
+   228→                      <span className="text-[10px] text-muted-foreground/50">
+   229→                        {notif.createdAt ? new Date(notif.createdAt as string).toLocaleString('en-IN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''}
+   230→                      </span>
+   231→                    </div>
+   232→                  </div>
+   233→                </div>
+   234→              ))}
+   235→            </div>
+   236→          )}
+   237→        </ScrollArea>
+   238→        {displayed.length > 0 && (
+   239→          <div className="border-t px-4 py-2">
+   240→            <Button
+   241→              variant="ghost"
+   242→              size="sm"
+   243→              className="w-full text-xs text-emerald-600 hover:text-emerald-700"
+   244→              onClick={() => {
+   245→                setOpen(false)
+   246→              }}
+   247→            >
+   248→              View All Notifications
+   249→            </Button>
+   250→          </div>
+   251→        )}
+   252→      </PopoverContent>
+   253→    </Popover>
+   254→  )
+   255→}
+   256→
+   257→// ═══════════════════════════════════════════════════════════════════════════════
+   258→// GLOBAL SEARCH BAR
+   259→// ═══════════════════════════════════════════════════════════════════════════════
+   260→
+   261→function GlobalSearchBar() {
+   262→  const { setCommandPaletteOpen } = useApp()
+   263→
+   264→  return (
+   265→    <button
+   266→      onClick={() => setCommandPaletteOpen(true)}
+   267→      className="flex items-center gap-2 h-8 rounded-lg border border-border/60 bg-muted/40 px-3 text-muted-foreground hover:bg-muted/60 hover:border-border transition-colors w-full max-w-xs sm:max-w-sm"
+   268→    >
+   269→      <Search className="h-3.5 w-3.5 shrink-0" />
+   270→      <span className="text-xs truncate flex-1 text-left">Search clients, invoices, returns...</span>
+   271→      <kbd className="hidden sm:inline-flex items-center gap-0.5 rounded border bg-background px-1 py-0.5 text-[9px] font-mono text-muted-foreground/60">
+   272→        <Command className="h-2.5 w-2.5" />K
+   273→      </kbd>
+   274→    </button>
+   275→  )
+   276→}
+   277→
+   278→
+   279→
+   280→// ═══════════════════════════════════════════════════════════════════════════════
+   281→// KEYBOARD SHORTCUTS HOOK
+   282→// ═══════════════════════════════════════════════════════════════════════════════
+   283→
+   284→function useKeyboardShortcuts() {
+   285→  const { setCurrentView, setCommandPaletteOpen, commandPaletteOpen } = useApp()
+   286→  const gPressed = useRef(false)
+   287→  const gTimer = useRef<NodeJS.Timeout | null>(null)
+   288→
+   289→  useEffect(() => {
+   290→    const handler = (e: KeyboardEvent) => {
+   291→      // Ctrl+K → Toggle Command Palette
+   292→      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+   293→        e.preventDefault()
+   294→        setCommandPaletteOpen(!commandPaletteOpen)
+   295→        return
+   296→      }
+   297→
+   298→      // G prefix shortcuts (G+D, G+C, G+I, G+R)
+   299→      if (e.key === 'g' && !e.metaKey && !e.ctrlKey && !e.altKey && !(e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement)) {
+   300→        if (gPressed.current) return
+   301→        gPressed.current = true
+   302→        gTimer.current = setTimeout(() => { gPressed.current = false }, 500)
+   303→        return
+   304→      }
+   305→
+   306→      if (gPressed.current && !e.metaKey && !e.ctrlKey && !e.altKey) {
+   307→        gPressed.current = false
+   308→        if (gTimer.current) clearTimeout(gTimer.current)
+   309→
+   310→        switch (e.key) {
+   311→          case 'd': setCurrentView('dashboard'); break
+   312→          case 'c': setCurrentView('clients'); break
+   313→          case 'i': setCurrentView('invoices'); break
+   314→          case 'r': setCurrentView('returns'); break
+   315→        }
+   316→      }
+   317→    }
+   318→
+   319→    window.addEventListener('keydown', handler)
+   320→    return () => window.removeEventListener('keydown', handler)
+   321→  }, [setCurrentView, setCommandPaletteOpen, commandPaletteOpen])
+   322→}
+   323→
+   324→// ═══════════════════════════════════════════════════════════════════════════════
+   325→// DASHBOARD CONTENT (main app layout)
+   326→// ═══════════════════════════════════════════════════════════════════════════════
+   327→
+   328→function DashboardContent() {
+   329→  const { currentView, setCurrentView, setCommandPaletteOpen } = useApp()
+   330→  const { user, logout } = useAuth()
+   331→
+   332→  useKeyboardShortcuts()
+   333→
+   334→  const renderView = () => {
+   335→    switch (currentView) {
+   336→      case 'dashboard': return <DashboardPage />
+   337→      case 'returns': return <ReturnsPage />
+   338→      case 'reconcile': return <ReconciliationPage />
+   339→      case 'invoices': return <InvoiceWorkspacePage />
+   340→      case 'clients': return <ClientRegistryPage />
+   341→      case 'client-workspace': return <ClientWorkspacePage />
+   342→      case 'return-prep': return <ReturnPrepWorkspace />
+   343→      case 'settings': return <SettingsPage />
+   344→      case 'analytics': return <AnalyticsPage />
+   345→      case 'timeline': return <TimelinePage />
+   346→      case 'billing': return <BillingPage />
+   347→      case 'team': return <TeamPage />
+   348→      case 'automations': return <AutomationsPage />
+   349→      case 'tasks': return <TasksPage />
+   350→      case 'agents': return <AgentsPage />
+   351→      case 'autopilot': return <AutopilotPage />
+   352→      case 'documents': return <DocumentsPage />
+   353→      case 'collaboration': return <CollaborationPage />
+   354→      case 'crm': return <CRMPage />
+   355→      case 'ai-cfo': return <AICFODashboardPage />
+   356→      case 'client-portal': return <ClientPortalPage />
+   357→      case 'white-label': return <WhiteLabelPage />
+   358→      case 'marketplace': return <MarketplacePage />
+   359→      case 'audit-trail': return <AuditLogsPage />
+   360→      case 'approvals': return <ApprovalsPage />
+   361→      case 'api-platform': return <APIPlatformPage />
+   362→      case 'version-history': return <VersionHistoryPage />
+   363→      case 'esignatures': return <ESignaturesPage />
+   364→      case 'firm-command-center': return <FirmCommandCenterPage />
+   365→      default: return <DashboardPage />
+   366→    }
+   367→  }
+   368→
+   369→  const userInitials = user?.name
+   370→    ? user.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
+   371→    : 'U'
+   372→
+   373→  return (
+   374→    <SidebarProvider>
+   375→      <AppSidebar onSearchOpen={() => setCommandPaletteOpen(true)} />
+   376→      <SidebarInset>
+   377→        <header className="flex h-13 items-center gap-3 border-b bg-white/80 backdrop-blur-sm px-4 sticky top-0 z-10 dark:bg-sidebar/80">
+   378→          <SidebarTrigger className="-ml-1 h-7 w-7" />
+   379→          <Separator orientation="vertical" className="h-5" />
+   380→          <h1 className="text-sm font-semibold text-foreground hidden sm:block">
+   381→            {VIEW_TITLES[currentView] || 'Dashboard'}
+   382→          </h1>
+   383→
+   384→          {/* Global Search Bar */}
+   385→          <div className="flex-1 flex justify-center px-2">
+   386→            <GlobalSearchBar />
+   387→          </div>
+   388→
+   389→          {/* Right side: Notifications + User */}
+   390→          <div className="flex items-center gap-2">
+   391→            <NotificationBell />
+   392→            <Separator orientation="vertical" className="h-5" />
+   393→            <DropdownMenu>
+   394→              <DropdownMenuTrigger className="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-accent transition-colors outline-none">
+   395→                <Avatar className="h-7 w-7">
+   396→                  <AvatarImage src={user?.picture} alt={user?.name || 'User'} />
+   397→                  <AvatarFallback className="bg-emerald-100 text-emerald-700 text-[11px] font-semibold">
+   398→                    {userInitials}
+   399→                  </AvatarFallback>
+   400→                </Avatar>
+   401→                <div className="hidden sm:flex flex-col items-start">
+   402→                  <span className="text-xs font-medium text-foreground leading-tight">{user?.name || 'User'}</span>
+   403→                  <span className="text-[10px] text-muted-foreground leading-tight">{user?.email || ''}</span>
+   404→                </div>
+   405→              </DropdownMenuTrigger>
+   406→              <DropdownMenuContent align="end" className="w-56">
+   407→                <div className="flex items-center gap-2 p-2">
+   408→                  <Avatar className="h-8 w-8">
+   409→                    <AvatarImage src={user?.picture} alt={user?.name || 'User'} />
+   410→                    <AvatarFallback className="bg-emerald-100 text-emerald-700 text-xs font-semibold">
+   411→                      {userInitials}
+   412→                    </AvatarFallback>
+   413→                  </Avatar>
+   414→                  <div className="flex-1 min-w-0">
+   415→                    <p className="text-sm font-medium truncate">{user?.name || 'User'}</p>
+   416→                    <p className="text-xs text-muted-foreground truncate">{user?.email || ''}</p>
+   417→                  </div>
+   418→                </div>
+   419→                <DropdownMenuSeparator />
+   420→                <DropdownMenuItem className="gap-2">
+   421→                  <User className="h-4 w-4" />
+   422→                  Profile
+   423→                </DropdownMenuItem>
+   424→                <DropdownMenuItem onClick={() => setCurrentView('settings')} className="gap-2">
+   425→                  <Settings className="h-4 w-4" />
+   426→                  Settings
+   427→                </DropdownMenuItem>
+   428→                <DropdownMenuSeparator />
+   429→                <DropdownMenuItem onClick={logout} className="gap-2 text-red-600 focus:text-red-600 focus:bg-red-50">
+   430→                  <LogOut className="h-4 w-4" />
+   431→                  Sign Out
+   432→                </DropdownMenuItem>
+   433→              </DropdownMenuContent>
+   434→            </DropdownMenu>
+   435→          </div>
+   436→        </header>
+   437→        {/* Persistent Workflow Tracker Bar */}
+   438→        <div className="border-b border-border/30 bg-white/60 dark:bg-gray-900/60 backdrop-blur-sm px-4">
+   439→          <WorkflowTracker compact />
+   440→        </div>
+   441→        <main className="flex-1 overflow-auto bg-gray-50/50 dark:bg-gray-950/50">
+   442→          {renderView()}
+   443→        </main>
+   444→      </SidebarInset>
+   445→      <AICopilot />
+   446→      <CommandPalette />
+   447→    </SidebarProvider>
+   448→  )
+   449→}
+   450→
+   451→// ═══════════════════════════════════════════════════════════════════════════════
+   452→// EMAIL VERIFICATION BANNER
+   453→// ═══════════════════════════════════════════════════════════════════════════════
+   454→
+   455→function EmailVerificationBanner() {
+   456→  const { user, logout } = useAuth()
+   457→  const [sending, setSending] = useState(false)
+   458→  const [sent, setSent] = useState(false)
+   459→
+   460→  const handleResend = async () => {
+   461→    setSending(true)
+   462→    try {
+   463→      const { sendVerificationEmail } = await import('@/lib/auth')
+   464→      const { error } = await sendVerificationEmail()
+   465→      if (!error) setSent(true)
+   466→    } catch {
+   467→      // ignore
+   468→    } finally {
+   469→      setSending(false)
+   470→    }
+   471→  }
+   472→
+   473→  return (
+   474→    <div className="bg-amber-50 border-b border-amber-200 px-4 py-3">
+   475→      <div className="flex items-center justify-between gap-3 max-w-7xl mx-auto">
+   476→        <div className="flex items-center gap-2.5">
+   477→          <MailCheck className="h-5 w-5 text-amber-600 shrink-0" />
+   478→          <p className="text-sm text-amber-800">
+   479→            {sent
+   480→              ? 'Verification email sent! Check your inbox.'
+   481→              : 'Please verify your email address to access all features.'}
+   482→          </p>
+   483→        </div>
+   484→        <div className="flex items-center gap-2">
+   485→          {!sent && (
+   486→            <button
+   487→              onClick={handleResend}
+   488→              disabled={sending}
+   489→              className="text-xs font-semibold text-amber-700 hover:text-amber-900 underline disabled:opacity-50"
+   490→            >
+   491→              {sending ? 'Sending...' : 'Resend email'}
+   492→            </button>
+   493→          )}
+   494→          <button
+   495→            onClick={logout}
+   496→            className="text-xs text-amber-600 hover:text-amber-800 font-medium"
+   497→          >
+   498→            Sign out
+   499→          </button>
+   500→        </div>
+   501→      </div>
+   502→    </div>
+   503→  )
+   504→}
+   505→
+   506→// ═══════════════════════════════════════════════════════════════════════════════
+   507→// ONBOARDING SCREEN
+   508→// ═══════════════════════════════════════════════════════════════════════════════
+   509→
+   510→function OnboardingScreen() {
+   511→  const { user, markOnboardingComplete } = useAuth()
+   512→  const { setCurrentScreen, setCurrentView } = useApp()
+   513→  const [saveError, setSaveError] = React.useState<string | null>(null)
+   514→
+   515→  const saveOnboardingToFirestore = async (
+   516→    data: import('@/components/onboarding/OnboardingFlow').OnboardingData,
+   517→    firmId: string
+   518→  ) => {
+   519→    try {
+   520→      const { doc, setDoc, serverTimestamp } = await import('firebase/firestore')
+   521→      const { db } = await import('@/lib/firebase')
+   522→      if (!user) return
+   523→
+   524→      await setDoc(doc(db, 'users', user.id), {
+   525→        uid: user.id, fullName: data.fullName, email: data.email, phone: data.phone,
+   526→        ageGroup: data.ageGroup, profession: data.profession, experience: data.experience,
+   527→        firmId: firmId || null, firmName: data.firmName, onboardingCompleted: true,
+   528→        clientCount: data.clientCount, monthlyReturns: data.monthlyReturns,
+   529→        gstServices: data.gstServices, painPoints: data.painPoints,
+   530→        referralSource: data.referralSource, trialReasons: data.trialReasons,
+   531→        wantsUpdates: data.wantsUpdates, updatedAt: serverTimestamp(),
+   532→      }, { merge: true })
+   533→
+   534→      await setDoc(doc(db, 'onboarding', user.id), {
+   535→        ...data, firmId: firmId || null, completedAt: serverTimestamp(),
+   536→      })
+   537→    } catch (error) {
+   538→      console.warn('[Onboarding] Background Firestore save failed:', error)
+   539→    }
+   540→  }
+   541→
+   542→  const handleOnboardingComplete = (
+   543→    data: import('@/components/onboarding/OnboardingFlow').OnboardingData,
+   544→    destination?: import('@/components/onboarding/OnboardingFlow').OnboardingDestination
+   545→  ) => {
+   546→    setSaveError(null)
+   547→    if (!user) { setSaveError('No authenticated user found. Please sign in again.'); return }
+   548→
+   549→    markOnboardingComplete(undefined, data.firmName)
+   550→    setCurrentView(destination || 'dashboard')
+   551→    setCurrentScreen('app')
+   552→
+   553→    ;(async () => {
+   554→      try {
+   555→        const { collection, addDoc, serverTimestamp } = await import('firebase/firestore')
+   556→        const { db } = await import('@/lib/firebase')
+   557→        let firmId = ''
+   558→        try {
+   559→          const firmRef = await addDoc(collection(db, 'firms'), {
+   560→            ownerId: user.id, firmName: data.firmName, gstin: data.gstin || null,
+   561→            state: data.state, stateCode: data.stateCode,
+   562→            organizationType: data.organizationType,
+   563→            icaiMembershipNo: data.icaiMembershipNo || null,
+   564→            officeAddress: data.officeAddress || null, createdAt: serverTimestamp(),
+   565→          })
+   566→          firmId = firmRef.id
+   567→          markOnboardingComplete(firmId, data.firmName)
+   568→        } catch (firmError) {
+   569→          console.warn('[Onboarding] Firm creation failed:', firmError)
+   570→        }
+   571→        await saveOnboardingToFirestore(data, firmId)
+   572→      } catch (error) {
+   573→        console.warn('[Onboarding] Background save error:', error)
+   574→      }
+   575→    })()
+   576→  }
+   577→
+   578→  const handleSkip = () => {
+   579→    setSaveError(null)
+   580→    if (!user) { setSaveError('No authenticated user found.'); return }
+   581→
+   582→    markOnboardingComplete()
+   583→    setCurrentView('dashboard')
+   584→    setCurrentScreen('app')
+   585→
+   586→    ;(async () => {
+   587→      try {
+   588→        const { doc, setDoc, serverTimestamp } = await import('firebase/firestore')
+   589→        const { db } = await import('@/lib/firebase')
+   590→        await setDoc(doc(db, 'users', user.id), {
+   591→          onboardingCompleted: true, updatedAt: serverTimestamp(),
+   592→        }, { merge: true })
+   593→      } catch (error) {
+   594→        console.warn('[Onboarding] Background skip save failed:', error)
+   595→      }
+   596→    })()
+   597→  }
+   598→
+   599→  return (
+   600→    <OnboardingFlow
+   601→      onComplete={handleOnboardingComplete}
+   602→      onSkip={handleSkip}
+   603→      userEmail={user?.email}
+   604→      userName={user?.name}
+   605→      error={saveError}
+   606→      onDismissError={() => setSaveError(null)}
+   607→    />
+   608→  )
+   609→}
+   610→
+   611→// ═══════════════════════════════════════════════════════════════════════════════
+   612→// APP ROUTER
+   613→// ═══════════════════════════════════════════════════════════════════════════════
+   614→
+   615→function AppRouter() {
+   616→  const { currentScreen, setCurrentScreen } = useApp()
+   617→  const { isAuthenticated, isInitializing, needsOnboarding, needsEmailVerification } = useAuth()
+   618→
+   619→  useEffect(() => {
+   620→    if (isInitializing) return
+   621→    if (isAuthenticated && !needsOnboarding && currentScreen !== 'app') {
+   622→      setCurrentScreen('app')
+   623→    }
+   624→  }, [isAuthenticated, isInitializing, currentScreen, setCurrentScreen, needsOnboarding])
+   625→
+   626→  useEffect(() => {
+   627→    if (isInitializing) return
+   628→    if (!isAuthenticated && currentScreen === 'app') {
+   629→      setCurrentScreen('landing')
+   630→    }
+   631→  }, [isAuthenticated, isInitializing, currentScreen, setCurrentScreen])
+   632→
+   633→  const handleGetStarted = () => setCurrentScreen('login')
+   634→  const handleBookDemo = () => setCurrentScreen('login')
+   635→  const handleBackToLanding = () => setCurrentScreen('landing')
+   636→
+   637→  if (isInitializing && !isAuthenticated) {
+   638→    return (
+   639→      <div className="min-h-screen flex items-center justify-center bg-white">
+   640→        <div className="flex flex-col items-center gap-3">
+   641→          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-500 to-emerald-600 shadow-lg shadow-emerald-600/20">
+   642→            <Zap className="h-6 w-6 text-white animate-pulse" />
+   643→          </div>
+   644→          <span className="text-sm text-slate-500 font-medium">Loading GSTPilot...</span>
+   645→        </div>
+   646→      </div>
+   647→    )
+   648→  }
+   649→
+   650→  if (isAuthenticated && needsOnboarding) {
+   651→    return <OnboardingScreen />
+   652→  }
+   653→
+   654→  if (currentScreen === 'app' && isAuthenticated) {
+   655→    return (
+   656→      <div className="min-h-screen flex flex-col">
+   657→        {needsEmailVerification && <EmailVerificationBanner />}
+   658→        <div className="flex-1 flex">
+   659→          <DashboardContent />
+   660→        </div>
+   661→      </div>
+   662→    )
+   663→  }
+   664→
+   665→  if (currentScreen === 'login') {
+   666→    return <LoginPage onBack={handleBackToLanding} onGetStarted={handleGetStarted} />
+   667→  }
+   668→
+   669→  return <LandingPage onGetStarted={handleGetStarted} onBookDemo={handleBookDemo} />
+   670→}
+   671→
+   672→export default function Home() {
+   673→  return <AppRouter />
+   674→}
+   675→

@@ -1,0 +1,681 @@
+     1→     1→'use client';
+     2→     2→
+     3→     3→import React, { useState, useEffect, useCallback } from 'react';
+     4→     4→import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+     5→     5→import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+     6→     6→import { Badge } from '@/components/ui/badge';
+     7→     7→import { Button } from '@/components/ui/button';
+     8→     8→import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+     9→     9→import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+    10→    10→import { Input } from '@/components/ui/input';
+    11→    11→import { Separator } from '@/components/ui/separator';
+    12→    12→import { Skeleton } from '@/components/ui/skeleton';
+    13→    13→import {
+    14→    14→  ScrollText,
+    15→    15→  Search,
+    16→    16→  Filter,
+    17→    17→  Clock,
+    18→    18→  Activity,
+    19→    19→  Eye,
+    20→    20→  ChevronLeft,
+    21→    21→  ChevronRight,
+    22→    22→  FileText,
+    23→    23→  Download,
+    24→    24→  Plus,
+    25→    25→  RefreshCw,
+    26→    26→  CheckCircle2,
+    27→    27→  Trash2,
+    28→    28→  User,
+    29→    29→} from 'lucide-react';
+    30→    30→import { format, isToday, subDays } from 'date-fns';
+    31→    31→import { AuditLogEntry } from '@/types/gst';
+    32→    32→import { formatNumber, periodToLabel } from '@/lib/gst-utils';
+    33→    33→
+    34→    34→// ─── Types ─────────────────────────────────────────────────────────────────────
+    35→    35→
+    36→    36→interface PaginationInfo {
+    37→    37→  total: number;
+    38→    38→  limit: number;
+    39→    39→  offset: number;
+    40→    40→  hasMore: boolean;
+    41→    41→}
+    42→    42→
+    43→    43→interface ClientOption {
+    44→    44→  id: string;
+    45→    45→  tradeName: string;
+    46→    46→  gstin: string;
+    47→    47→}
+    48→    48→
+    49→    49→// ─── Constants ─────────────────────────────────────────────────────────────────
+    50→    50→
+    51→    51→const ACTION_OPTIONS = [
+    52→    52→  'GSTR Generated',
+    53→    53→  'GSTR Downloaded',
+    54→    54→  'Return Filed',
+    55→    55→  'Return Reviewed',
+    56→    56→  'Invoice Approved',
+    57→    57→  'Reconciliation Completed',
+    58→    58→  'Client Created',
+    59→    59→  'Invoice Created',
+    60→    60→] as const;
+    61→    61→
+    62→    62→const ENTITY_OPTIONS = ['client', 'invoice', 'filing', 'reconciliation', 'health_score'] as const;
+    63→    63→
+    64→    64→const ACTION_COLOR_MAP: Record<string, { color: string; bgColor: string; icon: React.ReactNode }> = {
+    65→    65→  Created: { color: 'text-emerald-700', bgColor: 'bg-emerald-50 border-emerald-200', icon: <Plus className="size-3.5" /> },
+    66→    66→  Updated: { color: 'text-amber-700', bgColor: 'bg-amber-50 border-amber-200', icon: <RefreshCw className="size-3.5" /> },
+    67→    67→  Deleted: { color: 'text-red-700', bgColor: 'bg-red-50 border-red-200', icon: <Trash2 className="size-3.5" /> },
+    68→    68→  Filed: { color: 'text-purple-700', bgColor: 'bg-purple-50 border-purple-200', icon: <CheckCircle2 className="size-3.5" /> },
+    69→    69→  Generated: { color: 'text-blue-700', bgColor: 'bg-blue-50 border-blue-200', icon: <FileText className="size-3.5" /> },
+    70→    70→  Downloaded: { color: 'text-teal-700', bgColor: 'bg-teal-50 border-teal-200', icon: <Download className="size-3.5" /> },
+    71→    71→  Approved: { color: 'text-emerald-700', bgColor: 'bg-emerald-50 border-emerald-200', icon: <CheckCircle2 className="size-3.5" /> },
+    72→    72→  Completed: { color: 'text-emerald-700', bgColor: 'bg-emerald-50 border-emerald-200', icon: <CheckCircle2 className="size-3.5" /> },
+    73→    73→  Reviewed: { color: 'text-amber-700', bgColor: 'bg-amber-50 border-amber-200', icon: <Eye className="size-3.5" /> },
+    74→    74→  Exported: { color: 'text-teal-700', bgColor: 'bg-teal-50 border-teal-200', icon: <Download className="size-3.5" /> },
+    75→    75→  Imported: { color: 'text-blue-700', bgColor: 'bg-blue-50 border-blue-200', icon: <FileText className="size-3.5" /> },
+    76→    76→};
+    77→    77→
+    78→    78→const FILING_ACTIONS = ['GSTR Generated', 'GSTR Downloaded', 'Return Filed', 'Return Reviewed'];
+    79→    79→
+    80→    80→const PAGE_SIZE = 20;
+    81→    81→
+    82→    82→// ─── Helpers ───────────────────────────────────────────────────────────────────
+    83→    83→
+    84→    84→function getActionCategory(action: string): string {
+    85→    85→  const lower = action.toLowerCase();
+    86→    86→  if (lower.includes('creat')) return 'Created';
+    87→    87→  if (lower.includes('updat')) return 'Updated';
+    88→    88→  if (lower.includes('delet')) return 'Deleted';
+    89→    89→  if (lower.includes('filed') || lower.includes('file ')) return 'Filed';
+    90→    90→  if (lower.includes('generat')) return 'Generated';
+    91→    91→  if (lower.includes('download')) return 'Downloaded';
+    92→    92→  if (lower.includes('approv')) return 'Approved';
+    93→    93→  if (lower.includes('complet')) return 'Completed';
+    94→    94→  if (lower.includes('review')) return 'Reviewed';
+    95→    95→  if (lower.includes('export')) return 'Exported';
+    96→    96→  if (lower.includes('import')) return 'Imported';
+    97→    97→  return 'Updated';
+    98→    98→}
+    99→    99→
+   100→   100→function formatTimestamp(ts: string): string {
+   101→   101→  try {
+   102→   102→    const date = new Date(ts);
+   103→   103→    return format(date, 'MMM d, yyyy h:mm a');
+   104→   104→  } catch {
+   105→   105→    return ts;
+   106→   106→  }
+   107→   107→}
+   108→   108→
+   109→   109→function formatTimestampShort(ts: string): string {
+   110→   110→  try {
+   111→   111→    const date = new Date(ts);
+   112→   112→    if (isToday(date)) return format(date, 'h:mm a');
+   113→   113→    return format(date, 'MMM d, h:mm a');
+   114→   114→  } catch {
+   115→   115→    return ts;
+   116→   116→  }
+   117→   117→}
+   118→   118→
+   119→   119→// ─── Main Component ────────────────────────────────────────────────────────────
+   120→   120→
+   121→   121→export default function AuditLogsPage() {
+   122→   122→  // ─── State ────────────────────────────────────────────────────────────────
+   123→   123→  const [logs, setLogs] = useState<AuditLogEntry[]>([]);
+   124→   124→  const [clients, setClients] = useState<ClientOption[]>([]);
+   125→   125→  const [pagination, setPagination] = useState<PaginationInfo>({
+   126→   126→    total: 0,
+   127→   127→    limit: PAGE_SIZE,
+   128→   128→    offset: 0,
+   129→   129→    hasMore: false,
+   130→   130→  });
+   131→   131→  const [loading, setLoading] = useState(true);
+   132→   132→  const [currentPage, setCurrentPage] = useState(1);
+   133→   133→
+   134→   134→  // Filters
+   135→   135→  const [filterClient, setFilterClient] = useState<string>('all');
+   136→   136→  const [filterAction, setFilterAction] = useState<string>('all');
+   137→   137→  const [filterEntity, setFilterEntity] = useState<string>('all');
+   138→   138→  const [filterStartDate, setFilterStartDate] = useState<string>('');
+   139→   139→  const [filterEndDate, setFilterEndDate] = useState<string>('');
+   140→   140→  const [searchQuery, setSearchQuery] = useState<string>('');
+   141→   141→
+   142→   142→  // Dialog
+   143→   143→  const [detailOpen, setDetailOpen] = useState(false);
+   144→   144→  const [selectedLog, setSelectedLog] = useState<AuditLogEntry | null>(null);
+   145→   145→
+   146→   146→  // ─── Data Fetching ────────────────────────────────────────────────────────
+   147→   147→  const fetchLogs = useCallback(async () => {
+   148→   148→    setLoading(true);
+   149→   149→    try {
+   150→   150→      const params = new URLSearchParams();
+   151→   151→      params.set('limit', PAGE_SIZE.toString());
+   152→   152→      params.set('offset', ((currentPage - 1) * PAGE_SIZE).toString());
+   153→   153→
+   154→   154→      if (filterClient !== 'all') params.set('clientId', filterClient);
+   155→   155→      if (filterAction !== 'all') params.set('action', filterAction);
+   156→   156→      if (filterEntity !== 'all') params.set('entity', filterEntity);
+   157→   157→
+   158→   158→      const res = await fetch(`/api/audit-logs?${params.toString()}`);
+   159→   159→      if (res.ok) {
+   160→   160→        const data = await res.json();
+   161→   161→        setLogs(data.logs ?? data ?? []);
+   162→   162→        if (data.pagination) {
+   163→   163→          setPagination(data.pagination);
+   164→   164→        }
+   165→   165→      }
+   166→   166→    } catch (err) {
+   167→   167→      console.error('Failed to fetch audit logs:', err);
+   168→   168→    } finally {
+   169→   169→      setLoading(false);
+   170→   170→    }
+   171→   171→  }, [currentPage, filterClient, filterAction, filterEntity]);
+   172→   172→
+   173→   173→  // Fetch clients separately
+   174→   174→  useEffect(() => {
+   175→   175→    async function fetchClients() {
+   176→   176→      try {
+   177→   177→        const res = await fetch('/api/clients');
+   178→   178→        if (res.ok) {
+   179→   179→          const data = await res.json();
+   180→   180→          const clientList = (data.clients ?? data ?? []).map((c: { id: string; tradeName: string; gstin: string }) => ({
+   181→   181→            id: c.id,
+   182→   182→            tradeName: c.tradeName,
+   183→   183→            gstin: c.gstin,
+   184→   184→          }));
+   185→   185→          setClients(clientList);
+   186→   186→        }
+   187→   187→      } catch {
+   188→   188→        // Silently handle
+   189→   189→      }
+   190→   190→    }
+   191→   191→    fetchClients();
+   192→   192→  }, []);
+   193→   193→
+   194→   194→  useEffect(() => {
+   195→   195→    fetchLogs();
+   196→   196→  }, [fetchLogs]);
+   197→   197→
+   198→   198→  // ─── Derived Data ─────────────────────────────────────────────────────────
+   199→   199→  const totalEvents = pagination.total;
+   200→   200→  const todayEvents = logs.filter((l) => isToday(new Date(l.timestamp))).length;
+   201→   201→  const filingEvents = logs.filter((l) =>
+   202→   202→    FILING_ACTIONS.some((fa) => l.action?.toLowerCase().includes(fa.toLowerCase().split(' ')[0].toLowerCase()))
+   203→   203→  ).length;
+   204→   204→  const lastActivity = logs.length > 0 ? logs[0].timestamp : null;
+   205→   205→
+   206→   206→  // Apply client-side search filter
+   207→   207→  const displayLogs = searchQuery
+   208→   208→    ? logs.filter((l) => l.details?.toLowerCase().includes(searchQuery.toLowerCase()))
+   209→   209→    : logs;
+   210→   210→
+   211→   211→  // Apply date range filter client-side
+   212→   212→  const filteredLogs = displayLogs.filter((l) => {
+   213→   213→    if (filterStartDate) {
+   214→   214→      const logDate = new Date(l.timestamp);
+   215→   215→      const start = new Date(filterStartDate);
+   216→   216→      if (logDate < start) return false;
+   217→   217→    }
+   218→   218→    if (filterEndDate) {
+   219→   219→      const logDate = new Date(l.timestamp);
+   220→   220→      const end = new Date(filterEndDate);
+   221→   221→      end.setHours(23, 59, 59, 999);
+   222→   222→      if (logDate > end) return false;
+   223→   223→    }
+   224→   224→    return true;
+   225→   225→  });
+   226→   226→
+   227→   227→  const totalPages = Math.max(1, Math.ceil(pagination.total / PAGE_SIZE));
+   228→   228→
+   229→   229→  // ─── Handlers ────────────────────────────────────────────────────────────
+   230→   230→  const handleClearFilters = () => {
+   231→   231→    setFilterClient('all');
+   232→   232→    setFilterAction('all');
+   233→   233→    setFilterEntity('all');
+   234→   234→    setFilterStartDate('');
+   235→   235→    setFilterEndDate('');
+   236→   236→    setSearchQuery('');
+   237→   237→    setCurrentPage(1);
+   238→   238→  };
+   239→   239→
+   240→   240→  const handleViewDetail = (log: AuditLogEntry) => {
+   241→   241→    setSelectedLog(log);
+   242→   242→    setDetailOpen(true);
+   243→   243→  };
+   244→   244→
+   245→   245→  const handlePrevPage = () => {
+   246→   246→    setCurrentPage((p) => Math.max(1, p - 1));
+   247→   247→  };
+   248→   248→
+   249→   249→  const handleNextPage = () => {
+   250→   250→    setCurrentPage((p) => Math.min(totalPages, p + 1));
+   251→   251→  };
+   252→   252→
+   253→   253→  // ─── Loading Skeleton ────────────────────────────────────────────────────
+   254→   254→  if (loading && logs.length === 0) {
+   255→   255→    return (
+   256→   256→      <div className="space-y-6 p-6">
+   257→   257→        <div className="flex items-center gap-3">
+   258→   258→          <Skeleton className="size-10 rounded-lg" />
+   259→   259→          <div className="space-y-2">
+   260→   260→            <Skeleton className="h-6 w-48" />
+   261→   261→            <Skeleton className="h-4 w-36" />
+   262→   262→          </div>
+   263→   263→        </div>
+   264→   264→        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+   265→   265→          {[1, 2, 3, 4].map((i) => (
+   266→   266→            <Skeleton key={i} className="h-24 rounded-xl" />
+   267→   267→          ))}
+   268→   268→        </div>
+   269→   269→        <Skeleton className="h-12 w-full rounded-lg" />
+   270→   270→        <Skeleton className="h-96 rounded-xl" />
+   271→   271→      </div>
+   272→   272→    );
+   273→   273→  }
+   274→   274→
+   275→   275→  // ─── Render ──────────────────────────────────────────────────────────────
+   276→   276→  return (
+   277→   277→    <div className="space-y-6 p-4 md:p-6">
+   278→   278→      {/* Header */}
+   279→   279→      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+   280→   280→        <div className="flex items-center gap-3">
+   281→   281→          <div className="flex size-10 items-center justify-center rounded-lg bg-emerald-100">
+   282→   282→            <ScrollText className="size-5 text-emerald-700" />
+   283→   283→          </div>
+   284→   284→          <div>
+   285→   285→            <h1 className="text-xl font-bold tracking-tight sm:text-2xl">Audit Logs</h1>
+   286→   286→            <p className="text-sm text-muted-foreground">
+   287→   287→              Track all activities and changes across the system
+   288→   288→            </p>
+   289→   289→          </div>
+   290→   290→        </div>
+   291→   291→      </div>
+   292→   292→
+   293→   293→      {/* ═══════════════════════════════════════════════════════════════════════
+   294→   294→          Summary Cards
+   295→   295→      ═══════════════════════════════════════════════════════════════════════ */}
+   296→   296→      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+   297→   297→        {/* Total Events */}
+   298→   298→        <Card className="transition-shadow hover:shadow-md">
+   299→   299→          <CardContent className="pt-6">
+   300→   300→            <div className="flex items-center justify-between">
+   301→   301→              <div>
+   302→   302→                <p className="text-sm text-muted-foreground">Total Events</p>
+   303→   303→                <p className="text-2xl font-bold">{formatNumber(totalEvents)}</p>
+   304→   304→              </div>
+   305→   305→              <div className="flex size-10 items-center justify-center rounded-lg bg-emerald-50">
+   306→   306→                <Activity className="size-5 text-emerald-600" />
+   307→   307→              </div>
+   308→   308→            </div>
+   309→   309→          </CardContent>
+   310→   310→        </Card>
+   311→   311→
+   312→   312→        {/* Today's Events */}
+   313→   313→        <Card className="transition-shadow hover:shadow-md">
+   314→   314→          <CardContent className="pt-6">
+   315→   315→            <div className="flex items-center justify-between">
+   316→   316→              <div>
+   317→   317→                <p className="text-sm text-muted-foreground">Today&apos;s Events</p>
+   318→   318→                <p className="text-2xl font-bold">{todayEvents}</p>
+   319→   319→              </div>
+   320→   320→              <div className="flex size-10 items-center justify-center rounded-lg bg-amber-50">
+   321→   321→                <Clock className="size-5 text-amber-600" />
+   322→   322→              </div>
+   323→   323→            </div>
+   324→   324→          </CardContent>
+   325→   325→        </Card>
+   326→   326→
+   327→   327→        {/* Filing Events */}
+   328→   328→        <Card className="transition-shadow hover:shadow-md">
+   329→   329→          <CardContent className="pt-6">
+   330→   330→            <div className="flex items-center justify-between">
+   331→   331→              <div>
+   332→   332→                <p className="text-sm text-muted-foreground">Filing Events</p>
+   333→   333→                <p className="text-2xl font-bold">{filingEvents}</p>
+   334→   334→              </div>
+   335→   335→              <div className="flex size-10 items-center justify-center rounded-lg bg-purple-50">
+   336→   336→                <FileText className="size-5 text-purple-600" />
+   337→   337→              </div>
+   338→   338→            </div>
+   339→   339→          </CardContent>
+   340→   340→        </Card>
+   341→   341→
+   342→   342→        {/* Last Activity */}
+   343→   343→        <Card className="transition-shadow hover:shadow-md">
+   344→   344→          <CardContent className="pt-6">
+   345→   345→            <div className="flex items-center justify-between">
+   346→   346→              <div>
+   347→   347→                <p className="text-sm text-muted-foreground">Last Activity</p>
+   348→   348→                <p className="text-lg font-bold">
+   349→   349→                  {lastActivity ? formatTimestampShort(lastActivity) : '—'}
+   350→   350→                </p>
+   351→   351→              </div>
+   352→   352→              <div className="flex size-10 items-center justify-center rounded-lg bg-red-50">
+   353→   353→                <Clock className="size-5 text-red-600" />
+   354→   354→              </div>
+   355→   355→            </div>
+   356→   356→          </CardContent>
+   357→   357→        </Card>
+   358→   358→      </div>
+   359→   359→
+   360→   360→      {/* ═══════════════════════════════════════════════════════════════════════
+   361→   361→          Filter Bar
+   362→   362→      ═══════════════════════════════════════════════════════════════════════ */}
+   363→   363→      <Card>
+   364→   364→        <CardHeader className="pb-3">
+   365→   365→          <CardTitle className="flex items-center gap-2 text-base">
+   366→   366→            <Filter className="size-4 text-emerald-600" />
+   367→   367→            Filters
+   368→   368→          </CardTitle>
+   369→   369→        </CardHeader>
+   370→   370→        <CardContent>
+   371→   371→          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+   372→   372→            {/* Client Filter */}
+   373→   373→            <Select value={filterClient} onValueChange={(v) => { setFilterClient(v); setCurrentPage(1); }}>
+   374→   374→              <SelectTrigger>
+   375→   375→                <SelectValue placeholder="All Clients" />
+   376→   376→              </SelectTrigger>
+   377→   377→              <SelectContent>
+   378→   378→                <SelectItem value="all">All Clients</SelectItem>
+   379→   379→                {clients.map((c) => (
+   380→   380→                  <SelectItem key={c.id} value={c.id}>
+   381→   381→                    {c.tradeName}
+   382→   382→                  </SelectItem>
+   383→   383→                ))}
+   384→   384→              </SelectContent>
+   385→   385→            </Select>
+   386→   386→
+   387→   387→            {/* Action Filter */}
+   388→   388→            <Select value={filterAction} onValueChange={(v) => { setFilterAction(v); setCurrentPage(1); }}>
+   389→   389→              <SelectTrigger>
+   390→   390→                <SelectValue placeholder="All Actions" />
+   391→   391→              </SelectTrigger>
+   392→   392→              <SelectContent>
+   393→   393→                <SelectItem value="all">All Actions</SelectItem>
+   394→   394→                {ACTION_OPTIONS.map((a) => (
+   395→   395→                  <SelectItem key={a} value={a}>
+   396→   396→                    {a}
+   397→   397→                  </SelectItem>
+   398→   398→                ))}
+   399→   399→              </SelectContent>
+   400→   400→            </Select>
+   401→   401→
+   402→   402→            {/* Entity Filter */}
+   403→   403→            <Select value={filterEntity} onValueChange={(v) => { setFilterEntity(v); setCurrentPage(1); }}>
+   404→   404→              <SelectTrigger>
+   405→   405→                <SelectValue placeholder="All Entities" />
+   406→   406→              </SelectTrigger>
+   407→   407→              <SelectContent>
+   408→   408→                <SelectItem value="all">All Entities</SelectItem>
+   409→   409→                {ENTITY_OPTIONS.map((e) => (
+   410→   410→                  <SelectItem key={e} value={e}>
+   411→   411→                    {e.charAt(0).toUpperCase() + e.slice(1).replace('_', ' ')}
+   412→   412→                  </SelectItem>
+   413→   413→                ))}
+   414→   414→              </SelectContent>
+   415→   415→            </Select>
+   416→   416→
+   417→   417→            {/* Search */}
+   418→   418→            <div className="relative">
+   419→   419→              <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+   420→   420→              <Input
+   421→   421→                placeholder="Search details..."
+   422→   422→                value={searchQuery}
+   423→   423→                onChange={(e) => setSearchQuery(e.target.value)}
+   424→   424→                className="pl-9"
+   425→   425→              />
+   426→   426→            </div>
+   427→   427→          </div>
+   428→   428→
+   429→   429→          <div className="mt-3 grid gap-3 sm:grid-cols-3">
+   430→   430→            {/* Start Date */}
+   431→   431→            <div className="space-y-1">
+   432→   432→              <label className="text-xs text-muted-foreground">Start Date</label>
+   433→   433→              <Input
+   434→   434→                type="date"
+   435→   435→                value={filterStartDate}
+   436→   436→                onChange={(e) => setFilterStartDate(e.target.value)}
+   437→   437→              />
+   438→   438→            </div>
+   439→   439→
+   440→   440→            {/* End Date */}
+   441→   441→            <div className="space-y-1">
+   442→   442→              <label className="text-xs text-muted-foreground">End Date</label>
+   443→   443→              <Input
+   444→   444→                type="date"
+   445→   445→                value={filterEndDate}
+   446→   446→                onChange={(e) => setFilterEndDate(e.target.value)}
+   447→   447→              />
+   448→   448→            </div>
+   449→   449→
+   450→   450→            {/* Clear Filters */}
+   451→   451→            <div className="flex items-end">
+   452→   452→              <Button
+   453→   453→                variant="outline"
+   454→   454→                onClick={handleClearFilters}
+   455→   455→                className="gap-2 w-full"
+   456→   456→              >
+   457→   457→                <Filter className="size-3.5" />
+   458→   458→                Clear Filters
+   459→   459→              </Button>
+   460→   460→            </div>
+   461→   461→          </div>
+   462→   462→        </CardContent>
+   463→   463→      </Card>
+   464→   464→
+   465→   465→      {/* ═══════════════════════════════════════════════════════════════════════
+   466→   466→          Audit Log Table
+   467→   467→      ═══════════════════════════════════════════════════════════════════════ */}
+   468→   468→      <Card>
+   469→   469→        <CardHeader>
+   470→   470→          <CardTitle className="flex items-center gap-2 text-base">
+   471→   471→            <ScrollText className="size-4 text-emerald-600" />
+   472→   472→            Activity Log
+   473→   473→            <Badge variant="secondary" className="ml-2">
+   474→   474→              {formatNumber(pagination.total)} entries
+   475→   475→            </Badge>
+   476→   476→          </CardTitle>
+   477→   477→        </CardHeader>
+   478→   478→        <CardContent>
+   479→   479→          <div className="overflow-x-auto rounded-lg border" style={{ minWidth: '900px' }}>
+   480→   480→            <Table>
+   481→   481→              <TableHeader>
+   482→   482→                <TableRow className="bg-muted/50">
+   483→   483→                  <TableHead className="whitespace-nowrap">Timestamp</TableHead>
+   484→   484→                  <TableHead className="whitespace-nowrap">Action</TableHead>
+   485→   485→                  <TableHead className="whitespace-nowrap">Entity</TableHead>
+   486→   486→                  <TableHead className="whitespace-nowrap">Entity ID</TableHead>
+   487→   487→                  <TableHead className="whitespace-nowrap">Client</TableHead>
+   488→   488→                  <TableHead className="whitespace-nowrap">User</TableHead>
+   489→   489→                  <TableHead className="whitespace-nowrap">Details</TableHead>
+   490→   490→                  <TableHead className="whitespace-nowrap">Actions</TableHead>
+   491→   491→                </TableRow>
+   492→   492→              </TableHeader>
+   493→   493→              <TableBody>
+   494→   494→                {filteredLogs.length === 0 ? (
+   495→   495→                  <TableRow>
+   496→   496→                    <TableCell colSpan={8} className="h-32 text-center text-muted-foreground">
+   497→   497→                      <div className="flex flex-col items-center gap-2">
+   498→   498→                        <ScrollText className="size-8 text-muted-foreground/50" />
+   499→   499→                        <p>No audit logs found matching your filters</p>
+   500→   500→                      </div>
+   501→   501→                    </TableCell>
+   502→   502→                  </TableRow>
+   503→   503→                ) : (
+   504→   504→                  filteredLogs.map((log) => {
+   505→   505→                    const category = getActionCategory(log.action);
+   506→   506→                    const colorConfig = ACTION_COLOR_MAP[category] ?? ACTION_COLOR_MAP['Updated'];
+   507→   507→                    return (
+   508→   508→                      <TableRow key={log.id} className="hover:bg-muted/30">
+   509→   509→                        <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
+   510→   510→                          {formatTimestamp(log.timestamp)}
+   511→   511→                        </TableCell>
+   512→   512→                        <TableCell className="whitespace-nowrap">
+   513→   513→                          <Badge
+   514→   514→                            variant="outline"
+   515→   515→                            className={`gap-1 ${colorConfig.color} ${colorConfig.bgColor} text-xs`}
+   516→   516→                          >
+   517→   517→                            {colorConfig.icon}
+   518→   518→                            {log.action}
+   519→   519→                          </Badge>
+   520→   520→                        </TableCell>
+   521→   521→                        <TableCell className="whitespace-nowrap text-sm">
+   522→   522→                          {log.entity ? (
+   523→   523→                            <Badge variant="outline" className="text-xs border-slate-200 bg-slate-50 text-slate-700">
+   524→   524→                              {log.entity}
+   525→   525→                            </Badge>
+   526→   526→                          ) : (
+   527→   527→                            <span className="text-muted-foreground">—</span>
+   528→   528→                          )}
+   529→   529→                        </TableCell>
+   530→   530→                        <TableCell className="whitespace-nowrap text-xs font-mono text-muted-foreground">
+   531→   531→                          {log.entityId ? log.entityId.slice(0, 8) + '...' : '—'}
+   532→   532→                        </TableCell>
+   533→   533→                        <TableCell className="whitespace-nowrap text-sm">
+   534→   534→                          {log.client?.tradeName ?? '—'}
+   535→   535→                        </TableCell>
+   536→   536→                        <TableCell className="whitespace-nowrap text-sm">
+   537→   537→                          <div className="flex items-center gap-1.5">
+   538→   538→                            <User className="size-3 text-muted-foreground" />
+   539→   539→                            <span className="text-muted-foreground">{log.userId ?? 'System'}</span>
+   540→   540→                          </div>
+   541→   541→                        </TableCell>
+   542→   542→                        <TableCell className="max-w-[250px] truncate text-sm text-muted-foreground">
+   543→   543→                          {log.details ?? '—'}
+   544→   544→                        </TableCell>
+   545→   545→                        <TableCell className="whitespace-nowrap">
+   546→   546→                          <Button
+   547→   547→                            variant="ghost"
+   548→   548→                            size="sm"
+   549→   549→                            className="size-8 p-0"
+   550→   550→                            onClick={() => handleViewDetail(log)}
+   551→   551→                            title="View Details"
+   552→   552→                          >
+   553→   553→                            <Eye className="size-3.5" />
+   554→   554→                          </Button>
+   555→   555→                        </TableCell>
+   556→   556→                      </TableRow>
+   557→   557→                    );
+   558→   558→                  })
+   559→   559→                )}
+   560→   560→              </TableBody>
+   561→   561→            </Table>
+   562→   562→          </div>
+   563→   563→
+   564→   564→          {/* Pagination */}
+   565→   565→          <div className="mt-4 flex items-center justify-between">
+   566→   566→            <p className="text-sm text-muted-foreground">
+   567→   567→              Page {currentPage} of {totalPages} &middot; {formatNumber(pagination.total)} total entries
+   568→   568→            </p>
+   569→   569→            <div className="flex items-center gap-2">
+   570→   570→              <Button
+   571→   571→                variant="outline"
+   572→   572→                size="sm"
+   573→   573→                onClick={handlePrevPage}
+   574→   574→                disabled={currentPage <= 1}
+   575→   575→                className="gap-1"
+   576→   576→              >
+   577→   577→                <ChevronLeft className="size-4" />
+   578→   578→                Prev
+   579→   579→              </Button>
+   580→   580→              <Button
+   581→   581→                variant="outline"
+   582→   582→                size="sm"
+   583→   583→                onClick={handleNextPage}
+   584→   584→                disabled={currentPage >= totalPages}
+   585→   585→                className="gap-1"
+   586→   586→              >
+   587→   587→                Next
+   588→   588→                <ChevronRight className="size-4" />
+   589→   589→              </Button>
+   590→   590→            </div>
+   591→   591→          </div>
+   592→   592→        </CardContent>
+   593→   593→      </Card>
+   594→   594→
+   595→   595→      {/* ═══════════════════════════════════════════════════════════════════════
+   596→   596→          Log Detail Dialog
+   597→   597→      ═══════════════════════════════════════════════════════════════════════ */}
+   598→   598→      <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
+   599→   599→        <DialogContent className="max-w-lg">
+   600→   600→          <DialogHeader>
+   601→   601→            <DialogTitle className="flex items-center gap-2">
+   602→   602→              <Eye className="size-4 text-emerald-600" />
+   603→   603→              Log Entry Details
+   604→   604→            </DialogTitle>
+   605→   605→          </DialogHeader>
+   606→   606→          {selectedLog && (
+   607→   607→            <div className="space-y-4">
+   608→   608→              {/* Action & Entity */}
+   609→   609→              <div className="grid grid-cols-2 gap-4">
+   610→   610→                <div className="space-y-1">
+   611→   611→                  <p className="text-xs text-muted-foreground">Action</p>
+   612→   612→                  <Badge
+   613→   613→                    variant="outline"
+   614→   614→                    className={`gap-1 ${ACTION_COLOR_MAP[getActionCategory(selectedLog.action)]?.color ?? ''} ${ACTION_COLOR_MAP[getActionCategory(selectedLog.action)]?.bgColor ?? ''}`}
+   615→   615→                  >
+   616→   616→                    {selectedLog.action}
+   617→   617→                  </Badge>
+   618→   618→                </div>
+   619→   619→                <div className="space-y-1">
+   620→   620→                  <p className="text-xs text-muted-foreground">Entity</p>
+   621→   621→                  <Badge variant="outline" className="text-xs border-slate-200 bg-slate-50 text-slate-700">
+   622→   622→                    {selectedLog.entity ?? '—'}
+   623→   623→                  </Badge>
+   624→   624→                </div>
+   625→   625→              </div>
+   626→   626→
+   627→   627→              <Separator />
+   628→   628→
+   629→   629→              {/* Details Grid */}
+   630→   630→              <div className="grid grid-cols-2 gap-3 text-sm">
+   631→   631→                <div>
+   632→   632→                  <p className="text-xs text-muted-foreground">Log ID</p>
+   633→   633→                  <p className="font-mono text-xs">{selectedLog.id}</p>
+   634→   634→                </div>
+   635→   635→                <div>
+   636→   636→                  <p className="text-xs text-muted-foreground">Entity ID</p>
+   637→   637→                  <p className="font-mono text-xs">{selectedLog.entityId ?? '—'}</p>
+   638→   638→                </div>
+   639→   639→                <div>
+   640→   640→                  <p className="text-xs text-muted-foreground">Client</p>
+   641→   641→                  <p>{selectedLog.client?.tradeName ?? '—'}</p>
+   642→   642→                </div>
+   643→   643→                <div>
+   644→   644→                  <p className="text-xs text-muted-foreground">User</p>
+   645→   645→                  <p>{selectedLog.userId ?? 'System'}</p>
+   646→   646→                </div>
+   647→   647→                <div className="col-span-2">
+   648→   648→                  <p className="text-xs text-muted-foreground">Timestamp</p>
+   649→   649→                  <p>{formatTimestamp(selectedLog.timestamp)}</p>
+   650→   650→                </div>
+   651→   651→              </div>
+   652→   652→
+   653→   653→              {/* Details / JSON */}
+   654→   654→              {selectedLog.details && (
+   655→   655→                <>
+   656→   656→                  <Separator />
+   657→   657→                  <div className="space-y-2">
+   658→   658→                    <p className="text-xs text-muted-foreground">Details</p>
+   659→   659→                    <div className="rounded-lg border bg-muted/30 p-3">
+   660→   660→                      <pre className="max-h-48 overflow-auto text-xs whitespace-pre-wrap break-words">
+   661→   661→                        {(() => {
+   662→   662→                          try {
+   663→   663→                            const parsed = JSON.parse(selectedLog.details);
+   664→   664→                            return JSON.stringify(parsed, null, 2);
+   665→   665→                          } catch {
+   666→   666→                            return selectedLog.details;
+   667→   667→                          }
+   668→   668→                        })()}
+   669→   669→                      </pre>
+   670→   670→                    </div>
+   671→   671→                  </div>
+   672→   672→                </>
+   673→   673→              )}
+   674→   674→            </div>
+   675→   675→          )}
+   676→   676→        </DialogContent>
+   677→   677→      </Dialog>
+   678→   678→    </div>
+   679→   679→  );
+   680→   680→}
+   681→   681→

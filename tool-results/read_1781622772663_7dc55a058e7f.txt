@@ -1,0 +1,772 @@
+     1→'use client';
+     2→
+     3→import React, { useState, useMemo } from 'react';
+     4→import { Badge } from '@/components/ui/badge';
+     5→import { Button } from '@/components/ui/button';
+     6→import { Skeleton } from '@/components/ui/skeleton';
+     7→import { ScrollArea } from '@/components/ui/scroll-area';
+     8→import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+     9→import {
+    10→  Upload,
+    11→  CheckCircle2,
+    12→  AlertTriangle,
+    13→  Clock,
+    14→  ChevronRight,
+    15→  FileCheck2,
+    16→  CalendarClock,
+    17→  Sparkles,
+    18→  FileText,
+    19→  ShieldCheck,
+    20→  AlertOctagon,
+    21→  ClipboardCheck,
+    22→  Users,
+    23→  IndianRupee,
+    24→  TrendingUp,
+    25→  Plus,
+    26→  ArrowRight,
+    27→  Loader2,
+    28→  Rocket,
+    29→  Activity,
+    30→  Landmark,
+    31→} from 'lucide-react';
+    32→import { motion, AnimatePresence } from 'framer-motion';
+    33→import { useApp } from '@/contexts/AppContext';
+    34→import {
+    35→  useLiveDashboardMetrics,
+    36→  useFireClients,
+    37→  useFireReturns,
+    38→  useFireRecentActivities,
+    39→} from '@/hooks/use-firestore';
+    40→import type {
+    41→  FirestoreClient,
+    42→  FirestoreReturn,
+    43→  LiveDashboardMetrics,
+    44→} from '@/lib/firestore-schema';
+    45→import { fileReturn } from '@/lib/firestore-service';
+    46→import { formatCurrency, periodToLabel, isOverdue, getFilingDueDate } from '@/lib/gst-utils';
+    47→import { toast } from 'sonner';
+    48→
+    49→// ═══════════════════════════════════════════════════════════════════════════════
+    50→// HELPERS
+    51→// ═══════════════════════════════════════════════════════════════════════════════
+    52→
+    53→function getDaysRemaining(dueDateStr: string): number {
+    54→  const dueDate = new Date(dueDateStr);
+    55→  const today = new Date();
+    56→  today.setHours(0, 0, 0, 0);
+    57→  dueDate.setHours(0, 0, 0, 0);
+    58→  return Math.ceil((dueDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+    59→}
+    60→
+    61→function formatDaysRemaining(days: number): string {
+    62→  if (days < 0) return `${Math.abs(days)}d overdue`;
+    63→  if (days === 0) return 'Due today';
+    64→  if (days === 1) return 'Tomorrow';
+    65→  return `${days}d left`;
+    66→}
+    67→
+    68→function getInitials(name: string): string {
+    69→  return name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+    70→}
+    71→
+    72→function formatINR(amount: number): string {
+    73→  return amount.toLocaleString('en-IN');
+    74→}
+    75→
+    76→function timeAgo(dateStr: string): string {
+    77→  const now = new Date();
+    78→  const date = new Date(dateStr);
+    79→  const seconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+    80→  if (seconds < 60) return 'just now';
+    81→  const minutes = Math.floor(seconds / 60);
+    82→  if (minutes < 60) return `${minutes}m ago`;
+    83→  const hours = Math.floor(minutes / 60);
+    84→  if (hours < 24) return `${hours}h ago`;
+    85→  const days = Math.floor(hours / 24);
+    86→  if (days < 7) return `${days}d ago`;
+    87→  return date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+    88→}
+    89→
+    90→// ═══════════════════════════════════════════════════════════════════════════════
+    91→// METRIC CARD
+    92→// ═══════════════════════════════════════════════════════════════════════════════
+    93→
+    94→interface MetricCardProps {
+    95→  label: string;
+    96→  value: string | number;
+    97→  icon: React.ReactNode;
+    98→  iconColor: string;
+    99→  iconBg: string;
+   100→  subtitle: string;
+   101→  index: number;
+   102→}
+   103→
+   104→function MetricCard({ label, value, icon, iconColor, iconBg, subtitle, index }: MetricCardProps) {
+   105→  return (
+   106→    <motion.div
+   107→      initial={{ opacity: 0, y: 16 }}
+   108→      animate={{ opacity: 1, y: 0 }}
+   109→      transition={{ duration: 0.35, delay: index * 0.06 }}
+   110→    >
+   111→      <Card className="hover:shadow-md transition-shadow">
+   112→        <CardContent className="p-4">
+   113→          <div className="flex items-start justify-between">
+   114→            <div className="space-y-1">
+   115→              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+   116→                {label}
+   117→              </p>
+   118→              <p className="text-2xl font-bold text-foreground tracking-tight">{value}</p>
+   119→              <p className="text-[11px] text-muted-foreground">{subtitle}</p>
+   120→            </div>
+   121→            <div className={`flex items-center justify-center h-9 w-9 rounded-lg ${iconBg}`}>
+   122→              <span className={iconColor}>{icon}</span>
+   123→            </div>
+   124→          </div>
+   125→        </CardContent>
+   126→      </Card>
+   127→    </motion.div>
+   128→  );
+   129→}
+   130→
+   131→// ═══════════════════════════════════════════════════════════════════════════════
+   132→// ACTIVITY ICON
+   133→// ═══════════════════════════════════════════════════════════════════════════════
+   134→
+   135→function activityIcon(type: string): { icon: React.ReactNode; color: string; bg: string } {
+   136→  if (type.includes('filed')) return { icon: <CheckCircle2 className="h-3.5 w-3.5" />, color: 'text-emerald-600', bg: 'bg-emerald-50' };
+   137→  if (type.includes('upload') || type.includes('document')) return { icon: <Upload className="h-3.5 w-3.5" />, color: 'text-blue-600', bg: 'bg-blue-50' };
+   138→  if (type.includes('review')) return { icon: <ClipboardCheck className="h-3.5 w-3.5" />, color: 'text-violet-600', bg: 'bg-violet-50' };
+   139→  if (type.includes('client')) return { icon: <Users className="h-3.5 w-3.5" />, color: 'text-sky-600', bg: 'bg-sky-50' };
+   140→  if (type.includes('reconcil') || type.includes('mismatch')) return { icon: <AlertTriangle className="h-3.5 w-3.5" />, color: 'text-amber-600', bg: 'bg-amber-50' };
+   141→  if (type.includes('invoice') || type.includes('extract')) return { icon: <FileText className="h-3.5 w-3.5" />, color: 'text-teal-600', bg: 'bg-teal-50' };
+   142→  return { icon: <Activity className="h-3.5 w-3.5" />, color: 'text-slate-500', bg: 'bg-slate-50' };
+   143→}
+   144→
+   145→// ═══════════════════════════════════════════════════════════════════════════════
+   146→// LOADING SKELETON
+   147→// ═══════════════════════════════════════════════════════════════════════════════
+   148→
+   149→function DashboardSkeleton() {
+   150→  return (
+   151→    <div className="max-w-6xl mx-auto px-4 md:px-6 py-6 space-y-8">
+   152→      <div className="flex items-center justify-between">
+   153→        <div className="space-y-2">
+   154→          <Skeleton className="h-7 w-48" />
+   155→          <Skeleton className="h-4 w-64" />
+   156→        </div>
+   157→        <Skeleton className="h-9 w-28" />
+   158→      </div>
+   159→      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+   160→        {Array.from({ length: 6 }).map((_, i) => (
+   161→          <Skeleton key={i} className="h-28 rounded-xl" />
+   162→        ))}
+   163→      </div>
+   164→      <div className="grid lg:grid-cols-3 gap-6">
+   165→        <Skeleton className="lg:col-span-2 h-64 rounded-xl" />
+   166→        <Skeleton className="h-64 rounded-xl" />
+   167→      </div>
+   168→    </div>
+   169→  );
+   170→}
+   171→
+   172→// ═══════════════════════════════════════════════════════════════════════════════
+   173→// EMPTY STATE — Fresh onboarding
+   174→// ═══════════════════════════════════════════════════════════════════════════════
+   175→
+   176→function WelcomeEmptyState({ onAddClient, onUploadDoc }: { onAddClient: () => void; onUploadDoc: () => void }) {
+   177→  return (
+   178→    <motion.div
+   179→      initial={{ opacity: 0, y: 24 }}
+   180→      animate={{ opacity: 1, y: 0 }}
+   181→      transition={{ duration: 0.5, ease: 'easeOut' }}
+   182→      className="flex flex-col items-center justify-center text-center py-20 px-4"
+   183→    >
+   184→      <div className="relative mb-6">
+   185→        <div className="flex items-center justify-center h-20 w-20 rounded-2xl bg-gradient-to-br from-emerald-50 to-emerald-100 border border-emerald-200">
+   186→          <Rocket className="h-10 w-10 text-emerald-600" />
+   187→        </div>
+   188→        <div className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-emerald-500 flex items-center justify-center">
+   189→          <Sparkles className="h-3 w-3 text-white" />
+   190→        </div>
+   191→      </div>
+   192→      <h2 className="text-2xl font-bold text-foreground tracking-tight">
+   193→        Welcome to GSTPilot
+   194→      </h2>
+   195→      <p className="text-sm text-muted-foreground mt-2 max-w-md">
+   196→        Start by adding your first client to unlock the full workflow —
+   197→        from document upload to automated GST filing.
+   198→      </p>
+   199→      <div className="flex items-center gap-3 mt-6">
+   200→        <Button
+   201→          onClick={onAddClient}
+   202→          className="bg-emerald-600 hover:bg-emerald-700 gap-1.5"
+   203→        >
+   204→          <Plus className="h-4 w-4" />
+   205→          Add Client
+   206→        </Button>
+   207→        <Button variant="outline" onClick={onUploadDoc} className="gap-1.5">
+   208→          <Upload className="h-4 w-4" />
+   209→          Upload Document
+   210→        </Button>
+   211→      </div>
+   212→      <div className="grid grid-cols-3 gap-6 mt-10 text-center max-w-sm">
+   213→        {[
+   214→          { icon: <Users className="h-5 w-5" />, label: 'Add Clients' },
+   215→          { icon: <FileText className="h-5 w-5" />, label: 'Upload Docs' },
+   216→          { icon: <CheckCircle2 className="h-5 w-5" />, label: 'File Returns' },
+   217→        ].map((step, i) => (
+   218→          <div key={i} className="flex flex-col items-center gap-1.5">
+   219→            <div className="flex items-center justify-center h-10 w-10 rounded-lg bg-slate-100 text-slate-500">
+   220→              {step.icon}
+   221→            </div>
+   222→            <span className="text-[11px] text-muted-foreground">{step.label}</span>
+   223→          </div>
+   224→        ))}
+   225→      </div>
+   226→    </motion.div>
+   227→  );
+   228→}
+   229→
+   230→// ═══════════════════════════════════════════════════════════════════════════════
+   231→// MAIN COMPONENT
+   232→// ═══════════════════════════════════════════════════════════════════════════════
+   233→
+   234→export default function DashboardPage() {
+   235→  const { setCurrentView, setSelectedClientId, setReturnPrepCtx } = useApp();
+   236→
+   237→  // ── Firebase Firestore hooks ──────────────────────────────────────────
+   238→  const { metrics, loading, error } = useLiveDashboardMetrics();
+   239→  const { data: clients } = useFireClients();
+   240→  const { data: returns } = useFireReturns();
+   241→  const { data: recentActivities } = useFireRecentActivities(10);
+   242→
+   243→  // ── Filing state ──────────────────────────────────────────────────────
+   244→  const [filingInProgress, setFilingInProgress] = useState<Set<string>>(new Set());
+   245→
+   246→  // ── Client lookup map ─────────────────────────────────────────────────
+   247→  const clientMap = useMemo(() => {
+   248→    const map = new Map<string, FirestoreClient & { id: string }>();
+   249→    for (const c of clients) map.set(c.clientId, c);
+   250→    return map;
+   251→  }, [clients]);
+   252→
+   253→  // ── Metric cards from LiveDashboardMetrics ────────────────────────────
+   254→  const metricCards = useMemo(() => {
+   255→    const complianceScore = metrics.averageHealthScore > 0
+   256→      ? Math.round(metrics.averageHealthScore)
+   257→      : metrics.totalClients > 0 ? 0 : 100;
+   258→
+   259→    return [
+   260→      {
+   261→        label: 'Active Clients',
+   262→        value: metrics.activeClients,
+   263→        icon: <Users className="h-4 w-4" />,
+   264→        iconColor: 'text-sky-600',
+   265→        iconBg: 'bg-sky-50',
+   266→        subtitle: `of ${metrics.totalClients} total`,
+   267→      },
+   268→      {
+   269→        label: 'Ready to File',
+   270→        value: metrics.readyToFile,
+   271→        icon: <ShieldCheck className="h-4 w-4" />,
+   272→        iconColor: 'text-emerald-600',
+   273→        iconBg: 'bg-emerald-50',
+   274→        subtitle: 'Validated & reviewed',
+   275→      },
+   276→      {
+   277→        label: 'Critical Issues',
+   278→        value: metrics.criticalIssues,
+   279→        icon: <AlertOctagon className="h-4 w-4" />,
+   280→        iconColor: 'text-red-600',
+   281→        iconBg: 'bg-red-50',
+   282→        subtitle: `+ ${metrics.warnings} warnings`,
+   283→      },
+   284→      {
+   285→        label: 'Tax Volume',
+   286→        value: formatCurrency(metrics.totalTaxVolume),
+   287→        icon: <IndianRupee className="h-4 w-4" />,
+   288→        iconColor: 'text-emerald-600',
+   289→        iconBg: 'bg-emerald-50',
+   290→        subtitle: `${formatINR(metrics.totalInvoices)} invoices`,
+   291→      },
+   292→      {
+   293→        label: 'Filed Returns',
+   294→        value: metrics.filedReturns,
+   295→        icon: <FileCheck2 className="h-4 w-4" />,
+   296→        iconColor: 'text-teal-600',
+   297→        iconBg: 'bg-teal-50',
+   298→        subtitle: `${metrics.pendingReturns} pending`,
+   299→      },
+   300→      {
+   301→        label: 'Compliance',
+   302→        value: `${complianceScore}%`,
+   303→        icon: <TrendingUp className="h-4 w-4" />,
+   304→        iconColor: complianceScore >= 80 ? 'text-emerald-600' : complianceScore >= 50 ? 'text-amber-600' : 'text-red-600',
+   305→        iconBg: complianceScore >= 80 ? 'bg-emerald-50' : complianceScore >= 50 ? 'bg-amber-50' : 'bg-red-50',
+   306→        subtitle: 'Avg health score',
+   307→      },
+   308→    ];
+   309→  }, [metrics]);
+   310→
+   311→  // ── Ready-to-file returns ─────────────────────────────────────────────
+   312→  const readyReturns = useMemo(() => {
+   313→    return returns
+   314→      .filter(r => ['validated', 'reviewed', 'generated'].includes(r.status))
+   315→      .slice(0, 5);
+   316→  }, [returns]);
+   317→
+   318→  // ── Upcoming filings (unfiled, sorted by urgency) ────────────────────
+   319→  const upcomingFilings = useMemo(() => {
+   320→    return returns
+   321→      .filter(r => r.status !== 'filed')
+   322→      .sort((a, b) => {
+   323→        const aOverdue = isOverdue(a.period) ? 0 : 1;
+   324→        const bOverdue = isOverdue(b.period) ? 0 : 1;
+   325→        return aOverdue - bOverdue || a.period.localeCompare(b.period);
+   326→      })
+   327→      .slice(0, 5);
+   328→  }, [returns]);
+   329→
+   330→  // ── Handlers ──────────────────────────────────────────────────────────
+   331→  const handleOpenClient = (clientId: string) => {
+   332→    setSelectedClientId(clientId);
+   333→    setCurrentView('client-workspace');
+   334→  };
+   335→
+   336→  const handleFileReturn = (clientId: string, returnType: string, period: string) => {
+   337→    setSelectedClientId(clientId);
+   338→    setReturnPrepCtx({
+   339→      clientId,
+   340→      returnType: (returnType === 'GSTR-3B' ? 'GSTR-3B' : 'GSTR-1') as 'GSTR-1' | 'GSTR-3B',
+   341→      period,
+   342→    });
+   343→    setCurrentView('return-prep');
+   344→  };
+   345→
+   346→  const handleQuickFile = async (returnId: string, clientName: string, returnType: string) => {
+   347→    if (filingInProgress.has(returnId)) return;
+   348→    setFilingInProgress(prev => new Set(prev).add(returnId));
+   349→    try {
+   350→      const arn = await fileReturn(returnId);
+   351→      toast.success(`${returnType} Filed Successfully`, {
+   352→        description: `${clientName} — ARN: ${arn}`,
+   353→      });
+   354→    } catch (err) {
+   355→      toast.error('Filing Failed', {
+   356→        description: err instanceof Error ? err.message : 'Unknown error',
+   357→      });
+   358→    } finally {
+   359→      setFilingInProgress(prev => {
+   360→        const next = new Set(prev);
+   361→        next.delete(returnId);
+   362→        return next;
+   363→      });
+   364→    }
+   365→  };
+   366→
+   367→  // ── Animations ────────────────────────────────────────────────────────
+   368→  const stagger = {
+   369→    hidden: { opacity: 0 },
+   370→    visible: { opacity: 1, transition: { staggerChildren: 0.06 } },
+   371→  };
+   372→  const fadeUp = {
+   373→    hidden: { opacity: 0, y: 12 },
+   374→    visible: { opacity: 1, y: 0, transition: { duration: 0.4, ease: 'easeOut' } },
+   375→  };
+   376→
+   377→  // ═══════════════════════════════════════════════════════════════════════════
+   378→  // RENDER
+   379→  // ═══════════════════════════════════════════════════════════════════════════
+   380→
+   381→  // ── Loading ───────────────────────────────────────────────────────────
+   382→  if (loading) return <DashboardSkeleton />;
+   383→
+   384→  // ── Error ─────────────────────────────────────────────────────────────
+   385→  if (error) {
+   386→    return (
+   387→      <div className="max-w-6xl mx-auto px-4 md:px-6 py-6">
+   388→        <Card className="border-red-200 bg-red-50">
+   389→          <CardContent className="p-6 text-center">
+   390→            <AlertTriangle className="h-8 w-8 text-red-500 mx-auto mb-2" />
+   391→            <h3 className="font-semibold text-red-800">Failed to load dashboard</h3>
+   392→            <p className="text-sm text-red-600 mt-1">{error}</p>
+   393→            <Button variant="outline" className="mt-4" onClick={() => window.location.reload()}>
+   394→              Retry
+   395→            </Button>
+   396→          </CardContent>
+   397→        </Card>
+   398→      </div>
+   399→    );
+   400→  }
+   401→
+   402→  // ── Empty state — no clients at all ───────────────────────────────────
+   403→  if (metrics.totalClients === 0) {
+   404→    return (
+   405→      <div className="max-w-6xl mx-auto px-4 md:px-6 py-6">
+   406→        <WelcomeEmptyState
+   407→          onAddClient={() => setCurrentView('clients')}
+   408→          onUploadDoc={() => setCurrentView('invoices')}
+   409→        />
+   410→      </div>
+   411→    );
+   412→  }
+   413→
+   414→  return (
+   415→    <div className="max-w-6xl mx-auto px-4 md:px-6 py-6 space-y-8">
+   416→
+   417→      {/* ═══ HEADER ═══ */}
+   418→      <motion.div
+   419→        initial={{ opacity: 0, y: -8 }}
+   420→        animate={{ opacity: 1, y: 0 }}
+   421→        transition={{ duration: 0.4 }}
+   422→        className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4"
+   423→      >
+   424→        <div>
+   425→          <h1 className="text-xl font-semibold text-foreground tracking-tight">
+   426→            Command Center
+   427→          </h1>
+   428→          <p className="text-sm text-muted-foreground mt-0.5">
+   429→            What needs your attention today
+   430→          </p>
+   431→        </div>
+   432→        <div className="flex items-center gap-2.5">
+   433→          <Button
+   434→            variant="outline"
+   435→            size="sm"
+   436→            onClick={() => setCurrentView('clients')}
+   437→            className="gap-1.5"
+   438→          >
+   439→            <Plus className="h-3.5 w-3.5" />
+   440→            Add Client
+   441→          </Button>
+   442→          <Button
+   443→            size="sm"
+   444→            onClick={() => setCurrentView('invoices')}
+   445→            className="bg-emerald-600 hover:bg-emerald-700 gap-1.5"
+   446→          >
+   447→            <Upload className="h-3.5 w-3.5" />
+   448→            Upload
+   449→          </Button>
+   450→        </div>
+   451→      </motion.div>
+   452→
+   453→      {/* ═══ METRIC CARDS ═══ */}
+   454→      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+   455→        {metricCards.map((m, i) => (
+   456→          <MetricCard key={m.label} {...m} index={i} />
+   457→        ))}
+   458→      </div>
+   459→
+   460→      {/* ═══ MAIN CONTENT GRID ═══ */}
+   461→      <div className="grid lg:grid-cols-3 gap-6">
+   462→
+   463→        {/* ── Left: Ready to File + Upcoming ──────────────────────────── */}
+   464→        <div className="lg:col-span-2 space-y-6">
+   465→
+   466→          {/* Ready to File */}
+   467→          <motion.div variants={fadeUp} initial="hidden" animate="visible">
+   468→            <Card>
+   469→              <CardHeader className="pb-3">
+   470→                <div className="flex items-center justify-between">
+   471→                  <CardTitle className="text-sm font-semibold flex items-center gap-2">
+   472→                    <ShieldCheck className="h-4 w-4 text-emerald-600" />
+   473→                    Ready to File
+   474→                    {metrics.readyToFile > 0 && (
+   475→                      <Badge variant="secondary" className="text-[10px] bg-emerald-50 text-emerald-700">
+   476→                        {metrics.readyToFile}
+   477→                      </Badge>
+   478→                    )}
+   479→                  </CardTitle>
+   480→                  {returns.length > 0 && (
+   481→                    <Button
+   482→                      variant="ghost"
+   483→                      size="sm"
+   484→                      className="text-xs h-7 gap-1"
+   485→                      onClick={() => setCurrentView('returns')}
+   486→                    >
+   487→                      View all <ChevronRight className="h-3 w-3" />
+   488→                    </Button>
+   489→                  )}
+   490→                </div>
+   491→              </CardHeader>
+   492→              <CardContent>
+   493→                {readyReturns.length === 0 ? (
+   494→                  <div className="py-6 text-center">
+   495→                    <FileCheck2 className="h-8 w-8 text-slate-300 mx-auto mb-2" />
+   496→                    <p className="text-xs text-muted-foreground">
+   497→                      No returns ready for filing yet
+   498→                    </p>
+   499→                    <Button
+   500→                      variant="link"
+   501→                      size="sm"
+   502→                      className="text-xs text-emerald-600 mt-1"
+   503→                      onClick={() => setCurrentView('returns')}
+   504→                    >
+   505→                      Go to Returns →
+   506→                    </Button>
+   507→                  </div>
+   508→                ) : (
+   509→                  <div className="space-y-2">
+   510→                    {readyReturns.map((r) => {
+   511→                      const client = clientMap.get(r.clientId);
+   512→                      const name = client?.tradeName ?? 'Unknown';
+   513→                      return (
+   514→                        <div
+   515→                          key={r.id}
+   516→                          className="flex items-center justify-between p-3 rounded-lg bg-slate-50 hover:bg-slate-100 transition-colors"
+   517→                        >
+   518→                          <div className="flex items-center gap-3 min-w-0">
+   519→                            <div className="flex items-center justify-center h-8 w-8 rounded-full bg-emerald-100 text-emerald-700 text-xs font-semibold shrink-0">
+   520→                              {getInitials(name)}
+   521→                            </div>
+   522→                            <div className="min-w-0">
+   523→                              <p className="text-sm font-medium text-foreground truncate">
+   524→                                {name}
+   525→                              </p>
+   526→                              <p className="text-[11px] text-muted-foreground">
+   527→                                {r.returnType} · {periodToLabel(r.period)} · {r.totalInvoices} invoices
+   528→                              </p>
+   529→                            </div>
+   530→                          </div>
+   531→                          <div className="flex items-center gap-2 shrink-0">
+   532→                            <Badge
+   533→                              variant="outline"
+   534→                              className="text-[10px] bg-emerald-50 text-emerald-700 border-emerald-200"
+   535→                            >
+   536→                              {r.status}
+   537→                            </Badge>
+   538→                            <Button
+   539→                              size="sm"
+   540→                              className="h-7 text-xs bg-emerald-600 hover:bg-emerald-700 gap-1"
+   541→                              onClick={() => handleQuickFile(r.id, name, r.returnType)}
+   542→                              disabled={filingInProgress.has(r.id)}
+   543→                            >
+   544→                              {filingInProgress.has(r.id) ? (
+   545→                                <Loader2 className="h-3 w-3 animate-spin" />
+   546→                              ) : (
+   547→                                <FileCheck2 className="h-3 w-3" />
+   548→                              )}
+   549→                              File
+   550→                            </Button>
+   551→                          </div>
+   552→                        </div>
+   553→                      );
+   554→                    })}
+   555→                  </div>
+   556→                )}
+   557→              </CardContent>
+   558→            </Card>
+   559→          </motion.div>
+   560→
+   561→          {/* Upcoming Filing Deadlines */}
+   562→          <motion.div variants={fadeUp} initial="hidden" animate="visible">
+   563→            <Card>
+   564→              <CardHeader className="pb-3">
+   565→                <CardTitle className="text-sm font-semibold flex items-center gap-2">
+   566→                  <CalendarClock className="h-4 w-4 text-amber-600" />
+   567→                  Upcoming Deadlines
+   568→                  {metrics.overdueReturns > 0 && (
+   569→                    <Badge variant="secondary" className="text-[10px] bg-red-50 text-red-700">
+   570→                      {metrics.overdueReturns} overdue
+   571→                    </Badge>
+   572→                  )}
+   573→                </CardTitle>
+   574→              </CardHeader>
+   575→              <CardContent>
+   576→                {upcomingFilings.length === 0 ? (
+   577→                  <div className="py-6 text-center">
+   578→                    <CheckCircle2 className="h-8 w-8 text-slate-300 mx-auto mb-2" />
+   579→                    <p className="text-xs text-muted-foreground">All returns filed — you&apos;re all caught up!</p>
+   580→                  </div>
+   581→                ) : (
+   582→                  <ScrollArea className="max-h-64">
+   583→                    <div className="space-y-2">
+   584→                      {upcomingFilings.map((r) => {
+   585→                        const client = clientMap.get(r.clientId);
+   586→                        const name = client?.tradeName ?? 'Unknown';
+   587→                        const dueDateStr = getFilingDueDate(r.returnType, r.period);
+   588→                        const days = getDaysRemaining(dueDateStr);
+   589→                        const overdue = days < 0;
+   590→                        const dueSoon = days >= 0 && days <= 5;
+   591→
+   592→                        return (
+   593→                          <div
+   594→                            key={r.id}
+   595→                            className={`flex items-center justify-between p-3 rounded-lg border ${
+   596→                              overdue ? 'border-red-200 bg-red-50/50' : dueSoon ? 'border-amber-200 bg-amber-50/50' : 'border-slate-100 bg-slate-50'
+   597→                            }`}
+   598→                          >
+   599→                            <div className="flex items-center gap-3 min-w-0">
+   600→                              <div className={`flex items-center justify-center h-8 w-8 rounded-full text-xs font-semibold shrink-0 ${
+   601→                                overdue ? 'bg-red-100 text-red-700' : dueSoon ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600'
+   602→                              }`}>
+   603→                                {getInitials(name)}
+   604→                              </div>
+   605→                              <div className="min-w-0">
+   606→                                <p className="text-sm font-medium text-foreground truncate">{name}</p>
+   607→                                <p className="text-[11px] text-muted-foreground">
+   608→                                  {r.returnType} · {periodToLabel(r.period)} · {r.status}
+   609→                                </p>
+   610→                              </div>
+   611→                            </div>
+   612→                            <div className="flex items-center gap-2 shrink-0">
+   613→                              <span className={`text-xs font-medium ${
+   614→                                overdue ? 'text-red-600' : dueSoon ? 'text-amber-600' : 'text-muted-foreground'
+   615→                              }`}>
+   616→                                {formatDaysRemaining(days)}
+   617→                              </span>
+   618→                              <Button
+   619→                                variant={overdue ? 'default' : 'outline'}
+   620→                                size="sm"
+   621→                                className={`h-7 text-xs gap-1 ${
+   622→                                  overdue ? 'bg-red-600 hover:bg-red-700' : ''
+   623→                                }`}
+   624→                                onClick={() => handleFileReturn(r.clientId, r.returnType, r.period)}
+   625→                              >
+   626→                                <ArrowRight className="h-3 w-3" />
+   627→                                {overdue ? 'File Now' : 'Prepare'}
+   628→                              </Button>
+   629→                            </div>
+   630→                          </div>
+   631→                        );
+   632→                      })}
+   633→                    </div>
+   634→                  </ScrollArea>
+   635→                )}
+   636→              </CardContent>
+   637→            </Card>
+   638→          </motion.div>
+   639→        </div>
+   640→
+   641→        {/* ── Right Sidebar: Activity + Quick Actions ─────────────────── */}
+   642→        <div className="space-y-6">
+   643→
+   644→          {/* Recent Activity */}
+   645→          <motion.div variants={fadeUp} initial="hidden" animate="visible">
+   646→            <Card>
+   647→              <CardHeader className="pb-3">
+   648→                <CardTitle className="text-sm font-semibold flex items-center gap-2">
+   649→                  <Activity className="h-4 w-4 text-violet-600" />
+   650→                  Recent Activity
+   651→                </CardTitle>
+   652→              </CardHeader>
+   653→              <CardContent>
+   654→                {recentActivities.length === 0 ? (
+   655→                  <div className="py-6 text-center">
+   656→                    <Activity className="h-8 w-8 text-slate-300 mx-auto mb-2" />
+   657→                    <p className="text-xs text-muted-foreground">No activity yet</p>
+   658→                  </div>
+   659→                ) : (
+   660→                  <ScrollArea className="max-h-72">
+   661→                    <div className="space-y-3">
+   662→                      {recentActivities.map((a) => {
+   663→                        const { icon, color, bg } = activityIcon(a.type);
+   664→                        return (
+   665→                          <div key={a.id} className="flex items-start gap-2.5">
+   666→                            <div className={`flex items-center justify-center h-7 w-7 rounded-full shrink-0 mt-0.5 ${bg}`}>
+   667→                              <span className={color}>{icon}</span>
+   668→                            </div>
+   669→                            <div className="min-w-0 flex-1">
+   670→                              <p className="text-xs font-medium text-foreground leading-tight">
+   671→                                {a.title}
+   672→                              </p>
+   673→                              {a.description && (
+   674→                                <p className="text-[11px] text-muted-foreground mt-0.5 line-clamp-2">
+   675→                                  {a.description}
+   676→                                </p>
+   677→                              )}
+   678→                              <p className="text-[10px] text-muted-foreground/60 mt-0.5">
+   679→                                {a.createdAt ? timeAgo(a.createdAt as string) : ''}
+   680→                              </p>
+   681→                            </div>
+   682→                          </div>
+   683→                        );
+   684→                      })}
+   685→                    </div>
+   686→                  </ScrollArea>
+   687→                )}
+   688→              </CardContent>
+   689→            </Card>
+   690→          </motion.div>
+   691→
+   692→          {/* Quick Actions */}
+   693→          <motion.div variants={fadeUp} initial="hidden" animate="visible">
+   694→            <Card>
+   695→              <CardHeader className="pb-3">
+   696→                <CardTitle className="text-sm font-semibold">Quick Actions</CardTitle>
+   697→              </CardHeader>
+   698→              <CardContent>
+   699→                <div className="grid grid-cols-2 gap-2">
+   700→                  {[
+   701→                    { label: 'Add Client', icon: <Plus className="h-4 w-4" />, view: 'clients' as const, color: 'text-sky-600 bg-sky-50 hover:bg-sky-100' },
+   702→                    { label: 'Upload Doc', icon: <Upload className="h-4 w-4" />, view: 'invoices' as const, color: 'text-emerald-600 bg-emerald-50 hover:bg-emerald-100' },
+   703→                    { label: 'File Return', icon: <FileCheck2 className="h-4 w-4" />, view: 'returns' as const, color: 'text-violet-600 bg-violet-50 hover:bg-violet-100' },
+   704→                    { label: 'Reconcile', icon: <ClipboardCheck className="h-4 w-4" />, view: 'reconcile' as const, color: 'text-amber-600 bg-amber-50 hover:bg-amber-100' },
+   705→                    { label: 'War Room', icon: <Activity className="h-4 w-4" />, view: 'executive-war-room' as const, color: 'text-emerald-600 bg-emerald-50 hover:bg-emerald-100' },
+   706→                    { label: "RUN INDIA", icon: <Landmark className="h-4 w-4" />, view: 'run-india-business' as const, color: 'text-amber-700 bg-amber-50 hover:bg-amber-100' },
+   707→                    { label: 'Econ War Room', icon: <Activity className="h-4 w-4" />, view: 'economic-war-room' as const, color: 'text-emerald-700 bg-emerald-50 hover:bg-emerald-100' },
+   708→                    { label: "RUN COMPANY", icon: <Rocket className="h-4 w-4" />, view: 'run-my-company' as const, color: 'text-amber-700 bg-amber-50 hover:bg-amber-100' },
+   709→                  ].map((action) => (
+   710→                    <button
+   711→                      key={action.label}
+   712→                      onClick={() => setCurrentView(action.view)}
+   713→                      className={`flex flex-col items-center gap-1.5 p-3 rounded-lg transition-colors ${action.color}`}
+   714→                    >
+   715→                      {action.icon}
+   716→                      <span className="text-[11px] font-medium">{action.label}</span>
+   717→                    </button>
+   718→                  ))}
+   719→                </div>
+   720→              </CardContent>
+   721→            </Card>
+   722→          </motion.div>
+   723→
+   724→          {/* Summary Stats */}
+   725→          {metrics.documentsProcessed > 0 && (
+   726→            <motion.div variants={fadeUp} initial="hidden" animate="visible">
+   727→              <Card>
+   728→                <CardContent className="p-4">
+   729→                  <div className="space-y-3">
+   730→                    <div className="flex items-center justify-between text-xs">
+   731→                      <span className="text-muted-foreground">Documents Processed</span>
+   732→                      <span className="font-semibold">{metrics.documentsProcessed}</span>
+   733→                    </div>
+   734→                    {metrics.extractionsPending > 0 && (
+   735→                      <div className="flex items-center justify-between text-xs">
+   736→                        <span className="text-muted-foreground">Extractions Pending</span>
+   737→                        <Badge variant="secondary" className="text-[10px] bg-amber-50 text-amber-700">
+   738→                          {metrics.extractionsPending}
+   739→                        </Badge>
+   740→                      </div>
+   741→                    )}
+   742→                    {metrics.matchPercentage < 100 && (
+   743→                      <div className="flex items-center justify-between text-xs">
+   744→                        <span className="text-muted-foreground">Match Rate</span>
+   745→                        <span className="font-semibold">{metrics.matchPercentage}%</span>
+   746→                      </div>
+   747→                    )}
+   748→                    {metrics.riskPercentage > 0 && (
+   749→                      <div className="flex items-center justify-between text-xs">
+   750→                        <span className="text-muted-foreground">Risk Rate</span>
+   751→                        <span className={`font-semibold ${metrics.riskPercentage > 20 ? 'text-red-600' : 'text-amber-600'}`}>
+   752→                          {metrics.riskPercentage}%
+   753→                        </span>
+   754→                      </div>
+   755→                    )}
+   756→                    <div className="flex items-center justify-between text-xs">
+   757→                      <span className="text-muted-foreground">Overdue Returns</span>
+   758→                      <span className={`font-semibold ${metrics.overdueReturns > 0 ? 'text-red-600' : 'text-emerald-600'}`}>
+   759→                        {metrics.overdueReturns}
+   760→                      </span>
+   761→                    </div>
+   762→                  </div>
+   763→                </CardContent>
+   764→              </Card>
+   765→            </motion.div>
+   766→          )}
+   767→        </div>
+   768→      </div>
+   769→    </div>
+   770→  );
+   771→}
+   772→

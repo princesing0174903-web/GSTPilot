@@ -1,0 +1,892 @@
+     1→'use client';
+     2→
+     3→import React, { useEffect, useRef, useState } from 'react';
+     4→import { motion, useInView, useAnimation, AnimatePresence } from 'framer-motion';
+     5→import { Button } from '@/components/ui/button';
+     6→import { Card, CardContent } from '@/components/ui/card';
+     7→import { Badge } from '@/components/ui/badge';
+     8→import {
+     9→  Zap,
+    10→  FileText,
+    11→  Upload,
+    12→  CheckCircle2,
+    13→  ArrowRight,
+    14→  Check,
+    15→  X,
+    16→  Star,
+    17→  ChevronRight,
+    18→  Play,
+    19→  Sparkles,
+    20→  Clock,
+    21→  ShieldCheck,
+    22→  Brain,
+    23→  RefreshCw,
+    24→  Users,
+    25→  BarChart3,
+    26→  Globe,
+    27→  Layers,
+    28→} from 'lucide-react';
+    29→
+    30→interface LandingPageProps {
+    31→  onGetStarted: () => void;
+    32→  onBookDemo: () => void;
+    33→}
+    34→
+    35→// ─── Animated Counter ────────────────────────────────────
+    36→function AnimatedCounter({ target, suffix = '', prefix = '' }: { target: number; suffix?: string; prefix?: string }) {
+    37→  const [count, setCount] = useState(0);
+    38→  const ref = useRef<HTMLSpanElement>(null);
+    39→  const isInView = useInView(ref, { once: true, margin: '-50px' });
+    40→
+    41→  useEffect(() => {
+    42→    if (!isInView) return;
+    43→    const duration = 2000;
+    44→    const steps = 60;
+    45→    const increment = target / steps;
+    46→    let current = 0;
+    47→    const timer = setInterval(() => {
+    48→      current += increment;
+    49→      if (current >= target) {
+    50→        setCount(target);
+    51→        clearInterval(timer);
+    52→      } else {
+    53→        setCount(Math.floor(current));
+    54→      }
+    55→    }, duration / steps);
+    56→    return () => clearInterval(timer);
+    57→  }, [isInView, target]);
+    58→
+    59→  return (
+    60→    <span ref={ref}>
+    61→      {prefix}{count.toLocaleString('en-IN')}{suffix}
+    62→    </span>
+    63→  );
+    64→}
+    65→
+    66→// ─── Section Wrapper ─────────────────────────────────────
+    67→function Section({ children, className = '', id }: { children: React.ReactNode; className?: string; id?: string }) {
+    68→  const ref = useRef<HTMLElement>(null);
+    69→  const isInView = useInView(ref, { once: true, margin: '-80px' });
+    70→  const controls = useAnimation();
+    71→
+    72→  useEffect(() => {
+    73→    if (isInView) {
+    74→      controls.start('visible');
+    75→    }
+    76→  }, [isInView, controls]);
+    77→
+    78→  return (
+    79→    <motion.section
+    80→      id={id}
+    81→      ref={ref}
+    82→      initial="hidden"
+    83→      animate={controls}
+    84→      variants={{
+    85→        hidden: {},
+    86→        visible: { transition: { staggerChildren: 0.1 } },
+    87→      }}
+    88→      className={className}
+    89→    >
+    90→      {children}
+    91→    </motion.section>
+    92→  );
+    93→}
+    94→
+    95→const fadeUp = {
+    96→  hidden: { opacity: 0, y: 30 },
+    97→  visible: { opacity: 1, y: 0, transition: { duration: 0.6, ease: [0.22, 1, 0.36, 1] } },
+    98→};
+    99→
+   100→const scaleUp = {
+   101→  hidden: { opacity: 0, scale: 0.95 },
+   102→  visible: { opacity: 1, scale: 1, transition: { duration: 0.5, ease: [0.22, 1, 0.36, 1] } },
+   103→};
+   104→
+   105→// ─── Navbar ──────────────────────────────────────────────
+   106→function Navbar({ onGetStarted }: { onGetStarted: () => void }) {
+   107→  const [scrolled, setScrolled] = useState(false);
+   108→  const [mobileOpen, setMobileOpen] = useState(false);
+   109→
+   110→  useEffect(() => {
+   111→    const handler = () => setScrolled(window.scrollY > 20);
+   112→    window.addEventListener('scroll', handler, { passive: true });
+   113→    return () => window.removeEventListener('scroll', handler);
+   114→  }, []);
+   115→
+   116→  return (
+   117→    <motion.nav
+   118→      initial={{ y: -20, opacity: 0 }}
+   119→      animate={{ y: 0, opacity: 1 }}
+   120→      transition={{ duration: 0.5 }}
+   121→      className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
+   122→        scrolled
+   123→          ? 'bg-white/90 backdrop-blur-xl shadow-lg shadow-slate-900/5 border-b border-slate-200/50'
+   124→          : 'bg-transparent'
+   125→      }`}
+   126→    >
+   127→      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+   128→        <div className="flex items-center justify-between h-16 lg:h-18">
+   129→          {/* Logo */}
+   130→          <div className="flex items-center gap-2.5">
+   131→            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-500 to-emerald-600 shadow-md shadow-emerald-600/20">
+   132→              <Zap className="h-5 w-5 text-white" />
+   133→            </div>
+   134→            <span className="text-xl font-bold text-slate-900 tracking-tight">
+   135→              GSTPilot
+   136→            </span>
+   137→          </div>
+   138→
+   139→          {/* Desktop Nav */}
+   140→          <div className="hidden md:flex items-center gap-8">
+   141→            <a href="#how-it-works" className="text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors">How It Works</a>
+   142→            <a href="#features" className="text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors">Features</a>
+   143→            <a href="#pricing" className="text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors">Pricing</a>
+   144→            <a href="#testimonials" className="text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors">Testimonials</a>
+   145→          </div>
+   146→
+   147→          {/* Desktop CTA */}
+   148→          <div className="hidden md:flex items-center gap-3">
+   149→            <Button
+   150→              variant="ghost"
+   151→              onClick={onGetStarted}
+   152→              className="text-sm font-medium text-slate-700 hover:text-slate-900"
+   153→            >
+   154→              Sign In
+   155→            </Button>
+   156→            <Button
+   157→              onClick={onGetStarted}
+   158→              className="bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-600/20 text-sm font-semibold px-5"
+   159→            >
+   160→              Start Free Trial
+   161→              <ArrowRight className="ml-1.5 h-4 w-4" />
+   162→            </Button>
+   163→          </div>
+   164→
+   165→          {/* Mobile Hamburger */}
+   166→          <button
+   167→            onClick={() => setMobileOpen(!mobileOpen)}
+   168→            className="md:hidden p-2 rounded-lg hover:bg-slate-100 transition-colors"
+   169→            aria-label="Toggle menu"
+   170→          >
+   171→            <div className="w-5 h-5 flex flex-col justify-center items-center gap-1">
+   172→              <span className={`block h-0.5 w-5 bg-slate-700 transition-all duration-300 ${mobileOpen ? 'rotate-45 translate-y-1.5' : ''}`} />
+   173→              <span className={`block h-0.5 w-5 bg-slate-700 transition-all duration-300 ${mobileOpen ? 'opacity-0' : ''}`} />
+   174→              <span className={`block h-0.5 w-5 bg-slate-700 transition-all duration-300 ${mobileOpen ? '-rotate-45 -translate-y-1.5' : ''}`} />
+   175→            </div>
+   176→          </button>
+   177→        </div>
+   178→      </div>
+   179→
+   180→      {/* Mobile Menu */}
+   181→      <AnimatePresence>
+   182→        {mobileOpen && (
+   183→          <motion.div
+   184→            initial={{ opacity: 0, height: 0 }}
+   185→            animate={{ opacity: 1, height: 'auto' }}
+   186→            exit={{ opacity: 0, height: 0 }}
+   187→            className="md:hidden bg-white/95 backdrop-blur-xl border-b border-slate-200/50 overflow-hidden"
+   188→          >
+   189→            <div className="px-4 py-4 space-y-2">
+   190→              <a href="#how-it-works" onClick={() => setMobileOpen(false)} className="block py-2 text-sm font-medium text-slate-700">How It Works</a>
+   191→              <a href="#features" onClick={() => setMobileOpen(false)} className="block py-2 text-sm font-medium text-slate-700">Features</a>
+   192→              <a href="#pricing" onClick={() => setMobileOpen(false)} className="block py-2 text-sm font-medium text-slate-700">Pricing</a>
+   193→              <a href="#testimonials" onClick={() => setMobileOpen(false)} className="block py-2 text-sm font-medium text-slate-700">Testimonials</a>
+   194→              <div className="pt-3 border-t border-slate-200 space-y-2">
+   195→                <Button variant="outline" onClick={onGetStarted} className="w-full justify-center">Sign In</Button>
+   196→                <Button onClick={onGetStarted} className="w-full justify-center bg-emerald-600 hover:bg-emerald-700 text-white">Start Free Trial</Button>
+   197→              </div>
+   198→            </div>
+   199→          </motion.div>
+   200→        )}
+   201→      </AnimatePresence>
+   202→    </motion.nav>
+   203→  );
+   204→}
+   205→
+   206→// ─── Hero Section ────────────────────────────────────────
+   207→function HeroSection({ onGetStarted, onBookDemo }: { onGetStarted: () => void; onBookDemo: () => void }) {
+   208→  return (
+   209→    <Section className="relative min-h-screen flex items-center overflow-hidden pt-16" id="hero">
+   210→      {/* Background */}
+   211→      <div className="absolute inset-0 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950" />
+   212→      {/* Grid pattern */}
+   213→      <div className="absolute inset-0 opacity-[0.03]" style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg width=\'60\' height=\'60\' viewBox=\'0 0 60 60\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cg fill=\'none\' fill-rule=\'evenodd\'%3E%3Cg fill=\'%23ffffff\' fill-opacity=\'1\'%3E%3Cpath d=\'M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z\'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")' }} />
+   214→      {/* Radial gradient glow */}
+   215→      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-emerald-500/10 rounded-full blur-3xl" />
+   216→
+   217→      <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20 lg:py-28">
+   218→        <div className="grid lg:grid-cols-2 gap-12 lg:gap-16 items-center">
+   219→          {/* Left: Content */}
+   220→          <motion.div variants={fadeUp} className="text-center lg:text-left">
+   221→            <motion.div variants={fadeUp} className="inline-flex items-center gap-2 rounded-full bg-emerald-500/10 border border-emerald-500/20 px-4 py-1.5 mb-6">
+   222→              <Sparkles className="h-3.5 w-3.5 text-emerald-400" />
+   223→              <span className="text-sm font-medium text-emerald-400">Upload → File in Minutes</span>
+   224→            </motion.div>
+   225→
+   226→            <motion.h1 variants={fadeUp} className="text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight text-white leading-[1.1]">
+   227→              Prepare &amp; File GST Returns
+   228→              <br />
+   229→              <span className="bg-gradient-to-r from-emerald-400 to-emerald-300 bg-clip-text text-transparent">
+   230→                10x Faster
+   231→              </span>
+   232→            </motion.h1>
+   233→
+   234→            <motion.p variants={fadeUp} className="mt-6 text-lg sm:text-xl text-slate-400 max-w-xl mx-auto lg:mx-0 leading-relaxed">
+   235→              Upload invoices. Get GST-ready returns in minutes. No spreadsheets, no manual work, no errors.
+   236→            </motion.p>
+   237→
+   238→            <motion.div variants={fadeUp} className="mt-8 flex flex-col sm:flex-row items-center gap-4 justify-center lg:justify-start">
+   239→              <Button
+   240→                size="lg"
+   241→                onClick={onGetStarted}
+   242→                className="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 text-white shadow-xl shadow-emerald-600/25 h-12 px-8 text-base font-semibold"
+   243→              >
+   244→                Start Free — No Card Needed
+   245→                <ArrowRight className="ml-2 h-5 w-5" />
+   246→              </Button>
+   247→              <Button
+   248→                size="lg"
+   249→                variant="outline"
+   250→                onClick={onBookDemo}
+   251→                className="w-full sm:w-auto border-slate-600 text-slate-300 hover:bg-slate-800 hover:text-white hover:border-slate-500 h-12 px-8 text-base font-semibold"
+   252→              >
+   253→                <Play className="mr-2 h-4 w-4" />
+   254→                Watch Demo
+   255→              </Button>
+   256→            </motion.div>
+   257→
+   258→            <motion.div variants={fadeUp} className="mt-8 flex items-center gap-6 justify-center lg:justify-start">
+   259→              <div className="flex items-center gap-1.5">
+   260→                <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+   261→                <span className="text-sm text-slate-400">14-day free trial</span>
+   262→              </div>
+   263→              <div className="flex items-center gap-1.5">
+   264→                <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+   265→                <span className="text-sm text-slate-400">No credit card</span>
+   266→              </div>
+   267→              <div className="flex items-center gap-1.5">
+   268→                <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+   269→                <span className="text-sm text-slate-400">Cancel anytime</span>
+   270→              </div>
+   271→            </motion.div>
+   272→          </motion.div>
+   273→
+   274→          {/* Right: Product Preview */}
+   275→          <motion.div variants={scaleUp} className="relative">
+   276→            <div className="relative">
+   277→              {/* Main dashboard card */}
+   278→              <div className="rounded-2xl bg-white/5 backdrop-blur-xl border border-white/10 shadow-2xl shadow-emerald-500/5 p-6 overflow-hidden">
+   279→                {/* Mock header */}
+   280→                <div className="flex items-center gap-3 mb-6">
+   281→                  <div className="h-3 w-3 rounded-full bg-red-400" />
+   282→                  <div className="h-3 w-3 rounded-full bg-amber-400" />
+   283→                  <div className="h-3 w-3 rounded-full bg-emerald-400" />
+   284→                  <div className="flex-1 h-6 rounded-md bg-white/5 ml-3" />
+   285→                </div>
+   286→
+   287→                {/* Mock upload zone */}
+   288→                <div className="rounded-xl border-2 border-dashed border-emerald-500/30 bg-emerald-500/5 p-8 mb-4 text-center">
+   289→                  <Upload className="h-10 w-10 text-emerald-400 mx-auto mb-3" />
+   290→                  <p className="text-emerald-400 text-sm font-semibold">Drop invoices here</p>
+   291→                  <p className="text-slate-500 text-xs mt-1">PDF, Excel, CSV — AI extracts everything</p>
+   292→                </div>
+   293→
+   294→                {/* Mock extracted data */}
+   295→                <div className="grid grid-cols-3 gap-3 mb-4">
+   296→                  {[
+   297→                    { label: 'Invoices', value: '24', color: 'text-emerald-400' },
+   298→                    { label: 'Taxable', value: '₹18.4L', color: 'text-emerald-300' },
+   299→                    { label: 'GST', value: '₹3.3L', color: 'text-teal-400' },
+   300→                  ].map((card) => (
+   301→                    <div key={card.label} className="rounded-lg bg-white/5 border border-white/5 p-3 text-center">
+   302→                      <p className="text-[10px] uppercase tracking-wider text-slate-500 mb-0.5">{card.label}</p>
+   303→                      <p className={`text-lg font-bold ${card.color}`}>{card.value}</p>
+   304→                    </div>
+   305→                  ))}
+   306→                </div>
+   307→
+   308→                {/* Mock filing button */}
+   309→                <div className="rounded-lg bg-emerald-600 text-white text-center py-2.5 text-sm font-semibold">
+   310→                  <FileText className="h-4 w-4 inline mr-1.5" />
+   311→                  File GSTR-1 Now
+   312→                </div>
+   313→              </div>
+   314→
+   315→              {/* Floating cards */}
+   316→              <motion.div
+   317→                animate={{ y: [0, -8, 0] }}
+   318→                transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
+   319→                className="absolute -top-4 -right-4 rounded-xl bg-white/10 backdrop-blur-lg border border-white/10 p-3 shadow-xl"
+   320→              >
+   321→                <div className="flex items-center gap-2">
+   322→                  <div className="h-8 w-8 rounded-lg bg-emerald-500/20 flex items-center justify-center">
+   323→                    <Clock className="h-4 w-4 text-emerald-400" />
+   324→                  </div>
+   325→                  <div>
+   326→                    <p className="text-[10px] text-slate-400">Time Saved</p>
+   327→                    <p className="text-sm font-bold text-white">4.5 hrs</p>
+   328→                  </div>
+   329→                </div>
+   330→              </motion.div>
+   331→
+   332→              <motion.div
+   333→                animate={{ y: [0, 6, 0] }}
+   334→                transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut', delay: 1 }}
+   335→                className="absolute -bottom-4 -left-4 rounded-xl bg-white/10 backdrop-blur-lg border border-white/10 p-3 shadow-xl"
+   336→              >
+   337→                <div className="flex items-center gap-2">
+   338→                  <div className="h-8 w-8 rounded-lg bg-amber-500/20 flex items-center justify-center">
+   339→                    <ShieldCheck className="h-4 w-4 text-amber-400" />
+   340→                  </div>
+   341→                  <div>
+   342→                    <p className="text-[10px] text-slate-400">Accuracy</p>
+   343→                    <p className="text-sm font-bold text-white">99.9%</p>
+   344→                  </div>
+   345→                </div>
+   346→              </motion.div>
+   347→            </div>
+   348→          </motion.div>
+   349→        </div>
+   350→      </div>
+   351→    </Section>
+   352→  );
+   353→}
+   354→
+   355→// ─── Trust Section ───────────────────────────────────────
+   356→function TrustSection() {
+   357→  const stats = [
+   358→    { value: 500, suffix: '+', label: 'CA Firms', icon: Users },
+   359→    { value: 2000, suffix: '+', label: 'Businesses', icon: Globe },
+   360→    { value: 500, prefix: '₹', suffix: 'Cr+', label: 'Invoices Processed', icon: BarChart3 },
+   361→    { value: 10, suffix: 'x', label: 'Faster Filing', icon: Clock },
+   362→  ];
+   363→
+   364→  return (
+   365→    <Section className="py-16 lg:py-20 bg-white border-b border-slate-100">
+   366→      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+   367→        <motion.div variants={fadeUp} className="text-center mb-10">
+   368→          <p className="text-sm font-semibold uppercase tracking-widest text-emerald-600">Trusted by CA Firms Across India</p>
+   369→        </motion.div>
+   370→        <div className="grid grid-cols-2 lg:grid-cols-4 gap-8">
+   371→          {stats.map((stat) => (
+   372→            <motion.div key={stat.label} variants={fadeUp} className="text-center">
+   373→              <div className="inline-flex items-center justify-center h-12 w-12 rounded-xl bg-emerald-50 mb-3">
+   374→                <stat.icon className="h-6 w-6 text-emerald-600" />
+   375→              </div>
+   376→              <p className="text-3xl sm:text-4xl font-bold text-slate-900 tracking-tight">
+   377→                <AnimatedCounter
+   378→                  target={stat.value}
+   379→                  suffix={stat.suffix}
+   380→                  prefix={stat.prefix || ''}
+   381→                />
+   382→              </p>
+   383→              <p className="text-sm text-slate-500 mt-1 font-medium">{stat.label}</p>
+   384→            </motion.div>
+   385→          ))}
+   386→        </div>
+   387→      </div>
+   388→    </Section>
+   389→  );
+   390→}
+   391→
+   392→// ─── How It Works Section ────────────────────────────────
+   393→function HowItWorksSection() {
+   394→  const steps = [
+   395→    {
+   396→      step: 1,
+   397→      title: 'Upload Invoices',
+   398→      description: 'Drag & drop PDFs, Excel, CSV, or images. Our AI handles the rest.',
+   399→      icon: Upload,
+   400→    },
+   401→    {
+   402→      step: 2,
+   403→      title: 'AI Extracts & Validates',
+   404→      description: 'GSTIN, HSN, tax amounts — extracted and validated automatically.',
+   405→      icon: Brain,
+   406→    },
+   407→    {
+   408→      step: 3,
+   409→      title: 'Review & Reconcile',
+   410→      description: 'Fix mismatches. One-click reconciliation with GSTR-2A/2B.',
+   411→      icon: RefreshCw,
+   412→    },
+   413→    {
+   414→      step: 4,
+   415→      title: 'File Returns',
+   416→      description: 'Generate JSON, file GSTR-1/3B, download acknowledgement.',
+   417→      icon: FileText,
+   418→    },
+   419→  ];
+   420→
+   421→  return (
+   422→    <Section className="py-20 lg:py-28 bg-white" id="how-it-works">
+   423→      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+   424→        <motion.div variants={fadeUp} className="text-center max-w-2xl mx-auto mb-16">
+   425→          <Badge variant="outline" className="mb-4 border-emerald-200 text-emerald-700 bg-emerald-50/50">How It Works</Badge>
+   426→          <h2 className="text-3xl sm:text-4xl font-bold text-slate-900 tracking-tight">
+   427→            4 steps.{' '}
+   428→            <span className="text-emerald-600">That&apos;s it.</span>
+   429→          </h2>
+   430→          <p className="mt-4 text-lg text-slate-500">
+   431→            From raw invoices to filed GST returns. No spreadsheets needed.
+   432→          </p>
+   433→        </motion.div>
+   434→
+   435→        <div className="relative">
+   436→          {/* Connecting line */}
+   437→          <div className="hidden lg:block absolute top-1/2 left-[10%] right-[10%] h-0.5 bg-gradient-to-r from-emerald-200 via-emerald-300 to-emerald-200 -translate-y-1/2 z-0" />
+   438→
+   439→          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8 relative z-10">
+   440→            {steps.map((step) => (
+   441→              <motion.div key={step.step} variants={fadeUp} className="relative">
+   442→                <div className="flex flex-col items-center text-center">
+   443→                  <div className="relative mb-4">
+   444→                    <div className="h-16 w-16 rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-600 flex items-center justify-center shadow-lg shadow-emerald-500/20">
+   445→                      <step.icon className="h-7 w-7 text-white" />
+   446→                    </div>
+   447→                    <div className="absolute -top-2 -right-2 h-6 w-6 rounded-full bg-white border-2 border-emerald-500 flex items-center justify-center text-[10px] font-bold text-emerald-600">
+   448→                      {step.step}
+   449→                    </div>
+   450→                  </div>
+   451→                  <h3 className="text-sm font-semibold text-slate-900 mb-1">{step.title}</h3>
+   452→                  <p className="text-xs text-slate-500 leading-relaxed max-w-[200px]">{step.description}</p>
+   453→                </div>
+   454→              </motion.div>
+   455→            ))}
+   456→          </div>
+   457→        </div>
+   458→      </div>
+   459→    </Section>
+   460→  );
+   461→}
+   462→
+   463→// ─── Features Section ────────────────────────────────────
+   464→function FeaturesSection() {
+   465→  const features = [
+   466→    {
+   467→      icon: Upload,
+   468→      title: 'Upload & Extract',
+   469→      description: 'AI-powered extraction from PDFs, images, and Excel with 99.9% accuracy.',
+   470→      color: 'bg-emerald-50 text-emerald-600',
+   471→    },
+   472→    {
+   473→      icon: ShieldCheck,
+   474→      title: 'Auto-Validation',
+   475→      description: 'GSTIN verification, HSN code checks, and tax computation — all automatic.',
+   476→      color: 'bg-teal-50 text-teal-600',
+   477→    },
+   478→    {
+   479→      icon: RefreshCw,
+   480→      title: 'Smart Reconciliation',
+   481→      description: 'Auto-match GSTR-1 with GSTR-2A/2B. Find mismatches in seconds.',
+   482→      color: 'bg-amber-50 text-amber-600',
+   483→    },
+   484→    {
+   485→      icon: FileText,
+   486→      title: 'One-Click Filing',
+   487→      description: 'Generate GSTR-1/3B JSON, file directly, download acknowledgements.',
+   488→      color: 'bg-emerald-50 text-emerald-600',
+   489→    },
+   490→    {
+   491→      icon: Users,
+   492→      title: 'Multi-Client',
+   493→      description: 'Manage all your clients from one dashboard. Switch contexts instantly.',
+   494→      color: 'bg-violet-50 text-violet-600',
+   495→    },
+   496→    {
+   497→      icon: Layers,
+   498→      title: 'Section Classification',
+   499→      description: 'Auto-classify invoices into B2B, B2C, CDNR, Exports — ready for filing.',
+   500→      color: 'bg-rose-50 text-rose-600',
+   501→    },
+   502→  ];
+   503→
+   504→  return (
+   505→    <Section className="py-20 lg:py-28 bg-slate-50" id="features">
+   506→      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+   507→        <motion.div variants={fadeUp} className="text-center max-w-2xl mx-auto mb-16">
+   508→          <Badge variant="outline" className="mb-4 border-emerald-200 text-emerald-700 bg-emerald-50/50">Features</Badge>
+   509→          <h2 className="text-3xl sm:text-4xl font-bold text-slate-900 tracking-tight">
+   510→            Everything you need.{' '}
+   511→            <span className="text-emerald-600">Nothing you don&apos;t.</span>
+   512→          </h2>
+   513→          <p className="mt-4 text-lg text-slate-500">
+   514→            Focused on one thing: preparing and filing GST returns faster.
+   515→          </p>
+   516→        </motion.div>
+   517→
+   518→        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+   519→          {features.map((feature) => (
+   520→            <motion.div key={feature.title} variants={fadeUp}>
+   521→              <Card className="h-full hover:shadow-lg hover:shadow-emerald-500/5 transition-all duration-300 border-slate-200/80 group">
+   522→                <CardContent className="p-6">
+   523→                  <div className={`inline-flex items-center justify-center h-11 w-11 rounded-xl ${feature.color} mb-4 group-hover:scale-110 transition-transform duration-300`}>
+   524→                    <feature.icon className="h-5 w-5" />
+   525→                  </div>
+   526→                  <h3 className="text-lg font-semibold text-slate-900 mb-2">{feature.title}</h3>
+   527→                  <p className="text-sm text-slate-500 leading-relaxed">{feature.description}</p>
+   528→                </CardContent>
+   529→              </Card>
+   530→            </motion.div>
+   531→          ))}
+   532→        </div>
+   533→      </div>
+   534→    </Section>
+   535→  );
+   536→}
+   537→
+   538→// ─── Comparison Section ──────────────────────────────────
+   539→function ComparisonSection() {
+   540→  const comparisons = [
+   541→    { feature: 'Invoice Processing', traditional: '4-6 hours', gstpilot: '< 5 minutes', saved: '98%' },
+   542→    { feature: 'Error Rate', traditional: '8-12%', gstpilot: '< 0.1%', saved: '99%' },
+   543→    { feature: 'Reconciliation', traditional: 'Manual matching', gstpilot: 'Auto AI matching', saved: '100%' },
+   544→    { feature: 'GSTR Filing', traditional: '2-3 days', gstpilot: '< 1 hour', saved: '95%' },
+   545→    { feature: 'Multi-Client', traditional: 'Spreadsheets & email', gstpilot: 'One dashboard', saved: '90%' },
+   546→  ];
+   547→
+   548→  return (
+   549→    <Section className="py-20 lg:py-28 bg-white">
+   550→      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+   551→        <motion.div variants={fadeUp} className="text-center max-w-2xl mx-auto mb-16">
+   552→          <Badge variant="outline" className="mb-4 border-emerald-200 text-emerald-700 bg-emerald-50/50">Why GSTPilot</Badge>
+   553→          <h2 className="text-3xl sm:text-4xl font-bold text-slate-900 tracking-tight">
+   554→            Stop doing GST returns{' '}
+   555→            <span className="text-emerald-600">the hard way</span>
+   556→          </h2>
+   557→        </motion.div>
+   558→
+   559→        <motion.div variants={scaleUp}>
+   560→          <Card className="overflow-hidden border-slate-200/80">
+   561→            <div className="overflow-x-auto">
+   562→              <table className="w-full min-w-[600px]">
+   563→                <thead>
+   564→                  <tr className="border-b border-slate-200">
+   565→                    <th className="text-left p-4 text-sm font-semibold text-slate-600">Task</th>
+   566→                    <th className="text-center p-4 text-sm font-semibold text-red-600 bg-red-50/50">
+   567→                      <div className="flex items-center justify-center gap-1.5">
+   568→                        <X className="h-4 w-4" />
+   569→                        Manual
+   570→                      </div>
+   571→                    </th>
+   572→                    <th className="text-center p-4 text-sm font-semibold text-emerald-600 bg-emerald-50/50">
+   573→                      <div className="flex items-center justify-center gap-1.5">
+   574→                        <Check className="h-4 w-4" />
+   575→                        GSTPilot
+   576→                      </div>
+   577→                    </th>
+   578→                    <th className="text-center p-4 text-sm font-semibold text-slate-600">Saved</th>
+   579→                  </tr>
+   580→                </thead>
+   581→                <tbody>
+   582→                  {comparisons.map((row) => (
+   583→                    <tr key={row.feature} className="border-b border-slate-100 last:border-0 hover:bg-slate-50/50 transition-colors">
+   584→                      <td className="p-4 text-sm font-medium text-slate-700">{row.feature}</td>
+   585→                      <td className="p-4 text-center text-sm text-slate-500 bg-red-50/30">{row.traditional}</td>
+   586→                      <td className="p-4 text-center text-sm font-semibold text-emerald-700 bg-emerald-50/30">{row.gstpilot}</td>
+   587→                      <td className="p-4 text-center">
+   588→                        <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 font-semibold">{row.saved}</Badge>
+   589→                      </td>
+   590→                    </tr>
+   591→                  ))}
+   592→                </tbody>
+   593→              </table>
+   594→            </div>
+   595→          </Card>
+   596→        </motion.div>
+   597→      </div>
+   598→    </Section>
+   599→  );
+   600→}
+   601→
+   602→// ─── Testimonials Section ────────────────────────────────
+   603→function TestimonialsSection() {
+   604→  const testimonials = [
+   605→    {
+   606→      name: 'CA Suresh Menon',
+   607→      role: 'Managing Partner, Menon & Associates',
+   608→      content: 'We filed GSTR-1 for 80 clients in one afternoon. Before GSTPilot, this took our entire team a full week.',
+   609→      rating: 5,
+   610→    },
+   611→    {
+   612→      name: 'CA Deepika Rao',
+   613→      role: 'Founder, Rao GST Solutions',
+   614→      content: 'The upload → extract → file workflow is magic. My team went from dreading month-end to finishing before lunch.',
+   615→      rating: 5,
+   616→    },
+   617→    {
+   618→      name: 'Rahul Verma',
+   619→      role: 'CFO, TechBridge India',
+   620→      content: 'Reconciliation that used to take 3 days now takes 30 minutes. The auto-matching is incredibly accurate.',
+   621→      rating: 5,
+   622→    },
+   623→  ];
+   624→
+   625→  return (
+   626→    <Section className="py-20 lg:py-28 bg-slate-50" id="testimonials">
+   627→      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+   628→        <motion.div variants={fadeUp} className="text-center max-w-2xl mx-auto mb-16">
+   629→          <Badge variant="outline" className="mb-4 border-emerald-200 text-emerald-700 bg-emerald-50/50">Testimonials</Badge>
+   630→          <h2 className="text-3xl sm:text-4xl font-bold text-slate-900 tracking-tight">
+   631→            CAs love{' '}
+   632→            <span className="text-emerald-600">the speed</span>
+   633→          </h2>
+   634→        </motion.div>
+   635→
+   636→        <div className="grid md:grid-cols-3 gap-6">
+   637→          {testimonials.map((t) => (
+   638→            <motion.div key={t.name} variants={fadeUp}>
+   639→              <Card className="h-full hover:shadow-lg hover:shadow-emerald-500/5 transition-all duration-300 border-slate-200/80">
+   640→                <CardContent className="p-6">
+   641→                  <div className="flex items-center gap-0.5 mb-4">
+   642→                    {Array.from({ length: t.rating }).map((_, i) => (
+   643→                      <Star key={i} className="h-4 w-4 fill-amber-400 text-amber-400" />
+   644→                    ))}
+   645→                  </div>
+   646→                  <p className="text-sm text-slate-600 leading-relaxed mb-6">&ldquo;{t.content}&rdquo;</p>
+   647→                  <div className="flex items-center gap-3 pt-4 border-t border-slate-100">
+   648→                    <div className="h-10 w-10 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center text-white text-sm font-bold">
+   649→                      {t.name.split(' ').map(w => w[0]).join('').slice(0, 2)}
+   650→                    </div>
+   651→                    <div>
+   652→                      <p className="text-sm font-semibold text-slate-900">{t.name}</p>
+   653→                      <p className="text-xs text-slate-500">{t.role}</p>
+   654→                    </div>
+   655→                  </div>
+   656→                </CardContent>
+   657→              </Card>
+   658→            </motion.div>
+   659→          ))}
+   660→        </div>
+   661→      </div>
+   662→    </Section>
+   663→  );
+   664→}
+   665→
+   666→// ─── Pricing Section ─────────────────────────────────────
+   667→function PricingSection({ onGetStarted }: { onGetStarted: () => void }) {
+   668→  const [annual, setAnnual] = useState(true);
+   669→
+   670→  const plans = [
+   671→    {
+   672→      name: 'Starter',
+   673→      price: annual ? 1499 : 1999,
+   674→      period: '/mo',
+   675→      description: 'For solo practitioners',
+   676→      features: ['Up to 10 clients', 'Invoice processing', 'GST validation', 'GSTR-1/3B filing', 'Email support', '1 user seat'],
+   677→      cta: 'Start Free Trial',
+   678→      popular: false,
+   679→    },
+   680→    {
+   681→      name: 'Professional',
+   682→      price: annual ? 4999 : 5999,
+   683→      period: '/mo',
+   684→      description: 'For growing CA practices',
+   685→      features: ['Up to 50 clients', 'AI extraction + validation', 'Smart reconciliation', 'GSTR-1/3B/9/9C filing', '5 user seats', 'Priority support'],
+   686→      cta: 'Start Free Trial',
+   687→      popular: true,
+   688→    },
+   689→    {
+   690→      name: 'Firm',
+   691→      price: annual ? 12999 : 15999,
+   692→      period: '/mo',
+   693→      description: 'For established CA firms',
+   694→      features: ['Unlimited clients', 'Full AI suite', 'Bulk operations', 'API access', '25 user seats', 'Dedicated support', 'Custom onboarding'],
+   695→      cta: 'Start Free Trial',
+   696→      popular: false,
+   697→    },
+   698→  ];
+   699→
+   700→  return (
+   701→    <Section className="py-20 lg:py-28 bg-white" id="pricing">
+   702→      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+   703→        <motion.div variants={fadeUp} className="text-center max-w-2xl mx-auto mb-12">
+   704→          <Badge variant="outline" className="mb-4 border-emerald-200 text-emerald-700 bg-emerald-50/50">Pricing</Badge>
+   705→          <h2 className="text-3xl sm:text-4xl font-bold text-slate-900 tracking-tight">
+   706→            Simple pricing.{' '}
+   707→            <span className="text-emerald-600">No surprises.</span>
+   708→          </h2>
+   709→          <p className="mt-4 text-lg text-slate-500">
+   710→            Start free. Upgrade when you&apos;re ready.
+   711→          </p>
+   712→        </motion.div>
+   713→
+   714→        {/* Toggle */}
+   715→        <motion.div variants={fadeUp} className="flex items-center justify-center gap-3 mb-12">
+   716→          <span className={`text-sm font-medium ${!annual ? 'text-slate-900' : 'text-slate-400'}`}>Monthly</span>
+   717→          <button
+   718→            onClick={() => setAnnual(!annual)}
+   719→            className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors duration-200 ${annual ? 'bg-emerald-600' : 'bg-slate-300'}`}
+   720→          >
+   721→            <span className={`inline-block h-5 w-5 rounded-full bg-white shadow-sm transition-transform duration-200 ${annual ? 'translate-x-6' : 'translate-x-1'}`} />
+   722→          </button>
+   723→          <span className={`text-sm font-medium ${annual ? 'text-slate-900' : 'text-slate-400'}`}>
+   724→            Annual
+   725→            <Badge className="ml-1.5 bg-emerald-100 text-emerald-700 hover:bg-emerald-100 text-[10px]">Save 25%</Badge>
+   726→          </span>
+   727→        </motion.div>
+   728→
+   729→        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6 max-w-4xl mx-auto">
+   730→          {plans.map((plan) => (
+   731→            <motion.div key={plan.name} variants={fadeUp}>
+   732→              <Card className={`h-full relative overflow-hidden transition-all duration-300 hover:shadow-lg ${
+   733→                plan.popular
+   734→                  ? 'border-emerald-300 shadow-md shadow-emerald-500/10 ring-1 ring-emerald-200'
+   735→                  : 'border-slate-200/80'
+   736→              }`}>
+   737→                {plan.popular && (
+   738→                  <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-emerald-500 to-emerald-400" />
+   739→                )}
+   740→                <CardContent className="p-6">
+   741→                  {plan.popular && (
+   742→                    <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 mb-3 -mt-1">Most Popular</Badge>
+   743→                  )}
+   744→                  <h3 className="text-lg font-bold text-slate-900">{plan.name}</h3>
+   745→                  <p className="text-sm text-slate-500 mt-1">{plan.description}</p>
+   746→                  <div className="mt-4 mb-6">
+   747→                    <div className="flex items-baseline gap-1">
+   748→                      <span className="text-sm text-slate-500">₹</span>
+   749→                      <span className="text-3xl font-bold text-slate-900">{plan.price.toLocaleString('en-IN')}</span>
+   750→                      <span className="text-sm text-slate-500">{plan.period}</span>
+   751→                    </div>
+   752→                  </div>
+   753→                  <Button
+   754→                    onClick={onGetStarted}
+   755→                    className={`w-full mb-6 ${
+   756→                      plan.popular
+   757→                        ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-600/20'
+   758→                        : 'bg-slate-900 hover:bg-slate-800 text-white'
+   759→                    }`}
+   760→                  >
+   761→                    {plan.cta}
+   762→                    <ChevronRight className="ml-1 h-4 w-4" />
+   763→                  </Button>
+   764→                  <ul className="space-y-2.5">
+   765→                    {plan.features.map((feature) => (
+   766→                      <li key={feature} className="flex items-start gap-2 text-sm text-slate-600">
+   767→                        <Check className="h-4 w-4 text-emerald-500 mt-0.5 shrink-0" />
+   768→                        {feature}
+   769→                      </li>
+   770→                    ))}
+   771→                  </ul>
+   772→                </CardContent>
+   773→              </Card>
+   774→            </motion.div>
+   775→          ))}
+   776→        </div>
+   777→      </div>
+   778→    </Section>
+   779→  );
+   780→}
+   781→
+   782→// ─── CTA Section ─────────────────────────────────────────
+   783→function CTASection({ onGetStarted }: { onGetStarted: () => void }) {
+   784→  return (
+   785→    <Section className="py-20 lg:py-28 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
+   786→      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+   787→        <motion.div variants={fadeUp}>
+   788→          <h2 className="text-3xl sm:text-4xl font-bold text-white tracking-tight">
+   789→            Ready to file GST returns{' '}
+   790→            <span className="bg-gradient-to-r from-emerald-400 to-emerald-300 bg-clip-text text-transparent">10x faster?</span>
+   791→          </h2>
+   792→          <p className="mt-4 text-lg text-slate-400 max-w-2xl mx-auto">
+   793→            Join 500+ CA firms who have already switched. Start your free trial today.
+   794→          </p>
+   795→          <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-4">
+   796→            <Button
+   797→              size="lg"
+   798→              onClick={onGetStarted}
+   799→              className="bg-emerald-600 hover:bg-emerald-700 text-white shadow-xl shadow-emerald-600/25 h-12 px-8 text-base font-semibold"
+   800→            >
+   801→              Start Free Trial
+   802→              <ArrowRight className="ml-2 h-5 w-5" />
+   803→            </Button>
+   804→          </div>
+   805→          <p className="mt-4 text-sm text-slate-500">
+   806→            No credit card required • 14-day free trial • Cancel anytime
+   807→          </p>
+   808→        </motion.div>
+   809→      </div>
+   810→    </Section>
+   811→  );
+   812→}
+   813→
+   814→// ─── Footer ──────────────────────────────────────────────
+   815→function Footer() {
+   816→  return (
+   817→    <footer className="bg-slate-950 text-slate-400 py-12 border-t border-slate-800">
+   818→      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+   819→        <div className="grid grid-cols-2 md:grid-cols-4 gap-8 mb-10">
+   820→          {/* Brand */}
+   821→          <div className="col-span-2 md:col-span-1">
+   822→            <div className="flex items-center gap-2.5 mb-4">
+   823→              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-500 to-emerald-600">
+   824→                <Zap className="h-5 w-5 text-white" />
+   825→              </div>
+   826→              <span className="text-xl font-bold text-white tracking-tight">GSTPilot</span>
+   827→            </div>
+   828→            <p className="text-sm leading-relaxed max-w-xs">
+   829→              The fastest way to prepare and file GST returns. Built for CA firms.
+   830→            </p>
+   831→          </div>
+   832→
+   833→          {/* Links */}
+   834→          <div>
+   835→            <h4 className="text-sm font-semibold text-white mb-4">Product</h4>
+   836→            <ul className="space-y-2.5">
+   837→              {['Features', 'Pricing', 'How It Works', 'Changelog'].map((link) => (
+   838→                <li key={link}><a href="#" className="text-sm hover:text-white transition-colors">{link}</a></li>
+   839→              ))}
+   840→            </ul>
+   841→          </div>
+   842→          <div>
+   843→            <h4 className="text-sm font-semibold text-white mb-4">Support</h4>
+   844→            <ul className="space-y-2.5">
+   845→              {['Help Center', 'Contact Us', 'API Docs', 'Status'].map((link) => (
+   846→                <li key={link}><a href="#" className="text-sm hover:text-white transition-colors">{link}</a></li>
+   847→              ))}
+   848→            </ul>
+   849→          </div>
+   850→          <div>
+   851→            <h4 className="text-sm font-semibold text-white mb-4">Legal</h4>
+   852→            <ul className="space-y-2.5">
+   853→              {['Privacy Policy', 'Terms of Service', 'Security', 'GDPR'].map((link) => (
+   854→                <li key={link}><a href="#" className="text-sm hover:text-white transition-colors">{link}</a></li>
+   855→              ))}
+   856→            </ul>
+   857→          </div>
+   858→        </div>
+   859→
+   860→        <div className="pt-8 border-t border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-4">
+   861→          <p className="text-sm text-slate-500">
+   862→            &copy; {new Date().getFullYear()} GSTPilot. All rights reserved.
+   863→          </p>
+   864→          <p className="text-sm text-slate-500">
+   865→            Made with ❤️ for Indian CA firms
+   866→          </p>
+   867→        </div>
+   868→      </div>
+   869→    </footer>
+   870→  );
+   871→}
+   872→
+   873→// ─── Main Component ──────────────────────────────────────
+   874→export default function LandingPage({ onGetStarted, onBookDemo }: LandingPageProps) {
+   875→  return (
+   876→    <div className="min-h-screen flex flex-col">
+   877→      <div className="flex-1">
+   878→        <Navbar onGetStarted={onGetStarted} />
+   879→        <HeroSection onGetStarted={onGetStarted} onBookDemo={onBookDemo} />
+   880→        <TrustSection />
+   881→        <HowItWorksSection />
+   882→        <FeaturesSection />
+   883→        <ComparisonSection />
+   884→        <TestimonialsSection />
+   885→        <PricingSection onGetStarted={onGetStarted} />
+   886→        <CTASection onGetStarted={onGetStarted} />
+   887→      </div>
+   888→      <Footer />
+   889→    </div>
+   890→  );
+   891→}
+   892→

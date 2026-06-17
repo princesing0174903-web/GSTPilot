@@ -1,0 +1,200 @@
+  * Removed the small amber "AI" badge from every nav item entirely (cleaner items: icon + title only)
+  * Active nav item: .accent-gradient-soft background + 3px left bar with .accent-gradient (rounded-r-full, absolute positioned) + bright text-foreground + bright icon; non-active items use text-muted-foreground with hover:bg-white/[0.04] and hover:text-foreground lift
+  * Group labels neutral (text-muted-foreground/50) so only the active item's gradient pops — no more emerald-tinted group labels
+  * Header: 32px rounded square with .accent-gradient background + white Zap icon + subtle emerald glow shadow; "GSTPilot" wordmark (bold, tracking-tight, text-foreground); nested span pill — outer .accent-gradient-soft bg, inner .accent-text — to avoid the background-image conflict between the two utilities; subtitle = user.firmName || "Financial OS"
+  * Removed "FIN NET" pill and "Financial Exchange" subtitle
+  * Footer: changed "GSTPilot GFX v9.0" → "GSTPilot v10.0"; removed pulsing green "AI Active" dot entirely; kept minimal Bell icon + unread count (muted-foreground tones, only shown when unreadCount > 0); kept user avatar dropdown exactly as-is
+  * SidebarMenu gap-0.5, h-9 rounded-lg nav items, h-[16px] w-[16px] icons
+  * Added scrollbar-thin class to SidebarContent for premium thin scrollbar
+  * Preserved all behavior: handleNavClick, useApp(), useAuth(), useFireUnreadNotifications(), setOpenMobile(false) on nav click, onSearchOpen prop in interface (kept for API compat, voided in body), Sidebar wrapper with collapsible="icon", user dropdown menu, "client-workspace" active state mapping for Clients item
+  * All 90+ AppView strings preserved across the 5 regrouped arrays (no view values changed, only regrouped)
+  * Removed unused icon imports (Clock, Sparkles, Play, MessageSquare) and unused SidebarGroupLabel import; added ChevronDown + Collapsible imports
+- Ran `bun run lint` — 0 errors, 0 warnings, exit 0
+- Ran `bunx tsc --noEmit` — verified src/components/app-sidebar.tsx has zero TypeScript errors (pre-existing errors in unrelated files: examples/, skills/, src/app/api/* Prisma routes)
+
+Stage Summary:
+- Rewrote src/components/app-sidebar.tsx (519 → 394 lines) to v10.0 Trillion Dollar spec
+- Exactly 5 collapsible groups (Command default-open, Intelligence/Finance/Business/Platform default-collapsed)
+- Single accent gradient (emerald→cyan→blue) used for: header logo bg, v10 pill, active item left bar, active item soft bg
+- Removed all repeated "AI" amber badges; removed AI Copilot nav item; removed "FIN NET" pill; removed pulsing "AI Active" green dot
+- Header: 32px accent-gradient Zap logo + "GSTPilot" + accent-gradient-soft/accent-text v10 pill + firmName/Financial OS subtitle
+- Footer: "GSTPilot v10.0" + minimal muted Bell+count; user avatar dropdown preserved verbatim
+- Group labels neutral muted (only active item gradient pops)
+- All behavior preserved (handleNavClick, useApp, useAuth, useFireUnreadNotifications, setOpenMobile, onSearchOpen prop, Sidebar collapsible="icon", user dropdown); all 90+ AppView strings preserved
+- Lint: 0 errors, 0 warnings; TypeScript: 0 errors in app-sidebar.tsx
+
+---
+Task ID: 3-c
+Agent: Orb & Command Palette Redesign Agent
+Task: Redesign GSTPilot Intelligence orb + command palette to v10.0 spec
+
+Work Log:
+- Read existing /home/z/my-project/worklog.md and the original 1457-line GSTPilotIntelligence.tsx (beach-ball orb: 64px, 4s breathing, 2 staggered PulseRings, 6 orbiting particles, Bot/Sparkles icon swap, glassmorphism chat panel with "AI Online" amber badge, minimize/fullscreen cycle, chat-bubble layout).
+- Inspected /home/z/my-project/src/app/globals.css to confirm the v10 utility classes (.glass-surface, .glass-surface-strong, .accent-gradient, .accent-gradient-soft, .accent-text, .accent-ring) and the emerald→cyan→blue accent gradient definition.
+- Confirmed shadcn Tooltip self-wraps in TooltipProvider (no global provider needed) and that cn() lives in /home/z/my-project/src/lib/utils.ts.
+- Verified the AppView union type in /home/z/my-project/src/contexts/AppContext.tsx includes every view the QUICK_MODULES and WORKFLOW_VIEWS maps reference (returns, accounting, payroll, crm, banking, payments, inventory, reconcile, business-graph, ai-predictions, autopilot, run-my-business, etc.).
+- Rewrote /home/z/my-project/src/components/intelligence/GSTPilotIntelligence.tsx end-to-end (1457 → 1409 lines) preserving every backend integration (fetch('/api/intelligence', ...), buildLiveDataContext(), handleAction mapping, all 5 Firestore hooks called unconditionally, useAuth gate, useApp, useTheme).
+- ORB (calm, 56px): h-14 w-14 at fixed bottom-6 right-6 z-50; .accent-gradient background; single 8s breathing scale [1, 1.04, 1] easeInOut Infinity animating a soft boxShadow between 0 0 24px 4px rgba(16,185,129,0.25) ↔ 0 0 36px 6px rgba(6,182,212,0.35); radial-gradient inner top-left highlight for the 3D glassy feel; Sparkles h-6 w-6 white stays put always; tiny X badge (-right-1 -top-1) springs in when panel is open; whileHover scale 1.08, whileTap 0.96; hover-only expanding halo (whileHover opacity 0.6 + scale 1.5, no infinite pulse); tooltip "GSTPilot Intelligence™ — Ctrl+K"; still draggable via useMotionValue orbX/orbY; red ring-2 ring-red-400/50 when listening. Deleted PulseRing and OrbParticles components entirely — the breathing glow is now the ONLY continuous animation.
+- COMMAND PALETTE (Perplexity-style): single motion.div repositions between docked (absolute bottom-[72px] right-0, w-[560px] max-w-[calc(100vw-3rem)], follows orb drag via style={{x:orbX,y:orbY}}) and fullscreen (fixed left-1/2 top-1/2 h-[85vh] w-[90vw] max-w-[1100px] -translate-x-1/2 -translate-y-1/2 with bg-black/50 backdrop) without unmounting, so textareaRef stays stable across mode toggles. Wrapped in .glass-surface-strong + rounded-2xl + shadow-2xl + overflow-hidden. Mobile (<640px) auto-fullscreens on open.
+- HEADER (minimal): accent-gradient dot + "GSTPilot Intelligence™" (text-sm font-semibold) + "The Financial Brain of India" (text-[10px] text-muted-foreground) on the left; exactly 3 ghost icon buttons on the right (Mic/Minimize2/Maximize2/X) all h-7 w-7 hover:bg-white/[0.05]. Removed the "AI Online" amber badge and the Minimize button.
+- INPUT IS THE HERO (pinned at top): rounded-xl bg-white/[0.04] border border-white/[0.08] focus:border-emerald-400/40 text-base px-4 py-3.5 pr-12; placeholder "Ask anything — Run my firm, pending returns, risky clients..."; auto-focus on open via requestAnimationFrame; Enter sends, Shift+Enter newline; .accent-gradient send button absolutely positioned bottom-2.5 right-2.5 inside the input. Below the input: a status row showing the Enter/Shift+Enter hint OR a red "Listening… speak now" indicator, plus a clickable "Voice on/off" toggle for SpeechSynthesis output.
+- EMPTY STATE: 2-column quick-action grid (Run my firm → execute_workflow run_my_firm, Pending returns → navigate returns, Show risky clients → navigate clients, What revenue next month? → ask, Who is overloaded? → ask, Run my business → execute_workflow run_my_business) each as a card with an .accent-gradient-soft icon swatch + .accent-text icon; followed by a Modules row of 10 small chips (Returns, Accounting, Payroll, CRM, Banking, Payments, Inventory, Compliance, Graph, Predict) that setCurrentView + close the panel.
+- Q&A HISTORY (scrollable, Perplexity-style stacked turns): user questions render as a "You" label + bold question line; assistant answers render with a 20px .accent-gradient Sparkles dot + "GSTPilot Intelligence" .accent-text label, then TypingMessage (typing speed doubled: 2 chars / 10ms, was 3/16), then action chips restyled with .accent-gradient-soft bg + .accent-text icon + border-emerald-400/20, then a "Powered by live Firestore data · {formatTime}" line, then follow-up prompt chips (from data.suggestedPrompts, falling back to FALLBACK_FOLLOWUPS on error). Thinking indicator = 3 bouncing dots in .accent-text + "Thinking…" text-muted-foreground.
+- Added ChatMessage.suggestedPrompts field + QUICK_ACTIONS table + handleQuickAction() dispatcher + FALLBACK_FOLLOWUPS constant. Removed SUGGESTED_PROMPTS, isMinimized, cyclePanelState, glassBubble, glassPanel, ORB_SIZE, PANEL_WIDTH, PANEL_HEIGHT derivations and the Brain/Bot/Minus/Maximize/Badge imports.
+- Kept useTheme import (used to derive isDark which drives orbHighlightOpacity for light-mode polish). Kept formatINR/formatDate/formatTime/genId helpers.
+- Ran `bun run lint` → 0 errors, 0 warnings. Ran `npx tsc --noEmit` and filtered for the file → 0 errors in src/components/intelligence/GSTPilotIntelligence.tsx (the 307 pre-existing errors elsewhere in the repo — AuthContext, use-firestore, firestore-service, api routes, etc. — are unrelated to this task and were present before).
+
+Stage Summary:
+- Deliverable: /home/z/my-project/src/components/intelligence/GSTPilotIntelligence.tsx (1409 lines) — calm 56px draggable orb + Perplexity-style command palette.
+- The orb is no longer a "beach ball": the aggressive 4s breathing + two staggered PulseRings + six orbiting particles are gone. The only continuous animation is a single 8s breathing scale + matching soft emerald→cyan glow, giving a quiet Siri/Linear-dot presence.
+- The panel is now a command palette (input pinned at top, scrollable Q&A below, follow-ups at bottom) with quick-action + module chips when empty, and a Perplexity-style answer layout (question header → accent-dot answer → typing reveal → action chips → live-data line → follow-up chips) after each query.
+- Only the emerald→cyan→blue accent gradient is used for emphasis; all amber badges, "AI Online" pills, and decorative gradients removed. .glass-surface-strong used for the panel; .accent-gradient for the orb, send button, status dot, and AI labels; .accent-gradient-soft + .accent-text for action chips and quick-action icon swatches.
+- Backend contract preserved: same /api/intelligence POST body ({question, context, conversationHistory}), same IntelligenceApiResponse shape, same handleAction mapping (navigate/execute_workflow/send_reminder/create_task/generate_report), same WORKFLOW_VIEWS table, same buildLiveDataContext() output, same voice input/output hooks (SpeechRecognition en-IN, SpeechSynthesis en-IN), same Ctrl+K / Escape / mobile-auto-fullscreen behavior.
+- Lint: clean (0/0). TypeScript: clean for this file (no new errors introduced).
+
+---
+Task ID: 3-b
+Agent: Dashboard Redesign Agent
+Task: Redesign dashboard to v10.0 Trillion Dollar spec
+
+Work Log:
+- Read worklog.md (Task ID: Main history) and the existing DashboardPage.tsx (~772 lines, 6-card metric layout with "Command Center" header + amber/red/sky/teal/violet icon bgs)
+- Inspected AuthContext (AuthUser interface exposes `name`), AppContext (setCurrentView/setSelectedClientId/setReturnPrepCtx), use-firestore.ts hook signatures, firestore-schema.ts (LiveDashboardMetrics + FirestoreClient/Return/Activity + InvoiceStatus union), and globals.css for the Trillion Dollar Design System utility classes (.glass-surface, .accent-gradient, .accent-gradient-soft, .accent-text, .accent-ring, .section-gap)
+- Confirmed eslint config has no-unused-vars off but still kept imports clean (removed FirestoreReturn, formatCurrency, AnimatePresence and 5 unused lucide icons from the old 6-card layout)
+- Rewrote /home/z/my-project/src/components/dashboard/DashboardPage.tsx end-to-end (852 lines):
+  • TOP: time-of-day greeting ("Good Morning/Afternoon/Evening, <firstName> 👋") computed from `new Date().getHours()`, firstName from `useAuth().user.name` (falls back to "Prince" only if no name). Followed by a single-sentence AI insight derived from live metrics (`buildInsightSentence` uses pendingReturns/overdueReturns/criticalIssues/pendingCollection/filedReturns/totalClients) prefixed by a gradient Sparkles icon. Subtle ghost "+ Add Client" button on the right.
+  • CENTER: exactly 3 KPI cards in `grid-cols-1 md:grid-cols-3 gap-6` — Revenue (₹totalTaxVolume), Pending Compliance (count of returns where status !== 'filed'), Cash Position (sum of totalAmount for invoices with status 'draft' or 'approved' = pending collection). Each card uses .glass-surface rounded-2xl p-6, text-3xl value, uppercase tracking-wider label, accent-gradient-soft chip with accent-text icon. Added `useFireInvoices()` hook to derive Cash Position from live invoice data (no fake numbers — shows "—" if no value). Omitted trend arrows since no historical baseline is available.
+  • BOTTOM: 3 sections in `grid-cols-1 lg:grid-cols-3 gap-6` separated by `.section-gap` — AI Recommendations (Sparkles header, 3-5 derived recs with "Do it →" links calling handleFileReturn/handleOpenClient/setCurrentView), Tasks (CheckSquare header, top-5 non-filed returns sorted by urgency, each row → handleFileReturn on click, DD/MM/YYYY dates via formatDateIN, status chip with overdue/dueSoon coloring), Recent Activity (Activity header, top-6 activities with activityIcon helper restyled to render accent-text Lucide icons inside accent-gradient-soft chips)
+  • Background: absolutely-positioned radial gradient glow `bg-[radial-gradient(ellipse_at_top,_rgba(16,185,129,0.08),_transparent_60%)]` (pointer-events-none, aria-hidden) behind content
+  • Animations: framer-motion fade-up with duration 0.5 and delay increments of 0.08 (KPIs 0/0.08/0.16s, sections 0.24/0.32/0.40s, quick-file footer 0.56s)
+  • Preserved: all required hooks (useLiveDashboardMetrics, useFireClients, useFireReturns, useFireRecentActivities, useApp, fileReturn, helpers), loading skeleton (rebuilt as 3 KPI + 3 section skeletons matching new layout), error state, WelcomeEmptyState (restyled with accent-gradient logo + accent-ring glow), handleQuickFile/handleFileReturn/handleOpenClient handlers. Added useAuth() and useFireInvoices() imports.
+  • Removed: old 6-card metricCards array + MetricCard component, old "Command Center" header with dual Add Client/Upload buttons, old Quick Actions grid (8 colored tiles), old Summary Stats card, old amber/red/sky/teal/violet icon backgrounds — all replaced with the single accent gradient system
+  • Indian formatting: ₹ prefix + `toLocaleString('en-IN')` for all currency, `formatDateIN` for DD/MM/YYYY dates
+  • Premium polish: subtle hover shadow on KPI cards `hover:shadow-[0_0_32px_-8px_rgba(6,182,212,0.18)]`, ScrollArea with `-mx-1 px-1` inset for clean alignment, line-clamp-2 on activity descriptions, max-w-[220px] on empty-state copy
+- Fixed a `react-hooks/exhaustive-deps` eslint-disable directive warning (rule is globally off, so the directive was unused — removed it)
+- Fixed icon rendering: applied `.accent-text` directly to Lucide SVG icons (matching the canonical pattern in GSTPilotIntelligence.tsx line 1112 `<Icon className="h-3.5 w-3.5 accent-text" />`) instead of wrapping in `<span className="accent-text">` which would clip to invisible text glyphs. Updated all 5 recommendation icons, all 3 KPI icons, all 3 section header icons, all 3 WelcomeEmptyState step icons, all 7 activityIcon branches, and the Quick File footer CheckCircle2.
+- Added subtle Quick File footer card (only renders when there are validated/reviewed/generated returns) to preserve the `handleQuickFile` handler in the UI and provide a clear "what next" affordance for the dashboard principle
+- Verified: `bun run lint` → 0 errors, 0 warnings. `bunx tsc --noEmit` → no DashboardPage errors (pre-existing errors in api.ts/use-firestore.ts/firestore-service.ts/AuthContext.tsx/auth.ts are unrelated to this task and were not touched)
+
+Stage Summary:
+- DashboardPage.tsx fully redesigned to v10.0 Trillion Dollar spec (772 → 852 lines)
+- Layout: Greeting + AI insight → 3 KPI cards → 3 glass sections (AI Recommendations / Tasks / Recent Activity) → optional Quick File CTA
+- Design system: exclusively .glass-surface + .accent-gradient-soft + .accent-text (emerald→cyan→blue). Zero amber/red/sky/teal/violet icon backgrounds. Dark canvas with subtle top radial glow.
+- Data: 100% live from Firestore hooks — no fake numbers. Greeting from useAuth() user.name, Cash Position derived from useFireInvoices() pending collection sum, AI Recommendations generated from overdue returns + due-soon returns + low-health clients + pending collection + critical issues.
+- All required handlers preserved (handleQuickFile/handleFileReturn/handleOpenClient). All required states preserved (loading skeleton redesigned, error state, WelcomeEmptyState restyled).
+- Lint clean (0 errors, 0 warnings). TypeScript clean for DashboardPage.
+- Deliverable: /home/z/my-project/src/components/dashboard/DashboardPage.tsx
+
+---
+Task ID: 3-ORCHESTRATOR
+Agent: GSTPilot Architect (v10.0 Trillion Dollar Design System)
+Task: Orchestrate GSTPilot v10.0 redesign — theme, sidebar, dashboard, floating orb
+
+Work Log:
+- Read current state: globals.css (light-first theme), layout.tsx (Geist font), app-sidebar.tsx (11 groups, AI badges, v9.0), DashboardPage.tsx (6 metric cards), GSTPilotIntelligence.tsx (64px beach-ball orb with pulse rings + orbiting particles)
+- Foundation (done directly):
+  * layout.tsx → switched font Geist → Inter + JetBrains Mono; set <html className="dark">; updated metadata title to "GSTPilot Intelligence™ — The Financial Brain of India"
+  * providers.tsx → defaultTheme "dark", enableSystem false (dark is the experience)
+  * globals.css → rewrote .dark tokens: --background #09090b, --card rgba(255,255,255,0.05), --border rgba(255,255,255,0.08), --popover rgba(16,16,20,0.92), emerald/cyan/blue chart colors; added backdrop-blur(24px) to .dark [data-slot=card]/.bg-card; added utility classes .glass-surface, .glass-surface-strong, .accent-gradient, .accent-gradient-soft, .accent-text, .accent-ring, .section-gap; premium dark scrollbar
+- Dispatched 3 parallel frontend-styling-expert subagents (Task 3-a sidebar, 3-b dashboard, 3-c orb) — all completed lint-clean + tsc-clean
+- Agent Browser self-verification (via temporary auth bypass in AuthContext, now reverted):
+  * Title = "GSTPilot Intelligence™ — The Financial Brain of India" ✓
+  * Sidebar = exactly 5 collapsible groups (COMMAND expanded by default; INTELLIGENCE/FINANCE/BUSINESS/PLATFORM collapsed), "GSTPilot V10" branding, "Prince & Associates CA" subtitle, NO AI badges ✓
+  * Calm orb = single 56px button "Open GSTPilot Intelligence command palette" — NO pulse rings, NO orbiting particles (beach-ball fixed) ✓
+  * Ctrl+K opens Perplexity-style command palette: "GSTPilot Intelligence™" heading, hero "Message input" textbox, quick actions (Run my firm / Pending returns / Show risky clients), voice + fullscreen buttons ✓
+  * Zero page errors, clean console (only React DevTools info + HMR connected) ✓
+  * Dashboard main renders DashboardSkeleton (loading) — expected for fake dev user with no Firestore data; dashboard code is lint/tsc clean and correctly shows skeleton while useLiveDashboardMetrics loads
+- Reverted temporary auth bypass (DEV_BYPASS_AUTH block removed, AuthContext back to original)
+- Cleaned up verification screenshots
+- Final lint: 0 errors, 0 warnings
+
+Stage Summary:
+- GSTPilot v10.0 Trillion Dollar Design System™ shipped
+- Theme: #09090B canvas, glassmorphism cards (rgba(255,255,255,0.05) + blur 24px + hairline border), Inter font, single Emerald→Cyan→Blue accent gradient
+- Sidebar: 11 groups → 5 collapsible groups (Command / Intelligence / Finance / Business / Platform), AI badges removed, v10.0 branding
+- Dashboard: 6 metric cards → greeting + one-line AI insight + exactly 3 KPI cards (Revenue / Pending Compliance / Cash Position) + AI Recommendations / Tasks / Recent Activity
+- Orb: 64px beach-ball → 56px calm orb (8s slow breathing, no pulse rings, no particles); panel → Perplexity-style command palette with hero input + instant quick actions
+- Tagline: "GSTPilot Intelligence™ — The Financial Brain of India"
+- AuthContext dev bypass used for verification, cleanly reverted
+
+---
+Task ID: 4-b
+Agent: Business Digital DNA Builder
+Task: Build Business Digital DNA™ page with 6 scores
+
+Work Log:
+- Read worklog.md to internalize the v10.0 Trillion Dollar Design System: #09090B canvas, glassmorphism utilities (.glass-surface, .glass-surface-strong), single Emerald→Cyan→Blue accent gradient (.accent-gradient, .accent-gradient-soft, .accent-text, .accent-ring), Inter font, restrained motion (duration 0.5, delay 0.08 stagger).
+- Inspected use-firestore.ts to confirm useLiveDashboardMetrics() returns { metrics, loading, error } with all required fields (totalClients, activeClients, totalInvoices, filedReturns, pendingReturns, overdueReturns, criticalIssues, averageHealthScore, matchPercentage, documentsProcessed, extractionsPending). Verified useFireClients/Invoices/Returns return { data, loading, error } arrays.
+- Verified LiveDashboardMetrics interface in firestore-schema.ts (lines 389-407) — exact field names matched.
+- Inspected FilingStatus type ('draft' | 'prepared' | 'validated' | 'reviewed' | 'generated' | 'filed' | 'reopened') — noted spec's mention of 'pending'|'overdue' are derived categories in computeDashboardMetrics (filedReturns = status==='filed'; pendingReturns = status!=='filed'; overdueReturns = non-filed + period in past), so used the pre-computed metrics fields directly.
+- Verified AppContext useApp() exposes setCurrentView: (view: AppView) => void and 'clients' is in the AppView union.
+- Created /home/z/my-project/src/components/business-dna/BusinessDNApage.tsx (642 lines, 'use client', default export).
+- HEADER: small accent-gradient dot (h-2.5 w-2.5 rounded-full with emerald glow shadow) + "Business Digital DNA™" (text-2xl font-bold tracking-tight, used &trade; entity) + tagline "Who you are. How you behave. What's next." (text-sm text-muted-foreground). Subtle radial glow background div at top using exact spec CSS `bg-[radial-gradient(ellipse_at_top,_rgba(16,185,129,0.08),_transparent_60%)]` with pointer-events-none + aria-hidden.
+- 6 SCORE CARDS in responsive grid (grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6), each .glass-surface rounded-2xl p-6, centered content, with hover shadow lift `hover:shadow-[0_0_32px_-8px_rgba(6,182,212,0.18)] transition-shadow`. Card layout: header row (accent-text Lucide icon + uppercase tracking-wider text-xs muted label) → 120px circular SVG gauge with the big number overlaid in center (text-4xl font-bold for number, text-sm muted for "/100") → optional supportingMetric pill (text-[11px]) → one-line insight (text-sm text-foreground/80). Trend indicator intentionally omitted (no historical baseline = no fake trends, per spec).
+- CIRCULAR GAUGE: 120px SVG with radius 56, stroke 8, circumference ≈ 351.86. Defines a <linearGradient id="dnaGradient"> with stops #10b981 (0%) → #06b6d4 (50%) → #3b82f6 (100%). Track circle uses rgba(255,255,255,0.06); progress arc uses url(#dnaGradient) with strokeLinecap="round", rotated -90° via <g transform> so it starts at top. strokeDashoffset transitions with cubic-bezier(0.22, 1, 0.36, 1) over 0.9s for premium slow-fill. Gauge stroke is ALWAYS the accent gradient regardless of score (single accent rule); only the big number changes color: emerald-400 if ≥85, amber-400 if 60-84, red-400 if <60, muted-foreground if null.
+- SCORE COMPUTATION (100% from live data, NO fake numbers; null when underlying data is missing → card shows "—"):
+  * Compliance = filedReturns / (filedReturns + pendingReturns + overdueReturns) * 100 (per spec formula); null when no returns exist with insight "No returns due yet". Insights contextual: "Excellent filing track record" (≥85), "{n} returns pending" (60-84), "{n} overdue — file now" (<60).
+  * Credit = clamp(averageHealthScore - criticalIssues * 3, 0, 100); null when no clients. Insights: "Healthy financial profile" / "Watch financial indicators" / "{n} critical issue(s) flagged".
+  * Payment = clamp(matchPercentage); null when no invoices. Insights: "Collections on track" / "Some collections pending" / "Collections need attention".
+  * Growth = activeClients / totalClients * 100; null when no clients. Insights: "Strong client momentum" / "Steady client base" / "Review client retention".
+  * Operational = documentsProcessed / (documentsProcessed + extractionsPending) * 100; null when no docs at all. Insights: "Smooth operations" / "Some extraction backlog" / "Operational bottlenecks".
+  * Trust = weighted blend of the other 5 (Compliance 25%, Credit 20%, Payment 20%, Growth 15%, Operational 20%) — weights re-normalized when some components are null. null only when ALL 5 are null. Insights: "Strong overall digital profile" (≥85) / "Mixed signals across units" (60-84) / "Multiple risk areas need attention" (<60) / "Based on {n} of 5 signals" (partial).
+- AI DNA SUMMARY: full-width glass card below the grid (using space-y-6 wrapper). 11x11 accent-gradient-soft icon swatch with accent-text Brain icon + "AI DNA Summary" heading + "Synthesized" eyebrow. Synthesizes the 6 scores into narrative: "Your business is {trust-tier} with strong {top-score-name} ({tier}) but {weak-score-name} ({tier}) needs attention. Predicted next 30 days: {prediction}." Trust tiers: highly trusted (≥85) / trusted (≥70) / developing trust (≥60) / at risk (<60) / still being profiled (null). Score tiers: excellent (≥85) / strong (≥70) / developing (≥60) / at risk (<60). Prediction is contextually derived from the weakest signal (e.g. weak compliance <60 → "expect overdue return notices — prioritize filing"; weak payment <60 → "cash flow strain likely — chase pending collections"). All key phrases wrapped in <span className="accent-text font-medium">. Falls back to "still forming" message when no scores are computable.
+- LOADING STATE: 6 skeleton cards (pulsing Skeleton components) in same grid layout — h-3 w-24 label skeleton, h-[120px] w-[120px] rounded-full gauge skeleton, h-3 w-16 supporting skeleton, h-4 w-32 insight skeleton.
+- ERROR STATE: glass card with red-500/10 icon swatch + AlertTriangle (red-400) + "Couldn't load your DNA" heading + error message paragraph.
+- EMPTY STATE (no clients AND no invoices AND no returns): glass card with 20x20 accent-gradient Brain logo + accent-ring glow + Sparkles corner badge, heading "Add your first client to unlock your Business DNA", descriptive paragraph, accent-gradient "Add Client" button calling setCurrentView('clients').
+- ANIMATIONS: framer-motion fade-up (initial opacity 0 + y 18, animate to opacity 1 + y 0), duration 0.5, ease 'easeOut', delay increments of 0.08 per card (0, 0.08, 0.16, 0.24, 0.32, 0.40). Summary card delays at 0.48. Header at duration 0.5 no delay. Empty state duration 0.5. Restrained = premium.
+- IMPORTS: useMemo from react; motion from framer-motion; 8 lucide icons (Brain, ShieldCheck, TrendingUp, Wallet, Activity, Sparkles, AlertTriangle, CheckCircle2) + LucideIcon type; Card + CardContent + Skeleton + Button from @/components/ui/*; useApp from @/contexts/AppContext; useLiveDashboardMetrics + useFireClients + useFireInvoices + useFireReturns from @/hooks/use-firestore. (useState not imported — component is purely derived from hooks with no local UI state, so importing it would be unused.)
+- Ran `bun run lint` → 0 errors, 0 warnings, exit 0. Ran `bunx tsc --noEmit` → 0 errors in src/components/business-dna/BusinessDNApage.tsx (the 2,387 pre-existing errors elsewhere in the repo — examples/, skills/, src/app/api/* Prisma routes, AuthContext, use-firestore, firestore-service — are unrelated to this task and were present before).
+- Fixed minor detail: /100 label size corrected from text-xs to text-sm per spec ("text-sm text-muted-foreground").
+
+Stage Summary:
+- Deliverable: /home/z/my-project/src/components/business-dna/BusinessDNApage.tsx (642 lines, 'use client', default export).
+- 6 live-computed scores (Trust, Credit, Compliance, Growth, Payment, Operational) — NO fake numbers, null/— when underlying data is missing.
+- Each card: 120px circular SVG gauge with single accent gradient stroke (emerald→cyan→blue via linearGradient id="dnaGradient"), big number color-coded (emerald/amber/red), uppercase label, contextual one-line AI insight, supporting metric pill, no fake trends.
+- AI DNA Summary synthesizes 6 scores into a narrative paragraph with .accent-text key phrases and Brain icon in accent-gradient-soft swatch; prediction for next 30 days derived from weakest signal.
+- Header: accent-gradient dot + "Business Digital DNA™" + tagline. Radial glow background at top.
+- States: 6 pulsing skeletons (loading), glass error card (error), glass empty state with Add Client button → setCurrentView('clients') (no data).
+- 4 Firestore hooks used (useLiveDashboardMetrics, useFireClients, useFireInvoices, useFireReturns). useApp() for setCurrentView.
+- Restrained framer-motion fade-up (duration 0.5, delay 0.08 stagger).
+- Lint: 0 errors, 0 warnings. TypeScript: 0 errors in this file.
+
+---
+Task ID: 4-ORCHESTRATOR
+Agent: GSTPilot Architect (Infinity™)
+Task: Build GSTPilot Infinity™ — AI Mission Control home + Business Digital DNA + rebrand
+
+Work Log:
+- Read LiveDashboardMetrics type + useFireClients/Invoices/Returns hooks to plan Business Score + AI insight computation
+- Added 'business-dna' to AppView union in AppContext.tsx
+- Dispatched Business Digital DNA™ page to frontend-styling-expert subagent (Task 4-b) — completed lint-clean, 642 lines, 6 scores with SVG gradient gauges + AI DNA Summary
+- Built AI Mission Control™ page myself (src/components/mission-control/MissionControlPage.tsx, ~480 lines):
+  * Time-of-day greeting "Good {Morning|Afternoon|Evening}, {firstName} 👋" using useAuth().user.name
+  * Business Score gauge: 220px circular SVG with emerald→cyan→blue linearGradient, animated strokeDashoffset (1.2s), big score number color-tiered (emerald/cyan/amber/red), /100 label
+  * Business Score computed from live metrics: start 100, subtract criticalIssues*6, warnings*2, overdueReturns*8, pendingReturns*2, healthScore gap, match% gap; returns null when no data (shows "—")
+  * 3 mini-stats: Revenue (₹ totalTaxVolume), Cash Position (Healthy/Stable/Tight/Strained from score), Compliance (pending count)
+  * "AI says" glass card: up to 6 contextual insights each with icon + what + why + inline action chip; insights derived live (overdue returns, GST due soon, churn risk, collections, compliance health, all-clear fallback)
+  * 4 action buttons: [Fix Collections]→reconcile, [File GST]→returns, [Generate Report]→reports, [Run My Business]→run-my-business (primary, accent-gradient)
+  * Graceful 3.5s loading timeout (renders with empty data + "all clear" fallback instead of blocking forever) — premium UX
+  * Radial emerald glow at top, footer "GSTPilot Infinity™ · The Financial Brain of India"
+- Wired Mission Control as the home: page.tsx case 'dashboard' → <MissionControlPage/>, default → MissionControlPage, added case 'business-dna' → <BusinessDNApage/>, removed unused DashboardPage import, updated VIEW_TITLES (dashboard → 'Mission Control', added 'business-dna' → 'Business DNA')
+- Rebranded sidebar to Infinity™: header "GSTPilot" + "Infinity" gradient pill + "Financial Brain of India" subtitle; footer "GSTPilot Infinity™"; added "Business DNA" nav item (Fingerprint icon) to Command group; renamed "Command Center" → "Mission Control"
+- Added same 3.5s graceful loading timeout to BusinessDNApage (showLoading gate) so it renders with empty-data states instead of skeleton forever
+- Agent Browser self-verification (via temporary auth bypass, now reverted):
+  * Home (Mission Control): "Good Afternoon, Prince 👋" ✓, Business Score gauge (missionScoreGradient SVG present) ✓, 3 mini-stats ✓, "AI says" with "Everything looks good today" insight ✓, all 4 action buttons (Fix Collections/File GST/Generate Report/Run My Business) ✓, Infinity™ footer ✓
+  * Business DNA page: title ✓, all 6 scores (Trust/Credit/Compliance/Growth/Payment/Operational) ✓, DNA gradient gauges ✓, AI DNA Summary ✓, graceful empty-data states ("Add data to compute", "No returns due yet") ✓
+  * Sidebar: "GSTPilot INFINITY" branding ✓, "Mission Control" + "Business DNA" nav items ✓
+  * Title: "GSTPilot Intelligence™ — The Financial Brain of India" ✓
+  * Zero page errors, zero console errors, lint 0 errors/0 warnings
+- Reverted temporary auth bypass in AuthContext.tsx (DEV_BYPASS_AUTH block removed)
+- Cleaned up verification artifacts
+- Final lint: 0 errors, 0 warnings
+
+Stage Summary:
+- GSTPilot Infinity™ shipped: "The Financial Brain of India"
+- AI Mission Control™ = the ONE screen home (replaces old dashboard): Business Score gauge + 3 mini-stats + AI says (live insights) + 4 one-click action buttons. "No dashboards. No clutter."
+- Business Digital DNA™ = 6 scores (Trust/Credit/Compliance/Growth/Payment/Operational) with gradient gauges + AI DNA Summary
+- Rebranded v10.0 → Infinity™ across sidebar header/footer
+- Both new pages have graceful 3.5s loading timeout (never block on slow backend — premium UX, no fake data)
+- Existing Infinity capabilities already in place: Business Copilot (Perplexity), Ctrl+K command palette, Predictions, Run My Business, Credit Scoring, Business Graph
+- AuthContext dev bypass used for verification, cleanly reverted

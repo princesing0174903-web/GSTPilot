@@ -1,0 +1,845 @@
+     1→'use client'
+     2→
+     3→import React, { useState, useEffect, useCallback, useRef } from 'react'
+     4→import { useApp } from '@/contexts/AppContext'
+     5→import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+     6→import { Button } from '@/components/ui/button'
+     7→import { Badge } from '@/components/ui/badge'
+     8→import { Progress } from '@/components/ui/progress'
+     9→import { ScrollArea } from '@/components/ui/scroll-area'
+    10→import { motion, AnimatePresence } from 'framer-motion'
+    11→import {
+    12→  FileScan,
+    13→  ShieldCheck,
+    14→  GitCompareArrows,
+    15→  FileCheck,
+    16→  Brain,
+    17→  Play,
+    18→  CheckCircle2,
+    19→  Clock,
+    20→  Loader2,
+    21→  Sparkles,
+    22→  ArrowRight,
+    23→  RotateCcw,
+    24→  Eye,
+    25→  FileText,
+    26→  Search,
+    27→  RefreshCw,
+    28→  ClipboardList,
+    29→  Bot,
+    30→  Bell,
+    31→  BarChart3,
+    32→  Zap,
+    33→  Terminal,
+    34→  ChevronRight,
+    35→} from 'lucide-react'
+    36→
+    37→// ─── Types ──────────────────────────────────────────────────────────────────────
+    38→
+    39→type StepStatus = 'queued' | 'running' | 'completed'
+    40→type AgentRunStatus = 'queued' | 'running' | 'completed'
+    41→type OverallStatus = 'idle' | 'running' | 'completed'
+    42→
+    43→interface Step {
+    44→  id: number
+    45→  emoji: string
+    46→  label: string
+    47→  status: StepStatus
+    48→  progress: number
+    49→  duration: number // ms
+    50→}
+    51→
+    52→interface AgentStatus {
+    53→  id: string
+    54→  name: string
+    55→  icon: React.ElementType
+    56→  color: string
+    57→  colorBg: string
+    58→  colorText: string
+    59→  status: AgentRunStatus
+    60→}
+    61→
+    62→interface LogEntry {
+    63→  id: string
+    64→  timestamp: Date
+    65→  agent: string
+    66→  message: string
+    67→  level: 'info' | 'warn' | 'error'
+    68→}
+    69→
+    70→interface SummaryStat {
+    71→  label: string
+    72→  value: string
+    73→  icon: React.ElementType
+    74→  color: string
+    75→  colorBg: string
+    76→}
+    77→
+    78→// ─── Step Definitions ───────────────────────────────────────────────────────────
+    79→
+    80→const STEPS_CONFIG: Omit<Step, 'status' | 'progress'>[] = [
+    81→  { id: 1, emoji: '📄', label: 'Reading Documents', duration: 2500 },
+    82→  { id: 2, emoji: '🔍', label: 'Extracting Invoices', duration: 3000 },
+    83→  { id: 3, emoji: '🔄', label: 'Reconciling Data', duration: 2800 },
+    84→  { id: 4, emoji: '📋', label: 'Preparing Returns', duration: 2500 },
+    85→  { id: 5, emoji: '🤖', label: 'Generating Recommendations', duration: 2200 },
+    86→  { id: 6, emoji: '✅', label: 'Creating Tasks', duration: 2000 },
+    87→  { id: 7, emoji: '🔔', label: 'Sending Notifications', duration: 1800 },
+    88→  { id: 8, emoji: '📊', label: 'Generating Reports', duration: 2000 },
+    89→]
+    90→
+    91→const AGENTS_CONFIG: Omit<AgentStatus, 'status'>[] = [
+    92→  { id: 'invoice-extraction', name: 'Invoice Extraction', icon: FileScan, color: 'emerald', colorBg: 'bg-emerald-500/10', colorText: 'text-emerald-600' },
+    93→  { id: 'compliance', name: 'Compliance Agent', icon: ShieldCheck, color: 'amber', colorBg: 'bg-amber-500/10', colorText: 'text-amber-600' },
+    94→  { id: 'reconciliation', name: 'Reconciliation Agent', icon: GitCompareArrows, color: 'blue', colorBg: 'bg-blue-500/10', colorText: 'text-blue-600' },
+    95→  { id: 'filing', name: 'Filing Agent', icon: FileCheck, color: 'purple', colorBg: 'bg-purple-500/10', colorText: 'text-purple-600' },
+    96→  { id: 'firm-intelligence', name: 'Firm Intelligence', icon: Brain, color: 'rose', colorBg: 'bg-rose-500/10', colorText: 'text-rose-600' },
+    97→]
+    98→
+    99→const LOG_MESSAGES: { stepId: number; agent: string; messages: string[]; level: LogEntry['level'] }[] = [
+   100→  { stepId: 1, agent: 'Invoice Extraction', messages: ['Scanning upload directory for new documents...', 'Found 14 PDF invoices from 3 clients', 'OCR processing initiated for batch #2025-06'], level: 'info' },
+   101→  { stepId: 2, agent: 'Invoice Extraction', messages: ['Running GSTIN detection on scanned invoices...', 'Extracted tax values from 14 invoices', 'Classified 12 B2B and 2 B2C invoices'], level: 'info' },
+   102→  { stepId: 3, agent: 'Reconciliation Agent', messages: ['Comparing books data with GSTR-2B...', 'Detected 3 ITC mismatches in Client A', 'Auto-matched 89% of line items'], level: 'warn' },
+   103→  { stepId: 4, agent: 'Filing Agent', messages: ['Preparing GSTR-1 for 8 clients...', 'Preparing GSTR-3B for 8 clients...', 'Validation checks passed for all returns'], level: 'info' },
+   104→  { stepId: 5, agent: 'Firm Intelligence', messages: ['Analyzing compliance patterns across clients...', 'Generated 5 AI recommendations', 'Risk scores updated for 3 high-priority clients'], level: 'info' },
+   105→  { stepId: 6, agent: 'Compliance Agent', messages: ['Creating follow-up tasks for mismatches...', 'Generated 7 tasks for upcoming deadlines', 'Assigned tasks to team members'], level: 'info' },
+   106→  { stepId: 7, agent: 'Compliance Agent', messages: ['Sending deadline reminders to 12 clients...', 'Notified team about 3 urgent filings', 'Email notifications dispatched successfully'], level: 'info' },
+   107→  { stepId: 8, agent: 'Firm Intelligence', messages: ['Generating monthly compliance report...', 'Creating revenue forecast dashboard...', 'All reports generated and saved'], level: 'info' },
+   108→]
+   109→
+   110→// ─── Helpers ────────────────────────────────────────────────────────────────────
+   111→
+   112→function formatTime(date: Date): string {
+   113→  return date.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+   114→}
+   115→
+   116→function logLevelColor(level: LogEntry['level']) {
+   117→  switch (level) {
+   118→    case 'info': return 'text-emerald-400'
+   119→    case 'warn': return 'text-amber-400'
+   120→    case 'error': return 'text-red-400'
+   121→  }
+   122→}
+   123→
+   124→function logLevelBg(level: LogEntry['level']) {
+   125→  switch (level) {
+   126→    case 'info': return 'bg-emerald-500/10'
+   127→    case 'warn': return 'bg-amber-500/10'
+   128→    case 'error': return 'bg-red-500/10'
+   129→  }
+   130→}
+   131→
+   132→// ─── Circular Progress Component ────────────────────────────────────────────────
+   133→
+   134→function CircularProgress({ value, size = 140, strokeWidth = 8 }: { value: number; size?: number; strokeWidth?: number }) {
+   135→  const radius = (size - strokeWidth) / 2
+   136→  const circumference = 2 * Math.PI * radius
+   137→  const offset = circumference - (value / 100) * circumference
+   138→
+   139→  return (
+   140→    <div className="relative inline-flex items-center justify-center" style={{ width: size, height: size }}>
+   141→      <svg width={size} height={size} className="-rotate-90">
+   142→        <circle
+   143→          cx={size / 2}
+   144→          cy={size / 2}
+   145→          r={radius}
+   146→          fill="none"
+   147→          stroke="currentColor"
+   148→          strokeWidth={strokeWidth}
+   149→          className="text-gray-200 dark:text-gray-800"
+   150→        />
+   151→        <motion.circle
+   152→          cx={size / 2}
+   153→          cy={size / 2}
+   154→          r={radius}
+   155→          fill="none"
+   156→          stroke="url(#progressGradient)"
+   157→          strokeWidth={strokeWidth}
+   158→          strokeLinecap="round"
+   159→          strokeDasharray={circumference}
+   160→          initial={{ strokeDashoffset: circumference }}
+   161→          animate={{ strokeDashoffset: offset }}
+   162→          transition={{ duration: 0.5, ease: 'easeOut' }}
+   163→        />
+   164→        <defs>
+   165→          <linearGradient id="progressGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+   166→            <stop offset="0%" stopColor="#10b981" />
+   167→            <stop offset="100%" stopColor="#14b8a6" />
+   168→          </linearGradient>
+   169→        </defs>
+   170→      </svg>
+   171→      <div className="absolute inset-0 flex flex-col items-center justify-center">
+   172→        <motion.span
+   173→          className="text-3xl font-bold text-foreground"
+   174→          key={Math.round(value)}
+   175→          initial={{ scale: 1.1, opacity: 0.5 }}
+   176→          animate={{ scale: 1, opacity: 1 }}
+   177→          transition={{ duration: 0.2 }}
+   178→        >
+   179→          {Math.round(value)}%
+   180→        </motion.span>
+   181→        <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Progress</span>
+   182→      </div>
+   183→    </div>
+   184→  )
+   185→}
+   186→
+   187→// ─── Main Autopilot Page ────────────────────────────────────────────────────────
+   188→
+   189→export default function AutopilotPage() {
+   190→  const [overallStatus, setOverallStatus] = useState<OverallStatus>('idle')
+   191→  const [steps, setSteps] = useState<Step[]>(
+   192→    STEPS_CONFIG.map((s) => ({ ...s, status: 'queued' as StepStatus, progress: 0 }))
+   193→  )
+   194→  const [agentStatuses, setAgentStatuses] = useState<AgentStatus[]>(
+   195→    AGENTS_CONFIG.map((a) => ({ ...a, status: 'queued' as AgentRunStatus }))
+   196→  )
+   197→  const [logs, setLogs] = useState<LogEntry[]>([])
+   198→  const [overallProgress, setOverallProgress] = useState(0)
+   199→  const [currentStepLabel, setCurrentStepLabel] = useState('')
+   200→  const [elapsedSeconds, setElapsedSeconds] = useState(0)
+   201→  const [summaryStats, setSummaryStats] = useState<SummaryStat[]>([])
+   202→
+   203→  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+   204→  const stepTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+   205→  const logTimerRefs = useRef<ReturnType<typeof setTimeout>[]>([])
+   206→
+   207→  // Clean up all timers on unmount
+   208→  useEffect(() => {
+   209→    return () => {
+   210→      if (timerRef.current) clearInterval(timerRef.current)
+   211→      if (stepTimerRef.current) clearTimeout(stepTimerRef.current)
+   212→      logTimerRefs.current.forEach(clearTimeout)
+   213→    }
+   214→  }, [])
+   215→
+   216→  // Elapsed time counter
+   217→  useEffect(() => {
+   218→    if (overallStatus === 'running') {
+   219→      timerRef.current = setInterval(() => {
+   220→        setElapsedSeconds((prev) => prev + 1)
+   221→      }, 1000)
+   222→    } else {
+   223→      if (timerRef.current) clearInterval(timerRef.current)
+   224→    }
+   225→    return () => {
+   226→      if (timerRef.current) clearInterval(timerRef.current)
+   227→    }
+   228→  }, [overallStatus])
+   229→
+   230→  const addLog = useCallback((agent: string, message: string, level: LogEntry['level'] = 'info') => {
+   231→    setLogs((prev) => [
+   232→      ...prev,
+   233→      {
+   234→        id: `log-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+   235→        timestamp: new Date(),
+   236→        agent,
+   237→        message,
+   238→        level,
+   239→      },
+   240→    ])
+   241→  }, [])
+   242→
+   243→  const formatElapsed = (seconds: number) => {
+   244→    const m = Math.floor(seconds / 60)
+   245→    const s = seconds % 60
+   246→    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`
+   247→  }
+   248→
+   249→  const handleRun = useCallback(() => {
+   250→    // Reset everything
+   251→    setOverallStatus('running')
+   252→    setSteps(STEPS_CONFIG.map((s) => ({ ...s, status: 'queued' as StepStatus, progress: 0 })))
+   253→    setAgentStatuses(AGENTS_CONFIG.map((a) => ({ ...a, status: 'queued' as AgentRunStatus })))
+   254→    setLogs([])
+   255→    setOverallProgress(0)
+   256→    setCurrentStepLabel('Initializing...')
+   257→    setElapsedSeconds(0)
+   258→    setSummaryStats([])
+   259→    logTimerRefs.current.forEach(clearTimeout)
+   260→    logTimerRefs.current = []
+   261→
+   262→    // Add initial log
+   263→    addLog('System', 'GSTPilot Autopilot™ initiated', 'info')
+   264→
+   265→    // Process steps sequentially
+   266→    let currentStepIndex = 0
+   267→    let totalProgress = 0
+   268→
+   269→    const processNextStep = () => {
+   270→      if (currentStepIndex >= STEPS_CONFIG.length) {
+   271→        // All steps done
+   272→        setOverallStatus('completed')
+   273→        setCurrentStepLabel('Complete!')
+   274→        setOverallProgress(100)
+   275→        addLog('System', 'Autopilot run completed successfully! ✓', 'info')
+   276→
+   277→        setSummaryStats([
+   278→          { label: 'Documents Read', value: '14', icon: FileText, color: 'text-blue-600', colorBg: 'bg-blue-500/10' },
+   279→          { label: 'Invoices Extracted', value: '14', icon: Search, color: 'text-emerald-600', colorBg: 'bg-emerald-500/10' },
+   280→          { label: 'Mismatches Found', value: '3', icon: RefreshCw, color: 'text-amber-600', colorBg: 'bg-amber-500/10' },
+   281→          { label: 'Returns Prepared', value: '16', icon: ClipboardList, color: 'text-purple-600', colorBg: 'bg-purple-500/10' },
+   282→          { label: 'Tasks Created', value: '7', icon: CheckCircle2, color: 'text-teal-600', colorBg: 'bg-teal-500/10' },
+   283→          { label: 'Notifications Sent', value: '15', icon: Bell, color: 'text-rose-600', colorBg: 'bg-rose-500/10' },
+   284→        ])
+   285→        return
+   286→      }
+   287→
+   288→      const stepConfig = STEPS_CONFIG[currentStepIndex]
+   289→      setCurrentStepLabel(stepConfig.label)
+   290→
+   291→      // Set current step to running
+   292→      setSteps((prev) =>
+   293→        prev.map((s) =>
+   294→          s.id === stepConfig.id ? { ...s, status: 'running' as StepStatus } : s
+   295→        )
+   296→      )
+   297→
+   298→      // Activate the corresponding agent(s)
+   299→      const agentMapping: Record<number, string[]> = {
+   300→        1: ['invoice-extraction'],
+   301→        2: ['invoice-extraction'],
+   302→        3: ['reconciliation'],
+   303→        4: ['filing'],
+   304→        5: ['firm-intelligence'],
+   305→        6: ['compliance'],
+   306→        7: ['compliance'],
+   307→        8: ['firm-intelligence'],
+   308→      }
+   309→      const activeAgentIds = agentMapping[stepConfig.id] || []
+   310→      setAgentStatuses((prev) =>
+   311→        prev.map((a) => {
+   312→          if (activeAgentIds.includes(a.id) && a.status === 'queued') {
+   313→            return { ...a, status: 'running' as AgentRunStatus }
+   314→          }
+   315→          return a
+   316→        })
+   317→      )
+   318→
+   319→      // Animate progress for this step
+   320→      const stepDuration = stepConfig.duration
+   321→      const progressInterval = 50
+   322→      const progressIncrement = 100 / (stepDuration / progressInterval)
+   323→      let stepProgress = 0
+   324→
+   325→      const progressTimer = setInterval(() => {
+   326→        stepProgress = Math.min(stepProgress + progressIncrement, 100)
+   327→        setSteps((prev) =>
+   328→          prev.map((s) =>
+   329→            s.id === stepConfig.id ? { ...s, progress: stepProgress } : s
+   330→          )
+   331→        )
+   332→
+   333→        // Update overall progress
+   334→        totalProgress = ((currentStepIndex * 100 + stepProgress) / (STEPS_CONFIG.length * 100)) * 100
+   335→        setOverallProgress(totalProgress)
+   336→
+   337→        if (stepProgress >= 100) {
+   338→          clearInterval(progressTimer)
+   339→        }
+   340→      }, progressInterval)
+   341→
+   342→      // Add log entries for this step at intervals
+   343→      const logData = LOG_MESSAGES.find((l) => l.stepId === stepConfig.id)
+   344→      if (logData) {
+   345→        logData.messages.forEach((msg, idx) => {
+   346→          const delay = (idx + 1) * (stepDuration / (logData.messages.length + 1))
+   347→          const t = setTimeout(() => {
+   348→            addLog(logData.agent, msg, logData.level)
+   349→          }, delay)
+   350→          logTimerRefs.current.push(t)
+   351→        })
+   352→      }
+   353→
+   354→      // Complete this step after duration
+   355→      stepTimerRef.current = setTimeout(() => {
+   356→        clearInterval(progressTimer)
+   357→
+   358→        // Mark step as completed
+   359→        setSteps((prev) =>
+   360→          prev.map((s) =>
+   361→            s.id === stepConfig.id ? { ...s, status: 'completed' as StepStatus, progress: 100 } : s
+   362→          )
+   363→        )
+   364→
+   365→        // Mark agent(s) as completed
+   366→        setAgentStatuses((prev) =>
+   367→          prev.map((a) => {
+   368→            if (activeAgentIds.includes(a.id)) {
+   369→              return { ...a, status: 'completed' as AgentRunStatus }
+   370→            }
+   371→            return a
+   372→          })
+   373→        )
+   374→
+   375→        // Move to next step
+   376→        currentStepIndex++
+   377→        processNextStep()
+   378→      }, stepDuration)
+   379→    }
+   380→
+   381→    // Start processing after a short delay
+   382→    setTimeout(processNextStep, 500)
+   383→  }, [addLog])
+   384→
+   385→  const handleReset = useCallback(() => {
+   386→    if (stepTimerRef.current) clearTimeout(stepTimerRef.current)
+   387→    logTimerRefs.current.forEach(clearTimeout)
+   388→    logTimerRefs.current = []
+   389→    setOverallStatus('idle')
+   390→    setSteps(STEPS_CONFIG.map((s) => ({ ...s, status: 'queued' as StepStatus, progress: 0 })))
+   391→    setAgentStatuses(AGENTS_CONFIG.map((a) => ({ ...a, status: 'queued' as AgentRunStatus })))
+   392→    setLogs([])
+   393→    setOverallProgress(0)
+   394→    setCurrentStepLabel('')
+   395→    setElapsedSeconds(0)
+   396→    setSummaryStats([])
+   397→  }, [])
+   398→
+   399→  const isRunning = overallStatus === 'running'
+   400→  const isCompleted = overallStatus === 'completed'
+   401→
+   402→  return (
+   403→    <div className="min-h-screen bg-gradient-to-b from-background to-background">
+   404→      <div className="max-w-7xl mx-auto space-y-6 p-4 md:p-6">
+   405→
+   406→        {/* ═══ Hero Section ═══ */}
+   407→        <motion.div
+   408→          initial={{ opacity: 0, y: -20 }}
+   409→          animate={{ opacity: 1, y: 0 }}
+   410→          transition={{ duration: 0.5 }}
+   411→          className="text-center space-y-4 py-6 md:py-10"
+   412→        >
+   413→          <motion.div
+   414→            initial={{ scale: 0.8, opacity: 0 }}
+   415→            animate={{ scale: 1, opacity: 1 }}
+   416→            transition={{ duration: 0.5, delay: 0.2 }}
+   417→            className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 text-xs font-medium"
+   418→          >
+   419→            <Sparkles className="h-3.5 w-3.5" />
+   420→            AI-Powered Automation
+   421→          </motion.div>
+   422→
+   423→          <h1 className="text-4xl md:text-5xl font-bold tracking-tight bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 bg-clip-text text-transparent">
+   424→            GSTPilot Autopilot™
+   425→          </h1>
+   426→          <p className="text-lg text-muted-foreground max-w-lg mx-auto">
+   427→            One click. Your entire firm runs itself.
+   428→          </p>
+   429→
+   430→          {/* Run Button */}
+   431→          {!isCompleted && (
+   432→            <motion.div
+   433→              initial={{ opacity: 0, y: 10 }}
+   434→              animate={{ opacity: 1, y: 0 }}
+   435→              transition={{ duration: 0.5, delay: 0.4 }}
+   436→              className="pt-4"
+   437→            >
+   438→              <Button
+   439→                size="lg"
+   440→                onClick={handleRun}
+   441→                disabled={isRunning}
+   442→                className={`
+   443→                  relative px-10 py-6 text-lg font-semibold gap-3
+   444→                  bg-gradient-to-r from-emerald-500 via-emerald-600 to-teal-600
+   445→                  text-white shadow-2xl shadow-emerald-500/30
+   446→                  hover:shadow-emerald-500/40 hover:scale-[1.02]
+   447→                  active:scale-[0.98]
+   448→                  transition-all duration-300
+   449→                  disabled:opacity-70 disabled:cursor-not-allowed disabled:hover:scale-100
+   450→                  ${!isRunning ? 'animate-pulse' : ''}
+   451→                `}
+   452→              >
+   453→                {!isRunning && (
+   454→                  <span className="absolute inset-0 rounded-md bg-gradient-to-r from-emerald-400/20 to-teal-400/20 animate-ping" />
+   455→                )}
+   456→                {isRunning ? (
+   457→                  <>
+   458→                    <Loader2 className="h-5 w-5 animate-spin relative" />
+   459→                    <span className="relative">Running...</span>
+   460→                  </>
+   461→                ) : (
+   462→                  <>
+   463→                    <Play className="h-5 w-5 relative" />
+   464→                    <span className="relative">Run My Firm</span>
+   465→                  </>
+   466→                )}
+   467→              </Button>
+   468→            </motion.div>
+   469→          )}
+   470→        </motion.div>
+   471→
+   472→        {/* ═══ Running State ═══ */}
+   473→        <AnimatePresence>
+   474→          {(isRunning || isCompleted) && (
+   475→            <motion.div
+   476→              initial={{ opacity: 0, y: 30 }}
+   477→              animate={{ opacity: 1, y: 0 }}
+   478→              exit={{ opacity: 0, y: -20 }}
+   479→              transition={{ duration: 0.5 }}
+   480→              className="space-y-6"
+   481→            >
+   482→              {/* ═══ Completion Banner ═══ */}
+   483→              {isCompleted && (
+   484→                <motion.div
+   485→                  initial={{ opacity: 0, scale: 0.95 }}
+   486→                  animate={{ opacity: 1, scale: 1 }}
+   487→                  transition={{ duration: 0.5 }}
+   488→                >
+   489→                  <Card className="bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-cyan-500/10 border-emerald-500/20 backdrop-blur-sm overflow-hidden">
+   490→                    <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/5 via-transparent to-teal-500/5" />
+   491→                    <CardContent className="p-6 relative">
+   492→                      <div className="flex flex-col sm:flex-row items-center gap-4">
+   493→                        <motion.div
+   494→                          initial={{ scale: 0 }}
+   495→                          animate={{ scale: 1 }}
+   496→                          transition={{ type: 'spring', bounce: 0.5, delay: 0.2 }}
+   497→                          className="p-3 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white shadow-lg"
+   498→                        >
+   499→                          <CheckCircle2 className="h-8 w-8" />
+   500→                        </motion.div>
+   501→                        <div className="flex-1 text-center sm:text-left">
+   502→                          <h2 className="text-2xl font-bold text-emerald-700 dark:text-emerald-400">
+   503→                            Autopilot Complete ✓
+   504→                          </h2>
+   505→                          <p className="text-sm text-muted-foreground mt-1">
+   506→                            All 8 steps completed in {formatElapsed(elapsedSeconds)}
+   507→                          </p>
+   508→                        </div>
+   509→                        <div className="flex gap-2">
+   510→                          <Button variant="outline" size="sm" className="gap-1.5">
+   511→                            <Eye className="h-3.5 w-3.5" />
+   512→                            View Details
+   513→                          </Button>
+   514→                          <Button
+   515→                            size="sm"
+   516→                            onClick={handleReset}
+   517→                            className="gap-1.5 bg-gradient-to-r from-emerald-500 to-teal-600 text-white hover:opacity-90"
+   518→                          >
+   519→                            <RotateCcw className="h-3.5 w-3.5" />
+   520→                            Run Again
+   521→                          </Button>
+   522→                        </div>
+   523→                      </div>
+   524→                    </CardContent>
+   525→                  </Card>
+   526→                </motion.div>
+   527→              )}
+   528→
+   529→              {/* ═══ Summary Stats (completed) ═══ */}
+   530→              {isCompleted && summaryStats.length > 0 && (
+   531→                <motion.div
+   532→                  initial={{ opacity: 0, y: 20 }}
+   533→                  animate={{ opacity: 1, y: 0 }}
+   534→                  transition={{ duration: 0.4, delay: 0.3 }}
+   535→                  className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3"
+   536→                >
+   537→                  {summaryStats.map((stat, i) => {
+   538→                    const Icon = stat.icon
+   539→                    return (
+   540→                      <motion.div
+   541→                        key={stat.label}
+   542→                        initial={{ opacity: 0, scale: 0.9 }}
+   543→                        animate={{ opacity: 1, scale: 1 }}
+   544→                        transition={{ duration: 0.3, delay: 0.4 + i * 0.08 }}
+   545→                      >
+   546→                        <Card className="text-center backdrop-blur-sm">
+   547→                          <CardContent className="p-4">
+   548→                            <div className={`inline-flex p-2 rounded-lg ${stat.colorBg} mb-2`}>
+   549→                              <Icon className={`h-4 w-4 ${stat.color}`} />
+   550→                            </div>
+   551→                            <p className="text-2xl font-bold">{stat.value}</p>
+   552→                            <p className="text-[11px] text-muted-foreground">{stat.label}</p>
+   553→                          </CardContent>
+   554→                        </Card>
+   555→                      </motion.div>
+   556→                    )
+   557→                  })}
+   558→                </motion.div>
+   559→              )}
+   560→
+   561→              {/* ═══ Main Content: Progress + Timeline + Agents ═══ */}
+   562→              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+   563→                {/* Left: Circular Progress + Current Step */}
+   564→                <div className="space-y-4">
+   565→                  <Card className="backdrop-blur-sm">
+   566→                    <CardContent className="p-6 flex flex-col items-center gap-4">
+   567→                      <CircularProgress value={overallProgress} />
+   568→                      <div className="text-center">
+   569→                        <p className="text-sm font-medium text-foreground">
+   570→                          {currentStepLabel || 'Ready to start'}
+   571→                        </p>
+   572→                        <div className="flex items-center justify-center gap-2 mt-1 text-xs text-muted-foreground">
+   573→                          <Clock className="h-3.5 w-3.5" />
+   574→                          <span className="font-mono">{formatElapsed(elapsedSeconds)}</span>
+   575→                        </div>
+   576→                      </div>
+   577→                    </CardContent>
+   578→                  </Card>
+   579→
+   580→                  {/* Agent Status Panel */}
+   581→                  <Card className="backdrop-blur-sm">
+   582→                    <CardHeader className="pb-3">
+   583→                      <CardTitle className="text-sm font-semibold flex items-center gap-2">
+   584→                        <Bot className="h-4 w-4 text-violet-500" />
+   585→                        Agent Status
+   586→                      </CardTitle>
+   587→                    </CardHeader>
+   588→                    <CardContent className="space-y-2">
+   589→                      {agentStatuses.map((agent) => {
+   590→                        const Icon = agent.icon
+   591→                        return (
+   592→                          <motion.div
+   593→                            key={agent.id}
+   594→                            layout
+   595→                            className={`flex items-center gap-2.5 p-2 rounded-lg border transition-all ${
+   596→                              agent.status === 'running'
+   597→                                ? `${agent.colorBg} border-current/20`
+   598→                                : agent.status === 'completed'
+   599→                                ? 'bg-emerald-500/5 border-emerald-500/10'
+   600→                                : 'bg-gray-50 dark:bg-gray-900/30 border-border/50'
+   601→                            }`}
+   602→                          >
+   603→                            <div className={`p-1 rounded ${agent.colorBg}`}>
+   604→                              <Icon className={`h-3.5 w-3.5 ${agent.colorText}`} />
+   605→                            </div>
+   606→                            <span className="text-xs font-medium flex-1">{agent.name}</span>
+   607→                            {agent.status === 'queued' && (
+   608→                              <Badge variant="secondary" className="text-[10px] px-1.5">Queued</Badge>
+   609→                            )}
+   610→                            {agent.status === 'running' && (
+   611→                              <Badge className="text-[10px] px-1.5 bg-blue-500/10 text-blue-600 border-blue-500/20">
+   612→                                <Loader2 className="h-2.5 w-2.5 animate-spin mr-1" />Running
+   613→                              </Badge>
+   614→                            )}
+   615→                            {agent.status === 'completed' && (
+   616→                              <Badge className="text-[10px] px-1.5 bg-emerald-500/10 text-emerald-600 border-emerald-500/20">
+   617→                                <CheckCircle2 className="h-2.5 w-2.5 mr-0.5" />Done
+   618→                              </Badge>
+   619→                            )}
+   620→                          </motion.div>
+   621→                        )
+   622→                      })}
+   623→                    </CardContent>
+   624→                  </Card>
+   625→                </div>
+   626→
+   627→                {/* Right: Processing Timeline */}
+   628→                <div className="lg:col-span-2 space-y-4">
+   629→                  <Card className="backdrop-blur-sm">
+   630→                    <CardHeader className="pb-3">
+   631→                      <CardTitle className="text-sm font-semibold flex items-center gap-2">
+   632→                        <Zap className="h-4 w-4 text-emerald-500" />
+   633→                        Processing Timeline
+   634→                      </CardTitle>
+   635→                    </CardHeader>
+   636→                    <CardContent className="space-y-3">
+   637→                      {steps.map((step, idx) => (
+   638→                        <motion.div
+   639→                          key={step.id}
+   640→                          initial={{ opacity: 0, x: -10 }}
+   641→                          animate={{ opacity: 1, x: 0 }}
+   642→                          transition={{ duration: 0.3, delay: idx * 0.05 }}
+   643→                          className={`flex items-start gap-3 p-3 rounded-lg border transition-all ${
+   644→                            step.status === 'running'
+   645→                              ? 'bg-emerald-500/5 border-emerald-500/20'
+   646→                              : step.status === 'completed'
+   647→                              ? 'bg-emerald-500/3 border-emerald-500/10'
+   648→                              : 'bg-gray-50/50 dark:bg-gray-900/20 border-border/30'
+   649→                          }`}
+   650→                        >
+   651→                          {/* Step indicator */}
+   652→                          <div className="flex flex-col items-center">
+   653→                            <div className={`flex items-center justify-center w-8 h-8 rounded-full text-sm font-medium shrink-0 ${
+   654→                              step.status === 'running'
+   655→                                ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/30'
+   656→                                : step.status === 'completed'
+   657→                                ? 'bg-emerald-500/10 text-emerald-600'
+   658→                                : 'bg-gray-200 dark:bg-gray-800 text-muted-foreground'
+   659→                            }`}>
+   660→                              {step.status === 'running' ? (
+   661→                                <Loader2 className="h-4 w-4 animate-spin" />
+   662→                              ) : step.status === 'completed' ? (
+   663→                                <CheckCircle2 className="h-4 w-4" />
+   664→                              ) : (
+   665→                                <span className="text-xs">{step.id}</span>
+   666→                              )}
+   667→                            </div>
+   668→                            {idx < steps.length - 1 && (
+   669→                              <div className={`w-0.5 h-4 mt-1 ${
+   670→                                step.status === 'completed' ? 'bg-emerald-500/30' : 'bg-border/30'
+   671→                              }`} />
+   672→                            )}
+   673→                          </div>
+   674→
+   675→                          {/* Step content */}
+   676→                          <div className="flex-1 min-w-0">
+   677→                            <div className="flex items-center justify-between mb-1">
+   678→                              <span className={`text-sm font-medium ${
+   679→                                step.status === 'running' ? 'text-foreground' : step.status === 'completed' ? 'text-emerald-600' : 'text-muted-foreground'
+   680→                              }`}>
+   681→                                {step.emoji} {step.label}
+   682→                              </span>
+   683→                              <span className={`text-[10px] font-medium uppercase tracking-wider ${
+   684→                                step.status === 'running' ? 'text-emerald-600' : step.status === 'completed' ? 'text-emerald-500' : 'text-muted-foreground'
+   685→                              }`}>
+   686→                                {step.status}
+   687→                              </span>
+   688→                            </div>
+   689→                            <Progress
+   690→                              value={step.progress}
+   691→                              className={`h-1.5 ${step.status === 'completed' ? '[&>div]:bg-emerald-500' : step.status === 'running' ? '[&>div]:bg-emerald-500' : ''}`}
+   692→                            />
+   693→                          </div>
+   694→                        </motion.div>
+   695→                      ))}
+   696→                    </CardContent>
+   697→                  </Card>
+   698→
+   699→                  {/* ═══ Log Console ═══ */}
+   700→                  <Card className="backdrop-blur-sm overflow-hidden">
+   701→                    <CardHeader className="pb-2">
+   702→                      <CardTitle className="text-sm font-semibold flex items-center gap-2">
+   703→                        <Terminal className="h-4 w-4 text-emerald-500" />
+   704→                        Live Console
+   705→                        {isRunning && (
+   706→                          <span className="flex items-center gap-1 ml-auto">
+   707→                            <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+   708→                            <span className="text-[10px] text-emerald-600 font-mono">LIVE</span>
+   709→                          </span>
+   710→                        )}
+   711→                      </CardTitle>
+   712→                    </CardHeader>
+   713→                    <CardContent className="p-0">
+   714→                      <div className="bg-gray-950 dark:bg-gray-950 rounded-b-lg border-t border-gray-800">
+   715→                        <ScrollArea className="h-64">
+   716→                          <div className="p-3 font-mono text-xs space-y-1">
+   717→                            {/* System header */}
+   718→                            <div className="text-gray-500">
+   719→                              <span className="text-emerald-400">$</span> gstpilot autopilot start
+   720→                            </div>
+   721→                            <div className="text-gray-500 mb-2">
+   722→                              ──────────────────────────────────────
+   723→                            </div>
+   724→
+   725→                            {logs.map((log) => (
+   726→                              <motion.div
+   727→                                key={log.id}
+   728→                                initial={{ opacity: 0, x: -5 }}
+   729→                                animate={{ opacity: 1, x: 0 }}
+   730→                                transition={{ duration: 0.15 }}
+   731→                                className="flex items-start gap-2"
+   732→                              >
+   733→                                <span className="text-gray-600 shrink-0">{formatTime(log.timestamp)}</span>
+   734→                                <span className={`shrink-0 font-semibold ${logLevelColor(log.level)}`}>
+   735→                                  [{log.agent}]
+   736→                                </span>
+   737→                                <span className="text-gray-300">{log.message}</span>
+   738→                              </motion.div>
+   739→                            ))}
+   740→
+   741→                            {logs.length === 0 && (
+   742→                              <div className="text-gray-600 italic">Waiting for autopilot to start...</div>
+   743→                            )}
+   744→
+   745→                            {isRunning && (
+   746→                              <div className="flex items-center gap-1 text-emerald-400">
+   747→                                <span className="animate-pulse">▌</span>
+   748→                              </div>
+   749→                            )}
+   750→                          </div>
+   751→                        </ScrollArea>
+   752→                      </div>
+   753→                    </CardContent>
+   754→                  </Card>
+   755→                </div>
+   756→              </div>
+   757→
+   758→              {/* ═══ Action Buttons (running state) ═══ */}
+   759→              {isRunning && (
+   760→                <motion.div
+   761→                  initial={{ opacity: 0 }}
+   762→                  animate={{ opacity: 1 }}
+   763→                  className="flex justify-center gap-3 pt-2"
+   764→                >
+   765→                  <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-500/5 border border-blue-500/10">
+   766→                    <Loader2 className="h-4 w-4 text-blue-500 animate-spin" />
+   767→                    <span className="text-sm text-blue-600 font-medium">Autopilot is running...</span>
+   768→                    <span className="text-xs text-muted-foreground font-mono">{formatElapsed(elapsedSeconds)}</span>
+   769→                  </div>
+   770→                </motion.div>
+   771→              )}
+   772→            </motion.div>
+   773→          )}
+   774→        </AnimatePresence>
+   775→
+   776→        {/* ═══ Idle State Details ═══ */}
+   777→        {overallStatus === 'idle' && (
+   778→          <motion.div
+   779→            initial={{ opacity: 0, y: 20 }}
+   780→            animate={{ opacity: 1, y: 0 }}
+   781→            transition={{ duration: 0.5, delay: 0.6 }}
+   782→            className="space-y-6"
+   783→          >
+   784→            {/* What Autopilot Does */}
+   785→            <Card className="backdrop-blur-sm">
+   786→              <CardHeader>
+   787→                <CardTitle className="text-base">What Autopilot Does</CardTitle>
+   788→                <CardDescription>A complete end-to-end workflow that runs your entire firm autonomously</CardDescription>
+   789→              </CardHeader>
+   790→              <CardContent>
+   791→                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+   792→                  {STEPS_CONFIG.map((step, idx) => (
+   793→                    <motion.div
+   794→                      key={step.id}
+   795→                      initial={{ opacity: 0, x: -10 }}
+   796→                      animate={{ opacity: 1, x: 0 }}
+   797→                      transition={{ duration: 0.3, delay: 0.7 + idx * 0.06 }}
+   798→                      className="flex items-center gap-3 p-3 rounded-lg bg-gray-50/50 dark:bg-gray-900/20 border border-border/30"
+   799→                    >
+   800→                      <div className="flex items-center justify-center w-7 h-7 rounded-full bg-emerald-500/10 text-xs font-medium text-emerald-600 shrink-0">
+   801→                        {step.id}
+   802→                      </div>
+   803→                      <span className="text-sm">{step.emoji} {step.label}</span>
+   804→                      <ChevronRight className="h-3.5 w-3.5 text-muted-foreground ml-auto" />
+   805→                    </motion.div>
+   806→                  ))}
+   807→                </div>
+   808→              </CardContent>
+   809→            </Card>
+   810→
+   811→            {/* Agents Involved */}
+   812→            <Card className="backdrop-blur-sm">
+   813→              <CardHeader>
+   814→                <CardTitle className="text-base">Agents Involved</CardTitle>
+   815→                <CardDescription>5 specialized AI agents work together during the Autopilot run</CardDescription>
+   816→              </CardHeader>
+   817→              <CardContent>
+   818→                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+   819→                  {AGENTS_CONFIG.map((agent, idx) => {
+   820→                    const Icon = agent.icon
+   821→                    return (
+   822→                      <motion.div
+   823→                        key={agent.id}
+   824→                        initial={{ opacity: 0, y: 10 }}
+   825→                        animate={{ opacity: 1, y: 0 }}
+   826→                        transition={{ duration: 0.3, delay: 0.8 + idx * 0.06 }}
+   827→                        className={`flex flex-col items-center gap-2 p-4 rounded-lg border ${agent.colorBg} ${agent.color === 'emerald' ? 'border-emerald-500/20' : agent.color === 'amber' ? 'border-amber-500/20' : agent.color === 'blue' ? 'border-blue-500/20' : agent.color === 'purple' ? 'border-purple-500/20' : 'border-rose-500/20'}`}
+   828→                      >
+   829→                        <div className={`p-2 rounded-lg ${agent.colorBg}`}>
+   830→                          <Icon className={`h-5 w-5 ${agent.colorText}`} />
+   831→                        </div>
+   832→                        <span className="text-xs font-medium text-center">{agent.name}</span>
+   833→                      </motion.div>
+   834→                    )
+   835→                  })}
+   836→                </div>
+   837→              </CardContent>
+   838→            </Card>
+   839→          </motion.div>
+   840→        )}
+   841→      </div>
+   842→    </div>
+   843→  )
+   844→}
+   845→

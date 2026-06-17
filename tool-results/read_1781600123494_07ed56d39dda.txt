@@ -1,0 +1,807 @@
+     1→'use client'
+     2→
+     3→import React, { useState } from 'react'
+     4→import { motion } from 'framer-motion'
+     5→import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+     6→import { Badge } from '@/components/ui/badge'
+     7→import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
+     8→import { Progress } from '@/components/ui/progress'
+     9→import { ScrollArea } from '@/components/ui/scroll-area'
+    10→import { Separator } from '@/components/ui/separator'
+    11→import {
+    12→  Crown, TrendingUp, TrendingDown, Users, Zap,
+    13→  Activity, PieChart, BarChart3, Target,
+    14→  ArrowUpRight, ArrowDownRight, Radio, CheckCircle,
+    15→  Clock, Building, FileText, DollarSign,
+    16→} from 'lucide-react'
+    17→
+    18→// ── Helpers ──
+    19→const fmtINR = (n: number) =>
+    20→  '₹' + n.toLocaleString('en-IN')
+    21→
+    22→const pct = (n: number, decimals = 1) =>
+    23→  n.toFixed(decimals) + '%'
+    24→
+    25→// ── Sample Data ──
+    26→const revenueData = {
+    27→  mrr: 1245000, arr: 14940000, growth: 18.4,
+    28→  monthly: [982000, 1035000, 1087000, 1124000, 1189000, 1245000],
+    29→  months: ['Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar'],
+    30→}
+    31→
+    32→const clientHealth = {
+    33→  healthy: 31, atRisk: 11, critical: 5, total: 47,
+    34→}
+    35→
+    36→const retentionData = {
+    37→  rate: 94.2, churn: 5.8,
+    38→  monthly: [92.1, 93.4, 93.8, 94.0, 93.6, 94.2],
+    39→  months: ['Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar'],
+    40→}
+    41→
+    42→const agents = [
+    43→  { name: 'AI CA Manager', status: 'active', tasks: 342, success: 97.2, icon: '📋' },
+    44→  { name: 'AI Account Mgr', status: 'active', tasks: 289, success: 96.8, icon: '👤' },
+    45→  { name: 'AI Doc Employee', status: 'active', tasks: 512, success: 98.5, icon: '📄' },
+    46→  { name: 'AI Deadline Engine', status: 'active', tasks: 178, success: 99.1, icon: '⏰' },
+    47→  { name: 'AI Voice Asst', status: 'idle', tasks: 94, success: 95.4, icon: '🎙' },
+    48→  { name: 'AI Firm Memory', status: 'active', tasks: 267, success: 99.6, icon: '🧠' },
+    49→  { name: 'AI Reconciler', status: 'active', tasks: 398, success: 97.9, icon: '🔄' },
+    50→  { name: 'AI Risk Engine', status: 'active', tasks: 156, success: 98.2, icon: '🛡' },
+    51→  { name: 'AI CFO', status: 'active', tasks: 203, success: 96.3, icon: '💰' },
+    52→  { name: 'AI Compliance', status: 'idle', tasks: 87, success: 99.4, icon: '✅' },
+    53→]
+    54→
+    55→const forecastData = {
+    56→  revenue: [1245000, 1312000, 1384000, 1458000, 1536000, 1618000],
+    57→  months: ['Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep'],
+    58→  clientGrowth: [47, 49, 52, 55, 58, 62],
+    59→}
+    60→
+    61→const firmScore = 87
+    62→
+    63→const keyRatios = {
+    64→  revenuePerClient: 26_489,
+    65→  filingsPerEmployee: 18.7,
+    66→  avgCollectionDays: 12,
+    67→  clientAcquisitionCost: 4200,
+    68→  lifetimeValue: 3_12_000,
+    69→  profitMargin: 34.2,
+    70→}
+    71→
+    72→// ── SVG Sparkline ──
+    73→function Sparkline({ data, width = 120, height = 36, color = '#10b981', fill = true }: {
+    74→  data: number[]; width?: number; height?: number; color?: string; fill?: boolean
+    75→}) {
+    76→  const min = Math.min(...data)
+    77→  const max = Math.max(...data)
+    78→  const range = max - min || 1
+    79→  const pts = data.map((v, i) => {
+    80→    const x = (i / (data.length - 1)) * width
+    81→    const y = height - ((v - min) / range) * (height - 4) - 2
+    82→    return `${x},${y}`
+    83→  }).join(' ')
+    84→  const areaPath = data.map((v, i) => {
+    85→    const x = (i / (data.length - 1)) * width
+    86→    const y = height - ((v - min) / range) * (height - 4) - 2
+    87→    return `${i === 0 ? 'M' : 'L'}${x},${y}`
+    88→  }).join(' ') + ` L${width},${height} L0,${height} Z`
+    89→
+    90→  return (
+    91→    <svg width={width} height={height} className="overflow-visible">
+    92→      {fill && <path d={areaPath} fill={color + '18'} />}
+    93→      <polyline points={pts} fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+    94→      <circle cx={(data.length - 1) / (data.length - 1) * width} cy={height - ((data[data.length - 1] - min) / range) * (height - 4) - 2} r={3} fill={color} />
+    95→    </svg>
+    96→  )
+    97→}
+    98→
+    99→// ── SVG Pie Chart ──
+   100→function PieChartSVG({ segments }: { segments: { value: number; color: string; label: string }[] }) {
+   101→  const total = segments.reduce((s, seg) => s + seg.value, 0)
+   102→  const r = 60
+   103→  const cx = 80, cy = 80
+   104→
+   105→  // Compute cumulative offsets without mutation during render
+   106→  const cumOffsets = segments.reduce<number[]>((acc, seg, i) => {
+   107→    const prev = i === 0 ? -90 : acc[i - 1]
+   108→    const angle = (seg.value / total) * 360
+   109→    acc.push(prev + angle)
+   110→    return acc
+   111→  }, [])
+   112→
+   113→  const arcs = segments.map((seg, i) => {
+   114→    const angle = (seg.value / total) * 360
+   115→    const startAngle = i === 0 ? -90 : cumOffsets[i - 1]
+   116→    const endAngle = cumOffsets[i]
+   117→    const startRad = (startAngle * Math.PI) / 180
+   118→    const endRad = (endAngle * Math.PI) / 180
+   119→    const x1 = cx + r * Math.cos(startRad)
+   120→    const y1 = cy + r * Math.sin(startRad)
+   121→    const x2 = cx + r * Math.cos(endRad)
+   122→    const y2 = cy + r * Math.sin(endRad)
+   123→    const largeArc = angle > 180 ? 1 : 0
+   124→    const d = `M${cx},${cy} L${x1},${y1} A${r},${r} 0 ${largeArc},1 ${x2},${y2} Z`
+   125→    return { ...seg, d }
+   126→  })
+   127→
+   128→  return (
+   129→    <svg width={160} height={160} viewBox="0 0 160 160">
+   130→      {arcs.map((arc, i) => (
+   131→        <path key={i} d={arc.d} fill={arc.color} stroke="white" strokeWidth={2} />
+   132→      ))}
+   133→      <circle cx={cx} cy={cy} r={32} fill="white" />
+   134→      <text x={cx} y={cy - 4} textAnchor="middle" className="text-lg font-bold" fill="#0f172a">{total}</text>
+   135→      <text x={cx} y={cy + 12} textAnchor="middle" className="text-[9px]" fill="#64748b">clients</text>
+   136→    </svg>
+   137→  )
+   138→}
+   139→
+   140→// ── SVG Gauge ──
+   141→function GaugeChart({ value, max = 100 }: { value: number; max?: number }) {
+   142→  const pctVal = value / max
+   143→  const angle = pctVal * 180
+   144→  const r = 70
+   145→  const cx = 90, cy = 90
+   146→  const startAngle = 180
+   147→  const endAngle = 0
+   148→  const needleAngle = startAngle - angle
+   149→
+   150→  const needleRad = (needleAngle * Math.PI) / 180
+   151→  const nx = cx + (r - 15) * Math.cos(needleRad)
+   152→  const ny = cy - (r - 15) * Math.sin(needleRad)
+   153→
+   154→  const bgPath = describeArc(cx, cy, r, startAngle, endAngle)
+   155→  const fillEndAngle = 180 - angle
+   156→  const fillPath = describeArc(cx, cy, r, startAngle, fillEndAngle)
+   157→
+   158→  const color = value >= 80 ? '#10b981' : value >= 60 ? '#f59e0b' : '#ef4444'
+   159→
+   160→  return (
+   161→    <svg width={180} height={110} viewBox="0 0 180 110">
+   162→      <path d={bgPath} fill="none" stroke="#e2e8f0" strokeWidth={12} strokeLinecap="round" />
+   163→      <path d={fillPath} fill="none" stroke={color} strokeWidth={12} strokeLinecap="round" />
+   164→      <line x1={cx} y1={cy} x2={nx} y2={ny} stroke="#0f172a" strokeWidth={3} strokeLinecap="round" />
+   165→      <circle cx={cx} cy={cy} r={5} fill="#0f172a" />
+   166→      <text x={cx} y={cy + 30} textAnchor="middle" className="text-2xl font-bold" fill="#0f172a">{value}</text>
+   167→      <text x={cx} y={cy + 44} textAnchor="middle" className="text-[10px]" fill="#64748b">/ {max}</text>
+   168→    </svg>
+   169→  )
+   170→}
+   171→
+   172→function describeArc(cx: number, cy: number, r: number, startAngle: number, endAngle: number): string {
+   173→  const s = polarToCartesian(cx, cy, r, endAngle)
+   174→  const e = polarToCartesian(cx, cy, r, startAngle)
+   175→  const largeArc = startAngle - endAngle > 180 ? 1 : 0
+   176→  return `M${s.x},${s.y} A${r},${r} 0 ${largeArc},0 ${e.x},${e.y}`
+   177→}
+   178→
+   179→function polarToCartesian(cx: number, cy: number, r: number, angle: number) {
+   180→  const rad = (angle * Math.PI) / 180
+   181→  return { x: cx + r * Math.cos(rad), y: cy - r * Math.sin(rad) }
+   182→}
+   183→
+   184→// ── SVG Line Chart ──
+   185→function LineChart({ data, months, width = 280, height = 120, color = '#10b981', prefix = '₹' }: {
+   186→  data: number[]; months: string[]; width?: number; height?: number; color?: string; prefix?: string
+   187→}) {
+   188→  const pad = { top: 10, right: 10, bottom: 24, left: 10 }
+   189→  const w = width - pad.left - pad.right
+   190→  const h = height - pad.top - pad.bottom
+   191→  const min = Math.min(...data) * 0.95
+   192→  const max = Math.max(...data) * 1.05
+   193→  const range = max - min || 1
+   194→
+   195→  const points = data.map((v, i) => ({
+   196→    x: pad.left + (i / (data.length - 1)) * w,
+   197→    y: pad.top + h - ((v - min) / range) * h,
+   198→  }))
+   199→
+   200→  const linePath = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ')
+   201→  const areaPath = linePath + ` L${points[points.length - 1].x.toFixed(1)},${(pad.top + h).toFixed(1)} L${points[0].x.toFixed(1)},${(pad.top + h).toFixed(1)} Z`
+   202→
+   203→  return (
+   204→    <svg width={width} height={height}>
+   205→      <path d={areaPath} fill={color + '15'} />
+   206→      <path d={linePath} fill="none" stroke={color} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />
+   207→      {points.map((p, i) => (
+   208→        <g key={i}>
+   209→          <circle cx={p.x} cy={p.y} r={3.5} fill="white" stroke={color} strokeWidth={2} />
+   210→          <text x={p.x} y={height - 4} textAnchor="middle" className="text-[9px]" fill="#94a3b8">{months[i]}</text>
+   211→        </g>
+   212→      ))}
+   213→    </svg>
+   214→  )
+   215→}
+   216→
+   217→// ── Bar Chart ──
+   218→function BarChart({ data, months, width = 280, height = 120, color = '#10b981' }: {
+   219→  data: number[]; months: string[]; width?: number; height?: number; color?: string
+   220→}) {
+   221→  const pad = { top: 10, right: 10, bottom: 24, left: 10 }
+   222→  const w = width - pad.left - pad.right
+   223→  const h = height - pad.top - pad.bottom
+   224→  const max = Math.max(...data) * 1.1
+   225→  const barW = w / data.length * 0.6
+   226→  const gap = w / data.length
+   227→
+   228→  return (
+   229→    <svg width={width} height={height}>
+   230→      {data.map((v, i) => {
+   231→        const barH = (v / max) * h
+   232→        const x = pad.left + i * gap + (gap - barW) / 2
+   233→        const y = pad.top + h - barH
+   234→        return (
+   235→          <g key={i}>
+   236→            <rect x={x} y={y} width={barW} height={barH} rx={3} fill={color} opacity={0.8} />
+   237→            <text x={x + barW / 2} y={height - 4} textAnchor="middle" className="text-[9px]" fill="#94a3b8">{months[i]}</text>
+   238→          </g>
+   239→        )
+   240→      })}
+   241→    </svg>
+   242→  )
+   243→}
+   244→
+   245→// ── Animation Variants ──
+   246→const fadeUp = {
+   247→  hidden: { opacity: 0, y: 16 },
+   248→  visible: (i: number) => ({
+   249→    opacity: 1, y: 0, transition: { delay: i * 0.06, duration: 0.4, ease: 'easeOut' },
+   250→  }),
+   251→}
+   252→
+   253→// ── Main Component ──
+   254→export default function FirmCommandCenterPage() {
+   255→  const [activeTab, setActiveTab] = useState('overview')
+   256→
+   257→  const aiTasksPerDay = 156
+   258→
+   259→  return (
+   260→    <div className="p-4 md:p-6 max-w-[1440px] mx-auto space-y-6">
+   261→      {/* Header */}
+   262→      <motion.div initial="hidden" animate="visible" variants={fadeUp} custom={0} className="flex items-center justify-between">
+   263→        <div className="flex items-center gap-3">
+   264→          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-600 shadow-lg shadow-emerald-600/20">
+   265→            <Crown className="h-5 w-5 text-white" />
+   266→          </div>
+   267→          <div>
+   268→            <h1 className="text-xl font-bold text-slate-900">Executive Command Center</h1>
+   269→            <p className="text-xs text-slate-500">AI CEO — Real-time firm intelligence</p>
+   270→          </div>
+   271→        </div>
+   272→        <div className="flex items-center gap-2">
+   273→          <Badge variant="outline" className="gap-1 text-emerald-600 border-emerald-200 bg-emerald-50">
+   274→            <Radio className="h-3 w-3 animate-pulse" /> Live
+   275→          </Badge>
+   276→          <Badge variant="secondary" className="text-xs">{new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</Badge>
+   277→        </div>
+   278→      </motion.div>
+   279→
+   280→      {/* KPI Row */}
+   281→      <motion.div initial="hidden" animate="visible" variants={fadeUp} custom={1}
+   282→        className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-3">
+   283→        {[
+   284→          { label: 'MRR', value: fmtINR(revenueData.mrr), icon: DollarSign, trend: '+4.7%', up: true },
+   285→          { label: 'ARR', value: fmtINR(revenueData.arr), icon: TrendingUp, trend: '+18.4%', up: true },
+   286→          { label: 'Growth', value: pct(revenueData.growth), icon: ArrowUpRight, trend: '+2.1%', up: true },
+   287→          { label: 'Retention', value: pct(retentionData.rate), icon: Users, trend: '+0.6%', up: true },
+   288→          { label: 'Active Clients', value: String(clientHealth.total), icon: Building, trend: '+3', up: true },
+   289→          { label: 'AI Tasks/Day', value: String(aiTasksPerDay), icon: Zap, trend: '+12', up: true },
+   290→          { label: 'Firm Score', value: `${firmScore}/100`, icon: Target, trend: '+4', up: true },
+   291→          { label: 'Rev/Client', value: fmtINR(keyRatios.revenuePerClient), icon: BarChart3, trend: '+5.2%', up: true },
+   292→        ].map((kpi, i) => (
+   293→          <Card key={i} className="border-slate-200/60 shadow-sm hover:shadow-md transition-shadow">
+   294→            <CardContent className="p-3">
+   295→              <div className="flex items-center gap-1.5 mb-1">
+   296→                <kpi.icon className="h-3.5 w-3.5 text-emerald-600" />
+   297→                <span className="text-[10px] text-slate-500 font-medium uppercase tracking-wide">{kpi.label}</span>
+   298→              </div>
+   299→              <p className="text-sm font-bold text-slate-900">{kpi.value}</p>
+   300→              <div className={`flex items-center gap-0.5 mt-0.5 ${kpi.up ? 'text-emerald-600' : 'text-red-500'}`}>
+   301→                {kpi.up ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
+   302→                <span className="text-[10px] font-medium">{kpi.trend}</span>
+   303→              </div>
+   304→            </CardContent>
+   305→          </Card>
+   306→        ))}
+   307→      </motion.div>
+   308→
+   309→      {/* Tabs */}
+   310→      <Tabs value={activeTab} onValueChange={setActiveTab}>
+   311→        <TabsList className="bg-slate-100/80">
+   312→          {['overview', 'revenue', 'clients', 'agents', 'forecasts'].map(t => (
+   313→            <TabsTrigger key={t} value={t} className="text-xs capitalize data-[state=active]:bg-white data-[state=active]:text-emerald-700 data-[state=active]:shadow-sm">
+   314→              {t}
+   315→            </TabsTrigger>
+   316→          ))}
+   317→        </TabsList>
+   318→
+   319→        {/* ── Overview Tab ── */}
+   320→        <TabsContent value="overview" className="space-y-4 mt-4">
+   321→          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+   322→            {/* Revenue Card */}
+   323→            <motion.div initial="hidden" animate="visible" variants={fadeUp} custom={2}>
+   324→              <Card className="border-slate-200/60 shadow-sm h-full">
+   325→                <CardHeader className="pb-2">
+   326→                  <CardTitle className="text-sm font-semibold flex items-center gap-2">
+   327→                    <TrendingUp className="h-4 w-4 text-emerald-600" /> Revenue
+   328→                  </CardTitle>
+   329→                </CardHeader>
+   330→                <CardContent className="space-y-3">
+   331→                  <div className="grid grid-cols-2 gap-3">
+   332→                    <div>
+   333→                      <p className="text-[10px] text-slate-500 uppercase">MRR</p>
+   334→                      <p className="text-lg font-bold text-slate-900">{fmtINR(revenueData.mrr)}</p>
+   335→                    </div>
+   336→                    <div>
+   337→                      <p className="text-[10px] text-slate-500 uppercase">ARR</p>
+   338→                      <p className="text-lg font-bold text-slate-900">{fmtINR(revenueData.arr)}</p>
+   339→                    </div>
+   340→                  </div>
+   341→                  <div className="flex items-center justify-between">
+   342→                    <span className="text-xs text-slate-500">6-Month Trend</span>
+   343→                    <Sparkline data={revenueData.monthly} width={140} height={36} color="#10b981" />
+   344→                  </div>
+   345→                  <div className="flex items-center gap-1 text-emerald-600">
+   346→                    <ArrowUpRight className="h-3.5 w-3.5" />
+   347→                    <span className="text-xs font-semibold">{pct(revenueData.growth)} growth YoY</span>
+   348→                  </div>
+   349→                </CardContent>
+   350→              </Card>
+   351→            </motion.div>
+   352→
+   353→            {/* Client Health */}
+   354→            <motion.div initial="hidden" animate="visible" variants={fadeUp} custom={3}>
+   355→              <Card className="border-slate-200/60 shadow-sm h-full">
+   356→                <CardHeader className="pb-2">
+   357→                  <CardTitle className="text-sm font-semibold flex items-center gap-2">
+   358→                    <PieChart className="h-4 w-4 text-emerald-600" /> Client Health
+   359→                  </CardTitle>
+   360→                </CardHeader>
+   361→                <CardContent>
+   362→                  <div className="flex items-center gap-4">
+   363→                    <PieChartSVG segments={[
+   364→                      { value: clientHealth.healthy, color: '#10b981', label: 'Healthy' },
+   365→                      { value: clientHealth.atRisk, color: '#f59e0b', label: 'At Risk' },
+   366→                      { value: clientHealth.critical, color: '#ef4444', label: 'Critical' },
+   367→                    ]} />
+   368→                    <div className="space-y-2">
+   369→                      <div className="flex items-center gap-2">
+   370→                        <div className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
+   371→                        <span className="text-xs text-slate-600">Healthy <span className="font-semibold">{clientHealth.healthy}</span></span>
+   372→                      </div>
+   373→                      <div className="flex items-center gap-2">
+   374→                        <div className="h-2.5 w-2.5 rounded-full bg-amber-500" />
+   375→                        <span className="text-xs text-slate-600">At Risk <span className="font-semibold">{clientHealth.atRisk}</span></span>
+   376→                      </div>
+   377→                      <div className="flex items-center gap-2">
+   378→                        <div className="h-2.5 w-2.5 rounded-full bg-red-500" />
+   379→                        <span className="text-xs text-slate-600">Critical <span className="font-semibold">{clientHealth.critical}</span></span>
+   380→                      </div>
+   381→                    </div>
+   382→                  </div>
+   383→                </CardContent>
+   384→              </Card>
+   385→            </motion.div>
+   386→
+   387→            {/* Firm Score */}
+   388→            <motion.div initial="hidden" animate="visible" variants={fadeUp} custom={4}>
+   389→              <Card className="border-slate-200/60 shadow-sm h-full">
+   390→                <CardHeader className="pb-2">
+   391→                  <CardTitle className="text-sm font-semibold flex items-center gap-2">
+   392→                    <Target className="h-4 w-4 text-emerald-600" /> Firm Score
+   393→                  </CardTitle>
+   394→                </CardHeader>
+   395→                <CardContent className="flex flex-col items-center">
+   396→                  <GaugeChart value={firmScore} />
+   397→                  <Badge className="mt-2 bg-emerald-100 text-emerald-700 hover:bg-emerald-100">Excellent</Badge>
+   398→                  <p className="text-[10px] text-slate-500 mt-1">Top 12% of firms nationwide</p>
+   399→                </CardContent>
+   400→              </Card>
+   401→            </motion.div>
+   402→          </div>
+   403→
+   404→          {/* Key Ratios */}
+   405→          <motion.div initial="hidden" animate="visible" variants={fadeUp} custom={5}>
+   406→            <Card className="border-slate-200/60 shadow-sm">
+   407→              <CardHeader className="pb-2">
+   408→                <CardTitle className="text-sm font-semibold flex items-center gap-2">
+   409→                  <BarChart3 className="h-4 w-4 text-emerald-600" /> Key Ratios
+   410→                </CardTitle>
+   411→              </CardHeader>
+   412→              <CardContent>
+   413→                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+   414→                  {[
+   415→                    { label: 'Revenue / Client', value: fmtINR(keyRatios.revenuePerClient), sub: 'per month' },
+   416→                    { label: 'Filings / Employee', value: String(keyRatios.filingsPerEmployee), sub: 'per month' },
+   417→                    { label: 'Avg Collection', value: `${keyRatios.avgCollectionDays} days`, sub: 'payment cycle' },
+   418→                    { label: 'Client Acq. Cost', value: fmtINR(keyRatios.clientAcquisitionCost), sub: 'marketing' },
+   419→                    { label: 'Lifetime Value', value: fmtINR(keyRatios.lifetimeValue), sub: 'avg client' },
+   420→                    { label: 'Profit Margin', value: pct(keyRatios.profitMargin), sub: 'net margin' },
+   421→                  ].map((r, i) => (
+   422→                    <div key={i} className="text-center p-3 rounded-lg bg-slate-50/80">
+   423→                      <p className="text-[10px] text-slate-500 uppercase tracking-wide">{r.label}</p>
+   424→                      <p className="text-base font-bold text-slate-900 mt-1">{r.value}</p>
+   425→                      <p className="text-[10px] text-slate-400">{r.sub}</p>
+   426→                    </div>
+   427→                  ))}
+   428→                </div>
+   429→              </CardContent>
+   430→            </Card>
+   431→          </motion.div>
+   432→
+   433→          {/* Retention Mini */}
+   434→          <motion.div initial="hidden" animate="visible" variants={fadeUp} custom={6}>
+   435→            <Card className="border-slate-200/60 shadow-sm">
+   436→              <CardHeader className="pb-2">
+   437→                <CardTitle className="text-sm font-semibold flex items-center gap-2">
+   438→                  <Activity className="h-4 w-4 text-emerald-600" /> Retention Metrics
+   439→                </CardTitle>
+   440→              </CardHeader>
+   441→              <CardContent>
+   442→                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
+   443→                  <div className="space-y-3">
+   444→                    <div className="flex justify-between items-center">
+   445→                      <span className="text-xs text-slate-500">Monthly Retention</span>
+   446→                      <span className="text-sm font-bold text-emerald-600">{pct(retentionData.rate)}</span>
+   447→                    </div>
+   448→                    <Progress value={retentionData.rate} className="h-2" />
+   449→                    <div className="flex justify-between items-center">
+   450→                      <span className="text-xs text-slate-500">Churn Rate</span>
+   451→                      <span className="text-sm font-bold text-red-500">{pct(retentionData.churn)}</span>
+   452→                    </div>
+   453→                    <Progress value={retentionData.churn} className="h-2 [&>div]:bg-red-400" />
+   454→                  </div>
+   455→                  <div className="flex justify-center">
+   456→                    <LineChart data={retentionData.monthly} months={retentionData.months} height={100} color="#10b981" prefix="%" />
+   457→                  </div>
+   458→                </div>
+   459→              </CardContent>
+   460→            </Card>
+   461→          </motion.div>
+   462→        </TabsContent>
+   463→
+   464→        {/* ── Revenue Tab ── */}
+   465→        <TabsContent value="revenue" className="space-y-4 mt-4">
+   466→          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+   467→            <motion.div initial="hidden" animate="visible" variants={fadeUp} custom={2}>
+   468→              <Card className="border-slate-200/60 shadow-sm">
+   469→                <CardHeader className="pb-2">
+   470→                  <CardTitle className="text-sm font-semibold flex items-center gap-2">
+   471→                    <TrendingUp className="h-4 w-4 text-emerald-600" /> Revenue Trend (6 Months)
+   472→                  </CardTitle>
+   473→                </CardHeader>
+   474→                <CardContent className="flex justify-center py-4">
+   475→                  <LineChart data={revenueData.monthly} months={revenueData.months} width={320} height={160} />
+   476→                </CardContent>
+   477→                <div className="px-6 pb-4 grid grid-cols-3 gap-3 text-center">
+   478→                  <div className="p-2 rounded-lg bg-emerald-50">
+   479→                    <p className="text-[10px] text-slate-500">Lowest</p>
+   480→                    <p className="text-sm font-bold text-slate-900">{fmtINR(Math.min(...revenueData.monthly))}</p>
+   481→                  </div>
+   482→                  <div className="p-2 rounded-lg bg-emerald-50">
+   483→                    <p className="text-[10px] text-slate-500">Highest</p>
+   484→                    <p className="text-sm font-bold text-slate-900">{fmtINR(Math.max(...revenueData.monthly))}</p>
+   485→                  </div>
+   486→                  <div className="p-2 rounded-lg bg-emerald-50">
+   487→                    <p className="text-[10px] text-slate-500">Average</p>
+   488→                    <p className="text-sm font-bold text-slate-900">{fmtINR(Math.round(revenueData.monthly.reduce((a, b) => a + b, 0) / revenueData.monthly.length))}</p>
+   489→                  </div>
+   490→                </div>
+   491→              </Card>
+   492→            </motion.div>
+   493→
+   494→            <motion.div initial="hidden" animate="visible" variants={fadeUp} custom={3}>
+   495→              <Card className="border-slate-200/60 shadow-sm">
+   496→                <CardHeader className="pb-2">
+   497→                  <CardTitle className="text-sm font-semibold flex items-center gap-2">
+   498→                    <BarChart3 className="h-4 w-4 text-emerald-600" /> Monthly Revenue Breakdown
+   499→                  </CardTitle>
+   500→                </CardHeader>
+   501→                <CardContent className="flex justify-center py-4">
+   502→                  <BarChart data={revenueData.monthly} months={revenueData.months} width={320} height={160} />
+   503→                </CardContent>
+   504→                <div className="px-6 pb-4 space-y-2">
+   505→                  {revenueData.monthly.map((v, i) => (
+   506→                    <div key={i} className="flex items-center justify-between text-xs">
+   507→                      <span className="text-slate-500">{revenueData.months[i]}</span>
+   508→                      <div className="flex items-center gap-2 flex-1 mx-4">
+   509→                        <Progress value={(v / Math.max(...revenueData.monthly)) * 100} className="h-1.5" />
+   510→                      </div>
+   511→                      <span className="font-medium text-slate-700">{fmtINR(v)}</span>
+   512→                    </div>
+   513→                  ))}
+   514→                </div>
+   515→              </Card>
+   516→            </motion.div>
+   517→          </div>
+   518→
+   519→          {/* Revenue Composition */}
+   520→          <motion.div initial="hidden" animate="visible" variants={fadeUp} custom={4}>
+   521→            <Card className="border-slate-200/60 shadow-sm">
+   522→              <CardHeader className="pb-2">
+   523→                <CardTitle className="text-sm font-semibold">Revenue by Service</CardTitle>
+   524→              </CardHeader>
+   525→              <CardContent>
+   526→                <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+   527→                  {[
+   528→                    { service: 'GST Filing', amount: 4_98_000, pct: 40 },
+   529→                    { service: 'ITC Reconciliation', amount: 2_49_000, pct: 20 },
+   530→                    { service: 'Tax Advisory', amount: 1_86_750, pct: 15 },
+   531→                    { service: 'Compliance', amount: 1_24_500, pct: 10 },
+   532→                    { service: 'Other Services', amount: 1_86_750, pct: 15 },
+   533→                  ].map((s, i) => (
+   534→                    <div key={i} className="p-3 rounded-lg bg-slate-50/80 border border-slate-100">
+   535→                      <p className="text-[10px] text-slate-500 uppercase">{s.service}</p>
+   536→                      <p className="text-sm font-bold text-slate-900 mt-1">{fmtINR(s.amount)}</p>
+   537→                      <Progress value={s.pct} className="h-1.5 mt-2" />
+   538→                      <p className="text-[10px] text-slate-400 mt-1">{s.pct}% of revenue</p>
+   539→                    </div>
+   540→                  ))}
+   541→                </div>
+   542→              </CardContent>
+   543→            </Card>
+   544→          </motion.div>
+   545→        </TabsContent>
+   546→
+   547→        {/* ── Clients Tab ── */}
+   548→        <TabsContent value="clients" className="space-y-4 mt-4">
+   549→          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+   550→            <motion.div initial="hidden" animate="visible" variants={fadeUp} custom={2}>
+   551→              <Card className="border-slate-200/60 shadow-sm">
+   552→                <CardHeader className="pb-2">
+   553→                  <CardTitle className="text-sm font-semibold flex items-center gap-2">
+   554→                    <Users className="h-4 w-4 text-emerald-600" /> Client Health Distribution
+   555→                  </CardTitle>
+   556→                </CardHeader>
+   557→                <CardContent className="flex flex-col items-center py-4">
+   558→                  <PieChartSVG segments={[
+   559→                    { value: clientHealth.healthy, color: '#10b981', label: 'Healthy' },
+   560→                    { value: clientHealth.atRisk, color: '#f59e0b', label: 'At Risk' },
+   561→                    { value: clientHealth.critical, color: '#ef4444', label: 'Critical' },
+   562→                  ]} />
+   563→                  <div className="grid grid-cols-3 gap-4 mt-4 w-full">
+   564→                    <div className="text-center p-2 rounded-lg bg-emerald-50">
+   565→                      <p className="text-lg font-bold text-emerald-700">{clientHealth.healthy}</p>
+   566→                      <p className="text-[10px] text-slate-500">Healthy</p>
+   567→                    </div>
+   568→                    <div className="text-center p-2 rounded-lg bg-amber-50">
+   569→                      <p className="text-lg font-bold text-amber-700">{clientHealth.atRisk}</p>
+   570→                      <p className="text-[10px] text-slate-500">At Risk</p>
+   571→                    </div>
+   572→                    <div className="text-center p-2 rounded-lg bg-red-50">
+   573→                      <p className="text-lg font-bold text-red-700">{clientHealth.critical}</p>
+   574→                      <p className="text-[10px] text-slate-500">Critical</p>
+   575→                    </div>
+   576→                  </div>
+   577→                </CardContent>
+   578→              </Card>
+   579→            </motion.div>
+   580→
+   581→            <motion.div initial="hidden" animate="visible" variants={fadeUp} custom={3}>
+   582→              <Card className="border-slate-200/60 shadow-sm">
+   583→                <CardHeader className="pb-2">
+   584→                  <CardTitle className="text-sm font-semibold flex items-center gap-2">
+   585→                    <Activity className="h-4 w-4 text-emerald-600" /> Retention & Churn
+   586→                  </CardTitle>
+   587→                </CardHeader>
+   588→                <CardContent className="flex flex-col items-center py-4">
+   589→                  <LineChart data={retentionData.monthly} months={retentionData.months} width={280} height={140} color="#10b981" />
+   590→                  <div className="grid grid-cols-2 gap-4 mt-4 w-full">
+   591→                    <div className="text-center p-2 rounded-lg bg-emerald-50">
+   592→                      <p className="text-lg font-bold text-emerald-700">{pct(retentionData.rate)}</p>
+   593→                      <p className="text-[10px] text-slate-500">Retention Rate</p>
+   594→                    </div>
+   595→                    <div className="text-center p-2 rounded-lg bg-red-50">
+   596→                      <p className="text-lg font-bold text-red-700">{pct(retentionData.churn)}</p>
+   597→                      <p className="text-[10px] text-slate-500">Churn Rate</p>
+   598→                    </div>
+   599→                  </div>
+   600→                </CardContent>
+   601→              </Card>
+   602→            </motion.div>
+   603→          </div>
+   604→
+   605→          {/* At-Risk Clients */}
+   606→          <motion.div initial="hidden" animate="visible" variants={fadeUp} custom={4}>
+   607→            <Card className="border-slate-200/60 shadow-sm">
+   608→              <CardHeader className="pb-2">
+   609→                <CardTitle className="text-sm font-semibold flex items-center gap-2">
+   610→                  <Clock className="h-4 w-4 text-amber-500" /> At-Risk Clients
+   611→                </CardTitle>
+   612→              </CardHeader>
+   613→              <CardContent>
+   614→                <ScrollArea className="max-h-64">
+   615→                  <div className="space-y-2">
+   616→                    {[
+   617→                      { name: 'Sunrise Textiles Pvt Ltd', gstin: '27AABCS1234F1Z5', risk: 'high', reason: '3 overdue filings', lastActive: '12/02/2026' },
+   618→                      { name: 'Metro Logistics', gstin: '06AABCM5678G1Z3', risk: 'high', reason: 'Payment pending 45 days', lastActive: '08/03/2026' },
+   619→                      { name: 'Green Earth Exports', gstin: '33AABCG9012H1Z1', risk: 'medium', reason: '2A mismatch detected', lastActive: '01/03/2026' },
+   620→                      { name: 'Pinnacle Industries', gstin: '24AABCP3456K1Z9', risk: 'medium', reason: 'No response 14 days', lastActive: '15/02/2026' },
+   621→                      { name: 'Quantum Solutions', gstin: '29AABCQ7890L1Z7', risk: 'low', reason: 'Slow document upload', lastActive: '25/02/2026' },
+   622→                    ].map((c, i) => (
+   623→                      <div key={i} className="flex items-center justify-between p-3 rounded-lg bg-slate-50/60 border border-slate-100">
+   624→                        <div className="flex items-center gap-3">
+   625→                          <div className={`h-2 w-2 rounded-full ${c.risk === 'high' ? 'bg-red-500' : c.risk === 'medium' ? 'bg-amber-500' : 'bg-emerald-500'}`} />
+   626→                          <div>
+   627→                            <p className="text-xs font-medium text-slate-900">{c.name}</p>
+   628→                            <p className="text-[10px] text-slate-400">{c.gstin}</p>
+   629→                          </div>
+   630→                        </div>
+   631→                        <div className="text-right">
+   632→                          <p className="text-[10px] text-slate-600">{c.reason}</p>
+   633→                          <p className="text-[10px] text-slate-400">Last active: {c.lastActive}</p>
+   634→                        </div>
+   635→                      </div>
+   636→                    ))}
+   637→                  </div>
+   638→                </ScrollArea>
+   639→              </CardContent>
+   640→            </Card>
+   641→          </motion.div>
+   642→        </TabsContent>
+   643→
+   644→        {/* ── Agents Tab ── */}
+   645→        <TabsContent value="agents" className="space-y-4 mt-4">
+   646→          <motion.div initial="hidden" animate="visible" variants={fadeUp} custom={2}>
+   647→            <Card className="border-slate-200/60 shadow-sm">
+   648→              <CardHeader className="pb-2">
+   649→                <CardTitle className="text-sm font-semibold flex items-center gap-2">
+   650→                  <Zap className="h-4 w-4 text-emerald-600" /> AI Agent Performance
+   651→                </CardTitle>
+   652→              </CardHeader>
+   653→              <CardContent>
+   654→                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
+   655→                  {agents.map((agent, i) => (
+   656→                    <motion.div key={i} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
+   657→                      transition={{ delay: i * 0.05 }}
+   658→                      className="p-3 rounded-xl border border-slate-200/80 bg-white hover:shadow-md transition-shadow">
+   659→                      <div className="flex items-center gap-2 mb-2">
+   660→                        <div className={`h-2 w-2 rounded-full ${agent.status === 'active' ? 'bg-emerald-500' : 'bg-slate-300'}`} />
+   661→                        <span className="text-[10px] font-semibold uppercase text-slate-500">
+   662→                          {agent.status === 'active' ? 'Active' : 'Idle'}
+   663→                        </span>
+   664→                      </div>
+   665→                      <p className="text-xs font-bold text-slate-900 mb-2">{agent.name}</p>
+   666→                      <div className="space-y-1.5">
+   667→                        <div className="flex justify-between text-[10px]">
+   668→                          <span className="text-slate-500">Tasks</span>
+   669→                          <span className="font-medium text-slate-700">{agent.tasks}</span>
+   670→                        </div>
+   671→                        <div className="flex justify-between text-[10px]">
+   672→                          <span className="text-slate-500">Success</span>
+   673→                          <span className="font-medium text-emerald-600">{pct(agent.success)}</span>
+   674→                        </div>
+   675→                        <Progress value={agent.success} className="h-1.5" />
+   676→                      </div>
+   677→                    </motion.div>
+   678→                  ))}
+   679→                </div>
+   680→              </CardContent>
+   681→            </Card>
+   682→          </motion.div>
+   683→
+   684→          {/* Agent Summary */}
+   685→          <motion.div initial="hidden" animate="visible" variants={fadeUp} custom={3}>
+   686→            <Card className="border-slate-200/60 shadow-sm">
+   687→              <CardHeader className="pb-2">
+   688→                <CardTitle className="text-sm font-semibold">Agent Summary</CardTitle>
+   689→              </CardHeader>
+   690→              <CardContent>
+   691→                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+   692→                  <div className="text-center p-3 rounded-lg bg-emerald-50">
+   693→                    <p className="text-2xl font-bold text-emerald-700">{agents.filter(a => a.status === 'active').length}</p>
+   694→                    <p className="text-[10px] text-slate-500">Active Agents</p>
+   695→                  </div>
+   696→                  <div className="text-center p-3 rounded-lg bg-slate-50">
+   697→                    <p className="text-2xl font-bold text-slate-700">{agents.reduce((s, a) => s + a.tasks, 0).toLocaleString('en-IN')}</p>
+   698→                    <p className="text-[10px] text-slate-500">Total Tasks</p>
+   699→                  </div>
+   700→                  <div className="text-center p-3 rounded-lg bg-emerald-50">
+   701→                    <p className="text-2xl font-bold text-emerald-700">{pct(agents.reduce((s, a) => s + a.success, 0) / agents.length)}</p>
+   702→                    <p className="text-[10px] text-slate-500">Avg Success Rate</p>
+   703→                  </div>
+   704→                  <div className="text-center p-3 rounded-lg bg-slate-50">
+   705→                    <p className="text-2xl font-bold text-slate-700">{aiTasksPerDay}</p>
+   706→                    <p className="text-[10px] text-slate-500">Tasks / Day</p>
+   707→                  </div>
+   708→                </div>
+   709→              </CardContent>
+   710→            </Card>
+   711→          </motion.div>
+   712→        </TabsContent>
+   713→
+   714→        {/* ── Forecasts Tab ── */}
+   715→        <TabsContent value="forecasts" className="space-y-4 mt-4">
+   716→          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+   717→            <motion.div initial="hidden" animate="visible" variants={fadeUp} custom={2}>
+   718→              <Card className="border-slate-200/60 shadow-sm">
+   719→                <CardHeader className="pb-2">
+   720→                  <CardTitle className="text-sm font-semibold flex items-center gap-2">
+   721→                    <TrendingUp className="h-4 w-4 text-emerald-600" /> Revenue Forecast (Next 6 Months)
+   722→                  </CardTitle>
+   723→                </CardHeader>
+   724→                <CardContent className="flex flex-col items-center py-4">
+   725→                  <LineChart data={forecastData.revenue} months={forecastData.months} width={320} height={160} color="#10b981" />
+   726→                  <div className="grid grid-cols-3 gap-3 mt-4 w-full">
+   727→                    <div className="text-center p-2 rounded-lg bg-emerald-50">
+   728→                      <p className="text-xs font-bold text-emerald-700">{fmtINR(forecastData.revenue[0])}</p>
+   729→                      <p className="text-[10px] text-slate-500">Next Month</p>
+   730→                    </div>
+   731→                    <div className="text-center p-2 rounded-lg bg-emerald-50">
+   732→                      <p className="text-xs font-bold text-emerald-700">{fmtINR(forecastData.revenue[2])}</p>
+   733→                      <p className="text-[10px] text-slate-500">+3 Months</p>
+   734→                    </div>
+   735→                    <div className="text-center p-2 rounded-lg bg-emerald-50">
+   736→                      <p className="text-xs font-bold text-emerald-700">{fmtINR(forecastData.revenue[5])}</p>
+   737→                      <p className="text-[10px] text-slate-500">+6 Months</p>
+   738→                    </div>
+   739→                  </div>
+   740→                </CardContent>
+   741→              </Card>
+   742→            </motion.div>
+   743→
+   744→            <motion.div initial="hidden" animate="visible" variants={fadeUp} custom={3}>
+   745→              <Card className="border-slate-200/60 shadow-sm">
+   746→                <CardHeader className="pb-2">
+   747→                  <CardTitle className="text-sm font-semibold flex items-center gap-2">
+   748→                    <Users className="h-4 w-4 text-emerald-600" /> Client Growth Forecast
+   749→                  </CardTitle>
+   750→                </CardHeader>
+   751→                <CardContent className="flex flex-col items-center py-4">
+   752→                  <BarChart data={forecastData.clientGrowth} months={forecastData.months} width={320} height={160} color="#10b981" />
+   753→                  <div className="grid grid-cols-3 gap-3 mt-4 w-full">
+   754→                    <div className="text-center p-2 rounded-lg bg-emerald-50">
+   755→                      <p className="text-xs font-bold text-emerald-700">{forecastData.clientGrowth[0]}</p>
+   756→                      <p className="text-[10px] text-slate-500">Next Month</p>
+   757→                    </div>
+   758→                    <div className="text-center p-2 rounded-lg bg-emerald-50">
+   759→                      <p className="text-xs font-bold text-emerald-700">{forecastData.clientGrowth[2]}</p>
+   760→                      <p className="text-[10px] text-slate-500">+3 Months</p>
+   761→                    </div>
+   762→                    <div className="text-center p-2 rounded-lg bg-emerald-50">
+   763→                      <p className="text-xs font-bold text-emerald-700">{forecastData.clientGrowth[5]}</p>
+   764→                      <p className="text-[10px] text-slate-500">+6 Months</p>
+   765→                    </div>
+   766→                  </div>
+   767→                </CardContent>
+   768→              </Card>
+   769→            </motion.div>
+   770→          </div>
+   771→
+   772→          {/* Forecast Summary */}
+   773→          <motion.div initial="hidden" animate="visible" variants={fadeUp} custom={4}>
+   774→            <Card className="border-slate-200/60 shadow-sm">
+   775→              <CardHeader className="pb-2">
+   776→                <CardTitle className="text-sm font-semibold flex items-center gap-2">
+   777→                  <FileText className="h-4 w-4 text-emerald-600" /> AI Forecast Analysis
+   778→                </CardTitle>
+   779→              </CardHeader>
+   780→              <CardContent>
+   781→                <div className="space-y-3">
+   782→                  {[
+   783→                    { title: 'Revenue Trajectory', desc: 'Based on current growth rate of 18.4%, projected ARR will reach ₹1,77,00,000 by Sep 2026 — a 29.9% increase.', confidence: 87 },
+   784→                    { title: 'Client Acquisition', desc: 'Expecting 15 net new clients in next 6 months. Primary growth from SME segment in Maharashtra and Karnataka.', confidence: 82 },
+   785→                    { title: 'Churn Prevention', desc: '5 at-risk clients identified. Proactive engagement could save ₹4,20,000 in annual revenue.', confidence: 91 },
+   786→                    { title: 'Capacity Planning', desc: 'Current team can handle up to 62 clients. Recommend hiring 1 senior CA by Q3 to maintain service quality.', confidence: 76 },
+   787→                  ].map((f, i) => (
+   788→                    <div key={i} className="p-3 rounded-lg border border-slate-100 bg-slate-50/60">
+   789→                      <div className="flex items-center justify-between mb-1">
+   790→                        <p className="text-xs font-semibold text-slate-900">{f.title}</p>
+   791→                        <Badge variant="outline" className="text-[10px] gap-1">
+   792→                          <CheckCircle className="h-3 w-3 text-emerald-500" /> {f.confidence}% confidence
+   793→                        </Badge>
+   794→                      </div>
+   795→                      <p className="text-[11px] text-slate-600 leading-relaxed">{f.desc}</p>
+   796→                    </div>
+   797→                  ))}
+   798→                </div>
+   799→              </CardContent>
+   800→            </Card>
+   801→          </motion.div>
+   802→        </TabsContent>
+   803→      </Tabs>
+   804→    </div>
+   805→  )
+   806→}
+   807→

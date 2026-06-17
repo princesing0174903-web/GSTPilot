@@ -1,0 +1,1457 @@
+     1→'use client';
+     2→
+     3→// ═══════════════════════════════════════════════════════════════════════════════
+     4→// GSTPilot Intelligence™ — The AI Brain of Your Business
+     5→// A global floating AI assistant: Jarvis + ChatGPT Voice + Palantir + Cursor
+     6→// for Indian CAs and businesses.
+     7→//
+     8→// Features:
+     9→//   • Draggable breathing orb with orbiting particles + pulse ring
+    10→//   • Glassmorphism command panel (minimized / normal / fullscreen)
+    11→//   • Streaming chat with typing animation + action chips
+    12→//   • Voice input (SpeechRecognition) + Voice output (SpeechSynthesis, en-IN)
+    13→//   • Live Firestore data context (clients, invoices, returns, notifications, activities)
+    14→//   • Ctrl+K / Cmd+K to toggle, Escape to close
+    15→//   • Light + dark theme support via next-themes
+    16→//   • Mobile responsive (auto-fullscreen < 640px)
+    17→// ═══════════════════════════════════════════════════════════════════════════════
+    18→
+    19→import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+    20→import { motion, AnimatePresence, useMotionValue } from 'framer-motion';
+    21→import { useTheme } from 'next-themes';
+    22→import { toast } from 'sonner';
+    23→import {
+    24→  Sparkles, Brain, Bot, X, Minus, Maximize2, Maximize,
+    25→  ArrowUp, Mic, MicOff, Volume2, VolumeX, Send,
+    26→  ArrowRight, Play, Plus, FileText,
+    27→  Wallet, BookOpen, Briefcase, Landmark, Receipt, Package,
+    28→  ShieldCheck, Network, TrendingUp, Zap,
+    29→} from 'lucide-react';
+    30→import { Button } from '@/components/ui/button';
+    31→import { Badge } from '@/components/ui/badge';
+    32→import { ScrollArea } from '@/components/ui/scroll-area';
+    33→import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
+    34→import { useAuth } from '@/contexts/AuthContext';
+    35→import { useApp, type AppView } from '@/contexts/AppContext';
+    36→import {
+    37→  useFireClients,
+    38→  useFireInvoices,
+    39→  useFireReturns,
+    40→  useFireNotifications,
+    41→  useFireActivities,
+    42→} from '@/hooks/use-firestore';
+    43→
+    44→// ─── Types ────────────────────────────────────────────────────────────────────
+    45→
+    46→type ActionType =
+    47→  | 'navigate'
+    48→  | 'execute_workflow'
+    49→  | 'send_reminder'
+    50→  | 'create_task'
+    51→  | 'generate_report';
+    52→
+    53→interface AIAction {
+    54→  type: ActionType | string;
+    55→  title: string;
+    56→  description: string;
+    57→  payload?: Record<string, unknown>;
+    58→}
+    59→
+    60→interface ChatMessage {
+    61→  id: string;
+    62→  role: 'user' | 'assistant';
+    63→  content: string;
+    64→  timestamp: number;
+    65→  actions?: AIAction[];
+    66→}
+    67→
+    68→interface IntelligenceApiResponse {
+    69→  answer: string;
+    70→  actions: AIAction[];
+    71→  suggestedPrompts: string[];
+    72→  intent: string;
+    73→}
+    74→
+    75→interface SpeechRecognitionLike {
+    76→  continuous: boolean;
+    77→  interimResults: boolean;
+    78→  lang: string;
+    79→  start: () => void;
+    80→  stop: () => void;
+    81→  abort: () => void;
+    82→  onresult: ((event: SpeechRecognitionEventLike) => void) | null;
+    83→  onerror: ((event: SpeechRecognitionErrorLike) => void) | null;
+    84→  onend: (() => void) | null;
+    85→  onstart: (() => void) | null;
+    86→}
+    87→
+    88→// Constructor signature for the browser SpeechRecognition API
+    89→type SpeechRecognitionConstructor = new () => SpeechRecognitionLike;
+    90→
+    91→interface SpeechRecognitionEventLike {
+    92→  results: ArrayLike<{
+    93→    0: { transcript: string };
+    94→    isFinal: boolean;
+    95→    length: number;
+    96→  }>;
+    97→  resultIndex: number;
+    98→}
+    99→
+   100→interface SpeechRecognitionErrorLike {
+   101→  error: string;
+   102→  message?: string;
+   103→}
+   104→
+   105→// ─── Constants ────────────────────────────────────────────────────────────────
+   106→
+   107→const SUGGESTED_PROMPTS: string[] = [
+   108→  'Show pending returns',
+   109→  'Which clients are risky?',
+   110→  'What revenue will I make next month?',
+   111→  'Run my firm',
+   112→  'Run my business',
+   113→  'Who is overloaded?',
+   114→  'Why did collections drop?',
+   115→  "Show today's priorities",
+   116→];
+   117→
+   118→interface QuickModule {
+   119→  label: string;
+   120→  view: AppView;
+   121→  icon: typeof FileText;
+   122→}
+   123→
+   124→const QUICK_MODULES: QuickModule[] = [
+   125→  { label: 'Returns', view: 'returns', icon: FileText },
+   126→  { label: 'Accounting', view: 'accounting', icon: BookOpen },
+   127→  { label: 'Payroll', view: 'payroll', icon: Wallet },
+   128→  { label: 'CRM', view: 'crm', icon: Briefcase },
+   129→  { label: 'Banking', view: 'banking', icon: Landmark },
+   130→  { label: 'Payments', view: 'payments', icon: Receipt },
+   131→  { label: 'Inventory', view: 'inventory', icon: Package },
+   132→  { label: 'Compliance', view: 'reconcile', icon: ShieldCheck },
+   133→  { label: 'Graph', view: 'business-graph', icon: Network },
+   134→  { label: 'Predict', view: 'ai-predictions', icon: TrendingUp },
+   135→];
+   136→
+   137→const WORKFLOW_VIEWS: Record<string, AppView> = {
+   138→  run_my_firm: 'autopilot',
+   139→  run_my_business: 'run-my-business',
+   140→  run_india_business: 'run-india-business',
+   141→  run_my_company: 'run-my-company',
+   142→};
+   143→
+   144→const ORB_SIZE = 64; // px
+   145→const PANEL_WIDTH = 420;
+   146→const PANEL_HEIGHT = 580;
+   147→const MOBILE_BREAKPOINT = 640;
+   148→
+   149→// ─── Helpers ──────────────────────────────────────────────────────────────────
+   150→
+   151→function formatINR(amount: number): string {
+   152→  if (!isFinite(amount) || isNaN(amount)) return '₹0';
+   153→  return '₹' + Math.round(amount).toLocaleString('en-IN');
+   154→}
+   155→
+   156→function formatDate(ts: number | string | undefined): string {
+   157→  try {
+   158→    const d = typeof ts === 'number' ? new Date(ts) : new Date(ts as string);
+   159→    if (isNaN(d.getTime())) return '—';
+   160→    const dd = String(d.getDate()).padStart(2, '0');
+   161→    const mm = String(d.getMonth() + 1).padStart(2, '0');
+   162→    const yyyy = d.getFullYear();
+   163→    return `${dd}/${mm}/${yyyy}`;
+   164→  } catch {
+   165→    return '—';
+   166→  }
+   167→}
+   168→
+   169→function formatTime(ts: number): string {
+   170→  const d = new Date(ts);
+   171→  let h = d.getHours();
+   172→  const m = String(d.getMinutes()).padStart(2, '0');
+   173→  const ampm = h >= 12 ? 'PM' : 'AM';
+   174→  h = h % 12 || 12;
+   175→  return `${h}:${m} ${ampm}`;
+   176→}
+   177→
+   178→function genId(): string {
+   179→  return `msg_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+   180→}
+   181→
+   182→// ─── Live Data Context Builder ────────────────────────────────────────────────
+   183→// Safely composes a context string from live Firestore hooks. Never throws.
+   184→
+   185→function buildLiveDataContext(opts: {
+   186→  clients: Array<Record<string, unknown>>;
+   187→  invoices: Array<Record<string, unknown>>;
+   188→  returns: Array<Record<string, unknown>>;
+   189→  notifications: Array<Record<string, unknown>>;
+   190→  activities: Array<Record<string, unknown>>;
+   191→}): string {
+   192→  try {
+   193→    const { clients, invoices, returns, notifications, activities } = opts;
+   194→    const now = new Date();
+   195→    const dd = String(now.getDate()).padStart(2, '0');
+   196→    const mm = String(now.getMonth() + 1).padStart(2, '0');
+   197→    const yyyy = now.getFullYear();
+   198→    const hh = String(now.getHours()).padStart(2, '0');
+   199→    const min = String(now.getMinutes()).padStart(2, '0');
+   200→    const stamp = `${dd}/${mm}/${yyyy} ${hh}:${min}`;
+   201→
+   202→    const lines: string[] = [`LIVE DATA SNAPSHOT (${stamp}):`];
+   203→
+   204→    // Clients
+   205→    const totalClients = clients.length;
+   206→    const activeClients = clients.filter((c) => c.status === 'active').length;
+   207→    lines.push(`- Total clients: ${totalClients}`);
+   208→    lines.push(`- Active clients: ${activeClients}`);
+   209→
+   210→    // Invoices
+   211→    const activeInvoices = invoices.filter(
+   212→      (i) => i.status !== 'cancelled' && i.status !== 'draft',
+   213→    );
+   214→    const totalInvoiceValue = activeInvoices.reduce((s, i) => {
+   215→      const v =
+   216→        (i.totalAmount as number) ||
+   217→        (i.grandTotal as number) ||
+   218→        (i.total as number) ||
+   219→        ((i.subTotal as number) || 0) + ((i.totalTax as number) || 0);
+   220→      return s + (typeof v === 'number' ? v : 0);
+   221→    }, 0);
+   222→    const overdueInvoices = activeInvoices.filter((i) => {
+   223→      const status = i.status as string;
+   224→      return status === 'overdue' || status === 'unpaid';
+   225→    });
+   226→    const overdueValue = overdueInvoices.reduce((s, i) => {
+   227→      const v =
+   228→        (i.totalAmount as number) ||
+   229→        (i.grandTotal as number) ||
+   230→        (i.total as number) ||
+   231→        0;
+   232→      return s + (typeof v === 'number' ? v : 0);
+   233→    }, 0);
+   234→    lines.push(
+   235→      `- Active invoices: ${activeInvoices.length} (${formatINR(totalInvoiceValue)} total)`,
+   236→    );
+   237→    lines.push(
+   238→      `- Overdue invoices: ${overdueInvoices.length} (${formatINR(overdueValue)})`,
+   239→    );
+   240→
+   241→    // Returns
+   242→    const gstr1Pending = returns.filter(
+   243→      (r) => (r.returnType as string) === 'GSTR-1' && (r.status as string) !== 'filed',
+   244→    ).length;
+   245→    const gstr3bPending = returns.filter(
+   246→      (r) => (r.returnType as string) === 'GSTR-3B' && (r.status as string) !== 'filed',
+   247→    ).length;
+   248→    const filedReturns = returns.filter((r) => r.status === 'filed').length;
+   249→    lines.push(
+   250→      `- Pending returns: ${gstr1Pending} GSTR-1, ${gstr3bPending} GSTR-3B`,
+   251→    );
+   252→    lines.push(`- Filed returns: ${filedReturns}`);
+   253→
+   254→    // Notifications + Activities
+   255→    const unread = notifications.filter((n) => n.read === false).length;
+   256→    lines.push(`- Unread notifications: ${unread}`);
+   257→    lines.push(`- Recent activities: ${activities.length} in last 24h`);
+   258→
+   259→    // Top 5 clients by revenue
+   260→    const clientRevenue = new Map<string, number>();
+   261→    invoices.forEach((inv) => {
+   262→      const cid = (inv.clientId as string) || (inv.clientName as string) || 'unknown';
+   263→      const v =
+   264→        (inv.totalAmount as number) ||
+   265→        (inv.grandTotal as number) ||
+   266→        (inv.total as number) ||
+   267→        0;
+   268→      clientRevenue.set(cid, (clientRevenue.get(cid) || 0) + (typeof v === 'number' ? v : 0));
+   269→    });
+   270→    const top5 = [...clientRevenue.entries()]
+   271→      .sort((a, b) => b[1] - a[1])
+   272→      .slice(0, 5);
+   273→    if (top5.length > 0) {
+   274→      const top5Str = top5
+   275→        .map(([name, rev]) => {
+   276→          const client = clients.find(
+   277→            (c) => c.id === name || (c.tradeName as string) === name,
+   278→          );
+   279→          const label = (client?.tradeName as string) || name;
+   280→          return `${label} (${formatINR(rev)})`;
+   281→        })
+   282→        .join(', ');
+   283→      lines.push(`- Top 5 clients by revenue: ${top5Str}`);
+   284→    }
+   285→
+   286→    // High-risk clients (health score < 60)
+   287→    const highRisk = clients.filter((c) => {
+   288→      const score = (c.healthScore as number) ?? 100;
+   289→      return typeof score === 'number' && score < 60;
+   290→    });
+   291→    if (highRisk.length > 0) {
+   292→      const riskStr = highRisk
+   293→        .slice(0, 5)
+   294→        .map(
+   295→          (c) =>
+   296→            `${(c.tradeName as string) || (c.name as string) || 'Unknown'} (health ${c.healthScore ?? '?'})`,
+   297→        )
+   298→        .join(', ');
+   299→      lines.push(`- High-risk clients: ${riskStr}`);
+   300→    }
+   301→
+   302→    return lines.join('\n');
+   303→  } catch {
+   304→    return 'LIVE DATA SNAPSHOT: Data currently unavailable.';
+   305→  }
+   306→}
+   307→
+   308→// ─── Sub-component: Orbiting Particles ────────────────────────────────────────
+   309→
+   310→function OrbParticles() {
+   311→  const particles = useMemo(
+   312→    () =>
+   313→      Array.from({ length: 6 }, (_, i) => ({
+   314→        id: i,
+   315→        angle: (i * 60 * Math.PI) / 180,
+   316→      })),
+   317→    [],
+   318→  );
+   319→
+   320→  return (
+   321→    <motion.div
+   322→      className="pointer-events-none absolute inset-0"
+   323→      animate={{ rotate: 360 }}
+   324→      transition={{ duration: 8, repeat: Infinity, ease: 'linear' }}
+   325→    >
+   326→      {particles.map((p) => {
+   327→        const radius = 36; // px from center
+   328→        const x = Math.cos(p.angle) * radius;
+   329→        const y = Math.sin(p.angle) * radius;
+   330→        return (
+   331→          <span
+   332→            key={p.id}
+   333→            className="absolute left-1/2 top-1/2 h-1 w-1 rounded-full bg-emerald-200"
+   334→            style={{
+   335→              transform: `translate(${x}px, ${y}px) translate(-50%, -50%)`,
+   336→              boxShadow: '0 0 6px 1px rgba(16, 185, 129, 0.9)',
+   337→              filter: 'blur(0.5px)',
+   338→            }}
+   339→          />
+   340→        );
+   341→      })}
+   342→    </motion.div>
+   343→  );
+   344→}
+   345→
+   346→// ─── Sub-component: Expanding Pulse Ring ──────────────────────────────────────
+   347→
+   348→function PulseRing() {
+   349→  return (
+   350→    <motion.span
+   351→      className="pointer-events-none absolute inset-0 rounded-full border border-emerald-400/60"
+   352→      initial={{ scale: 1, opacity: 0.6 }}
+   353→      animate={{ scale: 2.5, opacity: 0 }}
+   354→      transition={{ duration: 4, repeat: Infinity, ease: 'easeOut' }}
+   355→    />
+   356→  );
+   357→}
+   358→
+   359→// ─── Sub-component: Thinking Dots ─────────────────────────────────────────────
+   360→
+   361→function ThinkingDots() {
+   362→  return (
+   363→    <div className="flex items-center gap-1.5 px-1 py-0.5">
+   364→      {[0, 0.15, 0.3].map((delay, i) => (
+   365→        <motion.span
+   366→          key={i}
+   367→          className="h-2 w-2 rounded-full bg-emerald-400"
+   368→          animate={{ y: [0, -6, 0] }}
+   369→          transition={{
+   370→            duration: 0.6,
+   371→            repeat: Infinity,
+   372→            ease: 'easeInOut',
+   373→            delay,
+   374→          }}
+   375→        />
+   376→      ))}
+   377→    </div>
+   378→  );
+   379→}
+   380→
+   381→// ─── Sub-component: Message Content (mini-markdown) ───────────────────────────
+   382→// Renders **bold**, line breaks, and bullet points (•).
+   383→
+   384→function MessageContent({ text }: { text: string }) {
+   385→  const blocks = useMemo(() => {
+   386→    const paragraphs = text.split('\n');
+   387→    return paragraphs.map((line) => {
+   388→      const trimmed = line.trim();
+   389→      if (trimmed.startsWith('• ') || trimmed.startsWith('- ')) {
+   390→        return { type: 'bullet' as const, content: trimmed.slice(2) };
+   391→      }
+   392→      if (/^\d+\.\s/.test(trimmed)) {
+   393→        return { type: 'numbered' as const, content: trimmed.replace(/^\d+\.\s/, '') };
+   394→      }
+   395→      return { type: 'text' as const, content: trimmed };
+   396→    });
+   397→  }, [text]);
+   398→
+   399→  const renderInline = (s: string, keyBase: string) => {
+   400→    // Split on **bold** markers
+   401→    const parts = s.split(/(\*\*[^*]+\*\*)/g);
+   402→    return parts.map((part, i) => {
+   403→      if (part.startsWith('**') && part.endsWith('**')) {
+   404→        return (
+   405→          <strong key={`${keyBase}-${i}`} className="font-semibold text-foreground">
+   406→            {part.slice(2, -2)}
+   407→          </strong>
+   408→        );
+   409→      }
+   410→      return <span key={`${keyBase}-${i}`}>{part}</span>;
+   411→    });
+   412→  };
+   413→
+   414→  return (
+   415→    <div className="space-y-1">
+   416→      {blocks.map((b, idx) => {
+   417→        if (b.type === 'bullet') {
+   418→          return (
+   419→            <div key={idx} className="flex gap-2">
+   420→              <span className="mt-0.5 text-emerald-400">•</span>
+   421→              <span>{renderInline(b.content, `b${idx}`)}</span>
+   422→            </div>
+   423→          );
+   424→        }
+   425→        if (b.type === 'numbered') {
+   426→          return (
+   427→            <div key={idx} className="flex gap-2">
+   428→              <span className="text-emerald-400 font-medium">{idx + 1}.</span>
+   429→              <span>{renderInline(b.content, `n${idx}`)}</span>
+   430→            </div>
+   431→          );
+   432→        }
+   433→        if (!b.content) return <div key={idx} className="h-1" />;
+   434→        return <p key={idx}>{renderInline(b.content, `t${idx}`)}</p>;
+   435→      })}
+   436→    </div>
+   437→  );
+   438→}
+   439→
+   440→// ─── Sub-component: Action Chip ───────────────────────────────────────────────
+   441→
+   442→function ActionChip({
+   443→  action,
+   444→  onActivate,
+   445→}: {
+   446→  action: AIAction;
+   447→  onActivate: (a: AIAction) => void;
+   448→}) {
+   449→  const icon = useMemo(() => {
+   450→    switch (action.type) {
+   451→      case 'navigate':
+   452→        return ArrowRight;
+   453→      case 'execute_workflow':
+   454→        return Play;
+   455→      case 'send_reminder':
+   456→        return Send;
+   457→      case 'create_task':
+   458→        return Plus;
+   459→      case 'generate_report':
+   460→        return FileText;
+   461→      default:
+   462→        return Zap;
+   463→    }
+   464→  }, [action.type]);
+   465→
+   466→  const Icon = icon;
+   467→
+   468→  return (
+   469→    <motion.button
+   470→      whileHover={{ scale: 1.03 }}
+   471→      whileTap={{ scale: 0.97 }}
+   472→      onClick={() => onActivate(action)}
+   473→      className="group inline-flex items-center gap-1.5 rounded-full border border-emerald-400/30 bg-emerald-500/10 px-3 py-1.5 text-xs font-medium text-emerald-700 dark:text-emerald-300 transition-colors hover:border-emerald-400/60 hover:bg-emerald-500/20"
+   474→      aria-label={action.title}
+   475→    >
+   476→      <Icon className="h-3 w-3" />
+   477→      <span>{action.title}</span>
+   478→    </motion.button>
+   479→  );
+   480→}
+   481→
+   482→// ─── Hook: Typing Effect ──────────────────────────────────────────────────────
+   483→// Reveals text progressively in small chunks for a "typing" feel.
+   484→
+   485→function useTypingEffect(fullText: string, active: boolean, speed = 16, chunkSize = 3) {
+   486→  // revealLength is only mutated inside the interval callback (never
+   487→  // synchronously in the effect body), which keeps React's
+   488→  // set-state-in-effect lint rule happy and avoids cascading renders.
+   489→  const [revealLength, setRevealLength] = useState(0);
+   490→
+   491→  useEffect(() => {
+   492→    if (!active) return;
+   493→    let i = 0;
+   494→    const interval = setInterval(() => {
+   495→      i += chunkSize;
+   496→      setRevealLength(i);
+   497→      if (i >= fullText.length) {
+   498→        clearInterval(interval);
+   499→      }
+   500→    }, speed);
+   501→    return () => clearInterval(interval);
+   502→  }, [fullText, active, speed, chunkSize]);
+   503→
+   504→  // When not active (e.g. older messages), show the full text instantly
+   505→  // via a derived value — no state mutation required.
+   506→  const displayed = active ? fullText.slice(0, revealLength) : fullText;
+   507→  const completed = displayed.length >= fullText.length;
+   508→
+   509→  return { displayed, completed };
+   510→}
+   511→
+   512→// ─── Typing Message Wrapper ───────────────────────────────────────────────────
+   513→// Renders an AI message with a progressive typing reveal.
+   514→
+   515→function TypingMessage({
+   516→  message,
+   517→  isLatest,
+   518→  onTypingComplete,
+   519→}: {
+   520→  message: ChatMessage;
+   521→  isLatest: boolean;
+   522→  onTypingComplete: () => void;
+   523→}) {
+   524→  const { displayed, completed } = useTypingEffect(
+   525→    message.content,
+   526→    isLatest,
+   527→    16,
+   528→    3,
+   529→  );
+   530→
+   531→  useEffect(() => {
+   532→    if (completed && isLatest) {
+   533→      onTypingComplete();
+   534→    }
+   535→  }, [completed, isLatest, onTypingComplete]);
+   536→
+   537→  return (
+   538→    <div className="space-y-1">
+   539→      <MessageContent text={displayed} />
+   540→      {!completed && (
+   541→        <motion.span
+   542→          className="inline-block h-3.5 w-1.5 rounded-sm bg-emerald-400 align-middle"
+   543→          animate={{ opacity: [1, 0, 1] }}
+   544→          transition={{ duration: 0.8, repeat: Infinity }}
+   545→        />
+   546→      )}
+   547→    </div>
+   548→  );
+   549→}
+   550→
+   551→// ═══════════════════════════════════════════════════════════════════════════════
+   552→// MAIN COMPONENT
+   553→// ═══════════════════════════════════════════════════════════════════════════════
+   554→
+   555→export default function GSTPilotIntelligence() {
+   556→  const { user } = useAuth();
+   557→  const { currentScreen, setCurrentView } = useApp();
+   558→  const { theme, systemTheme } = useTheme();
+   559→
+   560→  // ── Firestore live data hooks (always called — rules of hooks) ──
+   561→  // These hooks internally handle null user / Firebase errors gracefully.
+   562→  const clientsHook = useFireClients();
+   563→  const invoicesHook = useFireInvoices();
+   564→  const returnsHook = useFireReturns();
+   565→  const notificationsHook = useFireNotifications();
+   566→  const activitiesHook = useFireActivities();
+   567→
+   568→  // ── State ──
+   569→  const [isOpen, setIsOpen] = useState(false);
+   570→  const [isMinimized, setIsMinimized] = useState(false);
+   571→  const [isFullscreen, setIsFullscreen] = useState(false);
+   572→  const [isListening, setIsListening] = useState(false);
+   573→  const [speechEnabled, setSpeechEnabled] = useState(false);
+   574→  const [isThinking, setIsThinking] = useState(false);
+   575→  const [messages, setMessages] = useState<ChatMessage[]>([]);
+   576→  const [input, setInput] = useState('');
+   577→  const [isMobile, setIsMobile] = useState(false);
+   578→  const [typedMessageId, setTypedMessageId] = useState<string | null>(null);
+   579→
+   580→  // ── Refs ──
+   581→  const orbX = useMotionValue(0);
+   582→  const orbY = useMotionValue(0);
+   583→  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
+   584→  const messagesEndRef = useRef<HTMLDivElement | null>(null);
+   585→  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+   586→  const speechSupportedRef = useRef<boolean>(false);
+   587→
+   588→  // ── Derived theme ──
+   589→  const isDark =
+   590→    theme === 'dark' || (theme === 'system' && systemTheme === 'dark');
+   591→
+   592→  // ── Build live data context (memoized, never throws) ──
+   593→  const liveContext = useMemo(
+   594→    () =>
+   595→      buildLiveDataContext({
+   596→        clients: (clientsHook.data || []) as unknown as Array<Record<string, unknown>>,
+   597→        invoices: (invoicesHook.data || []) as unknown as Array<Record<string, unknown>>,
+   598→        returns: (returnsHook.data || []) as unknown as Array<Record<string, unknown>>,
+   599→        notifications: (notificationsHook.data || []) as unknown as Array<Record<string, unknown>>,
+   600→        activities: (activitiesHook.data || []) as unknown as Array<Record<string, unknown>>,
+   601→      }),
+   602→    [
+   603→      clientsHook.data,
+   604→      invoicesHook.data,
+   605→      returnsHook.data,
+   606→      notificationsHook.data,
+   607→      activitiesHook.data,
+   608→    ],
+   609→  );
+   610→
+   611→  // ── Conversation history for API context (last 8) ──
+   612→  const conversationHistory = useMemo(
+   613→    () =>
+   614→      messages.slice(-8).map((m) => ({
+   615→        role: m.role,
+   616→        content: m.content,
+   617→      })),
+   618→    [messages],
+   619→  );
+   620→
+   621→  // ── Mobile detection ──
+   622→  useEffect(() => {
+   623→    const check = () =>
+   624→      setIsMobile(window.innerWidth < MOBILE_BREAKPOINT);
+   625→    check();
+   626→    window.addEventListener('resize', check);
+   627→    return () => window.removeEventListener('resize', check);
+   628→  }, []);
+   629→
+   630→  // ── Auto-scroll to bottom on new messages ──
+   631→  useEffect(() => {
+   632→    if (messagesEndRef.current) {
+   633→      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+   634→    }
+   635→  }, [messages, isThinking]);
+   636→
+   637→  // ── Speech recognition support check ──
+   638→  useEffect(() => {
+   639→    if (typeof window === 'undefined') return;
+   640→    const SR =
+   641→      (window as unknown as { SpeechRecognition?: unknown }).SpeechRecognition ||
+   642→      (window as unknown as { webkitSpeechRecognition?: unknown })
+   643→        .webkitSpeechRecognition;
+   644→    speechSupportedRef.current = !!SR;
+   645→  }, []);
+   646→
+   647→  // ── Keyboard shortcuts: Ctrl/Cmd+K to toggle, Escape to close ──
+   648→  useEffect(() => {
+   649→    const handler = (e: KeyboardEvent) => {
+   650→      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+   651→        e.preventDefault();
+   652→        setIsOpen((prev) => !prev);
+   653→        return;
+   654→      }
+   655→      if (e.key === 'Escape' && isOpen) {
+   656→        setIsOpen(false);
+   657→        setIsMinimized(false);
+   658→        setIsFullscreen(false);
+   659→      }
+   660→    };
+   661→    window.addEventListener('keydown', handler);
+   662→    return () => window.removeEventListener('keydown', handler);
+   663→  }, [isOpen]);
+   664→
+   665→  // ── Stop speech when panel closes ──
+   666→  useEffect(() => {
+   667→    if (!isOpen && typeof window !== 'undefined' && window.speechSynthesis) {
+   668→      window.speechSynthesis.cancel();
+   669→    }
+   670→  }, [isOpen]);
+   671→
+   672→  // ── Cleanup speech recognition on unmount ──
+   673→  useEffect(() => {
+   674→    return () => {
+   675→      if (recognitionRef.current) {
+   676→        try {
+   677→          recognitionRef.current.abort();
+   678→        } catch {
+   679→          /* noop */
+   680→        }
+   681→      }
+   682→      if (typeof window !== 'undefined' && window.speechSynthesis) {
+   683→        window.speechSynthesis.cancel();
+   684→      }
+   685→    };
+   686→  }, []);
+   687→
+   688→  // ── Auto-grow textarea ──
+   689→  useEffect(() => {
+   690→    const ta = textareaRef.current;
+   691→    if (!ta) return;
+   692→    ta.style.height = 'auto';
+   693→    ta.style.height = Math.min(ta.scrollHeight, 96) + 'px';
+   694→  }, [input]);
+   695→
+   696→  // ── Send message to API ──
+   697→  const sendMessage = useCallback(
+   698→    async (question: string) => {
+   699→      const trimmed = question.trim();
+   700→      if (!trimmed || isThinking) return;
+   701→
+   702→      // Stop any ongoing speech
+   703→      if (typeof window !== 'undefined' && window.speechSynthesis) {
+   704→        window.speechSynthesis.cancel();
+   705→      }
+   706→
+   707→      const userMsg: ChatMessage = {
+   708→        id: genId(),
+   709→        role: 'user',
+   710→        content: trimmed,
+   711→        timestamp: Date.now(),
+   712→      };
+   713→      setMessages((prev) => [...prev, userMsg]);
+   714→      setInput('');
+   715→      setIsThinking(true);
+   716→
+   717→      // Build conversation history including the new message
+   718→      const history = [...messages.slice(-7), { role: 'user' as const, content: trimmed }];
+   719→
+   720→      try {
+   721→        const res = await fetch('/api/intelligence', {
+   722→          method: 'POST',
+   723→          headers: { 'Content-Type': 'application/json' },
+   724→          body: JSON.stringify({
+   725→            question: trimmed,
+   726→            context: liveContext,
+   727→            conversationHistory: history,
+   728→          }),
+   729→        });
+   730→
+   731→        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+   732→
+   733→        const data: IntelligenceApiResponse = await res.json();
+   734→
+   735→        const aiMsg: ChatMessage = {
+   736→          id: genId(),
+   737→          role: 'assistant',
+   738→          content: data.answer || "I couldn't process that right now.",
+   739→          timestamp: Date.now(),
+   740→          actions: data.actions || [],
+   741→        };
+   742→        setMessages((prev) => [...prev, aiMsg]);
+   743→        setTypedMessageId(aiMsg.id);
+   744→
+   745→        // Voice output
+   746→        if (speechEnabled && typeof window !== 'undefined' && window.speechSynthesis) {
+   747→          speakText(data.answer || '');
+   748→        }
+   749→      } catch (err) {
+   750→        const aiMsg: ChatMessage = {
+   751→          id: genId(),
+   752→          role: 'assistant',
+   753→          content:
+   754→            "I'm having trouble connecting to my brain right now. Please try again in a moment.",
+   755→          timestamp: Date.now(),
+   756→        };
+   757→        setMessages((prev) => [...prev, aiMsg]);
+   758→        setTypedMessageId(aiMsg.id);
+   759→        console.error('[GSTPilotIntelligence] send error:', err);
+   760→      } finally {
+   761→        setIsThinking(false);
+   762→      }
+   763→    },
+   764→    [isThinking, liveContext, messages, speechEnabled],
+   765→  );
+   766→
+   767→  // ── Text-to-Speech ──
+   768→  const speakText = useCallback((text: string) => {
+   769→    if (typeof window === 'undefined' || !window.speechSynthesis) return;
+   770→    try {
+   771→      window.speechSynthesis.cancel();
+   772→      const utterance = new SpeechSynthesisUtterance(text);
+   773→      utterance.lang = 'en-IN';
+   774→      utterance.rate = 1.0;
+   775→      utterance.pitch = 1.0;
+   776→      const voices = window.speechSynthesis.getVoices();
+   777→      const indianVoice =
+   778→        voices.find((v) => v.lang === 'en-IN') ||
+   779→        voices.find((v) => v.lang.startsWith('en'));
+   780→      if (indianVoice) utterance.voice = indianVoice;
+   781→      window.speechSynthesis.speak(utterance);
+   782→    } catch {
+   783→      /* noop */
+   784→    }
+   785→  }, []);
+   786→
+   787→  // ── Voice input toggle ──
+   788→  const toggleListening = useCallback(() => {
+   789→    if (!speechSupportedRef.current) {
+   790→      toast.error('Voice input unavailable', {
+   791→        description: 'Your browser does not support speech recognition.',
+   792→      });
+   793→      return;
+   794→    }
+   795→
+   796→    if (isListening) {
+   797→      try {
+   798→        recognitionRef.current?.stop();
+   799→      } catch {
+   800→        /* noop */
+   801→      }
+   802→      setIsListening(false);
+   803→      return;
+   804→    }
+   805→
+   806→    try {
+   807→      const SR =
+   808→        (window as unknown as { SpeechRecognition?: SpeechRecognitionConstructor })
+   809→          .SpeechRecognition ||
+   810→        (window as unknown as { webkitSpeechRecognition?: SpeechRecognitionConstructor })
+   811→          .webkitSpeechRecognition;
+   812→      if (!SR) throw new Error('not supported');
+   813→      const recognition: SpeechRecognitionLike = new SR();
+   814→      recognition.continuous = false;
+   815→      recognition.interimResults = false;
+   816→      recognition.lang = 'en-IN';
+   817→
+   818→      recognition.onstart = () => setIsListening(true);
+   819→      recognition.onend = () => setIsListening(false);
+   820→      recognition.onerror = (e) => {
+   821→        setIsListening(false);
+   822→        if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
+   823→          toast.error('Voice input unavailable', {
+   824→            description: 'Microphone permission denied.',
+   825→          });
+   826→        } else {
+   827→          toast.error('Voice input unavailable');
+   828→        }
+   829→      };
+   830→      recognition.onresult = (event) => {
+   831→        let transcript = '';
+   832→        for (let i = event.resultIndex; i < event.results.length; i++) {
+   833→          if (event.results[i].length > 0) {
+   834→            transcript += event.results[i][0].transcript;
+   835→          }
+   836→        }
+   837→        if (transcript) {
+   838→          setInput((prev) => (prev ? prev + ' ' + transcript : transcript));
+   839→        }
+   840→      };
+   841→
+   842→      recognitionRef.current = recognition;
+   843→      recognition.start();
+   844→    } catch {
+   845→      setIsListening(false);
+   846→      toast.error('Voice input unavailable');
+   847→    }
+   848→  }, [isListening]);
+   849→
+   850→  // ── Toggle speech output ──
+   851→  const toggleSpeech = useCallback(() => {
+   852→    setSpeechEnabled((prev) => {
+   853→      const next = !prev;
+   854→      if (!next && typeof window !== 'undefined' && window.speechSynthesis) {
+   855→        window.speechSynthesis.cancel();
+   856→      }
+   857→      return next;
+   858→    });
+   859→  }, []);
+   860→
+   861→  // ── Handle action chip activation ──
+   862→  const handleAction = useCallback(
+   863→    (action: AIAction) => {
+   864→      switch (action.type) {
+   865→        case 'navigate': {
+   866→          const view = (action.payload?.view as AppView) || 'dashboard';
+   867→          setCurrentView(view);
+   868→          toast.success('Navigating', { description: action.title });
+   869→          break;
+   870→        }
+   871→        case 'execute_workflow': {
+   872→          const workflowKey =
+   873→            (action.payload?.workflow as string) || 'run_my_firm';
+   874→          const view = WORKFLOW_VIEWS[workflowKey] || 'autopilot';
+   875→          setCurrentView(view);
+   876→          toast.success('Launching workflow', {
+   877→            description: action.title,
+   878→          });
+   879→          break;
+   880→        }
+   881→        case 'send_reminder':
+   882→          toast.success('Reminders queued', {
+   883→            description: 'Payment reminders queued for affected clients.',
+   884→          });
+   885→          break;
+   886→        case 'create_task':
+   887→          toast.success('Task created', {
+   888→            description: action.description,
+   889→          });
+   890→          break;
+   891→        case 'generate_report':
+   892→          toast.success('Report generation started', {
+   893→            description: 'Your executive report is being compiled.',
+   894→          });
+   895→          break;
+   896→        default:
+   897→          toast.info(action.title);
+   898→      }
+   899→    },
+   900→    [setCurrentView],
+   901→  );
+   902→
+   903→  // ── Panel control cycle: minimized → normal → fullscreen ──
+   904→  const cyclePanelState = useCallback(() => {
+   905→    if (isMinimized) {
+   906→      setIsMinimized(false);
+   907→      setIsFullscreen(false);
+   908→    } else if (isFullscreen) {
+   909→      setIsFullscreen(false);
+   910→    } else {
+   911→      setIsFullscreen(true);
+   912→    }
+   913→  }, [isMinimized, isFullscreen]);
+   914→
+   915→  // ── Open panel (with mobile auto-fullscreen) ──
+   916→  const openPanel = useCallback(() => {
+   917→    setIsOpen(true);
+   918→    setIsMinimized(false);
+   919→    if (isMobile) {
+   920→      setIsFullscreen(true);
+   921→    }
+   922→  }, [isMobile]);
+   923→
+   924→  // ── Close panel ──
+   925→  const closePanel = useCallback(() => {
+   926→    setIsOpen(false);
+   927→    setIsMinimized(false);
+   928→    setIsFullscreen(false);
+   929→    if (typeof window !== 'undefined' && window.speechSynthesis) {
+   930→      window.speechSynthesis.cancel();
+   931→    }
+   932→  }, []);
+   933→
+   934→  // ── Render null if not authenticated or on landing/login ──
+   935→  if (!user || currentScreen === 'landing' || currentScreen === 'login') {
+   936→    return null;
+   937→  }
+   938→
+   939→  // ── Handle Enter to send (Shift+Enter for newline) ──
+   940→  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+   941→    if (e.key === 'Enter' && !e.shiftKey) {
+   942→      e.preventDefault();
+   943→      sendMessage(input);
+   944→    }
+   945→  };
+   946→
+   947→  // ── Glassmorphism classes by theme ──
+   948→  const glassPanel = isDark
+   949→    ? 'bg-slate-900/70 backdrop-blur-2xl border-white/10'
+   950→    : 'bg-white/70 backdrop-blur-2xl border-slate-200/50';
+   951→
+   952→  const glassBubble = isDark
+   953→    ? 'bg-white/5 border-white/10'
+   954→    : 'bg-white/60 border-slate-200/60';
+   955→
+   956→  // ── Panel sizing ──
+   957→  const panelSizeClass = isFullscreen ? 'w-[90vw] h-[90vh] max-w-[1200px]' : '';
+   958→
+   959→  const panelStyle: React.CSSProperties = isFullscreen
+   960→    ? {}
+   961→    : {
+   962→        width: isMobile ? 'calc(100vw - 2rem)' : PANEL_WIDTH,
+   963→        height: isMinimized ? 60 : isMobile ? '70vh' : PANEL_HEIGHT,
+   964→      };
+   965→
+   966→  const showChatBody = !isMinimized;
+   967→  const hasMessages = messages.length > 0;
+   968→
+   969→  return (
+   970→    <>
+   971→      {/* ── Fullscreen backdrop ── */}
+   972→      <AnimatePresence>
+   973→        {isOpen && isFullscreen && (
+   974→          <motion.div
+   975→            className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm"
+   976→            initial={{ opacity: 0 }}
+   977→            animate={{ opacity: 1 }}
+   978→            exit={{ opacity: 0 }}
+   979→            onClick={closePanel}
+   980→          />
+   981→        )}
+   982→      </AnimatePresence>
+   983→
+   984→      {/* ── AI Command Center Panel ── */}
+   985→      <AnimatePresence>
+   986→        {isOpen && (
+   987→          <motion.div
+   988→            key="panel"
+   989→            role="dialog"
+   990→            aria-label="GSTPilot Intelligence AI Assistant"
+   991→            initial={{ opacity: 0, scale: 0.9, y: 20 }}
+   992→            animate={{ opacity: 1, scale: 1, y: 0 }}
+   993→            exit={{ opacity: 0, scale: 0.9, y: 20 }}
+   994→            transition={{ type: 'spring', stiffness: 300, damping: 26 }}
+   995→            className={`fixed z-50 flex flex-col overflow-hidden rounded-2xl border shadow-2xl ${glassPanel} ${panelSizeClass}`}
+   996→            style={
+   997→              isFullscreen
+   998→                ? { top: '5vh', left: '5vw', ...panelStyle }
+   999→                : { bottom: ORB_SIZE + 40, right: 24, x: orbX, y: orbY, ...panelStyle }
+  1000→            }
+  1001→          >
+  1002→              {/* ── Header ── */}
+  1003→              <div className="flex items-center justify-between gap-2 border-b border-white/10 px-4 py-3">
+  1004→                <div className="flex items-center gap-2.5 min-w-0">
+  1005→                  <div className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-emerald-400 via-cyan-400 to-blue-500">
+  1006→                    <Brain className="h-4.5 w-4.5 text-white" />
+  1007→                  </div>
+  1008→                  <div className="min-w-0">
+  1009→                    <h2 className="truncate bg-gradient-to-r from-emerald-500 via-cyan-500 to-blue-500 bg-clip-text text-sm font-bold text-transparent">
+  1010→                      GSTPilot Intelligence™
+  1011→                    </h2>
+  1012→                    <p className="truncate text-[10px] text-slate-500 dark:text-slate-400">
+  1013→                      The AI Brain of Your Business
+  1014→                    </p>
+  1015→                  </div>
+  1016→                </div>
+  1017→
+  1018→                <div className="flex items-center gap-1">
+  1019→                  {/* AI Online status */}
+  1020→                  <Badge
+  1021→                    variant="secondary"
+  1022→                    className="hidden sm:inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20 px-2 py-0.5 text-[10px]"
+  1023→                  >
+  1024→                    <span className="relative flex h-1.5 w-1.5">
+  1025→                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+  1026→                      <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500" />
+  1027→                    </span>
+  1028→                    AI Online
+  1029→                  </Badge>
+  1030→
+  1031→                  {/* Minimize */}
+  1032→                  <Button
+  1033→                    variant="ghost"
+  1034→                    size="icon"
+  1035→                    className="h-7 w-7"
+  1036→                    onClick={() => {
+  1037→                      setIsMinimized((p) => !p);
+  1038→                      setIsFullscreen(false);
+  1039→                    }}
+  1040→                    aria-label="Minimize"
+  1041→                  >
+  1042→                    <Minus className="h-4 w-4" />
+  1043→                  </Button>
+  1044→
+  1045→                  {/* Maximize / Fullscreen toggle */}
+  1046→                  <Button
+  1047→                    variant="ghost"
+  1048→                    size="icon"
+  1049→                    className="h-7 w-7"
+  1050→                    onClick={cyclePanelState}
+  1051→                    aria-label={
+  1052→                      isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'
+  1053→                    }
+  1054→                  >
+  1055→                    {isFullscreen ? (
+  1056→                      <Maximize className="h-4 w-4" />
+  1057→                    ) : (
+  1058→                      <Maximize2 className="h-4 w-4" />
+  1059→                    )}
+  1060→                  </Button>
+  1061→
+  1062→                  {/* Close */}
+  1063→                  <Button
+  1064→                    variant="ghost"
+  1065→                    size="icon"
+  1066→                    className="h-7 w-7 hover:bg-red-500/10 hover:text-red-500"
+  1067→                    onClick={closePanel}
+  1068→                    aria-label="Close"
+  1069→                  >
+  1070→                    <X className="h-4 w-4" />
+  1071→                  </Button>
+  1072→                </div>
+  1073→              </div>
+  1074→
+  1075→              {/* ── Body (hidden when minimized) ── */}
+  1076→              {showChatBody && (
+  1077→                <>
+  1078→                  {/* ── Messages ── */}
+  1079→                  <ScrollArea className="flex-1 overflow-y-auto">
+  1080→                    <div className="space-y-4 px-4 py-4">
+  1081→                      {!hasMessages && (
+  1082→                        <motion.div
+  1083→                          initial={{ opacity: 0, y: 10 }}
+  1084→                          animate={{ opacity: 1, y: 0 }}
+  1085→                          className="flex flex-col items-center gap-3 py-6 text-center"
+  1086→                        >
+  1087→                          <motion.div
+  1088→                            className="flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-emerald-400 via-cyan-400 to-blue-500"
+  1089→                            animate={{ scale: [1, 1.08, 1] }}
+  1090→                            transition={{
+  1091→                              duration: 3,
+  1092→                              repeat: Infinity,
+  1093→                              ease: 'easeInOut',
+  1094→                            }}
+  1095→                          >
+  1096→                            <Sparkles className="h-7 w-7 text-white" />
+  1097→                          </motion.div>
+  1098→                          <div>
+  1099→                            <p className="text-sm font-semibold text-foreground">
+  1100→                              Hello, I'm GSTPilot Intelligence™
+  1101→                            </p>
+  1102→                            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+  1103→                              Ask me anything about your business, or try a prompt below.
+  1104→                            </p>
+  1105→                          </div>
+  1106→                        </motion.div>
+  1107→                      )}
+  1108→
+  1109→                      <AnimatePresence initial={false}>
+  1110→                        {messages.map((msg, idx) => {
+  1111→                          const isUser = msg.role === 'user';
+  1112→                          const isLatest = msg.id === typedMessageId;
+  1113→                          return (
+  1114→                            <motion.div
+  1115→                              key={msg.id}
+  1116→                              initial={{ opacity: 0, y: 12 }}
+  1117→                              animate={{ opacity: 1, y: 0 }}
+  1118→                              transition={{ delay: Math.min(idx * 0.03, 0.3) }}
+  1119→                              className={`flex gap-2.5 ${
+  1120→                                isUser ? 'flex-row-reverse' : 'flex-row'
+  1121→                              }`}
+  1122→                            >
+  1123→                              {/* Avatar */}
+  1124→                              {!isUser && (
+  1125→                                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-emerald-400 via-cyan-400 to-blue-500">
+  1126→                                  <Brain className="h-3.5 w-3.5 text-white" />
+  1127→                                </div>
+  1128→                              )}
+  1129→
+  1130→                              <div
+  1131→                                className={`flex max-w-[78%] flex-col gap-1 ${
+  1132→                                  isUser ? 'items-end' : 'items-start'
+  1133→                                }`}
+  1134→                              >
+  1135→                                {/* Bubble */}
+  1136→                                <div
+  1137→                                  className={`rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed ${
+  1138→                                    isUser
+  1139→                                      ? 'bg-gradient-to-br from-emerald-500 to-cyan-600 text-white rounded-tr-sm'
+  1140→                                      : `${glassBubble} text-foreground rounded-tl-sm`
+  1141→                                  }`}
+  1142→                                >
+  1143→                                  {isUser ? (
+  1144→                                    <MessageContent text={msg.content} />
+  1145→                                  ) : (
+  1146→                                    <TypingMessage
+  1147→                                      message={msg}
+  1148→                                      isLatest={isLatest}
+  1149→                                      onTypingComplete={() =>
+  1150→                                        setTypedMessageId(null)
+  1151→                                      }
+  1152→                                    />
+  1153→                                  )}
+  1154→                                </div>
+  1155→
+  1156→                                {/* Action chips */}
+  1157→                                {!isUser && msg.actions && msg.actions.length > 0 && (
+  1158→                                  <div className="flex flex-wrap gap-1.5 pt-1">
+  1159→                                    {msg.actions.map((action, ai) => (
+  1160→                                      <ActionChip
+  1161→                                        key={ai}
+  1162→                                        action={action}
+  1163→                                        onActivate={handleAction}
+  1164→                                      />
+  1165→                                    ))}
+  1166→                                  </div>
+  1167→                                )}
+  1168→
+  1169→                                {/* Timestamp */}
+  1170→                                <span className="px-1 text-[10px] text-slate-400 dark:text-slate-500">
+  1171→                                  {formatTime(msg.timestamp)}
+  1172→                                </span>
+  1173→                              </div>
+  1174→                            </motion.div>
+  1175→                          );
+  1176→                        })}
+  1177→                      </AnimatePresence>
+  1178→
+  1179→                      {/* Thinking indicator */}
+  1180→                      <AnimatePresence>
+  1181→                        {isThinking && (
+  1182→                          <motion.div
+  1183→                            initial={{ opacity: 0, y: 10 }}
+  1184→                            animate={{ opacity: 1, y: 0 }}
+  1185→                            exit={{ opacity: 0, y: -10 }}
+  1186→                            className="flex gap-2.5"
+  1187→                          >
+  1188→                            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-emerald-400 via-cyan-400 to-blue-500">
+  1189→                              <Brain className="h-3.5 w-3.5 text-white" />
+  1190→                            </div>
+  1191→                            <div
+  1192→                              className={`rounded-2xl rounded-tl-sm px-3.5 py-3 ${glassBubble}`}
+  1193→                            >
+  1194→                              <ThinkingDots />
+  1195→                            </div>
+  1196→                          </motion.div>
+  1197→                        )}
+  1198→                      </AnimatePresence>
+  1199→
+  1200→                      <div ref={messagesEndRef} />
+  1201→                    </div>
+  1202→                  </ScrollArea>
+  1203→
+  1204→                  {/* ── Suggested prompts (when empty or always below) ── */}
+  1205→                  {!hasMessages && (
+  1206→                    <div className="border-t border-white/10 px-4 py-3">
+  1207→                      <p className="mb-2 text-[10px] font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
+  1208→                        Suggested prompts
+  1209→                      </p>
+  1210→                      <div className="flex flex-wrap gap-1.5">
+  1211→                        {SUGGESTED_PROMPTS.map((prompt) => (
+  1212→                          <motion.button
+  1213→                            key={prompt}
+  1214→                            whileHover={{ scale: 1.04 }}
+  1215→                            whileTap={{ scale: 0.96 }}
+  1216→                            onClick={() => sendMessage(prompt)}
+  1217→                            className="rounded-full border border-emerald-400/20 bg-emerald-500/5 px-2.5 py-1 text-[11px] font-medium text-emerald-700 dark:text-emerald-300 transition-colors hover:border-emerald-400/50 hover:bg-emerald-500/10"
+  1218→                          >
+  1219→                            {prompt}
+  1220→                          </motion.button>
+  1221→                        ))}
+  1222→                      </div>
+  1223→                    </div>
+  1224→                  )}
+  1225→
+  1226→                  {/* ── Quick module access ── */}
+  1227→                  <div className="border-t border-white/10 px-3 py-2">
+  1228→                    <div className="flex gap-1 overflow-x-auto pb-1" style={{ scrollbarWidth: 'none' }}>
+  1229→                      {QUICK_MODULES.map((mod) => {
+  1230→                        const Icon = mod.icon;
+  1231→                        return (
+  1232→                          <button
+  1233→                            key={mod.label}
+  1234→                            onClick={() => {
+  1235→                              setCurrentView(mod.view);
+  1236→                              toast.success('Module opened', {
+  1237→                                description: mod.label,
+  1238→                              });
+  1239→                            }}
+  1240→                            className="flex shrink-0 items-center gap-1 rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-[10px] font-medium text-slate-600 dark:text-slate-300 transition-colors hover:border-emerald-400/40 hover:bg-emerald-500/10 hover:text-emerald-600 dark:hover:text-emerald-300"
+  1241→                            aria-label={`Open ${mod.label}`}
+  1242→                          >
+  1243→                            <Icon className="h-3 w-3" />
+  1244→                            {mod.label}
+  1245→                          </button>
+  1246→                        );
+  1247→                      })}
+  1248→                    </div>
+  1249→                  </div>
+  1250→
+  1251→                  {/* ── Input area ── */}
+  1252→                  <div className="border-t border-white/10 p-3">
+  1253→                    <div className="flex items-end gap-2">
+  1254→                      {/* Voice input */}
+  1255→                      <Button
+  1256→                        variant="ghost"
+  1257→                        size="icon"
+  1258→                        className={`h-9 w-9 shrink-0 rounded-full ${
+  1259→                          isListening
+  1260→                            ? 'bg-red-500/20 text-red-500'
+  1261→                            : 'hover:bg-emerald-500/10 hover:text-emerald-600 dark:hover:text-emerald-400'
+  1262→                        }`}
+  1263→                        onClick={toggleListening}
+  1264→                        aria-label={
+  1265→                          isListening ? 'Stop voice input' : 'Start voice input'
+  1266→                        }
+  1267→                      >
+  1268→                        <motion.div
+  1269→                          animate={
+  1270→                            isListening
+  1271→                              ? { scale: [1, 1.15, 1] }
+  1272→                              : { scale: 1 }
+  1273→                          }
+  1274→                          transition={{
+  1275→                            duration: 0.8,
+  1276→                            repeat: isListening ? Infinity : 0,
+  1277→                          }}
+  1278→                        >
+  1279→                          {isListening ? (
+  1280→                            <MicOff className="h-4 w-4" />
+  1281→                          ) : (
+  1282→                            <Mic className="h-4 w-4" />
+  1283→                          )}
+  1284→                        </motion.div>
+  1285→                      </Button>
+  1286→
+  1287→                      {/* Speech output toggle */}
+  1288→                      <Button
+  1289→                        variant="ghost"
+  1290→                        size="icon"
+  1291→                        className={`h-9 w-9 shrink-0 rounded-full ${
+  1292→                          speechEnabled
+  1293→                            ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400'
+  1294→                            : 'hover:bg-white/10'
+  1295→                        }`}
+  1296→                        onClick={toggleSpeech}
+  1297→                        aria-label={
+  1298→                          speechEnabled
+  1299→                            ? 'Disable voice output'
+  1300→                            : 'Enable voice output'
+  1301→                        }
+  1302→                      >
+  1303→                        {speechEnabled ? (
+  1304→                          <Volume2 className="h-4 w-4" />
+  1305→                        ) : (
+  1306→                          <VolumeX className="h-4 w-4" />
+  1307→                        )}
+  1308→                      </Button>
+  1309→
+  1310→                      {/* Textarea */}
+  1311→                      <textarea
+  1312→                        ref={textareaRef}
+  1313→                        value={input}
+  1314→                        onChange={(e) => setInput(e.target.value)}
+  1315→                        onKeyDown={handleKeyDown}
+  1316→                        rows={1}
+  1317→                        placeholder={
+  1318→                          isListening
+  1319→                            ? 'Listening…'
+  1320→                            : 'Ask GSTPilot Intelligence anything…'
+  1321→                        }
+  1322→                        className="flex-1 resize-none rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-foreground placeholder:text-slate-400 focus:border-emerald-400/50 focus:outline-none focus:ring-1 focus:ring-emerald-400/30"
+  1323→                        style={{ maxHeight: 96 }}
+  1324→                        aria-label="Message input"
+  1325→                      />
+  1326→
+  1327→                      {/* Send */}
+  1328→                      <Button
+  1329→                        size="icon"
+  1330→                        className="h-9 w-9 shrink-0 rounded-full bg-gradient-to-br from-emerald-500 to-cyan-600 hover:from-emerald-600 hover:to-cyan-700"
+  1331→                        onClick={() => sendMessage(input)}
+  1332→                        disabled={!input.trim() || isThinking}
+  1333→                        aria-label="Send message"
+  1334→                      >
+  1335→                        <ArrowUp className="h-4 w-4" />
+  1336→                      </Button>
+  1337→                    </div>
+  1338→
+  1339→                    {/* Listening indicator */}
+  1340→                    <AnimatePresence>
+  1341→                      {isListening && (
+  1342→                        <motion.div
+  1343→                          initial={{ opacity: 0, height: 0 }}
+  1344→                          animate={{ opacity: 1, height: 'auto' }}
+  1345→                          exit={{ opacity: 0, height: 0 }}
+  1346→                          className="flex items-center gap-2 pt-2"
+  1347→                        >
+  1348→                          <span className="relative flex h-2 w-2">
+  1349→                            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75" />
+  1350→                            <span className="relative inline-flex h-2 w-2 rounded-full bg-red-500" />
+  1351→                          </span>
+  1352→                          <span className="text-[11px] text-red-500">
+  1353→                            Listening… speak now
+  1354→                          </span>
+  1355→                        </motion.div>
+  1356→                      )}
+  1357→                    </AnimatePresence>
+  1358→                  </div>
+  1359→                </>
+  1360→              )}
+  1361→          </motion.div>
+  1362→        )}
+  1363→      </AnimatePresence>
+  1364→
+  1365→      {/* ── Floating Orb (always bottom-right) ── */}
+  1366→      <div className="fixed z-50" style={{ bottom: 24, right: 24 }}>
+  1367→        <Tooltip>
+  1368→          <TooltipTrigger asChild>
+  1369→            <motion.button
+  1370→              drag
+  1371→              dragMomentum={false}
+  1372→              dragElastic={0}
+  1373→              style={{ x: orbX, y: orbY }}
+  1374→              whileHover={{ scale: 1.1 }}
+  1375→              whileTap={{ scale: 0.95 }}
+  1376→              onClick={() => {
+  1377→                if (isOpen) {
+  1378→                  closePanel();
+  1379→                } else {
+  1380→                  openPanel();
+  1381→                }
+  1382→              }}
+  1383→              aria-label="Open GSTPilot Intelligence AI Assistant"
+  1384→              className="relative flex h-16 w-16 cursor-pointer items-center justify-center rounded-full bg-gradient-to-br from-emerald-400 via-cyan-400 to-blue-500 shadow-lg"
+  1385→            >
+  1386→              {/* Breathing glow */}
+  1387→              <motion.span
+  1388→                className="absolute inset-0 rounded-full"
+  1389→                animate={{
+  1390→                  scale: [1, 1.06, 1],
+  1391→                  boxShadow: [
+  1392→                    '0 0 20px 2px rgba(16,185,129,0.5)',
+  1393→                    '0 0 35px 6px rgba(34,211,238,0.6)',
+  1394→                    '0 0 20px 2px rgba(16,185,129,0.5)',
+  1395→                  ],
+  1396→                }}
+  1397→                transition={{
+  1398→                  duration: 4,
+  1399→                  repeat: Infinity,
+  1400→                  ease: 'easeInOut',
+  1401→                }}
+  1402→              />
+  1403→
+  1404→              {/* Pulse rings (two staggered) */}
+  1405→              <PulseRing />
+  1406→              <motion.span
+  1407→                className="pointer-events-none absolute inset-0 rounded-full border border-cyan-400/40"
+  1408→                initial={{ scale: 1, opacity: 0.4 }}
+  1409→                animate={{ scale: 2.5, opacity: 0 }}
+  1410→                transition={{
+  1411→                  duration: 4,
+  1412→                  repeat: Infinity,
+  1413→                  ease: 'easeOut',
+  1414→                  delay: 2,
+  1415→                }}
+  1416→              />
+  1417→
+  1418→              {/* Orbiting particles */}
+  1419→              <OrbParticles />
+  1420→
+  1421→              {/* Center icon */}
+  1422→              <motion.div
+  1423→                className="relative z-10 flex items-center justify-center"
+  1424→                animate={{ scale: [1, 1.1, 1] }}
+  1425→                transition={{
+  1426→                  duration: 2,
+  1427→                  repeat: Infinity,
+  1428→                  ease: 'easeInOut',
+  1429→                }}
+  1430→              >
+  1431→                {isOpen ? (
+  1432→                  <Bot className="h-7 w-7 text-white drop-shadow" />
+  1433→                ) : (
+  1434→                  <Sparkles className="h-7 w-7 text-white drop-shadow" />
+  1435→                )}
+  1436→              </motion.div>
+  1437→
+  1438→              {/* Active state brightener */}
+  1439→              {isOpen && (
+  1440→                <motion.span
+  1441→                  className="absolute inset-0 rounded-full bg-white/20"
+  1442→                  initial={{ opacity: 0 }}
+  1443→                  animate={{ opacity: [0.1, 0.25, 0.1] }}
+  1444→                  transition={{ duration: 2, repeat: Infinity }}
+  1445→                />
+  1446→              )}
+  1447→            </motion.button>
+  1448→          </TooltipTrigger>
+  1449→          <TooltipContent side="top" sideOffset={8}>
+  1450→            GSTPilot Intelligence™ — Press Ctrl+K
+  1451→          </TooltipContent>
+  1452→        </Tooltip>
+  1453→      </div>
+  1454→    </>
+  1455→  );
+  1456→}
+  1457→

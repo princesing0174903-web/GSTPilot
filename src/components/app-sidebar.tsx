@@ -6,7 +6,6 @@ import {
   SidebarContent,
   SidebarGroup,
   SidebarGroupContent,
-  SidebarGroupLabel,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
@@ -14,6 +13,11 @@ import {
   SidebarFooter,
   useSidebar,
 } from '@/components/ui/sidebar'
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible'
 import {
   LayoutDashboard,
   FileText,
@@ -25,12 +29,62 @@ import {
   Building2,
   LogOut,
   Bell,
+  BarChart3,
+  CreditCard,
+  UserCog,
+  CheckSquare,
+  Bot,
+  Brain,
+  FolderOpen,
+  Workflow,
+  Briefcase,
+  Globe,
+  Palette,
+  Store,
+  Share2,
+  FileSearch,
+  CheckCircle,
+  Code,
+  BookOpen,
+  Wallet,
+  UserCircle,
+  Package,
+  Landmark,
+  Receipt,
+  FileOutput,
+  FileCheck,
+  ShieldCheck,
+  Scale,
+  Crown,
+  ChevronDown,
+  MonitorSmartphone,
+  UserCheck,
+  FileCode2,
+  CalendarClock,
+  Mic,
+  Database,
+  Building,
+  Radio,
+  Activity,
+  Target,
+  TrendingUp,
+  Gauge,
+  Network,
+  Rocket,
+  Banknote,
+  Copy,
+  Cpu,
+  Cloud,
+  Fingerprint,
+  HandCoins,
+  ArrowLeftRight,
+  GitBranch,
+  Radar,
 } from 'lucide-react'
 import { useApp, type AppView } from '@/contexts/AppContext'
 import { useAuth } from '@/contexts/AuthContext'
 import { useFireUnreadNotifications } from '@/hooks/use-firestore'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
-import { Badge } from '@/components/ui/badge'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -44,26 +98,119 @@ interface NavItem {
   view: AppView
   icon: React.ElementType
   subtitle?: string
+  shortcut?: string
+  isNew?: boolean
 }
 
-const workflowItems: NavItem[] = [
-  { title: 'Dashboard', view: 'dashboard', icon: LayoutDashboard, subtitle: 'Command Center' },
-  { title: 'Returns', view: 'returns', icon: FileText, subtitle: 'Filing Workspace' },
-  { title: 'Reconcile', view: 'reconcile', icon: Search, subtitle: 'Investigation Center' },
-  { title: 'Invoices', view: 'invoices', icon: FileScan, subtitle: 'Processing Center' },
+/* ────────────────────────────────────────────────────────────────────────────
+ * 5 GROUPS · GSTPilot Infinity™ — The Financial Brain of India
+ * Command · Intelligence · Finance · Business · Platform
+ * ────────────────────────────────────────────────────────────────────────── */
+
+// COMMAND — entry points + autonomous run modes
+const commandItems: NavItem[] = [
+  { title: 'Mission Control', view: 'dashboard', icon: LayoutDashboard, subtitle: 'The One Screen', shortcut: 'G+D' },
+  { title: 'Business DNA', view: 'business-dna', icon: Fingerprint, subtitle: '6 Scores · Digital DNA', isNew: true },
+  { title: "RUN INDIA'S BUSINESS™", view: 'run-india-business', icon: Landmark, subtitle: 'Autonomous Enterprise', isNew: true },
+  { title: 'RUN MY BUSINESS™', view: 'run-my-business', icon: Rocket, subtitle: 'One-Click Automation', isNew: true },
 ]
 
-const manageItems: NavItem[] = [
-  { title: 'Clients', view: 'clients', icon: Users, subtitle: 'Client Portfolio' },
+// INTELLIGENCE — AI Executive + AI Workforce merged
+const intelligenceItems: NavItem[] = [
+  { title: 'AI CEO', view: 'firm-command-center', icon: Crown, subtitle: 'Autonomous Partner', isNew: true },
+  { title: 'Operating Room', view: 'ai-operating-room', icon: Gauge, subtitle: '6 Live Scores', isNew: true },
+  { title: 'Predictions', view: 'ai-predictions', icon: TrendingUp, subtitle: '6 Prediction Models', isNew: true },
+  { title: 'Priority Engine', view: 'ai-priority-engine', icon: Target, subtitle: 'Daily Priorities', isNew: true },
+  { title: 'Decision Engine', view: 'decision-engine', icon: Brain, subtitle: 'AI Scored Decisions', isNew: true },
+  { title: 'AI CA Manager', view: 'ai-ca-manager', icon: MonitorSmartphone, subtitle: 'Runs Your Firm', isNew: true },
+  { title: 'AI Account Mgr', view: 'ai-account-manager', icon: UserCheck, subtitle: 'Client Guardian', isNew: true },
+  { title: 'AI Doc Employee', view: 'ai-document-employee', icon: FileCode2, subtitle: 'Auto Processes Docs', isNew: true },
+  { title: 'AI Deadline Engine', view: 'ai-deadline-engine', icon: CalendarClock, subtitle: 'Predicts Deadlines', isNew: true },
+  { title: 'AI Voice Assistant', view: 'ai-voice-assistant', icon: Mic, subtitle: 'Voice → Actions', isNew: true },
+  { title: 'AI Firm Memory', view: 'ai-firm-memory', icon: Database, subtitle: 'Remembers Everything', isNew: true },
+  { title: 'AI CFO', view: 'ai-cfo', icon: Brain, subtitle: 'Financial Intelligence' },
+  { title: 'AI Workforce', view: 'agents', icon: Bot, subtitle: '7 AI Employees' },
+  { title: 'AI Agent OS', view: 'agent-os', icon: Cpu, subtitle: 'Build AI Employees', isNew: true },
+  { title: 'Automations', view: 'automations', icon: Workflow, subtitle: 'Workflow Rules' },
+]
+
+// FINANCE — Finance + People merged
+const financeItems: NavItem[] = [
+  { title: 'GST', view: 'returns', icon: FileText, subtitle: 'Returns & Filing', shortcut: 'G+R' },
+  { title: 'Accounting', view: 'accounting', icon: BookOpen, subtitle: 'Double-Entry Books' },
+  { title: 'TDS', view: 'tds', icon: FileCheck, subtitle: 'TDS Management' },
+  { title: 'E-Invoicing', view: 'e-invoicing', icon: FileOutput, subtitle: 'IRN & E-Way Bill' },
+  { title: 'Payments', view: 'payments', icon: Receipt, subtitle: 'Collect & Pay' },
+  { title: 'Banking', view: 'banking', icon: Landmark, subtitle: 'Accounts & Reconcile' },
+  { title: 'Invoices', view: 'invoices', icon: FileScan, subtitle: 'Processing Center' },
+  { title: 'Reconcile', view: 'reconcile', icon: Search, subtitle: '2A/2B Matching' },
+  { title: 'Payroll', view: 'payroll', icon: Wallet, subtitle: 'Salary & Compliance' },
+  { title: 'HRMS', view: 'hrms', icon: UserCircle, subtitle: 'People Management' },
+]
+
+// BUSINESS — Business + Compliance merged
+const businessNavItems: NavItem[] = [
+  { title: 'CRM', view: 'crm', icon: Briefcase, subtitle: 'Lead Pipeline' },
+  { title: 'Inventory', view: 'inventory', icon: Package, subtitle: 'Stock & Warehouse' },
+  { title: 'Clients', view: 'clients', icon: Users, subtitle: 'Client Portfolio', shortcut: 'G+C' },
+  { title: 'Client Portal', view: 'client-portal', icon: Globe, subtitle: 'Client Self-Service' },
+  { title: 'ROC Compliance', view: 'roc-compliance', icon: ShieldCheck, subtitle: 'Company Law' },
+  { title: 'Legal Notices', view: 'legal-notices', icon: Scale, subtitle: 'Notice Management' },
+]
+
+// PLATFORM — GFX + Fin Infrastructure + Fin Network + System merged
+const platformItems: NavItem[] = [
+  // Financial Exchange (GFX)
+  { title: 'RUN MY COMPANY™', view: 'run-my-company', icon: Rocket, subtitle: 'Autonomous Company', isNew: true },
+  { title: 'Economic War Room', view: 'economic-war-room', icon: Radar, subtitle: 'Macro Command Center', isNew: true },
+  { title: 'Universal Business ID', view: 'universal-business-id', icon: Fingerprint, subtitle: 'India Business Identity', isNew: true },
+  { title: 'Credit Scoring Engine', view: 'credit-scoring-engine', icon: Gauge, subtitle: 'CIBIL for Businesses', isNew: true },
+  { title: 'Invoice Exchange', view: 'invoice-exchange', icon: ArrowLeftRight, subtitle: 'B2B Invoice Market', isNew: true },
+  { title: 'Financing Marketplace', view: 'financing-marketplace', icon: HandCoins, subtitle: 'Capital Connect', isNew: true },
+  { title: 'Economic Graph', view: 'economic-graph', icon: GitBranch, subtitle: 'Real-Time Business Graph', isNew: true },
+  // Financial Infrastructure
+  { title: 'War Room', view: 'executive-war-room', icon: Radio, subtitle: 'Palantir Command Center', isNew: true },
+  { title: 'Business Graph', view: 'business-graph', icon: Network, subtitle: 'Entity Graph DB', isNew: true },
+  { title: 'Data Moat', view: 'data-moat', icon: Database, subtitle: 'AI Business Memory', isNew: true },
+  { title: 'Data Cloud', view: 'data-cloud', icon: Cloud, subtitle: 'Financial Intelligence', isNew: true },
+  { title: 'Payments™', view: 'embedded-finance', icon: CreditCard, subtitle: 'Embedded Finance', isNew: true },
+  { title: 'Working Capital', view: 'working-capital', icon: Banknote, subtitle: 'Finance & Credit Engine', isNew: true },
+  { title: 'Industry Benchmark', view: 'industry-benchmark', icon: BarChart3, subtitle: 'Compare & Rank', isNew: true },
+  { title: 'Digital Twin', view: 'digital-twin', icon: Copy, subtitle: 'Business Simulation', isNew: true },
+  { title: 'Event Engine', view: 'event-engine', icon: Activity, subtitle: 'Real-Time Events', isNew: true },
+  { title: 'Network', view: 'gstpilot-network', icon: Globe, subtitle: 'Viral Growth Loop', isNew: true },
+  // Financial Network
+  { title: 'API Platform™', view: 'api-platform-v2', icon: Code, subtitle: 'Stripe for India', isNew: true },
+  { title: 'App Store™', view: 'app-store', icon: Store, subtitle: 'Financial App Ecosystem', isNew: true },
+  { title: 'Agent OS™', view: 'agent-os', icon: Cpu, subtitle: 'Build AI Employees', isNew: true },
+  { title: 'Network Effects', view: 'network-effects', icon: Share2, subtitle: 'Viral Growth Engine', isNew: true },
+  // System
+  { title: 'Multi-Firm', view: 'multi-firm', icon: Building, subtitle: 'Firm Switcher', isNew: true },
+  { title: 'Tasks', view: 'tasks', icon: CheckSquare, subtitle: 'Workflow Tasks' },
+  { title: 'Documents', view: 'documents', icon: FolderOpen, subtitle: 'Document Intel' },
+  { title: 'Analytics', view: 'analytics', icon: BarChart3, subtitle: 'Insights & Reports' },
+  { title: 'Marketplace', view: 'marketplace', icon: Store, subtitle: 'Platform Ecosystem' },
+  { title: 'Team', view: 'team', icon: UserCog, subtitle: 'Members & Roles' },
+  { title: 'Billing', view: 'billing', icon: CreditCard, subtitle: 'Plan & Usage' },
+  { title: 'Audit Trail', view: 'audit-trail', icon: FileSearch, subtitle: 'Compliance & Logs' },
+  { title: 'Approvals', view: 'approvals', icon: CheckCircle, subtitle: 'Workflow Approvals' },
+  { title: 'White Label', view: 'white-label', icon: Palette, subtitle: 'Custom Branding' },
   { title: 'Settings', view: 'settings', icon: Settings, subtitle: 'Workspace' },
 ]
 
-function SidebarNav() {
+interface AppSidebarProps {
+  onSearchOpen?: () => void
+}
+
+function SidebarNav({ onSearchOpen }: AppSidebarProps) {
   const { currentView, setCurrentView } = useApp()
   const { user, logout } = useAuth()
   const { setOpenMobile } = useSidebar()
   const { data: unreadNotifs } = useFireUnreadNotifications()
   const unreadCount = unreadNotifs.length
+
+  // onSearchOpen is retained for API compatibility (the floating Intelligence orb now covers Copilot).
+  void onSearchOpen
 
   const handleNavClick = (view: AppView) => {
     setCurrentView(view)
@@ -79,117 +226,124 @@ function SidebarNav() {
     return (
       <SidebarMenuItem key={item.view}>
         <SidebarMenuButton
-          isActive={isActive}
           onClick={() => handleNavClick(item.view)}
           tooltip={item.title}
           className={`
-            group relative h-10 rounded-lg transition-all duration-200 ease-in-out
+            group/navitem relative h-9 rounded-lg gap-2 transition-all duration-200 ease-in-out
             ${
               isActive
-                ? 'bg-emerald-500/10 font-semibold text-emerald-600 hover:bg-emerald-500/15 hover:text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-400 dark:hover:bg-emerald-500/20 dark:hover:text-emerald-400'
-                : 'text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground'
+                ? 'accent-gradient-soft text-foreground font-medium hover:text-foreground'
+                : 'text-muted-foreground hover:bg-white/[0.04] hover:text-foreground'
             }
           `}
         >
           {isActive && (
-            <div className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-emerald-500 transition-all duration-200" />
+            <div className="absolute left-0 top-1/2 h-4 w-[3px] -translate-y-1/2 rounded-r-full accent-gradient" />
           )}
           <item.icon
-            className={`h-[18px] w-[18px] transition-colors duration-200 ${
+            className={`h-[16px] w-[16px] shrink-0 transition-colors duration-200 ${
               isActive
-                ? 'text-emerald-600 dark:text-emerald-400'
-                : 'text-sidebar-foreground/50 group-hover:text-sidebar-foreground/80'
+                ? 'text-foreground'
+                : 'text-muted-foreground/70 group-hover/navitem:text-foreground'
             }`}
           />
-          <div className="flex flex-col">
-            <span className="text-sm leading-tight transition-colors duration-200">
-              {item.title}
+          <span className="flex-1 min-w-0 text-[13px] leading-tight truncate">
+            {item.title}
+          </span>
+          {item.shortcut && (
+            <span className="text-[9px] text-muted-foreground/30 font-mono hidden group-hover/navitem:inline-flex items-center gap-0.5">
+              {item.shortcut}
             </span>
-            {item.subtitle && (
-              <span className="text-[10px] leading-tight text-sidebar-foreground/40">
-                {item.subtitle}
-              </span>
-            )}
-          </div>
+          )}
         </SidebarMenuButton>
       </SidebarMenuItem>
     )
   }
 
+  const renderGroup = (label: string, items: NavItem[], defaultOpen = false) => (
+    <Collapsible defaultOpen={defaultOpen} className="group/collapsible">
+      <SidebarGroup className="p-1.5">
+        <CollapsibleTrigger className="group/label flex w-full items-center justify-between rounded-md px-2 h-8 hover:bg-white/[0.03] transition-colors outline-none focus-visible:ring-1 focus-visible:ring-ring/40">
+          <span className="text-[10px] font-semibold tracking-widest uppercase text-muted-foreground/50">
+            {label}
+          </span>
+          <ChevronDown className="h-3 w-3 text-muted-foreground/40 transition-transform duration-200 group-data-[state=open]/collapsible:rotate-180" />
+        </CollapsibleTrigger>
+        <CollapsibleContent className="overflow-hidden data-[state=open]:animate-collapsible-down data-[state=closed]:animate-collapsible-up">
+          <SidebarGroupContent>
+            <SidebarMenu className="gap-0.5 mt-1">
+              {items.map(renderNavItem)}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </CollapsibleContent>
+      </SidebarGroup>
+    </Collapsible>
+  )
+
   return (
     <>
-      <SidebarHeader className="border-b border-sidebar-border/50 px-4 py-5">
-        <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-600 shadow-md shadow-emerald-600/20">
-            <Zap className="h-5 w-5 text-white" />
+      <SidebarHeader className="border-b border-sidebar-border/50 px-3 py-4">
+        <div className="flex items-center gap-2.5">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg accent-gradient shadow-md shadow-emerald-500/10">
+            <Zap className="h-4 w-4 text-white" />
           </div>
-          <div className="flex flex-col">
-            <div className="flex items-center gap-2">
-              <span className="text-lg font-bold tracking-tight text-sidebar-foreground">
+          <div className="flex flex-col min-w-0">
+            <div className="flex items-center gap-1.5">
+              <span className="text-base font-bold tracking-tight text-foreground">
                 GSTPilot
               </span>
-              <span className="inline-flex items-center rounded-md bg-emerald-500/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-emerald-500">
-                AI
+              <span className="inline-flex items-center rounded-md accent-gradient-soft px-1.5 py-0.5 leading-none">
+                <span className="text-[9px] font-bold uppercase tracking-wider accent-text">
+                  Infinity
+                </span>
               </span>
             </div>
-            {user?.firmName && (
-              <span className="text-[10px] text-sidebar-foreground/40 truncate max-w-[160px]">
+            {user?.firmName ? (
+              <span className="text-[10px] text-muted-foreground/60 truncate max-w-[150px]">
                 {user.firmName}
+              </span>
+            ) : (
+              <span className="text-[10px] text-muted-foreground/40">
+                Financial Brain of India
               </span>
             )}
           </div>
         </div>
       </SidebarHeader>
 
-      <SidebarContent className="px-2 py-4">
-        <SidebarGroup>
-          <SidebarGroupLabel className="px-2 text-[11px] font-semibold uppercase tracking-widest text-sidebar-foreground/40">
-            Workflow
-          </SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu className="gap-1">
-              {workflowItems.map(renderNavItem)}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-
-        <SidebarGroup className="mt-2">
-          <SidebarGroupLabel className="px-2 text-[11px] font-semibold uppercase tracking-widest text-sidebar-foreground/40">
-            Manage
-          </SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu className="gap-1">
-              {manageItems.map(renderNavItem)}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+      <SidebarContent className="px-1.5 py-2 overflow-y-auto scrollbar-thin">
+        {renderGroup('Command', commandItems, true)}
+        {renderGroup('Intelligence', intelligenceItems)}
+        {renderGroup('Finance', financeItems)}
+        {renderGroup('Business', businessNavItems)}
+        {renderGroup('Platform', platformItems)}
       </SidebarContent>
 
       <SidebarFooter className="border-t border-sidebar-border/50 p-3">
         <DropdownMenu>
-          <DropdownMenuTrigger className="w-full flex items-center gap-2.5 rounded-lg px-2 py-2 hover:bg-sidebar-accent transition-colors outline-none text-left">
-            <Avatar className="h-8 w-8 shrink-0">
-              <AvatarFallback className="bg-emerald-100 text-emerald-700 text-xs font-semibold">
+          <DropdownMenuTrigger className="w-full flex items-center gap-2.5 rounded-lg px-2 py-2 hover:bg-white/[0.04] transition-colors outline-none text-left">
+            <Avatar className="h-7 w-7 shrink-0">
+              <AvatarFallback className="bg-emerald-100 text-emerald-700 text-[10px] font-semibold">
                 {userInitials}
               </AvatarFallback>
             </Avatar>
             <div className="flex-1 min-w-0 hidden group-data-[collapsible=icon]:hidden">
               <div className="flex items-center gap-1.5">
-                <span className="text-sm font-medium text-sidebar-foreground truncate">{user?.name || 'User'}</span>
+                <span className="text-xs font-medium text-foreground truncate">{user?.name || 'User'}</span>
               </div>
-              <span className="text-[10px] text-sidebar-foreground/40 truncate block">{user?.email || ''}</span>
+              <span className="text-[9px] text-muted-foreground/50 truncate block">{user?.email || ''}</span>
             </div>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" side="top" className="w-56">
             <div className="flex items-center gap-2 p-2">
-              <Avatar className="h-8 w-8">
-                <AvatarFallback className="bg-emerald-100 text-emerald-700 text-xs font-semibold">
+              <Avatar className="h-7 w-7">
+                <AvatarFallback className="bg-emerald-100 text-emerald-700 text-[10px] font-semibold">
                   {userInitials}
                 </AvatarFallback>
               </Avatar>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium truncate">{user?.name || 'User'}</p>
-                <p className="text-xs text-muted-foreground truncate">{user?.email || ''}</p>
+                <p className="text-xs font-medium truncate">{user?.name || 'User'}</p>
+                <p className="text-[10px] text-muted-foreground truncate">{user?.email || ''}</p>
               </div>
             </div>
             {user?.firmName && (
@@ -197,7 +351,7 @@ function SidebarNav() {
                 <DropdownMenuSeparator />
                 <div className="flex items-center gap-2 px-2 py-1.5">
                   <Building2 className="h-3.5 w-3.5 text-muted-foreground" />
-                  <span className="text-xs text-muted-foreground truncate">{user.firmName}</span>
+                  <span className="text-[10px] text-muted-foreground truncate">{user.firmName}</span>
                 </div>
               </>
             )}
@@ -214,42 +368,28 @@ function SidebarNav() {
           </DropdownMenuContent>
         </DropdownMenu>
         <div className="flex items-center justify-between mt-2 px-1 hidden group-data-[collapsible=icon]:hidden">
-          <span className="text-[10px] font-medium text-sidebar-foreground/30">
-            GSTPilot v2.0
+          <span className="text-[9px] font-medium text-muted-foreground/40">
+            GSTPilot Infinity™
           </span>
-          <div className="flex items-center gap-2">
-            {unreadCount > 0 && (
-              <div className="flex items-center gap-1">
-                <Bell className="h-3 w-3 text-amber-500" />
-                <span className="text-[10px] font-medium text-amber-600">{unreadCount}</span>
-              </div>
-            )}
+          {unreadCount > 0 && (
             <div className="flex items-center gap-1">
-              <div className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-              <span className="text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
-                Live
-              </span>
+              <Bell className="h-3 w-3 text-muted-foreground/50" />
+              <span className="text-[9px] font-medium text-muted-foreground/60">{unreadCount}</span>
             </div>
-          </div>
+          )}
         </div>
       </SidebarFooter>
     </>
   )
 }
 
-export function AppSidebar() {
+export function AppSidebar({ onSearchOpen }: AppSidebarProps) {
   return (
     <Sidebar
       collapsible="icon"
       className="border-r border-sidebar-border/50"
     >
-      <SidebarNav />
+      <SidebarNav onSearchOpen={onSearchOpen} />
     </Sidebar>
   )
-}
-
-export {
-  SidebarProvider,
-  SidebarTrigger,
-  useSidebar,
 }

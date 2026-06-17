@@ -1,0 +1,1028 @@
+     1→'use client';
+     2→
+     3→import React, { useState, useEffect, useCallback } from 'react';
+     4→import {
+     5→  Card,
+     6→  CardContent,
+     7→  CardHeader,
+     8→  CardTitle,
+     9→  CardDescription,
+    10→} from '@/components/ui/card';
+    11→import { Button } from '@/components/ui/button';
+    12→import { Badge } from '@/components/ui/badge';
+    13→import { Skeleton } from '@/components/ui/skeleton';
+    14→import { Switch } from '@/components/ui/switch';
+    15→import { Input } from '@/components/ui/input';
+    16→import { Label } from '@/components/ui/label';
+    17→import { Separator } from '@/components/ui/separator';
+    18→import { Textarea } from '@/components/ui/textarea';
+    19→import {
+    20→  Select,
+    21→  SelectContent,
+    22→  SelectItem,
+    23→  SelectTrigger,
+    24→  SelectValue,
+    25→} from '@/components/ui/select';
+    26→import {
+    27→  Dialog,
+    28→  DialogContent,
+    29→  DialogDescription,
+    30→  DialogFooter,
+    31→  DialogHeader,
+    32→  DialogTitle,
+    33→} from '@/components/ui/dialog';
+    34→import {
+    35→  Workflow,
+    36→  Plus,
+    37→  Play,
+    38→  Pause,
+    39→  Edit,
+    40→  Trash2,
+    41→  Zap,
+    42→  Activity,
+    43→  CheckCircle2,
+    44→  XCircle,
+    45→  Clock,
+    46→  ChevronDown,
+    47→  ChevronUp,
+    48→  ArrowRight,
+    49→  FileText,
+    50→  AlertTriangle,
+    51→  Shield,
+    52→  Filter,
+    53→  RotateCw,
+    54→} from 'lucide-react';
+    55→import { motion, AnimatePresence } from 'framer-motion';
+    56→import { toast } from 'sonner';
+    57→import { formatNumber } from '@/lib/gst-utils';
+    58→
+    59→// ─── Color Palette (Emerald/Teal — NO blue/indigo) ────────────────────────
+    60→const COLORS = {
+    61→  emerald: '#10b981',
+    62→  emeraldDark: '#059669',
+    63→  teal: '#14b8a6',
+    64→  amber: '#f59e0b',
+    65→  red: '#ef4444',
+    66→  slate: '#64748b',
+    67→};
+    68→
+    69→// ─── Types ────────────────────────────────────────────────────────────────
+    70→interface AutomationLog {
+    71→  id: string;
+    72→  ruleId: string;
+    73→  trigger: string;
+    74→  status: string;
+    75→  details: string | null;
+    76→  executedAt: string;
+    77→}
+    78→
+    79→interface AutomationRule {
+    80→  id: string;
+    81→  name: string;
+    82→  description: string | null;
+    83→  trigger: string;
+    84→  conditions: string | null;
+    85→  actions: string;
+    86→  isActive: boolean;
+    87→  lastRunAt: string | null;
+    88→  runCount: number;
+    89→  createdBy: string | null;
+    90→  createdAt: string;
+    91→  updatedAt: string;
+    92→  logs: AutomationLog[];
+    93→}
+    94→
+    95→// ─── Trigger Configuration ────────────────────────────────────────────────
+    96→const TRIGGER_CONFIG: Record<
+    97→  string,
+    98→  { label: string; color: string; bgColor: string; icon: React.ElementType }
+    99→> = {
+   100→  invoice_uploaded: {
+   101→    label: 'Invoice Upload',
+   102→    color: 'text-sky-700 dark:text-sky-400',
+   103→    bgColor: 'bg-sky-50 border-sky-200 dark:bg-sky-950/30 dark:border-sky-800',
+   104→    icon: FileText,
+   105→  },
+   106→  return_ready: {
+   107→    label: 'Return Ready',
+   108→    color: 'text-emerald-700 dark:text-emerald-400',
+   109→    bgColor:
+   110→      'bg-emerald-50 border-emerald-200 dark:bg-emerald-950/30 dark:border-emerald-800',
+   111→    icon: CheckCircle2,
+   112→  },
+   113→  return_filed: {
+   114→    label: 'Return Filed',
+   115→    color: 'text-teal-700 dark:text-teal-400',
+   116→    bgColor:
+   117→      'bg-teal-50 border-teal-200 dark:bg-teal-950/30 dark:border-teal-800',
+   118→    icon: Shield,
+   119→  },
+   120→  notice_received: {
+   121→    label: 'Notice Received',
+   122→    color: 'text-red-700 dark:text-red-400',
+   123→    bgColor: 'bg-red-50 border-red-200 dark:bg-red-950/30 dark:border-red-800',
+   124→    icon: AlertTriangle,
+   125→  },
+   126→};
+   127→
+   128→// ─── Animated Card Wrapper ─────────────────────────────────────────────────
+   129→function AnimatedCard({
+   130→  children,
+   131→  delay = 0,
+   132→  className = '',
+   133→}: {
+   134→  children: React.ReactNode;
+   135→  delay?: number;
+   136→  className?: string;
+   137→}) {
+   138→  return (
+   139→    <motion.div
+   140→      initial={{ opacity: 0, y: 20 }}
+   141→      animate={{ opacity: 1, y: 0 }}
+   142→      transition={{ delay, duration: 0.5, ease: 'easeOut' }}
+   143→    >
+   144→      <Card
+   145→        className={`hover:shadow-lg hover:shadow-emerald-500/5 transition-all duration-300 border-border/50 backdrop-blur-sm bg-card/80 ${className}`}
+   146→      >
+   147→        {children}
+   148→      </Card>
+   149→    </motion.div>
+   150→  );
+   151→}
+   152→
+   153→// ─── Trigger Badge ─────────────────────────────────────────────────────────
+   154→function TriggerBadge({ trigger }: { trigger: string }) {
+   155→  const config = TRIGGER_CONFIG[trigger];
+   156→  if (!config) {
+   157→    return <Badge variant="outline">{trigger}</Badge>;
+   158→  }
+   159→  const Icon = config.icon;
+   160→  return (
+   161→    <Badge
+   162→      variant="outline"
+   163→      className={`gap-1 text-xs font-medium border ${config.bgColor} ${config.color}`}
+   164→    >
+   165→      <Icon className="h-3 w-3" />
+   166→      {config.label}
+   167→    </Badge>
+   168→  );
+   169→}
+   170→
+   171→// ─── Visual Workflow Diagram ───────────────────────────────────────────────
+   172→function WorkflowDiagram({ rule }: { rule: AutomationRule }) {
+   173→  const triggerConfig = TRIGGER_CONFIG[rule.trigger];
+   174→  const TriggerIcon = triggerConfig?.icon || Zap;
+   175→
+   176→  const hasConditions = !!rule.conditions && rule.conditions.trim().length > 0;
+   177→
+   178→  return (
+   179→    <div className="flex items-center gap-0 overflow-x-auto py-2 px-1">
+   180→      {/* Trigger Node */}
+   181→      <div className="flex flex-col items-center shrink-0">
+   182→        <div
+   183→          className={`flex items-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-semibold ${
+   184→            triggerConfig?.bgColor || 'bg-slate-50 border-slate-200'
+   185→          } ${triggerConfig?.color || 'text-slate-700'}`}
+   186→        >
+   187→          <TriggerIcon className="h-3.5 w-3.5" />
+   188→          {triggerConfig?.label || rule.trigger}
+   189→        </div>
+   190→        <span className="text-[9px] text-muted-foreground mt-1">Trigger</span>
+   191→      </div>
+   192→
+   193→      {/* Arrow */}
+   194→      <div className="flex items-center mx-1 shrink-0">
+   195→        <svg width="32" height="12" viewBox="0 0 32 12">
+   196→          <line
+   197→            x1="0"
+   198→            y1="6"
+   199→            x2="26"
+   200→            y2="6"
+   201→            stroke="currentColor"
+   202→            strokeWidth="1.5"
+   203→            className="text-muted-foreground/40"
+   204→          />
+   205→          <polygon
+   206→            points="26,2 32,6 26,10"
+   207→            className="fill-muted-foreground/40"
+   208→          />
+   209→        </svg>
+   210→      </div>
+   211→
+   212→      {/* Condition Node */}
+   213→      <div className="flex flex-col items-center shrink-0">
+   214→        <div
+   215→          className={`flex items-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-semibold ${
+   216→            hasConditions
+   217→              ? 'bg-amber-50 border-amber-200 text-amber-700 dark:bg-amber-950/30 dark:border-amber-800 dark:text-amber-400'
+   218→              : 'bg-emerald-50 border-emerald-200 text-emerald-700 dark:bg-emerald-950/30 dark:border-emerald-800 dark:text-emerald-400'
+   219→          }`}
+   220→        >
+   221→          {hasConditions ? (
+   222→            <Filter className="h-3.5 w-3.5" />
+   223→          ) : (
+   224→            <CheckCircle2 className="h-3.5 w-3.5" />
+   225→          )}
+   226→          {hasConditions ? 'Check Conditions' : 'No Conditions'}
+   227→        </div>
+   228→        <span className="text-[9px] text-muted-foreground mt-1">Condition</span>
+   229→      </div>
+   230→
+   231→      {/* Arrow */}
+   232→      <div className="flex items-center mx-1 shrink-0">
+   233→        <svg width="32" height="12" viewBox="0 0 32 12">
+   234→          <line
+   235→            x1="0"
+   236→            y1="6"
+   237→            x2="26"
+   238→            y2="6"
+   239→            stroke="currentColor"
+   240→            strokeWidth="1.5"
+   241→            className="text-muted-foreground/40"
+   242→          />
+   243→          <polygon
+   244→            points="26,2 32,6 26,10"
+   245→            className="fill-muted-foreground/40"
+   246→          />
+   247→        </svg>
+   248→      </div>
+   249→
+   250→      {/* Action Node */}
+   251→      <div className="flex flex-col items-center shrink-0">
+   252→        <div className="flex items-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-semibold bg-emerald-50 border-emerald-200 text-emerald-700 dark:bg-emerald-950/30 dark:border-emerald-800 dark:text-emerald-400">
+   253→          <Play className="h-3.5 w-3.5" />
+   254→          {rule.actions.length > 30
+   255→            ? rule.actions.substring(0, 30) + '...'
+   256→            : rule.actions}
+   257→        </div>
+   258→        <span className="text-[9px] text-muted-foreground mt-1">Action</span>
+   259→      </div>
+   260→    </div>
+   261→  );
+   262→}
+   263→
+   264→// ─── Skeleton Loaders ──────────────────────────────────────────────────────
+   265→function StatsSkeleton() {
+   266→  return (
+   267→    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+   268→      {Array.from({ length: 4 }).map((_, i) => (
+   269→        <Skeleton key={i} className="h-24 rounded-xl" />
+   270→      ))}
+   271→    </div>
+   272→  );
+   273→}
+   274→
+   275→function RulesSkeleton() {
+   276→  return (
+   277→    <div className="space-y-3">
+   278→      {Array.from({ length: 3 }).map((_, i) => (
+   279→        <Skeleton key={i} className="h-48 rounded-xl" />
+   280→      ))}
+   281→    </div>
+   282→  );
+   283→}
+   284→
+   285→// ─── Format Timestamp ──────────────────────────────────────────────────────
+   286→function formatTimestamp(dateStr: string | null): string {
+   287→  if (!dateStr) return 'Never';
+   288→  try {
+   289→    const date = new Date(dateStr);
+   290→    const now = new Date();
+   291→    const diffMs = now.getTime() - date.getTime();
+   292→    const diffMins = Math.floor(diffMs / 60000);
+   293→    const diffHours = Math.floor(diffMs / 3600000);
+   294→    const diffDays = Math.floor(diffMs / 86400000);
+   295→
+   296→    if (diffMins < 1) return 'Just now';
+   297→    if (diffMins < 60) return `${diffMins}m ago`;
+   298→    if (diffHours < 24) return `${diffHours}h ago`;
+   299→    if (diffDays < 7) return `${diffDays}d ago`;
+   300→    return date.toLocaleDateString('en-IN', {
+   301→      day: 'numeric',
+   302→      month: 'short',
+   303→      year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined,
+   304→    });
+   305→  } catch {
+   306→    return 'Invalid date';
+   307→  }
+   308→}
+   309→
+   310→// ═══════════════════════════════════════════════════════════════════════════
+   311→// MAIN COMPONENT
+   312→// ═══════════════════════════════════════════════════════════════════════════
+   313→export default function AutomationCenterPage() {
+   314→  // ── State ────────────────────────────────────────────────────────────────
+   315→  const [loading, setLoading] = useState(true);
+   316→  const [rules, setRules] = useState<AutomationRule[]>([]);
+   317→  const [createDialogOpen, setCreateDialogOpen] = useState(false);
+   318→  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+   319→  const [deletingRule, setDeletingRule] = useState<AutomationRule | null>(null);
+   320→  const [logsExpanded, setLogsExpanded] = useState(false);
+   321→  const [logFilter, setLogFilter] = useState<'all' | 'success' | 'failed'>('all');
+   322→
+   323→  // Create form state
+   324→  const [formName, setFormName] = useState('');
+   325→  const [formDescription, setFormDescription] = useState('');
+   326→  const [formTrigger, setFormTrigger] = useState('');
+   327→  const [formConditions, setFormConditions] = useState('');
+   328→  const [formActions, setFormActions] = useState('');
+   329→  const [creating, setCreating] = useState(false);
+   330→
+   331→  // ── Data Fetching ────────────────────────────────────────────────────────
+   332→  const fetchRules = useCallback(async () => {
+   333→    try {
+   334→      setLoading(true);
+   335→      const res = await fetch('/api/automation');
+   336→      if (res.ok) {
+   337→        const data = await res.json();
+   338→        setRules(data.rules || []);
+   339→      }
+   340→    } catch (err) {
+   341→      console.error('Failed to fetch automation rules:', err);
+   342→      toast.error('Failed to load automation rules');
+   343→    } finally {
+   344→      setLoading(false);
+   345→    }
+   346→  }, []);
+   347→
+   348→  useEffect(() => {
+   349→    fetchRules();
+   350→  }, [fetchRules]);
+   351→
+   352→  // ── Derived Stats ────────────────────────────────────────────────────────
+   353→  const totalRules = rules.length;
+   354→  const activeRules = rules.filter((r) => r.isActive).length;
+   355→  const totalExecutions = rules.reduce((sum, r) => sum + r.runCount, 0);
+   356→  const allLogs = rules.flatMap((r) => r.logs);
+   357→  const successCount = allLogs.filter((l) => l.status === 'success').length;
+   358→  const successRate =
+   359→    allLogs.length > 0
+   360→      ? Math.round((successCount / allLogs.length) * 100)
+   361→      : 0;
+   362→
+   363→  const filteredLogs = allLogs
+   364→    .filter((l) => {
+   365→      if (logFilter === 'success') return l.status === 'success';
+   366→      if (logFilter === 'failed') return l.status === 'failed';
+   367→      return true;
+   368→    })
+   369→    .sort(
+   370→      (a, b) =>
+   371→        new Date(b.executedAt).getTime() - new Date(a.executedAt).getTime()
+   372→    )
+   373→    .slice(0, 20);
+   374→
+   375→  // ── Handlers ─────────────────────────────────────────────────────────────
+   376→  const handleCreateRule = async () => {
+   377→    if (!formName.trim() || !formTrigger || !formActions.trim()) {
+   378→      toast.error('Missing required fields', {
+   379→        description: 'Name, Trigger, and Actions are required.',
+   380→      });
+   381→      return;
+   382→    }
+   383→
+   384→    try {
+   385→      setCreating(true);
+   386→      const res = await fetch('/api/automation', {
+   387→        method: 'POST',
+   388→        headers: { 'Content-Type': 'application/json' },
+   389→        body: JSON.stringify({
+   390→          name: formName.trim(),
+   391→          description: formDescription.trim() || null,
+   392→          trigger: formTrigger,
+   393→          conditions: formConditions.trim() || null,
+   394→          actions: formActions.trim(),
+   395→        }),
+   396→      });
+   397→
+   398→      if (res.ok) {
+   399→        const data = await res.json();
+   400→        setRules((prev) => [data.rule, ...prev]);
+   401→        setCreateDialogOpen(false);
+   402→        resetForm();
+   403→        toast.success('Automation rule created', {
+   404→          description: `"${formName}" is now active.`,
+   405→          icon: <CheckCircle2 className="h-4 w-4 text-emerald-500" />,
+   406→        });
+   407→      } else {
+   408→        const errorData = await res.json();
+   409→        throw new Error(errorData.error || 'Failed to create rule');
+   410→      }
+   411→    } catch (err) {
+   412→      toast.error('Failed to create rule', {
+   413→        description:
+   414→          err instanceof Error ? err.message : 'Please try again.',
+   415→      });
+   416→    } finally {
+   417→      setCreating(false);
+   418→    }
+   419→  };
+   420→
+   421→  const handleToggleRule = async (rule: AutomationRule) => {
+   422→    try {
+   423→      const res = await fetch('/api/automation', {
+   424→        method: 'PATCH',
+   425→        headers: { 'Content-Type': 'application/json' },
+   426→        body: JSON.stringify({
+   427→          id: rule.id,
+   428→          isActive: !rule.isActive,
+   429→        }),
+   430→      });
+   431→
+   432→      if (res.ok) {
+   433→        setRules((prev) =>
+   434→          prev.map((r) =>
+   435→            r.id === rule.id ? { ...r, isActive: !r.isActive } : r
+   436→          )
+   437→        );
+   438→        toast.success(
+   439→          rule.isActive ? 'Rule deactivated' : 'Rule activated',
+   440→          {
+   441→            description: `"${rule.name}" is now ${rule.isActive ? 'inactive' : 'active'}.`,
+   442→          }
+   443→        );
+   444→      }
+   445→    } catch {
+   446→      toast.error('Failed to toggle rule');
+   447→    }
+   448→  };
+   449→
+   450→  const handleDeleteRule = async () => {
+   451→    if (!deletingRule) return;
+   452→
+   453→    try {
+   454→      const res = await fetch('/api/automation', {
+   455→        method: 'DELETE',
+   456→        headers: { 'Content-Type': 'application/json' },
+   457→        body: JSON.stringify({ id: deletingRule.id }),
+   458→      });
+   459→
+   460→      if (res.ok) {
+   461→        setRules((prev) => prev.filter((r) => r.id !== deletingRule.id));
+   462→        setDeleteDialogOpen(false);
+   463→        setDeletingRule(null);
+   464→        toast.success('Rule deleted', {
+   465→          description: `"${deletingRule.name}" has been removed.`,
+   466→        });
+   467→      }
+   468→    } catch {
+   469→      toast.error('Failed to delete rule');
+   470→    }
+   471→  };
+   472→
+   473→  const resetForm = () => {
+   474→    setFormName('');
+   475→    setFormDescription('');
+   476→    setFormTrigger('');
+   477→    setFormConditions('');
+   478→    setFormActions('');
+   479→  };
+   480→
+   481→  // ── Render ───────────────────────────────────────────────────────────────
+   482→  if (loading) {
+   483→    return (
+   484→      <div className="p-4 md:p-6 space-y-4">
+   485→        <motion.div
+   486→          initial={{ opacity: 0, y: -10 }}
+   487→          animate={{ opacity: 1, y: 0 }}
+   488→          transition={{ duration: 0.4 }}
+   489→        >
+   490→          <Skeleton className="h-10 w-64 mb-2" />
+   491→          <Skeleton className="h-4 w-48" />
+   492→        </motion.div>
+   493→        <StatsSkeleton />
+   494→        <RulesSkeleton />
+   495→      </div>
+   496→    );
+   497→  }
+   498→
+   499→  return (
+   500→    <div className="p-4 md:p-6 space-y-4">
+   501→      {/* ═══ PAGE HEADER ═══ */}
+   502→      <motion.div
+   503→        initial={{ opacity: 0, y: -10 }}
+   504→        animate={{ opacity: 1, y: 0 }}
+   505→        transition={{ duration: 0.4 }}
+   506→        className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
+   507→      >
+   508→        <div className="flex items-center gap-3">
+   509→          <div className="flex items-center justify-center h-10 w-10 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-600 shadow-md shadow-emerald-600/20">
+   510→            <Workflow className="h-5 w-5 text-white" />
+   511→          </div>
+   512→          <div>
+   513→            <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground">
+   514→              Automation Center
+   515→            </h1>
+   516→            <p className="text-sm text-muted-foreground mt-0.5">
+   517→              Configure workflow automations and triggers
+   518→            </p>
+   519→          </div>
+   520→        </div>
+   521→        <Button
+   522→          onClick={() => setCreateDialogOpen(true)}
+   523→          className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white"
+   524→        >
+   525→          <Plus className="h-4 w-4" />
+   526→          Create Rule
+   527→        </Button>
+   528→      </motion.div>
+   529→
+   530→      {/* ═══ STATS ROW ═══ */}
+   531→      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+   532→        {[
+   533→          {
+   534→            label: 'Total Rules',
+   535→            value: totalRules,
+   536→            icon: Workflow,
+   537→            color: 'text-emerald-600 dark:text-emerald-400',
+   538→            bg: 'bg-emerald-50 dark:bg-emerald-950/30',
+   539→          },
+   540→          {
+   541→            label: 'Active Rules',
+   542→            value: activeRules,
+   543→            icon: Play,
+   544→            color: 'text-teal-600 dark:text-teal-400',
+   545→            bg: 'bg-teal-50 dark:bg-teal-950/30',
+   546→          },
+   547→          {
+   548→            label: 'Total Executions',
+   549→            value: totalExecutions,
+   550→            icon: Activity,
+   551→            color: 'text-amber-600 dark:text-amber-400',
+   552→            bg: 'bg-amber-50 dark:bg-amber-950/30',
+   553→          },
+   554→          {
+   555→            label: 'Success Rate',
+   556→            value: `${successRate}%`,
+   557→            icon: CheckCircle2,
+   558→            color: 'text-emerald-600 dark:text-emerald-400',
+   559→            bg: 'bg-emerald-50 dark:bg-emerald-950/30',
+   560→          },
+   561→        ].map((stat, idx) => (
+   562→          <AnimatedCard key={stat.label} delay={0.05 + idx * 0.05}>
+   563→            <CardContent className="p-4">
+   564→              <div className="flex items-center justify-between">
+   565→                <div>
+   566→                  <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+   567→                    {stat.label}
+   568→                  </p>
+   569→                  <p className={`text-2xl font-bold mt-1 ${stat.color}`}>
+   570→                    {typeof stat.value === 'number'
+   571→                      ? formatNumber(stat.value)
+   572→                      : stat.value}
+   573→                  </p>
+   574→                </div>
+   575→                <div
+   576→                  className={`flex items-center justify-center h-10 w-10 rounded-xl ${stat.bg}`}
+   577→                >
+   578→                  <stat.icon className={`h-5 w-5 ${stat.color}`} />
+   579→                </div>
+   580→              </div>
+   581→            </CardContent>
+   582→          </AnimatedCard>
+   583→        ))}
+   584→      </div>
+   585→
+   586→      {/* ═══ AUTOMATION RULES LIST ═══ */}
+   587→      <div className="space-y-3">
+   588→        <AnimatePresence>
+   589→          {rules.length === 0 ? (
+   590→            <AnimatedCard delay={0.2}>
+   591→              <CardContent className="p-8 text-center">
+   592→                <div className="flex items-center justify-center h-14 w-14 rounded-2xl bg-emerald-50 dark:bg-emerald-950/30 mx-auto mb-4">
+   593→                  <Workflow className="h-7 w-7 text-emerald-500" />
+   594→                </div>
+   595→                <h3 className="text-lg font-semibold text-foreground mb-1">
+   596→                  No automation rules yet
+   597→                </h3>
+   598→                <p className="text-sm text-muted-foreground mb-4 max-w-sm mx-auto">
+   599→                  Create your first automation rule to streamline your GST
+   600→                  workflow and reduce manual effort.
+   601→                </p>
+   602→                <Button
+   603→                  onClick={() => setCreateDialogOpen(true)}
+   604→                  className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white"
+   605→                >
+   606→                  <Plus className="h-4 w-4" />
+   607→                  Create Your First Rule
+   608→                </Button>
+   609→              </CardContent>
+   610→            </AnimatedCard>
+   611→          ) : (
+   612→            rules.map((rule, idx) => (
+   613→              <AnimatedCard key={rule.id} delay={0.1 + idx * 0.05}>
+   614→                <CardContent className="p-4 md:p-5">
+   615→                  {/* Rule Header */}
+   616→                  <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-3">
+   617→                    <div className="flex-1 min-w-0">
+   618→                      <div className="flex items-center gap-2 flex-wrap">
+   619→                        <h3 className="text-base font-bold text-foreground">
+   620→                          {rule.name}
+   621→                        </h3>
+   622→                        <TriggerBadge trigger={rule.trigger} />
+   623→                        {rule.isActive ? (
+   624→                          <Badge className="bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border-emerald-200 gap-1 text-[10px]">
+   625→                            <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+   626→                            Active
+   627→                          </Badge>
+   628→                        ) : (
+   629→                          <Badge className="bg-slate-50 text-slate-500 hover:bg-slate-100 border-slate-200 gap-1 text-[10px]">
+   630→                            <Pause className="h-2.5 w-2.5" />
+   631→                            Inactive
+   632→                          </Badge>
+   633→                        )}
+   634→                      </div>
+   635→                      {rule.description && (
+   636→                        <p className="text-sm text-muted-foreground mt-1">
+   637→                          {rule.description}
+   638→                        </p>
+   639→                      )}
+   640→                    </div>
+   641→
+   642→                    {/* Toggle + Actions */}
+   643→                    <div className="flex items-center gap-3 shrink-0">
+   644→                      <div className="flex items-center gap-2">
+   645→                        <Label className="text-xs text-muted-foreground">
+   646→                          {rule.isActive ? 'On' : 'Off'}
+   647→                        </Label>
+   648→                        <Switch
+   649→                          checked={rule.isActive}
+   650→                          onCheckedChange={() => handleToggleRule(rule)}
+   651→                        />
+   652→                      </div>
+   653→                      <Separator orientation="vertical" className="h-6" />
+   654→                      <Button
+   655→                        variant="ghost"
+   656→                        size="sm"
+   657→                        className="h-8 w-8 p-0 text-muted-foreground hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/30"
+   658→                        title="Edit rule"
+   659→                      >
+   660→                        <Edit className="h-4 w-4" />
+   661→                      </Button>
+   662→                      <Button
+   663→                        variant="ghost"
+   664→                        size="sm"
+   665→                        className="h-8 w-8 p-0 text-muted-foreground hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30"
+   666→                        onClick={() => {
+   667→                          setDeletingRule(rule);
+   668→                          setDeleteDialogOpen(true);
+   669→                        }}
+   670→                        title="Delete rule"
+   671→                      >
+   672→                        <Trash2 className="h-4 w-4" />
+   673→                      </Button>
+   674→                    </div>
+   675→                  </div>
+   676→
+   677→                  {/* Action Summary */}
+   678→                  <div className="flex items-center gap-2 p-2 rounded-lg bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-100/50 dark:border-emerald-900/30 mb-3">
+   679→                    <Zap className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+   680→                    <span className="text-xs font-medium text-emerald-700 dark:text-emerald-400 truncate">
+   681→                      {rule.actions}
+   682→                    </span>
+   683→                  </div>
+   684→
+   685→                  {/* Visual Workflow Diagram */}
+   686→                  <div className="rounded-xl border border-border/30 bg-muted/10 p-3 mb-3">
+   687→                    <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+   688→                      Workflow
+   689→                    </p>
+   690→                    <WorkflowDiagram rule={rule} />
+   691→                  </div>
+   692→
+   693→                  {/* Footer Stats */}
+   694→                  <div className="flex items-center gap-4 text-xs text-muted-foreground">
+   695→                    <div className="flex items-center gap-1.5">
+   696→                      <RotateCw className="h-3 w-3" />
+   697→                      <span>
+   698→                        {formatNumber(rule.runCount)} run
+   699→                        {rule.runCount !== 1 ? 's' : ''}
+   700→                      </span>
+   701→                    </div>
+   702→                    <div className="flex items-center gap-1.5">
+   703→                      <Clock className="h-3 w-3" />
+   704→                      <span>
+   705→                        Last run: {formatTimestamp(rule.lastRunAt)}
+   706→                      </span>
+   707→                    </div>
+   708→                  </div>
+   709→                </CardContent>
+   710→              </AnimatedCard>
+   711→            ))
+   712→          )}
+   713→        </AnimatePresence>
+   714→      </div>
+   715→
+   716→      {/* ═══ AUTOMATION LOGS ═══ */}
+   717→      {allLogs.length > 0 && (
+   718→        <AnimatedCard delay={0.3}>
+   719→          <CardHeader className="pb-2">
+   720→            <div
+   721→              className="flex items-center justify-between cursor-pointer"
+   722→              onClick={() => setLogsExpanded(!logsExpanded)}
+   723→            >
+   724→              <CardTitle className="flex items-center gap-2 text-base">
+   725→                <Activity className="h-5 w-5 text-emerald-500" />
+   726→                Execution Logs
+   727→                <Badge
+   728→                  variant="outline"
+   729→                  className="text-[10px] px-1.5 py-0.5 border-border/50"
+   730→                >
+   731→                  {allLogs.length}
+   732→                </Badge>
+   733→              </CardTitle>
+   734→              <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
+   735→                {logsExpanded ? (
+   736→                  <ChevronUp className="h-4 w-4" />
+   737→                ) : (
+   738→                  <ChevronDown className="h-4 w-4" />
+   739→                )}
+   740→              </Button>
+   741→            </div>
+   742→            <CardDescription>
+   743→              Recent automation execution history
+   744→            </CardDescription>
+   745→          </CardHeader>
+   746→          <AnimatePresence>
+   747→            {logsExpanded && (
+   748→              <motion.div
+   749→                initial={{ height: 0, opacity: 0 }}
+   750→                animate={{ height: 'auto', opacity: 1 }}
+   751→                exit={{ height: 0, opacity: 0 }}
+   752→                transition={{ duration: 0.3 }}
+   753→                className="overflow-hidden"
+   754→              >
+   755→                <CardContent className="pt-0">
+   756→                  {/* Log Filters */}
+   757→                  <div className="flex items-center gap-2 mb-3">
+   758→                    {(['all', 'success', 'failed'] as const).map((filter) => (
+   759→                      <Button
+   760→                        key={filter}
+   761→                        variant={logFilter === filter ? 'default' : 'outline'}
+   762→                        size="sm"
+   763→                        className={`h-7 text-xs ${
+   764→                          logFilter === filter
+   765→                            ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+   766→                            : 'border-border/50 text-muted-foreground hover:text-foreground'
+   767→                        }`}
+   768→                        onClick={() => setLogFilter(filter)}
+   769→                      >
+   770→                        {filter === 'all' && 'All'}
+   771→                        {filter === 'success' && (
+   772→                          <CheckCircle2 className="h-3 w-3 mr-1" />
+   773→                        )}
+   774→                        {filter === 'success' && 'Success'}
+   775→                        {filter === 'failed' && (
+   776→                          <XCircle className="h-3 w-3 mr-1" />
+   777→                        )}
+   778→                        {filter === 'failed' && 'Failed'}
+   779→                      </Button>
+   780→                    ))}
+   781→                  </div>
+   782→
+   783→                  {/* Log Entries */}
+   784→                  <div className="max-h-96 overflow-y-auto space-y-1.5 pr-1 custom-scrollbar">
+   785→                    {filteredLogs.length === 0 ? (
+   786→                      <div className="text-center py-6 text-sm text-muted-foreground">
+   787→                        No logs matching the filter
+   788→                      </div>
+   789→                    ) : (
+   790→                      filteredLogs.map((log, idx) => {
+   791→                        const parentRule = rules.find(
+   792→                          (r) => r.id === log.ruleId
+   793→                        );
+   794→                        return (
+   795→                          <motion.div
+   796→                            key={log.id}
+   797→                            initial={{ opacity: 0, x: -10 }}
+   798→                            animate={{ opacity: 1, x: 0 }}
+   799→                            transition={{ delay: idx * 0.03 }}
+   800→                            className="flex items-center gap-3 p-2.5 rounded-lg border border-border/30 hover:bg-muted/20 transition-colors"
+   801→                          >
+   802→                            <div
+   803→                              className={`flex items-center justify-center h-7 w-7 rounded-lg shrink-0 ${
+   804→                                log.status === 'success'
+   805→                                  ? 'bg-emerald-50 dark:bg-emerald-950/30'
+   806→                                  : 'bg-red-50 dark:bg-red-950/30'
+   807→                              }`}
+   808→                            >
+   809→                              {log.status === 'success' ? (
+   810→                                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+   811→                              ) : (
+   812→                                <XCircle className="h-3.5 w-3.5 text-red-500" />
+   813→                              )}
+   814→                            </div>
+   815→                            <div className="flex-1 min-w-0">
+   816→                              <div className="flex items-center gap-2">
+   817→                                <span className="text-sm font-medium text-foreground truncate">
+   818→                                  {parentRule?.name || 'Unknown Rule'}
+   819→                                </span>
+   820→                                <TriggerBadge trigger={log.trigger} />
+   821→                              </div>
+   822→                              {log.details && (
+   823→                                <p className="text-xs text-muted-foreground truncate mt-0.5">
+   824→                                  {log.details}
+   825→                                </p>
+   826→                              )}
+   827→                            </div>
+   828→                            <div className="flex items-center gap-2 shrink-0">
+   829→                              <Badge
+   830→                                variant="outline"
+   831→                                className={`text-[10px] ${
+   832→                                  log.status === 'success'
+   833→                                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-400 dark:border-emerald-800'
+   834→                                    : 'bg-red-50 text-red-700 border-red-200 dark:bg-red-950/30 dark:text-red-400 dark:border-red-800'
+   835→                                }`}
+   836→                              >
+   837→                                {log.status === 'success' ? 'Success' : 'Failed'}
+   838→                              </Badge>
+   839→                              <span className="text-[10px] text-muted-foreground whitespace-nowrap">
+   840→                                {formatTimestamp(log.executedAt)}
+   841→                              </span>
+   842→                            </div>
+   843→                          </motion.div>
+   844→                        );
+   845→                      })
+   846→                    )}
+   847→                  </div>
+   848→                </CardContent>
+   849→              </motion.div>
+   850→            )}
+   851→          </AnimatePresence>
+   852→        </AnimatedCard>
+   853→      )}
+   854→
+   855→      {/* ═══ CREATE RULE DIALOG ═══ */}
+   856→      <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
+   857→        <DialogContent className="sm:max-w-lg">
+   858→          <DialogHeader>
+   859→            <DialogTitle className="flex items-center gap-2">
+   860→              <Workflow className="h-5 w-5 text-emerald-500" />
+   861→              Create Automation Rule
+   862→            </DialogTitle>
+   863→            <DialogDescription>
+   864→              Define a trigger and action to automate your GST workflow.
+   865→            </DialogDescription>
+   866→          </DialogHeader>
+   867→          <div className="space-y-4 py-2">
+   868→            {/* Rule Name */}
+   869→            <div className="space-y-2">
+   870→              <Label htmlFor="rule-name" className="text-sm font-medium">
+   871→                Rule Name <span className="text-red-500">*</span>
+   872→              </Label>
+   873→              <Input
+   874→                id="rule-name"
+   875→                value={formName}
+   876→                onChange={(e) => setFormName(e.target.value)}
+   877→                placeholder="e.g., Auto-file on invoice match"
+   878→              />
+   879→            </div>
+   880→
+   881→            {/* Description */}
+   882→            <div className="space-y-2">
+   883→              <Label htmlFor="rule-desc" className="text-sm font-medium">
+   884→                Description
+   885→              </Label>
+   886→              <Input
+   887→                id="rule-desc"
+   888→                value={formDescription}
+   889→                onChange={(e) => setFormDescription(e.target.value)}
+   890→                placeholder="Brief description of what this rule does"
+   891→              />
+   892→            </div>
+   893→
+   894→            {/* Trigger */}
+   895→            <div className="space-y-2">
+   896→              <Label htmlFor="rule-trigger" className="text-sm font-medium">
+   897→                Trigger <span className="text-red-500">*</span>
+   898→              </Label>
+   899→              <Select value={formTrigger} onValueChange={setFormTrigger}>
+   900→                <SelectTrigger className="w-full" id="rule-trigger">
+   901→                  <SelectValue placeholder="Select a trigger event" />
+   902→                </SelectTrigger>
+   903→                <SelectContent>
+   904→                  <SelectItem value="invoice_uploaded">
+   905→                    Invoice Upload
+   906→                  </SelectItem>
+   907→                  <SelectItem value="return_ready">
+   908→                    Return Ready
+   909→                  </SelectItem>
+   910→                  <SelectItem value="return_filed">
+   911→                    Return Filed
+   912→                  </SelectItem>
+   913→                  <SelectItem value="notice_received">
+   914→                    Notice Received
+   915→                  </SelectItem>
+   916→                </SelectContent>
+   917→              </Select>
+   918→            </div>
+   919→
+   920→            {/* Conditions */}
+   921→            <div className="space-y-2">
+   922→              <Label htmlFor="rule-conditions" className="text-sm font-medium">
+   923→                Conditions
+   924→              </Label>
+   925→              <Textarea
+   926→                id="rule-conditions"
+   927→                value={formConditions}
+   928→                onChange={(e) => setFormConditions(e.target.value)}
+   929→                placeholder='e.g., {"matchStatus": "perfect_match"} or key=value pairs'
+   930→                rows={3}
+   931→                className="font-mono text-sm resize-none"
+   932→              />
+   933→              <p className="text-xs text-muted-foreground">
+   934→                JSON format or key=value pairs (optional)
+   935→              </p>
+   936→            </div>
+   937→
+   938→            {/* Actions */}
+   939→            <div className="space-y-2">
+   940→              <Label htmlFor="rule-actions" className="text-sm font-medium">
+   941→                Actions <span className="text-red-500">*</span>
+   942→              </Label>
+   943→              <Textarea
+   944→                id="rule-actions"
+   945→                value={formActions}
+   946→                onChange={(e) => setFormActions(e.target.value)}
+   947→                placeholder="e.g., Auto-assign to filing team and send notification"
+   948→                rows={3}
+   949→                className="resize-none"
+   950→              />
+   951→            </div>
+   952→          </div>
+   953→          <DialogFooter>
+   954→            <Button
+   955→              variant="outline"
+   956→              onClick={() => {
+   957→                setCreateDialogOpen(false);
+   958→                resetForm();
+   959→              }}
+   960→            >
+   961→              Cancel
+   962→            </Button>
+   963→            <Button
+   964→              className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white"
+   965→              onClick={handleCreateRule}
+   966→              disabled={
+   967→                creating ||
+   968→                !formName.trim() ||
+   969→                !formTrigger ||
+   970→                !formActions.trim()
+   971→              }
+   972→            >
+   973→              {creating ? (
+   974→                <>
+   975→                  <motion.div
+   976→                    animate={{ rotate: 360 }}
+   977→                    transition={{
+   978→                      duration: 1,
+   979→                      repeat: Infinity,
+   980→                      ease: 'linear',
+   981→                    }}
+   982→                    className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full"
+   983→                  />
+   984→                  Creating...
+   985→                </>
+   986→              ) : (
+   987→                <>
+   988→                  <Zap className="h-4 w-4" />
+   989→                  Create Rule
+   990→                </>
+   991→              )}
+   992→            </Button>
+   993→          </DialogFooter>
+   994→        </DialogContent>
+   995→      </Dialog>
+   996→
+   997→      {/* ═══ DELETE CONFIRMATION DIALOG ═══ */}
+   998→      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+   999→        <DialogContent className="sm:max-w-md">
+  1000→          <DialogHeader>
+  1001→            <DialogTitle>Delete Automation Rule</DialogTitle>
+  1002→            <DialogDescription>
+  1003→              Are you sure you want to delete &quot;{deletingRule?.name}&quot;?
+  1004→              This action cannot be undone and will also delete all associated
+  1005→              execution logs.
+  1006→            </DialogDescription>
+  1007→          </DialogHeader>
+  1008→          <DialogFooter>
+  1009→            <Button
+  1010→              variant="outline"
+  1011→              onClick={() => {
+  1012→                setDeleteDialogOpen(false);
+  1013→                setDeletingRule(null);
+  1014→              }}
+  1015→            >
+  1016→              Cancel
+  1017→            </Button>
+  1018→            <Button variant="destructive" onClick={handleDeleteRule}>
+  1019→              <Trash2 className="h-4 w-4 mr-1.5" />
+  1020→              Delete Rule
+  1021→            </Button>
+  1022→          </DialogFooter>
+  1023→        </DialogContent>
+  1024→      </Dialog>
+  1025→    </div>
+  1026→  );
+  1027→}
+  1028→

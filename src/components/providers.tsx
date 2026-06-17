@@ -7,6 +7,7 @@ import { useState } from 'react';
 import { Toaster } from '@/components/ui/sonner';
 import { AppProvider } from '@/contexts/AppContext';
 import { AuthProvider } from '@/contexts/AuthContext';
+import GSTPilotIntelligence from '@/components/intelligence/GSTPilotIntelligence';
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(
@@ -22,12 +23,14 @@ export function Providers({ children }: { children: React.ReactNode }) {
   );
 
   return (
-    <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
+    <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false}>
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
           <AppProvider>
             {children}
             <Toaster />
+            {/* Global Floating AI Assistant — visible on every page when authenticated */}
+            <GSTPilotIntelligence />
           </AppProvider>
         </AuthProvider>
         <ReactQueryDevtools initialIsOpen={false} />

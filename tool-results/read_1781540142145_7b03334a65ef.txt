@@ -1,0 +1,609 @@
+     1→'use client'
+     2→
+     3→import React, { useState, useEffect } from 'react'
+     4→import { motion, AnimatePresence } from 'framer-motion'
+     5→import {
+     6→  Card,
+     7→  CardContent,
+     8→  CardHeader,
+     9→  CardTitle,
+    10→  CardDescription,
+    11→} from '@/components/ui/card'
+    12→import { Badge } from '@/components/ui/badge'
+    13→import { Button } from '@/components/ui/button'
+    14→import { Input } from '@/components/ui/input'
+    15→import { Skeleton } from '@/components/ui/skeleton'
+    16→import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+    17→import {
+    18→  Upload,
+    19→  FileText,
+    20→  Download,
+    21→  Eye,
+    22→  Bell,
+    23→  Shield,
+    24→  Clock,
+    25→  CheckCircle2,
+    26→  AlertTriangle,
+    27→  TrendingUp,
+    28→  ArrowUpRight,
+    29→  FileDown,
+    30→  FileUp,
+    31→  LogOut,
+    32→  User,
+    33→} from 'lucide-react'
+    34→import { formatCurrency } from '@/lib/gst-utils'
+    35→
+    36→interface ClientData {
+    37→  id: string
+    38→  tradeName: string
+    39→  gstin: string
+    40→  healthScore: number
+    41→  status: string
+    42→}
+    43→
+    44→interface FilingStatus {
+    45→  id: string
+    46→  returnType: string
+    47→  period: string
+    48→  status: string
+    49→  filedDate?: string
+    50→  totalTax: number
+    51→}
+    52→
+    53→interface ClientNotice {
+    54→  id: string
+    55→  subject: string
+    56→  noticeType: string
+    57→  status: string
+    58→  priority: string
+    59→  dueDate?: string
+    60→}
+    61→
+    62→interface ClientDocument {
+    63→  id: string
+    64→  name: string
+    65→  fileType: string
+    66→  folder: string
+    67→  createdAt: string
+    68→  size: number
+    69→}
+    70→
+    71→export default function ClientPortalPage() {
+    72→  const [isLoggedIn, setIsLoggedIn] = useState(false)
+    73→  const [loginEmail, setLoginEmail] = useState('')
+    74→  const [loginPassword, setLoginPassword] = useState('')
+    75→  const [loginError, setLoginError] = useState('')
+    76→  const [isLoading, setIsLoading] = useState(false)
+    77→  const [clientData, setClientData] = useState<ClientData | null>(null)
+    78→  const [filings, setFilings] = useState<FilingStatus[]>([])
+    79→  const [notices, setNotices] = useState<ClientNotice[]>([])
+    80→  const [documents, setDocuments] = useState<ClientDocument[]>([])
+    81→  const [activeTab, setActiveTab] = useState('overview')
+    82→
+    83→  // Demo clients for login
+    84→  const demoClients = [
+    85→    { email: 'accounts@sharmaent.com', password: 'demo', name: 'Sharma Enterprises', gstin: '27AABCS1429B1Z5', id: 'demo-1' },
+    86→    { email: 'gst@patelsons.com', password: 'demo', name: 'Patel & Sons', gstin: '24AABCP5678G1Z3', id: 'demo-2' },
+    87→    { email: 'gst@krishnatraders.in', password: 'demo', name: 'Krishna Traders', gstin: '06AABCK9012H1Z1', id: 'demo-3' },
+    88→  ]
+    89→
+    90→  const handleLogin = async (e: React.FormEvent) => {
+    91→    e.preventDefault()
+    92→    setLoginError('')
+    93→    setIsLoading(true)
+    94→
+    95→    // Simulate login delay
+    96→    await new Promise(resolve => setTimeout(resolve, 800))
+    97→
+    98→    const client = demoClients.find(c => c.email === loginEmail && c.password === loginPassword)
+    99→    if (client) {
+   100→      setIsLoggedIn(true)
+   101→      setClientData({
+   102→        id: client.id,
+   103→        tradeName: client.name,
+   104→        gstin: client.gstin,
+   105→        healthScore: 88,
+   106→        status: 'active',
+   107→      })
+   108→
+   109→      // Load client data
+   110→      try {
+   111→        const clientsRes = await fetch('/api/clients')
+   112→        if (clientsRes.ok) {
+   113→          const clientsData = await clientsRes.json()
+   114→          const matchedClient = clientsData.clients?.find((c: { gstin: string }) => c.gstin === client.gstin)
+   115→          if (matchedClient) {
+   116→            setClientData(matchedClient)
+   117→            
+   118→            // Fetch filings for this client
+   119→            const filingsRes = await fetch(`/api/gstr-filing?clientId=${matchedClient.id}`)
+   120→            if (filingsRes.ok) {
+   121→              const filingsData = await filingsRes.json()
+   122→              setFilings(filingsData.filings || [])
+   123→            }
+   124→
+   125→            // Fetch notices
+   126→            const noticesRes = await fetch(`/api/notices?clientId=${matchedClient.id}`)
+   127→            if (noticesRes.ok) {
+   128→              const noticesData = await noticesRes.json()
+   129→              setNotices(noticesData.notices || [])
+   130→            }
+   131→
+   132→            // Fetch documents
+   133→            const docsRes = await fetch(`/api/documents?clientId=${matchedClient.id}`)
+   134→            if (docsRes.ok) {
+   135→              const docsData = await docsRes.json()
+   136→              setDocuments(docsData.documents || [])
+   137→            }
+   138→          }
+   139→        }
+   140→      } catch {
+   141→        // Use fallback data
+   142→      }
+   143→
+   144→      // Set fallback data if API didn't return enough
+   145→      if (filings.length === 0) {
+   146→        setFilings([
+   147→          { id: '1', returnType: 'GSTR-1', period: '2025-05', status: 'filed', filedDate: '2025-06-11', totalTax: 2450000 },
+   148→          { id: '2', returnType: 'GSTR-3B', period: '2025-05', status: 'filed', filedDate: '2025-06-20', totalTax: 2380000 },
+   149→          { id: '3', returnType: 'GSTR-1', period: '2025-06', status: 'pending', totalTax: 0 },
+   150→          { id: '4', returnType: 'GSTR-3B', period: '2025-06', status: 'draft', totalTax: 0 },
+   151→        ])
+   152→      }
+   153→      if (notices.length === 0) {
+   154→        setNotices([
+   155→          { id: '1', subject: 'GST Assessment Notice for FY 2024-25', noticeType: 'gst_notice', status: 'open', priority: 'high', dueDate: '2025-08-15' },
+   156→        ])
+   157→      }
+   158→    } else {
+   159→      setLoginError('Invalid credentials. Try demo accounts below.')
+   160→    }
+   161→    setIsLoading(false)
+   162→  }
+   163→
+   164→  const handleDemoLogin = (email: string) => {
+   165→    setLoginEmail(email)
+   166→    setLoginPassword('demo')
+   167→  }
+   168→
+   169→  const handleLogout = () => {
+   170→    setIsLoggedIn(false)
+   171→    setClientData(null)
+   172→    setFilings([])
+   173→    setNotices([])
+   174→    setDocuments([])
+   175→    setLoginEmail('')
+   176→    setLoginPassword('')
+   177→  }
+   178→
+   179→  const getHealthColor = (score: number) => {
+   180→    if (score >= 80) return 'text-emerald-600'
+   181→    if (score >= 60) return 'text-amber-600'
+   182→    return 'text-red-600'
+   183→  }
+   184→
+   185→  const getHealthBg = (score: number) => {
+   186→    if (score >= 80) return 'bg-emerald-50 border-emerald-200'
+   187→    if (score >= 60) return 'bg-amber-50 border-amber-200'
+   188→    return 'bg-red-50 border-red-200'
+   189→  }
+   190→
+   191→  const getFilingStatusBadge = (status: string) => {
+   192→    const config: Record<string, { color: string; bg: string; label: string }> = {
+   193→      filed: { color: 'text-emerald-700', bg: 'bg-emerald-50 border-emerald-200', label: 'Filed' },
+   194→      pending: { color: 'text-amber-700', bg: 'bg-amber-50 border-amber-200', label: 'Pending' },
+   195→      draft: { color: 'text-slate-700', bg: 'bg-slate-50 border-slate-200', label: 'Draft' },
+   196→      prepared: { color: 'text-blue-700', bg: 'bg-blue-50 border-blue-200', label: 'Prepared' },
+   197→      validated: { color: 'text-cyan-700', bg: 'bg-cyan-50 border-cyan-200', label: 'Validated' },
+   198→    }
+   199→    const c = config[status] || config.draft
+   200→    return <Badge variant="outline" className={`${c.color} ${c.bg} text-[10px]`}>{c.label}</Badge>
+   201→  }
+   202→
+   203→  // ─── Login Screen ───
+   204→  if (!isLoggedIn) {
+   205→    return (
+   206→      <div className="min-h-[calc(100vh-52px)] flex items-center justify-center bg-gradient-to-br from-slate-50 via-white to-emerald-50/30 dark:from-gray-950 dark:via-gray-900 dark:to-emerald-950/20 p-4">
+   207→        <motion.div
+   208→          initial={{ opacity: 0, y: 20 }}
+   209→          animate={{ opacity: 1, y: 0 }}
+   210→          transition={{ duration: 0.5 }}
+   211→          className="w-full max-w-md"
+   212→        >
+   213→          <Card className="border-0 shadow-xl shadow-slate-200/50 dark:shadow-slate-900/50">
+   214→            <CardHeader className="text-center pb-4">
+   215→              <div className="flex justify-center mb-3">
+   216→                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-600 shadow-lg shadow-emerald-600/20">
+   217→                  <Shield className="h-6 w-6 text-white" />
+   218→                </div>
+   219→              </div>
+   220→              <CardTitle className="text-xl font-bold">Client Portal</CardTitle>
+   221→              <CardDescription>Access your GST filings and compliance data</CardDescription>
+   222→            </CardHeader>
+   223→            <CardContent>
+   224→              <form onSubmit={handleLogin} className="space-y-4">
+   225→                <div className="space-y-2">
+   226→                  <label className="text-sm font-medium text-foreground">Email</label>
+   227→                  <Input
+   228→                    type="email"
+   229→                    placeholder="Enter your email"
+   230→                    value={loginEmail}
+   231→                    onChange={(e) => setLoginEmail(e.target.value)}
+   232→                    className="h-10"
+   233→                    required
+   234→                  />
+   235→                </div>
+   236→                <div className="space-y-2">
+   237→                  <label className="text-sm font-medium text-foreground">Password</label>
+   238→                  <Input
+   239→                    type="password"
+   240→                    placeholder="Enter your password"
+   241→                    value={loginPassword}
+   242→                    onChange={(e) => setLoginPassword(e.target.value)}
+   243→                    className="h-10"
+   244→                    required
+   245→                  />
+   246→                </div>
+   247→                {loginError && (
+   248→                  <p className="text-sm text-red-600 bg-red-50 p-2 rounded-md">{loginError}</p>
+   249→                )}
+   250→                <Button
+   251→                  type="submit"
+   252→                  className="w-full h-10 bg-emerald-600 hover:bg-emerald-700"
+   253→                  disabled={isLoading}
+   254→                >
+   255→                  {isLoading ? 'Signing in...' : 'Sign In'}
+   256→                </Button>
+   257→              </form>
+   258→
+   259→              <div className="mt-6 pt-4 border-t">
+   260→                <p className="text-xs text-muted-foreground text-center mb-3">Demo Accounts</p>
+   261→                <div className="space-y-2">
+   262→                  {demoClients.map((client) => (
+   263→                    <button
+   264→                      key={client.email}
+   265→                      onClick={() => handleDemoLogin(client.email)}
+   266→                      className="w-full text-left p-2.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 hover:border-emerald-300 dark:hover:border-emerald-700 transition-all text-sm"
+   267→                    >
+   268→                      <span className="font-medium text-foreground">{client.name}</span>
+   269→                      <span className="block text-xs text-muted-foreground">{client.email}</span>
+   270→                    </button>
+   271→                  ))}
+   272→                </div>
+   273→                <p className="text-[10px] text-muted-foreground text-center mt-3">Password: demo</p>
+   274→              </div>
+   275→            </CardContent>
+   276→          </Card>
+   277→        </motion.div>
+   278→      </div>
+   279→    )
+   280→  }
+   281→
+   282→  // ─── Client Dashboard ───
+   283→  const healthScore = clientData?.healthScore || 0
+   284→  const filedCount = filings.filter(f => f.status === 'filed').length
+   285→  const pendingCount = filings.filter(f => f.status !== 'filed').length
+   286→  const openNotices = notices.filter(n => n.status === 'open' || n.status === 'in_progress').length
+   287→
+   288→  return (
+   289→    <div className="min-h-[calc(100vh-52px)] bg-gradient-to-br from-slate-50 via-white to-emerald-50/20 dark:from-gray-950 dark:via-gray-900 dark:to-emerald-950/10">
+   290→      {/* Client Header Bar */}
+   291→      <div className="bg-white dark:bg-gray-900 border-b px-6 py-4">
+   292→        <div className="flex items-center justify-between">
+   293→          <div className="flex items-center gap-3">
+   294→            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-500 to-emerald-600 shadow-md">
+   295→              <Shield className="h-5 w-5 text-white" />
+   296→            </div>
+   297→            <div>
+   298→              <h2 className="font-bold text-foreground">{clientData?.tradeName || 'Client'}</h2>
+   299→              <p className="text-xs text-muted-foreground">GSTIN: {clientData?.gstin}</p>
+   300→            </div>
+   301→          </div>
+   302→          <div className="flex items-center gap-3">
+   303→            <Badge variant="outline" className={`${getHealthColor(healthScore)} ${getHealthBg(healthScore)} text-xs`}>
+   304→              Health: {healthScore}%
+   305→            </Badge>
+   306→            <Button variant="outline" size="sm" onClick={handleLogout} className="gap-1.5 text-xs">
+   307→              <LogOut className="h-3.5 w-3.5" />
+   308→              Sign Out
+   309→            </Button>
+   310→          </div>
+   311→        </div>
+   312→      </div>
+   313→
+   314→      <div className="p-6 max-w-7xl mx-auto">
+   315→        {/* Quick Stats */}
+   316→        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+   317→          {[
+   318→            { label: 'Compliance Score', value: `${healthScore}%`, icon: TrendingUp, color: healthScore >= 80 ? 'emerald' : healthScore >= 60 ? 'amber' : 'red' },
+   319→            { label: 'Filed Returns', value: String(filedCount), icon: CheckCircle2, color: 'emerald' },
+   320→            { label: 'Pending Returns', value: String(pendingCount), icon: Clock, color: 'amber' },
+   321→            { label: 'Open Notices', value: String(openNotices), icon: Bell, color: openNotices > 0 ? 'red' : 'emerald' },
+   322→          ].map((stat, idx) => (
+   323→            <motion.div
+   324→              key={stat.label}
+   325→              initial={{ opacity: 0, y: 10 }}
+   326→              animate={{ opacity: 1, y: 0 }}
+   327→              transition={{ delay: idx * 0.1 }}
+   328→            >
+   329→              <Card className="border-0 shadow-sm">
+   330→                <CardContent className="p-4">
+   331→                  <div className="flex items-center justify-between mb-2">
+   332→                    <span className="text-xs font-medium text-muted-foreground">{stat.label}</span>
+   333→                    <stat.icon className={`h-4 w-4 text-${stat.color}-500`} />
+   334→                  </div>
+   335→                  <p className="text-2xl font-bold text-foreground">{stat.value}</p>
+   336→                </CardContent>
+   337→              </Card>
+   338→            </motion.div>
+   339→          ))}
+   340→        </div>
+   341→
+   342→        {/* Main Tabs */}
+   343→        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+   344→          <TabsList className="bg-white dark:bg-gray-900 shadow-sm border">
+   345→            <TabsTrigger value="overview" className="text-xs">Overview</TabsTrigger>
+   346→            <TabsTrigger value="filings" className="text-xs">Filing Status</TabsTrigger>
+   347→            <TabsTrigger value="documents" className="text-xs">Documents</TabsTrigger>
+   348→            <TabsTrigger value="notices" className="text-xs">Notices</TabsTrigger>
+   349→            <TabsTrigger value="upload" className="text-xs">Upload</TabsTrigger>
+   350→          </TabsList>
+   351→
+   352→          {/* Overview Tab */}
+   353→          <TabsContent value="overview">
+   354→            <div className="grid md:grid-cols-2 gap-4">
+   355→              <Card className="border-0 shadow-sm">
+   356→                <CardHeader className="pb-3">
+   357→                  <CardTitle className="text-sm font-semibold">Compliance Summary</CardTitle>
+   358→                </CardHeader>
+   359→                <CardContent className="space-y-3">
+   360→                  <div className="flex items-center justify-between p-3 rounded-lg bg-emerald-50 dark:bg-emerald-950/30">
+   361→                    <div className="flex items-center gap-2">
+   362→                      <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+   363→                      <span className="text-sm font-medium">Filed Returns</span>
+   364→                    </div>
+   365→                    <span className="text-lg font-bold text-emerald-600">{filedCount}</span>
+   366→                  </div>
+   367→                  <div className="flex items-center justify-between p-3 rounded-lg bg-amber-50 dark:bg-amber-950/30">
+   368→                    <div className="flex items-center gap-2">
+   369→                      <Clock className="h-4 w-4 text-amber-600" />
+   370→                      <span className="text-sm font-medium">Pending Returns</span>
+   371→                    </div>
+   372→                    <span className="text-lg font-bold text-amber-600">{pendingCount}</span>
+   373→                  </div>
+   374→                  <div className="flex items-center justify-between p-3 rounded-lg bg-red-50 dark:bg-red-950/30">
+   375→                    <div className="flex items-center gap-2">
+   376→                      <AlertTriangle className="h-4 w-4 text-red-600" />
+   377→                      <span className="text-sm font-medium">Open Notices</span>
+   378→                    </div>
+   379→                    <span className="text-lg font-bold text-red-600">{openNotices}</span>
+   380→                  </div>
+   381→                </CardContent>
+   382→              </Card>
+   383→
+   384→              <Card className="border-0 shadow-sm">
+   385→                <CardHeader className="pb-3">
+   386→                  <CardTitle className="text-sm font-semibold">Recent Filings</CardTitle>
+   387→                </CardHeader>
+   388→                <CardContent className="space-y-2">
+   389→                  {filings.slice(0, 4).map((filing) => (
+   390→                    <div key={filing.id} className="flex items-center justify-between p-2.5 rounded-lg border border-slate-100 dark:border-slate-800">
+   391→                      <div className="flex items-center gap-2">
+   392→                        <FileText className="h-4 w-4 text-slate-400" />
+   393→                        <div>
+   394→                          <p className="text-sm font-medium">{filing.returnType}</p>
+   395→                          <p className="text-xs text-muted-foreground">{filing.period}</p>
+   396→                        </div>
+   397→                      </div>
+   398→                      <div className="text-right">
+   399→                        {getFilingStatusBadge(filing.status)}
+   400→                        {filing.totalTax > 0 && (
+   401→                          <p className="text-[10px] text-muted-foreground mt-0.5">
+   402→                            Tax: {formatCurrency(filing.totalTax)}
+   403→                          </p>
+   404→                        )}
+   405→                      </div>
+   406→                    </div>
+   407→                  ))}
+   408→                </CardContent>
+   409→              </Card>
+   410→            </div>
+   411→          </TabsContent>
+   412→
+   413→          {/* Filings Tab */}
+   414→          <TabsContent value="filings">
+   415→            <Card className="border-0 shadow-sm">
+   416→              <CardHeader className="pb-3">
+   417→                <CardTitle className="text-sm font-semibold">Filing Status</CardTitle>
+   418→                <CardDescription>View and download your filed GST returns</CardDescription>
+   419→              </CardHeader>
+   420→              <CardContent>
+   421→                <div className="space-y-3">
+   422→                  {filings.map((filing) => (
+   423→                    <div key={filing.id} className="flex items-center justify-between p-4 rounded-lg border border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+   424→                      <div className="flex items-center gap-3">
+   425→                        <div className="h-10 w-10 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 flex items-center justify-center">
+   426→                          <FileText className="h-5 w-5 text-emerald-600" />
+   427→                        </div>
+   428→                        <div>
+   429→                          <p className="font-medium text-sm">{filing.returnType} — {filing.period}</p>
+   430→                          <div className="flex items-center gap-2 mt-0.5">
+   431→                            {getFilingStatusBadge(filing.status)}
+   432→                            {filing.filedDate && (
+   433→                              <span className="text-[10px] text-muted-foreground">Filed on {filing.filedDate}</span>
+   434→                            )}
+   435→                          </div>
+   436→                        </div>
+   437→                      </div>
+   438→                      <div className="flex items-center gap-2">
+   439→                        {filing.totalTax > 0 && (
+   440→                          <span className="text-sm font-semibold text-foreground">
+   441→                            {formatCurrency(filing.totalTax)}
+   442→                          </span>
+   443→                        )}
+   444→                        {filing.status === 'filed' && (
+   445→                          <Button variant="outline" size="sm" className="h-7 text-xs gap-1">
+   446→                            <Download className="h-3 w-3" />
+   447→                            Download
+   448→                          </Button>
+   449→                        )}
+   450→                      </div>
+   451→                    </div>
+   452→                  ))}
+   453→                  {filings.length === 0 && (
+   454→                    <div className="text-center py-8 text-muted-foreground">
+   455→                      <FileText className="h-8 w-8 mx-auto mb-2 opacity-50" />
+   456→                      <p className="text-sm">No filings found</p>
+   457→                    </div>
+   458→                  )}
+   459→                </div>
+   460→              </CardContent>
+   461→            </Card>
+   462→          </TabsContent>
+   463→
+   464→          {/* Documents Tab */}
+   465→          <TabsContent value="documents">
+   466→            <Card className="border-0 shadow-sm">
+   467→              <CardHeader className="pb-3">
+   468→                <div className="flex items-center justify-between">
+   469→                  <div>
+   470→                    <CardTitle className="text-sm font-semibold">Documents</CardTitle>
+   471→                    <CardDescription>Download reports and filed returns</CardDescription>
+   472→                  </div>
+   473→                </div>
+   474→              </CardHeader>
+   475→              <CardContent>
+   476→                <div className="space-y-2">
+   477→                  {documents.map((doc) => (
+   478→                    <div key={doc.id} className="flex items-center justify-between p-3 rounded-lg border border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+   479→                      <div className="flex items-center gap-3">
+   480→                        <div className={`h-9 w-9 rounded-lg flex items-center justify-center ${
+   481→                          doc.fileType === 'pdf' ? 'bg-red-50 dark:bg-red-950/30' :
+   482→                          doc.fileType === 'xlsx' ? 'bg-emerald-50 dark:bg-emerald-950/30' :
+   483→                          'bg-blue-50 dark:bg-blue-950/30'
+   484→                        }`}>
+   485→                          <FileText className={`h-4 w-4 ${
+   486→                            doc.fileType === 'pdf' ? 'text-red-600' :
+   487→                            doc.fileType === 'xlsx' ? 'text-emerald-600' :
+   488→                            'text-blue-600'
+   489→                          }`} />
+   490→                        </div>
+   491→                        <div>
+   492→                          <p className="text-sm font-medium">{doc.name}</p>
+   493→                          <div className="flex items-center gap-2 mt-0.5">
+   494→                            <Badge variant="outline" className="text-[9px] px-1 py-0">{doc.fileType.toUpperCase()}</Badge>
+   495→                            <span className="text-[10px] text-muted-foreground">
+   496→                              {(doc.size / 1024).toFixed(0)} KB
+   497→                            </span>
+   498→                          </div>
+   499→                        </div>
+   500→                      </div>
+   501→                      <div className="flex items-center gap-1">
+   502→                        <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
+   503→                          <Eye className="h-3.5 w-3.5" />
+   504→                        </Button>
+   505→                        <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
+   506→                          <Download className="h-3.5 w-3.5" />
+   507→                        </Button>
+   508→                      </div>
+   509→                    </div>
+   510→                  ))}
+   511→                  {documents.length === 0 && (
+   512→                    <div className="text-center py-8 text-muted-foreground">
+   513→                      <FileDown className="h-8 w-8 mx-auto mb-2 opacity-50" />
+   514→                      <p className="text-sm">No documents available</p>
+   515→                    </div>
+   516→                  )}
+   517→                </div>
+   518→              </CardContent>
+   519→            </Card>
+   520→          </TabsContent>
+   521→
+   522→          {/* Notices Tab */}
+   523→          <TabsContent value="notices">
+   524→            <Card className="border-0 shadow-sm">
+   525→              <CardHeader className="pb-3">
+   526→                <CardTitle className="text-sm font-semibold">Notices</CardTitle>
+   527→                <CardDescription>View GST notices and department queries</CardDescription>
+   528→              </CardHeader>
+   529→              <CardContent>
+   530→                <div className="space-y-3">
+   531→                  {notices.map((notice) => (
+   532→                    <div key={notice.id} className="p-4 rounded-lg border border-slate-100 dark:border-slate-800">
+   533→                      <div className="flex items-start justify-between">
+   534→                        <div className="flex items-start gap-3">
+   535→                          <div className={`h-9 w-9 rounded-lg flex items-center justify-center shrink-0 ${
+   536→                            notice.priority === 'high' || notice.priority === 'urgent'
+   537→                              ? 'bg-red-50 dark:bg-red-950/30'
+   538→                              : 'bg-amber-50 dark:bg-amber-950/30'
+   539→                          }`}>
+   540→                            <Bell className={`h-4 w-4 ${
+   541→                              notice.priority === 'high' || notice.priority === 'urgent'
+   542→                                ? 'text-red-600'
+   543→                                : 'text-amber-600'
+   544→                            }`} />
+   545→                          </div>
+   546→                          <div>
+   547→                            <p className="text-sm font-medium">{notice.subject}</p>
+   548→                            <div className="flex items-center gap-2 mt-1">
+   549→                              <Badge variant="outline" className="text-[9px] px-1 py-0">
+   550→                                {notice.noticeType === 'gst_notice' ? 'GST Notice' :
+   551→                                 notice.noticeType === 'department_notice' ? 'Dept Notice' : 'Tax Query'}
+   552→                              </Badge>
+   553→                              <Badge variant="outline" className={`text-[9px] px-1 py-0 ${
+   554→                                notice.status === 'open' ? 'text-amber-700 border-amber-200 bg-amber-50' :
+   555→                                notice.status === 'in_progress' ? 'text-blue-700 border-blue-200 bg-blue-50' :
+   556→                                'text-emerald-700 border-emerald-200 bg-emerald-50'
+   557→                              }`}>
+   558→                                {notice.status === 'in_progress' ? 'In Progress' : notice.status.charAt(0).toUpperCase() + notice.status.slice(1)}
+   559→                              </Badge>
+   560→                            </div>
+   561→                          </div>
+   562→                        </div>
+   563→                        {notice.dueDate && (
+   564→                          <span className="text-[10px] text-muted-foreground">Due: {notice.dueDate}</span>
+   565→                        )}
+   566→                      </div>
+   567→                    </div>
+   568→                  ))}
+   569→                  {notices.length === 0 && (
+   570→                    <div className="text-center py-8 text-muted-foreground">
+   571→                      <CheckCircle2 className="h-8 w-8 mx-auto mb-2 opacity-50" />
+   572→                      <p className="text-sm">No notices found</p>
+   573→                      <p className="text-xs mt-1">You&apos;re all caught up!</p>
+   574→                    </div>
+   575→                  )}
+   576→                </div>
+   577→              </CardContent>
+   578→            </Card>
+   579→          </TabsContent>
+   580→
+   581→          {/* Upload Tab */}
+   582→          <TabsContent value="upload">
+   583→            <Card className="border-0 shadow-sm">
+   584→              <CardHeader className="pb-3">
+   585→                <CardTitle className="text-sm font-semibold">Upload Documents</CardTitle>
+   586→                <CardDescription>Upload invoices, purchase registers, and other documents</CardDescription>
+   587→              </CardHeader>
+   588→              <CardContent>
+   589→                <div className="border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-xl p-8 text-center hover:border-emerald-400 dark:hover:border-emerald-600 transition-colors cursor-pointer">
+   590→                  <FileUp className="h-10 w-10 mx-auto text-slate-400 mb-3" />
+   591→                  <p className="text-sm font-medium text-foreground">Drop files here or click to browse</p>
+   592→                  <p className="text-xs text-muted-foreground mt-1">Supports PDF, XLSX, DOCX, JPG, PNG (max 10MB)</p>
+   593→                </div>
+   594→                <div className="mt-4 space-y-2">
+   595→                  <p className="text-xs font-medium text-muted-foreground">Recently Uploaded</p>
+   596→                  <div className="text-center py-4">
+   597→                    <Upload className="h-6 w-6 mx-auto text-slate-300 mb-2" />
+   598→                    <p className="text-xs text-muted-foreground">No recent uploads</p>
+   599→                  </div>
+   600→                </div>
+   601→              </CardContent>
+   602→            </Card>
+   603→          </TabsContent>
+   604→        </Tabs>
+   605→      </div>
+   606→    </div>
+   607→  )
+   608→}
+   609→

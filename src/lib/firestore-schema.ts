@@ -22,6 +22,11 @@ export const COLLECTIONS = {
   NOTIFICATIONS: 'notifications',
   ACTIVITIES: 'activities',
   AI_RECOMMENDATIONS: 'aiRecommendations',
+  // AI Executive Layer
+  PREDICTIONS: 'predictions',
+  PRIORITY_QUEUE: 'priorityQueue',
+  ORGANIZATIONS: 'organizations',
+  MEMBERSHIPS: 'memberships',
 } as const;
 
 export type CollectionName = typeof COLLECTIONS[keyof typeof COLLECTIONS];
@@ -295,6 +300,88 @@ export interface FirestoreAIRecommendation {
   appliedBy: string | null;
   createdAt: unknown;
   updatedAt: unknown;
+}
+
+// ─── Prediction (top-level: predictions/{predictionId}) ────────────────────
+
+export type PredictionType =
+  | 'revenue' | 'client_churn' | 'late_filing' | 'team_burnout'
+  | 'cash_collection' | 'compliance_risk';
+
+export interface FirestorePrediction {
+  predictionId: string;
+  firmId: string;
+  type: PredictionType;
+  entityId: string | null;        // clientId, userId, etc.
+  score: number;                   // 0-100
+  confidence: number;              // 0-100
+  recommendation: string;
+  metadata: Record<string, string | number | boolean>;
+  createdAt: unknown;
+  updatedAt: unknown;
+}
+
+// ─── Priority Queue (top-level: priorityQueue/{priorityId}) ─────────────────
+
+export type PriorityCategory = 'filing' | 'follow_up' | 'review' | 'upload' | 'call' | 'reconciliation' | 'payment';
+
+export interface FirestorePriority {
+  priorityId: string;
+  firmId: string;
+  clientId: string | null;
+  category: PriorityCategory;
+  title: string;
+  description: string;
+  urgency: number;                 // 1-10
+  revenueImpact: number;           // 1-10
+  complianceRisk: number;          // 1-10
+  clientValue: number;             // 1-10
+  priorityScore: number;           // computed: urgency × revenueImpact × complianceRisk × clientValue
+  status: 'pending' | 'in_progress' | 'completed' | 'dismissed';
+  assignedTo: string | null;
+  dueDate: string | null;
+  createdAt: unknown;
+  updatedAt: unknown;
+}
+
+// ─── Organization (top-level: organizations/{orgId}) ────────────────────────
+
+export interface FirestoreOrganization {
+  orgId: string;
+  name: string;
+  ownerId: string;
+  plan: 'starter' | 'professional' | 'enterprise';
+  firmIds: string[];
+  createdAt: unknown;
+  updatedAt: unknown;
+}
+
+// ─── Membership (top-level: memberships/{membershipId}) ─────────────────────
+
+export type MembershipRole = 'owner' | 'partner' | 'manager' | 'staff' | 'client';
+
+export interface FirestoreMembership {
+  membershipId: string;
+  orgId: string;
+  firmId: string;
+  userId: string;
+  role: MembershipRole;
+  permissions: string[];
+  invitedBy: string;
+  status: 'active' | 'invited' | 'suspended';
+  createdAt: unknown;
+  updatedAt: unknown;
+}
+
+// ─── AI Executive Scores (computed from live data) ───────────────────────────
+
+export interface FirmExecutiveScores {
+  firmHealth: number;             // 0-100
+  revenue: number;                // 0-100
+  compliance: number;             // 0-100
+  teamEfficiency: number;         // 0-100
+  clientSatisfaction: number;     // 0-100
+  cashFlow: number;               // 0-100
 }
 
 // ─── Dashboard Metrics (computed, not stored — derived from live data) ──────

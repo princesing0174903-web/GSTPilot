@@ -1,0 +1,944 @@
+     1→'use client';
+     2→
+     3→// ═══════════════════════════════════════════════════════════════════════════════
+     4→// GSTPilot — Analytics Page
+     5→// Comprehensive real-time analytics using live Firestore data
+     6→// ═══════════════════════════════════════════════════════════════════════════════
+     7→
+     8→import React, { useMemo } from 'react';
+     9→import { motion } from 'framer-motion';
+    10→import {
+    11→  useFireClients,
+    12→  useFireInvoices,
+    13→  useFireReturns,
+    14→  useFireReconciliations,
+    15→  useFireFirm,
+    16→} from '@/hooks/use-firestore';
+    17→import type {
+    18→  FirestoreClient,
+    19→  FirestoreInvoice,
+    20→  FirestoreReturn,
+    21→  FirestoreReconciliation,
+    22→  FirestoreFirm,
+    23→} from '@/lib/firestore-schema';
+    24→import { formatCurrency, formatNumber, periodToLabel } from '@/lib/gst-utils';
+    25→import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+    26→import { Badge } from '@/components/ui/badge';
+    27→import { Skeleton } from '@/components/ui/skeleton';
+    28→import { Button } from '@/components/ui/button';
+    29→import { ScrollArea } from '@/components/ui/scroll-area';
+    30→import {
+    31→  TrendingUp,
+    32→  TrendingDown,
+    33→  Users,
+    34→  FileCheck,
+    35→  AlertTriangle,
+    36→  BarChart3,
+    37→  IndianRupee,
+    38→  Shield,
+    39→  ArrowUpRight,
+    40→  ArrowDownRight,
+    41→  Activity,
+    42→  PieChart,
+    43→} from 'lucide-react';
+    44→
+    45→// ─── Animation Variants ─────────────────────────────────────────────────────
+    46→
+    47→const cardVariants = {
+    48→  hidden: { opacity: 0, y: 20 },
+    49→  visible: (i: number) => ({
+    50→    opacity: 1,
+    51→    y: 0,
+    52→    transition: { delay: i * 0.08, duration: 0.4, ease: 'easeOut' },
+    53→  }),
+    54→};
+    55→
+    56→// ─── Helper: Period aggregation ─────────────────────────────────────────────
+    57→
+    58→interface PeriodTax {
+    59→  period: string;
+    60→  label: string;
+    61→  totalTax: number;
+    62→  cgst: number;
+    63→  sgst: number;
+    64→  igst: number;
+    65→}
+    66→
+    67→interface PeriodRevenue {
+    68→  period: string;
+    69→  label: string;
+    70→  totalRevenue: number;
+    71→}
+    72→
+    73→interface CompliancePoint {
+    74→  period: string;
+    75→  label: string;
+    76→  score: number;
+    77→}
+    78→
+    79→interface TopClient {
+    80→  id: string;
+    81→  tradeName: string;
+    82→  gstin: string;
+    83→  totalTaxPaid: number;
+    84→  invoiceCount: number;
+    85→  healthScore: number;
+    86→  status: string;
+    87→}
+    88→
+    89→// ─── Loading Skeleton Card ──────────────────────────────────────────────────
+    90→
+    91→function SkeletonCard() {
+    92→  return (
+    93→    <Card className="border-emerald-100 dark:border-emerald-900/30">
+    94→      <CardHeader>
+    95→        <Skeleton className="h-5 w-36" />
+    96→        <Skeleton className="h-3 w-48 mt-1" />
+    97→      </CardHeader>
+    98→      <CardContent>
+    99→        <div className="space-y-3">
+   100→          <Skeleton className="h-8 w-24" />
+   101→          <Skeleton className="h-32 w-full" />
+   102→        </div>
+   103→      </CardContent>
+   104→    </Card>
+   105→  );
+   106→}
+   107→
+   108→// ─── Empty State ────────────────────────────────────────────────────────────
+   109→
+   110→function EmptyState({ icon: Icon, title, description }: { icon: React.ElementType; title: string; description: string }) {
+   111→  return (
+   112→    <div className="flex flex-col items-center justify-center py-8 text-center">
+   113→      <div className="rounded-full bg-emerald-50 dark:bg-emerald-950/40 p-3 mb-3">
+   114→        <Icon className="h-6 w-6 text-emerald-400" />
+   115→      </div>
+   116→      <p className="text-sm font-medium text-muted-foreground">{title}</p>
+   117→      <p className="text-xs text-muted-foreground/70 mt-1 max-w-[200px]">{description}</p>
+   118→    </div>
+   119→  );
+   120→}
+   121→
+   122→// ─── CSS Bar Chart ──────────────────────────────────────────────────────────
+   123→
+   124→function CSSBarChart({
+   125→  data,
+   126→  valueKey,
+   127→  labelKey,
+   128→  formatValue,
+   129→  color = 'emerald',
+   130→  height = 160,
+   131→}: {
+   132→  data: Array<Record<string, unknown>>;
+   133→  valueKey: string;
+   134→  labelKey: string;
+   135→  formatValue: (v: number) => string;
+   136→  color?: string;
+   137→  height?: number;
+   138→}) {
+   139→  const values = data.map((d) => Number(d[valueKey]) || 0);
+   140→  const maxVal = Math.max(...values, 1);
+   141→
+   142→  const barColor: Record<string, string> = {
+   143→    emerald: 'bg-emerald-500',
+   144→    teal: 'bg-teal-500',
+   145→    cyan: 'bg-cyan-500',
+   146→    violet: 'bg-violet-500',
+   147→    amber: 'bg-amber-500',
+   148→  };
+   149→
+   150→  const hoverColor: Record<string, string> = {
+   151→    emerald: 'hover:bg-emerald-400',
+   152→    teal: 'hover:bg-teal-400',
+   153→    cyan: 'hover:bg-cyan-400',
+   154→    violet: 'hover:bg-violet-400',
+   155→    amber: 'hover:bg-amber-400',
+   156→  };
+   157→
+   158→  return (
+   159→    <div className="flex items-end gap-1.5 sm:gap-2" style={{ height }}>
+   160→      {data.map((item, idx) => {
+   161→        const val = Number(item[valueKey]) || 0;
+   162→        const pct = maxVal > 0 ? (val / maxVal) * 100 : 0;
+   163→        return (
+   164→          <div key={idx} className="flex flex-col items-center flex-1 min-w-0 group relative">
+   165→            {/* Tooltip */}
+   166→            <div className="absolute -top-8 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-emerald-900 text-white text-[10px] px-2 py-1 rounded whitespace-nowrap z-10 pointer-events-none">
+   167→              {formatValue(val)}
+   168→            </div>
+   169→            <div
+   170→              className={`w-full rounded-t-sm transition-all duration-500 ${barColor[color]} ${hoverColor[color]} min-h-[2px]`}
+   171→              style={{ height: `${Math.max(pct, 1)}%` }}
+   172→            />
+   173→            <span className="text-[10px] text-muted-foreground mt-1.5 truncate w-full text-center">
+   174→              {String(item[labelKey])}
+   175→            </span>
+   176→          </div>
+   177→        );
+   178→      })}
+   179→    </div>
+   180→  );
+   181→}
+   182→
+   183→// ─── Progress Ring ──────────────────────────────────────────────────────────
+   184→
+   185→function ProgressRing({
+   186→  value,
+   187→  max = 100,
+   188→  size = 120,
+   189→  strokeWidth = 10,
+   190→  label,
+   191→}: {
+   192→  value: number;
+   193→  max?: number;
+   194→  size?: number;
+   195→  strokeWidth?: number;
+   196→  label: string;
+   197→}) {
+   198→  const radius = (size - strokeWidth) / 2;
+   199→  const circumference = 2 * Math.PI * radius;
+   200→  const pct = max > 0 ? Math.min(value / max, 1) : 0;
+   201→  const offset = circumference - pct * circumference;
+   202→
+   203→  const color =
+   204→    pct >= 0.8
+   205→      ? 'text-emerald-500'
+   206→      : pct >= 0.5
+   207→        ? 'text-amber-500'
+   208→        : 'text-red-500';
+   209→
+   210→  const strokeColor =
+   211→    pct >= 0.8
+   212→      ? 'stroke-emerald-500'
+   213→      : pct >= 0.5
+   214→        ? 'stroke-amber-500'
+   215→        : 'stroke-red-500';
+   216→
+   217→  return (
+   218→    <div className="flex flex-col items-center gap-2">
+   219→      <svg width={size} height={size} className="-rotate-90">
+   220→        <circle
+   221→          cx={size / 2}
+   222→          cy={size / 2}
+   223→          r={radius}
+   224→          fill="none"
+   225→          stroke="currentColor"
+   226→          strokeWidth={strokeWidth}
+   227→          className="text-emerald-100 dark:text-emerald-900/30"
+   228→        />
+   229→        <circle
+   230→          cx={size / 2}
+   231→          cy={size / 2}
+   232→          r={radius}
+   233→          fill="none"
+   234→          strokeWidth={strokeWidth}
+   235→          strokeLinecap="round"
+   236→          strokeDasharray={circumference}
+   237→          strokeDashoffset={offset}
+   238→          className={`${strokeColor} transition-all duration-1000 ease-out`}
+   239→        />
+   240→      </svg>
+   241→      <div className="absolute flex flex-col items-center justify-center" style={{ width: size, height: size }}>
+   242→        <span className={`text-2xl font-bold ${color}`}>{Math.round(pct * 100)}%</span>
+   243→        <span className="text-[10px] text-muted-foreground">{label}</span>
+   244→      </div>
+   245→    </div>
+   246→  );
+   247→}
+   248→
+   249→// ═══════════════════════════════════════════════════════════════════════════════
+   250→// MAIN COMPONENT
+   251→// ═══════════════════════════════════════════════════════════════════════════════
+   252→
+   253→export default function AnalyticsPage() {
+   254→  // ─── Live Firestore Data ──────────────────────────────────────────────────
+   255→  const { data: clients, loading: clientsLoading } = useFireClients();
+   256→  const { data: invoices, loading: invoicesLoading } = useFireInvoices();
+   257→  const { data: returns, loading: returnsLoading } = useFireReturns();
+   258→  const { data: reconciliations, loading: reconciliationsLoading } = useFireReconciliations();
+   259→  const { data: firm, loading: firmLoading } = useFireFirm();
+   260→
+   261→  const isLoading =
+   262→    clientsLoading || invoicesLoading || returnsLoading || reconciliationsLoading || firmLoading;
+   263→
+   264→  // ─── Computed: Monthly Tax Processed ──────────────────────────────────────
+   265→  const monthlyTaxData: PeriodTax[] = useMemo(() => {
+   266→    if (!invoices.length) return [];
+   267→    const map = new Map<string, PeriodTax>();
+   268→    for (const inv of invoices) {
+   269→      const p = inv.period || 'unknown';
+   270→      if (!map.has(p)) {
+   271→        map.set(p, { period: p, label: p === 'unknown' ? 'Unknown' : periodToLabel(p), totalTax: 0, cgst: 0, sgst: 0, igst: 0 });
+   272→      }
+   273→      const entry = map.get(p)!;
+   274→      entry.cgst += inv.cgst || 0;
+   275→      entry.sgst += inv.sgst || 0;
+   276→      entry.igst += inv.igst || 0;
+   277→      entry.totalTax += (inv.cgst || 0) + (inv.sgst || 0) + (inv.igst || 0);
+   278→    }
+   279→    return Array.from(map.values()).sort((a, b) => a.period.localeCompare(b.period));
+   280→  }, [invoices]);
+   281→
+   282→  // ─── Computed: Client Growth ──────────────────────────────────────────────
+   283→  const clientStats = useMemo(() => {
+   284→    const total = clients.length;
+   285→    const active = clients.filter((c) => c.status === 'active').length;
+   286→    const inactive = clients.filter((c) => c.status === 'inactive').length;
+   287→    const suspended = clients.filter((c) => c.status === 'suspended').length;
+   288→    return { total, active, inactive, suspended };
+   289→  }, [clients]);
+   290→
+   291→  // ─── Computed: Return Filing Rate ─────────────────────────────────────────
+   292→  const filingStats = useMemo(() => {
+   293→    const total = returns.length;
+   294→    const filed = returns.filter((r) => r.status === 'filed').length;
+   295→    const pending = returns.filter((r) => r.status === 'draft' || r.status === 'in_progress').length;
+   296→    const overdue = returns.filter((r) => r.status === 'overdue').length;
+   297→    const rate = total > 0 ? (filed / total) * 100 : 0;
+   298→    return { total, filed, pending, overdue, rate };
+   299→  }, [returns]);
+   300→
+   301→  // ─── Computed: Compliance Trend ───────────────────────────────────────────
+   302→  const complianceTrend: CompliancePoint[] = useMemo(() => {
+   303→    if (!returns.length) return [];
+   304→    const map = new Map<string, { totalScore: number; count: number }>();
+   305→    for (const ret of returns) {
+   306→      const p = ret.period || 'unknown';
+   307→      if (!map.has(p)) {
+   308→        map.set(p, { totalScore: 0, count: 0 });
+   309→      }
+   310→      const entry = map.get(p)!;
+   311→      // Use issuesFound to derive a compliance indicator: fewer issues = higher compliance
+   312→      const score = ret.totalInvoices > 0
+   313→        ? Math.max(0, 100 - (ret.criticalErrors * 20 + ret.issuesFound * 5 + ret.warnings * 2))
+   314→        : 100;
+   315→      entry.totalScore += score;
+   316→      entry.count += 1;
+   317→    }
+   318→    return Array.from(map.entries())
+   319→      .map(([period, { totalScore, count }]) => ({
+   320→        period,
+   321→        label: period === 'unknown' ? 'Unknown' : periodToLabel(period),
+   322→        score: count > 0 ? Math.round(totalScore / count) : 0,
+   323→      }))
+   324→      .sort((a, b) => a.period.localeCompare(b.period));
+   325→  }, [returns]);
+   326→
+   327→  // ─── Computed: Revenue Trend ──────────────────────────────────────────────
+   328→  const revenueTrend: PeriodRevenue[] = useMemo(() => {
+   329→    if (!invoices.length) return [];
+   330→    const map = new Map<string, number>();
+   331→    for (const inv of invoices) {
+   332→      const p = inv.period || 'unknown';
+   333→      map.set(p, (map.get(p) || 0) + (inv.totalAmount || 0));
+   334→    }
+   335→    return Array.from(map.entries())
+   336→      .map(([period, totalRevenue]) => ({
+   337→        period,
+   338→        label: period === 'unknown' ? 'Unknown' : periodToLabel(period),
+   339→        totalRevenue,
+   340→      }))
+   341→      .sort((a, b) => a.period.localeCompare(b.period));
+   342→  }, [invoices]);
+   343→
+   344→  // ─── Computed: Top Clients by Tax Volume ──────────────────────────────────
+   345→  const topClients: TopClient[] = useMemo(() => {
+   346→    return [...clients]
+   347→      .sort((a, b) => (b.totalTaxPaid || 0) - (a.totalTaxPaid || 0))
+   348→      .slice(0, 5)
+   349→      .map((c) => ({
+   350→        id: c.id,
+   351→        tradeName: c.tradeName,
+   352→        gstin: c.gstin,
+   353→        totalTaxPaid: c.totalTaxPaid || 0,
+   354→        invoiceCount: c.invoiceCount || 0,
+   355→        healthScore: c.healthScore || 0,
+   356→        status: c.status,
+   357→      }));
+   358→  }, [clients]);
+   359→
+   360→  // ─── Computed: Reconciliation Summary ─────────────────────────────────────
+   361→  const reconStats = useMemo(() => {
+   362→    const total = reconciliations.length;
+   363→    const completed = reconciliations.filter((r) => r.status === 'completed').length;
+   364→    const avgMatch = total > 0
+   365→      ? Math.round(
+   366→          reconciliations.reduce((sum, r) => {
+   367→            const rate = r.totalRecords > 0 ? (r.matched / r.totalRecords) * 100 : 0;
+   368→            return sum + rate;
+   369→          }, 0) / total
+   370→        )
+   371→      : 0;
+   372→    const totalITCDiff = reconciliations.reduce((sum, r) => sum + (r.gstDifference || 0), 0);
+   373→    return { total, completed, avgMatch, totalITCDiff };
+   374→  }, [reconciliations]);
+   375→
+   376→  // ─── Summary Metrics ─────────────────────────────────────────────────────
+   377→  const totalTaxVolume = useMemo(
+   378→    () => invoices.reduce((sum, inv) => sum + (inv.cgst || 0) + (inv.sgst || 0) + (inv.igst || 0) + (inv.cess || 0), 0),
+   379→    [invoices]
+   380→  );
+   381→
+   382→  const totalRevenue = useMemo(
+   383→    () => invoices.reduce((sum, inv) => sum + (inv.totalAmount || 0), 0),
+   384→    [invoices]
+   385→  );
+   386→
+   387→  // ─── Render ───────────────────────────────────────────────────────────────
+   388→
+   389→  if (isLoading) {
+   390→    return (
+   391→      <div className="p-4 md:p-6 space-y-6">
+   392→        {/* Header skeleton */}
+   393→        <div className="space-y-2">
+   394→          <Skeleton className="h-8 w-64" />
+   395→          <Skeleton className="h-4 w-96" />
+   396→        </div>
+   397→        {/* Summary row */}
+   398→        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+   399→          {Array.from({ length: 4 }).map((_, i) => (
+   400→            <Skeleton key={i} className="h-24 rounded-xl" />
+   401→          ))}
+   402→        </div>
+   403→        {/* Chart grid */}
+   404→        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+   405→          {Array.from({ length: 6 }).map((_, i) => (
+   406→            <SkeletonCard key={i} />
+   407→          ))}
+   408→        </div>
+   409→      </div>
+   410→    );
+   411→  }
+   412→
+   413→  return (
+   414→    <ScrollArea className="h-full">
+   415→      <div className="p-4 md:p-6 space-y-6">
+   416→        {/* ─── Header ──────────────────────────────────────────────────────── */}
+   417→        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+   418→          <div>
+   419→            <h1 className="text-2xl font-bold tracking-tight text-emerald-900 dark:text-emerald-100">
+   420→              Analytics
+   421→            </h1>
+   422→            <p className="text-sm text-muted-foreground mt-1">
+   423→              Real-time insights from your GST compliance data
+   424→              {firm && (
+   425→                <span className="text-emerald-600 dark:text-emerald-400 ml-1">
+   426→                  &middot; {firm.firmName}
+   427→                </span>
+   428→              )}
+   429→            </p>
+   430→          </div>
+   431→          <Badge
+   432→            variant="outline"
+   433→            className="w-fit border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300"
+   434→          >
+   435→            <Activity className="h-3 w-3 mr-1" />
+   436→            Live Data
+   437→          </Badge>
+   438→        </div>
+   439→
+   440→        {/* ─── Summary Metric Cards ────────────────────────────────────────── */}
+   441→        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+   442→          <motion.div custom={0} variants={cardVariants} initial="hidden" animate="visible">
+   443→            <Card className="border-emerald-100 dark:border-emerald-900/30 bg-gradient-to-br from-emerald-50 to-white dark:from-emerald-950/30 dark:to-card">
+   444→              <CardContent className="pt-0">
+   445→                <div className="flex items-center gap-2 mb-1">
+   446→                  <div className="rounded-md bg-emerald-100 dark:bg-emerald-900/50 p-1.5">
+   447→                    <IndianRupee className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+   448→                  </div>
+   449→                  <span className="text-xs text-muted-foreground">Total Tax Volume</span>
+   450→                </div>
+   451→                <p className="text-xl font-bold text-emerald-900 dark:text-emerald-100">
+   452→                  {formatCurrency(totalTaxVolume)}
+   453→                </p>
+   454→              </CardContent>
+   455→            </Card>
+   456→          </motion.div>
+   457→
+   458→          <motion.div custom={1} variants={cardVariants} initial="hidden" animate="visible">
+   459→            <Card className="border-emerald-100 dark:border-emerald-900/30">
+   460→              <CardContent className="pt-0">
+   461→                <div className="flex items-center gap-2 mb-1">
+   462→                  <div className="rounded-md bg-emerald-100 dark:bg-emerald-900/50 p-1.5">
+   463→                    <Users className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+   464→                  </div>
+   465→                  <span className="text-xs text-muted-foreground">Active Clients</span>
+   466→                </div>
+   467→                <p className="text-xl font-bold">
+   468→                  {formatNumber(clientStats.active)}
+   469→                  <span className="text-sm font-normal text-muted-foreground"> / {formatNumber(clientStats.total)}</span>
+   470→                </p>
+   471→              </CardContent>
+   472→            </Card>
+   473→          </motion.div>
+   474→
+   475→          <motion.div custom={2} variants={cardVariants} initial="hidden" animate="visible">
+   476→            <Card className="border-emerald-100 dark:border-emerald-900/30">
+   477→              <CardContent className="pt-0">
+   478→                <div className="flex items-center gap-2 mb-1">
+   479→                  <div className="rounded-md bg-emerald-100 dark:bg-emerald-900/50 p-1.5">
+   480→                    <FileCheck className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+   481→                  </div>
+   482→                  <span className="text-xs text-muted-foreground">Filing Rate</span>
+   483→                </div>
+   484→                <p className="text-xl font-bold">
+   485→                  {filingStats.rate.toFixed(1)}%
+   486→                  <span className="text-sm font-normal text-muted-foreground"> filed</span>
+   487→                </p>
+   488→              </CardContent>
+   489→            </Card>
+   490→          </motion.div>
+   491→
+   492→          <motion.div custom={3} variants={cardVariants} initial="hidden" animate="visible">
+   493→            <Card className="border-emerald-100 dark:border-emerald-900/30">
+   494→              <CardContent className="pt-0">
+   495→                <div className="flex items-center gap-2 mb-1">
+   496→                  <div className="rounded-md bg-emerald-100 dark:bg-emerald-900/50 p-1.5">
+   497→                    <Shield className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+   498→                  </div>
+   499→                  <span className="text-xs text-muted-foreground">Match Rate</span>
+   500→                </div>
+   501→                <p className="text-xl font-bold">
+   502→                  {reconStats.avgMatch}%
+   503→                  <span className="text-sm font-normal text-muted-foreground"> avg match</span>
+   504→                </p>
+   505→              </CardContent>
+   506→            </Card>
+   507→          </motion.div>
+   508→        </div>
+   509→
+   510→        {/* ─── Chart Grid ──────────────────────────────────────────────────── */}
+   511→        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+   512→
+   513→          {/* ── 1. Monthly Tax Processed ────────────────────────────────────── */}
+   514→          <motion.div custom={4} variants={cardVariants} initial="hidden" animate="visible">
+   515→            <Card className="border-emerald-100 dark:border-emerald-900/30">
+   516→              <CardHeader>
+   517→                <div className="flex items-center gap-2">
+   518→                  <BarChart3 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+   519→                  <CardTitle className="text-base">Monthly Tax Processed</CardTitle>
+   520→                </div>
+   521→                <p className="text-xs text-muted-foreground">
+   522→                  CGST + SGST + IGST per return period
+   523→                </p>
+   524→              </CardHeader>
+   525→              <CardContent>
+   526→                {monthlyTaxData.length === 0 ? (
+   527→                  <EmptyState
+   528→                    icon={BarChart3}
+   529→                    title="No tax data yet"
+   530→                    description="Tax analytics will appear once invoices are processed"
+   531→                  />
+   532→                ) : (
+   533→                  <>
+   534→                    <CSSBarChart
+   535→                      data={monthlyTaxData.map((d) => ({
+   536→                        period: d.label,
+   537→                        value: d.totalTax,
+   538→                      }))}
+   539→                      valueKey="value"
+   540→                      labelKey="period"
+   541→                      formatValue={formatCurrency}
+   542→                      color="emerald"
+   543→                      height={160}
+   544→                    />
+   545→                    <div className="flex justify-between mt-4 text-xs text-muted-foreground">
+   546→                      <span>CGST: {formatCurrency(monthlyTaxData.reduce((s, d) => s + d.cgst, 0))}</span>
+   547→                      <span>SGST: {formatCurrency(monthlyTaxData.reduce((s, d) => s + d.sgst, 0))}</span>
+   548→                      <span>IGST: {formatCurrency(monthlyTaxData.reduce((s, d) => s + d.igst, 0))}</span>
+   549→                    </div>
+   550→                  </>
+   551→                )}
+   552→              </CardContent>
+   553→            </Card>
+   554→          </motion.div>
+   555→
+   556→          {/* ── 2. Client Growth ────────────────────────────────────────────── */}
+   557→          <motion.div custom={5} variants={cardVariants} initial="hidden" animate="visible">
+   558→            <Card className="border-emerald-100 dark:border-emerald-900/30">
+   559→              <CardHeader>
+   560→                <div className="flex items-center gap-2">
+   561→                  <Users className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+   562→                  <CardTitle className="text-base">Client Growth</CardTitle>
+   563→                </div>
+   564→                <p className="text-xs text-muted-foreground">
+   565→                  Client distribution by status
+   566→                </p>
+   567→              </CardHeader>
+   568→              <CardContent>
+   569→                {clientStats.total === 0 ? (
+   570→                  <EmptyState
+   571→                    icon={Users}
+   572→                    title="No clients yet"
+   573→                    description="Add clients to see growth analytics"
+   574→                  />
+   575→                ) : (
+   576→                  <div className="space-y-4">
+   577→                    {/* Total */}
+   578→                    <div>
+   579→                      <div className="flex items-center justify-between mb-1">
+   580→                        <span className="text-sm text-muted-foreground">Total Clients</span>
+   581→                        <span className="text-sm font-semibold">{formatNumber(clientStats.total)}</span>
+   582→                      </div>
+   583→                      <div className="h-3 w-full rounded-full bg-emerald-100 dark:bg-emerald-900/30 overflow-hidden">
+   584→                        <div
+   585→                          className="h-full rounded-full bg-emerald-500 transition-all duration-700"
+   586→                          style={{ width: '100%' }}
+   587→                        />
+   588→                      </div>
+   589→                    </div>
+   590→                    {/* Active */}
+   591→                    <div>
+   592→                      <div className="flex items-center justify-between mb-1">
+   593→                        <span className="text-sm text-muted-foreground">Active</span>
+   594→                        <div className="flex items-center gap-1">
+   595→                          <span className="text-sm font-semibold text-emerald-600 dark:text-emerald-400">
+   596→                            {formatNumber(clientStats.active)}
+   597→                          </span>
+   598→                          {clientStats.total > 0 && (
+   599→                            <Badge variant="secondary" className="text-[10px] bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border-0">
+   600→                              {Math.round((clientStats.active / clientStats.total) * 100)}%
+   601→                            </Badge>
+   602→                          )}
+   603→                        </div>
+   604→                      </div>
+   605→                      <div className="h-3 w-full rounded-full bg-emerald-100 dark:bg-emerald-900/30 overflow-hidden">
+   606→                        <div
+   607→                          className="h-full rounded-full bg-teal-500 transition-all duration-700"
+   608→                          style={{ width: `${clientStats.total > 0 ? (clientStats.active / clientStats.total) * 100 : 0}%` }}
+   609→                        />
+   610→                      </div>
+   611→                    </div>
+   612→                    {/* Inactive */}
+   613→                    {clientStats.inactive > 0 && (
+   614→                      <div>
+   615→                        <div className="flex items-center justify-between mb-1">
+   616→                          <span className="text-sm text-muted-foreground">Inactive</span>
+   617→                          <span className="text-sm font-semibold text-muted-foreground">{formatNumber(clientStats.inactive)}</span>
+   618→                        </div>
+   619→                        <div className="h-3 w-full rounded-full bg-emerald-100 dark:bg-emerald-900/30 overflow-hidden">
+   620→                          <div
+   621→                            className="h-full rounded-full bg-slate-400 transition-all duration-700"
+   622→                            style={{ width: `${(clientStats.inactive / clientStats.total) * 100}%` }}
+   623→                          />
+   624→                        </div>
+   625→                      </div>
+   626→                    )}
+   627→                    {/* Suspended */}
+   628→                    {clientStats.suspended > 0 && (
+   629→                      <div>
+   630→                        <div className="flex items-center justify-between mb-1">
+   631→                          <span className="text-sm text-muted-foreground">Suspended</span>
+   632→                          <span className="text-sm font-semibold text-red-500">{formatNumber(clientStats.suspended)}</span>
+   633→                        </div>
+   634→                        <div className="h-3 w-full rounded-full bg-emerald-100 dark:bg-emerald-900/30 overflow-hidden">
+   635→                          <div
+   636→                            className="h-full rounded-full bg-red-400 transition-all duration-700"
+   637→                            style={{ width: `${(clientStats.suspended / clientStats.total) * 100}%` }}
+   638→                          />
+   639→                        </div>
+   640→                      </div>
+   641→                    )}
+   642→                  </div>
+   643→                )}
+   644→              </CardContent>
+   645→            </Card>
+   646→          </motion.div>
+   647→
+   648→          {/* ── 3. Return Filing Rate ───────────────────────────────────────── */}
+   649→          <motion.div custom={6} variants={cardVariants} initial="hidden" animate="visible">
+   650→            <Card className="border-emerald-100 dark:border-emerald-900/30">
+   651→              <CardHeader>
+   652→                <div className="flex items-center gap-2">
+   653→                  <FileCheck className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+   654→                  <CardTitle className="text-base">Return Filing Rate</CardTitle>
+   655→                </div>
+   656→                <p className="text-xs text-muted-foreground">
+   657→                  Percentage of returns filed vs total
+   658→                </p>
+   659→              </CardHeader>
+   660→              <CardContent>
+   661→                {filingStats.total === 0 ? (
+   662→                  <EmptyState
+   663→                    icon={FileCheck}
+   664→                    title="No returns yet"
+   665→                    description="File returns to track your filing rate"
+   666→                  />
+   667→                ) : (
+   668→                  <div className="flex flex-col items-center gap-4">
+   669→                    <div className="relative">
+   670→                      <ProgressRing
+   671→                        value={filingStats.filed}
+   672→                        max={filingStats.total}
+   673→                        size={120}
+   674→                        strokeWidth={10}
+   675→                        label="Filed"
+   676→                      />
+   677→                    </div>
+   678→                    <div className="grid grid-cols-3 gap-3 w-full text-center">
+   679→                      <div className="space-y-0.5">
+   680→                        <p className="text-lg font-semibold text-emerald-600 dark:text-emerald-400">
+   681→                          {formatNumber(filingStats.filed)}
+   682→                        </p>
+   683→                        <p className="text-[10px] text-muted-foreground">Filed</p>
+   684→                      </div>
+   685→                      <div className="space-y-0.5">
+   686→                        <p className="text-lg font-semibold text-amber-500">
+   687→                          {formatNumber(filingStats.pending)}
+   688→                        </p>
+   689→                        <p className="text-[10px] text-muted-foreground">Pending</p>
+   690→                      </div>
+   691→                      <div className="space-y-0.5">
+   692→                        <p className="text-lg font-semibold text-red-500">
+   693→                          {formatNumber(filingStats.overdue)}
+   694→                        </p>
+   695→                        <p className="text-[10px] text-muted-foreground">Overdue</p>
+   696→                      </div>
+   697→                    </div>
+   698→                  </div>
+   699→                )}
+   700→              </CardContent>
+   701→            </Card>
+   702→          </motion.div>
+   703→
+   704→          {/* ── 4. Compliance Trend ─────────────────────────────────────────── */}
+   705→          <motion.div custom={7} variants={cardVariants} initial="hidden" animate="visible">
+   706→            <Card className="border-emerald-100 dark:border-emerald-900/30">
+   707→              <CardHeader>
+   708→                <div className="flex items-center gap-2">
+   709→                  <Shield className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+   710→                  <CardTitle className="text-base">Compliance Trend</CardTitle>
+   711→                </div>
+   712→                <p className="text-xs text-muted-foreground">
+   713→                  Compliance score over recent periods
+   714→                </p>
+   715→              </CardHeader>
+   716→              <CardContent>
+   717→                {complianceTrend.length === 0 ? (
+   718→                  <EmptyState
+   719→                    icon={Shield}
+   720→                    title="No compliance data"
+   721→                    description="Process returns to see compliance trends"
+   722→                  />
+   723→                ) : (
+   724→                  <div className="space-y-3">
+   725→                    {complianceTrend.map((point, idx) => {
+   726→                      const prevScore = idx > 0 ? complianceTrend[idx - 1].score : point.score;
+   727→                      const isUp = point.score >= prevScore;
+   728→                      return (
+   729→                        <div key={point.period} className="flex items-center gap-3">
+   730→                          <span className="text-xs text-muted-foreground w-20 shrink-0 truncate">
+   731→                            {point.label}
+   732→                          </span>
+   733→                          <div className="flex-1 h-6 bg-emerald-50 dark:bg-emerald-900/20 rounded-full overflow-hidden relative">
+   734→                            <div
+   735→                              className={`h-full rounded-full transition-all duration-700 ${
+   736→                                point.score >= 80
+   737→                                  ? 'bg-emerald-500'
+   738→                                  : point.score >= 50
+   739→                                    ? 'bg-amber-500'
+   740→                                    : 'bg-red-500'
+   741→                              }`}
+   742→                              style={{ width: `${point.score}%` }}
+   743→                            />
+   744→                          </div>
+   745→                          <div className="flex items-center gap-1 shrink-0 w-16 justify-end">
+   746→                            <span className="text-sm font-semibold">{point.score}</span>
+   747→                            {idx > 0 && (
+   748→                              isUp ? (
+   749→                                <ArrowUpRight className="h-3 w-3 text-emerald-500" />
+   750→                              ) : (
+   751→                                <ArrowDownRight className="h-3 w-3 text-red-500" />
+   752→                              )
+   753→                            )}
+   754→                          </div>
+   755→                        </div>
+   756→                      );
+   757→                    })}
+   758→                  </div>
+   759→                )}
+   760→              </CardContent>
+   761→            </Card>
+   762→          </motion.div>
+   763→
+   764→          {/* ── 5. Revenue Trend ────────────────────────────────────────────── */}
+   765→          <motion.div custom={8} variants={cardVariants} initial="hidden" animate="visible">
+   766→            <Card className="border-emerald-100 dark:border-emerald-900/30">
+   767→              <CardHeader>
+   768→                <div className="flex items-center gap-2">
+   769→                  <IndianRupee className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+   770→                  <CardTitle className="text-base">Revenue Trend</CardTitle>
+   771→                </div>
+   772→                <p className="text-xs text-muted-foreground">
+   773→                  Total invoice value by period
+   774→                </p>
+   775→              </CardHeader>
+   776→              <CardContent>
+   777→                {revenueTrend.length === 0 ? (
+   778→                  <EmptyState
+   779→                    icon={IndianRupee}
+   780→                    title="No revenue data"
+   781→                    description="Upload invoices to see revenue trends"
+   782→                  />
+   783→                ) : (
+   784→                  <>
+   785→                    <CSSBarChart
+   786→                      data={revenueTrend.map((d) => ({
+   787→                        period: d.label,
+   788→                        value: d.totalRevenue,
+   789→                      }))}
+   790→                      valueKey="value"
+   791→                      labelKey="period"
+   792→                      formatValue={formatCurrency}
+   793→                      color="teal"
+   794→                      height={160}
+   795→                    />
+   796→                    <div className="flex items-center justify-between mt-4 text-xs text-muted-foreground">
+   797→                      <span>Total: {formatCurrency(totalRevenue)}</span>
+   798→                      {revenueTrend.length >= 2 && (
+   799→                        <span className="flex items-center gap-1">
+   800→                          {revenueTrend[revenueTrend.length - 1].totalRevenue >=
+   801→                          revenueTrend[revenueTrend.length - 2].totalRevenue ? (
+   802→                            <>
+   803→                              <TrendingUp className="h-3 w-3 text-emerald-500" />
+   804→                              <span className="text-emerald-600 dark:text-emerald-400">Trending up</span>
+   805→                            </>
+   806→                          ) : (
+   807→                            <>
+   808→                              <TrendingDown className="h-3 w-3 text-red-500" />
+   809→                              <span className="text-red-500">Trending down</span>
+   810→                            </>
+   811→                          )}
+   812→                        </span>
+   813→                      )}
+   814→                    </div>
+   815→                  </>
+   816→                )}
+   817→              </CardContent>
+   818→            </Card>
+   819→          </motion.div>
+   820→
+   821→          {/* ── 6. Top Clients ──────────────────────────────────────────────── */}
+   822→          <motion.div custom={9} variants={cardVariants} initial="hidden" animate="visible">
+   823→            <Card className="border-emerald-100 dark:border-emerald-900/30">
+   824→              <CardHeader>
+   825→                <div className="flex items-center gap-2">
+   826→                  <PieChart className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+   827→                  <CardTitle className="text-base">Top Clients</CardTitle>
+   828→                </div>
+   829→                <p className="text-xs text-muted-foreground">
+   830→                  Top 5 clients by tax volume
+   831→                </p>
+   832→              </CardHeader>
+   833→              <CardContent>
+   834→                {topClients.length === 0 ? (
+   835→                  <EmptyState
+   836→                    icon={Users}
+   837→                    title="No clients yet"
+   838→                    description="Add clients to see top performers"
+   839→                  />
+   840→                ) : (
+   841→                  <div className="space-y-3">
+   842→                    {/* Table header */}
+   843→                    <div className="grid grid-cols-[1fr_80px_60px] gap-2 text-[10px] text-muted-foreground uppercase tracking-wider font-medium pb-2 border-b border-emerald-100 dark:border-emerald-900/30">
+   844→                      <span>Client</span>
+   845→                      <span className="text-right">Tax Volume</span>
+   846→                      <span className="text-right">Health</span>
+   847→                    </div>
+   848→                    {topClients.map((client, idx) => (
+   849→                      <div
+   850→                        key={client.id}
+   851→                        className="grid grid-cols-[1fr_80px_60px] gap-2 items-center py-1.5 group"
+   852→                      >
+   853→                        <div className="min-w-0">
+   854→                          <div className="flex items-center gap-1.5">
+   855→                            <span className="text-xs font-medium text-emerald-700 dark:text-emerald-300">
+   856→                              #{idx + 1}
+   857→                            </span>
+   858→                            <span className="text-sm truncate">{client.tradeName}</span>
+   859→                          </div>
+   860→                          <p className="text-[10px] text-muted-foreground truncate">
+   861→                            {client.gstin}
+   862→                          </p>
+   863→                        </div>
+   864→                        <span className="text-sm font-medium text-right">
+   865→                          {formatCurrency(client.totalTaxPaid)}
+   866→                        </span>
+   867→                        <div className="flex items-center justify-end gap-1">
+   868→                          <span
+   869→                            className={`text-xs font-medium ${
+   870→                              client.healthScore >= 80
+   871→                                ? 'text-emerald-600 dark:text-emerald-400'
+   872→                                : client.healthScore >= 50
+   873→                                  ? 'text-amber-500'
+   874→                                  : 'text-red-500'
+   875→                            }`}
+   876→                          >
+   877→                            {client.healthScore}
+   878→                          </span>
+   879→                          {client.status === 'active' ? (
+   880→                            <div className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+   881→                          ) : (
+   882→                            <div className="h-1.5 w-1.5 rounded-full bg-slate-400" />
+   883→                          )}
+   884→                        </div>
+   885→                      </div>
+   886→                    ))}
+   887→                  </div>
+   888→                )}
+   889→              </CardContent>
+   890→            </Card>
+   891→          </motion.div>
+   892→        </div>
+   893→
+   894→        {/* ─── Reconciliation Summary Row ──────────────────────────────────── */}
+   895→        <motion.div custom={10} variants={cardVariants} initial="hidden" animate="visible">
+   896→          <Card className="border-emerald-100 dark:border-emerald-900/30">
+   897→            <CardHeader>
+   898→              <div className="flex items-center gap-2">
+   899→                <Activity className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+   900→                <CardTitle className="text-base">Reconciliation Summary</CardTitle>
+   901→              </div>
+   902→              <p className="text-xs text-muted-foreground">
+   903→                Overview of all reconciliation runs
+   904→              </p>
+   905→            </CardHeader>
+   906→            <CardContent>
+   907→              {reconStats.total === 0 ? (
+   908→                <EmptyState
+   909→                  icon={Activity}
+   910→                  title="No reconciliations yet"
+   911→                  description="Run reconciliations to see match analytics"
+   912→                />
+   913→              ) : (
+   914→                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+   915→                  <div className="space-y-1">
+   916→                    <p className="text-xs text-muted-foreground">Total Runs</p>
+   917→                    <p className="text-lg font-semibold">{formatNumber(reconStats.total)}</p>
+   918→                  </div>
+   919→                  <div className="space-y-1">
+   920→                    <p className="text-xs text-muted-foreground">Completed</p>
+   921→                    <p className="text-lg font-semibold text-emerald-600 dark:text-emerald-400">
+   922→                      {formatNumber(reconStats.completed)}
+   923→                    </p>
+   924→                  </div>
+   925→                  <div className="space-y-1">
+   926→                    <p className="text-xs text-muted-foreground">Avg Match Rate</p>
+   927→                    <p className="text-lg font-semibold">{reconStats.avgMatch}%</p>
+   928→                  </div>
+   929→                  <div className="space-y-1">
+   930→                    <p className="text-xs text-muted-foreground">ITC Difference</p>
+   931→                    <p className={`text-lg font-semibold ${reconStats.totalITCDiff > 0 ? 'text-amber-500' : 'text-emerald-600 dark:text-emerald-400'}`}>
+   932→                      {formatCurrency(reconStats.totalITCDiff)}
+   933→                    </p>
+   934→                  </div>
+   935→                </div>
+   936→              )}
+   937→            </CardContent>
+   938→          </Card>
+   939→        </motion.div>
+   940→      </div>
+   941→    </ScrollArea>
+   942→  );
+   943→}
+   944→

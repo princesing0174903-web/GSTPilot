@@ -1,0 +1,1553 @@
+     1→'use client';
+     2→
+     3→import React, { useState, useMemo } from 'react';
+     4→import { motion, AnimatePresence } from 'framer-motion';
+     5→import {
+     6→  Store, Search, Star, Download, Plug, FileText, Workflow, Cable,
+     7→  BarChart3, Check, ChevronRight, ExternalLink, Shield, Clock,
+     8→  ArrowRight, Sparkles, Zap, Tag, Users, BookOpen, Settings2,
+     9→  X, Play, Heart, Share2, MoreVertical, Package, Filter,
+    10→  BadgeCheck, TrendingUp, Globe, MessageSquare, CreditCard,
+    11→  FileSpreadsheet, Bell, FileSearch, Receipt, Calculator,
+    12→  Truck, ClipboardCheck, UserPlus, Mail, AlertCircle, RefreshCw,
+    13→  Bot, Activity,
+    14→} from 'lucide-react';
+    15→import { Input } from '@/components/ui/input';
+    16→import { Button } from '@/components/ui/button';
+    17→import { Badge } from '@/components/ui/badge';
+    18→import { Card, CardContent } from '@/components/ui/card';
+    19→import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+    20→import { Switch } from '@/components/ui/switch';
+    21→import { Label } from '@/components/ui/label';
+    22→import { Skeleton } from '@/components/ui/skeleton';
+    23→import { ScrollArea } from '@/components/ui/scroll-area';
+    24→import { Separator } from '@/components/ui/separator';
+    25→import {
+    26→  Dialog,
+    27→  DialogContent,
+    28→  DialogHeader,
+    29→  DialogTitle,
+    30→  DialogDescription,
+    31→} from '@/components/ui/dialog';
+    32→
+    33→// ═══════════════════════════════════════════════════════════════════════════════
+    34→// TYPES
+    35→// ═══════════════════════════════════════════════════════════════════════════════
+    36→
+    37→type MarketplaceCategory = 'plugins' | 'templates' | 'automations' | 'integrations' | 'reports';
+    38→
+    39→interface MarketplaceItem {
+    40→  id: string;
+    41→  name: string;
+    42→  description: string;
+    43→  longDescription: string;
+    44→  category: MarketplaceCategory;
+    45→  icon: React.ElementType;
+    46→  rating: number;
+    47→  reviews: number;
+    48→  downloads: number;
+    49→  price: 'Free' | 'Premium' | 'Enterprise';
+    50→  version: string;
+    51→  author: string;
+    52→  lastUpdated: string;
+    53→  tags: string[];
+    54→  installed: boolean;
+    55→  featured?: boolean;
+    56→  screenshots?: string[];
+    57→  // Integration-specific
+    58→  connectionStatus?: 'connected' | 'available' | 'coming-soon';
+    59→}
+    60→
+    61→// ═══════════════════════════════════════════════════════════════════════════════
+    62→// CATEGORY CONFIG
+    63→// ═══════════════════════════════════════════════════════════════════════════════
+    64→
+    65→const CATEGORY_CONFIG: Record<MarketplaceCategory, {
+    66→  label: string;
+    67→  icon: React.ElementType;
+    68→  color: string;
+    69→  bgColor: string;
+    70→  borderColor: string;
+    71→  badgeBg: string;
+    72→  badgeText: string;
+    73→  gradientFrom: string;
+    74→  gradientTo: string;
+    75→}> = {
+    76→  plugins: {
+    77→    label: 'GST Plugins',
+    78→    icon: Plug,
+    79→    color: 'text-violet-600 dark:text-violet-400',
+    80→    bgColor: 'bg-violet-50 dark:bg-violet-950/40',
+    81→    borderColor: 'border-violet-200 dark:border-violet-800',
+    82→    badgeBg: 'bg-violet-100 dark:bg-violet-900/60',
+    83→    badgeText: 'text-violet-700 dark:text-violet-300',
+    84→    gradientFrom: 'from-violet-500',
+    85→    gradientTo: 'to-purple-600',
+    86→  },
+    87→  templates: {
+    88→    label: 'CA Templates',
+    89→    icon: FileText,
+    90→    color: 'text-emerald-600 dark:text-emerald-400',
+    91→    bgColor: 'bg-emerald-50 dark:bg-emerald-950/40',
+    92→    borderColor: 'border-emerald-200 dark:border-emerald-800',
+    93→    badgeBg: 'bg-emerald-100 dark:bg-emerald-900/60',
+    94→    badgeText: 'text-emerald-700 dark:text-emerald-300',
+    95→    gradientFrom: 'from-emerald-500',
+    96→    gradientTo: 'to-teal-600',
+    97→  },
+    98→  automations: {
+    99→    label: 'Automation Templates',
+   100→    icon: Workflow,
+   101→    color: 'text-amber-600 dark:text-amber-400',
+   102→    bgColor: 'bg-amber-50 dark:bg-amber-950/40',
+   103→    borderColor: 'border-amber-200 dark:border-amber-800',
+   104→    badgeBg: 'bg-amber-100 dark:bg-amber-900/60',
+   105→    badgeText: 'text-amber-700 dark:text-amber-300',
+   106→    gradientFrom: 'from-amber-500',
+   107→    gradientTo: 'to-orange-600',
+   108→  },
+   109→  integrations: {
+   110→    label: 'API Integrations',
+   111→    icon: Cable,
+   112→    color: 'text-sky-600 dark:text-sky-400',
+   113→    bgColor: 'bg-sky-50 dark:bg-sky-950/40',
+   114→    borderColor: 'border-sky-200 dark:border-sky-800',
+   115→    badgeBg: 'bg-sky-100 dark:bg-sky-900/60',
+   116→    badgeText: 'text-sky-700 dark:text-sky-300',
+   117→    gradientFrom: 'from-sky-500',
+   118→    gradientTo: 'to-blue-600',
+   119→  },
+   120→  reports: {
+   121→    label: 'Custom Reports',
+   122→    icon: BarChart3,
+   123→    color: 'text-rose-600 dark:text-rose-400',
+   124→    bgColor: 'bg-rose-50 dark:bg-rose-950/40',
+   125→    borderColor: 'border-rose-200 dark:border-rose-800',
+   126→    badgeBg: 'bg-rose-100 dark:bg-rose-900/60',
+   127→    badgeText: 'text-rose-700 dark:text-rose-300',
+   128→    gradientFrom: 'from-rose-500',
+   129→    gradientTo: 'to-pink-600',
+   130→  },
+   131→};
+   132→
+   133→// ═══════════════════════════════════════════════════════════════════════════════
+   134→// SAMPLE DATA
+   135→// ═══════════════════════════════════════════════════════════════════════════════
+   136→
+   137→const MARKETPLACE_ITEMS: MarketplaceItem[] = [
+   138→  // ─── GST PLUGINS ───────────────────────────────────────────────────────────
+   139→  {
+   140→    id: 'plugin-eway-bill',
+   141→    name: 'E-Way Bill Generator',
+   142→    description: 'Auto-generate e-way bills from invoices',
+   143→    longDescription: 'Automatically generate e-way bills directly from your invoices with zero manual entry. Supports bulk generation, real-time validation with the GST portal, and automatic Part-B updates. Integrates seamlessly with your invoice workflow to ensure compliance and reduce errors.',
+   144→    category: 'plugins',
+   145→    icon: Truck,
+   146→    rating: 4.8,
+   147→    reviews: 124,
+   148→    downloads: 3420,
+   149→    price: 'Premium',
+   150→    version: '2.4.1',
+   151→    author: 'GSTPilot Labs',
+   152→    lastUpdated: '2025-02-28',
+   153→    tags: ['e-way bill', 'compliance', 'automation'],
+   154→    installed: true,
+   155→    featured: true,
+   156→  },
+   157→  {
+   158→    id: 'plugin-audit-trail',
+   159→    name: 'GST Audit Trail',
+   160→    description: 'Complete audit trail for all GST transactions',
+   161→    longDescription: 'Maintain a comprehensive, tamper-proof audit trail for every GST transaction. Track changes, view historical data, and generate audit-ready reports. Features include real-time change logging, user activity tracking, and automated compliance reporting.',
+   162→    category: 'plugins',
+   163→    icon: ClipboardCheck,
+   164→    rating: 4.6,
+   165→    reviews: 89,
+   166→    downloads: 2180,
+   167→    price: 'Premium',
+   168→    version: '1.8.0',
+   169→    author: 'TaxSoft Inc.',
+   170→    lastUpdated: '2025-03-01',
+   171→    tags: ['audit', 'compliance', 'tracking'],
+   172→    installed: false,
+   173→  },
+   174→  {
+   175→    id: 'plugin-tds-tcs',
+   176→    name: 'TDS/TCS Calculator',
+   177→    description: 'Auto-calculate TDS/TCS on transactions',
+   178→    longDescription: 'Intelligently calculate TDS and TCS on all transactions based on current rates and rules. Supports section-wise computation, threshold tracking, and automatic deduction entries. Stay compliant with the latest TDS/TCS provisions without manual lookup.',
+   179→    category: 'plugins',
+   180→    icon: Calculator,
+   181→    rating: 4.5,
+   182→    reviews: 67,
+   183→    downloads: 1890,
+   184→    price: 'Free',
+   185→    version: '3.1.2',
+   186→    author: 'GSTPilot Labs',
+   187→    lastUpdated: '2025-02-20',
+   188→    tags: ['TDS', 'TCS', 'calculator'],
+   189→    installed: false,
+   190→  },
+   191→  {
+   192→    id: 'plugin-refund-tracker',
+   193→    name: 'GST Refund Tracker',
+   194→    description: 'Track refund status and timelines',
+   195→    longDescription: 'Track the status of GST refund applications in real-time. Get automated alerts for refund acknowledgments, deficiencies, and sanctions. Maintain a complete timeline of all refund-related communications and deadlines.',
+   196→    category: 'plugins',
+   197→    icon: RefreshCw,
+   198→    rating: 4.3,
+   199→    reviews: 45,
+   200→    downloads: 1240,
+   201→    price: 'Free',
+   202→    version: '1.5.0',
+   203→    author: 'RefundPro',
+   204→    lastUpdated: '2025-01-15',
+   205→    tags: ['refund', 'tracking', 'status'],
+   206→    installed: false,
+   207→  },
+   208→  {
+   209→    id: 'plugin-einvoice',
+   210→    name: 'E-Invoice Compliance',
+   211→    description: 'Generate IRN for e-invoices',
+   212→    longDescription: 'Generate Invoice Reference Numbers (IRN) for e-invoices directly from GSTPilot. Automatic JSON generation, e-invoice portal integration, QR code embedding, and cancellation support. Compliant with the latest e-invoicing mandates.',
+   213→    category: 'plugins',
+   214→    icon: Receipt,
+   215→    rating: 4.9,
+   216→    reviews: 156,
+   217→    downloads: 4560,
+   218→    price: 'Premium',
+   219→    version: '2.2.0',
+   220→    author: 'GSTPilot Labs',
+   221→    lastUpdated: '2025-03-02',
+   222→    tags: ['e-invoice', 'IRN', 'compliance'],
+   223→    installed: true,
+   224→    featured: true,
+   225→  },
+   226→  {
+   227→    id: 'plugin-multi-state',
+   228→    name: 'Multi-State Filing',
+   229→    description: 'File returns across multiple states',
+   230→    longDescription: 'Simplify multi-state GST filing with a unified dashboard. Manage GSTINs across states, prepare and file returns for each state, and track compliance status from a single place. Bulk filing support and state-specific rule validation included.',
+   231→    category: 'plugins',
+   232→    icon: Globe,
+   233→    rating: 4.4,
+   234→    reviews: 78,
+   235→    downloads: 1670,
+   236→    price: 'Enterprise',
+   237→    version: '1.3.0',
+   238→    author: 'MultiTax Solutions',
+   239→    lastUpdated: '2025-02-10',
+   240→    tags: ['multi-state', 'filing', 'GSTIN'],
+   241→    installed: false,
+   242→  },
+   243→  {
+   244→    id: 'plugin-hsn-sac',
+   245→    name: 'HSN/SAC Code Lookup',
+   246→    description: 'Auto-classify goods and services',
+   247→    longDescription: 'Automatically classify goods and services with the correct HSN/SAC codes using AI-powered lookup. Supports keyword search, description matching, and bulk classification. Always up-to-date with the latest GST rate schedules.',
+   248→    category: 'plugins',
+   249→    icon: FileSearch,
+   250→    rating: 4.7,
+   251→    reviews: 98,
+   252→    downloads: 2890,
+   253→    price: 'Free',
+   254→    version: '2.0.3',
+   255→    author: 'GSTPilot Labs',
+   256→    lastUpdated: '2025-02-25',
+   257→    tags: ['HSN', 'SAC', 'classification'],
+   258→    installed: false,
+   259→  },
+   260→  {
+   261→    id: 'plugin-rate-finder',
+   262→    name: 'GST Rate Finder',
+   263→    description: 'Find applicable GST rates',
+   264→    longDescription: 'Instantly find applicable GST rates for any product or service. Search by HSN/SAC code, description, or category. Includes historical rate changes, special rate provisions, and cess calculations. Essential for accurate invoicing.',
+   265→    category: 'plugins',
+   266→    icon: Tag,
+   267→    rating: 4.2,
+   268→    reviews: 56,
+   269→    downloads: 1450,
+   270→    price: 'Free',
+   271→    version: '1.9.1',
+   272→    author: 'TaxTools',
+   273→    lastUpdated: '2025-01-28',
+   274→    tags: ['GST rates', 'lookup', 'cess'],
+   275→    installed: false,
+   276→  },
+   277→
+   278→  // ─── CA TEMPLATES ──────────────────────────────────────────────────────────
+   279→  {
+   280→    id: 'template-engagement',
+   281→    name: 'Engagement Letter',
+   282→    description: 'Professional client engagement letter',
+   283→    longDescription: 'A comprehensive, legally-vetted engagement letter template for CA firms. Covers scope of services, fee structure, confidentiality clauses, and termination provisions. Customizable with your firm branding and compliant with ICAI guidelines.',
+   284→    category: 'templates',
+   285→    icon: BookOpen,
+   286→    rating: 4.9,
+   287→    reviews: 210,
+   288→    downloads: 5670,
+   289→    price: 'Free',
+   290→    version: '3.2.0',
+   291→    author: 'GSTPilot Labs',
+   292→    lastUpdated: '2025-03-01',
+   293→    tags: ['engagement', 'legal', 'client'],
+   294→    installed: true,
+   295→    featured: true,
+   296→  },
+   297→  {
+   298→    id: 'template-poa',
+   299→    name: 'Power of Attorney',
+   300→    description: 'GST-specific POA template',
+   301→    longDescription: 'GST-specific Power of Attorney template authorizing CA firms to represent clients before tax authorities. Includes provisions for filing returns, attending hearings, and responding to notices. Compliant with GST law requirements.',
+   302→    category: 'templates',
+   303→    icon: Shield,
+   304→    rating: 4.7,
+   305→    reviews: 134,
+   306→    downloads: 3210,
+   307→    price: 'Free',
+   308→    version: '2.1.0',
+   309→    author: 'LegalDesk',
+   310→    lastUpdated: '2025-02-15',
+   311→    tags: ['POA', 'authorization', 'legal'],
+   312→    installed: false,
+   313→  },
+   314→  {
+   315→    id: 'template-checklist',
+   316→    name: 'Compliance Checklist',
+   317→    description: 'Monthly compliance checklist',
+   318→    longDescription: 'A detailed monthly compliance checklist covering all GST obligations — from return filing deadlines to document retention requirements. Auto-populates based on client profile and tracks completion status. Never miss a compliance deadline again.',
+   319→    category: 'templates',
+   320→    icon: ClipboardCheck,
+   321→    rating: 4.8,
+   322→    reviews: 178,
+   323→    downloads: 4890,
+   324→    price: 'Free',
+   325→    version: '4.0.1',
+   326→    author: 'GSTPilot Labs',
+   327→    lastUpdated: '2025-03-02',
+   328→    tags: ['checklist', 'compliance', 'monthly'],
+   329→    installed: false,
+   330→  },
+   331→  {
+   332→    id: 'template-audit-report',
+   333→    name: 'Audit Report Template',
+   334→    description: 'GST audit report format',
+   335→    longDescription: 'Professional GST audit report template following ICAI standards. Includes all required sections, observations, qualifications, and annexures. Auto-fills from reconciliation data and supports multiple audit types.',
+   336→    category: 'templates',
+   337→    icon: FileText,
+   338→    rating: 4.6,
+   339→    reviews: 92,
+   340→    downloads: 2340,
+   341→    price: 'Premium',
+   342→    version: '2.3.0',
+   343→    author: 'AuditPro',
+   344→    lastUpdated: '2025-02-20',
+   345→    tags: ['audit', 'report', 'ICAI'],
+   346→    installed: false,
+   347→  },
+   348→  {
+   349→    id: 'template-notice-response',
+   350→    name: 'Notice Response Template',
+   351→    description: 'Response to GST notices',
+   352→    longDescription: 'Pre-drafted response templates for common GST notices — SCN, ASMT-10, intimation under section 61, and more. Each template includes legal citations, formatting guidance, and fill-in-the-blank sections for quick customization.',
+   353→    category: 'templates',
+   354→    icon: Mail,
+   355→    rating: 4.5,
+   356→    reviews: 76,
+   357→    downloads: 1980,
+   358→    price: 'Premium',
+   359→    version: '1.7.2',
+   360→    author: 'GSTPilot Labs',
+   361→    lastUpdated: '2025-01-30',
+   362→    tags: ['notice', 'response', 'legal'],
+   363→    installed: false,
+   364→  },
+   365→  {
+   366→    id: 'template-onboarding',
+   367→    name: 'Client Onboarding Kit',
+   368→    description: 'Complete onboarding package',
+   369→    longDescription: 'Everything you need to onboard a new GST client — KYC forms, document checklists, authorization letters, fee agreements, and welcome guides. Streamlined digital workflow with e-sign support and automated document collection.',
+   370→    category: 'templates',
+   371→    icon: UserPlus,
+   372→    rating: 4.8,
+   373→    reviews: 145,
+   374→    downloads: 3780,
+   375→    price: 'Free',
+   376→    version: '3.0.0',
+   377→    author: 'GSTPilot Labs',
+   378→    lastUpdated: '2025-02-28',
+   379→    tags: ['onboarding', 'KYC', 'client'],
+   380→    installed: false,
+   381→  },
+   382→  {
+   383→    id: 'template-fee-proposal',
+   384→    name: 'Fee Proposal',
+   385→    description: 'Service fee proposal template',
+   386→    longDescription: 'Professional fee proposal template with itemized service breakdown, payment terms, and value proposition sections. Includes comparison tables, scope matrices, and tiered pricing options. Customizable with firm branding.',
+   387→    category: 'templates',
+   388→    icon: CreditCard,
+   389→    rating: 4.4,
+   390→    reviews: 63,
+   391→    downloads: 1560,
+   392→    price: 'Free',
+   393→    version: '1.5.0',
+   394→    author: 'CA Tools',
+   395→    lastUpdated: '2025-01-22',
+   396→    tags: ['fee', 'proposal', 'pricing'],
+   397→    installed: false,
+   398→  },
+   399→  {
+   400→    id: 'template-monthly-report',
+   401→    name: 'Monthly Report',
+   402→    description: 'Client monthly status report',
+   403→    longDescription: 'Comprehensive monthly status report template for CA-client communication. Includes filing status, payment summaries, compliance updates, upcoming deadlines, and action items. Auto-populates from GSTPilot data with charts and tables.',
+   404→    category: 'templates',
+   405→    icon: BarChart3,
+   406→    rating: 4.7,
+   407→    reviews: 112,
+   408→    downloads: 2670,
+   409→    price: 'Free',
+   410→    version: '2.1.0',
+   411→    author: 'GSTPilot Labs',
+   412→    lastUpdated: '2025-02-18',
+   413→    tags: ['report', 'monthly', 'client'],
+   414→    installed: false,
+   415→  },
+   416→
+   417→  // ─── AUTOMATION TEMPLATES ──────────────────────────────────────────────────
+   418→  {
+   419→    id: 'auto-file-gstr1',
+   420→    name: 'Auto-File GSTR-1',
+   421→    description: 'When all invoices extracted, prepare and validate GSTR-1',
+   422→    longDescription: 'Automated GSTR-1 filing workflow: triggers when all invoices for a period are extracted, validates data against 2A/2B, checks for errors, prepares the return, and queues for review. Includes pre-filing checks and reconciliation validation.',
+   423→    category: 'automations',
+   424→    icon: FileText,
+   425→    rating: 4.9,
+   426→    reviews: 189,
+   427→    downloads: 5230,
+   428→    price: 'Premium',
+   429→    version: '3.0.0',
+   430→    author: 'GSTPilot Labs',
+   431→    lastUpdated: '2025-03-01',
+   432→    tags: ['GSTR-1', 'filing', 'auto'],
+   433→    installed: true,
+   434→    featured: true,
+   435→  },
+   436→  {
+   437→    id: 'auto-mismatch-alert',
+   438→    name: 'Mismatch Alert',
+   439→    description: 'When reconciliation finds mismatch, create task + notify',
+   440→    longDescription: 'Automatically detect mismatches during 2A/2B reconciliation and create actionable tasks with full context. Sends notifications to the assigned team member with mismatch details, suggested actions, and client contact information.',
+   441→    category: 'automations',
+   442→    icon: AlertCircle,
+   443→    rating: 4.6,
+   444→    reviews: 97,
+   445→    downloads: 2450,
+   446→    price: 'Free',
+   447→    version: '2.1.0',
+   448→    author: 'GSTPilot Labs',
+   449→    lastUpdated: '2025-02-25',
+   450→    tags: ['reconciliation', 'mismatch', 'alert'],
+   451→    installed: false,
+   452→  },
+   453→  {
+   454→    id: 'auto-deadline-reminder',
+   455→    name: 'Deadline Reminder',
+   456→    description: '7 days before filing due date, send reminder to client',
+   457→    longDescription: 'Proactive deadline management: automatically sends reminders to clients 7 days, 3 days, and 1 day before filing due dates. Includes what documents are needed, pending actions, and a one-click document upload link.',
+   458→    category: 'automations',
+   459→    icon: Bell,
+   460→    rating: 4.7,
+   461→    reviews: 132,
+   462→    downloads: 3120,
+   463→    price: 'Free',
+   464→    version: '2.3.0',
+   465→    author: 'GSTPilot Labs',
+   466→    lastUpdated: '2025-02-28',
+   467→    tags: ['deadline', 'reminder', 'notification'],
+   468→    installed: false,
+   469→  },
+   470→  {
+   471→    id: 'auto-late-fee',
+   472→    name: 'Late Fee Calculator',
+   473→    description: 'When return overdue, calculate late fee + create task',
+   474→    longDescription: 'Automatically detect overdue returns, calculate applicable late fees under section 47, and create priority tasks for resolution. Includes interest calculation, waiver eligibility check, and CONDONATION request template generation.',
+   475→    category: 'automations',
+   476→    icon: Calculator,
+   477→    rating: 4.4,
+   478→    reviews: 68,
+   479→    downloads: 1670,
+   480→    price: 'Free',
+   481→    version: '1.6.0',
+   482→    author: 'TaxAuto',
+   483→    lastUpdated: '2025-01-20',
+   484→    tags: ['late fee', 'overdue', 'calculation'],
+   485→    installed: false,
+   486→  },
+   487→  {
+   488→    id: 'auto-doc-processor',
+   489→    name: 'Document Processor',
+   490→    description: 'When document uploaded, OCR + classify + extract',
+   491→    longDescription: 'Intelligent document processing pipeline: automatically OCR uploaded documents, classify them (invoice, credit note, purchase register, etc.), extract key data fields, and route to the appropriate workflow. Supports PDF, images, and scanned documents.',
+   492→    category: 'automations',
+   493→    icon: Bot,
+   494→    rating: 4.8,
+   495→    reviews: 156,
+   496→    downloads: 4560,
+   497→    price: 'Premium',
+   498→    version: '2.5.0',
+   499→    author: 'GSTPilot Labs',
+   500→    lastUpdated: '2025-03-02',
+   501→    tags: ['OCR', 'document', 'extraction'],
+   502→    installed: false,
+   503→  },
+   504→  {
+   505→    id: 'auto-health-monitor',
+   506→    name: 'Client Health Monitor',
+   507→    description: 'Daily check client health score, alert if dropped',
+   508→    longDescription: 'Continuous client health monitoring: daily evaluation of compliance scores, filing status, document completeness, and payment regularity. Automatically alerts when a client health score drops below threshold, with root cause analysis and recommended actions.',
+   509→    category: 'automations',
+   510→    icon: Activity,
+   511→    rating: 4.5,
+   512→    reviews: 84,
+   513→    downloads: 2100,
+   514→    price: 'Premium',
+   515→    version: '1.8.0',
+   516→    author: 'GSTPilot Labs',
+   517→    lastUpdated: '2025-02-15',
+   518→    tags: ['health', 'monitor', 'alert'],
+   519→    installed: false,
+   520→  },
+   521→
+   522→  // ─── API INTEGRATIONS ─────────────────────────────────────────────────────
+   523→  {
+   524→    id: 'int-tally',
+   525→    name: 'Tally ERP',
+   526→    description: 'Sync data with Tally',
+   527→    longDescription: 'Seamlessly sync master data, invoices, and returns between GSTPilot and Tally ERP. Supports real-time and batch sync, conflict resolution, and multi-company setup. Import purchase/sales registers, export GSTR files, and keep both systems in perfect sync.',
+   528→    category: 'integrations',
+   529→    icon: Package,
+   530→    rating: 4.7,
+   531→    reviews: 198,
+   532→    downloads: 6230,
+   533→    price: 'Premium',
+   534→    version: '3.2.0',
+   535→    author: 'Tally Solutions',
+   536→    lastUpdated: '2025-03-01',
+   537→    tags: ['tally', 'sync', 'accounting'],
+   538→    installed: true,
+   539→    connectionStatus: 'connected',
+   540→    featured: true,
+   541→  },
+   542→  {
+   543→    id: 'int-busy',
+   544→    name: 'Busy Accounting',
+   545→    description: 'Import/export with Busy',
+   546→    longDescription: 'Import and export data between GSTPilot and Busy Accounting software. Supports purchase/sales register import, GSTR export, master data sync, and voucher-level integration. Compatible with Busy 18 and Busy 21 versions.',
+   547→    category: 'integrations',
+   548→    icon: BookOpen,
+   549→    rating: 4.3,
+   550→    reviews: 56,
+   551→    downloads: 1340,
+   552→    price: 'Premium',
+   553→    version: '1.4.0',
+   554→    author: 'Busy Infotech',
+   555→    lastUpdated: '2025-02-10',
+   556→    tags: ['busy', 'import', 'accounting'],
+   557→    installed: false,
+   558→    connectionStatus: 'available',
+   559→  },
+   560→  {
+   561→    id: 'int-zoho',
+   562→    name: 'Zoho Books',
+   563→    description: 'Invoice sync with Zoho',
+   564→    longDescription: 'Keep your invoices in sync between Zoho Books and GSTPilot. Auto-import sales and purchase invoices, sync contact details, and push filing data back to Zoho. Supports multi-GSTIN setups and custom field mapping.',
+   565→    category: 'integrations',
+   566→    icon: FileSpreadsheet,
+   567→    rating: 4.6,
+   568→    reviews: 87,
+   569→    downloads: 2340,
+   570→    price: 'Premium',
+   571→    version: '2.0.0',
+   572→    author: 'Zoho Corporation',
+   573→    lastUpdated: '2025-02-20',
+   574→    tags: ['zoho', 'invoice', 'sync'],
+   575→    installed: false,
+   576→    connectionStatus: 'available',
+   577→  },
+   578→  {
+   579→    id: 'int-cleartax',
+   580→    name: 'ClearTax',
+   581→    description: 'File returns via ClearTax API',
+   582→    longDescription: 'File GST returns directly through ClearTax from GSTPilot. Leverage ClearTax validation engine, reconciliation tools, and filing infrastructure. Supports all return types including GSTR-1, GSTR-3B, and annual returns.',
+   583→    category: 'integrations',
+   584→    icon: Shield,
+   585→    rating: 4.5,
+   586→    reviews: 94,
+   587→    downloads: 2780,
+   588→    price: 'Premium',
+   589→    version: '2.1.0',
+   590→    author: 'ClearTax',
+   591→    lastUpdated: '2025-02-18',
+   592→    tags: ['cleartax', 'filing', 'returns'],
+   593→    installed: false,
+   594→    connectionStatus: 'available',
+   595→  },
+   596→  {
+   597→    id: 'int-whatsapp',
+   598→    name: 'WhatsApp Business',
+   599→    description: 'Send notifications via WhatsApp',
+   600→    longDescription: 'Send automated WhatsApp notifications to clients for filing reminders, document requests, status updates, and payment confirmations. Uses the official WhatsApp Business API with message templates, media support, and delivery tracking.',
+   601→    category: 'integrations',
+   602→    icon: MessageSquare,
+   603→    rating: 4.8,
+   604→    reviews: 167,
+   605→    downloads: 4120,
+   606→    price: 'Premium',
+   607→    version: '1.9.0',
+   608→    author: 'Meta Business',
+   609→    lastUpdated: '2025-02-28',
+   610→    tags: ['whatsapp', 'notification', 'communication'],
+   611→    installed: false,
+   612→    connectionStatus: 'available',
+   613→  },
+   614→  {
+   615→    id: 'int-google-sheets',
+   616→    name: 'Google Sheets',
+   617→    description: 'Export reports to Sheets',
+   618→    longDescription: 'Export any GSTPilot report directly to Google Sheets with one click. Auto-format with formulas, charts, and conditional formatting. Schedule recurring exports for monthly reports. Supports real-time sync and shared drive access.',
+   619→    category: 'integrations',
+   620→    icon: FileSpreadsheet,
+   621→    rating: 4.4,
+   622→    reviews: 72,
+   623→    downloads: 1890,
+   624→    price: 'Free',
+   625→    version: '1.3.0',
+   626→    author: 'Google',
+   627→    lastUpdated: '2025-01-25',
+   628→    tags: ['google', 'sheets', 'export'],
+   629→    installed: false,
+   630→    connectionStatus: 'available',
+   631→  },
+   632→  {
+   633→    id: 'int-slack',
+   634→    name: 'Slack',
+   635→    description: 'Team notifications',
+   636→    longDescription: 'Send team notifications to Slack channels for filing completions, mismatch alerts, deadline warnings, and task assignments. Configurable notification rules, channel mapping, and interactive message buttons for quick actions.',
+   637→    category: 'integrations',
+   638→    icon: MessageSquare,
+   639→    rating: 4.3,
+   640→    reviews: 48,
+   641→    downloads: 1120,
+   642→    price: 'Free',
+   643→    version: '1.1.0',
+   644→    author: 'Slack',
+   645→    lastUpdated: '2025-01-15',
+   646→    tags: ['slack', 'notification', 'team'],
+   647→    installed: false,
+   648→    connectionStatus: 'available',
+   649→  },
+   650→  {
+   651→    id: 'int-razorpay',
+   652→    name: 'Razorpay',
+   653→    description: 'Payment collection',
+   654→    longDescription: 'Collect client payments directly through GSTPilot using Razorpay. Generate payment links, track payment status, auto-reconcile with invoices, and send payment receipts. Supports UPI, cards, net banking, and EMI options.',
+   655→    category: 'integrations',
+   656→    icon: CreditCard,
+   657→    rating: 4.6,
+   658→    reviews: 91,
+   659→    downloads: 2240,
+   660→    price: 'Premium',
+   661→    version: '1.5.0',
+   662→    author: 'Razorpay',
+   663→    lastUpdated: '2025-02-12',
+   664→    tags: ['payment', 'razorpay', 'collection'],
+   665→    installed: false,
+   666→    connectionStatus: 'coming-soon',
+   667→  },
+   668→
+   669→  // ─── CUSTOM REPORTS ────────────────────────────────────────────────────────
+   670→  {
+   671→    id: 'report-compliance-dashboard',
+   672→    name: 'Monthly Compliance Dashboard',
+   673→    description: 'Full compliance status report',
+   674→    longDescription: 'A comprehensive monthly dashboard showing compliance status across all clients. Includes filing status, payment tracking, document completeness, and deadline adherence. Visual scorecards, trend charts, and drill-down capabilities for each compliance area.',
+   675→    category: 'reports',
+   676→    icon: BarChart3,
+   677→    rating: 4.9,
+   678→    reviews: 178,
+   679→    downloads: 4890,
+   680→    price: 'Free',
+   681→    version: '3.1.0',
+   682→    author: 'GSTPilot Labs',
+   683→    lastUpdated: '2025-03-01',
+   684→    tags: ['compliance', 'dashboard', 'monthly'],
+   685→    installed: true,
+   686→    featured: true,
+   687→  },
+   688→  {
+   689→    id: 'report-itc-reconciliation',
+   690→    name: 'ITC Reconciliation Report',
+   691→    description: 'Detailed ITC matching report',
+   692→    longDescription: 'Detailed Input Tax Credit reconciliation report comparing books with GSTR-2A/2B data. Shows matched, unmatched, and partially matched entries with reasons for discrepancies. Includes ITC eligibility analysis, ineligible credit tracking, and reversal calculations.',
+   693→    category: 'reports',
+   694→    icon: RefreshCw,
+   695→    rating: 4.7,
+   696→    reviews: 134,
+   697→    downloads: 3450,
+   698→    price: 'Premium',
+   699→    version: '2.2.0',
+   700→    author: 'GSTPilot Labs',
+   701→    lastUpdated: '2025-02-25',
+   702→    tags: ['ITC', 'reconciliation', 'matching'],
+   703→    installed: false,
+   704→  },
+   705→  {
+   706→    id: 'report-revenue-client',
+   707→    name: 'Revenue by Client',
+   708→    description: 'Revenue breakdown per client',
+   709→    longDescription: 'Comprehensive revenue analysis broken down by client, service type, and period. Shows fee collection status, outstanding amounts, and revenue trends. Includes profitability analysis, service mix visualization, and client tier classification.',
+   710→    category: 'reports',
+   711→    icon: TrendingUp,
+   712→    rating: 4.5,
+   713→    reviews: 86,
+   714→    downloads: 2100,
+   715→    price: 'Free',
+   716→    version: '1.8.0',
+   717→    author: 'GSTPilot Labs',
+   718→    lastUpdated: '2025-02-15',
+   719→    tags: ['revenue', 'client', 'analysis'],
+   720→    installed: false,
+   721→  },
+   722→  {
+   723→    id: 'report-filing-efficiency',
+   724→    name: 'Filing Efficiency Report',
+   725→    description: 'Time and cost per filing',
+   726→    longDescription: 'Measure your firm filing efficiency with detailed metrics on time spent, cost per return, and team productivity. Compare across return types, periods, and team members. Identify bottlenecks, optimize workflows, and benchmark against industry averages.',
+   727→    category: 'reports',
+   728→    icon: Clock,
+   729→    rating: 4.4,
+   730→    reviews: 62,
+   731→    downloads: 1560,
+   732→    price: 'Premium',
+   733→    version: '1.5.0',
+   734→    author: 'EfficiencyPro',
+   735→    lastUpdated: '2025-01-28',
+   736→    tags: ['efficiency', 'filing', 'productivity'],
+   737→    installed: false,
+   738→  },
+   739→  {
+   740→    id: 'report-risk-assessment',
+   741→    name: 'Risk Assessment Report',
+   742→    description: 'Client risk analysis',
+   743→    longDescription: 'AI-powered client risk assessment analyzing compliance history, filing patterns, ITC claims, and audit exposure. Generates risk scores with detailed factor breakdowns, flags high-risk clients, and provides mitigation recommendations.',
+   744→    category: 'reports',
+   745→    icon: Shield,
+   746→    rating: 4.6,
+   747→    reviews: 95,
+   748→    downloads: 2340,
+   749→    price: 'Enterprise',
+   750→    version: '2.0.0',
+   751→    author: 'GSTPilot Labs',
+   752→    lastUpdated: '2025-02-20',
+   753→    tags: ['risk', 'assessment', 'AI'],
+   754→    installed: false,
+   755→  },
+   756→  {
+   757→    id: 'report-tax-liability',
+   758→    name: 'Tax Liability Forecast',
+   759→    description: 'Upcoming tax obligations',
+   760→    longDescription: 'Forecast upcoming tax liabilities based on current transaction data, historical patterns, and projected sales. Includes cash flow impact analysis, quarterly projections, and scenario modeling. Essential for client advisory and financial planning.',
+   761→    category: 'reports',
+   762→    icon: Calculator,
+   763→    rating: 4.8,
+   764→    reviews: 118,
+   765→    downloads: 2890,
+   766→    price: 'Premium',
+   767→    version: '1.9.0',
+   768→    author: 'GSTPilot Labs',
+   769→    lastUpdated: '2025-02-22',
+   770→    tags: ['forecast', 'liability', 'planning'],
+   771→    installed: false,
+   772→  },
+   773→];
+   774→
+   775→// ═══════════════════════════════════════════════════════════════════════════════
+   776→// HELPER COMPONENTS
+   777→// ═══════════════════════════════════════════════════════════════════════════════
+   778→
+   779→function StarRating({ rating, size = 'sm' }: { rating: number; size?: 'sm' | 'md' }) {
+   780→  const starSize = size === 'sm' ? 'h-3 w-3' : 'h-4 w-4';
+   781→  return (
+   782→    <div className="flex items-center gap-0.5">
+   783→      {[1, 2, 3, 4, 5].map((star) => (
+   784→        <Star
+   785→          key={star}
+   786→          className={`${starSize} ${
+   787→            star <= Math.floor(rating)
+   788→              ? 'text-amber-400 fill-amber-400'
+   789→              : star <= rating
+   790→                ? 'text-amber-400 fill-amber-200'
+   791→                : 'text-gray-200 dark:text-gray-700'
+   792→          }`}
+   793→        />
+   794→      ))}
+   795→      <span className={`ml-1 font-medium text-muted-foreground ${size === 'sm' ? 'text-xs' : 'text-sm'}`}>
+   796→        {rating.toFixed(1)}
+   797→      </span>
+   798→    </div>
+   799→  );
+   800→}
+   801→
+   802→function PriceBadge({ price }: { price: MarketplaceItem['price'] }) {
+   803→  const config = {
+   804→    Free: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300',
+   805→    Premium: 'bg-violet-100 text-violet-700 dark:bg-violet-900/50 dark:text-violet-300',
+   806→    Enterprise: 'bg-rose-100 text-rose-700 dark:bg-rose-900/50 dark:text-rose-300',
+   807→  };
+   808→  return (
+   809→    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${config[price]}`}>
+   810→      {price}
+   811→    </span>
+   812→  );
+   813→}
+   814→
+   815→function ConnectionStatusBadge({ status }: { status: MarketplaceItem['connectionStatus'] }) {
+   816→  if (!status) return null;
+   817→  const config = {
+   818→    connected: { bg: 'bg-emerald-100 dark:bg-emerald-900/50', text: 'text-emerald-700 dark:text-emerald-300', label: 'Connected', icon: Check },
+   819→    available: { bg: 'bg-sky-100 dark:bg-sky-900/50', text: 'text-sky-700 dark:text-sky-300', label: 'Available', icon: ExternalLink },
+   820→    'coming-soon': { bg: 'bg-gray-100 dark:bg-gray-800', text: 'text-gray-500 dark:text-gray-400', label: 'Coming Soon', icon: Clock },
+   821→  };
+   822→  const c = config[status];
+   823→  const Icon = c.icon;
+   824→  return (
+   825→    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${c.bg} ${c.text}`}>
+   826→      <Icon className="h-2.5 w-2.5" />
+   827→      {c.label}
+   828→    </span>
+   829→  );
+   830→}
+   831→
+   832→function CategoryBadge({ category }: { category: MarketplaceCategory }) {
+   833→  const config = CATEGORY_CONFIG[category];
+   834→  return (
+   835→    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${config.badgeBg} ${config.badgeText}`}>
+   836→      <config.icon className="h-2.5 w-2.5" />
+   837→      {config.label}
+   838→    </span>
+   839→  );
+   840→}
+   841→
+   842→// ═══════════════════════════════════════════════════════════════════════════════
+   843→// SKELETON LOADER
+   844→// ═══════════════════════════════════════════════════════════════════════════════
+   845→
+   846→function MarketplaceSkeleton() {
+   847→  return (
+   848→    <div className="space-y-6 p-6">
+   849→      <div className="flex gap-4">
+   850→        <Skeleton className="h-10 w-64" />
+   851→        <Skeleton className="h-10 w-32" />
+   852→      </div>
+   853→      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+   854→        {Array.from({ length: 6 }).map((_, i) => (
+   855→          <Card key={i} className="overflow-hidden">
+   856→            <CardContent className="p-4 space-y-3">
+   857→              <div className="flex items-start gap-3">
+   858→                <Skeleton className="h-10 w-10 rounded-lg" />
+   859→                <div className="flex-1 space-y-2">
+   860→                  <Skeleton className="h-4 w-3/4" />
+   861→                  <Skeleton className="h-3 w-full" />
+   862→                </div>
+   863→              </div>
+   864→              <div className="flex gap-2">
+   865→                <Skeleton className="h-5 w-16 rounded-full" />
+   866→                <Skeleton className="h-5 w-12 rounded-full" />
+   867→              </div>
+   868→              <Skeleton className="h-8 w-24 rounded-md" />
+   869→            </CardContent>
+   870→          </Card>
+   871→        ))}
+   872→      </div>
+   873→    </div>
+   874→  );
+   875→}
+   876→
+   877→// ═══════════════════════════════════════════════════════════════════════════════
+   878→// FEATURED BANNER
+   879→// ═══════════════════════════════════════════════════════════════════════════════
+   880→
+   881→function FeaturedBanner({ onExplore }: { onExplore: (cat: MarketplaceCategory) => void }) {
+   882→  return (
+   883→    <motion.div
+   884→      initial={{ opacity: 0, y: 20 }}
+   885→      animate={{ opacity: 1, y: 0 }}
+   886→      transition={{ duration: 0.5 }}
+   887→      className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-emerald-600 via-emerald-500 to-teal-600 p-6 md:p-8 text-white"
+   888→    >
+   889→      <div className="absolute inset-0 opacity-10">
+   890→        <div className="absolute top-0 right-0 w-96 h-96 bg-white rounded-full -translate-y-1/2 translate-x-1/2" />
+   891→        <div className="absolute bottom-0 left-0 w-64 h-64 bg-white rounded-full translate-y-1/2 -translate-x-1/4" />
+   892→      </div>
+   893→      <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center gap-6">
+   894→        <div className="flex-1">
+   895→          <div className="flex items-center gap-2 mb-3">
+   896→            <Sparkles className="h-5 w-5 text-emerald-200" />
+   897→            <span className="text-sm font-semibold text-emerald-100 uppercase tracking-wider">
+   898→              GSTPilot Marketplace
+   899→            </span>
+   900→          </div>
+   901→          <h2 className="text-2xl md:text-3xl font-bold mb-2">
+   902→            Supercharge Your CA Practice
+   903→          </h2>
+   904→          <p className="text-emerald-100 max-w-lg text-sm md:text-base">
+   905→            Discover plugins, templates, automations, and integrations built specifically for Indian CA firms. 
+   906→            Install in seconds, configure in minutes.
+   907→          </p>
+   908→          <div className="flex flex-wrap gap-2 mt-4">
+   909→            {(['plugins', 'templates', 'automations', 'integrations', 'reports'] as MarketplaceCategory[]).map((cat) => {
+   910→              const config = CATEGORY_CONFIG[cat];
+   911→              const Icon = config.icon;
+   912→              return (
+   913→                <button
+   914→                  key={cat}
+   915→                  onClick={() => onExplore(cat)}
+   916→                  className="inline-flex items-center gap-1.5 rounded-full bg-white/15 hover:bg-white/25 backdrop-blur-sm px-3 py-1.5 text-xs font-medium text-white transition-colors"
+   917→                >
+   918→                  <Icon className="h-3 w-3" />
+   919→                  {config.label}
+   920→                </button>
+   921→              );
+   922→            })}
+   923→          </div>
+   924→        </div>
+   925→        <div className="hidden md:flex items-center gap-3">
+   926→          <div className="grid grid-cols-2 gap-2">
+   927→            {[
+   928→              { icon: Plug, label: '8 Plugins', color: 'bg-violet-500/30' },
+   929→              { icon: FileText, label: '8 Templates', color: 'bg-emerald-500/30' },
+   930→              { icon: Workflow, label: '6 Automations', color: 'bg-amber-500/30' },
+   931→              { icon: Cable, label: '8 Integrations', color: 'bg-sky-500/30' },
+   932→            ].map((item) => (
+   933→              <div key={item.label} className={`flex items-center gap-2 rounded-xl ${item.color} backdrop-blur-sm px-3 py-2`}>
+   934→                <item.icon className="h-4 w-4" />
+   935→                <span className="text-xs font-medium">{item.label}</span>
+   936→              </div>
+   937→            ))}
+   938→          </div>
+   939→        </div>
+   940→      </div>
+   941→    </motion.div>
+   942→  );
+   943→}
+   944→
+   945→// ═══════════════════════════════════════════════════════════════════════════════
+   946→// ITEM CARD
+   947→// ═══════════════════════════════════════════════════════════════════════════════
+   948→
+   949→function ItemCard({
+   950→  item,
+   951→  onOpen,
+   952→  onInstallToggle,
+   953→}: {
+   954→  item: MarketplaceItem;
+   955→  onOpen: (item: MarketplaceItem) => void;
+   956→  onInstallToggle: (id: string) => void;
+   957→}) {
+   958→  const config = CATEGORY_CONFIG[item.category];
+   959→  const Icon = item.icon;
+   960→
+   961→  return (
+   962→    <motion.div
+   963→      layout
+   964→      initial={{ opacity: 0, y: 20 }}
+   965→      animate={{ opacity: 1, y: 0 }}
+   966→      exit={{ opacity: 0, scale: 0.95 }}
+   967→      transition={{ duration: 0.3 }}
+   968→      whileHover={{ y: -4 }}
+   969→      className="group"
+   970→    >
+   971→      <Card
+   972→        className="overflow-hidden cursor-pointer border-border/60 hover:border-border hover:shadow-lg transition-all duration-300 h-full"
+   973→        onClick={() => onOpen(item)}
+   974→      >
+   975→        <CardContent className="p-4 flex flex-col h-full">
+   976→          {/* Header */}
+   977→          <div className="flex items-start gap-3 mb-3">
+   978→            <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${config.bgColor} ${config.color} group-hover:scale-110 transition-transform duration-300`}>
+   979→              <Icon className="h-5 w-5" />
+   980→            </div>
+   981→            <div className="flex-1 min-w-0">
+   982→              <div className="flex items-center gap-2">
+   983→                <h3 className="font-semibold text-sm truncate">{item.name}</h3>
+   984→                {item.featured && (
+   985→                  <BadgeCheck className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+   986→                )}
+   987→              </div>
+   988→              <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">{item.description}</p>
+   989→            </div>
+   990→          </div>
+   991→
+   992→          {/* Category + Price */}
+   993→          <div className="flex items-center gap-2 flex-wrap mb-3">
+   994→            <CategoryBadge category={item.category} />
+   995→            <PriceBadge price={item.price} />
+   996→            {item.connectionStatus && (
+   997→              <ConnectionStatusBadge status={item.connectionStatus} />
+   998→            )}
+   999→          </div>
+  1000→
+  1001→          {/* Rating & Downloads */}
+  1002→          <div className="flex items-center gap-3 mb-3">
+  1003→            <StarRating rating={item.rating} />
+  1004→            <span className="text-[10px] text-muted-foreground">
+  1005→              ({item.reviews})
+  1006→            </span>
+  1007→            <div className="flex items-center gap-1 text-[10px] text-muted-foreground ml-auto">
+  1008→              <Download className="h-3 w-3" />
+  1009→              {item.downloads.toLocaleString()}
+  1010→            </div>
+  1011→          </div>
+  1012→
+  1013→          {/* Action */}
+  1014→          <div className="mt-auto pt-2 border-t border-border/40">
+  1015→            <div className="flex items-center justify-between">
+  1016→              {item.category === 'integrations' ? (
+  1017→                item.connectionStatus === 'connected' ? (
+  1018→                  <Button
+  1019→                    size="sm"
+  1020→                    variant="outline"
+  1021→                    className="h-7 text-xs gap-1"
+  1022→                    onClick={(e) => { e.stopPropagation(); onInstallToggle(item.id); }}
+  1023→                  >
+  1024→                    <Settings2 className="h-3 w-3" />
+  1025→                    Configure
+  1026→                  </Button>
+  1027→                ) : item.connectionStatus === 'coming-soon' ? (
+  1028→                  <Button size="sm" variant="outline" className="h-7 text-xs gap-1" disabled>
+  1029→                    <Clock className="h-3 w-3" />
+  1030→                    Coming Soon
+  1031→                  </Button>
+  1032→                ) : (
+  1033→                  <Button
+  1034→                    size="sm"
+  1035→                    className="h-7 text-xs gap-1 bg-sky-600 hover:bg-sky-700"
+  1036→                    onClick={(e) => { e.stopPropagation(); onInstallToggle(item.id); }}
+  1037→                  >
+  1038→                    <Cable className="h-3 w-3" />
+  1039→                    Connect
+  1040→                  </Button>
+  1041→                )
+  1042→              ) : item.installed ? (
+  1043→                <Button
+  1044→                  size="sm"
+  1045→                  variant="outline"
+  1046→                  className="h-7 text-xs gap-1 text-emerald-600 border-emerald-200 bg-emerald-50 hover:bg-emerald-100 dark:text-emerald-400 dark:border-emerald-800 dark:bg-emerald-950/40 dark:hover:bg-emerald-950/60"
+  1047→                  onClick={(e) => { e.stopPropagation(); onInstallToggle(item.id); }}
+  1048→                >
+  1049→                  <Check className="h-3 w-3" />
+  1050→                  Installed
+  1051→                </Button>
+  1052→              ) : (
+  1053→                <Button
+  1054→                  size="sm"
+  1055→                  className="h-7 text-xs gap-1 bg-emerald-600 hover:bg-emerald-700"
+  1056→                  onClick={(e) => { e.stopPropagation(); onInstallToggle(item.id); }}
+  1057→                >
+  1058→                  <Download className="h-3 w-3" />
+  1059→                  Install
+  1060→                </Button>
+  1061→              )}
+  1062→              <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
+  1063→                v{item.version}
+  1064→              </div>
+  1065→            </div>
+  1066→          </div>
+  1067→        </CardContent>
+  1068→      </Card>
+  1069→    </motion.div>
+  1070→  );
+  1071→}
+  1072→
+  1073→// ═══════════════════════════════════════════════════════════════════════════════
+  1074→// ITEM DETAIL DIALOG
+  1075→// ═══════════════════════════════════════════════════════════════════════════════
+  1076→
+  1077→function ItemDetailDialog({
+  1078→  item,
+  1079→  open,
+  1080→  onClose,
+  1081→  onInstallToggle,
+  1082→}: {
+  1083→  item: MarketplaceItem | null;
+  1084→  open: boolean;
+  1085→  onClose: () => void;
+  1086→  onInstallToggle: (id: string) => void;
+  1087→}) {
+  1088→  if (!item) return null;
+  1089→  const config = CATEGORY_CONFIG[item.category];
+  1090→  const Icon = item.icon;
+  1091→
+  1092→  return (
+  1093→    <Dialog open={open} onOpenChange={onClose}>
+  1094→      <DialogContent className="max-w-lg p-0 overflow-hidden">
+  1095→        {/* Hero Header */}
+  1096→        <div className={`bg-gradient-to-br ${config.gradientFrom} ${config.gradientTo} p-6 text-white relative`}>
+  1097→          <div className="absolute inset-0 opacity-10">
+  1098→            <div className="absolute top-0 right-0 w-48 h-48 bg-white rounded-full -translate-y-1/2 translate-x-1/2" />
+  1099→          </div>
+  1100→          <div className="relative z-10">
+  1101→            <DialogHeader>
+  1102→              <div className="flex items-center gap-3 mb-2">
+  1103→                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/20 backdrop-blur-sm">
+  1104→                  <Icon className="h-6 w-6" />
+  1105→                </div>
+  1106→                <div>
+  1107→                  <DialogTitle className="text-lg font-bold text-white">
+  1108→                    {item.name}
+  1109→                  </DialogTitle>
+  1110→                  <DialogDescription className="text-white/70 text-xs">
+  1111→                    by {item.author}
+  1112→                  </DialogDescription>
+  1113→                </div>
+  1114→                {item.featured && (
+  1115→                  <Badge className="bg-white/20 text-white border-0 ml-auto">
+  1116→                    <BadgeCheck className="h-3 w-3 mr-1" />
+  1117→                    Featured
+  1118→                  </Badge>
+  1119→                )}
+  1120→              </div>
+  1121→            </DialogHeader>
+  1122→            <div className="flex items-center gap-4 mt-3">
+  1123→              <div className="flex items-center gap-1">
+  1124→                <StarRating rating={item.rating} size="md" />
+  1125→                <span className="text-xs text-white/70 ml-1">({item.reviews} reviews)</span>
+  1126→              </div>
+  1127→              <div className="flex items-center gap-1 text-xs text-white/70">
+  1128→                <Download className="h-3.5 w-3.5" />
+  1129→                {item.downloads.toLocaleString()} installs
+  1130→              </div>
+  1131→            </div>
+  1132→          </div>
+  1133→        </div>
+  1134→
+  1135→        {/* Body */}
+  1136→        <ScrollArea className="max-h-[60vh]">
+  1137→          <div className="p-6 space-y-5">
+  1138→            {/* Meta row */}
+  1139→            <div className="flex flex-wrap gap-2">
+  1140→              <CategoryBadge category={item.category} />
+  1141→              <PriceBadge price={item.price} />
+  1142→              {item.connectionStatus && (
+  1143→                <ConnectionStatusBadge status={item.connectionStatus} />
+  1144→              )}
+  1145→              <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 dark:bg-gray-800 px-2 py-0.5 text-[10px] font-semibold text-gray-600 dark:text-gray-400">
+  1146→                v{item.version}
+  1147→              </span>
+  1148→            </div>
+  1149→
+  1150→            {/* Description */}
+  1151→            <div>
+  1152→              <h4 className="text-sm font-semibold mb-2">About</h4>
+  1153→              <p className="text-sm text-muted-foreground leading-relaxed">
+  1154→                {item.longDescription}
+  1155→              </p>
+  1156→            </div>
+  1157→
+  1158→            {/* Tags */}
+  1159→            <div>
+  1160→              <h4 className="text-sm font-semibold mb-2">Tags</h4>
+  1161→              <div className="flex flex-wrap gap-1.5">
+  1162→                {item.tags.map((tag) => (
+  1163→                  <span
+  1164→                    key={tag}
+  1165→                    className="inline-flex items-center rounded-md bg-muted px-2 py-0.5 text-[11px] text-muted-foreground"
+  1166→                  >
+  1167→                    {tag}
+  1168→                  </span>
+  1169→                ))}
+  1170→              </div>
+  1171→            </div>
+  1172→
+  1173→            {/* Details */}
+  1174→            <div className="grid grid-cols-2 gap-3">
+  1175→              <div className="rounded-lg border p-3">
+  1176→                <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Version</p>
+  1177→                <p className="text-sm font-semibold">{item.version}</p>
+  1178→              </div>
+  1179→              <div className="rounded-lg border p-3">
+  1180→                <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Last Updated</p>
+  1181→                <p className="text-sm font-semibold">{item.lastUpdated}</p>
+  1182→              </div>
+  1183→              <div className="rounded-lg border p-3">
+  1184→                <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Author</p>
+  1185→                <p className="text-sm font-semibold">{item.author}</p>
+  1186→              </div>
+  1187→              <div className="rounded-lg border p-3">
+  1188→                <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Installs</p>
+  1189→                <p className="text-sm font-semibold">{item.downloads.toLocaleString()}</p>
+  1190→              </div>
+  1191→            </div>
+  1192→
+  1193→            {/* Configuration section (for integrations) */}
+  1194→            {item.category === 'integrations' && item.connectionStatus === 'connected' && (
+  1195→              <div>
+  1196→                <h4 className="text-sm font-semibold mb-2">Configuration</h4>
+  1197→                <div className="rounded-lg border p-3 space-y-3">
+  1198→                  <div className="flex items-center justify-between">
+  1199→                    <span className="text-sm">Auto-sync enabled</span>
+  1200→                    <Switch defaultChecked />
+  1201→                  </div>
+  1202→                  <div className="flex items-center justify-between">
+  1203→                    <span className="text-sm">Sync interval</span>
+  1204→                    <span className="text-sm text-muted-foreground">Every 30 min</span>
+  1205→                  </div>
+  1206→                  <Separator />
+  1207→                  <Button variant="outline" size="sm" className="w-full">
+  1208→                    <Settings2 className="h-3.5 w-3.5 mr-1.5" />
+  1209→                    Advanced Settings
+  1210→                  </Button>
+  1211→                </div>
+  1212→              </div>
+  1213→            )}
+  1214→          </div>
+  1215→        </ScrollArea>
+  1216→
+  1217→        {/* Footer */}
+  1218→        <div className="border-t p-4 flex items-center gap-3">
+  1219→          {item.category === 'integrations' ? (
+  1220→            item.connectionStatus === 'connected' ? (
+  1221→              <Button className="flex-1" variant="outline" onClick={() => { onInstallToggle(item.id); onClose(); }}>
+  1222→                <Settings2 className="h-4 w-4 mr-1.5" />
+  1223→                Configure Integration
+  1224→              </Button>
+  1225→            ) : item.connectionStatus === 'coming-soon' ? (
+  1226→              <Button className="flex-1" disabled>
+  1227→                <Clock className="h-4 w-4 mr-1.5" />
+  1228→                Coming Soon — Join Waitlist
+  1229→              </Button>
+  1230→            ) : (
+  1231→              <Button className="flex-1 bg-sky-600 hover:bg-sky-700" onClick={() => { onInstallToggle(item.id); onClose(); }}>
+  1232→                <Cable className="h-4 w-4 mr-1.5" />
+  1233→                Connect Integration
+  1234→              </Button>
+  1235→            )
+  1236→          ) : item.installed ? (
+  1237→            <Button
+  1238→              className="flex-1 border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-400 dark:hover:bg-emerald-950/60"
+  1239→              variant="outline"
+  1240→              onClick={() => { onInstallToggle(item.id); onClose(); }}
+  1241→            >
+  1242→              <Check className="h-4 w-4 mr-1.5" />
+  1243→              Installed — Click to Uninstall
+  1244→            </Button>
+  1245→          ) : (
+  1246→            <Button className="flex-1 bg-emerald-600 hover:bg-emerald-700" onClick={() => { onInstallToggle(item.id); onClose(); }}>
+  1247→              <Download className="h-4 w-4 mr-1.5" />
+  1248→              Install {item.name}
+  1249→            </Button>
+  1250→          )}
+  1251→          <Button variant="outline" size="icon" className="shrink-0">
+  1252→            <Heart className="h-4 w-4" />
+  1253→          </Button>
+  1254→          <Button variant="outline" size="icon" className="shrink-0">
+  1255→            <Share2 className="h-4 w-4" />
+  1256→          </Button>
+  1257→        </div>
+  1258→      </DialogContent>
+  1259→    </Dialog>
+  1260→  );
+  1261→}
+  1262→
+  1263→// ═══════════════════════════════════════════════════════════════════════════════
+  1264→// EMPTY STATE
+  1265→// ═══════════════════════════════════════════════════════════════════════════════
+  1266→
+  1267→function EmptyState({ category, search }: { category: string; search: string }) {
+  1268→  return (
+  1269→    <motion.div
+  1270→      initial={{ opacity: 0 }}
+  1271→      animate={{ opacity: 1 }}
+  1272→      className="flex flex-col items-center justify-center py-16 text-center"
+  1273→    >
+  1274→      <div className="h-16 w-16 rounded-full bg-muted flex items-center justify-center mb-4">
+  1275→        <Search className="h-8 w-8 text-muted-foreground" />
+  1276→      </div>
+  1277→      <h3 className="text-lg font-semibold mb-1">No results found</h3>
+  1278→      <p className="text-sm text-muted-foreground max-w-md">
+  1279→        {search
+  1280→          ? `No items matching "${search}" found in ${category || 'any category'}.`
+  1281→          : `No items available in this category yet.`}
+  1282→      </p>
+  1283→    </motion.div>
+  1284→  );
+  1285→}
+  1286→
+  1287→// ═══════════════════════════════════════════════════════════════════════════════
+  1288→// MAIN MARKETPLACE PAGE
+  1289→// ═══════════════════════════════════════════════════════════════════════════════
+  1290→
+  1291→export default function MarketplacePage() {
+  1292→  const [search, setSearch] = useState('');
+  1293→  const [activeCategory, setActiveCategory] = useState<'all' | MarketplaceCategory>('all');
+  1294→  const [showInstalledOnly, setShowInstalledOnly] = useState(false);
+  1295→  const [selectedItem, setSelectedItem] = useState<MarketplaceItem | null>(null);
+  1296→  const [detailOpen, setDetailOpen] = useState(false);
+  1297→  const [items, setItems] = useState<MarketplaceItem[]>(MARKETPLACE_ITEMS);
+  1298→  const [loading, setLoading] = useState(false);
+  1299→
+  1300→  const filteredItems = useMemo(() => {
+  1301→    let result = items;
+  1302→
+  1303→    if (activeCategory !== 'all') {
+  1304→      result = result.filter((item) => item.category === activeCategory);
+  1305→    }
+  1306→
+  1307→    if (search.trim()) {
+  1308→      const q = search.toLowerCase();
+  1309→      result = result.filter(
+  1310→        (item) =>
+  1311→          item.name.toLowerCase().includes(q) ||
+  1312→          item.description.toLowerCase().includes(q) ||
+  1313→          item.tags.some((tag) => tag.toLowerCase().includes(q)) ||
+  1314→          item.author.toLowerCase().includes(q)
+  1315→      );
+  1316→    }
+  1317→
+  1318→    if (showInstalledOnly) {
+  1319→      result = result.filter((item) => item.installed || item.connectionStatus === 'connected');
+  1320→    }
+  1321→
+  1322→    return result;
+  1323→  }, [items, activeCategory, search, showInstalledOnly]);
+  1324→
+  1325→  const featuredItems = useMemo(
+  1326→    () => items.filter((item) => item.featured),
+  1327→    [items]
+  1328→  );
+  1329→
+  1330→  const installedCount = useMemo(
+  1331→    () => items.filter((item) => item.installed || item.connectionStatus === 'connected').length,
+  1332→    [items]
+  1333→  );
+  1334→
+  1335→  const handleOpen = (item: MarketplaceItem) => {
+  1336→    setSelectedItem(item);
+  1337→    setDetailOpen(true);
+  1338→  };
+  1339→
+  1340→  const handleClose = () => {
+  1341→    setDetailOpen(false);
+  1342→    setTimeout(() => setSelectedItem(null), 200);
+  1343→  };
+  1344→
+  1345→  const handleInstallToggle = (id: string) => {
+  1346→    setItems((prev) =>
+  1347→      prev.map((item) => {
+  1348→        if (item.id !== id) return item;
+  1349→        if (item.category === 'integrations') {
+  1350→          const newStatus = item.connectionStatus === 'connected' ? 'available' : 'connected';
+  1351→          return { ...item, connectionStatus: newStatus as MarketplaceItem['connectionStatus'] };
+  1352→        }
+  1353→        return { ...item, installed: !item.installed };
+  1354→      })
+  1355→    );
+  1356→  };
+  1357→
+  1358→  const handleExplore = (cat: MarketplaceCategory) => {
+  1359→    setActiveCategory(cat);
+  1360→  };
+  1361→
+  1362→  const categoryTabs = [
+  1363→    { value: 'all', label: 'All', icon: Store },
+  1364→    { value: 'plugins', label: 'Plugins', icon: Plug },
+  1365→    { value: 'templates', label: 'Templates', icon: FileText },
+  1366→    { value: 'automations', label: 'Automations', icon: Workflow },
+  1367→    { value: 'integrations', label: 'Integrations', icon: Cable },
+  1368→    { value: 'reports', label: 'Reports', icon: BarChart3 },
+  1369→  ];
+  1370→
+  1371→  if (loading) return <MarketplaceSkeleton />;
+  1372→
+  1373→  return (
+  1374→    <div className="flex flex-col h-full">
+  1375→      {/* Sticky Header */}
+  1376→      <div className="sticky top-0 z-20 bg-background/95 backdrop-blur-sm border-b">
+  1377→        <div className="p-4 md:p-6 space-y-4">
+  1378→          {/* Top row */}
+  1379→          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+  1380→            <div className="flex items-center gap-2">
+  1381→              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-600 text-white">
+  1382→                <Store className="h-4 w-4" />
+  1383→              </div>
+  1384→              <h1 className="text-xl font-bold">Marketplace</h1>
+  1385→            </div>
+  1386→            <div className="flex-1 max-w-md w-full sm:w-auto">
+  1387→              <div className="relative">
+  1388→                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+  1389→                <Input
+  1390→                  placeholder="Search plugins, templates, integrations..."
+  1391→                  className="pl-9 h-9 text-sm"
+  1392→                  value={search}
+  1393→                  onChange={(e) => setSearch(e.target.value)}
+  1394→                />
+  1395→                {search && (
+  1396→                  <button
+  1397→                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+  1398→                    onClick={() => setSearch('')}
+  1399→                  >
+  1400→                    <X className="h-3.5 w-3.5" />
+  1401→                  </button>
+  1402→                )}
+  1403→              </div>
+  1404→            </div>
+  1405→            <div className="flex items-center gap-2">
+  1406→              <div className="flex items-center gap-2 rounded-lg border px-3 py-1.5">
+  1407→                <Switch
+  1408→                  id="installed-filter"
+  1409→                  checked={showInstalledOnly}
+  1410→                  onCheckedChange={setShowInstalledOnly}
+  1411→                  className="scale-75"
+  1412→                />
+  1413→                <Label htmlFor="installed-filter" className="text-xs cursor-pointer">
+  1414→                  Installed ({installedCount})
+  1415→                </Label>
+  1416→              </div>
+  1417→            </div>
+  1418→          </div>
+  1419→
+  1420→          {/* Category Tabs */}
+  1421→          <Tabs
+  1422→            value={activeCategory}
+  1423→            onValueChange={(v) => setActiveCategory(v as 'all' | MarketplaceCategory)}
+  1424→          >
+  1425→            <TabsList className="h-9 bg-muted/50 p-0.5">
+  1426→              {categoryTabs.map((tab) => {
+  1427→                const Icon = tab.icon;
+  1428→                return (
+  1429→                  <TabsTrigger
+  1430→                    key={tab.value}
+  1431→                    value={tab.value}
+  1432→                    className="h-8 text-xs gap-1.5 data-[state=active]:bg-background data-[state=active]:shadow-sm"
+  1433→                  >
+  1434→                    <Icon className="h-3.5 w-3.5" />
+  1435→                    <span className="hidden sm:inline">{tab.label}</span>
+  1436→                  </TabsTrigger>
+  1437→                );
+  1438→              })}
+  1439→            </TabsList>
+  1440→          </Tabs>
+  1441→        </div>
+  1442→      </div>
+  1443→
+  1444→      {/* Scrollable Content */}
+  1445→      <ScrollArea className="flex-1">
+  1446→        <div className="p-4 md:p-6 space-y-6">
+  1447→          {/* Featured Banner — only show on "all" tab with no search */}
+  1448→          {activeCategory === 'all' && !search && !showInstalledOnly && (
+  1449→            <FeaturedBanner onExplore={handleExplore} />
+  1450→          )}
+  1451→
+  1452→          {/* Featured Row — only on "all" tab with no search */}
+  1453→          {activeCategory === 'all' && !search && !showInstalledOnly && featuredItems.length > 0 && (
+  1454→            <div>
+  1455→              <div className="flex items-center justify-between mb-3">
+  1456→                <h2 className="text-sm font-semibold flex items-center gap-2">
+  1457→                  <Sparkles className="h-4 w-4 text-amber-500" />
+  1458→                  Featured
+  1459→                </h2>
+  1460→                <button
+  1461→                  onClick={() => setActiveCategory('all')}
+  1462→                  className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1"
+  1463→                >
+  1464→                  View all <ArrowRight className="h-3 w-3" />
+  1465→                </button>
+  1466→              </div>
+  1467→              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+  1468→                {featuredItems.map((item) => (
+  1469→                  <ItemCard
+  1470→                    key={item.id}
+  1471→                    item={item}
+  1472→                    onOpen={handleOpen}
+  1473→                    onInstallToggle={handleInstallToggle}
+  1474→                  />
+  1475→                ))}
+  1476→              </div>
+  1477→            </div>
+  1478→          )}
+  1479→
+  1480→          {/* Main Grid */}
+  1481→          {filteredItems.length > 0 ? (
+  1482→            <div>
+  1483→              <div className="flex items-center justify-between mb-3">
+  1484→                <h2 className="text-sm font-semibold">
+  1485→                  {activeCategory === 'all'
+  1486→                    ? showInstalledOnly
+  1487→                      ? `Installed Items (${filteredItems.length})`
+  1488→                      : `All Items (${filteredItems.length})`
+  1489→                    : `${CATEGORY_CONFIG[activeCategory].label} (${filteredItems.length})`}
+  1490→                </h2>
+  1491→              </div>
+  1492→              <AnimatePresence mode="popLayout">
+  1493→                <motion.div
+  1494→                  layout
+  1495→                  className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"
+  1496→                >
+  1497→                  {filteredItems.map((item) => (
+  1498→                    <ItemCard
+  1499→                      key={item.id}
+  1500→                      item={item}
+  1501→                      onOpen={handleOpen}
+  1502→                      onInstallToggle={handleInstallToggle}
+  1503→                    />
+  1504→                  ))}
+  1505→                </motion.div>
+  1506→              </AnimatePresence>
+  1507→            </div>
+  1508→          ) : (
+  1509→            <EmptyState
+  1510→              category={activeCategory === 'all' ? '' : CATEGORY_CONFIG[activeCategory].label}
+  1511→              search={search}
+  1512→            />
+  1513→          )}
+  1514→
+  1515→          {/* Stats Footer */}
+  1516→          {!search && !showInstalledOnly && (
+  1517→            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+  1518→              {(['plugins', 'templates', 'automations', 'integrations', 'reports'] as MarketplaceCategory[]).map((cat) => {
+  1519→                const config = CATEGORY_CONFIG[cat];
+  1520→                const Icon = config.icon;
+  1521→                const count = items.filter((i) => i.category === cat).length;
+  1522→                return (
+  1523→                  <button
+  1524→                    key={cat}
+  1525→                    onClick={() => setActiveCategory(cat)}
+  1526→                    className={`flex items-center gap-2 rounded-xl border p-3 hover:border-border transition-colors ${config.borderColor}`}
+  1527→                  >
+  1528→                    <div className={`flex h-8 w-8 items-center justify-center rounded-lg ${config.bgColor} ${config.color}`}>
+  1529→                      <Icon className="h-4 w-4" />
+  1530→                    </div>
+  1531→                    <div className="text-left">
+  1532→                      <p className="text-xs font-semibold">{count}</p>
+  1533→                      <p className="text-[10px] text-muted-foreground">{config.label}</p>
+  1534→                    </div>
+  1535→                  </button>
+  1536→                );
+  1537→              })}
+  1538→            </div>
+  1539→          )}
+  1540→        </div>
+  1541→      </ScrollArea>
+  1542→
+  1543→      {/* Detail Dialog */}
+  1544→      <ItemDetailDialog
+  1545→        item={selectedItem}
+  1546→        open={detailOpen}
+  1547→        onClose={handleClose}
+  1548→        onInstallToggle={handleInstallToggle}
+  1549→      />
+  1550→    </div>
+  1551→  );
+  1552→}
+  1553→

@@ -1,0 +1,879 @@
+     1→'use client';
+     2→
+     3→import React, { useState, useMemo } from 'react';
+     4→import { Badge } from '@/components/ui/badge';
+     5→import { Button } from '@/components/ui/button';
+     6→import { Skeleton } from '@/components/ui/skeleton';
+     7→import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+     8→import {
+     9→  Upload,
+    10→  CheckCircle2,
+    11→  AlertTriangle,
+    12→  Clock,
+    13→  ChevronRight,
+    14→  FileCheck2,
+    15→  CalendarClock,
+    16→  Sparkles,
+    17→  FileText,
+    18→  ShieldCheck,
+    19→  AlertOctagon,
+    20→  ClipboardCheck,
+    21→  Users,
+    22→  IndianRupee,
+    23→  TrendingUp,
+    24→  TrendingDown,
+    25→  Minus,
+    26→  Plus,
+    27→  ArrowRight,
+    28→  Loader2,
+    29→  Rocket,
+    30→  Activity,
+    31→  Zap,
+    32→  Wallet,
+    33→  ShieldAlert,
+    34→  FileCheck,
+    35→  Receipt,
+    36→  Timer,
+    37→  CircleDollarSign,
+    38→  FileScan,
+    39→  GitCompareArrows,
+    40→  Brain,
+    41→  Play,
+    42→} from 'lucide-react';
+    43→import { motion, AnimatePresence } from 'framer-motion';
+    44→import { useApp } from '@/contexts/AppContext';
+    45→import {
+    46→  useLiveDashboardMetrics,
+    47→  useFireClients,
+    48→  useFireReturns,
+    49→  useFireInvoices,
+    50→  useFireReconciliations,
+    51→  useFireRecentActivities,
+    52→  useFireDocuments,
+    53→} from '@/hooks/use-firestore';
+    54→import type {
+    55→  FirestoreClient,
+    56→  FirestoreReturn,
+    57→  FirestoreInvoice,
+    58→  FirestoreReconciliation,
+    59→  LiveDashboardMetrics,
+    60→} from '@/lib/firestore-schema';
+    61→import { fileReturn } from '@/lib/firestore-service';
+    62→import { formatCurrency, periodToLabel, isOverdue, getFilingDueDate } from '@/lib/gst-utils';
+    63→import { toast } from 'sonner';
+    64→
+    65→// ═══════════════════════════════════════════════════════════════════════════════
+    66→// HELPERS
+    67→// ═══════════════════════════════════════════════════════════════════════════════
+    68→
+    69→function getDaysRemaining(dueDateStr: string): number {
+    70→  const dueDate = new Date(dueDateStr);
+    71→  const today = new Date();
+    72→  today.setHours(0, 0, 0, 0);
+    73→  dueDate.setHours(0, 0, 0, 0);
+    74→  return Math.ceil((dueDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+    75→}
+    76→
+    77→function formatDaysRemaining(days: number): string {
+    78→  if (days < 0) return `${Math.abs(days)}d overdue`;
+    79→  if (days === 0) return 'Due today';
+    80→  if (days === 1) return 'Tomorrow';
+    81→  return `${days}d left`;
+    82→}
+    83→
+    84→function timeAgo(dateStr: string): string {
+    85→  if (!dateStr) return '';
+    86→  const now = new Date();
+    87→  const date = new Date(dateStr);
+    88→  const seconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+    89→  if (seconds < 60) return 'just now';
+    90→  const minutes = Math.floor(seconds / 60);
+    91→  if (minutes < 60) return `${minutes}m ago`;
+    92→  const hours = Math.floor(minutes / 60);
+    93→  if (hours < 24) return `${hours}h ago`;
+    94→  const days = Math.floor(hours / 24);
+    95→  if (days < 7) return `${days}d ago`;
+    96→  return date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+    97→}
+    98→
+    99→// ═══════════════════════════════════════════════════════════════════════════════
+   100→// SMART METRIC CARD — Real-time with trend
+   101→// ═══════════════════════════════════════════════════════════════════════════════
+   102→
+   103→interface SmartCardProps {
+   104→  label: string;
+   105→  value: string | number;
+   106→  icon: React.ReactNode;
+   107→  iconColor: string;
+   108→  iconBg: string;
+   109→  subtitle: string;
+   110→  trend?: 'up' | 'down' | 'neutral';
+   111→  trendValue?: string;
+   112→  pulse?: boolean;
+   113→  index: number;
+   114→  onClick?: () => void;
+   115→}
+   116→
+   117→function SmartCard({ label, value, icon, iconColor, iconBg, subtitle, trend, trendValue, pulse, index, onClick }: SmartCardProps) {
+   118→  const trendIcon = trend === 'up' ? <TrendingUp className="h-3 w-3" /> : trend === 'down' ? <TrendingDown className="h-3 w-3" /> : <Minus className="h-3 w-3" />;
+   119→  const trendColor = trend === 'up' ? 'text-emerald-600' : trend === 'down' ? 'text-red-500' : 'text-muted-foreground';
+   120→
+   121→  return (
+   122→    <motion.div
+   123→      initial={{ opacity: 0, y: 16 }}
+   124→      animate={{ opacity: 1, y: 0 }}
+   125→      transition={{ duration: 0.35, delay: index * 0.05 }}
+   126→    >
+   127→      <Card className={`hover:shadow-md transition-all duration-200 ${onClick ? 'cursor-pointer' : ''}`} onClick={onClick}>
+   128→        <CardContent className="p-4">
+   129→          <div className="flex items-start justify-between">
+   130→            <div className="space-y-1 min-w-0 flex-1">
+   131→              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest truncate">
+   132→                {label}
+   133→              </p>
+   134→              <div className="flex items-baseline gap-2">
+   135→                <p className="text-2xl font-bold text-foreground tracking-tight">{value}</p>
+   136→                {trend && trendValue && (
+   137→                  <span className={`flex items-center gap-0.5 text-[10px] font-semibold ${trendColor}`}>
+   138→                    {trendIcon} {trendValue}
+   139→                  </span>
+   140→                )}
+   141→              </div>
+   142→              <p className="text-[11px] text-muted-foreground truncate">{subtitle}</p>
+   143→            </div>
+   144→            <div className={`relative flex items-center justify-center h-9 w-9 rounded-lg ${iconBg} shrink-0 ml-2`}>
+   145→              <span className={iconColor}>{icon}</span>
+   146→              {pulse && (
+   147→                <span className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-emerald-500 animate-pulse" />
+   148→              )}
+   149→            </div>
+   150→          </div>
+   151→        </CardContent>
+   152→      </Card>
+   153→    </motion.div>
+   154→  );
+   155→}
+   156→
+   157→// ═══════════════════════════════════════════════════════════════════════════════
+   158→// ACTIVITY ICON HELPER
+   159→// ═══════════════════════════════════════════════════════════════════════════════
+   160→
+   161→function activityIcon(type: string): { icon: React.ReactNode; color: string; bg: string } {
+   162→  if (type.includes('filed')) return { icon: <CheckCircle2 className="h-3.5 w-3.5" />, color: 'text-emerald-600', bg: 'bg-emerald-50' };
+   163→  if (type.includes('upload') || type.includes('document')) return { icon: <Upload className="h-3.5 w-3.5" />, color: 'text-blue-600', bg: 'bg-blue-50' };
+   164→  if (type.includes('review')) return { icon: <ClipboardCheck className="h-3.5 w-3.5" />, color: 'text-violet-600', bg: 'bg-violet-50' };
+   165→  if (type.includes('client')) return { icon: <Users className="h-3.5 w-3.5" />, color: 'text-sky-600', bg: 'bg-sky-50' };
+   166→  if (type.includes('reconcil') || type.includes('mismatch')) return { icon: <AlertTriangle className="h-3.5 w-3.5" />, color: 'text-amber-600', bg: 'bg-amber-50' };
+   167→  if (type.includes('invoice') || type.includes('extract')) return { icon: <FileText className="h-3.5 w-3.5" />, color: 'text-teal-600', bg: 'bg-teal-50' };
+   168→  return { icon: <Activity className="h-3.5 w-3.5" />, color: 'text-slate-500', bg: 'bg-slate-50' };
+   169→}
+   170→
+   171→// ═══════════════════════════════════════════════════════════════════════════════
+   172→// LOADING SKELETON
+   173→// ═══════════════════════════════════════════════════════════════════════════════
+   174→
+   175→function DashboardSkeleton() {
+   176→  return (
+   177→    <div className="max-w-7xl mx-auto px-4 md:px-6 py-6 space-y-6">
+   178→      <div className="flex items-center justify-between">
+   179→        <div className="space-y-2">
+   180→          <Skeleton className="h-7 w-48" />
+   181→          <Skeleton className="h-4 w-64" />
+   182→        </div>
+   183→      </div>
+   184→      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
+   185→        {Array.from({ length: 7 }).map((_, i) => (
+   186→          <Skeleton key={i} className="h-28 rounded-xl" />
+   187→        ))}
+   188→      </div>
+   189→      <div className="grid lg:grid-cols-3 gap-6">
+   190→        <Skeleton className="lg:col-span-2 h-64 rounded-xl" />
+   191→        <Skeleton className="h-64 rounded-xl" />
+   192→      </div>
+   193→    </div>
+   194→  );
+   195→}
+   196→
+   197→// ═══════════════════════════════════════════════════════════════════════════════
+   198→// EMPTY STATE — Fresh onboarding
+   199→// ═══════════════════════════════════════════════════════════════════════════════
+   200→
+   201→function WelcomeEmptyState({ onAddClient }: { onAddClient: () => void }) {
+   202→  return (
+   203→    <motion.div
+   204→      initial={{ opacity: 0, y: 24 }}
+   205→      animate={{ opacity: 1, y: 0 }}
+   206→      transition={{ duration: 0.5, ease: 'easeOut' }}
+   207→      className="flex flex-col items-center justify-center text-center py-20 px-4"
+   208→    >
+   209→      <div className="relative mb-6">
+   210→        <div className="flex items-center justify-center h-20 w-20 rounded-2xl bg-gradient-to-br from-emerald-50 to-emerald-100 border border-emerald-200">
+   211→          <Rocket className="h-10 w-10 text-emerald-600" />
+   212→        </div>
+   213→        <div className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-emerald-500 flex items-center justify-center">
+   214→          <Sparkles className="h-3 w-3 text-white" />
+   215→        </div>
+   216→      </div>
+   217→      <h2 className="text-2xl font-bold text-foreground tracking-tight">
+   218→        Welcome to GSTPilot
+   219→      </h2>
+   220→      <p className="text-sm text-muted-foreground mt-2 max-w-md">
+   221→        Start by adding your first client to unlock the full workflow —
+   222→        from document upload to automated GST filing.
+   223→      </p>
+   224→      <div className="flex items-center gap-3 mt-6">
+   225→        <Button
+   226→          onClick={onAddClient}
+   227→          className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2"
+   228→        >
+   229→          <Plus className="h-4 w-4" />
+   230→          Add Your First Client
+   231→        </Button>
+   232→      </div>
+   233→      <div className="flex items-center gap-6 mt-8 text-xs text-muted-foreground">
+   234→        <div className="flex items-center gap-1.5">
+   235→          <ShieldCheck className="h-3.5 w-3.5 text-emerald-500" />
+   236→          <span>Auto compliance tracking</span>
+   237→        </div>
+   238→        <div className="flex items-center gap-1.5">
+   239→          <Zap className="h-3.5 w-3.5 text-emerald-500" />
+   240→          <span>AI-powered insights</span>
+   241→        </div>
+   242→        <div className="flex items-center gap-1.5">
+   243→          <Activity className="h-3.5 w-3.5 text-emerald-500" />
+   244→          <span>Real-time workflow</span>
+   245→        </div>
+   246→      </div>
+   247→    </motion.div>
+   248→  );
+   249→}
+   250→
+   251→// ═══════════════════════════════════════════════════════════════════════════════
+   252→// MAIN DASHBOARD
+   253→// ═══════════════════════════════════════════════════════════════════════════════
+   254→
+   255→export default function DashboardPage() {
+   256→  const { setCurrentView, setSelectedClientId } = useApp();
+   257→  const { metrics, loading } = useLiveDashboardMetrics();
+   258→  const { data: clients, loading: clientsLoading } = useFireClients();
+   259→  const { data: returns, loading: returnsLoading } = useFireReturns();
+   260→  const { data: invoices, loading: invoicesLoading } = useFireInvoices();
+   261→  const { data: reconciliations } = useFireReconciliations();
+   262→  const { data: documents } = useFireDocuments();
+   263→  const { data: recentActivities } = useFireRecentActivities(8);
+   264→  const [filingReturnId, setFilingReturnId] = useState<string | null>(null);
+   265→
+   266→  // ── AI Agent Statuses ──
+   267→  type AgentStatus = 'idle' | 'running' | 'error';
+   268→  const [agentStatuses, setAgentStatuses] = useState<Record<string, AgentStatus>>({
+   269→    invoice: 'idle',
+   270→    compliance: 'idle',
+   271→    reconciliation: 'idle',
+   272→    filing: 'idle',
+   273→    intelligence: 'idle',
+   274→  });
+   275→
+   276→  const aiAgents = useMemo(() => [
+   277→    { id: 'invoice', name: 'Invoice Extraction', icon: FileScan, color: 'emerald', status: agentStatuses.invoice },
+   278→    { id: 'compliance', name: 'Compliance', icon: ShieldCheck, color: 'amber', status: agentStatuses.compliance },
+   279→    { id: 'reconciliation', name: 'Reconciliation', icon: GitCompareArrows, color: 'blue', status: agentStatuses.reconciliation },
+   280→    { id: 'filing', name: 'Filing', icon: FileCheck, color: 'purple', status: agentStatuses.filing },
+   281→    { id: 'intelligence', name: 'Firm Intelligence', icon: Brain, color: 'rose', status: agentStatuses.intelligence },
+   282→  ], [agentStatuses]);
+   283→
+   284→  const handleRunAgent = (agentId: string) => {
+   285→    setAgentStatuses(prev => ({ ...prev, [agentId]: 'running' }));
+   286→    setTimeout(() => {
+   287→      setAgentStatuses(prev => ({ ...prev, [agentId]: 'idle' }));
+   288→    }, 3000);
+   289→  };
+   290→
+   291→  // ── Compute Smart Card Metrics ──
+   292→  const smartMetrics = useMemo(() => {
+   293→    const today = new Date();
+   294→    const weekFromNow = new Date(today);
+   295→    weekFromNow.setDate(weekFromNow.getDate() + 7);
+   296→
+   297→    // Today's Revenue — invoices created today
+   298→    const todayStart = new Date(today);
+   299→    todayStart.setHours(0, 0, 0, 0);
+   300→    const invoicesToday = invoices.filter(inv => {
+   301→      const d = new Date(inv.createdAt as string || 0);
+   302→      return d >= todayStart;
+   303→    });
+   304→    const revenueToday = invoicesToday.reduce((sum, inv) => sum + (inv.totalAmount || 0), 0);
+   305→
+   306→    // GST Due This Week — pending returns due within 7 days
+   307→    const returnsDueThisWeek = returns.filter(r => {
+   308→      if (r.status === 'filed') return false;
+   309→      const due = getFilingDueDate(r.returnType, r.period);
+   310→      const dueDate = new Date(due);
+   311→      return dueDate >= today && dueDate <= weekFromNow;
+   312→    });
+   313→    const gstDueThisWeek = returnsDueThisWeek.reduce((sum, r) => sum + (r.totalTax || 0), 0);
+   314→
+   315→    // Clients At Risk — health score < 60
+   316→    const clientsAtRisk = clients.filter(c => c.healthScore < 60);
+   317→
+   318→    // Invoices Processed Today
+   319→    const invoicesProcessedToday = invoices.filter(inv => {
+   320→      const d = new Date(inv.createdAt as string || 0);
+   321→      return d >= todayStart;
+   322→    }).length;
+   323→
+   324→    // Late Fee Exposure — overdue returns * ₹50/day (GSTR-1) + ₹50/day (GSTR-3B)
+   325→    const overdueReturns = returns.filter(r => r.status !== 'filed' && isOverdue(r.period));
+   326→    const lateFeeExposure = overdueReturns.reduce((sum, r) => {
+   327→      const due = getFilingDueDate(r.returnType, r.period);
+   328→      const daysOverdue = Math.max(0, Math.ceil((today.getTime() - new Date(due).getTime()) / (1000 * 60 * 60 * 24)));
+   329→      return sum + (daysOverdue * 50); // ₹50/day per return
+   330→    }, 0);
+   331→
+   332→    // Pending ITC — from reconciliations
+   333→    const pendingITC = reconciliations.reduce((sum, r) => sum + Math.abs(r.gstDifference || 0), 0);
+   334→
+   335→    // Ready to File
+   336→    const readyToFile = returns.filter(r => ['validated', 'reviewed', 'generated'].includes(r.status));
+   337→
+   338→    return {
+   339→      revenueToday,
+   340→      gstDueThisWeek,
+   341→      clientsAtRisk: clientsAtRisk.length,
+   342→      invoicesProcessedToday,
+   343→      lateFeeExposure,
+   344→      pendingITC,
+   345→      readyToFile: readyToFile.length,
+   346→      returnsDueThisWeek: returnsDueThisWeek.length,
+   347→    };
+   348→  }, [invoices, returns, clients, reconciliations]);
+   349→
+   350→  // ── Upcoming Filings ──
+   351→  const upcomingFilings = useMemo(() => {
+   352→    return returns
+   353→      .filter(r => r.status !== 'filed')
+   354→      .sort((a, b) => {
+   355→        const da = getFilingDueDate(a.returnType, a.period);
+   356→        const db = getFilingDueDate(b.returnType, b.period);
+   357→        return new Date(da).getTime() - new Date(db).getTime();
+   358→      })
+   359→      .slice(0, 5);
+   360→  }, [returns]);
+   361→
+   362→  // ── Clients At Risk Detail ──
+   363→  const atRiskClients = useMemo(() => {
+   364→    return clients
+   365→      .filter(c => c.healthScore < 60)
+   366→      .sort((a, b) => a.healthScore - b.healthScore)
+   367→      .slice(0, 5);
+   368→  }, [clients]);
+   369→
+   370→  // ── Loading ──
+   371→  if (loading || clientsLoading || returnsLoading || invoicesLoading) {
+   372→    return <DashboardSkeleton />;
+   373→  }
+   374→
+   375→  // ── Empty State ──
+   376→  if (clients.length === 0 && returns.length === 0) {
+   377→    return (
+   378→      <div className="max-w-7xl mx-auto px-4 md:px-6 py-6">
+   379→        <WelcomeEmptyState onAddClient={() => setCurrentView('clients')} />
+   380→      </div>
+   381→    );
+   382→  }
+   383→
+   384→  // ── File Return Handler ──
+   385→  const handleFileReturn = async (returnId: string) => {
+   386→    setFilingReturnId(returnId);
+   387→    try {
+   388→      await fileReturn(returnId);
+   389→      toast.success('Return filed successfully! ARN generated.');
+   390→    } catch (err) {
+   391→      toast.error('Failed to file return. Please try again.');
+   392→    } finally {
+   393→      setFilingReturnId(null);
+   394→    }
+   395→  };
+   396→
+   397→  return (
+   398→    <div className="max-w-7xl mx-auto px-4 md:px-6 py-6 space-y-6">
+   399→      {/* Header */}
+   400→      <div className="flex items-center justify-between">
+   401→        <div>
+   402→          <h1 className="text-xl font-bold text-foreground tracking-tight flex items-center gap-2">
+   403→            <Zap className="h-5 w-5 text-emerald-500" />
+   404→            Command Center
+   405→          </h1>
+   406→          <p className="text-sm text-muted-foreground mt-0.5">
+   407→            Real-time GST compliance overview · <span className="text-emerald-600 font-medium">Live</span>
+   408→          </p>
+   409→        </div>
+   410→      </div>
+   411→
+   412→      {/* ═══ SMART CARDS — 7 Live Metrics ═══ */}
+   413→      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
+   414→        <SmartCard
+   415→          label="Revenue Today"
+   416→          value={formatCurrency(smartMetrics.revenueToday)}
+   417→          icon={<IndianRupee className="h-4 w-4" />}
+   418→          iconColor="text-emerald-600"
+   419→          iconBg="bg-emerald-50"
+   420→          subtitle={`${smartMetrics.invoicesProcessedToday} invoices`}
+   421→          trend="up"
+   422→          trendValue="live"
+   423→          pulse
+   424→          index={0}
+   425→          onClick={() => setCurrentView('invoices')}
+   426→        />
+   427→        <SmartCard
+   428→          label="GST Due This Week"
+   429→          value={formatCurrency(smartMetrics.gstDueThisWeek)}
+   430→          icon={<Wallet className="h-4 w-4" />}
+   431→          iconColor="text-amber-600"
+   432→          iconBg="bg-amber-50"
+   433→          subtitle={`${smartMetrics.returnsDueThisWeek} returns due`}
+   434→          trend={smartMetrics.gstDueThisWeek > 0 ? 'down' : 'neutral'}
+   435→          index={1}
+   436→          onClick={() => setCurrentView('returns')}
+   437→        />
+   438→        <SmartCard
+   439→          label="Clients At Risk"
+   440→          value={smartMetrics.clientsAtRisk}
+   441→          icon={<ShieldAlert className="h-4 w-4" />}
+   442→          iconColor="text-red-600"
+   443→          iconBg="bg-red-50"
+   444→          subtitle={smartMetrics.clientsAtRisk > 0 ? 'Need attention' : 'All healthy'}
+   445→          trend={smartMetrics.clientsAtRisk > 0 ? 'down' : 'up'}
+   446→          index={2}
+   447→          onClick={() => setCurrentView('clients')}
+   448→        />
+   449→        <SmartCard
+   450→          label="Invoices Today"
+   451→          value={smartMetrics.invoicesProcessedToday}
+   452→          icon={<Receipt className="h-4 w-4" />}
+   453→          iconColor="text-blue-600"
+   454→          iconBg="bg-blue-50"
+   455→          subtitle={`${invoices.length} total`}
+   456→          index={3}
+   457→          onClick={() => setCurrentView('invoices')}
+   458→        />
+   459→        <SmartCard
+   460→          label="Late Fee Risk"
+   461→          value={formatCurrency(smartMetrics.lateFeeExposure)}
+   462→          icon={<Timer className="h-4 w-4" />}
+   463→          iconColor="text-orange-600"
+   464→          iconBg="bg-orange-50"
+   465→          subtitle={smartMetrics.lateFeeExposure > 0 ? '₹50/day per return' : 'No overdue'}
+   466→          trend={smartMetrics.lateFeeExposure > 0 ? 'down' : 'neutral'}
+   467→          index={4}
+   468→          onClick={() => setCurrentView('returns')}
+   469→        />
+   470→        <SmartCard
+   471→          label="Pending ITC"
+   472→          value={formatCurrency(smartMetrics.pendingITC)}
+   473→          icon={<CircleDollarSign className="h-4 w-4" />}
+   474→          iconColor="text-purple-600"
+   475→          iconBg="bg-purple-50"
+   476→          subtitle={`${reconciliations.length} recon runs`}
+   477→          index={5}
+   478→          onClick={() => setCurrentView('reconcile')}
+   479→        />
+   480→        <SmartCard
+   481→          label="Ready To File"
+   482→          value={smartMetrics.readyToFile}
+   483→          icon={<FileCheck className="h-4 w-4" />}
+   484→          iconColor="text-emerald-600"
+   485→          iconBg="bg-emerald-50"
+   486→          subtitle={smartMetrics.readyToFile > 0 ? 'File now' : 'None ready'}
+   487→          pulse={smartMetrics.readyToFile > 0}
+   488→          trend={smartMetrics.readyToFile > 0 ? 'up' : 'neutral'}
+   489→          index={6}
+   490→          onClick={() => setCurrentView('returns')}
+   491→        />
+   492→      </div>
+   493→
+   494→      {/* ═══ OVERVIEW METRICS ROW ═══ */}
+   495→      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+   496→        <SmartCard
+   497→          label="Active Clients"
+   498→          value={metrics.activeClients}
+   499→          icon={<Users className="h-4 w-4" />}
+   500→          iconColor="text-sky-600"
+   501→          iconBg="bg-sky-50"
+   502→          subtitle={`${metrics.totalClients} total`}
+   503→          index={7}
+   504→          onClick={() => setCurrentView('clients')}
+   505→        />
+   506→        <SmartCard
+   507→          label="Filed Returns"
+   508→          value={metrics.filedReturns}
+   509→          icon={<CheckCircle2 className="h-4 w-4" />}
+   510→          iconColor="text-emerald-600"
+   511→          iconBg="bg-emerald-50"
+   512→          subtitle={`${metrics.pendingReturns} pending · ${metrics.overdueReturns} overdue`}
+   513→          index={8}
+   514→          onClick={() => setCurrentView('returns')}
+   515→        />
+   516→        <SmartCard
+   517→          label="Tax Volume"
+   518→          value={formatCurrency(metrics.totalTaxVolume)}
+   519→          icon={<TrendingUp className="h-4 w-4" />}
+   520→          iconColor="text-teal-600"
+   521→          iconBg="bg-teal-50"
+   522→          subtitle={`${invoices.length} invoices`}
+   523→          index={9}
+   524→          onClick={() => setCurrentView('invoices')}
+   525→        />
+   526→        <SmartCard
+   527→          label="Avg Health"
+   528→          value={`${metrics.averageHealthScore}`}
+   529→          icon={<ShieldCheck className="h-4 w-4" />}
+   530→          iconColor="text-violet-600"
+   531→          iconBg="bg-violet-50"
+   532→          subtitle={metrics.averageHealthScore >= 80 ? 'Good' : metrics.averageHealthScore >= 60 ? 'Fair' : 'Needs attention'}
+   533→          trend={metrics.averageHealthScore >= 80 ? 'up' : metrics.averageHealthScore >= 60 ? 'neutral' : 'down'}
+   534→          index={10}
+   535→          onClick={() => setCurrentView('clients')}
+   536→        />
+   537→      </div>
+   538→
+   539→      {/* ═══ AI AGENT STATUS BAR ═══ */}
+   540→      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+   541→        {aiAgents.map((agent, i) => {
+   542→          const colorMap: Record<string, { iconColor: string; iconBg: string; dotColor: string; borderColor: string }> = {
+   543→            emerald: { iconColor: 'text-emerald-600', iconBg: 'bg-emerald-50', dotColor: 'bg-emerald-500', borderColor: 'border-emerald-200' },
+   544→            amber: { iconColor: 'text-amber-600', iconBg: 'bg-amber-50', dotColor: 'bg-amber-500', borderColor: 'border-amber-200' },
+   545→            blue: { iconColor: 'text-blue-600', iconBg: 'bg-blue-50', dotColor: 'bg-blue-500', borderColor: 'border-blue-200' },
+   546→            purple: { iconColor: 'text-purple-600', iconBg: 'bg-purple-50', dotColor: 'bg-purple-500', borderColor: 'border-purple-200' },
+   547→            rose: { iconColor: 'text-rose-600', iconBg: 'bg-rose-50', dotColor: 'bg-rose-500', borderColor: 'border-rose-200' },
+   548→          };
+   549→          const colors = colorMap[agent.color];
+   550→          const statusDotColor = agent.status === 'running' ? 'bg-emerald-500 animate-pulse' : agent.status === 'error' ? 'bg-red-500' : 'bg-gray-300';
+   551→          const AgentIcon = agent.icon;
+   552→          return (
+   553→            <motion.div
+   554→              key={agent.id}
+   555→              initial={{ opacity: 0, y: 12 }}
+   556→              animate={{ opacity: 1, y: 0 }}
+   557→              transition={{ duration: 0.3, delay: i * 0.06 }}
+   558→            >
+   559→              <Card className="hover:shadow-md transition-all duration-200 cursor-pointer" onClick={() => setCurrentView('agents')}>
+   560→                <CardContent className="p-3 flex items-center gap-2.5">
+   561→                  <div className={`flex items-center justify-center h-8 w-8 rounded-lg ${colors.iconBg} shrink-0`}>
+   562→                    <AgentIcon className={`h-4 w-4 ${colors.iconColor}`} />
+   563→                  </div>
+   564→                  <div className="flex-1 min-w-0">
+   565→                    <div className="flex items-center gap-1.5">
+   566→                      <span className={`h-2 w-2 rounded-full ${statusDotColor} shrink-0`} />
+   567→                      <p className="text-xs font-medium truncate">{agent.name}</p>
+   568→                    </div>
+   569→                    <div className="flex items-center justify-between mt-0.5">
+   570→                      <p className="text-[10px] text-muted-foreground capitalize">{agent.status}</p>
+   571→                      <button
+   572→                        className="text-[10px] font-medium text-emerald-600 hover:text-emerald-700 transition-colors"
+   573→                        onClick={(e) => { e.stopPropagation(); handleRunAgent(agent.id); }}
+   574→                      >
+   575→                        {agent.status === 'running' ? (
+   576→                          <span className="flex items-center gap-0.5"><Loader2 className="h-2.5 w-2.5 animate-spin" /> Running</span>
+   577→                        ) : 'Run'}
+   578→                      </button>
+   579→                    </div>
+   580→                  </div>
+   581→                </CardContent>
+   582→              </Card>
+   583→            </motion.div>
+   584→          );
+   585→        })}
+   586→      </div>
+   587→
+   588→      {/* ═══ AUTOPILOT CTA CARD ═══ */}
+   589→      <motion.div
+   590→        initial={{ opacity: 0, y: 16 }}
+   591→        animate={{ opacity: 1, y: 0 }}
+   592→        transition={{ duration: 0.4, delay: 0.3 }}
+   593→      >
+   594→        <Card className="overflow-hidden border-0">
+   595→          <div className="relative bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 p-5">
+   596→            {/* Sparkle animation overlay */}
+   597→            <div className="absolute inset-0 overflow-hidden pointer-events-none">
+   598→              <motion.div
+   599→                className="absolute top-2 right-8"
+   600→                animate={{ opacity: [0.3, 1, 0.3], scale: [0.8, 1.2, 0.8], rotate: [0, 180, 360] }}
+   601→                transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
+   602→              >
+   603→                <Sparkles className="h-4 w-4 text-white/60" />
+   604→              </motion.div>
+   605→              <motion.div
+   606→                className="absolute bottom-3 right-20"
+   607→                animate={{ opacity: [0.2, 0.8, 0.2], scale: [1, 1.4, 1], rotate: [360, 180, 0] }}
+   608→                transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut', delay: 1 }}
+   609→              >
+   610→                <Sparkles className="h-3 w-3 text-white/40" />
+   611→              </motion.div>
+   612→              <motion.div
+   613→                className="absolute top-4 right-36"
+   614→                animate={{ opacity: [0.4, 1, 0.4], scale: [0.9, 1.3, 0.9] }}
+   615→                transition={{ duration: 2.5, repeat: Infinity, ease: 'easeInOut', delay: 0.5 }}
+   616→              >
+   617→                <Sparkles className="h-2.5 w-2.5 text-white/50" />
+   618→              </motion.div>
+   619→            </div>
+   620→            <div className="relative flex items-center justify-between">
+   621→              <div>
+   622→                <h3 className="text-lg font-bold text-white tracking-tight flex items-center gap-2">
+   623→                  <Sparkles className="h-5 w-5 text-white/90" />
+   624→                  GSTPilot Autopilot™
+   625→                </h3>
+   626→                <p className="text-sm text-white/80 mt-0.5">
+   627→                  Run your entire firm with one click
+   628→                </p>
+   629→              </div>
+   630→              <Button
+   631→                className="bg-white/20 hover:bg-white/30 text-white border border-white/30 backdrop-blur-sm gap-2 font-semibold shadow-lg"
+   632→                onClick={() => setCurrentView('autopilot')}
+   633→              >
+   634→                <Play className="h-4 w-4" />
+   635→                Run My Firm
+   636→              </Button>
+   637→            </div>
+   638→          </div>
+   639→        </Card>
+   640→      </motion.div>
+   641→
+   642→      {/* ═══ MAIN CONTENT GRID ═══ */}
+   643→      <div className="grid lg:grid-cols-3 gap-6">
+   644→        {/* Upcoming Filings */}
+   645→        <Card className="lg:col-span-2">
+   646→          <CardHeader className="pb-3">
+   647→            <div className="flex items-center justify-between">
+   648→              <div>
+   649→                <CardTitle className="text-sm font-semibold flex items-center gap-2">
+   650→                  <CalendarClock className="h-4 w-4 text-amber-500" />
+   651→                  Upcoming Filings
+   652→                </CardTitle>
+   653→                <CardDescription className="text-xs mt-0.5">
+   654→                  Returns due soon — file before deadline
+   655→                </CardDescription>
+   656→              </div>
+   657→              <Button variant="ghost" size="sm" className="text-xs text-emerald-600 hover:text-emerald-700 h-7" onClick={() => setCurrentView('returns')}>
+   658→                View All <ChevronRight className="h-3 w-3 ml-0.5" />
+   659→              </Button>
+   660→            </div>
+   661→          </CardHeader>
+   662→          <CardContent>
+   663→            {upcomingFilings.length === 0 ? (
+   664→              <div className="flex flex-col items-center py-8 text-center">
+   665→                <CheckCircle2 className="h-8 w-8 text-emerald-400 mb-2" />
+   666→                <p className="text-sm text-muted-foreground">All filings are up to date!</p>
+   667→              </div>
+   668→            ) : (
+   669→              <div className="space-y-2">
+   670→                {upcomingFilings.map((filing, i) => {
+   671→                  const due = getFilingDueDate(filing.returnType, filing.period);
+   672→                  const days = getDaysRemaining(due);
+   673→                  const isUrgent = days <= 3;
+   674→                  const client = clients.find(c => c.id === filing.clientId);
+   675→                  return (
+   676→                    <motion.div
+   677→                      key={filing.id}
+   678→                      initial={{ opacity: 0, x: -8 }}
+   679→                      animate={{ opacity: 1, x: 0 }}
+   680→                      transition={{ delay: i * 0.05 }}
+   681→                      className={`flex items-center gap-3 p-3 rounded-lg border transition-colors ${
+   682→                        isUrgent ? 'border-red-200 bg-red-50/50' : 'border-border/50 hover:bg-muted/50'
+   683→                      }`}
+   684→                    >
+   685→                      <div className={`flex items-center justify-center h-8 w-8 rounded-lg shrink-0 ${
+   686→                        filing.returnType === 'GSTR-1' ? 'bg-blue-100 text-blue-600' : 'bg-purple-100 text-purple-600'
+   687→                      }`}>
+   688→                        <FileText className="h-4 w-4" />
+   689→                      </div>
+   690→                      <div className="flex-1 min-w-0">
+   691→                        <p className="text-sm font-medium truncate">
+   692→                          {filing.returnType} · {periodToLabel(filing.period)}
+   693→                        </p>
+   694→                        <p className="text-[11px] text-muted-foreground truncate">
+   695→                          {client?.tradeName || 'Client'} · {filing.status}
+   696→                        </p>
+   697→                      </div>
+   698→                      <div className="text-right shrink-0">
+   699→                        <Badge variant={isUrgent ? 'destructive' : 'secondary'} className="text-[10px]">
+   700→                          {formatDaysRemaining(days)}
+   701→                        </Badge>
+   702→                        {['validated', 'reviewed', 'generated'].includes(filing.status) && (
+   703→                          <Button
+   704→                            size="sm"
+   705→                            className="ml-2 h-6 text-[10px] px-2 bg-emerald-600 hover:bg-emerald-700 text-white"
+   706→                            disabled={filingReturnId === filing.id}
+   707→                            onClick={(e) => { e.stopPropagation(); handleFileReturn(filing.id); }}
+   708→                          >
+   709→                            {filingReturnId === filing.id ? <Loader2 className="h-3 w-3 animate-spin" /> : 'File'}
+   710→                          </Button>
+   711→                        )}
+   712→                      </div>
+   713→                    </motion.div>
+   714→                  );
+   715→                })}
+   716→              </div>
+   717→            )}
+   718→          </CardContent>
+   719→        </Card>
+   720→
+   721→        {/* Clients At Risk */}
+   722→        <Card>
+   723→          <CardHeader className="pb-3">
+   724→            <div className="flex items-center justify-between">
+   725→              <div>
+   726→                <CardTitle className="text-sm font-semibold flex items-center gap-2">
+   727→                  <AlertTriangle className="h-4 w-4 text-red-500" />
+   728→                  Clients At Risk
+   729→                </CardTitle>
+   730→                <CardDescription className="text-xs mt-0.5">
+   731→                  Health score below 60
+   732→                </CardDescription>
+   733→              </div>
+   734→              <Button variant="ghost" size="sm" className="text-xs text-emerald-600 hover:text-emerald-700 h-7" onClick={() => setCurrentView('clients')}>
+   735→                View All <ChevronRight className="h-3 w-3 ml-0.5" />
+   736→              </Button>
+   737→            </div>
+   738→          </CardHeader>
+   739→          <CardContent>
+   740→            {atRiskClients.length === 0 ? (
+   741→              <div className="flex flex-col items-center py-8 text-center">
+   742→                <ShieldCheck className="h-8 w-8 text-emerald-400 mb-2" />
+   743→                <p className="text-sm text-muted-foreground">All clients are healthy!</p>
+   744→              </div>
+   745→            ) : (
+   746→              <div className="space-y-2">
+   747→                {atRiskClients.map((client, i) => (
+   748→                  <motion.div
+   749→                    key={client.id}
+   750→                    initial={{ opacity: 0, x: -8 }}
+   751→                    animate={{ opacity: 1, x: 0 }}
+   752→                    transition={{ delay: i * 0.05 }}
+   753→                    className="flex items-center gap-3 p-2.5 rounded-lg border border-red-100 bg-red-50/30 hover:bg-red-50/60 transition-colors cursor-pointer"
+   754→                    onClick={() => { setSelectedClientId(client.id); setCurrentView('client-workspace'); }}
+   755→                  >
+   756→                    <div className="flex items-center justify-center h-8 w-8 rounded-full bg-red-100 text-red-600 text-xs font-bold shrink-0">
+   757→                      {client.healthScore}
+   758→                    </div>
+   759→                    <div className="flex-1 min-w-0">
+   760→                      <p className="text-sm font-medium truncate">{client.tradeName}</p>
+   761→                      <p className="text-[10px] text-muted-foreground truncate">
+   762→                        {client.pendingReturnCount} pending · {client.complianceProfile?.overdueReturns || 0} overdue
+   763→                      </p>
+   764→                    </div>
+   765→                    <ArrowRight className="h-3 w-3 text-red-400 shrink-0" />
+   766→                  </motion.div>
+   767→                ))}
+   768→              </div>
+   769→            )}
+   770→          </CardContent>
+   771→        </Card>
+   772→      </div>
+   773→
+   774→      {/* ═══ BOTTOM ROW ═══ */}
+   775→      <div className="grid lg:grid-cols-3 gap-6">
+   776→        {/* Recent Activity */}
+   777→        <Card className="lg:col-span-2">
+   778→          <CardHeader className="pb-3">
+   779→            <div className="flex items-center justify-between">
+   780→              <div>
+   781→                <CardTitle className="text-sm font-semibold flex items-center gap-2">
+   782→                  <Activity className="h-4 w-4 text-blue-500" />
+   783→                  Recent Activity
+   784→                </CardTitle>
+   785→                <CardDescription className="text-xs mt-0.5">
+   786→                  Real-time updates from your workflow
+   787→                </CardDescription>
+   788→              </div>
+   789→              <Button variant="ghost" size="sm" className="text-xs text-emerald-600 hover:text-emerald-700 h-7" onClick={() => setCurrentView('timeline')}>
+   790→                View Timeline <ChevronRight className="h-3 w-3 ml-0.5" />
+   791→              </Button>
+   792→            </div>
+   793→          </CardHeader>
+   794→          <CardContent>
+   795→            {recentActivities.length === 0 ? (
+   796→              <div className="flex flex-col items-center py-8 text-center">
+   797→                <Activity className="h-8 w-8 text-muted-foreground/30 mb-2" />
+   798→                <p className="text-sm text-muted-foreground">No activity yet</p>
+   799→                <p className="text-xs text-muted-foreground/60 mt-1">Activities will appear as you use GSTPilot</p>
+   800→              </div>
+   801→            ) : (
+   802→              <div className="space-y-1">
+   803→                {recentActivities.map((activity, i) => {
+   804→                  const { icon, color, bg } = activityIcon(activity.type);
+   805→                  return (
+   806→                    <motion.div
+   807→                      key={activity.id}
+   808→                      initial={{ opacity: 0, x: -8 }}
+   809→                      animate={{ opacity: 1, x: 0 }}
+   810→                      transition={{ delay: i * 0.03 }}
+   811→                      className="flex items-center gap-3 py-2 px-1"
+   812→                    >
+   813→                      <div className={`flex items-center justify-center h-7 w-7 rounded-lg ${bg} shrink-0`}>
+   814→                        <span className={color}>{icon}</span>
+   815→                      </div>
+   816→                      <div className="flex-1 min-w-0">
+   817→                        <p className="text-xs font-medium truncate">{activity.title}</p>
+   818→                        {activity.description && (
+   819→                          <p className="text-[10px] text-muted-foreground truncate">{activity.description}</p>
+   820→                        )}
+   821→                      </div>
+   822→                      <span className="text-[10px] text-muted-foreground shrink-0">
+   823→                        {timeAgo(activity.createdAt as string)}
+   824→                      </span>
+   825→                    </motion.div>
+   826→                  );
+   827→                })}
+   828→              </div>
+   829→            )}
+   830→          </CardContent>
+   831→        </Card>
+   832→
+   833→        {/* Quick Actions */}
+   834→        <Card>
+   835→          <CardHeader className="pb-3">
+   836→            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+   837→              <Zap className="h-4 w-4 text-emerald-500" />
+   838→              Quick Actions
+   839→            </CardTitle>
+   840→            <CardDescription className="text-xs">
+   841→              Jump to common tasks
+   842→            </CardDescription>
+   843→          </CardHeader>
+   844→          <CardContent>
+   845→            <div className="space-y-2">
+   846→              {[
+   847→                { label: 'Upload Documents', icon: Upload, view: 'invoices' as const, desc: 'Process invoices from files' },
+   848→                { label: 'Add New Client', icon: Plus, view: 'clients' as const, desc: 'Register a new GST client' },
+   849→                { label: 'Run Reconciliation', icon: AlertTriangle, view: 'reconcile' as const, desc: 'Match books vs portal' },
+   850→                { label: 'File Returns', icon: FileCheck2, view: 'returns' as const, desc: 'File ready returns' },
+   851→                { label: 'View Analytics', icon: TrendingUp, view: 'analytics' as const, desc: 'Charts & insights' },
+   852→                { label: 'Team Activity', icon: Activity, view: 'timeline' as const, desc: 'See what happened' },
+   853→              ].map((action, i) => (
+   854→                <motion.button
+   855→                  key={action.label}
+   856→                  initial={{ opacity: 0, y: 8 }}
+   857→                  animate={{ opacity: 1, y: 0 }}
+   858→                  transition={{ delay: i * 0.05 }}
+   859→                  className="w-full flex items-center gap-3 p-2.5 rounded-lg border border-border/50 hover:bg-emerald-50 hover:border-emerald-200 transition-all text-left group"
+   860→                  onClick={() => setCurrentView(action.view)}
+   861→                >
+   862→                  <div className="flex items-center justify-center h-8 w-8 rounded-lg bg-emerald-50 group-hover:bg-emerald-100 transition-colors shrink-0">
+   863→                    <action.icon className="h-4 w-4 text-emerald-600" />
+   864→                  </div>
+   865→                  <div className="flex-1 min-w-0">
+   866→                    <p className="text-xs font-medium">{action.label}</p>
+   867→                    <p className="text-[10px] text-muted-foreground">{action.desc}</p>
+   868→                  </div>
+   869→                  <ArrowRight className="h-3 w-3 text-muted-foreground group-hover:text-emerald-600 transition-colors shrink-0" />
+   870→                </motion.button>
+   871→              ))}
+   872→            </div>
+   873→          </CardContent>
+   874→        </Card>
+   875→      </div>
+   876→    </div>
+   877→  );
+   878→}
+   879→

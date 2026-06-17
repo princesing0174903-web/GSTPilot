@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Intelligence™ — The Financial Brain of India
+// GSTPilot Oracle™ — The Financial Brain of India
 // A calm floating orb + Perplexity-style command palette for Indian CAs.
 //
 // v10.0 — Trillion Dollar Design System
@@ -974,7 +974,7 @@ export default function GSTPilotIntelligence() {
           <span className="h-2 w-2 shrink-0 rounded-full accent-gradient shadow-[0_0_8px_rgba(16,185,129,0.6)]" />
           <div className="min-w-0">
             <h2 className="truncate text-sm font-semibold text-foreground">
-              GSTPilot Intelligence<span className="align-super text-[8px]">™</span>
+              GSTPilot Oracle<span className="align-super text-[8px]">™</span>
             </h2>
             <p className="truncate text-[10px] text-muted-foreground">
               The Financial Brain of India
@@ -1206,7 +1206,7 @@ export default function GSTPilotIntelligence() {
                         <Sparkles className="h-3 w-3 text-white" />
                       </span>
                       <span className="text-xs font-semibold accent-text">
-                        GSTPilot Intelligence
+                        GSTPilot Oracle
                       </span>
                     </div>
 
@@ -1278,7 +1278,7 @@ export default function GSTPilotIntelligence() {
                       <Sparkles className="h-3 w-3 text-white" />
                     </span>
                     <span className="text-xs font-semibold accent-text">
-                      GSTPilot Intelligence
+                      GSTPilot Oracle
                     </span>
                   </div>
                   <div className="flex items-center gap-2 pl-1">
@@ -1322,7 +1322,7 @@ export default function GSTPilotIntelligence() {
             <motion.div
               key="panel"
               role="dialog"
-              aria-label="GSTPilot Intelligence command palette"
+              aria-label="GSTPilot Oracle command palette"
               initial={{ opacity: 0, scale: 0.96, y: 12 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.96, y: 12 }}
@@ -1357,7 +1357,7 @@ export default function GSTPilotIntelligence() {
                   openPanel();
                 }
               }}
-              aria-label="Open GSTPilot Intelligence command palette"
+              aria-label="Open GSTPilot Oracle command palette"
               className={cn(
                 'accent-gradient relative flex h-14 w-14 cursor-pointer items-center justify-center rounded-full shadow-lg',
                 isListening && 'ring-2 ring-red-400/50 ring-offset-2 ring-offset-transparent',
@@ -1417,7 +1417,7 @@ export default function GSTPilotIntelligence() {
             </motion.button>
           </TooltipTrigger>
           <TooltipContent side="top" sideOffset={8}>
-            GSTPilot Intelligence™ — Ctrl+K
+            GSTPilot Oracle™ — Ctrl+K
           </TooltipContent>
         </Tooltip>
       </div>

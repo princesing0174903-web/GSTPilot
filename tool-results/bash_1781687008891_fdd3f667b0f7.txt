@@ -1,0 +1,200 @@
+- Read current state: globals.css (light-first theme), layout.tsx (Geist font), app-sidebar.tsx (11 groups, AI badges, v9.0), DashboardPage.tsx (6 metric cards), GSTPilotIntelligence.tsx (64px beach-ball orb with pulse rings + orbiting particles)
+- Foundation (done directly):
+  * layout.tsx → switched font Geist → Inter + JetBrains Mono; set <html className="dark">; updated metadata title to "GSTPilot Intelligence™ — The Financial Brain of India"
+  * providers.tsx → defaultTheme "dark", enableSystem false (dark is the experience)
+  * globals.css → rewrote .dark tokens: --background #09090b, --card rgba(255,255,255,0.05), --border rgba(255,255,255,0.08), --popover rgba(16,16,20,0.92), emerald/cyan/blue chart colors; added backdrop-blur(24px) to .dark [data-slot=card]/.bg-card; added utility classes .glass-surface, .glass-surface-strong, .accent-gradient, .accent-gradient-soft, .accent-text, .accent-ring, .section-gap; premium dark scrollbar
+- Dispatched 3 parallel frontend-styling-expert subagents (Task 3-a sidebar, 3-b dashboard, 3-c orb) — all completed lint-clean + tsc-clean
+- Agent Browser self-verification (via temporary auth bypass in AuthContext, now reverted):
+  * Title = "GSTPilot Intelligence™ — The Financial Brain of India" ✓
+  * Sidebar = exactly 5 collapsible groups (COMMAND expanded by default; INTELLIGENCE/FINANCE/BUSINESS/PLATFORM collapsed), "GSTPilot V10" branding, "Prince & Associates CA" subtitle, NO AI badges ✓
+  * Calm orb = single 56px button "Open GSTPilot Intelligence command palette" — NO pulse rings, NO orbiting particles (beach-ball fixed) ✓
+  * Ctrl+K opens Perplexity-style command palette: "GSTPilot Intelligence™" heading, hero "Message input" textbox, quick actions (Run my firm / Pending returns / Show risky clients), voice + fullscreen buttons ✓
+  * Zero page errors, clean console (only React DevTools info + HMR connected) ✓
+  * Dashboard main renders DashboardSkeleton (loading) — expected for fake dev user with no Firestore data; dashboard code is lint/tsc clean and correctly shows skeleton while useLiveDashboardMetrics loads
+- Reverted temporary auth bypass (DEV_BYPASS_AUTH block removed, AuthContext back to original)
+- Cleaned up verification screenshots
+- Final lint: 0 errors, 0 warnings
+
+Stage Summary:
+- GSTPilot v10.0 Trillion Dollar Design System™ shipped
+- Theme: #09090B canvas, glassmorphism cards (rgba(255,255,255,0.05) + blur 24px + hairline border), Inter font, single Emerald→Cyan→Blue accent gradient
+- Sidebar: 11 groups → 5 collapsible groups (Command / Intelligence / Finance / Business / Platform), AI badges removed, v10.0 branding
+- Dashboard: 6 metric cards → greeting + one-line AI insight + exactly 3 KPI cards (Revenue / Pending Compliance / Cash Position) + AI Recommendations / Tasks / Recent Activity
+- Orb: 64px beach-ball → 56px calm orb (8s slow breathing, no pulse rings, no particles); panel → Perplexity-style command palette with hero input + instant quick actions
+- Tagline: "GSTPilot Intelligence™ — The Financial Brain of India"
+- AuthContext dev bypass used for verification, cleanly reverted
+
+---
+Task ID: 4-b
+Agent: Business Digital DNA Builder
+Task: Build Business Digital DNA™ page with 6 scores
+
+Work Log:
+- Read worklog.md to internalize the v10.0 Trillion Dollar Design System: #09090B canvas, glassmorphism utilities (.glass-surface, .glass-surface-strong), single Emerald→Cyan→Blue accent gradient (.accent-gradient, .accent-gradient-soft, .accent-text, .accent-ring), Inter font, restrained motion (duration 0.5, delay 0.08 stagger).
+- Inspected use-firestore.ts to confirm useLiveDashboardMetrics() returns { metrics, loading, error } with all required fields (totalClients, activeClients, totalInvoices, filedReturns, pendingReturns, overdueReturns, criticalIssues, averageHealthScore, matchPercentage, documentsProcessed, extractionsPending). Verified useFireClients/Invoices/Returns return { data, loading, error } arrays.
+- Verified LiveDashboardMetrics interface in firestore-schema.ts (lines 389-407) — exact field names matched.
+- Inspected FilingStatus type ('draft' | 'prepared' | 'validated' | 'reviewed' | 'generated' | 'filed' | 'reopened') — noted spec's mention of 'pending'|'overdue' are derived categories in computeDashboardMetrics (filedReturns = status==='filed'; pendingReturns = status!=='filed'; overdueReturns = non-filed + period in past), so used the pre-computed metrics fields directly.
+- Verified AppContext useApp() exposes setCurrentView: (view: AppView) => void and 'clients' is in the AppView union.
+- Created /home/z/my-project/src/components/business-dna/BusinessDNApage.tsx (642 lines, 'use client', default export).
+- HEADER: small accent-gradient dot (h-2.5 w-2.5 rounded-full with emerald glow shadow) + "Business Digital DNA™" (text-2xl font-bold tracking-tight, used &trade; entity) + tagline "Who you are. How you behave. What's next." (text-sm text-muted-foreground). Subtle radial glow background div at top using exact spec CSS `bg-[radial-gradient(ellipse_at_top,_rgba(16,185,129,0.08),_transparent_60%)]` with pointer-events-none + aria-hidden.
+- 6 SCORE CARDS in responsive grid (grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6), each .glass-surface rounded-2xl p-6, centered content, with hover shadow lift `hover:shadow-[0_0_32px_-8px_rgba(6,182,212,0.18)] transition-shadow`. Card layout: header row (accent-text Lucide icon + uppercase tracking-wider text-xs muted label) → 120px circular SVG gauge with the big number overlaid in center (text-4xl font-bold for number, text-sm muted for "/100") → optional supportingMetric pill (text-[11px]) → one-line insight (text-sm text-foreground/80). Trend indicator intentionally omitted (no historical baseline = no fake trends, per spec).
+- CIRCULAR GAUGE: 120px SVG with radius 56, stroke 8, circumference ≈ 351.86. Defines a <linearGradient id="dnaGradient"> with stops #10b981 (0%) → #06b6d4 (50%) → #3b82f6 (100%). Track circle uses rgba(255,255,255,0.06); progress arc uses url(#dnaGradient) with strokeLinecap="round", rotated -90° via <g transform> so it starts at top. strokeDashoffset transitions with cubic-bezier(0.22, 1, 0.36, 1) over 0.9s for premium slow-fill. Gauge stroke is ALWAYS the accent gradient regardless of score (single accent rule); only the big number changes color: emerald-400 if ≥85, amber-400 if 60-84, red-400 if <60, muted-foreground if null.
+- SCORE COMPUTATION (100% from live data, NO fake numbers; null when underlying data is missing → card shows "—"):
+  * Compliance = filedReturns / (filedReturns + pendingReturns + overdueReturns) * 100 (per spec formula); null when no returns exist with insight "No returns due yet". Insights contextual: "Excellent filing track record" (≥85), "{n} returns pending" (60-84), "{n} overdue — file now" (<60).
+  * Credit = clamp(averageHealthScore - criticalIssues * 3, 0, 100); null when no clients. Insights: "Healthy financial profile" / "Watch financial indicators" / "{n} critical issue(s) flagged".
+  * Payment = clamp(matchPercentage); null when no invoices. Insights: "Collections on track" / "Some collections pending" / "Collections need attention".
+  * Growth = activeClients / totalClients * 100; null when no clients. Insights: "Strong client momentum" / "Steady client base" / "Review client retention".
+  * Operational = documentsProcessed / (documentsProcessed + extractionsPending) * 100; null when no docs at all. Insights: "Smooth operations" / "Some extraction backlog" / "Operational bottlenecks".
+  * Trust = weighted blend of the other 5 (Compliance 25%, Credit 20%, Payment 20%, Growth 15%, Operational 20%) — weights re-normalized when some components are null. null only when ALL 5 are null. Insights: "Strong overall digital profile" (≥85) / "Mixed signals across units" (60-84) / "Multiple risk areas need attention" (<60) / "Based on {n} of 5 signals" (partial).
+- AI DNA SUMMARY: full-width glass card below the grid (using space-y-6 wrapper). 11x11 accent-gradient-soft icon swatch with accent-text Brain icon + "AI DNA Summary" heading + "Synthesized" eyebrow. Synthesizes the 6 scores into narrative: "Your business is {trust-tier} with strong {top-score-name} ({tier}) but {weak-score-name} ({tier}) needs attention. Predicted next 30 days: {prediction}." Trust tiers: highly trusted (≥85) / trusted (≥70) / developing trust (≥60) / at risk (<60) / still being profiled (null). Score tiers: excellent (≥85) / strong (≥70) / developing (≥60) / at risk (<60). Prediction is contextually derived from the weakest signal (e.g. weak compliance <60 → "expect overdue return notices — prioritize filing"; weak payment <60 → "cash flow strain likely — chase pending collections"). All key phrases wrapped in <span className="accent-text font-medium">. Falls back to "still forming" message when no scores are computable.
+- LOADING STATE: 6 skeleton cards (pulsing Skeleton components) in same grid layout — h-3 w-24 label skeleton, h-[120px] w-[120px] rounded-full gauge skeleton, h-3 w-16 supporting skeleton, h-4 w-32 insight skeleton.
+- ERROR STATE: glass card with red-500/10 icon swatch + AlertTriangle (red-400) + "Couldn't load your DNA" heading + error message paragraph.
+- EMPTY STATE (no clients AND no invoices AND no returns): glass card with 20x20 accent-gradient Brain logo + accent-ring glow + Sparkles corner badge, heading "Add your first client to unlock your Business DNA", descriptive paragraph, accent-gradient "Add Client" button calling setCurrentView('clients').
+- ANIMATIONS: framer-motion fade-up (initial opacity 0 + y 18, animate to opacity 1 + y 0), duration 0.5, ease 'easeOut', delay increments of 0.08 per card (0, 0.08, 0.16, 0.24, 0.32, 0.40). Summary card delays at 0.48. Header at duration 0.5 no delay. Empty state duration 0.5. Restrained = premium.
+- IMPORTS: useMemo from react; motion from framer-motion; 8 lucide icons (Brain, ShieldCheck, TrendingUp, Wallet, Activity, Sparkles, AlertTriangle, CheckCircle2) + LucideIcon type; Card + CardContent + Skeleton + Button from @/components/ui/*; useApp from @/contexts/AppContext; useLiveDashboardMetrics + useFireClients + useFireInvoices + useFireReturns from @/hooks/use-firestore. (useState not imported — component is purely derived from hooks with no local UI state, so importing it would be unused.)
+- Ran `bun run lint` → 0 errors, 0 warnings, exit 0. Ran `bunx tsc --noEmit` → 0 errors in src/components/business-dna/BusinessDNApage.tsx (the 2,387 pre-existing errors elsewhere in the repo — examples/, skills/, src/app/api/* Prisma routes, AuthContext, use-firestore, firestore-service — are unrelated to this task and were present before).
+- Fixed minor detail: /100 label size corrected from text-xs to text-sm per spec ("text-sm text-muted-foreground").
+
+Stage Summary:
+- Deliverable: /home/z/my-project/src/components/business-dna/BusinessDNApage.tsx (642 lines, 'use client', default export).
+- 6 live-computed scores (Trust, Credit, Compliance, Growth, Payment, Operational) — NO fake numbers, null/— when underlying data is missing.
+- Each card: 120px circular SVG gauge with single accent gradient stroke (emerald→cyan→blue via linearGradient id="dnaGradient"), big number color-coded (emerald/amber/red), uppercase label, contextual one-line AI insight, supporting metric pill, no fake trends.
+- AI DNA Summary synthesizes 6 scores into a narrative paragraph with .accent-text key phrases and Brain icon in accent-gradient-soft swatch; prediction for next 30 days derived from weakest signal.
+- Header: accent-gradient dot + "Business Digital DNA™" + tagline. Radial glow background at top.
+- States: 6 pulsing skeletons (loading), glass error card (error), glass empty state with Add Client button → setCurrentView('clients') (no data).
+- 4 Firestore hooks used (useLiveDashboardMetrics, useFireClients, useFireInvoices, useFireReturns). useApp() for setCurrentView.
+- Restrained framer-motion fade-up (duration 0.5, delay 0.08 stagger).
+- Lint: 0 errors, 0 warnings. TypeScript: 0 errors in this file.
+
+---
+Task ID: 4-ORCHESTRATOR
+Agent: GSTPilot Architect (Infinity™)
+Task: Build GSTPilot Infinity™ — AI Mission Control home + Business Digital DNA + rebrand
+
+Work Log:
+- Read LiveDashboardMetrics type + useFireClients/Invoices/Returns hooks to plan Business Score + AI insight computation
+- Added 'business-dna' to AppView union in AppContext.tsx
+- Dispatched Business Digital DNA™ page to frontend-styling-expert subagent (Task 4-b) — completed lint-clean, 642 lines, 6 scores with SVG gradient gauges + AI DNA Summary
+- Built AI Mission Control™ page myself (src/components/mission-control/MissionControlPage.tsx, ~480 lines):
+  * Time-of-day greeting "Good {Morning|Afternoon|Evening}, {firstName} 👋" using useAuth().user.name
+  * Business Score gauge: 220px circular SVG with emerald→cyan→blue linearGradient, animated strokeDashoffset (1.2s), big score number color-tiered (emerald/cyan/amber/red), /100 label
+  * Business Score computed from live metrics: start 100, subtract criticalIssues*6, warnings*2, overdueReturns*8, pendingReturns*2, healthScore gap, match% gap; returns null when no data (shows "—")
+  * 3 mini-stats: Revenue (₹ totalTaxVolume), Cash Position (Healthy/Stable/Tight/Strained from score), Compliance (pending count)
+  * "AI says" glass card: up to 6 contextual insights each with icon + what + why + inline action chip; insights derived live (overdue returns, GST due soon, churn risk, collections, compliance health, all-clear fallback)
+  * 4 action buttons: [Fix Collections]→reconcile, [File GST]→returns, [Generate Report]→reports, [Run My Business]→run-my-business (primary, accent-gradient)
+  * Graceful 3.5s loading timeout (renders with empty data + "all clear" fallback instead of blocking forever) — premium UX
+  * Radial emerald glow at top, footer "GSTPilot Infinity™ · The Financial Brain of India"
+- Wired Mission Control as the home: page.tsx case 'dashboard' → <MissionControlPage/>, default → MissionControlPage, added case 'business-dna' → <BusinessDNApage/>, removed unused DashboardPage import, updated VIEW_TITLES (dashboard → 'Mission Control', added 'business-dna' → 'Business DNA')
+- Rebranded sidebar to Infinity™: header "GSTPilot" + "Infinity" gradient pill + "Financial Brain of India" subtitle; footer "GSTPilot Infinity™"; added "Business DNA" nav item (Fingerprint icon) to Command group; renamed "Command Center" → "Mission Control"
+- Added same 3.5s graceful loading timeout to BusinessDNApage (showLoading gate) so it renders with empty-data states instead of skeleton forever
+- Agent Browser self-verification (via temporary auth bypass, now reverted):
+  * Home (Mission Control): "Good Afternoon, Prince 👋" ✓, Business Score gauge (missionScoreGradient SVG present) ✓, 3 mini-stats ✓, "AI says" with "Everything looks good today" insight ✓, all 4 action buttons (Fix Collections/File GST/Generate Report/Run My Business) ✓, Infinity™ footer ✓
+  * Business DNA page: title ✓, all 6 scores (Trust/Credit/Compliance/Growth/Payment/Operational) ✓, DNA gradient gauges ✓, AI DNA Summary ✓, graceful empty-data states ("Add data to compute", "No returns due yet") ✓
+  * Sidebar: "GSTPilot INFINITY" branding ✓, "Mission Control" + "Business DNA" nav items ✓
+  * Title: "GSTPilot Intelligence™ — The Financial Brain of India" ✓
+  * Zero page errors, zero console errors, lint 0 errors/0 warnings
+- Reverted temporary auth bypass in AuthContext.tsx (DEV_BYPASS_AUTH block removed)
+- Cleaned up verification artifacts
+- Final lint: 0 errors, 0 warnings
+
+Stage Summary:
+- GSTPilot Infinity™ shipped: "The Financial Brain of India"
+- AI Mission Control™ = the ONE screen home (replaces old dashboard): Business Score gauge + 3 mini-stats + AI says (live insights) + 4 one-click action buttons. "No dashboards. No clutter."
+- Business Digital DNA™ = 6 scores (Trust/Credit/Compliance/Growth/Payment/Operational) with gradient gauges + AI DNA Summary
+- Rebranded v10.0 → Infinity™ across sidebar header/footer
+- Both new pages have graceful 3.5s loading timeout (never block on slow backend — premium UX, no fake data)
+- Existing Infinity capabilities already in place: Business Copilot (Perplexity), Ctrl+K command palette, Predictions, Run My Business, Credit Scoring, Business Graph
+- AuthContext dev bypass used for verification, cleanly reverted
+
+---
+Task ID: 5-a
+Agent: frontend-styling-expert (Mission Control redesign)
+Task: Rewrite MissionControlPage.tsx as the ONE-screen Infinity™ home per the radical simplification spec (Apple × Perplexity × Stripe × Linear × Palantir — calm, black, minimal, futuristic)
+
+Work Log:
+- Read worklog.md to internalize the v10.0 / Infinity™ design system (background #09090B, glass-surface rgba(255,255,255,0.05)+blur(24px), single Emerald→Cyan→Blue accent gradient, Inter font, restrained motion: duration 0.5, delay 0.08 stagger)
+- Read existing /home/z/my-project/src/components/mission-control/MissionControlPage.tsx (606 lines) — confirmed all helpers to keep: formatINR, greeting, firstName, computeBusinessScore, scoreTier, AIInsight interface, buildInsights, ScoreGauge (220px SVG gauge w/ missionScoreGradient), MiniStat, InsightRow, MissionControlSkeleton, ActionButton (to be removed), graceful 3.5s loading timeout, error state
+- Inspected /home/z/my-project/src/hooks/use-firestore.ts: confirmed `useFireActivities` returns `{ data: Array<FirestoreActivity & { id: string }>, loading, error }` ordered by createdAt desc; `useLiveDashboardMetrics` returns `{ metrics, loading, error }`; `useFireClients` returns `{ data, loading, error }`
+- Inspected /home/z/my-project/src/lib/firestore-schema.ts: FirestoreActivity has `{ activityId, firmId, userId, clientId, type, title, description, entityType, entityId, metadata, createdAt: unknown }`. createdAt is converted to ISO string by convertDoc in use-firestore.ts (so it'll be a string at runtime, but typed as unknown)
+- Inspected /home/z/my-project/src/contexts/AppContext.tsx: confirmed 'autopilot' and 'run-my-business' are both in the AppView union (Task 5 + previous orchestrator work)
+- Inspected /home/z/my-project/src/components/intelligence/GSTPilotIntelligence.tsx (lines 751–766): confirmed it listens for `window 'gstpilot-ask'` CustomEvent with `detail: string`, opens palette, defers sendMessage(question) to next animation frame
+- Inspected /home/z/my-project/src/app/page.tsx (lines 316–326): confirmed global sticky footer already exists with "GSTPilot Infinity™ · The Financial Brain of India" — so removed the in-component footer per spec
+- Inspected /home/z/my-project/src/app/globals.css: confirmed utility classes `.glass-surface`, `.glass-surface-strong`, `.accent-gradient`, `.accent-gradient-soft`, `.accent-text`, `.accent-ring`, `.section-gap`, `.custom-scrollbar`, `.scrollbar-thin` all present — used these exclusively, added NO new CSS
+- Rewrote MissionControlPage.tsx (606 → ~580 lines). ONE calm screen, top-to-bottom:
+  * (1) HEADER: small eyebrow "Today's Business Score" with Sparkles icon + h1 "Good {Morning|Afternoon|Evening}, {firstName} 👋"
+  * (2) SCORE GAUGE: existing 220px ScoreGauge with emerald→cyan→blue missionScoreGradient + tier label (Excellent/Healthy/At Risk/Critical)
+  * (3) 3 MINI STATS: Revenue (₹ totalTaxVolume), Cash Position (Healthy/Stable/Tight/Strained derived from score), Compliance (pending count or "All clear") — kept MiniStat component
+  * (4) AI INSIGHT HERO: glass-surface rounded-2xl card with Brain icon in accent-gradient swatch (h-10 w-10 rounded-xl) + "AI Insight" eyebrow + heroInsight.what in text-base md:text-lg font-medium + supporting heroInsight.why in text-sm muted. Uses FIRST insight from buildInsights()
+  * (5) [ RUN MY BUSINESS ] BUTTON: motion.button, w-full max-w-2xl mx-auto, accent-gradient bg, py-4 px-6, rounded-2xl, text-base md:text-lg font-semibold text-white, shadow-lg shadow-emerald-500/30 hover:shadow-emerald-500/40, whileHover scale 1.01, whileTap scale 0.99, Rocket icon + "RUN MY BUSINESS" label + trailing ArrowRight that nudges on hover. onClick → setCurrentView('run-my-business'). Replaced the old 4-button ActionButton grid entirely
+  * (6) HOW CAN I HELP TODAY? glass-surface rounded-2xl card with: heading "How can I help today?" + hero <form> input (rounded-xl, border-white/[0.08], bg-white/[0.03], py-3.5 pl-4 pr-14, focus ring emerald) with absolute-positioned ArrowUp submit button in accent-gradient rounded-lg square (h-9 w-9, disabled when input empty) + 5 suggestion chips (rounded-full border border-white/[0.08] bg-white/[0.03] px-3 py-1.5 text-xs text-muted-foreground hover:bg-white/[0.07] hover:text-foreground transition-colors, wrapped in flex flex-wrap gap-2)
+  * (7) BOTTOM 2-COLUMN ROW (grid grid-cols-1 lg:grid-cols-2 gap-6): LEFT AI Recommendations card (Sparkles icon swatch + "AI Recommendations" title + max-h-80 overflow-y-auto custom-scrollbar, renders remainingInsights via existing InsightRow; calm empty state "You're all set" when only the hero insight exists) | RIGHT Recent Activity card (Activity icon swatch + "Recent Activity" title + max-h-80 overflow-y-auto custom-scrollbar, renders up to 6 recent activities each as a small emerald ring + dot + title + relative time via timeAgo() helper; calm empty state "No recent activity yet" when no activities)
+- Added timeAgo(createdAt: unknown) helper — defensively handles Date objects, ISO strings, raw Firestore Timestamps (with .toDate()), and invalid/falsy values; returns "just now" / "Nm ago" / "Nh ago" / "Nd ago" / "Nw ago" / "Nmo ago" / "Ny ago"
+- Suggestion chip behavior wired exactly per spec:
+  * "Show pending returns" → window.dispatchEvent(new CustomEvent('gstpilot-ask', { detail: 'Show pending returns' }))
+  * "Run my firm" → setCurrentView('autopilot')
+  * "Why did collections drop?" → dispatches gstpilot-ask with that question
+  * "Show risky clients" → setCurrentView('clients')
+  * "Generate report" → dispatches gstpilot-ask with "Generate a business report"
+- Hero input form: onSubmit preventDefault → ask(input) → setAskInput('') (clears input). The GSTPilotIntelligence orb listens for gstpilot-ask and auto-opens the palette + sends the question (wiring already done by orchestrator)
+- Imports cleaned: removed unused FileText, BarChart3 (ActionButton component deleted). Added ArrowUp, Activity from lucide-react. Added useFireActivities from '@/hooks/use-firestore'. Added type FormEvent from react for the input submit handler
+- Animations: every section is a motion.div with initial { opacity: 0, y: 12 } animate { opacity: 1, y: 0 } transition { duration: 0.5, ease: 'easeOut', delay: N } where N increments by 0.08 (0 → 0.08 → 0.16 → 0.24 → 0.32 → 0.40). RUN MY BUSINESS button combines initial/animate with whileHover scale 1.01 + whileTap scale 0.99. Activity rows have a smaller stagger (0.06 each). Restrained = premium
+- Loading state: kept the 3.5s graceful timeout (loadingTimedOut gate) — premium UX never blocks forever. Redesigned MissionControlSkeleton to mirror the new layout (greeting skeleton + score+stats skeleton + AI insight hero skeleton + RUN MY BUSINESS skeleton + ask card skeleton + 2-col bottom skeletons)
+- Error state: kept the existing glass-surface error card with AlertTriangle + Retry button
+- Container: `max-w-5xl mx-auto px-4 md:px-6 py-8 md:py-12 space-y-8` (per spec). Radial emerald glow at top preserved (`bg-[radial-gradient(ellipse_at_top,_rgba(16,185,129,0.10),_transparent_60%)]`, pointer-events-none, aria-hidden)
+- Removed: old ActionButton component, old 4-button grid (Fix Collections / File GST / Generate Report / Run My Business), old "AI says" full-width card (replaced with hero AI Insight + AI Recommendations split), old in-component footer "GSTPilot Infinity™ · The Financial Brain of India" (page.tsx shell already has global sticky footer)
+- Did NOT import SidebarProvider/SidebarTrigger (sidebar removed from app shell)
+- TypeScript fix: added `matchPercentage: number` to the buildInsights opts.metrics type AND passed `matchPercentage: metrics.matchPercentage` at the call site. This was a pre-existing TS error in the original buildInsights (function accessed metrics.matchPercentage but the type didn't declare it). Behavior unchanged — just a type annotation fix so the file is 100% tsc-clean
+- Verification:
+  * `bun run lint` → 0 errors, 0 warnings, exit 0 ✓
+  * `bunx tsc --noEmit` → 0 errors in src/components/mission-control/MissionControlPage.tsx ✓ (the 5 pre-existing matchPercentage errors in buildInsights were resolved by the type annotation fix; the 4 pre-existing AppView errors in the original file were already resolved by other agents extending the AppView union in AppContext.tsx)
+
+Stage Summary:
+- Deliverable: /home/z/my-project/src/components/mission-control/MissionControlPage.tsx (~580 lines, 'use client', default export)
+- ONE calm, minimal, futuristic screen. Top-to-bottom: Greeting + eyebrow → Business Score gauge (220px emerald→cyan→blue SVG) + 3 mini stats → AI Insight hero (Brain icon + one-line what + supporting why) → [ RUN MY BUSINESS ] centerpiece button (accent-gradient, full-width max-w-2xl, Rocket icon, whileHover 1.01, whileTap 0.99) → "How can I help today?" glass card with hero input + ArrowUp submit + 5 suggestion chips → 2-col bottom row (AI Recommendations | Recent Activity), each with max-h-80 scrollable lists and calm empty states
+- Replaced: old 4-button ActionButton grid → ONE RUN MY BUSINESS button. Old "AI says" full card → split into hero AI Insight + AI Recommendations card. Old in-component footer → removed (page.tsx shell has global footer)
+- Added: useFireActivities hook for Recent Activity section; timeAgo() helper for relative timestamps; ask() dispatcher + handleAskSubmit form handler; suggestions array wiring chips to either gstpilot-ask event dispatch or setCurrentView navigation
+- Kept verbatim: formatINR, greeting, firstName, computeBusinessScore, scoreTier, AIInsight interface, ScoreGauge, MiniStat, InsightRow, MissionControlSkeleton, graceful 3.5s loading timeout, error state. buildInsights kept with one trivial type annotation fix (added matchPercentage to opts.metrics type — pre-existing TS bug)
+- Design system compliance: exclusively .glass-surface + .accent-gradient + .accent-gradient-soft + .accent-text + .custom-scrollbar utility classes from globals.css. NO new CSS added. Single Emerald→Cyan→Blue accent throughout. Background #09090B. Restrained framer-motion fade-up (duration 0.5, 0.08s stagger)
+- Lint: 0 errors, 0 warnings. TypeScript: 0 errors in this file
+
+---
+Task ID: 5-ORCHESTRATOR
+Agent: GSTPilot Architect (Infinity™ Radical Simplification)
+Task: GSTPilot Infinity™ — remove large sidebar, ONE-screen home with single RUN MY BUSINESS button + "How can I help today?" input, verify end-to-end
+
+Work Log:
+- Read worklog + current state: page.tsx had SidebarProvider/AppSidebar + 40+ view router + WorkflowTracker bar; MissionControlPage already had 4 action buttons; GSTPilotIntelligence orb managed own isOpen state via Ctrl+K
+- Wired the orb to listen for custom 'gstpilot-ask' window events: added useEffect in GSTPilotIntelligence.tsx (after sendMessage useCallback) that opens the palette + calls sendMessage(question) on 'gstpilot-ask' events. This lets the home input feed questions directly into the orb conversation — single source of truth.
+- Rewrote src/app/page.tsx shell: REMOVED SidebarProvider, AppSidebar, SidebarTrigger, SidebarInset, WorkflowTracker, Separator imports + usage. New shell = minimal sticky top bar (GSTPilot Infinity brand button → home, "← Home" back button on sub-views, Ctrl+K hint, avatar dropdown) + main + sticky footer ("GSTPilot Infinity™ · The Financial Brain of India" + "Open GSTPilot. Understand your business in seconds. Run it in one click."). Root = min-h-screen flex flex-col, footer mt-auto. Removed the flex-1 flex wrapper around DashboardContent.
+- Dispatched MissionControlPage redesign to frontend-styling-expert subagent (Task 5-a): rewrote to ONE big RUN MY BUSINESS button (accent-gradient, full-width, Rocket icon) replacing the 4-button grid, added "How can I help today?" glass card with hero input "Ask GSTPilot Intelligence..." + ArrowUp submit + 5 suggestion chips (Show pending returns / Run my firm / Why did collections drop? / Show risky clients / Generate report), kept ScoreGauge + 3 mini stats + AI Insight hero line, added bottom 2-col row (AI Recommendations + Recent Activities via useFireActivities). Chips dispatch 'gstpilot-ask' events or setCurrentView. Subagent reported lint 0/0, tsc clean.
+- Verified dev server compiles cleanly (killed stale next-server pid 1032 holding port 3000 from a previous session, started fresh — Ready in 593ms)
+- Applied temporary DEV_BYPASS_AUTH in AuthContext (dev user: Prince Kumar, prince@gstpilot.in, firm "Prince & Associates CA") for Agent Browser verification, then FULLY REVERTED (removed the entire bypass block + DEV_USER constant — AuthContext is now pristine)
+- Agent Browser end-to-end verification via Caddy gateway (localhost:81):
+  * Title: "GSTPilot Intelligence™ — The Financial Brain of India" ✓
+  * Top bar: "GSTPilot Infinity — Home" brand + "PK Prince" avatar, NO sidebar ✓
+  * Greeting: "Good Morning, Prince 👋" + "TODAY'S BUSINESS SCORE" eyebrow ✓
+  * Business Health Score gauge: shows "—" gracefully (no Firestore data for dev user — computeBusinessScore returns null) ✓
+  * 3 mini stats: Revenue / Cash Position / Compliance ✓
+  * AI Insight hero: "Everything looks good today" + "No urgent issues..." ✓
+  * ONE "Run my business" button (replaced 4-button grid) ✓
+  * "How can I help today?" + "Ask GSTPilot Intelligence" textbox + 5 suggestion chips ✓
+  * AI Recommendations + Recent Activity headings with calm empty states ✓
+  * GSTPilot Intelligence orb present ("Open GSTPilot Intelligence command palette") ✓
+  * Sticky footer: "GSTPilot Infinity™ · The Financial Brain of India | Open GSTPilot. Understand your business in seconds. Run it in one click." ✓
+  * RUN MY BUSINESS button click → navigated to run-my-business view, "Home" back button appeared ✓
+  * Ask input flow: typed "Why did collections drop?" + Enter → orb dialog opened, showed "YOU: Why did collections drop?" + AI response reading live data ("Total active invoices: ₹0...") ✓ — the gstpilot-ask event wiring works end-to-end
+  * "Show risky clients" chip → navigated to Client Registry view ("No clients yet" empty state) ✓
+  * Mobile (390×844): all sections stack vertically, avatar shows "PK" initials, full content present (greeting → score → 3 stats → AI insight → RUN MY BUSINESS → ask input → 5 chips → recommendations → activity), footer pushed below fold naturally ✓
+  * Desktop (1440×900): footer pushed down naturally (content 1194px > viewport 900px) — correct "natural push on overflow" ✓
+  * Console errors: ZERO ✓
+- Final lint: 0 errors, 0 warnings. tsc: no NEW errors in changed files (1 pre-existing error at AuthContext.tsx:129 `parsed.provider !== 'demo'` is unrelated and was there before).
+
+Stage Summary:
+- GSTPilot Infinity™ radical simplification SHIPPED + browser-verified.
+- Large sidebar REMOVED entirely. App shell is now: minimal sticky top bar (brand + back-to-home + avatar) + main + sticky footer. No 5-group collapsible sidebar, no WorkflowTracker bar, no 40-item navigation.
+- Home = ONE screen (MissionControlPage): greeting → Business Health Score gauge → 3 mini stats → AI Insight hero line → ONE big [ RUN MY BUSINESS ] button → "How can I help today?" hero input + 5 suggestion chips → AI Recommendations + Recent Activities.
+- The home ask input + suggestion chips feed directly into the GSTPilot Intelligence orb via custom 'gstpilot-ask' window events (orb opens + sends the question automatically). Single conversation source of truth.
+- Sub-views (returns, reconcile, clients, run-my-business, etc.) still reachable via AI action chips, suggestion chips, and the orb — just no sidebar. "Home" back button + clickable brand logo return to Mission Control.
+- Auth bypass used for verification, FULLY reverted (AuthContext pristine).
+- Calm empty states throughout ("Everything looks good today", "You're all set", "No recent activity yet") — no fake data, graceful when Firestore is empty.
+- The feeling: "I opened GSTPilot and an entire financial team is working for me."

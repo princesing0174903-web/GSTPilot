@@ -1,0 +1,757 @@
+     1→'use client';
+     2→
+     3→// ═══════════════════════════════════════════════════════════════════════════════
+     4→// GSTPilot Infinity™ — AI Mission Control™
+     5→// The ONE screen. Open GSTPilot in the morning → receive one screen.
+     6→// Greeting · Business Score · 3 mini stats · ONE AI Insight · RUN MY BUSINESS
+     7→// How can I help today? · AI Recommendations · Recent Activity
+     8→// No dashboards. No clutter. No menus.
+     9→// ═══════════════════════════════════════════════════════════════════════════════
+    10→
+    11→import { useMemo, useState, useEffect, type FormEvent } from 'react';
+    12→import { motion } from 'framer-motion';
+    13→import {
+    14→  Sparkles, TrendingDown, AlertTriangle, Clock, Brain,
+    15→  Rocket, Wallet, ArrowRight, IndianRupee, ShieldAlert,
+    16→  ArrowUp, Activity,
+    17→} from 'lucide-react';
+    18→import { Button } from '@/components/ui/button';
+    19→import { Skeleton } from '@/components/ui/skeleton';
+    20→import { useApp, type AppView } from '@/contexts/AppContext';
+    21→import { useAuth } from '@/contexts/AuthContext';
+    22→import {
+    23→  useLiveDashboardMetrics,
+    24→  useFireClients,
+    25→  useFireActivities,
+    26→} from '@/hooks/use-firestore';
+    27→import type { FirestoreClient, FirestoreReturn } from '@/lib/firestore-schema';
+    28→
+    29→// ─── Helpers ──────────────────────────────────────────────────────────────────
+    30→
+    31→function formatINR(amount: number): string {
+    32→  if (!isFinite(amount) || isNaN(amount)) return '₹0';
+    33→  return '₹' + Math.round(amount).toLocaleString('en-IN');
+    34→}
+    35→
+    36→function greeting(): string {
+    37→  const h = new Date().getHours();
+    38→  if (h < 12) return 'Good Morning';
+    39→  if (h < 17) return 'Good Afternoon';
+    40→  return 'Good Evening';
+    41→}
+    42→
+    43→function firstName(name?: string): string {
+    44→  if (!name) return 'there';
+    45→  return name.split(' ')[0];
+    46→}
+    47→
+    48→// ─── Relative time formatter (for Recent Activity) ────────────────────────────
+    49→// Firestore timestamps are converted to ISO strings by use-firestore's convertDoc,
+    50→// but we defensively handle Date objects and raw Firestore Timestamps too.
+    51→
+    52→function timeAgo(createdAt: unknown): string {
+    53→  if (!createdAt) return 'just now';
+    54→  let date: Date;
+    55→  if (createdAt instanceof Date) {
+    56→    date = createdAt;
+    57→  } else if (typeof createdAt === 'string') {
+    58→    date = new Date(createdAt);
+    59→  } else if (
+    60→    typeof createdAt === 'object' &&
+    61→    createdAt !== null &&
+    62→    'toDate' in createdAt &&
+    63→    typeof (createdAt as { toDate: () => Date }).toDate === 'function'
+    64→  ) {
+    65→    date = (createdAt as { toDate: () => Date }).toDate();
+    66→  } else {
+    67→    return 'just now';
+    68→  }
+    69→  if (isNaN(date.getTime())) return 'just now';
+    70→  const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
+    71→  if (seconds < 60) return 'just now';
+    72→  const minutes = Math.floor(seconds / 60);
+    73→  if (minutes < 60) return `${minutes}m ago`;
+    74→  const hours = Math.floor(minutes / 60);
+    75→  if (hours < 24) return `${hours}h ago`;
+    76→  const days = Math.floor(hours / 24);
+    77→  if (days < 7) return `${days}d ago`;
+    78→  const weeks = Math.floor(days / 7);
+    79→  if (weeks < 5) return `${weeks}w ago`;
+    80→  const months = Math.floor(days / 30);
+    81→  if (months < 12) return `${months}mo ago`;
+    82→  const years = Math.floor(days / 365);
+    83→  return `${years}y ago`;
+    84→}
+    85→
+    86→// ─── Business Score computation ───────────────────────────────────────────────
+    87→// Start at 100. Subtract weighted penalties for risk signals. Clamp 0–100.
+    88→// If there is no data at all, return null (UI shows welcoming state).
+    89→
+    90→function computeBusinessScore(opts: {
+    91→  totalClients: number;
+    92→  criticalIssues: number;
+    93→  warnings: number;
+    94→  pendingReturns: number;
+    95→  overdueReturns: number;
+    96→  averageHealthScore: number;
+    97→  matchPercentage: number;
+    98→}): number | null {
+    99→  const { totalClients, criticalIssues, warnings, pendingReturns, overdueReturns, averageHealthScore, matchPercentage } = opts;
+   100→  if (totalClients === 0 && pendingReturns === 0 && overdueReturns === 0) return null;
+   101→
+   102→  let score = 100;
+   103→  score -= criticalIssues * 6;      // critical issues are serious
+   104→  score -= warnings * 2;            // warnings are minor
+   105→  score -= overdueReturns * 8;      // overdue returns hurt most
+   106→  score -= pendingReturns * 2;      // pending returns are a mild drag
+   107→  // Health score gap: if avg health < 80, drag down
+   108→  if (averageHealthScore > 0) {
+   109→    score -= Math.max(0, 80 - averageHealthScore) * 0.6;
+   110→  }
+   111→  // Reconciliation gap: if match % < 100, mild drag
+   112→  score -= Math.max(0, 100 - matchPercentage) * 0.3;
+   113→  return Math.max(0, Math.min(100, Math.round(score)));
+   114→}
+   115→
+   116→function scoreTier(score: number | null): { label: string; color: string } {
+   117→  if (score === null) return { label: '—', color: 'text-muted-foreground' };
+   118→  if (score >= 85) return { label: 'Excellent', color: 'text-emerald-400' };
+   119→  if (score >= 70) return { label: 'Healthy', color: 'text-cyan-400' };
+   120→  if (score >= 50) return { label: 'At Risk', color: 'text-amber-400' };
+   121→  return { label: 'Critical', color: 'text-red-400' };
+   122→}
+   123→
+   124→// ─── AI Insight engine ────────────────────────────────────────────────────────
+   125→// Each insight: { icon, what (the observation), why (reasoning), action (label + view) }
+   126→// Answers the 3 questions: What happened? Why? What should I do next?
+   127→
+   128→interface AIInsight {
+   129→  id: string;
+   130→  icon: typeof Sparkles;
+   131→  tone: 'risk' | 'info' | 'success';
+   132→  what: string;
+   133→  why: string;
+   134→  actionLabel: string;
+   135→  actionView: AppView;
+   136→}
+   137→
+   138→function buildInsights(opts: {
+   139→  metrics: {
+   140→    totalClients: number;
+   141→    pendingReturns: number;
+   142→    overdueReturns: number;
+   143→    criticalIssues: number;
+   144→    warnings: number;
+   145→    totalTaxVolume: number;
+   146→    averageHealthScore: number;
+   147→    matchPercentage: number;
+   148→    upcomingFilings: FirestoreReturn[];
+   149→  };
+   150→  clients: Array<FirestoreClient & { id: string }>;
+   151→}): AIInsight[] {
+   152→  const { metrics, clients } = opts;
+   153→  const insights: AIInsight[] = [];
+   154→
+   155→  // 1. Overdue returns — most urgent
+   156→  if (metrics.overdueReturns > 0) {
+   157→    insights.push({
+   158→      id: 'overdue-returns',
+   159→      icon: AlertTriangle,
+   160→      tone: 'risk',
+   161→      what: `${metrics.overdueReturns} GST return${metrics.overdueReturns > 1 ? 's are' : ' is'} overdue`,
+   162→      why: 'Overdue returns trigger notices and late fees. File immediately to avoid penalties.',
+   163→      actionLabel: 'File Now',
+   164→      actionView: 'returns',
+   165→    });
+   166→  }
+   167→
+   168→  // 2. Pending returns due soon (next filing in upcomingFilings)
+   169→  const nextFiling = metrics.upcomingFilings[0];
+   170→  if (nextFiling && metrics.pendingReturns > 0 && metrics.overdueReturns === 0) {
+   171→    insights.push({
+   172→      id: 'gst-due',
+   173→      icon: Clock,
+   174→      tone: 'info',
+   175→      what: `GST filing due — ${nextFiling.returnType} for ${nextFiling.period}`,
+   176→      why: `${metrics.pendingReturns} return${metrics.pendingReturns > 1 ? 's' : ''} pending. Filing on time keeps compliance score high.`,
+   177→      actionLabel: 'File GST',
+   178→      actionView: 'returns',
+   179→    });
+   180→  }
+   181→
+   182→  // 3. Critical issues / risky clients
+   183→  const riskyClients = clients.filter(c => (c.healthScore ?? 100) < 60);
+   184→  if (metrics.criticalIssues > 0 || riskyClients.length > 0) {
+   185→    insights.push({
+   186→      id: 'churn-risk',
+   187→      icon: TrendingDown,
+   188→      tone: 'risk',
+   189→      what: riskyClients.length > 0
+   190→        ? `${riskyClients.length} client${riskyClients.length > 1 ? 's may' : ' may'} churn`
+   191→        : `${metrics.criticalIssues} critical issue${metrics.criticalIssues > 1 ? 's' : ''} need attention`,
+   192→      why: riskyClients.length > 0
+   193→        ? 'Low health scores signal dissatisfaction. Reach out before they leave.'
+   194→        : 'Critical issues compound into bigger problems if left unaddressed.',
+   195→      actionLabel: riskyClients.length > 0 ? 'View Clients' : 'Review Issues',
+   196→      actionView: riskyClients.length > 0 ? 'clients' : 'ai-operating-room',
+   197→    });
+   198→  }
+   199→
+   200→  // 4. Cash position / collections
+   201→  if (metrics.totalTaxVolume > 0) {
+   202→    insights.push({
+   203→      id: 'collections',
+   204→      icon: Wallet,
+   205→      tone: metrics.matchPercentage < 90 ? 'risk' : 'info',
+   206→      what: metrics.matchPercentage < 90
+   207→        ? 'Collections may drop — reconciliation gaps detected'
+   208→        : 'Cash position is healthy',
+   209→      why: metrics.matchPercentage < 90
+   210→        ? `${metrics.matchPercentage.toFixed(0)}% of invoices reconciled. Unmatched invoices mean uncollected revenue.`
+   211→        : `${metrics.matchPercentage.toFixed(0)}% invoice match rate. Keep chasing pending collections to maintain runway.`,
+   212→      actionLabel: 'Fix Collections',
+   213→      actionView: 'reconcile',
+   214→    });
+   215→  }
+   216→
+   217→  // 5. Compliance score insight
+   218→  if (metrics.averageHealthScore > 0) {
+   219→    const tier = metrics.averageHealthScore >= 80 ? 'success' : 'info';
+   220→    insights.push({
+   221→      id: 'compliance',
+   222→      icon: ShieldAlert,
+   223→      tone: tier,
+   224→      what: `Compliance health at ${metrics.averageHealthScore.toFixed(0)}%`,
+   225→      why: metrics.averageHealthScore >= 80
+   226→        ? 'Strong compliance posture. Maintain by filing on time and resolving warnings.'
+   227→        : 'Below optimal. Address pending returns and warnings to lift your score.',
+   228→      actionLabel: 'View Compliance',
+   229→      actionView: 'returns',
+   230→    });
+   231→  }
+   232→
+   233→  // 6. Always-on "Run My Business" nudge if nothing urgent
+   234→  if (insights.length === 0) {
+   235→    insights.push({
+   236→      id: 'all-clear',
+   237→      icon: Sparkles,
+   238→      tone: 'success',
+   239→      what: 'Everything looks good today',
+   240→      why: 'No urgent issues. Hand control to AI and let it run the routine work.',
+   241→      actionLabel: 'Run My Business',
+   242→      actionView: 'run-my-business',
+   243→    });
+   244→  }
+   245→
+   246→  return insights.slice(0, 6);
+   247→}
+   248→
+   249→// ─── Business Score Gauge (SVG) ───────────────────────────────────────────────
+   250→
+   251→function ScoreGauge({ score }: { score: number | null }) {
+   252→  const size = 220;
+   253→  const stroke = 14;
+   254→  const r = (size - stroke) / 2;
+   255→  const c = 2 * Math.PI * r;
+   256→  const pct = score === null ? 0 : score / 100;
+   257→  const offset = c * (1 - pct);
+   258→
+   259→  return (
+   260→    <div className="relative" style={{ width: size, height: size }}>
+   261→      <svg width={size} height={size} className="-rotate-90">
+   262→        <defs>
+   263→          <linearGradient id="missionScoreGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+   264→            <stop offset="0%" stopColor="#10b981" />
+   265→            <stop offset="50%" stopColor="#06b6d4" />
+   266→            <stop offset="100%" stopColor="#3b82f6" />
+   267→          </linearGradient>
+   268→        </defs>
+   269→        {/* Track */}
+   270→        <circle
+   271→          cx={size / 2}
+   272→          cy={size / 2}
+   273→          r={r}
+   274→          fill="none"
+   275→          stroke="rgba(255,255,255,0.06)"
+   276→          strokeWidth={stroke}
+   277→        />
+   278→        {/* Progress arc */}
+   279→        {score !== null && (
+   280→          <motion.circle
+   281→            cx={size / 2}
+   282→            cy={size / 2}
+   283→            r={r}
+   284→            fill="none"
+   285→            stroke="url(#missionScoreGradient)"
+   286→            strokeWidth={stroke}
+   287→            strokeLinecap="round"
+   288→            strokeDasharray={c}
+   289→            initial={{ strokeDashoffset: c }}
+   290→            animate={{ strokeDashoffset: offset }}
+   291→            transition={{ duration: 1.2, ease: 'easeOut', delay: 0.2 }}
+   292→          />
+   293→        )}
+   294→      </svg>
+   295→      <div className="absolute inset-0 flex flex-col items-center justify-center">
+   296→        {score === null ? (
+   297→          <span className="text-4xl font-bold text-muted-foreground">—</span>
+   298→        ) : (
+   299→          <motion.span
+   300→            initial={{ opacity: 0, scale: 0.8 }}
+   301→            animate={{ opacity: 1, scale: 1 }}
+   302→            transition={{ duration: 0.5, delay: 0.6 }}
+   303→            className={`text-6xl font-bold tracking-tight ${scoreTier(score).color}`}
+   304→          >
+   305→            {score}
+   306→          </motion.span>
+   307→        )}
+   308→        <span className="text-xs text-muted-foreground tracking-wider uppercase mt-1">
+   309→          / 100
+   310→        </span>
+   311→      </div>
+   312→    </div>
+   313→  );
+   314→}
+   315→
+   316→// ─── Mini Stat ────────────────────────────────────────────────────────────────
+   317→
+   318→function MiniStat({
+   319→  label, value, icon: Icon, hint,
+   320→}: {
+   321→  label: string;
+   322→  value: string;
+   323→  icon: typeof IndianRupee;
+   324→  hint?: string;
+   325→}) {
+   326→  return (
+   327→    <div className="glass-surface rounded-xl p-4 flex items-center gap-3">
+   328→      <div className="flex h-9 w-9 items-center justify-center rounded-lg accent-gradient-soft shrink-0">
+   329→        <Icon className="h-4 w-4 accent-text" />
+   330→      </div>
+   331→      <div className="min-w-0">
+   332→        <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground truncate">{label}</p>
+   333→        <p className="text-lg font-bold text-foreground leading-tight truncate">{value}</p>
+   334→        {hint && <p className="text-[10px] text-muted-foreground truncate">{hint}</p>}
+   335→      </div>
+   336→    </div>
+   337→  );
+   338→}
+   339→
+   340→// ─── AI Insight Row ───────────────────────────────────────────────────────────
+   341→
+   342→function InsightRow({
+   343→  insight, index, onAction,
+   344→}: {
+   345→  insight: AIInsight;
+   346→  index: number;
+   347→  onAction: (view: AppView) => void;
+   348→}) {
+   349→  const Icon = insight.icon;
+   350→  const toneColor =
+   351→    insight.tone === 'risk' ? 'text-amber-400' :
+   352→    insight.tone === 'success' ? 'text-emerald-400' :
+   353→    'text-cyan-400';
+   354→
+   355→  return (
+   356→    <motion.div
+   357→      initial={{ opacity: 0, x: -12 }}
+   358→      animate={{ opacity: 1, x: 0 }}
+   359→      transition={{ duration: 0.4, delay: 0.3 + index * 0.08 }}
+   360→      className="group flex items-start gap-4 rounded-xl p-4 hover:bg-white/[0.03] transition-colors"
+   361→    >
+   362→      <div className="flex h-8 w-8 items-center justify-center rounded-lg accent-gradient-soft shrink-0 mt-0.5">
+   363→        <Icon className={`h-4 w-4 ${toneColor}`} />
+   364→      </div>
+   365→      <div className="flex-1 min-w-0">
+   366→        <p className="text-sm font-medium text-foreground">{insight.what}</p>
+   367→        <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">{insight.why}</p>
+   368→      </div>
+   369→      <button
+   370→        onClick={() => onAction(insight.actionView)}
+   371→        className="shrink-0 inline-flex items-center gap-1 rounded-full border border-emerald-400/20 bg-emerald-500/10 px-3 py-1.5 text-xs font-medium text-emerald-300 transition-colors hover:border-emerald-400/40 hover:bg-emerald-500/20"
+   372→      >
+   373→        {insight.actionLabel}
+   374→        <ArrowRight className="h-3 w-3" />
+   375→      </button>
+   376→    </motion.div>
+   377→  );
+   378→}
+   379→
+   380→// ─── Loading Skeleton ─────────────────────────────────────────────────────────
+   381→
+   382→function MissionControlSkeleton() {
+   383→  return (
+   384→    <div className="max-w-5xl mx-auto px-4 md:px-6 py-10 space-y-8">
+   385→      <div className="space-y-3">
+   386→        <Skeleton className="h-3 w-32" />
+   387→        <Skeleton className="h-10 w-72" />
+   388→      </div>
+   389→      <div className="flex flex-col lg:flex-row gap-8 items-center">
+   390→        <Skeleton className="h-56 w-56 rounded-full" />
+   391→        <div className="flex-1 grid grid-cols-1 sm:grid-cols-3 gap-4 w-full">
+   392→          <Skeleton className="h-20 rounded-xl" />
+   393→          <Skeleton className="h-20 rounded-xl" />
+   394→          <Skeleton className="h-20 rounded-xl" />
+   395→        </div>
+   396→      </div>
+   397→      <Skeleton className="h-24 rounded-2xl" />
+   398→      <Skeleton className="h-14 max-w-2xl rounded-2xl mx-auto" />
+   399→      <Skeleton className="h-40 rounded-2xl" />
+   400→      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+   401→        <Skeleton className="h-64 rounded-2xl" />
+   402→        <Skeleton className="h-64 rounded-2xl" />
+   403→      </div>
+   404→    </div>
+   405→  );
+   406→}
+   407→
+   408→// ─── Main Component ───────────────────────────────────────────────────────────
+   409→
+   410→export default function MissionControlPage() {
+   411→  const { setCurrentView } = useApp();
+   412→  const { user } = useAuth();
+   413→  const { metrics, loading, error } = useLiveDashboardMetrics();
+   414→  const { data: clients } = useFireClients();
+   415→  const { data: activities } = useFireActivities();
+   416→
+   417→  // ── Ask-input local state ──
+   418→  const [askInput, setAskInput] = useState('');
+   419→
+   420→  // ── Graceful loading timeout ──
+   421→  // If live data hasn't arrived in 3.5s (e.g. slow backend or offline), stop
+   422→  // blocking the UI — render with whatever metrics we have (empty → null score
+   423→  // + "all clear" insight). Premium UX never makes the user stare at a skeleton.
+   424→  const [loadingTimedOut, setLoadingTimedOut] = useState(false);
+   425→  useEffect(() => {
+   426→    if (!loading) return;
+   427→    const t = setTimeout(() => setLoadingTimedOut(true), 3500);
+   428→    return () => clearTimeout(t);
+   429→  }, [loading]);
+   430→  const showLoading = loading && !loadingTimedOut;
+   431→
+   432→  // ── Business Score ──
+   433→  const businessScore = useMemo(() => computeBusinessScore({
+   434→    totalClients: metrics.totalClients,
+   435→    criticalIssues: metrics.criticalIssues,
+   436→    warnings: metrics.warnings,
+   437→    pendingReturns: metrics.pendingReturns,
+   438→    overdueReturns: metrics.overdueReturns,
+   439→    averageHealthScore: metrics.averageHealthScore,
+   440→    matchPercentage: metrics.matchPercentage,
+   441→  }), [metrics]);
+   442→
+   443→  // ── AI Insights ──
+   444→  const insights = useMemo(() => buildInsights({
+   445→    metrics: {
+   446→      totalClients: metrics.totalClients,
+   447→      pendingReturns: metrics.pendingReturns,
+   448→      overdueReturns: metrics.overdueReturns,
+   449→      criticalIssues: metrics.criticalIssues,
+   450→      warnings: metrics.warnings,
+   451→      totalTaxVolume: metrics.totalTaxVolume,
+   452→      averageHealthScore: metrics.averageHealthScore,
+   453→      matchPercentage: metrics.matchPercentage,
+   454→      upcomingFilings: metrics.upcomingFilings,
+   455→    },
+   456→    clients: clients as unknown as Array<FirestoreClient & { id: string }>,
+   457→  }), [metrics, clients]);
+   458→
+   459→  // Hero insight (first) + remaining for AI Recommendations card
+   460→  const heroInsight = insights[0];
+   461→  const remainingInsights = insights.slice(1);
+   462→
+   463→  const tier = scoreTier(businessScore);
+   464→
+   465→  // ── Cash position label ──
+   466→  const cashLabel = useMemo(() => {
+   467→    if (metrics.totalTaxVolume === 0 && metrics.totalClients === 0) return '—';
+   468→    if (businessScore === null) return '—';
+   469→    if (businessScore >= 80) return 'Healthy';
+   470→    if (businessScore >= 60) return 'Stable';
+   471→    if (businessScore >= 40) return 'Tight';
+   472→    return 'Strained';
+   473→  }, [metrics.totalTaxVolume, metrics.totalClients, businessScore]);
+   474→
+   475→  // ── Recent activities (top 6) ──
+   476→  const recentActivities = useMemo(() => activities.slice(0, 6), [activities]);
+   477→
+   478→  // ── Ask GSTPilot Intelligence ──
+   479→  const ask = (q: string) => {
+   480→    const question = q.trim();
+   481→    if (!question) return;
+   482→    window.dispatchEvent(new CustomEvent('gstpilot-ask', { detail: question }));
+   483→  };
+   484→
+   485→  const handleAskSubmit = (e: FormEvent) => {
+   486→    e.preventDefault();
+   487→    ask(askInput);
+   488→    setAskInput('');
+   489→  };
+   490→
+   491→  // ── Suggestion chips ──
+   492→  const suggestions: Array<{ label: string; onClick: () => void }> = [
+   493→    { label: 'Show pending returns', onClick: () => ask('Show pending returns') },
+   494→    { label: 'Run my firm', onClick: () => setCurrentView('autopilot') },
+   495→    { label: 'Why did collections drop?', onClick: () => ask('Why did collections drop?') },
+   496→    { label: 'Show risky clients', onClick: () => setCurrentView('clients') },
+   497→    { label: 'Generate report', onClick: () => ask('Generate a business report') },
+   498→  ];
+   499→
+   500→  // ── Loading ──
+   501→  if (showLoading) return <MissionControlSkeleton />;
+   502→
+   503→  // ── Error ──
+   504→  if (error) {
+   505→    return (
+   506→      <div className="max-w-2xl mx-auto px-4 py-20 text-center">
+   507→        <div className="glass-surface rounded-2xl p-8">
+   508→          <AlertTriangle className="h-10 w-10 text-amber-400 mx-auto mb-3" />
+   509→          <h3 className="text-lg font-semibold text-foreground">Couldn&apos;t load your mission control</h3>
+   510→          <p className="text-sm text-muted-foreground mt-1">{error}</p>
+   511→          <Button variant="outline" className="mt-4" onClick={() => window.location.reload()}>
+   512→            Retry
+   513→          </Button>
+   514→        </div>
+   515→      </div>
+   516→    );
+   517→  }
+   518→
+   519→  return (
+   520→    <div className="relative min-h-[calc(100vh-8rem)]">
+   521→      {/* Subtle radial glow at top */}
+   522→      <div
+   523→        className="pointer-events-none absolute inset-x-0 top-0 h-[480px] bg-[radial-gradient(ellipse_at_top,_rgba(16,185,129,0.10),_transparent_60%)]"
+   524→        aria-hidden
+   525→      />
+   526→
+   527→      <div className="relative max-w-5xl mx-auto px-4 md:px-6 py-8 md:py-12 space-y-8">
+   528→
+   529→        {/* ═══ 1. HEADER ═══ */}
+   530→        <motion.div
+   531→          initial={{ opacity: 0, y: -8 }}
+   532→          animate={{ opacity: 1, y: 0 }}
+   533→          transition={{ duration: 0.5, ease: 'easeOut' }}
+   534→          className="space-y-1.5"
+   535→        >
+   536→          <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+   537→            <Sparkles className="h-3.5 w-3.5 accent-text" />
+   538→            Today&apos;s Business Score
+   539→          </p>
+   540→          <h1 className="text-3xl md:text-4xl font-bold tracking-tight text-foreground">
+   541→            {greeting()}, {firstName(user?.name)} 👋
+   542→          </h1>
+   543→        </motion.div>
+   544→
+   545→        {/* ═══ 2 + 3. SCORE GAUGE + MINI STATS ═══ */}
+   546→        <motion.div
+   547→          initial={{ opacity: 0, y: 12 }}
+   548→          animate={{ opacity: 1, y: 0 }}
+   549→          transition={{ duration: 0.5, delay: 0.08, ease: 'easeOut' }}
+   550→          className="flex flex-col lg:flex-row gap-8 lg:gap-12 items-center"
+   551→        >
+   552→          <div className="flex flex-col items-center gap-2">
+   553→            <ScoreGauge score={businessScore} />
+   554→            <div className="text-center">
+   555→              <span className={`text-sm font-semibold ${tier.color}`}>{tier.label}</span>
+   556→            </div>
+   557→          </div>
+   558→
+   559→          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 w-full lg:flex-1">
+   560→            <MiniStat
+   561→              label="Revenue"
+   562→              value={metrics.totalTaxVolume > 0 ? formatINR(metrics.totalTaxVolume) : '—'}
+   563→              icon={IndianRupee}
+   564→              hint="Total tax volume"
+   565→            />
+   566→            <MiniStat
+   567→              label="Cash Position"
+   568→              value={cashLabel}
+   569→              icon={Wallet}
+   570→              hint={metrics.matchPercentage < 100 ? `${metrics.matchPercentage.toFixed(0)}% reconciled` : 'Fully reconciled'}
+   571→            />
+   572→            <MiniStat
+   573→              label="Compliance"
+   574→              value={metrics.pendingReturns + metrics.overdueReturns > 0
+   575→                ? `${metrics.pendingReturns + metrics.overdueReturns} pending`
+   576→                : 'All clear'}
+   577→              icon={ShieldAlert}
+   578→              hint={metrics.overdueReturns > 0 ? `${metrics.overdueReturns} overdue` : `${metrics.filedReturns} filed`}
+   579→            />
+   580→          </div>
+   581→        </motion.div>
+   582→
+   583→        {/* ═══ 4. AI INSIGHT (hero one-liner) ═══ */}
+   584→        {heroInsight && (
+   585→          <motion.div
+   586→            initial={{ opacity: 0, y: 12 }}
+   587→            animate={{ opacity: 1, y: 0 }}
+   588→            transition={{ duration: 0.5, delay: 0.16, ease: 'easeOut' }}
+   589→            className="glass-surface rounded-2xl p-5 md:p-6"
+   590→          >
+   591→            <div className="flex items-start gap-4">
+   592→              <div className="flex h-10 w-10 items-center justify-center rounded-xl accent-gradient shrink-0">
+   593→                <Brain className="h-5 w-5 text-white" />
+   594→              </div>
+   595→              <div className="flex-1 min-w-0">
+   596→                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+   597→                  AI Insight
+   598→                </p>
+   599→                <p className="text-base md:text-lg font-medium text-foreground leading-snug mt-1">
+   600→                  {heroInsight.what}
+   601→                </p>
+   602→                <p className="text-sm text-muted-foreground mt-1.5 leading-relaxed">
+   603→                  {heroInsight.why}
+   604→                </p>
+   605→              </div>
+   606→            </div>
+   607→          </motion.div>
+   608→        )}
+   609→
+   610→        {/* ═══ 5. RUN MY BUSINESS (centerpiece) ═══ */}
+   611→        <div className="flex justify-center">
+   612→          <motion.button
+   613→            initial={{ opacity: 0, y: 12 }}
+   614→            animate={{ opacity: 1, y: 0 }}
+   615→            transition={{ duration: 0.5, delay: 0.24, ease: 'easeOut' }}
+   616→            whileHover={{ scale: 1.01 }}
+   617→            whileTap={{ scale: 0.99 }}
+   618→            onClick={() => setCurrentView('run-my-business')}
+   619→            aria-label="Run my business"
+   620→            className="group w-full max-w-2xl flex items-center justify-center gap-3 rounded-2xl accent-gradient py-4 px-6 text-base md:text-lg font-semibold text-white shadow-lg shadow-emerald-500/30 transition-shadow hover:shadow-emerald-500/40"
+   621→          >
+   622→            <Rocket className="h-5 w-5" />
+   623→            <span>RUN MY BUSINESS</span>
+   624→            <ArrowRight className="h-4 w-4 opacity-70 transition-transform group-hover:translate-x-0.5" />
+   625→          </motion.button>
+   626→        </div>
+   627→
+   628→        {/* ═══ 6. HOW CAN I HELP TODAY? ═══ */}
+   629→        <motion.div
+   630→          initial={{ opacity: 0, y: 12 }}
+   631→          animate={{ opacity: 1, y: 0 }}
+   632→          transition={{ duration: 0.5, delay: 0.32, ease: 'easeOut' }}
+   633→          className="glass-surface rounded-2xl p-5 md:p-6 space-y-4"
+   634→        >
+   635→          <h3 className="text-sm font-semibold text-muted-foreground">
+   636→            How can I help today?
+   637→          </h3>
+   638→
+   639→          {/* Hero input */}
+   640→          <form onSubmit={handleAskSubmit} className="relative">
+   641→            <input
+   642→              type="text"
+   643→              value={askInput}
+   644→              onChange={(e) => setAskInput(e.target.value)}
+   645→              placeholder="Ask GSTPilot Intelligence..."
+   646→              aria-label="Ask GSTPilot Intelligence"
+   647→              className="w-full rounded-xl border border-white/[0.08] bg-white/[0.03] py-3.5 pl-4 pr-14 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-emerald-400/30 focus:bg-white/[0.05] transition-colors"
+   648→            />
+   649→            <button
+   650→              type="submit"
+   651→              disabled={!askInput.trim()}
+   652→              aria-label="Submit question"
+   653→              className="absolute right-1.5 top-1/2 -translate-y-1/2 flex h-9 w-9 items-center justify-center rounded-lg accent-gradient disabled:opacity-40 disabled:cursor-not-allowed hover:opacity-90 transition-opacity"
+   654→            >
+   655→              <ArrowUp className="h-4 w-4 text-white" />
+   656→            </button>
+   657→          </form>
+   658→
+   659→          {/* Suggestion chips */}
+   660→          <div className="flex flex-wrap gap-2">
+   661→            {suggestions.map((s) => (
+   662→              <button
+   663→                key={s.label}
+   664→                onClick={s.onClick}
+   665→                className="rounded-full border border-white/[0.08] bg-white/[0.03] px-3 py-1.5 text-xs text-muted-foreground hover:bg-white/[0.07] hover:text-foreground transition-colors"
+   666→              >
+   667→                {s.label}
+   668→              </button>
+   669→            ))}
+   670→          </div>
+   671→        </motion.div>
+   672→
+   673→        {/* ═══ 7. AI RECOMMENDATIONS + RECENT ACTIVITY ═══ */}
+   674→        <motion.div
+   675→          initial={{ opacity: 0, y: 12 }}
+   676→          animate={{ opacity: 1, y: 0 }}
+   677→          transition={{ duration: 0.5, delay: 0.40, ease: 'easeOut' }}
+   678→          className="grid grid-cols-1 lg:grid-cols-2 gap-6"
+   679→        >
+   680→          {/* LEFT: AI Recommendations */}
+   681→          <div className="glass-surface rounded-2xl p-2 md:p-3 flex flex-col">
+   682→            <div className="flex items-center gap-2 px-4 py-3">
+   683→              <div className="flex h-7 w-7 items-center justify-center rounded-lg accent-gradient-soft shrink-0">
+   684→                <Sparkles className="h-4 w-4 accent-text" />
+   685→              </div>
+   686→              <h2 className="text-sm font-semibold text-foreground">AI Recommendations</h2>
+   687→            </div>
+   688→            <div className="max-h-80 overflow-y-auto custom-scrollbar pr-1">
+   689→              {remainingInsights.length > 0 ? (
+   690→                <div className="space-y-1">
+   691→                  {remainingInsights.map((insight, i) => (
+   692→                    <InsightRow
+   693→                      key={insight.id}
+   694→                      insight={insight}
+   695→                      index={i}
+   696→                      onAction={(v) => setCurrentView(v)}
+   697→                    />
+   698→                  ))}
+   699→                </div>
+   700→              ) : (
+   701→                <div className="flex flex-col items-center justify-center text-center px-6 py-10">
+   702→                  <div className="flex h-10 w-10 items-center justify-center rounded-full accent-gradient-soft mb-3">
+   703→                    <Sparkles className="h-5 w-5 accent-text" />
+   704→                  </div>
+   705→                  <p className="text-sm text-foreground font-medium">You&apos;re all set</p>
+   706→                  <p className="text-xs text-muted-foreground mt-1">No further recommendations right now.</p>
+   707→                </div>
+   708→              )}
+   709→            </div>
+   710→          </div>
+   711→
+   712→          {/* RIGHT: Recent Activity */}
+   713→          <div className="glass-surface rounded-2xl p-2 md:p-3 flex flex-col">
+   714→            <div className="flex items-center gap-2 px-4 py-3">
+   715→              <div className="flex h-7 w-7 items-center justify-center rounded-lg accent-gradient-soft shrink-0">
+   716→                <Activity className="h-4 w-4 accent-text" />
+   717→              </div>
+   718→              <h2 className="text-sm font-semibold text-foreground">Recent Activity</h2>
+   719→            </div>
+   720→            <div className="max-h-80 overflow-y-auto custom-scrollbar pr-1">
+   721→              {recentActivities.length > 0 ? (
+   722→                <div className="space-y-1">
+   723→                  {recentActivities.map((act, i) => (
+   724→                    <motion.div
+   725→                      key={act.id}
+   726→                      initial={{ opacity: 0, x: -8 }}
+   727→                      animate={{ opacity: 1, x: 0 }}
+   728→                      transition={{ duration: 0.4, delay: 0.3 + i * 0.06, ease: 'easeOut' }}
+   729→                      className="flex items-start gap-3 rounded-xl px-4 py-3 hover:bg-white/[0.03] transition-colors"
+   730→                    >
+   731→                      <div className="flex h-5 w-5 items-center justify-center rounded-full border border-emerald-400/20 shrink-0 mt-0.5">
+   732→                        <div className="h-1.5 w-1.5 rounded-full accent-gradient" />
+   733→                      </div>
+   734→                      <div className="flex-1 min-w-0">
+   735→                        <p className="text-sm text-foreground truncate">{act.title}</p>
+   736→                        <p className="text-[11px] text-muted-foreground mt-0.5">{timeAgo(act.createdAt)}</p>
+   737→                      </div>
+   738→                    </motion.div>
+   739→                  ))}
+   740→                </div>
+   741→              ) : (
+   742→                <div className="flex flex-col items-center justify-center text-center px-6 py-10">
+   743→                  <div className="flex h-10 w-10 items-center justify-center rounded-full accent-gradient-soft mb-3">
+   744→                    <Activity className="h-5 w-5 accent-text" />
+   745→                  </div>
+   746→                  <p className="text-sm text-foreground font-medium">No recent activity yet</p>
+   747→                  <p className="text-xs text-muted-foreground mt-1">Actions across your firm will appear here.</p>
+   748→                </div>
+   749→              )}
+   750→            </div>
+   751→          </div>
+   752→        </motion.div>
+   753→      </div>
+   754→    </div>
+   755→  );
+   756→}
+   757→

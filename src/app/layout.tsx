@@ -16,7 +16,7 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "GSTPilot Intelligence™ — The Financial Brain of India",
+  title: "GSTPilot Oracle™ — The Financial Brain of India",
   description: "The world's most premium Financial Operating System for Chartered Accountants and Indian Businesses.",
 };
 

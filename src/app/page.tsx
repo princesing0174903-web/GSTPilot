@@ -21,7 +21,11 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Zap, LogOut, User, Settings, MailCheck, ArrowLeft, Sparkles } from 'lucide-react'
+import { Zap, LogOut, User, Settings, MailCheck, Search, Bell, Sun, Moon } from 'lucide-react'
+import { useTheme } from 'next-themes'
+import { LeftNav } from '@/components/layout/LeftNav'
+import { CommandBar } from '@/components/layout/CommandBar'
+import { OraclePanel } from '@/components/oracle/OraclePanel'
 import FirmCommandCenterPage from '@/components/firm-command-center/FirmCommandCenterPage'
 import MultiFirmPage from '@/components/multi-firm/MultiFirmPage'
 import AutopilotPage from '@/components/autopilot/AutopilotPage'
@@ -218,13 +222,11 @@ function DashboardContent() {
     ? user.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
     : 'U'
 
-  const isHome = currentView === 'dashboard'
-
   return (
-    <div className="min-h-screen flex flex-col bg-background">
-      {/* ═══ MINIMAL INFINITY TOP BAR ═══ */}
-      <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-white/[0.06] bg-background/80 px-4 backdrop-blur-xl md:px-6">
-        {/* Brand — clickable to go home */}
+    <div className="flex h-screen flex-col overflow-hidden bg-background">
+      {/* ═══ TOP BAR ═══ */}
+      <header className="flex h-14 shrink-0 items-center gap-3 border-b border-white/[0.06] bg-background/80 px-4 backdrop-blur-xl md:px-6">
+        {/* Brand + subtitle */}
         <button
           onClick={() => setCurrentView('dashboard')}
           className="flex items-center gap-2.5 rounded-lg outline-none transition-opacity hover:opacity-80"
@@ -233,37 +235,35 @@ function DashboardContent() {
           <span className="flex h-7 w-7 items-center justify-center rounded-lg accent-gradient shadow-lg shadow-emerald-500/20">
             <Zap className="h-4 w-4 text-white" fill="currentColor" />
           </span>
-          <span className="text-sm font-semibold tracking-tight text-foreground">GSTPilot</span>
-          <span className="rounded-md accent-gradient-soft px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider accent-text">
-            Infinity
-          </span>
+          <div className="hidden flex-col items-start leading-none sm:flex">
+            <span className="text-sm font-semibold tracking-tight text-foreground">
+              GSTPilot Infinity<span className="accent-text">™</span>
+            </span>
+            <span className="text-[10px] font-medium text-muted-foreground">
+              The Financial Brain of India
+            </span>
+          </div>
         </button>
 
-        {/* Back to Home — only on sub-views */}
-        {!isHome && (
+        {/* Right cluster: Search · Notifications · Theme · Profile */}
+        <div className="ml-auto flex items-center gap-1.5">
           <button
-            onClick={() => setCurrentView('dashboard')}
-            className="ml-1 inline-flex items-center gap-1.5 rounded-lg border border-white/[0.08] bg-white/[0.03] px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-white/[0.07] hover:text-foreground"
+            onClick={() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true }))}
+            className="flex h-8 items-center gap-2 rounded-lg border border-white/[0.08] bg-white/[0.03] px-2.5 text-xs text-muted-foreground transition-colors hover:bg-white/[0.07] hover:text-foreground"
+            aria-label="Search"
           >
-            <ArrowLeft className="h-3.5 w-3.5" />
-            Home
+            <Search className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Search</span>
+            <kbd className="hidden rounded bg-white/[0.06] px-1 py-0.5 text-[9px] font-semibold sm:inline">⌘K</kbd>
           </button>
-        )}
-
-        {/* Current view title — subtle, center-left */}
-        {!isHome && (
-          <span className="hidden text-xs font-medium text-muted-foreground/70 sm:inline">
-            {VIEW_TITLES[currentView] || ''}
-          </span>
-        )}
-
-        {/* Right cluster */}
-        <div className="ml-auto flex items-center gap-2">
-          {/* Hint to open AI */}
-          <kbd className="hidden items-center gap-1 rounded-md border border-white/[0.08] bg-white/[0.03] px-2 py-1 text-[10px] font-medium text-muted-foreground sm:inline-flex">
-            <Sparkles className="h-3 w-3 accent-text" />
-            Ctrl K
-          </kbd>
+          <button
+            className="relative flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-white/[0.05] hover:text-foreground"
+            aria-label="Notifications"
+          >
+            <Bell className="h-4 w-4" />
+            <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-emerald-400" />
+          </button>
+          <ThemeToggle />
           <DropdownMenu>
             <DropdownMenuTrigger className="flex items-center gap-2 rounded-lg px-1.5 py-1 outline-none transition-colors hover:bg-white/[0.05]">
               <Avatar className="h-7 w-7">
@@ -308,23 +308,42 @@ function DashboardContent() {
         </div>
       </header>
 
-      {/* ═══ MAIN ═══ */}
-      <main className="flex-1 overflow-auto">
-        {renderView()}
-      </main>
-
-      {/* ═══ STICKY FOOTER ═══ */}
-      <footer className="mt-auto border-t border-white/[0.06] bg-background/80 px-4 py-3 backdrop-blur-xl md:px-6">
-        <div className="mx-auto flex max-w-5xl flex-col items-center gap-1 text-center sm:flex-row sm:justify-between sm:text-left">
-          <p className="text-[11px] font-medium text-muted-foreground">
-            GSTPilot Infinity<span className="accent-text">™</span> · The Financial Brain of India
-          </p>
-          <p className="text-[10px] text-muted-foreground/60">
-            Open GSTPilot. Understand your business in seconds. Run it in one click.
-          </p>
+      {/* ═══ THREE-COLUMN WORKSPACE ═══ */}
+      <div className="flex min-h-0 flex-1 gap-3 p-3">
+        {/* LEFT NAV */}
+        <div className="shrink-0">
+          <LeftNav />
         </div>
-      </footer>
+
+        {/* MAIN WORKSPACE */}
+        <main className="min-w-0 flex-1 overflow-y-auto rounded-3xl pb-24 custom-scrollbar">
+          {renderView()}
+        </main>
+
+        {/* RIGHT AI PANEL (Oracle) — hidden below xl */}
+        <div className="hidden w-[340px] shrink-0 xl:block">
+          <OraclePanel onNavigate={setCurrentView} />
+        </div>
+      </div>
+
+      {/* ═══ COMMAND BAR (fixed, bottom center) ═══ */}
+      <CommandBar />
     </div>
+  )
+}
+
+// ─── Theme Toggle (inline) ─────────────────────────────────────────────────────
+function ThemeToggle() {
+  const { theme, setTheme } = useTheme()
+  const isDark = theme === 'dark'
+  return (
+    <button
+      onClick={() => setTheme(isDark ? 'light' : 'dark')}
+      className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-white/[0.05] hover:text-foreground"
+      aria-label="Toggle theme"
+    >
+      {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+    </button>
   )
 }
 
@@ -573,7 +592,7 @@ function AppRouter() {
 
   if (currentScreen === 'app' && isAuthenticated) {
     return (
-      <div className="min-h-screen flex flex-col">
+      <div className="flex min-h-screen flex-col">
         {needsEmailVerification && <EmailVerificationBanner />}
         <DashboardContent />
       </div>

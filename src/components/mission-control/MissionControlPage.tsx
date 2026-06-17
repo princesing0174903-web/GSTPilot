@@ -1,19 +1,19 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — AI Mission Control™
-// The ONE screen. Open GSTPilot in the morning → receive one screen.
-// Greeting · Business Score · 3 mini stats · ONE AI Insight · RUN MY BUSINESS
-// How can I help today? · AI Recommendations · Recent Activity
-// No dashboards. No clutter. No menus.
+// GSTPilot Infinity™ V15 — Mission Control
+// The main workspace hero: Greeting · AI Insight · Business Score · 3 KPI · 5 Widgets.
+// The global Command Bar (bottom) + Oracle Panel (right) are separate surfaces,
+// built by other agents. This file is purely the focused home workspace.
+// No clutter. No menus. No fake data. Calm, premium, expensive.
 // ═══════════════════════════════════════════════════════════════════════════════
 
-import { useMemo, useState, useEffect, type FormEvent } from 'react';
+import { useMemo, useState, useEffect, type ReactNode } from 'react';
 import { motion } from 'framer-motion';
 import {
   Sparkles, TrendingDown, AlertTriangle, Clock, Brain,
-  Rocket, Wallet, ArrowRight, IndianRupee, ShieldAlert,
-  ArrowUp, Activity,
+  Wallet, ArrowRight, IndianRupee, ShieldAlert,
+  ListTodo, Plug, Users, Lightbulb, CheckCircle2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -45,7 +45,7 @@ function firstName(name?: string): string {
   return name.split(' ')[0];
 }
 
-// ─── Relative time formatter (for Recent Activity) ────────────────────────────
+// ─── Relative time formatter (for Business Timeline widget) ───────────────────
 // Firestore timestamps are converted to ISO strings by use-firestore's convertDoc,
 // but we defensively handle Date objects and raw Firestore Timestamps too.
 
@@ -230,7 +230,7 @@ function buildInsights(opts: {
     });
   }
 
-  // 6. Always-on "Run My Business" nudge if nothing urgent
+  // 6. Always-on "all clear" nudge if nothing urgent
   if (insights.length === 0) {
     insights.push({
       id: 'all-clear',
@@ -313,7 +313,7 @@ function ScoreGauge({ score }: { score: number | null }) {
   );
 }
 
-// ─── Mini Stat ────────────────────────────────────────────────────────────────
+// ─── Mini Stat (KPI card) ─────────────────────────────────────────────────────
 
 function MiniStat({
   label, value, icon: Icon, hint,
@@ -324,7 +324,7 @@ function MiniStat({
   hint?: string;
 }) {
   return (
-    <div className="glass-surface rounded-xl p-4 flex items-center gap-3">
+    <div className="glass-surface rounded-2xl p-4 flex items-center gap-3">
       <div className="flex h-9 w-9 items-center justify-center rounded-lg accent-gradient-soft shrink-0">
         <Icon className="h-4 w-4 accent-text" />
       </div>
@@ -337,43 +337,63 @@ function MiniStat({
   );
 }
 
-// ─── AI Insight Row ───────────────────────────────────────────────────────────
+// ─── Widget Card wrapper ──────────────────────────────────────────────────────
 
-function InsightRow({
-  insight, index, onAction,
+function WidgetCard({
+  icon: Icon, title, children, delay = 0, className,
 }: {
-  insight: AIInsight;
-  index: number;
-  onAction: (view: AppView) => void;
+  icon: typeof Sparkles;
+  title: string;
+  children: ReactNode;
+  delay?: number;
+  className?: string;
 }) {
-  const Icon = insight.icon;
-  const toneColor =
-    insight.tone === 'risk' ? 'text-amber-400' :
-    insight.tone === 'success' ? 'text-emerald-400' :
-    'text-cyan-400';
-
   return (
     <motion.div
-      initial={{ opacity: 0, x: -12 }}
-      animate={{ opacity: 1, x: 0 }}
-      transition={{ duration: 0.4, delay: 0.3 + index * 0.08 }}
-      className="group flex items-start gap-4 rounded-xl p-4 hover:bg-white/[0.03] transition-colors"
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5, delay, ease: 'easeOut' }}
+      className={`glass-surface rounded-3xl p-5 flex flex-col ${className ?? ''}`}
     >
-      <div className="flex h-8 w-8 items-center justify-center rounded-lg accent-gradient-soft shrink-0 mt-0.5">
-        <Icon className={`h-4 w-4 ${toneColor}`} />
+      <div className="flex items-center gap-2 mb-4">
+        <div className="flex h-7 w-7 items-center justify-center rounded-lg accent-gradient-soft shrink-0">
+          <Icon className="h-4 w-4 accent-text" />
+        </div>
+        <h3 className="text-sm font-semibold text-foreground">{title}</h3>
       </div>
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-foreground">{insight.what}</p>
-        <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">{insight.why}</p>
-      </div>
-      <button
-        onClick={() => onAction(insight.actionView)}
-        className="shrink-0 inline-flex items-center gap-1 rounded-full border border-emerald-400/20 bg-emerald-500/10 px-3 py-1.5 text-xs font-medium text-emerald-300 transition-colors hover:border-emerald-400/40 hover:bg-emerald-500/20"
-      >
-        {insight.actionLabel}
-        <ArrowRight className="h-3 w-3" />
-      </button>
+      <div className="flex-1 min-h-0">{children}</div>
     </motion.div>
+  );
+}
+
+// ─── Calm Empty State ─────────────────────────────────────────────────────────
+
+function EmptyState({
+  icon: Icon, title, subtitle, actionLabel, onAction,
+}: {
+  icon: typeof Sparkles;
+  title: string;
+  subtitle?: string;
+  actionLabel?: string;
+  onAction?: () => void;
+}) {
+  return (
+    <div className="flex flex-col items-center justify-center text-center py-8 px-4">
+      <div className="flex h-10 w-10 items-center justify-center rounded-full accent-gradient-soft mb-3">
+        <Icon className="h-5 w-5 accent-text" />
+      </div>
+      <p className="text-sm text-foreground font-medium">{title}</p>
+      {subtitle && <p className="text-xs text-muted-foreground mt-1 max-w-[240px]">{subtitle}</p>}
+      {actionLabel && onAction && (
+        <button
+          onClick={onAction}
+          className="mt-3 inline-flex items-center gap-1 rounded-full border border-emerald-400/20 bg-emerald-500/10 px-3 py-1.5 text-xs font-medium text-emerald-300 transition-colors hover:border-emerald-400/40 hover:bg-emerald-500/20"
+        >
+          {actionLabel}
+          <ArrowRight className="h-3 w-3" />
+        </button>
+      )}
+    </div>
   );
 }
 
@@ -381,29 +401,40 @@ function InsightRow({
 
 function MissionControlSkeleton() {
   return (
-    <div className="max-w-5xl mx-auto px-4 md:px-6 py-10 space-y-8">
+    <div className="max-w-6xl mx-auto px-4 md:px-8 py-8 md:py-12 space-y-10">
       <div className="space-y-3">
-        <Skeleton className="h-3 w-32" />
         <Skeleton className="h-10 w-72" />
+        <Skeleton className="h-24 rounded-3xl" />
       </div>
-      <div className="flex flex-col lg:flex-row gap-8 items-center">
+      <div className="flex justify-center">
         <Skeleton className="h-56 w-56 rounded-full" />
-        <div className="flex-1 grid grid-cols-1 sm:grid-cols-3 gap-4 w-full">
-          <Skeleton className="h-20 rounded-xl" />
-          <Skeleton className="h-20 rounded-xl" />
-          <Skeleton className="h-20 rounded-xl" />
-        </div>
       </div>
-      <Skeleton className="h-24 rounded-2xl" />
-      <Skeleton className="h-14 max-w-2xl rounded-2xl mx-auto" />
-      <Skeleton className="h-40 rounded-2xl" />
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Skeleton className="h-64 rounded-2xl" />
-        <Skeleton className="h-64 rounded-2xl" />
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <Skeleton className="h-20 rounded-2xl" />
+        <Skeleton className="h-20 rounded-2xl" />
+        <Skeleton className="h-20 rounded-2xl" />
+      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        <Skeleton className="h-48 rounded-3xl" />
+        <Skeleton className="h-48 rounded-3xl" />
+        <Skeleton className="h-48 rounded-3xl" />
+        <Skeleton className="h-48 rounded-3xl" />
+        <Skeleton className="h-56 rounded-3xl lg:col-span-2" />
       </div>
     </div>
   );
 }
+
+// ─── Connected Services catalog (honest: all not-connected by default) ────────
+
+const CONNECTED_SERVICES: Array<{ id: string; name: string; initial: string }> = [
+  { id: 'google', name: 'Google', initial: 'G' },
+  { id: 'gmail', name: 'Gmail', initial: 'M' },
+  { id: 'outlook', name: 'Outlook', initial: 'O' },
+  { id: 'gstn', name: 'GSTN', initial: 'G' },
+  { id: 'whatsapp', name: 'WhatsApp', initial: 'W' },
+  { id: 'bank', name: 'Bank APIs', initial: 'B' },
+];
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
@@ -414,13 +445,13 @@ export default function MissionControlPage() {
   const { data: clients } = useFireClients();
   const { data: activities } = useFireActivities();
 
-  // ── Ask-input local state ──
-  const [askInput, setAskInput] = useState('');
+  // ── Priority checkbox toggle state (visual only, local) ──
+  const [done, setDone] = useState<Record<string, boolean>>({});
 
   // ── Graceful loading timeout ──
   // If live data hasn't arrived in 3.5s (e.g. slow backend or offline), stop
   // blocking the UI — render with whatever metrics we have (empty → null score
-  // + "all clear" insight). Premium UX never makes the user stare at a skeleton.
+  // + welcoming state). Premium UX never makes the user stare at a skeleton.
   const [loadingTimedOut, setLoadingTimedOut] = useState(false);
   useEffect(() => {
     if (!loading) return;
@@ -456,46 +487,47 @@ export default function MissionControlPage() {
     clients: clients as unknown as Array<FirestoreClient & { id: string }>,
   }), [metrics, clients]);
 
-  // Hero insight (first) + remaining for AI Recommendations card
+  // Hero insight (first) + compact recommendations (up to 4 more)
   const heroInsight = insights[0];
-  const remainingInsights = insights.slice(1);
+  const recommendations = useMemo(() => insights.slice(1, 5), [insights]);
 
   const tier = scoreTier(businessScore);
 
+  // ── "Has data" flag — drives honest empty vs welcoming states ──
+  const hasData = useMemo(() => (
+    metrics.totalClients > 0 ||
+    metrics.pendingReturns > 0 ||
+    metrics.overdueReturns > 0 ||
+    metrics.totalTaxVolume > 0
+  ), [metrics]);
+
   // ── Cash position label ──
   const cashLabel = useMemo(() => {
-    if (metrics.totalTaxVolume === 0 && metrics.totalClients === 0) return '—';
+    if (!hasData) return '—';
     if (businessScore === null) return '—';
     if (businessScore >= 80) return 'Healthy';
     if (businessScore >= 60) return 'Stable';
     if (businessScore >= 40) return 'Tight';
     return 'Strained';
-  }, [metrics.totalTaxVolume, metrics.totalClients, businessScore]);
+  }, [hasData, businessScore]);
 
-  // ── Recent activities (top 6) ──
-  const recentActivities = useMemo(() => activities.slice(0, 6), [activities]);
+  // ── Today's Priorities (derived from live data) ──
+  const priorities = useMemo<Array<{ id: string; label: string; view: AppView }>>(() => {
+    if (!hasData) return [];
+    const list: Array<{ id: string; label: string; view: AppView }> = [];
+    if (metrics.matchPercentage < 95 || metrics.criticalIssues > 0) {
+      list.push({ id: 'collections', label: 'Recover Collections', view: 'reconcile' });
+    }
+    if (metrics.pendingReturns > 0 || metrics.overdueReturns > 0) {
+      list.push({ id: 'gst', label: 'File GST Returns', view: 'returns' });
+    }
+    // Gentle nudge — always shown when there's data
+    list.push({ id: 'expenses', label: 'Review Expenses', view: 'invoices' });
+    return list.slice(0, 4);
+  }, [hasData, metrics.matchPercentage, metrics.criticalIssues, metrics.pendingReturns, metrics.overdueReturns]);
 
-  // ── Ask GSTPilot Intelligence ──
-  const ask = (q: string) => {
-    const question = q.trim();
-    if (!question) return;
-    window.dispatchEvent(new CustomEvent('gstpilot-ask', { detail: question }));
-  };
-
-  const handleAskSubmit = (e: FormEvent) => {
-    e.preventDefault();
-    ask(askInput);
-    setAskInput('');
-  };
-
-  // ── Suggestion chips ──
-  const suggestions: Array<{ label: string; onClick: () => void }> = [
-    { label: 'Show pending returns', onClick: () => ask('Show pending returns') },
-    { label: 'Run my firm', onClick: () => setCurrentView('autopilot') },
-    { label: 'Why did collections drop?', onClick: () => ask('Why did collections drop?') },
-    { label: 'Show risky clients', onClick: () => setCurrentView('clients') },
-    { label: 'Generate report', onClick: () => ask('Generate a business report') },
-  ];
+  // ── Business Timeline (top 5 recent activities) ──
+  const timelineActivities = useMemo(() => activities.slice(0, 5), [activities]);
 
   // ── Loading ──
   if (showLoading) return <MissionControlSkeleton />;
@@ -518,238 +550,283 @@ export default function MissionControlPage() {
 
   return (
     <div className="relative min-h-[calc(100vh-8rem)]">
-      {/* Subtle radial glow at top */}
+      {/* Subtle radial glow at top — adds depth, premium feel */}
       <div
         className="pointer-events-none absolute inset-x-0 top-0 h-[480px] bg-[radial-gradient(ellipse_at_top,_rgba(16,185,129,0.10),_transparent_60%)]"
         aria-hidden
       />
 
-      <div className="relative max-w-5xl mx-auto px-4 md:px-6 py-8 md:py-12 space-y-8">
+      <div className="relative max-w-6xl mx-auto px-4 md:px-8 py-8 md:py-12 space-y-10">
 
-        {/* ═══ 1. HEADER ═══ */}
-        <motion.div
-          initial={{ opacity: 0, y: -8 }}
+        {/* ═══ 1. HERO — Greeting + AI Insight ═══ */}
+        <motion.section
+          initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, ease: 'easeOut' }}
-          className="space-y-1.5"
+          className="space-y-6"
         >
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-            <Sparkles className="h-3.5 w-3.5 accent-text" />
-            Today&apos;s Business Score
-          </p>
           <h1 className="text-3xl md:text-4xl font-bold tracking-tight text-foreground">
             {greeting()}, {firstName(user?.name)} 👋
           </h1>
-        </motion.div>
 
-        {/* ═══ 2 + 3. SCORE GAUGE + MINI STATS ═══ */}
-        <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.08, ease: 'easeOut' }}
-          className="flex flex-col lg:flex-row gap-8 lg:gap-12 items-center"
-        >
-          <div className="flex flex-col items-center gap-2">
-            <ScoreGauge score={businessScore} />
-            <div className="text-center">
-              <span className={`text-sm font-semibold ${tier.color}`}>{tier.label}</span>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 w-full lg:flex-1">
-            <MiniStat
-              label="Revenue"
-              value={metrics.totalTaxVolume > 0 ? formatINR(metrics.totalTaxVolume) : '—'}
-              icon={IndianRupee}
-              hint="Total tax volume"
-            />
-            <MiniStat
-              label="Cash Position"
-              value={cashLabel}
-              icon={Wallet}
-              hint={metrics.matchPercentage < 100 ? `${metrics.matchPercentage.toFixed(0)}% reconciled` : 'Fully reconciled'}
-            />
-            <MiniStat
-              label="Compliance"
-              value={metrics.pendingReturns + metrics.overdueReturns > 0
-                ? `${metrics.pendingReturns + metrics.overdueReturns} pending`
-                : 'All clear'}
-              icon={ShieldAlert}
-              hint={metrics.overdueReturns > 0 ? `${metrics.overdueReturns} overdue` : `${metrics.filedReturns} filed`}
-            />
-          </div>
-        </motion.div>
-
-        {/* ═══ 4. AI INSIGHT (hero one-liner) ═══ */}
-        {heroInsight && (
-          <motion.div
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.16, ease: 'easeOut' }}
-            className="glass-surface rounded-2xl p-5 md:p-6"
-          >
+          <div className="glass-surface rounded-3xl p-5">
             <div className="flex items-start gap-4">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl accent-gradient shrink-0">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl accent-gradient shrink-0">
                 <Brain className="h-5 w-5 text-white" />
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
                   AI Insight
                 </p>
-                <p className="text-base md:text-lg font-medium text-foreground leading-snug mt-1">
-                  {heroInsight.what}
-                </p>
-                <p className="text-sm text-muted-foreground mt-1.5 leading-relaxed">
-                  {heroInsight.why}
-                </p>
+                {hasData && heroInsight ? (
+                  <>
+                    <p className="text-base font-medium text-foreground leading-snug mt-1">
+                      {heroInsight.what}
+                    </p>
+                    <p className="text-sm text-muted-foreground mt-1.5 leading-relaxed">
+                      {heroInsight.why}
+                    </p>
+                  </>
+                ) : (
+                  <p className="text-base font-medium text-foreground leading-snug mt-1">
+                    Connect your business data to unlock AI insights.
+                  </p>
+                )}
               </div>
-            </div>
-          </motion.div>
-        )}
-
-        {/* ═══ 5. RUN MY BUSINESS (centerpiece) ═══ */}
-        <div className="flex justify-center">
-          <motion.button
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.24, ease: 'easeOut' }}
-            whileHover={{ scale: 1.01 }}
-            whileTap={{ scale: 0.99 }}
-            onClick={() => setCurrentView('run-my-business')}
-            aria-label="Run my business"
-            className="group w-full max-w-2xl flex items-center justify-center gap-3 rounded-2xl accent-gradient py-4 px-6 text-base md:text-lg font-semibold text-white shadow-lg shadow-emerald-500/30 transition-shadow hover:shadow-emerald-500/40"
-          >
-            <Rocket className="h-5 w-5" />
-            <span>RUN MY BUSINESS</span>
-            <ArrowRight className="h-4 w-4 opacity-70 transition-transform group-hover:translate-x-0.5" />
-          </motion.button>
-        </div>
-
-        {/* ═══ 6. HOW CAN I HELP TODAY? ═══ */}
-        <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.32, ease: 'easeOut' }}
-          className="glass-surface rounded-2xl p-5 md:p-6 space-y-4"
-        >
-          <h3 className="text-sm font-semibold text-muted-foreground">
-            How can I help today?
-          </h3>
-
-          {/* Hero input */}
-          <form onSubmit={handleAskSubmit} className="relative">
-            <input
-              type="text"
-              value={askInput}
-              onChange={(e) => setAskInput(e.target.value)}
-              placeholder="Ask GSTPilot Intelligence..."
-              aria-label="Ask GSTPilot Intelligence"
-              className="w-full rounded-xl border border-white/[0.08] bg-white/[0.03] py-3.5 pl-4 pr-14 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-emerald-400/30 focus:bg-white/[0.05] transition-colors"
-            />
-            <button
-              type="submit"
-              disabled={!askInput.trim()}
-              aria-label="Submit question"
-              className="absolute right-1.5 top-1/2 -translate-y-1/2 flex h-9 w-9 items-center justify-center rounded-lg accent-gradient disabled:opacity-40 disabled:cursor-not-allowed hover:opacity-90 transition-opacity"
-            >
-              <ArrowUp className="h-4 w-4 text-white" />
-            </button>
-          </form>
-
-          {/* Suggestion chips */}
-          <div className="flex flex-wrap gap-2">
-            {suggestions.map((s) => (
-              <button
-                key={s.label}
-                onClick={s.onClick}
-                className="rounded-full border border-white/[0.08] bg-white/[0.03] px-3 py-1.5 text-xs text-muted-foreground hover:bg-white/[0.07] hover:text-foreground transition-colors"
-              >
-                {s.label}
-              </button>
-            ))}
-          </div>
-        </motion.div>
-
-        {/* ═══ 7. AI RECOMMENDATIONS + RECENT ACTIVITY ═══ */}
-        <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.40, ease: 'easeOut' }}
-          className="grid grid-cols-1 lg:grid-cols-2 gap-6"
-        >
-          {/* LEFT: AI Recommendations */}
-          <div className="glass-surface rounded-2xl p-2 md:p-3 flex flex-col">
-            <div className="flex items-center gap-2 px-4 py-3">
-              <div className="flex h-7 w-7 items-center justify-center rounded-lg accent-gradient-soft shrink-0">
-                <Sparkles className="h-4 w-4 accent-text" />
-              </div>
-              <h2 className="text-sm font-semibold text-foreground">AI Recommendations</h2>
-            </div>
-            <div className="max-h-80 overflow-y-auto custom-scrollbar pr-1">
-              {remainingInsights.length > 0 ? (
-                <div className="space-y-1">
-                  {remainingInsights.map((insight, i) => (
-                    <InsightRow
-                      key={insight.id}
-                      insight={insight}
-                      index={i}
-                      onAction={(v) => setCurrentView(v)}
-                    />
-                  ))}
-                </div>
-              ) : (
-                <div className="flex flex-col items-center justify-center text-center px-6 py-10">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full accent-gradient-soft mb-3">
-                    <Sparkles className="h-5 w-5 accent-text" />
-                  </div>
-                  <p className="text-sm text-foreground font-medium">You&apos;re all set</p>
-                  <p className="text-xs text-muted-foreground mt-1">No further recommendations right now.</p>
-                </div>
-              )}
             </div>
           </div>
+        </motion.section>
 
-          {/* RIGHT: Recent Activity */}
-          <div className="glass-surface rounded-2xl p-2 md:p-3 flex flex-col">
-            <div className="flex items-center gap-2 px-4 py-3">
-              <div className="flex h-7 w-7 items-center justify-center rounded-lg accent-gradient-soft shrink-0">
-                <Activity className="h-4 w-4 accent-text" />
-              </div>
-              <h2 className="text-sm font-semibold text-foreground">Recent Activity</h2>
-            </div>
-            <div className="max-h-80 overflow-y-auto custom-scrollbar pr-1">
-              {recentActivities.length > 0 ? (
-                <div className="space-y-1">
-                  {recentActivities.map((act, i) => (
-                    <motion.div
-                      key={act.id}
-                      initial={{ opacity: 0, x: -8 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ duration: 0.4, delay: 0.3 + i * 0.06, ease: 'easeOut' }}
-                      className="flex items-start gap-3 rounded-xl px-4 py-3 hover:bg-white/[0.03] transition-colors"
+        {/* ═══ 2. BUSINESS HEALTH SCORE ═══ */}
+        <motion.section
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.08, ease: 'easeOut' }}
+          className="flex flex-col items-center gap-2"
+        >
+          <ScoreGauge score={businessScore} />
+          <div className="text-center">
+            <span className={`text-sm font-semibold ${tier.color}`}>{tier.label}</span>
+          </div>
+          {businessScore === null && (
+            <p className="text-xs text-muted-foreground text-center max-w-[260px] mt-1">
+              Connect your business data to unlock AI insights.
+            </p>
+          )}
+        </motion.section>
+
+        {/* ═══ 3. KPI SECTION — exactly 3 cards ═══ */}
+        <motion.section
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.16, ease: 'easeOut' }}
+          className="grid grid-cols-1 sm:grid-cols-3 gap-4"
+        >
+          <MiniStat
+            label="Revenue"
+            value={metrics.totalTaxVolume > 0 ? formatINR(metrics.totalTaxVolume) : '—'}
+            icon={IndianRupee}
+            hint="Total tax volume"
+          />
+          <MiniStat
+            label="Cash Position"
+            value={cashLabel}
+            icon={Wallet}
+            hint={hasData
+              ? (metrics.matchPercentage < 100
+                ? `${metrics.matchPercentage.toFixed(0)}% reconciled`
+                : 'Fully reconciled')
+              : 'Awaiting data'}
+          />
+          <MiniStat
+            label="Compliance"
+            value={metrics.pendingReturns + metrics.overdueReturns > 0
+              ? `${metrics.pendingReturns + metrics.overdueReturns} pending`
+              : (hasData ? 'Safe' : '—')}
+            icon={ShieldAlert}
+            hint={hasData
+              ? (metrics.overdueReturns > 0
+                ? `${metrics.overdueReturns} overdue`
+                : `${metrics.filedReturns} filed`)
+              : 'Awaiting data'}
+          />
+        </motion.section>
+
+        {/* ═══ 4. WIDGETS — exactly 5 ═══ */}
+        <section className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+
+          {/* Widget 1: Today's Priorities */}
+          <WidgetCard icon={ListTodo} title="Today's Priorities" delay={0.24}>
+            {priorities.length > 0 ? (
+              <div className="space-y-1">
+                {priorities.map((p) => {
+                  const isDone = !!done[p.id];
+                  return (
+                    <div
+                      key={p.id}
+                      onClick={() => setCurrentView(p.view)}
+                      className="group flex items-center gap-3 rounded-xl px-3 py-2.5 hover:bg-white/[0.03] transition-colors cursor-pointer"
                     >
-                      <div className="flex h-5 w-5 items-center justify-center rounded-full border border-emerald-400/20 shrink-0 mt-0.5">
-                        <div className="h-1.5 w-1.5 rounded-full accent-gradient" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm text-foreground truncate">{act.title}</p>
+                      <button
+                        type="button"
+                        aria-label={`Mark ${p.label} as ${isDone ? 'incomplete' : 'complete'}`}
+                        aria-pressed={isDone}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setDone((d) => ({ ...d, [p.id]: !d[p.id] }));
+                        }}
+                        className={`flex h-5 w-5 items-center justify-center rounded-full border shrink-0 transition-colors ${
+                          isDone
+                            ? 'accent-gradient border-transparent'
+                            : 'border-white/[0.15] hover:border-emerald-400/40'
+                        }`}
+                      >
+                        {isDone && <CheckCircle2 className="h-3 w-3 text-white" />}
+                      </button>
+                      <span className={`text-sm flex-1 ${isDone ? 'text-muted-foreground line-through' : 'text-foreground'}`}>
+                        {p.label}
+                      </span>
+                      <ArrowRight className="h-3.5 w-3.5 text-muted-foreground/40 group-hover:text-emerald-400/70 transition-colors shrink-0" />
+                    </div>
+                  );
+                })}
+              </div>
+            ) : hasData ? (
+              <EmptyState
+                icon={ListTodo}
+                title="You're all caught up"
+                subtitle="No priorities right now."
+              />
+            ) : (
+              <EmptyState
+                icon={ListTodo}
+                title="No priorities yet"
+                subtitle="Connect your business data to see priorities."
+              />
+            )}
+          </WidgetCard>
+
+          {/* Widget 2: Business Timeline */}
+          <WidgetCard icon={Clock} title="Business Timeline" delay={0.32}>
+            {timelineActivities.length > 0 ? (
+              <div className="relative">
+                {timelineActivities.map((act, i) => {
+                  const isLast = i === timelineActivities.length - 1;
+                  return (
+                    <div key={act.id} className="relative flex gap-3 pb-4 last:pb-0">
+                      {!isLast && (
+                        <span
+                          className="absolute left-[9px] top-6 bottom-0 w-px bg-white/[0.08]"
+                          aria-hidden
+                        />
+                      )}
+                      <span className="relative z-10 flex h-[18px] w-[18px] items-center justify-center rounded-full border border-emerald-400/30 bg-[#09090B] shrink-0 mt-0.5">
+                        <span className="h-1.5 w-1.5 rounded-full accent-gradient" />
+                      </span>
+                      <div className="flex-1 min-w-0 pt-0.5">
+                        <p className="text-sm text-foreground leading-snug">{act.title}</p>
                         <p className="text-[11px] text-muted-foreground mt-0.5">{timeAgo(act.createdAt)}</p>
                       </div>
-                    </motion.div>
-                  ))}
-                </div>
-              ) : (
-                <div className="flex flex-col items-center justify-center text-center px-6 py-10">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full accent-gradient-soft mb-3">
-                    <Activity className="h-5 w-5 accent-text" />
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <EmptyState
+                icon={Clock}
+                title="No recent activity"
+                subtitle="Actions across your firm will appear here."
+              />
+            )}
+          </WidgetCard>
+
+          {/* Widget 3: Connected Services */}
+          <WidgetCard icon={Plug} title="Connected Services" delay={0.40}>
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {CONNECTED_SERVICES.map((s) => (
+                  <div
+                    key={s.id}
+                    className="flex items-center gap-2 rounded-xl border border-white/[0.06] bg-white/[0.02] px-3 py-2.5"
+                  >
+                    <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-white/[0.04] text-[11px] font-bold text-muted-foreground shrink-0">
+                      {s.initial}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-medium text-foreground truncate">{s.name}</p>
+                      <div className="flex items-center gap-1 mt-0.5">
+                        <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/40" />
+                        <span className="text-[10px] text-muted-foreground">Not connected</span>
+                      </div>
+                    </div>
                   </div>
-                  <p className="text-sm text-foreground font-medium">No recent activity yet</p>
-                  <p className="text-xs text-muted-foreground mt-1">Actions across your firm will appear here.</p>
-                </div>
-              )}
+                ))}
+              </div>
+              <p className="text-[11px] text-muted-foreground text-center pt-1">
+                Connect services to sync automatically.
+              </p>
             </div>
-          </div>
-        </motion.div>
+          </WidgetCard>
+
+          {/* Widget 4: Team Status */}
+          <WidgetCard icon={Users} title="Team Status" delay={0.48}>
+            {/* Honest empty state — we don't have team data yet */}
+            <EmptyState
+              icon={Users}
+              title="No team members yet"
+              subtitle="Invite your team to collaborate on clients, returns, and reconciliations."
+              actionLabel="Invite your team"
+              onAction={() => setCurrentView('team')}
+            />
+          </WidgetCard>
+
+          {/* Widget 5: AI Recommendations — full width */}
+          <WidgetCard icon={Lightbulb} title="AI Recommendations" delay={0.56} className="lg:col-span-2">
+            {hasData && recommendations.length > 0 ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {recommendations.map((insight) => {
+                  const Icon = insight.icon;
+                  const toneColor =
+                    insight.tone === 'risk' ? 'text-amber-400' :
+                    insight.tone === 'success' ? 'text-emerald-400' :
+                    'text-cyan-400';
+                  return (
+                    <div
+                      key={insight.id}
+                      className="flex flex-col gap-3 rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4 hover:bg-white/[0.04] transition-colors"
+                    >
+                      <div className="flex items-start gap-3">
+                        <div className="flex h-8 w-8 items-center justify-center rounded-lg accent-gradient-soft shrink-0">
+                          <Icon className={`h-4 w-4 ${toneColor}`} />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-foreground leading-snug">{insight.what}</p>
+                          <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{insight.why}</p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => setCurrentView(insight.actionView)}
+                        className="self-start inline-flex items-center gap-1 rounded-full border border-emerald-400/20 bg-emerald-500/10 px-3 py-1.5 text-xs font-medium text-emerald-300 transition-colors hover:border-emerald-400/40 hover:bg-emerald-500/20"
+                      >
+                        {insight.actionLabel}
+                        <ArrowRight className="h-3 w-3" />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <EmptyState
+                icon={Lightbulb}
+                title={hasData ? 'No recommendations right now' : 'No recommendations yet'}
+                subtitle={hasData
+                  ? 'Your business is in good shape — check back later for new guidance.'
+                  : 'Connect your business data for personalized AI guidance.'}
+              />
+            )}
+          </WidgetCard>
+
+        </section>
       </div>
     </div>
   );

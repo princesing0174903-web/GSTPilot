@@ -1,0 +1,264 @@
+total 5529
+drwxrwxrwx   1 z    z      4096 Jun 17 09:26 .
+drwxr-xr-x   1 z    z      4096 Jun 17 06:26 ..
+-rwxr-xr-x   1 z    z        50 Jun 16 08:20 .env
+drwxr-xr-x   8 z    z      4096 Jun 17 09:59 .git
+-rwxr-xr-x   1 z    z       586 May 12 10:06 .gitignore
+drwxr-xr-x   3 z    z      4096 Jun 17 05:41 .next
+drwxr-xr-x   2 z    z      4096 Jun 17 06:20 .zscripts
+-rwxr-xr-x   1 z    z       493 May 12 10:06 Caddyfile
+drwxr-xr-x   2 z    z      4096 Jun 16 13:51 agent-ctx
+-rwxr-xr-x   1 z    z    350585 Jun 14 14:05 bun.lock
+-rwxr-xr-x   1 z    z       430 May 12 10:06 components.json
+-rwxr-xr-x   1 z    z     83444 Jun  9 09:47 dashboard-after-login.png
+-rwxr-xr-x   1 z    z     33895 Jun  9 09:49 dashboard-mobile.png
+drwxr-xr-x   2 z    z      4096 Jun  9 09:26 db
+-rwxr-xr-x   1 z    z    296962 Jun  9 10:03 demo-login-check.png
+-rwxr-xr-x   1 z    z      2889 Jun 17 10:45 dev.log
+drwxr-xr-x   2 z    z      4096 Jun  9 09:26 download
+-rwxr-xr-x   1 z    z      1632 May 12 10:06 eslint.config.mjs
+drwxr-xr-x   3 z    z      4096 Jun  9 09:26 examples
+-rwxr-xr-x   1 z    z    134683 Jun 10 10:07 final-client-health.png
+-rwxr-xr-x   1 z    z    103676 Jun 10 10:06 final-command-center.png
+-rwxr-xr-x   1 z    z    113777 Jun 10 10:07 final-deadlines.png
+-rwxr-xr-x   1 z    z     40901 Jun 10 10:07 final-mobile-viewport.png
+-rwxr-xr-x   1 z    z     40901 Jun 10 10:07 final-mobile.png
+-rwxr-xr-x   1 z    z     75632 Jun 10 10:07 final-reconciliation.png
+-rwxr-xr-x   1 z    z     55266 Jun  9 10:00 firebase-auth-check.png
+-rwxr-xr-x   1 z    z    296962 Jun  9 10:07 firebase-auth-complete.png
+-rw-rw-r--   1 z    z     41518 Jun 17 06:28 infinity-home.png
+-rw-rw-r--   1 z    z     86934 Jun 17 09:26 infinity-v15-home.png
+-rwxr-xr-x   1 z    z    196044 Jun  9 09:49 landing-mobile.png
+-rwxr-xr-x   1 z    z    355552 Jun  9 09:43 landing-page-check.png
+-rwxr-xr-x   1 z    z    355839 Jun  9 09:45 landing-recheck.png
+-rwxr-xr-x   1 z    z     47479 Jun  9 09:49 login-mobile.png
+-rwxr-xr-x   1 z    z     18243 Jun  9 09:43 login-page-check.png
+-rwxr-xr-x   1 z    z    296920 Jun  9 09:46 login-page-working.png
+drwxr-xr-x   2 z    z      4096 Jun  9 09:26 mini-services
+-rwxr-xr-x   1 z    z       251 Jun 17 05:41 next-env.d.ts
+-rwxr-xr-x   1 z    z       300 Jun 15 09:52 next.config.ts
+drwxr-xr-x 592 z    z     20480 Jun 17 05:40 node_modules
+-rwxr-xr-x   1 z    z      3272 Jun 14 14:05 package.json
+-rwxr-xr-x   1 z    z        81 May 12 10:06 postcss.config.mjs
+drwxr-xr-x   2 z    z      4096 Jun  9 09:26 prisma
+drwxr-xr-x   2 z    z      4096 Jun  9 09:26 public
+-rwxr-xr-x   1 z    z    166578 Jun 10 09:57 screenshot-client-health.png
+-rwxr-xr-x   1 z    z    132611 Jun 10 09:57 screenshot-command-center-2.png
+-rwxr-xr-x   1 z    z    200452 Jun 10 09:59 screenshot-command-center-full.png
+-rwxr-xr-x   1 z    z     97596 Jun 10 09:57 screenshot-command-center.png
+-rwxr-xr-x   1 z    z     97942 Jun 10 10:00 screenshot-copilot-fab.png
+-rwxr-xr-x   1 z    z    125733 Jun 10 10:05 screenshot-copilot-final.png
+-rwxr-xr-x   1 z    z    126369 Jun 10 10:02 screenshot-copilot-open.png
+-rwxr-xr-x   1 z    z     85766 Jun 10 09:57 screenshot-deadlines.png
+-rwxr-xr-x   1 z    z    110515 Jun 10 09:57 screenshot-reconciliation.png
+-rwxr-xr-x   1 z    z    103968 Jun 10 10:02 screenshot-with-copilot.png
+drwxr-xr-x   2 z    z      4096 Jun 11 06:35 screenshots
+drwxr-xr-x  67 z    z      4096 Jun  9 09:26 skills
+drwxr-xr-x  11 z    z      4096 Jun 13 11:26 src
+-rwxr-xr-x   1 z    z      1696 May 12 10:06 tailwind.config.ts
+drwxr-xr-x   2 z    z     20480 Jun 17 09:12 tool-results
+-rwxr-xr-x   1 z    z       730 Jun  9 08:26 tsconfig.json
+-rw-rw-r--   1 z    z    975475 Jun 17 09:25 tsconfig.tsbuildinfo
+drwxrwxrwx   1 root root   4096 Jan  1  1970 upload
+-rwxrwxr-x   1 z    z    197561 Jun 17 09:28 worklog.md
+---
+- Read existing /home/z/my-project/src/components/mission-control/MissionControlPage.tsx (606 lines) — confirmed all helpers to keep: formatINR, greeting, firstName, computeBusinessScore, scoreTier, AIInsight interface, buildInsights, ScoreGauge (220px SVG gauge w/ missionScoreGradient), MiniStat, InsightRow, MissionControlSkeleton, ActionButton (to be removed), graceful 3.5s loading timeout, error state
+- Inspected /home/z/my-project/src/hooks/use-firestore.ts: confirmed `useFireActivities` returns `{ data: Array<FirestoreActivity & { id: string }>, loading, error }` ordered by createdAt desc; `useLiveDashboardMetrics` returns `{ metrics, loading, error }`; `useFireClients` returns `{ data, loading, error }`
+- Inspected /home/z/my-project/src/lib/firestore-schema.ts: FirestoreActivity has `{ activityId, firmId, userId, clientId, type, title, description, entityType, entityId, metadata, createdAt: unknown }`. createdAt is converted to ISO string by convertDoc in use-firestore.ts (so it'll be a string at runtime, but typed as unknown)
+- Inspected /home/z/my-project/src/contexts/AppContext.tsx: confirmed 'autopilot' and 'run-my-business' are both in the AppView union (Task 5 + previous orchestrator work)
+- Inspected /home/z/my-project/src/components/intelligence/GSTPilotIntelligence.tsx (lines 751–766): confirmed it listens for `window 'gstpilot-ask'` CustomEvent with `detail: string`, opens palette, defers sendMessage(question) to next animation frame
+- Inspected /home/z/my-project/src/app/page.tsx (lines 316–326): confirmed global sticky footer already exists with "GSTPilot Infinity™ · The Financial Brain of India" — so removed the in-component footer per spec
+- Inspected /home/z/my-project/src/app/globals.css: confirmed utility classes `.glass-surface`, `.glass-surface-strong`, `.accent-gradient`, `.accent-gradient-soft`, `.accent-text`, `.accent-ring`, `.section-gap`, `.custom-scrollbar`, `.scrollbar-thin` all present — used these exclusively, added NO new CSS
+- Rewrote MissionControlPage.tsx (606 → ~580 lines). ONE calm screen, top-to-bottom:
+  * (1) HEADER: small eyebrow "Today's Business Score" with Sparkles icon + h1 "Good {Morning|Afternoon|Evening}, {firstName} 👋"
+  * (2) SCORE GAUGE: existing 220px ScoreGauge with emerald→cyan→blue missionScoreGradient + tier label (Excellent/Healthy/At Risk/Critical)
+  * (3) 3 MINI STATS: Revenue (₹ totalTaxVolume), Cash Position (Healthy/Stable/Tight/Strained derived from score), Compliance (pending count or "All clear") — kept MiniStat component
+  * (4) AI INSIGHT HERO: glass-surface rounded-2xl card with Brain icon in accent-gradient swatch (h-10 w-10 rounded-xl) + "AI Insight" eyebrow + heroInsight.what in text-base md:text-lg font-medium + supporting heroInsight.why in text-sm muted. Uses FIRST insight from buildInsights()
+  * (5) [ RUN MY BUSINESS ] BUTTON: motion.button, w-full max-w-2xl mx-auto, accent-gradient bg, py-4 px-6, rounded-2xl, text-base md:text-lg font-semibold text-white, shadow-lg shadow-emerald-500/30 hover:shadow-emerald-500/40, whileHover scale 1.01, whileTap scale 0.99, Rocket icon + "RUN MY BUSINESS" label + trailing ArrowRight that nudges on hover. onClick → setCurrentView('run-my-business'). Replaced the old 4-button ActionButton grid entirely
+  * (6) HOW CAN I HELP TODAY? glass-surface rounded-2xl card with: heading "How can I help today?" + hero <form> input (rounded-xl, border-white/[0.08], bg-white/[0.03], py-3.5 pl-4 pr-14, focus ring emerald) with absolute-positioned ArrowUp submit button in accent-gradient rounded-lg square (h-9 w-9, disabled when input empty) + 5 suggestion chips (rounded-full border border-white/[0.08] bg-white/[0.03] px-3 py-1.5 text-xs text-muted-foreground hover:bg-white/[0.07] hover:text-foreground transition-colors, wrapped in flex flex-wrap gap-2)
+  * (7) BOTTOM 2-COLUMN ROW (grid grid-cols-1 lg:grid-cols-2 gap-6): LEFT AI Recommendations card (Sparkles icon swatch + "AI Recommendations" title + max-h-80 overflow-y-auto custom-scrollbar, renders remainingInsights via existing InsightRow; calm empty state "You're all set" when only the hero insight exists) | RIGHT Recent Activity card (Activity icon swatch + "Recent Activity" title + max-h-80 overflow-y-auto custom-scrollbar, renders up to 6 recent activities each as a small emerald ring + dot + title + relative time via timeAgo() helper; calm empty state "No recent activity yet" when no activities)
+- Added timeAgo(createdAt: unknown) helper — defensively handles Date objects, ISO strings, raw Firestore Timestamps (with .toDate()), and invalid/falsy values; returns "just now" / "Nm ago" / "Nh ago" / "Nd ago" / "Nw ago" / "Nmo ago" / "Ny ago"
+- Suggestion chip behavior wired exactly per spec:
+  * "Show pending returns" → window.dispatchEvent(new CustomEvent('gstpilot-ask', { detail: 'Show pending returns' }))
+  * "Run my firm" → setCurrentView('autopilot')
+  * "Why did collections drop?" → dispatches gstpilot-ask with that question
+  * "Show risky clients" → setCurrentView('clients')
+  * "Generate report" → dispatches gstpilot-ask with "Generate a business report"
+- Hero input form: onSubmit preventDefault → ask(input) → setAskInput('') (clears input). The GSTPilotIntelligence orb listens for gstpilot-ask and auto-opens the palette + sends the question (wiring already done by orchestrator)
+- Imports cleaned: removed unused FileText, BarChart3 (ActionButton component deleted). Added ArrowUp, Activity from lucide-react. Added useFireActivities from '@/hooks/use-firestore'. Added type FormEvent from react for the input submit handler
+- Animations: every section is a motion.div with initial { opacity: 0, y: 12 } animate { opacity: 1, y: 0 } transition { duration: 0.5, ease: 'easeOut', delay: N } where N increments by 0.08 (0 → 0.08 → 0.16 → 0.24 → 0.32 → 0.40). RUN MY BUSINESS button combines initial/animate with whileHover scale 1.01 + whileTap scale 0.99. Activity rows have a smaller stagger (0.06 each). Restrained = premium
+- Loading state: kept the 3.5s graceful timeout (loadingTimedOut gate) — premium UX never blocks forever. Redesigned MissionControlSkeleton to mirror the new layout (greeting skeleton + score+stats skeleton + AI insight hero skeleton + RUN MY BUSINESS skeleton + ask card skeleton + 2-col bottom skeletons)
+- Error state: kept the existing glass-surface error card with AlertTriangle + Retry button
+- Container: `max-w-5xl mx-auto px-4 md:px-6 py-8 md:py-12 space-y-8` (per spec). Radial emerald glow at top preserved (`bg-[radial-gradient(ellipse_at_top,_rgba(16,185,129,0.10),_transparent_60%)]`, pointer-events-none, aria-hidden)
+- Removed: old ActionButton component, old 4-button grid (Fix Collections / File GST / Generate Report / Run My Business), old "AI says" full-width card (replaced with hero AI Insight + AI Recommendations split), old in-component footer "GSTPilot Infinity™ · The Financial Brain of India" (page.tsx shell already has global sticky footer)
+- Did NOT import SidebarProvider/SidebarTrigger (sidebar removed from app shell)
+- TypeScript fix: added `matchPercentage: number` to the buildInsights opts.metrics type AND passed `matchPercentage: metrics.matchPercentage` at the call site. This was a pre-existing TS error in the original buildInsights (function accessed metrics.matchPercentage but the type didn't declare it). Behavior unchanged — just a type annotation fix so the file is 100% tsc-clean
+- Verification:
+  * `bun run lint` → 0 errors, 0 warnings, exit 0 ✓
+  * `bunx tsc --noEmit` → 0 errors in src/components/mission-control/MissionControlPage.tsx ✓ (the 5 pre-existing matchPercentage errors in buildInsights were resolved by the type annotation fix; the 4 pre-existing AppView errors in the original file were already resolved by other agents extending the AppView union in AppContext.tsx)
+
+Stage Summary:
+- Deliverable: /home/z/my-project/src/components/mission-control/MissionControlPage.tsx (~580 lines, 'use client', default export)
+- ONE calm, minimal, futuristic screen. Top-to-bottom: Greeting + eyebrow → Business Score gauge (220px emerald→cyan→blue SVG) + 3 mini stats → AI Insight hero (Brain icon + one-line what + supporting why) → [ RUN MY BUSINESS ] centerpiece button (accent-gradient, full-width max-w-2xl, Rocket icon, whileHover 1.01, whileTap 0.99) → "How can I help today?" glass card with hero input + ArrowUp submit + 5 suggestion chips → 2-col bottom row (AI Recommendations | Recent Activity), each with max-h-80 scrollable lists and calm empty states
+- Replaced: old 4-button ActionButton grid → ONE RUN MY BUSINESS button. Old "AI says" full card → split into hero AI Insight + AI Recommendations card. Old in-component footer → removed (page.tsx shell has global footer)
+- Added: useFireActivities hook for Recent Activity section; timeAgo() helper for relative timestamps; ask() dispatcher + handleAskSubmit form handler; suggestions array wiring chips to either gstpilot-ask event dispatch or setCurrentView navigation
+- Kept verbatim: formatINR, greeting, firstName, computeBusinessScore, scoreTier, AIInsight interface, ScoreGauge, MiniStat, InsightRow, MissionControlSkeleton, graceful 3.5s loading timeout, error state. buildInsights kept with one trivial type annotation fix (added matchPercentage to opts.metrics type — pre-existing TS bug)
+- Design system compliance: exclusively .glass-surface + .accent-gradient + .accent-gradient-soft + .accent-text + .custom-scrollbar utility classes from globals.css. NO new CSS added. Single Emerald→Cyan→Blue accent throughout. Background #09090B. Restrained framer-motion fade-up (duration 0.5, 0.08s stagger)
+- Lint: 0 errors, 0 warnings. TypeScript: 0 errors in this file
+
+---
+Task ID: 5-ORCHESTRATOR
+Agent: GSTPilot Architect (Infinity™ Radical Simplification)
+Task: GSTPilot Infinity™ — remove large sidebar, ONE-screen home with single RUN MY BUSINESS button + "How can I help today?" input, verify end-to-end
+
+Work Log:
+- Read worklog + current state: page.tsx had SidebarProvider/AppSidebar + 40+ view router + WorkflowTracker bar; MissionControlPage already had 4 action buttons; GSTPilotIntelligence orb managed own isOpen state via Ctrl+K
+- Wired the orb to listen for custom 'gstpilot-ask' window events: added useEffect in GSTPilotIntelligence.tsx (after sendMessage useCallback) that opens the palette + calls sendMessage(question) on 'gstpilot-ask' events. This lets the home input feed questions directly into the orb conversation — single source of truth.
+- Rewrote src/app/page.tsx shell: REMOVED SidebarProvider, AppSidebar, SidebarTrigger, SidebarInset, WorkflowTracker, Separator imports + usage. New shell = minimal sticky top bar (GSTPilot Infinity brand button → home, "← Home" back button on sub-views, Ctrl+K hint, avatar dropdown) + main + sticky footer ("GSTPilot Infinity™ · The Financial Brain of India" + "Open GSTPilot. Understand your business in seconds. Run it in one click."). Root = min-h-screen flex flex-col, footer mt-auto. Removed the flex-1 flex wrapper around DashboardContent.
+- Dispatched MissionControlPage redesign to frontend-styling-expert subagent (Task 5-a): rewrote to ONE big RUN MY BUSINESS button (accent-gradient, full-width, Rocket icon) replacing the 4-button grid, added "How can I help today?" glass card with hero input "Ask GSTPilot Intelligence..." + ArrowUp submit + 5 suggestion chips (Show pending returns / Run my firm / Why did collections drop? / Show risky clients / Generate report), kept ScoreGauge + 3 mini stats + AI Insight hero line, added bottom 2-col row (AI Recommendations + Recent Activities via useFireActivities). Chips dispatch 'gstpilot-ask' events or setCurrentView. Subagent reported lint 0/0, tsc clean.
+- Verified dev server compiles cleanly (killed stale next-server pid 1032 holding port 3000 from a previous session, started fresh — Ready in 593ms)
+- Applied temporary DEV_BYPASS_AUTH in AuthContext (dev user: Prince Kumar, prince@gstpilot.in, firm "Prince & Associates CA") for Agent Browser verification, then FULLY REVERTED (removed the entire bypass block + DEV_USER constant — AuthContext is now pristine)
+- Agent Browser end-to-end verification via Caddy gateway (localhost:81):
+  * Title: "GSTPilot Intelligence™ — The Financial Brain of India" ✓
+  * Top bar: "GSTPilot Infinity — Home" brand + "PK Prince" avatar, NO sidebar ✓
+  * Greeting: "Good Morning, Prince 👋" + "TODAY'S BUSINESS SCORE" eyebrow ✓
+  * Business Health Score gauge: shows "—" gracefully (no Firestore data for dev user — computeBusinessScore returns null) ✓
+  * 3 mini stats: Revenue / Cash Position / Compliance ✓
+  * AI Insight hero: "Everything looks good today" + "No urgent issues..." ✓
+  * ONE "Run my business" button (replaced 4-button grid) ✓
+  * "How can I help today?" + "Ask GSTPilot Intelligence" textbox + 5 suggestion chips ✓
+  * AI Recommendations + Recent Activity headings with calm empty states ✓
+  * GSTPilot Intelligence orb present ("Open GSTPilot Intelligence command palette") ✓
+  * Sticky footer: "GSTPilot Infinity™ · The Financial Brain of India | Open GSTPilot. Understand your business in seconds. Run it in one click." ✓
+  * RUN MY BUSINESS button click → navigated to run-my-business view, "Home" back button appeared ✓
+  * Ask input flow: typed "Why did collections drop?" + Enter → orb dialog opened, showed "YOU: Why did collections drop?" + AI response reading live data ("Total active invoices: ₹0...") ✓ — the gstpilot-ask event wiring works end-to-end
+  * "Show risky clients" chip → navigated to Client Registry view ("No clients yet" empty state) ✓
+  * Mobile (390×844): all sections stack vertically, avatar shows "PK" initials, full content present (greeting → score → 3 stats → AI insight → RUN MY BUSINESS → ask input → 5 chips → recommendations → activity), footer pushed below fold naturally ✓
+  * Desktop (1440×900): footer pushed down naturally (content 1194px > viewport 900px) — correct "natural push on overflow" ✓
+  * Console errors: ZERO ✓
+- Final lint: 0 errors, 0 warnings. tsc: no NEW errors in changed files (1 pre-existing error at AuthContext.tsx:129 `parsed.provider !== 'demo'` is unrelated and was there before).
+
+Stage Summary:
+- GSTPilot Infinity™ radical simplification SHIPPED + browser-verified.
+- Large sidebar REMOVED entirely. App shell is now: minimal sticky top bar (brand + back-to-home + avatar) + main + sticky footer. No 5-group collapsible sidebar, no WorkflowTracker bar, no 40-item navigation.
+- Home = ONE screen (MissionControlPage): greeting → Business Health Score gauge → 3 mini stats → AI Insight hero line → ONE big [ RUN MY BUSINESS ] button → "How can I help today?" hero input + 5 suggestion chips → AI Recommendations + Recent Activities.
+- The home ask input + suggestion chips feed directly into the GSTPilot Intelligence orb via custom 'gstpilot-ask' window events (orb opens + sends the question automatically). Single conversation source of truth.
+- Sub-views (returns, reconcile, clients, run-my-business, etc.) still reachable via AI action chips, suggestion chips, and the orb — just no sidebar. "Home" back button + clickable brand logo return to Mission Control.
+- Auth bypass used for verification, FULLY reverted (AuthContext pristine).
+- Calm empty states throughout ("Everything looks good today", "You're all set", "No recent activity yet") — no fake data, graceful when Firestore is empty.
+- The feeling: "I opened GSTPilot and an entire financial team is working for me."
+
+---
+Task ID: 6-a
+Agent: frontend-styling-expert (Oracle AI Panel)
+Task: Create /home/z/my-project/src/components/oracle/OraclePanel.tsx — the right persistent AI panel for GSTPilot Infinity™ V15 three-column layout (Left Nav · Main Workspace · Oracle AI Panel). Renamed from "GSTPilot Intelligence" to "GSTPilot Oracle™".
+
+Work Log:
+- Read worklog.md to internalize the v10/Infinity™ design system (#09090B canvas, glass-surface rgba(255,255,255,0.05)+blur(24px), single Emerald→Cyan→Blue accent gradient, Inter font, restrained motion, custom-scrollbar utility)
+- Read /src/contexts/AppContext.tsx — confirmed AppView union (90+ views including 'returns', 'reconcile', 'invoices', 'documents', 'banking', 'dashboard') and the onNavigate API shape
+- Read /src/hooks/use-firestore.ts — confirmed hook signatures and return types: useLiveDashboardMetrics() → { metrics, loading, error } with LiveDashboardMetrics fields (overdueReturns, pendingReturns, criticalIssues, warnings, matchPercentage, extractionsPending, totalClients); useFireActivities() → { data: (FirestoreActivity & {id})[], loading }; useFireNotifications() → { data: (FirestoreNotification & {id})[], loading }
+- Read /src/lib/firestore-schema.ts — confirmed FirestoreActivity (type: ActivityType union, title, createdAt) and FirestoreNotification (title, read, createdAt) shapes; ActivityType has no 'ai'/'workflow'/'automation' substrings, so I added a pragmatic AI-adjacent set (document_processed, invoice_extracted, invoice_corrected, reconciliation_run, mismatch_resolved, return_prepared) to make AI Activity useful without faking data
+- Read /src/components/ui/skeleton.tsx — confirmed shadcn Skeleton export
+- Read /src/components/mission-control/MissionControlPage.tsx timeAgo helper — adopted the same defensive pattern (handles ISO string, Date, Firestore Timestamp with toDate(), NaN guard, full m/h/d/w/mo/y progression)
+- Created /src/components/oracle/ directory
+- Wrote OraclePanel.tsx (~310 lines, fully self-contained, 'use client'):
+  * Props: { onNavigate: (view: AppView) => void }
+  * Root: motion.div with opacity 0→1 / 0.4s easeOut fade-in, .glass-surface .rounded-3xl .h-full .w-full .flex .flex-col
+  * Header: 32×32 accent-gradient square with Brain icon (white) + shadow-emerald-500/20 glow; "GSTPilot Oracle" text-sm font-semibold + ™ superscript (text-[9px]); "AI Active" indicator = emerald pulsing dot (animate-ping + solid) + "Live" text-[10px] text-muted-foreground
+  * Divider: border-t border-white/[0.06]
+  * Body: flex-1 overflow-y-auto custom-scrollbar space-y-5 p-4 holding all 5 sections
+  * Section 1 — Today's Actions (Zap icon, uppercase tracking-wider text-[10px] title): derived from metrics — File GSTR-3B (overdueReturns>0), File GSTR-1 (pendingReturns>0), Reconcile invoices (matchPercentage<90), Resolve critical issues (criticalIssues>0), Review document extractions (extractionsPending>0); empty state = "Connect bank to unlock actions" (totalClients===0) or "No actions pending". Action row = emerald dot + label + hint + ChevronRight (hover translate-x-0.5), onClick → onNavigate(view)
+  * Section 2 — Recommendations (Lightbulb): risk=amber-400 (AlertCircle), info=cyan-400 (Lightbulb), success=emerald-400 (CheckCircle2). Critical issues / overdue returns / match<90 / warnings derive items; otherwise single success item "Business is running smoothly"
+  * Section 3 — AI Activity (Activity): filters activities by isAiActivity(type) — accepts substring 'ai'/'workflow'/'automation' OR AI-adjacent ActivityType set. Each row = Bot icon (cyan-400/80) + title (text-xs) + timeAgo (text-[10px] text-muted-foreground). Empty = "AI is monitoring your business"
+  * Section 4 — Notifications (Bell): up to 5 notifs, unread styled bg-white/[0.04] brighter. Each = Bell icon + title + timeAgo. Empty = "No new notifications"
+  * Section 5 — Pending Decisions (ClipboardCheck): Approve GSTR-3B filing (pendingReturns>0), Review N mismatches (criticalIssues>0), Approve invoice extractions (extractionsPending>0). Each row = AlertCircle (amber-400/80) + label + hint + "Review" chip button (border-white/10, hover:border-emerald-400/30 hover:text-emerald-300) → onNavigate. Empty = "No decisions pending"
+  * Each section hard-capped at 5 via .slice(0, 5)
+  * Loading: if any of (metricsLoading || activitiesLoading || notificationsLoading) AND not timedOut → render OracleSkeleton (5 skeleton groups: title bar + 2 row skeletons each). 2.5s setTimeout flips timedOut=true so isLoading=false → empty states render instead of skeleton forever. Cleanup clearTimeout on unmount.
+  * All data derived from hooks — NEVER fabricated. Empty states are calm, muted (text-muted-foreground/70 + bg-muted-foreground/30 dot)
+  * Design discipline: only ONE accent gradient (.accent-gradient on header logo); tone colors are single solid colors (amber/cyan/emerald) only on icons, NOT gradients; no red/orange/purple anywhere
+  * Used `cn` from @/lib/utils for conditional classes (RecRow clickable state, Notification unread styling)
+  * timeAgo helper defensively handles ISO string / Date / Firestore Timestamp with toDate() / NaN
+  * Imported only what's used: Brain, Zap, Lightbulb, Activity, Bot, Bell, ClipboardCheck, AlertCircle, ChevronRight, CheckCircle2, type LucideIcon
+- Verification:
+  * `bun run lint` → 0 errors (clean output, only "$ eslint ." printed)
+  * `bunx tsc --noEmit` → 0 errors related to oracle/OraclePanel (grep "oracle" returns nothing; the ~2815 pre-existing project errors are all in OTHER files unrelated to this task)
+- Did NOT start dev server or run browser verification per spec
+
+Stage Summary:
+- Delivered: /home/z/my-project/src/components/oracle/OraclePanel.tsx (~310 lines, lint-clean, tsc-clean for this file)
+- OraclePanel is a self-contained, persistent right-side glass panel that derives 100% of its content from live Firestore data via useLiveDashboardMetrics / useFireActivities / useFireNotifications — no fabricated data, calm empty states everywhere
+- 5 sections capped at 5 items each, with consistent visual language (text-[10px] uppercase section titles, text-xs row labels, text-[10px] timestamps/hints, emerald/cyan/amber tone icons)
+- Loading uses shadcn Skeleton with 2.5s graceful timeout fallback to empty states
+- Ready to be embedded by the parent V15 shell: container should provide fixed ~340px width on xl screens (hidden on smaller), and pass onNavigate={setCurrentView} from useApp()
+- Design system honored: .glass-surface + .rounded-3xl container, single .accent-gradient on header logo only, .custom-scrollbar on body, framer-motion opacity 0→1 / 0.4s calm fade-in
+
+---
+Task ID: 6-b
+Agent: frontend-styling-expert (Mission Control V15)
+Task: Rewrite MissionControlPage.tsx per GSTPilot Infinity™ V15 spec — pure main-workspace hero (greeting + AI insight + score + 3 KPI + 5 widgets), removing the Command Bar input + RUN MY BUSINESS button + full Recommendations/Activity sections (those moved to global Command Bar + Oracle Panel).
+
+Work Log:
+- Read worklog.md (Main + V10/V14 history) and the existing MissionControlPage.tsx (757 lines) to understand the v10 design system, helpers (formatINR, greeting, firstName, timeAgo, computeBusinessScore, scoreTier, buildInsights, ScoreGauge, MiniStat, MissionControlSkeleton), and live-data hooks.
+- Verified design-system utilities in globals.css (.glass-surface, .accent-gradient, .accent-gradient-soft, .accent-text, .custom-scrollbar, .section-gap) and confirmed AppView union includes all views I navigate to (reconcile, returns, invoices, team, run-my-business, ai-operating-room, clients).
+- Confirmed LiveDashboardMetrics + FirestoreActivity shapes from firestore-schema.ts (title, createdAt, etc.) and use-firestore.ts hook signatures.
+- Rewrote MissionControlPage.tsx end-to-end (≈560 lines) with the V15 four-section vertical layout inside `max-w-6xl mx-auto px-4 md:px-8 py-8 md:py-12 space-y-10`:
+  1. Hero — h1 greeting + AI Insight glass card (Brain icon on solid accent-gradient h-9 w-9 swatch, "AI Insight" eyebrow, `what` in text-base font-medium + `why` in text-sm muted). Falls back to "Connect your business data to unlock AI insights." when no live data.
+  2. Business Health Score — centered ScoreGauge (kept 220px SVG, emerald→cyan→blue gradient, animated arc) + tier label; welcoming message shown below when score is null.
+  3. KPI — exactly 3 MiniStat cards (Revenue / Cash Position / Compliance) in `grid-cols-1 sm:grid-cols-3 gap-4`. Cash Position derived from score (Healthy/Stable/Tight/Strained). MiniStat style kept (rounded-2xl).
+  4. Widgets — exactly 5 in `grid-cols-1 lg:grid-cols-2 gap-5`, 5th spans `lg:col-span-2`:
+     • Today's Priorities (ListTodo) — checklist derived live: Recover Collections (match%<95 or criticalIssues>0), File GST Returns (pending/overdue>0), Review Expenses (gentle nudge). Local toggle state via useState; row click → setCurrentView. Honest empty states for no-data vs all-caught-up.
+     • Business Timeline (Clock) — up to 5 activities from useFireActivities() as vertical dot+line timeline with timeAgo().
+     • Connected Services (Plug) — 6 service chips (Google, Gmail, Outlook, GSTN, WhatsApp, Bank APIs) all honestly shown "Not connected" with muted dots + "Connect services to sync automatically." note.
+     • Team Status (Users) — honest empty state "No team members yet" + "Invite your team" → setCurrentView('team').
+     • AI Recommendations (Lightbulb) — up to 4 insights (insights.slice(1,5)) as 2-col compact cards with tone-colored icon + what + why + action chip → setCurrentView(actionView).
+- Removed: "How can I help today?" input + suggestion chips + handleAskSubmit/ask()/FormEvent, the "RUN MY BUSINESS" button (Rocket), the full AI Recommendations + Recent Activity sections (Activity icon), in-component footer (none existed). Removed unused imports: Rocket, ArrowUp, Activity, FormEvent. Added: ListTodo, Plug, Users, Lightbulb, CheckCircle2, ReactNode.
+- Added two small helpers: WidgetCard (glass-surface rounded-3xl p-5 wrapper with icon+title header + motion delay prop) and EmptyState (calm centered empty state with optional action chip).
+- KEPT everything required: 3.5s graceful loading timeout, error state with Retry, computeBusinessScore, scoreTier, buildInsights, ScoreGauge, MiniStat, MissionControlSkeleton (updated to match new 6xl/space-y-10 layout), formatINR, greeting, firstName, timeAgo.
+- Motion: subtle fade-up (opacity 0, y 12 → opacity 1, y 0), duration 0.5, staggered delays 0 / 0.08 / 0.16 / 0.24 / 0.32 / 0.40 / 0.48 / 0.56 across sections + widgets. Calm.
+- Honesty layer: introduced `hasData` flag (totalClients>0 || pendingReturns>0 || overdueReturns>0 || totalTaxVolume>0) that gates the AI Insight hero, score welcoming state, KPI hints, priorities, and recommendation empty states — NEVER fakes connected services or team members.
+- Responsive: mobile-first — gauge + KPI stack, widgets stack 1-col; lg breaks widgets to 2-col grid.
+- Verification: `bun run lint` → 0 errors project-wide (including this file). `bunx tsc --noEmit` → 0 errors in MissionControlPage.tsx (all remaining tsc errors are pre-existing in api.ts, use-firestore.ts, firestore-service.ts, AuthContext.tsx, lib/auth.ts — none introduced by this task).
+
+Stage Summary:
+- Delivered: /home/z/my-project/src/components/mission-control/MissionControlPage.tsx rewritten to V15 spec — pure main-workspace hero with 4 sections (Hero greeting+AI insight, centered Business Score, 3 KPI cards, 5 widgets). Command Bar input + RUN MY BUSINESS button + full Recommendations/Activity sections removed (now handled by global Command Bar + Oracle Panel).
+- Design system honored: glass surfaces, single emerald→cyan→blue accent gradient, 24px (rounded-3xl) radii, Inter, 32-48px section rhythm (space-y-10), calm motion.
+- Honest-data principle upheld: no fake connected services, no fake team members, welcoming "Connect your business data…" states everywhere when metrics are empty.
+- Lint clean (0 errors) and tsc clean for this file (0 new errors). No dev server / browser started.
+
+---
+Task ID: 6-ORCHESTRATOR
+Agent: GSTPilot Architect (Infinity™ V15 Three-Column)
+Task: GSTPilot Infinity™ V15 — three-column layout (LeftNav + Main + OraclePanel), top bar, bottom CommandBar, rename Intelligence→Oracle, verify end-to-end
+
+Work Log:
+- Read worklog + globals.css: confirmed v10 design tokens in place (#09090B bg, glass-surface blur 24px, emerald→cyan→blue accent, custom-scrollbar). V15 spec wants 24px radius = rounded-3xl, 32-48px section spacing.
+- Dispatched 2 parallel subagents:
+  * Task 6-a: OraclePanel (right AI panel — 5 sections: Today's Actions, Recommendations, AI Activity, Notifications, Pending Decisions, all from live Firestore hooks, honest empty states, 2.5s graceful timeout). ~310 lines, lint-clean.
+  * Task 6-b: MissionControlPage V15 redesign (greeting + AI Insight hero + Business Score gauge + 3 KPI + 5 widgets: Today's Priorities, Business Timeline, Connected Services, Team Status, AI Recommendations). Removed the ask input + RUN MY BUSINESS button + old recommendations/activity sections (moved to CommandBar + OraclePanel). ~560 lines, lint-clean.
+- Built LeftNav (src/components/layout/LeftNav.tsx): exactly 6 items (Home→dashboard, Intelligence→business-dna, Autopilot→run-my-business, Finance→reconcile, Network→business-graph, Settings→settings). Glassmorphism rounded-3xl, gradient active state with layoutId animated bar, icon rail (68px) below xl / full (200px) at xl. NAV_GROUP_MAP keeps active state correct in sub-views (returns→Finance, etc.).
+- Built CommandBar (src/components/layout/CommandBar.tsx): fixed bottom-center, glass-surface-strong rounded-3xl, "Ask GSTPilot Oracle…" input + Oracle icon + ArrowUp submit. Enter dispatches 'gstpilot-ask' event (orb opens + asks). "/" focuses input. Ctrl+K still handled by orb for fullscreen.
+- Rewrote src/app/page.tsx shell: h-screen flex flex-col overflow-hidden. Top bar (brand "GSTPilot Infinity™" + "The Financial Brain of India" subtitle | Search button dispatches Ctrl+K, Notifications w/ emerald dot, ThemeToggle Sun/Moon, Profile dropdown). Three-column workspace (LeftNav shrink-0 + main flex-1 overflow-y-auto pb-24 custom-scrollbar + OraclePanel w-340 hidden below xl). CommandBar fixed bottom-center. ThemeToggle inline component using useTheme. Removed old sidebar refs, Sparkles unused import.
+- Renamed "GSTPilot Intelligence" → "GSTPilot Oracle" across GSTPilotIntelligence.tsx (7 display strings: palette header, message headers, aria-labels, tooltip) + layout.tsx <title> + the orb's comment header. Component/file names unchanged to avoid breaking imports.
+- Applied temporary DEV_BYPASS_AUTH in AuthContext (dev user: Prince Kumar) for Agent Browser verification, then FULLY REVERTED (removed entire bypass block).
+- Agent Browser end-to-end verification via Caddy gateway (localhost:81):
+  * Desktop 1440×900 (3-column): top bar (GSTPilot Infinity™ brand + Search/Notifications/Theme/PK Prince) ✓, LeftNav exactly 6 items (Home/Intelligence/Autopilot/Finance/Network/Settings) ✓, main workspace (Good Morning Prince 👋 + AI Insight + Business Score gauge + 3 KPI + 5 widgets: Today's Priorities/Business Timeline/Connected Services/Team Status/AI Recommendations) ✓, right OraclePanel (GSTPilot Oracle™ Live header + TODAY'S ACTIONS/RECOMMENDATIONS/AI ACTIVITY/NOTIFICATIONS/PENDING DECISIONS) ✓, bottom CommandBar "Ask GSTPilot Oracle…" ✓, floating orb "Open GSTPilot Oracle command palette" ✓
+  * All empty states honest (no fake data): "Connect your business data to unlock AI insights", "Business is running smoothly", "Not connected" for Google/Gmail/Outlook/GSTN/WhatsApp/Bank, "No priorities yet", "No recent activity", "No new notifications", "Connect bank to unlock actions"
+  * Command bar flow: typed "Why did revenue drop?" + Enter → orb dialog opened ("GSTPilot Oracle™ command palette" + "GSTPilot Oracle™" heading) ✓ — gstpilot-ask event wiring works end-to-end
+  * Intelligence nav click → navigated to Business DNA page ("Add your first client to unlock your Business DNA") ✓
+  * Mobile 390×844: top bar (brand + Search/Notifications/Theme/PK initials), LeftNav collapses to 68px icon rail (6 icon buttons, labels hidden), main content all present (greeting + 5 widgets), OraclePanel HIDDEN (correct responsive), CommandBar still visible floating bottom, orb present ✓
+  * Console errors: ZERO ✓
+  * Title: "GSTPilot Oracle™ — The Financial Brain of India" ✓
+  * Screenshot saved: /home/z/my-project/infinity-v15-home.png
+- Final lint: 0 errors, 0 warnings. tsc: 0 errors in new files (LeftNav, CommandBar, OraclePanel, page.tsx). AuthContext pristine (bypass fully removed).
+
+Stage Summary:
+- GSTPilot Infinity™ V15 SHIPPED + browser-verified.
+- Architecture: 3-column layout (LeftNav 6 items · Main workspace · OraclePanel 5 sections) + top bar (brand + search/notifications/theme/profile) + bottom-center CommandBar + floating Oracle orb.
+- AI renamed: GSTPilot Intelligence → GSTPilot Oracle™ (all display strings + title + orb palette).
+- Home (Mission Control V15): greeting + AI Insight hero + Business Health Score gauge + 3 KPI (Revenue/Cash/Compliance) + 5 widgets (Today's Priorities/Business Timeline/Connected Services/Team Status/AI Recommendations).
+- Oracle Panel (right): Today's Actions + Recommendations + AI Activity + Notifications + Pending Decisions — all live data, honest empty states.
+- CommandBar (bottom): "Ask GSTPilot Oracle…" → dispatches gstpilot-ask → orb opens + asks. "/" focuses. Ctrl+K for fullscreen.
+- LeftNav: exactly 6 items (Home/Intelligence/Autopilot/Finance/Network/Settings), gradient active state, icon rail on mobile.
+- Responsive: OraclePanel hides below xl, LeftNav collapses to 68px icons, CommandBar always visible.
+- Zero console errors, zero fake data, premium calm dark aesthetic throughout.
+- "Open GSTPilot and your business runs itself."

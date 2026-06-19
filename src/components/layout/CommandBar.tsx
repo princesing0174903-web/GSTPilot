@@ -6,7 +6,7 @@
 //   • glass-surface-strong + search-glow on focus
 //   • InfinityMark symbol on the left, ArrowUp submit on the right
 //   • Example prompt chips below — hide while typing, reappear when empty
-//   • Enter → dispatches 'gstpilot-ask' (the Oracle orb opens + asks)
+//   • Enter → dispatches 'oracle-ask' (the GSTPilot Oracle™ workspace opens + asks)
 //   • "/" focuses the input (when not already typing in one)
 //   • Clicking a chip fills the input + submits immediately
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -47,7 +47,9 @@ export function CommandBar() {
   const ask = (q: string) => {
     const trimmed = q.trim();
     if (!trimmed) return;
-    window.dispatchEvent(new CustomEvent('gstpilot-ask', { detail: trimmed }));
+    // Route to the NEW full-screen GSTPilot Oracle™ workspace (listened to by
+    // OraclePanel). The legacy intelligence palette keeps its own launcher.
+    window.dispatchEvent(new CustomEvent('oracle-ask', { detail: trimmed }));
     setValue('');
     setShowChips(true);
   };

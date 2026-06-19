@@ -214,9 +214,26 @@ export function OraclePanel({ onNavigate }: OraclePanelProps) {
   // 2.5s graceful timeout — fall back to empty states if Firestore is slow.
   const [timedOut, setTimedOut] = useState(false);
   const [workspaceOpen, setWorkspaceOpen] = useState(false);
+  // Prefilled prompt forwarded into the workspace (e.g. from the CommandBar
+  // `oracle-ask` event). Cleared once the workspace consumes it.
+  const [pendingPrompt, setPendingPrompt] = useState<string | undefined>(undefined);
   useEffect(() => {
     const t = setTimeout(() => setTimedOut(true), 2500);
     return () => clearTimeout(t);
+  }, []);
+
+  // ── Listen for `oracle-ask` custom events (dispatched by the CommandBar and
+  //    any other launcher) so the full-screen Oracle workspace is reachable on
+  //    EVERY screen size — not just xl+ where the right panel is visible.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const question = (e as CustomEvent<string>).detail;
+      if (typeof question !== 'string' || !question.trim()) return;
+      setPendingPrompt(question);
+      setWorkspaceOpen(true);
+    };
+    window.addEventListener('oracle-ask', handler as EventListener);
+    return () => window.removeEventListener('oracle-ask', handler as EventListener);
   }, []);
 
   const isLoading = (metricsLoading || activitiesLoading) && !timedOut;
@@ -441,11 +458,15 @@ export function OraclePanel({ onNavigate }: OraclePanelProps) {
           parent glass-surface backdrop-filter does not trap the fixed layer) ═══ */}
       <OracleWorkspace
         open={workspaceOpen}
-        onClose={() => setWorkspaceOpen(false)}
+        onClose={() => {
+          setWorkspaceOpen(false);
+          setPendingPrompt(undefined);
+        }}
         onNavigate={onNavigate}
         userName={user?.name}
         firmName={undefined}
         gstin={undefined}
+        initialPrompt={pendingPrompt}
       />
     </>
   );

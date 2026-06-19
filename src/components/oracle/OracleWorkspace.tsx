@@ -55,6 +55,9 @@ interface OracleWorkspaceProps {
   userName?: string;
   firmName?: string;
   gstin?: string;
+  /** Optional prefilled question (e.g. from the CommandBar `oracle-ask` event).
+   *  When provided, the workspace auto-sends it once after opening. */
+  initialPrompt?: string;
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -98,7 +101,7 @@ const RAIL_ITEMS: RailItem[] = [
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export function OracleWorkspace({
-  open, onClose, onNavigate, userName, firmName, gstin,
+  open, onClose, onNavigate, userName, firmName, gstin, initialPrompt,
 }: OracleWorkspaceProps) {
   const [store, setStore] = useState<ConversationStore>({ conversations: [], activeId: null });
   // Portal guard: only render into document.body after mount to avoid SSR
@@ -119,6 +122,8 @@ export function OracleWorkspace({
   const abortRef = useRef<AbortController | null>(null);
   const userPinnedUpRef = useRef(false);
   const streamingIdRef = useRef<string | null>(null);
+  // Tracks the last initialPrompt we auto-sent, so we never fire it twice.
+  const initialPromptSentRef = useRef<string | null>(null);
 
   // ─── Load + migrate store on open ──────────────────────────────────────────
   useEffect(() => {
@@ -540,6 +545,20 @@ export function OracleWorkspace({
       requestAnimationFrame(() => inputRef.current?.focus());
     }
   }, [open]);
+
+  // ─── Auto-send a prefilled prompt (from the CommandBar / other launchers) ───
+  // Waits one tick so the conversation-load effect (also keyed on `open`) has
+  // settled messages/activeId before we send. Guarded by a ref so a given
+  // prompt is never sent twice.
+  useEffect(() => {
+    if (!open || !initialPrompt) return;
+    if (initialPromptSentRef.current === initialPrompt) return;
+    const t = setTimeout(() => {
+      initialPromptSentRef.current = initialPrompt;
+      sendMessage(initialPrompt);
+    }, 60);
+    return () => clearTimeout(t);
+  }, [open, initialPrompt, sendMessage]);
 
   // ─── Rail navigation ───────────────────────────────────────────────────────
   const handleRailClick = useCallback(

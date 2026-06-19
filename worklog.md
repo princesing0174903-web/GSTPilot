@@ -2194,3 +2194,80 @@ Stage Summary:
 - Fully mobile responsive (icon rail + drawer-based history).
 - All existing conversational logic preserved (streaming, memory, brand short-circuit, auto-scroll, follow-ups, emotion/language detection).
 - Files changed: src/components/oracle/OracleWorkspace.tsx (full rewrite), src/components/oracle/OraclePanel.tsx (onNavigate prop), src/components/oracle/OracleEmptyState.tsx (Obsidian theme).
+
+---
+Task ID: Oracle-Audit-Recovery
+Agent: GSTPilot Recovery Engineer
+Task: EMERGENCY RECOVERY — Forensic audit of why GSTPilot Oracle™ features "disappeared", then RESTORE all missing features WITHOUT redesign or rebuild.
+
+Work Log:
+- Read all Oracle files: OracleWorkspace.tsx (1259 lines), OraclePanel.tsx (455 lines), OracleEmptyState.tsx (138 lines), oracle-types.ts, oracle-human.ts, oracle-brand.ts, /api/oracle/chat/route.ts.
+- Read page.tsx (mounts OraclePanel inside `hidden w-[340px] xl:block` wrapper), AppContext.tsx (AppView union — NO 'oracle' view), LeftNav.tsx (6 items: Home/Intelligence/Autopilot/Finance/Network/Settings — NO Oracle entry), CommandBar.tsx (dispatches `gstpilot-ask`), providers.tsx (mounts OLD GSTPilotIntelligence globally), /intelligence/GSTPilotIntelligence.tsx (listens for `gstpilot-ask` → opens OLD palette → /api/intelligence).
+- Checked git: `git status` clean (no deletions), `git log -- oracle-memory.ts` empty (never tracked), `git ls-files --others` shows no untracked oracle files.
+- Searched for oracle-memory / MemoryPanel / OracleSidebar / OracleMemory references across src → ZERO matches.
+- Read dev.log: POST /api/oracle/chat returns 200 (streaming works), GET / 200, no errors.
+
+Forensic Findings (ROOT CAUSE):
+- NO files were deleted, renamed, or overwritten. git working tree is clean.
+- `oracle-memory.ts` was NEVER created (not in git, not referenced, not mentioned in the Oracle-Human-Experience worklog which lists exactly 7 files created). The "4-layer memory system" is INLINE: (a) memory payload built in OracleWorkspace.sendMessage() {userName, firmName, gstin, preferredLanguage, recentTopics}, (b) personalisation block in /api/oracle/chat buildSystemPrompt(). It is FULLY FUNCTIONAL — just not a separate file.
+- "Memory Panel" as a standalone UI component NEVER existed. The memory SYSTEM exists and persists (localStorage conversations + memory payload + system-prompt personalisation).
+- The actual regression is a ROUTING DISCONNECTION, not lost code:
+  * TWO competing "Oracle" systems exist:
+    1. NEW Oracle Workspace (src/components/oracle/) — full-screen 3-column, /api/oracle/chat, conversation history, localStorage, founder identity, 10 languages. ONLY reachable via right OraclePanel which is `hidden xl:block` → INVISIBLE on screens < 1280px.
+    2. OLD Intelligence Palette (src/components/intelligence/GSTPilotIntelligence.tsx) — floating palette, /api/intelligence, mounted GLOBALLY in providers.tsx, listens for `gstpilot-ask`.
+  * CommandBar placeholder says "Ask GSTPilot Oracle…" but dispatches `gstpilot-ask` → caught by the OLD palette, NOT the NEW Oracle workspace.
+  * Result: user types in CommandBar → OLD palette opens → user thinks the new Oracle (history, streaming, founder answers) "disappeared".
+  * LeftNav has NO Oracle entry. No always-visible launcher for the NEW Oracle on screens < xl.
+
+Feature-by-feature status (all 16):
+1.  Full-screen Oracle Workspace — EXISTS & intact (portal-to-body, z-[200], #050505)
+2.  Oracle launcher button — EXISTS but only on xl+ screens; CommandBar misroutes to old palette
+3.  Conversation History sidebar — EXISTS & intact (Today/Yesterday/Prev7/Older grouping)
+4.  Memory Panel — no standalone UI ever existed; 4-layer memory SYSTEM is inline & functional
+5.  Oracle routing and navigation — BROKEN (CommandBar→old palette; no always-visible launcher < xl)
+6.  LocalStorage chat persistence — EXISTS & intact (gstpilot-oracle-conversations-v2 + v1 migration)
+7.  Streaming response engine — EXISTS & intact (SSE)
+8.  "Oracle is responding…" indicator — EXISTS (RespondingIndicator)
+9.  Smart auto-scroll — EXISTS (userPinnedUpRef, pause-on-scroll-up)
+10. Sticky input bar — EXISTS
+11. Dynamic response length — EXISTS (system prompt ADAPTIVE ANSWERS section)
+12. Action chips — EXISTS (followUps + QUICK_PROMPTS)
+13. Oracle context engine — EXISTS (memory payload + personalisation in system prompt)
+14. 4-layer memory system — EXISTS inline (userName/firmName/gstin/preferredLanguage/recentTopics)
+15. Multilingual support — EXISTS (10 languages in oracle-human.ts)
+16. Founder identity — EXISTS (oracle-brand.ts + footers + system prompt block)
+
+Recovery Plan (minimal, non-redesign):
+- Wire CommandBar → NEW Oracle Workspace via a dedicated `oracle-ask` event (CommandBar is visible on ALL screens → restores launcher + routing everywhere).
+- OraclePanel listens for `oracle-ask` → opens workspace + passes initialPrompt.
+- OracleWorkspace accepts initialPrompt prop → auto-sends on open.
+- Do NOT touch: chat UI design, old intelligence palette module, LeftNav item count, any business module.
+- Verify all 16 features via Agent Browser.
+
+Stage Summary:
+- Root cause = routing disconnection (CommandBar→old palette), NOT lost/deleted code.
+- All 16 Oracle features still exist in src/components/oracle/ + /api/oracle/chat.
+- Recovery = 3 surgical edits (CommandBar event name, OraclePanel listener+initialPrompt, OracleWorkspace initialPrompt prop). No redesign.
+
+Recovery Implementation (3 surgical edits, zero redesign):
+- src/components/layout/CommandBar.tsx: Changed dispatched event from `gstpilot-ask` → `oracle-ask` so the CommandBar (visible on ALL screen sizes) opens the NEW full-screen Oracle workspace instead of the legacy intelligence palette. Updated comment. (1 logic line + 2 comment lines.)
+- src/components/oracle/OraclePanel.tsx: Added a `useEffect` that listens for `oracle-ask` custom events → sets pendingPrompt + opens the workspace. Added `pendingPrompt` state. Passed `initialPrompt={pendingPrompt}` to OracleWorkspace. Cleared pendingPrompt on close. OraclePanel mounts on ALL screens (its wrapper is `hidden xl:block` but the component still renders + listens), so the launcher now works below xl too.
+- src/components/oracle/OracleWorkspace.tsx: Added optional `initialPrompt?: string` prop + an auto-send effect (guarded by `initialPromptSentRef` so a given prompt fires exactly once, deferred 60ms so the conversation-load effect settles first). No chat UI touched.
+
+Verification (Agent Browser, authenticated, viewport 1024×768 = sub-xl to prove the fix):
+- Dashboard renders at 1024×768 with right OraclePanel correctly hidden (xl: 1280px gate) — confirms the regression: previously NO Oracle launcher existed below xl.
+- Typed "What is GST?" in the CommandBar ("Ask GSTPilot Oracle…") → NEW full-screen Oracle workspace opened via portal (document.body child: `fixed inset-0 z-[200]` bg `rgb(5,5,5)`). Solid #050505, zero dashboard bleed, 3 columns present.
+- Auto-send worked: "What is GST?" sent immediately, Oracle replied with streamed answer "Good question, Oracle. GST, or Goods and Services Tax, is a comprehensive indirect tax system..." — memory personalisation confirmed (addressed user "Oracle" by first name from userName "Oracle Test").
+- 3-column layout verified via DOM: Rail (Home/Intelligence/Autopilot/Finance/Network/Settings/Oracle + "The Financial Brain of India" footer) + History (New Chat / TODAY / "What is GST?") + Chat (GSTPilot Oracle™ header / "Ask anything. Run everything." / Ready status / streamed message with 🙂 emotion / multilingual follow-up chips "ITC claim कैसे करें?" / sticky input with QUICK_PROMPTS / "Founded by Prince Singh" hint).
+- Refreshed the page → localStorage `gstpilot-oracle-conversations-v2` still holds the full conversation (title "What is GST?", streamed content, followUps, activeId). Reopened Oracle → history sidebar shows "What is GST?" under TODAY → conversation restored with full content. PERSISTENCE CONFIRMED.
+- Founder-identity short-circuit: typed "who is prince singh" in CommandBar → Oracle opened + INSTANT canonical answer (client-side, no API round-trip): "GSTPilot Infinity™ was founded, developed, and is owned by Prince Singh — the visionary behind the platform. Prince Singh is the Founder, Owner, Developer, and Visionary of GSTPilot Oracle™..." with ✅ emotion + follow-ups.
+- Rail navigation: clicked "Home" in the workspace rail → workspace closed → dashboard visible. ROUTING CONFIRMED.
+- Console errors: ZERO (only the expected Firestore-offline warning, which is an environment limitation, not an Oracle issue).
+- Lint: clean (`bun run lint` → no errors). Dev.log: clean compiles, POST /api/oracle/chat 200.
+
+Stage Summary:
+- ROOT CAUSE was a ROUTING DISCONNECTION, not lost/deleted code. No files were deleted, renamed, or overwritten (git working tree clean).
+- All 16 Oracle features were ALREADY present in src/components/oracle/ + /api/oracle/chat — they were simply unreachable on screens < 1280px because the only launcher (right OraclePanel) was `hidden xl:block`, and the CommandBar misrouted to the legacy intelligence palette via `gstpilot-ask`.
+- Recovery = 3 surgical edits reconnecting the CommandBar → OraclePanel → OracleWorkspace (new `oracle-ask` event + initialPrompt auto-send). Zero UI redesign, zero business modules removed, zero file overwrites.
+- Oracle is now reachable and fully functional on EVERY screen size via the CommandBar. The legacy intelligence palette module is untouched (keeps its own floating launcher + `gstpilot-ask` listener for the Mission Control home).
+- Screenshots: /tmp/oracle-recovered-1.png (What is GST? streamed answer), /tmp/oracle-recovered-2.png (Explain ITC rules).

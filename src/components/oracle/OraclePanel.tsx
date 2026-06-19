@@ -442,6 +442,7 @@ export function OraclePanel({ onNavigate }: OraclePanelProps) {
       <OracleWorkspace
         open={workspaceOpen}
         onClose={() => setWorkspaceOpen(false)}
+        onNavigate={onNavigate}
         userName={user?.name}
         firmName={undefined}
         gstin={undefined}

@@ -1,26 +1,43 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Human Experience Workspace
-// A full-screen overlay chat that feels like Claude + Perplexity + Apple Intelligence.
+// GSTPilot Oracle™ — Professional UI Rebuild
+// A FULL-SCREEN, SOLID workspace. No popup. No overlay. No transparency.
 //
-// UX contract (Ultra Response Engine):
-//   • No fake "thinking/reading/analyzing" phases — only "Oracle is responding…"
-//     with a pulsing cursor while tokens stream.
-//   • Response container appears immediately and expands smoothly (no jumping).
-//   • Sticky input bar — fixed, never resizes unexpectedly.
-//   • Smart auto-scroll — only when the user is near the bottom; pause on scroll-up.
-//   • Brand questions are short-circuited client-side (instant canonical answer).
+// Layout (Claude 70% · ChatGPT 20% · Perplexity 10%):
+//   ┌──────────┬────────────────┬───────────────────────────────┐
+//   │  Rail    │  History       │  Chat                         │
+//   │  (icons) │  New Chat      │  GSTPilot Oracle™             │
+//   │  Home    │  Today         │  Ask anything. Run everything.│
+//   │  Intel   │  Yesterday     │  ───────────────────────────  │
+//   │  Auto    │  Prev 7 days   │  Messages (scroll)            │
+//   │  Finance │                │  ───────────────────────────  │
+//   │  Network │                │  Sticky input + suggestions   │
+//   │  Settings│                │                               │
+//   │  Oracle  │                │                               │
+//   └──────────┴────────────────┴───────────────────────────────┘
+//
+// Tokens:
+//   bg #050505 · cards #111111 · border rgba(255,255,255,0.08)
+//   text primary #fff · text secondary rgba(255,255,255,0.7)
+//
+// All existing logic preserved: streaming, brand short-circuit, memory,
+// auto-scroll, stop, follow-ups, emotion + language detection.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import {
   useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent,
 } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowUp, X, Square, Sparkles } from 'lucide-react';
+import {
+  ArrowUp, X, Square, Sparkles, Plus, MessageSquare, Trash2,
+  Home, Brain, Zap, Wallet, Network, Settings, type LucideIcon,
+} from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { InfinitySymbol } from '@/components/layout/InfinityMark';
 import { cn } from '@/lib/utils';
+import type { AppView } from '@/contexts/AppContext';
 import {
   detectLanguage, detectEmotion, deriveAvatarState, AVATAR_STATE_LABEL,
   ORACLE_EMOTIONS, nativeLanguageLabel,
@@ -34,6 +51,7 @@ import type { OracleMessage, OracleChatRequest, OracleStreamChunk } from './orac
 interface OracleWorkspaceProps {
   open: boolean;
   onClose: () => void;
+  onNavigate: (view: AppView) => void;
   userName?: string;
   firmName?: string;
   gstin?: string;
@@ -41,51 +59,150 @@ interface OracleWorkspaceProps {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const STORAGE_KEY = 'gstpilot-oracle-conversation-v1';
+const STORE_KEY = 'gstpilot-oracle-conversations-v2';
+const LEGACY_KEY = 'gstpilot-oracle-conversation-v1';
+
+// ─── Conversation store types ─────────────────────────────────────────────────
+
+interface OracleConversation {
+  id: string;
+  title: string;
+  messages: OracleMessage[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface ConversationStore {
+  conversations: OracleConversation[];
+  activeId: string | null;
+}
+
+// ─── Rail nav definition ──────────────────────────────────────────────────────
+
+interface RailItem {
+  id: AppView | 'oracle';
+  label: string;
+  icon: LucideIcon;
+}
+
+const RAIL_ITEMS: RailItem[] = [
+  { id: 'dashboard', label: 'Home', icon: Home },
+  { id: 'business-dna', label: 'Intelligence', icon: Brain },
+  { id: 'run-my-business', label: 'Autopilot', icon: Zap },
+  { id: 'reconcile', label: 'Finance', icon: Wallet },
+  { id: 'business-graph', label: 'Network', icon: Network },
+  { id: 'settings', label: 'Settings', icon: Settings },
+  { id: 'oracle', label: 'Oracle', icon: Sparkles },
+];
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export function OracleWorkspace({
-  open, onClose, userName, firmName, gstin,
+  open, onClose, onNavigate, userName, firmName, gstin,
 }: OracleWorkspaceProps) {
+  const [store, setStore] = useState<ConversationStore>({ conversations: [], activeId: null });
+  // Portal guard: only render into document.body after mount to avoid SSR
+  // hydration mismatch (server has no document.body).
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
   const [messages, setMessages] = useState<OracleMessage[]>([]);
+  const [activeId, setActiveId] = useState<string | null>(null);
   const [input, setInput] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
   const [lastEmotion, setLastEmotion] = useState<OracleMessage['emotion']>('helpful');
   const [activeLanguage, setActiveLanguage] = useState<OracleMessage['language']>('english');
+  // Mobile: history drawer open state
+  const [historyOpen, setHistoryOpen] = useState(false);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const abortRef = useRef<AbortController | null>(null);
-  // True while the user is intentionally scrolled up — pauses auto-scroll.
   const userPinnedUpRef = useRef(false);
   const streamingIdRef = useRef<string | null>(null);
 
-  // ─── Persist + restore conversation ────────────────────────────────────────
+  // ─── Load + migrate store on open ──────────────────────────────────────────
   useEffect(() => {
     if (!open) return;
-    try {
-      const raw = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEY) : null;
-      if (raw) {
-        const parsed = JSON.parse(raw) as OracleMessage[];
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          // Mark any previously-streaming message as complete on restore.
-          setMessages(parsed.map((m) => (m.streaming ? { ...m, streaming: false } : m)));
+    const loaded = loadStore();
+    if (loaded.conversations.length === 0) {
+      // Migrate legacy single-conversation store if present.
+      try {
+        const raw = localStorage.getItem(LEGACY_KEY);
+        if (raw) {
+          const parsed = JSON.parse(raw) as OracleMessage[];
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            const now = new Date().toISOString();
+            const conv: OracleConversation = {
+              id: cryptoId(),
+              title: deriveTitle(parsed),
+              messages: parsed.map((m) => (m.streaming ? { ...m, streaming: false } : m)),
+              createdAt: parsed[0]?.createdAt ?? now,
+              updatedAt: now,
+            };
+            const next: ConversationStore = { conversations: [conv], activeId: conv.id };
+            setStore(next);
+            setActiveId(conv.id);
+            setMessages(conv.messages);
+            saveStore(next);
+            return;
+          }
         }
+      } catch {
+        /* ignore */
       }
-    } catch {
-      /* ignore */
+      // Nothing to migrate — start fresh with one empty conversation.
+      const conv = newConversation();
+      const next: ConversationStore = { conversations: [conv], activeId: conv.id };
+      setStore(next);
+      setActiveId(conv.id);
+      setMessages([]);
+      saveStore(next);
+      return;
+    }
+    setStore(loaded);
+    const active = loaded.conversations.find((c) => c.id === loaded.activeId) ?? loaded.conversations[0];
+    if (active) {
+      setActiveId(active.id);
+      setMessages(active.messages);
     }
   }, [open]);
 
+  // ─── Persist active conversation whenever messages change ───────────────────
   useEffect(() => {
-    if (messages.length === 0) return;
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(messages.slice(-30)));
-    } catch {
-      /* ignore */
-    }
-  }, [messages]);
+    if (!open || !activeId) return;
+    setStore((prev) => {
+      if (!prev.conversations.length) return prev;
+      const exists = prev.conversations.some((c) => c.id === activeId);
+      let conversations: OracleConversation[];
+      let nextActiveId = prev.activeId;
+      if (exists) {
+        conversations = prev.conversations.map((c) =>
+          c.id === activeId
+            ? {
+                ...c,
+                messages,
+                title: deriveTitle(messages) || c.title,
+                updatedAt: new Date().toISOString(),
+              }
+            : c,
+        );
+      } else {
+        // Active conversation doesn't exist yet — create it on the fly.
+        const conv: OracleConversation = {
+          id: activeId,
+          title: deriveTitle(messages) || 'New chat',
+          messages,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+        conversations = [conv, ...prev.conversations];
+        nextActiveId = activeId;
+      }
+      const next = { conversations, activeId: nextActiveId };
+      saveStore(next);
+      return next;
+    });
+  }, [messages, open, activeId]);
 
   // ─── Body scroll lock while open ───────────────────────────────────────────
   useEffect(() => {
@@ -108,8 +225,6 @@ export function OracleWorkspace({
   }, [open, isStreaming, onClose]);
 
   // ─── Smart auto-scroll ─────────────────────────────────────────────────────
-  // Auto-scroll to bottom only when the user is near the bottom. If they scroll
-  // up, we pause auto-scroll until they return to the bottom.
   const handleScroll = useCallback(() => {
     const el = scrollRef.current;
     if (!el) return;
@@ -123,21 +238,83 @@ export function OracleWorkspace({
     el.scrollTo({ top: el.scrollHeight, behavior: smooth ? 'smooth' : 'auto' });
   }, []);
 
-  // After every messages update, auto-scroll if the user is near the bottom.
   useEffect(() => {
     if (!userPinnedUpRef.current) {
-      // Use rAF so layout settles before scrolling (prevents jump).
       requestAnimationFrame(() => scrollToBottom(false));
     }
   }, [messages, scrollToBottom]);
 
-  // ─── Send flow ─────────────────────────────────────────────────────────────
+  // ─── Conversation actions ──────────────────────────────────────────────────
+  const handleNewChat = useCallback(() => {
+    if (isStreaming) return;
+    const conv = newConversation();
+    setStore((prev) => {
+      const next = { conversations: [conv, ...prev.conversations], activeId: conv.id };
+      saveStore(next);
+      return next;
+    });
+    setActiveId(conv.id);
+    setMessages([]);
+    setInput('');
+    userPinnedUpRef.current = false;
+    setHistoryOpen(false);
+    requestAnimationFrame(() => inputRef.current?.focus());
+  }, [isStreaming]);
+
+  const handleSwitchConversation = useCallback(
+    (id: string) => {
+      if (isStreaming) return;
+      const conv = store.conversations.find((c) => c.id === id);
+      if (!conv) return;
+      setActiveId(id);
+      setMessages(conv.messages);
+      setStore((prev) => {
+        const next = { ...prev, activeId: id };
+        saveStore(next);
+        return next;
+      });
+      setHistoryOpen(false);
+      userPinnedUpRef.current = false;
+      requestAnimationFrame(() => scrollToBottom(false));
+    },
+    [isStreaming, store.conversations, scrollToBottom],
+  );
+
+  const handleDeleteConversation = useCallback(
+    (id: string) => {
+      if (isStreaming) return;
+      setStore((prev) => {
+        const filtered = prev.conversations.filter((c) => c.id !== id);
+        let nextActive = prev.activeId;
+        let nextMessages = messages;
+        if (prev.activeId === id) {
+          if (filtered.length > 0) {
+            nextActive = filtered[0].id;
+            nextMessages = filtered[0].messages;
+          } else {
+            const conv = newConversation();
+            filtered.unshift(conv);
+            nextActive = conv.id;
+            nextMessages = [];
+          }
+          setActiveId(nextActive);
+          setMessages(nextMessages);
+        }
+        const next = { conversations: filtered, activeId: nextActive };
+        saveStore(next);
+        return next;
+      });
+    },
+    [isStreaming, messages],
+  );
+
+  // ─── Send flow (preserved from previous implementation) ─────────────────────
   const sendMessage = useCallback(
     async (raw: string) => {
       const text = raw.trim();
       if (!text || isStreaming) return;
 
-      // ── Brand-question short-circuit (instant, canonical, no API) ──────────
+      // ── Brand-question short-circuit ───────────────────────────────────────
       const brand = detectBrandQuestion(text);
       if (brand.matched && brand.answer) {
         const userMsg: OracleMessage = {
@@ -189,10 +366,8 @@ export function OracleWorkspace({
       setActiveLanguage(userMsg.language);
       setInput('');
       userPinnedUpRef.current = false;
-      // Reset textarea height.
       if (inputRef.current) inputRef.current.style.height = 'auto';
 
-      // ── Build the request payload from the full conversation ───────────────
       const history: OracleChatRequest['messages'] = [
         ...messages
           .filter((m) => m.content.trim().length > 0)
@@ -255,13 +430,11 @@ export function OracleWorkspace({
             if (chunk.language) setActiveLanguage(chunk.language);
             if (chunk.token) {
               acc += chunk.token;
-              // Update the streaming message in place.
               setMessages((prev) =>
                 prev.map((m) => (m.id === oracleId ? { ...m, content: acc } : m)),
               );
             }
             if (chunk.done) {
-              // Finalize.
               setMessages((prev) =>
                 prev.map((m) =>
                   m.id === oracleId
@@ -297,7 +470,6 @@ export function OracleWorkspace({
           }
         }
 
-        // If the stream ended without an explicit done marker, finalize anyway.
         setMessages((prev) =>
           prev.map((m) =>
             m.id === oracleId && m.streaming
@@ -333,11 +505,10 @@ export function OracleWorkspace({
         setIsStreaming(false);
         streamingIdRef.current = null;
         abortRef.current = null;
-        // Refocus input for rapid follow-up.
         requestAnimationFrame(() => inputRef.current?.focus());
       }
     },
-    [isStreaming, messages, userName, firmName, gstin, activeLanguage],
+    [isStreaming, messages, userName, firmName, gstin, activeLanguage, scrollToBottom],
   );
 
   // ─── Stop streaming ────────────────────────────────────────────────────────
@@ -345,21 +516,9 @@ export function OracleWorkspace({
     abortRef.current?.abort();
   }, []);
 
-  // ─── Clear conversation ────────────────────────────────────────────────────
-  const handleClear = useCallback(() => {
-    if (isStreaming) return;
-    setMessages([]);
-    try {
-      localStorage.removeItem(STORAGE_KEY);
-    } catch {
-      /* ignore */
-    }
-  }, [isStreaming]);
-
   // ─── Input handling ────────────────────────────────────────────────────────
   const handleInputChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setInput(e.target.value);
-    // Auto-grow textarea up to a max height.
     const el = e.target;
     el.style.height = 'auto';
     el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
@@ -382,58 +541,238 @@ export function OracleWorkspace({
     }
   }, [open]);
 
-  // ─── Avatar state ──────────────────────────────────────────────────────────
+  // ─── Rail navigation ───────────────────────────────────────────────────────
+  const handleRailClick = useCallback(
+    (item: RailItem) => {
+      if (item.id === 'oracle') return; // already here
+      if (isStreaming) return;
+      onNavigate(item.id);
+      onClose();
+    },
+    [isStreaming, onNavigate, onClose],
+  );
+
+  // ─── Derived state ─────────────────────────────────────────────────────────
   const avatarState = useMemo(
     () => deriveAvatarState({ isStreaming, hasInput: input.trim().length > 0, lastEmotion }),
     [isStreaming, input, lastEmotion],
   );
 
   const isEmpty = messages.length === 0;
+  const grouped = useMemo(() => groupConversations(store.conversations), [store.conversations]);
 
-  return (
+  if (!mounted || typeof document === 'undefined') return null;
+
+  return createPortal(
     <AnimatePresence>
       {open && (
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          transition={{ duration: 0.25 }}
-          className="fixed inset-0 z-50 flex items-stretch justify-center bg-background/80 backdrop-blur-xl"
+          transition={{ duration: 0.2 }}
+          className="fixed inset-0 z-[200] flex h-screen w-screen"
+          style={{ background: '#050505' }}
         >
-          <motion.div
-            initial={{ opacity: 0, y: 16, scale: 0.99 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 16, scale: 0.99 }}
-            transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
-            className="relative flex h-full w-full max-w-3xl flex-col"
+          {/* ═══════════════════════════════════════════════════════════════════ */}
+          {/* COLUMN 0 — RAIL (left sidebar)                                       */}
+          {/* ═══════════════════════════════════════════════════════════════════ */}
+          <nav
+            aria-label="Oracle workspace navigation"
+            className="flex h-full w-14 shrink-0 flex-col items-center gap-1 border-r py-3 md:w-16 md:gap-1.5 lg:w-56 lg:items-stretch lg:px-2.5"
+            style={{ borderColor: 'rgba(255,255,255,0.08)' }}
           >
-            {/* ═══ HEADER ═══ */}
-            <header className="flex shrink-0 items-center gap-3 px-5 py-3.5">
+            {/* Brand */}
+            <div className="mb-2 flex items-center justify-center gap-2 px-1 lg:mb-4 lg:px-2">
+              <InfinitySymbol size={28} />
+              <div className="hidden lg:block">
+                <p className="text-[13px] font-semibold leading-tight tracking-tight text-white">
+                  GSTPilot
+                </p>
+                <p className="text-[10px] font-bold uppercase leading-tight tracking-wider text-white/50">
+                  Oracle
+                </p>
+              </div>
+            </div>
+
+            {/* Rail items */}
+            <div className="flex flex-1 flex-col gap-1 lg:gap-0.5">
+              {RAIL_ITEMS.map((item) => {
+                const isActive = item.id === 'oracle';
+                const Icon = item.icon;
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => handleRailClick(item)}
+                    aria-current={isActive ? 'page' : undefined}
+                    className={cn(
+                      'group relative flex items-center justify-center gap-3 rounded-xl px-2.5 py-2.5 text-sm font-medium transition-colors lg:justify-start lg:px-3',
+                      isActive
+                        ? 'text-white'
+                        : 'text-white/60 hover:bg-white/[0.05] hover:text-white',
+                    )}
+                  >
+                    {isActive && (
+                      <span
+                        className="absolute left-0 top-1/2 hidden h-7 w-[3px] -translate-y-1/2 rounded-full lg:block"
+                        style={{
+                          background:
+                            'linear-gradient(180deg, #10b981 0%, #059669 100%)',
+                        }}
+                      />
+                    )}
+                    <Icon
+                      className={cn(
+                        'h-5 w-5 shrink-0 transition-colors',
+                        isActive ? 'text-emerald-400' : 'text-white/60 group-hover:text-white',
+                      )}
+                    />
+                    <span className="hidden truncate lg:inline">{item.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Footer mini brand */}
+            <div className="mt-auto hidden px-2 pb-1 lg:block">
+              <p className="text-[9px] font-medium uppercase tracking-wider text-white/30">
+                The Financial Brain
+              </p>
+              <p className="text-[9px] font-medium uppercase tracking-wider text-white/30">
+                of India
+              </p>
+            </div>
+          </nav>
+
+          {/* ═══════════════════════════════════════════════════════════════════ */}
+          {/* COLUMN 1 — CONVERSATION HISTORY                                      */}
+          {/* ═══════════════════════════════════════════════════════════════════ */}
+          {/* Desktop: persistent column. Mobile: slide-over drawer. */}
+          <aside
+            className={cn(
+              'h-full w-72 shrink-0 flex-col border-r lg:flex',
+              historyOpen ? 'flex' : 'hidden',
+            )}
+            style={{ borderColor: 'rgba(255,255,255,0.08)', background: '#070707' }}
+          >
+            {/* New Chat */}
+            <div className="shrink-0 p-3">
+              <button
+                type="button"
+                onClick={handleNewChat}
+                disabled={isStreaming}
+                className="flex w-full items-center gap-2.5 rounded-xl border px-3.5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-white/[0.05] disabled:opacity-40"
+                style={{ borderColor: 'rgba(255,255,255,0.08)', background: '#111111' }}
+              >
+                <Plus className="h-4 w-4 text-emerald-400" />
+                New Chat
+              </button>
+            </div>
+
+            {/* History scroll */}
+            <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto px-2 pb-3">
+              <HistoryGroup
+                label="Today"
+                items={grouped.today}
+                activeId={activeId}
+                onSelect={handleSwitchConversation}
+                onDelete={handleDeleteConversation}
+              />
+              <HistoryGroup
+                label="Yesterday"
+                items={grouped.yesterday}
+                activeId={activeId}
+                onSelect={handleSwitchConversation}
+                onDelete={handleDeleteConversation}
+              />
+              <HistoryGroup
+                label="Previous 7 Days"
+                items={grouped.prev7}
+                activeId={activeId}
+                onSelect={handleSwitchConversation}
+                onDelete={handleDeleteConversation}
+              />
+              <HistoryGroup
+                label="Older"
+                items={grouped.older}
+                activeId={activeId}
+                onSelect={handleSwitchConversation}
+                onDelete={handleDeleteConversation}
+              />
+
+              {store.conversations.length === 0 && (
+                <p className="px-3 py-6 text-center text-xs text-white/40">
+                  No conversations yet.
+                </p>
+              )}
+            </div>
+
+            {/* Mobile close-drawer button */}
+            <button
+              type="button"
+              onClick={() => setHistoryOpen(false)}
+              className="shrink-0 border-t px-4 py-3 text-xs font-medium text-white/60 hover:text-white lg:hidden"
+              style={{ borderColor: 'rgba(255,255,255,0.08)' }}
+            >
+              Close
+            </button>
+          </aside>
+
+          {/* ═══════════════════════════════════════════════════════════════════ */}
+          {/* COLUMN 2 — MAIN CHAT                                                 */}
+          {/* ═══════════════════════════════════════════════════════════════════ */}
+          <section className="flex min-w-0 flex-1 flex-col" style={{ background: '#050505' }}>
+            {/* ─── Header ─── */}
+            <header
+              className="flex shrink-0 items-center gap-3 border-b px-4 py-3 md:px-6"
+              style={{ borderColor: 'rgba(255,255,255,0.08)' }}
+            >
+              {/* Mobile: open history drawer */}
+              <button
+                type="button"
+                onClick={() => setHistoryOpen(true)}
+                className="flex h-9 w-9 items-center justify-center rounded-lg text-white/60 transition-colors hover:bg-white/[0.05] hover:text-white lg:hidden"
+                aria-label="Open conversation history"
+              >
+                <MessageSquare className="h-4 w-4" />
+              </button>
+
               <OracleAvatar state={avatarState} />
+
               <div className="min-w-0 flex-1">
                 <div className="flex items-baseline gap-0.5">
-                  <span className="text-sm font-semibold text-zinc-100">GSTPilot Oracle</span>
-                  <sup className="text-[9px] font-medium text-muted-foreground">™</sup>
+                  <span className="text-sm font-semibold tracking-tight text-white md:text-base">
+                    GSTPilot Oracle
+                  </span>
+                  <sup className="text-[9px] font-medium text-white/40">™</sup>
                 </div>
-                <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                  <span
-                    className={cn(
-                      'inline-flex h-1.5 w-1.5 rounded-full',
-                      isStreaming ? 'bg-amber-400' : 'bg-emerald-400',
-                    )}
-                  />
-                  <span>{isStreaming ? 'Responding' : AVATAR_STATE_LABEL[avatarState]}</span>
-                  {activeLanguage && activeLanguage !== 'english' && (
-                    <span className="text-muted-foreground/50">· {nativeLanguageLabel(activeLanguage)}</span>
+                <p className="truncate text-[11px] text-white/50 md:text-xs">
+                  Ask anything. Run everything.
+                </p>
+              </div>
+
+              {/* Status pill */}
+              <div className="hidden items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] sm:flex" style={{ borderColor: 'rgba(255,255,255,0.08)' }}>
+                <span
+                  className={cn(
+                    'inline-flex h-1.5 w-1.5 rounded-full',
+                    isStreaming ? 'bg-amber-400' : 'bg-emerald-400',
                   )}
-                </div>
+                />
+                <span className="text-white/60">
+                  {isStreaming ? 'Responding' : AVATAR_STATE_LABEL[avatarState]}
+                </span>
+                {activeLanguage && activeLanguage !== 'english' && (
+                  <span className="text-white/30">· {nativeLanguageLabel(activeLanguage)}</span>
+                )}
               </div>
 
               {messages.length > 0 && !isStreaming && (
                 <button
                   type="button"
-                  onClick={handleClear}
-                  className="rounded-lg px-2.5 py-1.5 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-white/[0.05] hover:text-foreground"
+                  onClick={handleNewChat}
+                  className="rounded-lg px-2.5 py-1.5 text-[11px] font-medium text-white/60 transition-colors hover:bg-white/[0.05] hover:text-white"
                 >
                   Clear
                 </button>
@@ -442,25 +781,23 @@ export function OracleWorkspace({
                 type="button"
                 onClick={onClose}
                 disabled={isStreaming}
-                className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-white/[0.05] hover:text-foreground disabled:opacity-40"
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-white/60 transition-colors hover:bg-white/[0.05] hover:text-white disabled:opacity-40"
                 aria-label="Close Oracle"
               >
                 <X className="h-4 w-4" />
               </button>
             </header>
 
-            <div className="mx-5 h-px bg-white/[0.06]" />
-
-            {/* ═══ MESSAGES ═══ */}
+            {/* ─── Messages ─── */}
             <div
               ref={scrollRef}
               onScroll={handleScroll}
-              className="custom-scrollbar min-h-0 flex-1 overflow-y-auto px-5"
+              className="custom-scrollbar min-h-0 flex-1 overflow-y-auto"
             >
               {isEmpty ? (
                 <OracleEmptyState onPick={(p) => sendMessage(p)} userName={userName} />
               ) : (
-                <div className="mx-auto flex max-w-2xl flex-col gap-5 py-6">
+                <div className="mx-auto flex max-w-3xl flex-col gap-6 px-4 py-6 md:px-6">
                   {messages.map((m) => (
                     <MessageBubble key={m.id} message={m} onPickFollowUp={sendMessage} />
                   ))}
@@ -468,10 +805,47 @@ export function OracleWorkspace({
               )}
             </div>
 
-            {/* ═══ STICKY INPUT ═══ */}
-            <div className="shrink-0 px-5 pb-5 pt-2">
-              <div className="mx-auto max-w-2xl">
-                <div className="relative flex items-end gap-2 rounded-2xl border border-white/[0.08] bg-white/[0.03] p-2 transition-colors focus-within:border-white/[0.16] focus-within:bg-white/[0.05]">
+            {/* ─── Sticky input ─── */}
+            <div
+              className="shrink-0 border-t px-4 py-4 md:px-6"
+              style={{ borderColor: 'rgba(255,255,255,0.08)', background: '#050505' }}
+            >
+              <div className="mx-auto max-w-3xl">
+                {/* Suggested prompts (compact, only when input empty) */}
+                <AnimatePresence>
+                  {!input.trim() && !isEmpty && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                      className="mb-2.5 flex flex-wrap gap-2"
+                    >
+                      {QUICK_PROMPTS.map((p) => (
+                        <button
+                          key={p}
+                          type="button"
+                          onClick={() => sendMessage(p)}
+                          disabled={isStreaming}
+                          className="rounded-full border px-3 py-1.5 text-xs font-medium text-white/70 transition-colors hover:bg-white/[0.05] hover:text-white disabled:opacity-40"
+                          style={{ borderColor: 'rgba(255,255,255,0.08)', background: '#111111' }}
+                        >
+                          {p}
+                        </button>
+                      ))}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                {/* Input box */}
+                <div
+                  className="flex items-end gap-2 rounded-2xl p-2 transition-colors focus-within:border-white/[0.18]"
+                  style={{
+                    borderColor: 'rgba(255,255,255,0.08)',
+                    background: '#111111',
+                    borderWidth: 1,
+                    borderStyle: 'solid',
+                  }}
+                >
                   <textarea
                     ref={inputRef}
                     value={input}
@@ -479,14 +853,15 @@ export function OracleWorkspace({
                     onKeyDown={handleKeyDown}
                     rows={1}
                     placeholder="Ask Oracle anything — GST, returns, cash flow, ITC…"
-                    className="max-h-40 min-h-[36px] flex-1 resize-none bg-transparent px-2.5 py-1.5 text-sm leading-relaxed text-zinc-100 placeholder:text-muted-foreground/70 focus:outline-none custom-scrollbar"
+                    className="max-h-40 min-h-[36px] flex-1 resize-none bg-transparent px-2.5 py-1.5 text-sm leading-relaxed text-white placeholder:text-white/40 focus:outline-none custom-scrollbar"
                     disabled={isStreaming}
                   />
                   {isStreaming ? (
                     <button
                       type="button"
                       onClick={handleStop}
-                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/[0.06] text-zinc-300 transition-colors hover:bg-white/[0.12]"
+                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-white transition-colors hover:bg-white/[0.08]"
+                      style={{ background: 'rgba(255,255,255,0.06)' }}
                       aria-label="Stop"
                     >
                       <Square className="h-3.5 w-3.5 fill-current" />
@@ -496,14 +871,19 @@ export function OracleWorkspace({
                       type="button"
                       onClick={() => sendMessage(input)}
                       disabled={!input.trim()}
-                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl accent-gradient text-white shadow-lg shadow-emerald-500/20 transition-all hover:opacity-90 disabled:opacity-30 disabled:shadow-none"
+                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-white shadow-lg shadow-emerald-500/20 transition-all hover:opacity-90 disabled:opacity-30 disabled:shadow-none"
+                      style={{
+                        background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                      }}
                       aria-label="Send"
                     >
                       <ArrowUp className="h-4 w-4" />
                     </button>
                   )}
                 </div>
-                <div className="mt-2 flex items-center justify-between px-1 text-[10px] text-muted-foreground/60">
+
+                {/* Hint line */}
+                <div className="mt-2 flex items-center justify-between px-1 text-[10px] text-white/30">
                   <span className="flex items-center gap-1">
                     <Sparkles className="h-3 w-3" />
                     Oracle replies in your language · Enter to send · Shift+Enter for newline
@@ -514,10 +894,79 @@ export function OracleWorkspace({
                 </div>
               </div>
             </div>
-          </motion.div>
+          </section>
+
+          {/* Mobile history backdrop */}
+          <AnimatePresence>
+            {historyOpen && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setHistoryOpen(false)}
+                className="fixed inset-0 z-[110] bg-black/60 lg:hidden"
+                aria-hidden
+              />
+            )}
+          </AnimatePresence>
         </motion.div>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body,
+  );
+}
+
+// ─── History group ────────────────────────────────────────────────────────────
+
+interface HistoryGroupProps {
+  label: string;
+  items: OracleConversation[];
+  activeId: string | null;
+  onSelect: (id: string) => void;
+  onDelete: (id: string) => void;
+}
+
+function HistoryGroup({ label, items, activeId, onSelect, onDelete }: HistoryGroupProps) {
+  if (items.length === 0) return null;
+  return (
+    <div className="mb-3">
+      <p className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-white/30">
+        {label}
+      </p>
+      <div className="space-y-0.5">
+        {items.map((c) => {
+          const isActive = c.id === activeId;
+          return (
+            <div
+              key={c.id}
+              className={cn(
+                'group relative flex items-center gap-2 rounded-lg px-3 py-2 text-left transition-colors',
+                isActive ? 'bg-white/[0.06] text-white' : 'text-white/60 hover:bg-white/[0.04] hover:text-white',
+              )}
+            >
+              <button
+                type="button"
+                onClick={() => onSelect(c.id)}
+                className="min-w-0 flex-1 text-left"
+              >
+                <span className="block truncate text-sm font-medium">{c.title}</span>
+              </button>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDelete(c.id);
+                }}
+                className="shrink-0 rounded p-1 text-white/30 opacity-0 transition-opacity hover:text-white/80 group-hover:opacity-100"
+                aria-label="Delete conversation"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
@@ -533,15 +982,18 @@ function OracleAvatar({ state }: { state: ReturnType<typeof deriveAvatarState> }
           ? 'bg-emerald-400'
           : 'bg-emerald-400';
   return (
-    <div className="relative">
-      <div className="accent-gradient flex h-9 w-9 items-center justify-center rounded-xl shadow-lg shadow-emerald-500/20">
+    <div className="relative shrink-0">
+      <div
+        className="flex h-9 w-9 items-center justify-center rounded-xl shadow-lg shadow-emerald-500/20"
+        style={{ background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)' }}
+      >
         <InfinitySymbol size={20} />
       </div>
       <span className="absolute -bottom-0.5 -right-0.5 flex h-2.5 w-2.5">
         {state === 'speaking' && (
           <span className={cn('absolute inline-flex h-full w-full animate-ping rounded-full opacity-75', ringColor)} />
         )}
-        <span className={cn('relative inline-flex h-2.5 w-2.5 rounded-full border-2 border-background', ringColor)} />
+        <span className={cn('relative inline-flex h-2.5 w-2.5 rounded-full border-2', ringColor)} style={{ borderColor: '#050505' }} />
       </span>
     </div>
   );
@@ -567,7 +1019,10 @@ function MessageBubble({
         transition={{ duration: 0.25 }}
         className="flex justify-end"
       >
-        <div className="max-w-[85%] rounded-2xl rounded-br-md bg-white/[0.06] px-4 py-2.5 text-sm leading-relaxed text-zinc-100">
+        <div
+          className="max-w-[85%] rounded-2xl rounded-br-md px-4 py-2.5 text-sm leading-relaxed text-white"
+          style={{ background: '#1a1a1a' }}
+        >
           {message.content}
         </div>
       </motion.div>
@@ -585,7 +1040,10 @@ function MessageBubble({
     >
       {/* Avatar */}
       <div className="mt-0.5 shrink-0">
-        <div className="accent-gradient flex h-7 w-7 items-center justify-center rounded-lg shadow-md shadow-emerald-500/15">
+        <div
+          className="flex h-7 w-7 items-center justify-center rounded-lg shadow-md shadow-emerald-500/15"
+          style={{ background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)' }}
+        >
           <InfinitySymbol size={15} />
         </div>
       </div>
@@ -601,12 +1059,11 @@ function MessageBubble({
         {isEmptyStreaming ? (
           <RespondingIndicator />
         ) : (
-          <div className="oracle-prose text-sm leading-relaxed text-zinc-200">
+          <div className="oracle-prose text-sm leading-relaxed text-white/90">
             <ReactMarkdown
               components={{
-                // Open links in a new tab safely.
                 a: ({ children, href }) => (
-                  <a href={href} target="_blank" rel="noopener noreferrer" className="accent-text underline underline-offset-2">
+                  <a href={href} target="_blank" rel="noopener noreferrer" className="text-emerald-400 underline underline-offset-2">
                     {children}
                   </a>
                 ),
@@ -626,7 +1083,8 @@ function MessageBubble({
                 key={i}
                 type="button"
                 onClick={() => onPickFollowUp(f)}
-                className="rounded-full border border-white/[0.08] bg-white/[0.02] px-3 py-1.5 text-xs font-medium text-zinc-300 transition-all hover:border-white/[0.16] hover:bg-white/[0.06] hover:text-foreground"
+                className="rounded-full border px-3 py-1.5 text-xs font-medium text-white/70 transition-all hover:text-white"
+                style={{ borderColor: 'rgba(255,255,255,0.08)', background: '#111111' }}
               >
                 {f}
               </button>
@@ -638,11 +1096,11 @@ function MessageBubble({
   );
 }
 
-// ─── "Oracle is responding…" with pulsing cursor ─────────────────────────────
+// ─── "Oracle is responding…" with blinking cursor ─────────────────────────────
 
 function RespondingIndicator() {
   return (
-    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+    <div className="flex items-center gap-2 text-sm text-white/50">
       <span className="flex items-center gap-1.5">
         <span className="relative flex h-2 w-2">
           <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
@@ -650,7 +1108,8 @@ function RespondingIndicator() {
         </span>
         <span className="animate-pulse">Oracle is responding</span>
       </span>
-      <span className="text-muted-foreground/50">…</span>
+      <span className="text-white/30">…</span>
+      <BlinkingCursor />
     </div>
   );
 }
@@ -664,13 +1123,109 @@ function PulsingCursor() {
   );
 }
 
+function BlinkingCursor() {
+  return (
+    <span
+      className="ml-0.5 inline-block h-3.5 w-[2px] animate-pulse rounded-full bg-emerald-400 align-middle"
+      aria-hidden
+    />
+  );
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+const QUICK_PROMPTS = [
+  'GST kya hota hai?',
+  'Explain ITC rules',
+  'Check my compliance',
+  'GSTR-3B filing steps',
+];
 
 function cryptoId(): string {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
     return crypto.randomUUID();
   }
   return `id-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
+function newConversation(): OracleConversation {
+  const now = new Date().toISOString();
+  return {
+    id: cryptoId(),
+    title: 'New chat',
+    messages: [],
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+function deriveTitle(messages: OracleMessage[]): string {
+  const firstUser = messages.find((m) => m.role === 'user');
+  if (!firstUser) return 'New chat';
+  const t = firstUser.content.trim().replace(/\s+/g, ' ');
+  return t.length > 42 ? `${t.slice(0, 42)}…` : t || 'New chat';
+}
+
+function loadStore(): ConversationStore {
+  try {
+    const raw = localStorage.getItem(STORE_KEY);
+    if (!raw) return { conversations: [], activeId: null };
+    const parsed = JSON.parse(raw) as ConversationStore;
+    if (!parsed || !Array.isArray(parsed.conversations)) {
+      return { conversations: [], activeId: null };
+    }
+    return parsed;
+  } catch {
+    return { conversations: [], activeId: null };
+  }
+}
+
+function saveStore(store: ConversationStore) {
+  try {
+    localStorage.setItem(STORE_KEY, JSON.stringify(store));
+  } catch {
+    /* ignore */
+  }
+}
+
+interface ConversationGroups {
+  today: OracleConversation[];
+  yesterday: OracleConversation[];
+  prev7: OracleConversation[];
+  older: OracleConversation[];
+}
+
+function groupConversations(convos: OracleConversation[]): ConversationGroups {
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const startOfYesterday = startOfToday - 86_400_000;
+  const startOf7Days = startOfToday - 7 * 86_400_000;
+
+  const today: OracleConversation[] = [];
+  const yesterday: OracleConversation[] = [];
+  const prev7: OracleConversation[] = [];
+  const older: OracleConversation[] = [];
+
+  const sorted = [...convos].sort(
+    (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
+  );
+
+  for (const c of sorted) {
+    const t = new Date(c.updatedAt).getTime();
+    if (isNaN(t)) {
+      older.push(c);
+    } else if (t >= startOfToday) {
+      today.push(c);
+    } else if (t >= startOfYesterday) {
+      yesterday.push(c);
+    } else if (t >= startOf7Days) {
+      prev7.push(c);
+    } else {
+      older.push(c);
+    }
+  }
+
+  return { today, yesterday, prev7, older };
 }
 
 /** Generate contextual follow-up chips from the response content. */
@@ -687,10 +1242,8 @@ function buildFollowUps(content: string): string[] | undefined {
   if (/(reverse charge|rcm)/.test(lower)) pool.push('RCM किन पर लागू है?', 'How to report RCM in GSTR-3B?');
   if (/(refund)/.test(lower)) pool.push('Refund process क्या है?', 'Refund timeline कितनी है?');
 
-  // Generic, always-safe follow-ups.
   pool.push('GST kya hota hai?', 'Explain ITC rules', 'How can Oracle help me daily?');
 
-  // De-duplicate and pick 3.
   const seen = new Set<string>();
   const picks: string[] = [];
   for (const p of pool) {

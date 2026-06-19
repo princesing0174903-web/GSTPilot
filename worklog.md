@@ -2148,3 +2148,49 @@ Stage Summary:
 - Brand identity: Prince Singh credited as Founder/Owner/Developer/Visionary across (a) instant client-side short-circuit, (b) permanent server-side system-prompt block, (c) UI footers in panel + empty state + input hint.
 - GST reliability: CBIC/GSTN-grounded, honest uncertainty, ₹/lakhs formatting.
 - Files: oracle-types.ts, oracle-human.ts, oracle-brand.ts, OracleEmptyState.tsx, OracleWorkspace.tsx, /api/oracle/chat/route.ts, updated OraclePanel.tsx, globals.css additions.
+
+---
+Task ID: Oracle-UI-Rebuild
+Agent: GSTPilot Frontend Architect
+Task: Rebuild GSTPilot Oracle UI as a full-screen, solid Obsidian Black workspace (Claude 70% / ChatGPT 20% / Perplexity 10%) — replacing the messy transparent overlay/popup.
+
+Work Log:
+- Read existing OracleWorkspace.tsx (706 lines, transparent fixed overlay with bg-background/80 + backdrop-blur), OraclePanel.tsx, oracle-types.ts, OracleEmptyState.tsx, AppContext.tsx, page.tsx, LeftNav.tsx, and globals.css to understand the architecture and existing logic.
+- Identified root cause of "background visible / text overlap": the Oracle workspace was rendered inside the dashboard's `div.relative.z-10` stacking context, so its `z-[100]` was trapped below the dashboard's CommandBar (`fixed z-40` sibling). Plus the overlay used `bg-background/80 backdrop-blur-xl` (transparency).
+- Rebuilt OracleWorkspace.tsx as a TRUE full-screen solid workspace:
+  • Renders via `createPortal(..., document.body)` with `mounted` guard to escape ALL ancestor stacking contexts (fixes CommandBar bleed + avoids SSR hydration mismatch).
+  • `fixed inset-0 z-[200]` with solid `style={{ background: '#050505' }}` — zero transparency, zero blur, zero dashboard bleed.
+  • 3-column flex layout filling the viewport:
+      - Column 0 (Rail): Home, Intelligence, Autopilot, Finance, Network, Settings, Oracle. Slim icon rail on mobile (w-14/16), expands to w-56 with labels on lg. Oracle item shows active state. Clicking any non-Oracle item calls onNavigate(view) + onClose().
+      - Column 1 (History): New Chat button + conversation list grouped by Today / Yesterday / Previous 7 Days / Older. Persistent on lg+, slide-over drawer on mobile (toggled via header MessageSquare button + dark backdrop).
+      - Column 2 (Chat): Header (avatar + "GSTPilot Oracle™" + "Ask anything. Run everything." subtitle + status pill + clear/close), messages scroll area, sticky input with suggested prompt chips.
+  • Implemented a multi-conversation localStorage store (`gstpilot-oracle-conversations-v2`) with auto-title from first user message, conversation switching, delete, and one-time migration from the legacy single-conversation key (`gstpilot-oracle-conversation-v1`).
+  • Applied exact Obsidian tokens via inline style: bg #050505, cards #111111, borders rgba(255,255,255,0.08), text primary white, text secondary white/70.
+  • Preserved ALL existing logic: streaming SSE parse, brand-question short-circuit, 4-layer memory payload, smart auto-scroll with pause-on-scroll-up, stop/abort, follow-up chip generation, emotion + language detection, dynamic avatar states, "Oracle is responding…" + blinking/pulsing cursor.
+- Updated OraclePanel.tsx to pass `onNavigate` prop through to OracleWorkspace.
+- Restyled OracleEmptyState.tsx for the Obsidian theme (#111111 cards, emerald accents, white/white-70 text).
+
+Validation:
+- `bunx tsc --noEmit` → no Oracle-related errors (only pre-existing errors in unrelated files).
+- `bun run lint` → clean (no errors).
+- Agent Browser end-to-end testing (signed up a test account, reached dashboard, opened Oracle):
+  • VLM confirmed: solid black background, ZERO dashboard bleed, NO transparency.
+  • VLM confirmed: NO CommandBar/search-bar chips overlapping the chat (portal fix worked).
+  • VLM confirmed: 3 columns present (rail + history + chat), premium feel.
+  • Sent "What is GST?" → real streamed AI response rendered, follow-up chips appeared, conversation auto-titled "What is GST?" and saved to Today group.
+  • New Chat → created fresh conversation, preserved previous one in history, showed empty state.
+  • Switched back to "What is GST?" conversation → full message content + follow-ups restored.
+  • Clicked Home in the rail → Oracle closed, returned to dashboard (navigation works).
+  • Mobile (390×844): slim icon rail, history as slide-over drawer (verified with VLM), no horizontal overflow, no broken layout.
+  • Console + page errors: clean after the mounted-guard fix (the initial "Target container is not a DOM element" hydration error was eliminated).
+- dev.log: clean, POST /api/oracle/chat 200, all compiles succeeded.
+
+Stage Summary:
+- Oracle is now a dedicated full-screen AI product workspace, not a chatbot widget/popup.
+- No overlay, no popup, no transparency, no background bleed, no text overlap.
+- Solid Obsidian Black (#050505) with #111111 cards and rgba(255,255,255,0.08) borders.
+- 3-column layout: left rail (7 items) + conversation history (New Chat / Today / Yesterday / Previous 7 Days / Older, with real multi-conversation persistence) + main chat (header / messages / sticky input / suggested prompts).
+- Portal-to-body + mounted guard is the key architectural fix that guarantees Oracle sits above every dashboard layer (including the CommandBar).
+- Fully mobile responsive (icon rail + drawer-based history).
+- All existing conversational logic preserved (streaming, memory, brand short-circuit, auto-scroll, follow-ups, emotion/language detection).
+- Files changed: src/components/oracle/OracleWorkspace.tsx (full rewrite), src/components/oracle/OraclePanel.tsx (onNavigate prop), src/components/oracle/OracleEmptyState.tsx (Obsidian theme).

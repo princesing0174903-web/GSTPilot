@@ -11,12 +11,14 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Brain, Wallet, FileText, Receipt, ChevronRight, Activity, Lightbulb,
-  ShieldCheck, CreditCard, type LucideIcon,
+  ShieldCheck, CreditCard, Sparkles, type LucideIcon,
 } from 'lucide-react';
 import type { AppView } from '@/contexts/AppContext';
 import { useLiveDashboardMetrics, useFireActivities } from '@/hooks/use-firestore';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InfinitySymbol } from '@/components/layout/InfinityMark';
+import { OracleWorkspace } from './OracleWorkspace';
+import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
 
 interface OraclePanelProps {
@@ -207,9 +209,11 @@ function OracleSkeleton() {
 export function OraclePanel({ onNavigate }: OraclePanelProps) {
   const { metrics, loading: metricsLoading } = useLiveDashboardMetrics();
   const { data: activities, loading: activitiesLoading } = useFireActivities();
+  const { user } = useAuth();
 
   // 2.5s graceful timeout — fall back to empty states if Firestore is slow.
   const [timedOut, setTimedOut] = useState(false);
+  const [workspaceOpen, setWorkspaceOpen] = useState(false);
   useEffect(() => {
     const t = setTimeout(() => setTimedOut(true), 2500);
     return () => clearTimeout(t);
@@ -310,14 +314,20 @@ export function OraclePanel({ onNavigate }: OraclePanelProps) {
   const simLabel = SIMULATED_ACTIVITIES[simIndex].label;
 
   return (
+    <>
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.4, ease: 'easeOut' }}
       className="glass-surface flex h-full w-full flex-col rounded-3xl"
     >
-      {/* ─── Header ─────────────────────────────────────────────────────────── */}
-      <div className="flex items-center gap-2.5 px-4 py-3.5">
+      {/* ─── Header (click to open full Oracle workspace) ──────────────────── */}
+      <button
+        type="button"
+        onClick={() => setWorkspaceOpen(true)}
+        className="group flex w-full items-center gap-2.5 px-4 py-3.5 text-left transition-colors hover:bg-white/[0.03]"
+        aria-label="Open GSTPilot Oracle workspace"
+      >
         <div className="accent-gradient flex h-8 w-8 items-center justify-center rounded-lg shadow-lg shadow-emerald-500/20">
           <InfinitySymbol size={18} />
         </div>
@@ -331,10 +341,11 @@ export function OraclePanel({ onNavigate }: OraclePanelProps) {
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
               <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-400" />
             </span>
-            <span className="text-[10px] text-muted-foreground">Live</span>
+            <span className="text-[10px] text-muted-foreground">Live · Tap to chat</span>
           </div>
         </div>
-      </div>
+        <ChevronRight className="h-4 w-4 text-muted-foreground/50 transition-transform group-hover:translate-x-0.5" />
+      </button>
 
       {/* ─── Divider ────────────────────────────────────────────────────────── */}
       <div className="border-t border-white/[0.06]" />
@@ -397,9 +408,45 @@ export function OraclePanel({ onNavigate }: OraclePanelProps) {
               </AnimatePresence>
             )}
           </Section>
+
+          {/* ─── Ask Oracle CTA ─────────────────────────────────────────────── */}
+          <button
+            type="button"
+            onClick={() => setWorkspaceOpen(true)}
+            className="group flex w-full items-center gap-3 rounded-2xl border border-white/[0.08] bg-white/[0.02] p-3 text-left transition-all hover:border-emerald-500/30 hover:bg-emerald-500/[0.04]"
+          >
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl accent-gradient shadow-lg shadow-emerald-500/20">
+              <Sparkles className="h-4 w-4 text-white" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <span className="block text-sm font-medium text-zinc-100">Ask Oracle Anything</span>
+              <span className="block text-[11px] text-muted-foreground">
+                GST · ITC · Cash flow · 10 languages
+              </span>
+            </div>
+            <ChevronRight className="h-4 w-4 text-muted-foreground/50 transition-transform group-hover:translate-x-0.5" />
+          </button>
+
+          {/* Brand footer */}
+          <p className="px-1 pt-1 text-center text-[10px] leading-relaxed text-muted-foreground/60">
+            GSTPilot Oracle<span className="align-super text-[7px]">™</span> · The Financial Brain of India
+            <br />
+            <span className="text-muted-foreground/50">Founded &amp; developed by Prince Singh</span>
+          </p>
         </div>
       )}
     </motion.div>
+
+      {/* ═══ Full-screen Oracle workspace overlay (rendered as a sibling so the
+          parent glass-surface backdrop-filter does not trap the fixed layer) ═══ */}
+      <OracleWorkspace
+        open={workspaceOpen}
+        onClose={() => setWorkspaceOpen(false)}
+        userName={user?.name}
+        firmName={undefined}
+        gstin={undefined}
+      />
+    </>
   );
 }
 

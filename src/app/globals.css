@@ -208,6 +208,77 @@
     transform: scale(1.02);
   }
 
+  /* Oracle — slow breathing pulse for avatar halo / empty-state orb */
+  @keyframes oracle-pulse {
+    0%, 100% { opacity: 0.5; transform: scale(1); }
+    50% { opacity: 0.85; transform: scale(1.08); }
+  }
+  .motion-pulse {
+    animation: oracle-pulse 2.6s ease-in-out infinite;
+  }
+
+  /* Oracle — markdown prose styling for chat bubbles (Claude/Perplexity feel) */
+  .oracle-prose {
+    font-size: 0.9rem;
+    line-height: 1.65;
+    word-break: break-word;
+  }
+  .oracle-prose > *:first-child { margin-top: 0; }
+  .oracle-prose > *:last-child { margin-bottom: 0; }
+  .oracle-prose p { margin: 0 0 0.7rem; }
+  .oracle-prose p:last-child { margin-bottom: 0; }
+  .oracle-prose h1, .oracle-prose h2, .oracle-prose h3, .oracle-prose h4 {
+    font-weight: 600;
+    color: rgb(244 244 245);
+    margin: 1.1rem 0 0.5rem;
+    line-height: 1.35;
+  }
+  .oracle-prose h1 { font-size: 1.05rem; }
+  .oracle-prose h2 { font-size: 1rem; }
+  .oracle-prose h3 { font-size: 0.95rem; }
+  .oracle-prose h4 { font-size: 0.9rem; }
+  .oracle-prose ul, .oracle-prose ol {
+    margin: 0 0 0.7rem;
+    padding-left: 1.25rem;
+  }
+  .oracle-prose li { margin: 0.2rem 0; }
+  .oracle-prose ul li { list-style: disc; }
+  .oracle-prose ol li { list-style: decimal; }
+  .oracle-prose strong { font-weight: 600; color: rgb(244 244 245); }
+  .oracle-prose em { font-style: italic; color: rgb(228 228 231); }
+  .oracle-prose code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.82em;
+    background: rgba(255, 255, 255, 0.08);
+    padding: 0.1rem 0.32rem;
+    border-radius: 0.3rem;
+    color: rgb(234 234 234);
+  }
+  .oracle-prose pre {
+    margin: 0 0 0.7rem;
+    padding: 0.75rem 0.9rem;
+    background: rgba(0, 0, 0, 0.35);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 0.6rem;
+    overflow-x: auto;
+  }
+  .oracle-prose pre code {
+    background: transparent;
+    padding: 0;
+    font-size: 0.8em;
+  }
+  .oracle-prose blockquote {
+    margin: 0 0 0.7rem;
+    padding: 0.3rem 0 0.3rem 0.9rem;
+    border-left: 2px solid rgba(16, 185, 129, 0.5);
+    color: rgb(212 212 216);
+  }
+  .oracle-prose a { color: rgb(45 212 191); text-decoration: underline; text-underline-offset: 2px; }
+  .oracle-prose hr { margin: 1rem 0; border: 0; border-top: 1px solid rgba(255, 255, 255, 0.08); }
+  .oracle-prose table { width: 100%; border-collapse: collapse; margin: 0 0 0.7rem; font-size: 0.85em; }
+  .oracle-prose th, .oracle-prose td { border: 1px solid rgba(255,255,255,0.08); padding: 0.4rem 0.6rem; text-align: left; }
+  .oracle-prose th { background: rgba(255,255,255,0.04); font-weight: 600; }
+
   /* V16 search glow border on focus */
   .search-glow {
     transition: box-shadow 0.3s ease, border-color 0.3s ease;

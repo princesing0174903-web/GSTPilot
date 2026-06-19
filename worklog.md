@@ -2108,3 +2108,43 @@ Stage Summary:
 - Rebranded: "GSTPilot Intelligence" → "GSTPilot Oracle" throughout (orb tooltip, palette header, welcome message, input placeholder, footer, subtitle "Ask anything. Run everything.")
 - Micro-animations: .hover-lift (1.02 scale), card fade-in, typing cursor, search glow, aurora drift, breathing glow, network pulse — all 200-300ms, calm
 - "I am using the future." — V16 delivered.
+
+---
+Task ID: Oracle-Human-Experience
+Agent: GSTPilot Architect
+Task: Implement GSTPilot Oracle Human Experience — multilingual, emotional, premium AI Financial Officer (Claude/ChatGPT/Perplexity feel) with streaming, brand identity (Prince Singh), adaptive answers, and the Ultra Response Engine (no fake phases, <800ms first token, pulsing cursor, sticky input, smart auto-scroll).
+
+Work Log:
+- Discovered only OraclePanel.tsx (simple right-side launcher) existed; no Oracle chat workspace, no API route, no human-intelligence modules. Built the full Human Experience from scratch.
+- Created oracle-types.ts — OracleMessage, OracleLanguageId (10 langs), OracleEmotionId (6), OracleAvatarState, OracleChatRequest, OracleStreamChunk.
+- Created oracle-human.ts — 10-language auto-detection via Unicode script ranges (Devanagari/Arabic/Gurmukhi/Gujarati/Tamil/Telugu/Bengali) + Hinglish romanised keyword detection (2-marker threshold); 6-emotion detection (helpful/thinking/warning/success/opportunity/risk); avatar state derivation (idle/listening/thinking/speaking/success/warning); 6 multilingual suggestion starters.
+- Created oracle-brand.ts — Prince Singh founder identity with Levenshtein typo-tolerant detection (prince/singh/gstpilot variants + role keywords + self-identity questions in EN/Hindi); canonical instant answers (CANONICAL_FOUNDER_ANSWER, CANONICAL_IDENTITY_ANSWER); BRAND_IDENTITY_PROMPT_BLOCK injected permanently at top of system prompt.
+- Created /api/oracle/chat/route.ts — streaming SSE route. SDK called with stream:true returns ReadableStream; parsed upstream SSE chunks (data: {choices[0].delta.content}) and re-emitted as our SSE format (data: {token}). Emits language hint nudge first (so UI shows pulsing cursor within first frame), then tokens, then done. System prompt encodes: brand identity block, multilingual auto-match, natural executive personality, FORBIDDEN phrases (no "As an AI..."), adaptive answer shapes (simple→2-5 lines, procedural→steps, complex→light structure, status→number-first), sparing micro-expressions, GST reliability (cite CBIC/sections, honest uncertainty "Based on current GST rules..."), Indian number formatting (₹/lakhs).
+- Created OracleEmptyState.tsx — premium empty state: "Welcome back, {firstName}." headline (uses user memory), 6 multilingual suggestion cards, capability strip (10 languages / GST law / remembers everything / thinks like CFO), brand footer (Prince Singh).
+- Created OracleWorkspace.tsx — full-screen overlay chat. Key UX: fixed inset-0 z-50 overlay (rendered as sibling of OraclePanel to escape glass-surface backdrop-filter containing block); dynamic avatar (6 states); premium message bubbles with ReactMarkdown rendering + oracle-prose CSS; "Oracle is responding…" indicator with pulsing dot BEFORE first token; PulsingCursor (blinking emerald bar) DURING streaming; NO fake phases (thinking/reading/analyzing removed); sticky input bar (auto-grow textarea, Enter to send, Shift+Enter newline); smart auto-scroll (userPinnedUpRef — pauses when user scrolls >120px from bottom, resumes when near bottom); brand-question client-side short-circuit (instant canonical answer, no API); conversation persistence in localStorage; follow-up chips generated from response content; stop button during streaming; clear conversation; Escape to close.
+- Updated OraclePanel.tsx — made header clickable to open workspace; added "Ask Oracle Anything" CTA card; added brand footer; rendered OracleWorkspace as sibling (outside glass-surface) to avoid backdrop-filter containing-block trap.
+- Added CSS utilities to globals.css — .motion-pulse (breathing keyframe for avatar halo), .oracle-prose (markdown styling: headings, lists, bold, code, blockquote, tables — Claude/Perplexity readability).
+- Fixed bug: brand short-circuit branch wasn't clearing input (setInput('')) or resetting textarea height — now clears both and scrolls to bottom.
+- Fixed TS error: toModelMessages role typed as 'assistant'|'user' union (was inferred as string).
+- Verification (Agent Browser, authenticated via Firebase signup prince.oracle.test@gstpilot.dev):
+  * Dashboard renders with Oracle panel (header clickable + Ask Oracle CTA + brand footer "Founded & developed by Prince Singh").
+  * Empty state: "Welcome back, Prince." + 6 multilingual suggestion cards + capability strip + brand footer.
+  * Suggestion click "GST kya hota hai?" → streamed natural Hinglish answer, "Responding" header state (no fake phases), follow-up chips appeared.
+  * Brand question "who created you and who is prince singh?" → INSTANT canonical answer (client-side short-circuit): "GSTPilot Infinity™ was founded, developed, and is owned by **Prince Singh** — the visionary... Founder, Owner, Developer, and Visionary".
+  * Hindi (Devanagari) "मेरी GSTR-3B लेट हो गई" → "Responding" state + "हिन्दी" language indicator → streamed accurate Hindi answer (₹50/day penalty, 18% interest, ITC impact) with action steps + follow-up chip.
+  * Simple "What is GST?" → short 2-3 sentence answer (adaptive). Complex "Explain ITC rules for manufacturers" → structured with headers/bullets + single ⚠️ micro-expression (adaptive contrast confirmed).
+  * API: all POST /api/oracle/chat returned 200, 1.4-4.1s total stream time, first token <800ms. No errors in dev.log.
+- Lint: clean. TSC: clean (no oracle/* errors).
+
+Stage Summary:
+- GSTPilot Oracle™ Human Experience is LIVE and end-to-end verified.
+- 10-language auto-detection + reply (English, Hindi, Hinglish, Urdu, Punjabi, Gujarati, Marathi, Tamil, Telugu, Bengali).
+- Natural executive personality (CFO/CA tone, no robotic disclaimers).
+- 6 micro-expression emotions (used sparingly, one glyph per response max).
+- Adaptive answers (simple→short, complex→structured, no rigid templates).
+- Human memory (userName in empty state + sent to API for personalisation).
+- Premium empty states ("Welcome back, Prince" / "Your Financial Brain is ready").
+- Ultra Response Engine: no fake phases, "Oracle is responding…" + pulsing cursor, <800ms first token, sticky input, smart auto-scroll, smooth no-jump layout.
+- Brand identity: Prince Singh credited as Founder/Owner/Developer/Visionary across (a) instant client-side short-circuit, (b) permanent server-side system-prompt block, (c) UI footers in panel + empty state + input hint.
+- GST reliability: CBIC/GSTN-grounded, honest uncertainty, ₹/lakhs formatting.
+- Files: oracle-types.ts, oracle-human.ts, oracle-brand.ts, OracleEmptyState.tsx, OracleWorkspace.tsx, /api/oracle/chat/route.ts, updated OraclePanel.tsx, globals.css additions.

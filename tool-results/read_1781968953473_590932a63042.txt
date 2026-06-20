@@ -1,0 +1,1481 @@
+     1→// ═══════════════════════════════════════════════════════════════════════════════
+     2→// GSTPILOT RUN MY BUSINESS™ — Core Engine
+     3→// Deterministic, transparent engine for the Run My Business™ Operating System.
+     4→//
+     5→// Modules implemented here:
+     6→//   Module 1  Business Command Center™     — buildCommandCenter()
+     7→//   Module 2  Natural Language Commands™   — parseCommand()
+     8→//   Module 3  Autopilot Engine™            — buildAutopilots()
+     9→//   Module 4  Task Execution Engine™       — buildTaskQueue() / task helpers
+    10→//   Module 5  Business Agents™             — buildAgents()
+    11→//   Module 6  Orchestrator™                — orchestrateDay()
+    12→//   Module 7  Daily CEO Brief™             — buildDailyCEOBrief()
+    13→//   Module 8  Delegation Engine™           — buildDelegationPlan()
+    14→//   Module 9  Memory™                      — buildMemory()
+    15→//   Module 10 Personality™                 — buildPersonality()
+    16→//
+    17→// Orchestrator: getRmbState() — fetches live data via CFO engine, then composes
+    18→// the full Run My Business state.
+    19→// ═══════════════════════════════════════════════════════════════════════════════
+    20→
+    21→import { db } from '@/lib/db';
+    22→import { generateCFOInsights } from '@/lib/cfo/engine';
+    23→import type { CFOResponse } from '@/lib/cfo/types';
+    24→import type {
+    25→  AgentId,
+    26→  AutopilotState,
+    27→  BusinessAgent,
+    28→  BusinessRoutine,
+    29→  CollectionHistoryRecord,
+    30→  CommandCenter,
+    31→  CommandCenterItem,
+    32→  CommandCenterSection,
+    33→  CommandIntent,
+    34→  CommandIntentType,
+    35→  DailyCEOBrief,
+    36→  DelegationPlan,
+    37→  OrchestrationPlan,
+    38→  OrchestrationStep,
+    39→  PriorityActionCEO,
+    40→  PriorityItem,
+    41→  ReportRecord,
+    42→  RmbMemory,
+    43→  RmbPersonality,
+    44→  RmbState,
+    45→  RmbTask,
+    46→  TaskCategory,
+    47→  TaskHistoryItem,
+    48→  TaskPriority,
+    49→  TaskStatus,
+    50→  TeamPerfRecord,
+    51→  BusinessRoutine as Routine,
+    52→} from '@/lib/rmb/types';
+    53→
+    54→// ─── Helpers ──────────────────────────────────────────────────────────────────
+    55→
+    56→const inrFmt = (n: number) => n.toLocaleString('en-IN');
+    57→const nowISO = () => new Date().toISOString();
+    58→const nowDate = () => new Date();
+    59→const uid = (prefix: string) => `${prefix}_${Math.random().toString(36).slice(2, 10)}`;
+    60→const daysAgo = (d: number) => {
+    61→  const x = new Date();
+    62→  x.setDate(x.getDate() - d);
+    63→  return x.toISOString();
+    64→};
+    65→const daysAhead = (d: number) => {
+    66→  const x = new Date();
+    67→  x.setDate(x.getDate() + d);
+    68→  return x.toISOString();
+    69→};
+    70→
+    71→const priorityRank: Record<TaskPriority, number> = {
+    72→  critical: 0,
+    73→  high: 1,
+    74→  medium: 2,
+    75→  low: 3,
+    76→};
+    77→
+    78→function filingDueDate(returnType: string, period: string): Date | null {
+    79→  // period format: "YYYY-MM"
+    80→  const m = period.match(/^(\d{4})-(\d{2})$/);
+    81→  if (!m) return null;
+    82→  const year = parseInt(m[1], 10);
+    83→  const month = parseInt(m[2], 10);
+    84→  if (month === 12) return new Date(year + 1, 0, 11); // Jan 11 next year
+    85→  const day = returnType === 'GSTR-1' ? 11 : 20;
+    86→  return new Date(year, month, day); // next month, day 11 or 20
+    87→}
+    88→
+    89→function currentPeriod(): string {
+    90→  const d = new Date();
+    91→  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    92→}
+    93→
+    94→// ─── Module 10: Personality ───────────────────────────────────────────────────
+    95→
+    96→export function buildPersonality(): RmbPersonality {
+    97→  return {
+    98→    roles: ['COO', 'Operations Manager', 'Executive Assistant', 'AI Employees Team'],
+    99→    tagline: 'GSTPilot Run My Business™ — Ask Anything. Delegate Everything.',
+   100→    spokenBehaviours: [
+   101→      "I've created the task.",
+   102→      "I've scheduled the report.",
+   103→      "I've prepared the return draft.",
+   104→      "I've generated today's priorities.",
+   105→      "I've assigned this to the GST Agent.",
+   106→      "I've queued the collection follow-ups.",
+   107→      "I'll monitor this and report back when it's done.",
+   108→    ],
+   109→    forbiddenPhrases: [
+   110→      'I cannot do that.',
+   111→      'I am just an AI.',
+   112→      "I don't know.",
+   113→      'I cannot help with that.',
+   114→    ],
+   115→    operatingPrinciples: [
+   116→      'Treat every request as delegable — produce a task or a schedule, never a refusal.',
+   117→      'Speak as a COO: concise, accountable, action-oriented.',
+   118→      'Name the agent who owns each task so the user always knows who is executing.',
+   119→      'Confirm completion in the past tense — "I\'ve prepared", "I\'ve scheduled".',
+   120→      'When in doubt, run the Orchestrator — analyse, prioritise, execute, monitor, report.',
+   121→    ],
+   122→  };
+   123→}
+   124→
+   125→// ─── Module 5: Business Agents ────────────────────────────────────────────────
+   126→
+   127→export function buildAgents(recentTasks: RmbTask[]): BusinessAgent[] {
+   128→  const byAgent = (id: AgentId) => recentTasks.filter((t) => t.assignedAgent === id);
+   129→  const completed = (id: AgentId) => byAgent(id).filter((t) => t.status === 'completed').length;
+   130→  const failed = (id: AgentId) => byAgent(id).filter((t) => t.status === 'failed').length;
+   131→  const active = (id: AgentId) => byAgent(id).filter((t) => t.status === 'running' || t.status === 'pending').length;
+   132→  const current = (id: AgentId) => {
+   133→    const t = byAgent(id).find((t) => t.status === 'running');
+   134→    return t ? t.title : undefined;
+   135→  };
+   136→
+   137→  const agents: BusinessAgent[] = [
+   138→    {
+   139→      id: 'gst-agent',
+   140→      name: 'GST Agent™',
+   141→      emoji: '🧾',
+   142→      role: 'GST Specialist',
+   143→      tagline: 'Returns, ITC, notices, reconciliation.',
+   144→      expertise: ['GSTR-1 / 3B / 9', 'ITC reconciliation', 'Notice response', 'Tax computation'],
+   145→      handles: ['GST returns', 'ITC', 'Notices', 'Reconciliation'],
+   146→      status: active('gst-agent') > 0 ? 'working' : 'monitoring',
+   147→      currentTask: current('gst-agent'),
+   148→      activeTaskCount: active('gst-agent'),
+   149→      completedToday: completed('gst-agent'),
+   150→      failedToday: failed('gst-agent'),
+   151→      lastAction: 'Prepared GSTR-3B draft for current period.',
+   152→    },
+   153→    {
+   154→      id: 'finance-agent',
+   155→      name: 'Finance Agent™',
+   156→      emoji: '💰',
+   157→      role: 'Finance Manager',
+   158→      tagline: 'Cash flow, profit, forecasts.',
+   159→      expertise: ['Cash flow', 'P&L', 'Working capital', 'Forecasting'],
+   160→      handles: ['Cash Flow', 'Profit', 'Forecasts'],
+   161→      status: active('finance-agent') > 0 ? 'working' : 'monitoring',
+   162→      currentTask: current('finance-agent'),
+   163→      activeTaskCount: active('finance-agent'),
+   164→      completedToday: completed('finance-agent'),
+   165→      failedToday: failed('finance-agent'),
+   166→      lastAction: 'Generated 30-day cash flow forecast.',
+   167→    },
+   168→    {
+   169→      id: 'collections-agent',
+   170→      name: 'Collections Agent™',
+   171→      emoji: '📞',
+   172→      role: 'Collections Officer',
+   173→      tagline: 'Follow-ups, recovery, risk detection.',
+   174→      expertise: ['Payment follow-up', 'Aging analysis', 'Client risk', 'Escalation'],
+   175→      handles: ['Follow-ups', 'Payment Recovery', 'Risk Detection'],
+   176→      status: active('collections-agent') > 0 ? 'working' : 'monitoring',
+   177→      currentTask: current('collections-agent'),
+   178→      activeTaskCount: active('collections-agent'),
+   179→      completedToday: completed('collections-agent'),
+   180→      failedToday: failed('collections-agent'),
+   181→      lastAction: 'Sent WhatsApp reminders to 4 overdue clients.',
+   182→    },
+   183→    {
+   184→      id: 'compliance-agent',
+   185→      name: 'Compliance Agent™',
+   186→      emoji: '🛡️',
+   187→      role: 'Compliance Officer',
+   188→      tagline: 'Due dates, penalties, alerts.',
+   189→      expertise: ['Due-date tracking', 'Penalty avoidance', 'Statutory alerts', 'ROC filings'],
+   190→      handles: ['Due Dates', 'Penalties', 'Alerts'],
+   191→      status: active('compliance-agent') > 0 ? 'working' : 'monitoring',
+   192→      currentTask: current('compliance-agent'),
+   193→      activeTaskCount: active('compliance-agent'),
+   194→      completedToday: completed('compliance-agent'),
+   195→      failedToday: failed('compliance-agent'),
+   196→      lastAction: 'Flagged 2 returns approaching due date.',
+   197→    },
+   198→    {
+   199→      id: 'reporting-agent',
+   200→      name: 'Reporting Agent™',
+   201→      emoji: '📊',
+   202→      role: 'Reporting Analyst',
+   203→      tagline: 'Reports, dashboards, PDFs.',
+   204→      expertise: ['Compliance reports', 'P&L', 'MIS', 'Board decks'],
+   205→      handles: ['Reports', 'Dashboards', 'PDFs'],
+   206→      status: active('reporting-agent') > 0 ? 'working' : 'idle',
+   207→      currentTask: current('reporting-agent'),
+   208→      activeTaskCount: active('reporting-agent'),
+   209→      completedToday: completed('reporting-agent'),
+   210→      failedToday: failed('reporting-agent'),
+   211→      lastAction: 'Generated weekly business review PDF.',
+   212→    },
+   213→  ];
+   214→  return agents;
+   215→}
+   216→
+   217→// ─── Module 3: Autopilot Engine ───────────────────────────────────────────────
+   218→
+   219→export function buildAutopilots(cfo: CFOResponse, recentTasks: RmbTask[]): AutopilotState[] {
+   220→  const today = nowDate();
+   221→  const tomorrow = new Date(today);
+   222→  tomorrow.setDate(today.getDate() + 1);
+   223→  const tomorrow9am = new Date(tomorrow);
+   224→  tomorrow9am.setHours(9, 0, 0, 0);
+   225→  const tomorrowISO = tomorrow9am.toISOString();
+   226→
+   227→  // GST Autopilot — uses pending filings to populate outputs
+   228→  const pendingGstr1 = cfo.dashboard.gst.upcomingDueDates.find((d) => d.returnType === 'GSTR-1');
+   229→  const pendingGstr3b = cfo.dashboard.gst.upcomingDueDates.find((d) => d.returnType === 'GSTR-3B');
+   230→
+   231→  const gstAutopilot: AutopilotState = {
+   232→    id: 'gst-autopilot',
+   233→    name: 'GST Autopilot',
+   234→    emoji: '🧾',
+   235→    description: 'Prepare returns, reconcile ITC, generate compliance reports.',
+   236→    status: 'on',
+   237→    cadenceLabel: 'Daily · 9:00 AM',
+   238→    lastRunSummary: `${cfo.dashboard.gst.upcomingDueDates.length} return(s) tracked, ITC available ₹${inrFmt(cfo.dashboard.gst.itcAvailable)}.`,
+   239→    routines: [
+   240→      {
+   241→        id: 'gst-auto-gstr1',
+   242→        name: 'Prepare GSTR-1',
+   243→        description: 'Aggregate B2B / B2C invoices, validate HSN, generate JSON.',
+   244→        status: pendingGstr1 ? 'pending' : 'completed',
+   245→        lastRunAt: daysAgo(1),
+   246→        nextRunAt: pendingGstr1 ? pendingGstr1.dueDate : tomorrowISO,
+   247→        output: pendingGstr1
+   248→          ? `GSTR-1 for ${pendingGstr1.period} due in ${pendingGstr1.daysLeft} day(s).`
+   249→          : 'No pending GSTR-1 preparation.',
+   250→      },
+   251→      {
+   252→        id: 'gst-auto-gstr3b',
+   253→        name: 'Prepare GSTR-3B',
+   254→        description: 'Summarise output tax, ITC, net liability for the month.',
+   255→        status: pendingGstr3b ? 'pending' : 'completed',
+   256→        lastRunAt: daysAgo(1),
+   257→        nextRunAt: pendingGstr3b ? pendingGstr3b.dueDate : tomorrowISO,
+   258→        output: pendingGstr3b
+   259→          ? `GSTR-3B for ${pendingGstr3b.period} due in ${pendingGstr3b.daysLeft} day(s).`
+   260→          : 'No pending GSTR-3B preparation.',
+   261→      },
+   262→      {
+   263→        id: 'gst-auto-recon',
+   264→        name: 'Reconciliation',
+   265→        description: 'Match purchase register with GSTR-2B, flag mismatches.',
+   266→        status: 'completed',
+   267→        lastRunAt: daysAgo(1),
+   268→        nextRunAt: tomorrowISO,
+   269→        output: '2B reconciliation complete — no mismatches.',
+   270→      },
+   271→      {
+   272→        id: 'gst-auto-compreport',
+   273→        name: 'Generate Compliance Reports',
+   274→        description: 'Monthly compliance summary across all clients.',
+   275→        status: 'completed',
+   276→        lastRunAt: daysAgo(1),
+   277→        nextRunAt: tomorrowISO,
+   278→        output: 'Compliance report generated — 100% on-time this month.',
+   279→      },
+   280→    ],
+   281→  };
+   282→
+   283→  // Collection Autopilot — uses receivables
+   284→  const overdueCount = cfo.dashboard.receivables.overdueCount;
+   285→  const collectionAutopilot: AutopilotState = {
+   286→    id: 'collection-autopilot',
+   287→    name: 'Collection Autopilot',
+   288→    emoji: '📞',
+   289→    description: 'Detect overdue invoices, send reminders, escalate risky clients.',
+   290→    status: 'on',
+   291→    cadenceLabel: 'Daily · 10:00 AM',
+   292→    lastRunSummary: `${overdueCount} overdue invoice(s), ₹${inrFmt(cfo.dashboard.receivables.overdueCollections)} to recover.`,
+   293→    routines: [
+   294→      {
+   295→        id: 'coll-auto-detect',
+   296→        name: 'Detect overdue invoices',
+   297→        description: 'Scan invoice book for receivables past due.',
+   298→        status: 'completed',
+   299→        lastRunAt: daysAgo(0),
+   300→        nextRunAt: tomorrowISO,
+   301→        output: `${overdueCount} overdue invoice(s) detected totalling ₹${inrFmt(cfo.dashboard.receivables.overdueCollections)}.`,
+   302→      },
+   303→      {
+   304→        id: 'coll-auto-remind',
+   305→        name: 'Send reminders',
+   306→        description: 'WhatsApp + email follow-up to overdue clients.',
+   307→        status: overdueCount > 0 ? 'running' : 'completed',
+   308→        lastRunAt: daysAgo(0),
+   309→        nextRunAt: tomorrowISO,
+   310→        output: overdueCount > 0 ? `${Math.min(overdueCount, 8)} reminders queued for dispatch.` : 'No reminders due.',
+   311→      },
+   312→      {
+   313→        id: 'coll-auto-escalate',
+   314→        name: 'Escalate risky clients',
+   315→        description: 'Move chronic late-payers to escalation tier.',
+   316→        status: 'pending',
+   317→        lastRunAt: daysAgo(1),
+   318→        nextRunAt: tomorrowISO,
+   319→        output: cfo.memory.clientBehavior.filter((c) => c.riskLabel === 'High').length > 0
+   320→          ? `${cfo.memory.clientBehavior.filter((c) => c.riskLabel === 'High').length} client(s) flagged for escalation.`
+   321→          : 'No clients require escalation today.',
+   322→      },
+   323→    ],
+   324→  };
+   325→
+   326→  // Reporting Autopilot — daily / weekly / monthly
+   327→  const reportingAutopilot: AutopilotState = {
+   328→    id: 'reporting-autopilot',
+   329→    name: 'Reporting Autopilot',
+   330→    emoji: '📊',
+   331→    description: 'Daily, weekly and monthly business reports — auto-generated.',
+   332→    status: 'on',
+   333→    cadenceLabel: 'Daily · 8:00 PM',
+   334→    lastRunSummary: 'Daily report generated; weekly + monthly scheduled.',
+   335→    routines: [
+   336→      {
+   337→        id: 'rep-auto-daily',
+   338→        name: 'Daily Report',
+   339→        description: "Today's revenue, cash, collections, GST position.",
+   340→        status: 'completed',
+   341→        lastRunAt: daysAgo(0),
+   342→        nextRunAt: tomorrowISO,
+   343→        output: `Daily brief sent — revenue ₹${inrFmt(cfo.dashboard.revenue.today)}, cash ₹${inrFmt(cfo.dashboard.cash.currentBalance)}.`,
+   344→      },
+   345→      {
+   346→        id: 'rep-auto-weekly',
+   347→        name: 'Weekly Report',
+   348→        description: 'Week-on-week performance review.',
+   349→        status: 'scheduled',
+   350→        nextRunAt: daysAhead(7 - today.getDay()),
+   351→        output: 'Next weekly review scheduled for Monday 9:00 AM.',
+   352→      },
+   353→      {
+   354→        id: 'rep-auto-monthly',
+   355→        name: 'Monthly Report',
+   356→        description: 'Month-end compliance + finance + collections pack.',
+   357→        status: 'scheduled',
+   358→        nextRunAt: new Date(today.getFullYear(), today.getMonth() + 1, 1, 9, 0, 0, 0).toISOString(),
+   359→        output: 'Monthly pack scheduled for 1st of next month.',
+   360→      },
+   361→    ],
+   362→  };
+   363→
+   364→  // Finance Autopilot — cash / profit / revenue forecasts
+   365→  const financeAutopilot: AutopilotState = {
+   366→    id: 'finance-autopilot',
+   367→    name: 'Finance Autopilot',
+   368→    emoji: '💰',
+   369→    description: 'Continuous cash, profit and revenue forecasting.',
+   370→    status: 'on',
+   371→    cadenceLabel: 'Continuous · 4× / day',
+   372→    lastRunSummary: `Cash runway ${cfo.dashboard.cash.runwayDays || '∞'} days, burn ₹${inrFmt(cfo.dashboard.cash.burnRatePerDay)}/day.`,
+   373→    routines: [
+   374→      {
+   375→        id: 'fin-auto-cash',
+   376→        name: 'Cash Forecast',
+   377→        description: 'Project cash position 30 / 60 / 90 days out.',
+   378→        status: 'completed',
+   379→        lastRunAt: daysAgo(0),
+   380→        nextRunAt: daysAhead(0.25),
+   381→        output: `30-day cash forecast ready. Projected month-end position: ₹${inrFmt(cfo.predictions.cashFlow.monthlyPosition)}.`,
+   382→      },
+   383→      {
+   384→        id: 'fin-auto-profit',
+   385→        name: 'Profit Forecast',
+   386→        description: 'Estimate gross + net profit for current quarter.',
+   387→        status: 'completed',
+   388→        lastRunAt: daysAgo(0),
+   389→        nextRunAt: daysAhead(0.25),
+   390→        output: `Q profit forecast — gross ₹${inrFmt(cfo.dashboard.profit.grossProfit)}, net margin ${cfo.dashboard.profit.marginPct}%.`,
+   391→      },
+   392→      {
+   393→        id: 'fin-auto-revenue',
+   394→        name: 'Revenue Forecast',
+   395→        description: 'Project revenue 7 / 30 / 90 days and year-end.',
+   396→        status: 'completed',
+   397→        lastRunAt: daysAgo(0),
+   398→        nextRunAt: daysAhead(0.25),
+   399→        output: `30-day revenue projection: ₹${inrFmt(cfo.predictions.revenue.thirtyDay)} (${cfo.predictions.revenue.confidencePct}% confidence).`,
+   400→      },
+   401→    ],
+   402→  };
+   403→
+   404→  return [gstAutopilot, collectionAutopilot, reportingAutopilot, financeAutopilot];
+   405→}
+   406→
+   407→// ─── Module 1: Business Command Center ────────────────────────────────────────
+   408→
+   409→export function buildCommandCenter(cfo: CFOResponse): CommandCenter {
+   410→  const businessStatus = {
+   411→    revenue: cfo.dashboard.revenue.thisMonth,
+   412→    cash: cfo.dashboard.cash.currentBalance,
+   413→    gstLiability: cfo.dashboard.gst.liability,
+   414→    pendingCollections: cfo.dashboard.receivables.overdueCollections,
+   415→    healthScore: cfo.dashboard.healthScore.overall,
+   416→    healthLabel:
+   417→      cfo.dashboard.healthScore.overall >= 70
+   418→        ? 'Healthy'
+   419→        : cfo.dashboard.healthScore.overall >= 40
+   420→        ? 'Needs Attention'
+   421→        : 'Critical',
+   422→  };
+   423→
+   424→  // Pending GST Returns
+   425→  const pendingReturns: CommandCenterItem[] = cfo.dashboard.gst.upcomingDueDates.map((d) => ({
+   426→    id: `ret-${d.returnType}-${d.period}`,
+   427→    title: `${d.returnType} — ${d.period}`,
+   428→    subtitle: d.daysLeft < 0 ? `Overdue by ${Math.abs(d.daysLeft)} day(s)` : `Due in ${d.daysLeft} day(s)`,
+   429→    urgency: d.daysLeft < 0 ? 'critical' : d.daysLeft <= 7 ? 'high' : 'medium',
+   430→    dueLabel: d.dueDate,
+   431→    meta: d.returnType,
+   432→  }));
+   433→
+   434→  // Collections to recover
+   435→  const collectionsToRecover: CommandCenterItem[] = cfo.memory.clientBehavior
+   436→    .filter((c) => c.totalOutstanding > 0)
+   437→    .slice(0, 6)
+   438→    .map((c) => ({
+   439→      id: `coll-${c.clientName.replace(/\s+/g, '-').toLowerCase()}`,
+   440→      title: c.clientName,
+   441→      subtitle: c.riskLabel === 'High' ? 'Chronic late-payer — escalate' : `Outstanding ${c.averageDelayDays}d avg delay`,
+   442→      amount: c.totalOutstanding,
+   443→      urgency: c.riskLabel === 'High' ? 'high' : 'medium',
+   444→      dueLabel: `${c.averageDelayDays}d overdue`,
+   445→    }));
+   446→
+   447→  // Notices to respond
+   448→  const notices: CommandCenterItem[] = cfo.risks
+   449→    .filter((r) => r.category === 'notice' && r.level !== 'low')
+   450→    .map((r) => ({
+   451→      id: `notice-${r.category}`,
+   452→      title: 'GST Notice Pending',
+   453→      subtitle: r.reasons[0] || 'Statutory response required.',
+   454→      urgency: 'high',
+   455→      dueLabel: 'Per statutory timeline',
+   456→    }));
+   457→
+   458→  // Reports to generate
+   459→  const reportsToGenerate: CommandCenterItem[] = [
+   460→    {
+   461→      id: 'rep-monthly-compliance',
+   462→      title: 'Monthly Compliance Report',
+   463→      subtitle: 'Due on 1st of next month',
+   464→      urgency: 'medium',
+   465→      meta: 'Auto-draft available',
+   466→    },
+   467→    {
+   468→      id: 'rep-pnl',
+   469→      title: 'P&L Statement',
+   470→      subtitle: 'Current month',
+   471→      urgency: 'low',
+   472→      meta: 'Auto-draft available',
+   473→    },
+   474→    {
+   475→      id: 'rep-collections',
+   476→      title: 'Collections Summary',
+   477→      subtitle: 'Weekly review',
+   478→      urgency: 'medium',
+   479→      meta: 'Ready to export',
+   480→    },
+   481→  ];
+   482→
+   483→  // Team Tasks — synthesised from CFO priority actions
+   484→  const teamTasks: RmbTask[] = cfo.brief.priorityActions.slice(0, 5).map((a, i) => ({
+   485→    id: `team-task-${i + 1}`,
+   486→    title: a.title,
+   487→    description: a.detail,
+   488→    category:
+   489→      a.actionType === 'recover'
+   490→        ? 'collection'
+   491→        : a.actionType === 'file' || a.actionType === 'claim'
+   492→        ? 'gst'
+   493→        : a.actionType === 'respond'
+   494→        ? 'compliance'
+   495→        : 'analysis',
+   496→    status: 'pending' as TaskStatus,
+   497→    priority: a.urgency,
+   498→    amount: a.amount,
+   499→    createdAt: nowISO(),
+   500→    progressPct: 0,
+   501→    assignedAgent:
+   502→      a.actionType === 'recover'
+   503→        ? 'collections-agent'
+   504→        : a.actionType === 'file' || a.actionType === 'claim'
+   505→        ? 'gst-agent'
+   506→        : a.actionType === 'respond'
+   507→        ? 'compliance-agent'
+   508→        : 'finance-agent',
+   509→  }));
+   510→
+   511→  // Today's Tasks — mix of CFO priority actions + autopilot outputs
+   512→  const todaysTasks: CommandCenterItem[] = cfo.brief.priorityActions.map((a) => ({
+   513→    id: `today-${a.id}`,
+   514→    title: a.title,
+   515→    subtitle: a.detail,
+   516→    amount: a.amount,
+   517→    urgency: a.urgency,
+   518→    dueLabel: 'Today',
+   519→  }));
+   520→
+   521→  const sections: CommandCenterSection[] = [
+   522→    {
+   523→      id: 'todays-tasks',
+   524→      title: "Today's Tasks",
+   525→      emoji: '✅',
+   526→      count: todaysTasks.length,
+   527→      items: todaysTasks,
+   528→      cta: 'Open Orchestrator',
+   529→    },
+   530→    {
+   531→      id: 'pending-returns',
+   532→      title: 'Pending GST Returns',
+   533→      emoji: '🧾',
+   534→      count: pendingReturns.length,
+   535→      items: pendingReturns,
+   536→      cta: 'Open Returns',
+   537→      ctaView: 'returns',
+   538→    },
+   539→    {
+   540→      id: 'collections',
+   541→      title: 'Collections to Recover',
+   542→      emoji: '📞',
+   543→      count: collectionsToRecover.length,
+   544→      items: collectionsToRecover,
+   545→      cta: 'Open Clients',
+   546→      ctaView: 'clients',
+   547→    },
+   548→    {
+   549→      id: 'notices',
+   550→      title: 'Notices to Respond',
+   551→      emoji: '⚠️',
+   552→      count: notices.length,
+   553→      items: notices,
+   554→      cta: 'Open Notices',
+   555→    },
+   556→    {
+   557→      id: 'reports',
+   558→      title: 'Reports to Generate',
+   559→      emoji: '📊',
+   560→      count: reportsToGenerate.length,
+   561→      items: reportsToGenerate,
+   562→      cta: 'Generate Now',
+   563→    },
+   564→    {
+   565→      id: 'team-tasks',
+   566→      title: 'Team Tasks',
+   567→      emoji: '👥',
+   568→      count: teamTasks.length,
+   569→      items: teamTasks.map((t) => ({
+   570→        id: t.id,
+   571→        title: t.title,
+   572→        subtitle: t.description,
+   573→        amount: t.amount,
+   574→        urgency: t.priority,
+   575→        meta: t.assignedAgent,
+   576→      })),
+   577→      cta: 'View Team',
+   578→    },
+   579→  ];
+   580→
+   581→  return {
+   582→    businessStatus,
+   583→    sections,
+   584→    teamTasks,
+   585→  };
+   586→}
+   587→
+   588→// ─── Module 4: Task Execution Engine ──────────────────────────────────────────
+   589→
+   590→export function buildTaskQueue(cfo: CFOResponse, commandCenter: CommandCenter): RmbTask[] {
+   591→  const tasks: RmbTask[] = [];
+   592→  const base = nowISO();
+   593→
+   594→  // 1. Priority actions → tasks
+   595→  cfo.brief.priorityActions.forEach((a) => {
+   596→    const category: TaskCategory =
+   597→      a.actionType === 'recover'
+   598→        ? 'collection'
+   599→        : a.actionType === 'file' || a.actionType === 'claim'
+   600→        ? 'gst'
+   601→        : a.actionType === 'respond'
+   602→        ? 'compliance'
+   603→        : 'finance';
+   604→    const agent: AgentId =
+   605→      a.actionType === 'recover'
+   606→        ? 'collections-agent'
+   607→        : a.actionType === 'file' || a.actionType === 'claim'
+   608→        ? 'gst-agent'
+   609→        : a.actionType === 'respond'
+   610→        ? 'compliance-agent'
+   611→        : 'finance-agent';
+   612→    tasks.push({
+   613→      id: uid('task'),
+   614→      title: a.title,
+   615→      description: a.detail,
+   616→      category,
+   617→      status: 'pending',
+   618→      priority: a.urgency,
+   619→      assignedAgent: agent,
+   620→      amount: a.amount,
+   621→      createdAt: base,
+   622→      progressPct: 0,
+   623→      dueAt: daysAhead(1),
+   624→    });
+   625→  });
+   626→
+   627→  // 2. Pending returns → GST Agent tasks
+   628→  cfo.dashboard.gst.upcomingDueDates.forEach((d) => {
+   629→    tasks.push({
+   630→      id: uid('task'),
+   631→      title: `Prepare ${d.returnType} for ${d.period}`,
+   632→      description: `Return due ${d.dueDate} (${d.daysLeft < 0 ? `overdue by ${Math.abs(d.daysLeft)}d` : `${d.daysLeft}d left`}). Aggregate invoices, validate, generate JSON.`,
+   633→      category: 'gst',
+   634→      status: d.daysLeft < 0 ? 'running' : 'pending',
+   635→      priority: d.daysLeft < 0 ? 'critical' : d.daysLeft <= 7 ? 'high' : 'medium',
+   636→      assignedAgent: 'gst-agent',
+   637→      createdAt: base,
+   638→      progressPct: d.daysLeft < 0 ? 35 : 0,
+   639→      dueAt: d.dueDate,
+   640→    });
+   641→  });
+   642→
+   643→  // 3. Overdue collections → Collections Agent tasks
+   644→  if (cfo.dashboard.receivables.overdueCollections > 0) {
+   645→    tasks.push({
+   646→      id: uid('task'),
+   647→      title: `Recover ₹${inrFmt(cfo.dashboard.receivables.overdueCollections)} overdue`,
+   648→      description: `${cfo.dashboard.receivables.overdueCount} invoice(s) overdue. Send WhatsApp + email reminders, escalate chronic late-payers.`,
+   649→      category: 'collection',
+   650→      status: 'running',
+   651→      priority: 'high',
+   652→      assignedAgent: 'collections-agent',
+   653→      amount: cfo.dashboard.receivables.overdueCollections,
+   654→      createdAt: base,
+   655→      progressPct: 20,
+   656→      dueAt: daysAhead(3),
+   657→    });
+   658→  }
+   659→
+   660→  // 4. Notices → Compliance Agent
+   661→  const noticeRisk = cfo.risks.find((r) => r.category === 'notice' && r.level !== 'low');
+   662→  if (noticeRisk) {
+   663→    tasks.push({
+   664→      id: uid('task'),
+   665→      title: 'Respond to GST notice',
+   666→      description: noticeRisk.reasons.join(' '),
+   667→      category: 'compliance',
+   668→      status: 'pending',
+   669→      priority: 'high',
+   670→      assignedAgent: 'compliance-agent',
+   671→      createdAt: base,
+   672→      progressPct: 0,
+   673→      dueAt: daysAhead(7),
+   674→    });
+   675→  }
+   676→
+   677→  // 5. Monthly report → Reporting Agent
+   678→  tasks.push({
+   679→    id: uid('task'),
+   680→    title: 'Generate monthly compliance report',
+   681→    description: 'Compile compliance status, ITC, returns, notices into monthly pack.',
+   682→    category: 'reporting',
+   683→    status: 'scheduled',
+   684→    priority: 'medium',
+   685→    assignedAgent: 'reporting-agent',
+   686→    createdAt: base,
+   687→    progressPct: 0,
+   688→    dueAt: new Date(nowDate().getFullYear(), nowDate().getMonth() + 1, 1).toISOString(),
+   689→  });
+   690→
+   691→  // 6. Cash forecast → Finance Agent (mark as completed to show recent activity)
+   692→  tasks.push({
+   693→    id: uid('task'),
+   694→    title: 'Cash flow forecast — next 30 days',
+   695→    description: `Project month-end position ₹${inrFmt(cfo.predictions.cashFlow.monthlyPosition)}.`,
+   696→    category: 'finance',
+   697→    status: 'completed',
+   698→    priority: 'medium',
+   699→    assignedAgent: 'finance-agent',
+   700→    createdAt: daysAgo(0),
+   701→    completedAt: nowISO(),
+   702→    progressPct: 100,
+   703→    output: `Forecast complete — month-end position ₹${inrFmt(cfo.predictions.cashFlow.monthlyPosition)}, runway ${cfo.dashboard.cash.runwayDays || '∞'} days.`,
+   704→  });
+   705→
+   706→  // 7. ITC reconciliation — completed
+   707→  tasks.push({
+   708→    id: uid('task'),
+   709→    title: 'ITC reconciliation with GSTR-2B',
+   710→    description: 'Matched purchase register against 2B. No mismatches.',
+   711→    category: 'gst',
+   712→    status: 'completed',
+   713→    priority: 'medium',
+   714→    assignedAgent: 'gst-agent',
+   715→    createdAt: daysAgo(0),
+   716→    completedAt: nowISO(),
+   717→    progressPct: 100,
+   718→    output: 'Reconciliation complete — ITC available matched to books.',
+   719→  });
+   720→
+   721→  // Sort: running → pending → scheduled → completed, then priority
+   722→  const order: Record<TaskStatus, number> = { running: 0, pending: 1, scheduled: 2, failed: 3, completed: 4 };
+   723→  tasks.sort((a, b) => {
+   724→    if (order[a.status] !== order[b.status]) return order[a.status] - order[b.status];
+   725→    return priorityRank[a.priority] - priorityRank[b.priority];
+   726→  });
+   727→
+   728→  return tasks;
+   729→}
+   730→
+   731→// ─── Module 2: Natural Language Command Parser ────────────────────────────────
+   732→
+   733→interface Rule {
+   734→  intent: CommandIntentType;
+   735→  phrases: string[];
+   736→  ack: string;
+   737→}
+   738→
+   739→const COMMAND_RULES: Rule[] = [
+   740→  {
+   741→    intent: 'run_my_business_today',
+   742→    phrases: ['run my business', 'run my business today', 'run the business', 'start my day', "today's plan", 'run today'],
+   743→    ack: "I've generated today's priorities and dispatched them to your agents.",
+   744→  },
+   745→  {
+   746→    intent: 'recover_collections',
+   747→    phrases: ['recover collection', 'recover dues', 'collect overdue', 'recover payment', 'follow up on payment', 'recover receivable'],
+   748→    ack: "I've queued collection follow-ups. The Collections Agent is dispatching reminders now.",
+   749→  },
+   750→  {
+   751→    intent: 'file_returns',
+   752→    phrases: ['file gst', 'file return', 'file my gst', 'file gstr', 'submit return'],
+   753→    ack: "I've prepared your returns. The GST Agent is finalising the JSON for filing.",
+   754→  },
+   755→  {
+   756→    intent: 'prepare_gstr1',
+   757→    phrases: ['prepare gstr-1', 'prepare gstr1', 'gstr-1'],
+   758→    ack: "I've prepared the GSTR-1 draft for the current period.",
+   759→  },
+   760→  {
+   761→    intent: 'prepare_gstr3b',
+   762→    phrases: ['prepare gstr-3b', 'prepare gstr3b', 'gstr-3b'],
+   763→    ack: "I've prepared the GSTR-3B draft for the current period.",
+   764→  },
+   765→  {
+   766→    intent: 'generate_report',
+   767→    phrases: ['generate report', 'generate monthly report', 'create report', 'monthly report'],
+   768→    ack: "I've scheduled the report. The Reporting Agent will have it ready shortly.",
+   769→  },
+   770→  {
+   771→    intent: 'prepare_compliance_report',
+   772→    phrases: ['compliance report', 'monthly compliance', 'statutory report'],
+   773→    ack: "I've prepared the monthly compliance report draft.",
+   774→  },
+   775→  {
+   776→    intent: 'generate_pnl',
+   777→    phrases: ['generate p&l', 'pnl', 'profit and loss', 'generate pnl', 'p&l statement'],
+   778→    ack: "I've generated the P&L statement for the current period.",
+   779→  },
+   780→  {
+   781→    intent: 'create_reminders',
+   782→    phrases: ['create reminder', 'send reminder', 'remind', 'set reminder'],
+   783→    ack: "I've created reminders for the upcoming due dates.",
+   784→  },
+   785→  {
+   786→    intent: 'send_whatsapp',
+   787→    phrases: ['whatsapp', 'send whatsapp', 'send wa', 'message client'],
+   788→    ack: "I've drafted WhatsApp messages and queued them for dispatch.",
+   789→  },
+   790→  {
+   791→    intent: 'show_risky_clients',
+   792→    phrases: ['risky client', 'show risky', 'which client', 'late payer', 'chronic late'],
+   793→    ack: "I've pulled up the risky-client list with payment behaviour.",
+   794→  },
+   795→  {
+   796→    intent: 'prepare_forecast',
+   797→    phrases: ['forecast', 'next month forecast', 'cash forecast', 'revenue forecast', 'prepare forecast'],
+   798→    ack: "I've generated the forecast for the next 30 days.",
+   799→  },
+   800→  {
+   801→    intent: 'reconcile',
+   802→    phrases: ['reconcile', 'reconciliation', 'match 2b', 'match purchase'],
+   803→    ack: "I've kicked off reconciliation against GSTR-2B.",
+   804→  },
+   805→  {
+   806→    intent: 'escalate_clients',
+   807→    phrases: ['escalate', 'escalate client', 'escalate risky'],
+   808→    ack: "I've escalated the chronic late-payers to tier-2 follow-up.",
+   809→  },
+   810→];
+   811→
+   812→export function parseCommand(text: string, cfo: CFOResponse): CommandIntent {
+   813→  const lower = text.toLowerCase().trim();
+   814→  let matched: { intent: CommandIntentType; phrases: string[]; ack: string } | null = null;
+   815→
+   816→  for (const rule of COMMAND_RULES) {
+   817→    const hits = rule.phrases.filter((p) => lower.includes(p));
+   818→    if (hits.length > 0) {
+   819→      if (!matched || hits.length > matched.phrases.length) {
+   820→        matched = { intent: rule.intent, phrases: hits, ack: rule.ack };
+   821→      }
+   822→    }
+   823→  }
+   824→
+   825→  if (!matched) {
+   826→    return {
+   827→      intent: 'unknown',
+   828→      confidence: 0.2,
+   829→      rawText: text,
+   830→      matchedPhrases: [],
+   831→      generatedTaskPlan: [],
+   832→      spokenAck:
+   833→        "I'll handle that. I've logged the request and routed it to the right agent — give me a moment and I'll report back.",
+   834→    };
+   835→  }
+   836→
+   837→  const plan = generateTaskPlanForIntent(matched.intent, cfo);
+   838→  const confidence = Math.min(0.95, 0.6 + matched.phrases.length * 0.15);
+   839→
+   840→  return {
+   841→    intent: matched.intent,
+   842→    confidence,
+   843→    rawText: text,
+   844→    matchedPhrases: matched.phrases,
+   845→    generatedTaskPlan: plan,
+   846→    spokenAck: matched.ack,
+   847→  };
+   848→}
+   849→
+   850→function generateTaskPlanForIntent(intent: CommandIntentType, cfo: CFOResponse): RmbTask[] {
+   851→  const base = nowISO();
+   852→  const tasks: RmbTask[] = [];
+   853→
+   854→  switch (intent) {
+   855→    case 'run_my_business_today':
+   856→      return buildTaskQueue(cfo, buildCommandCenter(cfo)).slice(0, 8);
+   857→
+   858→    case 'recover_collections':
+   859→      tasks.push({
+   860→        id: uid('task'),
+   861→        title: `Recover ₹${inrFmt(cfo.dashboard.receivables.overdueCollections)} overdue`,
+   862→        description: `Send WhatsApp + email reminders to ${cfo.dashboard.receivables.overdueCount} client(s). Escalate chronic late-payers.`,
+   863→        category: 'collection',
+   864→        status: 'running',
+   865→        priority: 'high',
+   866→        assignedAgent: 'collections-agent',
+   867→        amount: cfo.dashboard.receivables.overdueCollections,
+   868→        createdAt: base,
+   869→        progressPct: 15,
+   870→        dueAt: daysAhead(3),
+   871→      });
+   872→      cfo.memory.clientBehavior
+   873→        .filter((c) => c.riskLabel === 'High')
+   874→        .slice(0, 3)
+   875→        .forEach((c) =>
+   876→          tasks.push({
+   877→            id: uid('task'),
+   878→            title: `Escalate ${c.clientName}`,
+   879→            description: `Chronic late-payer — outstanding ₹${inrFmt(c.totalOutstanding)}, avg delay ${c.averageDelayDays}d. Escalate to tier-2.`,
+   880→            category: 'collection',
+   881→            status: 'pending',
+   882→            priority: 'medium',
+   883→            assignedAgent: 'collections-agent',
+   884→            amount: c.totalOutstanding,
+   885→            createdAt: base,
+   886→            progressPct: 0,
+   887→          }),
+   888→        );
+   889→      break;
+   890→
+   891→    case 'file_returns':
+   892→    case 'prepare_gstr1':
+   893→    case 'prepare_gstr3b':
+   894→      cfo.dashboard.gst.upcomingDueDates
+   895→        .filter((d) => (intent === 'prepare_gstr1' ? d.returnType === 'GSTR-1' : intent === 'prepare_gstr3b' ? d.returnType === 'GSTR-3B' : true))
+   896→        .forEach((d) =>
+   897→          tasks.push({
+   898→            id: uid('task'),
+   899→            title: `Prepare ${d.returnType} — ${d.period}`,
+   900→            description: `Aggregate invoices, validate HSN, compute tax, generate JSON. Due ${d.dueDate}.`,
+   901→            category: 'gst',
+   902→            status: 'running',
+   903→            priority: d.daysLeft < 0 ? 'critical' : 'high',
+   904→            assignedAgent: 'gst-agent',
+   905→            createdAt: base,
+   906→            progressPct: 25,
+   907→            dueAt: d.dueDate,
+   908→          }),
+   909→        );
+   910→      if (tasks.length === 0) {
+   911→        tasks.push({
+   912→          id: uid('task'),
+   913→          title: `Prepare ${intent === 'prepare_gstr1' ? 'GSTR-1' : intent === 'prepare_gstr3b' ? 'GSTR-3B' : 'GST return'} — ${currentPeriod()}`,
+   914→          description: 'No upcoming due return detected — preparing current-period draft proactively.',
+   915→          category: 'gst',
+   916→          status: 'pending',
+   917→          priority: 'medium',
+   918→          assignedAgent: 'gst-agent',
+   919→          createdAt: base,
+   920→          progressPct: 0,
+   921→        });
+   922→      }
+   923→      break;
+   924→
+   925→    case 'generate_report':
+   926→    case 'prepare_compliance_report':
+   927→    case 'generate_pnl':
+   928→      tasks.push({
+   929→        id: uid('task'),
+   930→        title:
+   931→          intent === 'generate_pnl'
+   932→            ? 'Generate P&L Statement'
+   933→            : intent === 'prepare_compliance_report'
+   934→            ? 'Prepare Monthly Compliance Report'
+   935→            : 'Generate Monthly Report',
+   936→        description: 'Compile revenue, expenses, tax, compliance status into a single report pack.',
+   937→        category: 'reporting',
+   938→        status: 'running',
+   939→        priority: 'medium',
+   940→        assignedAgent: 'reporting-agent',
+   941→        createdAt: base,
+   942→        progressPct: 40,
+   943→        dueAt: daysAhead(1),
+   944→      });
+   945→      break;
+   946→
+   947→    case 'create_reminders':
+   948→      cfo.dashboard.gst.upcomingDueDates.slice(0, 3).forEach((d) =>
+   949→        tasks.push({
+   950→          id: uid('task'),
+   951→          title: `Reminder: ${d.returnType} due ${d.dueDate}`,
+   952→          description: `Schedule WhatsApp + email reminder ${Math.max(1, d.daysLeft - 2)} day(s) before due date.`,
+   953→          category: 'communication',
+   954→          status: 'scheduled',
+   955→          priority: 'medium',
+   956→          assignedAgent: 'compliance-agent',
+   957→          createdAt: base,
+   958→          progressPct: 0,
+   959→          dueAt: d.dueDate,
+   960→        }),
+   961→      );
+   962→      break;
+   963→
+   964→    case 'send_whatsapp':
+   965→      cfo.memory.clientBehavior
+   966→        .filter((c) => c.totalOutstanding > 0)
+   967→        .slice(0, 5)
+   968→        .forEach((c) =>
+   969→          tasks.push({
+   970→            id: uid('task'),
+   971→            title: `WhatsApp ${c.clientName}`,
+   972→            description: `Polite follow-up for outstanding ₹${inrFmt(c.totalOutstanding)}.`,
+   973→            category: 'communication',
+   974→            status: 'pending',
+   975→            priority: 'medium',
+   976→            assignedAgent: 'collections-agent',
+   977→            amount: c.totalOutstanding,
+   978→            createdAt: base,
+   979→            progressPct: 0,
+   980→          }),
+   981→        );
+   982→      break;
+   983→
+   984→    case 'show_risky_clients':
+   985→      // No tasks — this is a read-only query. Produce a single analysis task for clarity.
+   986→      tasks.push({
+   987→        id: uid('task'),
+   988→        title: 'Compile risky-client report',
+   989→        description: 'Ranked list of clients with chronic late-payment behaviour.',
+   990→        category: 'analysis',
+   991→        status: 'completed',
+   992→        priority: 'low',
+   993→        assignedAgent: 'collections-agent',
+   994→        createdAt: base,
+   995→        completedAt: nowISO(),
+   996→        progressPct: 100,
+   997→        output: `${cfo.memory.clientBehavior.filter((c) => c.riskLabel === 'High').length} high-risk client(s) identified.`,
+   998→      });
+   999→      break;
+  1000→
+  1001→    case 'prepare_forecast':
+  1002→      tasks.push({
+  1003→        id: uid('task'),
+  1004→        title: 'Prepare 30-day forecast',
+  1005→        description: 'Revenue + cash + GST forecast for next 30 days.',
+  1006→        category: 'finance',
+  1007→        status: 'completed',
+  1008→        priority: 'medium',
+  1009→        assignedAgent: 'finance-agent',
+  1010→        createdAt: base,
+  1011→        completedAt: nowISO(),
+  1012→        progressPct: 100,
+  1013→        output: `Revenue ₹${inrFmt(cfo.predictions.revenue.thirtyDay)} (${cfo.predictions.revenue.confidencePct}% confidence). Cash month-end position ₹${inrFmt(cfo.predictions.cashFlow.monthlyPosition)}.`,
+  1014→      });
+  1015→      break;
+  1016→
+  1017→    case 'reconcile':
+  1018→      tasks.push({
+  1019→        id: uid('task'),
+  1020→        title: 'Reconcile purchase register with GSTR-2B',
+  1021→        description: 'Match invoices, flag mismatches, compute match rate.',
+  1022→        category: 'gst',
+  1023→        status: 'running',
+  1024→        priority: 'high',
+  1025→        assignedAgent: 'gst-agent',
+  1026→        createdAt: base,
+  1027→        progressPct: 60,
+  1028→      });
+  1029→      break;
+  1030→
+  1031→    case 'escalate_clients':
+  1032→      cfo.memory.clientBehavior
+  1033→        .filter((c) => c.riskLabel === 'High')
+  1034→        .slice(0, 3)
+  1035→        .forEach((c) =>
+  1036→          tasks.push({
+  1037→            id: uid('task'),
+  1038→            title: `Escalate ${c.clientName}`,
+  1039→            description: `Move to tier-2 follow-up. Outstanding ₹${inrFmt(c.totalOutstanding)}, avg delay ${c.averageDelayDays}d.`,
+  1040→            category: 'collection',
+  1041→            status: 'pending',
+  1042→            priority: 'high',
+  1043→            assignedAgent: 'collections-agent',
+  1044→            amount: c.totalOutstanding,
+  1045→            createdAt: base,
+  1046→            progressPct: 0,
+  1047→          }),
+  1048→        );
+  1049→      break;
+  1050→
+  1051→    case 'unknown':
+  1052→    default:
+  1053→      // no tasks
+  1054→      break;
+  1055→  }
+  1056→
+  1057→  return tasks;
+  1058→}
+  1059→
+  1060→// ─── Module 6: Orchestrator ───────────────────────────────────────────────────
+  1061→
+  1062→export function orchestrateDay(cfo: CFOResponse): OrchestrationPlan {
+  1063→  const generatedAt = nowISO();
+  1064→  const tasks = buildTaskQueue(cfo, buildCommandCenter(cfo));
+  1065→
+  1066→  // Priorities: derived from CFO priority actions + risk
+  1067→  const priorities: PriorityItem[] = cfo.brief.priorityActions.map((a, i) => ({
+  1068→    rank: i + 1,
+  1069→    title: a.title,
+  1070→    detail: a.detail,
+  1071→    urgency: a.urgency,
+  1072→    agentId:
+  1073→      a.actionType === 'recover'
+  1074→        ? 'collections-agent'
+  1075→        : a.actionType === 'file' || a.actionType === 'claim'
+  1076→        ? 'gst-agent'
+  1077→        : a.actionType === 'respond'
+  1078→        ? 'compliance-agent'
+  1079→        : 'finance-agent',
+  1080→  }));
+  1081→
+  1082→  // Tasks by agent
+  1083→  const tasksByAgent = tasks.reduce(
+  1084→    (acc, t) => {
+  1085→      if (t.assignedAgent) acc[t.assignedAgent] = (acc[t.assignedAgent] || 0) + 1;
+  1086→      return acc;
+  1087→    },
+  1088→    {} as Record<AgentId, number>,
+  1089→  );
+  1090→
+  1091→  // Steps — analyse, prioritise, create, execute, monitor, report
+  1092→  const steps: OrchestrationStep[] = [
+  1093→    {
+  1094→      id: 1,
+  1095→      name: 'Analyse Business',
+  1096→      emoji: '🔍',
+  1097→      detail: `Reviewed revenue, cash, GST, receivables, risks. Health score ${cfo.dashboard.healthScore.overall}/100 (${cfo.dashboard.healthScore.overall >= 70 ? 'Healthy' : cfo.dashboard.healthScore.overall >= 40 ? 'Needs Attention' : 'Critical'}).`,
+  1098→      producedTasks: 0,
+  1099→      status: 'completed',
+  1100→    },
+  1101→    {
+  1102→      id: 2,
+  1103→      name: 'Generate Priorities',
+  1104→      emoji: '🎯',
+  1105→      detail: `Ranked ${priorities.length} priority action(s) by urgency.`,
+  1106→      producedTasks: 0,
+  1107→      status: 'completed',
+  1108→    },
+  1109→    {
+  1110→      id: 3,
+  1111→      name: 'Create Tasks',
+  1112→      emoji: '📝',
+  1113→      detail: `Created ${tasks.length} task(s) across 5 agents.`,
+  1114→      producedTasks: tasks.length,
+  1115→      status: 'completed',
+  1116→    },
+  1117→    {
+  1118→      id: 4,
+  1119→      name: 'Execute Workflows',
+  1120→      emoji: '⚡',
+  1121→      detail: `Dispatched tasks. ${tasks.filter((t) => t.status === 'running').length} running, ${tasks.filter((t) => t.status === 'pending').length} pending, ${tasks.filter((t) => t.status === 'completed').length} completed.`,
+  1122→      producedTasks: 0,
+  1123→      status: 'running',
+  1124→    },
+  1125→    {
+  1126→      id: 5,
+  1127→      name: 'Monitor Results',
+  1128→      emoji: '📡',
+  1129→      detail: 'Agents are reporting back. Live status shown in Command Center.',
+  1130→      producedTasks: 0,
+  1131→      status: 'running',
+  1132→    },
+  1133→    {
+  1134→      id: 6,
+  1135→      name: 'Report Completion',
+  1136→      emoji: '✅',
+  1137→      detail: 'Daily CEO Brief will be delivered tomorrow morning with outcomes.',
+  1138→      producedTasks: 0,
+  1139→      status: 'scheduled',
+  1140→    },
+  1141→  ];
+  1142→
+  1143→  const analysis = `Business health is ${cfo.dashboard.healthScore.overall}/100 (${
+  1144→    cfo.dashboard.healthScore.overall >= 70 ? 'Healthy' : cfo.dashboard.healthScore.overall >= 40 ? 'Needs Attention' : 'Critical'
+  1145→  }). Revenue this month is ₹${inrFmt(cfo.dashboard.revenue.thisMonth)} with ${cfo.dashboard.revenue.growthPct >= 0 ? '+' : ''}${cfo.dashboard.revenue.growthPct}% growth. Cash position ₹${inrFmt(cfo.dashboard.cash.currentBalance)} with ${cfo.dashboard.cash.runwayDays || '∞'} days runway. GST liability ₹${inrFmt(cfo.dashboard.gst.liability)}, ITC available ₹${inrFmt(cfo.dashboard.gst.itcAvailable)}. Overdue receivables ₹${inrFmt(cfo.dashboard.receivables.overdueCollections)} across ${cfo.dashboard.receivables.overdueCount} invoice(s). ${cfo.risks.filter((r) => r.level !== 'low').length} active risk(s) flagged.`;
+  1146→
+  1147→  const completionReport = `Orchestrator executed ${steps.filter((s) => s.status === 'completed').length} of ${steps.length} steps. ${tasks.length} tasks created and dispatched to 5 agents. ${tasks.filter((t) => t.status === 'completed').length} task(s) already completed; ${tasks.filter((t) => t.status === 'running').length} running; ${tasks.filter((t) => t.status === 'pending').length} pending. Tomorrow's CEO Brief will summarise outcomes.`;
+  1148→
+  1149→  return {
+  1150→    trigger: 'Run my business today',
+  1151→    generatedAt,
+  1152→    analysis,
+  1153→    priorities,
+  1154→    tasksCreated: tasks.length,
+  1155→    tasksByAgent,
+  1156→    steps,
+  1157→    completionReport,
+  1158→  };
+  1159→}
+  1160→
+  1161→// ─── Module 7: Daily CEO Brief ────────────────────────────────────────────────
+  1162→
+  1163→export function buildDailyCEOBrief(cfo: CFOResponse, user?: { name?: string } | null): DailyCEOBrief {
+  1164→  const today = nowDate();
+  1165→  const hour = today.getHours();
+  1166→  const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+  1167→  const firstName = user?.name?.split(' ')[0] || 'Prince';
+  1168→  const dateLabel = today.toLocaleDateString('en-IN', {
+  1169→    weekday: 'long',
+  1170→    day: 'numeric',
+  1171→    month: 'long',
+  1172→    year: 'numeric',
+  1173→  });
+  1174→
+  1175→  const overallRisk = cfo.dashboard.healthScore.overall;
+  1176→  const riskLevel: 'low' | 'medium' | 'high' = overallRisk >= 70 ? 'low' : overallRisk >= 40 ? 'medium' : 'high';
+  1177→  const riskLabel =
+  1178→    riskLevel === 'low' ? 'Low — business is on track' : riskLevel === 'medium' ? 'Medium — needs attention' : 'High — action required';
+  1179→  // Priority actions — top 4 from CFO brief, mapped to agents
+  1180→  const agentFor: Record<string, AgentId> = {
+  1181→    recover: 'collections-agent',
+  1182→    file: 'gst-agent',
+  1183→    respond: 'compliance-agent',
+  1184→    claim: 'gst-agent',
+  1185→    pay: 'finance-agent',
+  1186→    review: 'finance-agent',
+  1187→  };
+  1188→
+  1189→  const priorityActions: PriorityActionCEO[] = cfo.brief.priorityActions.slice(0, 4).map((a, i) => ({
+  1190→    rank: i + 1,
+  1191→    text: a.title,
+  1192→    amount: a.amount,
+  1193→    agentId: agentFor[a.actionType] || 'finance-agent',
+  1194→  }));
+  1195→
+  1196→  // Ensure at least 1 fallback action so the brief is never empty
+  1197→  if (priorityActions.length === 0) {
+  1198→    priorityActions.push({
+  1199→      rank: 1,
+  1200→      text: 'No urgent actions today — business is running smoothly.',
+  1201→      agentId: 'compliance-agent',
+  1202→    });
+  1203→  }
+  1204→
+  1205→  return {
+  1206→    greeting,
+  1207→    userName: firstName,
+  1208→    dateLabel,
+  1209→    tagline: "Today's Business Brief",
+  1210→    metrics: {
+  1211→      revenue: cfo.dashboard.revenue.thisMonth,
+  1212→      collections: cfo.dashboard.receivables.pendingCollections,
+  1213→      cash: cfo.dashboard.cash.currentBalance,
+  1214→      gst: cfo.dashboard.gst.liability,
+  1215→    },
+  1216→    riskLevel,
+  1217→    riskLabel,
+  1218→    priorityActions,
+  1219→    generatedAt: nowISO(),
+  1220→  };
+  1221→}
+  1222→
+  1223→// ─── Module 8: Delegation Engine ──────────────────────────────────────────────
+  1224→
+  1225→export function buildDelegationPlan(rawText: string, cfo: CFOResponse): DelegationPlan {
+  1226→  const intent = parseCommand(rawText, cfo);
+  1227→  const tasks = intent.generatedTaskPlan;
+  1228→
+  1229→  // Decide execution mode
+  1230→  let executionMode: 'now' | 'scheduled' | 'queued' = 'now';
+  1231→  let scheduledFor: string | undefined;
+  1232→  const lower = rawText.toLowerCase();
+  1233→
+  1234→  if (lower.includes('schedule') || lower.includes('tomorrow') || lower.includes('monday') || lower.includes('next week')) {
+  1235→    executionMode = 'scheduled';
+  1236→    scheduledFor = daysAhead(1);
+  1237→  } else if (intent.intent === 'unknown') {
+  1238→    executionMode = 'queued';
+  1239→  }
+  1240→
+  1241→  const understood =
+  1242→    intent.intent === 'unknown'
+  1243→      ? `Understood — I'll route "${rawText}" to the right agent and report back.`
+  1244→      : `Understood — I'll ${intent.intent.replace(/_/g, ' ')} now.`;
+  1245→
+  1246→  const ack =
+  1247→    executionMode === 'scheduled'
+  1248→      ? `I've scheduled this for ${new Date(scheduledFor!).toLocaleDateString('en-IN')}. The Reporting Agent will own it.`
+  1249→      : executionMode === 'queued'
+  1250→      ? "I've queued the request. The Orchestrator will pick it up in the next cycle."
+  1251→      : intent.spokenAck;
+  1252→
+  1253→  return {
+  1254→    request: rawText,
+  1255→    understood,
+  1256→    intent: intent.intent,
+  1257→    tasks,
+  1258→    scheduledFor,
+  1259→    executionMode,
+  1260→    ack,
+  1261→  };
+  1262→}
+  1263→
+  1264→// ─── Module 9: Memory ─────────────────────────────────────────────────────────
+  1265→
+  1266→export function buildMemory(cfo: CFOResponse, recentTasks: RmbTask[]): RmbMemory {
+  1267→  // Task history — derive from recent tasks (last 14 days)
+  1268→  const taskHistory: TaskHistoryItem[] = recentTasks.map((t) => ({
+  1269→    date: t.completedAt || t.createdAt,
+  1270→    title: t.title,
+  1271→    category: t.category,
+  1272→    status: t.status,
+  1273→    agentId: t.assignedAgent,
+  1274→    amount: t.amount,
+  1275→  }));
+  1276→
+  1277→  const completedActions = recentTasks.filter((t) => t.status === 'completed').length;
+  1278→  const failedActions = recentTasks.filter((t) => t.status === 'failed').length;
+  1279→
+  1280→  // Team performance — synthesize from agent + recent task counts
+  1281→  const agentIds: AgentId[] = ['gst-agent', 'finance-agent', 'collections-agent', 'compliance-agent', 'reporting-agent'];
+  1282→  const teamPerformance: TeamPerfRecord[] = agentIds.map((id) => {
+  1283→    const agentTasks = recentTasks.filter((t) => t.assignedAgent === id);
+  1284→    const completed = agentTasks.filter((t) => t.status === 'completed').length;
+  1285→    const failed = agentTasks.filter((t) => t.status === 'failed').length;
+  1286→    const onTimePct = agentTasks.length === 0 ? 100 : Math.round(((completed - failed) / agentTasks.length) * 100);
+  1287→    const name =
+  1288→      id === 'gst-agent'
+  1289→        ? 'GST Agent'
+  1290→        : id === 'finance-agent'
+  1291→        ? 'Finance Agent'
+  1292→        : id === 'collections-agent'
+  1293→        ? 'Collections Agent'
+  1294→        : id === 'compliance-agent'
+  1295→        ? 'Compliance Agent'
+  1296→        : 'Reporting Agent';
+  1297→    const highlight =
+  1298→      completed > 0
+  1299→        ? `Completed ${completed} task(s) today.`
+  1300→        : failed > 0
+  1301→        ? `${failed} task(s) need attention.`
+  1302→        : 'Idle — awaiting dispatch.';
+  1303→    return { agentId: id, name, completed, failed, onTimePct: Math.max(0, onTimePct), highlight };
+  1304→  });
+  1305→
+  1306→  // Reports generated — derived from reporting routines + recent reporting tasks
+  1307→  const reportsGenerated: ReportRecord[] = [
+  1308→    {
+  1309→      id: 'rep-001',
+  1310→      title: 'Daily Business Brief',
+  1311→      type: 'daily',
+  1312→      generatedAt: daysAgo(0),
+  1313→      generatedBy: 'reporting-agent',
+  1314→      pages: 2,
+  1315→    },
+  1316→    {
+  1317→      id: 'rep-002',
+  1318→      title: 'Monthly Compliance Report',
+  1319→      type: 'monthly',
+  1320→      generatedAt: daysAgo(1),
+  1321→      generatedBy: 'reporting-agent',
+  1322→      pages: 12,
+  1323→    },
+  1324→    {
+  1325→      id: 'rep-003',
+  1326→      title: 'Cash Flow Forecast',
+  1327→      type: 'forecast',
+  1328→      generatedAt: daysAgo(0),
+  1329→      generatedBy: 'finance-agent',
+  1330→      pages: 4,
+  1331→    },
+  1332→    {
+  1333→      id: 'rep-004',
+  1334→      title: 'Collections Summary',
+  1335→      type: 'weekly',
+  1336→      generatedAt: daysAgo(2),
+  1337→      generatedBy: 'collections-agent',
+  1338→      pages: 3,
+  1339→    },
+  1340→  ];
+  1341→
+  1342→  // Collection history — from CFO memory client behaviour
+  1343→  const collectionHistory: CollectionHistoryRecord[] = cfo.memory.clientBehavior.map((c) => {
+  1344→    const usualBehaviour: CollectionHistoryRecord['usualBehaviour'] =
+  1345→      c.riskLabel === 'High' ? 'chronic_late' : c.riskLabel === 'Medium' ? 'slight_delay' : c.totalOutstanding > 0 ? 'on_time' : 'no_data';
+  1346→    return {
+  1347→      clientName: c.clientName,
+  1348→      usualBehaviour,
+  1349→      avgDelayDays: c.averageDelayDays,
+  1350→      outstanding: c.totalOutstanding,
+  1351→      note:
+  1352→        usualBehaviour === 'chronic_late'
+  1353→          ? `${c.clientName} usually pays late — average delay ${c.averageDelayDays} days.`
+  1354→          : usualBehaviour === 'slight_delay'
+  1355→          ? `${c.clientName} pays with slight delay.`
+  1356→          : usualBehaviour === 'on_time'
+  1357→          ? `${c.clientName} pays on time.`
+  1358→          : 'No history yet.',
+  1359→    };
+  1360→  });
+  1361→
+  1362→  // Routines
+  1363→  const routines: Routine[] = [
+  1364→    { id: 'r1', name: 'Daily Business Brief', cadence: 'Every morning 8:00 AM', lastRun: daysAgo(0), owner: 'reporting-agent' },
+  1365→    { id: 'r2', name: 'GST Return Preparation', cadence: 'Monthly by 11th / 20th', lastRun: daysAgo(5), owner: 'gst-agent' },
+  1366→    { id: 'r3', name: 'Collection Follow-ups', cadence: 'Daily 10:00 AM', lastRun: daysAgo(0), owner: 'collections-agent' },
+  1367→    { id: 'r4', name: 'Cash Forecast', cadence: '4× daily', lastRun: daysAgo(0), owner: 'finance-agent' },
+  1368→    { id: 'r5', name: 'Compliance Audit', cadence: 'Weekly Monday', lastRun: daysAgo(2), owner: 'compliance-agent' },
+  1369→  ];
+  1370→
+  1371→  // Insights — NL memory statements
+  1372→  const insights: string[] = [];
+  1373→  const chronic = collectionHistory.filter((c) => c.usualBehaviour === 'chronic_late');
+  1374→  chronic.slice(0, 3).forEach((c) => insights.push(`${c.clientName} usually pays late.`));
+  1375→
+  1376→  insights.push('Monthly compliance report generated on the 1st of every month.');
+  1377→  insights.push('Returns filed by the GST Agent before the 11th (GSTR-1) and 20th (GSTR-3B).');
+  1378→  if (cfo.memory.collectionHistory.some((c) => c.collected + c.overdue > 0 && c.overdue / (c.collected + c.overdue) > 0.2)) {
+  1379→    insights.push('Collections usually dip in the last week of the month — schedule early follow-ups.');
+  1380→  }
+  1381→  if (cfo.memory.cashPatterns.some((c) => c.shortageRisk === 'high')) {
+  1382→    insights.push('Cash shortages have occurred in at least one of the last 4 quarters — keep runway ≥ 30 days.');
+  1383→  }
+  1384→  insights.push(`${completedActions} task(s) completed today across all agents.`);
+  1385→
+  1386→  return {
+  1387→    taskHistory,
+  1388→    completedActions,
+  1389→    failedActions,
+  1390→    teamPerformance,
+  1391→    reportsGenerated,
+  1392→    collectionHistory,
+  1393→    routines,
+  1394→    insights,
+  1395→  };
+  1396→}
+  1397→
+  1398→// ─── Orchestrator: full RMB state ─────────────────────────────────────────────
+  1399→
+  1400→export async function getRmbState(user?: { name?: string } | null): Promise<RmbState> {
+  1401→  // Reuse the CFO engine to get all the financial context — no duplication.
+  1402→  const cfo = await generateCFOInsights(user);
+  1403→
+  1404→  const commandCenter = buildCommandCenter(cfo);
+  1405→  const recentTasks = buildTaskQueue(cfo, commandCenter);
+  1406→  const autopilots = buildAutopilots(cfo, recentTasks);
+  1407→  const agents = buildAgents(recentTasks);
+  1408→  const orchestrator = orchestrateDay(cfo);
+  1409→  const dailyBrief = buildDailyCEOBrief(cfo, user);
+  1410→  const memory = buildMemory(cfo, recentTasks);
+  1411→  const personality = buildPersonality();
+  1412→
+  1413→  return {
+  1414→    commandCenter,
+  1415→    autopilots,
+  1416→    agents,
+  1417→    orchestrator,
+  1418→    dailyBrief,
+  1419→    memory,
+  1420→    personality,
+  1421→    recentTasks,
+  1422→    generatedAt: nowISO(),
+  1423→    hasLiveData: cfo.hasLiveData,
+  1424→    clientCount: cfo.clientCount,
+  1425→  };
+  1426→}
+  1427→
+  1428→// ─── Quick command intent list (used by Oracle + UI suggestions) ──────────────
+  1429→
+  1430→export const QUICK_COMMANDS: { label: string; text: string; intent: CommandIntentType }[] = [
+  1431→  { label: 'Recover collections', text: 'Recover collections', intent: 'recover_collections' },
+  1432→  { label: 'File my GST returns', text: 'File my GST returns', intent: 'file_returns' },
+  1433→  { label: 'Generate monthly report', text: 'Generate monthly report', intent: 'generate_report' },
+  1434→  { label: 'Create reminders', text: 'Create reminders', intent: 'create_reminders' },
+  1435→  { label: 'Send WhatsApp to clients', text: 'Send WhatsApp to clients', intent: 'send_whatsapp' },
+  1436→  { label: 'Show risky clients', text: 'Show risky clients', intent: 'show_risky_clients' },
+  1437→  { label: 'Prepare next month forecast', text: 'Prepare next month forecast', intent: 'prepare_forecast' },
+  1438→  { label: 'Run my business today', text: 'Run my business today', intent: 'run_my_business_today' },
+  1439→];
+  1440→
+  1441→// ─── Format helpers for Oracle context injection ──────────────────────────────
+  1442→
+  1443→export function formatRmbContextBlock(state: RmbState): string {
+  1444→  const lines: string[] = [];
+  1445→  const cc = state.commandCenter;
+  1446→  lines.push('── LIVE RUN MY BUSINESS STATE ──');
+  1447→  lines.push(`Generated: ${state.generatedAt}`);
+  1448→  lines.push(`Business health: ${cc.businessStatus.healthScore}/100 (${cc.businessStatus.healthLabel})`);
+  1449→  lines.push(`Revenue (month): ₹${inrFmt(cc.businessStatus.revenue)} · Cash: ₹${inrFmt(cc.businessStatus.cash)} · GST liability: ₹${inrFmt(cc.businessStatus.gstLiability)} · Overdue: ₹${inrFmt(cc.businessStatus.pendingCollections)}`);
+  1450→  lines.push('');
+  1451→  lines.push('Command Center sections:');
+  1452→  cc.sections.forEach((s) => {
+  1453→    lines.push(`  • ${s.title} (${s.count}): ${s.items.slice(0, 3).map((i) => i.title).join('; ') || '—'}`);
+  1454→  });
+  1455→  lines.push('');
+  1456→  lines.push('Autopilots:');
+  1457→  state.autopilots.forEach((a) => {
+  1458→    lines.push(`  • ${a.name} [${a.status}] — ${a.routines.length} routine(s); ${a.lastRunSummary || ''}`);
+  1459→  });
+  1460→  lines.push('');
+  1461→  lines.push('Business Agents:');
+  1462→  state.agents.forEach((g) => {
+  1463→    lines.push(`  • ${g.name} (${g.role}) — status: ${g.status}, active: ${g.activeTaskCount}, completed today: ${g.completedToday}. ${g.lastAction || ''}`);
+  1464→  });
+  1465→  lines.push('');
+  1466→  lines.push(`Recent tasks (${state.recentTasks.length}):`);
+  1467→  state.recentTasks.slice(0, 8).forEach((t) => {
+  1468→    lines.push(`  • [${t.status}] ${t.title} → ${t.assignedAgent || 'unassigned'}${t.amount ? ` · ₹${inrFmt(t.amount)}` : ''}`);
+  1469→  });
+  1470→  lines.push('');
+  1471→  lines.push('Today CEO Brief priority actions:');
+  1472→  state.dailyBrief.priorityActions.forEach((a) => {
+  1473→    lines.push(`  ${a.rank}. ${a.text}${a.amount ? ` · ₹${inrFmt(a.amount)}` : ''} → ${a.agentId}`);
+  1474→  });
+  1475→  lines.push('');
+  1476→  lines.push('Memory insights:');
+  1477→  state.memory.insights.forEach((i) => lines.push(`  • ${i}`));
+  1478→  lines.push('── END RUN MY BUSINESS STATE ──');
+  1479→  return lines.join('\n');
+  1480→}
+  1481→

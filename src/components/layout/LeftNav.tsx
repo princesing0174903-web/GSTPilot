@@ -22,7 +22,7 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   { id: 'dashboard', label: 'Home', icon: Home, emoji: '🏠' },
   { id: 'ai-cfo', label: 'AI CFO', icon: Brain, emoji: '🧠' },
-  { id: 'run-my-business', label: 'Autopilot', icon: Zap, emoji: '⚡' },
+  { id: 'run-my-business', label: 'Run Business', icon: Zap, emoji: '⚡' },
   { id: 'reconcile', label: 'Finance', icon: Wallet, emoji: '💰' },
   { id: 'business-graph', label: 'Network', icon: Network, emoji: '🌐' },
   { id: 'settings', label: 'Settings', icon: Settings, emoji: '⚙️' },

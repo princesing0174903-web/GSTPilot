@@ -21,7 +21,7 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   { id: 'dashboard', label: 'Home', icon: Home, emoji: '🏠' },
-  { id: 'business-dna', label: 'Intelligence', icon: Brain, emoji: '🧠' },
+  { id: 'ai-cfo', label: 'AI CFO', icon: Brain, emoji: '🧠' },
   { id: 'run-my-business', label: 'Autopilot', icon: Zap, emoji: '⚡' },
   { id: 'reconcile', label: 'Finance', icon: Wallet, emoji: '💰' },
   { id: 'business-graph', label: 'Network', icon: Network, emoji: '🌐' },
@@ -32,9 +32,10 @@ const NAV_ITEMS: NavItem[] = [
 // when the user is in a sub-view (e.g. 'returns' highlights Finance).
 const NAV_GROUP_MAP: Record<string, AppView> = {
   dashboard: 'dashboard',
-  'business-dna': 'business-dna',
-  'ai-predictions': 'business-dna',
-  'ai-business-copilot': 'business-dna',
+  'ai-cfo': 'ai-cfo',
+  'business-dna': 'ai-cfo',
+  'ai-predictions': 'ai-cfo',
+  'ai-business-copilot': 'ai-cfo',
   'run-my-business': 'run-my-business',
   autopilot: 'run-my-business',
   'run-my-company': 'run-my-business',

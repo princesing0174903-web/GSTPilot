@@ -1999,4 +1999,4 @@
   1999→- Read worklog.md (tail ~400 lines) to internalize the V10/Infinity™/V15 history and the new V16 design tokens: #050505 Obsidian Black 2.0 canvas, .glass-surface rgba(255,255,255,0.04) + blur(28px) + border rgba(255,255,255,0.08), .radius-premium 28px (rounded-3xl acceptable), single Emerald→Cyan→Blue accent gradient (.accent-gradient / .accent-gradient-soft / .accent-text / .accent-ring), .hover-lift (1.02 scale on hover), space-y-12 (32-48px rhythm), framer-motion fade-up (opacity 0 + y 12 → 1 + 0, duration 0.5, staggered), NO red/orange/purple anywhere.
   2000→- Read existing /src/components/mission-control/MissionControlPage.tsx (833 lines, V15) to inventory the helpers I must keep: formatINR, greeting, firstName, timeAgo, computeBusinessScore, scoreTier, buildInsights, ScoreGauge, MissionControlSkeleton — all retained verbatim (with two small V16-compliant color tweaks: scoreTier now uses only emerald/cyan/blue, no amber/red).
 
-[showing lines 1-2000 of 2197; use offset=2001 with limit to continue reading]
+[showing lines 1-2000 of 2274; use offset=2001 with limit to continue reading]

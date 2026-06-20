@@ -67,10 +67,12 @@ import EconomicWarRoomPage from '@/components/economic-war-room/EconomicWarRoomP
 import RunMyCompanyPage from '@/components/run-my-company/RunMyCompanyPage'
 import MissionControlPage from '@/components/mission-control/MissionControlPage'
 import BusinessDNApage from '@/components/business-dna/BusinessDNApage'
+import AICFODashboardPage from '@/components/ai-cfo/AICFODashboardPage'
 
 const VIEW_TITLES: Record<string, string> = {
   dashboard: 'Mission Control',
   'business-dna': 'Business DNA',
+  'ai-cfo': 'AI CFO',
   returns: 'Returns',
   reconcile: 'Reconcile',
   invoices: 'Invoices',
@@ -215,6 +217,8 @@ function DashboardContent() {
         return <RunMyCompanyPage />
       case 'business-dna':
         return <BusinessDNApage />
+      case 'ai-cfo':
+        return <AICFODashboardPage />
       default:
         return <MissionControlPage />
     }

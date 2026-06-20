@@ -1,968 +1,1087 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-} from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Skeleton } from '@/components/ui/skeleton';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import {
-  Brain,
-  Sparkles,
-  TrendingUp,
-  TrendingDown,
-  Minus,
-  IndianRupee,
-  Users,
-  FileCheck,
-  Activity,
-  AlertTriangle,
-  Lightbulb,
-  ArrowUpRight,
-  ArrowDownRight,
-} from 'lucide-react';
-import {
-  AreaChart,
-  Area,
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  ReferenceLine,
-} from 'recharts';
-import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
+// ═══════════════════════════════════════════════════════════════════════════════
+// GSTPilot AI CFO™ — Operating System Dashboard
+// Phase 3 — The CFO that runs your business 24/7.
+//
+// Modules rendered here:
+//   Module 1 — CFO Dashboard cards (Revenue/Profit/Cash/Receivables/Payables/GST)
+//   Module 2 — Financial Prediction Engine (forecasts with confidence)
+//   Module 3 — Business Risk Engine (level + WHY explanation)
+//   Module 4 — Daily CFO Brief (greeting + snapshot + priority actions)
+//   Module 6 — CFO Recommendation Engine (actionable cards)
+//   Module 7 — Action Engine (execute from recommendations)
+//   Module 8 — CFO Memory (trends, client behaviour, insights)
+//
+// Module 5 (Ask CFO) + Module 9 (CFO Personality) live in the Oracle chat
+// workspace — /api/oracle/chat system prompt.
+//
+// Tagline: Understand Your Business. Predict Your Future. Recommend Your Next Move.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+import { useEffect, useMemo, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { formatCurrency, formatNumber } from '@/lib/gst-utils';
+import {
+  Brain, TrendingUp, TrendingDown, Wallet, IndianRupee, FileText, CreditCard,
+  Sparkles, AlertTriangle, CheckCircle2, Lightbulb, Activity, Clock,
+  RefreshCw, ChevronRight, Zap, Target, ShieldAlert, Users, Send,
+  FileBarChart, MessageSquare, Eye, type LucideIcon,
+} from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { useApp } from '@/contexts/AppContext';
+import { useAuth } from '@/contexts/AuthContext';
+import { useToast } from '@/hooks/use-toast';
+import type { CFOResponse, RiskLevel, CFORecommendation } from '@/lib/cfo/types';
 
-// ─── Color Palette (Emerald/Purple — AI theme) ────────────────────────────
-const COLORS = {
-  emerald: '#10b981',
-  emeraldDark: '#059669',
-  emeraldLight: '#d1fae5',
-  purple: '#8b5cf6',
-  purpleDark: '#7c3aed',
-  purpleLight: '#ede9fe',
-  teal: '#14b8a6',
-  amber: '#f59e0b',
-  red: '#ef4444',
-  slate: '#64748b',
-};
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
-// ─── Types ────────────────────────────────────────────────────────────────
-interface CategoryPrediction {
-  category: string;
-  predictedValue: number;
-  confidence: number;
-  lowerBound: number;
-  upperBound: number;
-  trend: string;
+function formatINR(amount: number): string {
+  if (!isFinite(amount) || isNaN(amount)) return '₹0';
+  const abs = Math.abs(amount);
+  if (abs >= 10000000) return `₹${(amount / 10000000).toFixed(2)} Cr`;
+  if (abs >= 100000) return `₹${(amount / 100000).toFixed(2)} L`;
+  if (abs >= 1000) return `₹${(amount / 1000).toFixed(1)}K`;
+  return '₹' + Math.round(amount).toLocaleString('en-IN');
 }
 
-interface MonthlyDataPoint {
-  month: string;
-  category: string;
-  value: number;
-  isPredicted: boolean;
+function formatINRFull(amount: number): string {
+  if (!isFinite(amount) || isNaN(amount)) return '₹0';
+  return '₹' + Math.round(amount).toLocaleString('en-IN');
 }
 
-// ─── Animated Number Hook ─────────────────────────────────────────────────
-function useAnimatedNumber(target: number, duration: number = 1200) {
-  const [current, setCurrent] = useState(0);
-  const ref = useRef<number | null>(null);
-  const startTime = useRef<number | null>(null);
+function formatPct(pct: number): string {
+  const sign = pct > 0 ? '+' : '';
+  return `${sign}${pct.toFixed(1)}%`;
+}
 
+function timeAgo(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const s = Math.floor(diff / 1000);
+  if (s < 60) return 'just now';
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  return `${Math.floor(h / 24)}d ago`;
+}
+
+function riskColor(level: RiskLevel): string {
+  switch (level) {
+    case 'high': return 'text-red-400';
+    case 'medium': return 'text-amber-400';
+    default: return 'text-emerald-400';
+  }
+}
+
+function riskBg(level: RiskLevel): string {
+  switch (level) {
+    case 'high': return 'bg-red-500/10 border-red-500/20';
+    case 'medium': return 'bg-amber-500/10 border-amber-500/20';
+    default: return 'bg-emerald-500/10 border-emerald-500/20';
+  }
+}
+
+function severityColor(severity: CFORecommendation['severity']): string {
+  switch (severity) {
+    case 'critical': return 'border-red-500/30 bg-red-500/[0.04]';
+    case 'warning': return 'border-amber-500/30 bg-amber-500/[0.04]';
+    case 'opportunity': return 'border-emerald-500/30 bg-emerald-500/[0.04]';
+    default: return 'border-cyan-500/30 bg-cyan-500/[0.04]';
+  }
+}
+
+// ─── Animated number ──────────────────────────────────────────────────────────
+
+function useAnimatedNumber(target: number, duration = 1200) {
+  const [value, setValue] = useState(0);
   useEffect(() => {
-    startTime.current = null;
-    const startValue = current;
-
-    function step(timestamp: number) {
-      if (!startTime.current) startTime.current = timestamp;
-      const elapsed = timestamp - startTime.current;
-      const progress = Math.min(elapsed / duration, 1);
+    let raf = 0;
+    const start = performance.now();
+    const initial = 0;
+    const tick = (t: number) => {
+      const progress = Math.min((t - start) / duration, 1);
       const eased = 1 - Math.pow(1 - progress, 3);
-      setCurrent(Math.round(startValue + (target - startValue) * eased));
-      if (progress < 1) {
-        ref.current = requestAnimationFrame(step);
-      }
-    }
-
-    ref.current = requestAnimationFrame(step);
-    return () => {
-      if (ref.current) cancelAnimationFrame(ref.current);
+      setValue(initial + (target - initial) * eased);
+      if (progress < 1) raf = requestAnimationFrame(tick);
     };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
   }, [target, duration]);
-
-  return current;
+  return value;
 }
 
-// ─── Mini Sparkline Component ─────────────────────────────────────────────
-function MiniSparkline({
-  data,
-  color,
-  width = 80,
-  height = 32,
-}: {
-  data: number[];
-  color: string;
-  width?: number;
-  height?: number;
-}) {
-  if (data.length < 2) return null;
+// ─── Mini Sparkline (SVG) ─────────────────────────────────────────────────────
+
+function Sparkline({ data, color = '#10b981', width = 100, height = 32 }: { data: number[]; color?: string; width?: number; height?: number }) {
+  if (data.length < 2) return <div style={{ width, height }} />;
   const min = Math.min(...data);
   const max = Math.max(...data);
   const range = max - min || 1;
-  const padding = 2;
-
-  const points = data
-    .map((v, i) => {
-      const x = padding + (i / (data.length - 1)) * (width - padding * 2);
-      const y = height - padding - ((v - min) / range) * (height - padding * 2);
-      return `${x},${y}`;
-    })
-    .join(' ');
-
-  const areaPoints = `${padding},${height - padding} ${points} ${width - padding},${height - padding}`;
-
+  const pad = 2;
+  const points = data.map((v, i) => {
+    const x = pad + (i / (data.length - 1)) * (width - pad * 2);
+    const y = height - pad - ((v - min) / range) * (height - pad * 2);
+    return `${x},${y}`;
+  }).join(' ');
+  const area = `${pad},${height - pad} ${points} ${width - pad},${height - pad}`;
+  const id = `spark-${color.replace('#', '')}-${Math.round(Math.random() * 1e6)}`;
   return (
     <svg width={width} height={height} className="shrink-0">
       <defs>
-        <linearGradient id={`sparkGrad-${color.replace('#', '')}`} x1="0" y1="0" x2="0" y2="1">
+        <linearGradient id={id} x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stopColor={color} stopOpacity={0.3} />
           <stop offset="100%" stopColor={color} stopOpacity={0} />
         </linearGradient>
       </defs>
-      <polygon
-        points={areaPoints}
-        fill={`url(#sparkGrad-${color.replace('#', '')})`}
-      />
-      <polyline
-        points={points}
-        fill="none"
-        stroke={color}
-        strokeWidth={1.5}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
+      <polygon points={area} fill={`url(#${id})`} />
+      <polyline points={points} fill="none" stroke={color} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
 
-// ─── Animated Card Wrapper ────────────────────────────────────────────────
-function AnimatedCard({
-  children,
-  delay = 0,
-  className = '',
-}: {
-  children: React.ReactNode;
-  delay?: number;
-  className?: string;
-}) {
+// ─── Wrap with stagger animation ──────────────────────────────────────────────
+
+function FadeIn({ children, delay = 0 }: { children: React.ReactNode; delay?: number }) {
   return (
     <motion.div
-      initial={{ opacity: 0, y: 20 }}
+      initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ delay, duration: 0.5, ease: 'easeOut' }}
+      transition={{ duration: 0.5, delay, ease: 'easeOut' }}
     >
-      <Card
-        className={`hover:shadow-lg hover:shadow-purple-500/5 transition-all duration-300 border-border/50 backdrop-blur-sm bg-card/80 ${className}`}
-      >
-        {children}
-      </Card>
+      {children}
     </motion.div>
   );
 }
 
-// ─── Prediction Card Component ────────────────────────────────────────────
-function PredictionCard({
-  title,
-  value,
-  trend,
-  confidence,
-  lowerBound,
-  upperBound,
-  icon,
-  sparkData,
-  color,
-  isCurrency,
-  isPercent,
-  delay,
-}: {
-  title: string;
-  value: number;
-  trend: string;
-  confidence: number;
-  lowerBound: number;
-  upperBound: number;
-  icon: React.ReactNode;
-  sparkData: number[];
-  color: string;
-  isCurrency?: boolean;
-  isPercent?: boolean;
-  delay: number;
-}) {
-  const animatedValue = useAnimatedNumber(Math.round(value));
+// ─── Section header ───────────────────────────────────────────────────────────
 
-  const formatValue = (v: number) => {
-    if (isCurrency) return formatCurrency(v);
-    if (isPercent) return `${v.toFixed(1)}%`;
-    return formatNumber(v);
-  };
-
-  const trendIcon =
-    trend === 'up' ? (
-      <ArrowUpRight className="h-3.5 w-3.5" />
-    ) : trend === 'down' ? (
-      <ArrowDownRight className="h-3.5 w-3.5" />
-    ) : (
-      <Minus className="h-3 w-3" />
-    );
-
-  const trendColor =
-    trend === 'up'
-      ? 'text-emerald-600 dark:text-emerald-400'
-      : trend === 'down'
-        ? 'text-red-600 dark:text-red-400'
-        : 'text-slate-500';
-
-  const glowClass =
-    color === 'purple'
-      ? 'shadow-purple-500/10 hover:shadow-purple-500/20'
-      : 'shadow-emerald-500/10 hover:shadow-emerald-500/20';
-
+function SectionHeader({ icon: Icon, title, subtitle, action }: { icon: LucideIcon; title: string; subtitle?: string; action?: React.ReactNode }) {
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20, scale: 0.95 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
-      transition={{ delay, duration: 0.5, ease: 'easeOut' }}
-    >
-      <Card
-        className={`relative overflow-hidden hover:shadow-xl ${glowClass} transition-all duration-300 border-border/50 bg-card/80`}
-      >
-        {/* Glow accent */}
-        <div
-          className={`absolute top-0 left-0 w-full h-0.5 ${
-            color === 'purple'
-              ? 'bg-gradient-to-r from-purple-500 to-purple-300'
-              : 'bg-gradient-to-r from-emerald-500 to-emerald-300'
-          }`}
-        />
-        <CardContent className="p-4">
-          <div className="flex items-start justify-between mb-2">
+    <div className="mb-3 flex items-end justify-between gap-3">
+      <div className="flex items-center gap-2.5">
+        <div className="flex h-8 w-8 items-center justify-center rounded-lg accent-gradient-soft">
+          <Icon className="h-4 w-4 accent-text" />
+        </div>
+        <div>
+          <h2 className="text-base font-semibold text-foreground">{title}</h2>
+          {subtitle && <p className="text-xs text-muted-foreground">{subtitle}</p>}
+        </div>
+      </div>
+      {action}
+    </div>
+  );
+}
+
+// ─── Dashboard metric card ────────────────────────────────────────────────────
+
+interface MetricCardProps {
+  icon: LucideIcon;
+  label: string;
+  primary: string;
+  secondary?: string;
+  trend?: { value: number; label: string };
+  sparkData?: number[];
+  sparkColor?: string;
+  rows?: Array<{ label: string; value: string }>;
+  delay?: number;
+}
+
+function MetricCard({ icon: Icon, label, primary, secondary, trend, sparkData, sparkColor, rows, delay = 0 }: MetricCardProps) {
+  return (
+    <FadeIn delay={delay}>
+      <Card className="border-white/[0.06] bg-card/60 backdrop-blur-sm hover:bg-card/80 transition-colors">
+        <CardContent className="p-5">
+          <div className="mb-3 flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <div
-                className={`flex items-center justify-center h-8 w-8 rounded-lg ${
-                  color === 'purple'
-                    ? 'bg-purple-50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-400'
-                    : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400'
-                }`}
-              >
-                {icon}
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/[0.04]">
+                <Icon className="h-4 w-4 text-muted-foreground" />
               </div>
-              <span className="text-xs font-medium text-muted-foreground">
-                {title}
-              </span>
+              <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{label}</span>
             </div>
-            <Badge
-              variant="outline"
-              className={`text-[10px] px-1.5 py-0.5 ${
-                trend === 'up'
-                  ? 'border-emerald-200 text-emerald-700 bg-emerald-50/80 dark:border-emerald-800 dark:text-emerald-400 dark:bg-emerald-950/40'
-                  : trend === 'down'
-                    ? 'border-red-200 text-red-700 bg-red-50/80 dark:border-red-800 dark:text-red-400 dark:bg-red-950/40'
-                    : 'border-slate-200 text-slate-600 bg-slate-50/80 dark:border-slate-700 dark:text-slate-400 dark:bg-slate-900/40'
-              }`}
-            >
-              {trendIcon}
-            </Badge>
+            {sparkData && <Sparkline data={sparkData} color={sparkColor} />}
+          </div>
+          <div className="space-y-1">
+            <p className="text-2xl font-bold tracking-tight text-foreground">{primary}</p>
+            {secondary && <p className="text-xs text-muted-foreground">{secondary}</p>}
+          </div>
+          {trend && (
+            <div className="mt-3 flex items-center gap-1.5">
+              {trend.value >= 0 ? (
+                <TrendingUp className="h-3.5 w-3.5 text-emerald-400" />
+              ) : (
+                <TrendingDown className="h-3.5 w-3.5 text-red-400" />
+              )}
+              <span className={`text-xs font-medium ${trend.value >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                {formatPct(trend.value)}
+              </span>
+              <span className="text-[11px] text-muted-foreground">{trend.label}</span>
+            </div>
+          )}
+          {rows && rows.length > 0 && (
+            <div className="mt-3 space-y-1.5 border-t border-white/[0.04] pt-3">
+              {rows.map((r, i) => (
+                <div key={i} className="flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground">{r.label}</span>
+                  <span className="font-medium text-foreground">{r.value}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </FadeIn>
+  );
+}
+
+// ─── Risk Card (Module 3) ─────────────────────────────────────────────────────
+
+function RiskCard({ risk, delay }: { risk: CFOResponse['risks'][number]; delay: number }) {
+  const levelLabel = risk.level === 'high' ? 'HIGH' : risk.level === 'medium' ? 'MEDIUM' : 'LOW';
+  return (
+    <FadeIn delay={delay}>
+      <Card className={`border ${riskBg(risk.level)} backdrop-blur-sm`}>
+        <CardContent className="p-4">
+          <div className="mb-2 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <ShieldAlert className={`h-4 w-4 ${riskColor(risk.level)}`} />
+              <span className="text-sm font-semibold capitalize text-foreground">{risk.category} Risk</span>
+            </div>
+            <span className={`text-xs font-bold ${riskColor(risk.level)}`}>
+              {levelLabel}
+            </span>
+          </div>
+          <div className="mb-2 h-1.5 w-full overflow-hidden rounded-full bg-white/[0.05]">
+            <motion.div
+              initial={{ width: 0 }}
+              animate={{ width: `${risk.score}%` }}
+              transition={{ duration: 0.8, delay: delay + 0.2 }}
+              className={`h-full rounded-full ${risk.level === 'high' ? 'bg-red-500' : risk.level === 'medium' ? 'bg-amber-500' : 'bg-emerald-500'}`}
+            />
+          </div>
+          <div className="space-y-1">
+            {risk.reasons.map((reason, i) => (
+              <p key={i} className="text-xs leading-relaxed text-muted-foreground">
+                {reason}
+              </p>
+            ))}
+          </div>
+          {risk.recommendation && (
+            <div className="mt-2 rounded-lg bg-white/[0.03] p-2">
+              <p className="text-[11px] leading-relaxed text-foreground/80">
+                <span className="font-medium">Action:</span> {risk.recommendation}
+              </p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </FadeIn>
+  );
+}
+
+// ─── Recommendation Card (Module 6) ───────────────────────────────────────────
+
+function RecommendationCard({ rec, delay, onAction }: { rec: CFORecommendation; delay: number; onAction: (rec: CFORecommendation) => void }) {
+  const severityIcon: Record<CFORecommendation['severity'], LucideIcon> = {
+    critical: AlertTriangle,
+    warning: AlertTriangle,
+    opportunity: Lightbulb,
+    info: Sparkles,
+  };
+  const Icon = severityIcon[rec.severity];
+  const iconColor = rec.severity === 'critical' ? 'text-red-400' : rec.severity === 'warning' ? 'text-amber-400' : rec.severity === 'opportunity' ? 'text-emerald-400' : 'text-cyan-400';
+  return (
+    <FadeIn delay={delay}>
+      <Card className={`border ${severityColor(rec.severity)} backdrop-blur-sm`}>
+        <CardContent className="p-4">
+          <div className="mb-2 flex items-start justify-between gap-3">
+            <div className="flex items-start gap-2">
+              <Icon className={`h-4 w-4 mt-0.5 ${iconColor}`} />
+              <div>
+                <p className="text-sm font-semibold text-foreground">{rec.title}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">{rec.headline}</p>
+              </div>
+            </div>
+            {rec.metric && (
+              <Badge variant="outline" className="shrink-0 border-white/10 bg-white/[0.03]">
+                {rec.metric.value}
+              </Badge>
+            )}
+          </div>
+          <p className="mb-3 text-xs leading-relaxed text-muted-foreground">{rec.description}</p>
+          <div className="space-y-1">
+            {rec.actions.map((action, i) => (
+              <div key={i} className="flex items-start gap-2 text-xs text-foreground/80">
+                <ChevronRight className="h-3 w-3 mt-0.5 shrink-0 text-muted-foreground" />
+                <span>{action}</span>
+              </div>
+            ))}
+          </div>
+          <Button
+            size="sm"
+            variant="outline"
+            className="mt-3 h-7 border-white/10 bg-white/[0.03] text-xs hover:bg-white/[0.06]"
+            onClick={() => onAction(rec)}
+          >
+            <Zap className="h-3 w-3 mr-1.5" />
+            Take Action
+          </Button>
+        </CardContent>
+      </Card>
+    </FadeIn>
+  );
+}
+
+// ─── Action Engine button ─────────────────────────────────────────────────────
+
+interface ActionButton {
+  label: string;
+  icon: LucideIcon;
+  view?: Parameters<ReturnType<typeof useApp>['setCurrentView']>[0];
+  eventName?: string;
+  prompt?: string;
+}
+
+const ACTION_BUTTONS: ActionButton[] = [
+  { label: 'Generate Report', icon: FileBarChart, eventName: 'oracle-ask', prompt: 'Generate a CFO report for this month.' },
+  { label: 'Export PDF', icon: FileText, eventName: 'cfo-export-pdf' },
+  { label: 'Create Forecast', icon: TrendingUp, eventName: 'oracle-ask', prompt: 'Create a 90-day cash flow forecast.' },
+  { label: 'Recover Collections', icon: Wallet, view: 'reconcile' },
+  { label: 'Create Reminder', icon: MessageSquare, eventName: 'oracle-ask', prompt: 'Draft a WhatsApp reminder for overdue clients.' },
+  { label: 'Prepare Returns', icon: FileText, view: 'returns' },
+  { label: 'Send WhatsApp', icon: Send, eventName: 'cfo-send-whatsapp' },
+  { label: 'Open Analytics', icon: Activity, view: 'analytics' },
+];
+
+function ActionEngine({ onNavigate }: { onNavigate: (view: Parameters<ReturnType<typeof useApp>['setCurrentView']>[0]) => void }) {
+  const { toast } = useToast();
+  return (
+    <div className="flex flex-wrap gap-2">
+      {ACTION_BUTTONS.map((btn) => {
+        const Icon = btn.icon;
+        return (
+          <button
+            key={btn.label}
+            onClick={() => {
+              if (btn.view) {
+                onNavigate(btn.view);
+              } else if (btn.eventName === 'oracle-ask' && btn.prompt) {
+                window.dispatchEvent(new CustomEvent('oracle-ask', { detail: btn.prompt }));
+              } else if (btn.eventName) {
+                toast({
+                  title: `${btn.label}`,
+                  description: `${btn.label} workflow initiated. Oracle will prepare the deliverable.`,
+                });
+              }
+            }}
+            className="group flex items-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.02] px-3 py-2 text-xs font-medium text-foreground transition-all hover:border-emerald-500/30 hover:bg-emerald-500/[0.04] hover-lift"
+          >
+            <Icon className="h-3.5 w-3.5 text-muted-foreground group-hover:accent-text" />
+            <span>{btn.label}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── Health Score Gauge (Module 1) ────────────────────────────────────────────
+
+function HealthGauge({ score, size = 160 }: { score: number; size?: number }) {
+  const stroke = 12;
+  const r = (size - stroke) / 2;
+  const c = 2 * Math.PI * r;
+  const offset = c - (score / 100) * c;
+  const tier = score >= 80 ? 'Excellent' : score >= 65 ? 'Healthy' : score >= 50 ? 'Needs Attention' : 'At Risk';
+  const color = score >= 80 ? '#10b981' : score >= 65 ? '#06b6d4' : score >= 50 ? '#f59e0b' : '#ef4444';
+  return (
+    <div className="relative" style={{ width: size, height: size }}>
+      <svg width={size} height={size} className="-rotate-90">
+        <defs>
+          <linearGradient id="cfoHealthGrad" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stopColor={color} />
+            <stop offset="100%" stopColor={color} stopOpacity={0.6} />
+          </linearGradient>
+        </defs>
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth={stroke} />
+        <motion.circle
+          cx={size / 2}
+          cy={size / 2}
+          r={r}
+          fill="none"
+          stroke="url(#cfoHealthGrad)"
+          strokeWidth={stroke}
+          strokeLinecap="round"
+          strokeDasharray={c}
+          initial={{ strokeDashoffset: c }}
+          animate={{ strokeDashoffset: offset }}
+          transition={{ duration: 1.2, ease: 'easeOut' }}
+        />
+      </svg>
+      <div className="absolute inset-0 flex flex-col items-center justify-center">
+        <motion.span
+          initial={{ opacity: 0, scale: 0.7 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ delay: 0.4, duration: 0.4 }}
+          className="text-4xl font-bold"
+          style={{ color }}
+        >
+          {score}
+        </motion.span>
+        <span className="text-[10px] uppercase tracking-wider text-muted-foreground">/ 100</span>
+        <span className="mt-1 text-xs font-medium" style={{ color }}>{tier}</span>
+      </div>
+    </div>
+  );
+}
+
+// ─── Daily Brief (Module 4) ───────────────────────────────────────────────────
+
+function DailyBriefCard({ brief, delay }: { brief: CFOResponse['brief']; delay: number }) {
+  const urgencyStyles: Record<string, string> = {
+    critical: 'border-red-500/30 bg-red-500/[0.05]',
+    high: 'border-amber-500/30 bg-amber-500/[0.05]',
+    medium: 'border-cyan-500/20 bg-cyan-500/[0.03]',
+    low: 'border-white/[0.06] bg-white/[0.02]',
+  };
+  const urgencyLabel: Record<string, string> = {
+    critical: 'CRITICAL',
+    high: 'HIGH',
+    medium: 'MEDIUM',
+    low: 'LOW',
+  };
+  const urgencyColor: Record<string, string> = {
+    critical: 'text-red-400',
+    high: 'text-amber-400',
+    medium: 'text-cyan-400',
+    low: 'text-muted-foreground',
+  };
+  return (
+    <FadeIn delay={delay}>
+      <Card className="border-white/[0.06] bg-gradient-to-br from-emerald-500/[0.04] via-card/60 to-cyan-500/[0.04] backdrop-blur-sm">
+        <CardContent className="p-6">
+          {/* Greeting */}
+          <div className="mb-4 flex items-start justify-between gap-4">
+            <div>
+              <p className="text-xl font-bold text-foreground">{brief.greeting}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">{brief.dateLabel}</p>
+            </div>
+            <div className="flex flex-col items-end gap-1">
+              <Badge variant="outline" className="border-emerald-500/30 bg-emerald-500/[0.08] text-emerald-300">
+                <Activity className="h-3 w-3 mr-1" />
+                Live Brief
+              </Badge>
+              <span className="text-[10px] text-muted-foreground">Business Health: {brief.healthScore}/100</span>
+            </div>
           </div>
 
-          <div className="flex items-end justify-between">
-            <div>
-              <p className="text-xl font-bold text-foreground tracking-tight">
-                {formatValue(animatedValue)}
-              </p>
-              <div className="flex items-center gap-2 mt-1">
-                <Badge
-                  variant="outline"
-                  className="text-[10px] px-1.5 py-0 border-purple-200 text-purple-700 bg-purple-50/80 dark:border-purple-800 dark:text-purple-400 dark:bg-purple-950/40"
-                >
-                  {Math.round(confidence * 100)}% confidence
-                </Badge>
-                <span className="text-[10px] text-muted-foreground">
-                  {isCurrency
-                    ? `${formatCurrency(lowerBound)} - ${formatCurrency(upperBound)}`
-                    : isPercent
-                      ? `${lowerBound.toFixed(1)}% - ${upperBound.toFixed(1)}%`
-                      : `${formatNumber(lowerBound)} - ${formatNumber(upperBound)}`}
-                </span>
-              </div>
+          {/* Snapshot grid */}
+          <div className="mb-5 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+            {[
+              { label: 'Revenue', value: brief.snapshot.revenue, icon: TrendingUp },
+              { label: 'Cash Position', value: brief.snapshot.cashPosition, icon: Wallet },
+              { label: 'Receivables', value: brief.snapshot.receivables, icon: IndianRupee },
+              { label: 'Payables', value: brief.snapshot.payables, icon: CreditCard },
+              { label: 'GST Liability', value: brief.snapshot.gstLiability, icon: FileText },
+              { label: 'ITC Available', value: brief.snapshot.itcAvailable, icon: CheckCircle2 },
+            ].map((s, i) => {
+              const Icon = s.icon;
+              return (
+                <div key={s.label} className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-2.5">
+                  <div className="mb-1 flex items-center gap-1.5">
+                    <Icon className="h-3 w-3 text-muted-foreground" />
+                    <span className="text-[10px] uppercase tracking-wider text-muted-foreground">{s.label}</span>
+                  </div>
+                  <p className="text-sm font-bold text-foreground">{formatINR(s.value)}</p>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Priority actions */}
+          <div>
+            <div className="mb-2 flex items-center gap-2">
+              <Target className="h-3.5 w-3.5 accent-text" />
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-foreground">Priority Actions</h3>
             </div>
-            <MiniSparkline
-              data={sparkData}
-              color={color === 'purple' ? COLORS.purple : COLORS.emerald}
-            />
+            {brief.priorityActions.length === 0 ? (
+              <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/[0.04] p-3 text-center">
+                <CheckCircle2 className="mx-auto mb-1 h-5 w-5 text-emerald-400" />
+                <p className="text-xs text-foreground">You're all caught up. No priority actions today.</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {brief.priorityActions.map((action, i) => (
+                  <motion.div
+                    key={action.id}
+                    initial={{ opacity: 0, x: -8 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: delay + 0.1 + i * 0.05 }}
+                    className={`flex items-start gap-3 rounded-xl border p-3 ${urgencyStyles[action.urgency]}`}
+                  >
+                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white/[0.04] text-xs font-bold">
+                      {i + 1}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="text-sm font-medium text-foreground">{action.title}</p>
+                        <span className={`shrink-0 text-[10px] font-bold ${urgencyColor[action.urgency]}`}>
+                          {urgencyLabel[action.urgency]}
+                        </span>
+                      </div>
+                      <p className="mt-0.5 text-xs text-muted-foreground leading-relaxed">{action.detail}</p>
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
-    </motion.div>
+    </FadeIn>
   );
 }
 
-// ─── Skeleton Loaders ─────────────────────────────────────────────────────
-function PredictionCardSkeleton() {
-  return (
-    <Card className="border-border/50">
-      <CardContent className="p-4">
-        <div className="flex items-center gap-2 mb-3">
-          <Skeleton className="h-8 w-8 rounded-lg" />
-          <Skeleton className="h-3 w-24" />
-        </div>
-        <Skeleton className="h-6 w-32 mb-2" />
-        <div className="flex items-center gap-2">
-          <Skeleton className="h-4 w-20 rounded-full" />
-          <Skeleton className="h-3 w-28" />
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
+// ─── Predictions Card (Module 2) ──────────────────────────────────────────────
 
-function ChartSkeleton() {
+function PredictionCard({ predictions, delay }: { predictions: CFOResponse['predictions']; delay: number }) {
   return (
-    <div className="space-y-4 p-4">
-      <Skeleton className="h-56 w-full rounded-lg" />
-    </div>
-  );
-}
-
-function InsightsSkeleton() {
-  return (
-    <div className="space-y-3 p-4">
-      {Array.from({ length: 4 }).map((_, i) => (
-        <div key={i} className="flex items-center gap-3">
-          <Skeleton className="h-9 w-9 rounded-lg shrink-0" />
-          <div className="flex-1 space-y-1.5">
-            <Skeleton className="h-4 w-3/4" />
-            <Skeleton className="h-3 w-1/2" />
+    <FadeIn delay={delay}>
+      <Card className="border-white/[0.06] bg-card/60 backdrop-blur-sm">
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-sm">
+            <Brain className="h-4 w-4 accent-text" />
+            Financial Predictions
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* Revenue forecast */}
+          <div>
+            <div className="mb-2 flex items-center justify-between">
+              <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Revenue Forecast</span>
+              <Badge variant="outline" className="border-emerald-500/20 bg-emerald-500/[0.05] text-emerald-300 text-[10px]">
+                {predictions.revenue.confidencePct}% confidence
+              </Badge>
+            </div>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              {[
+                { label: '7 Days', value: predictions.revenue.sevenDay },
+                { label: '30 Days', value: predictions.revenue.thirtyDay },
+                { label: '90 Days', value: predictions.revenue.ninetyDay },
+                { label: 'Year End', value: predictions.revenue.yearEnd },
+              ].map((r) => (
+                <div key={r.label} className="rounded-lg border border-white/[0.05] bg-white/[0.02] p-2.5">
+                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{r.label}</p>
+                  <p className="text-sm font-bold text-foreground">{formatINR(r.value)}</p>
+                </div>
+              ))}
+            </div>
           </div>
-          <Skeleton className="h-5 w-12 rounded-full" />
-        </div>
-      ))}
+
+          {/* Cash flow + GST + Collections */}
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <div className="rounded-lg border border-white/[0.05] bg-white/[0.02] p-3">
+              <div className="mb-1.5 flex items-center gap-1.5">
+                <Wallet className="h-3.5 w-3.5 text-cyan-400" />
+                <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Cash Flow</span>
+              </div>
+              <div className="space-y-1 text-xs">
+                <div className="flex justify-between"><span className="text-muted-foreground">Daily</span><span className="font-medium text-foreground">{formatINR(predictions.cashFlow.dailyPosition)}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">Monthly</span><span className="font-medium text-foreground">{formatINR(predictions.cashFlow.monthlyPosition)}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">Runway</span><span className="font-medium text-foreground">{predictions.cashFlow.runwayDays || '∞'} days</span></div>
+              </div>
+            </div>
+            <div className="rounded-lg border border-white/[0.05] bg-white/[0.02] p-3">
+              <div className="mb-1.5 flex items-center gap-1.5">
+                <FileText className="h-3.5 w-3.5 text-emerald-400" />
+                <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">GST Forecast</span>
+              </div>
+              <div className="space-y-1 text-xs">
+                <div className="flex justify-between"><span className="text-muted-foreground">Liability</span><span className="font-medium text-foreground">{formatINR(predictions.gst.upcomingLiability)}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">ITC Use</span><span className="font-medium text-foreground">{predictions.gst.itcUtilization}%</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">Refund</span><span className="font-medium text-foreground">{formatINR(predictions.gst.refundPrediction)}</span></div>
+              </div>
+            </div>
+            <div className="rounded-lg border border-white/[0.05] bg-white/[0.02] p-3">
+              <div className="mb-1.5 flex items-center gap-1.5">
+                <Users className="h-3.5 w-3.5 text-amber-400" />
+                <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Collections</span>
+              </div>
+              <div className="space-y-1 text-xs">
+                <div className="flex justify-between"><span className="text-muted-foreground">Expected</span><span className="font-medium text-foreground">{formatINR(predictions.collections.expectedCollections)}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">Delays</span><span className="font-medium text-foreground">{predictions.collections.paymentDelays} clients</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">Risky</span><span className="font-medium text-foreground">{predictions.collections.riskyClients.length}</span></div>
+              </div>
+            </div>
+          </div>
+
+          {/* Risky clients */}
+          {predictions.collections.riskyClients.length > 0 && (
+            <div>
+              <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Risky Clients (top 5)</p>
+              <div className="max-h-32 overflow-y-auto custom-scrollbar space-y-1">
+                {predictions.collections.riskyClients.map((c, i) => (
+                  <div key={i} className="flex items-center justify-between rounded-md border border-white/[0.04] bg-white/[0.01] px-2.5 py-1.5 text-xs">
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-medium text-foreground">{c.name}</p>
+                      <p className="truncate text-[10px] text-muted-foreground">{c.gstin}</p>
+                    </div>
+                    <div className="ml-2 text-right">
+                      <p className="font-medium text-amber-300">{formatINR(c.outstanding)}</p>
+                      <p className="text-[10px] text-muted-foreground">risk {c.riskScore}/100</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </FadeIn>
+  );
+}
+
+// ─── Memory Section (Module 8) ────────────────────────────────────────────────
+
+function MemoryCard({ memory, delay }: { memory: CFOResponse['memory']; delay: number }) {
+  return (
+    <FadeIn delay={delay}>
+      <Card className="border-white/[0.06] bg-card/60 backdrop-blur-sm">
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-sm">
+            <Brain className="h-4 w-4 accent-text" />
+            CFO Memory
+            <Badge variant="outline" className="ml-1 border-white/10 bg-white/[0.03] text-[10px]">
+              <Clock className="h-3 w-3 mr-1" />
+              Pattern recognition
+            </Badge>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* Insights */}
+          {memory.insights.length > 0 && (
+            <div>
+              <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Remembered Insights</p>
+              <ul className="space-y-1.5">
+                {memory.insights.map((insight, i) => (
+                  <li key={i} className="flex items-start gap-2 text-xs text-foreground/90">
+                    <Sparkles className="h-3 w-3 mt-0.5 shrink-0 accent-text" />
+                    <span>{insight}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* Client behaviour */}
+          {memory.clientBehavior.length > 0 && (
+            <div>
+              <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Client Payment Behaviour</p>
+              <div className="max-h-40 overflow-y-auto custom-scrollbar space-y-1">
+                {memory.clientBehavior.map((c, i) => (
+                  <div key={i} className="flex items-center justify-between rounded-md border border-white/[0.04] bg-white/[0.01] px-2.5 py-1.5 text-xs">
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-medium text-foreground">{c.clientName}</p>
+                      <p className="text-[10px] text-muted-foreground">
+                        {c.delays} delay(s) · avg {c.averageDelayDays}d late · {c.riskLabel}
+                      </p>
+                    </div>
+                    <span className="ml-2 shrink-0 font-medium text-amber-300">{formatINR(c.totalOutstanding)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Revenue trend mini-chart */}
+          {memory.revenueTrends.length > 0 && (
+            <div>
+              <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Revenue Trend (6 mo)</p>
+              <div className="flex items-end gap-1.5 h-16">
+                {memory.revenueTrends.map((r, i) => {
+                  const max = Math.max(...memory.revenueTrends.map(t => t.value), 1);
+                  const h = Math.max(4, (r.value / max) * 100);
+                  const color = r.trend === 'up' ? '#10b981' : r.trend === 'down' ? '#ef4444' : '#06b6d4';
+                  return (
+                    <div key={i} className="flex flex-1 flex-col items-center gap-1">
+                      <motion.div
+                        initial={{ height: 0 }}
+                        animate={{ height: `${h}%` }}
+                        transition={{ duration: 0.6, delay: delay + 0.1 + i * 0.05 }}
+                        className="w-full rounded-t-sm"
+                        style={{ background: color, minHeight: 4 }}
+                      />
+                      <span className="text-[9px] text-muted-foreground">{r.month}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Filing history */}
+          {memory.filingHistory.length > 0 && (
+            <div>
+              <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Filing History (6 mo)</p>
+              <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
+                {memory.filingHistory.map((f, i) => (
+                  <div key={i} className="rounded-md border border-white/[0.04] bg-white/[0.01] p-2 text-center">
+                    <p className="text-[9px] text-muted-foreground">{f.period}</p>
+                    <p className="text-xs font-bold text-emerald-400">{f.filed}</p>
+                    {f.overdue > 0 && <p className="text-[9px] text-red-400">{f.overdue} overdue</p>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </FadeIn>
+  );
+}
+
+// ─── Skeletons ────────────────────────────────────────────────────────────────
+
+function CFOSkeleton() {
+  return (
+    <div className="space-y-6 p-4 sm:p-6">
+      <Skeleton className="h-12 w-full rounded-xl" />
+      <Skeleton className="h-64 w-full rounded-2xl" />
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <Skeleton key={i} className="h-40 rounded-2xl" />
+        ))}
+      </div>
     </div>
   );
 }
 
-// ─── AI Insights Data (derived from predictions) ──────────────────────────
-function generateInsights(predictions: Record<string, CategoryPrediction>) {
-  const insights: {
-    icon: React.ReactNode;
-    text: string;
-    confidence: number;
-    color: string;
-  }[] = [];
+// ─── Main ─────────────────────────────────────────────────────────────────────
 
-  const revenue = predictions['revenue'];
-  const gstLiability = predictions['gst_liability'];
-  const churn = predictions['churn'];
-  const filingLoad = predictions['filing_load'];
-  const teamLoad = predictions['team_load'];
-  const collections = predictions['collections'];
-
-  if (revenue) {
-    insights.push({
-      icon: <TrendingUp className="h-4 w-4" />,
-      text:
-        revenue.trend === 'up'
-          ? `Revenue is trending upward at ${formatCurrency(revenue.predictedValue)}. Maintain current client engagement strategies.`
-          : `Revenue is projected at ${formatCurrency(revenue.predictedValue)}. Consider proactive outreach to boost collections.`,
-      confidence: revenue.confidence,
-      color: revenue.trend === 'up' ? 'emerald' : 'amber',
-    });
-  }
-
-  if (gstLiability) {
-    insights.push({
-      icon: <IndianRupee className="h-4 w-4" />,
-      text: `GST liability forecast at ${formatCurrency(gstLiability.predictedValue)}. Ensure adequate cash reserves by the 20th of filing month.`,
-      confidence: gstLiability.confidence,
-      color: gstLiability.trend === 'up' ? 'amber' : 'emerald',
-    });
-  }
-
-  if (churn && churn.predictedValue > 5) {
-    insights.push({
-      icon: <AlertTriangle className="h-4 w-4" />,
-      text: `Client churn risk at ${churn.predictedValue.toFixed(1)}%. Identify at-risk clients and schedule retention reviews.`,
-      confidence: churn.confidence,
-      color: 'red',
-    });
-  }
-
-  if (filingLoad && filingLoad.predictedValue > 10) {
-    insights.push({
-      icon: <FileCheck className="h-4 w-4" />,
-      text: `Filing load of ${formatNumber(filingLoad.predictedValue)} returns expected. Optimize team allocation to avoid bottlenecks.`,
-      confidence: filingLoad.confidence,
-      color: 'amber',
-    });
-  }
-
-  if (teamLoad && teamLoad.predictedValue > 75) {
-    insights.push({
-      icon: <Users className="h-4 w-4" />,
-      text: `Team utilization projected at ${teamLoad.predictedValue.toFixed(0)}%. Consider temporary resources to prevent burnout.`,
-      confidence: teamLoad.confidence,
-      color: 'amber',
-    });
-  }
-
-  if (insights.length === 0) {
-    insights.push({
-      icon: <Lightbulb className="h-4 w-4" />,
-      text: 'All metrics are within normal range. Continue monitoring for emerging trends.',
-      confidence: 0.8,
-      color: 'emerald',
-    });
-  }
-
-  return insights;
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// MAIN COMPONENT
-// ═══════════════════════════════════════════════════════════════════════════
 export default function AICFODashboardPage() {
-  const [predictions, setPredictions] = useState<Record<string, CategoryPrediction>>({});
-  const [monthlyData, setMonthlyData] = useState<MonthlyDataPoint[]>([]);
-  const [overallConfidence, setOverallConfidence] = useState(0);
+  const { user } = useAuth();
+  const { setCurrentView } = useApp();
+  const { toast } = useToast();
+  const [data, setData] = useState<CFOResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // ── Data Fetching ──────────────────────────────────────────────────────
   const fetchData = useCallback(async () => {
     try {
-      setLoading(true);
+      setRefreshing(true);
+      const res = await fetch('/api/ai-cfo', { cache: 'no-store' });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const json = (await res.json()) as CFOResponse;
+      setData(json);
       setError(null);
-      const res = await fetch('/api/ai-cfo');
-      if (!res.ok) throw new Error('Failed to fetch AI CFO data');
-      const data = await res.json();
-      setPredictions(data.predictions ?? {});
-      setMonthlyData(data.monthlyData ?? []);
-      setOverallConfidence(data.confidence ?? 0);
-    } catch (err) {
-      console.error('AI CFO fetch error:', err);
-      setError('Failed to load predictions. Using fallback data.');
-      // Fallback mock data
-      setPredictions({
-        revenue: { category: 'revenue', predictedValue: 4500000, confidence: 0.82, lowerBound: 3825000, upperBound: 5175000, trend: 'up' },
-        gst_liability: { category: 'gst_liability', predictedValue: 810000, confidence: 0.78, lowerBound: 712800, upperBound: 907200, trend: 'up' },
-        collections: { category: 'collections', predictedValue: 3825000, confidence: 0.75, lowerBound: 3060000, upperBound: 4016250, trend: 'stable' },
-        churn: { category: 'churn', predictedValue: 8.5, confidence: 0.7, lowerBound: 6.5, upperBound: 11.5, trend: 'up' },
-        filing_load: { category: 'filing_load', predictedValue: 18, confidence: 0.85, lowerBound: 16, upperBound: 23, trend: 'up' },
-        team_load: { category: 'team_load', predictedValue: 78, confidence: 0.8, lowerBound: 68, upperBound: 88, trend: 'up' },
-      });
-      setOverallConfidence(0.78);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to load CFO insights');
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   }, []);
 
   useEffect(() => {
     fetchData();
+    // Auto-refresh every 5 minutes
+    const interval = setInterval(fetchData, 5 * 60 * 1000);
+    return () => clearInterval(interval);
   }, [fetchData]);
 
-  // ── Build chart data ───────────────────────────────────────────────────
-  const revenueChartData = monthlyData
-    .filter((d) => d.category === 'revenue')
-    .sort((a, b) => a.month.localeCompare(b.month))
-    .map((d) => ({
-      month: d.month,
-      value: d.value,
-      isPredicted: d.isPredicted,
-    }));
+  const handleRecommendationAction = useCallback((rec: CFORecommendation) => {
+    // Open Oracle with the recommendation context
+    const prompt = `As my CFO, help me execute this recommendation:\n\n${rec.title}: ${rec.headline}\n\n${rec.description}\n\nActions:\n${rec.actions.map((a, i) => `${i + 1}. ${a}`).join('\n')}`;
+    window.dispatchEvent(new CustomEvent('oracle-ask', { detail: prompt }));
+    toast({
+      title: 'Oracle engaged',
+      description: `Opening Oracle to execute: ${rec.title}`,
+    });
+  }, [toast]);
 
-  const gstChartData = monthlyData
-    .filter((d) => d.category === 'gst_liability')
-    .sort((a, b) => a.month.localeCompare(b.month))
-    .map((d) => ({
-      month: d.month,
-      value: d.value,
-      isPredicted: d.isPredicted,
-    }));
+  const animatedOverall = useAnimatedNumber(data?.dashboard.healthScore.overall || 0);
 
-  // Sparkline data for each category
-  const getSparkData = (category: string): number[] => {
-    const items = monthlyData
-      .filter((d) => d.category === category)
-      .sort((a, b) => a.month.localeCompare(b.month))
-      .map((d) => d.value);
-    return items.length > 1 ? items : [0, 0];
-  };
+  if (loading) return <CFOSkeleton />;
 
-  // AI insights
-  const insights = generateInsights(predictions);
+  if (error || !data) {
+    return (
+      <div className="flex min-h-[400px] items-center justify-center p-6">
+        <Card className="max-w-md border-white/[0.06] bg-card/60">
+          <CardContent className="p-6 text-center">
+            <AlertTriangle className="mx-auto mb-3 h-8 w-8 text-amber-400" />
+            <p className="text-sm font-medium text-foreground">Couldn't load CFO insights</p>
+            <p className="mt-1 text-xs text-muted-foreground">{error || 'Unknown error'}</p>
+            <Button onClick={fetchData} variant="outline" className="mt-4 border-white/10 bg-white/[0.03]">
+              <RefreshCw className="h-3.5 w-3.5 mr-2" />
+              Retry
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
-  // Chart configs
-  const revenueChartConfig = {
-    value: { label: 'Revenue', color: COLORS.purple },
-  };
-
-  const gstChartConfig = {
-    value: { label: 'GST Liability', color: COLORS.emerald },
-  };
-
-  // Find the boundary month (last historical)
-  const findPredictionStart = (data: { month: string; isPredicted: boolean }[]) => {
-    const firstPredicted = data.find((d) => d.isPredicted);
-    return firstPredicted?.month ?? null;
-  };
-
-  const revenuePredStart = findPredictionStart(revenueChartData);
-  const gstPredStart = findPredictionStart(gstChartData);
-
-  // ── Render ─────────────────────────────────────────────────────────────
   return (
-    <div className="p-4 md:p-6 space-y-4">
-      {/* ═══ PAGE HEADER ═══ */}
-      <motion.div
-        initial={{ opacity: 0, y: -10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4 }}
-        className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
-      >
-        <div className="flex items-center gap-3">
-          <div className="flex items-center justify-center h-10 w-10 rounded-xl bg-gradient-to-br from-purple-500 to-purple-700 text-white shadow-lg shadow-purple-500/20">
-            <Brain className="h-5 w-5" />
-          </div>
+    <div className="mx-auto max-w-7xl space-y-6 p-4 pb-24 sm:p-6">
+      {/* ═══ HEADER ═══ */}
+      <FadeIn>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground">
-              AI CFO Dashboard
-            </h1>
-            <p className="text-sm text-muted-foreground mt-0.5">
-              Predictive financial intelligence for your firm
-            </p>
+            <div className="flex items-center gap-2">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl accent-gradient shadow-lg shadow-emerald-500/20">
+                <Brain className="h-5 w-5 text-white" />
+              </div>
+              <div>
+                <h1 className="text-xl font-bold tracking-tight text-foreground sm:text-2xl">
+                  GSTPilot AI CFO<span className="accent-text">™</span>
+                </h1>
+                <p className="text-xs text-muted-foreground">
+                  Understand Your Business · Predict Your Future · Recommend Your Next Move
+                </p>
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={fetchData}
+              disabled={refreshing}
+              className="border-white/10 bg-white/[0.03] hover:bg-white/[0.06]"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
+              {refreshing ? 'Refreshing...' : 'Refresh'}
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => window.dispatchEvent(new CustomEvent('oracle-ask', { detail: 'Act as my CFO. Give me a quick read on my business.' }))}
+              className="accent-gradient text-white hover:opacity-90"
+            >
+              <MessageSquare className="h-3.5 w-3.5 mr-2" />
+              Ask CFO
+            </Button>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <Badge
-            variant="outline"
-            className="gap-1.5 px-3 py-1.5 border-purple-200 text-purple-700 bg-purple-50/80 dark:border-purple-800 dark:text-purple-400 dark:bg-purple-950/40 font-medium"
-          >
-            <Sparkles className="h-3.5 w-3.5" />
-            AI Powered
-          </Badge>
-          {overallConfidence > 0 && (
-            <Badge
-              variant="outline"
-              className="gap-1.5 px-3 py-1.5 border-emerald-200 text-emerald-700 bg-emerald-50/80 dark:border-emerald-800 dark:text-emerald-400 dark:bg-emerald-950/40"
-            >
-              <Activity className="h-3.5 w-3.5" />
-              {Math.round(overallConfidence * 100)}% Confidence
-            </Badge>
-          )}
+        {data.generatedAt && (
+          <p className="mt-2 text-[10px] text-muted-foreground">
+            Last updated {timeAgo(data.generatedAt)} · {data.clientCount} clients analysed · {data.hasLiveData ? 'Live data' : 'Limited data — connect sources for full insights'}
+          </p>
+        )}
+      </FadeIn>
+
+      {/* ═══ MODULE 4: DAILY CFO BRIEF ═══ */}
+      <DailyBriefCard brief={data.brief} delay={0.05} />
+
+      {/* ═══ MODULE 1: CFO DASHBOARD CARDS ═══ */}
+      <div>
+        <SectionHeader
+          icon={Activity}
+          title="CFO Dashboard"
+          subtitle="Real-time financial snapshot"
+          action={<Badge variant="outline" className="border-emerald-500/20 bg-emerald-500/[0.05] text-emerald-300">Live</Badge>}
+        />
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <MetricCard
+            icon={TrendingUp}
+            label="Revenue"
+            primary={formatINR(data.dashboard.revenue.thisMonth)}
+            secondary="This month"
+            trend={{ value: data.dashboard.revenue.growthPct, label: 'vs last month' }}
+            sparkData={data.dashboard.revenue.sparkline}
+            sparkColor="#10b981"
+            rows={[
+              { label: 'Today', value: formatINRFull(data.dashboard.revenue.today) },
+              { label: 'Last Month', value: formatINRFull(data.dashboard.revenue.lastMonth) },
+            ]}
+            delay={0.1}
+          />
+          <MetricCard
+            icon={IndianRupee}
+            label="Profit"
+            primary={formatINR(data.dashboard.profit.netProfit)}
+            secondary={`Net margin ${data.dashboard.profit.marginPct}%`}
+            rows={[
+              { label: 'Gross Profit', value: formatINRFull(data.dashboard.profit.grossProfit) },
+              { label: 'Gross Margin', value: `${data.dashboard.profit.grossMarginPct}%` },
+            ]}
+            delay={0.15}
+          />
+          <MetricCard
+            icon={Wallet}
+            label="Cash Position"
+            primary={formatINR(data.dashboard.cash.currentBalance)}
+            secondary={data.dashboard.cash.runwayDays > 0 ? `${data.dashboard.cash.runwayDays} days runway` : 'Healthy balance'}
+            rows={[
+              { label: 'Available Cash', value: formatINRFull(data.dashboard.cash.availableCash) },
+              { label: 'Daily Burn', value: formatINRFull(data.dashboard.cash.burnRatePerDay) },
+            ]}
+            delay={0.2}
+          />
+          <MetricCard
+            icon={CreditCard}
+            label="Receivables"
+            primary={formatINR(data.dashboard.receivables.pendingCollections)}
+            secondary={`${data.dashboard.receivables.overdueCount} overdue invoice(s)`}
+            rows={[
+              { label: 'Overdue', value: formatINRFull(data.dashboard.receivables.overdueCollections) },
+              { label: 'Efficiency', value: `${data.dashboard.receivables.collectionEfficiencyPct}%` },
+            ]}
+            delay={0.25}
+          />
+          <MetricCard
+            icon={FileText}
+            label="Payables"
+            primary={formatINR(data.dashboard.payables.upcomingPayments)}
+            secondary="Next 30 days"
+            rows={[
+              { label: 'Vendor Dues', value: formatINRFull(data.dashboard.payables.vendorDues) },
+              { label: 'Upcoming', value: `${data.dashboard.payables.upcomingCount} payments` },
+            ]}
+            delay={0.3}
+          />
+          <MetricCard
+            icon={CheckCircle2}
+            label="GST"
+            primary={formatINR(data.dashboard.gst.liability)}
+            secondary={`ITC available: ${formatINR(data.dashboard.gst.itcAvailable)}`}
+            rows={data.dashboard.gst.upcomingDueDates.slice(0, 3).map(d => ({
+              label: `${d.returnType} · ${d.period}`,
+              value: d.daysLeft < 0 ? `${Math.abs(d.daysLeft)}d overdue` : `${d.daysLeft}d left`,
+            }))}
+            delay={0.35}
+          />
         </div>
-      </motion.div>
-
-      {/* ═══ ERROR BANNER ═══ */}
-      <AnimatePresence>
-        {error && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            exit={{ opacity: 0, height: 0 }}
-            className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-sm text-amber-700 dark:text-amber-400"
-          >
-            {error}
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* ═══ PREDICTIVE ANALYTICS ROW (6 cards) ═══ */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
-        {loading ? (
-          Array.from({ length: 6 }).map((_, i) => (
-            <PredictionCardSkeleton key={i} />
-          ))
-        ) : (
-          <>
-            <PredictionCard
-              title="Predicted Revenue"
-              value={predictions['revenue']?.predictedValue ?? 0}
-              trend={predictions['revenue']?.trend ?? 'stable'}
-              confidence={predictions['revenue']?.confidence ?? 0}
-              lowerBound={predictions['revenue']?.lowerBound ?? 0}
-              upperBound={predictions['revenue']?.upperBound ?? 0}
-              icon={<IndianRupee className="h-4 w-4" />}
-              sparkData={getSparkData('revenue')}
-              color="purple"
-              isCurrency
-              delay={0.05}
-            />
-            <PredictionCard
-              title="Predicted GST Liability"
-              value={predictions['gst_liability']?.predictedValue ?? 0}
-              trend={predictions['gst_liability']?.trend ?? 'stable'}
-              confidence={predictions['gst_liability']?.confidence ?? 0}
-              lowerBound={predictions['gst_liability']?.lowerBound ?? 0}
-              upperBound={predictions['gst_liability']?.upperBound ?? 0}
-              icon={<IndianRupee className="h-4 w-4" />}
-              sparkData={getSparkData('gst_liability')}
-              color="emerald"
-              isCurrency
-              delay={0.1}
-            />
-            <PredictionCard
-              title="Expected Collections"
-              value={predictions['collections']?.predictedValue ?? 0}
-              trend={predictions['collections']?.trend ?? 'stable'}
-              confidence={predictions['collections']?.confidence ?? 0}
-              lowerBound={predictions['collections']?.lowerBound ?? 0}
-              upperBound={predictions['collections']?.upperBound ?? 0}
-              icon={<TrendingUp className="h-4 w-4" />}
-              sparkData={getSparkData('collections')}
-              color="purple"
-              isCurrency
-              delay={0.15}
-            />
-            <PredictionCard
-              title="Expected Client Churn"
-              value={predictions['churn']?.predictedValue ?? 0}
-              trend={predictions['churn']?.trend ?? 'stable'}
-              confidence={predictions['churn']?.confidence ?? 0}
-              lowerBound={predictions['churn']?.lowerBound ?? 0}
-              upperBound={predictions['churn']?.upperBound ?? 0}
-              icon={<Users className="h-4 w-4" />}
-              sparkData={getSparkData('churn')}
-              color="emerald"
-              isPercent
-              delay={0.2}
-            />
-            <PredictionCard
-              title="Expected Filing Load"
-              value={predictions['filing_load']?.predictedValue ?? 0}
-              trend={predictions['filing_load']?.trend ?? 'stable'}
-              confidence={predictions['filing_load']?.confidence ?? 0}
-              lowerBound={predictions['filing_load']?.lowerBound ?? 0}
-              upperBound={predictions['filing_load']?.upperBound ?? 0}
-              icon={<FileCheck className="h-4 w-4" />}
-              sparkData={getSparkData('filing_load')}
-              color="purple"
-              delay={0.25}
-            />
-            <PredictionCard
-              title="Expected Team Load"
-              value={predictions['team_load']?.predictedValue ?? 0}
-              trend={predictions['team_load']?.trend ?? 'stable'}
-              confidence={predictions['team_load']?.confidence ?? 0}
-              lowerBound={predictions['team_load']?.lowerBound ?? 0}
-              upperBound={predictions['team_load']?.upperBound ?? 0}
-              icon={<Activity className="h-4 w-4" />}
-              sparkData={getSparkData('team_load')}
-              color="emerald"
-              isPercent
-              delay={0.3}
-            />
-          </>
-        )}
       </div>
 
-      {/* ═══ CHARTS SECTION ═══ */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* ─── Revenue Forecast Chart ─── */}
-        <AnimatedCard delay={0.35}>
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <TrendingUp className="h-5 w-5 text-purple-500" />
-              Revenue Forecast
-            </CardTitle>
-            <CardDescription>6 months historical + 3 months predicted</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {loading ? (
-              <ChartSkeleton />
-            ) : (
-              <div className="space-y-3">
-                <ChartContainer config={revenueChartConfig} className="h-56 w-full">
-                  <AreaChart data={revenueChartData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
-                    <defs>
-                      <linearGradient id="revenueGradient" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor={COLORS.purple} stopOpacity={0.3} />
-                        <stop offset="95%" stopColor={COLORS.purple} stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" className="dark:stroke-slate-700/50" />
-                    <XAxis
-                      dataKey="month"
-                      tickLine={false}
-                      axisLine={false}
-                      tick={{ fontSize: 11, fill: '#64748b' }}
-                      tickFormatter={(v: string) => {
-                        const parts = v.split('-');
-                        const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-                        return months[parseInt(parts[1]) - 1] + " '" + parts[0].slice(2);
-                      }}
-                    />
-                    <YAxis
-                      tickLine={false}
-                      axisLine={false}
-                      tick={{ fontSize: 11, fill: '#64748b' }}
-                      tickFormatter={(v: number) => `${(v / 100000).toFixed(0)}L`}
-                    />
-                    <ChartTooltip content={<ChartTooltipContent />} />
-                    {revenuePredStart && (
-                      <ReferenceLine
-                        x={revenuePredStart}
-                        stroke={COLORS.purple}
-                        strokeDasharray="4 4"
-                        strokeWidth={1.5}
-                        label={{
-                          value: 'Forecast',
-                          position: 'top',
-                          fill: COLORS.purple,
-                          fontSize: 10,
-                        }}
-                      />
-                    )}
-                    <Area
-                      type="monotone"
-                      dataKey="value"
-                      stroke={COLORS.purple}
-                      strokeWidth={2}
-                      fill="url(#revenueGradient)"
-                      dot={(props: Record<string, unknown>) => {
-                        const { cx, cy, payload } = props as { cx: number; cy: number; payload: { isPredicted: boolean } };
-                        if (payload?.isPredicted) {
-                          return (
-                            <circle
-                              key={`dot-${cx}-${cy}`}
-                              cx={cx}
-                              cy={cy}
-                              r={3}
-                              fill={COLORS.purple}
-                              stroke="#fff"
-                              strokeWidth={1.5}
-                              strokeDasharray="2 2"
-                            />
-                          );
-                        }
-                        return (
-                          <circle
-                            key={`dot-${cx}-${cy}`}
-                            cx={cx}
-                            cy={cy}
-                            r={3}
-                            fill={COLORS.purple}
-                            stroke="#fff"
-                            strokeWidth={1.5}
+      {/* ═══ MODULE 1 (cont): BUSINESS HEALTH SCORE ═══ */}
+      <div>
+        <SectionHeader icon={Target} title="Business Health Score" subtitle="Composite of 6 dimensions" />
+        <FadeIn delay={0.4}>
+          <Card className="border-white/[0.06] bg-card/60 backdrop-blur-sm">
+            <CardContent className="p-6">
+              <div className="flex flex-col items-center gap-6 sm:flex-row sm:items-center">
+                <HealthGauge score={Math.round(animatedOverall)} />
+                <div className="grid flex-1 grid-cols-2 gap-3 sm:grid-cols-3">
+                  {[
+                    { label: 'Compliance', value: data.dashboard.healthScore.compliance, icon: CheckCircle2 },
+                    { label: 'Cash Flow', value: data.dashboard.healthScore.cashFlow, icon: Wallet },
+                    { label: 'Growth', value: data.dashboard.healthScore.growth, icon: TrendingUp },
+                    { label: 'Profitability', value: data.dashboard.healthScore.profitability, icon: IndianRupee },
+                    { label: 'Risk', value: data.dashboard.healthScore.risk, icon: ShieldAlert },
+                    { label: 'Collections', value: data.dashboard.healthScore.collections, icon: CreditCard },
+                  ].map((s) => {
+                    const Icon = s.icon;
+                    const color = s.value >= 80 ? 'text-emerald-400' : s.value >= 60 ? 'text-amber-400' : 'text-red-400';
+                    return (
+                      <div key={s.label} className="rounded-xl border border-white/[0.05] bg-white/[0.02] p-3">
+                        <div className="mb-1.5 flex items-center gap-1.5">
+                          <Icon className={`h-3 w-3 ${color}`} />
+                          <span className="text-[10px] uppercase tracking-wider text-muted-foreground">{s.label}</span>
+                        </div>
+                        <p className={`text-xl font-bold ${color}`}>{s.value}</p>
+                        <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-white/[0.05]">
+                          <motion.div
+                            initial={{ width: 0 }}
+                            animate={{ width: `${s.value}%` }}
+                            transition={{ duration: 0.8, delay: 0.5 }}
+                            className={`h-full rounded-full ${s.value >= 80 ? 'bg-emerald-500' : s.value >= 60 ? 'bg-amber-500' : 'bg-red-500'}`}
                           />
-                        );
-                      }}
-                      activeDot={{ r: 5, fill: COLORS.purple, stroke: '#fff', strokeWidth: 2 }}
-                    />
-                  </AreaChart>
-                </ChartContainer>
-                <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                  <div className="flex items-center gap-1.5">
-                    <div className="h-2 w-4 rounded-sm bg-purple-500" />
-                    <span>Historical</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <div className="h-2 w-4 rounded-sm bg-purple-300 border border-dashed border-purple-400" />
-                    <span>Predicted</span>
-                  </div>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
-            )}
-          </CardContent>
-        </AnimatedCard>
-
-        {/* ─── GST Liability Forecast Chart ─── */}
-        <AnimatedCard delay={0.4}>
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <IndianRupee className="h-5 w-5 text-emerald-500" />
-              GST Liability Forecast
-            </CardTitle>
-            <CardDescription>6 months historical + 3 months predicted</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {loading ? (
-              <ChartSkeleton />
-            ) : (
-              <div className="space-y-3">
-                <ChartContainer config={gstChartConfig} className="h-56 w-full">
-                  <LineChart data={gstChartData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" className="dark:stroke-slate-700/50" />
-                    <XAxis
-                      dataKey="month"
-                      tickLine={false}
-                      axisLine={false}
-                      tick={{ fontSize: 11, fill: '#64748b' }}
-                      tickFormatter={(v: string) => {
-                        const parts = v.split('-');
-                        const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-                        return months[parseInt(parts[1]) - 1] + " '" + parts[0].slice(2);
-                      }}
-                    />
-                    <YAxis
-                      tickLine={false}
-                      axisLine={false}
-                      tick={{ fontSize: 11, fill: '#64748b' }}
-                      tickFormatter={(v: number) => `${(v / 100000).toFixed(0)}L`}
-                    />
-                    <ChartTooltip content={<ChartTooltipContent />} />
-                    {gstPredStart && (
-                      <ReferenceLine
-                        x={gstPredStart}
-                        stroke={COLORS.emerald}
-                        strokeDasharray="4 4"
-                        strokeWidth={1.5}
-                        label={{
-                          value: 'Forecast',
-                          position: 'top',
-                          fill: COLORS.emerald,
-                          fontSize: 10,
-                        }}
-                      />
-                    )}
-                    <Line
-                      type="monotone"
-                      dataKey="value"
-                      stroke={COLORS.emerald}
-                      strokeWidth={2}
-                      dot={(props: Record<string, unknown>) => {
-                        const { cx, cy, payload } = props as { cx: number; cy: number; payload: { isPredicted: boolean } };
-                        if (payload?.isPredicted) {
-                          return (
-                            <circle
-                              key={`dot-${cx}-${cy}`}
-                              cx={cx}
-                              cy={cy}
-                              r={3}
-                              fill={COLORS.emerald}
-                              stroke="#fff"
-                              strokeWidth={1.5}
-                              strokeDasharray="2 2"
-                            />
-                          );
-                        }
-                        return (
-                          <circle
-                            key={`dot-${cx}-${cy}`}
-                            cx={cx}
-                            cy={cy}
-                            r={3}
-                            fill={COLORS.emerald}
-                            stroke="#fff"
-                            strokeWidth={1.5}
-                          />
-                        );
-                      }}
-                      activeDot={{ r: 5, fill: COLORS.emerald, stroke: '#fff', strokeWidth: 2 }}
-                    />
-                  </LineChart>
-                </ChartContainer>
-                <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                  <div className="flex items-center gap-1.5">
-                    <div className="h-2 w-4 rounded-sm bg-emerald-500" />
-                    <span>Historical</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <div className="h-2 w-4 rounded-sm bg-emerald-300 border border-dashed border-emerald-400" />
-                    <span>Predicted</span>
-                  </div>
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </AnimatedCard>
+            </CardContent>
+          </Card>
+        </FadeIn>
       </div>
 
-      {/* ═══ AI INSIGHTS PANEL ═══ */}
-      <AnimatedCard delay={0.45} className="relative overflow-hidden">
-        {/* Gradient border effect */}
-        <div className="absolute inset-0 rounded-xl p-[2px] bg-gradient-to-r from-purple-500 via-purple-400 to-emerald-500">
-          <div className="h-full w-full rounded-xl bg-card" />
-        </div>
-        <div className="relative z-10">
-          <CardHeader className="pb-2">
-            <div className="flex items-center justify-between">
-              <CardTitle className="flex items-center gap-2 text-base">
-                <Brain className="h-5 w-5 text-purple-500" />
-                AI Insights
-              </CardTitle>
-              <Badge
-                variant="outline"
-                className="gap-1.5 px-2 py-0.5 border-purple-200 text-purple-700 bg-purple-50/80 dark:border-purple-800 dark:text-purple-400 dark:bg-purple-950/40 text-[10px]"
-              >
-                <Sparkles className="h-2.5 w-2.5" />
-                AI Generated
-              </Badge>
-            </div>
-            <CardDescription>Predictive intelligence based on your firm&apos;s data patterns</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {loading ? (
-              <InsightsSkeleton />
-            ) : (
-              <ScrollArea className="max-h-80">
-                <div className="space-y-2 pr-2">
-                  <AnimatePresence>
-                    {insights.map((insight, index) => {
-                      const colorMap: Record<string, string> = {
-                        emerald: 'text-emerald-500 bg-emerald-50 dark:bg-emerald-950/40',
-                        purple: 'text-purple-500 bg-purple-50 dark:bg-purple-950/40',
-                        amber: 'text-amber-500 bg-amber-50 dark:bg-amber-950/40',
-                        red: 'text-red-500 bg-red-50 dark:bg-red-950/40',
-                      };
-                      const cls = colorMap[insight.color] || colorMap.emerald;
+      {/* ═══ MODULE 2: PREDICTIONS ═══ */}
+      <div>
+        <SectionHeader
+          icon={Brain}
+          title="Financial Prediction Engine"
+          subtitle="Forecasts with confidence intervals"
+        />
+        <PredictionCard predictions={data.predictions} delay={0.45} />
+      </div>
 
-                      return (
-                        <motion.div
-                          key={index}
-                          initial={{ opacity: 0, x: -20 }}
-                          animate={{ opacity: 1, x: 0 }}
-                          transition={{ delay: 0.5 + index * 0.08, duration: 0.4 }}
-                          whileHover={{
-                            x: 4,
-                            backgroundColor: 'rgba(139, 92, 246, 0.03)',
-                          }}
-                          className="flex items-center gap-3 p-3 rounded-xl border border-border/30 hover:border-purple-200/50 dark:hover:border-purple-800/50 transition-all cursor-pointer group"
-                        >
-                          <div
-                            className={`flex items-center justify-center h-9 w-9 rounded-lg shrink-0 ${cls}`}
-                          >
-                            {insight.icon}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm text-foreground leading-snug">
-                              {insight.text}
-                            </p>
-                          </div>
-                          <Badge
-                            variant="outline"
-                            className="text-[10px] px-2 py-0.5 shrink-0 border-purple-200 text-purple-700 bg-purple-50/80 dark:border-purple-800 dark:text-purple-400 dark:bg-purple-950/40"
-                          >
-                            {Math.round(insight.confidence * 100)}%
-                          </Badge>
-                        </motion.div>
-                      );
-                    })}
-                  </AnimatePresence>
-                </div>
-              </ScrollArea>
-            )}
-          </CardContent>
+      {/* ═══ MODULE 3: RISK ENGINE ═══ */}
+      <div>
+        <SectionHeader
+          icon={ShieldAlert}
+          title="Business Risk Engine"
+          subtitle="Calculated risks with explanations"
+        />
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {data.risks.map((risk, i) => (
+            <RiskCard key={risk.category} risk={risk} delay={0.5 + i * 0.05} />
+          ))}
         </div>
-      </AnimatedCard>
+      </div>
+
+      {/* ═══ MODULE 6: RECOMMENDATIONS ═══ */}
+      {data.recommendations.length > 0 && (
+        <div>
+          <SectionHeader
+            icon={Lightbulb}
+            title="CFO Recommendations"
+            subtitle="Continuous AI-generated actions"
+            action={<Badge variant="outline" className="border-white/10 bg-white/[0.03]">{data.recommendations.length} active</Badge>}
+          />
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {data.recommendations.map((rec, i) => (
+              <RecommendationCard key={rec.id} rec={rec} delay={0.55 + i * 0.05} onAction={handleRecommendationAction} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ═══ MODULE 7: ACTION ENGINE ═══ */}
+      <div>
+        <SectionHeader
+          icon={Zap}
+          title="Action Engine"
+          subtitle="Execute directly from recommendations"
+        />
+        <FadeIn delay={0.6}>
+          <Card className="border-white/[0.06] bg-card/60 backdrop-blur-sm">
+            <CardContent className="p-4">
+              <ActionEngine onNavigate={setCurrentView} />
+            </CardContent>
+          </Card>
+        </FadeIn>
+      </div>
+
+      {/* ═══ MODULE 8: CFO MEMORY ═══ */}
+      <div>
+        <SectionHeader
+          icon={Brain}
+          title="CFO Memory"
+          subtitle="Long-term patterns and client behaviour"
+        />
+        <MemoryCard memory={data.memory} delay={0.65} />
+      </div>
+
+      {/* ═══ FOOTER ═══ */}
+      <FadeIn delay={0.7}>
+        <div className="rounded-2xl border border-white/[0.06] bg-gradient-to-br from-emerald-500/[0.04] to-cyan-500/[0.04] p-5 text-center">
+          <p className="text-sm font-medium text-foreground">
+            GSTPilot AI CFO<span className="accent-text">™</span> — Always Watching. Always Predicting. Always Advising.
+          </p>
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            Understand Your Business · Predict Your Future · Recommend Your Next Move · Run Your Business
+          </p>
+          <p className="mt-2 text-[10px] text-muted-foreground/60">
+            Founded &amp; developed by Prince Singh
+          </p>
+        </div>
+      </FadeIn>
     </div>
   );
 }

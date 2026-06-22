@@ -1,30 +1,56 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
-import { motion, useInView, useAnimation, AnimatePresence } from 'framer-motion';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import {
+  motion,
+  useInView,
+  useScroll,
+  useSpring,
+  AnimatePresence,
+  type Variants,
+} from 'framer-motion';
+import {
+  Infinity as InfinityIcon,
   Zap,
-  FileText,
-  Upload,
-  CheckCircle2,
   ArrowRight,
+  ChevronDown,
   Check,
-  X,
-  Star,
-  ChevronRight,
-  Play,
   Sparkles,
-  Clock,
-  ShieldCheck,
   Brain,
-  RefreshCw,
+  ShieldCheck,
+  FileText,
+  Landmark,
+  Receipt,
+  Workflow,
+  Bot,
+  TrendingUp,
+  IndianRupee,
+  CalendarClock,
+  FileSearch,
+  Mic,
+  Database,
+  Target,
+  LineChart,
+  Building2,
+  CreditCard,
   Users,
-  BarChart3,
+  Lock,
+  Server,
   Globe,
+  Cpu,
   Layers,
+  Wallet,
+  Bell,
+  Quote,
+  Star,
+  Menu,
+  X,
+  Plus,
+  Minus,
+  Twitter,
+  Github,
+  Linkedin,
+  ArrowUpRight,
 } from 'lucide-react';
 
 interface LandingPageProps {
@@ -32,858 +58,1447 @@ interface LandingPageProps {
   onBookDemo: () => void;
 }
 
-// ─── Animated Counter ────────────────────────────────────
-function AnimatedCounter({ target, suffix = '', prefix = '' }: { target: number; suffix?: string; prefix?: string }) {
-  const [count, setCount] = useState(0);
-  const ref = useRef<HTMLSpanElement>(null);
-  const isInView = useInView(ref, { once: true, margin: '-50px' });
+/* ════════════════════════════════════════════════════════════════════════
+   MOTION PRIMITIVES
+   ════════════════════════════════════════════════════════════════════════ */
 
-  useEffect(() => {
-    if (!isInView) return;
-    const duration = 2000;
-    const steps = 60;
-    const increment = target / steps;
-    let current = 0;
-    const timer = setInterval(() => {
-      current += increment;
-      if (current >= target) {
-        setCount(target);
-        clearInterval(timer);
-      } else {
-        setCount(Math.floor(current));
-      }
-    }, duration / steps);
-    return () => clearInterval(timer);
-  }, [isInView, target]);
+const EASE = [0.22, 1, 0.36, 1] as const;
 
+const revealVariants: Variants = {
+  hidden: { opacity: 0, y: 26, filter: 'blur(10px)' },
+  visible: { opacity: 1, y: 0, filter: 'blur(0px)' },
+};
+
+function Reveal({
+  children,
+  delay = 0,
+  className,
+  as = 'div',
+}: {
+  children: React.ReactNode;
+  delay?: number;
+  className?: string;
+  as?: 'div' | 'section' | 'li' | 'span' | 'h2' | 'p';
+}) {
+  const MotionTag = motion[as] as typeof motion.div;
   return (
-    <span ref={ref}>
-      {prefix}{count.toLocaleString('en-IN')}{suffix}
+    <MotionTag
+      className={className}
+      variants={revealVariants}
+      initial="hidden"
+      whileInView="visible"
+      viewport={{ once: true, margin: '-80px' }}
+      transition={{ duration: 0.7, ease: EASE, delay }}
+    >
+      {children}
+    </MotionTag>
+  );
+}
+
+function StaggerGroup({
+  children,
+  className,
+  stagger = 0.08,
+}: {
+  children: React.ReactNode;
+  className?: string;
+  stagger?: number;
+}) {
+  return (
+    <motion.div
+      className={className}
+      initial="hidden"
+      whileInView="visible"
+      viewport={{ once: true, margin: '-60px' }}
+      variants={{
+        hidden: {},
+        visible: { transition: { staggerChildren: stagger } },
+      }}
+    >
+      {children}
+    </motion.div>
+  );
+}
+
+function StaggerItem({ children, className }: { children: React.ReactNode; className?: string }) {
+  return (
+    <motion.div className={className} variants={revealVariants} transition={{ duration: 0.6, ease: EASE }}>
+      {children}
+    </motion.div>
+  );
+}
+
+/* Top scroll-progress bar */
+function ScrollProgress() {
+  const { scrollYProgress } = useScroll();
+  const scaleX = useSpring(scrollYProgress, { stiffness: 120, damping: 30, restDelta: 0.001 });
+  return (
+    <motion.div
+      style={{ scaleX }}
+      className="fixed left-0 right-0 top-0 z-[60] h-[2px] origin-left accent-gradient"
+    />
+  );
+}
+
+/* Cinematic aurora background — drifts slowly behind content */
+function Aurora({ className = '' }: { className?: string }) {
+  return (
+    <div className={`pointer-events-none absolute inset-0 overflow-hidden ${className}`} aria-hidden>
+      <div className="aurora-blob absolute -left-32 top-0 h-[34rem] w-[34rem] rounded-full accent-gradient-soft blur-[120px] opacity-60" />
+      <div
+        className="aurora-blob absolute -right-24 top-40 h-[30rem] w-[30rem] rounded-full blur-[110px] opacity-50"
+        style={{ backgroundImage: 'linear-gradient(135deg, rgba(6,182,212,0.18), rgba(59,130,246,0.14))' }}
+      />
+      <div
+        className="aurora-blob absolute left-1/3 bottom-0 h-[26rem] w-[26rem] rounded-full blur-[120px] opacity-40"
+        style={{ backgroundImage: 'linear-gradient(135deg, rgba(16,185,129,0.16), rgba(6,182,212,0.10))' }}
+      />
+    </div>
+  );
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   SHARED UI
+   ════════════════════════════════════════════════════════════════════════ */
+
+function GlassIcon({ icon: Icon, size = 'md' }: { icon: React.ElementType; size?: 'sm' | 'md' | 'lg' }) {
+  const dims = size === 'lg' ? 'h-12 w-12' : size === 'sm' ? 'h-8 w-8' : 'h-10 w-10';
+  const ic = size === 'lg' ? 'h-6 w-6' : size === 'sm' ? 'h-4 w-4' : 'h-5 w-5';
+  return (
+    <div className={`flex ${dims} items-center justify-center rounded-xl glass-surface`}>
+      <Icon className={`${ic} accent-text`} />
+    </div>
+  );
+}
+
+function PrimaryButton({
+  children,
+  onClick,
+  className = '',
+}: {
+  children: React.ReactNode;
+  onClick?: () => void;
+  className?: string;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`inline-flex items-center justify-center gap-2 rounded-full bg-white px-6 py-3 text-sm font-semibold text-black transition-all hover:bg-white/90 hover:scale-[1.02] active:scale-95 ${className}`}
+    >
+      {children}
+    </button>
+  );
+}
+
+function GhostButton({
+  children,
+  onClick,
+  className = '',
+}: {
+  children: React.ReactNode;
+  onClick?: () => void;
+  className?: string;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`inline-flex items-center justify-center gap-2 rounded-full glass-surface px-6 py-3 text-sm font-semibold text-white transition-all hover:bg-white/10 hover:scale-[1.02] active:scale-95 ${className}`}
+    >
+      {children}
+    </button>
+  );
+}
+
+function SectionTag({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="inline-flex items-center gap-2 rounded-full glass-surface px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em] text-white/70">
+      {children}
     </span>
   );
 }
 
-// ─── Section Wrapper ─────────────────────────────────────
-function Section({ children, className = '', id }: { children: React.ReactNode; className?: string; id?: string }) {
-  const ref = useRef<HTMLElement>(null);
-  const isInView = useInView(ref, { once: true, margin: '-80px' });
-  const controls = useAnimation();
+/* ════════════════════════════════════════════════════════════════════════
+   NAVBAR
+   ════════════════════════════════════════════════════════════════════════ */
 
-  useEffect(() => {
-    if (isInView) {
-      controls.start('visible');
-    }
-  }, [isInView, controls]);
-
-  return (
-    <motion.section
-      id={id}
-      ref={ref}
-      initial="hidden"
-      animate={controls}
-      variants={{
-        hidden: {},
-        visible: { transition: { staggerChildren: 0.1 } },
-      }}
-      className={className}
-    >
-      {children}
-    </motion.section>
-  );
-}
-
-const fadeUp = {
-  hidden: { opacity: 0, y: 30 },
-  visible: { opacity: 1, y: 0, transition: { duration: 0.6, ease: [0.22, 1, 0.36, 1] } },
-};
-
-const scaleUp = {
-  hidden: { opacity: 0, scale: 0.95 },
-  visible: { opacity: 1, scale: 1, transition: { duration: 0.5, ease: [0.22, 1, 0.36, 1] } },
-};
-
-// ─── Navbar ──────────────────────────────────────────────
 function Navbar({ onGetStarted }: { onGetStarted: () => void }) {
   const [scrolled, setScrolled] = useState(false);
-  const [mobileOpen, setMobileOpen] = useState(false);
+  const [open, setOpen] = useState(false);
 
   useEffect(() => {
-    const handler = () => setScrolled(window.scrollY > 20);
-    window.addEventListener('scroll', handler, { passive: true });
-    return () => window.removeEventListener('scroll', handler);
+    const onScroll = () => setScrolled(window.scrollY > 16);
+    onScroll();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
   }, []);
 
+  const links = [
+    { label: 'Features', href: '#features' },
+    { label: 'Oracle AI', href: '#oracle' },
+    { label: 'Pricing', href: '#pricing' },
+    { label: 'Security', href: '#security' },
+  ];
+
   return (
-    <motion.nav
-      initial={{ y: -20, opacity: 0 }}
-      animate={{ y: 0, opacity: 1 }}
-      transition={{ duration: 0.5 }}
-      className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
-        scrolled
-          ? 'bg-white/90 backdrop-blur-xl shadow-lg shadow-slate-900/5 border-b border-slate-200/50'
-          : 'bg-transparent'
-      }`}
-    >
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-16 lg:h-18">
-          {/* Logo */}
-          <div className="flex items-center gap-2.5">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-500 to-emerald-600 shadow-md shadow-emerald-600/20">
-              <Zap className="h-5 w-5 text-white" />
-            </div>
-            <span className="text-xl font-bold text-slate-900 tracking-tight">
-              GSTPilot
-            </span>
-          </div>
+    <header className="fixed inset-x-0 top-0 z-50 px-4 pt-3 sm:px-6">
+      <nav
+        className={`mx-auto flex max-w-7xl items-center justify-between rounded-2xl px-4 py-2.5 transition-all duration-300 sm:px-5 ${
+          scrolled ? 'glass-surface-strong shadow-premium' : 'bg-transparent'
+        }`}
+      >
+        <a href="#top" className="flex items-center gap-2.5" aria-label="GSTPilot Infinity home">
+          <span className="flex h-8 w-8 items-center justify-center rounded-lg glass-surface">
+            <InfinityIcon className="h-4 w-4 accent-text" />
+          </span>
+          <span className="text-sm font-semibold tracking-tight text-white">
+            GSTPilot Infinity<span className="accent-text">™</span>
+          </span>
+        </a>
 
-          {/* Desktop Nav */}
-          <div className="hidden md:flex items-center gap-8">
-            <a href="#how-it-works" className="text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors">How It Works</a>
-            <a href="#features" className="text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors">Features</a>
-            <a href="#pricing" className="text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors">Pricing</a>
-            <a href="#testimonials" className="text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors">Testimonials</a>
-          </div>
-
-          {/* Desktop CTA */}
-          <div className="hidden md:flex items-center gap-3">
-            <Button
-              variant="ghost"
-              onClick={onGetStarted}
-              className="text-sm font-medium text-slate-700 hover:text-slate-900"
+        <div className="hidden items-center gap-1 md:flex">
+          {links.map((l) => (
+            <a
+              key={l.href}
+              href={l.href}
+              className="rounded-lg px-3 py-1.5 text-sm text-white/70 transition-colors hover:bg-white/5 hover:text-white"
             >
-              Sign In
-            </Button>
-            <Button
-              onClick={onGetStarted}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-600/20 text-sm font-semibold px-5"
-            >
-              Start Free Trial
-              <ArrowRight className="ml-1.5 h-4 w-4" />
-            </Button>
-          </div>
-
-          {/* Mobile Hamburger */}
-          <button
-            onClick={() => setMobileOpen(!mobileOpen)}
-            className="md:hidden p-2 rounded-lg hover:bg-slate-100 transition-colors"
-            aria-label="Toggle menu"
-          >
-            <div className="w-5 h-5 flex flex-col justify-center items-center gap-1">
-              <span className={`block h-0.5 w-5 bg-slate-700 transition-all duration-300 ${mobileOpen ? 'rotate-45 translate-y-1.5' : ''}`} />
-              <span className={`block h-0.5 w-5 bg-slate-700 transition-all duration-300 ${mobileOpen ? 'opacity-0' : ''}`} />
-              <span className={`block h-0.5 w-5 bg-slate-700 transition-all duration-300 ${mobileOpen ? '-rotate-45 -translate-y-1.5' : ''}`} />
-            </div>
-          </button>
+              {l.label}
+            </a>
+          ))}
         </div>
-      </div>
 
-      {/* Mobile Menu */}
-      <AnimatePresence>
-        {mobileOpen && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            exit={{ opacity: 0, height: 0 }}
-            className="md:hidden bg-white/95 backdrop-blur-xl border-b border-slate-200/50 overflow-hidden"
+        <div className="hidden items-center gap-2 md:flex">
+          <button
+            onClick={onGetStarted}
+            className="text-sm font-medium text-white/70 transition-colors hover:text-white"
           >
-            <div className="px-4 py-4 space-y-2">
-              <a href="#how-it-works" onClick={() => setMobileOpen(false)} className="block py-2 text-sm font-medium text-slate-700">How It Works</a>
-              <a href="#features" onClick={() => setMobileOpen(false)} className="block py-2 text-sm font-medium text-slate-700">Features</a>
-              <a href="#pricing" onClick={() => setMobileOpen(false)} className="block py-2 text-sm font-medium text-slate-700">Pricing</a>
-              <a href="#testimonials" onClick={() => setMobileOpen(false)} className="block py-2 text-sm font-medium text-slate-700">Testimonials</a>
-              <div className="pt-3 border-t border-slate-200 space-y-2">
-                <Button variant="outline" onClick={onGetStarted} className="w-full justify-center">Sign In</Button>
-                <Button onClick={onGetStarted} className="w-full justify-center bg-emerald-600 hover:bg-emerald-700 text-white">Start Free Trial</Button>
-              </div>
+            Sign in
+          </button>
+          <PrimaryButton onClick={onGetStarted} className="px-4 py-2">
+            Get Started
+            <ArrowRight className="h-3.5 w-3.5" />
+          </PrimaryButton>
+        </div>
+
+        <button
+          className="flex h-9 w-9 items-center justify-center rounded-lg glass-surface text-white md:hidden"
+          onClick={() => setOpen((v) => !v)}
+          aria-label="Toggle menu"
+          aria-expanded={open}
+        >
+          {open ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
+        </button>
+      </nav>
+
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.2 }}
+            className="mx-auto mt-2 max-w-7xl rounded-2xl glass-surface-strong p-2 md:hidden"
+          >
+            {links.map((l) => (
+              <a
+                key={l.href}
+                href={l.href}
+                onClick={() => setOpen(false)}
+                className="block rounded-lg px-4 py-2.5 text-sm text-white/80 transition-colors hover:bg-white/5 hover:text-white"
+              >
+                {l.label}
+              </a>
+            ))}
+            <div className="mt-1 px-2 pb-1">
+              <PrimaryButton onClick={onGetStarted} className="w-full">
+                Get Started
+                <ArrowRight className="h-3.5 w-3.5" />
+              </PrimaryButton>
             </div>
           </motion.div>
         )}
       </AnimatePresence>
-    </motion.nav>
+    </header>
   );
 }
 
-// ─── Hero Section ────────────────────────────────────────
-function HeroSection({ onGetStarted, onBookDemo }: { onGetStarted: () => void; onBookDemo: () => void }) {
+/* ════════════════════════════════════════════════════════════════════════
+   1. HERO
+   ════════════════════════════════════════════════════════════════════════ */
+
+function HeroSection({ onGetStarted, onBookDemo }: LandingPageProps) {
   return (
-    <Section className="relative min-h-screen flex items-center overflow-hidden pt-16" id="hero">
-      {/* Background */}
-      <div className="absolute inset-0 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950" />
-      {/* Grid pattern */}
-      <div className="absolute inset-0 opacity-[0.03]" style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg width=\'60\' height=\'60\' viewBox=\'0 0 60 60\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cg fill=\'none\' fill-rule=\'evenodd\'%3E%3Cg fill=\'%23ffffff\' fill-opacity=\'1\'%3E%3Cpath d=\'M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z\'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")' }} />
-      {/* Radial gradient glow */}
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-emerald-500/10 rounded-full blur-3xl" />
+    <section id="top" className="relative flex min-h-screen items-center overflow-hidden px-4 pt-28 sm:px-6">
+      <Aurora />
+      {/* subtle grid */}
+      <div
+        className="pointer-events-none absolute inset-0 opacity-[0.04]"
+        style={{
+          backgroundImage:
+            'linear-gradient(rgba(255,255,255,0.5) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.5) 1px, transparent 1px)',
+          backgroundSize: '64px 64px',
+          maskImage: 'radial-gradient(ellipse 80% 60% at 50% 40%, black, transparent)',
+        }}
+      />
 
-      <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20 lg:py-28">
-        <div className="grid lg:grid-cols-2 gap-12 lg:gap-16 items-center">
-          {/* Left: Content */}
-          <motion.div variants={fadeUp} className="text-center lg:text-left">
-            <motion.div variants={fadeUp} className="inline-flex items-center gap-2 rounded-full bg-emerald-500/10 border border-emerald-500/20 px-4 py-1.5 mb-6">
-              <Sparkles className="h-3.5 w-3.5 text-emerald-400" />
-              <span className="text-sm font-medium text-emerald-400">Upload → File in Minutes</span>
-            </motion.div>
-
-            <motion.h1 variants={fadeUp} className="text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight text-white leading-[1.1]">
-              Prepare &amp; File GST Returns
-              <br />
-              <span className="bg-gradient-to-r from-emerald-400 to-emerald-300 bg-clip-text text-transparent">
-                10x Faster
-              </span>
-            </motion.h1>
-
-            <motion.p variants={fadeUp} className="mt-6 text-lg sm:text-xl text-slate-400 max-w-xl mx-auto lg:mx-0 leading-relaxed">
-              Upload invoices. Get GST-ready returns in minutes. No spreadsheets, no manual work, no errors.
-            </motion.p>
-
-            <motion.div variants={fadeUp} className="mt-8 flex flex-col sm:flex-row items-center gap-4 justify-center lg:justify-start">
-              <Button
-                size="lg"
-                onClick={onGetStarted}
-                className="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 text-white shadow-xl shadow-emerald-600/25 h-12 px-8 text-base font-semibold"
-              >
-                Start Free — No Card Needed
-                <ArrowRight className="ml-2 h-5 w-5" />
-              </Button>
-              <Button
-                size="lg"
-                variant="outline"
-                onClick={onBookDemo}
-                className="w-full sm:w-auto border-slate-600 text-slate-300 hover:bg-slate-800 hover:text-white hover:border-slate-500 h-12 px-8 text-base font-semibold"
-              >
-                <Play className="mr-2 h-4 w-4" />
-                Watch Demo
-              </Button>
-            </motion.div>
-
-            <motion.div variants={fadeUp} className="mt-8 flex items-center gap-6 justify-center lg:justify-start">
-              <div className="flex items-center gap-1.5">
-                <CheckCircle2 className="h-4 w-4 text-emerald-400" />
-                <span className="text-sm text-slate-400">14-day free trial</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <CheckCircle2 className="h-4 w-4 text-emerald-400" />
-                <span className="text-sm text-slate-400">No credit card</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <CheckCircle2 className="h-4 w-4 text-emerald-400" />
-                <span className="text-sm text-slate-400">Cancel anytime</span>
-              </div>
-            </motion.div>
-          </motion.div>
-
-          {/* Right: Product Preview */}
-          <motion.div variants={scaleUp} className="relative">
-            <div className="relative">
-              {/* Main dashboard card */}
-              <div className="rounded-2xl bg-white/5 backdrop-blur-xl border border-white/10 shadow-2xl shadow-emerald-500/5 p-6 overflow-hidden">
-                {/* Mock header */}
-                <div className="flex items-center gap-3 mb-6">
-                  <div className="h-3 w-3 rounded-full bg-red-400" />
-                  <div className="h-3 w-3 rounded-full bg-amber-400" />
-                  <div className="h-3 w-3 rounded-full bg-emerald-400" />
-                  <div className="flex-1 h-6 rounded-md bg-white/5 ml-3" />
-                </div>
-
-                {/* Mock upload zone */}
-                <div className="rounded-xl border-2 border-dashed border-emerald-500/30 bg-emerald-500/5 p-8 mb-4 text-center">
-                  <Upload className="h-10 w-10 text-emerald-400 mx-auto mb-3" />
-                  <p className="text-emerald-400 text-sm font-semibold">Drop invoices here</p>
-                  <p className="text-slate-500 text-xs mt-1">PDF, Excel, CSV — AI extracts everything</p>
-                </div>
-
-                {/* Mock extracted data */}
-                <div className="grid grid-cols-3 gap-3 mb-4">
-                  {[
-                    { label: 'Invoices', value: '24', color: 'text-emerald-400' },
-                    { label: 'Taxable', value: '₹18.4L', color: 'text-emerald-300' },
-                    { label: 'GST', value: '₹3.3L', color: 'text-teal-400' },
-                  ].map((card) => (
-                    <div key={card.label} className="rounded-lg bg-white/5 border border-white/5 p-3 text-center">
-                      <p className="text-[10px] uppercase tracking-wider text-slate-500 mb-0.5">{card.label}</p>
-                      <p className={`text-lg font-bold ${card.color}`}>{card.value}</p>
-                    </div>
-                  ))}
-                </div>
-
-                {/* Mock filing button */}
-                <div className="rounded-lg bg-emerald-600 text-white text-center py-2.5 text-sm font-semibold">
-                  <FileText className="h-4 w-4 inline mr-1.5" />
-                  File GSTR-1 Now
-                </div>
-              </div>
-
-              {/* Floating cards */}
-              <motion.div
-                animate={{ y: [0, -8, 0] }}
-                transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
-                className="absolute -top-4 -right-4 rounded-xl bg-white/10 backdrop-blur-lg border border-white/10 p-3 shadow-xl"
-              >
-                <div className="flex items-center gap-2">
-                  <div className="h-8 w-8 rounded-lg bg-emerald-500/20 flex items-center justify-center">
-                    <Clock className="h-4 w-4 text-emerald-400" />
-                  </div>
-                  <div>
-                    <p className="text-[10px] text-slate-400">Time Saved</p>
-                    <p className="text-sm font-bold text-white">4.5 hrs</p>
-                  </div>
-                </div>
-              </motion.div>
-
-              <motion.div
-                animate={{ y: [0, 6, 0] }}
-                transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut', delay: 1 }}
-                className="absolute -bottom-4 -left-4 rounded-xl bg-white/10 backdrop-blur-lg border border-white/10 p-3 shadow-xl"
-              >
-                <div className="flex items-center gap-2">
-                  <div className="h-8 w-8 rounded-lg bg-amber-500/20 flex items-center justify-center">
-                    <ShieldCheck className="h-4 w-4 text-amber-400" />
-                  </div>
-                  <div>
-                    <p className="text-[10px] text-slate-400">Accuracy</p>
-                    <p className="text-sm font-bold text-white">99.9%</p>
-                  </div>
-                </div>
-              </motion.div>
-            </div>
-          </motion.div>
-        </div>
-      </div>
-    </Section>
-  );
-}
-
-// ─── Trust Section ───────────────────────────────────────
-function TrustSection() {
-  const stats = [
-    { value: 500, suffix: '+', label: 'CA Firms', icon: Users },
-    { value: 2000, suffix: '+', label: 'Businesses', icon: Globe },
-    { value: 500, prefix: '₹', suffix: 'Cr+', label: 'Invoices Processed', icon: BarChart3 },
-    { value: 10, suffix: 'x', label: 'Faster Filing', icon: Clock },
-  ];
-
-  return (
-    <Section className="py-16 lg:py-20 bg-white border-b border-slate-100">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <motion.div variants={fadeUp} className="text-center mb-10">
-          <p className="text-sm font-semibold uppercase tracking-widest text-emerald-600">Trusted by CA Firms Across India</p>
-        </motion.div>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-8">
-          {stats.map((stat) => (
-            <motion.div key={stat.label} variants={fadeUp} className="text-center">
-              <div className="inline-flex items-center justify-center h-12 w-12 rounded-xl bg-emerald-50 mb-3">
-                <stat.icon className="h-6 w-6 text-emerald-600" />
-              </div>
-              <p className="text-3xl sm:text-4xl font-bold text-slate-900 tracking-tight">
-                <AnimatedCounter
-                  target={stat.value}
-                  suffix={stat.suffix}
-                  prefix={stat.prefix || ''}
-                />
-              </p>
-              <p className="text-sm text-slate-500 mt-1 font-medium">{stat.label}</p>
-            </motion.div>
-          ))}
-        </div>
-      </div>
-    </Section>
-  );
-}
-
-// ─── How It Works Section ────────────────────────────────
-function HowItWorksSection() {
-  const steps = [
-    {
-      step: 1,
-      title: 'Upload Invoices',
-      description: 'Drag & drop PDFs, Excel, CSV, or images. Our AI handles the rest.',
-      icon: Upload,
-    },
-    {
-      step: 2,
-      title: 'AI Extracts & Validates',
-      description: 'GSTIN, HSN, tax amounts — extracted and validated automatically.',
-      icon: Brain,
-    },
-    {
-      step: 3,
-      title: 'Review & Reconcile',
-      description: 'Fix mismatches. One-click reconciliation with GSTR-2A/2B.',
-      icon: RefreshCw,
-    },
-    {
-      step: 4,
-      title: 'File Returns',
-      description: 'Generate JSON, file GSTR-1/3B, download acknowledgement.',
-      icon: FileText,
-    },
-  ];
-
-  return (
-    <Section className="py-20 lg:py-28 bg-white" id="how-it-works">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <motion.div variants={fadeUp} className="text-center max-w-2xl mx-auto mb-16">
-          <Badge variant="outline" className="mb-4 border-emerald-200 text-emerald-700 bg-emerald-50/50">How It Works</Badge>
-          <h2 className="text-3xl sm:text-4xl font-bold text-slate-900 tracking-tight">
-            4 steps.{' '}
-            <span className="text-emerald-600">That&apos;s it.</span>
-          </h2>
-          <p className="mt-4 text-lg text-slate-500">
-            From raw invoices to filed GST returns. No spreadsheets needed.
-          </p>
+      <div className="relative z-10 mx-auto w-full max-w-5xl text-center">
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, ease: EASE }}
+          className="flex justify-center"
+        >
+          <SectionTag>
+            <Sparkles className="h-3 w-3" />
+            The Financial Brain of India™
+          </SectionTag>
         </motion.div>
 
-        <div className="relative">
-          {/* Connecting line */}
-          <div className="hidden lg:block absolute top-1/2 left-[10%] right-[10%] h-0.5 bg-gradient-to-r from-emerald-200 via-emerald-300 to-emerald-200 -translate-y-1/2 z-0" />
+        <motion.h1
+          initial={{ opacity: 0, y: 24, filter: 'blur(14px)' }}
+          animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+          transition={{ duration: 0.9, ease: EASE, delay: 0.08 }}
+          className="mt-6 text-5xl font-semibold leading-[1.03] tracking-tight text-white sm:text-6xl md:text-7xl lg:text-8xl"
+        >
+          Run your entire
+          <br className="hidden sm:block" /> financial operation on{' '}
+          <span className="accent-text">one brain</span>.
+        </motion.h1>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8 relative z-10">
-            {steps.map((step) => (
-              <motion.div key={step.step} variants={fadeUp} className="relative">
-                <div className="flex flex-col items-center text-center">
-                  <div className="relative mb-4">
-                    <div className="h-16 w-16 rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-600 flex items-center justify-center shadow-lg shadow-emerald-500/20">
-                      <step.icon className="h-7 w-7 text-white" />
-                    </div>
-                    <div className="absolute -top-2 -right-2 h-6 w-6 rounded-full bg-white border-2 border-emerald-500 flex items-center justify-center text-[10px] font-bold text-emerald-600">
-                      {step.step}
-                    </div>
-                  </div>
-                  <h3 className="text-sm font-semibold text-slate-900 mb-1">{step.title}</h3>
-                  <p className="text-xs text-slate-500 leading-relaxed max-w-[200px]">{step.description}</p>
-                </div>
-              </motion.div>
-            ))}
-          </div>
-        </div>
+        <motion.p
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.7, ease: EASE, delay: 0.22 }}
+          className="mx-auto mt-6 max-w-2xl text-base text-white/65 sm:text-lg"
+        >
+          GSTPilot Infinity unifies GST, Banking, Invoicing, Reconciliation and an AI CFO into a
+          single, always-on operating system — purpose-built for India&apos;s Chartered Accountants
+          and ambitious businesses.
+        </motion.p>
+
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.7, ease: EASE, delay: 0.34 }}
+          className="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row"
+        >
+          <PrimaryButton onClick={onGetStarted} className="px-7 py-3.5 text-base">
+            Start Free
+            <ArrowRight className="h-4 w-4" />
+          </PrimaryButton>
+          <GhostButton onClick={onBookDemo} className="px-7 py-3.5 text-base">
+            Book a Demo
+          </GhostButton>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.8, delay: 0.5 }}
+          className="mt-10 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs text-white/45"
+        >
+          <span className="inline-flex items-center gap-1.5"><ShieldCheck className="h-3.5 w-3.5" /> SOC 2 Type II</span>
+          <span className="inline-flex items-center gap-1.5"><FileText className="h-3.5 w-3.5" /> GSTN Compliant</span>
+          <span className="inline-flex items-center gap-1.5"><Landmark className="h-3.5 w-3.5" /> RBI Aligned</span>
+          <span className="inline-flex items-center gap-1.5"><Lock className="h-3.5 w-3.5" /> India-hosted</span>
+        </motion.div>
       </div>
-    </Section>
+
+      {/* scroll cue */}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 1, duration: 1 }}
+        className="absolute bottom-8 left-1/2 -translate-x-1/2 text-white/40"
+      >
+        <motion.div animate={{ y: [0, 6, 0] }} transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}>
+          <ChevronDown className="h-5 w-5" />
+        </motion.div>
+      </motion.div>
+    </section>
   );
 }
 
-// ─── Features Section ────────────────────────────────────
+/* ════════════════════════════════════════════════════════════════════════
+   2. FEATURES
+   ════════════════════════════════════════════════════════════════════════ */
+
 function FeaturesSection() {
   const features = [
-    {
-      icon: Upload,
-      title: 'Upload & Extract',
-      description: 'AI-powered extraction from PDFs, images, and Excel with 99.9% accuracy.',
-      color: 'bg-emerald-50 text-emerald-600',
-    },
-    {
-      icon: ShieldCheck,
-      title: 'Auto-Validation',
-      description: 'GSTIN verification, HSN code checks, and tax computation — all automatic.',
-      color: 'bg-teal-50 text-teal-600',
-    },
-    {
-      icon: RefreshCw,
-      title: 'Smart Reconciliation',
-      description: 'Auto-match GSTR-1 with GSTR-2A/2B. Find mismatches in seconds.',
-      color: 'bg-amber-50 text-amber-600',
-    },
-    {
-      icon: FileText,
-      title: 'One-Click Filing',
-      description: 'Generate GSTR-1/3B JSON, file directly, download acknowledgements.',
-      color: 'bg-emerald-50 text-emerald-600',
-    },
-    {
-      icon: Users,
-      title: 'Multi-Client',
-      description: 'Manage all your clients from one dashboard. Switch contexts instantly.',
-      color: 'bg-violet-50 text-violet-600',
-    },
-    {
-      icon: Layers,
-      title: 'Section Classification',
-      description: 'Auto-classify invoices into B2B, B2C, CDNR, Exports — ready for filing.',
-      color: 'bg-rose-50 text-rose-600',
-    },
+    { icon: Brain, title: 'AI CFO', desc: 'A chief financial officer that never sleeps — forecasting, advising, and executing across your entire firm.' },
+    { icon: FileText, title: 'GST Cloud', desc: 'GSTR-1, 3B, 9, 9C and ITC reconciliation with auto-ARN generation and live compliance scoring.' },
+    { icon: Landmark, title: 'Banking Cloud', desc: 'Live bank feeds, auto-reconciliation, payment tracking and working-capital intelligence in one place.' },
+    { icon: Receipt, title: 'Invoice Cloud', desc: 'Create, track, reconcile and execute invoices — sales, purchase, TDS, payroll and receivables.' },
+    { icon: Workflow, title: 'Reconciliation Engine', desc: 'Two-way matching across ledgers, bank statements and GST returns with AI-assisted mismatch resolution.' },
+    { icon: Sparkles, title: 'Oracle AI', desc: 'Proactive intelligence that detects, predicts and prepares — so you never chase, you execute.' },
   ];
 
   return (
-    <Section className="py-20 lg:py-28 bg-slate-50" id="features">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <motion.div variants={fadeUp} className="text-center max-w-2xl mx-auto mb-16">
-          <Badge variant="outline" className="mb-4 border-emerald-200 text-emerald-700 bg-emerald-50/50">Features</Badge>
-          <h2 className="text-3xl sm:text-4xl font-bold text-slate-900 tracking-tight">
-            Everything you need.{' '}
-            <span className="text-emerald-600">Nothing you don&apos;t.</span>
+    <section id="features" className="relative section-gap px-4 py-24 sm:px-6">
+      <div className="mx-auto max-w-7xl">
+        <Reveal className="mx-auto max-w-2xl text-center">
+          <SectionTag><Layers className="h-3 w-3" /> Features</SectionTag>
+          <h2 className="mt-5 text-3xl font-semibold tracking-tight text-white sm:text-4xl md:text-5xl">
+            One platform. Every financial <span className="accent-text">superpower</span>.
           </h2>
-          <p className="mt-4 text-lg text-slate-500">
-            Focused on one thing: preparing and filing GST returns faster.
+          <p className="mt-4 text-white/60">
+            Replace a dozen disconnected tools with a single, intelligent operating system designed
+            for the realities of Indian finance.
           </p>
-        </motion.div>
+        </Reveal>
 
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          {features.map((feature) => (
-            <motion.div key={feature.title} variants={fadeUp}>
-              <Card className="h-full hover:shadow-lg hover:shadow-emerald-500/5 transition-all duration-300 border-slate-200/80 group">
-                <CardContent className="p-6">
-                  <div className={`inline-flex items-center justify-center h-11 w-11 rounded-xl ${feature.color} mb-4 group-hover:scale-110 transition-transform duration-300`}>
-                    <feature.icon className="h-5 w-5" />
-                  </div>
-                  <h3 className="text-lg font-semibold text-slate-900 mb-2">{feature.title}</h3>
-                  <p className="text-sm text-slate-500 leading-relaxed">{feature.description}</p>
-                </CardContent>
-              </Card>
-            </motion.div>
+        <StaggerGroup className="mt-14 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {features.map((f) => (
+            <StaggerItem key={f.title}>
+              <div className="group h-full rounded-3xl glass-surface p-6 hover-lift">
+                <GlassIcon icon={f.icon} />
+                <h3 className="mt-5 text-lg font-semibold text-white">{f.title}</h3>
+                <p className="mt-2 text-sm leading-relaxed text-white/60">{f.desc}</p>
+              </div>
+            </StaggerItem>
           ))}
+        </StaggerGroup>
+      </div>
+    </section>
+  );
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   3. CAPABILITIES (bento)
+   ════════════════════════════════════════════════════════════════════════ */
+
+function CapabilitiesSection() {
+  return (
+    <section className="relative section-gap px-4 py-24 sm:px-6">
+      <div className="mx-auto max-w-7xl">
+        <Reveal className="mx-auto max-w-2xl text-center">
+          <SectionTag><Cpu className="h-3 w-3" /> Capabilities</SectionTag>
+          <h2 className="mt-5 text-3xl font-semibold tracking-tight text-white sm:text-4xl md:text-5xl">
+            Built to <span className="accent-text">execute</span>, not just display.
+          </h2>
+          <p className="mt-4 text-white/60">
+            Every capability is wired to a real workflow — Oracle watches, decides, and acts.
+          </p>
+        </Reveal>
+
+        <div className="mt-14 grid grid-cols-1 gap-4 lg:grid-cols-3">
+          {/* large card */}
+          <Reveal className="lg:col-span-2">
+            <div className="relative h-full overflow-hidden rounded-3xl glass-surface p-7 hover-lift">
+              <div className="flex items-center gap-3">
+                <GlassIcon icon={Workflow} size="lg" />
+                <div>
+                  <h3 className="text-xl font-semibold text-white">Real-time Reconciliation</h3>
+                  <p className="text-sm text-white/55">Ledger × Bank × GST — matched in seconds.</p>
+                </div>
+              </div>
+              {/* mock reconciliation panel */}
+              <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                {[
+                  { l: 'Matched', v: '1,284', c: 'accent-text' },
+                  { l: 'Mismatches', v: '23', c: 'text-amber-300' },
+                  { l: 'ITC Gap', v: '₹1.2L', c: 'text-white' },
+                  { l: 'Auto-resolved', v: '19', c: 'accent-text' },
+                ].map((s) => (
+                  <div key={s.l} className="rounded-2xl bg-white/[0.03] p-4">
+                    <div className={`text-2xl font-semibold ${s.c}`}>{s.v}</div>
+                    <div className="mt-1 text-[11px] uppercase tracking-wider text-white/45">{s.l}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </Reveal>
+
+          <Reveal delay={0.08}>
+            <div className="h-full rounded-3xl glass-surface p-7 hover-lift">
+              <GlassIcon icon={CalendarClock} size="lg" />
+              <h3 className="mt-5 text-xl font-semibold text-white">Predictive Cash Flow</h3>
+              <p className="mt-2 text-sm text-white/60">
+                Oracle forecasts your 30/60/90-day position from receivables, payables and historical
+                cadence — so you see the curve before it bends.
+              </p>
+              <div className="mt-5 flex items-end gap-1.5">
+                {[40, 55, 48, 70, 62, 85, 78, 95].map((h, i) => (
+                  <motion.div
+                    key={i}
+                    initial={{ height: 0 }}
+                    whileInView={{ height: `${h}%` }}
+                    viewport={{ once: true }}
+                    transition={{ duration: 0.6, delay: i * 0.05, ease: EASE }}
+                    className="flex-1 rounded-t accent-gradient-soft"
+                    style={{ minHeight: 8 }}
+                  />
+                ))}
+              </div>
+            </div>
+          </Reveal>
+
+          <Reveal>
+            <div className="h-full rounded-3xl glass-surface p-7 hover-lift">
+              <GlassIcon icon={Building2} size="lg" />
+              <h3 className="mt-5 text-xl font-semibold text-white">Multi-Firm Command</h3>
+              <p className="mt-2 text-sm text-white/60">
+                Operate every client firm from one war room — bulk file, bulk reconcile, bulk advise.
+              </p>
+            </div>
+          </Reveal>
+
+          <Reveal delay={0.08}>
+            <div className="h-full rounded-3xl glass-surface p-7 hover-lift">
+              <GlassIcon icon={Mic} size="lg" />
+              <h3 className="mt-5 text-xl font-semibold text-white">Voice-driven Operations</h3>
+              <p className="mt-2 text-sm text-white/60">
+                &ldquo;File GSTR-3B for all clients due tomorrow.&rdquo; Spoken. Understood. Executed.
+              </p>
+            </div>
+          </Reveal>
+
+          <Reveal delay={0.16}>
+            <div className="h-full rounded-3xl glass-surface p-7 hover-lift">
+              <GlassIcon icon={Target} size="lg" />
+              <h3 className="mt-5 text-xl font-semibold text-white">Decision Engine</h3>
+              <p className="mt-2 text-sm text-white/60">
+                Priority-ranked actions across every firm — Oracle tells you what to do next, and why.
+              </p>
+            </div>
+          </Reveal>
         </div>
       </div>
-    </Section>
+    </section>
   );
 }
 
-// ─── Comparison Section ──────────────────────────────────
-function ComparisonSection() {
-  const comparisons = [
-    { feature: 'Invoice Processing', traditional: '4-6 hours', gstpilot: '< 5 minutes', saved: '98%' },
-    { feature: 'Error Rate', traditional: '8-12%', gstpilot: '< 0.1%', saved: '99%' },
-    { feature: 'Reconciliation', traditional: 'Manual matching', gstpilot: 'Auto AI matching', saved: '100%' },
-    { feature: 'GSTR Filing', traditional: '2-3 days', gstpilot: '< 1 hour', saved: '95%' },
-    { feature: 'Multi-Client', traditional: 'Spreadsheets & email', gstpilot: 'One dashboard', saved: '90%' },
+/* ════════════════════════════════════════════════════════════════════════
+   4. AI AGENTS
+   ════════════════════════════════════════════════════════════════════════ */
+
+function AIAgentsSection() {
+  const agents = [
+    { icon: Bot, name: 'AI CA Manager', role: 'Runs client practice end-to-end' },
+    { icon: Users, name: 'AI Account Manager', role: 'Owns client relationships & renewals' },
+    { icon: CalendarClock, name: 'AI Deadline Engine', role: 'Never misses a due date' },
+    { icon: FileSearch, name: 'AI Document Employee', role: 'Reads, extracts, files everything' },
+    { icon: Mic, name: 'AI Voice Assistant', role: 'Conversational command interface' },
+    { icon: Database, name: 'AI Firm Memory', role: 'Remembers every client, forever' },
+    { icon: Target, name: 'AI Priority Engine', role: 'Ranks what matters most, now' },
+    { icon: TrendingUp, name: 'AI Predictions', role: 'Forecasts revenue, tax & cash' },
   ];
 
   return (
-    <Section className="py-20 lg:py-28 bg-white">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <motion.div variants={fadeUp} className="text-center max-w-2xl mx-auto mb-16">
-          <Badge variant="outline" className="mb-4 border-emerald-200 text-emerald-700 bg-emerald-50/50">Why GSTPilot</Badge>
-          <h2 className="text-3xl sm:text-4xl font-bold text-slate-900 tracking-tight">
-            Stop doing GST returns{' '}
-            <span className="text-emerald-600">the hard way</span>
+    <section className="relative section-gap px-4 py-24 sm:px-6">
+      <Aurora className="opacity-50" />
+      <div className="relative z-10 mx-auto max-w-7xl">
+        <Reveal className="mx-auto max-w-2xl text-center">
+          <SectionTag><Bot className="h-3 w-3" /> AI Agents</SectionTag>
+          <h2 className="mt-5 text-3xl font-semibold tracking-tight text-white sm:text-4xl md:text-5xl">
+            An army of AI agents, <span className="accent-text">trained for Indian finance</span>.
           </h2>
-        </motion.div>
+          <p className="mt-4 text-white/60">
+            Each agent is a specialist. Together, they form a workforce that scales without hiring.
+          </p>
+        </Reveal>
 
-        <motion.div variants={scaleUp}>
-          <Card className="overflow-hidden border-slate-200/80">
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[600px]">
-                <thead>
-                  <tr className="border-b border-slate-200">
-                    <th className="text-left p-4 text-sm font-semibold text-slate-600">Task</th>
-                    <th className="text-center p-4 text-sm font-semibold text-red-600 bg-red-50/50">
-                      <div className="flex items-center justify-center gap-1.5">
-                        <X className="h-4 w-4" />
-                        Manual
-                      </div>
-                    </th>
-                    <th className="text-center p-4 text-sm font-semibold text-emerald-600 bg-emerald-50/50">
-                      <div className="flex items-center justify-center gap-1.5">
-                        <Check className="h-4 w-4" />
-                        GSTPilot
-                      </div>
-                    </th>
-                    <th className="text-center p-4 text-sm font-semibold text-slate-600">Saved</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {comparisons.map((row) => (
-                    <tr key={row.feature} className="border-b border-slate-100 last:border-0 hover:bg-slate-50/50 transition-colors">
-                      <td className="p-4 text-sm font-medium text-slate-700">{row.feature}</td>
-                      <td className="p-4 text-center text-sm text-slate-500 bg-red-50/30">{row.traditional}</td>
-                      <td className="p-4 text-center text-sm font-semibold text-emerald-700 bg-emerald-50/30">{row.gstpilot}</td>
-                      <td className="p-4 text-center">
-                        <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 font-semibold">{row.saved}</Badge>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </Card>
-        </motion.div>
+        <StaggerGroup className="mt-14 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4" stagger={0.05}>
+          {agents.map((a) => (
+            <StaggerItem key={a.name}>
+              <div className="group h-full rounded-2xl glass-surface p-5 hover-lift">
+                <GlassIcon icon={a.icon} size="sm" />
+                <h3 className="mt-4 text-sm font-semibold text-white">{a.name}</h3>
+                <p className="mt-1 text-xs leading-relaxed text-white/55">{a.role}</p>
+              </div>
+            </StaggerItem>
+          ))}
+        </StaggerGroup>
       </div>
-    </Section>
+    </section>
   );
 }
 
-// ─── Testimonials Section ────────────────────────────────
-function TestimonialsSection() {
-  const testimonials = [
-    {
-      name: 'CA Suresh Menon',
-      role: 'Managing Partner, Menon & Associates',
-      content: 'We filed GSTR-1 for 80 clients in one afternoon. Before GSTPilot, this took our entire team a full week.',
-      rating: 5,
-    },
-    {
-      name: 'CA Deepika Rao',
-      role: 'Founder, Rao GST Solutions',
-      content: 'The upload → extract → file workflow is magic. My team went from dreading month-end to finishing before lunch.',
-      rating: 5,
-    },
-    {
-      name: 'Rahul Verma',
-      role: 'CFO, TechBridge India',
-      content: 'Reconciliation that used to take 3 days now takes 30 minutes. The auto-matching is incredibly accurate.',
-      rating: 5,
-    },
+/* ════════════════════════════════════════════════════════════════════════
+   5–8. CLOUD SECTIONS (split layouts)
+   ════════════════════════════════════════════════════════════════════════ */
+
+function CloudSection({
+  id,
+  tag,
+  icon,
+  title,
+  highlight,
+  desc,
+  bullets,
+  reverse,
+  mock,
+}: {
+  id?: string;
+  tag: string;
+  icon: React.ElementType;
+  title: string;
+  highlight: string;
+  desc: string;
+  bullets: string[];
+  reverse?: boolean;
+  mock: React.ReactNode;
+}) {
+  const Icon = icon;
+  return (
+    <section id={id} className="relative section-gap px-4 py-20 sm:px-6">
+      <div className="mx-auto max-w-7xl">
+        <div className={`grid grid-cols-1 items-center gap-10 lg:grid-cols-2 ${reverse ? 'lg:[&>*:first-child]:order-2' : ''}`}>
+          <Reveal>
+            <SectionTag>
+              <Icon className="h-3 w-3" /> {tag}
+            </SectionTag>
+            <h2 className="mt-5 text-3xl font-semibold tracking-tight text-white sm:text-4xl">
+              {title} <span className="accent-text">{highlight}</span>
+            </h2>
+            <p className="mt-4 text-white/60">{desc}</p>
+            <ul className="mt-6 space-y-3">
+              {bullets.map((b) => (
+                <li key={b} className="flex items-start gap-3 text-sm text-white/75">
+                  <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full accent-gradient-soft">
+                    <Check className="h-3 w-3 accent-text" />
+                  </span>
+                  {b}
+                </li>
+              ))}
+            </ul>
+          </Reveal>
+
+          <Reveal delay={0.12}>{mock}</Reveal>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function ReturnsMock() {
+  const rows = [
+    { form: 'GSTR-1', client: 'Nexus Traders', status: 'Filed', tone: 'ok' },
+    { form: 'GSTR-3B', client: 'Summit Finserv', status: 'In Review', tone: 'warn' },
+    { form: 'GSTR-9', client: 'Pioneer Assoc.', status: 'Draft', tone: 'muted' },
+    { form: 'GSTR-1', client: 'Vanta Capital', status: 'Filed', tone: 'ok' },
+  ];
+  return (
+    <div className="rounded-3xl glass-surface-strong p-5 shadow-premium">
+      <div className="flex items-center justify-between">
+        <div className="text-sm font-semibold text-white">Returns — Live</div>
+        <span className="rounded-full bg-white/5 px-2.5 py-1 text-[10px] font-medium text-white/60">ARN auto-generated</span>
+      </div>
+      <div className="mt-4 space-y-2">
+        {rows.map((r) => (
+          <div key={r.form + r.client} className="flex items-center justify-between rounded-xl bg-white/[0.03] px-4 py-3">
+            <div>
+              <div className="text-sm font-medium text-white">{r.form}</div>
+              <div className="text-[11px] text-white/50">{r.client}</div>
+            </div>
+            <span
+              className={`rounded-full px-2.5 py-1 text-[10px] font-semibold ${
+                r.tone === 'ok'
+                  ? 'bg-emerald-500/15 text-emerald-300'
+                  : r.tone === 'warn'
+                  ? 'bg-amber-500/15 text-amber-300'
+                  : 'bg-white/5 text-white/55'
+              }`}
+            >
+              {r.status}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function BankMock() {
+  return (
+    <div className="rounded-3xl glass-surface-strong p-5 shadow-premium">
+      <div className="flex items-center justify-between">
+        <div className="text-sm font-semibold text-white">Bank Feeds</div>
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/15 px-2.5 py-1 text-[10px] font-medium text-emerald-300">
+          <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" /> Live
+        </span>
+      </div>
+      <div className="mt-4 grid grid-cols-2 gap-3">
+        {[
+          { bank: 'HDFC', bal: '₹42.8L' },
+          { bank: 'ICICI', bal: '₹18.4L' },
+          { bank: 'SBI', bal: '₹9.1L' },
+          { bank: 'Axis', bal: '₹3.6L' },
+        ].map((b) => (
+          <div key={b.bank} className="rounded-2xl bg-white/[0.03] p-4">
+            <div className="text-[11px] uppercase tracking-wider text-white/45">{b.bank}</div>
+            <div className="mt-1 text-lg font-semibold text-white">{b.bal}</div>
+          </div>
+        ))}
+      </div>
+      <div className="mt-3 rounded-2xl bg-white/[0.03] p-4">
+        <div className="flex items-center justify-between text-xs">
+          <span className="text-white/55">Auto-reconciled today</span>
+          <span className="font-semibold accent-text">312 of 318</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function InvoiceMock() {
+  return (
+    <div className="rounded-3xl glass-surface-strong p-5 shadow-premium">
+      <div className="flex items-center justify-between">
+        <div className="text-sm font-semibold text-white">INV-2025-0418</div>
+        <span className="rounded-full accent-gradient-soft px-2.5 py-1 text-[10px] font-semibold accent-text">₹2,48,000</span>
+      </div>
+      <div className="mt-4 space-y-2.5 text-xs">
+        {[
+          ['Client', 'Meridian Tax LLP'],
+          ['GSTIN', '27ABCDE1234F1Z5'],
+          ['CGST + SGST', '₹22,320 + ₹22,320'],
+          ['Due', 'In 14 days'],
+        ].map(([k, v]) => (
+          <div key={k} className="flex items-center justify-between">
+            <span className="text-white/50">{k}</span>
+            <span className="font-medium text-white/85">{v}</span>
+          </div>
+        ))}
+      </div>
+      <div className="mt-4 flex gap-2">
+        <span className="rounded-lg bg-white/5 px-2.5 py-1 text-[10px] font-medium text-white/70">QR ready</span>
+        <span className="rounded-lg bg-white/5 px-2.5 py-1 text-[10px] font-medium text-white/70">E-mailed</span>
+        <span className="rounded-lg bg-white/5 px-2.5 py-1 text-[10px] font-medium text-white/70">WhatsApp</span>
+      </div>
+    </div>
+  );
+}
+
+function WarRoomMock() {
+  return (
+    <div className="rounded-3xl glass-surface-strong p-5 shadow-premium">
+      <div className="flex items-center gap-2 text-sm font-semibold text-white">
+        <span className="flex h-7 w-7 items-center justify-center rounded-lg accent-gradient-soft">
+          <Target className="h-3.5 w-3.5 accent-text" />
+        </span>
+        Executive War Room
+      </div>
+      <div className="mt-4 space-y-2">
+        {[
+          { t: 'File 3B for 8 clients', p: 'Critical', tone: 'red' },
+          { t: 'Reconcile HDFC feed', p: 'High', tone: 'amber' },
+          { t: 'Send 12 reminders', p: 'Medium', tone: 'muted' },
+          { t: 'Review ITC gap ₹1.2L', p: 'High', tone: 'amber' },
+        ].map((a) => (
+          <div key={a.t} className="flex items-center justify-between rounded-xl bg-white/[0.03] px-4 py-2.5">
+            <span className="text-sm text-white/80">{a.t}</span>
+            <span
+              className={`rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider ${
+                a.tone === 'red'
+                  ? 'bg-red-500/15 text-red-300'
+                  : a.tone === 'amber'
+                  ? 'bg-amber-500/15 text-amber-300'
+                  : 'bg-white/5 text-white/55'
+              }`}
+            >
+              {a.p}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   9. ORACLE AI
+   ════════════════════════════════════════════════════════════════════════ */
+
+function OracleAISection() {
+  const statements = [
+    "I've detected ₹3.2 lakh pending receivables.",
+    "I've forecasted ₹18 lakh revenue this month.",
+    "I've identified 12 overdue invoices.",
+    "I've prepared collection reminders, ready to send.",
   ];
 
   return (
-    <Section className="py-20 lg:py-28 bg-slate-50" id="testimonials">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <motion.div variants={fadeUp} className="text-center max-w-2xl mx-auto mb-16">
-          <Badge variant="outline" className="mb-4 border-emerald-200 text-emerald-700 bg-emerald-50/50">Testimonials</Badge>
-          <h2 className="text-3xl sm:text-4xl font-bold text-slate-900 tracking-tight">
-            CAs love{' '}
-            <span className="text-emerald-600">the speed</span>
+    <section id="oracle" className="relative section-gap overflow-hidden px-4 py-28 sm:px-6">
+      <Aurora />
+      <div className="relative z-10 mx-auto max-w-5xl text-center">
+        <Reveal>
+          <SectionTag><Brain className="h-3 w-3" /> Oracle AI</SectionTag>
+          <h2 className="mt-6 text-3xl font-semibold tracking-tight text-white sm:text-4xl md:text-5xl">
+            Oracle AI — your always-on <span className="accent-text">financial mind</span>
           </h2>
-        </motion.div>
+          <p className="mx-auto mt-4 max-w-2xl text-white/60">
+            Oracle doesn&apos;t wait to be asked. It watches every ledger, predicts every curve, and
+            prepares every action — then tells you what it has done.
+          </p>
+        </Reveal>
 
-        <div className="grid md:grid-cols-3 gap-6">
-          {testimonials.map((t) => (
-            <motion.div key={t.name} variants={fadeUp}>
-              <Card className="h-full hover:shadow-lg hover:shadow-emerald-500/5 transition-all duration-300 border-slate-200/80">
-                <CardContent className="p-6">
-                  <div className="flex items-center gap-0.5 mb-4">
-                    {Array.from({ length: t.rating }).map((_, i) => (
-                      <Star key={i} className="h-4 w-4 fill-amber-400 text-amber-400" />
+        {/* Oracle orb */}
+        <Reveal delay={0.1} className="mt-12 flex justify-center">
+          <div className="relative flex h-44 w-44 items-center justify-center">
+            <div className="absolute inset-0 rounded-full accent-gradient-soft blur-2xl breathe-glow" />
+            <div className="absolute inset-4 rounded-full glass-surface-strong motion-pulse" />
+            <div className="relative flex h-20 w-20 items-center justify-center rounded-full accent-gradient">
+              <Brain className="h-9 w-9 text-black" />
+            </div>
+            {/* orbiting dots */}
+            {[0, 120, 240].map((deg) => (
+              <span
+                key={deg}
+                className="absolute left-1/2 top-1/2 h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white/80"
+                style={{
+                  transform: `rotate(${deg}deg) translateX(5.5rem)`,
+                  animation: 'oracle-pulse 2.6s ease-in-out infinite',
+                }}
+              />
+            ))}
+          </div>
+        </Reveal>
+
+        <StaggerGroup className="mt-14 grid grid-cols-1 gap-3 sm:grid-cols-2" stagger={0.1}>
+          {statements.map((s) => (
+            <StaggerItem key={s}>
+              <div className="flex items-start gap-3 rounded-2xl glass-surface p-5 text-left hover-lift">
+                <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg accent-gradient-soft">
+                  <Sparkles className="h-3.5 w-3.5 accent-text" />
+                </span>
+                <p className="text-sm leading-relaxed text-white/85">{s}</p>
+              </div>
+            </StaggerItem>
+          ))}
+        </StaggerGroup>
+
+        <p className="mt-8 text-xs text-white/40">
+          Proactive, never passive. Oracle acts — then informs.
+        </p>
+      </div>
+    </section>
+  );
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   10. INTERACTIVE PRODUCT DEMO
+   ════════════════════════════════════════════════════════════════════════ */
+
+function InteractiveDemoSection({ onGetStarted }: { onGetStarted: () => void }) {
+  return (
+    <section className="relative section-gap px-4 py-24 sm:px-6">
+      <div className="mx-auto max-w-5xl">
+        <Reveal className="text-center">
+          <SectionTag><MessageSquareDemo /> Interactive Demo</SectionTag>
+          <h2 className="mt-5 text-3xl font-semibold tracking-tight text-white sm:text-4xl md:text-5xl">
+            Ask Oracle anything. <span className="accent-text">Get the answer — and the action.</span>
+          </h2>
+        </Reveal>
+
+        <Reveal delay={0.1} className="mt-12">
+          <div className="overflow-hidden rounded-3xl glass-surface-strong shadow-premium">
+            <div className="flex items-center gap-2 border-b border-white/[0.06] px-5 py-3">
+              <span className="h-2.5 w-2.5 rounded-full bg-red-400/70" />
+              <span className="h-2.5 w-2.5 rounded-full bg-amber-400/70" />
+              <span className="h-2.5 w-2.5 rounded-full bg-emerald-400/70" />
+              <span className="ml-3 text-xs text-white/50">Oracle — live session</span>
+            </div>
+            <div className="space-y-4 p-6">
+              {/* user */}
+              <div className="flex justify-end">
+                <div className="max-w-[80%] rounded-2xl rounded-br-sm bg-white px-4 py-2.5 text-sm font-medium text-black">
+                  What&apos;s my cash position right now?
+                </div>
+              </div>
+              {/* oracle */}
+              <div className="flex gap-3">
+                <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg accent-gradient">
+                  <Brain className="h-3.5 w-3.5 text-black" />
+                </span>
+                <div className="max-w-[85%] rounded-2xl rounded-tl-sm glass-surface px-4 py-3">
+                  <p className="oracle-prose text-sm text-white/85">
+                    Your consolidated cash position is <strong className="text-white">₹73.9 lakh</strong> across
+                    4 accounts. I&apos;ve flagged <strong className="text-white">₹3.2 lakh in pending
+                    receivables</strong> due this week and prepared reminders — I can send them now.
+                  </p>
+                  <div className="mt-3 grid grid-cols-3 gap-2">
+                    {[
+                      { l: 'Available', v: '₹73.9L' },
+                      { l: 'Receivables', v: '₹3.2L' },
+                      { l: 'Payables', v: '₹1.8L' },
+                    ].map((s) => (
+                      <div key={s.l} className="rounded-xl bg-white/[0.04] p-3 text-center">
+                        <div className="text-sm font-semibold text-white">{s.v}</div>
+                        <div className="text-[10px] uppercase tracking-wider text-white/45">{s.l}</div>
+                      </div>
                     ))}
                   </div>
-                  <p className="text-sm text-slate-600 leading-relaxed mb-6">&ldquo;{t.content}&rdquo;</p>
-                  <div className="flex items-center gap-3 pt-4 border-t border-slate-100">
-                    <div className="h-10 w-10 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center text-white text-sm font-bold">
-                      {t.name.split(' ').map(w => w[0]).join('').slice(0, 2)}
-                    </div>
-                    <div>
-                      <p className="text-sm font-semibold text-slate-900">{t.name}</p>
-                      <p className="text-xs text-slate-500">{t.role}</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </motion.div>
-          ))}
-        </div>
+                </div>
+              </div>
+            </div>
+            <div className="border-t border-white/[0.06] px-6 py-4">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-white/45">Oracle prepared 3 actions for you</span>
+                <PrimaryButton onClick={onGetStarted} className="px-4 py-2 text-xs">
+                  Try Oracle
+                  <ArrowUpRight className="h-3.5 w-3.5" />
+                </PrimaryButton>
+              </div>
+            </div>
+          </div>
+        </Reveal>
       </div>
-    </Section>
+    </section>
   );
 }
 
-// ─── Pricing Section ─────────────────────────────────────
-function PricingSection({ onGetStarted }: { onGetStarted: () => void }) {
-  const [annual, setAnnual] = useState(true);
+function MessageSquareDemo() {
+  return <Sparkles className="h-3 w-3" />;
+}
 
-  const plans = [
+/* ════════════════════════════════════════════════════════════════════════
+   11. STATISTICS
+   ════════════════════════════════════════════════════════════════════════ */
+
+function AnimatedCounter({ target, prefix = '', suffix = '', decimals = 0 }: { target: number; prefix?: string; suffix?: string; decimals?: number }) {
+  const ref = useRef<HTMLSpanElement>(null);
+  const inView = useInView(ref, { once: true, margin: '-60px' });
+  const [val, setVal] = useState(0);
+
+  useEffect(() => {
+    if (!inView) return;
+    const duration = 1800;
+    const start = performance.now();
+    let raf = 0;
+    const tick = (now: number) => {
+      const t = Math.min((now - start) / duration, 1);
+      const eased = 1 - Math.pow(1 - t, 3);
+      setVal(target * eased);
+      if (t < 1) raf = requestAnimationFrame(tick);
+      else setVal(target);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [inView, target]);
+
+  const formatted =
+    decimals > 0
+      ? val.toFixed(decimals)
+      : Math.round(val).toLocaleString('en-IN');
+
+  return (
+    <span ref={ref}>
+      {prefix}
+      {formatted}
+      {suffix}
+    </span>
+  );
+}
+
+function StatisticsSection() {
+  const stats = [
+    { target: 2400, prefix: '₹', suffix: ' Cr+', label: 'Revenue tracked', decimals: 0 },
+    { target: 8.5, suffix: ' Lakh+', label: 'Returns filed', decimals: 1 },
+    { target: 12000, suffix: '+', label: 'Firms onboarded', decimals: 0 },
+    { target: 99.97, suffix: '%', label: 'Uptime SLA', decimals: 2 },
+  ];
+  return (
+    <section className="relative section-gap px-4 py-24 sm:px-6">
+      <div className="mx-auto max-w-7xl">
+        <div className="grid grid-cols-2 gap-3 rounded-3xl glass-surface p-8 sm:p-10 lg:grid-cols-4">
+          {stats.map((s) => (
+            <Reveal key={s.label} className="text-center">
+              <div className="text-3xl font-semibold tracking-tight text-white sm:text-4xl md:text-5xl">
+                <AnimatedCounter target={s.target} prefix={s.prefix} suffix={s.suffix} decimals={s.decimals} />
+              </div>
+              <div className="mt-2 text-xs uppercase tracking-wider text-white/50">{s.label}</div>
+            </Reveal>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   12. CUSTOMER LOGOS
+   ════════════════════════════════════════════════════════════════════════ */
+
+function LogosSection() {
+  const logos = ['NEXUS CA', 'SUMMIT FINSERV', 'PIONEER ASSOC.', 'VANTA CAPITAL', 'MERIDIAN TAX', 'ASCENT ADVISORY'];
+  return (
+    <section className="relative section-gap px-4 py-20 sm:px-6">
+      <div className="mx-auto max-w-7xl text-center">
+        <Reveal>
+          <p className="text-xs uppercase tracking-[0.2em] text-white/40">Trusted by India&apos;s most ambitious firms</p>
+          <div className="mt-8 grid grid-cols-2 items-center gap-x-6 gap-y-6 sm:grid-cols-3 lg:grid-cols-6">
+            {logos.map((l) => (
+              <div key={l} className="text-center text-sm font-semibold tracking-wide text-white/35 transition-colors hover:text-white/60">
+                {l}
+              </div>
+            ))}
+          </div>
+        </Reveal>
+      </div>
+    </section>
+  );
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   13. TESTIMONIALS
+   ════════════════════════════════════════════════════════════════════════ */
+
+function TestimonialsSection() {
+  const quotes = [
+    {
+      q: 'GSTPilot replaced six tools and three accountants worth of manual work. Oracle files returns before I even remember they are due.',
+      n: 'Rahul Mehta',
+      r: 'Founder & CA, Nexus Associates',
+    },
+    {
+      q: 'The Invoice Cloud is the first product that actually understands Indian receivables. We closed last quarter with zero overdue.',
+      n: 'Priya Nair',
+      r: 'CFO, Summit Finserv',
+    },
+    {
+      q: 'I manage 48 client firms from one screen. The War Room tells me exactly what to do each morning. It feels like cheating.',
+      n: 'Karthik Subramaniam',
+      r: 'Partner, Meridian Tax LLP',
+    },
+  ];
+  return (
+    <section className="relative section-gap px-4 py-24 sm:px-6">
+      <div className="mx-auto max-w-7xl">
+        <Reveal className="mx-auto max-w-2xl text-center">
+          <SectionTag><Star className="h-3 w-3" /> Testimonials</SectionTag>
+          <h2 className="mt-5 text-3xl font-semibold tracking-tight text-white sm:text-4xl md:text-5xl">
+            Loved by the firms that <span className="accent-text">move India forward</span>
+          </h2>
+        </Reveal>
+
+        <StaggerGroup className="mt-14 grid grid-cols-1 gap-4 md:grid-cols-3" stagger={0.1}>
+          {quotes.map((t) => (
+            <StaggerItem key={t.n}>
+              <figure className="flex h-full flex-col rounded-3xl glass-surface p-7 hover-lift">
+                <Quote className="h-7 w-7 accent-text" />
+                <blockquote className="mt-4 flex-1 text-sm leading-relaxed text-white/80">
+                  &ldquo;{t.q}&rdquo;
+                </blockquote>
+                <figcaption className="mt-6 border-t border-white/[0.06] pt-4">
+                  <div className="text-sm font-semibold text-white">{t.n}</div>
+                  <div className="text-xs text-white/50">{t.r}</div>
+                </figcaption>
+              </figure>
+            </StaggerItem>
+          ))}
+        </StaggerGroup>
+      </div>
+    </section>
+  );
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   14. PRICING
+   ════════════════════════════════════════════════════════════════════════ */
+
+function PricingSection({ onGetStarted }: { onGetStarted: () => void }) {
+  const [yearly, setYearly] = useState(false);
+  const tiers = [
     {
       name: 'Starter',
-      price: annual ? 1499 : 1999,
-      period: '/mo',
-      description: 'For solo practitioners',
-      features: ['Up to 10 clients', 'Invoice processing', 'GST validation', 'GSTR-1/3B filing', 'Email support', '1 user seat'],
-      cta: 'Start Free Trial',
-      popular: false,
+      price: 0,
+      desc: 'For solo practitioners getting started.',
+      features: ['1 firm', 'Up to 25 clients', 'GST Cloud basics', 'Oracle AI (limited)', 'Community support'],
+      cta: 'Start Free',
+      featured: false,
     },
     {
       name: 'Professional',
-      price: annual ? 4999 : 5999,
-      period: '/mo',
-      description: 'For growing CA practices',
-      features: ['Up to 50 clients', 'AI extraction + validation', 'Smart reconciliation', 'GSTR-1/3B/9/9C filing', '5 user seats', 'Priority support'],
-      cta: 'Start Free Trial',
-      popular: true,
+      price: yearly ? 3999 : 4999,
+      desc: 'For growing firms that need every superpower.',
+      features: ['Up to 5 firms', 'Unlimited clients', 'Full GST + Banking + Invoice Cloud', 'Oracle AI (unlimited)', 'All 8 AI Agents', 'Priority support'],
+      cta: 'Get Started',
+      featured: true,
     },
     {
-      name: 'Firm',
-      price: annual ? 12999 : 15999,
-      period: '/mo',
-      description: 'For established CA firms',
-      features: ['Unlimited clients', 'Full AI suite', 'Bulk operations', 'API access', '25 user seats', 'Dedicated support', 'Custom onboarding'],
-      cta: 'Start Free Trial',
-      popular: false,
+      name: 'Enterprise',
+      price: null,
+      desc: 'For networks and large enterprises.',
+      features: ['Unlimited firms', 'Dedicated Oracle tuning', 'SSO + audit logs', 'On-prem option', 'Dedicated CSM', '99.99% SLA'],
+      cta: 'Talk to Sales',
+      featured: false,
     },
   ];
 
   return (
-    <Section className="py-20 lg:py-28 bg-white" id="pricing">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <motion.div variants={fadeUp} className="text-center max-w-2xl mx-auto mb-12">
-          <Badge variant="outline" className="mb-4 border-emerald-200 text-emerald-700 bg-emerald-50/50">Pricing</Badge>
-          <h2 className="text-3xl sm:text-4xl font-bold text-slate-900 tracking-tight">
-            Simple pricing.{' '}
-            <span className="text-emerald-600">No surprises.</span>
+    <section id="pricing" className="relative section-gap px-4 py-24 sm:px-6">
+      <div className="mx-auto max-w-7xl">
+        <Reveal className="mx-auto max-w-2xl text-center">
+          <SectionTag><IndianRupee className="h-3 w-3" /> Pricing</SectionTag>
+          <h2 className="mt-5 text-3xl font-semibold tracking-tight text-white sm:text-4xl md:text-5xl">
+            Simple pricing. <span className="accent-text">Serious leverage.</span>
           </h2>
-          <p className="mt-4 text-lg text-slate-500">
-            Start free. Upgrade when you&apos;re ready.
-          </p>
-        </motion.div>
 
-        {/* Toggle */}
-        <motion.div variants={fadeUp} className="flex items-center justify-center gap-3 mb-12">
-          <span className={`text-sm font-medium ${!annual ? 'text-slate-900' : 'text-slate-400'}`}>Monthly</span>
-          <button
-            onClick={() => setAnnual(!annual)}
-            className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors duration-200 ${annual ? 'bg-emerald-600' : 'bg-slate-300'}`}
-          >
-            <span className={`inline-block h-5 w-5 rounded-full bg-white shadow-sm transition-transform duration-200 ${annual ? 'translate-x-6' : 'translate-x-1'}`} />
-          </button>
-          <span className={`text-sm font-medium ${annual ? 'text-slate-900' : 'text-slate-400'}`}>
-            Annual
-            <Badge className="ml-1.5 bg-emerald-100 text-emerald-700 hover:bg-emerald-100 text-[10px]">Save 25%</Badge>
-          </span>
-        </motion.div>
+          <div className="mt-7 inline-flex items-center gap-1 rounded-full glass-surface p-1">
+            <button
+              onClick={() => setYearly(false)}
+              className={`rounded-full px-4 py-1.5 text-xs font-semibold transition-colors ${!yearly ? 'bg-white text-black' : 'text-white/70 hover:text-white'}`}
+            >
+              Monthly
+            </button>
+            <button
+              onClick={() => setYearly(true)}
+              className={`rounded-full px-4 py-1.5 text-xs font-semibold transition-colors ${yearly ? 'bg-white text-black' : 'text-white/70 hover:text-white'}`}
+            >
+              Yearly <span className="ml-1 text-[10px] text-white/50">−20%</span>
+            </button>
+          </div>
+        </Reveal>
 
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6 max-w-4xl mx-auto">
-          {plans.map((plan) => (
-            <motion.div key={plan.name} variants={fadeUp}>
-              <Card className={`h-full relative overflow-hidden transition-all duration-300 hover:shadow-lg ${
-                plan.popular
-                  ? 'border-emerald-300 shadow-md shadow-emerald-500/10 ring-1 ring-emerald-200'
-                  : 'border-slate-200/80'
-              }`}>
-                {plan.popular && (
-                  <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-emerald-500 to-emerald-400" />
+        <div className="mt-14 grid grid-cols-1 gap-4 lg:grid-cols-3">
+          {tiers.map((t, i) => (
+            <Reveal key={t.name} delay={i * 0.08}>
+              <div
+                className={`flex h-full flex-col rounded-3xl p-7 hover-lift ${
+                  t.featured ? 'glass-surface-strong accent-ring' : 'glass-surface'
+                }`}
+              >
+                {t.featured && (
+                  <span className="mb-4 inline-flex w-fit items-center gap-1.5 rounded-full accent-gradient-soft px-3 py-1 text-[10px] font-semibold uppercase tracking-wider accent-text">
+                    <Sparkles className="h-3 w-3" /> Most popular
+                  </span>
                 )}
-                <CardContent className="p-6">
-                  {plan.popular && (
-                    <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 mb-3 -mt-1">Most Popular</Badge>
+                <h3 className="text-lg font-semibold text-white">{t.name}</h3>
+                <p className="mt-1 text-sm text-white/55">{t.desc}</p>
+                <div className="mt-5 flex items-end gap-1">
+                  {t.price === null ? (
+                    <span className="text-3xl font-semibold text-white">Custom</span>
+                  ) : (
+                    <>
+                      <span className="text-4xl font-semibold tracking-tight text-white">₹{t.price.toLocaleString('en-IN')}</span>
+                      <span className="mb-1 text-sm text-white/50">/mo</span>
+                    </>
                   )}
-                  <h3 className="text-lg font-bold text-slate-900">{plan.name}</h3>
-                  <p className="text-sm text-slate-500 mt-1">{plan.description}</p>
-                  <div className="mt-4 mb-6">
-                    <div className="flex items-baseline gap-1">
-                      <span className="text-sm text-slate-500">₹</span>
-                      <span className="text-3xl font-bold text-slate-900">{plan.price.toLocaleString('en-IN')}</span>
-                      <span className="text-sm text-slate-500">{plan.period}</span>
-                    </div>
-                  </div>
-                  <Button
-                    onClick={onGetStarted}
-                    className={`w-full mb-6 ${
-                      plan.popular
-                        ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-600/20'
-                        : 'bg-slate-900 hover:bg-slate-800 text-white'
-                    }`}
-                  >
-                    {plan.cta}
-                    <ChevronRight className="ml-1 h-4 w-4" />
-                  </Button>
-                  <ul className="space-y-2.5">
-                    {plan.features.map((feature) => (
-                      <li key={feature} className="flex items-start gap-2 text-sm text-slate-600">
-                        <Check className="h-4 w-4 text-emerald-500 mt-0.5 shrink-0" />
-                        {feature}
-                      </li>
-                    ))}
-                  </ul>
-                </CardContent>
-              </Card>
-            </motion.div>
+                </div>
+                <ul className="mt-6 flex-1 space-y-3">
+                  {t.features.map((f) => (
+                    <li key={f} className="flex items-start gap-2.5 text-sm text-white/75">
+                      <Check className="mt-0.5 h-4 w-4 shrink-0 accent-text" />
+                      {f}
+                    </li>
+                  ))}
+                </ul>
+                <div className="mt-7">
+                  {t.featured ? (
+                    <PrimaryButton onClick={onGetStarted} className="w-full">
+                      {t.cta}
+                      <ArrowRight className="h-3.5 w-3.5" />
+                    </PrimaryButton>
+                  ) : (
+                    <GhostButton onClick={onGetStarted} className="w-full">
+                      {t.cta}
+                    </GhostButton>
+                  )}
+                </div>
+              </div>
+            </Reveal>
           ))}
         </div>
       </div>
-    </Section>
+    </section>
   );
 }
 
-// ─── CTA Section ─────────────────────────────────────────
-function CTASection({ onGetStarted }: { onGetStarted: () => void }) {
+/* ════════════════════════════════════════════════════════════════════════
+   15. SECURITY
+   ════════════════════════════════════════════════════════════════════════ */
+
+function SecuritySection() {
+  const badges = ['GSTN Compliant', 'RBI Aligned', 'SOC 2 Type II', 'ISO 27001', '256-bit Encryption', 'Daily Backups', 'India-hosted', 'DPDPA Ready'];
   return (
-    <Section className="py-20 lg:py-28 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-        <motion.div variants={fadeUp}>
-          <h2 className="text-3xl sm:text-4xl font-bold text-white tracking-tight">
-            Ready to file GST returns{' '}
-            <span className="bg-gradient-to-r from-emerald-400 to-emerald-300 bg-clip-text text-transparent">10x faster?</span>
+    <section id="security" className="relative section-gap px-4 py-24 sm:px-6">
+      <div className="mx-auto max-w-5xl">
+        <Reveal className="text-center">
+          <SectionTag><ShieldCheck className="h-3 w-3" /> Security</SectionTag>
+          <h2 className="mt-5 text-3xl font-semibold tracking-tight text-white sm:text-4xl md:text-5xl">
+            Built for the trust <span className="accent-text">Indian finance demands</span>
           </h2>
-          <p className="mt-4 text-lg text-slate-400 max-w-2xl mx-auto">
-            Join 500+ CA firms who have already switched. Start your free trial today.
+          <p className="mx-auto mt-4 max-w-2xl text-white/60">
+            Your data never leaves Indian soil. Every layer — from transit to storage to backup — is
+            encrypted, audited, and aligned with national standards.
           </p>
-          <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-4">
-            <Button
-              size="lg"
-              onClick={onGetStarted}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white shadow-xl shadow-emerald-600/25 h-12 px-8 text-base font-semibold"
-            >
-              Start Free Trial
-              <ArrowRight className="ml-2 h-5 w-5" />
-            </Button>
+        </Reveal>
+
+        <Reveal delay={0.1} className="mt-12">
+          <div className="flex flex-wrap items-center justify-center gap-2.5">
+            {badges.map((b) => (
+              <span key={b} className="inline-flex items-center gap-1.5 rounded-full glass-surface px-4 py-2 text-xs font-medium text-white/75">
+                <Lock className="h-3 w-3 accent-text" />
+                {b}
+              </span>
+            ))}
           </div>
-          <p className="mt-4 text-sm text-slate-500">
-            No credit card required • 14-day free trial • Cancel anytime
-          </p>
-        </motion.div>
+        </Reveal>
+
+        <Reveal delay={0.18} className="mt-12 grid grid-cols-1 gap-3 sm:grid-cols-3">
+          {[
+            { icon: Server, t: 'India data residency', d: 'Mumbai + Hyderabad regions. No cross-border data flow.' },
+            { icon: Globe, t: 'Sovereign-grade infra', d: 'Hosted on audited Indian cloud with private networking.' },
+            { icon: Lock, t: 'Encryption everywhere', d: 'TLS 1.3 in transit, AES-256 at rest, HSM-backed keys.' },
+          ].map((c) => (
+            <div key={c.t} className="rounded-2xl glass-surface p-6 hover-lift">
+              <GlassIcon icon={c.icon} />
+              <h3 className="mt-4 text-sm font-semibold text-white">{c.t}</h3>
+              <p className="mt-1.5 text-xs leading-relaxed text-white/55">{c.d}</p>
+            </div>
+          ))}
+        </Reveal>
       </div>
-    </Section>
+    </section>
   );
 }
 
-// ─── Footer ──────────────────────────────────────────────
-function Footer() {
+/* ════════════════════════════════════════════════════════════════════════
+   16. FAQ
+   ════════════════════════════════════════════════════════════════════════ */
+
+function FAQItem({ q, a }: { q: string; a: string }) {
+  const [open, setOpen] = useState(false);
   return (
-    <footer className="bg-slate-950 text-slate-400 py-12 border-t border-slate-800">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-8 mb-10">
-          {/* Brand */}
+    <div className="rounded-2xl glass-surface overflow-hidden">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left"
+        aria-expanded={open}
+      >
+        <span className="text-sm font-medium text-white">{q}</span>
+        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white/5">
+          {open ? <Minus className="h-3.5 w-3.5 text-white/70" /> : <Plus className="h-3.5 w-3.5 text-white/70" />}
+        </span>
+      </button>
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.3, ease: EASE }}
+            className="overflow-hidden"
+          >
+            <p className="px-5 pb-5 text-sm leading-relaxed text-white/60">{a}</p>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+function FAQSection() {
+  const faqs = [
+    { q: 'Is GSTPilot approved by GSTN?', a: 'GSTPilot operates as a GST Suvidha Provider–aligned workflow layer. We generate return payloads in GSTN-compatible formats and support ARN tracking. Full ASP/GSP certification is in progress for direct filing.' },
+    { q: 'How does Oracle AI work?', a: 'Oracle is a deterministic intelligence layer — not a chatbot. It continuously evaluates your invoices, payments, receivables and returns, then surfaces proactive statements and prepared actions. It acts only with your approval.' },
+    { q: 'Can I manage multiple firms?', a: 'Yes. The Multi-Firm Command and Executive War Room are built specifically for CAs and networks operating many client firms from a single screen, with bulk filing and bulk reconciliation.' },
+    { q: 'Is my data secure?', a: 'All data is encrypted in transit (TLS 1.3) and at rest (AES-256), hosted on audited Indian cloud infrastructure in Mumbai and Hyderabad. We are SOC 2 Type II and ISO 27001 aligned, with daily encrypted backups.' },
+    { q: 'Do you support all GST return types?', a: 'Yes — GSTR-1, GSTR-3B, GSTR-9, GSTR-9C, CMP-08 and more, with ITC reconciliation across GSTR-2B, ledger matching, and automated compliance scoring.' },
+    { q: 'What is included in the free plan?', a: 'One firm, up to 25 clients, GST Cloud basics, and limited Oracle AI insights — enough to feel the difference. Upgrade anytime for unlimited firms and the full agent roster.' },
+    { q: 'How fast can I get started?', a: 'Most firms are live within a day. Onboarding collects your firm and GSTIN details, Oracle begins analyzing immediately, and the first returns can be prepared the same session.' },
+  ];
+  return (
+    <section className="relative section-gap px-4 py-24 sm:px-6">
+      <div className="mx-auto max-w-3xl">
+        <Reveal className="text-center">
+          <SectionTag><FileText className="h-3 w-3" /> FAQ</SectionTag>
+          <h2 className="mt-5 text-3xl font-semibold tracking-tight text-white sm:text-4xl">
+            Questions, <span className="accent-text">answered</span>
+          </h2>
+        </Reveal>
+        <StaggerGroup className="mt-12 space-y-3" stagger={0.05}>
+          {faqs.map((f) => (
+            <StaggerItem key={f.q}>
+              <FAQItem q={f.q} a={f.a} />
+            </StaggerItem>
+          ))}
+        </StaggerGroup>
+      </div>
+    </section>
+  );
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   17. CTA
+   ════════════════════════════════════════════════════════════════════════ */
+
+function CTASection({ onGetStarted, onBookDemo }: LandingPageProps) {
+  return (
+    <section className="relative section-gap overflow-hidden px-4 py-28 sm:px-6">
+      <Aurora />
+      <div className="relative z-10 mx-auto max-w-4xl text-center">
+        <Reveal>
+          <h2 className="text-4xl font-semibold leading-tight tracking-tight text-white sm:text-5xl md:text-6xl">
+            Run your entire financial operation on <span className="accent-text">one brain</span>.
+          </h2>
+          <p className="mx-auto mt-5 max-w-xl text-white/60">
+            Join the firms that have already replaced a dozen tools with GSTPilot Infinity. Start
+            free — no card required.
+          </p>
+          <div className="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row">
+            <PrimaryButton onClick={onGetStarted} className="px-7 py-3.5 text-base">
+              Get Started Free
+              <ArrowRight className="h-4 w-4" />
+            </PrimaryButton>
+            <GhostButton onClick={onBookDemo} className="px-7 py-3.5 text-base">
+              Talk to Sales
+            </GhostButton>
+          </div>
+        </Reveal>
+      </div>
+    </section>
+  );
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   18. FOOTER
+   ════════════════════════════════════════════════════════════════════════ */
+
+function Footer() {
+  const cols = [
+    { h: 'Product', links: ['Features', 'Oracle AI', 'Pricing', 'Security', 'App Store'] },
+    { h: 'Company', links: ['About', 'Careers', 'Blog', 'Press'] },
+    { h: 'Resources', links: ['Docs', 'API', 'Guides', 'Status'] },
+    { h: 'Legal', links: ['Privacy', 'Terms', 'GSTN Compliance', 'RBI Alignment'] },
+  ];
+  return (
+    <footer className="mt-auto border-t border-white/[0.06] px-4 py-12 sm:px-6">
+      <div className="mx-auto max-w-7xl">
+        <div className="grid grid-cols-2 gap-8 md:grid-cols-5">
           <div className="col-span-2 md:col-span-1">
-            <div className="flex items-center gap-2.5 mb-4">
-              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-500 to-emerald-600">
-                <Zap className="h-5 w-5 text-white" />
-              </div>
-              <span className="text-xl font-bold text-white tracking-tight">GSTPilot</span>
+            <div className="flex items-center gap-2.5">
+              <span className="flex h-8 w-8 items-center justify-center rounded-lg glass-surface">
+                <InfinityIcon className="h-4 w-4 accent-text" />
+              </span>
+              <span className="text-sm font-semibold text-white">
+                GSTPilot Infinity<span className="accent-text">™</span>
+              </span>
             </div>
-            <p className="text-sm leading-relaxed max-w-xs">
-              The fastest way to prepare and file GST returns. Built for CA firms.
+            <p className="mt-3 text-xs leading-relaxed text-white/45">
+              The Financial Brain of India.
             </p>
+            <div className="mt-4 flex gap-2">
+              {[Twitter, Github, Linkedin].map((Icon, i) => (
+                <a
+                  key={i}
+                  href="#"
+                  className="flex h-8 w-8 items-center justify-center rounded-lg glass-surface text-white/60 transition-colors hover:text-white"
+                  aria-label="Social link"
+                >
+                  <Icon className="h-3.5 w-3.5" />
+                </a>
+              ))}
+            </div>
           </div>
 
-          {/* Links */}
-          <div>
-            <h4 className="text-sm font-semibold text-white mb-4">Product</h4>
-            <ul className="space-y-2.5">
-              {['Features', 'Pricing', 'How It Works', 'Changelog'].map((link) => (
-                <li key={link}><a href="#" className="text-sm hover:text-white transition-colors">{link}</a></li>
-              ))}
-            </ul>
-          </div>
-          <div>
-            <h4 className="text-sm font-semibold text-white mb-4">Support</h4>
-            <ul className="space-y-2.5">
-              {['Help Center', 'Contact Us', 'API Docs', 'Status'].map((link) => (
-                <li key={link}><a href="#" className="text-sm hover:text-white transition-colors">{link}</a></li>
-              ))}
-            </ul>
-          </div>
-          <div>
-            <h4 className="text-sm font-semibold text-white mb-4">Legal</h4>
-            <ul className="space-y-2.5">
-              {['Privacy Policy', 'Terms of Service', 'Security', 'GDPR'].map((link) => (
-                <li key={link}><a href="#" className="text-sm hover:text-white transition-colors">{link}</a></li>
-              ))}
-            </ul>
-          </div>
+          {cols.map((c) => (
+            <div key={c.h}>
+              <h4 className="text-xs font-semibold uppercase tracking-wider text-white/50">{c.h}</h4>
+              <ul className="mt-4 space-y-2.5">
+                {c.links.map((l) => (
+                  <li key={l}>
+                    <a href="#" className="text-sm text-white/55 transition-colors hover:text-white">
+                      {l}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
         </div>
 
-        <div className="pt-8 border-t border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <p className="text-sm text-slate-500">
-            &copy; {new Date().getFullYear()} GSTPilot. All rights reserved.
-          </p>
-          <p className="text-sm text-slate-500">
-            Made with ❤️ for Indian CA firms
-          </p>
+        <div className="mt-10 flex flex-col items-center justify-between gap-4 border-t border-white/[0.06] pt-6 sm:flex-row">
+          <p className="text-xs text-white/40">© 2025 GSTPilot Infinity. All rights reserved.</p>
+          <p className="text-xs text-white/40">Made in India · GSTN Compliant · RBI Aligned</p>
         </div>
       </div>
     </footer>
   );
 }
 
-// ─── Main Component ──────────────────────────────────────
+/* ════════════════════════════════════════════════════════════════════════
+   MAIN
+   ════════════════════════════════════════════════════════════════════════ */
+
 export default function LandingPage({ onGetStarted, onBookDemo }: LandingPageProps) {
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="relative min-h-screen flex flex-col bg-black text-white">
+      <ScrollProgress />
+      <Navbar onGetStarted={onGetStarted} />
       <div className="flex-1">
-        <Navbar onGetStarted={onGetStarted} />
         <HeroSection onGetStarted={onGetStarted} onBookDemo={onBookDemo} />
-        <TrustSection />
-        <HowItWorksSection />
         <FeaturesSection />
-        <ComparisonSection />
+        <CapabilitiesSection />
+        <AIAgentsSection />
+        <CloudSection
+          tag="GST Cloud"
+          icon={FileText}
+          title="File every return,"
+          highlight="flawlessly."
+          desc="GSTR-1, 3B, 9, 9C and CMP-08 with automatic ITC reconciliation, ARN generation and live compliance scoring — across every client firm."
+          bullets={[
+            'Two-way ITC reconciliation against GSTR-2B',
+            'Auto ARN generation & status tracking',
+            'Live compliance scoring per client',
+            'Bulk filing across hundreds of firms',
+          ]}
+          mock={<ReturnsMock />}
+        />
+        <CloudSection
+          tag="Banking Cloud"
+          icon={Landmark}
+          title="Your bank, finally"
+          highlight="in one place."
+          desc="Live feeds from every account, auto-reconciliation against ledgers, payment tracking and working-capital intelligence — reconciled while you sleep."
+          bullets={[
+            'Live bank feeds across HDFC, ICICI, SBI, Axis & more',
+            'Auto-reconciliation with ledger entries',
+            'Payment tracking — partial, full, scheduled',
+            'Working-capital & cash-position intelligence',
+          ]}
+          reverse
+          mock={<BankMock />}
+        />
+        <CloudSection
+          tag="Invoice Cloud"
+          icon={Receipt}
+          title="Create. Track. Reconcile."
+          highlight="Execute."
+          desc="The full invoice lifecycle — sales, purchase, receivables, payables, TDS and payroll — with QR-ready PDFs, e-mail & WhatsApp delivery, and auto-collections."
+          bullets={[
+            'Sales invoices + purchase bills in one engine',
+            'Receivables & payables with due-date forecasting',
+            'TDS Cloud + Payroll Cloud with payslips',
+            'QR-ready PDFs, e-mail & WhatsApp delivery',
+          ]}
+          mock={<InvoiceMock />}
+        />
+        <CloudSection
+          tag="Execution Cloud"
+          icon={Workflow}
+          title="From insight to"
+          highlight="execution."
+          desc="Autopilot, Executive War Room, Run-My-Business and the Decision Engine turn Oracle's intelligence into ranked, executable actions — across firms."
+          bullets={[
+            'Autopilot runs repeatable operations automatically',
+            'Executive War Room prioritises every action',
+            'Decision Engine ranks what to do next — and why',
+            'Bulk execute across hundreds of firms',
+          ]}
+          reverse
+          mock={<WarRoomMock />}
+        />
+        <OracleAISection />
+        <InteractiveDemoSection onGetStarted={onGetStarted} />
+        <StatisticsSection />
+        <LogosSection />
         <TestimonialsSection />
         <PricingSection onGetStarted={onGetStarted} />
-        <CTASection onGetStarted={onGetStarted} />
+        <SecuritySection />
+        <FAQSection />
+        <CTASection onGetStarted={onGetStarted} onBookDemo={onBookDemo} />
       </div>
       <Footer />
     </div>

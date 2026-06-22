@@ -373,11 +373,11 @@ function EmailVerificationBanner() {
   }
 
   return (
-    <div className="bg-amber-50 border-b border-amber-200 px-4 py-3">
+    <div className="bg-amber-500/10 border-b border-amber-500/25 px-4 py-3">
       <div className="flex items-center justify-between gap-3 max-w-7xl mx-auto">
         <div className="flex items-center gap-2.5">
-          <MailCheck className="h-5 w-5 text-amber-600 shrink-0" />
-          <p className="text-sm text-amber-800">
+          <MailCheck className="h-5 w-5 text-amber-300 shrink-0" />
+          <p className="text-sm text-amber-200">
             {sent
               ? 'Verification email sent! Check your inbox.'
               : 'Please verify your email address to access all features.'}
@@ -388,14 +388,14 @@ function EmailVerificationBanner() {
             <button
               onClick={handleResend}
               disabled={sending}
-              className="text-xs font-semibold text-amber-700 hover:text-amber-900 underline disabled:opacity-50"
+              className="text-xs font-semibold text-amber-200 hover:text-amber-100 underline disabled:opacity-50"
             >
               {sending ? 'Sending...' : 'Resend email'}
             </button>
           )}
           <button
             onClick={logout}
-            className="text-xs text-amber-600 hover:text-amber-800 font-medium"
+            className="text-xs text-amber-300 hover:text-amber-100 font-medium"
           >
             Sign out
           </button>
@@ -581,12 +581,12 @@ function AppRouter() {
 
   if (isInitializing && !isAuthenticated) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-white">
-        <div className="flex flex-col items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-500 to-emerald-600 shadow-lg shadow-emerald-600/20">
-            <Zap className="h-6 w-6 text-white animate-pulse" />
+      <div className="min-h-screen flex items-center justify-center bg-black">
+        <div className="flex flex-col items-center gap-4">
+          <div className="flex h-11 w-11 items-center justify-center rounded-2xl glass-surface motion-pulse">
+            <Zap className="h-5 w-5 accent-text" />
           </div>
-          <span className="text-sm text-slate-500 font-medium">Loading GSTPilot...</span>
+          <span className="text-sm text-white/55 font-medium">Loading GSTPilot…</span>
         </div>
       </div>
     )

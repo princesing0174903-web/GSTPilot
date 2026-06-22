@@ -2585,3 +2585,52 @@ Stage Summary:
 - Files: 2 NEW engine files (types.ts 280 lines, engine.ts 1440 lines), 5 NEW API routes, 1 REPLACED UI (BusinessGraphPage.tsx 2049 lines), 1 MODIFIED Oracle (oracle/chat/route.ts — Phase 5 personality + graph context block + 3 new prompt sections).
 - Tagline live in UI + Oracle system prompt: "GSTPilot Business Graph™ — Understand Everything. Connect Everything. See Connections. Understand Causes. Predict Outcomes. Operate Intelligently."
 - Success criteria met: A business owner feels Oracle understands the entire business (graph), knows relationships (edges), predicts impacts (what-if), explains causes (causal chains), remembers everything (memory graph). The user asks "Why is cash flow down?" and Oracle traces through nodes + edges rather than just citing a number.
+
+---
+Task ID: RESTORE-1
+Agent: GSTPilot Architect (main agent — Emergency Restore)
+Task: EMERGENCY RESTORE — GSTPILOT INFINITY™. Restore premium cinematic liquid-glass dark design across the whole app after a previous AI regressed it. DO NOT touch business logic / APIs / DB / auth / dashboard functionality. Only styling layers + theme tokens + landing rebuild.
+
+Work Log:
+- Diagnosed emergency state via git history + on-disk inspection:
+  - Premium cinematic files (SpaceLanding.tsx, FadingVideo.tsx, BlurText.tsx, space-fonts.ts, space-landing.css) were NEVER committed to git — gone, not recoverable from backup.
+  - Global Dark Cascade in globals.css had been reverted (was 378 lines, 0 cascade rules).
+  - page.tsx loading screen was bg-white + emerald gradient; EmailVerificationBanner was bg-amber-50/text-amber-800.
+  - LandingPage.tsx was the OLD generic GST landing (Upload/FileText/4-Steps).
+- Restored Global Dark Cascade in src/app/globals.css (378 → 663 lines, unlayered CSS so it always wins over Tailwind utilities):
+  - HARD DARK BASELINE: html/body/#root forced #000, color-scheme dark, Chrome autofill dark fix.
+  - Container bg-white/bg-gray-50..300/bg-slate-50..200/bg-zinc → #0a0a0a (buttons/links/summary EXCLUDED to preserve white CTA pattern + .keep-white opt-out).
+  - hover:bg-gray-* → glass hover (non-buttons).
+  - text-black/text-gray-700..900/text-slate-700..900/text-zinc → #fff (buttons EXCLUDED + .keep-black opt-out).
+  - text-gray-400..600 → readable white/45..60 secondaries.
+  - All gray + brand borders → rgba(255,255,255,0.08).
+  - Light brand tints (bg-emerald/blue/cyan/teal/indigo/violet/purple 50/100/200) → rgba(255,255,255,0.06).
+  - Dark brand text (700/800/900) → white.
+  - Status colors (red/amber/yellow/orange) kept semantic but darkened: 50/100 → 10% translucent tints, 600..900 text → light readable (fca5a5 / fcd34d / fdba74).
+  - All shadow-* → monochrome dark shadows.
+  - Native form controls (input/textarea/select) → dark glass with white text + white/45 placeholders + white/25 focus border.
+- Fixed 2 styling regressions in src/app/page.tsx (logic 100% intact):
+  - Loading screen: bg-white→bg-black, emerald-gradient logo→glass-surface + accent-text Zap + motion-pulse, text-slate-500→text-white/55.
+  - EmailVerificationBanner: bg-amber-50→bg-amber-500/10, border-amber-200→border-amber-500/25, text-amber-800→text-amber-200, amber-600→amber-300, hover→amber-100. AppRouter + OnboardingScreen + resend handler untouched.
+- Rebuilt src/components/landing/LandingPage.tsx as premium cinematic 17-section landing (kept export signature LandingPage({onGetStarted,onBookDemo})):
+  - Motion primitives: Reveal (blur-in on whileInView), StaggerGroup/StaggerItem, ScrollProgress (accent-gradient top bar via useScroll+useSpring), Aurora (3 drifting blobs), GlassIcon, PrimaryButton (white/black), GhostButton (glass).
+  - 18 sections: Floating glass Navbar (scroll-aware + mobile menu), Hero (aurora + grid mask + animated scroll cue), Features (6 glass bento cards), Capabilities (asymmetric bento with mock reconciliation stats + animated cash-flow bars), AI Agents (8 agent cards), GST Cloud (split + ReturnsMock), Banking Cloud (reverse split + BankMock), Invoice Cloud (split + InvoiceMock), Execution Cloud (reverse split + WarRoomMock), Oracle AI (breathing orb + orbiting dots + 4 proactive statement cards), Interactive Demo (mock Oracle chat with stat row), Statistics (4 rAF AnimatedCounters), Logos (text cloud), Testimonials (3 glass quote cards), Pricing (3 tiers + monthly/yearly toggle, featured accent-ring), Security (8 badge pills + 3 detail cards), FAQ (animated accordion), CTA (aurora), Footer (5-col + social + mt-auto sticky).
+  - Uses ONLY existing globals.css utilities (glass-surface, glass-surface-strong, accent-gradient, accent-gradient-soft, accent-text, accent-ring, hover-lift, motion-pulse, aurora-blob, breathe-glow, radius-premium, shadow-premium, section-gap, oracle-prose). No new deps.
+  - Fixed React warning: <icon> lowercase JSX → capitalized <Icon> in CloudSection.
+- Verification (Agent Browser, viewport 1440x900):
+  - HTTP 200, dev server compiles clean.
+  - bun run lint: PASS (0 errors).
+  - darkClass="dark", bodyBg=rgb(0,0,0), htmlBg=rgb(0,0,0), bodyColor=rgb(255,255,255) — pure black + white text confirmed.
+  - Console: 0 errors, 0 React warnings after reload.
+  - 17 section headings render in correct order.
+  - Hero H1: rgb(255,255,255), 96px (text-8xl).
+  - Glass card computed: bg rgba(255,255,255,0.04), border rgba(255,255,255,0.08) — exact spec; backdrop-filter rule confirmed present in stylesheet.
+  - Footer present, full-width, naturally pushed to bottom (mt-auto on min-h-screen flex-col root).
+
+Stage Summary:
+- Emergency resolved. Pure-black cinematic dark theme restored app-wide via Global Dark Cascade (no business logic touched).
+- page.tsx AppRouter / auth / onboarding / dashboard / 40+ module views / Firebase / APIs / DB all UNTOUCHED in logic.
+- Landing rebuilt as premium OpenAI/Apple/Stripe/Linear/Vercel/Notion-class 18-section cinematic page with Framer Motion blur-reveal, aurora backgrounds, glass cards, accent-gradient system, proactive Oracle statements.
+- Old GST sections (Upload/File in Minutes, Trusted by CA Firms, 4 Steps, Simple Pricing, old testimonials) fully removed and replaced.
+- Sticky footer (mt-auto) + responsive (sm/md/lg/xl) + accessible (aria, semantic, sr-only where needed).
+- Lint clean, browser-verified, console clean.

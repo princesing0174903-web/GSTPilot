@@ -376,3 +376,287 @@
     background: linear-gradient(180deg, #059669, #0891b2);
   }
 }
+
+/* ════════════════════════════════════════════════════════════════════════
+   GLOBAL DARK CASCADE  (unlayered → always wins over Tailwind utilities)
+   Neutralizes hardcoded light-mode utilities across ALL components so the
+   entire SaaS renders dark. Business logic is untouched — this is a pure
+   styling/theming layer. Buttons & links are excluded to preserve the
+   intentional white-CTA-with-black-text pattern.
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* ── HARD DARK BASELINE ── force the root to pure black ── */
+html,
+body,
+#root,
+#__next {
+  background-color: #000000 !important;
+  color: #ffffff;
+  min-height: 100vh;
+}
+html {
+  color-scheme: dark;
+}
+
+/* Chrome autofill — keep inputs dark with white text */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+textarea:-webkit-autofill,
+textarea:-webkit-autofill:focus,
+select:-webkit-autofill {
+  -webkit-text-fill-color: #ffffff !important;
+  -webkit-box-shadow: 0 0 0px 1000px rgba(255, 255, 255, 0.04) inset !important;
+  caret-color: #ffffff;
+  transition: background-color 9999s ease-in-out 0s;
+}
+
+/* ── CONTAINER BACKGROUNDS: light → #0a0a0a (buttons/links excluded) ── */
+.dark .bg-white:not(button):not(a):not([role="button"]):not([role="link"]):not(summary):not(.keep-white) {
+  background-color: #0a0a0a !important;
+}
+.dark .bg-gray-50:not(button):not(a):not([role="button"]):not(summary),
+.dark .bg-gray-100:not(button):not(a):not([role="button"]):not(summary),
+.dark .bg-gray-200:not(button):not(a):not([role="button"]):not(summary),
+.dark .bg-gray-300:not(button):not(a):not([role="button"]):not(summary),
+.dark .bg-slate-50:not(button):not(a):not([role="button"]):not(summary),
+.dark .bg-slate-100:not(button):not(a):not([role="button"]):not(summary),
+.dark .bg-slate-200:not(button):not(a):not([role="button"]):not(summary),
+.dark .bg-zinc-50:not(button):not(a):not([role="button"]):not(summary),
+.dark .bg-zinc-100:not(button):not(a):not([role="button"]):not(summary),
+.dark .bg-neutral-50:not(button):not(a):not([role="button"]):not(summary),
+.dark .bg-neutral-100:not(button):not(a):not([role="button"]):not(summary) {
+  background-color: #0a0a0a !important;
+}
+
+/* Hover variants of light backgrounds → glass hover (non-buttons) */
+.dark .hover\:bg-gray-50:hover:not(button):not(a):not([role="button"]):not(summary),
+.dark .hover\:bg-gray-100:hover:not(button):not(a):not([role="button"]):not(summary),
+.dark .hover\:bg-slate-50:hover:not(button):not(a):not([role="button"]):not(summary),
+.dark .hover\:bg-slate-100:hover:not(button):not(a):not([role="button"]):not(summary),
+.dark .hover\:bg-zinc-50:hover:not(button):not(a):not([role="button"]):not(summary),
+.dark .hover\:bg-zinc-100:hover:not(button):not(a):not([role="button"]):not(summary) {
+  background-color: rgba(255, 255, 255, 0.05) !important;
+}
+
+/* ── CONTAINER TEXT: dark → white (buttons/links excluded) ── */
+.dark .text-black:not(button):not(a):not([role="button"]):not([role="link"]):not(summary):not(.keep-black),
+.dark .text-gray-900:not(button):not(a):not([role="button"]):not(summary),
+.dark .text-gray-800:not(button):not(a):not([role="button"]):not(summary),
+.dark .text-gray-700:not(button):not(a):not([role="button"]):not(summary),
+.dark .text-slate-900:not(button):not(a):not([role="button"]):not(summary),
+.dark .text-slate-800:not(button):not(a):not([role="button"]):not(summary),
+.dark .text-slate-700:not(button):not(a):not([role="button"]):not(summary),
+.dark .text-zinc-900:not(button):not(a):not([role="button"]):not(summary),
+.dark .text-zinc-800:not(button):not(a):not([role="button"]):not(summary),
+.dark .text-neutral-900:not(button):not(a):not([role="button"]):not(summary),
+.dark .text-neutral-800:not(button):not(a):not([role="button"]):not(summary) {
+  color: #ffffff !important;
+}
+
+/* Muted gray text → readable secondary */
+.dark .text-gray-600:not(button):not(a):not([role="button"]):not(summary),
+.dark .text-gray-500:not(button):not(a):not([role="button"]):not(summary),
+.dark .text-slate-600:not(button):not(a):not([role="button"]):not(summary),
+.dark .text-slate-500:not(button):not(a):not([role="button"]):not(summary),
+.dark .text-zinc-600:not(button):not(a):not([role="button"]):not(summary),
+.dark .text-zinc-500:not(button):not(a):not([role="button"]):not(summary) {
+  color: rgba(255, 255, 255, 0.60) !important;
+}
+.dark .text-gray-400:not(button):not(a):not([role="button"]):not(summary),
+.dark .text-slate-400:not(button):not(a):not([role="button"]):not(summary),
+.dark .text-zinc-400:not(button):not(a):not([role="button"]):not(summary) {
+  color: rgba(255, 255, 255, 0.45) !important;
+}
+
+/* ── BORDERS: light gray → translucent white ── */
+.dark .border-gray-100,
+.dark .border-gray-200,
+.dark .border-gray-300,
+.dark .border-slate-100,
+.dark .border-slate-200,
+.dark .border-slate-300,
+.dark .border-zinc-100,
+.dark .border-zinc-200,
+.dark .border-zinc-300,
+.dark .border-neutral-200,
+.dark .border-neutral-300 {
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+/* Divide & ring light variants */
+.dark .divide-gray-100 > * + *,
+.dark .divide-gray-200 > * + *,
+.dark .divide-slate-200 > * + * {
+  border-color: rgba(255, 255, 255, 0.06) !important;
+}
+.dark .ring-gray-200,
+.dark .ring-slate-200 {
+  --tw-ring-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+/* ── BRAND TINTS: light emerald/blue/cyan backgrounds → glass ── */
+.dark .bg-emerald-50:not(button):not(a):not(summary),
+.dark .bg-emerald-100:not(button):not(a):not(summary),
+.dark .bg-emerald-200:not(button):not(a):not(summary),
+.dark .bg-green-50:not(button):not(a):not(summary),
+.dark .bg-green-100:not(button):not(a):not(summary),
+.dark .bg-blue-50:not(button):not(a):not(summary),
+.dark .bg-blue-100:not(button):not(a):not(summary),
+.dark .bg-cyan-50:not(button):not(a):not(summary),
+.dark .bg-cyan-100:not(button):not(a):not(summary),
+.dark .bg-teal-50:not(button):not(a):not(summary),
+.dark .bg-teal-100:not(button):not(a):not(summary),
+.dark .bg-indigo-50:not(button):not(a):not(summary),
+.dark .bg-indigo-100:not(button):not(a):not(summary),
+.dark .bg-violet-50:not(button):not(a):not(summary),
+.dark .bg-violet-100:not(button):not(a):not(summary),
+.dark .bg-purple-50:not(button):not(a):not(summary),
+.dark .bg-purple-100:not(button):not(a):not(summary) {
+  background-color: rgba(255, 255, 255, 0.06) !important;
+}
+
+/* Dark brand text (700/800/900) → white */
+.dark .text-emerald-700:not(button):not(a):not(summary),
+.dark .text-emerald-800:not(button):not(a):not(summary),
+.dark .text-emerald-900:not(button):not(a):not(summary),
+.dark .text-green-700:not(button):not(a):not(summary),
+.dark .text-green-800:not(button):not(a):not(summary),
+.dark .text-green-900:not(button):not(a):not(summary),
+.dark .text-blue-700:not(button):not(a):not(summary),
+.dark .text-blue-800:not(button):not(a):not(summary),
+.dark .text-blue-900:not(button):not(a):not(summary),
+.dark .text-cyan-700:not(button):not(a):not(summary),
+.dark .text-cyan-800:not(button):not(a):not(summary),
+.dark .text-indigo-700:not(button):not(a):not(summary),
+.dark .text-indigo-800:not(button):not(a):not(summary),
+.dark .text-violet-700:not(button):not(a):not(summary),
+.dark .text-violet-800:not(button):not(a):not(summary),
+.dark .text-purple-700:not(button):not(a):not(summary),
+.dark .text-purple-800:not(button):not(a):not(summary) {
+  color: #ffffff !important;
+}
+
+/* Brand borders → translucent white */
+.dark .border-emerald-100,
+.dark .border-emerald-200,
+.dark .border-green-100,
+.dark .border-green-200,
+.dark .border-blue-100,
+.dark .border-blue-200,
+.dark .border-cyan-100,
+.dark .border-cyan-200,
+.dark .border-indigo-100,
+.dark .border-indigo-200,
+.dark .border-violet-100,
+.dark .border-violet-200,
+.dark .border-purple-100,
+.dark .border-purple-200 {
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+/* ── STATUS COLORS: keep semantic but darken for dark bg ── */
+/* Red (errors) */
+.dark .bg-red-50:not(button):not(a):not(summary),
+.dark .bg-red-100:not(button):not(a):not(summary),
+.dark .bg-rose-50:not(button):not(a):not(summary),
+.dark .bg-rose-100:not(button):not(a):not(summary) {
+  background-color: rgba(239, 68, 68, 0.10) !important;
+}
+.dark .text-red-700:not(button):not(a):not(summary),
+.dark .text-red-800:not(button):not(a):not(summary),
+.dark .text-red-900:not(button):not(a):not(summary),
+.dark .text-rose-700:not(button):not(a):not(summary),
+.dark .text-rose-800:not(button):not(a):not(summary) {
+  color: #fca5a5 !important;
+}
+.dark .border-red-100,
+.dark .border-red-200,
+.dark .border-rose-100,
+.dark .border-rose-200 {
+  border-color: rgba(239, 68, 68, 0.25) !important;
+}
+
+/* Amber (warnings / deadlines) */
+.dark .bg-amber-50:not(button):not(a):not(summary),
+.dark .bg-amber-100:not(button):not(a):not(summary),
+.dark .bg-yellow-50:not(button):not(a):not(summary),
+.dark .bg-yellow-100:not(button):not(a):not(summary) {
+  background-color: rgba(245, 158, 11, 0.10) !important;
+}
+.dark .text-amber-600:not(button):not(a):not(summary),
+.dark .text-amber-700:not(button):not(a):not(summary),
+.dark .text-amber-800:not(button):not(a):not(summary),
+.dark .text-amber-900:not(button):not(a):not(summary),
+.dark .text-yellow-600:not(button):not(a):not(summary),
+.dark .text-yellow-700:not(button):not(a):not(summary),
+.dark .text-yellow-800:not(button):not(a):not(summary) {
+  color: #fcd34d !important;
+}
+.dark .border-amber-100,
+.dark .border-amber-200,
+.dark .border-yellow-100,
+.dark .border-yellow-200 {
+  border-color: rgba(245, 158, 11, 0.25) !important;
+}
+
+/* Orange */
+.dark .bg-orange-50:not(button):not(a):not(summary),
+.dark .bg-orange-100:not(button):not(a):not(summary) {
+  background-color: rgba(249, 115, 22, 0.10) !important;
+}
+.dark .text-orange-700:not(button):not(a):not(summary),
+.dark .text-orange-800:not(button):not(a):not(summary),
+.dark .text-orange-900:not(button):not(a):not(summary) {
+  color: #fdba74 !important;
+}
+
+/* ── Remove brand-colored shadows (keep them subtle/monochrome) ── */
+.dark .shadow-sm { box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.4) !important; }
+.dark .shadow { box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.45), 0 1px 2px -1px rgba(0, 0, 0, 0.45) !important; }
+.dark .shadow-md { box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.5), 0 2px 4px -2px rgba(0, 0, 0, 0.4) !important; }
+.dark .shadow-lg { box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.55), 0 4px 6px -4px rgba(0, 0, 0, 0.4) !important; }
+.dark .shadow-xl { box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.6), 0 8px 10px -6px rgba(0, 0, 0, 0.4) !important; }
+
+/* ── Native form controls: dark ── */
+.dark input[type="text"],
+.dark input[type="email"],
+.dark input[type="password"],
+.dark input[type="number"],
+.dark input[type="tel"],
+.dark input[type="url"],
+.dark input[type="search"],
+.dark input[type="date"],
+.dark input[type="datetime-local"],
+.dark input[type="time"],
+.dark input[type="month"],
+.dark textarea,
+.dark select {
+  background-color: rgba(255, 255, 255, 0.04) !important;
+  color: #ffffff !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}
+.dark input::placeholder,
+.dark textarea::placeholder {
+  color: rgba(255, 255, 255, 0.45) !important;
+}
+.dark select option {
+  background-color: #0a0a0a !important;
+  color: #ffffff !important;
+}
+.dark input:focus,
+.dark textarea:focus,
+.dark select:focus {
+  border-color: rgba(255, 255, 255, 0.25) !important;
+  outline: none !important;
+}
+
+/* ── Placeholder utility: ensure dark-themed placeholders on Tailwind inputs ── */
+.dark .placeholder\:text-gray-400::placeholder,
+.dark .placeholder\:text-gray-500::placeholder,
+.dark .placeholder\:text-slate-400::placeholder,
+.dark .placeholder\:text-slate-500::placeholder,
+.dark .placeholder\:text-zinc-400::placeholder,
+.dark .placeholder\:text-zinc-500::placeholder {
+  color: rgba(255, 255, 255, 0.45) !important;
+}

@@ -2634,3 +2634,46 @@ Stage Summary:
 - Old GST sections (Upload/File in Minutes, Trusted by CA Firms, 4 Steps, Simple Pricing, old testimonials) fully removed and replaced.
 - Sticky footer (mt-auto) + responsive (sm/md/lg/xl) + accessible (aria, semantic, sr-only where needed).
 - Lint clean, browser-verified, console clean.
+
+---
+Task ID: UIPRO-1
+Agent: GSTPilot Architect (main agent — UI Pro Max integration)
+Task: Install & integrate github.com/nextlevelbuilder/ui-ux-pro-max-skill as a UI/UX ENHANCEMENT layer ONLY. No file replacements, no deletions, no business logic / auth / API / DB / routing / GST / Banking / Oracle / dashboard functionality changes. Apply theme spec (#000 bg, 0.04 cards, #FFF text, 0.75 secondary, 0.12 borders, #3B82F6 accent). Fix white-on-white/black-on-black. Make GSTPilot feel OpenAI+Stripe+Linear+Vercel+Notion+Apple+Hostinger+Arc-grade premium.
+
+Work Log:
+- Cloned repo to /tmp/ui-ux-pro-max-skill and analyzed structure.
+  - Discovered it is NOT a component library — it is an AI design-intelligence SKILL with searchable CSV databases (styles, colors, typography, charts, ux-guidelines, landing patterns, 17 stack variants) queried via a Python BM25 search engine.
+  - Value = design knowledge, not code. Extracted via `python3 scripts/search.py "<q>" --domain <d>`.
+- Queried 4 design domains for GSTPilot's dark premium aesthetic:
+  - style "glassmorphism dark premium" → "Modern Dark (Cinema)" + "Liquid Glass" styles. Extracted: Expo.out easing cubic-bezier(0.16,1,0.3,1), spring modal (damping:20 stiffness:90), scale-press 0.97→1.0, ambient blobs (blur 30-50 opacity 0.08-0.12), hairline borders rgba(255,255,255,0.08), accent-glow behind primary button, liquid-glass morph 400-600ms blur+saturate.
+  - typography "premium sans serif fintech dashboard" → confirmed GSTPilot's existing Inter+JetBrains Mono IS the optimal fintech pairing ("SaaS Mobile Boutique" result). No font change needed.
+  - chart "financial revenue cash flow" → Candlestick (bull #26A69A / bear #EF5350), Sankey for flows, Funnel for conversion. Extracted as chart tokens.
+  - stack shadcn → confirmed CSS-variables approach + .dark support (GSTPilot already does both).
+- APPLIED as additive enhancement (zero replacements):
+  1. Appended "UI PRO MAX™ ENHANCEMENT LAYER" to src/app/globals.css (663 → 965 lines, all NEW rules, no existing rules modified):
+     - :root tokens: --ease-premium, --ease-spring, --accent-blue (#3B82F6), --accent-blue-soft, --accent-blue-glow, --border-premium (0.12), --text-secondary-premium (0.75), --chart-bull, --chart-bear, --chart-neutral, --spring-modal-damping/stiffness.
+     - Utilities: .ease-premium/.ease-spring, .accent-blue/.accent-blue-soft/.accent-blue-text/.ring-accent-blue/.glow-accent-blue, .border-premium, .text-secondary-premium, .press-scale (scale-press micro-interaction), .glow-accent-btn (accent glow behind primary), .glass-morph (liquid-glass 400-600ms morph), .skeleton-shimmer (loading), :focus-visible premium ring, .table-premium (dark header + hairline rows + hover), .premium-backdrop (modal blur), .link-underline-premium, .tabular-nums, .badge-premium, .divider-premium, .text-bull/.text-bear/.bg-bull/.bg-bear, .status-dot + status-pulse keyframes (live/warn/error), .spinner-premium, @media prefers-reduced-motion (a11y — disables all animations), .snap-x-premium, ::selection blue.
+     - Premium dropdown/popover surface override (dark border + premium shadow on [data-slot=popover-content]/[data-slot=dropdown-menu-content]).
+  2. Created NEW folder src/components/ui-pro/ (no existing files touched):
+     - index.tsx: ProButton (4 variants: primary/glass/ghost/accent, 3 sizes, press-scale + glow), ProCard (glass + hover-lift + radius-premium), ProSkeleton (shimmer, multi-line), ProSpinner (blue ring), ProStatusDot (live/warn/error pulse), ProBadge (pill), ProTable (.table-premium wrapper), ProDivider (gradient hairline), ProStat (financial stat with tabular-nums + bull/bear tone), springModalTransition + modalEnterVariants + backdropVariants (Framer Motion configs).
+     - index.ts: barrel export.
+- White-on-white / black-on-black audit: confirmed Global Dark Cascade (from prior task RESTORE-1) already neutralizes all 619 hardcoded bg-white/text-black/bg-gray-50/border-gray-200 utilities across 78 files. Buttons excluded → white CTA pattern preserved (white bg + black text stays readable). Enhancement layer adds .border-premium (0.12) + .text-secondary-premium (0.75) for spec alignment + premium dropdown/popover surface for any shadcn overlays.
+- Functionality preservation: ZERO changes to page.tsx, layout.tsx, any API route, any DB schema, any auth, any Oracle logic, any GST/Banking module, any dashboard view, any routing. The enhancement is pure CSS + opt-in primitives.
+- Verification (Agent Browser, 1440x900):
+  - bun run lint: PASS (0 errors).
+  - HTTP 200, dev server compiles clean.
+  - 0 page errors, 0 console errors/warnings after reload.
+  - Enhancement tokens live in stylesheet: --accent-blue=#3b82f6, --border-premium=#ffffff1f (0.12), --text-secondary-premium=#ffffffbf (0.75), --ease-premium=cubic-bezier(.16,1,.3,1), --chart-bull=#26a69a, --chart-bear=#ef5350.
+  - All 11 enhancement utility classes resolved in stylesheet: press-scale, glass-morph, skeleton-shimmer, table-premium, badge-premium, spinner-premium, status-dot, divider-premium, glow-accent-btn, accent-blue-text, ring-accent-blue.
+  - Dark theme intact: darkClass="dark", bodyBg=rgb(0,0,0), bodyColor=rgb(255,255,255).
+  - 14 h2 + 1 h1 sections render (all landing sections preserved).
+  - Footer sticky at bottom.
+- Cleaned up /tmp/ui-ux-pro-max-skill (temp clone removed; not installed into project tree to avoid any file collisions).
+
+Stage Summary:
+- UI Pro Max design intelligence integrated as a pure enhancement layer — zero file replacements, zero deletions, zero business-logic changes.
+- New theme spec honored: #000 bg, 0.04 cards, #FFF text, 0.75 secondary, 0.12 borders, #3B82F6 blue accent (additive alongside existing emerald→cyan→blue gradient).
+- Premium patterns from the repo now available app-wide: Expo.out easing, scale-press, spring modals, liquid-glass morph, shimmer skeletons, premium tables, status dots, financial chart tokens, reduced-motion a11y, blue focus rings, selection color.
+- New src/components/ui-pro/ primitive library (ProButton, ProCard, ProSkeleton, ProSpinner, ProStatusDot, ProBadge, ProTable, ProDivider, ProStat + Framer Motion variants) available for opt-in use.
+- Global Dark Cascade from RESTORE-1 continues to fix all white-on-white/black-on-black app-wide.
+- Lint clean, browser-verified, 100% functionality preserved.

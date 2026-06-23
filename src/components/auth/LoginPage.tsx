@@ -54,12 +54,12 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
   // ── Show loading screen while Firebase processes redirect result ──
   if (isInitializing) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-gray-950 gap-4">
-        <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-500 to-emerald-600 shadow-lg shadow-emerald-600/20">
+      <div className="min-h-screen flex flex-col items-center justify-center bg-black gap-5">
+        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-600 shadow-lg shadow-emerald-600/30 glow-accent-btn">
           <Zap className="h-7 w-7 text-white animate-pulse" />
         </div>
-        <div className="w-8 h-8 border-2 border-emerald-400/30 border-t-emerald-400 rounded-full animate-spin" />
-        <p className="text-gray-400 text-sm font-medium">Completing sign in...</p>
+        <div className="spinner-premium" />
+        <p className="text-white/60 text-sm font-medium">Completing sign in...</p>
       </div>
     );
   }
@@ -191,13 +191,13 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
   };
 
   return (
-    <div className="min-h-screen flex">
+    <div className="min-h-screen flex bg-black">
       {/* Left Side - Branding */}
-      <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
+      <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden bg-gradient-to-br from-black via-[#050507] to-black">
         {/* Background effects */}
         <div className="absolute inset-0 opacity-[0.03]" style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg width=\'60\' height=\'60\' viewBox=\'0 0 60 60\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cg fill=\'none\' fill-rule=\'evenodd\'%3E%3Cg fill=\'%23ffffff\' fill-opacity=\'1\'%3E%3Cpath d=\'M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z\'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")' }} />
         <div className="absolute top-1/3 left-1/4 w-[500px] h-[500px] bg-emerald-500/10 rounded-full blur-3xl" />
-        <div className="absolute bottom-1/4 right-1/4 w-[400px] h-[400px] bg-indigo-500/8 rounded-full blur-3xl" />
+        <div className="absolute bottom-1/4 right-1/4 w-[400px] h-[400px] bg-[#3B82F6]/8 rounded-full blur-3xl" />
 
         <div className="relative flex flex-col justify-center px-12 xl:px-16">
           {/* Logo */}
@@ -292,7 +292,7 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
       </div>
 
       {/* Right Side - Auth Form */}
-      <div className="w-full lg:w-1/2 flex items-center justify-center p-6 sm:p-8 lg:p-12 bg-white">
+      <div className="w-full lg:w-1/2 flex items-center justify-center p-6 sm:p-8 lg:p-12 bg-black">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -301,10 +301,10 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
         >
           {/* Mobile Logo */}
           <div className="lg:hidden flex items-center gap-2.5 mb-8">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-500 to-emerald-600 shadow-md shadow-emerald-600/20">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-500 to-emerald-600 shadow-md shadow-emerald-600/30">
               <Zap className="h-5 w-5 text-white" />
             </div>
-            <span className="text-xl font-bold text-slate-900 tracking-tight">GSTPilot</span>
+            <span className="text-xl font-bold text-white tracking-tight">GSTPilot</span>
           </div>
 
           {/* Header */}
@@ -313,14 +313,14 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
             {mode !== 'login' && (
               <button
                 onClick={() => switchMode('login')}
-                className="flex items-center gap-1 text-sm text-slate-500 hover:text-slate-700 mb-4 transition-colors"
+                className="flex items-center gap-1 text-sm text-white/50 hover:text-white mb-4 transition-colors"
               >
                 <ArrowLeft className="h-4 w-4" />
                 Back to sign in
               </button>
             )}
-            <h2 className="text-2xl font-bold text-slate-900 tracking-tight">{modeTitles[mode]}</h2>
-            <p className="text-sm text-slate-500 mt-1.5">{modeSubtitles[mode]}</p>
+            <h2 className="text-2xl font-bold text-white tracking-tight">{modeTitles[mode]}</h2>
+            <p className="text-sm text-white/55 mt-1.5">{modeSubtitles[mode]}</p>
           </div>
 
           {/* Error State */}
@@ -330,12 +330,12 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: 'auto' }}
                 exit={{ opacity: 0, height: 0 }}
-                className="mb-6 rounded-lg bg-red-50 border border-red-200 p-3.5 flex items-start gap-3"
+                className="mb-6 rounded-xl bg-red-500/10 border border-red-500/20 p-3.5 flex items-start gap-3"
               >
-                <AlertCircle className="h-5 w-5 text-red-500 mt-0.5 shrink-0" />
+                <AlertCircle className="h-5 w-5 text-red-400 mt-0.5 shrink-0" />
                 <div>
-                  <p className="text-sm font-medium text-red-800">{displayError}</p>
-                  <button onClick={clearErrors} className="text-xs text-red-600 hover:text-red-800 mt-1 underline">
+                  <p className="text-sm font-medium text-red-200">{displayError}</p>
+                  <button onClick={clearErrors} className="text-xs text-red-400 hover:text-red-300 mt-1 underline">
                     Dismiss
                   </button>
                 </div>
@@ -350,13 +350,13 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0 }}
-                className="mb-6 rounded-lg bg-emerald-50 border border-emerald-200 p-4 flex items-center gap-3"
+                className="mb-6 rounded-xl bg-emerald-500/10 border border-emerald-500/20 p-4 flex items-center gap-3"
               >
-                <div className="h-10 w-10 rounded-full bg-emerald-100 flex items-center justify-center shrink-0">
-                  <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+                <div className="h-10 w-10 rounded-full bg-emerald-500/15 flex items-center justify-center shrink-0">
+                  <CheckCircle2 className="h-5 w-5 text-emerald-400" />
                 </div>
                 <div>
-                  <p className="text-sm font-semibold text-emerald-800">{successMessage}</p>
+                  <p className="text-sm font-semibold text-emerald-200">{successMessage}</p>
                 </div>
               </motion.div>
             )}
@@ -366,16 +366,16 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
           {mode === 'forgot' && (
             <form onSubmit={handleForgotPassword} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="forgot-email" className="text-sm font-medium text-slate-700">Email address</Label>
+                <Label htmlFor="forgot-email" className="text-sm font-medium text-white/75">Email address</Label>
                 <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/40" />
                   <Input
                     id="forgot-email"
                     type="email"
                     placeholder="you@company.com"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    className="h-11 pl-10 border-slate-200 focus:border-emerald-500 focus:ring-emerald-500/20"
+                    className="h-11 pl-10 bg-white/[0.03] border-white/[0.08] text-white placeholder:text-white/30 focus:border-[#3B82F6] focus:ring-[#3B82F6]/20"
                     required
                     disabled={combinedLoading}
                   />
@@ -384,7 +384,7 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
               <Button
                 type="submit"
                 disabled={combinedLoading}
-                className="w-full h-11 bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-600/20 font-semibold"
+                className="w-full h-11 bg-white text-black hover:bg-white/90 press-scale glow-accent-btn rounded-xl font-semibold"
               >
                 {combinedLoading ? (
                   <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Sending reset link...</>
@@ -403,7 +403,7 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
                 variant="outline"
                 onClick={handleGoogleSignIn}
                 disabled={combinedLoading}
-                className="w-full h-11 border-slate-200 hover:bg-slate-50 text-slate-700 font-medium gap-2.5 mb-4"
+                className="w-full h-11 glass-surface border-white/[0.10] hover:bg-white/[0.06] text-white font-medium gap-2.5 mb-4 press-scale rounded-xl"
               >
                 {combinedLoading ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -415,8 +415,8 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
 
               {/* Divider */}
               <div className="relative my-6">
-                <Separator />
-                <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-white px-3 text-xs text-slate-400">
+                <Separator className="bg-white/[0.08]" />
+                <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-black px-3 text-xs text-white/40">
                   or {mode === 'login' ? 'sign in' : 'sign up'} with email
                 </span>
               </div>
@@ -426,16 +426,16 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
                 {/* Name field (signup only) */}
                 {mode === 'signup' && (
                   <div className="space-y-2">
-                    <Label htmlFor="name" className="text-sm font-medium text-slate-700">Full Name</Label>
+                    <Label htmlFor="name" className="text-sm font-medium text-white/75">Full Name</Label>
                     <div className="relative">
-                      <UserPlus className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                      <UserPlus className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/40" />
                       <Input
                         id="name"
                         type="text"
                         placeholder="Rajesh Kumar"
                         value={name}
                         onChange={(e) => setName(e.target.value)}
-                        className="h-11 pl-10 border-slate-200 focus:border-emerald-500 focus:ring-emerald-500/20"
+                        className="h-11 pl-10 bg-white/[0.03] border-white/[0.08] text-white placeholder:text-white/30 focus:border-[#3B82F6] focus:ring-[#3B82F6]/20"
                         required
                         disabled={combinedLoading}
                       />
@@ -444,16 +444,16 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
                 )}
 
                 <div className="space-y-2">
-                  <Label htmlFor="email" className="text-sm font-medium text-slate-700">Email</Label>
+                  <Label htmlFor="email" className="text-sm font-medium text-white/75">Email</Label>
                   <div className="relative">
-                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/40" />
                     <Input
                       id="email"
                       type="email"
                       placeholder="you@company.com"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
-                      className="h-11 pl-10 border-slate-200 focus:border-emerald-500 focus:ring-emerald-500/20"
+                      className="h-11 pl-10 bg-white/[0.03] border-white/[0.08] text-white placeholder:text-white/30 focus:border-[#3B82F6] focus:ring-[#3B82F6]/20"
                       required
                       disabled={combinedLoading}
                     />
@@ -462,26 +462,26 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
 
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <Label htmlFor="password" className="text-sm font-medium text-slate-700">Password</Label>
+                    <Label htmlFor="password" className="text-sm font-medium text-white/75">Password</Label>
                     {mode === 'login' && (
                       <button
                         type="button"
                         onClick={() => switchMode('forgot')}
-                        className="text-xs text-emerald-600 hover:text-emerald-700 font-medium"
+                        className="text-xs text-[#3B82F6] hover:text-[#60A5FA] font-medium"
                       >
                         Forgot password?
                       </button>
                     )}
                   </div>
                   <div className="relative">
-                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/40" />
                     <Input
                       id="password"
                       type={showPassword ? 'text' : 'password'}
                       placeholder={mode === 'signup' ? 'Min 6 characters' : 'Enter your password'}
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      className="h-11 pl-10 pr-10 border-slate-200 focus:border-emerald-500 focus:ring-emerald-500/20"
+                      className="h-11 pl-10 pr-10 bg-white/[0.03] border-white/[0.08] text-white placeholder:text-white/30 focus:border-[#3B82F6] focus:ring-[#3B82F6]/20"
                       required
                       disabled={combinedLoading}
                       minLength={6}
@@ -489,7 +489,7 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
                     <button
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 hover:text-white/70 transition-colors"
                     >
                       {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </button>
@@ -502,9 +502,9 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
                       id="remember"
                       checked={rememberMe}
                       onCheckedChange={(checked) => setRememberMe(checked === true)}
-                      className="data-[state=checked]:bg-emerald-600 data-[state=checked]:border-emerald-600"
+                      className="data-[state=checked]:bg-[#3B82F6] data-[state=checked]:border-[#3B82F6] border-white/[0.12]"
                     />
-                    <Label htmlFor="remember" className="text-sm text-slate-600 cursor-pointer">
+                    <Label htmlFor="remember" className="text-sm text-white/60 cursor-pointer">
                       Remember me for 30 days
                     </Label>
                   </div>
@@ -513,7 +513,7 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
                 <Button
                   type="submit"
                   disabled={combinedLoading}
-                  className="w-full h-11 bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-600/20 font-semibold"
+                  className="w-full h-11 bg-white text-black hover:bg-white/90 press-scale glow-accent-btn rounded-xl font-semibold"
                 >
                   {combinedLoading ? (
                     <>
@@ -536,9 +536,9 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
             <>
               {/* Create Account link */}
               <div className="mt-6">
-                <p className="text-center text-sm text-slate-500">
+                <p className="text-center text-sm text-white/50">
                   Don&apos;t have an account?{' '}
-                  <button onClick={() => switchMode('signup')} className="text-emerald-600 hover:text-emerald-700 font-semibold">
+                  <button onClick={() => switchMode('signup')} className="text-[#3B82F6] hover:text-[#60A5FA] font-semibold">
                     Create account
                   </button>
                 </p>
@@ -547,9 +547,9 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
           )}
 
           {mode === 'signup' && (
-            <p className="text-center text-sm text-slate-500 mt-4">
+            <p className="text-center text-sm text-white/50 mt-4">
               Already have an account?{' '}
-              <button onClick={() => switchMode('login')} className="text-emerald-600 hover:text-emerald-700 font-semibold">
+              <button onClick={() => switchMode('login')} className="text-[#3B82F6] hover:text-[#60A5FA] font-semibold">
                 Sign in
               </button>
             </p>
@@ -558,7 +558,7 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
           {/* Back link */}
           <button
             onClick={onBack}
-            className="mt-6 w-full text-center text-sm text-slate-400 hover:text-slate-600 transition-colors"
+            className="mt-6 w-full text-center text-sm text-white/40 hover:text-white/70 transition-colors"
           >
             ← Back to homepage
           </button>

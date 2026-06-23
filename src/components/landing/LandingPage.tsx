@@ -807,6 +807,263 @@ function WarRoomMock() {
 }
 
 /* ════════════════════════════════════════════════════════════════════════
+   HOW IT WORKS — 4-step user journey
+   ════════════════════════════════════════════════════════════════════════ */
+
+function HowItWorksSection() {
+  const steps = [
+    {
+      n: '01',
+      icon: Database,
+      title: 'Connect your data',
+      desc: 'Link GST, bank, invoices and ledgers in minutes — securely, on India-hosted infrastructure.',
+    },
+    {
+      n: '02',
+      icon: Brain,
+      title: 'Oracle AI analyzes',
+      desc: 'Oracle reads every ledger, return and payment — detecting gaps, predicting cash, ranking actions.',
+    },
+    {
+      n: '03',
+      icon: Workflow,
+      title: 'Automate compliance',
+      desc: 'File returns, reconcile accounts and chase receivables on autopilot — with one-tap approval.',
+    },
+    {
+      n: '04',
+      icon: TrendingUp,
+      title: 'Scale with confidence',
+      desc: 'Operate hundreds of firms from one war room — Oracle scales your expertise without hiring.',
+    },
+  ];
+
+  return (
+    <section id="how-it-works" className="relative section-gap px-4 py-24 sm:px-6">
+      <div className="mx-auto max-w-7xl">
+        <Reveal className="mx-auto max-w-2xl text-center">
+          <SectionTag><Workflow className="h-3 w-3" /> How It Works</SectionTag>
+          <h2 className="mt-5 text-3xl font-semibold tracking-tight text-white sm:text-4xl md:text-5xl">
+            From chaos to clarity in <span className="accent-text">four moves</span>.
+          </h2>
+          <p className="mt-4 text-white/60">
+            No migrations. No consultants. Connect, watch, automate, scale — and let Oracle handle the rest.
+          </p>
+        </Reveal>
+
+        <div className="relative mt-16">
+          {/* connecting gradient line — desktop only, runs through the step numbers */}
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-x-0 top-12 hidden h-px lg:block"
+            style={{
+              background:
+                'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.16) 10%, rgba(59,130,246,0.40) 50%, rgba(255,255,255,0.16) 90%, transparent 100%)',
+            }}
+          />
+          <StaggerGroup className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4" stagger={0.1}>
+            {steps.map((s) => {
+              const Icon = s.icon;
+              return (
+                <StaggerItem key={s.n}>
+                  <div className="group relative h-full rounded-3xl glass-surface p-6 hover-lift">
+                    <div className="flex items-center justify-between">
+                      <span className="text-5xl font-bold leading-none tracking-tight accent-text">
+                        {s.n}
+                      </span>
+                      <span className="flex h-10 w-10 items-center justify-center rounded-xl glass-surface">
+                        <Icon className="h-5 w-5 accent-text" />
+                      </span>
+                    </div>
+                    <h3 className="mt-6 text-lg font-semibold text-white">{s.title}</h3>
+                    <p className="mt-2 text-sm leading-relaxed text-white/60">{s.desc}</p>
+                  </div>
+                </StaggerItem>
+              );
+            })}
+          </StaggerGroup>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   DASHBOARD SHOWCASE — cinematic floating product mockup
+   ════════════════════════════════════════════════════════════════════════ */
+
+function DashboardShowcaseSection() {
+  const sidebar = [Layers, FileText, Landmark, Receipt, Target];
+  const kpis = [
+    { label: 'Revenue', value: '₹4.2Cr', delta: '+12.4% QoQ', icon: TrendingUp, tone: 'accent-text' },
+    { label: 'GST Liability', value: '₹12.4L', delta: 'Due 20th', icon: IndianRupee, tone: 'text-amber-300' },
+    { label: 'Filings Due', value: '3', delta: 'This week', icon: CalendarClock, tone: 'text-white' },
+  ];
+  const activity = [
+    { t: 'GSTR-3B filed', c: 'Nexus Traders', a: '₹1.2L', s: 'Done', tone: 'ok' },
+    { t: 'Invoice paid', c: 'Summit Finserv', a: '₹2.4L', s: 'Cleared', tone: 'ok' },
+    { t: 'ITC reconciled', c: 'Vanta Capital', a: '₹48K', s: 'Auto', tone: 'muted' },
+    { t: 'Payment received', c: 'Pioneer Assoc.', a: '₹6.8L', s: 'Posted', tone: 'ok' },
+  ];
+
+  return (
+    <section id="showcase" className="relative section-gap overflow-hidden px-4 py-24 sm:px-6">
+      <Aurora className="opacity-40" />
+      <div className="relative z-10 mx-auto max-w-7xl">
+        <Reveal className="mx-auto max-w-2xl text-center">
+          <SectionTag><Layers className="h-3 w-3" /> Product</SectionTag>
+          <h2 className="mt-5 text-3xl font-semibold tracking-tight text-white sm:text-4xl md:text-5xl">
+            The operating system for <span className="accent-text">Indian finance</span>.
+          </h2>
+          <p className="mt-4 text-white/60">
+            Every firm, every return, every rupee — in one cinematic command center. This is where Oracle lives.
+          </p>
+        </Reveal>
+
+        <Reveal delay={0.1} className="mt-14">
+          {/* perspective parent → 3D tilt on the floating mockup */}
+          <div style={{ perspective: '2000px' }}>
+            <motion.div
+              animate={{ y: [0, -8, 0], rotateX: 2 }}
+              transition={{ duration: 6, repeat: Infinity, ease: 'easeInOut' }}
+              style={{ transformOrigin: 'center center' }}
+            >
+              <div className="overflow-hidden rounded-3xl glass-surface-strong p-3 shadow-premium sm:p-4">
+                {/* ── top bar ── */}
+                <div className="flex items-center gap-3 rounded-2xl bg-white/[0.03] px-3 py-2.5 sm:px-4">
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg accent-gradient-soft">
+                    <Layers className="h-3.5 w-3.5 accent-text" />
+                  </span>
+                  <div className="flex flex-1 items-center gap-2 rounded-full bg-white/[0.04] px-3 py-1.5">
+                    <FileSearch className="h-3.5 w-3.5 shrink-0 text-white/40" />
+                    <span className="truncate text-xs text-white/40">Search firms, invoices, returns…</span>
+                  </div>
+                  <span className="hidden items-center gap-1.5 rounded-full bg-emerald-500/15 px-2.5 py-1 text-[10px] font-medium text-emerald-300 sm:inline-flex">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" /> Live
+                  </span>
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full glass-surface">
+                    <Bell className="h-3.5 w-3.5 text-white/60" />
+                  </span>
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full accent-gradient text-[10px] font-bold text-black">RM</span>
+                </div>
+
+                {/* ── body: sidebar + main ── */}
+                <div className="mt-3 flex gap-3">
+                  {/* sidebar */}
+                  <div className="hidden w-14 flex-col items-center gap-2 rounded-2xl bg-white/[0.03] py-4 sm:flex">
+                    {sidebar.map((Icon, i) => (
+                      <span
+                        key={i}
+                        className={`flex h-9 w-9 items-center justify-center rounded-xl transition-colors ${
+                          i === 0 ? 'accent-gradient-soft' : 'hover:bg-white/5'
+                        }`}
+                      >
+                        <Icon className={`h-4 w-4 ${i === 0 ? 'accent-text' : 'text-white/55'}`} />
+                      </span>
+                    ))}
+                  </div>
+
+                  {/* main column */}
+                  <div className="flex-1 space-y-3">
+                    {/* KPI cards */}
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                      {kpis.map((k) => {
+                        const Icon = k.icon;
+                        return (
+                          <div key={k.label} className="rounded-2xl bg-white/[0.03] p-4">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[10px] uppercase tracking-wider text-white/45">{k.label}</span>
+                              <Icon className={`h-4 w-4 ${k.tone}`} />
+                            </div>
+                            <div className="mt-2 text-2xl font-semibold tracking-tight text-white">{k.value}</div>
+                            <div className={`mt-1 text-[11px] ${k.tone}`}>{k.delta}</div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* chart + activity table */}
+                    <div className="grid grid-cols-1 gap-3 lg:grid-cols-5">
+                      {/* revenue area chart */}
+                      <div className="rounded-2xl bg-white/[0.03] p-4 lg:col-span-3">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <div className="text-xs font-semibold text-white">Revenue this quarter</div>
+                            <div className="text-[11px] text-white/45">₹4.2Cr · +12.4% vs last quarter</div>
+                          </div>
+                          <span className="rounded-full accent-gradient-soft px-2.5 py-1 text-[10px] font-semibold accent-text">Q3 FY25</span>
+                        </div>
+                        <svg viewBox="0 0 400 120" className="mt-3 h-28 w-full" preserveAspectRatio="none" aria-hidden>
+                          <defs>
+                            <linearGradient id="showcaseArea" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="0%" stopColor="#3b82f6" stopOpacity="0.45" />
+                              <stop offset="100%" stopColor="#3b82f6" stopOpacity="0" />
+                            </linearGradient>
+                            <linearGradient id="showcaseLine" x1="0" y1="0" x2="1" y2="0">
+                              <stop offset="0%" stopColor="#10b981" />
+                              <stop offset="50%" stopColor="#06b6d4" />
+                              <stop offset="100%" stopColor="#3b82f6" />
+                            </linearGradient>
+                          </defs>
+                          <path
+                            d="M0,95 L40,78 L80,84 L120,58 L160,66 L200,42 L240,52 L280,32 L320,40 L360,22 L400,14 L400,120 L0,120 Z"
+                            fill="url(#showcaseArea)"
+                          />
+                          <path
+                            d="M0,95 L40,78 L80,84 L120,58 L160,66 L200,42 L240,52 L280,32 L320,40 L360,22 L400,14"
+                            fill="none"
+                            stroke="url(#showcaseLine)"
+                            strokeWidth="2.5"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                        </svg>
+                      </div>
+
+                      {/* recent activity */}
+                      <div className="rounded-2xl bg-white/[0.03] p-4 lg:col-span-2">
+                        <div className="text-xs font-semibold text-white">Recent activity</div>
+                        <div className="mt-3 space-y-2">
+                          {activity.map((row) => (
+                            <div
+                              key={row.t + row.c}
+                              className="flex items-center justify-between gap-2 rounded-xl bg-white/[0.02] px-3 py-2"
+                            >
+                              <div className="min-w-0">
+                                <div className="truncate text-xs font-medium text-white">{row.t}</div>
+                                <div className="truncate text-[10px] text-white/45">{row.c}</div>
+                              </div>
+                              <div className="flex shrink-0 items-center gap-2">
+                                <span className="text-[11px] font-semibold text-white/85">{row.a}</span>
+                                <span
+                                  className={`rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider ${
+                                    row.tone === 'ok' ? 'bg-emerald-500/15 text-emerald-300' : 'bg-white/5 text-white/55'
+                                  }`}
+                                >
+                                  {row.s}
+                                </span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        </Reveal>
+
+        <p className="mt-8 text-center text-xs text-white/40">
+          Live mockup — your dashboard, your firms, your numbers.
+        </p>
+      </div>
+    </section>
+  );
+}
+
+/* ════════════════════════════════════════════════════════════════════════
    9. ORACLE AI
    ════════════════════════════════════════════════════════════════════════ */
 
@@ -1490,6 +1747,8 @@ export default function LandingPage({ onGetStarted, onBookDemo }: LandingPagePro
           reverse
           mock={<WarRoomMock />}
         />
+        <HowItWorksSection />
+        <DashboardShowcaseSection />
         <OracleAISection />
         <InteractiveDemoSection onGetStarted={onGetStarted} />
         <StatisticsSection />

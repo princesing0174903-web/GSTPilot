@@ -1,0 +1,1507 @@
+     1→     1→'use client';
+     2→     2→
+     3→     3→import React, { useEffect, useRef, useState } from 'react';
+     4→     4→import {
+     5→     5→  motion,
+     6→     6→  useInView,
+     7→     7→  useScroll,
+     8→     8→  useSpring,
+     9→     9→  AnimatePresence,
+    10→    10→  type Variants,
+    11→    11→} from 'framer-motion';
+    12→    12→import {
+    13→    13→  Infinity as InfinityIcon,
+    14→    14→  Zap,
+    15→    15→  ArrowRight,
+    16→    16→  ChevronDown,
+    17→    17→  Check,
+    18→    18→  Sparkles,
+    19→    19→  Brain,
+    20→    20→  ShieldCheck,
+    21→    21→  FileText,
+    22→    22→  Landmark,
+    23→    23→  Receipt,
+    24→    24→  Workflow,
+    25→    25→  Bot,
+    26→    26→  TrendingUp,
+    27→    27→  IndianRupee,
+    28→    28→  CalendarClock,
+    29→    29→  FileSearch,
+    30→    30→  Mic,
+    31→    31→  Database,
+    32→    32→  Target,
+    33→    33→  LineChart,
+    34→    34→  Building2,
+    35→    35→  CreditCard,
+    36→    36→  Users,
+    37→    37→  Lock,
+    38→    38→  Server,
+    39→    39→  Globe,
+    40→    40→  Cpu,
+    41→    41→  Layers,
+    42→    42→  Wallet,
+    43→    43→  Bell,
+    44→    44→  Quote,
+    45→    45→  Star,
+    46→    46→  Menu,
+    47→    47→  X,
+    48→    48→  Plus,
+    49→    49→  Minus,
+    50→    50→  Twitter,
+    51→    51→  Github,
+    52→    52→  Linkedin,
+    53→    53→  ArrowUpRight,
+    54→    54→} from 'lucide-react';
+    55→    55→
+    56→    56→interface LandingPageProps {
+    57→    57→  onGetStarted: () => void;
+    58→    58→  onBookDemo: () => void;
+    59→    59→}
+    60→    60→
+    61→    61→/* ════════════════════════════════════════════════════════════════════════
+    62→    62→   MOTION PRIMITIVES
+    63→    63→   ════════════════════════════════════════════════════════════════════════ */
+    64→    64→
+    65→    65→const EASE = [0.22, 1, 0.36, 1] as const;
+    66→    66→
+    67→    67→const revealVariants: Variants = {
+    68→    68→  hidden: { opacity: 0, y: 26, filter: 'blur(10px)' },
+    69→    69→  visible: { opacity: 1, y: 0, filter: 'blur(0px)' },
+    70→    70→};
+    71→    71→
+    72→    72→function Reveal({
+    73→    73→  children,
+    74→    74→  delay = 0,
+    75→    75→  className,
+    76→    76→  as = 'div',
+    77→    77→}: {
+    78→    78→  children: React.ReactNode;
+    79→    79→  delay?: number;
+    80→    80→  className?: string;
+    81→    81→  as?: 'div' | 'section' | 'li' | 'span' | 'h2' | 'p';
+    82→    82→}) {
+    83→    83→  const MotionTag = motion[as] as typeof motion.div;
+    84→    84→  return (
+    85→    85→    <MotionTag
+    86→    86→      className={className}
+    87→    87→      variants={revealVariants}
+    88→    88→      initial="hidden"
+    89→    89→      whileInView="visible"
+    90→    90→      viewport={{ once: true, margin: '-80px' }}
+    91→    91→      transition={{ duration: 0.7, ease: EASE, delay }}
+    92→    92→    >
+    93→    93→      {children}
+    94→    94→    </MotionTag>
+    95→    95→  );
+    96→    96→}
+    97→    97→
+    98→    98→function StaggerGroup({
+    99→    99→  children,
+   100→   100→  className,
+   101→   101→  stagger = 0.08,
+   102→   102→}: {
+   103→   103→  children: React.ReactNode;
+   104→   104→  className?: string;
+   105→   105→  stagger?: number;
+   106→   106→}) {
+   107→   107→  return (
+   108→   108→    <motion.div
+   109→   109→      className={className}
+   110→   110→      initial="hidden"
+   111→   111→      whileInView="visible"
+   112→   112→      viewport={{ once: true, margin: '-60px' }}
+   113→   113→      variants={{
+   114→   114→        hidden: {},
+   115→   115→        visible: { transition: { staggerChildren: stagger } },
+   116→   116→      }}
+   117→   117→    >
+   118→   118→      {children}
+   119→   119→    </motion.div>
+   120→   120→  );
+   121→   121→}
+   122→   122→
+   123→   123→function StaggerItem({ children, className }: { children: React.ReactNode; className?: string }) {
+   124→   124→  return (
+   125→   125→    <motion.div className={className} variants={revealVariants} transition={{ duration: 0.6, ease: EASE }}>
+   126→   126→      {children}
+   127→   127→    </motion.div>
+   128→   128→  );
+   129→   129→}
+   130→   130→
+   131→   131→/* Top scroll-progress bar */
+   132→   132→function ScrollProgress() {
+   133→   133→  const { scrollYProgress } = useScroll();
+   134→   134→  const scaleX = useSpring(scrollYProgress, { stiffness: 120, damping: 30, restDelta: 0.001 });
+   135→   135→  return (
+   136→   136→    <motion.div
+   137→   137→      style={{ scaleX }}
+   138→   138→      className="fixed left-0 right-0 top-0 z-[60] h-[2px] origin-left accent-gradient"
+   139→   139→    />
+   140→   140→  );
+   141→   141→}
+   142→   142→
+   143→   143→/* Cinematic aurora background — drifts slowly behind content */
+   144→   144→function Aurora({ className = '' }: { className?: string }) {
+   145→   145→  return (
+   146→   146→    <div className={`pointer-events-none absolute inset-0 overflow-hidden ${className}`} aria-hidden>
+   147→   147→      <div className="aurora-blob absolute -left-32 top-0 h-[34rem] w-[34rem] rounded-full accent-gradient-soft blur-[120px] opacity-60" />
+   148→   148→      <div
+   149→   149→        className="aurora-blob absolute -right-24 top-40 h-[30rem] w-[30rem] rounded-full blur-[110px] opacity-50"
+   150→   150→        style={{ backgroundImage: 'linear-gradient(135deg, rgba(6,182,212,0.18), rgba(59,130,246,0.14))' }}
+   151→   151→      />
+   152→   152→      <div
+   153→   153→        className="aurora-blob absolute left-1/3 bottom-0 h-[26rem] w-[26rem] rounded-full blur-[120px] opacity-40"
+   154→   154→        style={{ backgroundImage: 'linear-gradient(135deg, rgba(16,185,129,0.16), rgba(6,182,212,0.10))' }}
+   155→   155→      />
+   156→   156→    </div>
+   157→   157→  );
+   158→   158→}
+   159→   159→
+   160→   160→/* ════════════════════════════════════════════════════════════════════════
+   161→   161→   SHARED UI
+   162→   162→   ════════════════════════════════════════════════════════════════════════ */
+   163→   163→
+   164→   164→function GlassIcon({ icon: Icon, size = 'md' }: { icon: React.ElementType; size?: 'sm' | 'md' | 'lg' }) {
+   165→   165→  const dims = size === 'lg' ? 'h-12 w-12' : size === 'sm' ? 'h-8 w-8' : 'h-10 w-10';
+   166→   166→  const ic = size === 'lg' ? 'h-6 w-6' : size === 'sm' ? 'h-4 w-4' : 'h-5 w-5';
+   167→   167→  return (
+   168→   168→    <div className={`flex ${dims} items-center justify-center rounded-xl glass-surface`}>
+   169→   169→      <Icon className={`${ic} accent-text`} />
+   170→   170→    </div>
+   171→   171→  );
+   172→   172→}
+   173→   173→
+   174→   174→function PrimaryButton({
+   175→   175→  children,
+   176→   176→  onClick,
+   177→   177→  className = '',
+   178→   178→}: {
+   179→   179→  children: React.ReactNode;
+   180→   180→  onClick?: () => void;
+   181→   181→  className?: string;
+   182→   182→}) {
+   183→   183→  return (
+   184→   184→    <button
+   185→   185→      onClick={onClick}
+   186→   186→      className={`inline-flex items-center justify-center gap-2 rounded-full bg-white px-6 py-3 text-sm font-semibold text-black transition-all hover:bg-white/90 hover:scale-[1.02] active:scale-95 ${className}`}
+   187→   187→    >
+   188→   188→      {children}
+   189→   189→    </button>
+   190→   190→  );
+   191→   191→}
+   192→   192→
+   193→   193→function GhostButton({
+   194→   194→  children,
+   195→   195→  onClick,
+   196→   196→  className = '',
+   197→   197→}: {
+   198→   198→  children: React.ReactNode;
+   199→   199→  onClick?: () => void;
+   200→   200→  className?: string;
+   201→   201→}) {
+   202→   202→  return (
+   203→   203→    <button
+   204→   204→      onClick={onClick}
+   205→   205→      className={`inline-flex items-center justify-center gap-2 rounded-full glass-surface px-6 py-3 text-sm font-semibold text-white transition-all hover:bg-white/10 hover:scale-[1.02] active:scale-95 ${className}`}
+   206→   206→    >
+   207→   207→      {children}
+   208→   208→    </button>
+   209→   209→  );
+   210→   210→}
+   211→   211→
+   212→   212→function SectionTag({ children }: { children: React.ReactNode }) {
+   213→   213→  return (
+   214→   214→    <span className="inline-flex items-center gap-2 rounded-full glass-surface px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em] text-white/70">
+   215→   215→      {children}
+   216→   216→    </span>
+   217→   217→  );
+   218→   218→}
+   219→   219→
+   220→   220→/* ════════════════════════════════════════════════════════════════════════
+   221→   221→   NAVBAR
+   222→   222→   ════════════════════════════════════════════════════════════════════════ */
+   223→   223→
+   224→   224→function Navbar({ onGetStarted }: { onGetStarted: () => void }) {
+   225→   225→  const [scrolled, setScrolled] = useState(false);
+   226→   226→  const [open, setOpen] = useState(false);
+   227→   227→
+   228→   228→  useEffect(() => {
+   229→   229→    const onScroll = () => setScrolled(window.scrollY > 16);
+   230→   230→    onScroll();
+   231→   231→    window.addEventListener('scroll', onScroll, { passive: true });
+   232→   232→    return () => window.removeEventListener('scroll', onScroll);
+   233→   233→  }, []);
+   234→   234→
+   235→   235→  const links = [
+   236→   236→    { label: 'Features', href: '#features' },
+   237→   237→    { label: 'Oracle AI', href: '#oracle' },
+   238→   238→    { label: 'Pricing', href: '#pricing' },
+   239→   239→    { label: 'Security', href: '#security' },
+   240→   240→  ];
+   241→   241→
+   242→   242→  return (
+   243→   243→    <header className="fixed inset-x-0 top-0 z-50 px-4 pt-3 sm:px-6">
+   244→   244→      <nav
+   245→   245→        className={`mx-auto flex max-w-7xl items-center justify-between rounded-2xl px-4 py-2.5 transition-all duration-300 sm:px-5 ${
+   246→   246→          scrolled ? 'glass-surface-strong shadow-premium' : 'bg-transparent'
+   247→   247→        }`}
+   248→   248→      >
+   249→   249→        <a href="#top" className="flex items-center gap-2.5" aria-label="GSTPilot Infinity home">
+   250→   250→          <span className="flex h-8 w-8 items-center justify-center rounded-lg glass-surface">
+   251→   251→            <InfinityIcon className="h-4 w-4 accent-text" />
+   252→   252→          </span>
+   253→   253→          <span className="text-sm font-semibold tracking-tight text-white">
+   254→   254→            GSTPilot Infinity<span className="accent-text">™</span>
+   255→   255→          </span>
+   256→   256→        </a>
+   257→   257→
+   258→   258→        <div className="hidden items-center gap-1 md:flex">
+   259→   259→          {links.map((l) => (
+   260→   260→            <a
+   261→   261→              key={l.href}
+   262→   262→              href={l.href}
+   263→   263→              className="rounded-lg px-3 py-1.5 text-sm text-white/70 transition-colors hover:bg-white/5 hover:text-white"
+   264→   264→            >
+   265→   265→              {l.label}
+   266→   266→            </a>
+   267→   267→          ))}
+   268→   268→        </div>
+   269→   269→
+   270→   270→        <div className="hidden items-center gap-2 md:flex">
+   271→   271→          <button
+   272→   272→            onClick={onGetStarted}
+   273→   273→            className="text-sm font-medium text-white/70 transition-colors hover:text-white"
+   274→   274→          >
+   275→   275→            Sign in
+   276→   276→          </button>
+   277→   277→          <PrimaryButton onClick={onGetStarted} className="px-4 py-2">
+   278→   278→            Get Started
+   279→   279→            <ArrowRight className="h-3.5 w-3.5" />
+   280→   280→          </PrimaryButton>
+   281→   281→        </div>
+   282→   282→
+   283→   283→        <button
+   284→   284→          className="flex h-9 w-9 items-center justify-center rounded-lg glass-surface text-white md:hidden"
+   285→   285→          onClick={() => setOpen((v) => !v)}
+   286→   286→          aria-label="Toggle menu"
+   287→   287→          aria-expanded={open}
+   288→   288→        >
+   289→   289→          {open ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
+   290→   290→        </button>
+   291→   291→      </nav>
+   292→   292→
+   293→   293→      <AnimatePresence>
+   294→   294→        {open && (
+   295→   295→          <motion.div
+   296→   296→            initial={{ opacity: 0, y: -8 }}
+   297→   297→            animate={{ opacity: 1, y: 0 }}
+   298→   298→            exit={{ opacity: 0, y: -8 }}
+   299→   299→            transition={{ duration: 0.2 }}
+   300→   300→            className="mx-auto mt-2 max-w-7xl rounded-2xl glass-surface-strong p-2 md:hidden"
+   301→   301→          >
+   302→   302→            {links.map((l) => (
+   303→   303→              <a
+   304→   304→                key={l.href}
+   305→   305→                href={l.href}
+   306→   306→                onClick={() => setOpen(false)}
+   307→   307→                className="block rounded-lg px-4 py-2.5 text-sm text-white/80 transition-colors hover:bg-white/5 hover:text-white"
+   308→   308→              >
+   309→   309→                {l.label}
+   310→   310→              </a>
+   311→   311→            ))}
+   312→   312→            <div className="mt-1 px-2 pb-1">
+   313→   313→              <PrimaryButton onClick={onGetStarted} className="w-full">
+   314→   314→                Get Started
+   315→   315→                <ArrowRight className="h-3.5 w-3.5" />
+   316→   316→              </PrimaryButton>
+   317→   317→            </div>
+   318→   318→          </motion.div>
+   319→   319→        )}
+   320→   320→      </AnimatePresence>
+   321→   321→    </header>
+   322→   322→  );
+   323→   323→}
+   324→   324→
+   325→   325→/* ════════════════════════════════════════════════════════════════════════
+   326→   326→   1. HERO
+   327→   327→   ════════════════════════════════════════════════════════════════════════ */
+   328→   328→
+   329→   329→function HeroSection({ onGetStarted, onBookDemo }: LandingPageProps) {
+   330→   330→  return (
+   331→   331→    <section id="top" className="relative flex min-h-screen items-center overflow-hidden px-4 pt-28 sm:px-6">
+   332→   332→      <Aurora />
+   333→   333→      {/* subtle grid */}
+   334→   334→      <div
+   335→   335→        className="pointer-events-none absolute inset-0 opacity-[0.04]"
+   336→   336→        style={{
+   337→   337→          backgroundImage:
+   338→   338→            'linear-gradient(rgba(255,255,255,0.5) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.5) 1px, transparent 1px)',
+   339→   339→          backgroundSize: '64px 64px',
+   340→   340→          maskImage: 'radial-gradient(ellipse 80% 60% at 50% 40%, black, transparent)',
+   341→   341→        }}
+   342→   342→      />
+   343→   343→
+   344→   344→      <div className="relative z-10 mx-auto w-full max-w-5xl text-center">
+   345→   345→        <motion.div
+   346→   346→          initial={{ opacity: 0, y: 16 }}
+   347→   347→          animate={{ opacity: 1, y: 0 }}
+   348→   348→          transition={{ duration: 0.6, ease: EASE }}
+   349→   349→          className="flex justify-center"
+   350→   350→        >
+   351→   351→          <SectionTag>
+   352→   352→            <Sparkles className="h-3 w-3" />
+   353→   353→            The Financial Brain of India™
+   354→   354→          </SectionTag>
+   355→   355→        </motion.div>
+   356→   356→
+   357→   357→        <motion.h1
+   358→   358→          initial={{ opacity: 0, y: 24, filter: 'blur(14px)' }}
+   359→   359→          animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+   360→   360→          transition={{ duration: 0.9, ease: EASE, delay: 0.08 }}
+   361→   361→          className="mt-6 text-5xl font-semibold leading-[1.03] tracking-tight text-white sm:text-6xl md:text-7xl lg:text-8xl"
+   362→   362→        >
+   363→   363→          Run your entire
+   364→   364→          <br className="hidden sm:block" /> financial operation on{' '}
+   365→   365→          <span className="accent-text">one brain</span>.
+   366→   366→        </motion.h1>
+   367→   367→
+   368→   368→        <motion.p
+   369→   369→          initial={{ opacity: 0, y: 20 }}
+   370→   370→          animate={{ opacity: 1, y: 0 }}
+   371→   371→          transition={{ duration: 0.7, ease: EASE, delay: 0.22 }}
+   372→   372→          className="mx-auto mt-6 max-w-2xl text-base text-white/65 sm:text-lg"
+   373→   373→        >
+   374→   374→          GSTPilot Infinity unifies GST, Banking, Invoicing, Reconciliation and an AI CFO into a
+   375→   375→          single, always-on operating system — purpose-built for India&apos;s Chartered Accountants
+   376→   376→          and ambitious businesses.
+   377→   377→        </motion.p>
+   378→   378→
+   379→   379→        <motion.div
+   380→   380→          initial={{ opacity: 0, y: 20 }}
+   381→   381→          animate={{ opacity: 1, y: 0 }}
+   382→   382→          transition={{ duration: 0.7, ease: EASE, delay: 0.34 }}
+   383→   383→          className="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row"
+   384→   384→        >
+   385→   385→          <PrimaryButton onClick={onGetStarted} className="px-7 py-3.5 text-base">
+   386→   386→            Start Free
+   387→   387→            <ArrowRight className="h-4 w-4" />
+   388→   388→          </PrimaryButton>
+   389→   389→          <GhostButton onClick={onBookDemo} className="px-7 py-3.5 text-base">
+   390→   390→            Book a Demo
+   391→   391→          </GhostButton>
+   392→   392→        </motion.div>
+   393→   393→
+   394→   394→        <motion.div
+   395→   395→          initial={{ opacity: 0 }}
+   396→   396→          animate={{ opacity: 1 }}
+   397→   397→          transition={{ duration: 0.8, delay: 0.5 }}
+   398→   398→          className="mt-10 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs text-white/45"
+   399→   399→        >
+   400→   400→          <span className="inline-flex items-center gap-1.5"><ShieldCheck className="h-3.5 w-3.5" /> SOC 2 Type II</span>
+   401→   401→          <span className="inline-flex items-center gap-1.5"><FileText className="h-3.5 w-3.5" /> GSTN Compliant</span>
+   402→   402→          <span className="inline-flex items-center gap-1.5"><Landmark className="h-3.5 w-3.5" /> RBI Aligned</span>
+   403→   403→          <span className="inline-flex items-center gap-1.5"><Lock className="h-3.5 w-3.5" /> India-hosted</span>
+   404→   404→        </motion.div>
+   405→   405→      </div>
+   406→   406→
+   407→   407→      {/* scroll cue */}
+   408→   408→      <motion.div
+   409→   409→        initial={{ opacity: 0 }}
+   410→   410→        animate={{ opacity: 1 }}
+   411→   411→        transition={{ delay: 1, duration: 1 }}
+   412→   412→        className="absolute bottom-8 left-1/2 -translate-x-1/2 text-white/40"
+   413→   413→      >
+   414→   414→        <motion.div animate={{ y: [0, 6, 0] }} transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}>
+   415→   415→          <ChevronDown className="h-5 w-5" />
+   416→   416→        </motion.div>
+   417→   417→      </motion.div>
+   418→   418→    </section>
+   419→   419→  );
+   420→   420→}
+   421→   421→
+   422→   422→/* ════════════════════════════════════════════════════════════════════════
+   423→   423→   2. FEATURES
+   424→   424→   ════════════════════════════════════════════════════════════════════════ */
+   425→   425→
+   426→   426→function FeaturesSection() {
+   427→   427→  const features = [
+   428→   428→    { icon: Brain, title: 'AI CFO', desc: 'A chief financial officer that never sleeps — forecasting, advising, and executing across your entire firm.' },
+   429→   429→    { icon: FileText, title: 'GST Cloud', desc: 'GSTR-1, 3B, 9, 9C and ITC reconciliation with auto-ARN generation and live compliance scoring.' },
+   430→   430→    { icon: Landmark, title: 'Banking Cloud', desc: 'Live bank feeds, auto-reconciliation, payment tracking and working-capital intelligence in one place.' },
+   431→   431→    { icon: Receipt, title: 'Invoice Cloud', desc: 'Create, track, reconcile and execute invoices — sales, purchase, TDS, payroll and receivables.' },
+   432→   432→    { icon: Workflow, title: 'Reconciliation Engine', desc: 'Two-way matching across ledgers, bank statements and GST returns with AI-assisted mismatch resolution.' },
+   433→   433→    { icon: Sparkles, title: 'Oracle AI', desc: 'Proactive intelligence that detects, predicts and prepares — so you never chase, you execute.' },
+   434→   434→  ];
+   435→   435→
+   436→   436→  return (
+   437→   437→    <section id="features" className="relative section-gap px-4 py-24 sm:px-6">
+   438→   438→      <div className="mx-auto max-w-7xl">
+   439→   439→        <Reveal className="mx-auto max-w-2xl text-center">
+   440→   440→          <SectionTag><Layers className="h-3 w-3" /> Features</SectionTag>
+   441→   441→          <h2 className="mt-5 text-3xl font-semibold tracking-tight text-white sm:text-4xl md:text-5xl">
+   442→   442→            One platform. Every financial <span className="accent-text">superpower</span>.
+   443→   443→          </h2>
+   444→   444→          <p className="mt-4 text-white/60">
+   445→   445→            Replace a dozen disconnected tools with a single, intelligent operating system designed
+   446→   446→            for the realities of Indian finance.
+   447→   447→          </p>
+   448→   448→        </Reveal>
+   449→   449→
+   450→   450→        <StaggerGroup className="mt-14 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+   451→   451→          {features.map((f) => (
+   452→   452→            <StaggerItem key={f.title}>
+   453→   453→              <div className="group h-full rounded-3xl glass-surface p-6 hover-lift">
+   454→   454→                <GlassIcon icon={f.icon} />
+   455→   455→                <h3 className="mt-5 text-lg font-semibold text-white">{f.title}</h3>
+   456→   456→                <p className="mt-2 text-sm leading-relaxed text-white/60">{f.desc}</p>
+   457→   457→              </div>
+   458→   458→            </StaggerItem>
+   459→   459→          ))}
+   460→   460→        </StaggerGroup>
+   461→   461→      </div>
+   462→   462→    </section>
+   463→   463→  );
+   464→   464→}
+   465→   465→
+   466→   466→/* ════════════════════════════════════════════════════════════════════════
+   467→   467→   3. CAPABILITIES (bento)
+   468→   468→   ════════════════════════════════════════════════════════════════════════ */
+   469→   469→
+   470→   470→function CapabilitiesSection() {
+   471→   471→  return (
+   472→   472→    <section className="relative section-gap px-4 py-24 sm:px-6">
+   473→   473→      <div className="mx-auto max-w-7xl">
+   474→   474→        <Reveal className="mx-auto max-w-2xl text-center">
+   475→   475→          <SectionTag><Cpu className="h-3 w-3" /> Capabilities</SectionTag>
+   476→   476→          <h2 className="mt-5 text-3xl font-semibold tracking-tight text-white sm:text-4xl md:text-5xl">
+   477→   477→            Built to <span className="accent-text">execute</span>, not just display.
+   478→   478→          </h2>
+   479→   479→          <p className="mt-4 text-white/60">
+   480→   480→            Every capability is wired to a real workflow — Oracle watches, decides, and acts.
+   481→   481→          </p>
+   482→   482→        </Reveal>
+   483→   483→
+   484→   484→        <div className="mt-14 grid grid-cols-1 gap-4 lg:grid-cols-3">
+   485→   485→          {/* large card */}
+   486→   486→          <Reveal className="lg:col-span-2">
+   487→   487→            <div className="relative h-full overflow-hidden rounded-3xl glass-surface p-7 hover-lift">
+   488→   488→              <div className="flex items-center gap-3">
+   489→   489→                <GlassIcon icon={Workflow} size="lg" />
+   490→   490→                <div>
+   491→   491→                  <h3 className="text-xl font-semibold text-white">Real-time Reconciliation</h3>
+   492→   492→                  <p className="text-sm text-white/55">Ledger × Bank × GST — matched in seconds.</p>
+   493→   493→                </div>
+   494→   494→              </div>
+   495→   495→              {/* mock reconciliation panel */}
+   496→   496→              <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+   497→   497→                {[
+   498→   498→                  { l: 'Matched', v: '1,284', c: 'accent-text' },
+   499→   499→                  { l: 'Mismatches', v: '23', c: 'text-amber-300' },
+   500→   500→                  { l: 'ITC Gap', v: '₹1.2L', c: 'text-white' },
+   501→   501→                  { l: 'Auto-resolved', v: '19', c: 'accent-text' },
+   502→   502→                ].map((s) => (
+   503→   503→                  <div key={s.l} className="rounded-2xl bg-white/[0.03] p-4">
+   504→   504→                    <div className={`text-2xl font-semibold ${s.c}`}>{s.v}</div>
+   505→   505→                    <div className="mt-1 text-[11px] uppercase tracking-wider text-white/45">{s.l}</div>
+   506→   506→                  </div>
+   507→   507→                ))}
+   508→   508→              </div>
+   509→   509→            </div>
+   510→   510→          </Reveal>
+   511→   511→
+   512→   512→          <Reveal delay={0.08}>
+   513→   513→            <div className="h-full rounded-3xl glass-surface p-7 hover-lift">
+   514→   514→              <GlassIcon icon={CalendarClock} size="lg" />
+   515→   515→              <h3 className="mt-5 text-xl font-semibold text-white">Predictive Cash Flow</h3>
+   516→   516→              <p className="mt-2 text-sm text-white/60">
+   517→   517→                Oracle forecasts your 30/60/90-day position from receivables, payables and historical
+   518→   518→                cadence — so you see the curve before it bends.
+   519→   519→              </p>
+   520→   520→              <div className="mt-5 flex items-end gap-1.5">
+   521→   521→                {[40, 55, 48, 70, 62, 85, 78, 95].map((h, i) => (
+   522→   522→                  <motion.div
+   523→   523→                    key={i}
+   524→   524→                    initial={{ height: 0 }}
+   525→   525→                    whileInView={{ height: `${h}%` }}
+   526→   526→                    viewport={{ once: true }}
+   527→   527→                    transition={{ duration: 0.6, delay: i * 0.05, ease: EASE }}
+   528→   528→                    className="flex-1 rounded-t accent-gradient-soft"
+   529→   529→                    style={{ minHeight: 8 }}
+   530→   530→                  />
+   531→   531→                ))}
+   532→   532→              </div>
+   533→   533→            </div>
+   534→   534→          </Reveal>
+   535→   535→
+   536→   536→          <Reveal>
+   537→   537→            <div className="h-full rounded-3xl glass-surface p-7 hover-lift">
+   538→   538→              <GlassIcon icon={Building2} size="lg" />
+   539→   539→              <h3 className="mt-5 text-xl font-semibold text-white">Multi-Firm Command</h3>
+   540→   540→              <p className="mt-2 text-sm text-white/60">
+   541→   541→                Operate every client firm from one war room — bulk file, bulk reconcile, bulk advise.
+   542→   542→              </p>
+   543→   543→            </div>
+   544→   544→          </Reveal>
+   545→   545→
+   546→   546→          <Reveal delay={0.08}>
+   547→   547→            <div className="h-full rounded-3xl glass-surface p-7 hover-lift">
+   548→   548→              <GlassIcon icon={Mic} size="lg" />
+   549→   549→              <h3 className="mt-5 text-xl font-semibold text-white">Voice-driven Operations</h3>
+   550→   550→              <p className="mt-2 text-sm text-white/60">
+   551→   551→                &ldquo;File GSTR-3B for all clients due tomorrow.&rdquo; Spoken. Understood. Executed.
+   552→   552→              </p>
+   553→   553→            </div>
+   554→   554→          </Reveal>
+   555→   555→
+   556→   556→          <Reveal delay={0.16}>
+   557→   557→            <div className="h-full rounded-3xl glass-surface p-7 hover-lift">
+   558→   558→              <GlassIcon icon={Target} size="lg" />
+   559→   559→              <h3 className="mt-5 text-xl font-semibold text-white">Decision Engine</h3>
+   560→   560→              <p className="mt-2 text-sm text-white/60">
+   561→   561→                Priority-ranked actions across every firm — Oracle tells you what to do next, and why.
+   562→   562→              </p>
+   563→   563→            </div>
+   564→   564→          </Reveal>
+   565→   565→        </div>
+   566→   566→      </div>
+   567→   567→    </section>
+   568→   568→  );
+   569→   569→}
+   570→   570→
+   571→   571→/* ════════════════════════════════════════════════════════════════════════
+   572→   572→   4. AI AGENTS
+   573→   573→   ════════════════════════════════════════════════════════════════════════ */
+   574→   574→
+   575→   575→function AIAgentsSection() {
+   576→   576→  const agents = [
+   577→   577→    { icon: Bot, name: 'AI CA Manager', role: 'Runs client practice end-to-end' },
+   578→   578→    { icon: Users, name: 'AI Account Manager', role: 'Owns client relationships & renewals' },
+   579→   579→    { icon: CalendarClock, name: 'AI Deadline Engine', role: 'Never misses a due date' },
+   580→   580→    { icon: FileSearch, name: 'AI Document Employee', role: 'Reads, extracts, files everything' },
+   581→   581→    { icon: Mic, name: 'AI Voice Assistant', role: 'Conversational command interface' },
+   582→   582→    { icon: Database, name: 'AI Firm Memory', role: 'Remembers every client, forever' },
+   583→   583→    { icon: Target, name: 'AI Priority Engine', role: 'Ranks what matters most, now' },
+   584→   584→    { icon: TrendingUp, name: 'AI Predictions', role: 'Forecasts revenue, tax & cash' },
+   585→   585→  ];
+   586→   586→
+   587→   587→  return (
+   588→   588→    <section className="relative section-gap px-4 py-24 sm:px-6">
+   589→   589→      <Aurora className="opacity-50" />
+   590→   590→      <div className="relative z-10 mx-auto max-w-7xl">
+   591→   591→        <Reveal className="mx-auto max-w-2xl text-center">
+   592→   592→          <SectionTag><Bot className="h-3 w-3" /> AI Agents</SectionTag>
+   593→   593→          <h2 className="mt-5 text-3xl font-semibold tracking-tight text-white sm:text-4xl md:text-5xl">
+   594→   594→            An army of AI agents, <span className="accent-text">trained for Indian finance</span>.
+   595→   595→          </h2>
+   596→   596→          <p className="mt-4 text-white/60">
+   597→   597→            Each agent is a specialist. Together, they form a workforce that scales without hiring.
+   598→   598→          </p>
+   599→   599→        </Reveal>
+   600→   600→
+   601→   601→        <StaggerGroup className="mt-14 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4" stagger={0.05}>
+   602→   602→          {agents.map((a) => (
+   603→   603→            <StaggerItem key={a.name}>
+   604→   604→              <div className="group h-full rounded-2xl glass-surface p-5 hover-lift">
+   605→   605→                <GlassIcon icon={a.icon} size="sm" />
+   606→   606→                <h3 className="mt-4 text-sm font-semibold text-white">{a.name}</h3>
+   607→   607→                <p className="mt-1 text-xs leading-relaxed text-white/55">{a.role}</p>
+   608→   608→              </div>
+   609→   609→            </StaggerItem>
+   610→   610→          ))}
+   611→   611→        </StaggerGroup>
+   612→   612→      </div>
+   613→   613→    </section>
+   614→   614→  );
+   615→   615→}
+   616→   616→
+   617→   617→/* ════════════════════════════════════════════════════════════════════════
+   618→   618→   5–8. CLOUD SECTIONS (split layouts)
+   619→   619→   ════════════════════════════════════════════════════════════════════════ */
+   620→   620→
+   621→   621→function CloudSection({
+   622→   622→  id,
+   623→   623→  tag,
+   624→   624→  icon,
+   625→   625→  title,
+   626→   626→  highlight,
+   627→   627→  desc,
+   628→   628→  bullets,
+   629→   629→  reverse,
+   630→   630→  mock,
+   631→   631→}: {
+   632→   632→  id?: string;
+   633→   633→  tag: string;
+   634→   634→  icon: React.ElementType;
+   635→   635→  title: string;
+   636→   636→  highlight: string;
+   637→   637→  desc: string;
+   638→   638→  bullets: string[];
+   639→   639→  reverse?: boolean;
+   640→   640→  mock: React.ReactNode;
+   641→   641→}) {
+   642→   642→  const Icon = icon;
+   643→   643→  return (
+   644→   644→    <section id={id} className="relative section-gap px-4 py-20 sm:px-6">
+   645→   645→      <div className="mx-auto max-w-7xl">
+   646→   646→        <div className={`grid grid-cols-1 items-center gap-10 lg:grid-cols-2 ${reverse ? 'lg:[&>*:first-child]:order-2' : ''}`}>
+   647→   647→          <Reveal>
+   648→   648→            <SectionTag>
+   649→   649→              <Icon className="h-3 w-3" /> {tag}
+   650→   650→            </SectionTag>
+   651→   651→            <h2 className="mt-5 text-3xl font-semibold tracking-tight text-white sm:text-4xl">
+   652→   652→              {title} <span className="accent-text">{highlight}</span>
+   653→   653→            </h2>
+   654→   654→            <p className="mt-4 text-white/60">{desc}</p>
+   655→   655→            <ul className="mt-6 space-y-3">
+   656→   656→              {bullets.map((b) => (
+   657→   657→                <li key={b} className="flex items-start gap-3 text-sm text-white/75">
+   658→   658→                  <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full accent-gradient-soft">
+   659→   659→                    <Check className="h-3 w-3 accent-text" />
+   660→   660→                  </span>
+   661→   661→                  {b}
+   662→   662→                </li>
+   663→   663→              ))}
+   664→   664→            </ul>
+   665→   665→          </Reveal>
+   666→   666→
+   667→   667→          <Reveal delay={0.12}>{mock}</Reveal>
+   668→   668→        </div>
+   669→   669→      </div>
+   670→   670→    </section>
+   671→   671→  );
+   672→   672→}
+   673→   673→
+   674→   674→function ReturnsMock() {
+   675→   675→  const rows = [
+   676→   676→    { form: 'GSTR-1', client: 'Nexus Traders', status: 'Filed', tone: 'ok' },
+   677→   677→    { form: 'GSTR-3B', client: 'Summit Finserv', status: 'In Review', tone: 'warn' },
+   678→   678→    { form: 'GSTR-9', client: 'Pioneer Assoc.', status: 'Draft', tone: 'muted' },
+   679→   679→    { form: 'GSTR-1', client: 'Vanta Capital', status: 'Filed', tone: 'ok' },
+   680→   680→  ];
+   681→   681→  return (
+   682→   682→    <div className="rounded-3xl glass-surface-strong p-5 shadow-premium">
+   683→   683→      <div className="flex items-center justify-between">
+   684→   684→        <div className="text-sm font-semibold text-white">Returns — Live</div>
+   685→   685→        <span className="rounded-full bg-white/5 px-2.5 py-1 text-[10px] font-medium text-white/60">ARN auto-generated</span>
+   686→   686→      </div>
+   687→   687→      <div className="mt-4 space-y-2">
+   688→   688→        {rows.map((r) => (
+   689→   689→          <div key={r.form + r.client} className="flex items-center justify-between rounded-xl bg-white/[0.03] px-4 py-3">
+   690→   690→            <div>
+   691→   691→              <div className="text-sm font-medium text-white">{r.form}</div>
+   692→   692→              <div className="text-[11px] text-white/50">{r.client}</div>
+   693→   693→            </div>
+   694→   694→            <span
+   695→   695→              className={`rounded-full px-2.5 py-1 text-[10px] font-semibold ${
+   696→   696→                r.tone === 'ok'
+   697→   697→                  ? 'bg-emerald-500/15 text-emerald-300'
+   698→   698→                  : r.tone === 'warn'
+   699→   699→                  ? 'bg-amber-500/15 text-amber-300'
+   700→   700→                  : 'bg-white/5 text-white/55'
+   701→   701→              }`}
+   702→   702→            >
+   703→   703→              {r.status}
+   704→   704→            </span>
+   705→   705→          </div>
+   706→   706→        ))}
+   707→   707→      </div>
+   708→   708→    </div>
+   709→   709→  );
+   710→   710→}
+   711→   711→
+   712→   712→function BankMock() {
+   713→   713→  return (
+   714→   714→    <div className="rounded-3xl glass-surface-strong p-5 shadow-premium">
+   715→   715→      <div className="flex items-center justify-between">
+   716→   716→        <div className="text-sm font-semibold text-white">Bank Feeds</div>
+   717→   717→        <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/15 px-2.5 py-1 text-[10px] font-medium text-emerald-300">
+   718→   718→          <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" /> Live
+   719→   719→        </span>
+   720→   720→      </div>
+   721→   721→      <div className="mt-4 grid grid-cols-2 gap-3">
+   722→   722→        {[
+   723→   723→          { bank: 'HDFC', bal: '₹42.8L' },
+   724→   724→          { bank: 'ICICI', bal: '₹18.4L' },
+   725→   725→          { bank: 'SBI', bal: '₹9.1L' },
+   726→   726→          { bank: 'Axis', bal: '₹3.6L' },
+   727→   727→        ].map((b) => (
+   728→   728→          <div key={b.bank} className="rounded-2xl bg-white/[0.03] p-4">
+   729→   729→            <div className="text-[11px] uppercase tracking-wider text-white/45">{b.bank}</div>
+   730→   730→            <div className="mt-1 text-lg font-semibold text-white">{b.bal}</div>
+   731→   731→          </div>
+   732→   732→        ))}
+   733→   733→      </div>
+   734→   734→      <div className="mt-3 rounded-2xl bg-white/[0.03] p-4">
+   735→   735→        <div className="flex items-center justify-between text-xs">
+   736→   736→          <span className="text-white/55">Auto-reconciled today</span>
+   737→   737→          <span className="font-semibold accent-text">312 of 318</span>
+   738→   738→        </div>
+   739→   739→      </div>
+   740→   740→    </div>
+   741→   741→  );
+   742→   742→}
+   743→   743→
+   744→   744→function InvoiceMock() {
+   745→   745→  return (
+   746→   746→    <div className="rounded-3xl glass-surface-strong p-5 shadow-premium">
+   747→   747→      <div className="flex items-center justify-between">
+   748→   748→        <div className="text-sm font-semibold text-white">INV-2025-0418</div>
+   749→   749→        <span className="rounded-full accent-gradient-soft px-2.5 py-1 text-[10px] font-semibold accent-text">₹2,48,000</span>
+   750→   750→      </div>
+   751→   751→      <div className="mt-4 space-y-2.5 text-xs">
+   752→   752→        {[
+   753→   753→          ['Client', 'Meridian Tax LLP'],
+   754→   754→          ['GSTIN', '27ABCDE1234F1Z5'],
+   755→   755→          ['CGST + SGST', '₹22,320 + ₹22,320'],
+   756→   756→          ['Due', 'In 14 days'],
+   757→   757→        ].map(([k, v]) => (
+   758→   758→          <div key={k} className="flex items-center justify-between">
+   759→   759→            <span className="text-white/50">{k}</span>
+   760→   760→            <span className="font-medium text-white/85">{v}</span>
+   761→   761→          </div>
+   762→   762→        ))}
+   763→   763→      </div>
+   764→   764→      <div className="mt-4 flex gap-2">
+   765→   765→        <span className="rounded-lg bg-white/5 px-2.5 py-1 text-[10px] font-medium text-white/70">QR ready</span>
+   766→   766→        <span className="rounded-lg bg-white/5 px-2.5 py-1 text-[10px] font-medium text-white/70">E-mailed</span>
+   767→   767→        <span className="rounded-lg bg-white/5 px-2.5 py-1 text-[10px] font-medium text-white/70">WhatsApp</span>
+   768→   768→      </div>
+   769→   769→    </div>
+   770→   770→  );
+   771→   771→}
+   772→   772→
+   773→   773→function WarRoomMock() {
+   774→   774→  return (
+   775→   775→    <div className="rounded-3xl glass-surface-strong p-5 shadow-premium">
+   776→   776→      <div className="flex items-center gap-2 text-sm font-semibold text-white">
+   777→   777→        <span className="flex h-7 w-7 items-center justify-center rounded-lg accent-gradient-soft">
+   778→   778→          <Target className="h-3.5 w-3.5 accent-text" />
+   779→   779→        </span>
+   780→   780→        Executive War Room
+   781→   781→      </div>
+   782→   782→      <div className="mt-4 space-y-2">
+   783→   783→        {[
+   784→   784→          { t: 'File 3B for 8 clients', p: 'Critical', tone: 'red' },
+   785→   785→          { t: 'Reconcile HDFC feed', p: 'High', tone: 'amber' },
+   786→   786→          { t: 'Send 12 reminders', p: 'Medium', tone: 'muted' },
+   787→   787→          { t: 'Review ITC gap ₹1.2L', p: 'High', tone: 'amber' },
+   788→   788→        ].map((a) => (
+   789→   789→          <div key={a.t} className="flex items-center justify-between rounded-xl bg-white/[0.03] px-4 py-2.5">
+   790→   790→            <span className="text-sm text-white/80">{a.t}</span>
+   791→   791→            <span
+   792→   792→              className={`rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider ${
+   793→   793→                a.tone === 'red'
+   794→   794→                  ? 'bg-red-500/15 text-red-300'
+   795→   795→                  : a.tone === 'amber'
+   796→   796→                  ? 'bg-amber-500/15 text-amber-300'
+   797→   797→                  : 'bg-white/5 text-white/55'
+   798→   798→              }`}
+   799→   799→            >
+   800→   800→              {a.p}
+   801→   801→            </span>
+   802→   802→          </div>
+   803→   803→        ))}
+   804→   804→      </div>
+   805→   805→    </div>
+   806→   806→  );
+   807→   807→}
+   808→   808→
+   809→   809→/* ════════════════════════════════════════════════════════════════════════
+   810→   810→   9. ORACLE AI
+   811→   811→   ════════════════════════════════════════════════════════════════════════ */
+   812→   812→
+   813→   813→function OracleAISection() {
+   814→   814→  const statements = [
+   815→   815→    "I've detected ₹3.2 lakh pending receivables.",
+   816→   816→    "I've forecasted ₹18 lakh revenue this month.",
+   817→   817→    "I've identified 12 overdue invoices.",
+   818→   818→    "I've prepared collection reminders, ready to send.",
+   819→   819→  ];
+   820→   820→
+   821→   821→  return (
+   822→   822→    <section id="oracle" className="relative section-gap overflow-hidden px-4 py-28 sm:px-6">
+   823→   823→      <Aurora />
+   824→   824→      <div className="relative z-10 mx-auto max-w-5xl text-center">
+   825→   825→        <Reveal>
+   826→   826→          <SectionTag><Brain className="h-3 w-3" /> Oracle AI</SectionTag>
+   827→   827→          <h2 className="mt-6 text-3xl font-semibold tracking-tight text-white sm:text-4xl md:text-5xl">
+   828→   828→            Oracle AI — your always-on <span className="accent-text">financial mind</span>
+   829→   829→          </h2>
+   830→   830→          <p className="mx-auto mt-4 max-w-2xl text-white/60">
+   831→   831→            Oracle doesn&apos;t wait to be asked. It watches every ledger, predicts every curve, and
+   832→   832→            prepares every action — then tells you what it has done.
+   833→   833→          </p>
+   834→   834→        </Reveal>
+   835→   835→
+   836→   836→        {/* Oracle orb */}
+   837→   837→        <Reveal delay={0.1} className="mt-12 flex justify-center">
+   838→   838→          <div className="relative flex h-44 w-44 items-center justify-center">
+   839→   839→            <div className="absolute inset-0 rounded-full accent-gradient-soft blur-2xl breathe-glow" />
+   840→   840→            <div className="absolute inset-4 rounded-full glass-surface-strong motion-pulse" />
+   841→   841→            <div className="relative flex h-20 w-20 items-center justify-center rounded-full accent-gradient">
+   842→   842→              <Brain className="h-9 w-9 text-black" />
+   843→   843→            </div>
+   844→   844→            {/* orbiting dots */}
+   845→   845→            {[0, 120, 240].map((deg) => (
+   846→   846→              <span
+   847→   847→                key={deg}
+   848→   848→                className="absolute left-1/2 top-1/2 h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white/80"
+   849→   849→                style={{
+   850→   850→                  transform: `rotate(${deg}deg) translateX(5.5rem)`,
+   851→   851→                  animation: 'oracle-pulse 2.6s ease-in-out infinite',
+   852→   852→                }}
+   853→   853→              />
+   854→   854→            ))}
+   855→   855→          </div>
+   856→   856→        </Reveal>
+   857→   857→
+   858→   858→        <StaggerGroup className="mt-14 grid grid-cols-1 gap-3 sm:grid-cols-2" stagger={0.1}>
+   859→   859→          {statements.map((s) => (
+   860→   860→            <StaggerItem key={s}>
+   861→   861→              <div className="flex items-start gap-3 rounded-2xl glass-surface p-5 text-left hover-lift">
+   862→   862→                <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg accent-gradient-soft">
+   863→   863→                  <Sparkles className="h-3.5 w-3.5 accent-text" />
+   864→   864→                </span>
+   865→   865→                <p className="text-sm leading-relaxed text-white/85">{s}</p>
+   866→   866→              </div>
+   867→   867→            </StaggerItem>
+   868→   868→          ))}
+   869→   869→        </StaggerGroup>
+   870→   870→
+   871→   871→        <p className="mt-8 text-xs text-white/40">
+   872→   872→          Proactive, never passive. Oracle acts — then informs.
+   873→   873→        </p>
+   874→   874→      </div>
+   875→   875→    </section>
+   876→   876→  );
+   877→   877→}
+   878→   878→
+   879→   879→/* ════════════════════════════════════════════════════════════════════════
+   880→   880→   10. INTERACTIVE PRODUCT DEMO
+   881→   881→   ════════════════════════════════════════════════════════════════════════ */
+   882→   882→
+   883→   883→function InteractiveDemoSection({ onGetStarted }: { onGetStarted: () => void }) {
+   884→   884→  return (
+   885→   885→    <section className="relative section-gap px-4 py-24 sm:px-6">
+   886→   886→      <div className="mx-auto max-w-5xl">
+   887→   887→        <Reveal className="text-center">
+   888→   888→          <SectionTag><MessageSquareDemo /> Interactive Demo</SectionTag>
+   889→   889→          <h2 className="mt-5 text-3xl font-semibold tracking-tight text-white sm:text-4xl md:text-5xl">
+   890→   890→            Ask Oracle anything. <span className="accent-text">Get the answer — and the action.</span>
+   891→   891→          </h2>
+   892→   892→        </Reveal>
+   893→   893→
+   894→   894→        <Reveal delay={0.1} className="mt-12">
+   895→   895→          <div className="overflow-hidden rounded-3xl glass-surface-strong shadow-premium">
+   896→   896→            <div className="flex items-center gap-2 border-b border-white/[0.06] px-5 py-3">
+   897→   897→              <span className="h-2.5 w-2.5 rounded-full bg-red-400/70" />
+   898→   898→              <span className="h-2.5 w-2.5 rounded-full bg-amber-400/70" />
+   899→   899→              <span className="h-2.5 w-2.5 rounded-full bg-emerald-400/70" />
+   900→   900→              <span className="ml-3 text-xs text-white/50">Oracle — live session</span>
+   901→   901→            </div>
+   902→   902→            <div className="space-y-4 p-6">
+   903→   903→              {/* user */}
+   904→   904→              <div className="flex justify-end">
+   905→   905→                <div className="max-w-[80%] rounded-2xl rounded-br-sm bg-white px-4 py-2.5 text-sm font-medium text-black">
+   906→   906→                  What&apos;s my cash position right now?
+   907→   907→                </div>
+   908→   908→              </div>
+   909→   909→              {/* oracle */}
+   910→   910→              <div className="flex gap-3">
+   911→   911→                <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg accent-gradient">
+   912→   912→                  <Brain className="h-3.5 w-3.5 text-black" />
+   913→   913→                </span>
+   914→   914→                <div className="max-w-[85%] rounded-2xl rounded-tl-sm glass-surface px-4 py-3">
+   915→   915→                  <p className="oracle-prose text-sm text-white/85">
+   916→   916→                    Your consolidated cash position is <strong className="text-white">₹73.9 lakh</strong> across
+   917→   917→                    4 accounts. I&apos;ve flagged <strong className="text-white">₹3.2 lakh in pending
+   918→   918→                    receivables</strong> due this week and prepared reminders — I can send them now.
+   919→   919→                  </p>
+   920→   920→                  <div className="mt-3 grid grid-cols-3 gap-2">
+   921→   921→                    {[
+   922→   922→                      { l: 'Available', v: '₹73.9L' },
+   923→   923→                      { l: 'Receivables', v: '₹3.2L' },
+   924→   924→                      { l: 'Payables', v: '₹1.8L' },
+   925→   925→                    ].map((s) => (
+   926→   926→                      <div key={s.l} className="rounded-xl bg-white/[0.04] p-3 text-center">
+   927→   927→                        <div className="text-sm font-semibold text-white">{s.v}</div>
+   928→   928→                        <div className="text-[10px] uppercase tracking-wider text-white/45">{s.l}</div>
+   929→   929→                      </div>
+   930→   930→                    ))}
+   931→   931→                  </div>
+   932→   932→                </div>
+   933→   933→              </div>
+   934→   934→            </div>
+   935→   935→            <div className="border-t border-white/[0.06] px-6 py-4">
+   936→   936→              <div className="flex items-center justify-between">
+   937→   937→                <span className="text-xs text-white/45">Oracle prepared 3 actions for you</span>
+   938→   938→                <PrimaryButton onClick={onGetStarted} className="px-4 py-2 text-xs">
+   939→   939→                  Try Oracle
+   940→   940→                  <ArrowUpRight className="h-3.5 w-3.5" />
+   941→   941→                </PrimaryButton>
+   942→   942→              </div>
+   943→   943→            </div>
+   944→   944→          </div>
+   945→   945→        </Reveal>
+   946→   946→      </div>
+   947→   947→    </section>
+   948→   948→  );
+   949→   949→}
+   950→   950→
+   951→   951→function MessageSquareDemo() {
+   952→   952→  return <Sparkles className="h-3 w-3" />;
+   953→   953→}
+   954→   954→
+   955→   955→/* ════════════════════════════════════════════════════════════════════════
+   956→   956→   11. STATISTICS
+   957→   957→   ════════════════════════════════════════════════════════════════════════ */
+   958→   958→
+   959→   959→function AnimatedCounter({ target, prefix = '', suffix = '', decimals = 0 }: { target: number; prefix?: string; suffix?: string; decimals?: number }) {
+   960→   960→  const ref = useRef<HTMLSpanElement>(null);
+   961→   961→  const inView = useInView(ref, { once: true, margin: '-60px' });
+   962→   962→  const [val, setVal] = useState(0);
+   963→   963→
+   964→   964→  useEffect(() => {
+   965→   965→    if (!inView) return;
+   966→   966→    const duration = 1800;
+   967→   967→    const start = performance.now();
+   968→   968→    let raf = 0;
+   969→   969→    const tick = (now: number) => {
+   970→   970→      const t = Math.min((now - start) / duration, 1);
+   971→   971→      const eased = 1 - Math.pow(1 - t, 3);
+   972→   972→      setVal(target * eased);
+   973→   973→      if (t < 1) raf = requestAnimationFrame(tick);
+   974→   974→      else setVal(target);
+   975→   975→    };
+   976→   976→    raf = requestAnimationFrame(tick);
+   977→   977→    return () => cancelAnimationFrame(raf);
+   978→   978→  }, [inView, target]);
+   979→   979→
+   980→   980→  const formatted =
+   981→   981→    decimals > 0
+   982→   982→      ? val.toFixed(decimals)
+   983→   983→      : Math.round(val).toLocaleString('en-IN');
+   984→   984→
+   985→   985→  return (
+   986→   986→    <span ref={ref}>
+   987→   987→      {prefix}
+   988→   988→      {formatted}
+   989→   989→      {suffix}
+   990→   990→    </span>
+   991→   991→  );
+   992→   992→}
+   993→   993→
+   994→   994→function StatisticsSection() {
+   995→   995→  const stats = [
+   996→   996→    { target: 2400, prefix: '₹', suffix: ' Cr+', label: 'Revenue tracked', decimals: 0 },
+   997→   997→    { target: 8.5, suffix: ' Lakh+', label: 'Returns filed', decimals: 1 },
+   998→   998→    { target: 12000, suffix: '+', label: 'Firms onboarded', decimals: 0 },
+   999→   999→    { target: 99.97, suffix: '%', label: 'Uptime SLA', decimals: 2 },
+  1000→  1000→  ];
+  1001→  1001→  return (
+  1002→  1002→    <section className="relative section-gap px-4 py-24 sm:px-6">
+  1003→  1003→      <div className="mx-auto max-w-7xl">
+  1004→  1004→        <div className="grid grid-cols-2 gap-3 rounded-3xl glass-surface p-8 sm:p-10 lg:grid-cols-4">
+  1005→  1005→          {stats.map((s) => (
+  1006→  1006→            <Reveal key={s.label} className="text-center">
+  1007→  1007→              <div className="text-3xl font-semibold tracking-tight text-white sm:text-4xl md:text-5xl">
+  1008→  1008→                <AnimatedCounter target={s.target} prefix={s.prefix} suffix={s.suffix} decimals={s.decimals} />
+  1009→  1009→              </div>
+  1010→  1010→              <div className="mt-2 text-xs uppercase tracking-wider text-white/50">{s.label}</div>
+  1011→  1011→            </Reveal>
+  1012→  1012→          ))}
+  1013→  1013→        </div>
+  1014→  1014→      </div>
+  1015→  1015→    </section>
+  1016→  1016→  );
+  1017→  1017→}
+  1018→  1018→
+  1019→  1019→/* ════════════════════════════════════════════════════════════════════════
+  1020→  1020→   12. CUSTOMER LOGOS
+  1021→  1021→   ════════════════════════════════════════════════════════════════════════ */
+  1022→  1022→
+  1023→  1023→function LogosSection() {
+  1024→  1024→  const logos = ['NEXUS CA', 'SUMMIT FINSERV', 'PIONEER ASSOC.', 'VANTA CAPITAL', 'MERIDIAN TAX', 'ASCENT ADVISORY'];
+  1025→  1025→  return (
+  1026→  1026→    <section className="relative section-gap px-4 py-20 sm:px-6">
+  1027→  1027→      <div className="mx-auto max-w-7xl text-center">
+  1028→  1028→        <Reveal>
+  1029→  1029→          <p className="text-xs uppercase tracking-[0.2em] text-white/40">Trusted by India&apos;s most ambitious firms</p>
+  1030→  1030→          <div className="mt-8 grid grid-cols-2 items-center gap-x-6 gap-y-6 sm:grid-cols-3 lg:grid-cols-6">
+  1031→  1031→            {logos.map((l) => (
+  1032→  1032→              <div key={l} className="text-center text-sm font-semibold tracking-wide text-white/35 transition-colors hover:text-white/60">
+  1033→  1033→                {l}
+  1034→  1034→              </div>
+  1035→  1035→            ))}
+  1036→  1036→          </div>
+  1037→  1037→        </Reveal>
+  1038→  1038→      </div>
+  1039→  1039→    </section>
+  1040→  1040→  );
+  1041→  1041→}
+  1042→  1042→
+  1043→  1043→/* ════════════════════════════════════════════════════════════════════════
+  1044→  1044→   13. TESTIMONIALS
+  1045→  1045→   ════════════════════════════════════════════════════════════════════════ */
+  1046→  1046→
+  1047→  1047→function TestimonialsSection() {
+  1048→  1048→  const quotes = [
+  1049→  1049→    {
+  1050→  1050→      q: 'GSTPilot replaced six tools and three accountants worth of manual work. Oracle files returns before I even remember they are due.',
+  1051→  1051→      n: 'Rahul Mehta',
+  1052→  1052→      r: 'Founder & CA, Nexus Associates',
+  1053→  1053→    },
+  1054→  1054→    {
+  1055→  1055→      q: 'The Invoice Cloud is the first product that actually understands Indian receivables. We closed last quarter with zero overdue.',
+  1056→  1056→      n: 'Priya Nair',
+  1057→  1057→      r: 'CFO, Summit Finserv',
+  1058→  1058→    },
+  1059→  1059→    {
+  1060→  1060→      q: 'I manage 48 client firms from one screen. The War Room tells me exactly what to do each morning. It feels like cheating.',
+  1061→  1061→      n: 'Karthik Subramaniam',
+  1062→  1062→      r: 'Partner, Meridian Tax LLP',
+  1063→  1063→    },
+  1064→  1064→  ];
+  1065→  1065→  return (
+  1066→  1066→    <section className="relative section-gap px-4 py-24 sm:px-6">
+  1067→  1067→      <div className="mx-auto max-w-7xl">
+  1068→  1068→        <Reveal className="mx-auto max-w-2xl text-center">
+  1069→  1069→          <SectionTag><Star className="h-3 w-3" /> Testimonials</SectionTag>
+  1070→  1070→          <h2 className="mt-5 text-3xl font-semibold tracking-tight text-white sm:text-4xl md:text-5xl">
+  1071→  1071→            Loved by the firms that <span className="accent-text">move India forward</span>
+  1072→  1072→          </h2>
+  1073→  1073→        </Reveal>
+  1074→  1074→
+  1075→  1075→        <StaggerGroup className="mt-14 grid grid-cols-1 gap-4 md:grid-cols-3" stagger={0.1}>
+  1076→  1076→          {quotes.map((t) => (
+  1077→  1077→            <StaggerItem key={t.n}>
+  1078→  1078→              <figure className="flex h-full flex-col rounded-3xl glass-surface p-7 hover-lift">
+  1079→  1079→                <Quote className="h-7 w-7 accent-text" />
+  1080→  1080→                <blockquote className="mt-4 flex-1 text-sm leading-relaxed text-white/80">
+  1081→  1081→                  &ldquo;{t.q}&rdquo;
+  1082→  1082→                </blockquote>
+  1083→  1083→                <figcaption className="mt-6 border-t border-white/[0.06] pt-4">
+  1084→  1084→                  <div className="text-sm font-semibold text-white">{t.n}</div>
+  1085→  1085→                  <div className="text-xs text-white/50">{t.r}</div>
+  1086→  1086→                </figcaption>
+  1087→  1087→              </figure>
+  1088→  1088→            </StaggerItem>
+  1089→  1089→          ))}
+  1090→  1090→        </StaggerGroup>
+  1091→  1091→      </div>
+  1092→  1092→    </section>
+  1093→  1093→  );
+  1094→  1094→}
+  1095→  1095→
+  1096→  1096→/* ════════════════════════════════════════════════════════════════════════
+  1097→  1097→   14. PRICING
+  1098→  1098→   ════════════════════════════════════════════════════════════════════════ */
+  1099→  1099→
+  1100→  1100→function PricingSection({ onGetStarted }: { onGetStarted: () => void }) {
+  1101→  1101→  const [yearly, setYearly] = useState(false);
+  1102→  1102→  const tiers = [
+  1103→  1103→    {
+  1104→  1104→      name: 'Starter',
+  1105→  1105→      price: 0,
+  1106→  1106→      desc: 'For solo practitioners getting started.',
+  1107→  1107→      features: ['1 firm', 'Up to 25 clients', 'GST Cloud basics', 'Oracle AI (limited)', 'Community support'],
+  1108→  1108→      cta: 'Start Free',
+  1109→  1109→      featured: false,
+  1110→  1110→    },
+  1111→  1111→    {
+  1112→  1112→      name: 'Professional',
+  1113→  1113→      price: yearly ? 3999 : 4999,
+  1114→  1114→      desc: 'For growing firms that need every superpower.',
+  1115→  1115→      features: ['Up to 5 firms', 'Unlimited clients', 'Full GST + Banking + Invoice Cloud', 'Oracle AI (unlimited)', 'All 8 AI Agents', 'Priority support'],
+  1116→  1116→      cta: 'Get Started',
+  1117→  1117→      featured: true,
+  1118→  1118→    },
+  1119→  1119→    {
+  1120→  1120→      name: 'Enterprise',
+  1121→  1121→      price: null,
+  1122→  1122→      desc: 'For networks and large enterprises.',
+  1123→  1123→      features: ['Unlimited firms', 'Dedicated Oracle tuning', 'SSO + audit logs', 'On-prem option', 'Dedicated CSM', '99.99% SLA'],
+  1124→  1124→      cta: 'Talk to Sales',
+  1125→  1125→      featured: false,
+  1126→  1126→    },
+  1127→  1127→  ];
+  1128→  1128→
+  1129→  1129→  return (
+  1130→  1130→    <section id="pricing" className="relative section-gap px-4 py-24 sm:px-6">
+  1131→  1131→      <div className="mx-auto max-w-7xl">
+  1132→  1132→        <Reveal className="mx-auto max-w-2xl text-center">
+  1133→  1133→          <SectionTag><IndianRupee className="h-3 w-3" /> Pricing</SectionTag>
+  1134→  1134→          <h2 className="mt-5 text-3xl font-semibold tracking-tight text-white sm:text-4xl md:text-5xl">
+  1135→  1135→            Simple pricing. <span className="accent-text">Serious leverage.</span>
+  1136→  1136→          </h2>
+  1137→  1137→
+  1138→  1138→          <div className="mt-7 inline-flex items-center gap-1 rounded-full glass-surface p-1">
+  1139→  1139→            <button
+  1140→  1140→              onClick={() => setYearly(false)}
+  1141→  1141→              className={`rounded-full px-4 py-1.5 text-xs font-semibold transition-colors ${!yearly ? 'bg-white text-black' : 'text-white/70 hover:text-white'}`}
+  1142→  1142→            >
+  1143→  1143→              Monthly
+  1144→  1144→            </button>
+  1145→  1145→            <button
+  1146→  1146→              onClick={() => setYearly(true)}
+  1147→  1147→              className={`rounded-full px-4 py-1.5 text-xs font-semibold transition-colors ${yearly ? 'bg-white text-black' : 'text-white/70 hover:text-white'}`}
+  1148→  1148→            >
+  1149→  1149→              Yearly <span className="ml-1 text-[10px] text-white/50">−20%</span>
+  1150→  1150→            </button>
+  1151→  1151→          </div>
+  1152→  1152→        </Reveal>
+  1153→  1153→
+  1154→  1154→        <div className="mt-14 grid grid-cols-1 gap-4 lg:grid-cols-3">
+  1155→  1155→          {tiers.map((t, i) => (
+  1156→  1156→            <Reveal key={t.name} delay={i * 0.08}>
+  1157→  1157→              <div
+  1158→  1158→                className={`flex h-full flex-col rounded-3xl p-7 hover-lift ${
+  1159→  1159→                  t.featured ? 'glass-surface-strong accent-ring' : 'glass-surface'
+  1160→  1160→                }`}
+  1161→  1161→              >
+  1162→  1162→                {t.featured && (
+  1163→  1163→                  <span className="mb-4 inline-flex w-fit items-center gap-1.5 rounded-full accent-gradient-soft px-3 py-1 text-[10px] font-semibold uppercase tracking-wider accent-text">
+  1164→  1164→                    <Sparkles className="h-3 w-3" /> Most popular
+  1165→  1165→                  </span>
+  1166→  1166→                )}
+  1167→  1167→                <h3 className="text-lg font-semibold text-white">{t.name}</h3>
+  1168→  1168→                <p className="mt-1 text-sm text-white/55">{t.desc}</p>
+  1169→  1169→                <div className="mt-5 flex items-end gap-1">
+  1170→  1170→                  {t.price === null ? (
+  1171→  1171→                    <span className="text-3xl font-semibold text-white">Custom</span>
+  1172→  1172→                  ) : (
+  1173→  1173→                    <>
+  1174→  1174→                      <span className="text-4xl font-semibold tracking-tight text-white">₹{t.price.toLocaleString('en-IN')}</span>
+  1175→  1175→                      <span className="mb-1 text-sm text-white/50">/mo</span>
+  1176→  1176→                    </>
+  1177→  1177→                  )}
+  1178→  1178→                </div>
+  1179→  1179→                <ul className="mt-6 flex-1 space-y-3">
+  1180→  1180→                  {t.features.map((f) => (
+  1181→  1181→                    <li key={f} className="flex items-start gap-2.5 text-sm text-white/75">
+  1182→  1182→                      <Check className="mt-0.5 h-4 w-4 shrink-0 accent-text" />
+  1183→  1183→                      {f}
+  1184→  1184→                    </li>
+  1185→  1185→                  ))}
+  1186→  1186→                </ul>
+  1187→  1187→                <div className="mt-7">
+  1188→  1188→                  {t.featured ? (
+  1189→  1189→                    <PrimaryButton onClick={onGetStarted} className="w-full">
+  1190→  1190→                      {t.cta}
+  1191→  1191→                      <ArrowRight className="h-3.5 w-3.5" />
+  1192→  1192→                    </PrimaryButton>
+  1193→  1193→                  ) : (
+  1194→  1194→                    <GhostButton onClick={onGetStarted} className="w-full">
+  1195→  1195→                      {t.cta}
+  1196→  1196→                    </GhostButton>
+  1197→  1197→                  )}
+  1198→  1198→                </div>
+  1199→  1199→              </div>
+  1200→  1200→            </Reveal>
+  1201→  1201→          ))}
+  1202→  1202→        </div>
+  1203→  1203→      </div>
+  1204→  1204→    </section>
+  1205→  1205→  );
+  1206→  1206→}
+  1207→  1207→
+  1208→  1208→/* ════════════════════════════════════════════════════════════════════════
+  1209→  1209→   15. SECURITY
+  1210→  1210→   ════════════════════════════════════════════════════════════════════════ */
+  1211→  1211→
+  1212→  1212→function SecuritySection() {
+  1213→  1213→  const badges = ['GSTN Compliant', 'RBI Aligned', 'SOC 2 Type II', 'ISO 27001', '256-bit Encryption', 'Daily Backups', 'India-hosted', 'DPDPA Ready'];
+  1214→  1214→  return (
+  1215→  1215→    <section id="security" className="relative section-gap px-4 py-24 sm:px-6">
+  1216→  1216→      <div className="mx-auto max-w-5xl">
+  1217→  1217→        <Reveal className="text-center">
+  1218→  1218→          <SectionTag><ShieldCheck className="h-3 w-3" /> Security</SectionTag>
+  1219→  1219→          <h2 className="mt-5 text-3xl font-semibold tracking-tight text-white sm:text-4xl md:text-5xl">
+  1220→  1220→            Built for the trust <span className="accent-text">Indian finance demands</span>
+  1221→  1221→          </h2>
+  1222→  1222→          <p className="mx-auto mt-4 max-w-2xl text-white/60">
+  1223→  1223→            Your data never leaves Indian soil. Every layer — from transit to storage to backup — is
+  1224→  1224→            encrypted, audited, and aligned with national standards.
+  1225→  1225→          </p>
+  1226→  1226→        </Reveal>
+  1227→  1227→
+  1228→  1228→        <Reveal delay={0.1} className="mt-12">
+  1229→  1229→          <div className="flex flex-wrap items-center justify-center gap-2.5">
+  1230→  1230→            {badges.map((b) => (
+  1231→  1231→              <span key={b} className="inline-flex items-center gap-1.5 rounded-full glass-surface px-4 py-2 text-xs font-medium text-white/75">
+  1232→  1232→                <Lock className="h-3 w-3 accent-text" />
+  1233→  1233→                {b}
+  1234→  1234→              </span>
+  1235→  1235→            ))}
+  1236→  1236→          </div>
+  1237→  1237→        </Reveal>
+  1238→  1238→
+  1239→  1239→        <Reveal delay={0.18} className="mt-12 grid grid-cols-1 gap-3 sm:grid-cols-3">
+  1240→  1240→          {[
+  1241→  1241→            { icon: Server, t: 'India data residency', d: 'Mumbai + Hyderabad regions. No cross-border data flow.' },
+  1242→  1242→            { icon: Globe, t: 'Sovereign-grade infra', d: 'Hosted on audited Indian cloud with private networking.' },
+  1243→  1243→            { icon: Lock, t: 'Encryption everywhere', d: 'TLS 1.3 in transit, AES-256 at rest, HSM-backed keys.' },
+  1244→  1244→          ].map((c) => (
+  1245→  1245→            <div key={c.t} className="rounded-2xl glass-surface p-6 hover-lift">
+  1246→  1246→              <GlassIcon icon={c.icon} />
+  1247→  1247→              <h3 className="mt-4 text-sm font-semibold text-white">{c.t}</h3>
+  1248→  1248→              <p className="mt-1.5 text-xs leading-relaxed text-white/55">{c.d}</p>
+  1249→  1249→            </div>
+  1250→  1250→          ))}
+  1251→  1251→        </Reveal>
+  1252→  1252→      </div>
+  1253→  1253→    </section>
+  1254→  1254→  );
+  1255→  1255→}
+  1256→  1256→
+  1257→  1257→/* ════════════════════════════════════════════════════════════════════════
+  1258→  1258→   16. FAQ
+  1259→  1259→   ════════════════════════════════════════════════════════════════════════ */
+  1260→  1260→
+  1261→  1261→function FAQItem({ q, a }: { q: string; a: string }) {
+  1262→  1262→  const [open, setOpen] = useState(false);
+  1263→  1263→  return (
+  1264→  1264→    <div className="rounded-2xl glass-surface overflow-hidden">
+  1265→  1265→      <button
+  1266→  1266→        onClick={() => setOpen((v) => !v)}
+  1267→  1267→        className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left"
+  1268→  1268→        aria-expanded={open}
+  1269→  1269→      >
+  1270→  1270→        <span className="text-sm font-medium text-white">{q}</span>
+  1271→  1271→        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white/5">
+  1272→  1272→          {open ? <Minus className="h-3.5 w-3.5 text-white/70" /> : <Plus className="h-3.5 w-3.5 text-white/70" />}
+  1273→  1273→        </span>
+  1274→  1274→      </button>
+  1275→  1275→      <AnimatePresence initial={false}>
+  1276→  1276→        {open && (
+  1277→  1277→          <motion.div
+  1278→  1278→            initial={{ height: 0, opacity: 0 }}
+  1279→  1279→            animate={{ height: 'auto', opacity: 1 }}
+  1280→  1280→            exit={{ height: 0, opacity: 0 }}
+  1281→  1281→            transition={{ duration: 0.3, ease: EASE }}
+  1282→  1282→            className="overflow-hidden"
+  1283→  1283→          >
+  1284→  1284→            <p className="px-5 pb-5 text-sm leading-relaxed text-white/60">{a}</p>
+  1285→  1285→          </motion.div>
+  1286→  1286→        )}
+  1287→  1287→      </AnimatePresence>
+  1288→  1288→    </div>
+  1289→  1289→  );
+  1290→  1290→}
+  1291→  1291→
+  1292→  1292→function FAQSection() {
+  1293→  1293→  const faqs = [
+  1294→  1294→    { q: 'Is GSTPilot approved by GSTN?', a: 'GSTPilot operates as a GST Suvidha Provider–aligned workflow layer. We generate return payloads in GSTN-compatible formats and support ARN tracking. Full ASP/GSP certification is in progress for direct filing.' },
+  1295→  1295→    { q: 'How does Oracle AI work?', a: 'Oracle is a deterministic intelligence layer — not a chatbot. It continuously evaluates your invoices, payments, receivables and returns, then surfaces proactive statements and prepared actions. It acts only with your approval.' },
+  1296→  1296→    { q: 'Can I manage multiple firms?', a: 'Yes. The Multi-Firm Command and Executive War Room are built specifically for CAs and networks operating many client firms from a single screen, with bulk filing and bulk reconciliation.' },
+  1297→  1297→    { q: 'Is my data secure?', a: 'All data is encrypted in transit (TLS 1.3) and at rest (AES-256), hosted on audited Indian cloud infrastructure in Mumbai and Hyderabad. We are SOC 2 Type II and ISO 27001 aligned, with daily encrypted backups.' },
+  1298→  1298→    { q: 'Do you support all GST return types?', a: 'Yes — GSTR-1, GSTR-3B, GSTR-9, GSTR-9C, CMP-08 and more, with ITC reconciliation across GSTR-2B, ledger matching, and automated compliance scoring.' },
+  1299→  1299→    { q: 'What is included in the free plan?', a: 'One firm, up to 25 clients, GST Cloud basics, and limited Oracle AI insights — enough to feel the difference. Upgrade anytime for unlimited firms and the full agent roster.' },
+  1300→  1300→    { q: 'How fast can I get started?', a: 'Most firms are live within a day. Onboarding collects your firm and GSTIN details, Oracle begins analyzing immediately, and the first returns can be prepared the same session.' },
+  1301→  1301→  ];
+  1302→  1302→  return (
+  1303→  1303→    <section className="relative section-gap px-4 py-24 sm:px-6">
+  1304→  1304→      <div className="mx-auto max-w-3xl">
+  1305→  1305→        <Reveal className="text-center">
+  1306→  1306→          <SectionTag><FileText className="h-3 w-3" /> FAQ</SectionTag>
+  1307→  1307→          <h2 className="mt-5 text-3xl font-semibold tracking-tight text-white sm:text-4xl">
+  1308→  1308→            Questions, <span className="accent-text">answered</span>
+  1309→  1309→          </h2>
+  1310→  1310→        </Reveal>
+  1311→  1311→        <StaggerGroup className="mt-12 space-y-3" stagger={0.05}>
+  1312→  1312→          {faqs.map((f) => (
+  1313→  1313→            <StaggerItem key={f.q}>
+  1314→  1314→              <FAQItem q={f.q} a={f.a} />
+  1315→  1315→            </StaggerItem>
+  1316→  1316→          ))}
+  1317→  1317→        </StaggerGroup>
+  1318→  1318→      </div>
+  1319→  1319→    </section>
+  1320→  1320→  );
+  1321→  1321→}
+  1322→  1322→
+  1323→  1323→/* ════════════════════════════════════════════════════════════════════════
+  1324→  1324→   17. CTA
+  1325→  1325→   ════════════════════════════════════════════════════════════════════════ */
+  1326→  1326→
+  1327→  1327→function CTASection({ onGetStarted, onBookDemo }: LandingPageProps) {
+  1328→  1328→  return (
+  1329→  1329→    <section className="relative section-gap overflow-hidden px-4 py-28 sm:px-6">
+  1330→  1330→      <Aurora />
+  1331→  1331→      <div className="relative z-10 mx-auto max-w-4xl text-center">
+  1332→  1332→        <Reveal>
+  1333→  1333→          <h2 className="text-4xl font-semibold leading-tight tracking-tight text-white sm:text-5xl md:text-6xl">
+  1334→  1334→            Run your entire financial operation on <span className="accent-text">one brain</span>.
+  1335→  1335→          </h2>
+  1336→  1336→          <p className="mx-auto mt-5 max-w-xl text-white/60">
+  1337→  1337→            Join the firms that have already replaced a dozen tools with GSTPilot Infinity. Start
+  1338→  1338→            free — no card required.
+  1339→  1339→          </p>
+  1340→  1340→          <div className="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row">
+  1341→  1341→            <PrimaryButton onClick={onGetStarted} className="px-7 py-3.5 text-base">
+  1342→  1342→              Get Started Free
+  1343→  1343→              <ArrowRight className="h-4 w-4" />
+  1344→  1344→            </PrimaryButton>
+  1345→  1345→            <GhostButton onClick={onBookDemo} className="px-7 py-3.5 text-base">
+  1346→  1346→              Talk to Sales
+  1347→  1347→            </GhostButton>
+  1348→  1348→          </div>
+  1349→  1349→        </Reveal>
+  1350→  1350→      </div>
+  1351→  1351→    </section>
+  1352→  1352→  );
+  1353→  1353→}
+  1354→  1354→
+  1355→  1355→/* ════════════════════════════════════════════════════════════════════════
+  1356→  1356→   18. FOOTER
+  1357→  1357→   ════════════════════════════════════════════════════════════════════════ */
+  1358→  1358→
+  1359→  1359→function Footer() {
+  1360→  1360→  const cols = [
+  1361→  1361→    { h: 'Product', links: ['Features', 'Oracle AI', 'Pricing', 'Security', 'App Store'] },
+  1362→  1362→    { h: 'Company', links: ['About', 'Careers', 'Blog', 'Press'] },
+  1363→  1363→    { h: 'Resources', links: ['Docs', 'API', 'Guides', 'Status'] },
+  1364→  1364→    { h: 'Legal', links: ['Privacy', 'Terms', 'GSTN Compliance', 'RBI Alignment'] },
+  1365→  1365→  ];
+  1366→  1366→  return (
+  1367→  1367→    <footer className="mt-auto border-t border-white/[0.06] px-4 py-12 sm:px-6">
+  1368→  1368→      <div className="mx-auto max-w-7xl">
+  1369→  1369→        <div className="grid grid-cols-2 gap-8 md:grid-cols-5">
+  1370→  1370→          <div className="col-span-2 md:col-span-1">
+  1371→  1371→            <div className="flex items-center gap-2.5">
+  1372→  1372→              <span className="flex h-8 w-8 items-center justify-center rounded-lg glass-surface">
+  1373→  1373→                <InfinityIcon className="h-4 w-4 accent-text" />
+  1374→  1374→              </span>
+  1375→  1375→              <span className="text-sm font-semibold text-white">
+  1376→  1376→                GSTPilot Infinity<span className="accent-text">™</span>
+  1377→  1377→              </span>
+  1378→  1378→            </div>
+  1379→  1379→            <p className="mt-3 text-xs leading-relaxed text-white/45">
+  1380→  1380→              The Financial Brain of India.
+  1381→  1381→            </p>
+  1382→  1382→            <div className="mt-4 flex gap-2">
+  1383→  1383→              {[Twitter, Github, Linkedin].map((Icon, i) => (
+  1384→  1384→                <a
+  1385→  1385→                  key={i}
+  1386→  1386→                  href="#"
+  1387→  1387→                  className="flex h-8 w-8 items-center justify-center rounded-lg glass-surface text-white/60 transition-colors hover:text-white"
+  1388→  1388→                  aria-label="Social link"
+  1389→  1389→                >
+  1390→  1390→                  <Icon className="h-3.5 w-3.5" />
+  1391→  1391→                </a>
+  1392→  1392→              ))}
+  1393→  1393→            </div>
+  1394→  1394→          </div>
+  1395→  1395→
+  1396→  1396→          {cols.map((c) => (
+  1397→  1397→            <div key={c.h}>
+  1398→  1398→              <h4 className="text-xs font-semibold uppercase tracking-wider text-white/50">{c.h}</h4>
+  1399→  1399→              <ul className="mt-4 space-y-2.5">
+  1400→  1400→                {c.links.map((l) => (
+  1401→  1401→                  <li key={l}>
+  1402→  1402→                    <a href="#" className="text-sm text-white/55 transition-colors hover:text-white">
+  1403→  1403→                      {l}
+  1404→  1404→                    </a>
+  1405→  1405→                  </li>
+  1406→  1406→                ))}
+  1407→  1407→              </ul>
+  1408→  1408→            </div>
+  1409→  1409→          ))}
+  1410→  1410→        </div>
+  1411→  1411→
+  1412→  1412→        <div className="mt-10 flex flex-col items-center justify-between gap-4 border-t border-white/[0.06] pt-6 sm:flex-row">
+  1413→  1413→          <p className="text-xs text-white/40">© 2025 GSTPilot Infinity. All rights reserved.</p>
+  1414→  1414→          <p className="text-xs text-white/40">Made in India · GSTN Compliant · RBI Aligned</p>
+  1415→  1415→        </div>
+  1416→  1416→      </div>
+  1417→  1417→    </footer>
+  1418→  1418→  );
+  1419→  1419→}
+  1420→  1420→
+  1421→  1421→/* ════════════════════════════════════════════════════════════════════════
+  1422→  1422→   MAIN
+  1423→  1423→   ════════════════════════════════════════════════════════════════════════ */
+  1424→  1424→
+  1425→  1425→export default function LandingPage({ onGetStarted, onBookDemo }: LandingPageProps) {
+  1426→  1426→  return (
+  1427→  1427→    <div className="relative min-h-screen flex flex-col bg-black text-white">
+  1428→  1428→      <ScrollProgress />
+  1429→  1429→      <Navbar onGetStarted={onGetStarted} />
+  1430→  1430→      <div className="flex-1">
+  1431→  1431→        <HeroSection onGetStarted={onGetStarted} onBookDemo={onBookDemo} />
+  1432→  1432→        <FeaturesSection />
+  1433→  1433→        <CapabilitiesSection />
+  1434→  1434→        <AIAgentsSection />
+  1435→  1435→        <CloudSection
+  1436→  1436→          tag="GST Cloud"
+  1437→  1437→          icon={FileText}
+  1438→  1438→          title="File every return,"
+  1439→  1439→          highlight="flawlessly."
+  1440→  1440→          desc="GSTR-1, 3B, 9, 9C and CMP-08 with automatic ITC reconciliation, ARN generation and live compliance scoring — across every client firm."
+  1441→  1441→          bullets={[
+  1442→  1442→            'Two-way ITC reconciliation against GSTR-2B',
+  1443→  1443→            'Auto ARN generation & status tracking',
+  1444→  1444→            'Live compliance scoring per client',
+  1445→  1445→            'Bulk filing across hundreds of firms',
+  1446→  1446→          ]}
+  1447→  1447→          mock={<ReturnsMock />}
+  1448→  1448→        />
+  1449→  1449→        <CloudSection
+  1450→  1450→          tag="Banking Cloud"
+  1451→  1451→          icon={Landmark}
+  1452→  1452→          title="Your bank, finally"
+  1453→  1453→          highlight="in one place."
+  1454→  1454→          desc="Live feeds from every account, auto-reconciliation against ledgers, payment tracking and working-capital intelligence — reconciled while you sleep."
+  1455→  1455→          bullets={[
+  1456→  1456→            'Live bank feeds across HDFC, ICICI, SBI, Axis & more',
+  1457→  1457→            'Auto-reconciliation with ledger entries',
+  1458→  1458→            'Payment tracking — partial, full, scheduled',
+  1459→  1459→            'Working-capital & cash-position intelligence',
+  1460→  1460→          ]}
+  1461→  1461→          reverse
+  1462→  1462→          mock={<BankMock />}
+  1463→  1463→        />
+  1464→  1464→        <CloudSection
+  1465→  1465→          tag="Invoice Cloud"
+  1466→  1466→          icon={Receipt}
+  1467→  1467→          title="Create. Track. Reconcile."
+  1468→  1468→          highlight="Execute."
+  1469→  1469→          desc="The full invoice lifecycle — sales, purchase, receivables, payables, TDS and payroll — with QR-ready PDFs, e-mail & WhatsApp delivery, and auto-collections."
+  1470→  1470→          bullets={[
+  1471→  1471→            'Sales invoices + purchase bills in one engine',
+  1472→  1472→            'Receivables & payables with due-date forecasting',
+  1473→  1473→            'TDS Cloud + Payroll Cloud with payslips',
+  1474→  1474→            'QR-ready PDFs, e-mail & WhatsApp delivery',
+  1475→  1475→          ]}
+  1476→  1476→          mock={<InvoiceMock />}
+  1477→  1477→        />
+  1478→  1478→        <CloudSection
+  1479→  1479→          tag="Execution Cloud"
+  1480→  1480→          icon={Workflow}
+  1481→  1481→          title="From insight to"
+  1482→  1482→          highlight="execution."
+  1483→  1483→          desc="Autopilot, Executive War Room, Run-My-Business and the Decision Engine turn Oracle's intelligence into ranked, executable actions — across firms."
+  1484→  1484→          bullets={[
+  1485→  1485→            'Autopilot runs repeatable operations automatically',
+  1486→  1486→            'Executive War Room prioritises every action',
+  1487→  1487→            'Decision Engine ranks what to do next — and why',
+  1488→  1488→            'Bulk execute across hundreds of firms',
+  1489→  1489→          ]}
+  1490→  1490→          reverse
+  1491→  1491→          mock={<WarRoomMock />}
+  1492→  1492→        />
+  1493→  1493→        <OracleAISection />
+  1494→  1494→        <InteractiveDemoSection onGetStarted={onGetStarted} />
+  1495→  1495→        <StatisticsSection />
+  1496→  1496→        <LogosSection />
+  1497→  1497→        <TestimonialsSection />
+  1498→  1498→        <PricingSection onGetStarted={onGetStarted} />
+  1499→  1499→        <SecuritySection />
+  1500→  1500→        <FAQSection />
+  1501→  1501→        <CTASection onGetStarted={onGetStarted} onBookDemo={onBookDemo} />
+  1502→  1502→      </div>
+  1503→  1503→      <Footer />
+  1504→  1504→    </div>
+  1505→  1505→  );
+  1506→  1506→}
+  1507→  1507→

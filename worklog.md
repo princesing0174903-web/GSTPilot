@@ -2700,3 +2700,177 @@ Stage Summary:
 - Search engine + design-system generator verified working from installed path — available on-demand for any future UI/UX query.
 - Combined with UIPRO-1's extractive work (globals.css enhancement layer + src/components/ui-pro/ primitives), GSTPilot now has BOTH the baked-in premium design system AND the live design-intelligence tool installed.
 - Zero file replacements, zero deletions, zero business-logic changes. Lint clean, dev server 200.
+
+---
+Task ID: 2-c
+Agent: Theme Consistency Fixes
+Task: Premium-ize Sonner toasts + tokenize Sign Out + AppSidebar avatar (UI-only)
+
+Work Log:
+- Read worklog tail (UIPRO-1 / UIPRO-INSTALL-2 confirmed premium utility classes available: glass-surface, premium-backdrop, ring-accent-blue, badge-premium) and globals.css 665–965 to confirm premium layer tokens.
+- Fix 1 — `/home/z/my-project/src/components/ui/sonner.tsx`: Rewrote `<Toaster>` props to add premium glass treatment. Kept `'use client'`, `useTheme` import/logic, `theme={theme}` prop, `className="toaster group"`, and `{...props}` spread. Removed reliance on sonner default colored toasts by introducing `toastOptions.classNames` mapping (toast -> `glass-surface border-white/[0.10] !backdrop-blur-2xl !rounded-xl !shadow-[0_20px_50px_-12px_rgba(0,0,0,0.7)]`; title -> `!text-white !font-semibold`; description -> `!text-white/60`; actionButton -> `!bg-[#3B82F6] !text-white`; cancelButton -> `!bg-white/[0.06] !text-white/70 !border-white/[0.08]`). Updated inline `style` to set `--normal-bg: transparent` (via `['--normal-bg' as any]`) and `--normal-border: transparent` so the `glass-surface` background shows through. Component export `Toaster` unchanged. No `richColors` prop was present originally, so nothing to remove.
+- Fix 2 — Sign Out dropdown items: Found light-red treatment in 2 files via targeted Read of surrounding context (page.tsx line 309 dashboard top-bar avatar dropdown; app-sidebar.tsx line 364 sidebar footer dropdown).
+  - `/home/z/my-project/src/app/page.tsx` line 309: `text-red-600 focus:text-red-600 focus:bg-red-50` → `text-red-400 focus:text-red-300 focus:bg-red-500/10`.
+  - `/home/z/my-project/src/components/app-sidebar.tsx` line 364: same token swap `text-red-600 focus:text-red-600 focus:bg-red-50` → `text-red-400 focus:text-red-300 focus:bg-red-500/10`.
+  - No standalone `bg-red-50` existed on either item; only `focus:bg-red-50` was present and was swapped. Used targeted Edit (not replace_all) so each Sign Out item is unique.
+- Fix 3 — AppSidebar avatar fallbacks: Read context around lines 326 and 340 in app-sidebar.tsx. Both `AvatarFallback` instances used light-mode `bg-emerald-100 text-emerald-700` with identical surrounding markup, so used MultiEdit with two distinct old_str contexts (each Avatar wrapped differently — first inside `shrink-0` Avatar, second inside non-shrink Avatar within DropdownMenuContent). Both changed to `bg-emerald-500/15 text-emerald-300 border border-emerald-500/20`. No other lines touched.
+- Verification: `cd /home/z/my-project && bun run lint 2>&1 | tail -30` → only prints `$ eslint .` with no warnings or errors (clean).
+
+Stage Summary:
+- Files changed (3): src/components/ui/sonner.tsx, src/app/page.tsx (1 line, line 309), src/components/app-sidebar.tsx (3 spots — Sign Out item + 2 AvatarFallbacks).
+- Classes tokenized:
+  - Sonner: glass-surface + border-white/[0.10] + !backdrop-blur-2xl + !rounded-xl + premium dark shadow on toast; white title; white/60 description; #3B82F6 action button; white/[0.06] cancel button. `--normal-bg` set transparent to allow glass-surface to show.
+  - Sign Out (page.tsx + app-sidebar.tsx): text-red-600 → text-red-400; focus:bg-red-50 → focus:bg-red-500/10; focus:text-red-600 → focus:text-red-300.
+  - AppSidebar AvatarFallback ×2: bg-emerald-100 text-emerald-700 → bg-emerald-500/15 text-emerald-300 border border-emerald-500/20.
+- Zero logic / handler / prop / export changes. All imports intact. `'use client'` retained on sonner.tsx.
+- Lint result: PASS (0 errors, 0 warnings).
+
+---
+Task ID: 2-d
+Agent: Dashboard ProSkeleton Adoption
+Task: Migrate DashboardPage Skeleton→ProSkeleton + accent blue shadows + hover-lift (UI-only)
+
+Work Log:
+- Read worklog tail (UIPRO-1 + UIPRO-INSTALL-2 context) to understand the ui-pro primitives layer already installed.
+- Read /home/z/my-project/src/components/ui-pro/index.tsx — confirmed ProSkeleton signature: `lines?` prop (default 1), single-line mode applies `skeleton-shimmer h-3 w-full` + className via cn() (twMerge), so arbitrary h-/w-/rounded- className overrides resolve correctly.
+- Read /home/z/my-project/src/components/dashboard/DashboardPage.tsx (852 lines) entirely. Mapped:
+    * Imports (lines 1-43): Skeleton from '@/components/ui/skeleton'; Loader2 from lucide-react.
+    * KpiCard (line 172): glass-surface rounded-2xl p-6 + raw cyan hover shadow `rgba(6,182,212,0.18)`.
+    * SectionCard (line 220): glass-surface rounded-2xl h-full flex flex-col — no hover-lift.
+    * DashboardSkeleton (lines 252-271): 4 × <Skeleton> usages (h-9 w-64, h-4 w-80, h-32 rounded-2xl ×3, h-72 rounded-2xl ×3).
+    * Quick File button (line 839): <Loader2 className="h-3.5 w-3.5 animate-spin" /> inside an accent-gradient button.
+    * No inline green/amber/red status-dot spans found (grep `rounded-full bg-(green|red|amber|emerald|yellow|rose)` → no matches).
+- Verified cn() in src/lib/utils.ts uses twMerge(clsx(...)) — safe for ProSkeleton className override.
+- Confirmed spinner-premium CSS (globals.css L922-929): border-top-color = var(--accent-blue) #3B82F6 → would be low-contrast inside the accent-gradient Quick File button. Per "skip risky swaps" rule, LEFT Loader2 untouched.
+
+Edits applied (MultiEdit, single pass):
+  1. Imports: removed `import { Skeleton } from '@/components/ui/skeleton';`, added `import { ProSkeleton } from '@/components/ui-pro';` after the Card import. Loader2 import retained (still used at line 839).
+  2. KpiCard wrapper (L172): `hover:shadow-[0_0_32px_-8px_rgba(6,182,212,0.18)]` (cyan) → `hover:shadow-[0_0_32px_-8px_rgba(59,130,246,0.25)]` (accent blue #3B82F6 @ 0.25); added `hover-lift` class.
+  3. SectionCard wrapper (L220): added `hover-lift` class to `glass-surface rounded-2xl h-full flex flex-col`.
+  4. DashboardSkeleton (L256-266): all 4 `<Skeleton>` → `<ProSkeleton>` with identical className props preserved (h-9 w-64, h-4 w-80, h-32 rounded-2xl, h-72 rounded-2xl). cn()/twMerge resolves the height/width overrides cleanly over ProSkeleton's default `h-3 w-full`.
+- KpiCard NOT upgraded to <ProStat> — existing layout has a custom icon chip (accent-gradient-soft h-10 w-10 rounded-xl) + subtitle line, which is more complex than ProStat's label/value/delta/tone API. Per requirement #2 ("only if drop-in"), left as-is but ensured glass-surface + hover-lift present.
+- Quick-action footer card (L818) NOT given hover-lift — it is not a SectionCard wrapper and only the inner Button is interactive; adding hover-lift would falsely signal card-level clickability.
+- All Framer Motion animations (motion.div with initial/animate/transition on KpiCard, SectionCard, footer) preserved untouched.
+- Zero changes to data fetching, state, handlers, props, business logic, exports, or component signature.
+
+Verification:
+- `cd /home/z/my-project && bun run lint 2>&1 | tail -30` → `$ eslint .` with zero output (clean, 0 errors, 0 warnings, no unused imports).
+- Post-edit grep confirms: 0 remaining `Skeleton` references except the `DashboardSkeleton` function name (intentional); 0 remaining `rgba(6,182,212` cyan shadows; `rgba(59,130,246,0.25)` blue shadow present once on KpiCard; `hover-lift` present on KpiCard + SectionCard; ProSkeleton import live at line 8.
+
+Stage Summary:
+- 4 × Skeleton → ProSkeleton swaps (DashboardSkeleton loader: 2 header lines + 3 KPI blocks + 3 section blocks).
+- 0 × ProStat adoptions (KpiCard layout too custom — skipped per drop-in rule; given hover-lift instead).
+- 0 × ProStatusDot adoptions (no inline colored status dots existed in DashboardPage).
+- 0 × ProSpinner adoptions (Loader2 lives inside accent-gradient button — blue-on-blue contrast risk; skipped per safe-swap rule).
+- 1 × shadow color change: cyan rgba(6,182,212,0.18) → accent blue rgba(59,130,246,0.25) on KpiCard (theme spec alignment).
+- 2 × hover-lift class additions: KpiCard wrapper + SectionCard wrapper.
+- Lint: PASS (0 errors, 0 warnings, no unused imports).
+- DashboardPage now showcases ui-pro ProSkeleton shimmer + premium hover-lift + spec-correct accent-blue glow.
+
+---
+Task ID: 2-b
+Agent: Landing Page Sections
+Task: Add "How It Works" + "Dashboard Showcase" sections to LandingPage.tsx (additive)
+
+Work Log:
+- Read worklog tail (last 100 lines) to understand prior RESTORE-1 + UIPRO-1/2 context (pure-black cinematic theme, motion primitives, glass-surface/accent-gradient/accent-text utilities, UI Pro Max enhancement layer).
+- Read LandingPage.tsx entirely (~1507→1766 lines after edit): confirmed motion primitives (Reveal, StaggerGroup, StaggerItem, Aurora, ScrollProgress, GlassIcon, PrimaryButton, GhostButton, SectionTag), 18 existing sections, and main LandingPage({onGetStarted,onBookDemo}) signature.
+- Read globals.css lines 665–965 (UI Pro Max enhancement layer: --accent-blue #3B82F6, --border-premium 0.12, --text-secondary-premium 0.75, press-scale, glass-morph, table-premium, status-dot, reduced-motion a11y) + lines 155–214 (glass-surface 0.04 / glass-surface-strong 0.06 / accent-gradient emerald→cyan→blue / accent-text background-clip:text / hover-lift / shadow-premium).
+- Confirmed Tailwind v4 in use (so 3D transforms available) but implemented the showcase tilt via inline `perspective: 2000px` parent + Framer Motion `animate={{ y:[0,-8,0], rotateX:2 }}` for maximum reliability across the Reveal wrapper.
+- Created HowItWorksSection (id="how-it-works", SectionTag "How It Works", headline "From chaos to clarity in four moves."):
+  • 4 glass cards (Database/Brain/Workflow/TrendingUp) in responsive grid (1 col mobile → 2 col sm → 4 col lg).
+  • Each card: big gradient step number 01–04 (accent-text, text-5xl) + glass icon chip top-right, title, 1-line description.
+  • Desktop-only connecting gradient line (absolute, top-12, h-px, linear-gradient white→blue 0.40→white, hidden lg:block) running through the step numbers.
+  • Motion: Reveal header + StaggerGroup/StaggerItem cards (stagger 0.1) reusing existing revealVariants blur-in.
+- Created DashboardShowcaseSection (id="showcase", SectionTag "Product", headline "The operating system for Indian finance."):
+  • Aurora background (opacity-40) for cinematic depth.
+  • Floating mock dashboard: outer `perspective:2000px` div → motion.div with `animate={{ y:[0,-8,0], rotateX:2 }}` infinite 6s ease-in-out → glass-surface-strong rounded-3xl frame (shadow-premium).
+  • Top bar: logo chip + search pill (FileSearch) + Live status pill + Bell + avatar (RM, accent-gradient).
+  • Left sidebar (sm+): 5 icon rows (Layers active in accent-gradient-soft, FileText, Landmark, Receipt, Target).
+  • 3 KPI cards: Revenue ₹4.2Cr (+12.4% QoQ, accent-text), GST Liability ₹12.4L (Due 20th, amber), Filings Due 3 (This week, white).
+  • SVG mini area chart (lg:col-span-3): linearGradient area fill (#3b82f6 0.45→0) + gradient stroke line (emerald→cyan→blue), 11-point upward curve.
+  • 4-row recent activity table (lg:col-span-2): GSTR-3B filed/Invoice paid/ITC reconciled/Payment received with client, amount, status pill (emerald/muted).
+  • Fully responsive: sidebar hides on mobile, KPI cards stack, chart+table stack to single column.
+- Inserted BOTH section component definitions between WarRoomMock and OracleAISection (after the Cloud section group, before CTASection as required).
+- Added 2 JSX lines to main LandingPage return: `<HowItWorksSection />` + `<DashboardShowcaseSection />` between the Execution Cloud CloudSection and `<OracleAISection />`. Zero changes to any existing section, prop, handler, state, or the export signature.
+- Zero new imports needed — reused all existing Lucide icons (Database, Brain, Workflow, TrendingUp, Layers, FileText, Landmark, Receipt, Target, FileSearch, Bell, IndianRupee, CalendarClock) and the existing motion/Aurora/Reveal/StaggerGroup/StaggerItem/SectionTag primitives.
+- Verification:
+  • `bun run lint` → PASS (0 errors, no output).
+  • `bunx tsc --noEmit` → 0 errors in LandingPage.tsx (360 pre-existing errors are all in unrelated files like firestore-service.ts; none reference landing).
+  • Dev server (Next 16.1.3 Turbopack) compiled `/` clean: HTTP 200, 54KB, 7.9s compile, no errors/warnings in dev log.
+  • Agent Browser (1440×900): both new section IDs present in DOM — order confirmed `top → features → [Capabilities/AIAgents/4 CloudSections without ids] → how-it-works → showcase → oracle → pricing → security`. New sections sit exactly between Execution Cloud and Oracle AI as required.
+  • DOM content verified: #how-it-works h2 = "From chaos to clarity in four moves."; #showcase h2 = "The operating system for Indian finance."; 4 step numbers [01,02,03,04]; 3 KPI values [₹4.2Cr, ₹12.4L, 3].
+  • Console: 0 page errors, 0 React warnings (only standard React DevTools info + Firebase Auth null-state log).
+  • Screenshots captured (/tmp/how-it-works.png, /tmp/showcase.png) — both valid 1440×900.
+  • Export signature intact: `export default function LandingPage({ onGetStarted, onBookDemo }: LandingPageProps)` at line 1682.
+
+Stage Summary:
+- 2 new sections added additively, zero existing code touched:
+  1. HowItWorksSection — 4-step user journey (Connect → Analyze → Automate → Scale), gradient step numbers, glass cards, desktop connecting gradient line, Reveal+Stagger motion.
+  2. DashboardShowcaseSection — cinematic floating dashboard mockup (perspective tilt rotateX:2 + infinite y-float 6s), glass frame with sidebar (5 icons) + top bar (search/avatar/bell) + 3 KPI cards (₹4.2Cr/₹12.4L/3) + SVG gradient area chart + 4-row activity table.
+- Motion: reused Reveal (blur-in whileInView), StaggerGroup/StaggerItem (stagger 0.1), Aurora; added Framer Motion `animate={{ y:[0,-8,0], rotateX:2 }}` infinite float for the showcase.
+- Styling: matched existing conventions exactly — glass-surface / glass-surface-strong (0.04/0.06), accent-text / accent-gradient / accent-gradient-soft (emerald→cyan→blue), hover-lift, shadow-premium, section-gap, SectionTag, white/60 secondaries, white/10 borders, #3B82F6 blue accent alongside existing emerald gradient.
+- Responsive: mobile-first (1 col → 2 col sm → 4 col lg for How It Works; sidebar hides on mobile, KPI/table/chart stack on showcase).
+- No new dependencies, no new imports, no changes to LandingPage signature/props/handlers/state, no existing sections modified/reordered/renamed/deleted.
+- Lint clean, tsc clean (for LandingPage), dev server 200, browser-verified DOM + console clean.
+
+---
+Task ID: 2-a
+Agent: CommandPalette Premium Upgrade
+Task: Upgrade CommandPalette.tsx to premium cinematic glass + motion (UI-only)
+
+Work Log:
+- Read worklog tail (last 100 lines) — prior 2-b/2-d/sonner/sidebar premium upgrades confirmed ui-pro primitives layer installed and the established class vocabulary (glass-surface-strong, premium-backdrop, badge-premium, accent-blue #3B82F6, modalEnterVariants/springModalTransition/backdropVariants).
+- Read /home/z/my-project/src/components/ui-pro/index.tsx — confirmed exports: modalEnterVariants {hidden:{opacity:0,scale:0.96,y:8}, visible:{opacity:1,scale:1,y:0}, exit:{opacity:0,scale:0.97,y:6}}, springModalTransition {type:'spring', damping:20, stiffness:90}, backdropVariants {hidden/visible/exit opacity}. Also ProButton/ProCard/ProSpinner/ProSkeleton/ProBadge/ProStat available.
+- Read globals.css L665–965 (UI Pro Max layer) + L150–219 (glass-surface-strong = bg rgba(255,255,255,0.06) + blur(32px) saturate(160%) + border 1px rgba(255,255,255,0.10); premium-backdrop = rgba(0,0,0,0.72) + blur(8px) saturate(120%); badge-premium = pill bg-white/[0.05] border-white/[0.08] text-white/75).
+- Read CommandPalette.tsx fully (821→826 lines). Confirmed: 'use client'; already imports motion+AnimatePresence from framer-motion; uses custom motion.div overlay+modal (NOT shadcn CommandDialog — the Command* imports are unused but lint passes so left untouched per "don't remove imports" rule); CommandItemRow is a local sub-component with its own motion.div + hovered state; Ctrl+K keyboard logic, Firestore search, favorites/recent localStorage, and all handlers preserved.
+- Applied all 10 requirements via single MultiEdit pass (13 atomic edits), then fixed one `)>` → `)}` JSX typo introduced in the empty-state block.
+
+Edits applied:
+  1. Import: added `import { modalEnterVariants, springModalTransition, backdropVariants } from '@/components/ui-pro';` after the command import.
+  2. Backdrop overlay: replaced inline `initial/animate/exit/transition={{duration:0.15}}` + `bg-black/50 backdrop-blur-sm` with `variants={backdropVariants}` + `initial="hidden" animate="visible" exit="exit"` + `premium-backdrop` class.
+  3. Modal motion.div: replaced inline `initial/animate/exit/transition={{duration:0.15,ease:'easeOut'}}` with `variants={modalEnterVariants}` + `initial="hidden" animate="visible" exit="exit"` + `transition={springModalTransition}`.
+  4. Dialog content: `rounded-xl border bg-background shadow-2xl` → `glass-surface-strong rounded-2xl shadow-[0_24px_70px_-12px_rgba(0,0,0,0.8)]` (glass-surface-strong provides the border-white/[0.10] + backdrop-blur-32px natively).
+  5. Search header row: `px-4 py-3 border-b` → `px-4 py-3.5 border-b border-white/[0.08] bg-white/[0.03] transition-colors focus-within:border-[#3B82F6]/50 focus-within:ring-1 focus-within:ring-[#3B82F6]/40`; Search icon `text-muted-foreground` → `text-white/50`; input `placeholder:text-muted-foreground` → `text-white placeholder:text-white/40`; ESC kbd → `badge-premium hidden sm:inline-flex font-mono text-[10px]`.
+  6. Empty state: Search icon `text-muted-foreground/40` → `text-white/25`; "No results" `text-muted-foreground` → `text-white/60`; hint `text-muted-foreground/60` → `text-white/40`.
+  7. All 8 section-heading spans (Favorites/Recent/Commands/Clients/Invoices/Returns/Documents/Activities): `text-xs font-medium text-muted-foreground uppercase tracking-wider` → `text-[10px] font-semibold text-white/40 uppercase tracking-[0.12em]` (replace_all).
+  8. All 5 section count badges ("N found"): `text-[10px] text-muted-foreground/60 ml-auto` → `text-[10px] text-white/40 ml-auto` (replace_all).
+  9. Section heading icons Clock + Zap: `text-muted-foreground` → `text-white/40` (semantic colored icons emerald-600/amber-600/blue-600/orange-600/purple-600/amber-500 left untouched — they encode entity type).
+  10. Footer: `border-t bg-muted/30 px-4 py-2 ... text-[10px] text-muted-foreground` → `border-t border-white/[0.06] px-4 py-2.5 ... text-xs text-white/45`.
+  11. All 3 footer kbd className (↑↓ / ↵ / esc): `rounded border bg-background px-1 py-0.5 font-mono` → `badge-premium font-mono text-[10px]` (replace_all).
+  12. CommandItemRow: outer motion.div `hover:bg-accent` → `hover:bg-white/[0.06]` + added `relative` + `duration-150`; added absolute left accent bar `<span className="absolute left-0 top-1/2 h-5 w-[2px] -translate-y-1/2 rounded-full bg-[#3B82F6] opacity-0 group-hover:opacity-100 transition-opacity duration-150" />`; icon chip `bg-muted/60` → `bg-white/[0.04]` + `group-hover:bg-[#3B82F6]/10`; Icon `text-muted-foreground` → `text-white/50 group-hover:text-[#3B82F6]`; label `text-sm font-medium` → `text-sm font-medium text-white`; description `text-muted-foreground` → `text-white/45`; favorite button `hover:bg-accent` → `hover:bg-white/[0.08]`; non-favorite Star `text-muted-foreground/60` → `text-white/40`; shortcut kbd → `badge-premium hidden sm:inline-flex font-mono text-[10px]`; trailing ArrowRight `text-muted-foreground/0 group-hover:text-muted-foreground/60` → `text-white/0 group-hover:text-white/50`. All onClick/onMouseEnter/onMouseLeave/whileHover/transition + hovered state preserved.
+
+Verification:
+- `cd /home/z/my-project && bun run lint 2>&1 | tail -30` → `$ eslint .` with zero output (PASS, 0 errors, 0 warnings). Fixed one self-introduced JSX typo (`)>` → `)}` at line 516) before final pass.
+- `bunx tsc --noEmit | rg CommandPalette` → no errors referencing the file.
+- Post-edit grep confirms: 0 remaining `text-muted-foreground|bg-muted|bg-background|bg-accent|bg-black/50|backdrop-blur-sm|shadow-2xl` in the file.
+- Export intact: `export default function CommandPalette()` at line 124. `'use client'` retained. CommandItemRow local component signature unchanged. All 20 Lucide icon imports + 5 Firestore hooks + 8 shadcn Command imports + framer-motion + new ui-pro import all present.
+
+Stage Summary:
+- 1 file touched: src/components/command-palette/CommandPalette.tsx (821 → 826 lines; +1 import, +1 accent-bar span, className upgrades only).
+- Motion: migrated both overlay + modal from inline initial/animate/exit/transition objects to shared variants from ui-pro — overlay uses backdropVariants, modal uses modalEnterVariants + springModalTransition (spring damping:20 stiffness:90). AnimatePresence wrapper preserved.
+- Glass treatment: dialog content = glass-surface-strong (bg 0.06 + blur 32px + border 0.10) + rounded-2xl + custom cinematic shadow `0_24px_70px_-12px_rgba(0,0,0,0.8)`. Backdrop = premium-backdrop (rgba(0,0,0,0.72) + blur 8px).
+- Accent system: #3B82F6 used for search focus ring (focus-within:border + ring), active command left accent bar (2px), active icon color, active icon-chip tint (#3B82F6/10). Theme-spec aligned.
+- Typography: section headings → text-[10px] uppercase tracking-[0.12em] text-white/40 font-semibold; body text white / white/45 / white/50 / white/60 hierarchy; kbd → badge-premium pills (bg-white/[0.05] border-white/[0.08] text-white/75 + font-mono text-[10px] override).
+- Zero functional changes: no props/state/handlers/keyboard-shortcut/search/command-registration logic touched. Ctrl+K toggle, Escape close, query filter, favorites toggle, recent tracking, all 5 entity-type handlers, and CommandItemRow onClick/whileHover preserved exactly.
+- Lint: PASS (0 errors, 0 warnings).
+
+---
+Task ID: 3
+Agent: Main (UI/UX Upgrade Lead)
+Task: LoginPage.tsx + OnboardingFlow.tsx premium dark rebuild (UI-only, auth/onboarding logic 100% preserved)
+
+Work Log:
+- Read full LoginPage.tsx (570 lines) — identified 14 light-mode hardcoded patterns: bg-white right panel, text-slate-*, bg-red-50/bg-emerald-50 error/success states, border-slate-200 inputs, bg-emerald-600 CTAs.
+- MultiEdit pass on LoginPage.tsx (8 edits): loading screen bg-gray-950→bg-black + spinner-premium; left panel from-slate-950→from-black + indigo glow→#3B82F6; right panel bg-white→bg-black; all text-slate-*→text-white/55-75; error state bg-red-50→bg-red-500/10 + text-red-200/400; success state bg-emerald-50→bg-emerald-500/10 + text-emerald-200/400; all inputs →bg-white/[0.03] border-white/[0.08] text-white focus:border-[#3B82F6]; Google button→glass-surface; divider chip bg-white→bg-black; CTAs bg-emerald-600→bg-white text-black press-scale glow-accent-btn; checkbox accent→#3B82F6; links text-emerald-600→text-[#3B82F6].
+- Preserved 100%: handleEmailSignIn, handleSignUp, handleGoogleSignIn, handleForgotPassword, useAuth, all imports, LoginPageProps signature, modeTitles/modeSubtitles, leftBenefits, switchMode, clearErrors, all motion variants.
+- Read OnboardingFlow.tsx (1159 lines) — identified 20 light-mode patterns: bg-white root/header/footer, bg-emerald-100 icon containers (4x), bg-emerald-600 CTAs (3x), from-emerald-400 to-teal-600 gradient (2x), bg-emerald-50/bg-emerald-300 pill states, text-muted-foreground labels.
+- MultiEdit pass on OnboardingFlow.tsx (8 edits): pill button states→#3B82F6 tints; welcome icon gradient→from-emerald-500 to-emerald-600 + glow-accent-btn; welcome heading text-foreground→text-white; Get Started CTA→white press-scale; 4x icon containers bg-emerald-100→bg-emerald-500/15 border; final icon gradient fixed; Go to Dashboard CTA→white press-scale; Upload button→glass-surface; root bg-white→bg-black; progress header→glass-surface border-white/[0.06]; progress dots bg-emerald-*→bg-[#3B82F6] / bg-white/[0.08]; progress track→bg-white/[0.08] + gradient fill from-[#3B82F6] to-[#60A5FA]; footer→glass-surface; Continue CTA→white press-scale.
+- Preserved 100%: OnboardingData interface, OnboardingFlowProps signature, all 5 step renders, handleNext/goBack/goNext/onSkip, formData state, currentStep/direction, progressPercent, all motion transitions, onComplete callback, all Select/Input/Textarea/Switch handlers.
+
+Stage Summary:
+- LoginPage.tsx: 570 lines, 14 light-mode patterns → premium dark (#000 bg, glass-surface, #3B82F6 accent, white CTAs with press-scale + glow-accent-btn, spinner-premium). Firebase auth logic intact.
+- OnboardingFlow.tsx: 1159 lines, 20 light-mode patterns → premium dark (#000 bg, glass-surface header/footer, #3B82F6 progress system, white CTAs). Onboarding logic intact.
+- bun run lint → CLEAN (0 errors).
+- Dev server → HTTP 200, no compile errors.
+- Both files now use ONE design system: #000 bg, rgba(255,255,255,0.04) cards via glass-surface, #FFF text, #3B82F6 accent, white CTAs with press-scale + glow-accent-btn.

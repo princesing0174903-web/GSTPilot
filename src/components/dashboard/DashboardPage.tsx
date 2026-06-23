@@ -3,9 +3,9 @@
 import React, { useState, useMemo } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Skeleton } from '@/components/ui/skeleton';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Card, CardContent } from '@/components/ui/card';
+import { ProSkeleton } from '@/components/ui-pro';
 import {
   Upload,
   CheckCircle2,
@@ -169,7 +169,7 @@ function KpiCard({ label, value, subtitle, icon, index }: KpiCardProps) {
       transition={{ duration: 0.5, delay: index * 0.08, ease: 'easeOut' }}
       className="h-full"
     >
-      <div className="glass-surface rounded-2xl p-6 h-full transition-shadow hover:shadow-[0_0_32px_-8px_rgba(6,182,212,0.18)]">
+      <div className="glass-surface rounded-2xl p-6 h-full transition-shadow hover-lift hover:shadow-[0_0_32px_-8px_rgba(59,130,246,0.25)]">
         <div className="flex items-start justify-between gap-4">
           <div className="space-y-1.5 min-w-0">
             <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
@@ -217,7 +217,7 @@ function SectionCard({
       transition={{ duration: 0.5, delay: 0.24 + index * 0.08, ease: 'easeOut' }}
       className="h-full"
     >
-      <div className="glass-surface rounded-2xl h-full flex flex-col">
+      <div className="glass-surface rounded-2xl h-full flex flex-col hover-lift">
         <div className="flex items-center justify-between gap-3 p-6 pb-3">
           <div className="flex items-center gap-2.5 min-w-0">
             <div className="flex items-center justify-center h-8 w-8 rounded-lg accent-gradient-soft shrink-0">
@@ -253,17 +253,17 @@ function DashboardSkeleton() {
   return (
     <div className="max-w-6xl mx-auto px-4 md:px-6 py-8 md:py-10 space-y-8">
       <div className="space-y-3">
-        <Skeleton className="h-9 w-64" />
-        <Skeleton className="h-4 w-80" />
+        <ProSkeleton className="h-9 w-64" />
+        <ProSkeleton className="h-4 w-80" />
       </div>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {Array.from({ length: 3 }).map((_, i) => (
-          <Skeleton key={i} className="h-32 rounded-2xl" />
+          <ProSkeleton key={i} className="h-32 rounded-2xl" />
         ))}
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {Array.from({ length: 3 }).map((_, i) => (
-          <Skeleton key={i} className="h-72 rounded-2xl" />
+          <ProSkeleton key={i} className="h-72 rounded-2xl" />
         ))}
       </div>
     </div>

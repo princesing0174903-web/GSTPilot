@@ -1,0 +1,200 @@
+  • Module 5 query submit → POST /api/graph/query with { text } → renders GraphQueryResult (intent + confidence + spokenAck + answer + bullets + relatedNodeIds).
+  • Node click in explorer → opens right-side detail panel with emoji + label + type + subtitle + amount + risk score/level (if any) + connections list (each clickable → focus + scroll to top).
+  • All "Highlight in graph" buttons across Modules 3/4/5/8/9 → setFocusedNodeId + window.scrollTo({ top: 0, behavior: 'smooth' }).
+  • "Ask Oracle" header button + Module 6 detail-panel button + Module 8 scenario button → window.dispatchEvent(new CustomEvent('oracle-ask', { detail: { prompt: '...' } })) per the established convention.
+  • Module 10 "Try it" buttons → live fetch with loading state + JSON response in collapsible <pre>.
+- Styling verified: dark theme matching AICFO page exactly (accent-gradient / accent-gradient-soft / accent-text / custom-scrollbar classes used throughout), all cards border-white/[0.06] bg-card/60 backdrop-blur-sm or bg-white/[0.02], emerald/teal/amber/red/cyan status palette (NO indigo/blue primary; blue only used for bank-account node color which is semantically appropriate per task spec), FadeIn motion with staggered delays, ScrollArea wrapping long lists (max-h-64 / max-h-72 / max-h-48), responsive grid (1 col mobile → 2 col sm → 3 col lg → up to 5 col xl where appropriate), shadcn/ui components throughout (Card, CardHeader, CardTitle, CardContent, Button, Badge, ScrollArea, Separator, Progress, Switch, Input, Textarea).
+- Fixed three issues found during validation:
+  1. TS2322 "Type 'unknown' is not assignable to ReactNode" on `{r?.data && (...)}` conditional → rewrote as explicit ternary `{r?.data ? (...) : null}`.
+  2. ESLint react-hooks/refs "Cannot access refs during render" on `interactionMode.current === 'pan'` in className → introduced `isPanning` state alongside the ref (ref still used for hot-path mode detection in pointer handlers, state drives the cursor class).
+  3. ESLint react-hooks/set-state-in-effect "Calling setState synchronously within an effect" on `setPositions(pos)` in a useEffect that synced engine positions → replaced the imperative effect with a derived `useMemo` over `state` + `userOverrides` state, so positions = engine layout merged with any user drag overrides. The drag handler now writes to `setUserOverrides` instead of `setPositions`. Bonus: user drag overrides now survive graph refreshes (cleaner behavior than the original reset-on-refresh).
+- File size: 2049 lines (was 1858 — replaced the placeholder demo with the full 10-module OS).
+
+Validation:
+- `cd /home/z/my-project && bunx tsc --noEmit 2>&1 | rg "business-graph" | head -20` → ZERO errors in this file.
+- `bun run lint 2>&1 | tail -5` → `$ eslint .` (exit code 0) — ZERO errors, ZERO warnings.
+- API smoke tests: GET /api/graph → HTTP 200; POST /api/graph/query {"text":"Why did revenue drop?"} → HTTP 200.
+
+Stage Summary:
+- src/components/business-graph/BusinessGraphPage.tsx fully rewritten (2049 lines) — renders all 10 modules of the Business Graph™ Operating System as a single scrollable dashboard inside the existing app shell.
+- Visual language is identical to AICFODashboardPage.tsx (dark theme, emerald/teal accents, accent-gradient tiles, FadeIn motion, status glyph system, ScrollArea long lists, staggered animation delays).
+- Visual Graph Explorer implements all 6 required interactions (zoom wheel + buttons + % indicator, canvas pan via pointer-drag with grab/grabbing cursor, node drag-reposition, click-to-focus with neighbor highlighting + dim unrelated, type-filter chips, label search with 1-hop neighbor inclusion) plus the risk overlay toggle, edge-color legend, focused-node indicator pill, and right-side node detail panel with neighbors + risk + Ask Oracle button.
+- Uses existing shared types from @/lib/graph/types — no type redefinitions. Uses NODE_LABELS, RISK_GLYPH, RISK_COLOR constants for visual mapping per task spec.
+- All 5 Graph API endpoints surfaced in Module 10 with "Try it" live fetch + JSON response rendering.
+- Auto-refresh every 90s per task spec. Manual Refresh button in header. Skeleton state while loading. Error state with Retry button.
+- tsc clean (0 errors in file), lint clean (0 errors, 0 warnings).
+
+---
+Task ID: Phase-5-Business-Graph
+Agent: GSTPilot Business Graph Architect
+Task: PHASE 5 — GSTPILOT BUSINESS GRAPH™ OPERATING SYSTEM. Create a Business Knowledge Graph connecting Businesses/Clients/Invoices/GST Returns/Banks/Collections/Notices/Employees/Vendors/Tasks/Reports/Conversations/Predictions. 10 modules: Knowledge Graph Engine, Client Relationship Graph, Risk Graph, Business Dependency Graph, Natural Language Graph Queries, Visual Graph Explorer, Business Memory Graph, Prediction Graph, Graph Insights, Graph API + Oracle Integration. Tagline: "Understand Everything. Connect Everything. See Connections. Understand Causes. Predict Outcomes. Operate Intelligently."
+
+Work Log:
+- Read worklog.md (Phase 4 complete — Run My Business live). Inspected src/lib/cfo/engine.ts + types.ts + src/lib/rmb/engine.ts + types.ts to understand the existing substrate. Phase 5 reuses CFO engine as the financial substrate + Prisma for raw rows.
+- Inspected src/components/business-graph/BusinessGraphPage.tsx (1858 lines, placeholder demo — discarded entirely). Confirmed nav wiring: LeftNav 'Network' → business-graph view (already grouped with gstpilot-network, economic-graph).
+- Created src/lib/graph/ with two files:
+  • src/lib/graph/types.ts (~280 lines) — shared types for all 10 modules: NodeType (12 types: business/client/vendor/invoice/gst-return/bank-account/employee/task/report/notice/conversation/prediction) + NODE_LABELS map (emoji+label+color per type), RelationshipType (11: OWNS/PAYS/OWES/FILES/GENERATES/RESPONDS_TO/WORKS_WITH/ASSIGNED_TO/CONNECTED_TO/PREDICTED_BY/CREATED_BY), GraphNode (with x/y/riskScore/riskLevel/expanded/hidden), GraphEdge (with weight/amount/label), KnowledgeGraph (with nodeCountByType/edgeCountByType stats), RiskLevel (low/medium/high/critical) + RISK_GLYPH/RISK_COLOR maps, RiskCategory (7: late_payment/gst_notice/cash_flow/vendor_dependency/revenue_concentration/compliance/fraud), RiskNode, RiskGraph (with countByLevel/countByCategory/overallLevel/topRisks), DependencyEdge + DependencyGraph + DependencyAnswer, GraphQueryIntent (12 intents) + GraphQueryResult, ExplorerFilter + ExplorerLayoutNode, MemoryRelationship + BusinessMemoryGraph, ScenarioType + WhatIfScenario + PredictionGraph, GraphInsight + InsightSeverity, RelationshipChain + RelationshipChainStep, aggregated GraphState, ClientSubgraph + BusinessSubgraph.
+  • src/lib/graph/engine.ts (~1440 lines) — deterministic graph engine implementing 8 of the 10 modules (Module 6 = UI, Module 10 = API). buildKnowledgeGraph(rows, cfo) builds the full graph: 1 business node + 1 bank node + 3 employees + N clients (radial layout) + N invoices (matched to clients via buyerGstin) + N gst-returns (linked to clients via FILES) + N notices (RESPONDS_TO clients) + 3 vendors + 5 tasks (from CFO priority actions) + 3 reports + 1 conversation node + 3 prediction nodes (revenue/cash/GST 30d). Each node gets x/y positions for the visual explorer. buildRiskGraph(graph, cfo) generates RiskNode[] for late_payment (from CFO client behaviour), gst_notice (per open notice), cash_flow (from CFO cash risk), compliance (from CFO compliance risk), revenue_concentration (if client >35% revenue), vendor_dependency (synthesized), fraud (heuristic). Stamps riskScore/riskLevel back onto graph nodes. buildRelationshipChains(graph, riskGraph, cfo) creates Module 2 chains: Client → Outstanding Invoice → GST Liability → Collections Risk → Cash Flow Impact with total impact ₹. buildDependencyGraph(graph, cfo) returns 5 dependency arrays (topRevenueClients, criticalVendors, noticesAffectingCashFlow, invoicesLinkedToOverdueReturns, employeesAndTheirClients). buildDependencyAnswers(dep, cfo) returns canonical DependencyAnswer[] for the 5 Module 4 questions. executeQuery(text, state) implements Module 5 NL query parser — 11 query rules with phrase matching, returns GraphQueryResult with spokenAck + answer + bullets + relatedNodeIds + relatedRiskIds. buildMemoryGraph(graph, cfo) returns Module 7 BusinessMemoryGraph — client behaviour (from CFO memory), team performance (synthesized 3 employees), history (monthly reports + filings), patterns (cash quarters), NL insights. buildPredictionGraph(graph, cfo) returns Module 8 PredictionGraph — 5 what-if scenarios (client_delays_payment/revenue_falls_pct/gst_liability_increases/vendor_price_increase/notice_escalation) each with impactOnCash/Revenue/GST/Compliance deltas + impactOnRiskLevel + affectedNodes + NL explanation chain. buildInsights(graph, riskGraph, dep, cfo) returns Module 9 GraphInsight[] — top risky client, most profitable, critical vendor, pending GST risks, collection bottlenecks, revenue dependencies, 30-day prediction. getGraphState() orchestrator: fetches CFO insights + Prisma raw rows, composes full GraphState. buildClientSubgraph(state, clientId) returns 2-hop BFS subgraph for /api/graph/client/:id. buildBusinessSubgraph(state, businessId) returns 1-hop subgraph for /api/graph/business/:id. QUICK_GRAPH_QUERIES exported for UI chips. formatGraphContextBlock(state) formats full graph state for Oracle system prompt injection (nodes/edges stats, top risks, top revenue clients, critical vendors, notices, relationship chains, what-if predictions, daily insights, memory insights).
+
+- Created 5 API routes (Module 10):
+  • src/app/api/graph/route.ts (GET) — returns full GraphState via getGraphState(), force-dynamic.
+  • src/app/api/graph/client/[id]/route.ts (GET :id) — returns ClientSubgraph via buildClientSubgraph, 404 if not found.
+  • src/app/api/graph/business/[id]/route.ts (GET :id) — returns BusinessSubgraph via buildBusinessSubgraph.
+  • src/app/api/graph/risk/route.ts (GET) — returns just state.riskGraph.
+  • src/app/api/graph/query/route.ts (POST {text}) — calls executeQuery(text, state), returns GraphQueryResult + QUICK_GRAPH_QUERIES.
+
+- Replaced src/components/business-graph/BusinessGraphPage.tsx (delegated to subagent — 2049 lines, see Task ID 5-UI). Renders all 10 modules with dark theme matching AI CFO + Run My Business pages. Hero is the Visual Graph Explorer: SVG canvas with pan/zoom/drag/focus/filter/search/risk-overlay, edge legend, node detail panel. Modules 9/2/3/4/5/7/8/10/1 stacked below. Every bullet in modules 4/5/8 is clickable → sets focusedNodeId in the explorer.
+
+- Upgraded src/app/api/oracle/chat/route.ts (Phase 5 Graph personality + Ask Graph context):
+  • Added imports of getGraphState + formatGraphContextBlock + executeQuery + GraphState type from @/lib/graph.
+  • NEW buildGraphContextBlock() — async, calls getGraphState(), formats full graph state via formatGraphContextBlock. Fail-safe.
+  • buildSystemPrompt now fetches cfoContextBlock + rmbContextBlock + graphContextBlock.
+  • WHO YOU ARE expanded: "AI Chief Financial Officer, Chief Operating Officer, AND Business Knowledge Graph". Tagline changed to "GSTPilot Business Graph™ — Understand Everything. Connect Everything. See Connections. Understand Causes. Predict Outcomes. Operate Intelligently."
+  • NEW SECTION: BUSINESS GRAPH PERSONALITY (Phase 5 Module 1) — Oracle understands the full relationship topology. Speaks the language of connections: "linked to", "depends on", "traced back to", "caused by", "cascades into". Explains CAUSES using graph traversal.
+  • NEW SECTION: ASK GRAPH™ (Phase 5 — Live Graph Context) — 8 graph question types mapped (why_revenue_drop / risky_clients / overdue_invoices / vendor_profitability / businesses_with_notices / employee_for_client / cash_flow_down / what_if). When answering graph questions, ALWAYS: lead with spoken ack ("I've traced the cash flow chain through your business graph."), cite specific node names + relationship types ("ABC Pvt Ltd → OWES → ₹5,00,000 → impacts → Bank Account"), use chain format cause → relationship → effect → impact, reference live risk scores (🟢🟡🟠🔴).
+  • NEW SECTION: WHAT-IF PREDICTIONS™ (Phase 5 Module 8) — 5 pre-computed scenarios in the LIVE BUSINESS GRAPH STATE. For each, cite impactOnCash (₹ delta), impactOnRiskLevel, and explanation chain. If user asks custom what-if, map to closest scenario.
+  • Updated header comment + closing tagline to reflect Phase 5.
+
+Validation:
+- `bunx tsc --noEmit` → ZERO errors in any Phase 5 file (src/lib/graph/*, src/app/api/graph/*, src/app/api/oracle/chat/route.ts, src/components/business-graph/BusinessGraphPage.tsx). Pre-existing errors in unrelated files unchanged.
+- `bun run lint` → 0 errors, 0 warnings.
+- API smoke tests:
+  • GET /api/graph → HTTP 200, returns full GraphState: knowledgeGraph (business:firm + bank-account:primary + 3 employees + N clients + invoices + gst-returns + notices + vendors + tasks + reports + conversation + predictions, all with x/y positions), riskGraph (overallLevel, countByLevel, topRisks), dependencyGraph (5 dependency arrays), dependencyAnswers (5 canonical Q&A), memoryGraph (relationships + insights), predictionGraph (5 scenarios), insights (7 cards), relationshipChains (chains with steps + totalImpact + riskLevel), hasLiveData=true, clientCount=N, invoiceCount=N, filingCount=N, noticeCount=N.
+  • POST /api/graph/query {"text":"Why is cash flow down?"} → HTTP 200, returns {intent:"cash_flow_down", confidence:0.9, spokenAck:"I've analyzed the cash flow chain through your graph.", answer:"Cash flow is down because...", bullets:[...], relatedNodeIds:["bank-account:primary","business:firm"], relatedRiskIds:[...]} + 8 quickQueries.
+- Oracle smoke test: POST /api/oracle/chat with "Why is cash flow down?" → HTTP 200 streamed response in Graph/causal-chain mode:
+  "I've traced the cash flow chain through your business graph. Your cash flow is down because:- TechCorp Solutions, your primary revenue client, hasn't generated any invoices yet this month (GENERATES edge), resulting in ₹0 revenue inflow.- With no revenue coming in, your business is relying on your existing bank balance of ₹50,000 to cover operations.- You have no..."
+  → Graph personality confirmed: cites node names (TechCorp Solutions), edge types (GENERATES edge), uses causal chain format. Phase 5 personality confirmed.
+
+Stage Summary:
+- PHASE 5 — GSTPILOT BUSINESS GRAPH™ OPERATING SYSTEM is LIVE and end-to-end verified at the API + Oracle level.
+- All 10 modules implemented:
+  • Module 1 Knowledge Graph Engine™ — 12 node types + 11 relationship types, builds full graph from Prisma + CFO data.
+  • Module 2 Client Relationship Graph™ — chains: Client → Outstanding Invoice → GST Liability → Collections Risk → Cash Flow Impact with ₹ impact totals.
+  • Module 3 Risk Graph™ — 7 risk categories (late_payment/gst_notice/cash_flow/vendor_dependency/revenue_concentration/compliance/fraud) with Low/Medium/High/Critical levels + scores + reasons + impact + recommendations.
+  • Module 4 Business Dependency Graph™ — 5 canonical Q&A (top revenue clients / critical vendors / notices affecting cash flow / invoices linked to overdue returns / employees & their clients).
+  • Module 5 Natural Language Graph Queries™ — 11 query intents, POST /api/graph/query, returns spokenAck + answer + bullets + relatedNodeIds.
+  • Module 6 Visual Graph Explorer™ — interactive SVG: zoom (wheel + buttons), pan (drag canvas), drag nodes, expand/collapse (focus 1-hop neighbors), filters (12 node type toggles), search (label match + neighbors), risk overlay, edge legend, node detail panel.
+  • Module 7 Business Memory Graph™ — client behaviour + team performance + history + patterns with NL insights ("ABC usually pays late", "Priya files returns by 10th").
+  • Module 8 Prediction Graph™ — 5 what-if scenarios with ₹ deltas + risk level escalation + NL explanation chains.
+  • Module 9 Graph Insights™ — 7 insight cards (top risky client / most profitable / critical vendor / pending GST risks / collection bottlenecks / revenue dependencies / 30-day prediction).
+  • Module 10 Graph API™ — 5 endpoints (GET /api/graph, GET /api/graph/client/:id, GET /api/graph/business/:id, GET /api/graph/risk, POST /api/graph/query).
+- Architecture: deterministic engine (no LLM in engine) + LLM only in Oracle conversational layer with live graph context injected into system prompt. CFO engine reused as the financial substrate — no duplication. RMB engine remains intact for Phase 4 features.
+- Navigation: LeftNav "Network" → business-graph view → BusinessGraphPage. Nav grouping intact (gstpilot-network/economic-graph all map to this group).
+- Files: 2 NEW engine files (types.ts 280 lines, engine.ts 1440 lines), 5 NEW API routes, 1 REPLACED UI (BusinessGraphPage.tsx 2049 lines), 1 MODIFIED Oracle (oracle/chat/route.ts — Phase 5 personality + graph context block + 3 new prompt sections).
+- Tagline live in UI + Oracle system prompt: "GSTPilot Business Graph™ — Understand Everything. Connect Everything. See Connections. Understand Causes. Predict Outcomes. Operate Intelligently."
+- Success criteria met: A business owner feels Oracle understands the entire business (graph), knows relationships (edges), predicts impacts (what-if), explains causes (causal chains), remembers everything (memory graph). The user asks "Why is cash flow down?" and Oracle traces through nodes + edges rather than just citing a number.
+
+---
+Task ID: RESTORE-1
+Agent: GSTPilot Architect (main agent — Emergency Restore)
+Task: EMERGENCY RESTORE — GSTPILOT INFINITY™. Restore premium cinematic liquid-glass dark design across the whole app after a previous AI regressed it. DO NOT touch business logic / APIs / DB / auth / dashboard functionality. Only styling layers + theme tokens + landing rebuild.
+
+Work Log:
+- Diagnosed emergency state via git history + on-disk inspection:
+  - Premium cinematic files (SpaceLanding.tsx, FadingVideo.tsx, BlurText.tsx, space-fonts.ts, space-landing.css) were NEVER committed to git — gone, not recoverable from backup.
+  - Global Dark Cascade in globals.css had been reverted (was 378 lines, 0 cascade rules).
+  - page.tsx loading screen was bg-white + emerald gradient; EmailVerificationBanner was bg-amber-50/text-amber-800.
+  - LandingPage.tsx was the OLD generic GST landing (Upload/FileText/4-Steps).
+- Restored Global Dark Cascade in src/app/globals.css (378 → 663 lines, unlayered CSS so it always wins over Tailwind utilities):
+  - HARD DARK BASELINE: html/body/#root forced #000, color-scheme dark, Chrome autofill dark fix.
+  - Container bg-white/bg-gray-50..300/bg-slate-50..200/bg-zinc → #0a0a0a (buttons/links/summary EXCLUDED to preserve white CTA pattern + .keep-white opt-out).
+  - hover:bg-gray-* → glass hover (non-buttons).
+  - text-black/text-gray-700..900/text-slate-700..900/text-zinc → #fff (buttons EXCLUDED + .keep-black opt-out).
+  - text-gray-400..600 → readable white/45..60 secondaries.
+  - All gray + brand borders → rgba(255,255,255,0.08).
+  - Light brand tints (bg-emerald/blue/cyan/teal/indigo/violet/purple 50/100/200) → rgba(255,255,255,0.06).
+  - Dark brand text (700/800/900) → white.
+  - Status colors (red/amber/yellow/orange) kept semantic but darkened: 50/100 → 10% translucent tints, 600..900 text → light readable (fca5a5 / fcd34d / fdba74).
+  - All shadow-* → monochrome dark shadows.
+  - Native form controls (input/textarea/select) → dark glass with white text + white/45 placeholders + white/25 focus border.
+- Fixed 2 styling regressions in src/app/page.tsx (logic 100% intact):
+  - Loading screen: bg-white→bg-black, emerald-gradient logo→glass-surface + accent-text Zap + motion-pulse, text-slate-500→text-white/55.
+  - EmailVerificationBanner: bg-amber-50→bg-amber-500/10, border-amber-200→border-amber-500/25, text-amber-800→text-amber-200, amber-600→amber-300, hover→amber-100. AppRouter + OnboardingScreen + resend handler untouched.
+- Rebuilt src/components/landing/LandingPage.tsx as premium cinematic 17-section landing (kept export signature LandingPage({onGetStarted,onBookDemo})):
+  - Motion primitives: Reveal (blur-in on whileInView), StaggerGroup/StaggerItem, ScrollProgress (accent-gradient top bar via useScroll+useSpring), Aurora (3 drifting blobs), GlassIcon, PrimaryButton (white/black), GhostButton (glass).
+  - 18 sections: Floating glass Navbar (scroll-aware + mobile menu), Hero (aurora + grid mask + animated scroll cue), Features (6 glass bento cards), Capabilities (asymmetric bento with mock reconciliation stats + animated cash-flow bars), AI Agents (8 agent cards), GST Cloud (split + ReturnsMock), Banking Cloud (reverse split + BankMock), Invoice Cloud (split + InvoiceMock), Execution Cloud (reverse split + WarRoomMock), Oracle AI (breathing orb + orbiting dots + 4 proactive statement cards), Interactive Demo (mock Oracle chat with stat row), Statistics (4 rAF AnimatedCounters), Logos (text cloud), Testimonials (3 glass quote cards), Pricing (3 tiers + monthly/yearly toggle, featured accent-ring), Security (8 badge pills + 3 detail cards), FAQ (animated accordion), CTA (aurora), Footer (5-col + social + mt-auto sticky).
+  - Uses ONLY existing globals.css utilities (glass-surface, glass-surface-strong, accent-gradient, accent-gradient-soft, accent-text, accent-ring, hover-lift, motion-pulse, aurora-blob, breathe-glow, radius-premium, shadow-premium, section-gap, oracle-prose). No new deps.
+  - Fixed React warning: <icon> lowercase JSX → capitalized <Icon> in CloudSection.
+- Verification (Agent Browser, viewport 1440x900):
+  - HTTP 200, dev server compiles clean.
+  - bun run lint: PASS (0 errors).
+  - darkClass="dark", bodyBg=rgb(0,0,0), htmlBg=rgb(0,0,0), bodyColor=rgb(255,255,255) — pure black + white text confirmed.
+  - Console: 0 errors, 0 React warnings after reload.
+  - 17 section headings render in correct order.
+  - Hero H1: rgb(255,255,255), 96px (text-8xl).
+  - Glass card computed: bg rgba(255,255,255,0.04), border rgba(255,255,255,0.08) — exact spec; backdrop-filter rule confirmed present in stylesheet.
+  - Footer present, full-width, naturally pushed to bottom (mt-auto on min-h-screen flex-col root).
+
+Stage Summary:
+- Emergency resolved. Pure-black cinematic dark theme restored app-wide via Global Dark Cascade (no business logic touched).
+- page.tsx AppRouter / auth / onboarding / dashboard / 40+ module views / Firebase / APIs / DB all UNTOUCHED in logic.
+- Landing rebuilt as premium OpenAI/Apple/Stripe/Linear/Vercel/Notion-class 18-section cinematic page with Framer Motion blur-reveal, aurora backgrounds, glass cards, accent-gradient system, proactive Oracle statements.
+- Old GST sections (Upload/File in Minutes, Trusted by CA Firms, 4 Steps, Simple Pricing, old testimonials) fully removed and replaced.
+- Sticky footer (mt-auto) + responsive (sm/md/lg/xl) + accessible (aria, semantic, sr-only where needed).
+- Lint clean, browser-verified, console clean.
+
+---
+Task ID: UIPRO-1
+Agent: GSTPilot Architect (main agent — UI Pro Max integration)
+Task: Install & integrate github.com/nextlevelbuilder/ui-ux-pro-max-skill as a UI/UX ENHANCEMENT layer ONLY. No file replacements, no deletions, no business logic / auth / API / DB / routing / GST / Banking / Oracle / dashboard functionality changes. Apply theme spec (#000 bg, 0.04 cards, #FFF text, 0.75 secondary, 0.12 borders, #3B82F6 accent). Fix white-on-white/black-on-black. Make GSTPilot feel OpenAI+Stripe+Linear+Vercel+Notion+Apple+Hostinger+Arc-grade premium.
+
+Work Log:
+- Cloned repo to /tmp/ui-ux-pro-max-skill and analyzed structure.
+  - Discovered it is NOT a component library — it is an AI design-intelligence SKILL with searchable CSV databases (styles, colors, typography, charts, ux-guidelines, landing patterns, 17 stack variants) queried via a Python BM25 search engine.
+  - Value = design knowledge, not code. Extracted via `python3 scripts/search.py "<q>" --domain <d>`.
+- Queried 4 design domains for GSTPilot's dark premium aesthetic:
+  - style "glassmorphism dark premium" → "Modern Dark (Cinema)" + "Liquid Glass" styles. Extracted: Expo.out easing cubic-bezier(0.16,1,0.3,1), spring modal (damping:20 stiffness:90), scale-press 0.97→1.0, ambient blobs (blur 30-50 opacity 0.08-0.12), hairline borders rgba(255,255,255,0.08), accent-glow behind primary button, liquid-glass morph 400-600ms blur+saturate.
+  - typography "premium sans serif fintech dashboard" → confirmed GSTPilot's existing Inter+JetBrains Mono IS the optimal fintech pairing ("SaaS Mobile Boutique" result). No font change needed.
+  - chart "financial revenue cash flow" → Candlestick (bull #26A69A / bear #EF5350), Sankey for flows, Funnel for conversion. Extracted as chart tokens.
+  - stack shadcn → confirmed CSS-variables approach + .dark support (GSTPilot already does both).
+- APPLIED as additive enhancement (zero replacements):
+  1. Appended "UI PRO MAX™ ENHANCEMENT LAYER" to src/app/globals.css (663 → 965 lines, all NEW rules, no existing rules modified):
+     - :root tokens: --ease-premium, --ease-spring, --accent-blue (#3B82F6), --accent-blue-soft, --accent-blue-glow, --border-premium (0.12), --text-secondary-premium (0.75), --chart-bull, --chart-bear, --chart-neutral, --spring-modal-damping/stiffness.
+     - Utilities: .ease-premium/.ease-spring, .accent-blue/.accent-blue-soft/.accent-blue-text/.ring-accent-blue/.glow-accent-blue, .border-premium, .text-secondary-premium, .press-scale (scale-press micro-interaction), .glow-accent-btn (accent glow behind primary), .glass-morph (liquid-glass 400-600ms morph), .skeleton-shimmer (loading), :focus-visible premium ring, .table-premium (dark header + hairline rows + hover), .premium-backdrop (modal blur), .link-underline-premium, .tabular-nums, .badge-premium, .divider-premium, .text-bull/.text-bear/.bg-bull/.bg-bear, .status-dot + status-pulse keyframes (live/warn/error), .spinner-premium, @media prefers-reduced-motion (a11y — disables all animations), .snap-x-premium, ::selection blue.
+     - Premium dropdown/popover surface override (dark border + premium shadow on [data-slot=popover-content]/[data-slot=dropdown-menu-content]).
+  2. Created NEW folder src/components/ui-pro/ (no existing files touched):
+     - index.tsx: ProButton (4 variants: primary/glass/ghost/accent, 3 sizes, press-scale + glow), ProCard (glass + hover-lift + radius-premium), ProSkeleton (shimmer, multi-line), ProSpinner (blue ring), ProStatusDot (live/warn/error pulse), ProBadge (pill), ProTable (.table-premium wrapper), ProDivider (gradient hairline), ProStat (financial stat with tabular-nums + bull/bear tone), springModalTransition + modalEnterVariants + backdropVariants (Framer Motion configs).
+     - index.ts: barrel export.
+- White-on-white / black-on-black audit: confirmed Global Dark Cascade (from prior task RESTORE-1) already neutralizes all 619 hardcoded bg-white/text-black/bg-gray-50/border-gray-200 utilities across 78 files. Buttons excluded → white CTA pattern preserved (white bg + black text stays readable). Enhancement layer adds .border-premium (0.12) + .text-secondary-premium (0.75) for spec alignment + premium dropdown/popover surface for any shadcn overlays.
+- Functionality preservation: ZERO changes to page.tsx, layout.tsx, any API route, any DB schema, any auth, any Oracle logic, any GST/Banking module, any dashboard view, any routing. The enhancement is pure CSS + opt-in primitives.
+- Verification (Agent Browser, 1440x900):
+  - bun run lint: PASS (0 errors).
+  - HTTP 200, dev server compiles clean.
+  - 0 page errors, 0 console errors/warnings after reload.
+  - Enhancement tokens live in stylesheet: --accent-blue=#3b82f6, --border-premium=#ffffff1f (0.12), --text-secondary-premium=#ffffffbf (0.75), --ease-premium=cubic-bezier(.16,1,.3,1), --chart-bull=#26a69a, --chart-bear=#ef5350.
+  - All 11 enhancement utility classes resolved in stylesheet: press-scale, glass-morph, skeleton-shimmer, table-premium, badge-premium, spinner-premium, status-dot, divider-premium, glow-accent-btn, accent-blue-text, ring-accent-blue.
+  - Dark theme intact: darkClass="dark", bodyBg=rgb(0,0,0), bodyColor=rgb(255,255,255).
+  - 14 h2 + 1 h1 sections render (all landing sections preserved).
+  - Footer sticky at bottom.
+- Cleaned up /tmp/ui-ux-pro-max-skill (temp clone removed; not installed into project tree to avoid any file collisions).
+
+Stage Summary:
+- UI Pro Max design intelligence integrated as a pure enhancement layer — zero file replacements, zero deletions, zero business-logic changes.
+- New theme spec honored: #000 bg, 0.04 cards, #FFF text, 0.75 secondary, 0.12 borders, #3B82F6 blue accent (additive alongside existing emerald→cyan→blue gradient).
+- Premium patterns from the repo now available app-wide: Expo.out easing, scale-press, spring modals, liquid-glass morph, shimmer skeletons, premium tables, status dots, financial chart tokens, reduced-motion a11y, blue focus rings, selection color.
+- New src/components/ui-pro/ primitive library (ProButton, ProCard, ProSkeleton, ProSpinner, ProStatusDot, ProBadge, ProTable, ProDivider, ProStat + Framer Motion variants) available for opt-in use.
+- Global Dark Cascade from RESTORE-1 continues to fix all white-on-white/black-on-black app-wide.
+- Lint clean, browser-verified, 100% functionality preserved.
+
+---
+Task ID: UIPRO-INSTALL-2
+Agent: GSTPilot Architect (main agent — UI Pro Max repository install)
+Task: Install the github.com/nextlevelbuilder/ui-ux-pro-max-skill repository persistently into the project so its design-intelligence search engine + design-system generator are available on-demand as a tool (not just the extractive CSS integration done in UIPRO-1).
+
+Work Log:
+- Confirmed prerequisites: skills/ dir exists at project root, python3 3.12.13 available, npm global prefix /home/z/.npm-global.
+- Cloned the repository persistently into /home/z/my-project/skills/ui-ux-pro-max-skill/ (17MB, full source with src/ui-ux-pro-max/{scripts,data,templates}, cli/, docs/, preview/). NOT in /tmp this time — persistent install.
+- Installed the official npm CLI globally: `npm install -g uipro-cli` → uipro v2.2.3 (23 packages). Commands available: `uipro init`, `uipro versions`, `uipro update`.
+- Verified the Python search engine runs from the installed path:
+  `python3 skills/ui-ux-pro-max-skill/src/ui-ux-pro-max/scripts/search.py "dark premium glassmorphism" --domain style -n 2` → returns full "Modern Dark (Cinema)" style intelligence (Expo.out easing, spring damping:20/stiffness:90, scale-press 0.97→1.0, ambient blobs blur 30-50 opacity 0.08-0.12).
+- Verified the design-system generator runs from the installed path:
+  `python3 skills/ui-ux-pro-max-skill/src/ui-ux-pro-max/scripts/design_system.py "fintech GST dark dashboard" --project-name "GSTPilot" --format markdown` → generates a tailored GSTPilot design system (Real-Time/Operations pattern, Inter typography, dark cinematic palette, status colors). Confirms the tool produces project-specific design guidance on-demand.
+- Reconciled with pre-existing /home/z/my-project/skills/ui-ux-pro-max/ folder (a prior skill-install form with SKILL.md). The two are complementary: ui-ux-pro-max/ = installed skill form; ui-ux-pro-max-skill/ = full source repo (with cli/, docs/, preview/, templates/). Both functional. No deletion performed (rule: no deletions).
+- Confirmed ZERO impact on project: bun run lint PASS (0 errors), dev server HTTP 200, skills/ directory is not linted by the Next.js eslint config so the Python/Markdown assets don't interfere.
+
+Stage Summary:
+- Repository FULLY installed at skills/ui-ux-pro-max-skill/ (persistent, 17MB).
+- uipro CLI v2.2.3 installed globally (npm).
+- Search engine + design-system generator verified working from installed path — available on-demand for any future UI/UX query.
+- Combined with UIPRO-1's extractive work (globals.css enhancement layer + src/components/ui-pro/ primitives), GSTPilot now has BOTH the baked-in premium design system AND the live design-intelligence tool installed.
+- Zero file replacements, zero deletions, zero business-logic changes. Lint clean, dev server 200.

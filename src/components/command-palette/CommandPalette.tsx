@@ -42,6 +42,7 @@ import {
   CommandSeparator,
   CommandShortcut,
 } from '@/components/ui/command';
+import { modalEnterVariants, springModalTransition, backdropVariants } from '@/components/ui-pro';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // TYPES
@@ -460,40 +461,41 @@ export default function CommandPalette() {
           {/* Dark overlay with blur */}
           <motion.div
             key="cmd-overlay"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.15 }}
-            className="fixed inset-0 z-[60] bg-black/50 backdrop-blur-sm"
+            variants={backdropVariants}
+            initial="hidden"
+            animate="visible"
+            exit="exit"
+            className="fixed inset-0 z-[60] premium-backdrop"
             onClick={() => setCommandPaletteOpen(false)}
           />
 
           {/* Centered modal */}
           <motion.div
             key="cmd-modal"
-            initial={{ opacity: 0, scale: 0.96, y: -8 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.96, y: -8 }}
-            transition={{ duration: 0.15, ease: 'easeOut' }}
+            variants={modalEnterVariants}
+            initial="hidden"
+            animate="visible"
+            exit="exit"
+            transition={springModalTransition}
             className="fixed left-1/2 top-[12%] z-[70] w-full max-w-xl -translate-x-1/2"
           >
-            <div className="rounded-xl border bg-background shadow-2xl overflow-hidden">
+            <div className="glass-surface-strong rounded-2xl shadow-[0_24px_70px_-12px_rgba(0,0,0,0.8)] overflow-hidden">
               {/* Search input */}
-              <div className="flex items-center gap-3 px-4 py-3 border-b">
-                <Search className="h-4 w-4 text-muted-foreground shrink-0" />
+              <div className="flex items-center gap-3 px-4 py-3.5 border-b border-white/[0.08] bg-white/[0.03] transition-colors focus-within:border-[#3B82F6]/50 focus-within:ring-1 focus-within:ring-[#3B82F6]/40">
+                <Search className="h-4 w-4 text-white/50 shrink-0 transition-colors" />
                 <input
                   autoFocus
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   placeholder="Type a command or search..."
-                  className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+                  className="flex-1 bg-transparent text-sm text-white outline-none placeholder:text-white/40"
                   onKeyDown={(e) => {
                     if (e.key === 'Escape') {
                       setCommandPaletteOpen(false);
                     }
                   }}
                 />
-                <kbd className="hidden sm:inline-flex items-center gap-0.5 rounded border bg-muted px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground">
+                <kbd className="badge-premium hidden sm:inline-flex font-mono text-[10px]">
                   ESC
                 </kbd>
               </div>
@@ -503,11 +505,11 @@ export default function CommandPalette() {
                 {/* Empty state */}
                 {isSearching && !hasSearchResults && (
                   <div className="py-10 text-center">
-                    <Search className="h-8 w-8 text-muted-foreground/40 mx-auto mb-2" />
-                    <p className="text-sm text-muted-foreground">
+                    <Search className="h-8 w-8 text-white/25 mx-auto mb-2" />
+                    <p className="text-sm text-white/60">
                       No results found for &ldquo;{query}&rdquo;
                     </p>
-                    <p className="text-xs text-muted-foreground/60 mt-1">
+                    <p className="text-xs text-white/40 mt-1">
                       Try searching for clients, invoices, returns, or documents
                     </p>
                   </div>
@@ -518,7 +520,7 @@ export default function CommandPalette() {
                   <div className="p-2">
                     <div className="flex items-center gap-1.5 px-2 py-1.5">
                       <Star className="h-3 w-3 text-amber-500" />
-                      <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                      <span className="text-[10px] font-semibold text-white/40 uppercase tracking-[0.12em]">
                         Favorites
                       </span>
                     </div>
@@ -541,8 +543,8 @@ export default function CommandPalette() {
                 {!isSearching && recentCommands.length > 0 && (
                   <div className="p-2">
                     <div className="flex items-center gap-1.5 px-2 py-1.5">
-                      <Clock className="h-3 w-3 text-muted-foreground" />
-                      <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                      <Clock className="h-3 w-3 text-white/40" />
+                      <span className="text-[10px] font-semibold text-white/40 uppercase tracking-[0.12em]">
                         Recent
                       </span>
                     </div>
@@ -565,8 +567,8 @@ export default function CommandPalette() {
                 {!isSearching && (
                   <div className="p-2">
                     <div className="flex items-center gap-1.5 px-2 py-1.5">
-                      <Zap className="h-3 w-3 text-muted-foreground" />
-                      <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                      <Zap className="h-3 w-3 text-white/40" />
+                      <span className="text-[10px] font-semibold text-white/40 uppercase tracking-[0.12em]">
                         Commands
                       </span>
                     </div>
@@ -590,10 +592,10 @@ export default function CommandPalette() {
                   <div className="p-2">
                     <div className="flex items-center gap-1.5 px-2 py-1.5">
                       <Building2 className="h-3 w-3 text-emerald-600" />
-                      <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                      <span className="text-[10px] font-semibold text-white/40 uppercase tracking-[0.12em]">
                         Clients
                       </span>
-                      <span className="text-[10px] text-muted-foreground/60 ml-auto">
+                      <span className="text-[10px] text-white/40 ml-auto">
                         {searchResults.clients.length} found
                       </span>
                     </div>
@@ -616,10 +618,10 @@ export default function CommandPalette() {
                   <div className="p-2">
                     <div className="flex items-center gap-1.5 px-2 py-1.5">
                       <FileSpreadsheet className="h-3 w-3 text-amber-600" />
-                      <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                      <span className="text-[10px] font-semibold text-white/40 uppercase tracking-[0.12em]">
                         Invoices
                       </span>
-                      <span className="text-[10px] text-muted-foreground/60 ml-auto">
+                      <span className="text-[10px] text-white/40 ml-auto">
                         {searchResults.invoices.length} found
                       </span>
                     </div>
@@ -640,10 +642,10 @@ export default function CommandPalette() {
                   <div className="p-2">
                     <div className="flex items-center gap-1.5 px-2 py-1.5">
                       <FileText className="h-3 w-3 text-blue-600" />
-                      <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                      <span className="text-[10px] font-semibold text-white/40 uppercase tracking-[0.12em]">
                         Returns
                       </span>
-                      <span className="text-[10px] text-muted-foreground/60 ml-auto">
+                      <span className="text-[10px] text-white/40 ml-auto">
                         {searchResults.returns.length} found
                       </span>
                     </div>
@@ -669,10 +671,10 @@ export default function CommandPalette() {
                   <div className="p-2">
                     <div className="flex items-center gap-1.5 px-2 py-1.5">
                       <FolderOpen className="h-3 w-3 text-orange-600" />
-                      <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                      <span className="text-[10px] font-semibold text-white/40 uppercase tracking-[0.12em]">
                         Documents
                       </span>
-                      <span className="text-[10px] text-muted-foreground/60 ml-auto">
+                      <span className="text-[10px] text-white/40 ml-auto">
                         {searchResults.documents.length} found
                       </span>
                     </div>
@@ -693,10 +695,10 @@ export default function CommandPalette() {
                   <div className="p-2">
                     <div className="flex items-center gap-1.5 px-2 py-1.5">
                       <Activity className="h-3 w-3 text-purple-600" />
-                      <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                      <span className="text-[10px] font-semibold text-white/40 uppercase tracking-[0.12em]">
                         Activities
                       </span>
-                      <span className="text-[10px] text-muted-foreground/60 ml-auto">
+                      <span className="text-[10px] text-white/40 ml-auto">
                         {searchResults.activities.length} found
                       </span>
                     </div>
@@ -721,17 +723,17 @@ export default function CommandPalette() {
               </div>
 
               {/* Footer with keyboard hints */}
-              <div className="border-t bg-muted/30 px-4 py-2 flex items-center gap-4 text-[10px] text-muted-foreground">
+              <div className="border-t border-white/[0.06] px-4 py-2.5 flex items-center gap-4 text-xs text-white/45">
                 <span className="flex items-center gap-1">
-                  <kbd className="rounded border bg-background px-1 py-0.5 font-mono">↑↓</kbd>
+                  <kbd className="badge-premium font-mono text-[10px]">↑↓</kbd>
                   Navigate
                 </span>
                 <span className="flex items-center gap-1">
-                  <kbd className="rounded border bg-background px-1 py-0.5 font-mono">↵</kbd>
+                  <kbd className="badge-premium font-mono text-[10px]">↵</kbd>
                   Select
                 </span>
                 <span className="flex items-center gap-1">
-                  <kbd className="rounded border bg-background px-1 py-0.5 font-mono">esc</kbd>
+                  <kbd className="badge-premium font-mono text-[10px]">esc</kbd>
                   Close
                 </span>
                 <span className="ml-auto flex items-center gap-1">
@@ -773,20 +775,22 @@ function CommandItemRow({
 
   return (
     <motion.div
-      className="group flex items-center gap-3 rounded-lg px-3 py-2 cursor-pointer transition-colors hover:bg-accent"
+      className="group relative flex items-center gap-3 rounded-lg px-3 py-2 cursor-pointer transition-colors duration-150 hover:bg-white/[0.06]"
       onClick={onSelect}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       whileHover={{ x: 2 }}
       transition={{ duration: 0.1 }}
     >
-      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-muted/60">
-        <Icon className="h-3.5 w-3.5 text-muted-foreground" />
+      {/* Active left accent bar */}
+      <span className="absolute left-0 top-1/2 h-5 w-[2px] -translate-y-1/2 rounded-full bg-[#3B82F6] opacity-0 group-hover:opacity-100 transition-opacity duration-150" />
+      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-white/[0.04] transition-colors group-hover:bg-[#3B82F6]/10">
+        <Icon className="h-3.5 w-3.5 text-white/50 transition-colors group-hover:text-[#3B82F6]" />
       </div>
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium truncate">{label}</p>
+        <p className="text-sm font-medium text-white truncate">{label}</p>
         {description && (
-          <p className="text-xs text-muted-foreground truncate">{description}</p>
+          <p className="text-xs text-white/45 truncate">{description}</p>
         )}
       </div>
       <div className="flex items-center gap-2 shrink-0">
@@ -797,24 +801,24 @@ function CommandItemRow({
               e.stopPropagation();
               onToggleFavorite();
             }}
-            className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 hover:bg-accent rounded"
+            className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 hover:bg-white/[0.08] rounded"
             aria-label={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
           >
             <Star
               className={`h-3 w-3 ${
                 isFavorite
                   ? 'fill-amber-400 text-amber-400'
-                  : 'text-muted-foreground/60'
+                  : 'text-white/40'
               }`}
             />
           </button>
         )}
         {shortcut && (
-          <kbd className="hidden sm:inline-flex items-center gap-0.5 rounded border bg-muted px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground">
+          <kbd className="badge-premium hidden sm:inline-flex font-mono text-[10px]">
             {shortcut}
           </kbd>
         )}
-        <ArrowRight className="h-3 w-3 text-muted-foreground/0 group-hover:text-muted-foreground/60 transition-colors" />
+        <ArrowRight className="h-3 w-3 text-white/0 group-hover:text-white/50 transition-colors" />
       </div>
     </motion.div>
   );

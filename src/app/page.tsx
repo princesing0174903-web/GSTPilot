@@ -306,7 +306,7 @@ function DashboardContent() {
                 Settings
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={logout} className="gap-2 text-red-600 focus:text-red-600 focus:bg-red-50">
+              <DropdownMenuItem onClick={logout} className="gap-2 text-red-400 focus:text-red-300 focus:bg-red-500/10">
                 <LogOut className="h-4 w-4" />
                 Sign Out
               </DropdownMenuItem>

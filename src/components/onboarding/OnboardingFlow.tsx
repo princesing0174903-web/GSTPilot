@@ -194,8 +194,8 @@ function MultiSelectChip({
       onClick={onToggle}
       className={`rounded-full border px-3 py-1.5 text-sm cursor-pointer transition-all duration-150 ${
         selected
-          ? 'bg-emerald-50 border-emerald-300 text-emerald-700'
-          : 'bg-background border-input text-muted-foreground hover:border-emerald-200 hover:text-foreground'
+          ? 'bg-[#3B82F6]/15 border-[#3B82F6]/40 text-[#3B82F6]'
+          : 'bg-white/[0.03] border-white/[0.08] text-white/60 hover:border-[#3B82F6]/40 hover:text-white'
       }`}
     >
       {selected && <Check className="inline size-3 mr-1 -mt-0.5" />}
@@ -371,7 +371,7 @@ export function OnboardingFlow({
             transition={{ type: 'spring', stiffness: 200, damping: 15, delay: 0.1 }}
             className="mb-8"
           >
-            <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-emerald-400 to-teal-600 flex items-center justify-center shadow-lg shadow-emerald-200">
+            <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-600 flex items-center justify-center shadow-lg shadow-emerald-600/30 glow-accent-btn">
               <Zap className="size-10 text-white" />
             </div>
           </motion.div>
@@ -379,7 +379,7 @@ export function OnboardingFlow({
             initial={{ y: 20, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             transition={{ delay: 0.2 }}
-            className="text-2xl font-bold tracking-tight text-foreground"
+            className="text-2xl font-bold tracking-tight text-white"
           >
             Welcome to GSTPilot
           </motion.h1>
@@ -387,7 +387,7 @@ export function OnboardingFlow({
             initial={{ y: 20, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             transition={{ delay: 0.3 }}
-            className="text-muted-foreground mt-2 max-w-sm"
+            className="text-white/55 mt-2 max-w-sm"
           >
             Let&apos;s set up your workspace in less than 2 minutes.
           </motion.p>
@@ -400,7 +400,7 @@ export function OnboardingFlow({
             <Button
               onClick={goNext}
               size="lg"
-              className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2 px-8"
+              className="bg-white text-black hover:bg-white/90 press-scale glow-accent-btn rounded-xl gap-2 px-8"
             >
               Get Started
               <ArrowRight className="size-4" />
@@ -424,7 +424,7 @@ export function OnboardingFlow({
           className="py-4"
         >
           <div className="flex items-center gap-3 mb-6">
-            <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center">
+            <div className="w-10 h-10 rounded-xl bg-emerald-500/15 border border-emerald-500/20 flex items-center justify-center">
               <User className="size-5 text-emerald-600" />
             </div>
             <div>
@@ -578,7 +578,7 @@ export function OnboardingFlow({
           className="py-4"
         >
           <div className="flex items-center gap-3 mb-6">
-            <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center">
+            <div className="w-10 h-10 rounded-xl bg-emerald-500/15 border border-emerald-500/20 flex items-center justify-center">
               <Building2 className="size-5 text-emerald-600" />
             </div>
             <div>
@@ -739,7 +739,7 @@ export function OnboardingFlow({
           className="py-4"
         >
           <div className="flex items-center gap-3 mb-6">
-            <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center">
+            <div className="w-10 h-10 rounded-xl bg-emerald-500/15 border border-emerald-500/20 flex items-center justify-center">
               <Briefcase className="size-5 text-emerald-600" />
             </div>
             <div>
@@ -839,7 +839,7 @@ export function OnboardingFlow({
           className="py-4"
         >
           <div className="flex items-center gap-3 mb-6">
-            <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center">
+            <div className="w-10 h-10 rounded-xl bg-emerald-500/15 border border-emerald-500/20 flex items-center justify-center">
               <Target className="size-5 text-emerald-600" />
             </div>
             <div>
@@ -928,7 +928,7 @@ export function OnboardingFlow({
           transition={{ type: 'spring', stiffness: 200, damping: 15, delay: 0.1 }}
           className="mb-6"
         >
-          <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-emerald-400 to-teal-600 flex items-center justify-center shadow-lg shadow-emerald-200">
+          <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-600 flex items-center justify-center shadow-lg shadow-emerald-600/30 glow-accent-btn">
             <Rocket className="size-10 text-white" />
           </div>
         </motion.div>
@@ -1026,7 +1026,7 @@ export function OnboardingFlow({
             type="button"
             onClick={() => onComplete(formData, 'dashboard')}
             size="lg"
-            className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white gap-2"
+            className="flex-1 bg-white text-black hover:bg-white/90 press-scale glow-accent-btn rounded-xl gap-2"
           >
             Go to Dashboard <ArrowRight className="size-4" />
           </Button>
@@ -1035,7 +1035,7 @@ export function OnboardingFlow({
             onClick={() => onComplete(formData, 'invoices')}
             variant="outline"
             size="lg"
-            className="flex-1 gap-2 border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+            className="flex-1 gap-2 glass-surface border-white/[0.10] text-white hover:bg-white/[0.06] press-scale rounded-xl"
           >
             <Upload className="size-4" />Upload First Document
           </Button>
@@ -1047,14 +1047,14 @@ export function OnboardingFlow({
   // ─── Main Render ──────────────────────────────────────────────────────────
 
   return (
-    <div className="min-h-screen bg-white flex flex-col">
+    <div className="min-h-screen bg-black flex flex-col">
       {/* Progress Bar */}
-      <div className="sticky top-0 z-10 bg-white border-b">
+      <div className="sticky top-0 z-10 glass-surface border-b border-white/[0.06]">
         <div className="max-w-[640px] mx-auto px-6 py-3">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
               {currentStep > 0 && (
-                <span className="text-xs font-medium text-muted-foreground">
+                <span className="text-xs font-medium text-white/50">
                   Step {currentStep} of {totalSteps}
                 </span>
               )}
@@ -1066,10 +1066,10 @@ export function OnboardingFlow({
                     key={i}
                     className={`h-1.5 rounded-full transition-all duration-300 ${
                       i < currentStep
-                        ? 'w-8 bg-emerald-500'
+                        ? 'w-8 bg-[#3B82F6]'
                         : i === currentStep
-                        ? 'w-8 bg-emerald-300'
-                        : 'w-4 bg-emerald-100'
+                        ? 'w-8 bg-[#3B82F6]/40'
+                        : 'w-4 bg-white/[0.08]'
                     }`}
                   />
                 ))}
@@ -1077,9 +1077,9 @@ export function OnboardingFlow({
             )}
           </div>
           {currentStep > 0 && (
-            <div className="h-1 w-full bg-emerald-100 rounded-full overflow-hidden">
+            <div className="h-1 w-full bg-white/[0.08] rounded-full overflow-hidden">
               <motion.div
-                className="h-full bg-emerald-500 rounded-full"
+                className="h-full bg-gradient-to-r from-[#3B82F6] to-[#60A5FA] rounded-full"
                 initial={false}
                 animate={{ width: `${progressPercent}%` }}
                 transition={{ duration: 0.3, ease: 'easeOut' }}
@@ -1099,7 +1099,7 @@ export function OnboardingFlow({
       </div>
 
       {/* Footer */}
-      <div className="border-t bg-white">
+      <div className="border-t border-white/[0.06] glass-surface">
         <div className="max-w-[640px] mx-auto px-6 py-4 flex items-center justify-between">
           {currentStep > 0 && currentStep < 5 ? (
             <Button
@@ -1139,7 +1139,7 @@ export function OnboardingFlow({
             <Button
               onClick={handleNext}
               size="sm"
-              className="bg-emerald-600 hover:bg-emerald-700 text-white gap-1"
+              className="bg-white text-black hover:bg-white/90 press-scale glow-accent-btn rounded-xl gap-1"
             >
               {currentStep === 4 ? 'Complete Setup' : 'Continue'}
               {currentStep === 4 ? (

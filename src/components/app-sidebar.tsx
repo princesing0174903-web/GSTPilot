@@ -323,7 +323,7 @@ function SidebarNav({ onSearchOpen }: AppSidebarProps) {
         <DropdownMenu>
           <DropdownMenuTrigger className="w-full flex items-center gap-2.5 rounded-lg px-2 py-2 hover:bg-white/[0.04] transition-colors outline-none text-left">
             <Avatar className="h-7 w-7 shrink-0">
-              <AvatarFallback className="bg-emerald-100 text-emerald-700 text-[10px] font-semibold">
+              <AvatarFallback className="bg-emerald-500/15 text-emerald-300 border border-emerald-500/20 text-[10px] font-semibold">
                 {userInitials}
               </AvatarFallback>
             </Avatar>
@@ -337,7 +337,7 @@ function SidebarNav({ onSearchOpen }: AppSidebarProps) {
           <DropdownMenuContent align="end" side="top" className="w-56">
             <div className="flex items-center gap-2 p-2">
               <Avatar className="h-7 w-7">
-                <AvatarFallback className="bg-emerald-100 text-emerald-700 text-[10px] font-semibold">
+                <AvatarFallback className="bg-emerald-500/15 text-emerald-300 border border-emerald-500/20 text-[10px] font-semibold">
                   {userInitials}
                 </AvatarFallback>
               </Avatar>
@@ -361,7 +361,7 @@ function SidebarNav({ onSearchOpen }: AppSidebarProps) {
               Settings
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={logout} className="gap-2 text-red-600 focus:text-red-600 focus:bg-red-50">
+            <DropdownMenuItem onClick={logout} className="gap-2 text-red-400 focus:text-red-300 focus:bg-red-500/10">
               <LogOut className="h-4 w-4" />
               Sign Out
             </DropdownMenuItem>

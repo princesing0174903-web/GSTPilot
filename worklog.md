@@ -2677,3 +2677,26 @@ Stage Summary:
 - New src/components/ui-pro/ primitive library (ProButton, ProCard, ProSkeleton, ProSpinner, ProStatusDot, ProBadge, ProTable, ProDivider, ProStat + Framer Motion variants) available for opt-in use.
 - Global Dark Cascade from RESTORE-1 continues to fix all white-on-white/black-on-black app-wide.
 - Lint clean, browser-verified, 100% functionality preserved.
+
+---
+Task ID: UIPRO-INSTALL-2
+Agent: GSTPilot Architect (main agent — UI Pro Max repository install)
+Task: Install the github.com/nextlevelbuilder/ui-ux-pro-max-skill repository persistently into the project so its design-intelligence search engine + design-system generator are available on-demand as a tool (not just the extractive CSS integration done in UIPRO-1).
+
+Work Log:
+- Confirmed prerequisites: skills/ dir exists at project root, python3 3.12.13 available, npm global prefix /home/z/.npm-global.
+- Cloned the repository persistently into /home/z/my-project/skills/ui-ux-pro-max-skill/ (17MB, full source with src/ui-ux-pro-max/{scripts,data,templates}, cli/, docs/, preview/). NOT in /tmp this time — persistent install.
+- Installed the official npm CLI globally: `npm install -g uipro-cli` → uipro v2.2.3 (23 packages). Commands available: `uipro init`, `uipro versions`, `uipro update`.
+- Verified the Python search engine runs from the installed path:
+  `python3 skills/ui-ux-pro-max-skill/src/ui-ux-pro-max/scripts/search.py "dark premium glassmorphism" --domain style -n 2` → returns full "Modern Dark (Cinema)" style intelligence (Expo.out easing, spring damping:20/stiffness:90, scale-press 0.97→1.0, ambient blobs blur 30-50 opacity 0.08-0.12).
+- Verified the design-system generator runs from the installed path:
+  `python3 skills/ui-ux-pro-max-skill/src/ui-ux-pro-max/scripts/design_system.py "fintech GST dark dashboard" --project-name "GSTPilot" --format markdown` → generates a tailored GSTPilot design system (Real-Time/Operations pattern, Inter typography, dark cinematic palette, status colors). Confirms the tool produces project-specific design guidance on-demand.
+- Reconciled with pre-existing /home/z/my-project/skills/ui-ux-pro-max/ folder (a prior skill-install form with SKILL.md). The two are complementary: ui-ux-pro-max/ = installed skill form; ui-ux-pro-max-skill/ = full source repo (with cli/, docs/, preview/, templates/). Both functional. No deletion performed (rule: no deletions).
+- Confirmed ZERO impact on project: bun run lint PASS (0 errors), dev server HTTP 200, skills/ directory is not linted by the Next.js eslint config so the Python/Markdown assets don't interfere.
+
+Stage Summary:
+- Repository FULLY installed at skills/ui-ux-pro-max-skill/ (persistent, 17MB).
+- uipro CLI v2.2.3 installed globally (npm).
+- Search engine + design-system generator verified working from installed path — available on-demand for any future UI/UX query.
+- Combined with UIPRO-1's extractive work (globals.css enhancement layer + src/components/ui-pro/ primitives), GSTPilot now has BOTH the baked-in premium design system AND the live design-intelligence tool installed.
+- Zero file replacements, zero deletions, zero business-logic changes. Lint clean, dev server 200.

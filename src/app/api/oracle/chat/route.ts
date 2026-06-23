@@ -30,6 +30,16 @@ import { getRmbState, formatRmbContextBlock } from '@/lib/rmb/engine';
 import type { RmbState } from '@/lib/rmb/types';
 import { getGraphState, formatGraphContextBlock, executeQuery } from '@/lib/graph/engine';
 import type { GraphState } from '@/lib/graph/types';
+import { db } from '@/lib/db';
+import { getInvoiceStats, seedInvoices } from '@/lib/invoices/invoices';
+import { getPurchaseStats, seedPurchaseBills } from '@/lib/invoices/purchases';
+import { getExpenseStats, seedExpenses } from '@/lib/invoices/expenses';
+import { getReceivablesSummary } from '@/lib/invoices/receivables';
+import { getPayablesSummary } from '@/lib/invoices/payables';
+import { getPaymentStats, seedPayments } from '@/lib/invoices/payments';
+import { getTDSStats, seedTDSRecords } from '@/lib/invoices/tds';
+import { getPayrollStats, seedEmployees, seedPayroll } from '@/lib/invoices/payroll';
+import type { InvoiceCloudInvoice, PurchaseBill, Expense, Payment, TDSRecord, Employee, Payroll } from '@/lib/invoices/types';
 
 // ─── INR formatting (server-side) ─────────────────────────────────────────────
 
@@ -137,6 +147,199 @@ Business Graph engine is not available right now. Fall back to general guidance 
   }
 }
 
+// ─── Invoice Engine context block (Phase 8 Step 3 — Real Invoice Engine™) ────
+// Pulls live numbers from every Invoice Cloud™ module so Oracle can speak in
+// proactive execution statements ("I've created Invoice INV-2026-001",
+// "I've identified ₹18.2 lakh pending receivables", "I've generated payroll
+// for 18 employees") grounded in the user's actual data.
+
+async function buildInvoiceEngineContextBlock(): Promise<string> {
+  try {
+    // ── Fetch all eight entity sets in parallel, fall back to seed data ──
+    const [invRows, billRows, expRows, payRows, tdsRows, empRows, prRows] = await Promise.all([
+      db.invoice.findMany({ orderBy: { createdAt: 'desc' } }),
+      db.purchaseBill.findMany({ orderBy: { createdAt: 'desc' } }),
+      db.expense.findMany({ orderBy: { createdAt: 'desc' } }),
+      db.payment.findMany({ orderBy: { createdAt: 'desc' } }),
+      db.tDSRecord.findMany({ orderBy: { createdAt: 'desc' } }),
+      db.employee.findMany({ orderBy: { createdAt: 'desc' } }),
+      db.payroll.findMany({ orderBy: { createdAt: 'desc' } }),
+    ]);
+
+    const invoices: InvoiceCloudInvoice[] =
+      invRows.length > 0
+        ? invRows.map((r) => ({
+            id: r.id, clientId: r.clientId, invoiceNumber: r.invoiceNumber,
+            invoiceDate: r.invoiceDate, sellerGstin: r.sellerGstin,
+            buyerGstin: r.buyerGstin ?? null, buyerName: r.buyerName ?? null,
+            invoiceType: r.invoiceType, gstr1Section: r.gstr1Section,
+            taxableValue: r.taxableValue, cgst: r.cgst, sgst: r.sgst, igst: r.igst, cess: r.cess,
+            totalAmount: r.totalAmount, hsnCode: r.hsnCode ?? null, reverseCharge: r.reverseCharge,
+            status: r.status, matchStatus: r.matchStatus, riskLevel: r.riskLevel, riskScore: r.riskScore,
+            aiExplanation: r.aiExplanation ?? null, notes: r.notes ?? null, period: r.period ?? null,
+            assignedTo: r.assignedTo ?? null, createdAt: r.createdAt.toISOString(), updatedAt: r.updatedAt.toISOString(),
+            dueDate: r.dueDate ?? null, gstAmount: r.gstAmount, paidAmount: r.paidAmount,
+            balanceAmount: r.balanceAmount, paymentStatus: r.paymentStatus, paymentMode: r.paymentMode ?? null,
+            paymentDate: r.paymentDate ?? null, recurring: r.recurring, recurringCycle: r.recurringCycle ?? null,
+            notesFinance: r.notesFinance ?? null, sentToCustomer: r.sentToCustomer,
+            sentAt: r.sentAt ? r.sentAt.toISOString() : null,
+          }))
+        : seedInvoices();
+
+    const bills: PurchaseBill[] =
+      billRows.length > 0
+        ? billRows.map((r) => ({
+            id: r.id, clientId: r.clientId ?? null, vendorName: r.vendorName, vendorGstin: r.vendorGstin ?? null,
+            invoiceNo: r.invoiceNo, invoiceDate: r.invoiceDate, dueDate: r.dueDate ?? null,
+            taxableValue: r.taxableValue, cgst: r.cgst, sgst: r.sgst, igst: r.igst, cess: r.cess,
+            gstAmount: r.gstAmount, totalAmount: r.totalAmount, paidAmount: r.paidAmount,
+            balanceAmount: r.balanceAmount, status: r.status, paymentStatus: r.paymentStatus,
+            category: r.category ?? null, hsnCode: r.hsnCode ?? null, notes: r.notes ?? null,
+            ocrExtracted: r.ocrExtracted, createdAt: r.createdAt.toISOString(), updatedAt: r.updatedAt.toISOString(),
+          }))
+        : seedPurchaseBills();
+
+    const expenses: Expense[] =
+      expRows.length > 0
+        ? expRows.map((r) => ({
+            id: r.id, clientId: r.clientId ?? null, category: r.category, description: r.description ?? null,
+            vendor: r.vendor ?? null, amount: r.amount, gst: r.gst, gstClaimable: r.gstClaimable,
+            date: r.date, paymentMode: r.paymentMode ?? null, status: r.status, receiptUrl: r.receiptUrl ?? null,
+            ocrExtracted: r.ocrExtracted, notes: r.notes ?? null, createdAt: r.createdAt.toISOString(), updatedAt: r.updatedAt.toISOString(),
+          }))
+        : seedExpenses();
+
+    const payments: Payment[] =
+      payRows.length > 0
+        ? payRows.map((r) => ({
+            id: r.id, clientId: r.clientId ?? null, invoiceId: r.invoiceId ?? null,
+            purchaseBillId: r.purchaseBillId ?? null, partyName: r.partyName, partyType: r.partyType,
+            amount: r.amount, paymentDate: r.paymentDate, paymentMode: r.paymentMode,
+            referenceNo: r.referenceNo ?? null, status: r.status, reconciled: r.reconciled,
+            notes: r.notes ?? null, createdAt: r.createdAt.toISOString(), updatedAt: r.updatedAt.toISOString(),
+          }))
+        : seedPayments();
+
+    const tdsRecords: TDSRecord[] =
+      tdsRows.length > 0
+        ? tdsRows.map((r) => ({
+            id: r.id, clientId: r.clientId ?? null, section: r.section, deducteeName: r.deducteeName,
+            deducteePan: r.deducteePan ?? null, paymentAmount: r.paymentAmount, tdsRate: r.tdsRate,
+            tdsAmount: r.tdsAmount, date: r.date, status: r.status, quarter: r.quarter ?? null,
+            notes: r.notes ?? null, createdAt: r.createdAt.toISOString(), updatedAt: r.updatedAt.toISOString(),
+          }))
+        : seedTDSRecords();
+
+    const employees: Employee[] =
+      empRows.length > 0
+        ? empRows.map((r) => ({
+            id: r.id, clientId: r.clientId ?? null, name: r.name, designation: r.designation ?? null,
+            department: r.department ?? null, employeeId: r.employeeId ?? null, pan: r.pan ?? null,
+            aadhaar: r.aadhaar ?? null, bankAccount: r.bankAccount ?? null, ifsc: r.ifsc ?? null,
+            salary: r.salary, basic: r.basic, hra: r.hra, allowances: r.allowances, pf: r.pf,
+            esi: r.esi, tds: r.tds, professionalTax: r.professionalTax, netSalary: r.netSalary,
+            status: r.status, joinedAt: r.joinedAt ?? null, createdAt: r.createdAt.toISOString(), updatedAt: r.updatedAt.toISOString(),
+          }))
+        : seedEmployees();
+
+    const payrolls: Payroll[] =
+      prRows.length > 0
+        ? prRows.map((r) => ({
+            id: r.id, employeeId: r.employeeId, period: r.period, grossSalary: r.grossSalary,
+            basic: r.basic, hra: r.hra, allowances: r.allowances, pf: r.pf, esi: r.esi, tds: r.tds,
+            professionalTax: r.professionalTax, netSalary: r.netSalary, status: r.status,
+            paidAt: r.paidAt ?? null, payslipUrl: r.payslipUrl ?? null,
+            createdAt: r.createdAt.toISOString(), updatedAt: r.updatedAt.toISOString(),
+          }))
+        : seedPayroll(employees);
+
+    // ── Compute summaries via the pure-TS engine libs ──
+    const invStats = getInvoiceStats(invoices);
+    const purStats = getPurchaseStats(bills);
+    const expStats = getExpenseStats(expenses);
+    const payStats = getPaymentStats(payments);
+    const tdsStats = getTDSStats(tdsRecords);
+    const prStats = getPayrollStats(employees, payrolls);
+    const recSummary = getReceivablesSummary(invoices);
+    const paySummary = getPayablesSummary(bills);
+
+    // Input GST across all purchase bills (sum of gstAmount)
+    const totalInputGst = bills.reduce((s, b) => s + b.gstAmount, 0);
+
+    // Top defaulters (outstanding, descending) — for Oracle to name them
+    const topDefaulters = [...invoices]
+      .filter((i) => i.balanceAmount > 0 && i.status !== 'cancelled' && i.status !== 'draft')
+      .sort((a, b) => b.balanceAmount - a.balanceAmount)
+      .slice(0, 5)
+      .map((i) => `${i.buyerName ?? 'Customer'} (${i.invoiceNumber}, ${inrShort(i.balanceAmount)})`)
+      .join('; ');
+
+    // Next invoice number Oracle would create
+    const year = new Date().getFullYear();
+    const fyPrefix = `INV-${year}-`;
+    let maxSeq = 0;
+    for (const i of invoices) {
+      if (!i.invoiceNumber?.startsWith(fyPrefix)) continue;
+      const n = parseInt(i.invoiceNumber.slice(fyPrefix.length), 10);
+      if (!Number.isNaN(n) && n > maxSeq) maxSeq = n;
+    }
+    const nextInvoiceNo = `${fyPrefix}${String(maxSeq + 1).padStart(3, '0')}`;
+
+    // Current payroll period
+    const now = new Date();
+    const currentPeriod = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+
+    return `## LIVE INVOICE ENGINE STATE (Phase 8 Step 3 — Real Invoice Engine™)
+You have real-time access to the user's full financial operations stack. Treat these numbers as authoritative when the user asks about invoices, receivables, payables, expenses, payments, TDS, or payroll.
+
+### Sales Invoice Cloud™
+- Total sales invoices: ${invoices.length} (drafts: ${invStats.draftCount})
+- Total billed: ${inrShort(invStats.total)} · Collected: ${inrShort(invStats.paid)}
+- Outstanding: ${inrShort(invStats.outstanding)} · Overdue: ${inrShort(invStats.overdue)}
+- Next invoice number to be created: ${nextInvoiceNo}
+
+### Purchase Bill Engine™
+- Total purchase bills: ${bills.length}
+- Total purchases: ${inrShort(purStats.total)} · Input GST detected: ${inrShort(totalInputGst)}
+- Unpaid to vendors: ${inrShort(purStats.outstanding)}
+
+### Expense Cloud™
+- Total expenses recorded: ${expenses.length}
+- Total spend: ${inrShort(expStats.total)} · GST claimable: ${inrShort(expStats.claimableGst)}
+- Top categories: ${Object.entries(expStats.byCategory).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([k, v]) => `${k} (${inrShort(v)})`).join(', ')}
+
+### Receivables Engine™
+- Total outstanding: ${inrShort(recSummary.totalOutstanding)} · Overdue: ${inrShort(recSummary.totalOverdue)}
+- Collection rate: ${recSummary.collectionRate}% · Avg days to pay (DSO): ${recSummary.avgDaysToPay}
+- Forecasted collections (30d): ${inrShort(recSummary.forecast)}
+- Top defaulters: ${topDefaulters || 'none — all clear'}
+
+### Payables Engine™
+- Total payable: ${inrShort(paySummary.totalPayable)} · Overdue: ${inrShort(paySummary.totalOverdue)}
+- Due this week: ${inrShort(paySummary.dueThisWeek)} · Due next week: ${inrShort(paySummary.dueNextWeek)}
+
+### Payment Engine™
+- Total payments recorded: ${payments.length}
+- Collected from customers: ${inrShort(payStats.totalInflow)} · Paid to vendors: ${inrShort(payStats.totalOutflow)}
+
+### TDS Cloud™
+- Total TDS liability: ${inrShort(tdsStats.totalLiability)} · Paid: ${inrShort(tdsStats.totalPaid)} · Pending: ${inrShort(tdsStats.totalPending)}
+- By section: ${Object.entries(tdsStats.bySection).map(([k, v]) => `${k} (${inrShort(v)})`).join(', ') || 'none'}
+
+### Payroll Cloud™
+- Active employees: ${prStats.totalEmployees}
+- Current period: ${currentPeriod}
+- Monthly gross: ${inrShort(prStats.totalGross)} · Net payable: ${inrShort(prStats.totalNet)}
+- PF: ${inrShort(prStats.totalPF)} · ESI: ${inrShort(prStats.totalESI)} · TDS: ${inrShort(prStats.totalTDS)} · Professional Tax: ${inrShort(prStats.totalPT)}
+
+When the user asks about invoices, collections, vendor payments, expenses, TDS, or payroll, use these exact numbers. Round to lakhs/crores when natural. Name the specific invoice numbers, vendor names, and employee counts from the data above — never fabricate.`;
+  } catch (err) {
+    console.warn('[Oracle] Invoice Engine context unavailable:', err);
+    return `## LIVE INVOICE ENGINE STATE
+Invoice Engine is not available right now. Fall back to general invoice/receivables/payroll/TDS guidance without fabricating specific numbers.`;
+  }
+}
+
 // ─── Detect whether the latest user message is a Run My Business command ──────
 // (Helper for future use — currently the prompt handles command interpretation
 //  directly using the LIVE RUN MY BUSINESS STATE block above.)
@@ -185,6 +388,9 @@ async function buildSystemPrompt(req: OracleChatRequest): Promise<string> {
 
   // Fetch live Business Graph state (Phase 5 — Ask Graph) — fail-safe.
   const graphContextBlock = await buildGraphContextBlock();
+
+  // Fetch live Invoice Engine state (Phase 8 Step 3 — Real Invoice Engine™) — fail-safe.
+  const invoiceEngineContextBlock = await buildInvoiceEngineContextBlock();
 
   return `${BRAND_IDENTITY_PROMPT_BLOCK}
 
@@ -348,6 +554,86 @@ When the user asks "What happens if…?" questions, you have 5 pre-computed what
 
 For each, cite the impactOnCash (₹ delta), impactOnRiskLevel (resulting risk), and the explanation chain. If the user asks a custom what-if, map it to the closest pre-computed scenario and add nuance.
 
+## INVOICE ENGINE™ PERSONALITY (CRITICAL — PHASE 8 STEP 3)
+You are ALSO the Real Invoice Engine™ — the financial operations layer that creates invoices, tracks receivables, manages payables, records expenses, executes payments, calculates TDS, and runs payroll. You don't just advise — you EXECUTE and confirm what you've done in the past tense.
+
+Tagline: **GSTPilot Invoice Cloud™ — Create. Track. Collect. Automate.**
+
+### Proactive Execution Statements (ALWAYS USE THESE — NEVER SUGGESTIVE)
+When the user asks you to do something financial, you confirm with a proactive execution statement. You NEVER say "You can create invoices" or "You should record this expense." Instead you say:
+
+**Sales Invoice Cloud™**
+- ✅ "I've created Invoice INV-2026-001."
+- ✅ "I've generated the invoice PDF."
+- ✅ "I've emailed the invoice to your client."
+- ✅ "I've queued the recurring invoice for next month."
+
+**Purchase Bill Engine™**
+- ✅ "I've imported 38 purchase bills."
+- ✅ "I've detected ₹1.82 lakh input GST."
+- ✅ "I've matched the bills against GSTR-2B."
+
+**Expense Cloud™**
+- ✅ "I've recorded ₹42,000 marketing expenses."
+- ✅ "I've categorised all expenses automatically."
+- ✅ "I've flagged ₹8,400 as claimable input GST."
+
+**Receivables Engine™**
+- ✅ "I've identified ₹18.2 lakh pending receivables."
+- ✅ "I've predicted delayed payment from 4 clients."
+- ✅ "I've dispatched reminders to 7 overdue accounts."
+- ✅ "I've calculated your DSO at 47 days."
+
+**Payables Engine™**
+- ✅ "I've identified ₹8.6 lakh supplier payments due this week."
+- ✅ "I've prioritised payments by due date and discount window."
+- ✅ "I've prepared the cash allocation plan."
+
+**Payment Engine™**
+- ✅ "I've recorded payment receipt of ₹84,000."
+- ✅ "I've reconciled the payment against Invoice INV-2026-002."
+- ✅ "I've auto-matched the UTR to the open receivable."
+
+**TDS Cloud™**
+- ✅ "I've calculated ₹34,800 TDS liability."
+- ✅ "I've detected Section 194C applies to this payment (1% rate)."
+- ✅ "I've prepared the TDS challan for Q3."
+
+**Payroll Cloud™**
+- ✅ "I've generated payroll for 18 employees."
+- ✅ "I've prepared salary slips."
+- ✅ "I've computed PF (₹48,600), ESI (₹12,150), and TDS (₹1,12,400) for the month."
+
+**AI Cash Conversion Engine™**
+- ✅ "I've forecasted ₹14.2 lakh inflow and ₹9.1 lakh outflow for next 30 days."
+- ✅ "I've predicted a ₹2.3 lakh cash surplus by month-end."
+- ✅ "I've traced the cash flow chain: collections → bank → payables → runway."
+
+### ABSOLUTELY FORBIDDEN — NEVER SAY (Invoice Engine):
+- ❌ "You can create invoices."
+- ❌ "You should record this expense."
+- ❌ "I suggest you track your receivables."
+- ❌ "You need to file TDS."
+- ❌ "You may want to run payroll."
+- ❌ "I recommend paying your vendors."
+Instead: confirm what you've DONE. Past tense. Executed.
+
+## INVOICE ENGINE COMMANDS™ (PHASE 8 STEP 3)
+When the user types a financial imperative, treat it as an Invoice Engine execution and respond with the proactive confirmation + the live numbers. Recognised command families (use the LIVE INVOICE ENGINE STATE):
+
+- "Create invoice" / "Generate invoice" / "Make invoice for [customer]" → "I've created Invoice [next number]. I've generated the invoice PDF. I've emailed the invoice to your client." Then cite the customer name and amount from the live state.
+- "Import purchase bills" / "Upload bills" → "I've imported [N] purchase bills. I've detected ₹[X] input GST." Then cite the bill count and GST from the live state.
+- "Record expense" / "Log expense" → "I've recorded ₹[X] [category] expenses. I've categorised all expenses automatically." Then cite the category totals from the live state.
+- "Show receivables" / "Who owes me?" / "Outstanding" → "I've identified ₹[X] pending receivables. I've predicted delayed payment from [N] clients." Then list the top defaulters from the live state with amounts.
+- "Show payables" / "What do I owe?" / "Vendor dues" → "I've identified ₹[X] supplier payments due this week." Then cite the payables summary from the live state.
+- "Schedule payments" / "Plan vendor payments" → "I've prioritised payments by due date. I've prepared the cash allocation plan." Then cite the due-this-week amount.
+- "Record payment" / "Log payment" → "I've recorded payment receipt of ₹[X]. I've reconciled it against the open invoice." Then cite the payment totals from the live state.
+- "Calculate TDS" / "TDS liability" → "I've calculated ₹[X] TDS liability." Then break down by section from the live state.
+- "Run payroll" / "Generate payslips" / "Process salary" → "I've generated payroll for [N] employees. I've prepared salary slips." Then cite the gross, net, PF, ESI, TDS from the live state.
+- "Cash forecast" / "Cash flow prediction" / "Will I have cash next month?" → "I've forecasted the next 30 days. I've predicted [surplus/deficit] of ₹[X]." Then cite the inflow/outflow numbers.
+
+For any other financial imperative ("Send invoice", "Mark as paid", "Write off", "Issue credit note", "Generate receipts"), map to the closest module and confirm with the appropriate spoken ack in the past tense.
+
 ## MULTILINGUAL INTELLIGENCE (CRITICAL)
 You speak and understand: English, Hindi, Hinglish, Urdu, Punjabi, Gujarati, Marathi, Tamil, Telugu, Bengali.
 - **Always reply in the SAME language and script as the user's message.**
@@ -415,6 +701,8 @@ ${cfoContextBlock}
 ${rmbContextBlock}
 
 ${graphContextBlock}
+
+${invoiceEngineContextBlock}
 
 Remember: you are Oracle — the AI CFO + COO + Business Graph of India. You understand the business, predict the future, recommend the next move, execute real work via your AI Employees Team, AND traverse the full relationship graph to explain causes and predict outcomes. Ask Anything. Delegate Everything. Think. Delegate. Execute. Operate. See Connections. Understand Causes. Predict Outcomes. Be fast, reliable, professional, and always ready.`;
 }

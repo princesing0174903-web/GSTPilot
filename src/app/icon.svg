@@ -1,31 +1,53 @@
-<svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="GSTPilot Icon">
   <defs>
-    <linearGradient id="g1" x1="0" y1="0" x2="48" y2="48">
-      <stop offset="0%" stop-color="#10b981"/>
-      <stop offset="100%" stop-color="#06b6d4"/>
+    <!-- Brand Blue: #3B82F6 → #22D3EE -->
+    <linearGradient id="gp-blue" x1="0" y1="0" x2="512" y2="512" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#22D3EE"/>
+      <stop offset="100%" stop-color="#3B82F6"/>
     </linearGradient>
-    <linearGradient id="g2" x1="48" y1="0" x2="0" y2="48">
-      <stop offset="0%" stop-color="#06b6d4"/>
-      <stop offset="100%" stop-color="#3b82f6"/>
+    <!-- Brand Purple: #8B5CF6 → #6366F1 -->
+    <linearGradient id="gp-purple" x1="512" y1="0" x2="0" y2="512" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#8B5CF6"/>
+      <stop offset="100%" stop-color="#6366F1"/>
     </linearGradient>
-    <linearGradient id="g3" x1="0" y1="48" x2="48" y2="0">
-      <stop offset="0%" stop-color="#3b82f6"/>
-      <stop offset="100%" stop-color="#10b981"/>
+    <!-- Arrow gradient: purple → blue -->
+    <linearGradient id="gp-arrow" x1="80" y1="400" x2="440" y2="80" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#8B5CF6"/>
+      <stop offset="55%" stop-color="#6366F1"/>
+      <stop offset="100%" stop-color="#22D3EE"/>
     </linearGradient>
-    <linearGradient id="ln" x1="0" y1="0" x2="48" y2="48">
-      <stop offset="0%" stop-color="#10b981" stop-opacity="0.6"/>
-      <stop offset="50%" stop-color="#06b6d4" stop-opacity="0.6"/>
-      <stop offset="100%" stop-color="#3b82f6" stop-opacity="0.6"/>
-    </linearGradient>
+    <filter id="gp-glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="6" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
   </defs>
-  <rect width="48" height="48" rx="10" fill="#050505"/>
-  <g stroke="url(#ln)" stroke-width="1.5" fill="none" stroke-linecap="round">
-    <path d="M 12 14 Q 24 6, 36 14"/>
-    <path d="M 36 14 Q 42 24, 24 36"/>
-    <path d="M 24 36 Q 6 24, 12 14"/>
-    <path d="M 16 18 Q 24 28, 32 18" stroke-opacity="0.4"/>
-  </g>
-  <circle cx="12" cy="14" r="4.5" fill="url(#g1)"/>
-  <circle cx="36" cy="14" r="4.5" fill="url(#g2)"/>
-  <circle cx="24" cy="36" r="4.5" fill="url(#g3)"/>
+
+  <!-- Outer G ring (open on the right where the arrow exits) -->
+  <!-- The G is a thick arc from top, going clockwise, opening at ~3 o'clock -->
+  <path d="
+    M 300 96
+    A 160 160 0 1 0 416 352
+    L 350 352
+    A 96 96 0 1 1 300 160
+    Z
+  " fill="url(#gp-blue)"/>
+
+  <!-- Inner cutout to give the G its counter (negative space) -->
+  <circle cx="256" cy="256" r="96" fill="#000000"/>
+
+  <!-- G horizontal bar (the spine of the G) -->
+  <rect x="256" y="224" width="120" height="64" fill="url(#gp-blue)"/>
+
+  <!-- Upward arrow exiting the G opening, purple shaft + blue head -->
+  <!-- Shaft -->
+  <path d="M 360 360 L 408 312 L 408 248 L 360 296 Z" fill="url(#gp-purple)"/>
+  <!-- Arrowhead pointing up-right -->
+  <path d="M 408 96 L 448 96 L 448 248 L 408 248 Z" fill="url(#gp-arrow)"/>
+  <path d="M 360 144 L 428 80 L 496 144 L 428 216 Z" fill="url(#gp-arrow)"/>
+  <!-- Arrowhead tip accent -->
+  <path d="M 428 80 L 496 144 L 448 144 Z" fill="#22D3EE"/>
+
+  <!-- Subtle highlight on the G -->
+  <path d="M 300 96 A 160 160 0 0 0 140 180" stroke="rgba(255,255,255,0.35)" stroke-width="6" stroke-linecap="round" fill="none"/>
 </svg>

@@ -962,3 +962,205 @@ a:focus-visible,
   background: rgba(59, 130, 246, 0.30);
   color: #ffffff;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   GSTPILOT™ BRAND IDENTITY SYSTEM — Official Brand Layer
+   ═══════════════════════════════════════════════════════════════════════════════
+   Brand:    GSTPilot™
+   Tagline:  The Financial Brain of India™
+   Colors:   Blue #3B82F6 · Purple #8B5CF6 · Teal #22D3EE · Bg #000000
+   Fonts:    Poppins (wordmark) · Sora (headings) · Inter (body)
+   Motion:   hover scale(1.05) · glow 0 0 30px · 300ms transition
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* ── Official brand color tokens ── */
+  --brand-blue: #3B82F6;
+  --brand-purple: #8B5CF6;
+  --brand-teal: #22D3EE;
+  --brand-bg: #000000;
+  --brand-text: #FFFFFF;
+
+  /* ── Brand gradients ── */
+  --brand-gradient-blue-purple: linear-gradient(135deg, #3B82F6 0%, #8B5CF6 100%);
+  --brand-gradient-teal-blue: linear-gradient(135deg, #22D3EE 0%, #3B82F6 100%);
+  --brand-gradient-purple-blue: linear-gradient(135deg, #8B5CF6 0%, #3B82F6 100%);
+  --brand-gradient-spectrum: linear-gradient(135deg, #22D3EE 0%, #3B82F6 50%, #8B5CF6 100%);
+
+  /* ── Brand glow shadows ── */
+  --brand-glow-blue: 0 0 30px rgba(59, 130, 246, 0.35);
+  --brand-glow-purple: 0 0 30px rgba(139, 92, 246, 0.35);
+  --brand-glow-spectrum: 0 0 30px rgba(59, 130, 246, 0.30), 0 0 60px rgba(139, 92, 246, 0.20);
+  --brand-glow-soft: 0 0 24px rgba(59, 130, 246, 0.25);
+
+  /* ── Brand font stacks ── */
+  --font-brand-wordmark: var(--font-poppins), Poppins, ui-sans-serif, system-ui, sans-serif;
+  --font-brand-heading: var(--font-sora), Sora, ui-sans-serif, system-ui, sans-serif;
+  --font-brand-body: var(--font-geist-sans), Inter, ui-sans-serif, system-ui, sans-serif;
+}
+
+/* ── Brand font utility classes ── */
+.font-brand-wordmark { font-family: var(--font-brand-wordmark); }
+.font-brand-heading { font-family: var(--font-brand-heading); }
+.font-brand-body { font-family: var(--font-brand-body); }
+
+/* ── Brand text colors ── */
+.text-brand-blue { color: var(--brand-blue); }
+.text-brand-purple { color: var(--brand-purple); }
+.text-brand-teal { color: var(--brand-teal); }
+
+/* ── Brand gradient text (spectrum: teal → blue → purple) ── */
+.text-brand-gradient {
+  background: var(--brand-gradient-spectrum);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+}
+.text-brand-gradient-blue-purple {
+  background: var(--brand-gradient-blue-purple);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+}
+
+/* ── Brand gradient backgrounds ── */
+.bg-brand-gradient { background: var(--brand-gradient-spectrum); }
+.bg-brand-gradient-blue-purple { background: var(--brand-gradient-blue-purple); }
+.bg-brand-blue { background-color: var(--brand-blue); }
+.bg-brand-purple { background-color: var(--brand-purple); }
+.bg-brand-teal { background-color: var(--brand-teal); }
+
+/* ── Brand glow utilities ── */
+.glow-brand-blue { box-shadow: var(--brand-glow-blue); }
+.glow-brand-purple { box-shadow: var(--brand-glow-purple); }
+.glow-brand-spectrum { box-shadow: var(--brand-glow-spectrum); }
+.glow-brand-soft { box-shadow: var(--brand-glow-soft); }
+
+/* ── BRAND MOTION SYSTEM ───────────────────────────────────────────────────────
+   Logo hover:  scale(1.05)
+   Glow:        box-shadow 0 0 30px rgba(59,130,246,0.35)
+   Transition:  300ms ease-premium
+   ─────────────────────────────────────────────────────────────────────────── */
+.brand-logo {
+  display: inline-flex;
+  align-items: center;
+  transition: transform 300ms var(--ease-premium), filter 300ms var(--ease-premium);
+  will-change: transform, filter;
+}
+.brand-logo:hover {
+  transform: scale(1.05);
+  filter: drop-shadow(0 0 30px rgba(59, 130, 246, 0.35));
+}
+.brand-logo:active {
+  transform: scale(0.97);
+}
+
+/* White-theme logo glow (for light backgrounds) */
+.brand-logo-white:hover {
+  filter: drop-shadow(0 0 24px rgba(139, 92, 246, 0.45));
+}
+
+/* ── Brand pulse animation (Oracle top-right, loading screens) ──
+   8-second cycle: subtle scale + blue↔purple glow shift */
+@keyframes brand-pulse-8s {
+  0%, 100% {
+    transform: scale(1);
+    filter: drop-shadow(0 0 12px rgba(59, 130, 246, 0.30));
+  }
+  50% {
+    transform: scale(1.06);
+    filter: drop-shadow(0 0 24px rgba(139, 92, 246, 0.55));
+  }
+}
+.brand-pulse {
+  animation: brand-pulse-8s 8s ease-in-out infinite;
+}
+
+/* ── Brand loading pulse (2s infinite, scale 0.95↔1, glow blue↔purple) ── */
+@keyframes brand-loading-pulse {
+  0%, 100% {
+    transform: scale(0.95);
+    filter: drop-shadow(0 0 20px rgba(59, 130, 246, 0.50));
+  }
+  50% {
+    transform: scale(1);
+    filter: drop-shadow(0 0 35px rgba(139, 92, 246, 0.70));
+  }
+}
+.brand-loading {
+  animation: brand-loading-pulse 2s ease-in-out infinite;
+}
+
+/* ── Brand fade-in (login page logo: fade + scale + glow, 0.8s) ── */
+@keyframes brand-fade-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.92);
+    filter: drop-shadow(0 0 0px rgba(59, 130, 246, 0));
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+    filter: drop-shadow(0 0 28px rgba(59, 130, 246, 0.40));
+  }
+}
+.brand-fade-in {
+  animation: brand-fade-in 0.8s var(--ease-premium) both;
+}
+
+/* ── Brand splash (mobile app shell: 1s fade-in, 2s glow) ── */
+@keyframes brand-splash-fade {
+  0% { opacity: 0; transform: scale(0.94); }
+  100% { opacity: 1; transform: scale(1); }
+}
+@keyframes brand-splash-glow {
+  0%, 100% { filter: drop-shadow(0 0 18px rgba(59, 130, 246, 0.40)); }
+  50% { filter: drop-shadow(0 0 40px rgba(139, 92, 246, 0.70)); }
+}
+.brand-splash-fade { animation: brand-splash-fade 1s var(--ease-premium) both; }
+.brand-splash-glow { animation: brand-splash-glow 2s ease-in-out infinite; animation-delay: 1s; }
+
+/* ── Blue-purple ambient glow behind logo (signup page) ── */
+.brand-aura {
+  position: absolute;
+  inset: -40% -20%;
+  background: radial-gradient(ellipse at center,
+    rgba(59, 130, 246, 0.28) 0%,
+    rgba(139, 92, 246, 0.20) 35%,
+    transparent 70%);
+  filter: blur(40px);
+  pointer-events: none;
+  z-index: -1;
+}
+
+/* ── Brand divider line (subtle gradient) ── */
+.brand-divider {
+  height: 1px;
+  background: linear-gradient(90deg,
+    transparent 0%,
+    rgba(59, 130, 246, 0.35) 30%,
+    rgba(139, 92, 246, 0.35) 70%,
+    transparent 100%);
+}
+
+/* ── Brand heading utility (Sora SemiBold) ── */
+.brand-heading {
+  font-family: var(--font-brand-heading);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+/* ── Reduced motion: disable brand animations ── */
+@media (prefers-reduced-motion: reduce) {
+  .brand-logo,
+  .brand-pulse,
+  .brand-loading,
+  .brand-fade-in,
+  .brand-splash-fade,
+  .brand-splash-glow {
+    animation: none !important;
+    transition: none !important;
+  }
+}

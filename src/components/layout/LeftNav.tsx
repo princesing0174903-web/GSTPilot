@@ -10,7 +10,7 @@ import { motion } from 'framer-motion';
 import { Home, Brain, Zap, Wallet, Network, Settings, type LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useApp, type AppView } from '@/contexts/AppContext';
-import { InfinitySymbol } from '@/components/layout/InfinityMark';
+import { SidebarBrand } from '@/components/brand/BrandLogo';
 
 interface NavItem {
   id: AppView;
@@ -61,17 +61,9 @@ export function LeftNav() {
       aria-label="Primary"
       className="glass-surface flex h-full w-[68px] flex-col items-center gap-1.5 rounded-3xl p-2.5 xl:w-[200px] xl:items-stretch xl:gap-1 xl:p-3"
     >
-      {/* Brand mark at top — V16 InfinityMark™ */}
-      <div className="mb-2 flex items-center justify-center gap-2 px-1 py-2 xl:mb-3">
-        <InfinitySymbol size={32} />
-        <div className="hidden xl:block">
-          <p className="text-[13px] font-semibold leading-tight tracking-tight text-foreground">
-            GSTPilot
-          </p>
-          <p className="accent-text text-[10px] font-bold uppercase leading-tight tracking-wider">
-            Infinity
-          </p>
-        </div>
+      {/* Brand mark at top — Official GSTPilot™ logo (collapse-aware, hover glow) */}
+      <div className="mb-2 px-1 py-2 xl:mb-3">
+        <SidebarBrand collapsed={false} size={32} onClick={() => setCurrentView('dashboard')} />
       </div>
 
       {/* Nav items */}

@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="gBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0a0a0a"/>
+      <stop offset="100%" stop-color="#000000"/>
+    </linearGradient>
+    <linearGradient id="gBlue" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#22D3EE"/>
+      <stop offset="100%" stop-color="#10B0F0"/>
+    </linearGradient>
+    <linearGradient id="gPurple" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#7040D0"/>
+      <stop offset="100%" stop-color="#9F67E0"/>
+    </linearGradient>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="8" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  <rect x="16" y="16" width="480" height="480" rx="112" fill="url(#gBg)"/>
+  <circle cx="256" cy="256" r="128" fill="none" stroke="url(#gBlue)" stroke-width="40"
+          stroke-dasharray="540 360" stroke-linecap="round" transform="rotate(-90 256 256)"
+          filter="url(#glow)"/>
+  <path d="M 256 150 L 332 226 L 290 226 L 290 312 L 222 312 L 222 226 L 180 226 Z"
+        fill="url(#gPurple)" filter="url(#glow)"/>
+  <circle cx="256" cy="256" r="14" fill="#22D3EE" filter="url(#glow)"/>
+</svg>

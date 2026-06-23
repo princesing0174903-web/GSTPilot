@@ -25,7 +25,6 @@ import {
   FileScan,
   Users,
   Settings,
-  Zap,
   Building2,
   LogOut,
   Bell,
@@ -81,6 +80,7 @@ import {
   GitBranch,
   Radar,
 } from 'lucide-react'
+import { BrandLogo } from '@/components/brand'
 import { useApp, type AppView } from '@/contexts/AppContext'
 import { useAuth } from '@/contexts/AuthContext'
 import { useFireUnreadNotifications } from '@/hooks/use-firestore'
@@ -284,9 +284,7 @@ function SidebarNav({ onSearchOpen }: AppSidebarProps) {
     <>
       <SidebarHeader className="border-b border-sidebar-border/50 px-3 py-4">
         <div className="flex items-center gap-2.5">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg accent-gradient shadow-md shadow-emerald-500/10">
-            <Zap className="h-4 w-4 text-white" />
-          </div>
+          <BrandLogo variant="icon" theme="dark" size={32} disableGlow />
           <div className="flex flex-col min-w-0">
             <div className="flex items-center gap-1.5">
               <span className="text-base font-bold tracking-tight text-foreground">

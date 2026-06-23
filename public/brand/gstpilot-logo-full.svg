@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1048 986" width="1048" height="986">
+  <defs>
+    <linearGradient id="gBlue" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#22D3EE"/>
+      <stop offset="100%" stop-color="#10B0F0"/>
+    </linearGradient>
+    <linearGradient id="gPurple" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#7040D0"/>
+      <stop offset="100%" stop-color="#9F67E0"/>
+    </linearGradient>
+    <linearGradient id="gText" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF"/>
+      <stop offset="100%" stop-color="#E8E8F0"/>
+    </linearGradient>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="10" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  <rect width="1048" height="986" fill="#000000"/>
+  <g transform="translate(234, 40) scale(1.0)">
+    <circle cx="290" cy="290" r="150" fill="none" stroke="url(#gBlue)" stroke-width="44"
+            stroke-dasharray="630 420" stroke-linecap="round" transform="rotate(-90 290 290)"
+            filter="url(#glow)"/>
+    <path d="M 290 170 L 380 260 L 330 260 L 330 360 L 250 360 L 250 260 L 200 260 Z"
+          fill="url(#gPurple)" filter="url(#glow)"/>
+    <circle cx="290" cy="290" r="16" fill="#22D3EE" filter="url(#glow)"/>
+  </g>
+  <text x="524" y="760" text-anchor="middle"
+        font-family="Poppins, Montserrat, Arial, sans-serif" font-weight="700"
+        font-size="118" fill="url(#gText)" letter-spacing="-2">GSTPilot</text>
+  <text x="858" y="700" text-anchor="middle"
+        font-family="Poppins, Arial, sans-serif" font-weight="600"
+        font-size="44" fill="#22D3EE">TM</text>
+  <text x="524" y="880" text-anchor="middle"
+        font-family="Inter, Open Sans, Arial, sans-serif" font-weight="400"
+        font-size="46" fill="#B8B8C8" letter-spacing="1.5">The Financial Brain of India</text>
+  <text x="940" y="868" text-anchor="middle"
+        font-family="Inter, Arial, sans-serif" font-weight="400"
+        font-size="26" fill="#8888A0">TM</text>
+</svg>

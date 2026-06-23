@@ -65,6 +65,11 @@ model Client {
   payments            Payment[]
   employees           Employee[]
   tdsRecords          TDSRecord[]
+  // ── Communication Cloud™ back-relations (Phase 8 Step 4) ──
+  whatsappMessages    WhatsAppMessage[]
+  emailMessages       EmailMessage[]
+  smsMessages         SMSMessage[]
+  communicationLogs   CommunicationLog[]
 }
 
 model Invoice {
@@ -860,6 +865,109 @@ model TDSRecord {
   notes         String?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+
+  client Client? @relation(fields: [clientId], references: [id])
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// GSTPILOT COMMUNICATION CLOUD™ — Phase 8 Step 4
+// Communicate. Remind. Recover. Automate. — The Financial Brain of India™
+// WhatsApp + Email + SMS + Notification Center + Collection Recovery +
+// Report Distribution + AI Communication Engine
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ─── WhatsApp Business Cloud™ Messages ──────────────────────────────────────────
+model WhatsAppMessage {
+  id             String    @id @default(cuid())
+  clientId       String?
+  recipientName  String?
+  recipientPhone String                          // E.164 phone number
+  templateName   String?                         // WhatsApp template name (if templated)
+  messageType    String    @default("text")      // text | template | media | document | interactive
+  messageBody    String                          // rendered message text
+  mediaUrl       String?                         // attached media/document URL
+  caption        String?                         // media caption
+  category       String    @default("general")   // invoice | reminder | gst_notice | collection | report | payslip | otp | general
+  status         String    @default("queued")    // queued | sent | delivered | read | failed
+  errorMessage   String?
+  sentAt         DateTime?
+  deliveredAt    DateTime?
+  readAt         DateTime?
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  client Client? @relation(fields: [clientId], references: [id])
+}
+
+// ─── Email Cloud™ Messages ──────────────────────────────────────────────────────
+model EmailMessage {
+  id            String    @id @default(cuid())
+  clientId      String?
+  recipientName String?
+  recipientEmail String
+  templateName  String?
+  subject       String
+  bodyHtml      String                          // rendered HTML body
+  bodyText      String?                         // plain-text fallback
+  category      String   @default("general")     // invoice | gst_notice | collection | report | payslip | forecast | general
+  attachments   String?                         // JSON string of attachment URLs
+  status        String   @default("queued")      // queued | sent | delivered | opened | failed | bounced
+  errorMessage  String?
+  sentAt        DateTime?
+  deliveredAt   DateTime?
+  openedAt      DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  client Client? @relation(fields: [clientId], references: [id])
+}
+
+// ─── SMS Cloud™ Messages ────────────────────────────────────────────────────────
+model SMSMessage {
+  id            String    @id @default(cuid())
+  clientId      String?
+  recipientName String?
+  recipientPhone String                         // E.164 phone number
+  message       String                          // SMS text (max 160 chars per segment)
+  category      String   @default("general")     // otp | gst_alert | payment_reminder | due_date | collection | general
+  status        String   @default("queued")      // queued | sent | delivered | failed
+  errorMessage  String?
+  sentAt        DateTime?
+  deliveredAt   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  client Client? @relation(fields: [clientId], references: [id])
+}
+
+// ─── Communication Templates ────────────────────────────────────────────────────
+model CommunicationTemplate {
+  id            String   @id @default(cuid())
+  name          String   @unique                // unique template identifier
+  channel       String                          // whatsapp | email | sms
+  category      String   @default("general")     // invoice | reminder | gst_notice | collection | report | payslip | otp | general
+  subject       String?                         // email subject (email only)
+  body          String                          // template body with {{variable}} placeholders
+  variables     String?                         // JSON string of variable names + descriptions
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+// ─── Communication Log (AI Engine audit trail) ──────────────────────────────────
+model CommunicationLog {
+  id             String   @id @default(cuid())
+  clientId       String?
+  channel        String                          // whatsapp | email | sms | notification
+  eventType      String                          // invoice_due | overdue | payment_received | gst_deadline | escalation | report_delivery | payroll | tds | cash_shortage
+  recipient      String                          // phone or email
+  recipientName  String?
+  templateName   String?
+  messagePreview String                          // first 200 chars of rendered message
+  status         String   @default("sent")       // sent | delivered | read | failed | escalated
+  triggerSource  String   @default("ai_engine")  // ai_engine | manual | scheduled | bulk_campaign
+  metadata       String?                         // JSON string of extra context (invoice no, amount, etc.)
+  createdAt      DateTime @default(now())
 
   client Client? @relation(fields: [clientId], references: [id])
 }

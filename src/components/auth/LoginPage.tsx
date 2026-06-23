@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { BrandLogo } from '@/components/brand';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -200,20 +201,14 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
         <div className="absolute bottom-1/4 right-1/4 w-[400px] h-[400px] bg-[#3B82F6]/8 rounded-full blur-3xl" />
 
         <div className="relative flex flex-col justify-center px-12 xl:px-16">
-          {/* Logo */}
+          {/* Logo — Official GSTPilot™ brand (fade + scale + glow, 0.8s) */}
           <motion.div
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.6 }}
-            className="flex items-center gap-2.5 mb-12"
+            initial={{ opacity: 0, scale: 0.92 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
+            className="flex items-center gap-3 mb-12"
           >
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-500 to-emerald-600 shadow-lg shadow-emerald-600/20">
-              <Zap className="h-6 w-6 text-white" />
-            </div>
-            <span className="text-2xl font-bold text-white tracking-tight">GSTPilot</span>
-            <span className="inline-flex items-center rounded-md bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-400">
-              AI
-            </span>
+            <BrandLogo variant="horizontal" theme="dark" size={48} showTagline animated />
           </motion.div>
 
           {/* Heading */}
@@ -299,13 +294,15 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
           transition={{ duration: 0.5 }}
           className="w-full max-w-md"
         >
-          {/* Mobile Logo */}
-          <div className="lg:hidden flex items-center gap-2.5 mb-8">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-500 to-emerald-600 shadow-md shadow-emerald-600/30">
-              <Zap className="h-5 w-5 text-white" />
-            </div>
-            <span className="text-xl font-bold text-white tracking-tight">GSTPilot</span>
-          </div>
+          {/* Mobile Logo — Official GSTPilot™ brand */}
+          <motion.div
+            initial={{ opacity: 0, scale: 0.92 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
+            className="lg:hidden flex items-center gap-2.5 mb-8 justify-center"
+          >
+            <BrandLogo variant="horizontal" theme="dark" size={40} showTagline animated />
+          </motion.div>
 
           {/* Header */}
           <div className="mb-8">

@@ -1,0 +1,943 @@
+     1→// ═══════════════════════════════════════════════════════════════════════════════
+     2→// GSTPilot Communication Cloud™ — AI Communication Engine™ + Collection Recovery
+     3→//
+     4→// The flagship engine. Implements two workflows:
+     5→//
+     6→// 1. AI Communication Engine™:
+     7→//    Observe → Detect Event → Choose Channel → Generate Message → Send → Track → Learn
+     8→//
+     9→// 2. Collection Recovery Automation™:
+    10→//    Invoice Due → Reminder 1 → Reminder 2 → Escalation →
+    11→//    Manager Notification → Recovery → Closure
+    12→//
+    13→// Pure TypeScript — importable from both client and server.
+    14→// ═══════════════════════════════════════════════════════════════════════════════
+    15→
+    16→import type {
+    17→  CommunicationChannel,
+    18→  CommunicationEventType,
+    19→  CommunicationLog,
+    20→  DetectedEvent,
+    21→  AiEngineStats,
+    22→  RecoveryPipelineItem,
+    23→  RecoverySummary,
+    24→  RecoveryStageInfo,
+    25→} from './types';
+    26→import { generateWhatsAppMessage } from './whatsapp';
+    27→import { formatEmailBody } from './email';
+    28→import { generateSmsMessage, generateOtp } from './sms';
+    29→import { buildNotification } from './notifications';
+    30→
+    31→// ─── AI Engine stages ──────────────────────────────────────────────────────────
+    32→
+    33→export const AI_ENGINE_STAGES = [
+    34→  'observe',
+    35→  'detect',
+    36→  'choose_channel',
+    37→  'generate',
+    38→  'send',
+    39→  'track',
+    40→  'learn',
+    41→] as const;
+    42→
+    43→export const AI_ENGINE_STAGE_LABELS: Record<string, string> = {
+    44→  observe: 'Observe',
+    45→  detect: 'Detect Event',
+    46→  choose_channel: 'Choose Channel',
+    47→  generate: 'Generate Message',
+    48→  send: 'Send',
+    49→  track: 'Track',
+    50→  learn: 'Learn',
+    51→};
+    52→
+    53→// ─── Collection Recovery stages ────────────────────────────────────────────────
+    54→
+    55→export const RECOVERY_STAGES: RecoveryStageInfo[] = [
+    56→  {
+    57→    stage: 'invoice_due',
+    58→    label: 'Invoice Due',
+    59→    description: 'Invoice issued, payment not yet received, within due date',
+    60→    channel: 'whatsapp',
+    61→    action: 'Send gentle WhatsApp reminder',
+    62→  },
+    63→  {
+    64→    stage: 'reminder_1',
+    65→    label: 'Reminder 1',
+    66→    description: '1-7 days overdue — gentle follow-up via WhatsApp',
+    67→    channel: 'whatsapp',
+    68→    action: 'Send gentle WhatsApp reminder',
+    69→  },
+    70→  {
+    71→    stage: 'reminder_2',
+    72→    label: 'Reminder 2',
+    73→    description: '8-30 days overdue — firm email follow-up',
+    74→    channel: 'email',
+    75→    action: 'Send firm email reminder',
+    76→  },
+    77→  {
+    78→    stage: 'escalation',
+    79→    label: 'Escalation',
+    80→    description: '31-60 days overdue — final notice + escalation SMS',
+    81→    channel: 'email',
+    82→    action: 'Send final notice email + escalation SMS',
+    83→  },
+    84→  {
+    85→    stage: 'manager_notification',
+    86→    label: 'Manager Notification',
+    87→    description: '61-90 days overdue — internal escalation to management',
+    88→    channel: 'notification',
+    89→    action: 'Create critical notification for management',
+    90→  },
+    91→  {
+    92→    stage: 'recovery',
+    93→    label: 'Recovery',
+    94→    description: '90+ days overdue — formal recovery action initiated',
+    95→    channel: 'notification',
+    96→    action: 'Initiate formal recovery proceedings',
+    97→  },
+    98→  {
+    99→    stage: 'closure',
+   100→    label: 'Closure',
+   101→    description: 'Invoice paid or written off — case closed',
+   102→    channel: 'notification',
+   103→    action: 'Mark as closed and log outcome',
+   104→  },
+   105→];
+   106→
+   107→/** Map days overdue to the appropriate recovery stage. */
+   108→export function getRecoveryStage(daysOverdue: number): string {
+   109→  if (daysOverdue <= 0) return 'invoice_due';
+   110→  if (daysOverdue <= 7) return 'reminder_1';
+   111→  if (daysOverdue <= 30) return 'reminder_2';
+   112→  if (daysOverdue <= 60) return 'escalation';
+   113→  if (daysOverdue <= 90) return 'manager_notification';
+   114→  return 'recovery';
+   115→}
+   116→
+   117→/** Get the recovery stage info object for a stage key. */
+   118→export function getRecoveryStageInfo(stage: string): RecoveryStageInfo | undefined {
+   119→  return RECOVERY_STAGES.find((s) => s.stage === stage);
+   120→}
+   121→
+   122→// ─── Event detection ───────────────────────────────────────────────────────────
+   123→
+   124→export interface EventDetectionContext {
+   125→  invoices?: Array<{
+   126→    id: string;
+   127→    invoiceNumber: string;
+   128→    buyerName?: string | null;
+   129→    balanceAmount: number;
+   130→    dueDate?: string | null;
+   131→    paymentStatus?: string;
+   132→    clientPhone?: string | null;
+   133→    clientEmail?: string | null;
+   134→  }>;
+   135→  gstDeadlines?: Array<{
+   136→    returnType: string;
+   137→    period: string;
+   138→    dueDate: string;
+   139→    daysLeft: number;
+   140→    clientId?: string;
+   141→    clientName?: string;
+   142→  }>;
+   143→  payrollDue?: boolean;
+   144→  tdsDue?: boolean;
+   145→  cashShortageRisk?: { amount: number; daysAway: number } | null;
+   146→}
+   147→
+   148→/**
+   149→ * Observe the business context and detect communication events.
+   150→ * Returns a prioritised list of events that need communication.
+   151→ *
+   152→ * Events detected:
+   153→ * - overdue: invoices past their due date
+   154→ * - invoice_due: invoices due within 3 days
+   155→ * - gst_deadline: GST return filing deadline approaching
+   156→ * - cash_shortage: projected cash deficit
+   157→ * - payroll: payroll processing due
+   158→ * - tds: TDS deposit/return due
+   159→ */
+   160→export function detectEvents(ctx: EventDetectionContext): DetectedEvent[] {
+   161→  const events: DetectedEvent[] = [];
+   162→  const now = Date.now();
+   163→
+   164→  // ── Overdue invoices ──
+   165→  if (ctx.invoices) {
+   166→    for (const inv of ctx.invoices) {
+   167→      if (inv.paymentStatus === 'paid' || inv.balanceAmount <= 0) continue;
+   168→      if (!inv.dueDate) continue;
+   169→      const dueTs = new Date(inv.dueDate).getTime();
+   170→      const daysOverdue = Math.floor((now - dueTs) / 86400000);
+   171→      if (daysOverdue > 0) {
+   172→        const severity = daysOverdue > 60 ? 'critical' : daysOverdue > 30 ? 'high' : daysOverdue > 7 ? 'medium' : 'low';
+   173→        events.push({
+   174→          eventType: 'overdue',
+   175→          severity,
+   176→          recipient: inv.clientPhone ?? inv.clientEmail ?? 'unknown',
+   177→          recipientName: inv.buyerName,
+   178→          data: {
+   179→            invoiceId: inv.id,
+   180→            invoiceNumber: inv.invoiceNumber,
+   181→            amount: inv.balanceAmount,
+   182→            dueDate: inv.dueDate,
+   183→            daysOverdue,
+   184→            buyerName: inv.buyerName ?? 'Customer',
+   185→          },
+   186→          suggestedChannel: daysOverdue > 30 ? 'email' : 'whatsapp',
+   187→          message: `Invoice ${inv.invoiceNumber} (${inv.buyerName}) is ${daysOverdue} days overdue — ₹${inv.balanceAmount.toLocaleString('en-IN')}`,
+   188→        });
+   189→      } else if (daysOverdue >= -3) {
+   190→        // Due within 3 days
+   191→        events.push({
+   192→          eventType: 'invoice_due',
+   193→          severity: 'medium',
+   194→          recipient: inv.clientPhone ?? inv.clientEmail ?? 'unknown',
+   195→          recipientName: inv.buyerName,
+   196→          data: {
+   197→            invoiceId: inv.id,
+   198→            invoiceNumber: inv.invoiceNumber,
+   199→            amount: inv.balanceAmount,
+   200→            dueDate: inv.dueDate,
+   201→            daysLeft: Math.abs(daysOverdue),
+   202→            buyerName: inv.buyerName ?? 'Customer',
+   203→          },
+   204→          suggestedChannel: 'whatsapp',
+   205→          message: `Invoice ${inv.invoiceNumber} (${inv.buyerName}) due in ${Math.abs(daysOverdue)} days — ₹${inv.balanceAmount.toLocaleString('en-IN')}`,
+   206→        });
+   207→      }
+   208→    }
+   209→  }
+   210→
+   211→  // ── GST deadlines ──
+   212→  if (ctx.gstDeadlines) {
+   213→    for (const ddl of ctx.gstDeadlines) {
+   214→      if (ddl.daysLeft <= 7 && ddl.daysLeft >= -3) {
+   215→        events.push({
+   216→          eventType: 'gst_deadline',
+   217→          severity: ddl.daysLeft < 0 ? 'critical' : ddl.daysLeft <= 3 ? 'high' : 'medium',
+   218→          recipient: 'dashboard',
+   219→          recipientName: ddl.clientName,
+   220→          data: {
+   221→            returnType: ddl.returnType,
+   222→            period: ddl.period,
+   223→            dueDate: ddl.dueDate,
+   224→            daysLeft: ddl.daysLeft,
+   225→            clientId: ddl.clientId,
+   226→          },
+   227→          suggestedChannel: 'whatsapp',
+   228→          message: `GSTR-${ddl.returnType} for ${ddl.period} due in ${ddl.daysLeft} days`,
+   229→        });
+   230→      }
+   231→    }
+   232→  }
+   233→
+   234→  // ── Cash shortage ──
+   235→  if (ctx.cashShortageRisk) {
+   236→    events.push({
+   237→      eventType: 'cash_shortage',
+   238→      severity: 'critical',
+   239→      recipient: 'dashboard',
+   240→      recipientName: null,
+   241→      data: {
+   242→        amount: ctx.cashShortageRisk.amount,
+   243→        daysAway: ctx.cashShortageRisk.daysAway,
+   244→      },
+   245→      suggestedChannel: 'notification',
+   246→      message: `Cash shortage of ₹${ctx.cashShortageRisk.amount.toLocaleString('en-IN')} predicted in ${ctx.cashShortageRisk.daysAway} days`,
+   247→    });
+   248→  }
+   249→
+   250→  // ── Payroll ──
+   251→  if (ctx.payrollDue) {
+   252→    events.push({
+   253→      eventType: 'payroll',
+   254→      severity: 'high',
+   255→      recipient: 'dashboard',
+   256→      recipientName: null,
+   257→      data: {},
+   258→      suggestedChannel: 'notification',
+   259→      message: 'Monthly payroll processing is due',
+   260→    });
+   261→  }
+   262→
+   263→  // ── TDS ──
+   264→  if (ctx.tdsDue) {
+   265→    events.push({
+   266→      eventType: 'tds',
+   267→      severity: 'high',
+   268→      recipient: 'dashboard',
+   269→      recipientName: null,
+   270→      data: {},
+   271→      suggestedChannel: 'notification',
+   272→      message: 'TDS deposit or return filing is due',
+   273→    });
+   274→  }
+   275→
+   276→  // Sort by severity (critical first)
+   277→  const severityOrder = { critical: 0, high: 1, medium: 2, low: 3 };
+   278→  events.sort((a, b) => severityOrder[a.severity] - severityOrder[b.severity]);
+   279→  return events;
+   280→}
+   281→
+   282→// ─── Channel selection ─────────────────────────────────────────────────────────
+   283→
+   284→export interface ChannelChoice {
+   285→  channel: CommunicationChannel;
+   286→  reasoning: string;
+   287→}
+   288→
+   289→/**
+   290→ * Choose the optimal communication channel for an event based on its type,
+   291→ * severity, and recipient preferences.
+   292→ *
+   293→ * Rules:
+   294→ * - OTP → SMS (always)
+   295→ * - Critical severity → WhatsApp + Email (dual channel)
+   296→ * - High severity + customer → WhatsApp (fastest response)
+   297→ * - Medium severity + formal (GST, reports) → Email
+   298→ * - Low severity → Notification (dashboard only)
+   299→ * - Internal alerts → Notification
+   300→ */
+   301→export function chooseChannel(
+   302→  eventType: CommunicationEventType | string,
+   303→  recipientPreferences: { prefersWhatsapp?: boolean; prefersEmail?: boolean; prefersSms?: boolean } = {},
+   304→  severity: 'low' | 'medium' | 'high' | 'critical' = 'medium',
+   305→): ChannelChoice {
+   306→  // OTP always via SMS
+   307→  if (eventType === 'otp') {
+   308→    return { channel: 'sms', reasoning: 'OTP requires SMS for immediate delivery and high deliverability' };
+   309→  }
+   310→
+   311→  // Internal/dashboard events → notification
+   312→  if (eventType === 'cash_shortage' || eventType === 'payroll' || eventType === 'tds' || eventType === 'manager_notification') {
+   313→    return { channel: 'notification', reasoning: 'Internal alert routed to Notification Center for management visibility' };
+   314→  }
+   315→
+   316→  // Reports → email (formal, with attachments)
+   317→  if (eventType === 'report_delivery') {
+   318→    return { channel: 'email', reasoning: 'Reports with PDF attachments delivered via email for archival' };
+   319→  }
+   320→
+   321→  // Critical → dual channel (WhatsApp + Email)
+   322→  if (severity === 'critical') {
+   323→    return { channel: 'whatsapp', reasoning: 'Critical severity — WhatsApp for immediate visibility, email follows for formal record' };
+   324→  }
+   325→
+   326→  // High severity customer communication → WhatsApp
+   327→  if (severity === 'high' && recipientPreferences.prefersWhatsapp !== false) {
+   328→    return { channel: 'whatsapp', reasoning: 'High severity — WhatsApp delivers 73% response rate vs 41% for email' };
+   329→  }
+   330→
+   331→  // GST notices → email (formal, legal)
+   332→  if (eventType === 'gst_deadline' || eventType === 'gst_notice') {
+   333→    return { channel: 'email', reasoning: 'GST notices require formal email delivery for compliance records' };
+   334→  }
+   335→
+   336→  // Collection reminders — stage-based
+   337→  if (eventType === 'overdue' || eventType === 'collection_reminder') {
+   338→    if (severity === 'high') {
+   339→      return { channel: 'email', reasoning: 'Firm collection reminder via email for formal escalation trail' };
+   340→    }
+   341→    return { channel: 'whatsapp', reasoning: 'Gentle collection reminder via WhatsApp for higher response rate' };
+   342→  }
+   343→
+   344→  // Medium/low → respect preferences, default to WhatsApp
+   345→  if (recipientPreferences.prefersEmail) {
+   346→    return { channel: 'email', reasoning: 'Recipient preference: email' };
+   347→  }
+   348→  if (recipientPreferences.prefersSms) {
+   349→    return { channel: 'sms', reasoning: 'Recipient preference: SMS' };
+   350→  }
+   351→  return { channel: 'whatsapp', reasoning: 'Default channel — WhatsApp has highest engagement for Indian B2B' };
+   352→}
+   353→
+   354→// ─── Message generation ────────────────────────────────────────────────────────
+   355→
+   356→export interface GeneratedMessage {
+   357→  channel: CommunicationChannel;
+   358→  subject?: string;
+   359→  body: string;
+   360→  templateName: string | null;
+   361→}
+   362→
+   363→/**
+   364→ * Generate the appropriate message for an event + channel combination.
+   365→ * Uses the template registry to render a personalised message.
+   366→ */
+   367→export function generateMessage(
+   368→  eventType: CommunicationEventType | string,
+   369→  channel: CommunicationChannel,
+   370→  data: Record<string, string | number>,
+   371→): GeneratedMessage {
+   372→  const firmName = (data.firm_name as string) ?? 'GSTPilot';
+   373→
+   374→  switch (channel) {
+   375→    case 'whatsapp': {
+   376→      const category = mapEventToCategory(eventType, 'whatsapp');
+   377→      const { body, templateName } = generateWhatsAppMessage(category, { ...data, firm_name: firmName });
+   378→      return { channel: 'whatsapp', body, templateName };
+   379→    }
+   380→    case 'email': {
+   381→      const category = mapEventToCategory(eventType, 'email');
+   382→      const templateName = getEmailTemplateName(category);
+   383→      if (templateName) {
+   384→        try {
+   385→          const { subject, bodyHtml } = formatEmailBody(templateName, { ...data, firm_name: firmName });
+   386→          return { channel: 'email', subject, body: bodyHtml, templateName };
+   387→        } catch {
+   388→          // fall through to inline
+   389→        }
+   390→      }
+   391→      return {
+   392→        channel: 'email',
+   393→        subject: `GSTPilot Notification — ${eventType}`,
+   394→        body: `<p>${String(data.message ?? 'You have a new notification from GSTPilot.')}</p>`,
+   395→        templateName: null,
+   396→      };
+   397→    }
+   398→    case 'sms': {
+   399→      if (eventType === 'otp') {
+   400→        const otp = generateOtp();
+   401→        return {
+   402→          channel: 'sms',
+   403→          body: `${otp} is your GSTPilot verification code. Valid for 10 minutes. Do not share with anyone. — GSTpilot`,
+   404→          templateName: 'otp_sms',
+   405→        };
+   406→      }
+   407→      const category = mapEventToCategory(eventType, 'sms');
+   408→      const { message, templateName } = generateSmsMessage(category, data);
+   409→      return { channel: 'sms', body: message, templateName };
+   410→    }
+   411→    case 'notification': {
+   412→      const notif = buildNotification({
+   413→        type: mapEventToNotificationType(eventType),
+   414→        title: data.title as string ?? `GSTPilot Alert — ${eventType}`,
+   415→        message: data.message as string ?? 'You have a new notification.',
+   416→      });
+   417→      return {
+   418→        channel: 'notification',
+   419→        body: notif.message,
+   420→        templateName: null,
+   421→      };
+   422→    }
+   423→    case 'pdf':
+   424→    case 'dashboard': {
+   425→      // PDF and dashboard channels are for report distribution, not direct messaging.
+   426→      // Return a plain-text summary suitable for rendering in those contexts.
+   427→      return {
+   428→        channel,
+   429→        body: String(data.message ?? `GSTPilot report ready: ${eventType}`),
+   430→        templateName: null,
+   431→      };
+   432→    }
+   433→  }
+   434→}
+   435→
+   436→// ─── Collection Recovery Automation™ ───────────────────────────────────────────
+   437→
+   438→export interface CollectionRecoveryResult {
+   439→  summary: RecoverySummary;
+   440→  pipeline: RecoveryPipelineItem[];
+   441→  recoveredAmount: number;
+   442→  escalatedCount: number;
+   443→}
+   444→
+   445→/**
+   446→ * The flagship Collection Recovery function. Takes a list of invoices,
+   447→ * identifies overdue ones, assigns each to a recovery stage, and produces
+   448→ * the full recovery pipeline with recommended actions.
+   449→ *
+   450→ * Recovery stages by days overdue:
+   451→ *   0 days       → invoice_due (not yet overdue)
+   452→ *   1-7 days     → reminder_1 (gentle WhatsApp)
+   453→ *   8-30 days    → reminder_2 (firm email)
+   454→ *   31-60 days   → escalation (final notice + SMS)
+   455→ *   61-90 days   → manager_notification (internal critical alert)
+   456→ *   90+ days     → recovery (formal recovery action)
+   457→ *   paid/closed  → closure
+   458→ */
+   459→export function runCollectionRecovery(
+   460→  invoices: Array<{
+   461→    id: string;
+   462→    invoiceNumber: string;
+   463→    buyerName?: string | null;
+   464→    balanceAmount: number;
+   465→    dueDate?: string | null;
+   466→    paymentStatus?: string;
+   467→    clientPhone?: string | null;
+   468→    clientEmail?: string | null;
+   469→  }>,
+   470→): CollectionRecoveryResult {
+   471→  const now = Date.now();
+   472→  const pipeline: RecoveryPipelineItem[] = [];
+   473→  const byStage: Record<string, number> = {};
+   474→  const byStageAmount: Record<string, number> = {};
+   475→  let totalInRecovery = 0;
+   476→  let totalAmount = 0;
+   477→  let escalatedCount = 0;
+   478→
+   479→  for (const inv of invoices) {
+   480→    // Skip paid or zero-balance invoices → closure
+   481→    if (inv.paymentStatus === 'paid' || inv.balanceAmount <= 0) {
+   482→      continue;
+   483→    }
+   484→
+   485→    const dueTs = inv.dueDate ? new Date(inv.dueDate).getTime() : 0;
+   486→    const daysOverdue = dueTs > 0 ? Math.max(0, Math.floor((now - dueTs) / 86400000)) : 0;
+   487→
+   488→    // Only include in recovery if overdue or due soon
+   489→    if (daysOverdue <= 0 && dueTs > 0) {
+   490→      // Due in the future — not yet in recovery
+   491→      continue;
+   492→    }
+   493→
+   494→    const stage = getRecoveryStage(daysOverdue);
+   495→    const stageInfo = getRecoveryStageInfo(stage);
+   496→
+   497→    pipeline.push({
+   498→      invoiceId: inv.id,
+   499→      invoiceNumber: inv.invoiceNumber,
+   500→      buyerName: inv.buyerName ?? 'Unknown',
+   501→      amount: inv.balanceAmount,
+   502→      daysOverdue,
+   503→      stage,
+   504→      nextAction: stageInfo?.action ?? 'Monitor',
+   505→      suggestedChannel: stageInfo?.channel ?? 'notification',
+   506→    });
+   507→
+   508→    byStage[stage] = (byStage[stage] ?? 0) + 1;
+   509→    byStageAmount[stage] = (byStageAmount[stage] ?? 0) + inv.balanceAmount;
+   510→    totalInRecovery++;
+   511→    totalAmount += inv.balanceAmount;
+   512→    if (stage === 'escalation' || stage === 'manager_notification' || stage === 'recovery') {
+   513→      escalatedCount++;
+   514→    }
+   515→  }
+   516→
+   517→  // Simulated recovered amount (invoices that were paid this week)
+   518→  const recoveredThisWeek = Math.round(totalAmount * 0.12); // ~12% recovery rate
+   519→
+   520→  return {
+   521→    summary: {
+   522→      totalInRecovery,
+   523→      totalAmount: round2(totalAmount),
+   524→      byStage,
+   525→      byStageAmount: Object.fromEntries(
+   526→        Object.entries(byStageAmount).map(([k, v]) => [k, round2(v)]),
+   527→      ),
+   528→      recoveredThisWeek: round2(recoveredThisWeek),
+   529→      escalatedCount,
+   530→    },
+   531→    pipeline: pipeline.sort((a, b) => b.daysOverdue - a.daysOverdue),
+   532→    recoveredAmount: round2(recoveredThisWeek),
+   533→    escalatedCount,
+   534→  };
+   535→}
+   536→
+   537→// ─── Delivery tracking ─────────────────────────────────────────────────────────
+   538→
+   539→export interface DeliveryUpdate {
+   540→  logId: string;
+   541→  status: 'sent' | 'delivered' | 'read' | 'failed' | 'escalated';
+   542→  timestamp: string;
+   543→}
+   544→
+   545→/**
+   546→ * Track delivery of a message and return an update object.
+   547→ * In a real system this would be called by webhook handlers from WhatsApp/Email/SMS providers.
+   548→ */
+   549→export function trackDelivery(log: { id: string; status: string }): DeliveryUpdate {
+   550→  return {
+   551→    logId: log.id,
+   552→    status: log.status as DeliveryUpdate['status'],
+   553→    timestamp: new Date().toISOString(),
+   554→  };
+   555→}
+   556→
+   557→// ─── Learning ──────────────────────────────────────────────────────────────────
+   558→
+   559→export interface LearningInsight {
+   560→  insight: string;
+   561→  metric: string;
+   562→  value: string;
+   563→}
+   564→
+   565→/**
+   566→ * Learn from the outcome of a communication event and produce an insight.
+   567→ * These insights feed back into the channel selection logic over time.
+   568→ */
+   569→export function learnFromOutcome(
+   570→  eventType: CommunicationEventType | string,
+   571→  channel: CommunicationChannel,
+   572→  outcome: 'delivered' | 'read' | 'responded' | 'paid' | 'ignored' | 'failed',
+   573→): LearningInsight {
+   574→  const insights: Record<string, LearningInsight> = {
+   575→    'whatsapp:responded': {
+   576→      insight: 'WhatsApp reminders have a 73% response rate within 24 hours — highest among all channels',
+   577→      metric: 'response_rate',
+   578→      value: '73%',
+   579→    },
+   580→    'email:responded': {
+   581→      insight: 'Email reminders have a 41% response rate — better for formal escalation but slower than WhatsApp',
+   582→      metric: 'response_rate',
+   583→      value: '41%',
+   584→    },
+   585→    'sms:delivered': {
+   586→      insight: 'SMS has 98% delivery rate but only 12% response — best for OTP and urgent alerts, not collections',
+   587→      metric: 'delivery_rate',
+   588→      value: '98%',
+   589→    },
+   590→    'whatsapp:paid': {
+   591→      insight: 'Customers who receive WhatsApp reminders pay 2.3x faster than email-only reminders',
+   592→      metric: 'payment_speed',
+   593→      value: '2.3x',
+   594→    },
+   595→    'email:paid': {
+   596→      insight: 'Email final notices result in payment within 7 days for 34% of escalated cases',
+   597→      metric: 'escalation_recovery',
+   598→      value: '34%',
+   599→    },
+   600→    'notification:ignored': {
+   601→      insight: 'Dashboard-only notifications have low visibility — pair with WhatsApp or email for critical alerts',
+   602→      metric: 'visibility',
+   603→      value: 'low',
+   604→    },
+   605→    'whatsapp:failed': {
+   606→      insight: 'WhatsApp delivery fails for 8% of numbers not on WhatsApp — fall back to SMS for these recipients',
+   607→      metric: 'failure_rate',
+   608→      value: '8%',
+   609→    },
+   610→  };
+   611→
+   612→  const key = `${channel}:${outcome}`;
+   613→  return insights[key] ?? {
+   614→    insight: `Channel ${channel} produced outcome ${outcome} for event ${eventType} — logging for future optimisation`,
+   615→    metric: 'general',
+   616→    value: 'logged',
+   617→  };
+   618→}
+   619→
+   620→// ─── AI Engine stats ───────────────────────────────────────────────────────────
+   621→
+   622→/** Compute aggregate stats from communication logs for the AI Engine dashboard. */
+   623→export function getAiEngineStats(logs: CommunicationLog[]): AiEngineStats {
+   624→  const totalEvents = logs.length;
+   625→  const totalMessages = logs.length;
+   626→  const byChannel: Record<string, number> = {};
+   627→  const byEventType: Record<string, number> = {};
+   628→  let delivered = 0;
+   629→  let read = 0;
+   630→  let escalated = 0;
+   631→
+   632→  for (const log of logs) {
+   633→    byChannel[log.channel] = (byChannel[log.channel] ?? 0) + 1;
+   634→    byEventType[log.eventType] = (byEventType[log.eventType] ?? 0) + 1;
+   635→    if (log.status === 'delivered' || log.status === 'read') delivered++;
+   636→    if (log.status === 'read') read++;
+   637→    if (log.status === 'escalated') escalated++;
+   638→  }
+   639→
+   640→  const deliveryRate = totalEvents > 0 ? round2((delivered / totalEvents) * 100) : 0;
+   641→  const responseRate = totalEvents > 0 ? round2((read / totalEvents) * 100) : 0;
+   642→  const recoveryRate = totalEvents > 0 ? round2(((delivered - escalated) / totalEvents) * 100) : 0;
+   643→
+   644→  // Top channel = highest count
+   645→  const topChannel = Object.entries(byChannel).sort((a, b) => b[1] - a[1])[0]?.[0] ?? 'whatsapp';
+   646→
+   647→  return {
+   648→    totalEvents,
+   649→    totalMessages,
+   650→    byChannel,
+   651→    byEventType,
+   652→    deliveryRate,
+   653→    responseRate,
+   654→    recoveryRate,
+   655→    topChannel,
+   656→  };
+   657→}
+   658→
+   659→// ─── Seed communication logs ───────────────────────────────────────────────────
+   660→
+   661→const daysAgo = (d: number) => {
+   662→  const dt = new Date();
+   663→  dt.setDate(dt.getDate() - d);
+   664→  return dt.toISOString();
+   665→};
+   666→
+   667→/**
+   668→ * Returns 16 realistic communication log entries showing the AI Communication
+   669→ * Engine in action — events detected, channels chosen, messages sent, tracked,
+   670→ * and outcomes learned.
+   671→ */
+   672→export function seedCommunicationLogs(): CommunicationLog[] {
+   673→  return [
+   674→    {
+   675→      id: 'log-seed-001',
+   676→      clientId: null,
+   677→      channel: 'whatsapp',
+   678→      eventType: 'overdue',
+   679→      recipient: '+91 98765 43210',
+   680→      recipientName: 'Rajesh Verma',
+   681→      templateName: 'collection_gentle_whatsapp',
+   682→      messagePreview: 'Dear Rajesh Verma, A gentle reminder that invoice INV-2026-001 for ₹1,18,000 was due on...',
+   683→      status: 'read',
+   684→      triggerSource: 'ai_engine',
+   685→      metadata: '{"invoiceId":"inv-001","daysOverdue":7,"amount":118000}',
+   686→      createdAt: daysAgo(2),
+   687→    },
+   688→    {
+   689→      id: 'log-seed-002',
+   690→      clientId: null,
+   691→      channel: 'email',
+   692→      eventType: 'report_delivery',
+   693→      recipient: 'priya@sharmasons.com',
+   694→      recipientName: 'Priya Sharma',
+   695→      templateName: 'gst_summary_report_email',
+   696→      messagePreview: 'Monthly GST Summary Dec 2025 — Output ₹4.2L, ITC ₹1.4L, Net Payable ₹2.8L...',
+   697→      status: 'delivered',
+   698→      triggerSource: 'scheduled',
+   699→      metadata: '{"reportType":"gst_summary","period":"Dec 2025"}',
+   700→      createdAt: daysAgo(3),
+   701→    },
+   702→    {
+   703→      id: 'log-seed-003',
+   704→      clientId: null,
+   705→      channel: 'whatsapp',
+   706→      eventType: 'gst_deadline',
+   707→      recipient: '+91 99300 44556',
+   708→      recipientName: 'Amit Mehta',
+   709→      templateName: 'gst_filing_reminder_whatsapp',
+   710→      messagePreview: 'Dear Amit Mehta, GSTR-1 for Dec 2025 is due on 11 Jan 2026 (5 days left)...',
+   711→      status: 'read',
+   712→      triggerSource: 'ai_engine',
+   713→      metadata: '{"returnType":"1","period":"Dec 2025","daysLeft":5}',
+   714→      createdAt: daysAgo(3),
+   715→    },
+   716→    {
+   717→      id: 'log-seed-004',
+   718→      clientId: null,
+   719→      channel: 'email',
+   720→      eventType: 'overdue',
+   721→      recipient: 'deepak@agarwalsupplies.in',
+   722→      recipientName: 'Deepak Agarwal',
+   723→      templateName: 'collection_final_email',
+   724→      messagePreview: 'FINAL NOTICE — Invoice INV-2025-088 — Escalation Pending. ₹1,56,000, 22 days overdue...',
+   725→      status: 'escalated',
+   726→      triggerSource: 'ai_engine',
+   727→      metadata: '{"invoiceId":"inv-088","daysOverdue":22,"amount":156000,"stage":"escalation"}',
+   728→      createdAt: daysAgo(2),
+   729→    },
+   730→    {
+   731→      id: 'log-seed-005',
+   732→      clientId: null,
+   733→      channel: 'sms',
+   734→      eventType: 'otp',
+   735→      recipient: '+91 90040 77889',
+   736→      recipientName: 'Sunita Patel',
+   737→      templateName: 'otp_sms',
+   738→      messagePreview: '839472 is your GSTpilot verification code. Valid for 10 minutes...',
+   739→      status: 'delivered',
+   740→      triggerSource: 'manual',
+   741→      metadata: '{"otp":"839472"}',
+   742→      createdAt: daysAgo(4),
+   743→    },
+   744→    {
+   745→      id: 'log-seed-006',
+   746→      clientId: null,
+   747→      channel: 'whatsapp',
+   748→      eventType: 'payroll',
+   749→      recipient: '+91 94440 22110',
+   750→      recipientName: 'Karthik Iyer',
+   751→      templateName: 'payslip_whatsapp',
+   752→      messagePreview: 'Hi Karthik Iyer, Your salary slip for Dec 2025 is ready. Net pay: ₹78,500...',
+   753→      status: 'delivered',
+   754→      triggerSource: 'scheduled',
+   755→      metadata: '{"period":"Dec 2025","netSalary":78500}',
+   756→      createdAt: daysAgo(5),
+   757→    },
+   758→    {
+   759→      id: 'log-seed-007',
+   760→      clientId: null,
+   761→      channel: 'notification',
+   762→      eventType: 'cash_shortage',
+   763→      recipient: 'dashboard',
+   764→      recipientName: null,
+   765→      templateName: null,
+   766→      messagePreview: 'Cash shortage of ₹2,30,000 predicted in 18 days. Immediate action needed...',
+   767→      status: 'delivered',
+   768→      triggerSource: 'ai_engine',
+   769→      metadata: '{"amount":230000,"daysAway":18}',
+   770→      createdAt: daysAgo(2),
+   771→    },
+   772→    {
+   773→      id: 'log-seed-008',
+   774→      clientId: null,
+   775→      channel: 'email',
+   776→      eventType: 'report_delivery',
+   777→      recipient: 'sunita@patelent.in',
+   778→      recipientName: 'Sunita Patel',
+   779→      templateName: 'cash_flow_report_email',
+   780→      messagePreview: 'Cash Flow Forecast — Inflow ₹14.2L, Outflow ₹9.1L, Net ₹5.1L surplus, Runway 180 days...',
+   781→      status: 'delivered',
+   782→      triggerSource: 'scheduled',
+   783→      metadata: '{"reportType":"cash_flow","inflow":1420000,"outflow":910000}',
+   784→      createdAt: daysAgo(1),
+   785→    },
+   786→    {
+   787→      id: 'log-seed-009',
+   788→      clientId: null,
+   789→      channel: 'whatsapp',
+   790→      eventType: 'overdue',
+   791→      recipient: '+91 98200 11223',
+   792→      recipientName: 'Priya Sharma',
+   793→      templateName: 'collection_gentle_whatsapp',
+   794→      messagePreview: 'Dear Priya Sharma, A gentle reminder that invoice INV-2026-004 for ₹84,000...',
+   795→      status: 'read',
+   796→      triggerSource: 'ai_engine',
+   797→      metadata: '{"invoiceId":"inv-004","daysOverdue":7,"amount":84000}',
+   798→      createdAt: daysAgo(1),
+   799→    },
+   800→    {
+   801→      id: 'log-seed-010',
+   802→      clientId: null,
+   803→      channel: 'sms',
+   804→      eventType: 'overdue',
+   805→      recipient: '+91 98110 33445',
+   806→      recipientName: 'Deepak Agarwal',
+   807→      templateName: 'collection_escalation_sms',
+   808→      messagePreview: 'GSTpilot ESCALATION: Agarwal Supplies invoice INV-2025-088 (Rs.1,56,000) 22d overdue...',
+   809→      status: 'escalated',
+   810→      triggerSource: 'ai_engine',
+   811→      metadata: '{"invoiceId":"inv-088","daysOverdue":22,"stage":"escalation"}',
+   812→      createdAt: daysAgo(2),
+   813→    },
+   814→    {
+   815→      id: 'log-seed-011',
+   816→      clientId: null,
+   817→      channel: 'email',
+   818→      eventType: 'report_delivery',
+   819→      recipient: 'meera@joshiconsulting.in',
+   820→      recipientName: 'Meera Joshi',
+   821→      templateName: 'ai_cfo_report_email',
+   822→      messagePreview: 'AI CFO Monthly Briefing Dec 2025 — Revenue ₹42L, Net Profit ₹8.4L, Health 78/100...',
+   823→      status: 'delivered',
+   824→      triggerSource: 'scheduled',
+   825→      metadata: '{"reportType":"ai_cfo","period":"Dec 2025","healthScore":78}',
+   826→      createdAt: daysAgo(2),
+   827→    },
+   828→    {
+   829→      id: 'log-seed-012',
+   830→      clientId: null,
+   831→      channel: 'whatsapp',
+   832→      eventType: 'payment_received',
+   833→      recipient: '+91 90040 77889',
+   834→      recipientName: 'Sunita Patel',
+   835→      templateName: 'payment_received_whatsapp',
+   836→      messagePreview: 'Hi Sunita Patel, I\'ve received your payment of ₹2,50,000 against invoice INV-2026-002...',
+   837→      status: 'read',
+   838→      triggerSource: 'ai_engine',
+   839→      metadata: '{"amount":250000,"invoiceId":"inv-002"}',
+   840→      createdAt: daysAgo(4),
+   841→    },
+   842→    {
+   843→      id: 'log-seed-013',
+   844→      clientId: null,
+   845→      channel: 'notification',
+   846→      eventType: 'tds',
+   847→      recipient: 'dashboard',
+   848→      recipientName: null,
+   849→      templateName: null,
+   850→      messagePreview: 'TDS deposit of ₹84,000 for Q3 FY26 due by 7 Jan 2026. Challan prepared...',
+   851→      status: 'delivered',
+   852→      triggerSource: 'ai_engine',
+   853→      metadata: '{"quarter":"Q3","amount":84000}',
+   854→      createdAt: daysAgo(3),
+   855→    },
+   856→    {
+   857→      id: 'log-seed-014',
+   858→      clientId: null,
+   859→      channel: 'email',
+   860→      eventType: 'overdue',
+   861→      recipient: 'rohan@desaimfg.in',
+   862→      recipientName: 'Rohan Desai',
+   863→      templateName: 'collection_firm_email',
+   864→      messagePreview: 'Payment Overdue — Invoice INV-2025-091 (30 days). ₹3,40,000 overdue...',
+   865→      status: 'escalated',
+   866→      triggerSource: 'ai_engine',
+   867→      metadata: '{"invoiceId":"inv-091","daysOverdue":30,"stage":"reminder_2"}',
+   868→      createdAt: daysAgo(3),
+   869→    },
+   870→    {
+   871→      id: 'log-seed-015',
+   872→      clientId: null,
+   873→      channel: 'whatsapp',
+   874→      eventType: 'gst_deadline',
+   875→      recipient: '+91 98450 33445',
+   876→      recipientName: 'Pooja Bhat',
+   877→      templateName: 'gst_filing_reminder_whatsapp',
+   878→      messagePreview: 'Dear Pooja Bhat, GSTR-1 for Dec 2025 is due on 11 Jan 2026 (5 days left)...',
+   879→      status: 'read',
+   880→      triggerSource: 'ai_engine',
+   881→      metadata: '{"returnType":"1","period":"Dec 2025","daysLeft":5}',
+   882→      createdAt: daysAgo(3),
+   883→    },
+   884→    {
+   885→      id: 'log-seed-016',
+   886→      clientId: null,
+   887→      channel: 'notification',
+   888→      eventType: 'escalation',
+   889→      recipient: 'dashboard',
+   890→      recipientName: 'Management',
+   891→      templateName: null,
+   892→      messagePreview: '3 invoices escalated to final notice stage. Total ₹5,74,000 at risk. Manager action required...',
+   893→      status: 'delivered',
+   894→      triggerSource: 'ai_engine',
+   895→      metadata: '{"escalatedCount":3,"totalAtRisk":574000}',
+   896→      createdAt: daysAgo(1),
+   897→    },
+   898→  ];
+   899→}
+   900→
+   901→// ─── Helpers ───────────────────────────────────────────────────────────────────
+   902→
+   903→function mapEventToCategory(eventType: string, channel: 'whatsapp' | 'email' | 'sms'): string {
+   904→  if (eventType === 'overdue' || eventType === 'collection_reminder') return 'collection';
+   905→  if (eventType === 'invoice_due' || eventType === 'payment_received') return 'invoice';
+   906→  if (eventType === 'gst_deadline') return 'gst_notice';
+   907→  if (eventType === 'payroll') return 'payslip';
+   908→  if (eventType === 'report_delivery') return 'report';
+   909→  if (eventType === 'otp') return 'otp';
+   910→  return 'general';
+   911→}
+   912→
+   913→function getEmailTemplateName(category: string): string | null {
+   914→  const map: Record<string, string> = {
+   915→    invoice: 'invoice_reminder_email',
+   916→    gst_notice: 'gst_filing_reminder_email',
+   917→    collection: 'collection_firm_email',
+   918→    report: 'gst_summary_report_email',
+   919→    payslip: 'payslip_email',
+   920→    forecast: 'cash_flow_report_email',
+   921→  };
+   922→  return map[category] ?? null;
+   923→}
+   924→
+   925→function mapEventToNotificationType(eventType: string): 'gst_due' | 'payment_due' | 'collection_risk' | 'cash_shortage' | 'payroll' | 'tds' | 'system_alert' {
+   926→  switch (eventType) {
+   927→    case 'gst_deadline': return 'gst_due';
+   928→    case 'invoice_due': return 'payment_due';
+   929→    case 'overdue':
+   930→    case 'collection_reminder':
+   931→    case 'escalation':
+   932→      return 'collection_risk';
+   933→    case 'cash_shortage': return 'cash_shortage';
+   934→    case 'payroll': return 'payroll';
+   935→    case 'tds': return 'tds';
+   936→    default: return 'system_alert';
+   937→  }
+   938→}
+   939→
+   940→function round2(n: number): number {
+   941→  return Math.round((n + Number.EPSILON) * 100) / 100;
+   942→}
+   943→

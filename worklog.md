@@ -3076,3 +3076,132 @@ Stage Summary:
 - Success criteria met: "GSTPilot creates my invoices / tracks my expenses / knows who owes me money / knows whom I need to pay / predicts collections / manages payroll and TDS / runs my back office automatically"
 - Tagline live: GSTPilot Invoice Cloud™ — Create. Track. Collect. Automate. — The Financial Brain of India™
 - Next phases ready: Step 4 (Communication Cloud), Step 5 (AI Execution Engine), Step 6-10 (Mobile/SaaS Billing/Multi-Tenant/Marketplace/Autonomous AI CFO)
+
+---
+Task ID: 2
+Agent: Main (Communication Cloud Lead)
+Task: Build src/lib/communication/ — 7 pure-TypeScript engine files for GSTPilot Communication Cloud™
+
+Work Log:
+- Read prior worklog: confirmed Phase 8 Step 3 (Invoice Engine) complete, UI Pro Max + global dark theme in place.
+- Added 5 Prisma models (WhatsAppMessage, EmailMessage, SMSMessage, CommunicationTemplate, CommunicationLog) + Client back-relations. db:push successful.
+- Created src/lib/communication/types.ts — shared types mirroring Prisma schema (entities, stats, AI engine types, recovery pipeline types).
+- Created src/lib/communication/templates.ts — 21-template registry (WhatsApp/Email/SMS) with {{variable}} placeholders, render helpers, extractVariables.
+- Created src/lib/communication/whatsapp.ts — seedWhatsAppMessages (14 msgs), getWhatsAppStats, generateWhatsAppMessage, formatWhatsAppMessage, bulkCampaignRecipients.
+- Created src/lib/communication/email.ts — seedEmailMessages (14 emails), getEmailStats, renderEmailHtml (premium dark HTML template), generateEmailSubject, formatEmailBody.
+- Created src/lib/communication/sms.ts — seedSMSMessages (14 SMS), getSMSStats, generateOtp, generateSmsMessage, segmentCount, estimateSmsCost.
+- Created src/lib/communication/notifications.ts — NOTIFICATION_TYPES (7 types: gst_due/payment_due/collection_risk/cash_shortage/payroll/tds/system_alert), seedNotifications (16), getNotificationStats, buildNotification, formatNotificationAction.
+- Created src/lib/communication/reports.ts — REPORT_TYPES (7: gst_summary/cash_flow/receivables/payables/tds/payroll/ai_cfo), DELIVERY_CHANNELS, seedReportDistributions (12), getReportStats, generateReportSummary, scheduleReport.
+- Created src/lib/communication/ai-engine.ts — flagship file: AI_ENGINE_STAGES, RECOVERY_STAGES (7 stages), detectEvents, chooseChannel, generateMessage, runCollectionRecovery, trackDelivery, learnFromOutcome, getAiEngineStats, seedCommunicationLogs (16).
+- Fixed type errors: added 'otp' to CommunicationEventType, 'pdf'/'dashboard' to CommunicationChannel, added pdf/dashboard cases to generateMessage switch.
+- npx tsc --noEmit → ZERO errors in src/lib/communication/*.
+
+Stage Summary:
+- 7 files in src/lib/communication/ (types, templates, whatsapp, email, sms, notifications, reports, ai-engine) — all pure TypeScript, client+server importable.
+- Exported function signatures ready for API routes + UI consumption.
+- Key exports: seedWhatsAppMessages, seedEmailMessages, seedSMSMessages, seedNotifications, seedReportDistributions, seedCommunicationLogs, getWhatsAppStats, getEmailStats, getSMSStats, getNotificationStats, getReportStats, getAiEngineStats, detectEvents, chooseChannel, generateMessage, runCollectionRecovery, RECOVERY_STAGES, NOTIFICATION_TYPES, REPORT_TYPES, COMMUNICATION_TEMPLATES, renderTemplate, formatEmailBody.
+- Prisma accessors confirmed: db.whatsappMessage, db.emailMessage, db.sMSMessage, db.communicationTemplate, db.communicationLog, db.notification.
+
+---
+Task ID: 3
+Agent: Communication Cloud API Routes
+Task: Build 4 API route groups for GSTPilot Communication Cloud™
+
+Work Log:
+- Read worklog.md (Task ID: 2 entries + Main) and studied the existing API route patterns: /api/receivables/route.ts (DB→engine-type mapping), /api/notifications/route.ts (full CRUD + audit), /api/expenses/route.ts (POST create with audit log)
+- Read all 7 engine files in src/lib/communication/ (whatsapp.ts, email.ts, sms.ts, ai-engine.ts, reports.ts, notifications.ts, templates.ts, types.ts) to confirm exports and types
+- Confirmed Prisma accessors by inspecting prisma/schema.prisma + node_modules/.prisma/client/index.d.ts — the actual generated accessors are `db.whatsAppMessage` (capital A in App), `db.emailMessage`, `db.sMSMessage`, `db.communicationTemplate`, `db.communicationLog` (the task brief's `db.whatsappMessage` was a typo)
+- Created /src/app/api/whatsapp/route.ts — GET (DB query with seedWhatsAppMessages() fallback, returns {messages, stats}) + POST (creates whatsappMessage with status='sent' + communicationLog with channel='whatsapp', triggerSource='manual' + auditLog with action='WhatsApp Message Sent'; category→eventType mapping helper included)
+- Created /src/app/api/email/route.ts — GET (DB query with seedEmailMessages() fallback, returns {messages, stats}) + POST (creates emailMessage with status='sent' + communicationLog channel='email' + auditLog action='Email Sent'; handles attachments as string-or-array)
+- Created /src/app/api/sms/route.ts — GET (DB query with seedSMSMessages() fallback, returns {messages, stats}) + POST (creates sMSMessage with status='sent' + communicationLog channel='sms' + auditLog action='SMS Sent')
+- Created /src/app/api/communication/route.ts — flagship GET-only aggregation endpoint that returns {aiEngine, collectionRecovery, reportDistribution, channelSummary, detectedEvents, recoveryStages}. Fetches communicationLog (fallback seedCommunicationLogs), invoices (fallback seedInvoices with full InvoiceCloudInvoice mapping copied from /api/receivables/route.ts), runs runCollectionRecovery + detectEvents, uses seedReportDistributions for report stats (no Prisma model exists), aggregates channel stats across all 4 channels (whatsapp/email/sms/notifications) with engine stats computed per-channel
+- All 4 routes follow the established pattern: `import { db } from '@/lib/db'`, `NextResponse`, try/catch with `console.error('GET /api/xxx error:', error)`, 500 fallback
+- Hit a major issue: the running next-server process (started 05:16) had a stale PrismaClient in globalThis cache from BEFORE the Communication Cloud models were added to the schema (09:40). Even after `bun run db:push` regenerated the client (10:04), the cached instance lacked whatsAppMessage/emailMessage/sMSMessage/communicationLog accessors. Fixed by upgrading src/lib/db.ts with a versioned global cache (PRISMA_CACHE_VERSION = 'v2-commcloud') that tears down and recreates the PrismaClient when the version changes. Bumping the version forces fresh-client instantiation on the next module reload
+- The dev server also needed a full restart (the system's one-shot launch via /start.sh + .zscripts/dev.sh has no watchdog). Restarted via `setsid -f bash -c 'cd /home/z/my-project && exec bun run dev'` which fully detaches into a new session so the Bash tool's exit doesn't kill it
+- Verified all 4 routes return real data via curl (whatsapp/email/sms return seed messages; communication returns aggregated AI engine stats with 16 events across 4 channels, 7-stage recovery pipeline, 12 report distributions, 7 detected events from live invoice scanning)
+- Verified all 3 POST routes work via curl (created test records, confirmed 201 responses with sentAt timestamps, then re-fetched GET to confirm the new records appear at the top of the list)
+- tsc --noEmit is clean (0 errors in src/app/api/{whatsapp,email,sms,communication}/)
+- bun run lint is clean (exit 0, 0 errors)
+
+Stage Summary:
+- 4 new API route files created (all in src/app/api/):
+  - /src/app/api/whatsapp/route.ts (GET + POST, ~210 lines)
+  - /src/app/api/email/route.ts (GET + POST, ~205 lines)
+  - /src/app/api/sms/route.ts (GET + POST, ~190 lines)
+  - /src/app/api/communication/route.ts (GET only, ~330 lines — flagship aggregation)
+- /src/lib/db.ts upgraded with versioned global cache invalidation (so future schema changes don't require a dev server restart — just bump PRISMA_CACHE_VERSION)
+- All 3 POST routes write to 3 tables atomically: the channel-specific message table (whatsappMessage/emailMessage/sMSMessage), the CommunicationLog audit trail, and the AuditLog entity-history table
+- The /api/communication GET endpoint orchestrates 5 engine functions (getAiEngineStats, runCollectionRecovery, getReportStats, detectEvents, getWhatsAppStats/getEmailStats/getSMSStats/getNotificationStats) into a single dashboard payload suitable for the Communication Cloud™ UI
+- All routes use DB-with-seed-fallback so the dashboard always shows realistic Indian business data even on a fresh database
+- Dev server restarted and stable; all curl tests pass; tsc + lint clean
+
+---
+Task ID: Phase8-BrandIdentity
+Agent: GSTPilot Brand Identity Architect
+Task: Phase 8 — GSTPILOT BRAND IDENTITY SYSTEM™ — Integrate the official uploaded GSTPilot logo across the entire SaaS (branding only, no functionality changes)
+
+Work Log:
+- Read prior worklog: confirmed Phase 8 Step 3 (Invoice Engine) + Communication Cloud (lib + API) complete; BrandLogo component + brand assets already scaffolded but using placeholder icon design
+- Analyzed uploaded official logo (/home/z/my-project/upload/pasted_image_1782212751517.png, 2230x1536 RGBA) via VLM + PIL pixel analysis:
+  - Layout: stacked vertical (icon top, "GSTPilot" wordmark middle, "The Financial Brain of India™" tagline bottom)
+  - Icon bounds: x=714-1544, y=248-842 (831x595 region)
+  - Full logo bounds: x=611-1660, y=248-1234 (1050x987)
+  - Brand colors sampled: Blue #10B0F0, Purple #7040D0, Cyan accent #22D3EE, BG #000000, Text #FFFFFF
+- Built /home/z/my-project/scripts/generate-brand-assets.py (PIL + NumPy) — derives all variants from uploaded logo:
+  - make_black_transparent(): luminance-based alpha extraction (black→transparent, preserves vivid blue/purple icon)
+  - feather_edges(): Gaussian blur on alpha channel for clean scaling
+  - square_pad(): centered fit with 82% margin, configurable bg
+  - make_white_version(): monochrome white for dark-bg subtle use
+- Generated 9 raster assets + 3 SVGs:
+  - /public/brand/gstpilot-icon-transparent.png (512x512, transparent bg, colorful GR+arrow icon)
+  - /public/brand/gstpilot-icon.png (1048x1048, black bg)
+  - /public/brand/gstpilot-icon-white.png (512x512, white monochrome)
+  - /public/brand/gstpilot-logo-full-transparent.png (1089x1026, full logo transparent bg)
+  - /public/brand/gstpilot-logo-full.png (1129x1066, full logo black bg)
+  - /public/brand/gstpilot-splash.png (1024x1024, splash)
+  - /public/brand/gstpilot-icon.svg + gstpilot-logo-full.svg (vector versions with gradient defs + glow filter)
+  - /public/favicon.ico (16+32+48 multi-size), favicon-16x16.png, favicon-32x32.png
+  - /public/apple-touch-icon.png (180x180 opaque), android-chrome-192.png, android-chrome-512.png
+  - /public/og-image.png (1200x630, full logo centered on black with glow)
+  - /public/icon.svg + /public/logo.svg (matching brand icon)
+- Dispatched Explore agent for comprehensive logo-placement map (survey only, no edits): identified 12 hardcoded <Image> instances across 5 files + 1 Zap-icon block in app-sidebar + missing loading.tsx
+- Integrated BrandLogo component into 6 files (replaced hardcoded <Image> blocks):
+  - LandingPage.tsx (3 placements): navbar horizontal size=40 asLink href=#top showTagline; hero icon size=72 with drop-shadow; footer horizontal size=36 asLink showTagline
+  - LoginPage.tsx (2 placements): desktop horizontal size=48 showTagline; mobile horizontal size=40 showTagline
+  - OnboardingFlow.tsx (1 placement): welcome icon size=96 with brand-aura glow + purple drop-shadow
+  - OraclePanel.tsx (2 placements): skeleton loading → BrandLogoPulse size=56 label="Initializing Financial Brain…"; header button → icon size=32 disableGlow
+  - OracleWorkspace.tsx (4 placements): rail sidebar icon size=28 disableGlow (kept custom GSTPilot™ + Oracle wordmark); brand-pulse top-right icon size=24 disableGlow className="brand-pulse" (preserves 8s CSS glow animation); OracleAvatar icon size=20 disableGlow; MessageAvatar icon size=15 disableGlow
+  - app-sidebar.tsx (1 placement): replaced Zap-icon block with BrandLogo icon size=32 disableGlow, kept GSTPilot wordmark + Infinity badge + firm-name subtitle (no functionality change)
+- Removed unused `import Image from 'next/image'` from 5 files; removed unused `Zap` import from app-sidebar
+- Created /src/app/loading.tsx — Next.js route-loading screen with BrandLogoPulse size=96 label="Loading GSTPilot…" on full-screen black canvas (finally uses the previously-unused BrandLogoPulse component)
+- Updated /src/lib/communication/email.ts renderEmailHtml() — added <img src="https://gstpilot.in/brand/gstpilot-icon-transparent.png" width=40 height=40> next to wordmark in email header (absolute URL for email-client compatibility)
+- Verified layout.tsx metadata already comprehensive (favicon.ico, 16x16, 32x32, svg, apple-touch, mask-icon color=#3B82F6, manifest, theme-color #000000, OG image 1200x630, Twitter card) — all reference regenerated assets, no changes needed
+- Verified manifest.json already correct (name, short_name, description, theme_color #000000, background_color #000000, 6 icons including /brand/gstpilot-icon.svg, shortcuts for Dashboard + Oracle AI) — no changes needed
+- Ran bun run lint: 0 errors (clean)
+- Verified dev server stable: all 9 brand assets serve HTTP 200, page loads 200, no compile errors in dev.log
+- Browser-verified via agent-browser (VLM cross-check on screenshots):
+  - Landing navbar: GR+arrow icon + GSTPilot™ wordmark + tagline rendering ✓
+  - Landing hero: large icon with blue glow rendering ✓
+  - Landing footer: full logo with wordmark + tagline rendering ✓
+  - Login page desktop: GR+arrow + GSTPilot™ + tagline in top-left ✓
+  - Login page mobile (390px): logo renders cleanly, centered, legible ✓
+  - Navbar logo link: href="#top" confirmed (scrolls to top) ✓
+  - Favicon link tags: all 9 correctly wired in <head> ✓
+  - Console errors: 0 on landing, 0 on login ✓
+  - All brand assets: 9/9 serve HTTP 200 ✓
+
+Stage Summary:
+- Phase 8 — GSTPILOT BRAND IDENTITY SYSTEM™ is COMPLETE and browser-verified
+- Official uploaded GSTPilot logo (GR+arrow, blue #10B0F0 + purple #7040D0) now integrated across ALL major surfaces:
+  - Public: landing navbar/hero/footer, login (desktop+mobile), onboarding welcome, email headers
+  - In-app: Oracle panel (header + skeleton loading), Oracle workspace (sidebar + brand-pulse + avatars), app-sidebar header
+  - Browser tab: favicon.ico (multi-size), 16/32/180/192/512 PNGs, SVG icon, mask-icon, theme-color #000000
+  - PWA: manifest.json with 6 icons, standalone display, black theme
+  - Social: og-image.png (1200x630) + Twitter card
+  - Route loading: /src/app/loading.tsx with BrandLogoPulse animated splash
+- 12 hardcoded <Image> instances replaced with <BrandLogo> component (single source of truth for brand mark)
+- 1 Zap-icon placeholder in app-sidebar replaced with official logo icon (kept wordmark + Infinity badge + firm name)
+- 1 new file: /src/app/loading.tsx (BrandLogoPulse — previously unused component now live)
+- 9 raster assets + 3 SVGs regenerated from official uploaded logo (replacing placeholder icon design)
+- Critical constraints honored: NO functionality changes, NO API/DB/auth/Oracle/GST/Banking/Invoice modifications, NO page replacements, NO UI resets (kept InfinityMark as in-app top-bar symbol, kept all existing CSS classes .brand-logo/.brand-pulse/.brand-loading/.brand-aura working)
+- Tagline live: GSTPilot™ — The Financial Brain of India™

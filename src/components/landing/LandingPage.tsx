@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
+import { BrandLogo } from '@/components/brand';
 import {
   motion,
   useInView,
@@ -246,14 +247,15 @@ function Navbar({ onGetStarted }: { onGetStarted: () => void }) {
           scrolled ? 'glass-surface-strong shadow-premium' : 'bg-transparent'
         }`}
       >
-        <a href="#top" className="flex items-center gap-2.5" aria-label="GSTPilot Infinity home">
-          <span className="flex h-8 w-8 items-center justify-center rounded-lg glass-surface">
-            <InfinityIcon className="h-4 w-4 accent-text" />
-          </span>
-          <span className="text-sm font-semibold tracking-tight text-white">
-            GSTPilot Infinity<span className="accent-text">™</span>
-          </span>
-        </a>
+        <BrandLogo
+          variant="horizontal"
+          theme="dark"
+          size={40}
+          asLink
+          href="#top"
+          showTagline
+          className="brand-logo"
+        />
 
         <div className="hidden items-center gap-1 md:flex">
           {links.map((l) => (
@@ -342,10 +344,25 @@ function HeroSection({ onGetStarted, onBookDemo }: LandingPageProps) {
       />
 
       <div className="relative z-10 mx-auto w-full max-w-5xl text-center">
+        {/* Official GSTPilot™ logo — subtle, above headline */}
+        <motion.div
+          initial={{ opacity: 0, y: 16, scale: 0.94 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          transition={{ duration: 0.8, ease: EASE }}
+          className="mb-8 flex justify-center"
+        >
+          <BrandLogo
+            variant="icon"
+            theme="dark"
+            size={72}
+            className="drop-shadow-[0_0_24px_rgba(59,130,246,0.4)]"
+          />
+        </motion.div>
+
         <motion.div
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, ease: EASE }}
+          transition={{ duration: 0.6, ease: EASE, delay: 0.1 }}
           className="flex justify-center"
         >
           <SectionTag>
@@ -1625,16 +1642,17 @@ function Footer() {
       <div className="mx-auto max-w-7xl">
         <div className="grid grid-cols-2 gap-8 md:grid-cols-5">
           <div className="col-span-2 md:col-span-1">
-            <div className="flex items-center gap-2.5">
-              <span className="flex h-8 w-8 items-center justify-center rounded-lg glass-surface">
-                <InfinityIcon className="h-4 w-4 accent-text" />
-              </span>
-              <span className="text-sm font-semibold text-white">
-                GSTPilot Infinity<span className="accent-text">™</span>
-              </span>
-            </div>
+            <BrandLogo
+              variant="horizontal"
+              theme="dark"
+              size={36}
+              asLink
+              href="#top"
+              showTagline
+              className="brand-logo"
+            />
             <p className="mt-3 text-xs leading-relaxed text-white/45">
-              The Financial Brain of India.
+              The Financial Brain of India™ — the world's most premium Financial Operating System for Chartered Accountants and Indian Businesses.
             </p>
             <div className="mt-4 flex gap-2">
               {[Twitter, Github, Linkedin].map((Icon, i) => (

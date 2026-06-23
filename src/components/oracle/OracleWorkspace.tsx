@@ -35,7 +35,7 @@ import {
   Home, Brain, Zap, Wallet, Network, Settings, type LucideIcon,
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
-import { InfinitySymbol } from '@/components/layout/InfinityMark';
+import { BrandLogo } from '@/components/brand';
 import { cn } from '@/lib/utils';
 import type { AppView } from '@/contexts/AppContext';
 import {
@@ -601,12 +601,15 @@ export function OracleWorkspace({
             className="flex h-full w-14 shrink-0 flex-col items-center gap-1 border-r py-3 md:w-16 md:gap-1.5 lg:w-56 lg:items-stretch lg:px-2.5"
             style={{ borderColor: 'rgba(255,255,255,0.08)' }}
           >
-            {/* Brand */}
-            <div className="mb-2 flex items-center justify-center gap-2 px-1 lg:mb-4 lg:px-2">
-              <InfinitySymbol size={28} />
+            {/* Brand — Official GSTPilot™ logo */}
+            <div className="brand-logo mb-2 flex items-center justify-center gap-2 px-1 lg:mb-4 lg:px-2">
+              <BrandLogo variant="icon" theme="dark" size={28} disableGlow />
               <div className="hidden lg:block">
-                <p className="text-[13px] font-semibold leading-tight tracking-tight text-white">
-                  GSTPilot
+                <p
+                  className="text-[13px] font-semibold leading-tight tracking-tight text-white"
+                  style={{ fontFamily: 'var(--font-poppins), Poppins, sans-serif' }}
+                >
+                  GSTPilot<span style={{ color: '#22D3EE' }}>™</span>
                 </p>
                 <p className="text-[10px] font-bold uppercase leading-tight tracking-wider text-white/50">
                   Oracle
@@ -786,6 +789,15 @@ export function OracleWorkspace({
                   <span className="text-white/30">· {nativeLanguageLabel(activeLanguage)}</span>
                 )}
               </div>
+
+              {/* Animated brand pulse — top right, 8s cycle (blue ↔ purple glow) */}
+              <BrandLogo
+                variant="icon"
+                theme="dark"
+                size={24}
+                disableGlow
+                className="brand-pulse hidden md:block"
+              />
 
               {messages.length > 0 && !isStreaming && (
                 <button
@@ -1006,7 +1018,7 @@ function OracleAvatar({ state }: { state: ReturnType<typeof deriveAvatarState> }
         className="flex h-9 w-9 items-center justify-center rounded-xl shadow-lg shadow-emerald-500/20"
         style={{ background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)' }}
       >
-        <InfinitySymbol size={20} />
+        <BrandLogo variant="icon" theme="dark" size={20} disableGlow />
       </div>
       <span className="absolute -bottom-0.5 -right-0.5 flex h-2.5 w-2.5">
         {state === 'speaking' && (
@@ -1063,7 +1075,7 @@ function MessageBubble({
           className="flex h-7 w-7 items-center justify-center rounded-lg shadow-md shadow-emerald-500/15"
           style={{ background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)' }}
         >
-          <InfinitySymbol size={15} />
+          <BrandLogo variant="icon" theme="dark" size={15} disableGlow />
         </div>
       </div>
 

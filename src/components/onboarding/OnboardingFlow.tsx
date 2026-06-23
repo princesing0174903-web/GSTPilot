@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useCallback } from 'react';
+import { BrandLogo } from '@/components/brand';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Zap,
@@ -369,19 +370,25 @@ export function OnboardingFlow({
             initial={{ scale: 0.5, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             transition={{ type: 'spring', stiffness: 200, damping: 15, delay: 0.1 }}
-            className="mb-8"
+            className="relative mb-8"
           >
-            <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-600 flex items-center justify-center shadow-lg shadow-emerald-600/30 glow-accent-btn">
-              <Zap className="size-10 text-white" />
-            </div>
+            {/* Blue-purple glow behind logo (signup spec) */}
+            <div className="brand-aura" aria-hidden />
+            <BrandLogo
+              variant="icon"
+              theme="dark"
+              size={96}
+              className="relative drop-shadow-[0_0_30px_rgba(139,92,246,0.55)]"
+            />
           </motion.div>
           <motion.h1
             initial={{ y: 20, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             transition={{ delay: 0.2 }}
             className="text-2xl font-bold tracking-tight text-white"
+            style={{ fontFamily: 'var(--font-poppins), Poppins, sans-serif' }}
           >
-            Welcome to GSTPilot
+            Welcome to GSTPilot<span style={{ color: '#22D3EE' }}>™</span>
           </motion.h1>
           <motion.p
             initial={{ y: 20, opacity: 0 }}
@@ -389,7 +396,7 @@ export function OnboardingFlow({
             transition={{ delay: 0.3 }}
             className="text-white/55 mt-2 max-w-sm"
           >
-            Let&apos;s set up your workspace in less than 2 minutes.
+            The Financial Brain of India™ — let’s set up your workspace in less than 2 minutes.
           </motion.p>
           <motion.div
             initial={{ y: 20, opacity: 0 }}

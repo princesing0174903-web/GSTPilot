@@ -9,6 +9,7 @@
 
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { BrandLogo, BrandLogoPulse } from '@/components/brand';
 import {
   Brain, Wallet, FileText, Receipt, ChevronRight, Activity, Lightbulb,
   ShieldCheck, CreditCard, Sparkles, type LucideIcon,
@@ -16,7 +17,6 @@ import {
 import type { AppView } from '@/contexts/AppContext';
 import { useLiveDashboardMetrics, useFireActivities } from '@/hooks/use-firestore';
 import { Skeleton } from '@/components/ui/skeleton';
-import { InfinitySymbol } from '@/components/layout/InfinityMark';
 import { OracleWorkspace } from './OracleWorkspace';
 import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
@@ -190,9 +190,12 @@ function LiveActivityItem({ icon: Icon, label, sublabel }: { icon: LucideIcon; l
 function OracleSkeleton() {
   return (
     <div className="flex-1 space-y-6 overflow-hidden p-4">
+      {/* Branded loading state — Animated GSTPilot logo + “Initializing Financial Brain…” */}
+      <div className="flex flex-col items-center justify-center gap-4 py-6">
+        <BrandLogoPulse size={56} label="Initializing Financial Brain…" />
+      </div>
       <div className="space-y-3">
         <Skeleton className="h-3 w-24" />
-        <Skeleton className="h-14 w-full rounded-2xl" />
         <Skeleton className="h-14 w-full rounded-2xl" />
         <Skeleton className="h-14 w-full rounded-2xl" />
       </div>
@@ -345,8 +348,8 @@ export function OraclePanel({ onNavigate }: OraclePanelProps) {
         className="group flex w-full items-center gap-2.5 px-4 py-3.5 text-left transition-colors hover:bg-white/[0.03]"
         aria-label="Open GSTPilot Oracle workspace"
       >
-        <div className="accent-gradient flex h-8 w-8 items-center justify-center rounded-lg shadow-lg shadow-emerald-500/20">
-          <InfinitySymbol size={18} />
+        <div className="flex h-8 w-8 items-center justify-center rounded-lg">
+          <BrandLogo variant="icon" theme="dark" size={32} disableGlow />
         </div>
         <div className="flex min-w-0 flex-1 flex-col">
           <div className="flex items-baseline gap-0.5">

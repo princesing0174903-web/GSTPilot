@@ -43,6 +43,7 @@ const NAV_GROUP_MAP: Record<string, AppView> = {
   reconcile: 'reconcile',
   returns: 'reconcile',
   invoices: 'reconcile',
+  'invoice-cloud': 'reconcile',
   'embedded-finance': 'reconcile',
   'working-capital': 'reconcile',
   'business-graph': 'business-graph',

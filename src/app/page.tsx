@@ -68,10 +68,12 @@ import RunMyCompanyPage from '@/components/run-my-company/RunMyCompanyPage'
 import MissionControlPage from '@/components/mission-control/MissionControlPage'
 import BusinessDNApage from '@/components/business-dna/BusinessDNApage'
 import AICFODashboardPage from '@/components/ai-cfo/AICFODashboardPage'
+import InvoiceCloudPage from '@/components/invoice-cloud/InvoiceCloudPage'
 
 const VIEW_TITLES: Record<string, string> = {
   dashboard: 'Mission Control',
   'business-dna': 'Business DNA',
+  'invoice-cloud': 'Invoice Cloud',
   'ai-cfo': 'AI CFO',
   returns: 'Returns',
   reconcile: 'Reconcile',
@@ -217,6 +219,8 @@ function DashboardContent() {
         return <RunMyCompanyPage />
       case 'business-dna':
         return <BusinessDNApage />
+      case 'invoice-cloud':
+        return <InvoiceCloudPage />
       case 'ai-cfo':
         return <AICFODashboardPage />
       default:

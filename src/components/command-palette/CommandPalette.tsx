@@ -23,6 +23,7 @@ import {
   Pin,
   Search,
   ArrowRight,
+  Receipt,
 } from 'lucide-react';
 import { useApp } from '@/contexts/AppContext';
 import {
@@ -207,6 +208,18 @@ export default function CommandPalette() {
         action: () => {
           setCurrentView('invoices');
           addToRecent('cmd-upload-invoice', 'Upload Invoice', 'command');
+        },
+        group: 'Commands',
+      },
+      {
+        id: 'cmd-invoice-cloud',
+        label: 'Open Invoice Cloud',
+        description: 'Sales · Purchase · Expenses · Receivables · Payables · Payments · TDS · Payroll · Forecast',
+        icon: Receipt,
+        shortcut: 'G C',
+        action: () => {
+          setCurrentView('invoice-cloud');
+          addToRecent('cmd-invoice-cloud', 'Open Invoice Cloud', 'command');
         },
         group: 'Commands',
       },

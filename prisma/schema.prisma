@@ -59,6 +59,12 @@ model Client {
   uploadedFiles       UploadedFile[]
   notifications       Notification[]
   filingHistories     FilingHistory[]
+  // ── Invoice Cloud™ back-relations (Phase 8 Step 3) ──
+  purchaseBills       PurchaseBill[]
+  expenses            Expense[]
+  payments            Payment[]
+  employees           Employee[]
+  tdsRecords          TDSRecord[]
 }
 
 model Invoice {
@@ -89,6 +95,20 @@ model Invoice {
   assignedTo    String?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+
+  // ── Invoice Cloud™ financial fields (Phase 8 Step 3) ──
+  dueDate         String?            // payment due date (ISO date string)
+  gstAmount       Float    @default(0)  // denormalised tax total (cgst+sgst+igst+cess)
+  paidAmount      Float    @default(0)  // amount already collected
+  balanceAmount   Float    @default(0)  // totalAmount - paidAmount
+  paymentStatus   String   @default("unpaid") // unpaid | partial | paid | overdue
+  paymentMode     String?             // upi | bank | cash | cheque
+  paymentDate     String?             // when fully paid
+  recurring       Boolean  @default(false)
+  recurringCycle  String?             // monthly | quarterly | yearly
+  notesFinance    String?             // Invoice Cloud private notes
+  sentToCustomer  Boolean  @default(false)
+  sentAt          DateTime?
 
   client          Client                 @relation(fields: [clientId], references: [id])
   reconciliations ReconciliationResult[]
@@ -676,4 +696,170 @@ model AIJob {
   createdBy     String?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// GSTPILOT REAL INVOICE ENGINE™ — Phase 8 Step 3
+// Create. Track. Collect. Automate. — The Financial Brain of India™
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ─── Purchase Bills (Vendor Invoices) ────────────────────────────────────────────
+model PurchaseBill {
+  id            String   @id @default(cuid())
+  clientId      String?                       // owning business/client
+  vendorName    String
+  vendorGstin   String?
+  invoiceNo     String                         // vendor's invoice number
+  invoiceDate   String
+  dueDate       String?
+  taxableValue  Float    @default(0)
+  cgst          Float    @default(0)
+  sgst          Float    @default(0)
+  igst          Float    @default(0)
+  cess          Float    @default(0)
+  gstAmount     Float    @default(0)           // denormalised tax total
+  totalAmount   Float    @default(0)
+  paidAmount    Float    @default(0)
+  balanceAmount Float    @default(0)
+  status        String   @default("recorded")  // recorded | matched | paid | partial | overdue
+  paymentStatus String   @default("unpaid")
+  category      String?                        // procurement category
+  hsnCode       String?
+  notes         String?
+  ocrExtracted  Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  client Client? @relation(fields: [clientId], references: [id])
+}
+
+// ─── Expenses (Receipts / Operational Spend) ─────────────────────────────────────
+model Expense {
+  id            String   @id @default(cuid())
+  clientId      String?
+  category      String   @default("Miscellaneous") // Office|Travel|Salary|Marketing|Rent|Utilities|Software|Miscellaneous
+  description   String?
+  vendor        String?
+  amount        Float    @default(0)              // total amount paid
+  gst           Float    @default(0)              // GST portion (claimable)
+  gstClaimable  Boolean  @default(true)
+  date          String                            // expense date (ISO)
+  paymentMode   String?                           // upi|bank|cash|cheque|card
+  status        String   @default("recorded")     // recorded | reimbursed | claimed
+  receiptUrl    String?
+  ocrExtracted  Boolean  @default(false)
+  notes         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  client Client? @relation(fields: [clientId], references: [id])
+}
+
+// ─── Payments (Customer + Vendor Settlements) ────────────────────────────────────
+model Payment {
+  id            String   @id @default(cuid())
+  clientId      String?
+  invoiceId     String?                          // links to Invoice (sales collection)
+  purchaseBillId String?                         // links to PurchaseBill (vendor payment)
+  partyName     String                           // customer or vendor name
+  partyType     String   @default("customer")    // customer | vendor
+  amount        Float    @default(0)
+  paymentDate   String
+  paymentMode   String   @default("upi")         // upi|bank|cash|cheque|card
+  referenceNo   String?                          // UTR / cheque no
+  status        String   @default("completed")   // completed | pending | failed | reconciled
+  reconciled    Boolean  @default(false)
+  notes         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  client Client? @relation(fields: [clientId], references: [id])
+}
+
+// ─── Employees (Payroll Roster) ──────────────────────────────────────────────────
+model Employee {
+  id            String   @id @default(cuid())
+  clientId      String?
+  name          String
+  designation   String?
+  department    String?
+  employeeId    String?                          // internal emp code
+  pan           String?
+  aadhaar       String?
+  bankAccount   String?
+  ifsc          String?
+  salary        Float    @default(0)             // gross monthly salary
+  basic         Float    @default(0)
+  hra           Float    @default(0)
+  allowances    Float    @default(0)
+  pf            Float    @default(0)             // employee PF contribution
+  esi           Float    @default(0)             // employee ESI contribution
+  tds           Float    @default(0)             // monthly TDS
+  professionalTax Float  @default(0)
+  netSalary     Float    @default(0)
+  status        String   @default("active")      // active | inactive | resigned
+  joinedAt      String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  client    Client?   @relation(fields: [clientId], references: [id])
+  payrolls  Payroll[]
+}
+
+// ─── Payroll (Monthly Salary Runs) ───────────────────────────────────────────────
+model Payroll {
+  id            String   @id @default(cuid())
+  employeeId    String
+  period        String                           // YYYY-MM
+  grossSalary   Float    @default(0)
+  basic         Float    @default(0)
+  hra           Float    @default(0)
+  allowances    Float    @default(0)
+  pf            Float    @default(0)
+  esi           Float    @default(0)
+  tds           Float    @default(0)
+  professionalTax Float  @default(0)
+  netSalary     Float    @default(0)
+  status        String   @default("generated")   // generated | paid | held
+  paidAt        String?
+  payslipUrl    String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  employee Employee @relation(fields: [employeeId], references: [id])
+}
+
+// ─── Revenue / Cash Flow Forecast ────────────────────────────────────────────────
+model RevenueForecast {
+  id              String   @id @default(cuid())
+  period          String                           // YYYY-MM
+  forecastType    String   @default("cash_flow")   // cash_flow | revenue | collection
+  projectedInflow Float    @default(0)             // expected collections
+  projectedOutflow Float   @default(0)             // expected payments (vendors + payroll + expenses)
+  projectedNet    Float    @default(0)             // inflow - outflow
+  confidence      Float    @default(0.8)
+  factors         String?                          // JSON string of contributing factors
+  aiSummary       String?                          // Oracle human-readable summary
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+// ─── TDS Liability (Tax Deducted at Source) ──────────────────────────────────────
+model TDSRecord {
+  id            String   @id @default(cuid())
+  clientId      String?
+  section       String   @default("194C")         // 194C|194J|194I|194H|94Q|etc
+  deducteeName  String
+  deducteePan   String?
+  paymentAmount Float    @default(0)
+  tdsRate       Float    @default(0)
+  tdsAmount     Float    @default(0)
+  date          String
+  status        String   @default("deducted")     // deducted | paid | filed
+  quarter       String?                           // Q1|Q2|Q3|Q4
+  notes         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  client Client? @relation(fields: [clientId], references: [id])
 }

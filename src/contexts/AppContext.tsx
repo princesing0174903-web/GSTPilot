@@ -85,7 +85,9 @@ export type AppView =
   | 'economic-war-room'
   | 'run-my-company'
   // GSTPilot Infinity™ Layer
-  | 'business-dna';
+  | 'business-dna'
+  // Phase 8 Step 3 — GSTPilot Real Invoice Engine™
+  | 'invoice-cloud';
 
 export interface ReturnPrepContext {
   clientId: string | null;

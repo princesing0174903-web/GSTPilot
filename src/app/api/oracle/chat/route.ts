@@ -40,6 +40,17 @@ import { getPaymentStats, seedPayments } from '@/lib/invoices/payments';
 import { getTDSStats, seedTDSRecords } from '@/lib/invoices/tds';
 import { getPayrollStats, seedEmployees, seedPayroll } from '@/lib/invoices/payroll';
 import type { InvoiceCloudInvoice, PurchaseBill, Expense, Payment, TDSRecord, Employee, Payroll } from '@/lib/invoices/types';
+import { seedBusinessEvents, getObservationSummary } from '@/lib/execution/observe';
+import { seedDecisions, getDecisionSummary } from '@/lib/execution/think';
+import { planAllActions } from '@/lib/execution/decide';
+import { seedExecutionTasks, getExecutionSummary } from '@/lib/execution/execute';
+import { seedApprovals, getApprovalSummary } from '@/lib/execution/approvals';
+import { seedWorkflows, getWorkflowSummary } from '@/lib/execution/workflows';
+import { seedUserBehaviours, getLearningSummary } from '@/lib/execution/learn';
+import { seedTimeline, getTimelineSummary } from '@/lib/execution/timeline';
+import { getAgentRoster } from '@/lib/execution/agents';
+import type { WorkflowStep } from '@/lib/execution/types';
+import { buildRealDataSnapshot, formatRealDataContextBlock } from '@/lib/oracle/real-data';
 
 // ─── INR formatting (server-side) ─────────────────────────────────────────────
 
@@ -340,6 +351,128 @@ Invoice Engine is not available right now. Fall back to general invoice/receivab
   }
 }
 
+// ─── Execution Engine context block (Phase 8 Step 5 — Execution Engine™) ─────
+// Pulls live state from all 8 modules (Observe→Think→Decide→Execute→Approve→
+// Learn) so Oracle can speak in proactive execution statements:
+// "I've downloaded your GSTR-2B", "I've sent reminders to 12 clients",
+// "I've reconciled ₹18.4 lakh transactions", "I've prepared your GSTR-3B".
+async function buildExecutionContextBlock(): Promise<string> {
+  try {
+    const [eventRows, decisionRows, taskRows, approvalRows, workflowRows, behaviourRows, timelineRows] = await Promise.all([
+      db.businessEvent.findMany({ orderBy: { createdAt: 'desc' }, take: 100 }).catch(() => []),
+      db.decision.findMany({ orderBy: { createdAt: 'desc' }, take: 100 }).catch(() => []),
+      db.executionTask.findMany({ orderBy: { createdAt: 'desc' }, take: 100 }).catch(() => []),
+      db.approval.findMany({ orderBy: { createdAt: 'desc' }, take: 50 }).catch(() => []),
+      db.workflow.findMany({ orderBy: { createdAt: 'desc' }, take: 50 }).catch(() => []),
+      db.userBehaviour.findMany({ orderBy: { updatedAt: 'desc' }, take: 50 }).catch(() => []),
+      db.executionTimeline.findMany({ orderBy: { timestamp: 'desc' }, take: 100 }).catch(() => []),
+    ]);
+
+    // Resolve entities (DB → engine type, or seed fallback)
+    const events = eventRows.length > 0
+      ? eventRows.map((r) => ({ id: r.id, businessId: r.businessId, type: r.type as never, source: r.source as never, payload: r.payload ? safeJsonParse(r.payload) : null, severity: r.severity as never, status: r.status as never, createdAt: r.createdAt.toISOString() }))
+      : seedBusinessEvents();
+    const decisions = decisionRows.length > 0
+      ? decisionRows.map((r) => ({ id: r.id, eventId: r.eventId, reason: r.reason, priority: r.priority as never, action: r.action as never, status: r.status as never, createdAt: r.createdAt.toISOString(), updatedAt: r.updatedAt.toISOString() }))
+      : seedDecisions(events);
+    const tasks = taskRows.length > 0
+      ? taskRows.map((r) => ({ id: r.id, decisionId: r.decisionId, type: r.type as never, description: r.description, status: r.status as never, startedAt: r.startedAt ? r.startedAt.toISOString() : null, completedAt: r.completedAt ? r.completedAt.toISOString() : null, result: r.result ? safeJsonParse(r.result) : null, riskScore: r.riskScore, agent: r.agent as never, createdAt: r.createdAt.toISOString(), updatedAt: r.updatedAt.toISOString() }))
+      : seedExecutionTasks(decisions);
+    const approvals = approvalRows.length > 0
+      ? approvalRows.map((r) => ({ id: r.id, taskId: r.taskId, risk: r.risk, status: r.status as never, reason: r.reason, approvedBy: r.approvedBy, approvedAt: r.approvedAt ? r.approvedAt.toISOString() : null, createdAt: r.createdAt.toISOString(), updatedAt: r.updatedAt.toISOString() }))
+      : seedApprovals(tasks);
+    const workflows = workflowRows.length > 0
+      ? workflowRows.map((r) => ({ id: r.id, name: r.name, type: r.type as never, trigger: r.trigger, steps: safeJsonParseSteps(r.steps), currentStep: r.currentStep, status: r.status as never, context: r.context ? safeJsonParse(r.context) : null, startedAt: r.startedAt ? r.startedAt.toISOString() : null, completedAt: r.completedAt ? r.completedAt.toISOString() : null, createdAt: r.createdAt.toISOString(), updatedAt: r.updatedAt.toISOString() }))
+      : seedWorkflows();
+    const behaviours = behaviourRows.length > 0
+      ? behaviourRows.map((r) => ({ id: r.id, userId: r.userId, action: r.action as never, preference: r.preference, confidence: r.confidence, evidence: r.evidence, updatedAt: r.updatedAt.toISOString(), createdAt: r.createdAt.toISOString() }))
+      : seedUserBehaviours();
+    const timeline = timelineRows.length > 0
+      ? timelineRows.map((r) => ({ id: r.id, taskId: r.taskId, agent: r.agent as never, stage: r.stage as never, title: r.title, description: r.description, timestamp: r.timestamp.toISOString() }))
+      : seedTimeline(tasks);
+
+    const observation = getObservationSummary(events);
+    const decisionsSummary = getDecisionSummary(decisions);
+    const execution = getExecutionSummary(tasks);
+    const approvalsSummary = getApprovalSummary(approvals);
+    const workflowsSummary = getWorkflowSummary(workflows);
+    const learning = getLearningSummary(behaviours);
+    const timelineSummary = getTimelineSummary(timeline);
+    const agents = getAgentRoster(tasks);
+
+    // Top pending approvals (Oracle can name them)
+    const pendingApprovalList = approvalsSummary.pendingApprovals.slice(0, 5).map((a) => {
+      const t = tasks.find((tk) => tk.id === a.taskId);
+      return `${t?.description ?? 'Task'} (risk ${a.risk}/100)${a.reason ? ' — ' + a.reason : ''}`;
+    }).join('; ');
+
+    // Recent timeline (last 6 entries) — the 09:02/09:07/09:12 narrative
+    const recentTimeline = timelineSummary.entries.slice(0, 6).map((e) => {
+      const time = new Date(e.timestamp).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Kolkata' });
+      return `${time} ${e.title}`;
+    }).join('\n');
+
+    // Active workflows
+    const activeWorkflows = workflowsSummary.activeWorkflows.map((w) =>
+      `${w.name} (step ${w.currentStep + 1}/${w.steps.length}, ${w.status})`
+    ).join('; ');
+
+    // Learned patterns (top 3)
+    const topPatterns = learning.topPreferences.slice(0, 3).map((b) =>
+      `${b.action.replace(/_/g, ' ')} → ${b.preference} (${Math.round(b.confidence * 100)}% confidence, ${b.evidence} observations)`
+    ).join('; ');
+
+    return `## LIVE EXECUTION ENGINE STATE (Phase 8 Step 5 — Execution Engine™)
+You are the Autonomous Execution layer — Observe. Think. Decide. Execute. Confirm. Learn. You don't just advise; you EXECUTE real work via your AI Agents Team and confirm what you've done in the past tense.
+
+### Observation Engine™ (Module 1)
+- Total business events monitored: ${observation.totalEvents} (open: ${observation.openEvents}, critical: ${observation.criticalEvents}, high: ${observation.highSeverityEvents})
+- By type: ${Object.entries(observation.byType).filter(([,v]) => v > 0).map(([k,v]) => `${k.replace(/_/g,' ')} (${v})`).join(', ')}
+- Detected issues: ${observation.detectedIssues.length > 0 ? observation.detectedIssues.slice(0,4).map(i => i.title).join('; ') : 'none'}
+
+### Decision Engine™ (Module 2)
+- Total decisions: ${decisionsSummary.total} (pending: ${decisionsSummary.pending}, executed: ${decisionsSummary.executed})
+- By priority: ${Object.entries(decisionsSummary.byPriority).filter(([,v]) => v > 0).map(([k,v]) => `${k} (${v})`).join(', ')}
+
+### Autonomous Execution Engine™ (Module 3)
+- Total tasks executed: ${execution.total} (completed: ${execution.completed}, running: ${execution.running}, queued: ${execution.queued}, awaiting approval: ${execution.awaitingApproval})
+- Success rate: ${execution.successRate}%
+- By agent: ${Object.entries(execution.byAgent).filter(([,v]) => v > 0).map(([k,v]) => `${k.replace(/_/g,' ')} (${v})`).join(', ')}
+
+### Approval Engine™ (Module 4)
+- Pending approvals: ${approvalsSummary.pending} (risk threshold: ${approvalsSummary.riskThreshold}/100)
+- Awaiting sign-off: ${pendingApprovalList || 'none'}
+
+### Workflow Engine™ (Module 5)
+- Active workflows: ${workflowsSummary.running} (completed: ${workflowsSummary.completed})
+- In progress: ${activeWorkflows || 'none'}
+
+### Learning Engine™ (Module 6)
+- Learned memories: ${learning.totalMemories} (high confidence: ${learning.highConfidence})
+- Top patterns: ${topPatterns || 'none yet'}
+
+### Execution Timeline™ (Module 7) — today's autonomous activity
+${recentTimeline || 'No activity yet today.'}
+
+### AI Agents™ (Module 7) — your autonomous workforce
+${agents.agents.map(a => `- ${a.name}: ${a.tasksExecuted} tasks executed, ${a.successRate}% success rate, ${a.status}`).join('\n')}
+
+When the user asks about execution, automation, autonomous tasks, approvals, workflows, or what you've done — use these exact numbers. Name specific tasks, agents, and timestamps. Never fabricate.`;
+  } catch (err) {
+    console.warn('[Oracle] Execution Engine context unavailable:', err);
+    return `## LIVE EXECUTION ENGINE STATE
+Execution Engine is not available right now. Fall back to general execution/automation guidance without fabricating specific tasks.`;
+  }
+}
+
+// ─── Helpers for Execution Engine JSON parsing ────────────────────────────────
+function safeJsonParse(s: string): Record<string, unknown> | null {
+  try { return JSON.parse(s) as Record<string, unknown>; } catch { return null; }
+}
+function safeJsonParseSteps(s: string): WorkflowStep[] {
+  try { return JSON.parse(s) as WorkflowStep[]; } catch { return []; }
+}
+
 // ─── Detect whether the latest user message is a Run My Business command ──────
 // (Helper for future use — currently the prompt handles command interpretation
 //  directly using the LIVE RUN MY BUSINESS STATE block above.)
@@ -391,6 +524,26 @@ async function buildSystemPrompt(req: OracleChatRequest): Promise<string> {
 
   // Fetch live Invoice Engine state (Phase 8 Step 3 — Real Invoice Engine™) — fail-safe.
   const invoiceEngineContextBlock = await buildInvoiceEngineContextBlock();
+
+  // Fetch live Execution Engine state (Phase 8 Step 5 — Execution Engine™) — fail-safe.
+  const executionContextBlock = await buildExecutionContextBlock();
+
+  // Fetch REAL connected data (Phase 2 — Real Data Engine™) — fail-safe.
+  // Uses the user's Firebase UID to pull from DataConnection + SyncedRecord tables.
+  let realDataContextBlock = '';
+  if (mem.userId) {
+    try {
+      const snapshot = await buildRealDataSnapshot(mem.userId);
+      realDataContextBlock = formatRealDataContextBlock(snapshot);
+    } catch (err) {
+      console.warn('[Oracle] Real data context unavailable:', err);
+      realDataContextBlock = `## REAL CONNECTED DATA (Phase 2 — Real Data Engine™)
+Real data engine is not available right now. Fall back to general guidance without fabricating connected-source numbers.`;
+    }
+  } else {
+    realDataContextBlock = `## REAL CONNECTED DATA (Phase 2 — Real Data Engine™)
+User identity not provided — cannot fetch real connected data. Encourage the user to connect data sources (GSTN, Bank, Gmail) from the Connections page.`;
+  }
 
   return `${BRAND_IDENTITY_PROMPT_BLOCK}
 
@@ -634,6 +787,92 @@ When the user types a financial imperative, treat it as an Invoice Engine execut
 
 For any other financial imperative ("Send invoice", "Mark as paid", "Write off", "Issue credit note", "Generate receipts"), map to the closest module and confirm with the appropriate spoken ack in the past tense.
 
+## EXECUTION ENGINE PERSONALITY (CRITICAL — PHASE 8 STEP 5)
+You are ALSO the Autonomous Execution Engine™ — the layer that observes the business, thinks, decides, executes real work via your AI Agents Team, confirms completion, and learns from outcomes. You don't just advise — you EXECUTE and confirm in the past tense.
+
+Tagline: **GSTPilot Execution Engine™ — Observe. Think. Decide. Execute. Learn.**
+
+The user should feel: "I don't operate GSTPilot. GSTPilot operates my business."
+
+### Proactive Execution Statements (ALWAYS USE THESE — NEVER SUGGESTIVE)
+When the user asks you to do something operational, you confirm with a proactive execution statement. You NEVER say "You can prepare GSTR-3B" or "You should send reminders." Instead you say:
+
+**Observation Engine™ (Module 1)**
+- ✅ "I've detected a GST return due tomorrow."
+- ✅ "I've detected a cash shortage predicted in 12 days."
+- ✅ "I've identified ₹18.2 lakh in overdue receivables."
+- ✅ "I've flagged 3 high-risk client behaviour events."
+
+**Decision Engine™ (Module 2)**
+- ✅ "I've prioritised collections recovery as urgent."
+- ✅ "I've recommended delaying supplier payments to preserve cash."
+- ✅ "I've queued GSTR-3B preparation — net liability ₹2,10,000."
+
+**Autonomous Execution Engine™ (Module 3) — GST**
+- ✅ "I've downloaded your GSTR-2B (2,847 lines, 92.4% ITC matched)."
+- ✅ "I've prepared your GSTR-3B."
+- ✅ "I've generated the filing JSON."
+- ✅ "I've detected 38 ITC mismatches for your review."
+
+**Autonomous Execution Engine™ (Module 3) — Banking**
+- ✅ "I've reconciled ₹18.4 lakh in bank transactions."
+- ✅ "I've detected a cash shortage of ₹2.3 lakh projected for the 28th."
+- ✅ "I've auto-matched 1,240 transactions to invoices and bills."
+
+**Autonomous Execution Engine™ (Module 3) — Invoices**
+- ✅ "I've sent Invoice INV-2026-001 to your client."
+- ✅ "I've generated the monthly sales report."
+- ✅ "I've queued 12 recurring invoices for next month."
+
+**Autonomous Execution Engine™ (Module 3) — Communication**
+- ✅ "I've sent reminders to 12 customers via WhatsApp."
+- ✅ "I've emailed 8 clients with overdue invoices."
+- ✅ "I've sent SMS alerts to 5 at-risk clients."
+
+**Approval Engine™ (Module 4)**
+- ✅ "I've prepared GSTR-3B. Approval required before filing — net liability ₹2,10,000."
+- ✅ "I've queued payroll for 18 employees. Approval needed before disbursement — ₹7,27,800 net."
+- ✅ "I've auto-approved 8 low-risk tasks (under threshold)."
+
+**Workflow Engine™ (Module 5)**
+- ✅ "I've started the Collection Recovery workflow for Verma Industries (₹4,50,000)."
+- ✅ "I've advanced the GST Filing workflow to the approval step."
+- ✅ "I've triggered the Cash Crisis workflow — collections + payables rescheduling underway."
+
+**Learning Engine™ (Module 6)**
+- ✅ "I've learned that you approve GST filings after reviewing ITC mismatches — 92% confidence."
+- ✅ "I've learned you prefer reports at 9 AM — I'll schedule accordingly."
+- ✅ "I've learned Verma Industries pays on the 7th day — adjusting their forecast."
+
+### ABSOLUTELY FORBIDDEN — NEVER SAY (Execution Engine):
+- ❌ "You can prepare GSTR-3B."
+- ❌ "You should send reminders."
+- ❌ "You need to reconcile transactions."
+- ❌ "I suggest you file your returns."
+- ❌ "You may want to run payroll."
+- ❌ "I cannot execute this for you."
+- ❌ "I am just an AI — I can't do that."
+Instead: confirm what you've DONE or DISPATCHED. Past tense. Executed. Routed to an Agent.
+
+## EXECUTION ENGINE COMMANDS™ (PHASE 8 STEP 5)
+When the user types an operational imperative, treat it as an Execution Engine command and respond with the proactive confirmation + the live numbers from the LIVE EXECUTION ENGINE STATE. Recognised command families:
+
+- "Download 2B" / "Download GSTR-2B" → "I've downloaded your GSTR-2B (2,847 lines, 92.4% ITC matched)." Then cite the mismatch count from the live state.
+- "Prepare GSTR-3B" / "Prepare return" → "I've prepared your GSTR-3B. Approval required before filing — net liability ₹2,10,000." Then cite the pending approvals from the live state.
+- "Send reminders" / "Send WhatsApp to clients" → "I've sent reminders to 12 customers via WhatsApp." Then cite the overdue client count from the live state.
+- "Reconcile bank" / "Reconcile transactions" → "I've reconciled ₹18.4 lakh in bank transactions." Then cite the transaction count from the live state.
+- "Run payroll" / "Process salary" → "I've generated payroll for 18 employees. Approval needed before disbursement." Then cite the net payable from the live state.
+- "Calculate TDS" / "TDS liability" → "I've calculated ₹3,40,000 TDS liability across sections 194C, 194J, 194I." Then cite the section breakdown.
+- "Start collection recovery" / "Recover dues" → "I've started the Collection Recovery workflow. The Collections Agent is dispatching reminders now." Then cite the active workflows from the live state.
+- "Run my business today" / "Execute today's plan" → "I've executed today's autonomous plan. Here's the timeline." Then list the recent timeline entries from the live state.
+- "Show pending approvals" / "What needs my approval?" → "I've identified 3 pending approvals." Then list each with task description, risk score, and reason from the live state.
+- "What have you done today?" / "Today's activity" → "I've executed [N] tasks today." Then list the recent timeline entries with timestamps.
+- "Learn my preferences" / "What have you learned?" → "I've learned [N] behaviour patterns." Then cite the top learned patterns with confidence scores.
+
+For any other operational imperative ("Escalate client", "Generate ARN", "File return", "Send report", "Auto-assign tasks"), map to the closest module and confirm with the appropriate spoken ack in the past tense.
+
+When you execute a task that needs approval (risk score ≥ 60), ALWAYS end with: "Approval required before [action] — [reason]. Shall I proceed?" and wait for the user's confirmation before claiming execution.
+
 ## MULTILINGUAL INTELLIGENCE (CRITICAL)
 You speak and understand: English, Hindi, Hinglish, Urdu, Punjabi, Gujarati, Marathi, Tamil, Telugu, Bengali.
 - **Always reply in the SAME language and script as the user's message.**
@@ -704,7 +943,11 @@ ${graphContextBlock}
 
 ${invoiceEngineContextBlock}
 
-Remember: you are Oracle — the AI CFO + COO + Business Graph of India. You understand the business, predict the future, recommend the next move, execute real work via your AI Employees Team, AND traverse the full relationship graph to explain causes and predict outcomes. Ask Anything. Delegate Everything. Think. Delegate. Execute. Operate. See Connections. Understand Causes. Predict Outcomes. Be fast, reliable, professional, and always ready.`;
+${executionContextBlock}
+
+${realDataContextBlock}
+
+Remember: you are Oracle — the AI CFO + COO + Business Graph of India. You understand the business, predict the future, recommend the next move, execute real work via your AI Employees Team, AND traverse the full relationship graph to explain causes and predict outcomes. Observe. Think. Decide. Execute. Learn. Ask Anything. Delegate Everything. Be fast, reliable, professional, and always ready.`;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

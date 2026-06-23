@@ -69,11 +69,65 @@ import MissionControlPage from '@/components/mission-control/MissionControlPage'
 import BusinessDNApage from '@/components/business-dna/BusinessDNApage'
 import AICFODashboardPage from '@/components/ai-cfo/AICFODashboardPage'
 import InvoiceCloudPage from '@/components/invoice-cloud/InvoiceCloudPage'
+import ExecutionEnginePage from '@/components/execution-engine/ExecutionEnginePage'
+import CommandPalette from '@/components/command-palette/CommandPalette'
+
+// ═══ Recovered modules — previously disconnected from the router ═══
+import ReportsPage from '@/components/reports/ReportsPage'
+import AIExecutiveReportsPage from '@/components/ai-reports/AIExecutiveReportsPage'
+import AICompliancePage from '@/components/ai-compliance/AICompliancePage'
+import AIRiskEnginePage from '@/components/ai-risk/AIRiskEnginePage'
+import AIClientInsightsPage from '@/components/ai-insights/AIClientInsightsPage'
+import AITaskGeneratorPage from '@/components/ai-tasks/AITaskGeneratorPage'
+import AIBenchmarkPage from '@/components/ai-benchmark/AIBenchmarkPage'
+import AIKnowledgeCenterPage from '@/components/ai-knowledge/AIKnowledgeCenterPage'
+import AIDocumentChatPage from '@/components/ai-doc-chat/AIDocumentChatPage'
+import NoticeCenterPage from '@/components/notices/NoticeCenterPage'
+import GSTRFilingPage from '@/components/gstr/GSTRFilingPage'
+import FilingCalendarPage from '@/components/calendar/FilingCalendarPage'
+import AccountingPage from '@/components/accounting/AccountingPage'
+import PayrollPage from '@/components/payroll/PayrollPage'
+import HRMSPage from '@/components/hrms/HRMSPage'
+import InventoryPage from '@/components/inventory/InventoryPage'
+import BankingPage from '@/components/banking/BankingPage'
+import PaymentsPage from '@/components/payments/PaymentsPage'
+import EInvoicingPage from '@/components/e-invoicing/EInvoicingPage'
+import TDSPage from '@/components/tds/TDSPage'
+import ROCCompliancePage from '@/components/roc-compliance/ROCCompliancePage'
+import LegalNoticesPage from '@/components/legal-notices/LegalNoticesPage'
+import TeamManagementPage from '@/components/team/TeamManagementPage'
+import TeamPerformancePage from '@/components/team-performance/TeamPerformancePage'
+import FirmOperationsPage from '@/components/firm-operations/FirmOperationsPage'
+import WorkloadPage from '@/components/workload/WorkloadPage'
+import ReviewPage from '@/components/review/ReviewPage'
+import DeadlineCenterPage from '@/components/deadlines/DeadlineCenterPage'
+import ClientHealthPage from '@/components/client-health/ClientHealthPage'
+import ExecutiveAnalyticsPage from '@/components/executive-analytics/ExecutiveAnalyticsPage'
+import AnalyticsPage from '@/components/analytics/AnalyticsPage'
+import TimelinePage from '@/components/timeline/TimelinePage'
+import TasksPage from '@/components/tasks/TasksPage'
+import DocumentVaultPage from '@/components/documents/DocumentVaultPage'
+import CollaborationPage from '@/components/collaboration/CollaborationPage'
+import CRMPage from '@/components/crm/CRMPage'
+import ApprovalsPage from '@/components/approvals/ApprovalsPage'
+import AutomationsPage from '@/components/automations/AutomationsPage'
+import AutomationCenterPage from '@/components/automation/AutomationCenterPage'
+import ErrorResolutionPage from '@/components/audit/ErrorResolutionPage'
+import AuditLogsPage from '@/components/audit-logs/AuditLogsPage'
+import BillingPage from '@/components/billing/BillingPage'
+import WhiteLabelPage from '@/components/white-label/WhiteLabelPage'
+import VersionHistoryPage from '@/components/version-history/VersionHistoryPage'
+import ESignaturesPage from '@/components/esignatures/ESignaturesPage'
+import ClientPortalPage from '@/components/client-portal/ClientPortalPage'
+import MarketplacePage from '@/components/marketplace/MarketplacePage'
+import AgentsPage from '@/components/agents/AgentsPage'
+import ConnectionsPage from '@/components/connections/ConnectionsPage'
 
 const VIEW_TITLES: Record<string, string> = {
   dashboard: 'Mission Control',
   'business-dna': 'Business DNA',
   'invoice-cloud': 'Invoice Cloud',
+  'execution-engine': 'Execution Engine',
   'ai-cfo': 'AI CFO',
   returns: 'Returns',
   reconcile: 'Reconcile',
@@ -119,6 +173,56 @@ const VIEW_TITLES: Record<string, string> = {
   'economic-graph': 'ECONOMIC GRAPH™',
   'economic-war-room': 'ECONOMIC WAR ROOM™',
   'run-my-company': 'RUN MY COMPANY™',
+  // ═══ Recovered module titles ═══
+  reports: 'Reports',
+  'ai-reports': 'AI Executive Reports',
+  'ai-compliance': 'AI Compliance',
+  'ai-risk': 'AI Risk Engine',
+  'ai-insights': 'AI Client Insights',
+  'ai-tasks': 'AI Task Generator',
+  'ai-benchmark': 'AI Benchmark',
+  'ai-knowledge': 'AI Knowledge Center',
+  'ai-doc-chat': 'AI Document Chat',
+  notices: 'Notice Center',
+  'gstr-filing': 'GSTR Filing',
+  calendar: 'Filing Calendar',
+  accounting: 'Accounting',
+  payroll: 'Payroll',
+  hrms: 'HRMS',
+  inventory: 'Inventory',
+  banking: 'Banking',
+  payments: 'Payments',
+  'e-invoicing': 'E-Invoicing',
+  tds: 'TDS',
+  'roc-compliance': 'ROC Compliance',
+  'legal-notices': 'Legal Notices',
+  team: 'Team',
+  'team-performance': 'Team Performance',
+  'firm-operations': 'Firm Operations',
+  workload: 'Workload',
+  review: 'Review',
+  deadlines: 'Deadline Center',
+  'client-health': 'Client Health',
+  'executive-analytics': 'Executive Analytics',
+  analytics: 'Analytics',
+  timeline: 'Timeline',
+  tasks: 'Tasks',
+  documents: 'Document Vault',
+  collaboration: 'Collaboration',
+  crm: 'CRM',
+  approvals: 'Approvals',
+  automations: 'Automations',
+  'automation-center': 'Automation Center',
+  'audit-resolution': 'Error Resolution',
+  'audit-trail': 'Audit Logs',
+  billing: 'Billing',
+  'white-label': 'White Label',
+  'version-history': 'Version History',
+  esignatures: 'E-Signatures',
+  'client-portal': 'Client Portal',
+  marketplace: 'Marketplace',
+  agents: 'Agents',
+  connections: 'Connections',
 }
 
 function DashboardContent() {
@@ -221,8 +325,109 @@ function DashboardContent() {
         return <BusinessDNApage />
       case 'invoice-cloud':
         return <InvoiceCloudPage />
+      case 'execution-engine':
+        return <ExecutionEnginePage />
       case 'ai-cfo':
         return <AICFODashboardPage />
+      // ═══ Recovered modules — previously fell to default ═══
+      case 'reports':
+        return <ReportsPage />
+      case 'ai-reports':
+        return <AIExecutiveReportsPage />
+      case 'ai-compliance':
+        return <AICompliancePage />
+      case 'ai-risk':
+        return <AIRiskEnginePage />
+      case 'ai-insights':
+        return <AIClientInsightsPage />
+      case 'ai-tasks':
+        return <AITaskGeneratorPage />
+      case 'ai-benchmark':
+        return <AIBenchmarkPage />
+      case 'ai-knowledge':
+        return <AIKnowledgeCenterPage />
+      case 'ai-doc-chat':
+        return <AIDocumentChatPage />
+      case 'notices':
+        return <NoticeCenterPage />
+      case 'gstr-filing':
+        return <GSTRFilingPage />
+      case 'calendar':
+        return <FilingCalendarPage />
+      case 'accounting':
+        return <AccountingPage />
+      case 'payroll':
+        return <PayrollPage />
+      case 'hrms':
+        return <HRMSPage />
+      case 'inventory':
+        return <InventoryPage />
+      case 'banking':
+        return <BankingPage />
+      case 'payments':
+        return <PaymentsPage />
+      case 'e-invoicing':
+        return <EInvoicingPage />
+      case 'tds':
+        return <TDSPage />
+      case 'roc-compliance':
+        return <ROCCompliancePage />
+      case 'legal-notices':
+        return <LegalNoticesPage />
+      case 'team':
+        return <TeamManagementPage />
+      case 'team-performance':
+        return <TeamPerformancePage />
+      case 'firm-operations':
+        return <FirmOperationsPage />
+      case 'workload':
+        return <WorkloadPage />
+      case 'review':
+        return <ReviewPage />
+      case 'deadlines':
+        return <DeadlineCenterPage />
+      case 'client-health':
+        return <ClientHealthPage />
+      case 'executive-analytics':
+        return <ExecutiveAnalyticsPage />
+      case 'analytics':
+        return <AnalyticsPage />
+      case 'timeline':
+        return <TimelinePage />
+      case 'tasks':
+        return <TasksPage />
+      case 'documents':
+        return <DocumentVaultPage />
+      case 'collaboration':
+        return <CollaborationPage />
+      case 'crm':
+        return <CRMPage />
+      case 'approvals':
+        return <ApprovalsPage />
+      case 'automations':
+        return <AutomationsPage />
+      case 'automation-center':
+        return <AutomationCenterPage />
+      case 'audit-resolution':
+        return <ErrorResolutionPage />
+      case 'audit-trail':
+        return <AuditLogsPage />
+      case 'billing':
+        return <BillingPage />
+      case 'white-label':
+        return <WhiteLabelPage />
+      case 'version-history':
+        return <VersionHistoryPage />
+      case 'esignatures':
+        return <ESignaturesPage />
+      case 'client-portal':
+        return <ClientPortalPage />
+      case 'marketplace':
+        return <MarketplacePage />
+      case 'agents':
+        return <AgentsPage />
+      case 'connections':
+        return <ConnectionsPage />
       default:
         return <MissionControlPage />
     }
@@ -339,6 +544,9 @@ function DashboardContent() {
 
       {/* ═══ COMMAND BAR (fixed, bottom center) ═══ */}
       <CommandBar />
+
+      {/* ═══ COMMAND PALETTE (⌘K) ═══ */}
+      <CommandPalette />
     </div>
   )
 }

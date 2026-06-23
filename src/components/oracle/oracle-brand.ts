@@ -16,6 +16,20 @@ export interface BrandAnswer {
   intent?: 'founder' | 'owner' | 'developer' | 'visionary' | 'brand' | 'competitor' | 'what_are_you';
 }
 
+// ─── Competitor names (typo-tolerant) ─────────────────────────────────────────
+
+const COMPETITOR_VARIANTS = [
+  'cleartax', 'clear', 'cleartaxe', 'taxspanner', 'taxspaner',
+  'zoho', 'zohoBooks', 'zohobooks', 'zoho books',
+  'tally', 'tallyprime', 'tally prime', 'tallyerp',
+  'quicko', 'quickbooks', 'quick books', 'intuit',
+  'gen gst', 'gengst', 'gen-gst', 'computax', 'compu tax',
+  'marg', 'margerp', 'marg erp', 'busy', 'busywin', 'busy win',
+  'winman', 'sag infotech', 'sag', 'kdk', 'kdksoftware',
+  'h&r block', 'hrblock', 'hr block', 'taxbuddy', 'tax buddy',
+  'myitreturn', 'my it return', 'eztax', 'ez tax',
+];
+
 // ─── Levenshtein-lite: normalised fuzzy containment ───────────────────────────
 
 /** Lowercase, strip non-alphanumeric, collapse whitespace. */
@@ -124,6 +138,13 @@ export function detectBrandQuestion(message: string): BrandAnswer {
     return { matched: true, intent: 'founder', answer: CANONICAL_FOUNDER_ANSWER };
   }
 
+  // 2b. Competitor comparison: GSTPilot vs ClearTax / Zoho / Tally / Quicko / etc.
+  const hasCompetitor = containsAny(text, COMPETITOR_VARIANTS)
+    || anyTokenMatches(text, COMPETITOR_VARIANTS, 2);
+  if (hasCompetitor && (hasBrand || containsAny(text, ['vs', 'versus', 'better', 'best', 'alternative', 'compare', 'comparison', 'difference']))) {
+    return { matched: true, intent: 'competitor', answer: CANONICAL_COMPETITOR_ANSWER };
+  }
+
   // 3. Pure self-identity question ("who are you")
   if (isSelfQuery && (hasBrand || containsAny(text, ['oracle']))) {
     return { matched: true, intent: 'what_are_you', answer: CANONICAL_IDENTITY_ANSWER };
@@ -145,6 +166,22 @@ export const CANONICAL_IDENTITY_ANSWER = `I'm **GSTPilot Oracle™** — your AI
 I was founded and developed by **Prince Singh**. I live inside GSTPilot Infinity™ and help you with GST compliance, returns, reconciliation, ITC, cash flow, and running your entire business — in English, Hindi, Hinglish, and 7 more Indian languages.
 
 **Ask Anything. Remember Everything. Speak Every Language. Run Everything.**`;
+
+export const CANONICAL_COMPETITOR_ANSWER = `Great question — here's how **GSTPilot Infinity™** is fundamentally different from traditional tax/ERP tools:
+
+| Dimension | ClearTax / Zoho / Tally / Quicko | **GSTPilot Infinity™** |
+|---|---|---|
+| Core identity | Tax filing tool or accounting software | **Autonomous Business Operating System™** — an AI Financial Officer |
+| Intelligence | Forms + ledgers (you do the thinking) | **Oracle AI™** thinks, decides, executes, learns (10 Indian languages) |
+| Scope | One workflow (GST or books or payroll) | 10 modules: Oracle AI, AI CFO, GST Cloud, Invoice Cloud, Banking Cloud, Reconciliation Engine, Business Graph, Run My Business, Network, Autonomous OS |
+| Execution | You click, you file | 5 engines (Observe → Decide → Execute → Approve → Learn) run work autonomously |
+| Memory | None | Digital Twin™ remembers every transaction, client, vendor, notice — forever |
+| Proactive | Reactive (you open it) | Morning Brief tells you what to do today before you ask |
+| Founder | Various companies | **Founded & developed by Prince Singh** |
+
+In short: they are **tools you use**. GSTPilot is **a Financial Brain that runs your business for you**.
+
+If you want to file one return, use a filing tool. If you want to run an entire Indian business on autopilot — that's GSTPilot.`;
 
 // ─── System-prompt brand block ────────────────────────────────────────────────
 

@@ -87,7 +87,63 @@ export type AppView =
   // GSTPilot Infinity™ Layer
   | 'business-dna'
   // Phase 8 Step 3 — GSTPilot Real Invoice Engine™
-  | 'invoice-cloud';
+  | 'invoice-cloud'
+  // Phase 8 Step 5 — GSTPilot Execution Engine™
+  | 'execution-engine'
+  // Phase 2 — Real Data Engine™
+  | 'connections'
+  // ─── Recovered modules (previously disconnected from router) ───
+  // Reports & Intelligence
+  | 'reports'
+  | 'ai-reports'
+  | 'ai-compliance'
+  | 'ai-risk'
+  | 'ai-insights'
+  | 'ai-tasks'
+  | 'ai-benchmark'
+  | 'ai-knowledge'
+  | 'ai-doc-chat'
+  | 'notices'
+  | 'gstr-filing'
+  | 'calendar'
+  // Business Operations
+  | 'accounting'
+  | 'payroll'
+  | 'hrms'
+  | 'inventory'
+  | 'banking'
+  | 'payments'
+  | 'e-invoicing'
+  | 'tds'
+  | 'roc-compliance'
+  | 'legal-notices'
+  // Firm & Team
+  | 'team'
+  | 'team-performance'
+  | 'firm-operations'
+  | 'workload'
+  | 'review'
+  | 'deadlines'
+  | 'client-health'
+  | 'executive-analytics'
+  | 'analytics'
+  | 'timeline'
+  | 'tasks'
+  | 'documents'
+  | 'collaboration'
+  | 'crm'
+  | 'approvals'
+  | 'automations'
+  | 'automation-center'
+  | 'audit-resolution'
+  | 'audit-trail'
+  | 'billing'
+  | 'white-label'
+  | 'version-history'
+  | 'esignatures'
+  | 'client-portal'
+  | 'marketplace'
+  | 'agents';
 
 export interface ReturnPrepContext {
   clientId: string | null;

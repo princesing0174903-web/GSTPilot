@@ -971,3 +971,185 @@ model CommunicationLog {
 
   client Client? @relation(fields: [clientId], references: [id])
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// PHASE 8 STEP 5 — GSTPILOT EXECUTION ENGINE™
+// Observe. Think. Decide. Execute. Confirm. Learn.
+// 8 models: BusinessEvent, Decision, ExecutionTask, Approval, Workflow,
+// UserBehaviour, ExecutionTimeline, AgentMemory
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ─── MODULE 1 — Observation Engine™: BusinessEvent ──────────────────────────────
+model BusinessEvent {
+  id          String   @id @default(cuid())
+  businessId  String?                          // firm/client scope
+  type        String                            // gst_due | bank_transaction | receivable | payable | payroll | tds | client_behaviour | cash_flow | collection_risk
+  source      String   @default("system")       // system | gst | banking | invoice | communication | payroll | manual
+  payload     String?                           // JSON string of event details
+  severity    String   @default("info")         // info | low | medium | high | critical
+  status      String   @default("open")         // open | acknowledged | resolved | escalated
+  createdAt   DateTime @default(now())
+
+  decision    Decision?
+}
+
+// ─── MODULE 2 — Decision Engine™: Decision ──────────────────────────────────────
+model Decision {
+  id          String   @id @default(cuid())
+  eventId     String   @unique
+  reason      String                            // AI reasoning text
+  priority    String   @default("medium")       // low | medium | high | urgent
+  action      String                            // action plan: prepare_return | send_reminder | reconcile | delay_payment | forecast | escalate
+  status      String   @default("pending")      // pending | approved | rejected | executed | superseded
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  event       BusinessEvent @relation(fields: [eventId], references: [id])
+  tasks       ExecutionTask[]
+}
+
+// ─── MODULE 3 — Autonomous Execution Engine™: ExecutionTask ─────────────────────
+model ExecutionTask {
+  id           String    @id @default(cuid())
+  decisionId   String?
+  type         String                             // gst_prepare | gst_json | download_2b | bank_reconcile | send_invoice | send_report | send_whatsapp | send_email | send_sms | run_payroll | calc_tds
+  description  String
+  status       String    @default("queued")       // queued | running | completed | failed | awaiting_approval | cancelled
+  startedAt    DateTime?
+  completedAt  DateTime?
+  result       String?                            // JSON string of execution result
+  riskScore    Int       @default(0)              // 0-100; >= threshold needs approval
+  agent        String?                            // gst_agent | cfo_agent | collection_agent | compliance_agent | reporting_agent
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  decision     Decision?  @relation(fields: [decisionId], references: [id])
+  approval     Approval?
+  timeline     ExecutionTimeline[]
+}
+
+// ─── MODULE 4 — Approval Engine™: Approval ──────────────────────────────────────
+model Approval {
+  id          String    @id @default(cuid())
+  taskId      String    @unique
+  risk        Int                                // 0-100 risk score
+  status      String    @default("pending")      // pending | approved | rejected | auto_approved | expired
+  reason      String?                            // why approval is needed
+  approvedBy  String?
+  approvedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  task        ExecutionTask @relation(fields: [taskId], references: [id])
+}
+
+// ─── MODULE 5 — Workflow Engine™: Workflow ──────────────────────────────────────
+model Workflow {
+  id          String   @id @default(cuid())
+  name        String                            // Collection Recovery | GST Filing | Cash Crisis | etc.
+  type        String                            // collection_recovery | gst_filing | cash_crisis | onboarding | tds_filing | payroll_run
+  trigger     String?                           // what event starts this workflow
+  steps       String                            // JSON array of {stage, action, agent}
+  currentStep Int      @default(0)
+  status      String   @default("idle")         // idle | running | paused | completed | aborted
+  context     String?                           // JSON string of workflow variables (clientId, amount, etc.)
+  startedAt   DateTime?
+  completedAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// ─── MODULE 6 — Learning Engine™: UserBehaviour ────────────────────────────────
+model UserBehaviour {
+  id          String   @id @default(cuid())
+  userId      String?
+  action      String                            // approve_filing | reject_reminder | delay_payment | prefer_time | payment_behaviour | filing_pattern
+  preference  String                            // learned preference value (e.g. "after_itc_review", "morning_9am")
+  confidence  Float    @default(0.5)            // 0.0-1.0 confidence in the learned preference
+  evidence    Int      @default(1)              // number of observations supporting this
+  updatedAt   DateTime @updatedAt
+  createdAt   DateTime @default(now())
+}
+
+// ─── MODULE 7 — Execution Timeline™ ─────────────────────────────────────────────
+model ExecutionTimeline {
+  id          String    @id @default(cuid())
+  taskId      String?
+  agent       String?                           // gst_agent | cfo_agent | collection_agent | compliance_agent | oracle
+  stage       String                            // observe | think | decide | execute | confirm | learn
+  title       String                            // "Downloaded GSTR-2B"
+  description String?
+  timestamp   DateTime @default(now())
+
+  task        ExecutionTask? @relation(fields: [taskId], references: [id])
+}
+
+// ─── MODULE 8 — Agent Memory™ ──────────────────────────────────────────────────
+model AgentMemory {
+  id         String   @id @default(cuid())
+  agent      String                            // gst_agent | cfo_agent | collection_agent | compliance_agent | oracle
+  memoryType String                            // fact | preference | pattern | outcome | skill
+  key        String                            // memory key (e.g. "client_abc_pays_late")
+  value      String                            // memory value (JSON or text)
+  importance Float    @default(0.5)            // 0.0-1.0 — decays over time if unused
+  lastUsedAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+// ─── PHASE 2 — REAL DATA ENGINE™: Connections & Synced Data ─────────────────────
+// User-scoped real data connectors (GSTN, Bank, Gmail, WhatsApp, Tally/Zoho/QB)
+// Each connection stores metadata + sync state. Synced raw data is stored per-source.
+
+model DataConnection {
+  id            String   @id @default(cuid())
+  userId        String                            // Firebase UID
+  type          String                            // gstn | bank | gmail | whatsapp | tally | zoho | quickbooks
+  status        String   @default("connected")   // connected | disconnected | error | syncing
+  label         String                            // "HDFC ****1234" | "GSTN: 27ABCDE1234F1Z5" | "prince@gmail.com"
+  identifier    String?                           // GSTIN / account no / email / phone
+  metadata      String?                           // JSON: bank name, gstin details, scopes, etc.
+  lastSyncAt    DateTime?
+  syncInterval  String   @default("15m")          // 15m | 1h | 6h | daily
+  errorMessage  String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  syncedRecords SyncedRecord[]
+  qualityAlerts DataQualityAlert[]
+}
+
+// Raw synced data from connectors — used by Oracle + Data Quality Engine
+model SyncedRecord {
+  id            String   @id @default(cuid())
+  connectionId  String
+  userId        String
+  sourceType    String                            // gst_profile | gst_return | bank_tx | email | whatsapp_msg | accounting_invoice | accounting_ledger
+  externalId    String?                           // message ID / tx ID / return period — for dedup
+  title         String?                           // email subject / tx description / return type
+  amount        Float?
+  date          String?
+  rawData       String?                           // JSON blob of full record
+  category      String?                           // gst_notice | vendor_invoice | client_invoice | credit | debit | collection
+  processed     Boolean  @default(false)
+  createdAt     DateTime @default(now())
+
+  connection    DataConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+}
+
+// Data Quality Engine — alerts for missing invoices, GST mismatches, duplicates
+model DataQualityAlert {
+  id            String   @id @default(cuid())
+  userId        String
+  connectionId  String?
+  severity      String   @default("medium")      // low | medium | high | critical
+  category      String                            // missing_invoice | gst_mismatch | reconciliation | duplicate | stale_data
+  title         String
+  description   String?
+  amount        Float?
+  resolved      Boolean  @default(false)
+  resolvedAt    DateTime?
+  createdAt     DateTime @default(now())
+
+  connection    DataConnection? @relation(fields: [connectionId], references: [id], onDelete: SetNull)
+}

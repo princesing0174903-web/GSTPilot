@@ -1,0 +1,502 @@
+     1→// ═══════════════════════════════════════════════════════════════════════════════
+     2→// GSTPilot Oracle™ — Streaming Chat API
+     3→// POST /api/oracle/chat
+     4→//
+     5→// Streams tokens to the client as SSE: `data: {"token":"..."}\n\n`.
+     6→// The system prompt encodes the full Human Experience + AI CFO + Run My Business +
+     7→// Business Graph:
+     8→//   • Multilingual (auto-match the user's language & script)
+     9→//   • CFO Personality (Phase 3 Module 9): never robotic, behaves like a real CFO
+    10→//   • Ask CFO (Phase 3 Module 5): live CFO context from /lib/cfo/engine
+    11→//   • Run My Business Personality (Phase 4 Module 10): COO + AI Employees Team
+    12→//   • Natural Language Commands (Phase 4 Module 2): imperative → executed task
+    13→//   • Orchestrator (Phase 4 Module 6): "Run my business today" → full plan
+    14→//   • Delegation Engine (Phase 4 Module 8): delegate → now / scheduled / queued
+    15→//   • Ask Operator (Phase 4): live RMB state from /lib/rmb/engine
+    16→//   • Business Graph Personality (Phase 5 Module 1): causal chain explanations
+    17→//   • Ask Graph (Phase 5): live graph + risk + dependencies + what-if predictions
+    18→//   • Adaptive answer length (simple → 2-5 lines; complex → structured)
+    19→//   • GST reliability (CBIC / GSTN / GST Law; honest uncertainty)
+    20→//   • Brand identity (Prince Singh — Founder/Owner/Developer/Visionary)
+    21→//   • Live CFO + RMB + Graph data — never fabricate
+    22→// ═══════════════════════════════════════════════════════════════════════════════
+    23→
+    24→import ZAI from 'z-ai-web-dev-sdk';
+    25→import { BRAND_IDENTITY_PROMPT_BLOCK } from '@/components/oracle/oracle-brand';
+    26→import type { OracleChatRequest, OracleLanguageId } from '@/components/oracle/oracle-types';
+    27→import { generateCFOInsights } from '@/lib/cfo/engine';
+    28→import type { CFOResponse } from '@/lib/cfo/types';
+    29→import { getRmbState, formatRmbContextBlock } from '@/lib/rmb/engine';
+    30→import type { RmbState } from '@/lib/rmb/types';
+    31→import { getGraphState, formatGraphContextBlock, executeQuery } from '@/lib/graph/engine';
+    32→import type { GraphState } from '@/lib/graph/types';
+    33→import { db } from '@/lib/db';
+    34→import { getInvoiceStats, seedInvoices } from '@/lib/invoices/invoices';
+    35→import { getPurchaseStats, seedPurchaseBills } from '@/lib/invoices/purchases';
+    36→import { getExpenseStats, seedExpenses } from '@/lib/invoices/expenses';
+    37→import { getReceivablesSummary } from '@/lib/invoices/receivables';
+    38→import { getPayablesSummary } from '@/lib/invoices/payables';
+    39→import { getPaymentStats, seedPayments } from '@/lib/invoices/payments';
+    40→import { getTDSStats, seedTDSRecords } from '@/lib/invoices/tds';
+    41→import { getPayrollStats, seedEmployees, seedPayroll } from '@/lib/invoices/payroll';
+    42→import type { InvoiceCloudInvoice, PurchaseBill, Expense, Payment, TDSRecord, Employee, Payroll } from '@/lib/invoices/types';
+    43→import { seedBusinessEvents, getObservationSummary } from '@/lib/execution/observe';
+    44→import { seedDecisions, getDecisionSummary } from '@/lib/execution/think';
+    45→import { planAllActions } from '@/lib/execution/decide';
+    46→import { seedExecutionTasks, getExecutionSummary } from '@/lib/execution/execute';
+    47→import { seedApprovals, getApprovalSummary } from '@/lib/execution/approvals';
+    48→import { seedWorkflows, getWorkflowSummary } from '@/lib/execution/workflows';
+    49→import { seedUserBehaviours, getLearningSummary } from '@/lib/execution/learn';
+    50→import { seedTimeline, getTimelineSummary } from '@/lib/execution/timeline';
+    51→import { getAgentRoster } from '@/lib/execution/agents';
+    52→import type { WorkflowStep } from '@/lib/execution/types';
+    53→import { buildRealDataSnapshot, formatRealDataContextBlock } from '@/lib/oracle/real-data';
+    54→
+    55→// ─── INR formatting (server-side) ─────────────────────────────────────────────
+    56→
+    57→function inrShort(n: number): string {
+    58→  if (!isFinite(n) || isNaN(n)) return '₹0';
+    59→  const abs = Math.abs(n);
+    60→  if (abs >= 10000000) return `₹${(n / 10000000).toFixed(2)} Cr`;
+    61→  if (abs >= 100000) return `₹${(n / 100000).toFixed(2)} L`;
+    62→  if (abs >= 1000) return `₹${(n / 1000).toFixed(1)}K`;
+    63→  return '₹' + Math.round(n).toLocaleString('en-IN');
+    64→}
+    65→
+    66→// ─── CFO context block (Module 5 — Ask CFO + live data injection) ─────────────
+    67→
+    68→async function buildCFOContextBlock(): Promise<string> {
+    69→  try {
+    70→    const cfo: CFOResponse = await generateCFOInsights(null);
+    71→    if (!cfo.hasLiveData && cfo.clientCount === 0) {
+    72→      return `## LIVE CFO CONTEXT
+    73→No business data connected yet. Encourage the user to add clients, invoices, or returns to unlock CFO insights. Do not fabricate financial numbers.`;
+    74→    }
+    75→    const d = cfo.dashboard;
+    76→    const p = cfo.predictions;
+    77→    const risks = cfo.risks;
+    78→    const topRisks = risks
+    79→      .filter((r) => r.level !== 'low')
+    80→      .slice(0, 3)
+    81→      .map((r) => `  - ${r.category.toUpperCase()} (${r.level}): ${r.reasons[0] || 'n/a'}`)
+    82→      .join('\n');
+    83→    const briefActions = cfo.brief.priorityActions
+    84→      .slice(0, 4)
+    85→      .map((a, i) => `  ${i + 1}. ${a.title}${a.amount ? ` (₹${Math.round(a.amount).toLocaleString('en-IN')})` : ''}`)
+    86→      .join('\n');
+    87→    const memInsights = cfo.memory.insights.slice(0, 4).map((i) => `  - ${i}`).join('\n');
+    88→
+    89→    return `## LIVE CFO CONTEXT (Phase 3 — AI CFO™ Operating System)
+    90→You have real-time access to the user's CFO intelligence. Treat these numbers as authoritative when the user asks about their business.
+    91→
+    92→### Snapshot
+    93→- Revenue (this month): ${inrShort(d.revenue.thisMonth)} (growth ${d.revenue.growthPct >= 0 ? '+' : ''}${d.revenue.growthPct}% vs last month)
+    94→- Revenue (today): ${inrShort(d.revenue.today)}
+    95→- Net Profit: ${inrShort(d.profit.netProfit)} (margin ${d.profit.marginPct}%)
+    96→- Cash Position: ${inrShort(d.cash.currentBalance)} · Available: ${inrShort(d.cash.availableCash)} · Runway: ${d.cash.runwayDays || '∞'} days · Burn: ${inrShort(d.cash.burnRatePerDay)}/day
+    97→- Receivables: ${inrShort(d.receivables.pendingCollections)} pending, ${inrShort(d.receivables.overdueCollections)} overdue (${d.receivables.overdueCount} invoices) · Efficiency: ${d.receivables.collectionEfficiencyPct}%
+    98→- Payables: ${inrShort(d.payables.upcomingPayments)} due in 30 days
+    99→- GST Liability: ${inrShort(d.gst.liability)} · ITC Available: ${inrShort(d.gst.itcAvailable)}
+   100→- Upcoming GST due dates: ${d.gst.upcomingDueDates.map((dd) => `${dd.returnType} (${dd.daysLeft < 0 ? `${Math.abs(dd.daysLeft)}d overdue` : `${dd.daysLeft}d left`})`).join(', ') || 'none'}
+   101→- Business Health Score: ${d.healthScore.overall}/100 (compliance ${d.healthScore.compliance}, cash flow ${d.healthScore.cashFlow}, growth ${d.healthScore.growth}, profitability ${d.healthScore.profitability}, risk ${d.healthScore.risk}, collections ${d.healthScore.collections})
+   102→
+   103→### Forecasts (Module 2)
+   104→- Revenue: 7d ${inrShort(p.revenue.sevenDay)}, 30d ${inrShort(p.revenue.thirtyDay)}, 90d ${inrShort(p.revenue.ninetyDay)}, year-end ${inrShort(p.revenue.yearEnd)} (confidence ${p.revenue.confidencePct}%)
+   105→- Cash Flow: daily ${inrShort(p.cashFlow.dailyPosition)}, monthly ${inrShort(p.cashFlow.monthlyPosition)}, runway ${p.cashFlow.runwayDays || '∞'} days (confidence ${p.cashFlow.confidencePct}%)
+   106→- GST: upcoming liability ${inrShort(p.gst.upcomingLiability)}, ITC utilization ${p.gst.itcUtilization}%, refund prediction ${inrShort(p.gst.refundPrediction)} (confidence ${p.gst.confidencePct}%)
+   107→- Collections: expected ${inrShort(p.collections.expectedCollections)}, ${p.collections.paymentDelays} likely delays, ${p.collections.riskyClients.length} risky clients (confidence ${p.collections.confidencePct}%)
+   108→${p.collections.riskyClients.slice(0, 3).map((c) => `    · Risky: ${c.name} — outstanding ${inrShort(c.outstanding)}, risk ${c.riskScore}/100`).join('\n')}
+   109→
+   110→### Active Risks (Module 3)
+   111→${topRisks || '  · All risk dimensions are LOW — business is healthy.'}
+   112→
+   113→### Today's Priority Actions (Module 4)
+   114→${briefActions || '  · No priority actions today — you are all caught up.'}
+   115→
+   116→### CFO Memory Insights (Module 8)
+   117→${memInsights || '  · No long-term patterns detected yet.'}
+   118→
+   119→When answering CFO questions (revenue, cash, runway, risk, recommendations, GST outlook), use these exact numbers. Round to lakhs/crores when natural. Explain WHY a risk is elevated using the reasons above. Recommend the priority actions verbatim when relevant.`;
+   120→  } catch (err) {
+   121→    console.warn('[Oracle] CFO context unavailable:', err);
+   122→    return `## LIVE CFO CONTEXT
+   123→CFO engine is not available right now. Fall back to general CFO/GST guidance without fabricating specific numbers.`;
+   124→  }
+   125→}
+   126→
+   127→// ─── RMB context block (Phase 4 — Run My Business™ Operating System) ──────────
+   128→
+   129→async function buildRmbContextBlock(): Promise<string> {
+   130→  try {
+   131→    const state: RmbState = await getRmbState(null);
+   132→    if (!state.hasLiveData && state.clientCount === 0) {
+   133→      return `## LIVE RUN MY BUSINESS STATE
+   134→No business data connected yet — Autopilot is in monitoring mode, agents are idle. Encourage the user to add clients, invoices, or returns to activate the Operating System. Do not fabricate task lists or agent activity.`;
+   135→    }
+   136→    return formatRmbContextBlock(state);
+   137→  } catch (err) {
+   138→    console.warn('[Oracle] RMB context unavailable:', err);
+   139→    return `## LIVE RUN MY BUSINESS STATE
+   140→Run My Business engine is not available right now. Fall back to general operating guidance without fabricating task state.`;
+   141→  }
+   142→}
+   143→
+   144→// ─── Graph context block (Phase 5 — Business Graph™ Operating System) ─────────
+   145→
+   146→async function buildGraphContextBlock(): Promise<string> {
+   147→  try {
+   148→    const state: GraphState = await getGraphState();
+   149→    if (!state.hasLiveData && state.clientCount === 0) {
+   150→      return `## LIVE BUSINESS GRAPH STATE
+   151→No business data connected yet — graph contains only the firm node. Encourage the user to add clients, invoices, or returns to populate the knowledge graph. Do not fabricate relationships.`;
+   152→    }
+   153→    return formatGraphContextBlock(state);
+   154→  } catch (err) {
+   155→    console.warn('[Oracle] Graph context unavailable:', err);
+   156→    return `## LIVE BUSINESS GRAPH STATE
+   157→Business Graph engine is not available right now. Fall back to general guidance without fabricating relationships.`;
+   158→  }
+   159→}
+   160→
+   161→// ─── Invoice Engine context block (Phase 8 Step 3 — Real Invoice Engine™) ────
+   162→// Pulls live numbers from every Invoice Cloud™ module so Oracle can speak in
+   163→// proactive execution statements ("I've created Invoice INV-2026-001",
+   164→// "I've identified ₹18.2 lakh pending receivables", "I've generated payroll
+   165→// for 18 employees") grounded in the user's actual data.
+   166→
+   167→async function buildInvoiceEngineContextBlock(): Promise<string> {
+   168→  try {
+   169→    // ── Fetch all eight entity sets in parallel, fall back to seed data ──
+   170→    const [invRows, billRows, expRows, payRows, tdsRows, empRows, prRows] = await Promise.all([
+   171→      db.invoice.findMany({ orderBy: { createdAt: 'desc' } }),
+   172→      db.purchaseBill.findMany({ orderBy: { createdAt: 'desc' } }),
+   173→      db.expense.findMany({ orderBy: { createdAt: 'desc' } }),
+   174→      db.payment.findMany({ orderBy: { createdAt: 'desc' } }),
+   175→      db.tDSRecord.findMany({ orderBy: { createdAt: 'desc' } }),
+   176→      db.employee.findMany({ orderBy: { createdAt: 'desc' } }),
+   177→      db.payroll.findMany({ orderBy: { createdAt: 'desc' } }),
+   178→    ]);
+   179→
+   180→    const invoices: InvoiceCloudInvoice[] =
+   181→      invRows.length > 0
+   182→        ? invRows.map((r) => ({
+   183→            id: r.id, clientId: r.clientId, invoiceNumber: r.invoiceNumber,
+   184→            invoiceDate: r.invoiceDate, sellerGstin: r.sellerGstin,
+   185→            buyerGstin: r.buyerGstin ?? null, buyerName: r.buyerName ?? null,
+   186→            invoiceType: r.invoiceType, gstr1Section: r.gstr1Section,
+   187→            taxableValue: r.taxableValue, cgst: r.cgst, sgst: r.sgst, igst: r.igst, cess: r.cess,
+   188→            totalAmount: r.totalAmount, hsnCode: r.hsnCode ?? null, reverseCharge: r.reverseCharge,
+   189→            status: r.status, matchStatus: r.matchStatus, riskLevel: r.riskLevel, riskScore: r.riskScore,
+   190→            aiExplanation: r.aiExplanation ?? null, notes: r.notes ?? null, period: r.period ?? null,
+   191→            assignedTo: r.assignedTo ?? null, createdAt: r.createdAt.toISOString(), updatedAt: r.updatedAt.toISOString(),
+   192→            dueDate: r.dueDate ?? null, gstAmount: r.gstAmount, paidAmount: r.paidAmount,
+   193→            balanceAmount: r.balanceAmount, paymentStatus: r.paymentStatus, paymentMode: r.paymentMode ?? null,
+   194→            paymentDate: r.paymentDate ?? null, recurring: r.recurring, recurringCycle: r.recurringCycle ?? null,
+   195→            notesFinance: r.notesFinance ?? null, sentToCustomer: r.sentToCustomer,
+   196→            sentAt: r.sentAt ? r.sentAt.toISOString() : null,
+   197→          }))
+   198→        : seedInvoices();
+   199→
+   200→    const bills: PurchaseBill[] =
+   201→      billRows.length > 0
+   202→        ? billRows.map((r) => ({
+   203→            id: r.id, clientId: r.clientId ?? null, vendorName: r.vendorName, vendorGstin: r.vendorGstin ?? null,
+   204→            invoiceNo: r.invoiceNo, invoiceDate: r.invoiceDate, dueDate: r.dueDate ?? null,
+   205→            taxableValue: r.taxableValue, cgst: r.cgst, sgst: r.sgst, igst: r.igst, cess: r.cess,
+   206→            gstAmount: r.gstAmount, totalAmount: r.totalAmount, paidAmount: r.paidAmount,
+   207→            balanceAmount: r.balanceAmount, status: r.status, paymentStatus: r.paymentStatus,
+   208→            category: r.category ?? null, hsnCode: r.hsnCode ?? null, notes: r.notes ?? null,
+   209→            ocrExtracted: r.ocrExtracted, createdAt: r.createdAt.toISOString(), updatedAt: r.updatedAt.toISOString(),
+   210→          }))
+   211→        : seedPurchaseBills();
+   212→
+   213→    const expenses: Expense[] =
+   214→      expRows.length > 0
+   215→        ? expRows.map((r) => ({
+   216→            id: r.id, clientId: r.clientId ?? null, category: r.category, description: r.description ?? null,
+   217→            vendor: r.vendor ?? null, amount: r.amount, gst: r.gst, gstClaimable: r.gstClaimable,
+   218→            date: r.date, paymentMode: r.paymentMode ?? null, status: r.status, receiptUrl: r.receiptUrl ?? null,
+   219→            ocrExtracted: r.ocrExtracted, notes: r.notes ?? null, createdAt: r.createdAt.toISOString(), updatedAt: r.updatedAt.toISOString(),
+   220→          }))
+   221→        : seedExpenses();
+   222→
+   223→    const payments: Payment[] =
+   224→      payRows.length > 0
+   225→        ? payRows.map((r) => ({
+   226→            id: r.id, clientId: r.clientId ?? null, invoiceId: r.invoiceId ?? null,
+   227→            purchaseBillId: r.purchaseBillId ?? null, partyName: r.partyName, partyType: r.partyType,
+   228→            amount: r.amount, paymentDate: r.paymentDate, paymentMode: r.paymentMode,
+   229→            referenceNo: r.referenceNo ?? null, status: r.status, reconciled: r.reconciled,
+   230→            notes: r.notes ?? null, createdAt: r.createdAt.toISOString(), updatedAt: r.updatedAt.toISOString(),
+   231→          }))
+   232→        : seedPayments();
+   233→
+   234→    const tdsRecords: TDSRecord[] =
+   235→      tdsRows.length > 0
+   236→        ? tdsRows.map((r) => ({
+   237→            id: r.id, clientId: r.clientId ?? null, section: r.section, deducteeName: r.deducteeName,
+   238→            deducteePan: r.deducteePan ?? null, paymentAmount: r.paymentAmount, tdsRate: r.tdsRate,
+   239→            tdsAmount: r.tdsAmount, date: r.date, status: r.status, quarter: r.quarter ?? null,
+   240→            notes: r.notes ?? null, createdAt: r.createdAt.toISOString(), updatedAt: r.updatedAt.toISOString(),
+   241→          }))
+   242→        : seedTDSRecords();
+   243→
+   244→    const employees: Employee[] =
+   245→      empRows.length > 0
+   246→        ? empRows.map((r) => ({
+   247→            id: r.id, clientId: r.clientId ?? null, name: r.name, designation: r.designation ?? null,
+   248→            department: r.department ?? null, employeeId: r.employeeId ?? null, pan: r.pan ?? null,
+   249→            aadhaar: r.aadhaar ?? null, bankAccount: r.bankAccount ?? null, ifsc: r.ifsc ?? null,
+   250→            salary: r.salary, basic: r.basic, hra: r.hra, allowances: r.allowances, pf: r.pf,
+   251→            esi: r.esi, tds: r.tds, professionalTax: r.professionalTax, netSalary: r.netSalary,
+   252→            status: r.status, joinedAt: r.joinedAt ?? null, createdAt: r.createdAt.toISOString(), updatedAt: r.updatedAt.toISOString(),
+   253→          }))
+   254→        : seedEmployees();
+   255→
+   256→    const payrolls: Payroll[] =
+   257→      prRows.length > 0
+   258→        ? prRows.map((r) => ({
+   259→            id: r.id, employeeId: r.employeeId, period: r.period, grossSalary: r.grossSalary,
+   260→            basic: r.basic, hra: r.hra, allowances: r.allowances, pf: r.pf, esi: r.esi, tds: r.tds,
+   261→            professionalTax: r.professionalTax, netSalary: r.netSalary, status: r.status,
+   262→            paidAt: r.paidAt ?? null, payslipUrl: r.payslipUrl ?? null,
+   263→            createdAt: r.createdAt.toISOString(), updatedAt: r.updatedAt.toISOString(),
+   264→          }))
+   265→        : seedPayroll(employees);
+   266→
+   267→    // ── Compute summaries via the pure-TS engine libs ──
+   268→    const invStats = getInvoiceStats(invoices);
+   269→    const purStats = getPurchaseStats(bills);
+   270→    const expStats = getExpenseStats(expenses);
+   271→    const payStats = getPaymentStats(payments);
+   272→    const tdsStats = getTDSStats(tdsRecords);
+   273→    const prStats = getPayrollStats(employees, payrolls);
+   274→    const recSummary = getReceivablesSummary(invoices);
+   275→    const paySummary = getPayablesSummary(bills);
+   276→
+   277→    // Input GST across all purchase bills (sum of gstAmount)
+   278→    const totalInputGst = bills.reduce((s, b) => s + b.gstAmount, 0);
+   279→
+   280→    // Top defaulters (outstanding, descending) — for Oracle to name them
+   281→    const topDefaulters = [...invoices]
+   282→      .filter((i) => i.balanceAmount > 0 && i.status !== 'cancelled' && i.status !== 'draft')
+   283→      .sort((a, b) => b.balanceAmount - a.balanceAmount)
+   284→      .slice(0, 5)
+   285→      .map((i) => `${i.buyerName ?? 'Customer'} (${i.invoiceNumber}, ${inrShort(i.balanceAmount)})`)
+   286→      .join('; ');
+   287→
+   288→    // Next invoice number Oracle would create
+   289→    const year = new Date().getFullYear();
+   290→    const fyPrefix = `INV-${year}-`;
+   291→    let maxSeq = 0;
+   292→    for (const i of invoices) {
+   293→      if (!i.invoiceNumber?.startsWith(fyPrefix)) continue;
+   294→      const n = parseInt(i.invoiceNumber.slice(fyPrefix.length), 10);
+   295→      if (!Number.isNaN(n) && n > maxSeq) maxSeq = n;
+   296→    }
+   297→    const nextInvoiceNo = `${fyPrefix}${String(maxSeq + 1).padStart(3, '0')}`;
+   298→
+   299→    // Current payroll period
+   300→    const now = new Date();
+   301→    const currentPeriod = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+   302→
+   303→    return `## LIVE INVOICE ENGINE STATE (Phase 8 Step 3 — Real Invoice Engine™)
+   304→You have real-time access to the user's full financial operations stack. Treat these numbers as authoritative when the user asks about invoices, receivables, payables, expenses, payments, TDS, or payroll.
+   305→
+   306→### Sales Invoice Cloud™
+   307→- Total sales invoices: ${invoices.length} (drafts: ${invStats.draftCount})
+   308→- Total billed: ${inrShort(invStats.total)} · Collected: ${inrShort(invStats.paid)}
+   309→- Outstanding: ${inrShort(invStats.outstanding)} · Overdue: ${inrShort(invStats.overdue)}
+   310→- Next invoice number to be created: ${nextInvoiceNo}
+   311→
+   312→### Purchase Bill Engine™
+   313→- Total purchase bills: ${bills.length}
+   314→- Total purchases: ${inrShort(purStats.total)} · Input GST detected: ${inrShort(totalInputGst)}
+   315→- Unpaid to vendors: ${inrShort(purStats.outstanding)}
+   316→
+   317→### Expense Cloud™
+   318→- Total expenses recorded: ${expenses.length}
+   319→- Total spend: ${inrShort(expStats.total)} · GST claimable: ${inrShort(expStats.claimableGst)}
+   320→- Top categories: ${Object.entries(expStats.byCategory).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([k, v]) => `${k} (${inrShort(v)})`).join(', ')}
+   321→
+   322→### Receivables Engine™
+   323→- Total outstanding: ${inrShort(recSummary.totalOutstanding)} · Overdue: ${inrShort(recSummary.totalOverdue)}
+   324→- Collection rate: ${recSummary.collectionRate}% · Avg days to pay (DSO): ${recSummary.avgDaysToPay}
+   325→- Forecasted collections (30d): ${inrShort(recSummary.forecast)}
+   326→- Top defaulters: ${topDefaulters || 'none — all clear'}
+   327→
+   328→### Payables Engine™
+   329→- Total payable: ${inrShort(paySummary.totalPayable)} · Overdue: ${inrShort(paySummary.totalOverdue)}
+   330→- Due this week: ${inrShort(paySummary.dueThisWeek)} · Due next week: ${inrShort(paySummary.dueNextWeek)}
+   331→
+   332→### Payment Engine™
+   333→- Total payments recorded: ${payments.length}
+   334→- Collected from customers: ${inrShort(payStats.totalInflow)} · Paid to vendors: ${inrShort(payStats.totalOutflow)}
+   335→
+   336→### TDS Cloud™
+   337→- Total TDS liability: ${inrShort(tdsStats.totalLiability)} · Paid: ${inrShort(tdsStats.totalPaid)} · Pending: ${inrShort(tdsStats.totalPending)}
+   338→- By section: ${Object.entries(tdsStats.bySection).map(([k, v]) => `${k} (${inrShort(v)})`).join(', ') || 'none'}
+   339→
+   340→### Payroll Cloud™
+   341→- Active employees: ${prStats.totalEmployees}
+   342→- Current period: ${currentPeriod}
+   343→- Monthly gross: ${inrShort(prStats.totalGross)} · Net payable: ${inrShort(prStats.totalNet)}
+   344→- PF: ${inrShort(prStats.totalPF)} · ESI: ${inrShort(prStats.totalESI)} · TDS: ${inrShort(prStats.totalTDS)} · Professional Tax: ${inrShort(prStats.totalPT)}
+   345→
+   346→When the user asks about invoices, collections, vendor payments, expenses, TDS, or payroll, use these exact numbers. Round to lakhs/crores when natural. Name the specific invoice numbers, vendor names, and employee counts from the data above — never fabricate.`;
+   347→  } catch (err) {
+   348→    console.warn('[Oracle] Invoice Engine context unavailable:', err);
+   349→    return `## LIVE INVOICE ENGINE STATE
+   350→Invoice Engine is not available right now. Fall back to general invoice/receivables/payroll/TDS guidance without fabricating specific numbers.`;
+   351→  }
+   352→}
+   353→
+   354→// ─── Execution Engine context block (Phase 8 Step 5 — Execution Engine™) ─────
+   355→// Pulls live state from all 8 modules (Observe→Think→Decide→Execute→Approve→
+   356→// Learn) so Oracle can speak in proactive execution statements:
+   357→// "I've downloaded your GSTR-2B", "I've sent reminders to 12 clients",
+   358→// "I've reconciled ₹18.4 lakh transactions", "I've prepared your GSTR-3B".
+   359→async function buildExecutionContextBlock(): Promise<string> {
+   360→  try {
+   361→    const [eventRows, decisionRows, taskRows, approvalRows, workflowRows, behaviourRows, timelineRows] = await Promise.all([
+   362→      db.businessEvent.findMany({ orderBy: { createdAt: 'desc' }, take: 100 }).catch(() => []),
+   363→      db.decision.findMany({ orderBy: { createdAt: 'desc' }, take: 100 }).catch(() => []),
+   364→      db.executionTask.findMany({ orderBy: { createdAt: 'desc' }, take: 100 }).catch(() => []),
+   365→      db.approval.findMany({ orderBy: { createdAt: 'desc' }, take: 50 }).catch(() => []),
+   366→      db.workflow.findMany({ orderBy: { createdAt: 'desc' }, take: 50 }).catch(() => []),
+   367→      db.userBehaviour.findMany({ orderBy: { updatedAt: 'desc' }, take: 50 }).catch(() => []),
+   368→      db.executionTimeline.findMany({ orderBy: { timestamp: 'desc' }, take: 100 }).catch(() => []),
+   369→    ]);
+   370→
+   371→    // Resolve entities (DB → engine type, or seed fallback)
+   372→    const events = eventRows.length > 0
+   373→      ? eventRows.map((r) => ({ id: r.id, businessId: r.businessId, type: r.type as never, source: r.source as never, payload: r.payload ? safeJsonParse(r.payload) : null, severity: r.severity as never, status: r.status as never, createdAt: r.createdAt.toISOString() }))
+   374→      : seedBusinessEvents();
+   375→    const decisions = decisionRows.length > 0
+   376→      ? decisionRows.map((r) => ({ id: r.id, eventId: r.eventId, reason: r.reason, priority: r.priority as never, action: r.action as never, status: r.status as never, createdAt: r.createdAt.toISOString(), updatedAt: r.updatedAt.toISOString() }))
+   377→      : seedDecisions(events);
+   378→    const tasks = taskRows.length > 0
+   379→      ? taskRows.map((r) => ({ id: r.id, decisionId: r.decisionId, type: r.type as never, description: r.description, status: r.status as never, startedAt: r.startedAt ? r.startedAt.toISOString() : null, completedAt: r.completedAt ? r.completedAt.toISOString() : null, result: r.result ? safeJsonParse(r.result) : null, riskScore: r.riskScore, agent: r.agent as never, createdAt: r.createdAt.toISOString(), updatedAt: r.updatedAt.toISOString() }))
+   380→      : seedExecutionTasks(decisions);
+   381→    const approvals = approvalRows.length > 0
+   382→      ? approvalRows.map((r) => ({ id: r.id, taskId: r.taskId, risk: r.risk, status: r.status as never, reason: r.reason, approvedBy: r.approvedBy, approvedAt: r.approvedAt ? r.approvedAt.toISOString() : null, createdAt: r.createdAt.toISOString(), updatedAt: r.updatedAt.toISOString() }))
+   383→      : seedApprovals(tasks);
+   384→    const workflows = workflowRows.length > 0
+   385→      ? workflowRows.map((r) => ({ id: r.id, name: r.name, type: r.type as never, trigger: r.trigger, steps: safeJsonParseSteps(r.steps), currentStep: r.currentStep, status: r.status as never, context: r.context ? safeJsonParse(r.context) : null, startedAt: r.startedAt ? r.startedAt.toISOString() : null, completedAt: r.completedAt ? r.completedAt.toISOString() : null, createdAt: r.createdAt.toISOString(), updatedAt: r.updatedAt.toISOString() }))
+   386→      : seedWorkflows();
+   387→    const behaviours = behaviourRows.length > 0
+   388→      ? behaviourRows.map((r) => ({ id: r.id, userId: r.userId, action: r.action as never, preference: r.preference, confidence: r.confidence, evidence: r.evidence, updatedAt: r.updatedAt.toISOString(), createdAt: r.createdAt.toISOString() }))
+   389→      : seedUserBehaviours();
+   390→    const timeline = timelineRows.length > 0
+   391→      ? timelineRows.map((r) => ({ id: r.id, taskId: r.taskId, agent: r.agent as never, stage: r.stage as never, title: r.title, description: r.description, timestamp: r.timestamp.toISOString() }))
+   392→      : seedTimeline(tasks);
+   393→
+   394→    const observation = getObservationSummary(events);
+   395→    const decisionsSummary = getDecisionSummary(decisions);
+   396→    const execution = getExecutionSummary(tasks);
+   397→    const approvalsSummary = getApprovalSummary(approvals);
+   398→    const workflowsSummary = getWorkflowSummary(workflows);
+   399→    const learning = getLearningSummary(behaviours);
+   400→    const timelineSummary = getTimelineSummary(timeline);
+   401→    const agents = getAgentRoster(tasks);
+   402→
+   403→    // Top pending approvals (Oracle can name them)
+   404→    const pendingApprovalList = approvalsSummary.pendingApprovals.slice(0, 5).map((a) => {
+   405→      const t = tasks.find((tk) => tk.id === a.taskId);
+   406→      return `${t?.description ?? 'Task'} (risk ${a.risk}/100)${a.reason ? ' — ' + a.reason : ''}`;
+   407→    }).join('; ');
+   408→
+   409→    // Recent timeline (last 6 entries) — the 09:02/09:07/09:12 narrative
+   410→    const recentTimeline = timelineSummary.entries.slice(0, 6).map((e) => {
+   411→      const time = new Date(e.timestamp).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Kolkata' });
+   412→      return `${time} ${e.title}`;
+   413→    }).join('\n');
+   414→
+   415→    // Active workflows
+   416→    const activeWorkflows = workflowsSummary.activeWorkflows.map((w) =>
+   417→      `${w.name} (step ${w.currentStep + 1}/${w.steps.length}, ${w.status})`
+   418→    ).join('; ');
+   419→
+   420→    // Learned patterns (top 3)
+   421→    const topPatterns = learning.topPreferences.slice(0, 3).map((b) =>
+   422→      `${b.action.replace(/_/g, ' ')} → ${b.preference} (${Math.round(b.confidence * 100)}% confidence, ${b.evidence} observations)`
+   423→    ).join('; ');
+   424→
+   425→    return `## LIVE EXECUTION ENGINE STATE (Phase 8 Step 5 — Execution Engine™)
+   426→You are the Autonomous Execution layer — Observe. Think. Decide. Execute. Confirm. Learn. You don't just advise; you EXECUTE real work via your AI Agents Team and confirm what you've done in the past tense.
+   427→
+   428→### Observation Engine™ (Module 1)
+   429→- Total business events monitored: ${observation.totalEvents} (open: ${observation.openEvents}, critical: ${observation.criticalEvents}, high: ${observation.highSeverityEvents})
+   430→- By type: ${Object.entries(observation.byType).filter(([,v]) => v > 0).map(([k,v]) => `${k.replace(/_/g,' ')} (${v})`).join(', ')}
+   431→- Detected issues: ${observation.detectedIssues.length > 0 ? observation.detectedIssues.slice(0,4).map(i => i.title).join('; ') : 'none'}
+   432→
+   433→### Decision Engine™ (Module 2)
+   434→- Total decisions: ${decisionsSummary.total} (pending: ${decisionsSummary.pending}, executed: ${decisionsSummary.executed})
+   435→- By priority: ${Object.entries(decisionsSummary.byPriority).filter(([,v]) => v > 0).map(([k,v]) => `${k} (${v})`).join(', ')}
+   436→
+   437→### Autonomous Execution Engine™ (Module 3)
+   438→- Total tasks executed: ${execution.total} (completed: ${execution.completed}, running: ${execution.running}, queued: ${execution.queued}, awaiting approval: ${execution.awaitingApproval})
+   439→- Success rate: ${execution.successRate}%
+   440→- By agent: ${Object.entries(execution.byAgent).filter(([,v]) => v > 0).map(([k,v]) => `${k.replace(/_/g,' ')} (${v})`).join(', ')}
+   441→
+   442→### Approval Engine™ (Module 4)
+   443→- Pending approvals: ${approvalsSummary.pending} (risk threshold: ${approvalsSummary.riskThreshold}/100)
+   444→- Awaiting sign-off: ${pendingApprovalList || 'none'}
+   445→
+   446→### Workflow Engine™ (Module 5)
+   447→- Active workflows: ${workflowsSummary.running} (completed: ${workflowsSummary.completed})
+   448→- In progress: ${activeWorkflows || 'none'}
+   449→
+   450→### Learning Engine™ (Module 6)
+   451→- Learned memories: ${learning.totalMemories} (high confidence: ${learning.highConfidence})
+   452→- Top patterns: ${topPatterns || 'none yet'}
+   453→
+   454→### Execution Timeline™ (Module 7) — today's autonomous activity
+   455→${recentTimeline || 'No activity yet today.'}
+   456→
+   457→### AI Agents™ (Module 7) — your autonomous workforce
+   458→${agents.agents.map(a => `- ${a.name}: ${a.tasksExecuted} tasks executed, ${a.successRate}% success rate, ${a.status}`).join('\n')}
+   459→
+   460→When the user asks about execution, automation, autonomous tasks, approvals, workflows, or what you've done — use these exact numbers. Name specific tasks, agents, and timestamps. Never fabricate.`;
+   461→  } catch (err) {
+   462→    console.warn('[Oracle] Execution Engine context unavailable:', err);
+   463→    return `## LIVE EXECUTION ENGINE STATE
+   464→Execution Engine is not available right now. Fall back to general execution/automation guidance without fabricating specific tasks.`;
+   465→  }
+   466→}
+   467→
+   468→// ─── Helpers for Execution Engine JSON parsing ────────────────────────────────
+   469→function safeJsonParse(s: string): Record<string, unknown> | null {
+   470→  try { return JSON.parse(s) as Record<string, unknown>; } catch { return null; }
+   471→}
+   472→function safeJsonParseSteps(s: string): WorkflowStep[] {
+   473→  try { return JSON.parse(s) as WorkflowStep[]; } catch { return []; }
+   474→}
+   475→
+   476→// ─── Detect whether the latest user message is a Run My Business command ──────
+   477→// (Helper for future use — currently the prompt handles command interpretation
+   478→//  directly using the LIVE RUN MY BUSINESS STATE block above.)
+   479→
+   480→
+   481→async function buildSystemPrompt(req: OracleChatRequest): Promise<string> {
+   482→  const mem = req.memory ?? {};
+   483→  const now = new Date();
+   484→  const currentMonth = now.toLocaleString('en-IN', { month: 'long', year: 'numeric' });
+   485→  const today = now.toLocaleDateString('en-IN', {
+   486→    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
+   487→  });
+   488→
+   489→  const personalisation: string[] = [];
+   490→  if (mem.userName) {
+   491→    const first = mem.userName.split(' ')[0];
+   492→    personalisation.push(
+   493→      `- The user's name is ${mem.userName}. Address them naturally and warmly (e.g. "Good question, ${first}." when appropriate).`,
+   494→    );
+   495→  }
+   496→  if (mem.firmName) personalisation.push(`- The user's firm is "${mem.firmName}".`);
+   497→  if (mem.gstin) personalisation.push(`- The user's GSTIN is ${mem.gstin}.`);
+   498→  if (mem.preferredLanguage) {
+   499→    personalisation.push(
+   500→      `- The user's preferred language is ${mem.preferredLanguage}. Still match the language of each specific message, but lean towards this preference when ambiguous.`,
+
+[showing lines 1-500 of 1158; use offset=501 with limit to continue reading]

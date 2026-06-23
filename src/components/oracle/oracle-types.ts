@@ -63,13 +63,40 @@ export interface OracleMessage {
   createdAt: string;
   /** Optional follow-up suggestion chips attached to an oracle message. */
   followUps?: string[];
+  /** Optional action chips — one-tap shortcuts that navigate the user to the
+   *  right workspace (e.g. "File now" → returns, "Open reconcile" → reconcile). */
+  actions?: OracleActionChip[];
 }
+
+/** A single action chip attached to an Oracle response. */
+export interface OracleActionChip {
+  label: string;
+  intent: OracleActionIntent;
+  /** AppView to navigate to, or a free-form target string. */
+  view?: string;
+}
+
+export type OracleActionIntent =
+  | 'file_now'
+  | 'open_returns'
+  | 'open_reconcile'
+  | 'open_invoices'
+  | 'open_clients'
+  | 'open_reports'
+  | 'open_banking'
+  | 'open_notices'
+  | 'open_compliance'
+  | 'open_risk'
+  | 'open_insights'
+  | 'open_connections'
+  | 'open_settings';
 
 /** A concise memory snapshot sent to the API for personalisation. */
 export interface OracleUserMemory {
   userName?: string;
   firmName?: string;
   gstin?: string;
+  userId?: string;
   preferredLanguage?: OracleLanguageId;
   recentTopics?: string[];
 }
@@ -90,4 +117,6 @@ export interface OracleStreamChunk {
   emotion?: OracleEmotionId;
   done?: boolean;
   error?: string;
+  /** Optional action chips the server suggests for the final response. */
+  actions?: OracleActionChip[];
 }

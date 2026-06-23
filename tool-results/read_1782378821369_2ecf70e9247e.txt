@@ -1,0 +1,851 @@
+     1→'use client';
+     2→
+     3→import React, { useEffect, useMemo, useCallback, useState } from 'react';
+     4→import { motion, AnimatePresence } from 'framer-motion';
+     5→import {
+     6→  UserPlus,
+     7→  Upload,
+     8→  FileText,
+     9→  RefreshCw,
+    10→  BarChart3,
+    11→  ClipboardList,
+    12→  Bell,
+    13→  Users,
+    14→  CheckSquare,
+    15→  Bot,
+    16→  Zap,
+    17→  Building2,
+    18→  FileSpreadsheet,
+    19→  FolderOpen,
+    20→  Activity,
+    21→  Star,
+    22→  Clock,
+    23→  Pin,
+    24→  Search,
+    25→  ArrowRight,
+    26→  Receipt,
+    27→} from 'lucide-react';
+    28→import { useApp } from '@/contexts/AppContext';
+    29→import {
+    30→  useFireClients,
+    31→  useFireInvoices,
+    32→  useFireReturns,
+    33→  useFireDocuments,
+    34→  useFireRecentActivities,
+    35→} from '@/hooks/use-firestore';
+    36→import {
+    37→  CommandDialog,
+    38→  CommandInput,
+    39→  CommandList,
+    40→  CommandEmpty,
+    41→  CommandGroup,
+    42→  CommandItem,
+    43→  CommandSeparator,
+    44→  CommandShortcut,
+    45→} from '@/components/ui/command';
+    46→import { modalEnterVariants, springModalTransition, backdropVariants } from '@/components/ui-pro';
+    47→
+    48→// ═══════════════════════════════════════════════════════════════════════════════
+    49→// TYPES
+    50→// ═══════════════════════════════════════════════════════════════════════════════
+    51→
+    52→interface CommandAction {
+    53→  id: string;
+    54→  label: string;
+    55→  description?: string;
+    56→  icon: React.ElementType;
+    57→  shortcut?: string;
+    58→  action: () => void;
+    59→  group: string;
+    60→}
+    61→
+    62→interface RecentItem {
+    63→  id: string;
+    64→  label: string;
+    65→  type: 'command' | 'client' | 'invoice' | 'return' | 'document' | 'activity';
+    66→  timestamp: number;
+    67→}
+    68→
+    69→interface FavoriteItem {
+    70→  id: string;
+    71→  label: string;
+    72→  type: 'command';
+    73→}
+    74→
+    75→// ═══════════════════════════════════════════════════════════════════════════════
+    76→// CONSTANTS
+    77→// ═══════════════════════════════════════════════════════════════════════════════
+    78→
+    79→const RECENT_STORAGE_KEY = 'gstpilot-recent-commands';
+    80→const FAVORITES_STORAGE_KEY = 'gstpilot-favorite-commands';
+    81→const MAX_RECENT = 5;
+    82→
+    83→// ═══════════════════════════════════════════════════════════════════════════════
+    84→// LOCAL STORAGE HELPERS
+    85→// ═══════════════════════════════════════════════════════════════════════════════
+    86→
+    87→function loadRecent(): RecentItem[] {
+    88→  try {
+    89→    const raw = localStorage.getItem(RECENT_STORAGE_KEY);
+    90→    return raw ? JSON.parse(raw) : [];
+    91→  } catch {
+    92→    return [];
+    93→  }
+    94→}
+    95→
+    96→function saveRecent(items: RecentItem[]) {
+    97→  try {
+    98→    localStorage.setItem(RECENT_STORAGE_KEY, JSON.stringify(items.slice(0, MAX_RECENT)));
+    99→  } catch {
+   100→    // ignore quota errors
+   101→  }
+   102→}
+   103→
+   104→function loadFavorites(): FavoriteItem[] {
+   105→  try {
+   106→    const raw = localStorage.getItem(FAVORITES_STORAGE_KEY);
+   107→    return raw ? JSON.parse(raw) : [];
+   108→  } catch {
+   109→    return [];
+   110→  }
+   111→}
+   112→
+   113→function saveFavorites(items: FavoriteItem[]) {
+   114→  try {
+   115→    localStorage.setItem(FAVORITES_STORAGE_KEY, JSON.stringify(items));
+   116→  } catch {
+   117→    // ignore quota errors
+   118→  }
+   119→}
+   120→
+   121→// ═══════════════════════════════════════════════════════════════════════════════
+   122→// COMMAND PALETTE COMPONENT
+   123→// ═══════════════════════════════════════════════════════════════════════════════
+   124→
+   125→export default function CommandPalette() {
+   126→  const {
+   127→    setCurrentView,
+   128→    commandPaletteOpen,
+   129→    setCommandPaletteOpen,
+   130→    setSelectedClientId,
+   131→  } = useApp();
+   132→
+   133→  const [query, setQuery] = useState('');
+   134→  const [recentItems, setRecentItems] = useState<RecentItem[]>(loadRecent);
+   135→  const [favorites, setFavorites] = useState<FavoriteItem[]>(loadFavorites);
+   136→
+   137→  // ─── Firestore live data ──────────────────────────────────────────────────
+   138→  const { data: clients } = useFireClients();
+   139→  const { data: invoices } = useFireInvoices();
+   140→  const { data: returns } = useFireReturns();
+   141→  const { data: documents } = useFireDocuments();
+   142→  const { data: activities } = useFireRecentActivities(20);
+   143→
+   144→  // ─── Keyboard shortcut: Ctrl+K ───────────────────────────────────────────
+   145→  useEffect(() => {
+   146→    const handler = (e: KeyboardEvent) => {
+   147→      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+   148→        e.preventDefault();
+   149→        if (!commandPaletteOpen) {
+   150→          setQuery('');
+   151→        }
+   152→        setCommandPaletteOpen(!commandPaletteOpen);
+   153→      }
+   154→    };
+   155→    window.addEventListener('keydown', handler);
+   156→    return () => window.removeEventListener('keydown', handler);
+   157→  }, [commandPaletteOpen, setCommandPaletteOpen]);
+   158→
+   159→  // ─── Add to recent ───────────────────────────────────────────────────────
+   160→  const addToRecent = useCallback(
+   161→    (id: string, label: string, type: RecentItem['type']) => {
+   162→      setRecentItems((prev) => {
+   163→        const filtered = prev.filter((r) => r.id !== id);
+   164→        const updated = [{ id, label, type, timestamp: Date.now() }, ...filtered].slice(
+   165→          0,
+   166→          MAX_RECENT
+   167→        );
+   168→        saveRecent(updated);
+   169→        return updated;
+   170→      });
+   171→    },
+   172→    []
+   173→  );
+   174→
+   175→  // ─── Toggle favorite ─────────────────────────────────────────────────────
+   176→  const toggleFavorite = useCallback((id: string, label: string) => {
+   177→    setFavorites((prev) => {
+   178→      const exists = prev.find((f) => f.id === id);
+   179→      const updated = exists
+   180→        ? prev.filter((f) => f.id !== id)
+   181→        : [...prev, { id, label, type: 'command' as const }];
+   182→      saveFavorites(updated);
+   183→      return updated;
+   184→    });
+   185→  }, []);
+   186→
+   187→  // ─── Command actions ─────────────────────────────────────────────────────
+   188→  const commands: CommandAction[] = useMemo(
+   189→    () => [
+   190→      {
+   191→        id: 'cmd-create-client',
+   192→        label: 'Create Client',
+   193→        description: 'Add a new client to the registry',
+   194→        icon: UserPlus,
+   195→        shortcut: 'G C',
+   196→        action: () => {
+   197→          setCurrentView('clients');
+   198→          addToRecent('cmd-create-client', 'Create Client', 'command');
+   199→        },
+   200→        group: 'Commands',
+   201→      },
+   202→      {
+   203→        id: 'cmd-upload-invoice',
+   204→        label: 'Upload Invoice',
+   205→        description: 'Upload and extract invoice data',
+   206→        icon: Upload,
+   207→        shortcut: 'G I',
+   208→        action: () => {
+   209→          setCurrentView('invoices');
+   210→          addToRecent('cmd-upload-invoice', 'Upload Invoice', 'command');
+   211→        },
+   212→        group: 'Commands',
+   213→      },
+   214→      {
+   215→        id: 'cmd-invoice-cloud',
+   216→        label: 'Open Invoice Cloud',
+   217→        description: 'Sales · Purchase · Expenses · Receivables · Payables · Payments · TDS · Payroll · Forecast',
+   218→        icon: Receipt,
+   219→        shortcut: 'G C',
+   220→        action: () => {
+   221→          setCurrentView('invoice-cloud');
+   222→          addToRecent('cmd-invoice-cloud', 'Open Invoice Cloud', 'command');
+   223→        },
+   224→        group: 'Commands',
+   225→      },
+   226→      {
+   227→        id: 'cmd-execution-engine',
+   228→        label: 'Open Execution Engine',
+   229→        description: 'Observe · Think · Decide · Execute · Learn — Autonomous AI workforce',
+   230→        icon: Zap,
+   231→        shortcut: 'G E',
+   232→        action: () => {
+   233→          setCurrentView('execution-engine');
+   234→          addToRecent('cmd-execution-engine', 'Open Execution Engine', 'command');
+   235→        },
+   236→        group: 'Commands',
+   237→      },
+   238→      {
+   239→        id: 'cmd-create-return',
+   240→        label: 'Create Return',
+   241→        description: 'Prepare a new GST return',
+   242→        icon: FileText,
+   243→        action: () => {
+   244→          setCurrentView('returns');
+   245→          addToRecent('cmd-create-return', 'Create Return', 'command');
+   246→        },
+   247→        group: 'Commands',
+   248→      },
+   249→      {
+   250→        id: 'cmd-run-reconciliation',
+   251→        label: 'Run Reconciliation',
+   252→        description: 'Reconcile GSTR-2B with purchase register',
+   253→        icon: RefreshCw,
+   254→        action: () => {
+   255→          setCurrentView('reconcile');
+   256→          addToRecent('cmd-run-reconciliation', 'Run Reconciliation', 'command');
+   257→        },
+   258→        group: 'Commands',
+   259→      },
+   260→      {
+   261→        id: 'cmd-open-analytics',
+   262→        label: 'Open Analytics',
+   263→        description: 'View firm analytics and reports',
+   264→        icon: BarChart3,
+   265→        action: () => {
+   266→          setCurrentView('analytics');
+   267→          addToRecent('cmd-open-analytics', 'Open Analytics', 'command');
+   268→        },
+   269→        group: 'Commands',
+   270→      },
+   271→      {
+   272→        id: 'cmd-generate-filing-summary',
+   273→        label: 'Generate Filing Summary',
+   274→        description: 'Generate a filing summary report',
+   275→        icon: ClipboardList,
+   276→        action: () => {
+   277→          setCurrentView('returns');
+   278→          addToRecent('cmd-generate-filing-summary', 'Generate Filing Summary', 'command');
+   279→        },
+   280→        group: 'Commands',
+   281→      },
+   282→      {
+   283→        id: 'cmd-open-notifications',
+   284→        label: 'Open Notifications',
+   285→        description: 'View your notifications',
+   286→        icon: Bell,
+   287→        action: () => {
+   288→          setCommandPaletteOpen(false);
+   289→          addToRecent('cmd-open-notifications', 'Open Notifications', 'command');
+   290→        },
+   291→        group: 'Commands',
+   292→      },
+   293→      {
+   294→        id: 'cmd-invite-team-member',
+   295→        label: 'Invite Team Member',
+   296→        description: 'Send a team invitation',
+   297→        icon: Users,
+   298→        action: () => {
+   299→          setCurrentView('team');
+   300→          addToRecent('cmd-invite-team-member', 'Invite Team Member', 'command');
+   301→        },
+   302→        group: 'Commands',
+   303→      },
+   304→      {
+   305→        id: 'cmd-create-task',
+   306→        label: 'Create Task',
+   307→        description: 'Create a new task',
+   308→        icon: CheckSquare,
+   309→        action: () => {
+   310→          setCurrentView('tasks');
+   311→          addToRecent('cmd-create-task', 'Create Task', 'command');
+   312→        },
+   313→        group: 'Commands',
+   314→      },
+   315→      {
+   316→        id: 'cmd-open-ai-copilot',
+   317→        label: 'Open AI Copilot',
+   318→        description: 'Copilot is always visible in the sidebar',
+   319→        icon: Bot,
+   320→        action: () => {
+   321→          setCommandPaletteOpen(false);
+   322→          addToRecent('cmd-open-ai-copilot', 'Open AI Copilot', 'command');
+   323→        },
+   324→        group: 'Commands',
+   325→      },
+   326→      {
+   327→        id: 'cmd-run-autopilot',
+   328→        label: 'Run Autopilot',
+   329→        description: 'Launch automated workflow execution',
+   330→        icon: Zap,
+   331→        action: () => {
+   332→          setCurrentView('autopilot');
+   333→          addToRecent('cmd-run-autopilot', 'Run Autopilot', 'command');
+   334→        },
+   335→        group: 'Commands',
+   336→      },
+   337→    ],
+   338→    [setCurrentView, setCommandPaletteOpen, addToRecent]
+   339→  );
+   340→
+   341→  // ─── Search results grouped by type ──────────────────────────────────────
+   342→  const searchResults = useMemo(() => {
+   343→    if (!query.trim()) return { clients: [], invoices: [], returns: [], documents: [], activities: [] };
+   344→
+   345→    const q = query.toLowerCase();
+   346→
+   347→    const matchedClients = clients
+   348→      .filter(
+   349→        (c) =>
+   350→          c.tradeName?.toLowerCase().includes(q) ||
+   351→          c.gstin?.toLowerCase().includes(q) ||
+   352→          c.legalName?.toLowerCase().includes(q)
+   353→      )
+   354→      .slice(0, 5);
+   355→
+   356→    const matchedInvoices = invoices
+   357→      .filter(
+   358→        (inv) =>
+   359→          inv.invoiceNumber?.toLowerCase().includes(q) ||
+   360→          inv.buyerName?.toLowerCase().includes(q) ||
+   361→          inv.sellerGstin?.toLowerCase().includes(q)
+   362→      )
+   363→      .slice(0, 5);
+   364→
+   365→    const matchedReturns = returns
+   366→      .filter(
+   367→        (r) =>
+   368→          r.returnType?.toLowerCase().includes(q) ||
+   369→          r.period?.toLowerCase().includes(q) ||
+   370→          r.status?.toLowerCase().includes(q)
+   371→      )
+   372→      .slice(0, 5);
+   373→
+   374→    const matchedDocuments = documents
+   375→      .filter(
+   376→        (d) =>
+   377→          d.fileName?.toLowerCase().includes(q) ||
+   378→          d.documentType?.toLowerCase().includes(q) ||
+   379→          d.status?.toLowerCase().includes(q)
+   380→      )
+   381→      .slice(0, 5);
+   382→
+   383→    const matchedActivities = activities
+   384→      .filter(
+   385→        (a) =>
+   386→          a.title?.toLowerCase().includes(q) ||
+   387→          a.description?.toLowerCase().includes(q)
+   388→      )
+   389→      .slice(0, 5);
+   390→
+   391→    return {
+   392→      clients: matchedClients,
+   393→      invoices: matchedInvoices,
+   394→      returns: matchedReturns,
+   395→      documents: matchedDocuments,
+   396→      activities: matchedActivities,
+   397→    };
+   398→  }, [query, clients, invoices, returns, documents, activities]);
+   399→
+   400→  const hasSearchResults =
+   401→    searchResults.clients.length > 0 ||
+   402→    searchResults.invoices.length > 0 ||
+   403→    searchResults.returns.length > 0 ||
+   404→    searchResults.documents.length > 0 ||
+   405→    searchResults.activities.length > 0;
+   406→
+   407→  // ─── Handle item selection ───────────────────────────────────────────────
+   408→  const handleSelect = useCallback(
+   409→    (callback: () => void) => {
+   410→      setCommandPaletteOpen(false);
+   411→      callback();
+   412→    },
+   413→    [setCommandPaletteOpen]
+   414→  );
+   415→
+   416→  const handleClientSelect = useCallback(
+   417→    (clientId: string, tradeName: string) => {
+   418→      setCommandPaletteOpen(false);
+   419→      setSelectedClientId(clientId);
+   420→      setCurrentView('client-workspace');
+   421→      addToRecent(`client-${clientId}`, tradeName, 'client');
+   422→    },
+   423→    [setCommandPaletteOpen, setSelectedClientId, setCurrentView, addToRecent]
+   424→  );
+   425→
+   426→  const handleInvoiceSelect = useCallback(
+   427→    (invoiceNumber: string) => {
+   428→      setCommandPaletteOpen(false);
+   429→      setCurrentView('invoices');
+   430→      addToRecent(`invoice-${invoiceNumber}`, invoiceNumber, 'invoice');
+   431→    },
+   432→    [setCommandPaletteOpen, setCurrentView, addToRecent]
+   433→  );
+   434→
+   435→  const handleReturnSelect = useCallback(
+   436→    (returnLabel: string, clientId: string | null) => {
+   437→      setCommandPaletteOpen(false);
+   438→      if (clientId) {
+   439→        setSelectedClientId(clientId);
+   440→      }
+   441→      setCurrentView('returns');
+   442→      addToRecent(`return-${returnLabel}`, returnLabel, 'return');
+   443→    },
+   444→    [setCommandPaletteOpen, setSelectedClientId, setCurrentView, addToRecent]
+   445→  );
+   446→
+   447→  const handleDocumentSelect = useCallback(
+   448→    (fileName: string) => {
+   449→      setCommandPaletteOpen(false);
+   450→      setCurrentView('documents');
+   451→      addToRecent(`doc-${fileName}`, fileName, 'document');
+   452→    },
+   453→    [setCommandPaletteOpen, setCurrentView, addToRecent]
+   454→  );
+   455→
+   456→  // ─── Recent commands filtered ────────────────────────────────────────────
+   457→  const recentCommands = useMemo(() => {
+   458→    return recentItems
+   459→      .map((r) => {
+   460→        if (r.type === 'command') {
+   461→          const cmd = commands.find((c) => c.id === r.id);
+   462→          return cmd || null;
+   463→        }
+   464→        return null;
+   465→      })
+   466→      .filter(Boolean) as CommandAction[];
+   467→  }, [recentItems, commands]);
+   468→
+   469→  // ─── Favorite commands resolved ──────────────────────────────────────────
+   470→  const favoriteCommands = useMemo(() => {
+   471→    return favorites
+   472→      .map((f) => {
+   473→        const cmd = commands.find((c) => c.id === f.id);
+   474→        return cmd || null;
+   475→      })
+   476→      .filter(Boolean) as CommandAction[];
+   477→  }, [favorites, commands]);
+   478→
+   479→  // ─── Is searching ────────────────────────────────────────────────────────
+   480→  const isSearching = query.trim().length > 0;
+   481→
+   482→  return (
+   483→    <AnimatePresence>
+   484→      {commandPaletteOpen && (
+   485→        <>
+   486→          {/* Dark overlay with blur */}
+   487→          <motion.div
+   488→            key="cmd-overlay"
+   489→            variants={backdropVariants}
+   490→            initial="hidden"
+   491→            animate="visible"
+   492→            exit="exit"
+   493→            className="fixed inset-0 z-[60] premium-backdrop"
+   494→            onClick={() => setCommandPaletteOpen(false)}
+   495→          />
+   496→
+   497→          {/* Centered modal */}
+   498→          <motion.div
+   499→            key="cmd-modal"
+   500→            variants={modalEnterVariants}
+   501→            initial="hidden"
+   502→            animate="visible"
+   503→            exit="exit"
+   504→            transition={springModalTransition}
+   505→            className="fixed left-1/2 top-[12%] z-[70] w-full max-w-xl -translate-x-1/2"
+   506→          >
+   507→            <div className="glass-surface-strong rounded-2xl shadow-[0_24px_70px_-12px_rgba(0,0,0,0.8)] overflow-hidden">
+   508→              {/* Search input */}
+   509→              <div className="flex items-center gap-3 px-4 py-3.5 border-b border-white/[0.08] bg-white/[0.03] transition-colors focus-within:border-[#3B82F6]/50 focus-within:ring-1 focus-within:ring-[#3B82F6]/40">
+   510→                <Search className="h-4 w-4 text-white/50 shrink-0 transition-colors" />
+   511→                <input
+   512→                  autoFocus
+   513→                  value={query}
+   514→                  onChange={(e) => setQuery(e.target.value)}
+   515→                  placeholder="Type a command or search..."
+   516→                  className="flex-1 bg-transparent text-sm text-white outline-none placeholder:text-white/40"
+   517→                  onKeyDown={(e) => {
+   518→                    if (e.key === 'Escape') {
+   519→                      setCommandPaletteOpen(false);
+   520→                    }
+   521→                  }}
+   522→                />
+   523→                <kbd className="badge-premium hidden sm:inline-flex font-mono text-[10px]">
+   524→                  ESC
+   525→                </kbd>
+   526→              </div>
+   527→
+   528→              {/* Results list */}
+   529→              <div className="max-h-[420px] overflow-y-auto overscroll-contain scrollbar-thin">
+   530→                {/* Empty state */}
+   531→                {isSearching && !hasSearchResults && (
+   532→                  <div className="py-10 text-center">
+   533→                    <Search className="h-8 w-8 text-white/25 mx-auto mb-2" />
+   534→                    <p className="text-sm text-white/60">
+   535→                      No results found for &ldquo;{query}&rdquo;
+   536→                    </p>
+   537→                    <p className="text-xs text-white/40 mt-1">
+   538→                      Try searching for clients, invoices, returns, or documents
+   539→                    </p>
+   540→                  </div>
+   541→                )}
+   542→
+   543→                {/* ─── Favorites Section ──────────────────────────────────── */}
+   544→                {!isSearching && favoriteCommands.length > 0 && (
+   545→                  <div className="p-2">
+   546→                    <div className="flex items-center gap-1.5 px-2 py-1.5">
+   547→                      <Star className="h-3 w-3 text-amber-500" />
+   548→                      <span className="text-[10px] font-semibold text-white/40 uppercase tracking-[0.12em]">
+   549→                        Favorites
+   550→                      </span>
+   551→                    </div>
+   552→                    {favoriteCommands.map((cmd) => (
+   553→                      <CommandItemRow
+   554→                        key={cmd.id}
+   555→                        icon={cmd.icon}
+   556→                        label={cmd.label}
+   557→                        description={cmd.description}
+   558→                        shortcut={cmd.shortcut}
+   559→                        isFavorite={favorites.some((f) => f.id === cmd.id)}
+   560→                        onToggleFavorite={() => toggleFavorite(cmd.id, cmd.label)}
+   561→                        onSelect={() => handleSelect(cmd.action)}
+   562→                      />
+   563→                    ))}
+   564→                  </div>
+   565→                )}
+   566→
+   567→                {/* ─── Recent Section ─────────────────────────────────────── */}
+   568→                {!isSearching && recentCommands.length > 0 && (
+   569→                  <div className="p-2">
+   570→                    <div className="flex items-center gap-1.5 px-2 py-1.5">
+   571→                      <Clock className="h-3 w-3 text-white/40" />
+   572→                      <span className="text-[10px] font-semibold text-white/40 uppercase tracking-[0.12em]">
+   573→                        Recent
+   574→                      </span>
+   575→                    </div>
+   576→                    {recentCommands.map((cmd) => (
+   577→                      <CommandItemRow
+   578→                        key={cmd.id}
+   579→                        icon={cmd.icon}
+   580→                        label={cmd.label}
+   581→                        description={cmd.description}
+   582→                        shortcut={cmd.shortcut}
+   583→                        isFavorite={favorites.some((f) => f.id === cmd.id)}
+   584→                        onToggleFavorite={() => toggleFavorite(cmd.id, cmd.label)}
+   585→                        onSelect={() => handleSelect(cmd.action)}
+   586→                      />
+   587→                    ))}
+   588→                  </div>
+   589→                )}
+   590→
+   591→                {/* ─── Commands Section ───────────────────────────────────── */}
+   592→                {!isSearching && (
+   593→                  <div className="p-2">
+   594→                    <div className="flex items-center gap-1.5 px-2 py-1.5">
+   595→                      <Zap className="h-3 w-3 text-white/40" />
+   596→                      <span className="text-[10px] font-semibold text-white/40 uppercase tracking-[0.12em]">
+   597→                        Commands
+   598→                      </span>
+   599→                    </div>
+   600→                    {commands.map((cmd) => (
+   601→                      <CommandItemRow
+   602→                        key={cmd.id}
+   603→                        icon={cmd.icon}
+   604→                        label={cmd.label}
+   605→                        description={cmd.description}
+   606→                        shortcut={cmd.shortcut}
+   607→                        isFavorite={favorites.some((f) => f.id === cmd.id)}
+   608→                        onToggleFavorite={() => toggleFavorite(cmd.id, cmd.label)}
+   609→                        onSelect={() => handleSelect(cmd.action)}
+   610→                      />
+   611→                    ))}
+   612→                  </div>
+   613→                )}
+   614→
+   615→                {/* ─── Search Results: Clients ────────────────────────────── */}
+   616→                {isSearching && searchResults.clients.length > 0 && (
+   617→                  <div className="p-2">
+   618→                    <div className="flex items-center gap-1.5 px-2 py-1.5">
+   619→                      <Building2 className="h-3 w-3 text-emerald-600" />
+   620→                      <span className="text-[10px] font-semibold text-white/40 uppercase tracking-[0.12em]">
+   621→                        Clients
+   622→                      </span>
+   623→                      <span className="text-[10px] text-white/40 ml-auto">
+   624→                        {searchResults.clients.length} found
+   625→                      </span>
+   626→                    </div>
+   627→                    {searchResults.clients.map((c) => (
+   628→                      <CommandItemRow
+   629→                        key={c.id}
+   630→                        icon={Building2}
+   631→                        label={c.tradeName || c.legalName || 'Unknown'}
+   632→                        description={`${c.gstin}${c.state ? ` · ${c.state}` : ''}`}
+   633→                        onSelect={() =>
+   634→                          handleClientSelect(c.id, c.tradeName || c.legalName || 'Unknown')
+   635→                        }
+   636→                      />
+   637→                    ))}
+   638→                  </div>
+   639→                )}
+   640→
+   641→                {/* ─── Search Results: Invoices ───────────────────────────── */}
+   642→                {isSearching && searchResults.invoices.length > 0 && (
+   643→                  <div className="p-2">
+   644→                    <div className="flex items-center gap-1.5 px-2 py-1.5">
+   645→                      <FileSpreadsheet className="h-3 w-3 text-amber-600" />
+   646→                      <span className="text-[10px] font-semibold text-white/40 uppercase tracking-[0.12em]">
+   647→                        Invoices
+   648→                      </span>
+   649→                      <span className="text-[10px] text-white/40 ml-auto">
+   650→                        {searchResults.invoices.length} found
+   651→                      </span>
+   652→                    </div>
+   653→                    {searchResults.invoices.map((inv) => (
+   654→                      <CommandItemRow
+   655→                        key={inv.id}
+   656→                        icon={FileSpreadsheet}
+   657→                        label={inv.invoiceNumber || 'Unknown'}
+   658→                        description={`${inv.invoiceType} · ₹${(inv.totalAmount || 0).toLocaleString('en-IN')}`}
+   659→                        onSelect={() => handleInvoiceSelect(inv.invoiceNumber || inv.id)}
+   660→                      />
+   661→                    ))}
+   662→                  </div>
+   663→                )}
+   664→
+   665→                {/* ─── Search Results: Returns ────────────────────────────── */}
+   666→                {isSearching && searchResults.returns.length > 0 && (
+   667→                  <div className="p-2">
+   668→                    <div className="flex items-center gap-1.5 px-2 py-1.5">
+   669→                      <FileText className="h-3 w-3 text-blue-600" />
+   670→                      <span className="text-[10px] font-semibold text-white/40 uppercase tracking-[0.12em]">
+   671→                        Returns
+   672→                      </span>
+   673→                      <span className="text-[10px] text-white/40 ml-auto">
+   674→                        {searchResults.returns.length} found
+   675→                      </span>
+   676→                    </div>
+   677→                    {searchResults.returns.map((r) => (
+   678→                      <CommandItemRow
+   679→                        key={r.id}
+   680→                        icon={FileText}
+   681→                        label={`${r.returnType} · ${r.period}`}
+   682→                        description={`${r.status}`}
+   683→                        onSelect={() =>
+   684→                          handleReturnSelect(
+   685→                            `${r.returnType} · ${r.period}`,
+   686→                            r.clientId || null
+   687→                          )
+   688→                        }
+   689→                      />
+   690→                    ))}
+   691→                  </div>
+   692→                )}
+   693→
+   694→                {/* ─── Search Results: Documents ──────────────────────────── */}
+   695→                {isSearching && searchResults.documents.length > 0 && (
+   696→                  <div className="p-2">
+   697→                    <div className="flex items-center gap-1.5 px-2 py-1.5">
+   698→                      <FolderOpen className="h-3 w-3 text-orange-600" />
+   699→                      <span className="text-[10px] font-semibold text-white/40 uppercase tracking-[0.12em]">
+   700→                        Documents
+   701→                      </span>
+   702→                      <span className="text-[10px] text-white/40 ml-auto">
+   703→                        {searchResults.documents.length} found
+   704→                      </span>
+   705→                    </div>
+   706→                    {searchResults.documents.map((d) => (
+   707→                      <CommandItemRow
+   708→                        key={d.id}
+   709→                        icon={FolderOpen}
+   710→                        label={d.fileName || 'Unknown document'}
+   711→                        description={`${d.documentType} · ${d.status}`}
+   712→                        onSelect={() => handleDocumentSelect(d.fileName || d.id)}
+   713→                      />
+   714→                    ))}
+   715→                  </div>
+   716→                )}
+   717→
+   718→                {/* ─── Search Results: Activities ─────────────────────────── */}
+   719→                {isSearching && searchResults.activities.length > 0 && (
+   720→                  <div className="p-2">
+   721→                    <div className="flex items-center gap-1.5 px-2 py-1.5">
+   722→                      <Activity className="h-3 w-3 text-purple-600" />
+   723→                      <span className="text-[10px] font-semibold text-white/40 uppercase tracking-[0.12em]">
+   724→                        Activities
+   725→                      </span>
+   726→                      <span className="text-[10px] text-white/40 ml-auto">
+   727→                        {searchResults.activities.length} found
+   728→                      </span>
+   729→                    </div>
+   730→                    {searchResults.activities.map((a) => (
+   731→                      <CommandItemRow
+   732→                        key={a.id}
+   733→                        icon={Activity}
+   734→                        label={a.title || 'Activity'}
+   735→                        description={a.description?.slice(0, 60) || ''}
+   736→                        onSelect={() => {
+   737→                          setCommandPaletteOpen(false);
+   738→                          addToRecent(`activity-${a.id}`, a.title || 'Activity', 'activity');
+   739→                          if (a.clientId) {
+   740→                            setSelectedClientId(a.clientId);
+   741→                            setCurrentView('client-workspace');
+   742→                          }
+   743→                        }}
+   744→                      />
+   745→                    ))}
+   746→                  </div>
+   747→                )}
+   748→              </div>
+   749→
+   750→              {/* Footer with keyboard hints */}
+   751→              <div className="border-t border-white/[0.06] px-4 py-2.5 flex items-center gap-4 text-xs text-white/45">
+   752→                <span className="flex items-center gap-1">
+   753→                  <kbd className="badge-premium font-mono text-[10px]">↑↓</kbd>
+   754→                  Navigate
+   755→                </span>
+   756→                <span className="flex items-center gap-1">
+   757→                  <kbd className="badge-premium font-mono text-[10px]">↵</kbd>
+   758→                  Select
+   759→                </span>
+   760→                <span className="flex items-center gap-1">
+   761→                  <kbd className="badge-premium font-mono text-[10px]">esc</kbd>
+   762→                  Close
+   763→                </span>
+   764→                <span className="ml-auto flex items-center gap-1">
+   765→                  <Pin className="h-2.5 w-2.5" /> Click star to favorite
+   766→                </span>
+   767→              </div>
+   768→            </div>
+   769→          </motion.div>
+   770→        </>
+   771→      )}
+   772→    </AnimatePresence>
+   773→  );
+   774→}
+   775→
+   776→// ═══════════════════════════════════════════════════════════════════════════════
+   777→// COMMAND ITEM ROW — Reusable row for each palette item
+   778→// ═══════════════════════════════════════════════════════════════════════════════
+   779→
+   780→interface CommandItemRowProps {
+   781→  icon: React.ElementType;
+   782→  label: string;
+   783→  description?: string;
+   784→  shortcut?: string;
+   785→  isFavorite?: boolean;
+   786→  onToggleFavorite?: () => void;
+   787→  onSelect: () => void;
+   788→}
+   789→
+   790→function CommandItemRow({
+   791→  icon: Icon,
+   792→  label,
+   793→  description,
+   794→  shortcut,
+   795→  isFavorite,
+   796→  onToggleFavorite,
+   797→  onSelect,
+   798→}: CommandItemRowProps) {
+   799→  const [hovered, setHovered] = React.useState(false);
+   800→
+   801→  return (
+   802→    <motion.div
+   803→      className="group relative flex items-center gap-3 rounded-lg px-3 py-2 cursor-pointer transition-colors duration-150 hover:bg-white/[0.06]"
+   804→      onClick={onSelect}
+   805→      onMouseEnter={() => setHovered(true)}
+   806→      onMouseLeave={() => setHovered(false)}
+   807→      whileHover={{ x: 2 }}
+   808→      transition={{ duration: 0.1 }}
+   809→    >
+   810→      {/* Active left accent bar */}
+   811→      <span className="absolute left-0 top-1/2 h-5 w-[2px] -translate-y-1/2 rounded-full bg-[#3B82F6] opacity-0 group-hover:opacity-100 transition-opacity duration-150" />
+   812→      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-white/[0.04] transition-colors group-hover:bg-[#3B82F6]/10">
+   813→        <Icon className="h-3.5 w-3.5 text-white/50 transition-colors group-hover:text-[#3B82F6]" />
+   814→      </div>
+   815→      <div className="flex-1 min-w-0">
+   816→        <p className="text-sm font-medium text-white truncate">{label}</p>
+   817→        {description && (
+   818→          <p className="text-xs text-white/45 truncate">{description}</p>
+   819→        )}
+   820→      </div>
+   821→      <div className="flex items-center gap-2 shrink-0">
+   822→        {/* Favorite toggle for commands */}
+   823→        {onToggleFavorite && (
+   824→          <button
+   825→            onClick={(e) => {
+   826→              e.stopPropagation();
+   827→              onToggleFavorite();
+   828→            }}
+   829→            className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 hover:bg-white/[0.08] rounded"
+   830→            aria-label={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+   831→          >
+   832→            <Star
+   833→              className={`h-3 w-3 ${
+   834→                isFavorite
+   835→                  ? 'fill-amber-400 text-amber-400'
+   836→                  : 'text-white/40'
+   837→              }`}
+   838→            />
+   839→          </button>
+   840→        )}
+   841→        {shortcut && (
+   842→          <kbd className="badge-premium hidden sm:inline-flex font-mono text-[10px]">
+   843→            {shortcut}
+   844→          </kbd>
+   845→        )}
+   846→        <ArrowRight className="h-3 w-3 text-white/0 group-hover:text-white/50 transition-colors" />
+   847→      </div>
+   848→    </motion.div>
+   849→  );
+   850→}
+   851→

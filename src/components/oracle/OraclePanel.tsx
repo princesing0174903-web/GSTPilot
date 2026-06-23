@@ -467,6 +467,7 @@ export function OraclePanel({ onNavigate }: OraclePanelProps) {
         }}
         onNavigate={onNavigate}
         userName={user?.name}
+        userId={user?.id}
         firmName={undefined}
         gstin={undefined}
         initialPrompt={pendingPrompt}

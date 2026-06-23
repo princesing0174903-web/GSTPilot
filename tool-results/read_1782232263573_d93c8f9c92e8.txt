@@ -1,0 +1,732 @@
+     1→// ═══════════════════════════════════════════════════════════════════════════════
+     2→// GSTPilot Execution Engine™ — MODULE 1: Observation Engine™
+     3→// Phase 8 Step 5 — Observe. Think. Decide. Execute. Confirm. Learn.
+     4→// ═══════════════════════════════════════════════════════════════════════════════
+     5→// Monitors 9 business-signal classes for Indian SMEs / CA firms:
+     6→//   GST due dates • Bank transactions • Receivables • Payables • Payroll •
+     7→//   TDS compliance • Client behaviour • Cash flow • Collection risk
+     8→//
+     9→// Pure TypeScript — no Prisma, no React, no 'use client'.
+    10→// Importable from both Next.js API routes (server) and React components (client).
+    11→// ═══════════════════════════════════════════════════════════════════════════════
+    12→
+    13→import type {
+    14→  BusinessEvent,
+    15→  BusinessEventType,
+    16→  EventSeverity,
+    17→  ObservationSummary,
+    18→  DetectedIssue,
+    19→} from './types';
+    20→
+    21→// ─── Indian Rupee grouping (₹1,23,456 — not Western 1,23,456) ─────────────────
+    22→export function formatInr(n: number): string {
+    23→  const neg = n < 0;
+    24→  const abs = Math.abs(Math.round(n));
+    25→  const digits = abs.toString();
+    26→  let grouped: string;
+    27→  if (digits.length <= 3) {
+    28→    grouped = digits;
+    29→  } else {
+    30→    const last3 = digits.slice(-3);
+    31→    const rest = digits.slice(0, -3);
+    32→    grouped = `${rest.replace(/\B(?=(\d{2})+(?!\d))/g, ',')},${last3}`;
+    33→  }
+    34→  return `${neg ? '-' : ''}₹${grouped}`;
+    35→}
+    36→
+    37→// Local alias to keep this file dependency-free of sibling engine modules.
+    38→const inr = formatInr;
+    39→
+    40→// ─── The 9 monitored business-signal classes ──────────────────────────────────
+    41→export interface BusinessEventTypeMeta {
+    42→  type: BusinessEventType;
+    43→  label: string;
+    44→  icon: string;
+    45→  description: string;
+    46→}
+    47→
+    48→export const BUSINESS_EVENT_TYPES: BusinessEventTypeMeta[] = [
+    49→  { type: 'gst_due',            label: 'GST Due Dates',     icon: 'calendar-clock',    description: 'GSTR-1 / 3B / 2B filing windows + late-fee exposure' },
+    50→  { type: 'bank_transaction',   label: 'Bank Transactions', icon: 'banknote',          description: 'Live UPI / NEFT / RTGS credits & debits across linked accounts' },
+    51→  { type: 'receivable',         label: 'Receivables',       icon: 'arrow-down-circle', description: 'Outstanding client invoices + aging buckets' },
+    52→  { type: 'payable',            label: 'Payables',          icon: 'arrow-up-circle',   description: 'Vendor bills + statutory payouts due' },
+    53→  { type: 'payroll',            label: 'Payroll',           icon: 'users',             description: 'Monthly salary run + PF / ESI / TDS deductions' },
+    54→  { type: 'tds',                label: 'TDS Compliance',    icon: 'receipt',           description: 'Section 194C / 194J / 194I withholding + challan timelines' },
+    55→  { type: 'client_behaviour',   label: 'Client Behaviour',  icon: 'user-check',        description: 'Payment-pattern learning + risk segmentation' },
+    56→  { type: 'cash_flow',          label: 'Cash Flow',         icon: 'trending-up',       description: '13-week rolling cash forecast + runway prediction' },
+    57→  { type: 'collection_risk',    label: 'Collection Risk',   icon: 'alert-triangle',    description: 'Default-probability scoring on overdue receivables' },
+    58→];
+    59→
+    60→const EVENT_TYPES: BusinessEventType[] = [
+    61→  'gst_due', 'bank_transaction', 'receivable', 'payable', 'payroll',
+    62→  'tds', 'client_behaviour', 'cash_flow', 'collection_risk',
+    63→];
+    64→
+    65→const SEVERITIES: EventSeverity[] = ['info', 'low', 'medium', 'high', 'critical'];
+    66→
+    67→// ─── Timestamp helpers (timeline feels live, spread across last 48h) ──────────
+    68→function isoHoursAgo(h: number): string {
+    69→  return new Date(Date.now() - h * 3600 * 1000).toISOString();
+    70→}
+    71→function isoDaysAhead(d: number): string {
+    72→  return new Date(Date.now() + d * 86400 * 1000).toISOString();
+    73→}
+    74→
+    75→// ─── 16 seed events covering all 9 monitored areas (Indian SME context) ───────
+    76→export function seedBusinessEvents(): BusinessEvent[] {
+    77→  const now = new Date();
+    78→  const tomorrow = new Date(now.getTime() + 24 * 3600 * 1000);
+    79→  const tomorrowDMY =
+    80→    `${String(tomorrow.getUTCDate()).padStart(2, '0')}/` +
+    81→    `${String(tomorrow.getUTCMonth() + 1).padStart(2, '0')}/` +
+    82→    `${tomorrow.getUTCFullYear()}`;
+    83→
+    84→  return [
+    85→    // ── 1. GST DUE — GSTR-3B due tomorrow ──────────────────────────────────
+    86→    {
+    87→      id: 'evt_gstr3b_due_001',
+    88→      businessId: 'biz_sharma_enterprises',
+    89→      type: 'gst_due',
+    90→      source: 'gst',
+    91→      payload: {
+    92→        form: 'GSTR-3B',
+    93→        period: 'December 2025',
+    94→        dueDate: tomorrowDMY,
+    95→        dueInHours: 24,
+    96→        outputTaxLiability: 420000,
+    97→        itcAvailable: 210000,
+    98→        netPayable: 210000,
+    99→        cashLedgerBalance: 95000,
+   100→        lateFeePerDay: 50,
+   101→        interestRate: '18% p.a.',
+   102→      },
+   103→      severity: 'critical',
+   104→      status: 'open',
+   105→      createdAt: isoHoursAgo(0.5),
+   106→    },
+   107→    // ── 2. GST DUE — GSTR-2B download pending ──────────────────────────────
+   108→    {
+   109→      id: 'evt_gstr2b_download_002',
+   110→      businessId: 'biz_sharma_enterprises',
+   111→      type: 'gst_due',
+   112→      source: 'gst',
+   113→      payload: {
+   114→        form: 'GSTR-2B',
+   115→        period: 'December 2025',
+   116→        action: 'download_2b_for_itc_reconciliation',
+   117→        itcExpected: 210000,
+   118→        vendors: 24,
+   119→      },
+   120→      severity: 'high',
+   121→      status: 'open',
+   122→      createdAt: isoHoursAgo(3),
+   123→    },
+   124→    // ── 3. BANK TRANSACTION — large credit received ────────────────────────
+   125→    {
+   126→      id: 'evt_bank_credit_003',
+   127→      businessId: 'biz_sharma_enterprises',
+   128→      type: 'bank_transaction',
+   129→      source: 'banking',
+   130→      payload: {
+   131→        bank: 'HDFC Bank',
+   132→        account: 'XXXX-4821',
+   133→        mode: 'UPI',
+   134→        direction: 'credit',
+   135→        amount: 320000,
+   136→        counterparty: 'Sharma Enterprises LLP',
+   137→        utr: 'UPI-AXIS-4821-9934',
+   138→        reference: 'INV-2025-0184 final settlement',
+   139→        matched: true,
+   140→      },
+   141→      severity: 'info',
+   142→      status: 'resolved',
+   143→      createdAt: isoHoursAgo(2),
+   144→    },
+   145→    // ── 4. BANK TRANSACTION — rent debit ───────────────────────────────────
+   146→    {
+   147→      id: 'evt_bank_debit_004',
+   148→      businessId: 'biz_sharma_enterprises',
+   149→      type: 'bank_transaction',
+   150→      source: 'banking',
+   151→      payload: {
+   152→        bank: 'HDFC Bank',
+   153→        account: 'XXXX-4821',
+   154→        mode: 'NEFT',
+   155→        direction: 'debit',
+   156→        amount: 58000,
+   157→        counterparty: 'Brigade Gateway',
+   158→        reference: 'Office rent — January 2026',
+   159→        category: 'rent',
+   160→        matched: true,
+   161→      },
+   162→      severity: 'low',
+   163→      status: 'resolved',
+   164→      createdAt: isoHoursAgo(7),
+   165→    },
+   166→    // ── 5. RECEIVABLE — Verma Industries ₹18.2L overdue ────────────────────
+   167→    {
+   168→      id: 'evt_recv_overdue_005',
+   169→      businessId: 'biz_sharma_enterprises',
+   170→      type: 'receivable',
+   171→      source: 'invoice',
+   172→      payload: {
+   173→        client: 'Verma Industries LLP',
+   174→        clientId: 'cli_verma_001',
+   175→        invoiceNo: 'INV-2025-0172',
+   176→        amount: 1820000,
+   177→        overdueDays: 32,
+   178→        terms: 30,
+   179→        invoiceDate: '15/11/2025',
+   180→        dueDate: '15/12/2025',
+   181→        dso: 62,
+   182→      },
+   183→      severity: 'critical',
+   184→      status: 'open',
+   185→      createdAt: isoHoursAgo(5),
+   186→    },
+   187→    // ── 6. RECEIVABLE — aging snapshot across 11 clients ───────────────────
+   188→    {
+   189→      id: 'evt_recv_aging_006',
+   190→      businessId: 'biz_sharma_enterprises',
+   191→      type: 'receivable',
+   192→      source: 'invoice',
+   193→      payload: {
+   194→        totalOutstanding: 4280000,
+   195→        agingBuckets: {
+   196→          '0-30':  1840000,
+   197→          '31-60':  620000,
+   198→          '61-90':  980000,
+   199→          '90+':    840000,
+   200→        },
+   201→        clientCount: 11,
+   202→        averageDSO: 51,
+   203→      },
+   204→      severity: 'high',
+   205→      status: 'open',
+   206→      createdAt: isoHoursAgo(11),
+   207→    },
+   208→    // ── 7. PAYABLE — Patel & Sons ₹2.4L due in 7 days ──────────────────────
+   209→    {
+   210→      id: 'evt_payable_patel_007',
+   211→      businessId: 'biz_sharma_enterprises',
+   212→      type: 'payable',
+   213→      source: 'invoice',
+   214→      payload: {
+   215→        vendor: 'Patel & Sons Hardware',
+   216→        vendorId: 'ven_patel_001',
+   217→        billNo: 'PS-2025-1129',
+   218→        amount: 240000,
+   219→        dueInDays: 7,
+   220→        terms: 15,
+   221→        earlyPayDiscount: '2% if paid in 5 days',
+   222→      },
+   223→      severity: 'medium',
+   224→      status: 'open',
+   225→      createdAt: isoHoursAgo(9),
+   226→    },
+   227→    // ── 8. PAYABLE — HDFC MSME Loan EMI ────────────────────────────────────
+   228→    {
+   229→      id: 'evt_payable_emi_008',
+   230→      businessId: 'biz_sharma_enterprises',
+   231→      type: 'payable',
+   232→      source: 'banking',
+   233→      payload: {
+   234→        vendor: 'HDFC Bank — MSME Loan',
+   235→        description: 'EMI instalment',
+   236→        amount: 124000,
+   237→        dueInDays: 5,
+   238→        principal: 98000,
+   239→        interest: 26000,
+   240→        loanOutstanding: 1420000,
+   241→      },
+   242→      severity: 'high',
+   243→      status: 'open',
+   244→      createdAt: isoHoursAgo(14),
+   245→    },
+   246→    // ── 9. PAYROLL — January cycle for 18 employees ────────────────────────
+   247→    {
+   248→      id: 'evt_payroll_run_009',
+   249→      businessId: 'biz_sharma_enterprises',
+   250→      type: 'payroll',
+   251→      source: 'payroll',
+   252→      payload: {
+   253→        cycle: 'January 2026',
+   254→        payDate: '31/01/2026',
+   255→        employeeCount: 18,
+   256→        grossPayroll: 842000,
+   257→        pfDeduction: 71200,
+   258→        esiDeduction: 0,
+   259→        tdsDeduction: 40600,
+   260→        professionalTax: 2400,
+   261→        netPayable: 727800,
+   262→        status: 'draft',
+   263→      },
+   264→      severity: 'high',
+   265→      status: 'open',
+   266→      createdAt: isoHoursAgo(16),
+   267→    },
+   268→    // ── 10. TDS — Q3 ₹3.4L pending (26Q return) ────────────────────────────
+   269→    {
+   270→      id: 'evt_tds_q3_pending_010',
+   271→      businessId: 'biz_sharma_enterprises',
+   272→      type: 'tds',
+   273→      source: 'gst',
+   274→      payload: {
+   275→        quarter: 'Q3 FY25-26',
+   276→        returnForm: '26Q',
+   277→        dueDate: '31/01/2026',
+   278→        totalTDS: 340000,
+   279→        sections: {
+   280→          '194C': 210000, // contractor
+   281→          '194J': 95000,  // professional fees
+   282→          '194I': 35000,  // rent
+   283→        },
+   284→        challanStatus: '3 of 4 paid',
+   285→        pendingChallan: 85000,
+   286→      },
+   287→      severity: 'high',
+   288→      status: 'open',
+   289→      createdAt: isoHoursAgo(13),
+   290→    },
+   291→    // ── 11. TDS — 194J challan for Apollo Legal ────────────────────────────
+   292→    {
+   293→      id: 'evt_tds_challan_011',
+   294→      businessId: 'biz_sharma_enterprises',
+   295→      type: 'tds',
+   296→      source: 'gst',
+   297→      payload: {
+   298→        section: '194J',
+   299→        vendor: 'Apollo Legal Associates',
+   300→        amount: 28000,
+   301→        rate: '10%',
+   302→        invoiceValue: 280000,
+   303→        dueDate: '07/02/2026',
+   304→        challanType: 'ITNS-281',
+   305→      },
+   306→      severity: 'medium',
+   307→      status: 'open',
+   308→      createdAt: isoHoursAgo(20),
+   309→    },
+   310→    // ── 12. CLIENT BEHAVIOUR — Sharma pays 47 days (amber) ─────────────────
+   311→    {
+   312→      id: 'evt_behaviour_sharma_012',
+   313→      businessId: 'biz_sharma_enterprises',
+   314→      type: 'client_behaviour',
+   315→      source: 'communication',
+   316→      payload: {
+   317→        client: 'Sharma Enterprises LLP',
+   318→        clientId: 'cli_sharma_001',
+   319→        observedAvgPaymentDays: 47,
+   320→        contractualTerms: 30,
+   321→        delayPattern: '+17 days average',
+   322→        sampleSize: 12,
+   323→        confidence: 0.92,
+   324→        riskSegment: 'amber',
+   325→      },
+   326→      severity: 'medium',
+   327→      status: 'open',
+   328→      createdAt: isoHoursAgo(18),
+   329→    },
+   330→    // ── 13. CLIENT BEHAVIOUR — Mehta early-payer (green) ───────────────────
+   331→    {
+   332→      id: 'evt_behaviour_mehta_013',
+   333→      businessId: 'biz_sharma_enterprises',
+   334→      type: 'client_behaviour',
+   335→      source: 'communication',
+   336→      payload: {
+   337→        client: 'Mehta Traders',
+   338→        clientId: 'cli_mehta_001',
+   339→        observedAvgPaymentDays: 14,
+   340→        contractualTerms: 30,
+   341→        delayPattern: '-16 days (early payer)',
+   342→        sampleSize: 9,
+   343→        confidence: 0.88,
+   344→        riskSegment: 'green',
+   345→        earlyPayDiscountEligible: true,
+   346→      },
+   347→      severity: 'info',
+   348→      status: 'resolved',
+   349→      createdAt: isoHoursAgo(28),
+   350→    },
+   351→    // ── 14. CASH FLOW — shortage predicted in 12 days ──────────────────────
+   352→    {
+   353→      id: 'evt_cash_shortage_014',
+   354→      businessId: 'biz_sharma_enterprises',
+   355→      type: 'cash_flow',
+   356→      source: 'system',
+   357→      payload: {
+   358→        forecastHorizon: '13 weeks',
+   359→        currentBankBalance: 1840000,
+   360→        predictedShortageDate: isoDaysAhead(12),
+   361→        runwayDays: 11.5,
+   362→        weeklyBurn: 162000,
+   363→        expectedInflows: 980000,
+   364→        expectedOutflows: 2840000,
+   365→        netDeficit: -1860000,
+   366→      },
+   367→      severity: 'critical',
+   368→      status: 'open',
+   369→      createdAt: isoHoursAgo(1),
+   370→    },
+   371→    // ── 15. CASH FLOW — February forecast ──────────────────────────────────
+   372→    {
+   373→      id: 'evt_cash_forecast_015',
+   374→      businessId: 'biz_sharma_enterprises',
+   375→      type: 'cash_flow',
+   376→      source: 'system',
+   377→      payload: {
+   378→        month: 'February 2026',
+   379→        projectedClosing: 480000,
+   380→        inflows: 4200000,
+   381→        outflows: 3720000,
+   382→        recommendation: 'Bridge ₹14L working-capital gap via invoice discounting',
+   383→      },
+   384→      severity: 'medium',
+   385→      status: 'acknowledged',
+   386→      createdAt: isoHoursAgo(22),
+   387→    },
+   388→    // ── 16. COLLECTION RISK — Reddy Suppliers ₹2.8L, 41% default prob ──────
+   389→    {
+   390→      id: 'evt_collection_risk_016',
+   391→      businessId: 'biz_sharma_enterprises',
+   392→      type: 'collection_risk',
+   393→      source: 'invoice',
+   394→      payload: {
+   395→        client: 'Reddy Suppliers',
+   396→        clientId: 'cli_reddy_001',
+   397→        invoiceNo: 'INV-2025-0098',
+   398→        amount: 280000,
+   399→        overdueDays: 68,
+   400→        defaultProbability: 0.41,
+   401→        riskSegment: 'red',
+   402→        recoveryStage: 'escalation',
+   403→        suggestedAction: 'Issue legal notice under IBC Section 9 (MSME recovery)',
+   404→      },
+   405→      severity: 'critical',
+   406→      status: 'escalated',
+   407→      createdAt: isoHoursAgo(40),
+   408→    },
+   409→  ];
+   410→}
+   411→
+   412→// ─── Observation Summary — derived from event stream ──────────────────────────
+   413→export function getObservationSummary(events: BusinessEvent[]): ObservationSummary {
+   414→  const byType = {} as Record<BusinessEventType, number>;
+   415→  const bySeverity = {} as Record<EventSeverity, number>;
+   416→  for (const t of EVENT_TYPES) byType[t] = 0;
+   417→  for (const s of SEVERITIES) bySeverity[s] = 0;
+   418→
+   419→  let openEvents = 0;
+   420→  let criticalEvents = 0;
+   421→  let highSeverityEvents = 0;
+   422→
+   423→  for (const e of events) {
+   424→    byType[e.type] = (byType[e.type] ?? 0) + 1;
+   425→    bySeverity[e.severity] = (bySeverity[e.severity] ?? 0) + 1;
+   426→    if (e.status === 'open' || e.status === 'escalated') openEvents += 1;
+   427→    if (e.severity === 'critical') criticalEvents += 1;
+   428→    if (e.severity === 'high') highSeverityEvents += 1;
+   429→  }
+   430→
+   431→  const recentEvents = [...events]
+   432→    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+   433→    .slice(0, 8);
+   434→
+   435→  // Detected issues are derived from high+critical events (the signals worth acting on).
+   436→  const detectedIssues: DetectedIssue[] = events
+   437→    .filter((e) => e.severity === 'high' || e.severity === 'critical')
+   438→    .sort((a, b) => severityRank(b.severity) - severityRank(a.severity))
+   439→    .map(deriveIssue);
+   440→
+   441→  return {
+   442→    totalEvents: events.length,
+   443→    openEvents,
+   444→    criticalEvents,
+   445→    highSeverityEvents,
+   446→    byType,
+   447→    bySeverity,
+   448→    recentEvents,
+   449→    detectedIssues,
+   450→  };
+   451→}
+   452→
+   453→function severityRank(s: EventSeverity): number {
+   454→  return { info: 0, low: 1, medium: 2, high: 3, critical: 4 }[s] ?? 0;
+   455→}
+   456→
+   457→function deriveIssue(e: BusinessEvent): DetectedIssue {
+   458→  const p = (e.payload ?? {}) as Record<string, unknown>;
+   459→  const num = (k: string): number | null =>
+   460→    typeof p[k] === 'number' ? (p[k] as number) : null;
+   461→  const str = (k: string): string | null =>
+   462→    typeof p[k] === 'string' ? (p[k] as string) : null;
+   463→
+   464→  switch (e.type) {
+   465→    case 'gst_due': {
+   466→      const form = str('form') ?? 'GST return';
+   467→      const net = num('netPayable') ?? num('outputTaxLiability') ?? num('itcExpected');
+   468→      const due = str('dueDate') ?? (num('dueInHours') != null ? `${num('dueInHours')}h` : 'soon');
+   469→      return {
+   470→        type: e.type,
+   471→        title: `${form} window open`,
+   472→        description:
+   473→          `${form} for ${str('period') ?? 'current period'} due ${due}` +
+   474→          (net != null ? ` — ${net >= 0 ? 'net liability' : 'net refund'} ${inr(Math.abs(net))}` : '') +
+   475→          `. Late fee ₹50/day + 18% p.a. interest on delayed tax.`,
+   476→        severity: e.severity,
+   477→        suggestedAction:
+   478→          'Prepare return immediately; verify cash ledger balance; file before due date to avoid penalty exposure.',
+   479→      };
+   480→    }
+   481→    case 'bank_transaction': {
+   482→      const amt = num('amount');
+   483→      const dir = str('direction') ?? 'movement';
+   484→      const cp = str('counterparty') ?? 'counterparty';
+   485→      return {
+   486→        type: e.type,
+   487→        title: `Bank ${dir} detected — ${amt != null ? inr(amt) : 'unknown amount'}`,
+   488→        description:
+   489→          `${dir === 'credit' ? 'Credit' : 'Debit'} ${amt != null ? inr(amt) : ''} via ` +
+   490→          `${str('mode') ?? 'bank'} from ${cp}. Reference: ${str('reference') ?? 'n/a'}.`,
+   491→        severity: e.severity,
+   492→        suggestedAction:
+   493→          'Auto-reconcile against open invoices / payables; flag if unmatched or outside expected pattern.',
+   494→      };
+   495→    }
+   496→    case 'receivable': {
+   497→      const amt = num('amount') ?? num('totalOutstanding');
+   498→      const client = str('client') ?? 'client';
+   499→      const days = num('overdueDays');
+   500→      return {
+   501→        type: e.type,
+   502→        title: `Overdue receivable — ${client}`,
+   503→        description:
+   504→          `${client} invoice ${str('invoiceNo') ?? ''} ${amt != null ? inr(amt) : ''} ` +
+   505→          (days != null ? `${days} days overdue (DSO ${num('dso') ?? '?'})` : 'overdue') + '.',
+   506→        severity: e.severity,
+   507→        suggestedAction:
+   508→          'Trigger collection recovery workflow; send WhatsApp + email reminder; escalate if >60 days.',
+   509→      };
+   510→    }
+   511→    case 'payable': {
+   512→      const amt = num('amount');
+   513→      const vendor = str('vendor') ?? 'vendor';
+   514→      const due = num('dueInDays');
+   515→      return {
+   516→        type: e.type,
+   517→        title: `Payable approaching due — ${vendor}`,
+   518→        description:
+   519→          `${vendor} bill ${amt != null ? inr(amt) : ''} due in ${due ?? '?'} days` +
+   520→          (str('earlyPayDiscount') ? ` — ${str('earlyPayDiscount')}` : '') + '.',
+   521→        severity: e.severity,
+   522→        suggestedAction:
+   523→          'Schedule payment via Payment Engine; capture early-pay discount if offered; preserve runway.',
+   524→      };
+   525→    }
+   526→    case 'payroll': {
+   527→      const cycle = str('cycle') ?? 'cycle';
+   528→      const net = num('netPayable');
+   529→      const emp = num('employeeCount');
+   530→      return {
+   531→        type: e.type,
+   532→        title: `Payroll run pending — ${cycle}`,
+   533→        description:
+   534→          `${emp ?? '?'} employees, gross ${num('grossPayroll') != null ? inr(num('grossPayroll')!) : ''}, ` +
+   535→          `net ${net != null ? inr(net) : ''}. PF ${num('pfDeduction') ?? 0} + TDS ${num('tdsDeduction') ?? 0}.`,
+   536→        severity: e.severity,
+   537→        suggestedAction:
+   538→          'Lock attendance; compute PF / ESI / TDS; release net-pay bank file before pay-date.',
+   539→      };
+   540→    }
+   541→    case 'tds': {
+   542→      const q = str('quarter') ?? str('section') ?? 'review';
+   543→      const amt = num('totalTDS') ?? num('amount');
+   544→      return {
+   545→        type: e.type,
+   546→        title: `TDS compliance gap — ${q}`,
+   547→        description:
+   548→          `${str('returnForm') ?? 'Return'} for ${q} — ${amt != null ? inr(amt) : ''} ` +
+   549→          `pending. Due: ${str('dueDate') ?? 'per schedule'}. ` +
+   550→          `Challan status: ${str('challanStatus') ?? 'unpaid'}.`,
+   551→        severity: e.severity,
+   552→        suggestedAction:
+   553→          'Deposit pending challan via ITNS-281; prepare 26Q return; file before statutory due date.',
+   554→      };
+   555→    }
+   556→    case 'client_behaviour': {
+   557→      const client = str('client') ?? 'client';
+   558→      const avg = num('observedAvgPaymentDays');
+   559→      const terms = num('contractualTerms');
+   560→      const seg = str('riskSegment') ?? 'unclassified';
+   561→      return {
+   562→        type: e.type,
+   563→        title: `Payment-pattern shift — ${client}`,
+   564→        description:
+   565→          `${client} pays in ${avg ?? '?'} days vs ${terms ?? '?'}-day terms. ` +
+   566→          `Risk segment: ${seg}. Confidence ${(num('confidence') ?? 0) * 100}%.`,
+   567→        severity: e.severity,
+   568→        suggestedAction:
+   569→          'Update risk-segment; tighten credit terms for amber/red clients; offer early-pay discount to green.',
+   570→      };
+   571→    }
+   572→    case 'cash_flow': {
+   573→      const runway = num('runwayDays');
+   574→      const deficit = num('netDeficit');
+   575→      const balance = num('currentBankBalance');
+   576→      return {
+   577→        type: e.type,
+   578→        title: 'Cash-flow stress predicted',
+   579→        description:
+   580→          `Runway ${runway != null ? `${runway} days` : 'low'}` +
+   581→          (balance != null ? ` • bank balance ${inr(balance)}` : '') +
+   582→          (deficit != null ? ` • projected deficit ${inr(Math.abs(deficit))}` : '') + '.',
+   583→        severity: e.severity,
+   584→        suggestedAction:
+   585→          'Activate invoice-discounting bridge; defer non-essential capex; alert CFO + renegotiate vendor terms.',
+   586→      };
+   587→    }
+   588→    case 'collection_risk': {
+   589→      const client = str('client') ?? 'client';
+   590→      const amt = num('amount');
+   591→      const prob = num('defaultProbability');
+   592→      const stage = str('recoveryStage') ?? 'pending';
+   593→      return {
+   594→        type: e.type,
+   595→        title: `Default-risk receivable — ${client}`,
+   596→        description:
+   597→          `${client} ${amt != null ? inr(amt) : ''} overdue ${num('overdueDays') ?? '?'} days. ` +
+   598→          `Default probability ${prob != null ? `${Math.round(prob * 100)}%` : 'high'}. ` +
+   599→          `Recovery stage: ${stage}.`,
+   600→        severity: e.severity,
+   601→        suggestedAction:
+   602→          'Escalate to legal recovery; issue IBC Section 9 notice (MSME); provision doubtful debt in books.',
+   603→      };
+   604→    }
+   605→    default:
+   606→      return {
+   607→        type: e.type,
+   608→        title: `Signal detected — ${e.type}`,
+   609→        description: 'Auto-generated issue from observation engine.',
+   610→        severity: e.severity,
+   611→        suggestedAction: 'Review event payload and decide on next action.',
+   612→      };
+   613→  }
+   614→}
+   615→
+   616→// ─── Live-data integration: scan Invoice Engine records for issues ────────────
+   617→// Pure — accepts plain objects (no Prisma types), returns DetectedIssue[].
+   618→export function detectEvents(
+   619→  invoices?: Record<string, unknown>[],
+   620→  receivables?: Record<string, unknown>[],
+   621→  payables?: Record<string, unknown>[],
+   622→): DetectedIssue[] {
+   623→  const issues: DetectedIssue[] = [];
+   624→  const now = Date.now();
+   625→
+   626→  if (invoices && invoices.length > 0) {
+   627→    const overdue = invoices.filter((inv) => {
+   628→      const dueRaw = inv.dueDate as string | undefined;
+   629→      const status = inv.paymentStatus as string | undefined;
+   630→      if (!dueRaw || status === 'paid' || status === 'settled') return false;
+   631→      const dueMs = new Date(dueRaw).getTime();
+   632→      return Number.isFinite(dueMs) && dueMs < now;
+   633→    });
+   634→    if (overdue.length > 0) {
+   635→      const total = overdue.reduce(
+   636→        (s, inv) => s + Number(inv.total ?? inv.amount ?? 0),
+   637→        0,
+   638→      );
+   639→      issues.push({
+   640→        type: 'receivable',
+   641→        title: `${overdue.length} overdue sales invoice(s) detected`,
+   642→        description: `Total overdue value ${inr(total)} across ${overdue.length} invoice(s).`,
+   643→        severity: total > 500000 ? 'high' : 'medium',
+   644→        suggestedAction:
+   645→          'Trigger collection recovery workflow + send payment reminders via WhatsApp / email.',
+   646→      });
+   647→    }
+   648→  }
+   649→
+   650→  if (receivables && receivables.length > 0) {
+   651→    const risky = receivables.filter((r) => {
+   652→      const days = Number(r.overdueDays ?? 0);
+   653→      return days >= 60;
+   654→    });
+   655→    if (risky.length > 0) {
+   656→      const total = risky.reduce((s, r) => s + Number(r.amount ?? 0), 0);
+   657→      issues.push({
+   658→        type: 'collection_risk',
+   659→        title: `${risky.length} receivable(s) in 60+ day bucket`,
+   660→        description: `High-risk pool totalling ${inr(total)} — escalate before books close.`,
+   661→        severity: total > 1000000 ? 'critical' : 'high',
+   662→        suggestedAction:
+   663→          'Escalate to legal recovery; consider IBC Section 9 notice for MSME clients.',
+   664→      });
+   665→    }
+   666→  }
+   667→
+   668→  if (payables && payables.length > 0) {
+   669→    const dueSoon = payables.filter((p) => {
+   670→      const days = Number(p.dueInDays ?? 999);
+   671→      return days <= 7;
+   672→    });
+   673→    if (dueSoon.length > 0) {
+   674→      const total = dueSoon.reduce((s, p) => s + Number(p.amount ?? 0), 0);
+   675→      issues.push({
+   676→        type: 'payable',
+   677→        title: `${dueSoon.length} payable(s) due within 7 days`,
+   678→        description: `Vendor payouts totalling ${inr(total)} scheduled this week.`,
+   679→        severity: total > 500000 ? 'high' : 'medium',
+   680→        suggestedAction:
+   681→          'Schedule payments via Payment Engine; capture early-pay discounts where offered.',
+   682→      });
+   683→    }
+   684→  }
+   685→
+   686→  return issues;
+   687→}
+   688→
+   689→// ─── Lightweight scalar-issue detector (for Oracle + dashboard quick-checks) ──
+   690→export function detectIssues(opts: {
+   691→  overdueInvoices?: number;
+   692→  pendingTds?: number;
+   693→  cashRunwayDays?: number;
+   694→}): DetectedIssue[] {
+   695→  const issues: DetectedIssue[] = [];
+   696→
+   697→  if (typeof opts.overdueInvoices === 'number' && opts.overdueInvoices > 0) {
+   698→    issues.push({
+   699→      type: 'receivable',
+   700→      title: `${opts.overdueInvoices} overdue invoice(s) flagged`,
+   701→      description: `${opts.overdueInvoices} client invoice(s) have crossed their due date without payment receipt.`,
+   702→      severity: opts.overdueInvoices >= 5 ? 'critical' : 'high',
+   703→      suggestedAction:
+   704→        'Trigger collection recovery workflow; send WhatsApp + email reminders; escalate after 60 days.',
+   705→    });
+   706→  }
+   707→
+   708→  if (typeof opts.pendingTds === 'number' && opts.pendingTds > 0) {
+   709→    issues.push({
+   710→      type: 'tds',
+   711→      title: `TDS pending — ${inr(opts.pendingTds)} liability`,
+   712→      description: `Outstanding TDS deposit of ${inr(opts.pendingTds)}; challan ITNS-281 + 26Q return preparation required.`,
+   713→      severity: opts.pendingTds >= 200000 ? 'high' : 'medium',
+   714→      suggestedAction:
+   715→        'Generate ITNS-281 challan; deposit before statutory due date; prepare 26Q return.',
+   716→    });
+   717→  }
+   718→
+   719→  if (typeof opts.cashRunwayDays === 'number' && opts.cashRunwayDays < 15) {
+   720→    issues.push({
+   721→      type: 'cash_flow',
+   722→      title: `Cash runway critical — ${opts.cashRunwayDays} day(s)`,
+   723→      description: `Predicted cash shortage in ${opts.cashRunwayDays} day(s); immediate working-capital action required.`,
+   724→      severity: opts.cashRunwayDays < 7 ? 'critical' : 'high',
+   725→      suggestedAction:
+   726→        'Activate invoice-discounting bridge; defer non-essential capex; alert CFO.',
+   727→    });
+   728→  }
+   729→
+   730→  return issues;
+   731→}
+   732→

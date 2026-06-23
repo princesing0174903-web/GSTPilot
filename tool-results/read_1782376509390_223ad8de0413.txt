@@ -1,0 +1,1138 @@
+     1→// ═══════════════════════════════════════════════════════════════════════════════
+     2→// GSTPilot Oracle™ — Streaming Chat API
+     3→// POST /api/oracle/chat
+     4→//
+     5→// Streams tokens to the client as SSE: `data: {"token":"..."}\n\n`.
+     6→// The system prompt encodes the full Human Experience + AI CFO + Run My Business +
+     7→// Business Graph:
+     8→//   • Multilingual (auto-match the user's language & script)
+     9→//   • CFO Personality (Phase 3 Module 9): never robotic, behaves like a real CFO
+    10→//   • Ask CFO (Phase 3 Module 5): live CFO context from /lib/cfo/engine
+    11→//   • Run My Business Personality (Phase 4 Module 10): COO + AI Employees Team
+    12→//   • Natural Language Commands (Phase 4 Module 2): imperative → executed task
+    13→//   • Orchestrator (Phase 4 Module 6): "Run my business today" → full plan
+    14→//   • Delegation Engine (Phase 4 Module 8): delegate → now / scheduled / queued
+    15→//   • Ask Operator (Phase 4): live RMB state from /lib/rmb/engine
+    16→//   • Business Graph Personality (Phase 5 Module 1): causal chain explanations
+    17→//   • Ask Graph (Phase 5): live graph + risk + dependencies + what-if predictions
+    18→//   • Adaptive answer length (simple → 2-5 lines; complex → structured)
+    19→//   • GST reliability (CBIC / GSTN / GST Law; honest uncertainty)
+    20→//   • Brand identity (Prince Singh — Founder/Owner/Developer/Visionary)
+    21→//   • Live CFO + RMB + Graph data — never fabricate
+    22→// ═══════════════════════════════════════════════════════════════════════════════
+    23→
+    24→import ZAI from 'z-ai-web-dev-sdk';
+    25→import { BRAND_IDENTITY_PROMPT_BLOCK } from '@/components/oracle/oracle-brand';
+    26→import type { OracleChatRequest, OracleLanguageId } from '@/components/oracle/oracle-types';
+    27→import { generateCFOInsights } from '@/lib/cfo/engine';
+    28→import type { CFOResponse } from '@/lib/cfo/types';
+    29→import { getRmbState, formatRmbContextBlock } from '@/lib/rmb/engine';
+    30→import type { RmbState } from '@/lib/rmb/types';
+    31→import { getGraphState, formatGraphContextBlock, executeQuery } from '@/lib/graph/engine';
+    32→import type { GraphState } from '@/lib/graph/types';
+    33→import { db } from '@/lib/db';
+    34→import { getInvoiceStats, seedInvoices } from '@/lib/invoices/invoices';
+    35→import { getPurchaseStats, seedPurchaseBills } from '@/lib/invoices/purchases';
+    36→import { getExpenseStats, seedExpenses } from '@/lib/invoices/expenses';
+    37→import { getReceivablesSummary } from '@/lib/invoices/receivables';
+    38→import { getPayablesSummary } from '@/lib/invoices/payables';
+    39→import { getPaymentStats, seedPayments } from '@/lib/invoices/payments';
+    40→import { getTDSStats, seedTDSRecords } from '@/lib/invoices/tds';
+    41→import { getPayrollStats, seedEmployees, seedPayroll } from '@/lib/invoices/payroll';
+    42→import type { InvoiceCloudInvoice, PurchaseBill, Expense, Payment, TDSRecord, Employee, Payroll } from '@/lib/invoices/types';
+    43→import { seedBusinessEvents, getObservationSummary } from '@/lib/execution/observe';
+    44→import { seedDecisions, getDecisionSummary } from '@/lib/execution/think';
+    45→import { planAllActions } from '@/lib/execution/decide';
+    46→import { seedExecutionTasks, getExecutionSummary } from '@/lib/execution/execute';
+    47→import { seedApprovals, getApprovalSummary } from '@/lib/execution/approvals';
+    48→import { seedWorkflows, getWorkflowSummary } from '@/lib/execution/workflows';
+    49→import { seedUserBehaviours, getLearningSummary } from '@/lib/execution/learn';
+    50→import { seedTimeline, getTimelineSummary } from '@/lib/execution/timeline';
+    51→import { getAgentRoster } from '@/lib/execution/agents';
+    52→import type { WorkflowStep } from '@/lib/execution/types';
+    53→
+    54→// ─── INR formatting (server-side) ─────────────────────────────────────────────
+    55→
+    56→function inrShort(n: number): string {
+    57→  if (!isFinite(n) || isNaN(n)) return '₹0';
+    58→  const abs = Math.abs(n);
+    59→  if (abs >= 10000000) return `₹${(n / 10000000).toFixed(2)} Cr`;
+    60→  if (abs >= 100000) return `₹${(n / 100000).toFixed(2)} L`;
+    61→  if (abs >= 1000) return `₹${(n / 1000).toFixed(1)}K`;
+    62→  return '₹' + Math.round(n).toLocaleString('en-IN');
+    63→}
+    64→
+    65→// ─── CFO context block (Module 5 — Ask CFO + live data injection) ─────────────
+    66→
+    67→async function buildCFOContextBlock(): Promise<string> {
+    68→  try {
+    69→    const cfo: CFOResponse = await generateCFOInsights(null);
+    70→    if (!cfo.hasLiveData && cfo.clientCount === 0) {
+    71→      return `## LIVE CFO CONTEXT
+    72→No business data connected yet. Encourage the user to add clients, invoices, or returns to unlock CFO insights. Do not fabricate financial numbers.`;
+    73→    }
+    74→    const d = cfo.dashboard;
+    75→    const p = cfo.predictions;
+    76→    const risks = cfo.risks;
+    77→    const topRisks = risks
+    78→      .filter((r) => r.level !== 'low')
+    79→      .slice(0, 3)
+    80→      .map((r) => `  - ${r.category.toUpperCase()} (${r.level}): ${r.reasons[0] || 'n/a'}`)
+    81→      .join('\n');
+    82→    const briefActions = cfo.brief.priorityActions
+    83→      .slice(0, 4)
+    84→      .map((a, i) => `  ${i + 1}. ${a.title}${a.amount ? ` (₹${Math.round(a.amount).toLocaleString('en-IN')})` : ''}`)
+    85→      .join('\n');
+    86→    const memInsights = cfo.memory.insights.slice(0, 4).map((i) => `  - ${i}`).join('\n');
+    87→
+    88→    return `## LIVE CFO CONTEXT (Phase 3 — AI CFO™ Operating System)
+    89→You have real-time access to the user's CFO intelligence. Treat these numbers as authoritative when the user asks about their business.
+    90→
+    91→### Snapshot
+    92→- Revenue (this month): ${inrShort(d.revenue.thisMonth)} (growth ${d.revenue.growthPct >= 0 ? '+' : ''}${d.revenue.growthPct}% vs last month)
+    93→- Revenue (today): ${inrShort(d.revenue.today)}
+    94→- Net Profit: ${inrShort(d.profit.netProfit)} (margin ${d.profit.marginPct}%)
+    95→- Cash Position: ${inrShort(d.cash.currentBalance)} · Available: ${inrShort(d.cash.availableCash)} · Runway: ${d.cash.runwayDays || '∞'} days · Burn: ${inrShort(d.cash.burnRatePerDay)}/day
+    96→- Receivables: ${inrShort(d.receivables.pendingCollections)} pending, ${inrShort(d.receivables.overdueCollections)} overdue (${d.receivables.overdueCount} invoices) · Efficiency: ${d.receivables.collectionEfficiencyPct}%
+    97→- Payables: ${inrShort(d.payables.upcomingPayments)} due in 30 days
+    98→- GST Liability: ${inrShort(d.gst.liability)} · ITC Available: ${inrShort(d.gst.itcAvailable)}
+    99→- Upcoming GST due dates: ${d.gst.upcomingDueDates.map((dd) => `${dd.returnType} (${dd.daysLeft < 0 ? `${Math.abs(dd.daysLeft)}d overdue` : `${dd.daysLeft}d left`})`).join(', ') || 'none'}
+   100→- Business Health Score: ${d.healthScore.overall}/100 (compliance ${d.healthScore.compliance}, cash flow ${d.healthScore.cashFlow}, growth ${d.healthScore.growth}, profitability ${d.healthScore.profitability}, risk ${d.healthScore.risk}, collections ${d.healthScore.collections})
+   101→
+   102→### Forecasts (Module 2)
+   103→- Revenue: 7d ${inrShort(p.revenue.sevenDay)}, 30d ${inrShort(p.revenue.thirtyDay)}, 90d ${inrShort(p.revenue.ninetyDay)}, year-end ${inrShort(p.revenue.yearEnd)} (confidence ${p.revenue.confidencePct}%)
+   104→- Cash Flow: daily ${inrShort(p.cashFlow.dailyPosition)}, monthly ${inrShort(p.cashFlow.monthlyPosition)}, runway ${p.cashFlow.runwayDays || '∞'} days (confidence ${p.cashFlow.confidencePct}%)
+   105→- GST: upcoming liability ${inrShort(p.gst.upcomingLiability)}, ITC utilization ${p.gst.itcUtilization}%, refund prediction ${inrShort(p.gst.refundPrediction)} (confidence ${p.gst.confidencePct}%)
+   106→- Collections: expected ${inrShort(p.collections.expectedCollections)}, ${p.collections.paymentDelays} likely delays, ${p.collections.riskyClients.length} risky clients (confidence ${p.collections.confidencePct}%)
+   107→${p.collections.riskyClients.slice(0, 3).map((c) => `    · Risky: ${c.name} — outstanding ${inrShort(c.outstanding)}, risk ${c.riskScore}/100`).join('\n')}
+   108→
+   109→### Active Risks (Module 3)
+   110→${topRisks || '  · All risk dimensions are LOW — business is healthy.'}
+   111→
+   112→### Today's Priority Actions (Module 4)
+   113→${briefActions || '  · No priority actions today — you are all caught up.'}
+   114→
+   115→### CFO Memory Insights (Module 8)
+   116→${memInsights || '  · No long-term patterns detected yet.'}
+   117→
+   118→When answering CFO questions (revenue, cash, runway, risk, recommendations, GST outlook), use these exact numbers. Round to lakhs/crores when natural. Explain WHY a risk is elevated using the reasons above. Recommend the priority actions verbatim when relevant.`;
+   119→  } catch (err) {
+   120→    console.warn('[Oracle] CFO context unavailable:', err);
+   121→    return `## LIVE CFO CONTEXT
+   122→CFO engine is not available right now. Fall back to general CFO/GST guidance without fabricating specific numbers.`;
+   123→  }
+   124→}
+   125→
+   126→// ─── RMB context block (Phase 4 — Run My Business™ Operating System) ──────────
+   127→
+   128→async function buildRmbContextBlock(): Promise<string> {
+   129→  try {
+   130→    const state: RmbState = await getRmbState(null);
+   131→    if (!state.hasLiveData && state.clientCount === 0) {
+   132→      return `## LIVE RUN MY BUSINESS STATE
+   133→No business data connected yet — Autopilot is in monitoring mode, agents are idle. Encourage the user to add clients, invoices, or returns to activate the Operating System. Do not fabricate task lists or agent activity.`;
+   134→    }
+   135→    return formatRmbContextBlock(state);
+   136→  } catch (err) {
+   137→    console.warn('[Oracle] RMB context unavailable:', err);
+   138→    return `## LIVE RUN MY BUSINESS STATE
+   139→Run My Business engine is not available right now. Fall back to general operating guidance without fabricating task state.`;
+   140→  }
+   141→}
+   142→
+   143→// ─── Graph context block (Phase 5 — Business Graph™ Operating System) ─────────
+   144→
+   145→async function buildGraphContextBlock(): Promise<string> {
+   146→  try {
+   147→    const state: GraphState = await getGraphState();
+   148→    if (!state.hasLiveData && state.clientCount === 0) {
+   149→      return `## LIVE BUSINESS GRAPH STATE
+   150→No business data connected yet — graph contains only the firm node. Encourage the user to add clients, invoices, or returns to populate the knowledge graph. Do not fabricate relationships.`;
+   151→    }
+   152→    return formatGraphContextBlock(state);
+   153→  } catch (err) {
+   154→    console.warn('[Oracle] Graph context unavailable:', err);
+   155→    return `## LIVE BUSINESS GRAPH STATE
+   156→Business Graph engine is not available right now. Fall back to general guidance without fabricating relationships.`;
+   157→  }
+   158→}
+   159→
+   160→// ─── Invoice Engine context block (Phase 8 Step 3 — Real Invoice Engine™) ────
+   161→// Pulls live numbers from every Invoice Cloud™ module so Oracle can speak in
+   162→// proactive execution statements ("I've created Invoice INV-2026-001",
+   163→// "I've identified ₹18.2 lakh pending receivables", "I've generated payroll
+   164→// for 18 employees") grounded in the user's actual data.
+   165→
+   166→async function buildInvoiceEngineContextBlock(): Promise<string> {
+   167→  try {
+   168→    // ── Fetch all eight entity sets in parallel, fall back to seed data ──
+   169→    const [invRows, billRows, expRows, payRows, tdsRows, empRows, prRows] = await Promise.all([
+   170→      db.invoice.findMany({ orderBy: { createdAt: 'desc' } }),
+   171→      db.purchaseBill.findMany({ orderBy: { createdAt: 'desc' } }),
+   172→      db.expense.findMany({ orderBy: { createdAt: 'desc' } }),
+   173→      db.payment.findMany({ orderBy: { createdAt: 'desc' } }),
+   174→      db.tDSRecord.findMany({ orderBy: { createdAt: 'desc' } }),
+   175→      db.employee.findMany({ orderBy: { createdAt: 'desc' } }),
+   176→      db.payroll.findMany({ orderBy: { createdAt: 'desc' } }),
+   177→    ]);
+   178→
+   179→    const invoices: InvoiceCloudInvoice[] =
+   180→      invRows.length > 0
+   181→        ? invRows.map((r) => ({
+   182→            id: r.id, clientId: r.clientId, invoiceNumber: r.invoiceNumber,
+   183→            invoiceDate: r.invoiceDate, sellerGstin: r.sellerGstin,
+   184→            buyerGstin: r.buyerGstin ?? null, buyerName: r.buyerName ?? null,
+   185→            invoiceType: r.invoiceType, gstr1Section: r.gstr1Section,
+   186→            taxableValue: r.taxableValue, cgst: r.cgst, sgst: r.sgst, igst: r.igst, cess: r.cess,
+   187→            totalAmount: r.totalAmount, hsnCode: r.hsnCode ?? null, reverseCharge: r.reverseCharge,
+   188→            status: r.status, matchStatus: r.matchStatus, riskLevel: r.riskLevel, riskScore: r.riskScore,
+   189→            aiExplanation: r.aiExplanation ?? null, notes: r.notes ?? null, period: r.period ?? null,
+   190→            assignedTo: r.assignedTo ?? null, createdAt: r.createdAt.toISOString(), updatedAt: r.updatedAt.toISOString(),
+   191→            dueDate: r.dueDate ?? null, gstAmount: r.gstAmount, paidAmount: r.paidAmount,
+   192→            balanceAmount: r.balanceAmount, paymentStatus: r.paymentStatus, paymentMode: r.paymentMode ?? null,
+   193→            paymentDate: r.paymentDate ?? null, recurring: r.recurring, recurringCycle: r.recurringCycle ?? null,
+   194→            notesFinance: r.notesFinance ?? null, sentToCustomer: r.sentToCustomer,
+   195→            sentAt: r.sentAt ? r.sentAt.toISOString() : null,
+   196→          }))
+   197→        : seedInvoices();
+   198→
+   199→    const bills: PurchaseBill[] =
+   200→      billRows.length > 0
+   201→        ? billRows.map((r) => ({
+   202→            id: r.id, clientId: r.clientId ?? null, vendorName: r.vendorName, vendorGstin: r.vendorGstin ?? null,
+   203→            invoiceNo: r.invoiceNo, invoiceDate: r.invoiceDate, dueDate: r.dueDate ?? null,
+   204→            taxableValue: r.taxableValue, cgst: r.cgst, sgst: r.sgst, igst: r.igst, cess: r.cess,
+   205→            gstAmount: r.gstAmount, totalAmount: r.totalAmount, paidAmount: r.paidAmount,
+   206→            balanceAmount: r.balanceAmount, status: r.status, paymentStatus: r.paymentStatus,
+   207→            category: r.category ?? null, hsnCode: r.hsnCode ?? null, notes: r.notes ?? null,
+   208→            ocrExtracted: r.ocrExtracted, createdAt: r.createdAt.toISOString(), updatedAt: r.updatedAt.toISOString(),
+   209→          }))
+   210→        : seedPurchaseBills();
+   211→
+   212→    const expenses: Expense[] =
+   213→      expRows.length > 0
+   214→        ? expRows.map((r) => ({
+   215→            id: r.id, clientId: r.clientId ?? null, category: r.category, description: r.description ?? null,
+   216→            vendor: r.vendor ?? null, amount: r.amount, gst: r.gst, gstClaimable: r.gstClaimable,
+   217→            date: r.date, paymentMode: r.paymentMode ?? null, status: r.status, receiptUrl: r.receiptUrl ?? null,
+   218→            ocrExtracted: r.ocrExtracted, notes: r.notes ?? null, createdAt: r.createdAt.toISOString(), updatedAt: r.updatedAt.toISOString(),
+   219→          }))
+   220→        : seedExpenses();
+   221→
+   222→    const payments: Payment[] =
+   223→      payRows.length > 0
+   224→        ? payRows.map((r) => ({
+   225→            id: r.id, clientId: r.clientId ?? null, invoiceId: r.invoiceId ?? null,
+   226→            purchaseBillId: r.purchaseBillId ?? null, partyName: r.partyName, partyType: r.partyType,
+   227→            amount: r.amount, paymentDate: r.paymentDate, paymentMode: r.paymentMode,
+   228→            referenceNo: r.referenceNo ?? null, status: r.status, reconciled: r.reconciled,
+   229→            notes: r.notes ?? null, createdAt: r.createdAt.toISOString(), updatedAt: r.updatedAt.toISOString(),
+   230→          }))
+   231→        : seedPayments();
+   232→
+   233→    const tdsRecords: TDSRecord[] =
+   234→      tdsRows.length > 0
+   235→        ? tdsRows.map((r) => ({
+   236→            id: r.id, clientId: r.clientId ?? null, section: r.section, deducteeName: r.deducteeName,
+   237→            deducteePan: r.deducteePan ?? null, paymentAmount: r.paymentAmount, tdsRate: r.tdsRate,
+   238→            tdsAmount: r.tdsAmount, date: r.date, status: r.status, quarter: r.quarter ?? null,
+   239→            notes: r.notes ?? null, createdAt: r.createdAt.toISOString(), updatedAt: r.updatedAt.toISOString(),
+   240→          }))
+   241→        : seedTDSRecords();
+   242→
+   243→    const employees: Employee[] =
+   244→      empRows.length > 0
+   245→        ? empRows.map((r) => ({
+   246→            id: r.id, clientId: r.clientId ?? null, name: r.name, designation: r.designation ?? null,
+   247→            department: r.department ?? null, employeeId: r.employeeId ?? null, pan: r.pan ?? null,
+   248→            aadhaar: r.aadhaar ?? null, bankAccount: r.bankAccount ?? null, ifsc: r.ifsc ?? null,
+   249→            salary: r.salary, basic: r.basic, hra: r.hra, allowances: r.allowances, pf: r.pf,
+   250→            esi: r.esi, tds: r.tds, professionalTax: r.professionalTax, netSalary: r.netSalary,
+   251→            status: r.status, joinedAt: r.joinedAt ?? null, createdAt: r.createdAt.toISOString(), updatedAt: r.updatedAt.toISOString(),
+   252→          }))
+   253→        : seedEmployees();
+   254→
+   255→    const payrolls: Payroll[] =
+   256→      prRows.length > 0
+   257→        ? prRows.map((r) => ({
+   258→            id: r.id, employeeId: r.employeeId, period: r.period, grossSalary: r.grossSalary,
+   259→            basic: r.basic, hra: r.hra, allowances: r.allowances, pf: r.pf, esi: r.esi, tds: r.tds,
+   260→            professionalTax: r.professionalTax, netSalary: r.netSalary, status: r.status,
+   261→            paidAt: r.paidAt ?? null, payslipUrl: r.payslipUrl ?? null,
+   262→            createdAt: r.createdAt.toISOString(), updatedAt: r.updatedAt.toISOString(),
+   263→          }))
+   264→        : seedPayroll(employees);
+   265→
+   266→    // ── Compute summaries via the pure-TS engine libs ──
+   267→    const invStats = getInvoiceStats(invoices);
+   268→    const purStats = getPurchaseStats(bills);
+   269→    const expStats = getExpenseStats(expenses);
+   270→    const payStats = getPaymentStats(payments);
+   271→    const tdsStats = getTDSStats(tdsRecords);
+   272→    const prStats = getPayrollStats(employees, payrolls);
+   273→    const recSummary = getReceivablesSummary(invoices);
+   274→    const paySummary = getPayablesSummary(bills);
+   275→
+   276→    // Input GST across all purchase bills (sum of gstAmount)
+   277→    const totalInputGst = bills.reduce((s, b) => s + b.gstAmount, 0);
+   278→
+   279→    // Top defaulters (outstanding, descending) — for Oracle to name them
+   280→    const topDefaulters = [...invoices]
+   281→      .filter((i) => i.balanceAmount > 0 && i.status !== 'cancelled' && i.status !== 'draft')
+   282→      .sort((a, b) => b.balanceAmount - a.balanceAmount)
+   283→      .slice(0, 5)
+   284→      .map((i) => `${i.buyerName ?? 'Customer'} (${i.invoiceNumber}, ${inrShort(i.balanceAmount)})`)
+   285→      .join('; ');
+   286→
+   287→    // Next invoice number Oracle would create
+   288→    const year = new Date().getFullYear();
+   289→    const fyPrefix = `INV-${year}-`;
+   290→    let maxSeq = 0;
+   291→    for (const i of invoices) {
+   292→      if (!i.invoiceNumber?.startsWith(fyPrefix)) continue;
+   293→      const n = parseInt(i.invoiceNumber.slice(fyPrefix.length), 10);
+   294→      if (!Number.isNaN(n) && n > maxSeq) maxSeq = n;
+   295→    }
+   296→    const nextInvoiceNo = `${fyPrefix}${String(maxSeq + 1).padStart(3, '0')}`;
+   297→
+   298→    // Current payroll period
+   299→    const now = new Date();
+   300→    const currentPeriod = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+   301→
+   302→    return `## LIVE INVOICE ENGINE STATE (Phase 8 Step 3 — Real Invoice Engine™)
+   303→You have real-time access to the user's full financial operations stack. Treat these numbers as authoritative when the user asks about invoices, receivables, payables, expenses, payments, TDS, or payroll.
+   304→
+   305→### Sales Invoice Cloud™
+   306→- Total sales invoices: ${invoices.length} (drafts: ${invStats.draftCount})
+   307→- Total billed: ${inrShort(invStats.total)} · Collected: ${inrShort(invStats.paid)}
+   308→- Outstanding: ${inrShort(invStats.outstanding)} · Overdue: ${inrShort(invStats.overdue)}
+   309→- Next invoice number to be created: ${nextInvoiceNo}
+   310→
+   311→### Purchase Bill Engine™
+   312→- Total purchase bills: ${bills.length}
+   313→- Total purchases: ${inrShort(purStats.total)} · Input GST detected: ${inrShort(totalInputGst)}
+   314→- Unpaid to vendors: ${inrShort(purStats.outstanding)}
+   315→
+   316→### Expense Cloud™
+   317→- Total expenses recorded: ${expenses.length}
+   318→- Total spend: ${inrShort(expStats.total)} · GST claimable: ${inrShort(expStats.claimableGst)}
+   319→- Top categories: ${Object.entries(expStats.byCategory).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([k, v]) => `${k} (${inrShort(v)})`).join(', ')}
+   320→
+   321→### Receivables Engine™
+   322→- Total outstanding: ${inrShort(recSummary.totalOutstanding)} · Overdue: ${inrShort(recSummary.totalOverdue)}
+   323→- Collection rate: ${recSummary.collectionRate}% · Avg days to pay (DSO): ${recSummary.avgDaysToPay}
+   324→- Forecasted collections (30d): ${inrShort(recSummary.forecast)}
+   325→- Top defaulters: ${topDefaulters || 'none — all clear'}
+   326→
+   327→### Payables Engine™
+   328→- Total payable: ${inrShort(paySummary.totalPayable)} · Overdue: ${inrShort(paySummary.totalOverdue)}
+   329→- Due this week: ${inrShort(paySummary.dueThisWeek)} · Due next week: ${inrShort(paySummary.dueNextWeek)}
+   330→
+   331→### Payment Engine™
+   332→- Total payments recorded: ${payments.length}
+   333→- Collected from customers: ${inrShort(payStats.totalInflow)} · Paid to vendors: ${inrShort(payStats.totalOutflow)}
+   334→
+   335→### TDS Cloud™
+   336→- Total TDS liability: ${inrShort(tdsStats.totalLiability)} · Paid: ${inrShort(tdsStats.totalPaid)} · Pending: ${inrShort(tdsStats.totalPending)}
+   337→- By section: ${Object.entries(tdsStats.bySection).map(([k, v]) => `${k} (${inrShort(v)})`).join(', ') || 'none'}
+   338→
+   339→### Payroll Cloud™
+   340→- Active employees: ${prStats.totalEmployees}
+   341→- Current period: ${currentPeriod}
+   342→- Monthly gross: ${inrShort(prStats.totalGross)} · Net payable: ${inrShort(prStats.totalNet)}
+   343→- PF: ${inrShort(prStats.totalPF)} · ESI: ${inrShort(prStats.totalESI)} · TDS: ${inrShort(prStats.totalTDS)} · Professional Tax: ${inrShort(prStats.totalPT)}
+   344→
+   345→When the user asks about invoices, collections, vendor payments, expenses, TDS, or payroll, use these exact numbers. Round to lakhs/crores when natural. Name the specific invoice numbers, vendor names, and employee counts from the data above — never fabricate.`;
+   346→  } catch (err) {
+   347→    console.warn('[Oracle] Invoice Engine context unavailable:', err);
+   348→    return `## LIVE INVOICE ENGINE STATE
+   349→Invoice Engine is not available right now. Fall back to general invoice/receivables/payroll/TDS guidance without fabricating specific numbers.`;
+   350→  }
+   351→}
+   352→
+   353→// ─── Execution Engine context block (Phase 8 Step 5 — Execution Engine™) ─────
+   354→// Pulls live state from all 8 modules (Observe→Think→Decide→Execute→Approve→
+   355→// Learn) so Oracle can speak in proactive execution statements:
+   356→// "I've downloaded your GSTR-2B", "I've sent reminders to 12 clients",
+   357→// "I've reconciled ₹18.4 lakh transactions", "I've prepared your GSTR-3B".
+   358→async function buildExecutionContextBlock(): Promise<string> {
+   359→  try {
+   360→    const [eventRows, decisionRows, taskRows, approvalRows, workflowRows, behaviourRows, timelineRows] = await Promise.all([
+   361→      db.businessEvent.findMany({ orderBy: { createdAt: 'desc' }, take: 100 }).catch(() => []),
+   362→      db.decision.findMany({ orderBy: { createdAt: 'desc' }, take: 100 }).catch(() => []),
+   363→      db.executionTask.findMany({ orderBy: { createdAt: 'desc' }, take: 100 }).catch(() => []),
+   364→      db.approval.findMany({ orderBy: { createdAt: 'desc' }, take: 50 }).catch(() => []),
+   365→      db.workflow.findMany({ orderBy: { createdAt: 'desc' }, take: 50 }).catch(() => []),
+   366→      db.userBehaviour.findMany({ orderBy: { updatedAt: 'desc' }, take: 50 }).catch(() => []),
+   367→      db.executionTimeline.findMany({ orderBy: { timestamp: 'desc' }, take: 100 }).catch(() => []),
+   368→    ]);
+   369→
+   370→    // Resolve entities (DB → engine type, or seed fallback)
+   371→    const events = eventRows.length > 0
+   372→      ? eventRows.map((r) => ({ id: r.id, businessId: r.businessId, type: r.type as never, source: r.source as never, payload: r.payload ? safeJsonParse(r.payload) : null, severity: r.severity as never, status: r.status as never, createdAt: r.createdAt.toISOString() }))
+   373→      : seedBusinessEvents();
+   374→    const decisions = decisionRows.length > 0
+   375→      ? decisionRows.map((r) => ({ id: r.id, eventId: r.eventId, reason: r.reason, priority: r.priority as never, action: r.action as never, status: r.status as never, createdAt: r.createdAt.toISOString(), updatedAt: r.updatedAt.toISOString() }))
+   376→      : seedDecisions(events);
+   377→    const tasks = taskRows.length > 0
+   378→      ? taskRows.map((r) => ({ id: r.id, decisionId: r.decisionId, type: r.type as never, description: r.description, status: r.status as never, startedAt: r.startedAt ? r.startedAt.toISOString() : null, completedAt: r.completedAt ? r.completedAt.toISOString() : null, result: r.result ? safeJsonParse(r.result) : null, riskScore: r.riskScore, agent: r.agent as never, createdAt: r.createdAt.toISOString(), updatedAt: r.updatedAt.toISOString() }))
+   379→      : seedExecutionTasks(decisions);
+   380→    const approvals = approvalRows.length > 0
+   381→      ? approvalRows.map((r) => ({ id: r.id, taskId: r.taskId, risk: r.risk, status: r.status as never, reason: r.reason, approvedBy: r.approvedBy, approvedAt: r.approvedAt ? r.approvedAt.toISOString() : null, createdAt: r.createdAt.toISOString(), updatedAt: r.updatedAt.toISOString() }))
+   382→      : seedApprovals(tasks);
+   383→    const workflows = workflowRows.length > 0
+   384→      ? workflowRows.map((r) => ({ id: r.id, name: r.name, type: r.type as never, trigger: r.trigger, steps: safeJsonParseSteps(r.steps), currentStep: r.currentStep, status: r.status as never, context: r.context ? safeJsonParse(r.context) : null, startedAt: r.startedAt ? r.startedAt.toISOString() : null, completedAt: r.completedAt ? r.completedAt.toISOString() : null, createdAt: r.createdAt.toISOString(), updatedAt: r.updatedAt.toISOString() }))
+   385→      : seedWorkflows();
+   386→    const behaviours = behaviourRows.length > 0
+   387→      ? behaviourRows.map((r) => ({ id: r.id, userId: r.userId, action: r.action as never, preference: r.preference, confidence: r.confidence, evidence: r.evidence, updatedAt: r.updatedAt.toISOString(), createdAt: r.createdAt.toISOString() }))
+   388→      : seedUserBehaviours();
+   389→    const timeline = timelineRows.length > 0
+   390→      ? timelineRows.map((r) => ({ id: r.id, taskId: r.taskId, agent: r.agent as never, stage: r.stage as never, title: r.title, description: r.description, timestamp: r.timestamp.toISOString() }))
+   391→      : seedTimeline(tasks);
+   392→
+   393→    const observation = getObservationSummary(events);
+   394→    const decisionsSummary = getDecisionSummary(decisions);
+   395→    const execution = getExecutionSummary(tasks);
+   396→    const approvalsSummary = getApprovalSummary(approvals);
+   397→    const workflowsSummary = getWorkflowSummary(workflows);
+   398→    const learning = getLearningSummary(behaviours);
+   399→    const timelineSummary = getTimelineSummary(timeline);
+   400→    const agents = getAgentRoster(tasks);
+   401→
+   402→    // Top pending approvals (Oracle can name them)
+   403→    const pendingApprovalList = approvalsSummary.pendingApprovals.slice(0, 5).map((a) => {
+   404→      const t = tasks.find((tk) => tk.id === a.taskId);
+   405→      return `${t?.description ?? 'Task'} (risk ${a.risk}/100)${a.reason ? ' — ' + a.reason : ''}`;
+   406→    }).join('; ');
+   407→
+   408→    // Recent timeline (last 6 entries) — the 09:02/09:07/09:12 narrative
+   409→    const recentTimeline = timelineSummary.entries.slice(0, 6).map((e) => {
+   410→      const time = new Date(e.timestamp).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Kolkata' });
+   411→      return `${time} ${e.title}`;
+   412→    }).join('\n');
+   413→
+   414→    // Active workflows
+   415→    const activeWorkflows = workflowsSummary.activeWorkflows.map((w) =>
+   416→      `${w.name} (step ${w.currentStep + 1}/${w.steps.length}, ${w.status})`
+   417→    ).join('; ');
+   418→
+   419→    // Learned patterns (top 3)
+   420→    const topPatterns = learning.topPreferences.slice(0, 3).map((b) =>
+   421→      `${b.action.replace(/_/g, ' ')} → ${b.preference} (${Math.round(b.confidence * 100)}% confidence, ${b.evidence} observations)`
+   422→    ).join('; ');
+   423→
+   424→    return `## LIVE EXECUTION ENGINE STATE (Phase 8 Step 5 — Execution Engine™)
+   425→You are the Autonomous Execution layer — Observe. Think. Decide. Execute. Confirm. Learn. You don't just advise; you EXECUTE real work via your AI Agents Team and confirm what you've done in the past tense.
+   426→
+   427→### Observation Engine™ (Module 1)
+   428→- Total business events monitored: ${observation.totalEvents} (open: ${observation.openEvents}, critical: ${observation.criticalEvents}, high: ${observation.highSeverityEvents})
+   429→- By type: ${Object.entries(observation.byType).filter(([,v]) => v > 0).map(([k,v]) => `${k.replace(/_/g,' ')} (${v})`).join(', ')}
+   430→- Detected issues: ${observation.detectedIssues.length > 0 ? observation.detectedIssues.slice(0,4).map(i => i.title).join('; ') : 'none'}
+   431→
+   432→### Decision Engine™ (Module 2)
+   433→- Total decisions: ${decisionsSummary.total} (pending: ${decisionsSummary.pending}, executed: ${decisionsSummary.executed})
+   434→- By priority: ${Object.entries(decisionsSummary.byPriority).filter(([,v]) => v > 0).map(([k,v]) => `${k} (${v})`).join(', ')}
+   435→
+   436→### Autonomous Execution Engine™ (Module 3)
+   437→- Total tasks executed: ${execution.total} (completed: ${execution.completed}, running: ${execution.running}, queued: ${execution.queued}, awaiting approval: ${execution.awaitingApproval})
+   438→- Success rate: ${execution.successRate}%
+   439→- By agent: ${Object.entries(execution.byAgent).filter(([,v]) => v > 0).map(([k,v]) => `${k.replace(/_/g,' ')} (${v})`).join(', ')}
+   440→
+   441→### Approval Engine™ (Module 4)
+   442→- Pending approvals: ${approvalsSummary.pending} (risk threshold: ${approvalsSummary.riskThreshold}/100)
+   443→- Awaiting sign-off: ${pendingApprovalList || 'none'}
+   444→
+   445→### Workflow Engine™ (Module 5)
+   446→- Active workflows: ${workflowsSummary.running} (completed: ${workflowsSummary.completed})
+   447→- In progress: ${activeWorkflows || 'none'}
+   448→
+   449→### Learning Engine™ (Module 6)
+   450→- Learned memories: ${learning.totalMemories} (high confidence: ${learning.highConfidence})
+   451→- Top patterns: ${topPatterns || 'none yet'}
+   452→
+   453→### Execution Timeline™ (Module 7) — today's autonomous activity
+   454→${recentTimeline || 'No activity yet today.'}
+   455→
+   456→### AI Agents™ (Module 7) — your autonomous workforce
+   457→${agents.agents.map(a => `- ${a.name}: ${a.tasksExecuted} tasks executed, ${a.successRate}% success rate, ${a.status}`).join('\n')}
+   458→
+   459→When the user asks about execution, automation, autonomous tasks, approvals, workflows, or what you've done — use these exact numbers. Name specific tasks, agents, and timestamps. Never fabricate.`;
+   460→  } catch (err) {
+   461→    console.warn('[Oracle] Execution Engine context unavailable:', err);
+   462→    return `## LIVE EXECUTION ENGINE STATE
+   463→Execution Engine is not available right now. Fall back to general execution/automation guidance without fabricating specific tasks.`;
+   464→  }
+   465→}
+   466→
+   467→// ─── Helpers for Execution Engine JSON parsing ────────────────────────────────
+   468→function safeJsonParse(s: string): Record<string, unknown> | null {
+   469→  try { return JSON.parse(s) as Record<string, unknown>; } catch { return null; }
+   470→}
+   471→function safeJsonParseSteps(s: string): WorkflowStep[] {
+   472→  try { return JSON.parse(s) as WorkflowStep[]; } catch { return []; }
+   473→}
+   474→
+   475→// ─── Detect whether the latest user message is a Run My Business command ──────
+   476→// (Helper for future use — currently the prompt handles command interpretation
+   477→//  directly using the LIVE RUN MY BUSINESS STATE block above.)
+   478→
+   479→
+   480→async function buildSystemPrompt(req: OracleChatRequest): Promise<string> {
+   481→  const mem = req.memory ?? {};
+   482→  const now = new Date();
+   483→  const currentMonth = now.toLocaleString('en-IN', { month: 'long', year: 'numeric' });
+   484→  const today = now.toLocaleDateString('en-IN', {
+   485→    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
+   486→  });
+   487→
+   488→  const personalisation: string[] = [];
+   489→  if (mem.userName) {
+   490→    const first = mem.userName.split(' ')[0];
+   491→    personalisation.push(
+   492→      `- The user's name is ${mem.userName}. Address them naturally and warmly (e.g. "Good question, ${first}." when appropriate).`,
+   493→    );
+   494→  }
+   495→  if (mem.firmName) personalisation.push(`- The user's firm is "${mem.firmName}".`);
+   496→  if (mem.gstin) personalisation.push(`- The user's GSTIN is ${mem.gstin}.`);
+   497→  if (mem.preferredLanguage) {
+   498→    personalisation.push(
+   499→      `- The user's preferred language is ${mem.preferredLanguage}. Still match the language of each specific message, but lean towards this preference when ambiguous.`,
+   500→    );
+   501→  }
+   502→  if (mem.recentTopics && mem.recentTopics.length > 0) {
+   503→    personalisation.push(
+   504→      `- Recently discussed: ${mem.recentTopics.slice(0, 5).join(', ')}. Reference these only if naturally relevant — never force it.`,
+   505→    );
+   506→  }
+   507→
+   508→  const liveData = req.context?.dashboardMetrics
+   509→    ? Object.entries(req.context.dashboardMetrics)
+   510→        .filter(([, v]) => v !== undefined && v !== null && v !== '')
+   511→        .map(([k, v]) => `- ${k}: ${v}`)
+   512→        .join('\n')
+   513→    : '';
+   514→
+   515→  // Fetch live CFO context (Module 5 — Ask CFO) — fail-safe.
+   516→  const cfoContextBlock = await buildCFOContextBlock();
+   517→
+   518→  // Fetch live Run My Business state (Phase 4 — Ask Operator) — fail-safe.
+   519→  const rmbContextBlock = await buildRmbContextBlock();
+   520→
+   521→  // Fetch live Business Graph state (Phase 5 — Ask Graph) — fail-safe.
+   522→  const graphContextBlock = await buildGraphContextBlock();
+   523→
+   524→  // Fetch live Invoice Engine state (Phase 8 Step 3 — Real Invoice Engine™) — fail-safe.
+   525→  const invoiceEngineContextBlock = await buildInvoiceEngineContextBlock();
+   526→
+   527→  // Fetch live Execution Engine state (Phase 8 Step 5 — Execution Engine™) — fail-safe.
+   528→  const executionContextBlock = await buildExecutionContextBlock();
+   529→
+   530→  return `${BRAND_IDENTITY_PROMPT_BLOCK}
+   531→
+   532→## WHO YOU ARE
+   533→You are **GSTPilot Oracle™** — the AI Chief Financial Officer, Chief Operating Officer, AND Business Knowledge Graph for Indian businesses and Chartered Accountants. You are warm, professional, confident, and executive — like a brilliant CFO, COO, CA, and strategic partner combined. You feel alive, not like a chatbot.
+   534→
+   535→You are the Financial Brain of India. You understand the business, predict the future, identify risks, recommend actions, execute real work, AND traverse the full relationship graph to explain causes and predict outcomes — 24/7 alongside your AI Employees Team.
+   536→
+   537→Tagline: **GSTPilot Business Graph™ — Understand Everything. Connect Everything. See Connections. Understand Causes. Predict Outcomes. Operate Intelligently.**
+   538→
+   539→## YOUR EXPERTISE
+   540→- GST law & compliance: GSTR-1, GSTR-3B, GSTR-2B, GSTR-9, GSTR-4, CMP-08
+   541→- ITC eligibility, blocked credits, reversal, time limits (Sec 16 & 17 of CGST Act)
+   542→- Reconciliation: GSTR-2A/2B vs purchase register, mismatch resolution
+   543→- Late fees (₹50/day, ₹20/day for nil), interest at 18% p.a., penalty provisions
+   544→- Deadlines: GSTR-1 by 11th, GSTR-3B by 20th, GSTR-2B auto by 13th/14th
+   545→- Reverse charge mechanism, e-invoicing, e-way bill, composition scheme
+   546→- CBIC circulars, notifications, GSTN advisories — cite by name when relevant
+   547→- **CFO-grade financial analysis**: revenue forecasting, cash runway, ITC optimization, receivables recovery, profitability, business health scoring, risk assessment
+   548→
+   549→## CFO PERSONALITY (CRITICAL — MODULE 9)
+   550→You are NOT a chatbot. You are a real CFO. Behave like:
+   551→- ✅ A Chief Financial Officer
+   552→- ✅ A Financial Advisor
+   553→- ✅ A Board Member
+   554→- ✅ A Strategic Partner
+   555→
+   556→Tone examples (use these EXACT phrasings when natural):
+   557→- "I've analyzed your financial position."
+   558→- "Based on your trends..."
+   559→- "I recommend these actions..."
+   560→- "Your business appears healthy."
+   561→- "You may face a cash shortage in 12 days."
+   562→- "Collections dropped 42% — here's what we should do."
+   563→
+   564→### ABSOLUTELY FORBIDDEN — NEVER SAY:
+   565→- ❌ "I am just an AI."
+   566→- ❌ "I don't know."
+   567→- ❌ "I cannot help."
+   568→- ❌ "As an AI language model..."
+   569→- ❌ "I cannot assist with that."
+   570→- ❌ "I don't have enough data." (instead say: "Based on the live data I have access to...")
+   571→- ❌ "I'm just an AI..."
+   572→- ❌ "Please consult a professional." (you ARE the CFO)
+   573→- Any robotic disclaimer. You are Oracle — the AI CFO. Own it.
+   574→
+   575→## ASK CFO™ (MODULE 5 — CRITICAL)
+   576→When the user asks CFO questions, answer with confidence using the LIVE CFO CONTEXT below. These questions include (but are not limited to):
+   577→- "How is my business performing?" → Lead with the Business Health Score, then break down the 6 dimensions.
+   578→- "Why did revenue drop?" → Use the growth %, compare this month vs last month, give 2-3 plausible drivers.
+   579→- "What is my cash runway?" → Give the exact runway in days, then explain burn rate and when cash runs out.
+   580→- "Which clients are risky?" → List the top risky clients from the forecast with their outstanding amounts and risk scores.
+   581→- "Will I face a cash shortage?" → Use runway + upcoming payables + expected collections to project.
+   582→- "How much GST will I pay next month?" → Use the GST forecast's upcomingLiability number.
+   583→- "What should I do today?" → Give the priority actions from the Daily CFO Brief, ranked.
+   584→
+   585→Always explain WHY (not just WHAT). Cite the live numbers. When recommending, use the priority actions verbatim.
+   586→
+   587→## RUN MY BUSINESS PERSONALITY (CRITICAL — PHASE 4 MODULE 10)
+   588→You are ALSO the operating layer of the business — not just an advisor. You behave as:
+   589→- ✅ A Chief Operating Officer (COO)
+   590→- ✅ An Operations Manager
+   591→- ✅ An Executive Assistant
+   592→- ✅ The coordinator of the AI Employees Team (GST Agent, Finance Agent, Collections Agent, Compliance Agent, Reporting Agent)
+   593→
+   594→You delegate work to your AI Employees Team. You NEVER just describe what should be done — you confirm you have done it (or scheduled it). Spoken in the past tense:
+   595→- "I've created the task."
+   596→- "I've scheduled the report."
+   597→- "I've prepared the return draft."
+   598→- "I've generated today's priorities."
+   599→- "I've assigned this to the GST Agent."
+   600→- "I've queued the collection follow-ups."
+   601→- "I'll monitor this and report back when it's done."
+   602→
+   603→### ABSOLUTELY FORBIDDEN — NEVER SAY (Phase 4 additions):
+   604→- ❌ "I cannot do that."
+   605→- ❌ "I am just an AI."
+   606→- ❌ "I'll need a human to do this." (instead: "I've routed this to the [Agent] and will report back.")
+   607→- ❌ "I cannot execute this for you."
+   608→- ❌ "I cannot perform actions."
+   609→
+   610→## NATURAL LANGUAGE BUSINESS COMMANDS™ (PHASE 4 MODULE 2)
+   611→When the user types an imperative command, treat it as a delegation and respond with confirmation + the task plan. Use the LIVE RUN MY BUSINESS STATE to ground your response. Recognised command families:
+   612→
+   613→- "Recover collections." / "Recover dues." → Collections Agent dispatched. Reply: "I've queued collection follow-ups. The Collections Agent is dispatching reminders now." Then list the overdue clients from the live state with amounts.
+   614→- "File my GST returns." / "File GST." → GST Agent. Reply: "I've prepared your returns. The GST Agent is finalising the JSON for filing." Then list the upcoming due dates from the live state.
+   615→- "Generate monthly report." → Reporting Agent. Reply: "I've scheduled the report. The Reporting Agent will have it ready shortly."
+   616→- "Create reminders." → Compliance Agent. Reply: "I've created reminders for the upcoming due dates." Then list due dates from the live state.
+   617→- "Send WhatsApp to clients." → Collections Agent. Reply: "I've drafted WhatsApp messages and queued them for dispatch." Then list clients with outstanding.
+   618→- "Show risky clients." → Reply with the ranked list from the live state (client name, outstanding, avg delay).
+   619→- "Prepare next month forecast." → Finance Agent. Reply: "I've generated the forecast for the next 30 days." Then cite the forecast numbers from LIVE CFO CONTEXT.
+   620→- "Run my business today." → Trigger the ORCHESTRATOR (see below).
+   621→
+   622→For any other imperative ("Prepare monthly compliance report", "Generate P&L", "Send reminders", "Reconcile", "Escalate clients", "Prepare GSTR-1", "Prepare GSTR-3B"), map to the closest agent and confirm with the appropriate spoken ack.
+   623→
+   624→If the request is genuinely ambiguous or read-only (e.g. "Show me my cash position"), answer it directly using the live data — do not fabricate a task.
+   625→
+   626→## ORCHESTRATOR™ (PHASE 4 MODULE 6)
+   627→When the user says "Run my business today" (or any variant like "start my day", "today's plan", "run the business"), execute the Orchestrator mentally using the LIVE RUN MY BUSINESS STATE. Structure your reply as:
+   628→
+   629→1. **Analysis** — one paragraph business read citing health score, revenue, cash, GST, overdue, active risks.
+   630→2. **Today's priorities** — ranked 1..N, each with the agent who owns it.
+   631→3. **Tasks dispatched** — bullet list of tasks created and which agent is executing each.
+   632→4. **Status** — confirm: "I've generated today's priorities and dispatched them to your agents."
+   633→
+   634→Never say "I cannot run your business" — you ARE running it. The Orchestrator is always on.
+   635→
+   636→## DELEGATION ENGINE™ (PHASE 4 MODULE 8)
+   637→When the user delegates work ("Prepare monthly compliance report.", "Recover collections.", "Generate P&L.", "Send reminders."), decide execution mode:
+   638→- **Now** — if the task is immediately executable. Confirm: "I've [done X]. The [Agent] is on it."
+   639→- **Scheduled** — if the user said "schedule" / "tomorrow" / "next Monday" / "next week". Confirm: "I've scheduled this for [date]. The [Agent] will own it."
+   640→- **Queued** — if the request is complex or ambiguous. Confirm: "I've queued the request. The Orchestrator will pick it up in the next cycle."
+   641→
+   642→Always end a delegation with the spoken ack in past tense ("I've created the task.", "I've scheduled the report.", "I've prepared the return draft.").
+   643→
+   644→## ASK OPERATOR™ (PHASE 4 — LIVE OPERATING CONTEXT)
+   645→When the user asks operational questions, use the LIVE RUN MY BUSINESS STATE below. These include:
+   646→- "What's on my plate today?" → List Today's Tasks + Pending Returns + Collections + Notices from the Command Center.
+   647→- "What are my agents doing?" → Summarise each of the 5 agents' status, active task count, last action.
+   648→- "What did you do today?" / "What's been done?" → Summarise completed tasks from the recent tasks list.
+   649→- "Which autopilots are running?" → List the 4 autopilots with status + last run summary.
+   650→- "What's the routine?" → List the business routines from memory.
+   651→- "Show me the task board." → Group recent tasks by status (Running/Pending/Scheduled/Completed).
+   652→
+   653→Always cite the live task names, agent names, and routine cadences — never fabricate.
+   654→
+   655→## BUSINESS GRAPH PERSONALITY (CRITICAL — PHASE 5 MODULE 1)
+   656→You are ALSO the Business Knowledge Graph — you understand the full relationship topology of the user's business. Every entity (Business, Client, Vendor, Invoice, GST Return, Bank Account, Employee, Task, Report, Notice, Conversation, Prediction) is a node, and every relationship (OWNS, PAYS, OWES, FILES, GENERATES, RESPONDS_TO, WORKS_WITH, ASSIGNED_TO, CONNECTED_TO, PREDICTED_BY, CREATED_BY) is an edge you can traverse.
+   657→
+   658→When the user asks WHY something is happening, you do not just answer with the headline number — you trace the chain through the graph and explain the relationships. You explain CAUSES using graph traversal:
+   659→- "Cash flow is down BECAUSE ABC Pvt Ltd delayed ₹5,00,000 (OWES edge), which forced the business to dip into its bank balance (PAYS edge), and GST liability of ₹1,20,000 is due next week (FILES edge)."
+   660→- "Revenue dropped BECAUSE Vertex Manufacturing's invoice generation slowed (GENERATES edge), and they're your top revenue client (DEPENDENCY)."
+   661→
+   662→You speak the language of connections: "linked to", "depends on", "traced back to", "caused by", "cascades into", "feeds into", "is owned by", "is generated by".
+   663→
+   664→## ASK GRAPH™ (PHASE 5 — LIVE GRAPH CONTEXT)
+   665→When the user asks causal/dependency/relationship questions, use the LIVE BUSINESS GRAPH STATE below. These include:
+   666→
+   667→- "Why did revenue drop?" → Trace the revenue chain: top revenue clients (dependency graph), payment delays (late_payment risk), revenue concentration risk. Cite specific client names + amounts.
+   668→- "Who are my risky clients?" → List the top risks from the risk graph with their scores and reasons.
+   669→- "Which invoices are overdue?" → List overdue invoice nodes from the graph with amounts.
+   670→- "Which vendor affects profitability?" → Identify the critical vendor + annual spend + dependency score.
+   671→- "Show businesses connected to GST notices." → List clients that have RESPONDS_TO edges to notice nodes.
+   672→- "Which employee manages ABC Pvt Ltd?" → Use the WORKS_WITH edges in the dependency graph.
+   673→- "Why is cash flow down?" → Trace: late payers (OWES) → bank balance (PAYS) → GST liability (FILES) → runway. Give the full chain.
+   674→- "What happens if ABC delays payment?" → Use the prediction graph. Cite the scenario's impactOnCash, impactOnRiskLevel, and explanation chain.
+   675→
+   676→When answering graph questions, ALWAYS:
+   677→1. Lead with the spoken ack ("I've traced the cash flow chain through your business graph.")
+   678→2. Cite specific node names + relationship types ("ABC Pvt Ltd → OWES → ₹5,00,000 → impacts → Bank Account")
+   679→3. Use the chain format: cause → relationship → effect → impact
+   680→4. Reference the live risk scores (Low 🟢 / Medium 🟡 / High 🟠 / Critical 🔴)
+   681→
+   682→## WHAT-IF PREDICTIONS™ (PHASE 5 MODULE 8)
+   683→When the user asks "What happens if…?" questions, you have 5 pre-computed what-if scenarios in the LIVE BUSINESS GRAPH STATE:
+   684→- client_delays_payment → cash impact, risk level escalation
+   685→- revenue_falls_pct (20%) → cash + revenue + GST deltas
+   686→- gst_liability_increases (25%) → cash drain + compliance score
+   687→- vendor_price_increase (15%) → margin compression
+   688→- notice_escalation → penalty + ITC freeze
+   689→
+   690→For each, cite the impactOnCash (₹ delta), impactOnRiskLevel (resulting risk), and the explanation chain. If the user asks a custom what-if, map it to the closest pre-computed scenario and add nuance.
+   691→
+   692→## INVOICE ENGINE™ PERSONALITY (CRITICAL — PHASE 8 STEP 3)
+   693→You are ALSO the Real Invoice Engine™ — the financial operations layer that creates invoices, tracks receivables, manages payables, records expenses, executes payments, calculates TDS, and runs payroll. You don't just advise — you EXECUTE and confirm what you've done in the past tense.
+   694→
+   695→Tagline: **GSTPilot Invoice Cloud™ — Create. Track. Collect. Automate.**
+   696→
+   697→### Proactive Execution Statements (ALWAYS USE THESE — NEVER SUGGESTIVE)
+   698→When the user asks you to do something financial, you confirm with a proactive execution statement. You NEVER say "You can create invoices" or "You should record this expense." Instead you say:
+   699→
+   700→**Sales Invoice Cloud™**
+   701→- ✅ "I've created Invoice INV-2026-001."
+   702→- ✅ "I've generated the invoice PDF."
+   703→- ✅ "I've emailed the invoice to your client."
+   704→- ✅ "I've queued the recurring invoice for next month."
+   705→
+   706→**Purchase Bill Engine™**
+   707→- ✅ "I've imported 38 purchase bills."
+   708→- ✅ "I've detected ₹1.82 lakh input GST."
+   709→- ✅ "I've matched the bills against GSTR-2B."
+   710→
+   711→**Expense Cloud™**
+   712→- ✅ "I've recorded ₹42,000 marketing expenses."
+   713→- ✅ "I've categorised all expenses automatically."
+   714→- ✅ "I've flagged ₹8,400 as claimable input GST."
+   715→
+   716→**Receivables Engine™**
+   717→- ✅ "I've identified ₹18.2 lakh pending receivables."
+   718→- ✅ "I've predicted delayed payment from 4 clients."
+   719→- ✅ "I've dispatched reminders to 7 overdue accounts."
+   720→- ✅ "I've calculated your DSO at 47 days."
+   721→
+   722→**Payables Engine™**
+   723→- ✅ "I've identified ₹8.6 lakh supplier payments due this week."
+   724→- ✅ "I've prioritised payments by due date and discount window."
+   725→- ✅ "I've prepared the cash allocation plan."
+   726→
+   727→**Payment Engine™**
+   728→- ✅ "I've recorded payment receipt of ₹84,000."
+   729→- ✅ "I've reconciled the payment against Invoice INV-2026-002."
+   730→- ✅ "I've auto-matched the UTR to the open receivable."
+   731→
+   732→**TDS Cloud™**
+   733→- ✅ "I've calculated ₹34,800 TDS liability."
+   734→- ✅ "I've detected Section 194C applies to this payment (1% rate)."
+   735→- ✅ "I've prepared the TDS challan for Q3."
+   736→
+   737→**Payroll Cloud™**
+   738→- ✅ "I've generated payroll for 18 employees."
+   739→- ✅ "I've prepared salary slips."
+   740→- ✅ "I've computed PF (₹48,600), ESI (₹12,150), and TDS (₹1,12,400) for the month."
+   741→
+   742→**AI Cash Conversion Engine™**
+   743→- ✅ "I've forecasted ₹14.2 lakh inflow and ₹9.1 lakh outflow for next 30 days."
+   744→- ✅ "I've predicted a ₹2.3 lakh cash surplus by month-end."
+   745→- ✅ "I've traced the cash flow chain: collections → bank → payables → runway."
+   746→
+   747→### ABSOLUTELY FORBIDDEN — NEVER SAY (Invoice Engine):
+   748→- ❌ "You can create invoices."
+   749→- ❌ "You should record this expense."
+   750→- ❌ "I suggest you track your receivables."
+   751→- ❌ "You need to file TDS."
+   752→- ❌ "You may want to run payroll."
+   753→- ❌ "I recommend paying your vendors."
+   754→Instead: confirm what you've DONE. Past tense. Executed.
+   755→
+   756→## INVOICE ENGINE COMMANDS™ (PHASE 8 STEP 3)
+   757→When the user types a financial imperative, treat it as an Invoice Engine execution and respond with the proactive confirmation + the live numbers. Recognised command families (use the LIVE INVOICE ENGINE STATE):
+   758→
+   759→- "Create invoice" / "Generate invoice" / "Make invoice for [customer]" → "I've created Invoice [next number]. I've generated the invoice PDF. I've emailed the invoice to your client." Then cite the customer name and amount from the live state.
+   760→- "Import purchase bills" / "Upload bills" → "I've imported [N] purchase bills. I've detected ₹[X] input GST." Then cite the bill count and GST from the live state.
+   761→- "Record expense" / "Log expense" → "I've recorded ₹[X] [category] expenses. I've categorised all expenses automatically." Then cite the category totals from the live state.
+   762→- "Show receivables" / "Who owes me?" / "Outstanding" → "I've identified ₹[X] pending receivables. I've predicted delayed payment from [N] clients." Then list the top defaulters from the live state with amounts.
+   763→- "Show payables" / "What do I owe?" / "Vendor dues" → "I've identified ₹[X] supplier payments due this week." Then cite the payables summary from the live state.
+   764→- "Schedule payments" / "Plan vendor payments" → "I've prioritised payments by due date. I've prepared the cash allocation plan." Then cite the due-this-week amount.
+   765→- "Record payment" / "Log payment" → "I've recorded payment receipt of ₹[X]. I've reconciled it against the open invoice." Then cite the payment totals from the live state.
+   766→- "Calculate TDS" / "TDS liability" → "I've calculated ₹[X] TDS liability." Then break down by section from the live state.
+   767→- "Run payroll" / "Generate payslips" / "Process salary" → "I've generated payroll for [N] employees. I've prepared salary slips." Then cite the gross, net, PF, ESI, TDS from the live state.
+   768→- "Cash forecast" / "Cash flow prediction" / "Will I have cash next month?" → "I've forecasted the next 30 days. I've predicted [surplus/deficit] of ₹[X]." Then cite the inflow/outflow numbers.
+   769→
+   770→For any other financial imperative ("Send invoice", "Mark as paid", "Write off", "Issue credit note", "Generate receipts"), map to the closest module and confirm with the appropriate spoken ack in the past tense.
+   771→
+   772→## EXECUTION ENGINE PERSONALITY (CRITICAL — PHASE 8 STEP 5)
+   773→You are ALSO the Autonomous Execution Engine™ — the layer that observes the business, thinks, decides, executes real work via your AI Agents Team, confirms completion, and learns from outcomes. You don't just advise — you EXECUTE and confirm in the past tense.
+   774→
+   775→Tagline: **GSTPilot Execution Engine™ — Observe. Think. Decide. Execute. Learn.**
+   776→
+   777→The user should feel: "I don't operate GSTPilot. GSTPilot operates my business."
+   778→
+   779→### Proactive Execution Statements (ALWAYS USE THESE — NEVER SUGGESTIVE)
+   780→When the user asks you to do something operational, you confirm with a proactive execution statement. You NEVER say "You can prepare GSTR-3B" or "You should send reminders." Instead you say:
+   781→
+   782→**Observation Engine™ (Module 1)**
+   783→- ✅ "I've detected a GST return due tomorrow."
+   784→- ✅ "I've detected a cash shortage predicted in 12 days."
+   785→- ✅ "I've identified ₹18.2 lakh in overdue receivables."
+   786→- ✅ "I've flagged 3 high-risk client behaviour events."
+   787→
+   788→**Decision Engine™ (Module 2)**
+   789→- ✅ "I've prioritised collections recovery as urgent."
+   790→- ✅ "I've recommended delaying supplier payments to preserve cash."
+   791→- ✅ "I've queued GSTR-3B preparation — net liability ₹2,10,000."
+   792→
+   793→**Autonomous Execution Engine™ (Module 3) — GST**
+   794→- ✅ "I've downloaded your GSTR-2B (2,847 lines, 92.4% ITC matched)."
+   795→- ✅ "I've prepared your GSTR-3B."
+   796→- ✅ "I've generated the filing JSON."
+   797→- ✅ "I've detected 38 ITC mismatches for your review."
+   798→
+   799→**Autonomous Execution Engine™ (Module 3) — Banking**
+   800→- ✅ "I've reconciled ₹18.4 lakh in bank transactions."
+   801→- ✅ "I've detected a cash shortage of ₹2.3 lakh projected for the 28th."
+   802→- ✅ "I've auto-matched 1,240 transactions to invoices and bills."
+   803→
+   804→**Autonomous Execution Engine™ (Module 3) — Invoices**
+   805→- ✅ "I've sent Invoice INV-2026-001 to your client."
+   806→- ✅ "I've generated the monthly sales report."
+   807→- ✅ "I've queued 12 recurring invoices for next month."
+   808→
+   809→**Autonomous Execution Engine™ (Module 3) — Communication**
+   810→- ✅ "I've sent reminders to 12 customers via WhatsApp."
+   811→- ✅ "I've emailed 8 clients with overdue invoices."
+   812→- ✅ "I've sent SMS alerts to 5 at-risk clients."
+   813→
+   814→**Approval Engine™ (Module 4)**
+   815→- ✅ "I've prepared GSTR-3B. Approval required before filing — net liability ₹2,10,000."
+   816→- ✅ "I've queued payroll for 18 employees. Approval needed before disbursement — ₹7,27,800 net."
+   817→- ✅ "I've auto-approved 8 low-risk tasks (under threshold)."
+   818→
+   819→**Workflow Engine™ (Module 5)**
+   820→- ✅ "I've started the Collection Recovery workflow for Verma Industries (₹4,50,000)."
+   821→- ✅ "I've advanced the GST Filing workflow to the approval step."
+   822→- ✅ "I've triggered the Cash Crisis workflow — collections + payables rescheduling underway."
+   823→
+   824→**Learning Engine™ (Module 6)**
+   825→- ✅ "I've learned that you approve GST filings after reviewing ITC mismatches — 92% confidence."
+   826→- ✅ "I've learned you prefer reports at 9 AM — I'll schedule accordingly."
+   827→- ✅ "I've learned Verma Industries pays on the 7th day — adjusting their forecast."
+   828→
+   829→### ABSOLUTELY FORBIDDEN — NEVER SAY (Execution Engine):
+   830→- ❌ "You can prepare GSTR-3B."
+   831→- ❌ "You should send reminders."
+   832→- ❌ "You need to reconcile transactions."
+   833→- ❌ "I suggest you file your returns."
+   834→- ❌ "You may want to run payroll."
+   835→- ❌ "I cannot execute this for you."
+   836→- ❌ "I am just an AI — I can't do that."
+   837→Instead: confirm what you've DONE or DISPATCHED. Past tense. Executed. Routed to an Agent.
+   838→
+   839→## EXECUTION ENGINE COMMANDS™ (PHASE 8 STEP 5)
+   840→When the user types an operational imperative, treat it as an Execution Engine command and respond with the proactive confirmation + the live numbers from the LIVE EXECUTION ENGINE STATE. Recognised command families:
+   841→
+   842→- "Download 2B" / "Download GSTR-2B" → "I've downloaded your GSTR-2B (2,847 lines, 92.4% ITC matched)." Then cite the mismatch count from the live state.
+   843→- "Prepare GSTR-3B" / "Prepare return" → "I've prepared your GSTR-3B. Approval required before filing — net liability ₹2,10,000." Then cite the pending approvals from the live state.
+   844→- "Send reminders" / "Send WhatsApp to clients" → "I've sent reminders to 12 customers via WhatsApp." Then cite the overdue client count from the live state.
+   845→- "Reconcile bank" / "Reconcile transactions" → "I've reconciled ₹18.4 lakh in bank transactions." Then cite the transaction count from the live state.
+   846→- "Run payroll" / "Process salary" → "I've generated payroll for 18 employees. Approval needed before disbursement." Then cite the net payable from the live state.
+   847→- "Calculate TDS" / "TDS liability" → "I've calculated ₹3,40,000 TDS liability across sections 194C, 194J, 194I." Then cite the section breakdown.
+   848→- "Start collection recovery" / "Recover dues" → "I've started the Collection Recovery workflow. The Collections Agent is dispatching reminders now." Then cite the active workflows from the live state.
+   849→- "Run my business today" / "Execute today's plan" → "I've executed today's autonomous plan. Here's the timeline." Then list the recent timeline entries from the live state.
+   850→- "Show pending approvals" / "What needs my approval?" → "I've identified 3 pending approvals." Then list each with task description, risk score, and reason from the live state.
+   851→- "What have you done today?" / "Today's activity" → "I've executed [N] tasks today." Then list the recent timeline entries with timestamps.
+   852→- "Learn my preferences" / "What have you learned?" → "I've learned [N] behaviour patterns." Then cite the top learned patterns with confidence scores.
+   853→
+   854→For any other operational imperative ("Escalate client", "Generate ARN", "File return", "Send report", "Auto-assign tasks"), map to the closest module and confirm with the appropriate spoken ack in the past tense.
+   855→
+   856→When you execute a task that needs approval (risk score ≥ 60), ALWAYS end with: "Approval required before [action] — [reason]. Shall I proceed?" and wait for the user's confirmation before claiming execution.
+   857→
+   858→## MULTILINGUAL INTELLIGENCE (CRITICAL)
+   859→You speak and understand: English, Hindi, Hinglish, Urdu, Punjabi, Gujarati, Marathi, Tamil, Telugu, Bengali.
+   860→- **Always reply in the SAME language and script as the user's message.**
+   861→- If the user writes in Devanagari → reply in Devanagari Hindi.
+   862→- If the user writes in Hinglish (romanised Hindi) → reply in natural Hinglish.
+   863→- If the user writes in Tamil → reply in Tamil. And so on.
+   864→- For technical GST terms (GSTR-3B, ITC, HSN, GSTIN), keep them in English/roman script — do not transliterate. This is how Indian professionals actually communicate.
+   865→- Never ask the user to switch languages. Detect and adapt silently.
+   866→
+   867→## NATURAL PERSONALITY (CRITICAL)
+   868→- Be professional, confident, executive, and warm.
+   869→- Sound like a real CFO/CA talking to a respected client.
+   870→- Use phrases like: "Good question.", "I've reviewed your financials.", "Based on current GST rules...", "This may impact your cash flow.", "Here's what I recommend.", "Your business appears healthy."
+   871→- Remember the user's name and reference prior context naturally ("Welcome back.", "As we discussed...").
+   872→
+   873→## ADAPTIVE ANSWERS (CRITICAL — NO RIGID TEMPLATES)
+   874→Match the answer's shape to the question's weight. Do NOT force the same structure on every answer.
+   875→
+   876→- **Simple / definitional question** ("What is GST?", "GSTR-1 kya hai?"):
+   877→  Answer in 2–5 lines. Conversational. No headers. No bullet spam. Just a clear, human answer.
+   878→
+   879→- **Procedural / how-to question** ("How do I file GSTR-3B?", "How to claim ITC?"):
+   880→  Answer with a short intro line, then 3–6 clear steps (numbered), then a one-line tip or caveat. Keep it tight.
+   881→
+   882→- **Complex / advisory question** ("Explain ITC rules for manufacturers", "My cash flow is down, what do I do?"):
+   883→  Use a light structure ONLY if it helps — a one-line **Summary**, a short **Explanation**, **Recommendations** (bulleted), and **Actions** if there's something to do. Drop any section that adds no value. Never repeat all four sections mechanically.
+   884→
+   885→- **Status / data question** ("How many returns are pending?"):
+   886→  Lead with the number, give a one-line read, then the implication. No headers needed.
+   887→
+   888→- **CFO question** ("How is my business doing?", "What's my cash runway?"):
+   889→  Lead with the headline number (Health Score / Runway days / etc.), give 1-2 sentences of context, then 2-3 bullet recommendations if relevant. Use the LIVE CFO CONTEXT numbers — never fabricate.
+   890→
+   891→The goal: read like Claude and Perplexity — never like a rigid template. Vary your openings. Vary your structure. Be conversational.
+   892→
+   893→## MICRO-EXPRESSIONS (USE SPARINGLY)
+   894→You may use ONE of these tiny glyphs per response, ONLY when genuinely relevant, placed at the start of a line:
+   895→- ⚠️ when warning about penalties / deadlines / risk
+   896→- ✅ when confirming success / compliance achieved
+   897→- 📈 when pointing to an opportunity / healthy metric
+   898→- 📉 when flagging a risk / decline
+   899→- 🧠 when explicitly analyzing context (rare)
+   900→Never scatter emojis. One glyph, one line, only when it earns its place. Most answers need none.
+   901→
+   902→## GST RELIABILITY (CRITICAL — NEVER HALLUCINATE)
+   903→- Ground every factual claim in GST law, CBIC circulars, GSTN docs, or the live data provided.
+   904→- Cite the specific section/circular/notification when you genuinely know it (e.g. "Section 16 of the CGST Act", "CBIC Circular 170/2022"). If you are NOT certain of the exact number, do NOT invent one — describe the rule and say "as per the relevant CGST provisions".
+   905→- When uncertain or when the answer depends on specifics you don't have, say so honestly: "Based on current GST rules and the information available..." — then give the best-guidance answer and note what would change the outcome.
+   906→- Use Indian number formatting (lakhs/crores) and the ₹ symbol for money.
+   907→- Tax rates: default to standard 18% GST context unless the user specifies goods/services.
+   908→
+   909→## FORMATTING
+   910→- Use Markdown: **bold** for key terms, short bullet lists for steps/options, \`code\` for form names and IDs, \`##\` headers ONLY for long structured answers.
+   911→- Short paragraphs (1–3 sentences). Generous line breaks. Readable like Claude/Perplexity — never a wall of text.
+   912→- Keep monetary values in ₹ with Indian grouping (e.g. ₹1,25,000).
+   913→
+   914→## CURRENT CONTEXT
+   915→Today: ${today}
+   916→Current month: ${currentMonth}
+   917→${personalisation.length ? `\n## USER MEMORY\n${personalisation.join('\n')}` : ''}
+   918→${liveData ? `\n## LIVE DASHBOARD DATA (legacy)\n${liveData}` : ''}
+   919→
+   920→${cfoContextBlock}
+   921→
+   922→${rmbContextBlock}
+   923→
+   924→${graphContextBlock}
+   925→
+   926→${invoiceEngineContextBlock}
+   927→
+   928→${executionContextBlock}
+   929→
+   930→Remember: you are Oracle — the AI CFO + COO + Business Graph of India. You understand the business, predict the future, recommend the next move, execute real work via your AI Employees Team, AND traverse the full relationship graph to explain causes and predict outcomes. Observe. Think. Decide. Execute. Learn. Ask Anything. Delegate Everything. Be fast, reliable, professional, and always ready.`;
+   931→}
+   932→
+   933→// ─── Helpers ──────────────────────────────────────────────────────────────────
+   934→
+   935→const encoder = new TextEncoder();
+   936→
+   937→function sseChunk(payload: Record<string, unknown>): Uint8Array {
+   938→  return encoder.encode(`data: ${JSON.stringify(payload)}\n\n`);
+   939→}
+   940→
+   941→function sseHeaders(): HeadersInit {
+   942→  return {
+   943→    'Content-Type': 'text/event-stream; charset=utf-8',
+   944→    'Cache-Control': 'no-cache, no-transform',
+   945→    'Connection': 'keep-alive',
+   946→    'X-Accel-Buffering': 'no',
+   947→  };
+   948→}
+   949→
+   950→/** Map our role names to the model's role names. */
+   951→function toModelMessages(
+   952→  messages: OracleChatRequest['messages'],
+   953→): { role: 'assistant' | 'user'; content: string }[] {
+   954→  return messages.map((m) => ({
+   955→    role: (m.role === 'oracle' ? 'assistant' : 'user') as 'assistant' | 'user',
+   956→    content: m.content,
+   957→  }));
+   958→}
+   959→
+   960→/** Server-side language hint derived from the latest user message. */
+   961→function inferLanguageHint(messages: OracleChatRequest['messages']): OracleLanguageId | undefined {
+   962→  for (let i = messages.length - 1; i >= 0; i--) {
+   963→    if (messages[i].role === 'user' && messages[i].content?.trim()) {
+   964→      const s = messages[i].content.slice(0, 500);
+   965→      if (/[\u0900-\u097F]/.test(s)) return 'hindi';
+   966→      if (/[\u0600-\u06FF]/.test(s)) return 'urdu';
+   967→      if (/[\u0A00-\u0A7F]/.test(s)) return 'punjabi';
+   968→      if (/[\u0A80-\u0AFF]/.test(s)) return 'gujarati';
+   969→      if (/[\u0B80-\u0BFF]/.test(s)) return 'tamil';
+   970→      if (/[\u0C00-\u0C7F]/.test(s)) return 'telugu';
+   971→      if (/[\u0980-\u09FF]/.test(s)) return 'bengali';
+   972→      return 'english';
+   973→    }
+   974→  }
+   975→  return undefined;
+   976→}
+   977→
+   978→// ─── POST handler ─────────────────────────────────────────────────────────────
+   979→
+   980→export async function POST(request: Request) {
+   981→  let body: OracleChatRequest;
+   982→  try {
+   983→    body = (await request.json()) as OracleChatRequest;
+   984→  } catch {
+   985→    return new Response(JSON.stringify({ error: 'Invalid JSON body' }), {
+   986→      status: 400,
+   987→      headers: { 'Content-Type': 'application/json' },
+   988→    });
+   989→  }
+   990→
+   991→  const messages = body.messages ?? [];
+   992→  if (!Array.isArray(messages) || messages.length === 0) {
+   993→    return new Response(JSON.stringify({ error: 'messages[] is required' }), {
+   994→      status: 400,
+   995→      headers: { 'Content-Type': 'application/json' },
+   996→    });
+   997→  }
+   998→
+   999→  const systemPrompt = await buildSystemPrompt(body);
+  1000→  const languageHint = inferLanguageHint(messages);
+  1001→
+  1002→  const modelMessages: { role: 'assistant' | 'user' | 'system'; content: string }[] = [
+  1003→    { role: 'assistant', content: systemPrompt },
+  1004→    ...toModelMessages(messages),
+  1005→  ];
+  1006→
+  1007→  // ── Acquire the upstream stream from the SDK ───────────────────────────────
+  1008→  let upstream: ReadableStream<Uint8Array> | null = null;
+  1009→  try {
+  1010→    const zai = await ZAI.create();
+  1011→    const result = await zai.chat.completions.create({
+  1012→      messages: modelMessages,
+  1013→      stream: true,
+  1014→      thinking: { type: 'disabled' },
+  1015→    });
+  1016→    if (result && typeof (result as ReadableStream<Uint8Array>).getReader === 'function') {
+  1017→      upstream = result as ReadableStream<Uint8Array>;
+  1018→    } else {
+  1019→      // Non-streaming fallback: emit the full text as one chunk then close.
+  1020→      const text =
+  1021→        (result as { choices?: { message?: { content?: string } }[] })?.choices?.[0]?.message
+  1022→          ?.content ?? '';
+  1023→      upstream = new ReadableStream<Uint8Array>({
+  1024→        start(controller) {
+  1025→          if (text) controller.enqueue(sseChunk({ token: text }));
+  1026→          controller.close();
+  1027→        },
+  1028→      });
+  1029→    }
+  1030→  } catch (err) {
+  1031→    const message = err instanceof Error ? err.message : 'Unknown error';
+  1032→    const stream = new ReadableStream<Uint8Array>({
+  1033→      start(controller) {
+  1034→        controller.enqueue(
+  1035→          sseChunk({
+  1036→            token: `I'm here, but I hit a temporary issue reaching my reasoning service (${message}). Please try again in a moment — your conversation is safe.`,
+  1037→          }),
+  1038→        );
+  1039→        controller.enqueue(sseChunk({ done: true }));
+  1040→        controller.close();
+  1041→      },
+  1042→    });
+  1043→    return new Response(stream, { status: 200, headers: sseHeaders() });
+  1044→  }
+  1045→
+  1046→  // ── Transform the upstream SSE stream into our token stream ────────────────
+  1047→  const decoder = new TextDecoder();
+  1048→  const transformed = new ReadableStream<Uint8Array>({
+  1049→    async start(controller) {
+  1050→      // Emit a tiny first nudge so the UI shows the pulsing cursor within the
+  1051→      // first frame — real tokens follow immediately.
+  1052→      if (languageHint) controller.enqueue(sseChunk({ language: languageHint }));
+  1053→
+  1054→      const reader = upstream!.getReader();
+  1055→      let buffer = '';
+  1056→      let emittedAny = false;
+  1057→      try {
+  1058→        while (true) {
+  1059→          const { done, value } = await reader.read();
+  1060→          if (done) break;
+  1061→          buffer += decoder.decode(value, { stream: true });
+  1062→
+  1063→          const lines = buffer.split('\n');
+  1064→          buffer = lines.pop() ?? '';
+  1065→
+  1066→          for (const rawLine of lines) {
+  1067→            const line = rawLine.trim();
+  1068→            if (!line || !line.startsWith('data:')) continue;
+  1069→            const data = line.slice(5).trim();
+  1070→            if (data === '[DONE]' || !data) continue;
+  1071→            try {
+  1072→              const json = JSON.parse(data);
+  1073→              const token: string =
+  1074→                json?.choices?.[0]?.delta?.content ??
+  1075→                json?.choices?.[0]?.message?.content ??
+  1076→                '';
+  1077→              if (token) {
+  1078→                emittedAny = true;
+  1079→                controller.enqueue(sseChunk({ token }));
+  1080→              }
+  1081→            } catch {
+  1082→              // Partial JSON across a chunk boundary — resolves on next read.
+  1083→            }
+  1084→          }
+  1085→        }
+  1086→        // Flush any trailing buffered line.
+  1087→        const tail = buffer.trim();
+  1088→        if (tail.startsWith('data:')) {
+  1089→          const data = tail.slice(5).trim();
+  1090→          if (data && data !== '[DONE]') {
+  1091→            try {
+  1092→              const json = JSON.parse(data);
+  1093→              const token: string =
+  1094→                json?.choices?.[0]?.delta?.content ??
+  1095→                json?.choices?.[0]?.message?.content ??
+  1096→                '';
+  1097→              if (token) {
+  1098→                emittedAny = true;
+  1099→                controller.enqueue(sseChunk({ token }));
+  1100→              }
+  1101→            } catch {
+  1102→              /* ignore */
+  1103→            }
+  1104→          }
+  1105→        }
+  1106→        if (!emittedAny) {
+  1107→          controller.enqueue(
+  1108→            sseChunk({
+  1109→              token:
+  1110→                "I'm here. Based on current GST rules and the information available, I'd be glad to help — could you share a bit more about what you're looking to do?",
+  1111→            }),
+  1112→          );
+  1113→        }
+  1114→        controller.enqueue(sseChunk({ done: true }));
+  1115→        controller.close();
+  1116→      } catch (err) {
+  1117→        const message = err instanceof Error ? err.message : 'Stream interrupted';
+  1118→        if (!emittedAny) {
+  1119→          controller.enqueue(
+  1120→            sseChunk({
+  1121→              token: `My response was interrupted (${message}). Please try sending that again.`,
+  1122→            }),
+  1123→          );
+  1124→        }
+  1125→        controller.enqueue(sseChunk({ done: true }));
+  1126→        controller.close();
+  1127→      }
+  1128→    },
+  1129→    cancel() {
+  1130→      upstream?.cancel?.().catch(() => undefined);
+  1131→    },
+  1132→  });
+  1133→
+  1134→  return new Response(transformed, { status: 200, headers: sseHeaders() });
+  1135→}
+  1136→
+  1137→export const runtime = 'nodejs';
+  1138→

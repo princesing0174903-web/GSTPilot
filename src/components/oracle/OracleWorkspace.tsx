@@ -31,7 +31,7 @@ import {
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  ArrowUp, X, Square, Sparkles, Plus, MessageSquare, Trash2,
+  ArrowUp, ArrowRight, X, Square, Sparkles, Plus, MessageSquare, Trash2,
   Home, Brain, Zap, Wallet, Network, Settings, type LucideIcon,
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
@@ -44,7 +44,7 @@ import {
 } from './oracle-human';
 import { detectBrandQuestion } from './oracle-brand';
 import { OracleEmptyState } from './OracleEmptyState';
-import type { OracleMessage, OracleChatRequest, OracleStreamChunk } from './oracle-types';
+import type { OracleMessage, OracleChatRequest, OracleStreamChunk, OracleActionChip } from './oracle-types';
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
@@ -55,6 +55,7 @@ interface OracleWorkspaceProps {
   userName?: string;
   firmName?: string;
   gstin?: string;
+  userId?: string;
   /** Optional prefilled question (e.g. from the CommandBar `oracle-ask` event).
    *  When provided, the workspace auto-sends it once after opening. */
   initialPrompt?: string;
@@ -101,7 +102,7 @@ const RAIL_ITEMS: RailItem[] = [
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export function OracleWorkspace({
-  open, onClose, onNavigate, userName, firmName, gstin, initialPrompt,
+  open, onClose, onNavigate, userName, firmName, gstin, userId, initialPrompt,
 }: OracleWorkspaceProps) {
   const [store, setStore] = useState<ConversationStore>({ conversations: [], activeId: null });
   // Portal guard: only render into document.body after mount to avoid SSR
@@ -386,6 +387,7 @@ export function OracleWorkspace({
           userName,
           firmName,
           gstin,
+          userId,
           preferredLanguage: activeLanguage,
           recentTopics: messages
             .filter((m) => m.role === 'user')
@@ -449,6 +451,7 @@ export function OracleWorkspace({
                         streaming: false,
                         emotion: detectEmotion(acc),
                         followUps: buildFollowUps(acc),
+                        actions: buildActionChips(acc),
                       }
                     : m,
                 ),
@@ -483,6 +486,7 @@ export function OracleWorkspace({
                   streaming: false,
                   emotion: detectEmotion(m.content),
                   followUps: buildFollowUps(m.content),
+                  actions: buildActionChips(m.content),
                 }
               : m,
           ),
@@ -513,7 +517,7 @@ export function OracleWorkspace({
         requestAnimationFrame(() => inputRef.current?.focus());
       }
     },
-    [isStreaming, messages, userName, firmName, gstin, activeLanguage, scrollToBottom],
+    [isStreaming, messages, userName, firmName, gstin, userId, activeLanguage, scrollToBottom],
   );
 
   // ─── Stop streaming ────────────────────────────────────────────────────────
@@ -830,7 +834,12 @@ export function OracleWorkspace({
               ) : (
                 <div className="mx-auto flex max-w-3xl flex-col gap-6 px-4 py-6 md:px-6">
                   {messages.map((m) => (
-                    <MessageBubble key={m.id} message={m} onPickFollowUp={sendMessage} />
+                    <MessageBubble
+                      key={m.id}
+                      message={m}
+                      onPickFollowUp={sendMessage}
+                      onNavigate={(v) => { onNavigate(v as AppView); onClose(); }}
+                    />
                   ))}
                 </div>
               )}
@@ -1035,9 +1044,11 @@ function OracleAvatar({ state }: { state: ReturnType<typeof deriveAvatarState> }
 function MessageBubble({
   message,
   onPickFollowUp,
+  onNavigate,
 }: {
   message: OracleMessage;
   onPickFollowUp: (prompt: string) => void;
+  onNavigate?: (view: string) => void;
 }) {
   const isUser = message.role === 'user';
   const emotionGlyph = !isUser && message.emotion ? ORACLE_EMOTIONS[message.emotion]?.glyph : null;
@@ -1103,6 +1114,25 @@ function MessageBubble({
               {message.content}
             </ReactMarkdown>
             {message.streaming && <PulsingCursor />}
+          </div>
+        )}
+
+        {/* Action chips — one-tap shortcuts that navigate to the right workspace.
+            Rendered ABOVE follow-ups because they are the primary "do something" CTA. */}
+        {message.actions && message.actions.length > 0 && !message.streaming && onNavigate && (
+          <div className="mt-3 flex flex-wrap gap-2">
+            {message.actions.map((a, i) => (
+              <button
+                key={i}
+                type="button"
+                onClick={() => a.view && onNavigate(a.view)}
+                className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-all hover:brightness-110"
+                style={{ background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)' }}
+              >
+                <ArrowRight className="h-3 w-3" />
+                {a.label}
+              </button>
+            ))}
           </div>
         )}
 
@@ -1284,6 +1314,83 @@ function buildFollowUps(content: string): string[] | undefined {
     if (picks.length >= 3) break;
   }
   return picks;
+}
+
+/**
+ * Generate contextual ACTION chips from the response content.
+ * Unlike follow-up questions (which are conversational), action chips are
+ * one-tap shortcuts that navigate the user straight to the right workspace
+ * to DO something about what Oracle just said.
+ */
+function buildActionChips(content: string): OracleActionChip[] | undefined {
+  if (!content || content.length < 30) return undefined;
+  const lower = content.toLowerCase();
+  const chips: OracleActionChip[] = [];
+
+  // Filing / returns actions
+  if (/(gstr-3b|gstr-1|gstr 3b|gstr 1|return|filing|file your|file now|file the)/.test(lower)) {
+    chips.push({ label: 'File Return', intent: 'file_now', view: 'returns' });
+  }
+  // Overdue / late fee → open returns urgently
+  if (/(overdue|late fee|penalty|missed|due date|deadline)/.test(lower)) {
+    chips.push({ label: 'Open Returns', intent: 'open_returns', view: 'returns' });
+  }
+  // Reconciliation / ITC / mismatch
+  if (/(itc|input tax credit|reconcil|mismatch|2b|gstr-2b|match)/.test(lower)) {
+    chips.push({ label: 'Open Reconcile', intent: 'open_reconcile', view: 'reconcile' });
+  }
+  // Cash flow / collections / receivables / banking
+  if (/(cash flow|cash position|receivable|collection|bank|balance|bank balance)/.test(lower)) {
+    chips.push({ label: 'Open Banking', intent: 'open_banking', view: 'banking' });
+  }
+  if (/(collection|recover|receivable|outstanding|due from|pending payment)/.test(lower)) {
+    chips.push({ label: 'Reconcile Collections', intent: 'open_reconcile', view: 'reconcile' });
+  }
+  // Invoices / sales / expenses
+  if (/(invoice|sales|b2b|b2c|expense|purchase)/.test(lower)) {
+    chips.push({ label: 'Open Invoices', intent: 'open_invoices', view: 'invoices' });
+  }
+  // Clients / vendors
+  if (/(client|customer|vendor|supplier|gstin)/.test(lower)) {
+    chips.push({ label: 'Open Clients', intent: 'open_clients', view: 'clients' });
+  }
+  // Notices / scrutiny / compliance alerts
+  if (/(notice|scrutiny|drc|asn|show cause|letter|communication)/.test(lower)) {
+    chips.push({ label: 'Open Notices', intent: 'open_notices', view: 'notices' });
+  }
+  // Compliance / risk
+  if (/(compliance|risk|score|health|warning|alert)/.test(lower)) {
+    chips.push({ label: 'Compliance Alerts', intent: 'open_compliance', view: 'ai-compliance' });
+  }
+  if (/(risk|fraud|litigation|legal)/.test(lower)) {
+    chips.push({ label: 'Risk Engine', intent: 'open_risk', view: 'ai-risk' });
+  }
+  // Reports / insights / forecast
+  if (/(report|summary|statement|download|export|pdf)/.test(lower)) {
+    chips.push({ label: 'Open Reports', intent: 'open_reports', view: 'reports' });
+  }
+  if (/(insight|recommend|suggest|advice|forecast|predict)/.test(lower)) {
+    chips.push({ label: 'AI Insights', intent: 'open_insights', view: 'ai-insights' });
+  }
+  // Connections / connect data
+  if (/(connect|integration|gstn|sync|link your|link the)/.test(lower)) {
+    chips.push({ label: 'Connect Services', intent: 'open_connections', view: 'connections' });
+  }
+  // Settings / profile
+  if (/(setting|profile|account|configur|preference)/.test(lower)) {
+    chips.push({ label: 'Open Settings', intent: 'open_settings', view: 'settings' });
+  }
+
+  // De-duplicate by intent, cap at 3 chips
+  const seen = new Set<string>();
+  const picks: OracleActionChip[] = [];
+  for (const c of chips) {
+    if (seen.has(c.intent)) continue;
+    seen.add(c.intent);
+    picks.push(c);
+    if (picks.length >= 3) break;
+  }
+  return picks.length > 0 ? picks : undefined;
 }
 
 export default OracleWorkspace;

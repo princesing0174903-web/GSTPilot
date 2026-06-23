@@ -224,6 +224,18 @@ export default function CommandPalette() {
         group: 'Commands',
       },
       {
+        id: 'cmd-execution-engine',
+        label: 'Open Execution Engine',
+        description: 'Observe · Think · Decide · Execute · Learn — Autonomous AI workforce',
+        icon: Zap,
+        shortcut: 'G E',
+        action: () => {
+          setCurrentView('execution-engine');
+          addToRecent('cmd-execution-engine', 'Open Execution Engine', 'command');
+        },
+        group: 'Commands',
+      },
+      {
         id: 'cmd-create-return',
         label: 'Create Return',
         description: 'Prepare a new GST return',

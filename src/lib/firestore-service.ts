@@ -20,6 +20,8 @@ import {
   type FirestoreClient, type FirestoreDocument, type FirestoreInvoice,
   type FirestoreReturn, type FirestoreReconciliation, type FirestoreNotification,
   type FirestoreActivity, type FirestoreAIRecommendation, type FirestoreFirm,
+  type FirestoreLead, type FirestoreDeal, type FirestoreMeeting,
+  type LeadStatus, type LeadSource, type DealStage, type MeetingType, type MeetingStatus,
   type ActivityType, type NotificationType, type NotificationPriority,
   type ReconMismatch, type DocumentStatus, type DocumentType,
   type LiveDashboardMetrics,
@@ -1020,4 +1022,134 @@ function parsePeriod(period: string | null): Date | null {
   } catch {
     return null;
   }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// CRM — Leads, Deals, Meetings (Recovered)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ─── Leads ────────────────────────────────────────────────────────────────────
+
+export async function createLead(
+  data: Omit<FirestoreLead, 'leadId' | 'firmId' | 'convertedClientId' | 'createdAt' | 'updatedAt'>,
+): Promise<string> {
+  const firmId = currentFirmId();
+  if (!firmId) throw new Error('No firm found. Please complete onboarding first.');
+  const leadId = generateId();
+  const leadRef = doc(db, COLLECTIONS.LEADS, leadId);
+  const leadData: FirestoreLead = {
+    ...data,
+    leadId,
+    firmId,
+    convertedClientId: null,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  };
+  await setDoc(leadRef, leadData);
+  return leadId;
+}
+
+export async function updateLead(leadId: string, updates: Partial<FirestoreLead>): Promise<void> {
+  const leadRef = doc(db, COLLECTIONS.LEADS, leadId);
+  await updateDoc(leadRef, { ...updates, updatedAt: serverTimestamp() });
+}
+
+export async function deleteLead(leadId: string): Promise<void> {
+  const leadRef = doc(db, COLLECTIONS.LEADS, leadId);
+  await deleteDoc(leadRef);
+}
+
+export async function convertLeadToClient(leadId: string): Promise<string> {
+  // Read the lead, create a client from it, then mark lead as converted.
+  const leadRef = doc(db, COLLECTIONS.LEADS, leadId);
+  const leadSnap = await getDoc(leadRef);
+  if (!leadSnap.exists()) throw new Error('Lead not found');
+  const lead = leadSnap.data() as FirestoreLead;
+
+  // Create the client using the existing createClient workflow (which handles
+  // side effects: counters, compliance profile, draft returns, activity, etc.)
+  const clientId = await createClient({
+    tradeName: lead.company,
+    legalName: lead.company,
+    gstin: lead.gstin || '',
+    contactEmail: lead.contactEmail,
+    contactPhone: lead.contactPhone,
+    address: '',
+    state: '',
+    stateCode: '',
+    entityType: 'Regular',
+    returnPeriod: null,
+    lastFilingDate: null,
+    status: 'active',
+    healthScore: 80,
+  });
+
+  // Mark the lead as converted
+  await updateDoc(leadRef, {
+    status: 'converted' as LeadStatus,
+    convertedClientId: clientId,
+    updatedAt: serverTimestamp(),
+  });
+
+  return clientId;
+}
+
+// ─── Deals ────────────────────────────────────────────────────────────────────
+
+export async function createDeal(
+  data: Omit<FirestoreDeal, 'dealId' | 'firmId' | 'createdAt' | 'updatedAt'>,
+): Promise<string> {
+  const firmId = currentFirmId();
+  if (!firmId) throw new Error('No firm found. Please complete onboarding first.');
+  const dealId = generateId();
+  const dealRef = doc(db, COLLECTIONS.DEALS, dealId);
+  const dealData: FirestoreDeal = {
+    ...data,
+    dealId,
+    firmId,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  };
+  await setDoc(dealRef, dealData);
+  return dealId;
+}
+
+export async function updateDeal(dealId: string, updates: Partial<FirestoreDeal>): Promise<void> {
+  const dealRef = doc(db, COLLECTIONS.DEALS, dealId);
+  await updateDoc(dealRef, { ...updates, updatedAt: serverTimestamp() });
+}
+
+export async function deleteDeal(dealId: string): Promise<void> {
+  const dealRef = doc(db, COLLECTIONS.DEALS, dealId);
+  await deleteDoc(dealRef);
+}
+
+// ─── Meetings ─────────────────────────────────────────────────────────────────
+
+export async function createMeeting(
+  data: Omit<FirestoreMeeting, 'meetingId' | 'firmId' | 'createdAt' | 'updatedAt'>,
+): Promise<string> {
+  const firmId = currentFirmId();
+  if (!firmId) throw new Error('No firm found. Please complete onboarding first.');
+  const meetingId = generateId();
+  const meetingRef = doc(db, COLLECTIONS.MEETINGS, meetingId);
+  const meetingData: FirestoreMeeting = {
+    ...data,
+    meetingId,
+    firmId,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  };
+  await setDoc(meetingRef, meetingData);
+  return meetingId;
+}
+
+export async function updateMeeting(meetingId: string, updates: Partial<FirestoreMeeting>): Promise<void> {
+  const meetingRef = doc(db, COLLECTIONS.MEETINGS, meetingId);
+  await updateDoc(meetingRef, { ...updates, updatedAt: serverTimestamp() });
+}
+
+export async function deleteMeeting(meetingId: string): Promise<void> {
+  const meetingRef = doc(db, COLLECTIONS.MEETINGS, meetingId);
+  await deleteDoc(meetingRef);
 }

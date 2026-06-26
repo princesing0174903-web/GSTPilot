@@ -27,6 +27,11 @@ export const COLLECTIONS = {
   PRIORITY_QUEUE: 'priorityQueue',
   ORGANIZATIONS: 'organizations',
   MEMBERSHIPS: 'memberships',
+  // CRM & Productivity (recovered)
+  LEADS: 'leads',
+  DEALS: 'deals',
+  MEETINGS: 'meetings',
+  TASKS: 'tasks',
 } as const;
 
 export type CollectionName = typeof COLLECTIONS[keyof typeof COLLECTIONS];
@@ -369,6 +374,94 @@ export interface FirestoreMembership {
   permissions: string[];
   invitedBy: string;
   status: 'active' | 'invited' | 'suspended';
+  createdAt: unknown;
+  updatedAt: unknown;
+}
+
+// ─── Lead (CRM: leads/{leadId}) ──────────────────────────────────────────────
+
+export type LeadStatus = 'new' | 'contacted' | 'qualified' | 'proposal_sent' | 'negotiation' | 'converted' | 'lost';
+export type LeadSource = 'website' | 'referral' | 'advertisement' | 'cold_call' | 'event' | 'social_media' | 'other';
+
+export interface FirestoreLead {
+  leadId: string;
+  firmId: string;
+  contactName: string;
+  contactEmail: string;
+  contactPhone: string;
+  company: string;
+  gstin: string | null;
+  source: LeadSource;
+  status: LeadStatus;
+  leadScore: number;
+  estimatedValue: number;
+  notes: string;
+  assignedTo: string | null;
+  nextFollowUp: string | null;
+  convertedClientId: string | null;
+  tags: string[];
+  createdAt: unknown;
+  updatedAt: unknown;
+}
+
+// ─── Deal (CRM: deals/{dealId}) ──────────────────────────────────────────────
+
+export type DealStage = 'proposal' | 'negotiation' | 'closed_won' | 'closed_lost';
+
+export interface FirestoreDeal {
+  dealId: string;
+  firmId: string;
+  leadId: string | null;
+  clientId: string | null;
+  title: string;
+  description: string;
+  value: number;
+  stage: DealStage;
+  probability: number;
+  expectedCloseDate: string | null;
+  assignedTo: string | null;
+  createdAt: unknown;
+  updatedAt: unknown;
+}
+
+// ─── Meeting (CRM: meetings/{meetingId}) ─────────────────────────────────────
+
+export type MeetingType = 'in_person' | 'video_call' | 'phone_call';
+export type MeetingStatus = 'scheduled' | 'completed' | 'cancelled' | 'no_show';
+
+export interface FirestoreMeeting {
+  meetingId: string;
+  firmId: string;
+  clientId: string | null;
+  leadId: string | null;
+  title: string;
+  description: string;
+  dateTime: string;
+  duration: number;
+  type: MeetingType;
+  status: MeetingStatus;
+  attendees: string[];
+  notes: string;
+  createdAt: unknown;
+  updatedAt: unknown;
+}
+
+// ─── Task (tasks/{taskId}) ───────────────────────────────────────────────────
+
+export type TaskPriority = 'low' | 'medium' | 'high' | 'urgent';
+export type TaskStatus = 'todo' | 'in_progress' | 'completed' | 'cancelled';
+
+export interface FirestoreTask {
+  taskId: string;
+  firmId: string;
+  title: string;
+  description: string;
+  status: TaskStatus;
+  priority: TaskPriority;
+  assignedTo: string | null;
+  clientId: string | null;
+  dueDate: string | null;
+  tags: string[];
   createdAt: unknown;
   updatedAt: unknown;
 }

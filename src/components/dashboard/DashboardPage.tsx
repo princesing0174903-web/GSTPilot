@@ -23,9 +23,15 @@ import {
   Rocket,
   Activity,
   CheckSquare,
+  Brain,
+  Plug,
+  MessageSquare,
+  Zap,
+  TrendingUp,
+  ShieldAlert,
 } from 'lucide-react';
 import { motion } from 'framer-motion';
-import { useApp } from '@/contexts/AppContext';
+import { useApp, type AppView } from '@/contexts/AppContext';
 import { useAuth } from '@/contexts/AuthContext';
 import {
   useLiveDashboardMetrics,
@@ -33,6 +39,9 @@ import {
   useFireReturns,
   useFireRecentActivities,
   useFireInvoices,
+  useFirmExecutiveScores,
+  useFireMemberships,
+  useFirePriorities,
 } from '@/hooks/use-firestore';
 import type {
   FirestoreClient,
@@ -246,6 +255,179 @@ function SectionCard({
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// BUSINESS HEALTH SCORE — prominent SVG gauge (0-100)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function healthTier(score: number): { label: string; tone: string } {
+  if (score >= 85) return { label: 'Excellent', tone: 'text-emerald-400' };
+  if (score >= 70) return { label: 'Healthy', tone: 'text-emerald-400' };
+  if (score >= 50) return { label: 'At Risk', tone: 'text-amber-400' };
+  return { label: 'Critical', tone: 'text-amber-400' };
+}
+
+function BusinessHealthGauge({
+  score,
+  insight,
+}: {
+  score: number;
+  insight: string;
+}) {
+  const size = 180;
+  const stroke = 12;
+  const r = (size - stroke) / 2;
+  const c = 2 * Math.PI * r;
+  const pct = Math.max(0, Math.min(100, score)) / 100;
+  const offset = c * (1 - pct);
+  const tier = healthTier(score);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 16 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5, delay: 0.12, ease: 'easeOut' }}
+      className="h-full"
+    >
+      <div className="glass-surface rounded-2xl p-6 md:p-8 flex flex-col sm:flex-row items-center gap-6 md:gap-10 h-full">
+        <div className="relative shrink-0" style={{ width: size, height: size }}>
+          <svg width={size} height={size} className="-rotate-90">
+            <defs>
+              <linearGradient id="bhsGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stopColor="#10b981" />
+                <stop offset="60%" stopColor="#06b6d4" />
+                <stop offset="100%" stopColor="#f59e0b" />
+              </linearGradient>
+            </defs>
+            <circle
+              cx={size / 2}
+              cy={size / 2}
+              r={r}
+              fill="none"
+              stroke="rgba(255,255,255,0.06)"
+              strokeWidth={stroke}
+            />
+            <motion.circle
+              cx={size / 2}
+              cy={size / 2}
+              r={r}
+              fill="none"
+              stroke="url(#bhsGradient)"
+              strokeWidth={stroke}
+              strokeLinecap="round"
+              strokeDasharray={c}
+              initial={{ strokeDashoffset: c }}
+              animate={{ strokeDashoffset: offset }}
+              transition={{ duration: 1.2, ease: 'easeOut', delay: 0.3 }}
+            />
+          </svg>
+          <div className="absolute inset-0 flex flex-col items-center justify-center">
+            <motion.span
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.5, delay: 0.7 }}
+              className={`text-5xl font-bold tracking-tight ${tier.tone}`}
+            >
+              {Math.round(score)}
+            </motion.span>
+            <span className="text-[10px] text-muted-foreground tracking-wider uppercase mt-1">
+              / 100
+            </span>
+          </div>
+        </div>
+        <div className="flex-1 min-w-0 space-y-2 text-center sm:text-left">
+          <div className="flex items-center justify-center sm:justify-start gap-2">
+            <div className="flex items-center justify-center h-8 w-8 rounded-lg accent-gradient-soft">
+              <Brain className="h-4 w-4 accent-text" />
+            </div>
+            <h3 className="text-sm font-semibold text-foreground tracking-tight">
+              Business Health Score
+            </h3>
+          </div>
+          <p className={`text-lg font-semibold ${tier.tone}`}>{tier.label}</p>
+          <p className="text-xs text-muted-foreground leading-relaxed line-clamp-3">
+            {insight}
+          </p>
+          <div className="flex items-center justify-center sm:justify-start gap-2 pt-1">
+            <span className="text-[10px] text-muted-foreground uppercase tracking-wider">
+              Updated just now
+            </span>
+          </div>
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SCORE CARD — small 0-100 score with progress bar
+// ═══════════════════════════════════════════════════════════════════════════════
+
+interface ScoreCardProps {
+  label: string;
+  score: number; // 0-100
+  subtitle: string;
+  icon: React.ReactNode;
+  index: number;
+  tone?: 'emerald' | 'amber' | 'cyan';
+}
+
+function ScoreCard({
+  label,
+  score,
+  subtitle,
+  icon,
+  index,
+  tone = 'emerald',
+}: ScoreCardProps) {
+  const clamped = Math.max(0, Math.min(100, score));
+  const barColor =
+    tone === 'amber'
+      ? 'from-amber-500 to-amber-400'
+      : tone === 'cyan'
+        ? 'from-cyan-500 to-cyan-400'
+        : 'from-emerald-500 to-emerald-400';
+  const textColor =
+    tone === 'amber'
+      ? 'text-amber-400'
+      : tone === 'cyan'
+        ? 'text-cyan-400'
+        : 'text-emerald-400';
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 16 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5, delay: index * 0.08, ease: 'easeOut' }}
+      className="h-full"
+    >
+      <div className="glass-surface rounded-2xl p-5 h-full hover-lift">
+        <div className="flex items-start justify-between gap-3 mb-3">
+          <div className="space-y-1 min-w-0">
+            <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
+              {label}
+            </p>
+            <p className={`text-2xl font-bold tracking-tight ${textColor}`}>
+              {Math.round(clamped)}
+              <span className="text-sm text-muted-foreground ml-0.5">/100</span>
+            </p>
+          </div>
+          <div className="flex items-center justify-center h-9 w-9 rounded-lg accent-gradient-soft shrink-0">
+            {icon}
+          </div>
+        </div>
+        <div className="h-1.5 rounded-full bg-white/[0.05] overflow-hidden">
+          <motion.div
+            initial={{ width: 0 }}
+            animate={{ width: `${clamped}%` }}
+            transition={{ duration: 0.8, delay: 0.3 + index * 0.05, ease: 'easeOut' }}
+            className={`h-full rounded-full bg-gradient-to-r ${barColor}`}
+          />
+        </div>
+        <p className="text-[11px] text-muted-foreground mt-2">{subtitle}</p>
+      </div>
+    </motion.div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // LOADING SKELETON — matches new layout (3 KPI + 3 sections)
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -360,6 +542,9 @@ export default function DashboardPage() {
   const { data: returns } = useFireReturns();
   const { data: invoices } = useFireInvoices();
   const { data: recentActivities } = useFireRecentActivities(10);
+  const { scores: execScores } = useFirmExecutiveScores();
+  const { data: memberships } = useFireMemberships(user?.firmId || null);
+  const { data: priorityQueue } = useFirePriorities('pending');
 
   // ── Filing state ──────────────────────────────────────────────────────
   const [filingInProgress, setFilingInProgress] = useState<Set<string>>(new Set());
@@ -390,6 +575,129 @@ export default function DashboardPage() {
   const insight = useMemo(
     () => buildInsightSentence(metrics, pendingCollection),
     [metrics, pendingCollection],
+  );
+
+  // ── Business Health Score (firmHealth from executive scores, fallback to metrics) ──
+  const businessHealthScore = useMemo<number>(() => {
+    if (execScores && typeof execScores.firmHealth === 'number' && execScores.firmHealth > 0) {
+      return execScores.firmHealth;
+    }
+    if (metrics.averageHealthScore > 0) return metrics.averageHealthScore;
+    // Fallback computation — start at 100, subtract weighted penalties
+    let score = 100;
+    score -= metrics.criticalIssues * 6;
+    score -= metrics.warnings * 2;
+    score -= metrics.overdueReturns * 8;
+    score -= metrics.pendingReturns * 2;
+    return Math.max(0, Math.min(100, Math.round(score)));
+  }, [execScores, metrics]);
+
+  // ── Compliance Score (0-100): filed vs total returns, blended with exec score ──
+  const complianceScore = useMemo<number>(() => {
+    if (execScores && typeof execScores.compliance === 'number' && execScores.compliance > 0) {
+      return execScores.compliance;
+    }
+    const totalReturns = returns.length;
+    if (totalReturns === 0) return 100;
+    const filed = returns.filter((r) => r.status === 'filed').length;
+    return Math.round((filed / totalReturns) * 100);
+  }, [execScores, returns]);
+
+  // ── Collection Score (0-100): match percentage from reconciliation ──
+  const collectionScore = useMemo<number>(() => {
+    if (execScores && typeof execScores.cashFlow === 'number' && execScores.cashFlow > 0) {
+      // Use a blend: cashFlow score and match percentage
+      return Math.round((execScores.cashFlow + metrics.matchPercentage) / 2);
+    }
+    return Math.round(metrics.matchPercentage);
+  }, [execScores, metrics.matchPercentage]);
+
+  // ── Risk Score (0-100): inverse of risk percentage, with critical issues penalty ──
+  const riskScore = useMemo<number>(() => {
+    // riskScore represents risk POSTURE (higher = safer), not raw risk
+    const baseRisk = Math.max(0, Math.min(100, 100 - metrics.riskPercentage));
+    const criticalPenalty = Math.min(50, metrics.criticalIssues * 8);
+    const overduePenalty = Math.min(30, metrics.overdueReturns * 6);
+    return Math.max(0, Math.min(100, Math.round(baseRisk - criticalPenalty - overduePenalty)));
+  }, [metrics]);
+
+  // ── Today's Priorities: from priority queue hook, fallback to derived priorities ──
+  const todaysPriorities = useMemo<
+    Array<{ id: string; label: string; category: string; urgency: number; view: AppView }>
+  >(() => {
+    // 1. Use real priority queue data if available
+    if (priorityQueue && priorityQueue.length > 0) {
+      return priorityQueue.slice(0, 5).map((p) => ({
+        id: p.priorityId || p.id,
+        label: p.title || 'Untitled priority',
+        category: p.category || 'general',
+        urgency: p.urgency || 5,
+        view: 'tasks' as AppView,
+      }));
+    }
+    // 2. Fallback: derive from live metrics
+    const list: Array<{ id: string; label: string; category: string; urgency: number; view: AppView }> = [];
+    if (metrics.overdueReturns > 0) {
+      list.push({
+        id: 'fb-overdue',
+        label: `File ${metrics.overdueReturns} overdue return${metrics.overdueReturns > 1 ? 's' : ''}`,
+        category: 'filing',
+        urgency: 10,
+        view: 'returns',
+      });
+    }
+    if (metrics.criticalIssues > 0) {
+      list.push({
+        id: 'fb-critical',
+        label: `Resolve ${metrics.criticalIssues} critical issue${metrics.criticalIssues > 1 ? 's' : ''}`,
+        category: 'reconciliation',
+        urgency: 9,
+        view: 'reconcile',
+      });
+    }
+    if (pendingCollection > 0) {
+      list.push({
+        id: 'fb-collections',
+        label: `Collect ₹${formatINR(pendingCollection)} pending`,
+        category: 'payment',
+        urgency: 7,
+        view: 'invoices',
+      });
+    }
+    if (metrics.extractionsPending > 0) {
+      list.push({
+        id: 'fb-extractions',
+        label: `Review ${metrics.extractionsPending} pending extraction${metrics.extractionsPending > 1 ? 's' : ''}`,
+        category: 'upload',
+        urgency: 5,
+        view: 'invoices',
+      });
+    }
+    return list.slice(0, 5);
+  }, [priorityQueue, metrics, pendingCollection]);
+
+  // ── Connected services (static catalog — honest "Not connected" by default) ──
+  const connectedServices = useMemo(
+    () => [
+      { id: 'gstn', name: 'GSTN', initial: 'G', connected: metrics.totalClients > 0 },
+      { id: 'einvoice', name: 'E-Invoice', initial: 'E', connected: false },
+      { id: 'gstr2b', name: 'GSTR-2B', initial: '2', connected: false },
+      { id: 'bank', name: 'Bank APIs', initial: 'B', connected: false },
+      { id: 'whatsapp', name: 'WhatsApp', initial: 'W', connected: false },
+      { id: 'gmail', name: 'Gmail', initial: 'M', connected: false },
+    ],
+    [metrics.totalClients],
+  );
+
+  // ── Team members from memberships hook ──
+  const teamMembers = useMemo(
+    () => memberships.slice(0, 6).map((m) => ({
+      id: m.membershipId || m.id,
+      name: m.userId?.split('@')[0] || 'Team member',
+      role: m.role || 'staff',
+      status: m.status || 'invited',
+    })),
+    [memberships],
   );
 
   // ── Upcoming filings (non-filed, sorted by urgency) ───────────────────
@@ -603,6 +911,12 @@ export default function DashboardPage() {
           </Button>
         </motion.div>
 
+        {/* ═══ BUSINESS HEALTH SCORE — prominent gauge ═══ */}
+        <BusinessHealthGauge
+          score={businessHealthScore}
+          insight={insight}
+        />
+
         {/* ═══ KPI CARDS — exactly 3 ═══ */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <KpiCard
@@ -633,6 +947,46 @@ export default function DashboardPage() {
                 : 'Pending collection'
             }
             icon={<IndianRupee className="h-4 w-4 accent-text" />}
+          />
+        </div>
+
+        {/* ═══ SCORE CARDS — Compliance / Collection / Risk (0-100) ═══ */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <ScoreCard
+            index={0}
+            label="Compliance Score"
+            score={complianceScore}
+            subtitle={
+              metrics.filedReturns > 0
+                ? `${metrics.filedReturns} filed · ${metrics.pendingReturns + metrics.overdueReturns} pending`
+                : 'Based on filed vs pending returns'
+            }
+            icon={<ShieldCheck className="h-4 w-4 accent-text" />}
+            tone="emerald"
+          />
+          <ScoreCard
+            index={1}
+            label="Collection Score"
+            score={collectionScore}
+            subtitle={
+              pendingCollection > 0
+                ? `₹${formatINR(pendingCollection)} pending collection`
+                : `${metrics.matchPercentage.toFixed(0)}% invoice match rate`
+            }
+            icon={<TrendingUp className="h-4 w-4 accent-text" />}
+            tone="cyan"
+          />
+          <ScoreCard
+            index={2}
+            label="Risk Score"
+            score={riskScore}
+            subtitle={
+              metrics.criticalIssues > 0
+                ? `${metrics.criticalIssues} critical · ${metrics.overdueReturns} overdue`
+                : 'Risk posture — higher is safer'
+            }
+            icon={<ShieldAlert className="h-4 w-4 accent-text" />}
+            tone="amber"
           />
         </div>
 
@@ -679,9 +1033,68 @@ export default function DashboardPage() {
             )}
           </SectionCard>
 
-          {/* ── Tasks ─────────────────────────────────────────────────── */}
+          {/* ── Today's Priorities ───────────────────────────────────── */}
           <SectionCard
             index={1}
+            title="Today's Priorities"
+            icon={<Zap className="h-4 w-4 accent-text" />}
+            actionLabel="View all"
+            onAction={() => setCurrentView('tasks')}
+          >
+            {todaysPriorities.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-8 text-center">
+                <CheckCircle2 className="h-7 w-7 text-emerald-500/70 mb-2" />
+                <p className="text-xs text-muted-foreground max-w-[220px]">
+                  No priorities today — you&apos;re ahead of schedule!
+                </p>
+              </div>
+            ) : (
+              <ScrollArea className="max-h-[280px] -mx-1 px-1">
+                <ul className="space-y-1">
+                  {todaysPriorities.map((p) => {
+                    const urgencyHigh = p.urgency >= 8;
+                    const urgencyMed = p.urgency >= 5 && p.urgency < 8;
+                    return (
+                      <li key={p.id}>
+                        <button
+                          type="button"
+                          onClick={() => setCurrentView(p.view)}
+                          className="w-full text-left p-2.5 rounded-lg hover:bg-white/5 transition-colors group"
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="min-w-0 flex-1">
+                              <p className="text-[13px] font-medium text-foreground truncate">
+                                {p.label}
+                              </p>
+                              <p className="text-[11px] text-muted-foreground mt-0.5 capitalize">
+                                {p.category} · urgency {p.urgency}/10
+                              </p>
+                            </div>
+                            <Badge
+                              variant="outline"
+                              className={`text-[10px] px-1.5 py-0 h-5 shrink-0 ${
+                                urgencyHigh
+                                  ? 'border-amber-500/30 text-amber-400'
+                                  : urgencyMed
+                                    ? 'border-cyan-500/30 text-cyan-400'
+                                    : 'border-border text-muted-foreground'
+                              }`}
+                            >
+                              {urgencyHigh ? 'High' : urgencyMed ? 'Med' : 'Low'}
+                            </Badge>
+                          </div>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </ScrollArea>
+            )}
+          </SectionCard>
+
+          {/* ── Tasks (upcoming filings) ─────────────────────────────── */}
+          <SectionCard
+            index={2}
             title="Tasks"
             icon={<CheckSquare className="h-4 w-4 accent-text" />}
             actionLabel="View all"
@@ -757,12 +1170,17 @@ export default function DashboardPage() {
               </ScrollArea>
             )}
           </SectionCard>
+        </div>
 
-          {/* ── Recent Activity ───────────────────────────────────────── */}
+        {/* ═══ ADDITIONAL WIDGETS — Activity / Services / Team ═══ */}
+        <div className="section-gap grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* ── Business Timeline (Recent Activity) ──────────────────── */}
           <SectionCard
-            index={2}
-            title="Recent Activity"
-            icon={<Activity className="h-4 w-4 accent-text" />}
+            index={0}
+            title="Business Timeline"
+            icon={<Clock className="h-4 w-4 accent-text" />}
+            actionLabel="View all"
+            onAction={() => setCurrentView('timeline')}
           >
             {recentActivities.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-8 text-center">
@@ -773,32 +1191,212 @@ export default function DashboardPage() {
               </div>
             ) : (
               <ScrollArea className="max-h-[280px] -mx-1 px-1">
-                <ul className="space-y-3">
-                  {recentActivities.slice(0, 6).map((a) => (
-                    <li key={a.id} className="flex items-start gap-2.5">
-                      <div className="flex items-center justify-center h-7 w-7 rounded-full accent-gradient-soft shrink-0 mt-0.5">
-                        {activityIcon(a.type)}
+                <div className="relative">
+                  <ul className="space-y-0">
+                    {recentActivities.slice(0, 6).map((a, i) => {
+                      const isLast = i === Math.min(recentActivities.length, 6) - 1;
+                      return (
+                        <li key={a.id} className="relative flex gap-3 pb-3 last:pb-0">
+                          {!isLast && (
+                            <span
+                              className="absolute left-[9px] top-7 bottom-0 w-px bg-white/[0.08]"
+                              aria-hidden
+                            />
+                          )}
+                          <span className="relative z-10 flex h-[18px] w-[18px] items-center justify-center rounded-full border border-emerald-400/30 bg-[#050505] shrink-0 mt-1">
+                            <span className="h-1.5 w-1.5 rounded-full accent-gradient" />
+                          </span>
+                          <div className="min-w-0 flex-1 pt-0.5">
+                            <p className="text-[13px] font-medium text-foreground leading-snug">
+                              {a.title}
+                            </p>
+                            {a.description && (
+                              <p className="text-[11px] text-muted-foreground mt-0.5 line-clamp-2">
+                                {a.description}
+                              </p>
+                            )}
+                            <p className="text-[10px] text-muted-foreground/60 mt-0.5">
+                              {a.createdAt ? timeAgo(a.createdAt as string) : ''}
+                            </p>
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              </ScrollArea>
+            )}
+          </SectionCard>
+
+          {/* ── Connected Services ───────────────────────────────────── */}
+          <SectionCard
+            index={1}
+            title="Connected Services"
+            icon={<Plug className="h-4 w-4 accent-text" />}
+            actionLabel="Manage"
+            onAction={() => setCurrentView('connections')}
+          >
+            <div className="grid grid-cols-2 gap-2">
+              {connectedServices.map((s) => (
+                <div
+                  key={s.id}
+                  className="flex flex-col gap-2 rounded-xl border border-white/[0.06] bg-white/[0.02] px-3 py-3"
+                >
+                  <div className="flex items-center gap-2">
+                    <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-white/[0.04] text-[11px] font-bold text-muted-foreground shrink-0">
+                      {s.initial}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-medium text-foreground truncate">
+                        {s.name}
+                      </p>
+                      <div className="flex items-center gap-1 mt-0.5">
+                        <span
+                          className={`h-1.5 w-1.5 rounded-full ${
+                            s.connected ? 'bg-emerald-400' : 'bg-muted-foreground/40'
+                          }`}
+                        />
+                        <span className="text-[10px] text-muted-foreground">
+                          {s.connected ? 'Connected' : 'Not connected'}
+                        </span>
                       </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-[13px] font-medium text-foreground leading-snug">
-                          {a.title}
-                        </p>
-                        {a.description && (
-                          <p className="text-[11px] text-muted-foreground mt-0.5 line-clamp-2">
-                            {a.description}
-                          </p>
-                        )}
-                        <p className="text-[10px] text-muted-foreground/60 mt-0.5">
-                          {a.createdAt ? timeAgo(a.createdAt as string) : ''}
-                        </p>
-                      </div>
-                    </li>
-                  ))}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <p className="text-[11px] text-muted-foreground text-center pt-3">
+              Connect services to sync automatically.
+            </p>
+          </SectionCard>
+
+          {/* ── Team Status ──────────────────────────────────────────── */}
+          <SectionCard
+            index={2}
+            title="Team Status"
+            icon={<Users className="h-4 w-4 accent-text" />}
+            actionLabel="Manage"
+            onAction={() => setCurrentView('team')}
+          >
+            {teamMembers.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-6 text-center">
+                <div className="flex items-center justify-center h-10 w-10 rounded-xl accent-gradient-soft mb-2">
+                  <Users className="h-4 w-4 accent-text" />
+                </div>
+                <p className="text-xs text-muted-foreground max-w-[220px]">
+                  No team members yet — invite your team to collaborate.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setCurrentView('team')}
+                  className="mt-3 inline-flex items-center gap-1 text-[11px] font-medium accent-text hover:opacity-80 transition-opacity"
+                >
+                  [ Invite your team ]
+                  <ArrowRight className="h-3 w-3" />
+                </button>
+              </div>
+            ) : (
+              <ScrollArea className="max-h-[280px] -mx-1 px-1">
+                <ul className="space-y-1">
+                  {teamMembers.map((m) => {
+                    const initials = m.name.slice(0, 2).toUpperCase();
+                    const isActive = m.status === 'active';
+                    return (
+                      <li key={m.id}>
+                        <div className="flex items-center gap-3 p-2 rounded-lg hover:bg-white/5 transition-colors">
+                          <div className="flex h-8 w-8 items-center justify-center rounded-full accent-gradient text-[11px] font-bold text-white shrink-0">
+                            {initials}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-[13px] font-medium text-foreground truncate capitalize">
+                              {m.name}
+                            </p>
+                            <p className="text-[11px] text-muted-foreground capitalize">
+                              {m.role}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <span
+                              className={`h-1.5 w-1.5 rounded-full ${
+                                isActive ? 'bg-emerald-400' : 'bg-amber-400'
+                              }`}
+                            />
+                            <span
+                              className={`text-[10px] capitalize ${
+                                isActive ? 'text-emerald-400' : 'text-amber-400'
+                              }`}
+                            >
+                              {m.status}
+                            </span>
+                          </div>
+                        </div>
+                      </li>
+                    );
+                  })}
                 </ul>
               </ScrollArea>
             )}
           </SectionCard>
         </div>
+
+        {/* ═══ ORACLE QUICK-ASK — AI assistant entry ═══ */}
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.56, ease: 'easeOut' }}
+          className="h-full"
+        >
+          <div className="glass-surface rounded-2xl p-6 hover-lift">
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+              <div className="flex items-start gap-3 min-w-0">
+                <div className="flex items-center justify-center h-10 w-10 rounded-xl accent-gradient shrink-0">
+                  <Brain className="h-5 w-5 text-white" />
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-sm font-semibold text-foreground tracking-tight">
+                      Ask Oracle
+                    </h3>
+                    <Badge
+                      variant="outline"
+                      className="text-[10px] px-1.5 py-0 h-5 border-emerald-500/30 text-emerald-400"
+                    >
+                      AI
+                    </Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+                    Ask any question about your clients, returns, or compliance — Oracle turns live firm data into instant answers and actions.
+                  </p>
+                  <div className="flex flex-wrap items-center gap-1.5 mt-3">
+                    {[
+                      'What should I prioritize today?',
+                      'Show overdue returns',
+                      'Which clients are at risk?',
+                    ].map((q) => (
+                      <button
+                        key={q}
+                        type="button"
+                        onClick={() => setCurrentView('ai-business-copilot')}
+                        className="text-[11px] rounded-full border border-white/[0.08] bg-white/[0.02] px-2.5 py-1 text-muted-foreground hover:border-emerald-400/30 hover:text-foreground transition-colors"
+                      >
+                        {q}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              <Button
+                size="sm"
+                className="accent-gradient text-white hover:opacity-90 gap-1.5 shrink-0"
+                onClick={() => setCurrentView('ai-business-copilot')}
+              >
+                <MessageSquare className="h-3.5 w-3.5" />
+                Ask Oracle
+                <ArrowRight className="h-3 w-3" />
+              </Button>
+            </div>
+          </div>
+        </motion.div>
 
         {/* ── Ready-to-file quick action footer (subtle, optional) ── */}
         {(() => {

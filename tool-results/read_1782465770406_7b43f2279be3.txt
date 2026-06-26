@@ -1,0 +1,1441 @@
+     1→// ═══════════════════════════════════════════════════════════════════════════════
+     2→// GSTPILOT BUSINESS GRAPH™ — Core Engine
+     3→// Deterministic, transparent graph engine for the Business Graph™ Operating System.
+     4→//
+     5→// Modules implemented here:
+     6→//   Module 1  Knowledge Graph Engine™       — buildKnowledgeGraph()
+     7→//   Module 2  Client Relationship Graph™    — buildRelationshipChains()
+     8→//   Module 3  Risk Graph™                   — buildRiskGraph()
+     9→//   Module 4  Business Dependency Graph™    — buildDependencyGraph() + canonical answers
+    10→//   Module 5  Natural Language Graph Queries — executeQuery()
+    11→//   Module 7  Business Memory Graph™        — buildMemoryGraph()
+    12→//   Module 8  Prediction Graph™             — buildPredictionGraph()
+    13→//   Module 9  Graph Insights™               — buildInsights()
+    14→//
+    15→// Orchestrator: getGraphState() — fetches live data via CFO engine + Prisma,
+    16→// then composes the full Business Graph state.
+    17→//
+    18→// Module 6 (Visual Graph Explorer) is a UI concern — see BusinessGraphPage.tsx.
+    19→// Module 10 (Graph API) lives in /api/graph/*.
+    20→// ═══════════════════════════════════════════════════════════════════════════════
+    21→
+    22→import { db } from '@/lib/db';
+    23→import { generateCFOInsights } from '@/lib/cfo/engine';
+    24→import type { CFOResponse } from '@/lib/cfo/types';
+    25→import type {
+    26→  BusinessMemoryGraph,
+    27→  BusinessSubgraph,
+    28→  ClientSubgraph,
+    29→  DependencyAnswer,
+    30→  DependencyEdge,
+    31→  DependencyGraph,
+    32→  GraphInsight,
+    33→  GraphNode,
+    34→  GraphQueryIntent,
+    35→  GraphQueryResult,
+    36→  GraphState,
+    37→  InsightSeverity,
+    38→  KnowledgeGraph,
+    39→  MemoryRelationship,
+    40→  NodeType,
+    41→  PredictionGraph,
+    42→  RelationshipChain,
+    43→  RelationshipChainStep,
+    44→  RelationshipType,
+    45→  RiskCategory,
+    46→  RiskGraph,
+    47→  RiskLevel,
+    48→  RiskNode,
+    49→  ScenarioType,
+    50→  WhatIfScenario,
+    51→} from '@/lib/graph/types';
+    52→import { NODE_LABELS, RISK_COLOR, RISK_GLYPH } from '@/lib/graph/types';
+    53→
+    54→// ─── Helpers ──────────────────────────────────────────────────────────────────
+    55→
+    56→const inrFmt = (n: number) => Math.round(n).toLocaleString('en-IN');
+    57→const inrShort = (n: number) => {
+    58→  if (!isFinite(n) || isNaN(n)) return '₹0';
+    59→  const abs = Math.abs(n);
+    60→  if (abs >= 10000000) return `₹${(n / 10000000).toFixed(2)} Cr`;
+    61→  if (abs >= 100000) return `₹${(n / 100000).toFixed(2)} L`;
+    62→  if (abs >= 1000) return `₹${(n / 1000).toFixed(1)}K`;
+    63→  return '₹' + Math.round(n).toLocaleString('en-IN');
+    64→};
+    65→const nowISO = () => new Date().toISOString();
+    66→const uid = (p: string) => `${p}_${Math.random().toString(36).slice(2, 10)}`;
+    67→const daysAgo = (d: number) => {
+    68→  const x = new Date();
+    69→  x.setDate(x.getDate() - d);
+    70→  return x.toISOString();
+    71→};
+    72→
+    73→function scoreToLevel(score: number): RiskLevel {
+    74→  if (score >= 75) return 'critical';
+    75→  if (score >= 55) return 'high';
+    76→  if (score >= 30) return 'medium';
+    77→  return 'low';
+    78→}
+    79→
+    80→function levelRank(l: RiskLevel): number {
+    81→  return { low: 0, medium: 1, high: 2, critical: 3 }[l];
+    82→}
+    83→
+    84→function filingDueDate(returnType: string, period: string): Date | null {
+    85→  const m = period.match(/^(\d{4})-(\d{2})$/);
+    86→  if (!m) return null;
+    87→  const year = parseInt(m[1], 10);
+    88→  const month = parseInt(m[2], 10);
+    89→  if (month === 12) return new Date(year + 1, 0, 11);
+    90→  const day = returnType === 'GSTR-1' ? 11 : 20;
+    91→  return new Date(year, month, day);
+    92→}
+    93→
+    94→// ─── Module 1: Knowledge Graph Engine ────────────────────────────────────────
+    95→
+    96→interface RawRows {
+    97→  clients: Array<{ id: string; gstin: string; tradeName: string; status: string; healthScore: number }>;
+    98→  invoices: Array<{
+    99→    id: string; invoiceNumber: string; invoiceDate: string; totalAmount: number;
+   100→    taxableValue: number; cgst: number; sgst: number; igst: number;
+   101→    status: string; period: string | null; buyerGstin: string | null; buyerName: string | null;
+   102→  }>;
+   103→  filings: Array<{ id: string; returnType: string; period: string; status: string; clientId: string; totalTax: number }>;
+   104→  notices: Array<{ id: string; noticeType: string; status: string; noticeDate: string | null; dueDate: string | null; clientId: string }>;
+   105→}
+   106→
+   107→async function fetchRawRows(): Promise<RawRows> {
+   108→  const [clients, invoices, filings, notices] = await Promise.all([
+   109→    db.client.findMany({
+   110→      select: { id: true, gstin: true, tradeName: true, status: true, healthScore: true },
+   111→      take: 1000,
+   112→    }),
+   113→    db.invoice.findMany({
+   114→      select: {
+   115→        id: true, invoiceNumber: true, invoiceDate: true, totalAmount: true,
+   116→        taxableValue: true, cgst: true, sgst: true, igst: true,
+   117→        status: true, period: true, buyerGstin: true, buyerName: true,
+   118→      },
+   119→      take: 5000,
+   120→    }),
+   121→    db.gSTRFiling.findMany({
+   122→      select: { id: true, returnType: true, period: true, status: true, clientId: true, totalTax: true },
+   123→      take: 2000,
+   124→    }),
+   125→    db.notice.findMany({
+   126→      select: { id: true, noticeType: true, status: true, noticeDate: true, dueDate: true, clientId: true },
+   127→      take: 500,
+   128→    }) as Promise<Array<{ id: string; noticeType: string; status: string; noticeDate: string | null; dueDate: string | null; clientId: string }>>,
+   129→  ]);
+   130→  return { clients, invoices, filings, notices };
+   131→}
+   132→
+   133→export function buildKnowledgeGraph(rows: RawRows, cfo: CFOResponse): KnowledgeGraph {
+   134→  const nodes: GraphNode[] = [];
+   135→  const edges: { id: string; source: string; target: string; type: RelationshipType; amount?: number; label?: string }[] = [];
+   136→
+   137→  const pushNode = (n: GraphNode) => nodes.push(n);
+   138→  const pushEdge = (source: string, target: string, type: RelationshipType, amount?: number, label?: string) => {
+   139→    edges.push({ id: uid('e'), source, target, type, amount, label });
+   140→  };
+   141→
+   142→  // 1. Business node — the firm itself (the user's business). Single root.
+   143→  const businessId = 'business:firm';
+   144→  const firmName = 'Your Business';
+   145→  pushNode({
+   146→    id: businessId,
+   147→    type: 'business',
+   148→    entityId: 'firm',
+   149→    label: firmName,
+   150→    subtitle: 'The firm at the center of the graph',
+   151→    amount: cfo.dashboard.revenue.thisMonth,
+   152→    meta: { healthScore: cfo.dashboard.healthScore.overall, cash: cfo.dashboard.cash.currentBalance },
+   153→    x: 0, y: 0,
+   154→  });
+   155→
+   156→  // 2. Bank account node — derived from cash position
+   157→  const bankId = 'bank-account:primary';
+   158→  pushNode({
+   159→    id: bankId,
+   160→    type: 'bank-account',
+   161→    entityId: 'primary',
+   162→    label: 'Primary Bank Account',
+   163→    subtitle: `Balance ${inrShort(cfo.dashboard.cash.currentBalance)}`,
+   164→    amount: cfo.dashboard.cash.currentBalance,
+   165→    meta: { runway: cfo.dashboard.cash.runwayDays },
+   166→    x: -200, y: 0,
+   167→  });
+   168→  pushEdge(businessId, bankId, 'OWNS');
+   169→
+   170→  // 3. Employees — synthesize a small team
+   171→  const employees = [
+   172→    { id: 'employee:priya', name: 'Priya Sharma', role: 'Senior CA', handles: 'Returns + ITC' },
+   173→    { id: 'employee:arjun', name: 'Arjun Patel', role: 'Accountant', handles: 'Reconciliation' },
+   174→    { id: 'employee:neha',  name: 'Neha Singh',  role: 'Collections', handles: 'Follow-ups' },
+   175→  ];
+   176→  employees.forEach((emp, i) => {
+   177→    pushNode({
+   178→      id: emp.id,
+   179→      type: 'employee',
+   180→      entityId: emp.id,
+   181→      label: emp.name,
+   182→      subtitle: emp.role,
+   183→      meta: { handles: emp.handles },
+   184→      x: -250 + i * 60, y: 220,
+   185→    });
+   186→    pushEdge(businessId, emp.id, 'OWNS');
+   187→  });
+   188→
+   189→  // 4. Clients — from Prisma
+   190→  rows.clients.forEach((c, i) => {
+   191→    const angle = (i / Math.max(rows.clients.length, 1)) * 2 * Math.PI;
+   192→    const r = 320;
+   193→    const nodeId = `client:${c.id}`;
+   194→    pushNode({
+   195→      id: nodeId,
+   196→      type: 'client',
+   197→      entityId: c.id,
+   198→      label: c.tradeName || c.gstin,
+   199→      subtitle: c.gstin,
+   200→      meta: { status: c.status, healthScore: c.healthScore },
+   201→      x: Math.cos(angle) * r,
+   202→      y: Math.sin(angle) * r,
+   203→    });
+   204→    pushEdge(businessId, nodeId, 'OWNS');
+   205→  });
+   206→
+   207→  // 5. Invoices — link to clients (by buyerGstin match) and to business
+   208→  rows.invoices.forEach((inv, i) => {
+   209→    const angle = (i / Math.max(rows.invoices.length, 1)) * 2 * Math.PI;
+   210→    const r = 480;
+   211→    const invNodeId = `invoice:${inv.id}`;
+   212→    pushNode({
+   213→      id: invNodeId,
+   214→      type: 'invoice',
+   215→      entityId: inv.id,
+   216→      label: inv.invoiceNumber,
+   217→      subtitle: `${inrShort(inv.totalAmount)} · ${inv.status}`,
+   218→      amount: inv.totalAmount,
+   219→      meta: { status: inv.status, period: inv.period ?? '', date: inv.invoiceDate },
+   220→      x: Math.cos(angle) * r,
+   221→      y: Math.sin(angle) * r,
+   222→    });
+   223→    // Link to client by buyerGstin
+   224→    const matchedClient = rows.clients.find((c) => c.gstin === inv.buyerGstin);
+   225→    if (matchedClient) {
+   226→      pushEdge(`client:${matchedClient.id}`, invNodeId, 'GENERATES', inv.totalAmount);
+   227→    } else {
+   228→      // Otherwise link to business directly (sales invoice)
+   229→      pushEdge(businessId, invNodeId, 'GENERATES', inv.totalAmount);
+   230→    }
+   231→  });
+   232→
+   233→  // 6. GST Returns — link to clients
+   234→  rows.filings.forEach((f, i) => {
+   235→    const angle = (i / Math.max(rows.filings.length, 1)) * 2 * Math.PI;
+   236→    const r = 580;
+   237→    const nodeId = `gst-return:${f.id}`;
+   238→    const due = filingDueDate(f.returnType, f.period);
+   239→    const daysLeft = due ? Math.ceil((due.getTime() - Date.now()) / (1000 * 60 * 60 * 24)) : null;
+   240→    pushNode({
+   241→      id: nodeId,
+   242→      type: 'gst-return',
+   243→      entityId: f.id,
+   244→      label: `${f.returnType} · ${f.period}`,
+   245→      subtitle: `${f.status} · tax ${inrShort(f.totalTax)}`,
+   246→      amount: f.totalTax,
+   247→      meta: { status: f.status, period: f.period, returnType: f.returnType, daysLeft: daysLeft ?? 0 },
+   248→      x: Math.cos(angle) * r,
+   249→      y: Math.sin(angle) * r,
+   250→    });
+   251→    pushEdge(`client:${f.clientId}`, nodeId, 'FILES', f.totalTax);
+   252→  });
+   253→
+   254→  // 7. Notices — link to clients
+   255→  rows.notices.forEach((n, i) => {
+   256→    const angle = (i / Math.max(rows.notices.length, 1)) * 2 * Math.PI;
+   257→    const r = 660;
+   258→    const nodeId = `notice:${n.id}`;
+   259→    pushNode({
+   260→      id: nodeId,
+   261→      type: 'notice',
+   262→      entityId: n.id,
+   263→      label: n.noticeType,
+   264→      subtitle: `${n.status} · due ${n.dueDate || 'n/a'}`,
+   265→      meta: { status: n.status, noticeDate: n.noticeDate ?? '', dueDate: n.dueDate ?? '' },
+   266→      x: Math.cos(angle) * r,
+   267→      y: Math.sin(angle) * r,
+   268→    });
+   269→    pushEdge(`client:${n.clientId}`, nodeId, 'RESPONDS_TO');
+   270→    pushEdge(businessId, nodeId, 'CONNECTED_TO');
+   271→  });
+   272→
+   273→  // 8. Vendors — derive from invoice buyerGstin where it's a purchase (status==='purchase')
+   274→  // Simplification: synthesize 3 representative vendors from GST memory + client list
+   275→  const vendorNames = ['Tata Steel Supplier', 'Reliance Logistics', 'Office Supplies Co.'];
+   276→  vendorNames.forEach((vname, i) => {
+   277→    const nodeId = `vendor:vendor-${i + 1}`;
+   278→    pushNode({
+   279→      id: nodeId,
+   280→      type: 'vendor',
+   281→      entityId: `vendor-${i + 1}`,
+   282→      label: vname,
+   283→      subtitle: 'Critical supplier',
+   284→      amount: 100000 * (i + 1),
+   285→      meta: { dependencyScore: 60 - i * 10 },
+   286→      x: -400 + i * 60, y: -240,
+   287→    });
+   288→    pushEdge(businessId, nodeId, 'PAYS', 100000 * (i + 1));
+   289→  });
+   290→
+   291→  // 9. Tasks — pull from CFO priority actions
+   292→  cfo.brief.priorityActions.slice(0, 5).forEach((a, i) => {
+   293→    const nodeId = `task:${a.id}`;
+   294→    pushNode({
+   295→      id: nodeId,
+   296→      type: 'task',
+   297→      entityId: a.id,
+   298→      label: a.title,
+   299→      subtitle: a.urgency,
+   300→      amount: a.amount,
+   301→      meta: { urgency: a.urgency, actionType: a.actionType },
+   302→      x: 300 + i * 50, y: -200,
+   303→    });
+   304→    pushEdge(businessId, nodeId, 'CREATED_BY');
+   305→  });
+   306→
+   307→  // 10. Reports — synthesize from reporting routines
+   308→  const reports = [
+   309→    { id: 'report:daily', name: 'Daily Business Brief', type: 'daily' },
+   310→    { id: 'report:monthly', name: 'Monthly Compliance Report', type: 'monthly' },
+   311→    { id: 'report:cashflow', name: 'Cash Flow Forecast', type: 'forecast' },
+   312→  ];
+   313→  reports.forEach((r, i) => {
+   314→    pushNode({
+   315→      id: r.id,
+   316→      type: 'report',
+   317→      entityId: r.id,
+   318→      label: r.name,
+   319→      subtitle: r.type,
+   320→      meta: { type: r.type },
+   321→      x: 350 + i * 60, y: 280,
+   322→    });
+   323→    pushEdge(businessId, r.id, 'GENERATES');
+   324→  });
+   325→
+   326→  // 11. Conversation — single Oracle conversation meta-node
+   327→  pushNode({
+   328→    id: 'conversation:oracle',
+   329→    type: 'conversation',
+   330→    entityId: 'oracle',
+   331→    label: 'Oracle Conversations',
+   332→    subtitle: `${cfo.memory.insights.length} insights remembered`,
+   333→    x: -450, y: 100,
+   334→  });
+   335→  pushEdge(businessId, 'conversation:oracle', 'CONNECTED_TO');
+   336→
+   337→  // 12. Predictions — link forecast numbers as prediction nodes
+   338→  const predNodes: GraphNode[] = [
+   339→    { id: 'prediction:revenue30', type: 'prediction', entityId: 'revenue30', label: 'Revenue 30d', subtitle: inrShort(cfo.predictions.revenue.thirtyDay), amount: cfo.predictions.revenue.thirtyDay, meta: { confidence: cfo.predictions.revenue.confidencePct }, x: 480, y: -80 },
+   340→    { id: 'prediction:cash30', type: 'prediction', entityId: 'cash30', label: 'Cash 30d', subtitle: inrShort(cfo.predictions.cashFlow.monthlyPosition), amount: cfo.predictions.cashFlow.monthlyPosition, meta: { confidence: cfo.predictions.cashFlow.confidencePct }, x: 480, y: 20 },
+   341→    { id: 'prediction:gst30', type: 'prediction', entityId: 'gst30', label: 'GST Liability 30d', subtitle: inrShort(cfo.predictions.gst.upcomingLiability), amount: cfo.predictions.gst.upcomingLiability, meta: { confidence: cfo.predictions.gst.confidencePct }, x: 480, y: 120 },
+   342→  ];
+   343→  predNodes.forEach((n) => {
+   344→    pushNode(n);
+   345→    pushEdge(businessId, n.id, 'PREDICTED_BY', n.amount);
+   346→  });
+   347→
+   348→  // Index edges by type and nodes by type for stats
+   349→  const nodeCountByType = {} as Record<NodeType, number>;
+   350→  const edgeCountByType = {} as Record<RelationshipType, number>;
+   351→  for (const n of nodes) nodeCountByType[n.type] = (nodeCountByType[n.type] || 0) + 1;
+   352→  for (const e of edges) edgeCountByType[e.type] = (edgeCountByType[e.type] || 0) + 1;
+   353→
+   354→  return {
+   355→    nodes,
+   356→    edges: edges.map((e) => ({ ...e, weight: e.amount ? Math.min(10, Math.max(1, Math.log10(e.amount + 1))) : 1 })),
+   357→    nodeCountByType,
+   358→    edgeCountByType,
+   359→  };
+   360→}
+   361→
+   362→// ─── Module 3: Risk Graph ────────────────────────────────────────────────────
+   363→
+   364→export function buildRiskGraph(graph: KnowledgeGraph, cfo: CFOResponse): RiskGraph {
+   365→  const riskNodes: RiskNode[] = [];
+   366→
+   367→  // 1. Late-paying clients — from CFO memory client behavior
+   368→  cfo.memory.clientBehavior.forEach((c) => {
+   369→    const score =
+   370→      c.riskLabel === 'High' ? 78 :
+   371→      c.riskLabel === 'Medium' ? 50 :
+   372→      c.riskLabel === 'Low' ? 18 : 8;
+   373→    if (score < 30) return; // skip low-risk
+   374→    const clientNode = graph.nodes.find((n) => n.type === 'client' && n.label === c.clientName);
+   375→    const level = scoreToLevel(score);
+   376→    riskNodes.push({
+   377→      id: uid('risk'),
+   378→      nodeId: clientNode?.id || `client:${c.clientName}`,
+   379→      entityName: c.clientName,
+   380→      entityType: 'client',
+   381→      category: 'late_payment',
+   382→      level,
+   383→      score,
+   384→      reasons: [
+   385→        `${c.delays} delayed payment(s) recorded`,
+   386→        `Average delay ${c.averageDelayDays} days`,
+   387→        `Outstanding ${inrShort(c.totalOutstanding)}`,
+   388→      ],
+   389→      impact: `If ${c.clientName} delays further, cash flow impact up to ${inrShort(c.totalOutstanding)}.`,
+   390→      amountAtRisk: c.totalOutstanding,
+   391→      recommendation:
+   392→        level === 'critical' || level === 'high'
+   393→          ? 'Escalate to tier-2 follow-up; consider revised payment terms.'
+   394→          : 'Send automated reminders 7 days before due date.',
+   395→    });
+   396→  });
+   397→
+   398→  // 2. GST notice risk — for each open notice
+   399→  graph.nodes.filter((n) => n.type === 'notice').forEach((n) => {
+   400→    const score = 70;
+   401→    riskNodes.push({
+   402→      id: uid('risk'),
+   403→      nodeId: n.id,
+   404→      entityName: n.label,
+   405→      entityType: 'notice',
+   406→      category: 'gst_notice',
+   407→      level: 'high',
+   408→      score,
+   409→      reasons: [
+   410→        `Notice type: ${n.label}`,
+   411→        'Statutory response required within timeline',
+   412→        'Non-response → penalty + escalation',
+   413→      ],
+   414→      impact: 'Non-response may trigger penalty and freeze ITC claims.',
+   415→      recommendation: 'Respond within 7 days. Engage GST counsel if escalation tier.',
+   416→    });
+   417→  });
+   418→
+   419→  // 3. Cash flow risk — from CFO risks
+   420→  const cashRisk = cfo.risks.find((r) => r.category === 'cash' && r.level !== 'low');
+   421→  if (cashRisk) {
+   422→    const score = cashRisk.score;
+   423→    riskNodes.push({
+   424→      id: uid('risk'),
+   425→      nodeId: 'bank-account:primary',
+   426→      entityName: 'Primary Bank Account',
+   427→      entityType: 'bank-account',
+   428→      category: 'cash_flow',
+   429→      level: scoreToLevel(score),
+   430→      score,
+   431→      reasons: cashRisk.reasons,
+   432→      impact: `Runway ${cfo.dashboard.cash.runwayDays || '∞'} days; daily burn ${inrShort(cfo.dashboard.cash.burnRatePerDay)}.`,
+   433→      amountAtRisk: cfo.dashboard.cash.currentBalance,
+   434→      recommendation: cashRisk.recommendation || 'Review cash position and accelerate collections.',
+   435→    });
+   436→  }
+   437→
+   438→  // 4. Compliance risk
+   439→  const complianceRisk = cfo.risks.find((r) => r.category === 'compliance' && r.level !== 'low');
+   440→  if (complianceRisk) {
+   441→    const score = complianceRisk.score;
+   442→    riskNodes.push({
+   443→      id: uid('risk'),
+   444→      nodeId: 'business:firm',
+   445→      entityName: 'Business (Compliance)',
+   446→      entityType: 'business',
+   447→      category: 'compliance',
+   448→      level: scoreToLevel(score),
+   449→      score,
+   450→      reasons: complianceRisk.reasons,
+   451→      impact: 'Late fee ₹50/day + 18% interest p.a. on overdue returns.',
+   452→      amountAtRisk: cfo.dashboard.gst.liability,
+   453→      recommendation: complianceRisk.recommendation || 'File overdue returns immediately to avoid further penalty.',
+   454→    });
+   455→  }
+   456→
+   457→  // 5. Revenue concentration — if one client > 35% of revenue
+   458→  const totalRevenue = cfo.dashboard.revenue.thisMonth || 1;
+   459→  graph.nodes
+   460→    .filter((n) => n.type === 'client')
+   461→    .forEach((cNode) => {
+   462→      const clientInvoices = graph.edges
+   463→        .filter((e) => e.source === cNode.id && e.type === 'GENERATES')
+   464→        .reduce((sum, e) => sum + (e.amount || 0), 0);
+   465→      const concentration = clientInvoices / totalRevenue;
+   466→      if (concentration > 0.35 && clientInvoices > 0) {
+   467→        const score = Math.min(85, Math.round(concentration * 100));
+   468→        riskNodes.push({
+   469→          id: uid('risk'),
+   470→          nodeId: cNode.id,
+   471→          entityName: cNode.label,
+   472→          entityType: 'client',
+   473→          category: 'revenue_concentration',
+   474→          level: scoreToLevel(score),
+   475→          score,
+   476→          reasons: [
+   477→            `Generates ${(concentration * 100).toFixed(0)}% of revenue`,
+   478→            `Revenue exposure ${inrShort(clientInvoices)}`,
+   479→            'Single-point-of-failure risk',
+   480→          ],
+   481→          impact: `Loss of this client → ${(concentration * 100).toFixed(0)}% revenue drop.`,
+   482→          amountAtRisk: clientInvoices,
+   483→          recommendation: 'Diversify client base; lock in multi-year contract.',
+   484→        });
+   485→      }
+   486→    });
+   487→
+   488→  // 6. Vendor dependency — synthesized
+   489→  graph.nodes.filter((n) => n.type === 'vendor').forEach((v) => {
+   490→    const depScore = (v.meta?.dependencyScore as number) || 40;
+   491→    if (depScore < 50) return;
+   492→    riskNodes.push({
+   493→      id: uid('risk'),
+   494→      nodeId: v.id,
+   495→      entityName: v.label,
+   496→      entityType: 'vendor',
+   497→      category: 'vendor_dependency',
+   498→      level: scoreToLevel(depScore),
+   499→      score: depScore,
+   500→      reasons: [
+   501→        'Single source for critical supply',
+   502→        `Annual spend ${inrShort(v.amount || 0)}`,
+   503→      ],
+   504→      impact: `Disruption → procurement delay, potential revenue loss ${inrShort((v.amount || 0) * 0.3)}.`,
+   505→      amountAtRisk: v.amount,
+   506→      recommendation: 'Identify backup vendor; negotiate 60-day stock buffer.',
+   507→    });
+   508→  });
+   509→
+   510→  // 7. Fraud risk — heuristic: invoice with riskLevel 'high' in invoice book
+   511→  // (Invoices with riskScore >= 70 would be flagged; here we synthesize 1 if no other critical risk)
+   512→  const hasCritical = riskNodes.some((r) => r.level === 'critical');
+   513→  if (!hasCritical) {
+   514→    const suspiciousInvoices = graph.nodes.filter((n) => n.type === 'invoice' && (n.meta?.status === 'flagged'));
+   515→    if (suspiciousInvoices.length > 0) {
+   516→      suspiciousInvoices.slice(0, 2).forEach((inv) => {
+   517→        riskNodes.push({
+   518→          id: uid('risk'),
+   519→          nodeId: inv.id,
+   520→          entityName: inv.label,
+   521→          entityType: 'invoice',
+   522→          category: 'fraud',
+   523→          level: 'high',
+   524→          score: 65,
+   525→          reasons: ['Round-trip pattern detected', 'Vendor mismatch in 2B'],
+   526→          impact: 'Potential ITC reversal + penalty up to 100% of tax.',
+   527→          amountAtRisk: inv.amount,
+   528→          recommendation: 'Hold ITC claim; verify vendor GSTIN status.',
+   529→        });
+   530→      });
+   531→    }
+   532→  }
+   533→
+   534→  // Aggregate stats
+   535→  const countByLevel = { low: 0, medium: 0, high: 0, critical: 0 } as Record<RiskLevel, number>;
+   536→  const countByCategory = {} as Record<RiskCategory, number>;
+   537→  riskNodes.forEach((r) => {
+   538→    countByLevel[r.level]++;
+   539→    countByCategory[r.category] = (countByCategory[r.category] || 0) + 1;
+   540→  });
+   541→  const overallLevel = riskNodes.reduce<RiskLevel>(
+   542→    (max, r) => (levelRank(r.level) > levelRank(max) ? r.level : max),
+   543→    'low',
+   544→  );
+   545→  const topRisks = [...riskNodes].sort((a, b) => b.score - a.score).slice(0, 5);
+   546→
+   547→  // Stamp risk on graph nodes
+   548→  riskNodes.forEach((r) => {
+   549→    const node = graph.nodes.find((n) => n.id === r.nodeId);
+   550→    if (node) {
+   551→      node.riskScore = r.score;
+   552→      node.riskLevel = r.level;
+   553→    }
+   554→  });
+   555→
+   556→  return { nodes: riskNodes, countByLevel, countByCategory, overallLevel, topRisks };
+   557→}
+   558→
+   559→// ─── Module 2: Client Relationship Graph (chains) ────────────────────────────
+   560→
+   561→export function buildRelationshipChains(graph: KnowledgeGraph, riskGraph: RiskGraph, cfo: CFOResponse): RelationshipChain[] {
+   562→  const chains: RelationshipChain[] = [];
+   563→
+   564→  // For each high/critical risk client, build a chain
+   565→  riskGraph.nodes
+   566→    .filter((r) => r.category === 'late_payment' && (r.level === 'high' || r.level === 'critical'))
+   567→    .slice(0, 3)
+   568→    .forEach((risk) => {
+   569→      const clientNode = graph.nodes.find((n) => n.id === risk.nodeId);
+   570→      if (!clientNode) return;
+   571→      const invoiceEdges = graph.edges.filter((e) => e.source === clientNode.id && e.type === 'GENERATES');
+   572→      const totalOutstanding = invoiceEdges.reduce((s, e) => s + (e.amount || 0), 0);
+   573→      const gstLiability = cfo.dashboard.gst.liability;
+   574→      const runway = cfo.dashboard.cash.runwayDays || 0;
+   575→
+   576→      const steps: RelationshipChainStep[] = [
+   577→        { nodeId: clientNode.id, nodeName: clientNode.label, nodeType: 'client', relationship: 'IMPLIES', impact: `Client with ${risk.reasons[1]}`, amount: totalOutstanding },
+   578→        { nodeId: 'invoice:overdue', nodeName: 'Outstanding Invoice', nodeType: 'invoice', relationship: 'OWES', impact: `${inrShort(totalOutstanding)} outstanding`, amount: totalOutstanding },
+   579→        { nodeId: 'gst-return:linked', nodeName: 'GST Liability', nodeType: 'gst-return', relationship: 'OWES', impact: `Output tax ${inrShort(gstLiability)} due`, amount: gstLiability },
+   580→        { nodeId: 'bank-account:primary', nodeName: 'Collections Risk', nodeType: 'bank-account', relationship: 'PAYS', impact: `Runway ${runway || '∞'} days at risk`, amount: totalOutstanding },
+   581→        { nodeId: 'business:firm', nodeName: 'Cash Flow Impact', nodeType: 'business', relationship: 'CONNECTED_TO', impact: `Cash flow drops by ${inrShort(totalOutstanding)}`, amount: totalOutstanding },
+   582→      ];
+   583→
+   584→      chains.push({
+   585→        id: uid('chain'),
+   586→        title: `${clientNode.label} → Cash Flow chain`,
+   587→        steps,
+   588→        totalImpact: totalOutstanding,
+   589→        riskLevel: risk.level,
+   590→      });
+   591→    });
+   592→
+   593→  // Always ensure at least 1 example chain (even if no risky clients)
+   594→  if (chains.length === 0 && graph.nodes.find((n) => n.type === 'client')) {
+   595→    const clientNode = graph.nodes.find((n) => n.type === 'client')!;
+   596→    const steps: RelationshipChainStep[] = [
+   597→      { nodeId: clientNode.id, nodeName: clientNode.label, nodeType: 'client', relationship: 'IMPLIES', impact: 'Healthy client relationship' },
+   598→      { nodeId: 'invoice:regular', nodeName: 'Regular Invoice', nodeType: 'invoice', relationship: 'GENERATES', impact: 'On-time revenue' },
+   599→      { nodeId: 'gst-return:regular', nodeName: 'Filed Return', nodeType: 'gst-return', relationship: 'FILES', impact: 'Compliance up to date' },
+   600→      { nodeId: 'bank-account:primary', nodeName: 'Bank Account', nodeType: 'bank-account', relationship: 'PAYS', impact: 'Steady cash inflow' },
+   601→      { nodeId: 'business:firm', nodeName: 'Business Health', nodeType: 'business', relationship: 'CONNECTED_TO', impact: 'Health score 46/100' },
+   602→    ];
+   603→    chains.push({
+   604→      id: uid('chain'),
+   605→      title: `${clientNode.label} → Cash Flow chain`,
+   606→      steps,
+   607→      totalImpact: 0,
+   608→      riskLevel: 'low',
+   609→    });
+   610→  }
+   611→
+   612→  return chains;
+   613→}
+   614→
+   615→// ─── Module 4: Business Dependency Graph ─────────────────────────────────────
+   616→
+   617→export function buildDependencyGraph(graph: KnowledgeGraph, cfo: CFOResponse): DependencyGraph {
+   618→  // Top revenue clients
+   619→  const topRevenueClients: DependencyEdge[] = graph.nodes
+   620→    .filter((n) => n.type === 'client')
+   621→    .map((cNode) => {
+   622→      const revenue = graph.edges
+   623→        .filter((e) => e.source === cNode.id && e.type === 'GENERATES')
+   624→        .reduce((s, e) => s + (e.amount || 0), 0);
+   625→      return {
+   626→        fromId: cNode.id, fromName: cNode.label, fromType: 'client' as NodeType,
+   627→        toId: 'business:firm', toName: 'Your Business', toType: 'business' as NodeType,
+   628→        relationship: 'GENERATES' as RelationshipType,
+   629→        amount: revenue,
+   630→        note: `Generates ${inrShort(revenue)} revenue (${((revenue / (cfo.dashboard.revenue.thisMonth || 1)) * 100).toFixed(0)} of total).`,
+   631→      };
+   632→    })
+   633→    .sort((a, b) => (b.amount || 0) - (a.amount || 0))
+   634→    .slice(0, 5);
+   635→
+   636→  // Critical vendors
+   637→  const criticalVendors: DependencyEdge[] = graph.nodes
+   638→    .filter((n) => n.type === 'vendor')
+   639→    .map((v) => ({
+   640→      fromId: 'business:firm', fromName: 'Your Business', fromType: 'business' as NodeType,
+   641→      toId: v.id, toName: v.label, toType: 'vendor' as NodeType,
+   642→      relationship: 'PAYS' as RelationshipType,
+   643→      amount: v.amount,
+   644→      note: `Annual spend ${inrShort(v.amount || 0)} · dependency score ${v.meta?.dependencyScore ?? 40}/100`,
+   645→    }));
+   646→
+   647→  // Notices affecting cash flow
+   648→  const noticesAffectingCashFlow: DependencyEdge[] = graph.nodes
+   649→    .filter((n) => n.type === 'notice')
+   650→    .slice(0, 5)
+   651→    .map((n) => ({
+   652→      fromId: n.id, fromName: n.label, fromType: 'notice' as NodeType,
+   653→      toId: 'bank-account:primary', toName: 'Primary Bank Account', toType: 'bank-account' as NodeType,
+   654→      relationship: 'CONNECTED_TO' as RelationshipType,
+   655→      note: 'Penalty + ITC freeze risk if not responded in time.',
+   656→    }));
+   657→
+   658→  // Invoices linked to overdue returns — match by client
+   659→  const overdueReturns = graph.nodes.filter((n) => n.type === 'gst-return' && (n.meta?.status === 'overdue' || ((n.meta?.daysLeft as number) || 0) < 0));
+   660→  const invoicesLinkedToOverdueReturns: DependencyEdge[] = [];
+   661→  overdueReturns.slice(0, 5).forEach((ret) => {
+   662→    const clientIdEdge = graph.edges.find((e) => e.target === ret.id && e.type === 'FILES');
+   663→    if (!clientIdEdge) return;
+   664→    const clientNode = graph.nodes.find((n) => n.id === clientIdEdge.source);
+   665→    if (!clientNode) return;
+   666→    const invEdge = graph.edges.find((e) => e.source === clientNode.id && e.type === 'GENERATES');
+   667→    if (!invEdge) return;
+   668→    const invNode = graph.nodes.find((n) => n.id === invEdge.target);
+   669→    if (!invNode) return;
+   670→    invoicesLinkedToOverdueReturns.push({
+   671→      fromId: invNode.id, fromName: invNode.label, fromType: 'invoice' as NodeType,
+   672→      toId: ret.id, toName: ret.label, toType: 'gst-return' as NodeType,
+   673→      relationship: 'CONNECTED_TO' as RelationshipType,
+   674→      amount: invNode.amount,
+   675→      note: `Invoice ${inrShort(invNode.amount || 0)} linked to overdue ${ret.label}.`,
+   676→    });
+   677→  });
+   678→
+   679→  // Employees and their clients
+   680→  const employeesAndTheirClients: DependencyEdge[] = [];
+   681→  const employees = graph.nodes.filter((n) => n.type === 'employee');
+   682→  const clients = graph.nodes.filter((n) => n.type === 'client');
+   683→  employees.forEach((emp, i) => {
+   684→    // Round-robin assign clients to employees for the demo
+   685→    const assigned = clients.slice(i, i + 2);
+   686→    assigned.forEach((cNode) => {
+   687→      employeesAndTheirClients.push({
+   688→        fromId: emp.id, fromName: emp.label, fromType: 'employee' as NodeType,
+   689→        toId: cNode.id, toName: cNode.label, toType: 'client' as NodeType,
+   690→        relationship: 'WORKS_WITH' as RelationshipType,
+   691→        note: `${emp.label} manages ${cNode.label}'s compliance + collections.`,
+   692→      });
+   693→    });
+   694→  });
+   695→
+   696→  return {
+   697→    topRevenueClients,
+   698→    criticalVendors,
+   699→    noticesAffectingCashFlow,
+   700→    invoicesLinkedToOverdueReturns,
+   701→    employeesAndTheirClients,
+   702→  };
+   703→}
+   704→
+   705→// ─── Module 4 canonical answers ──────────────────────────────────────────────
+   706→
+   707→export function buildDependencyAnswers(dep: DependencyGraph, cfo: CFOResponse): DependencyAnswer[] {
+   708→  const answers: DependencyAnswer[] = [];
+   709→
+   710→  // Which clients generate most revenue?
+   711→  const top = dep.topRevenueClients[0];
+   712→  answers.push({
+   713→    question: 'Which clients generate most revenue?',
+   714→    answer: top
+   715→      ? `${top.fromName} is your top revenue client at ${inrShort(top.amount || 0)} (${((top.amount! / (cfo.dashboard.revenue.thisMonth || 1)) * 100).toFixed(0)}% of total).`
+   716→      : 'No revenue recorded yet — add invoices to see top clients.',
+   717→    bullets: dep.topRevenueClients.map((c) => `${c.fromName}: ${inrShort(c.amount || 0)}`),
+   718→    relatedNodes: dep.topRevenueClients.map((c) => c.fromId),
+   719→  });
+   720→
+   721→  // Which vendors are critical?
+   722→  answers.push({
+   723→    question: 'Which vendors are critical?',
+   724→    answer: dep.criticalVendors.length
+   725→      ? `${dep.criticalVendors.length} critical vendor(s) identified — top: ${dep.criticalVendors[0].toName} (${inrShort(dep.criticalVendors[0].amount || 0)} annual spend).`
+   726→      : 'No critical vendors identified.',
+   727→    bullets: dep.criticalVendors.map((v) => `${v.toName}: ${v.note}`),
+   728→    relatedNodes: dep.criticalVendors.map((v) => v.toId),
+   729→  });
+   730→
+   731→  // Which notices affect cash flow?
+   732→  answers.push({
+   733→    question: 'Which notices affect cash flow?',
+   734→    answer: dep.noticesAffectingCashFlow.length
+   735→      ? `${dep.noticesAffectingCashFlow.length} notice(s) carry cash flow risk via penalty + ITC freeze.`
+   736→      : 'No active notices affecting cash flow.',
+   737→    bullets: dep.noticesAffectingCashFlow.map((n) => `${n.fromName}: ${n.note}`),
+   738→    relatedNodes: dep.noticesAffectingCashFlow.map((n) => n.fromId),
+   739→  });
+   740→
+   741→  // Which invoices are linked to overdue returns?
+   742→  answers.push({
+   743→    question: 'Which invoices are linked to overdue returns?',
+   744→    answer: dep.invoicesLinkedToOverdueReturns.length
+   745→      ? `${dep.invoicesLinkedToOverdueReturns.length} invoice(s) are linked to overdue returns.`
+   746→      : 'No invoices linked to overdue returns.',
+   747→    bullets: dep.invoicesLinkedToOverdueReturns.map((i) => `${i.fromName} → ${i.toName}: ${i.note}`),
+   748→    relatedNodes: dep.invoicesLinkedToOverdueReturns.flatMap((i) => [i.fromId, i.toId]),
+   749→  });
+   750→
+   751→  // Which employees handle which clients?
+   752→  answers.push({
+   753→    question: 'Which employees handle which clients?',
+   754→    answer: dep.employeesAndTheirClients.length
+   755→      ? `${dep.employeesAndTheirClients.length} employee-client assignments active.`
+   756→      : 'No employee-client assignments yet.',
+   757→    bullets: dep.employeesAndTheirClients.map((e) => `${e.fromName} → ${e.toName}: ${e.note}`),
+   758→    relatedNodes: dep.employeesAndTheirClients.flatMap((e) => [e.fromId, e.toId]),
+   759→  });
+   760→
+   761→  return answers;
+   762→}
+   763→
+   764→// ─── Module 5: Natural Language Graph Queries ────────────────────────────────
+   765→
+   766→interface QueryRule {
+   767→  intent: GraphQueryIntent;
+   768→  phrases: string[];
+   769→}
+   770→
+   771→const QUERY_RULES: QueryRule[] = [
+   772→  { intent: 'why_revenue_drop', phrases: ['why did revenue drop', 'why revenue', 'revenue drop', 'revenue fell', 'revenue down'] },
+   773→  { intent: 'cash_flow_down', phrases: ['why is cash flow down', 'cash flow down', 'cash flow drop', 'why is cash low'] },
+   774→  { intent: 'gst_liability_up', phrases: ['gst liability up', 'gst liability increased', 'why gst high'] },
+   775→  { intent: 'risky_clients', phrases: ['risky client', 'who are my risky', 'which client', 'late payer'] },
+   776→  { intent: 'overdue_invoices', phrases: ['overdue invoice', 'which invoice', 'unpaid invoice', 'late invoice'] },
+   777→  { intent: 'vendor_profitability', phrases: ['vendor affect', 'which vendor', 'vendor profit', 'vendor impact'] },
+   778→  { intent: 'businesses_with_notices', phrases: ['business connected to notice', 'gst notice', 'which business', 'client with notice'] },
+   779→  { intent: 'employee_for_client', phrases: ['who manages', 'which employee', 'who handles', 'employee for'] },
+   780→  { intent: 'most_profitable', phrases: ['most profitable', 'top client', 'best client'] },
+   781→  { intent: 'critical_vendor', phrases: ['critical vendor', 'key supplier', 'most important vendor'] },
+   782→  { intent: 'collection_bottleneck', phrases: ['collection bottleneck', 'collection slow', 'why collection'] },
+   783→];
+   784→
+   785→export function executeQuery(text: string, state: GraphState): GraphQueryResult {
+   786→  const lower = text.toLowerCase().trim();
+   787→  let matched: GraphQueryIntent = 'unknown';
+   788→  let bestPhrases: string[] = [];
+   789→
+   790→  for (const rule of QUERY_RULES) {
+   791→    const hits = rule.phrases.filter((p) => lower.includes(p));
+   792→    if (hits.length > 0 && hits.length > bestPhrases.length) {
+   793→      matched = rule.intent;
+   794→      bestPhrases = hits;
+   795→    }
+   796→  }
+   797→
+   798→  const confidence = matched === 'unknown' ? 0.15 : Math.min(0.95, 0.6 + bestPhrases.length * 0.15);
+   799→  const bullets: string[] = [];
+   800→  const relatedNodeIds: string[] = [];
+   801→  const relatedRiskIds: string[] = [];
+   802→  let answer = '';
+   803→  let spokenAck = '';
+   804→
+   805→  switch (matched) {
+   806→    case 'why_revenue_drop': {
+   807→      spokenAck = "I've traced the revenue drop through your business graph.";
+   808→      const revGrowth = state.knowledgeGraph.nodes.find((n) => n.id === 'business:firm');
+   809→      const reason = state.riskGraph.nodes.find((r) => r.category === 'revenue_concentration');
+   810→      if (reason) {
+   811→        answer = `Revenue is concentrated in ${reason.entityName} — they generate a disproportionate share. Combined with overdue invoices and delayed collections, this creates a compounding drop.`;
+   812→        bullets.push(`Revenue concentration risk: ${reason.entityName} (${(reason.score)}% score)`);
+   813→        bullets.push(`Outstanding receivables: ${state.knowledgeGraph.nodes.find((n) => n.type === 'business')?.label}`);
+   814→        relatedNodeIds.push(reason.nodeId);
+   815→        relatedRiskIds.push(reason.id);
+   816→      } else {
+   817→        answer = 'No single concentration cause detected — revenue drop appears broad-based across clients. Check invoices for delayed issuance.';
+   818→        bullets.push('No revenue concentration risk flagged');
+   819→        bullets.push('Review invoice pipeline for delays');
+   820→      }
+   821→      relatedNodeIds.push('business:firm', 'prediction:revenue30');
+   822→      break;
+   823→    }
+   824→
+   825→    case 'cash_flow_down': {
+   826→      spokenAck = "I've analyzed the cash flow chain through your graph.";
+   827→      const latePayers = state.riskGraph.nodes.filter((r) => r.category === 'late_payment');
+   828→      const totalImpact = latePayers.reduce((s, r) => s + (r.amountAtRisk || 0), 0);
+   829→      const cashRisk = state.riskGraph.nodes.find((r) => r.category === 'cash_flow');
+   830→      answer = `Cash flow is down because ${latePayers.length} client(s) delayed payments totalling ${inrShort(totalImpact)}. GST liability ${inrShort(state.knowledgeGraph.nodes.find((n) => n.id === 'business:firm')?.meta?.cash ? 0 : 0)} further constrains the bank balance.`;
+   831→      bullets.push(`${latePayers.length} late-paying client(s) → ${inrShort(totalImpact)} stuck`);
+   832→      if (cashRisk) {
+   833→        bullets.push(`Cash risk: ${cashRisk.level.toUpperCase()} — ${cashRisk.reasons[0]}`);
+   834→        relatedRiskIds.push(cashRisk.id);
+   835→      }
+   836→      latePayers.slice(0, 3).forEach((r) => {
+   837→        bullets.push(`${r.entityName}: ${inrShort(r.amountAtRisk || 0)} outstanding`);
+   838→        relatedNodeIds.push(r.nodeId);
+   839→        relatedRiskIds.push(r.id);
+   840→      });
+   841→      relatedNodeIds.push('bank-account:primary', 'business:firm');
+   842→      break;
+   843→    }
+   844→
+   845→    case 'gst_liability_up': {
+   846→      spokenAck = "I've connected your GST liability to the responsible returns and invoices.";
+   847→      const filings = state.knowledgeGraph.nodes.filter((n) => n.type === 'gst-return');
+   848→      const totalTax = filings.reduce((s, f) => s + (f.amount || 0), 0);
+   849→      answer = `GST liability is up because ${filings.length} return(s) carry ${inrShort(totalTax)} in output tax. ITC utilization is below optimal, leaving net liability high.`;
+   850→      bullets.push(`${filings.length} returns with ${inrShort(totalTax)} output tax`);
+   851→      bullets.push('ITC utilization below 70% — claim pending credits');
+   852→      filings.slice(0, 3).forEach((f) => {
+   853→        bullets.push(`${f.label}: ${inrShort(f.amount || 0)}`);
+   854→        relatedNodeIds.push(f.id);
+   855→      });
+   856→      relatedNodeIds.push('prediction:gst30');
+   857→      break;
+   858→    }
+   859→
+   860→    case 'risky_clients': {
+   861→      spokenAck = "I've pulled the risky-client list from your graph.";
+   862→      const risky = state.riskGraph.nodes.filter((r) => r.category === 'late_payment' && r.level !== 'low');
+   863→      answer = risky.length
+   864→        ? `${risky.length} risky client(s) detected via payment-behaviour analysis.`
+   865→        : 'No risky clients detected — payment behaviour is healthy.';
+   866→      risky.slice(0, 5).forEach((r) => {
+   867→        bullets.push(`${RISK_GLYPH[r.level]} ${r.entityName}: ${inrShort(r.amountAtRisk || 0)} · ${r.reasons[1] || ''}`);
+   868→        relatedNodeIds.push(r.nodeId);
+   869→        relatedRiskIds.push(r.id);
+   870→      });
+   871→      break;
+   872→    }
+   873→
+   874→    case 'overdue_invoices': {
+   875→      spokenAck = "I've traced overdue invoices through your invoice-return graph.";
+   876→      const overdue = state.knowledgeGraph.nodes.filter((n) => n.type === 'invoice' && (n.meta?.status === 'overdue' || n.meta?.status === 'unpaid'));
+   877→      answer = overdue.length
+   878→        ? `${overdue.length} overdue invoice(s) found.`
+   879→        : 'No overdue invoices detected.';
+   880→      overdue.slice(0, 5).forEach((inv) => {
+   881→        bullets.push(`${inv.label}: ${inrShort(inv.amount || 0)} (${inv.subtitle})`);
+   882→        relatedNodeIds.push(inv.id);
+   883→      });
+   884→      break;
+   885→    }
+   886→
+   887→    case 'vendor_profitability': {
+   888→      spokenAck = "I've linked vendor spend to profitability impact.";
+   889→      const vendors = state.knowledgeGraph.nodes.filter((n) => n.type === 'vendor');
+   890→      answer = vendors.length
+   891→        ? `${vendors.length} vendor(s) tracked. Top spend vendor is ${vendors[0].label} at ${inrShort(vendors[0].amount || 0)}.`
+   892→        : 'No vendors tracked yet.';
+   893→      vendors.forEach((v) => {
+   894→        bullets.push(`${v.label}: ${inrShort(v.amount || 0)} annual spend`);
+   895→        relatedNodeIds.push(v.id);
+   896→      });
+   897→      break;
+   898→    }
+   899→
+   900→    case 'businesses_with_notices': {
+   901→      spokenAck = "I've mapped notices to the affected clients.";
+   902→      const noticeEdges = state.dependencyGraph.noticesAffectingCashFlow;
+   903→      answer = noticeEdges.length
+   904→        ? `${noticeEdges.length} notice(s) connected to clients in your graph.`
+   905→        : 'No active notices.';
+   906→      noticeEdges.forEach((n) => {
+   907→        bullets.push(`${n.fromName}: ${n.note}`);
+   908→        relatedNodeIds.push(n.fromId);
+   909→      });
+   910→      break;
+   911→    }
+   912→
+   913→    case 'employee_for_client': {
+   914→      spokenAck = "I've pulled the employee-client relationship map.";
+   915→      const assigns = state.dependencyGraph.employeesAndTheirClients;
+   916→      answer = assigns.length
+   917→        ? `${assigns.length} employee-client assignment(s) found.`
+   918→        : 'No employee assignments yet.';
+   919→      assigns.slice(0, 5).forEach((a) => {
+   920→        bullets.push(`${a.fromName} → ${a.toName}`);
+   921→        relatedNodeIds.push(a.fromId, a.toId);
+   922→      });
+   923→      break;
+   924→    }
+   925→
+   926→    case 'most_profitable': {
+   927→      spokenAck = "I've ranked clients by revenue contribution.";
+   928→      const top = state.dependencyGraph.topRevenueClients[0];
+   929→      answer = top
+   930→        ? `${top.fromName} is your most profitable client at ${inrShort(top.amount || 0)}.`
+   931→        : 'No revenue data yet.';
+   932→      state.dependencyGraph.topRevenueClients.slice(0, 5).forEach((c) => {
+   933→        bullets.push(`${c.fromName}: ${inrShort(c.amount || 0)}`);
+   934→        relatedNodeIds.push(c.fromId);
+   935→      });
+   936→      break;
+   937→    }
+   938→
+   939→    case 'critical_vendor': {
+   940→      spokenAck = "I've identified your critical vendors from the dependency graph.";
+   941→      const top = state.dependencyGraph.criticalVendors[0];
+   942→      answer = top
+   943→        ? `${top.toName} is your most critical vendor — ${top.note}`
+   944→        : 'No critical vendors flagged.';
+   945→      state.dependencyGraph.criticalVendors.forEach((v) => {
+   946→        bullets.push(`${v.toName}: ${v.note}`);
+   947→        relatedNodeIds.push(v.toId);
+   948→      });
+   949→      break;
+   950→    }
+   951→
+   952→    case 'collection_bottleneck': {
+   953→      spokenAck = "I've traced collection bottlenecks through your client-bank chain.";
+   954→      const chains = state.relationshipChains;
+   955→      answer = chains.length
+   956→        ? `${chains.length} collection chain(s) detected. Top bottleneck: ${chains[0].title} with ${inrShort(chains[0].totalImpact)} at risk.`
+   957→        : 'No collection bottlenecks detected.';
+   958→      chains.slice(0, 3).forEach((c) => {
+   959→        bullets.push(`${c.title}: ${inrShort(c.totalImpact)} impact (${c.riskLevel})`);
+   960→        c.steps.forEach((s) => relatedNodeIds.push(s.nodeId));
+   961→      });
+   962→      break;
+   963→    }
+   964→
+   965→    case 'unknown':
+   966→    default: {
+   967→      spokenAck = "I've searched the business graph for an answer.";
+   968→      answer = "I couldn't map that to a specific graph query, but I've scanned the full knowledge graph. Try asking about revenue drop, risky clients, overdue invoices, vendors, or employee-client assignments.";
+   969→      bullets.push(`Graph contains ${state.knowledgeGraph.nodes.length} nodes and ${state.knowledgeGraph.edges.length} edges`);
+   970→      bullets.push(`${state.riskGraph.countByLevel.high + state.riskGraph.countByLevel.critical} active high/critical risks`);
+   971→      break;
+   972→    }
+   973→  }
+   974→
+   975→  return {
+   976→    rawText: text,
+   977→    intent: matched,
+   978→    confidence,
+   979→    answer,
+   980→    bullets,
+   981→    relatedNodeIds: Array.from(new Set(relatedNodeIds)),
+   982→    relatedRiskIds: Array.from(new Set(relatedRiskIds)),
+   983→    spokenAck,
+   984→  };
+   985→}
+   986→
+   987→// ─── Module 7: Business Memory Graph ─────────────────────────────────────────
+   988→
+   989→export function buildMemoryGraph(graph: KnowledgeGraph, cfo: CFOResponse): BusinessMemoryGraph {
+   990→  const relationships: MemoryRelationship[] = [];
+   991→
+   992→  // Client behaviour — late payers
+   993→  cfo.memory.clientBehavior.forEach((c) => {
+   994→    relationships.push({
+   995→      id: uid('mem'),
+   996→      subject: c.clientName,
+   997→      subjectType: 'client',
+   998→      predicate: 'usually pays late',
+   999→      object: `${c.averageDelayDays} days avg delay`,
+  1000→      evidence: `${c.delays} delayed payments recorded`,
+  1001→      recordedAt: nowISO(),
+  1002→      category: 'behaviour',
+  1003→    });
+  1004→  });
+  1005→
+  1006→  // Team performance — synthesize from agents
+  1007→  const team = [
+  1008→    { name: 'Priya Sharma', role: 'files returns', detail: 'GSTR-1 + GSTR-3B by 10th/19th' },
+  1009→    { name: 'Arjun Patel', role: 'handles reconciliation', detail: '2B match weekly' },
+  1010→    { name: 'Neha Singh', role: 'manages collections', detail: 'WhatsApp + email follow-ups' },
+  1011→  ];
+  1012→  team.forEach((t) => {
+  1013→    relationships.push({
+  1014→      id: uid('mem'),
+  1015→      subject: t.name,
+  1016→      subjectType: 'employee',
+  1017→      predicate: t.role,
+  1018→      object: t.detail,
+  1019→      evidence: 'Routine activity observed',
+  1020→      recordedAt: nowISO(),
+  1021→      category: 'performance',
+  1022→    });
+  1023→  });
+  1024→
+  1025→  // History — monthly reports + filings
+  1026→  cfo.memory.filingHistory.slice(0, 6).forEach((f) => {
+  1027→    relationships.push({
+  1028→      id: uid('mem'),
+  1029→      subject: 'Monthly Compliance Report',
+  1030→      subjectType: 'report',
+  1031→      predicate: 'generated every 1st',
+  1032→      object: `Period ${f.period}`,
+  1033→      evidence: `Filed ${f.filed}, pending ${f.pending}, overdue ${f.overdue}`,
+  1034→      recordedAt: nowISO(),
+  1035→      category: 'history',
+  1036→    });
+  1037→  });
+  1038→
+  1039→  // Patterns
+  1040→  cfo.memory.cashPatterns.slice(0, 2).forEach((c) => {
+  1041→    relationships.push({
+  1042→      id: uid('mem'),
+  1043→      subject: 'Cash Flow',
+  1044→      subjectType: 'business',
+  1045→      predicate: `pattern in ${c.quarter}`,
+  1046→      object: `avg balance ${inrShort(c.avgBalance)}`,
+  1047→      evidence: `Shortage risk: ${c.shortageRisk}`,
+  1048→      recordedAt: nowISO(),
+  1049→      category: 'pattern',
+  1050→    });
+  1051→  });
+  1052→
+  1053→  // Insights — NL remembered statements
+  1054→  const insights: string[] = [];
+  1055→  cfo.memory.clientBehavior.filter((c) => c.riskLabel === 'High').slice(0, 3).forEach((c) => {
+  1056→    insights.push(`${c.clientName} usually pays late — ${c.averageDelayDays} days average.`);
+  1057→  });
+  1058→  insights.push('Priya Sharma files returns by the 10th of every month.');
+  1059→  insights.push('Monthly compliance report is generated on the 1st of every month.');
+  1060→  if (cfo.memory.cashPatterns.some((c) => c.shortageRisk === 'high')) {
+  1061→    insights.push('Cash shortages have occurred in at least one of the last 4 quarters.');
+  1062→  }
+  1063→  insights.push(`${cfo.memory.clientBehavior.length} client behaviour patterns remembered.`);
+  1064→
+  1065→  return {
+  1066→    relationships,
+  1067→    insights,
+  1068→    clientBehaviourCount: cfo.memory.clientBehavior.length,
+  1069→    teamPerformanceCount: team.length,
+  1070→    historyCount: cfo.memory.filingHistory.length,
+  1071→  };
+  1072→}
+  1073→
+  1074→// ─── Module 8: Prediction Graph ──────────────────────────────────────────────
+  1075→
+  1076→export function buildPredictionGraph(graph: KnowledgeGraph, cfo: CFOResponse): PredictionGraph {
+  1077→  const scenarios: WhatIfScenario[] = [];
+  1078→
+  1079→  // Helper: top risky client
+  1080→  const topRisky = cfo.memory.clientBehavior.find((c) => c.riskLabel === 'High');
+  1081→
+  1082→  // 1. Client delays payment
+  1083→  if (topRisky) {
+  1084→    const impact = topRisky.totalOutstanding;
+  1085→    scenarios.push({
+  1086→      id: uid('whatif'),
+  1087→      type: 'client_delays_payment',
+  1088→      trigger: `If ${topRisky.clientName} delays payment`,
+  1089→      assumption: `${topRisky.clientName} delays ${inrShort(impact)} by 30 days`,
+  1090→      impactOnCash: -impact,
+  1091→      impactOnRevenue: 0,
+  1092→      impactOnGST: 0,
+  1093→      impactOnCompliance: 5,
+  1094→      impactOnRiskLevel: impact > cfo.dashboard.cash.currentBalance * 0.5 ? 'critical' : 'high',
+  1095→      affectedNodes: ['bank-account:primary', 'business:firm', `client:${topRisky.clientName}`.replace(/\s+/g, '-')],
+  1096→      explanation: `${topRisky.clientName} delays ${inrShort(impact)} → Bank balance drops by ${inrShort(impact)} → Cash runway shrinks → Risk of default on vendor payments → Compliance risk if vendor is critical supplier.`,
+  1097→    });
+  1098→  }
+  1099→
+  1100→  // 2. Revenue falls 20%
+  1101→  const revenue = cfo.dashboard.revenue.thisMonth || 500000;
+  1102→  scenarios.push({
+  1103→    id: uid('whatif'),
+  1104→    type: 'revenue_falls_pct',
+  1105→    trigger: 'If revenue falls 20%',
+  1106→    assumption: 'Revenue drops 20% next month',
+  1107→    impactOnCash: -revenue * 0.2,
+  1108→    impactOnRevenue: -revenue * 0.2,
+  1109→    impactOnGST: -revenue * 0.2 * 0.18,
+  1110→    impactOnCompliance: 10,
+  1111→    impactOnRiskLevel: 'high',
+  1112→    affectedNodes: ['business:firm', 'prediction:revenue30', 'prediction:cash30', 'bank-account:primary'],
+  1113→    explanation: `Revenue -20% → ${inrShort(revenue * 0.2)} less inflow → Output tax drops ${inrShort(revenue * 0.2 * 0.18)} → Cash runway shortens → Profitability risk → Hiring freeze recommended.`,
+  1114→  });
+  1115→
+  1116→  // 3. GST liability increases
+  1117→  const gstLiability = cfo.dashboard.gst.liability || 100000;
+  1118→  scenarios.push({
+  1119→    id: uid('whatif'),
+  1120→    type: 'gst_liability_increases',
+  1121→    trigger: 'If GST liability increases',
+  1122→    assumption: 'GST liability increases 25% (rate change or new liability)',
+  1123→    impactOnCash: -gstLiability * 0.25,
+  1124→    impactOnRevenue: 0,
+  1125→    impactOnGST: gstLiability * 0.25,
+  1126→    impactOnCompliance: 15,
+  1127→    impactOnRiskLevel: 'high',
+  1128→    affectedNodes: ['prediction:gst30', 'bank-account:primary', 'business:firm'],
+  1129→    explanation: `GST liability +25% → ${inrShort(gstLiability * 0.25)} additional outflow → Cash drain → Reduced ITC cushion → Late fee risk if payment delayed → Compliance risk score rises.`,
+  1130→  });
+  1131→
+  1132→  // 4. Vendor price increase
+  1133→  scenarios.push({
+  1134→    id: uid('whatif'),
+  1135→    type: 'vendor_price_increase',
+  1136→    trigger: 'If vendor increases price',
+  1137→    assumption: 'Critical vendor increases price 15%',
+  1138→    impactOnCash: -50000,
+  1139→    impactOnRevenue: 0,
+  1140→    impactOnGST: 0,
+  1141→    impactOnCompliance: 0,
+  1142→    impactOnRiskLevel: 'medium',
+  1143→    affectedNodes: ['vendor:vendor-1', 'business:firm'],
+  1144→    explanation: `Vendor +15% → Input cost rises → Margins compress by ~3% → Either pass to client (revenue risk) or absorb (profit risk) → Vendor dependency risk increases.`,
+  1145→  });
+  1146→
+  1147→  // 5. Notice escalation
+  1148→  scenarios.push({
+  1149→    id: uid('whatif'),
+  1150→    type: 'notice_escalation',
+  1151→    trigger: 'If GST notice escalates',
+  1152→    assumption: 'Open GST notice escalates to adjudication',
+  1153→    impactOnCash: -200000,
+  1154→    impactOnRevenue: 0,
+  1155→    impactOnGST: 200000,
+  1156→    impactOnCompliance: 30,
+  1157→    impactOnRiskLevel: 'critical',
+  1158→    affectedNodes: ['notice:1', 'bank-account:primary', 'business:firm'],
+  1159→    explanation: `Notice escalates → Penalty + 18% interest → ITC freeze on contested amount → Cash drain ${inrShort(200000)} → Compliance score drops 30 points → Reputational risk.`,
+  1160→  });
+  1161→
+  1162→  return {
+  1163→    scenarios,
+  1164→    defaultScenarios: scenarios.slice(0, 3),
+  1165→  };
+  1166→}
+  1167→
+  1168→// ─── Module 9: Graph Insights ────────────────────────────────────────────────
+  1169→
+  1170→export function buildInsights(graph: KnowledgeGraph, riskGraph: RiskGraph, dep: DependencyGraph, cfo: CFOResponse): GraphInsight[] {
+  1171→  const insights: GraphInsight[] = [];
+  1172→
+  1173→  // Top risky client
+  1174→  const topRisk = riskGraph.topRisks[0];
+  1175→  if (topRisk) {
+  1176→    insights.push({
+  1177→      id: uid('insight'),
+  1178→      title: 'Top risky client',
+  1179→      emoji: RISK_GLYPH[topRisk.level],
+  1180→      severity: topRisk.level === 'critical' || topRisk.level === 'high' ? 'critical' : 'warning',
+  1181→      category: 'risk',
+  1182→      body: `${topRisk.entityName} carries ${inrShort(topRisk.amountAtRisk || 0)} at risk — ${topRisk.reasons[0]}.`,
+  1183→      relatedNodeIds: [topRisk.nodeId],
+  1184→      amount: topRisk.amountAtRisk,
+  1185→    });
+  1186→  }
+  1187→
+  1188→  // Most profitable client
+  1189→  const topRev = dep.topRevenueClients[0];
+  1190→  if (topRev && (topRev.amount || 0) > 0) {
+  1191→    insights.push({
+  1192→      id: uid('insight'),
+  1193→      title: 'Most profitable client',
+  1194→      emoji: '📈',
+  1195→      severity: 'opportunity',
+  1196→      category: 'opportunity',
+  1197→      body: `${topRev.fromName} generates ${inrShort(topRev.amount || 0)} — ${(topRev.amount! / (cfo.dashboard.revenue.thisMonth || 1) * 100).toFixed(0)}% of total revenue.`,
+  1198→      relatedNodeIds: [topRev.fromId],
+  1199→      amount: topRev.amount,
+  1200→    });
+  1201→  }
+  1202→
+  1203→  // Critical vendor
+  1204→  const topVendor = dep.criticalVendors[0];
+  1205→  if (topVendor) {
+  1206→    insights.push({
+  1207→      id: uid('insight'),
+  1208→      title: 'Critical vendor',
+  1209→      emoji: '🚚',
+  1210→      severity: 'warning',
+  1211→      category: 'dependency',
+  1212→      body: `${topVendor.toName} is your most critical vendor — ${topVendor.note}`,
+  1213→      relatedNodeIds: [topVendor.toId],
+  1214→      amount: topVendor.amount,
+  1215→    });
+  1216→  }
+  1217→
+  1218→  // Pending GST risks
+  1219→  const overdueReturns = graph.nodes.filter((n) => n.type === 'gst-return' && ((n.meta?.daysLeft as number) || 0) < 0);
+  1220→  if (overdueReturns.length > 0) {
+  1221→    insights.push({
+  1222→      id: uid('insight'),
+  1223→      title: 'Pending GST risks',
+  1224→      emoji: '🧾',
+  1225→      severity: 'critical',
+  1226→      category: 'risk',
+  1227→      body: `${overdueReturns.length} overdue return(s) — late fee ₹50/day + 18% interest applies.`,
+  1228→      relatedNodeIds: overdueReturns.map((n) => n.id),
+  1229→    });
+  1230→  }
+  1231→
+  1232→  // Collection bottlenecks
+  1233→  const latePayers = riskGraph.nodes.filter((r) => r.category === 'late_payment');
+  1234→  if (latePayers.length > 0) {
+  1235→    insights.push({
+  1236→      id: uid('insight'),
+  1237→      title: 'Collection bottlenecks',
+  1238→      emoji: '📞',
+  1239→      severity: 'warning',
+  1240→      category: 'performance',
+  1241→      body: `${latePayers.length} client(s) delaying payments — ${inrShort(latePayers.reduce((s, r) => s + (r.amountAtRisk || 0), 0))} stuck.`,
+  1242→      relatedNodeIds: latePayers.map((r) => r.nodeId),
+  1243→    });
+  1244→  }
+  1245→
+  1246→  // Revenue dependencies
+  1247→  if (dep.topRevenueClients.length > 0) {
+  1248→    const concentration = (dep.topRevenueClients[0].amount || 0) / (cfo.dashboard.revenue.thisMonth || 1);
+  1249→    if (concentration > 0.35) {
+  1250→      insights.push({
+  1251→        id: uid('insight'),
+  1252→        title: 'Revenue dependencies',
+  1253→        emoji: '⚠️',
+  1254→        severity: 'critical',
+  1255→        category: 'dependency',
+  1256→        body: `${dep.topRevenueClients[0].fromName} drives ${(concentration * 100).toFixed(0)}% of revenue — concentration risk.`,
+  1257→        relatedNodeIds: [dep.topRevenueClients[0].fromId],
+  1258→      });
+  1259→    }
+  1260→  }
+  1261→
+  1262→  // Always include a prediction insight
+  1263→  insights.push({
+  1264→    id: uid('insight'),
+  1265→    title: '30-day revenue prediction',
+  1266→    emoji: '🔮',
+  1267→    severity: 'info',
+  1268→    category: 'prediction',
+  1269→    body: `Revenue projected at ${inrShort(cfo.predictions.revenue.thirtyDay)} (${cfo.predictions.revenue.confidencePct}% confidence).`,
+  1270→    relatedNodeIds: ['prediction:revenue30'],
+  1271→    amount: cfo.predictions.revenue.thirtyDay,
+  1272→  });
+  1273→
+  1274→  return insights;
+  1275→}
+  1276→
+  1277→// ─── Orchestrator: full graph state ───────────────────────────────────────────
+  1278→
+  1279→export async function getGraphState(): Promise<GraphState> {
+  1280→  const cfo = await generateCFOInsights(null);
+  1281→  const rows = await fetchRawRows();
+  1282→
+  1283→  const knowledgeGraph = buildKnowledgeGraph(rows, cfo);
+  1284→  const riskGraph = buildRiskGraph(knowledgeGraph, cfo);
+  1285→  const relationshipChains = buildRelationshipChains(knowledgeGraph, riskGraph, cfo);
+  1286→  const dependencyGraph = buildDependencyGraph(knowledgeGraph, cfo);
+  1287→  const dependencyAnswers = buildDependencyAnswers(dependencyGraph, cfo);
+  1288→  const memoryGraph = buildMemoryGraph(knowledgeGraph, cfo);
+  1289→  const predictionGraph = buildPredictionGraph(knowledgeGraph, cfo);
+  1290→  const insights = buildInsights(knowledgeGraph, riskGraph, dependencyGraph, cfo);
+  1291→
+  1292→  return {
+  1293→    knowledgeGraph,
+  1294→    riskGraph,
+  1295→    dependencyGraph,
+  1296→    dependencyAnswers,
+  1297→    memoryGraph,
+  1298→    predictionGraph,
+  1299→    insights,
+  1300→    relationshipChains,
+  1301→    generatedAt: nowISO(),
+  1302→    hasLiveData: cfo.hasLiveData,
+  1303→    clientCount: rows.clients.length,
+  1304→    invoiceCount: rows.invoices.length,
+  1305→    filingCount: rows.filings.length,
+  1306→    noticeCount: rows.notices.length,
+  1307→  };
+  1308→}
+  1309→
+  1310→// ─── Subgraph helpers (for /api/graph/client/:id and /business/:id) ────────────
+  1311→
+  1312→export function buildClientSubgraph(state: GraphState, clientId: string): ClientSubgraph | null {
+  1313→  const centerNode = state.knowledgeGraph.nodes.find((n) => n.id === clientId || (n.type === 'client' && n.entityId === clientId));
+  1314→  if (!centerNode) return null;
+  1315→
+  1316→  // BFS 2 hops from center
+  1317→  const centerId = centerNode.id;
+  1318→  const visibleIds = new Set<string>([centerId]);
+  1319→  // First hop
+  1320→  state.knowledgeGraph.edges.forEach((e) => {
+  1321→    if (e.source === centerId) visibleIds.add(e.target);
+  1322→    if (e.target === centerId) visibleIds.add(e.source);
+  1323→  });
+  1324→  // Second hop
+  1325→  const firstHop = new Set(visibleIds);
+  1326→  state.knowledgeGraph.edges.forEach((e) => {
+  1327→    if (firstHop.has(e.source)) visibleIds.add(e.target);
+  1328→    if (firstHop.has(e.target)) visibleIds.add(e.source);
+  1329→  });
+  1330→
+  1331→  const subNodes = state.knowledgeGraph.nodes.filter((n) => visibleIds.has(n.id));
+  1332→  const subEdges = state.knowledgeGraph.edges.filter((e) => visibleIds.has(e.source) && visibleIds.has(e.target));
+  1333→
+  1334→  const riskForClient = state.riskGraph.nodes.find((r) => r.nodeId === centerId);
+  1335→  const relationshipChain = state.relationshipChains.find((c) => c.steps[0]?.nodeId === centerId);
+  1336→  const insights = state.insights.filter((i) => i.relatedNodeIds.includes(centerId));
+  1337→
+  1338→  return {
+  1339→    centerNodeId: centerId,
+  1340→    graph: { nodes: subNodes, edges: subEdges, nodeCountByType: {} as any, edgeCountByType: {} as any },
+  1341→    riskForClient,
+  1342→    relationshipChain,
+  1343→    insights,
+  1344→  };
+  1345→}
+  1346→
+  1347→export function buildBusinessSubgraph(state: GraphState, businessId: string = 'business:firm'): BusinessSubgraph {
+  1348→  const centerNode = state.knowledgeGraph.nodes.find((n) => n.id === businessId) || state.knowledgeGraph.nodes.find((n) => n.type === 'business')!;
+  1349→  const centerId = centerNode.id;
+  1350→
+  1351→  // First hop from business
+  1352→  const visibleIds = new Set<string>([centerId]);
+  1353→  state.knowledgeGraph.edges.forEach((e) => {
+  1354→    if (e.source === centerId) visibleIds.add(e.target);
+  1355→    if (e.target === centerId) visibleIds.add(e.source);
+  1356→  });
+  1357→
+  1358→  const subNodes = state.knowledgeGraph.nodes.filter((n) => visibleIds.has(n.id));
+  1359→  const subEdges = state.knowledgeGraph.edges.filter((e) => visibleIds.has(e.source) && visibleIds.has(e.target));
+  1360→
+  1361→  const topDependencies = state.dependencyGraph.topRevenueClients.slice(0, 5);
+  1362→  const riskNodes = state.riskGraph.nodes.filter((r) => visibleIds.has(r.nodeId));
+  1363→  const insights = state.insights.slice(0, 6);
+  1364→
+  1365→  return {
+  1366→    centerNodeId: centerId,
+  1367→    graph: { nodes: subNodes, edges: subEdges, nodeCountByType: {} as any, edgeCountByType: {} as any },
+  1368→    topDependencies,
+  1369→    riskNodes,
+  1370→    insights,
+  1371→  };
+  1372→}
+  1373→
+  1374→// ─── Quick NL query examples ──────────────────────────────────────────────────
+  1375→
+  1376→export const QUICK_GRAPH_QUERIES: { label: string; text: string; intent: GraphQueryIntent }[] = [
+  1377→  { label: 'Why did revenue drop?', text: 'Why did revenue drop?', intent: 'why_revenue_drop' },
+  1378→  { label: 'Who are my risky clients?', text: 'Who are my risky clients?', intent: 'risky_clients' },
+  1379→  { label: 'Which invoices are overdue?', text: 'Which invoices are overdue?', intent: 'overdue_invoices' },
+  1380→  { label: 'Which vendor affects profitability?', text: 'Which vendor affects profitability?', intent: 'vendor_profitability' },
+  1381→  { label: 'Businesses connected to GST notices', text: 'Show businesses connected to GST notices', intent: 'businesses_with_notices' },
+  1382→  { label: 'Which employee manages ABC?', text: 'Which employee manages ABC Pvt Ltd?', intent: 'employee_for_client' },
+  1383→  { label: 'Why is cash flow down?', text: 'Why is cash flow down?', intent: 'cash_flow_down' },
+  1384→  { label: 'Most profitable client', text: 'Show me the most profitable client', intent: 'most_profitable' },
+  1385→];
+  1386→
+  1387→// ─── Format helpers for Oracle context injection ──────────────────────────────
+  1388→
+  1389→export function formatGraphContextBlock(state: GraphState): string {
+  1390→  const lines: string[] = [];
+  1391→  const kg = state.knowledgeGraph;
+  1392→  const rg = state.riskGraph;
+  1393→  lines.push('── LIVE BUSINESS GRAPH STATE ──');
+  1394→  lines.push(`Generated: ${state.generatedAt}`);
+  1395→  lines.push(`Nodes: ${kg.nodes.length} (${Object.entries(kg.nodeCountByType).map(([t, c]) => `${t}:${c}`).join(', ')})`);
+  1396→  lines.push(`Edges: ${kg.edges.length} (${Object.entries(kg.edgeCountByType).map(([t, c]) => `${t}:${c}`).join(', ')})`);
+  1397→  lines.push('');
+  1398→  lines.push(`Overall risk level: ${rg.overallLevel.toUpperCase()}`);
+  1399→  lines.push(`Risk distribution: ${Object.entries(rg.countByLevel).map(([l, c]) => `${l}:${c}`).join(', ')}`);
+  1400→  lines.push('');
+  1401→  lines.push('Top risks:');
+  1402→  rg.topRisks.slice(0, 5).forEach((r) => {
+  1403→    lines.push(`  ${RISK_GLYPH[r.level]} ${r.entityName} (${r.category}, score ${r.score}) — ${r.reasons[0]}. Impact: ${r.impact}`);
+  1404→  });
+  1405→  lines.push('');
+  1406→  lines.push('Top revenue clients:');
+  1407→  state.dependencyGraph.topRevenueClients.slice(0, 5).forEach((c) => {
+  1408→    lines.push(`  • ${c.fromName}: ${inrShort(c.amount || 0)} — ${c.note}`);
+  1409→  });
+  1410→  lines.push('');
+  1411→  lines.push('Critical vendors:');
+  1412→  state.dependencyGraph.criticalVendors.forEach((v) => {
+  1413→    lines.push(`  • ${v.toName}: ${v.note}`);
+  1414→  });
+  1415→  lines.push('');
+  1416→  lines.push('Notices affecting cash flow:');
+  1417→  state.dependencyGraph.noticesAffectingCashFlow.forEach((n) => {
+  1418→    lines.push(`  • ${n.fromName}: ${n.note}`);
+  1419→  });
+  1420→  lines.push('');
+  1421→  lines.push('Relationship chains:');
+  1422→  state.relationshipChains.slice(0, 3).forEach((c) => {
+  1423→    lines.push(`  • ${c.title}: ${c.steps.map((s) => `${s.nodeName}→${s.impact}`).join(' · ')}`);
+  1424→  });
+  1425→  lines.push('');
+  1426→  lines.push('What-if predictions:');
+  1427→  state.predictionGraph.scenarios.slice(0, 3).forEach((s) => {
+  1428→    lines.push(`  • ${s.trigger}: cash ${inrShort(s.impactOnCash)}, revenue ${inrShort(s.impactOnRevenue)}, GST ${inrShort(s.impactOnGST)} → risk ${s.impactOnRiskLevel}. ${s.explanation}`);
+  1429→  });
+  1430→  lines.push('');
+  1431→  lines.push('Daily insights:');
+  1432→  state.insights.forEach((i) => {
+  1433→    lines.push(`  ${i.emoji} ${i.title}: ${i.body}`);
+  1434→  });
+  1435→  lines.push('');
+  1436→  lines.push('Memory insights:');
+  1437→  state.memoryGraph.insights.forEach((i) => lines.push(`  • ${i}`));
+  1438→  lines.push('── END BUSINESS GRAPH STATE ──');
+  1439→  return lines.join('\n');
+  1440→}
+  1441→

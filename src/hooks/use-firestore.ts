@@ -18,6 +18,7 @@ import {
   type FirestoreReturn, type FirestoreReconciliation, type FirestoreNotification,
   type FirestoreActivity, type FirestoreAIRecommendation, type FirestoreFirm,
   type FirestorePrediction, type FirestorePriority, type FirestoreOrganization, type FirestoreMembership,
+  type FirestoreLead, type FirestoreDeal, type FirestoreMeeting, type FirestoreTask,
   type LiveDashboardMetrics, type FirmExecutiveScores, type CollectionName,
 } from '@/lib/firestore-schema';
 import { computeDashboardMetrics } from '@/lib/firestore-service';
@@ -395,4 +396,28 @@ export function useFirmExecutiveScores(): { scores: FirmExecutiveScores; loading
   }, [clients, returns, invoices, reconciliations, activities, loading]);
 
   return { scores, loading };
+}
+
+// ─── CRM: Leads ──────────────────────────────────────────────────────────────
+
+export function useFireLeads() {
+  return useFirestoreCollection<FirestoreLead>(COLLECTIONS.LEADS, [orderBy('createdAt', 'desc')]);
+}
+
+// ─── CRM: Deals ──────────────────────────────────────────────────────────────
+
+export function useFireDeals() {
+  return useFirestoreCollection<FirestoreDeal>(COLLECTIONS.DEALS, [orderBy('createdAt', 'desc')]);
+}
+
+// ─── CRM: Meetings ───────────────────────────────────────────────────────────
+
+export function useFireMeetings() {
+  return useFirestoreCollection<FirestoreMeeting>(COLLECTIONS.MEETINGS, [orderBy('dateTime', 'asc')]);
+}
+
+// ─── Tasks ───────────────────────────────────────────────────────────────────
+
+export function useFireTasks() {
+  return useFirestoreCollection<FirestoreTask>(COLLECTIONS.TASKS, [orderBy('createdAt', 'desc')]);
 }

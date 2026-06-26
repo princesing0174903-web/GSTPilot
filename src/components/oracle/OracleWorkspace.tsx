@@ -38,6 +38,7 @@ import ReactMarkdown from 'react-markdown';
 import { BrandLogo } from '@/components/brand';
 import { cn } from '@/lib/utils';
 import type { AppView } from '@/contexts/AppContext';
+import { useLiveDashboardMetrics } from '@/hooks/use-firestore';
 import {
   detectLanguage, detectEmotion, deriveAvatarState, AVATAR_STATE_LABEL,
   ORACLE_EMOTIONS, nativeLanguageLabel,
@@ -117,6 +118,11 @@ export function OracleWorkspace({
   const [activeLanguage, setActiveLanguage] = useState<OracleMessage['language']>('english');
   // Mobile: history drawer open state
   const [historyOpen, setHistoryOpen] = useState(false);
+
+  // ── Oracle Context Engine™ — live dashboard metrics from Firestore are
+  //    forwarded to the API as context.dashboardMetrics so the model can
+  //    reason about the user's real compliance / return / invoice state.
+  const { metrics: dashboardMetrics } = useLiveDashboardMetrics();
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -394,6 +400,29 @@ export function OracleWorkspace({
             .slice(-4)
             .map((m) => m.content.slice(0, 60)),
         },
+        // Oracle Context Engine™ — forward live dashboard metrics so the
+        // server can ground its response in the user's actual compliance /
+        // return / invoice state (built into the system prompt as
+        // "LIVE DASHBOARD DATA (legacy)").
+        context: {
+          dashboardMetrics: {
+            totalClients: dashboardMetrics.totalClients,
+            activeClients: dashboardMetrics.activeClients,
+            totalInvoices: dashboardMetrics.totalInvoices,
+            totalTaxVolume: dashboardMetrics.totalTaxVolume,
+            filedReturns: dashboardMetrics.filedReturns,
+            pendingReturns: dashboardMetrics.pendingReturns,
+            overdueReturns: dashboardMetrics.overdueReturns,
+            readyToFile: dashboardMetrics.readyToFile,
+            criticalIssues: dashboardMetrics.criticalIssues,
+            warnings: dashboardMetrics.warnings,
+            averageHealthScore: dashboardMetrics.averageHealthScore,
+            matchPercentage: dashboardMetrics.matchPercentage,
+            riskPercentage: dashboardMetrics.riskPercentage,
+            documentsProcessed: dashboardMetrics.documentsProcessed,
+            extractionsPending: dashboardMetrics.extractionsPending,
+          },
+        },
       };
 
       const controller = new AbortController();
@@ -517,7 +546,7 @@ export function OracleWorkspace({
         requestAnimationFrame(() => inputRef.current?.focus());
       }
     },
-    [isStreaming, messages, userName, firmName, gstin, userId, activeLanguage, scrollToBottom],
+    [isStreaming, messages, userName, firmName, gstin, userId, activeLanguage, scrollToBottom, dashboardMetrics],
   );
 
   // ─── Stop streaming ────────────────────────────────────────────────────────

@@ -1,0 +1,907 @@
+     1→'use client';
+     2→
+     3→import React, { useState, useEffect, useCallback } from 'react';
+     4→import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+     5→import { Checkbox } from '@/components/ui/checkbox';
+     6→import { Button } from '@/components/ui/button';
+     7→import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+     8→import { Badge } from '@/components/ui/badge';
+     9→import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+    10→import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+    11→import { Separator } from '@/components/ui/separator';
+    12→import { Skeleton } from '@/components/ui/skeleton';
+    13→import {
+    14→  Download,
+    15→  FileText,
+    16→  FileJson,
+    17→  FileSpreadsheet,
+    18→  Package,
+    19→  Eye,
+    20→  Clock,
+    21→  Search,
+    22→  Trash2,
+    23→  RefreshCw,
+    24→} from 'lucide-react';
+    25→import {
+    26→  Invoice,
+    27→  GSTRFiling,
+    28→  GSTR1Section,
+    29→  GSTR1_SECTION_LABELS,
+    30→  Client,
+    31→} from '@/types/gst';
+    32→import { formatCurrency, formatNumber, periodToLabel } from '@/lib/gst-utils';
+    33→
+    34→// ─── Types ─────────────────────────────────────────────────────────────────────
+    35→
+    36→interface SectionPreview {
+    37→  section: GSTR1Section;
+    38→  invoiceCount: number;
+    39→  taxableValue: number;
+    40→  totalTax: number;
+    41→}
+    42→
+    43→interface RecentExport {
+    44→  id: string;
+    45→  exportType: string;
+    46→  clientName: string;
+    47→  period: string;
+    48→  generatedAt: string;
+    49→  fileSize: string;
+    50→  fileType: string;
+    51→  data?: unknown;
+    52→}
+    53→
+    54→interface ClientOption {
+    55→  id: string;
+    56→  tradeName: string;
+    57→  gstin: string;
+    58→}
+    59→
+    60→// ─── Constants ─────────────────────────────────────────────────────────────────
+    61→
+    62→const SECTION_KEYS: GSTR1Section[] = ['b2b', 'b2cl', 'b2cs', 'cdnr', 'cdnur', 'exp'];
+    63→
+    64→const EXPORT_TYPE_CONFIG: Record<string, { label: string; icon: React.ReactNode; color: string; bgColor: string }> = {
+    65→  'GSTR-1 JSON': { label: 'GSTR-1 JSON', icon: <FileJson className="size-5" />, color: 'text-emerald-700', bgColor: 'bg-emerald-50' },
+    66→  'GSTR-1 Excel': { label: 'GSTR-1 Excel', icon: <FileSpreadsheet className="size-5" />, color: 'text-amber-700', bgColor: 'bg-amber-50' },
+    67→  'Filing Summary PDF': { label: 'Filing Summary PDF', icon: <FileText className="size-5" />, color: 'text-red-700', bgColor: 'bg-red-50' },
+    68→  'Working Papers PDF': { label: 'Working Papers PDF', icon: <FileText className="size-5" />, color: 'text-purple-700', bgColor: 'bg-purple-50' },
+    69→};
+    70→
+    71→const MONTHS = [
+    72→  'January', 'February', 'March', 'April', 'May', 'June',
+    73→  'July', 'August', 'September', 'October', 'November', 'December',
+    74→];
+    75→
+    76→// ─── Main Component ────────────────────────────────────────────────────────────
+    77→
+    78→export default function ReportsPage() {
+    79→  // ─── State ────────────────────────────────────────────────────────────────
+    80→  const [invoices, setInvoices] = useState<Invoice[]>([]);
+    81→  const [filings, setFilings] = useState<GSTRFiling[]>([]);
+    82→  const [clients, setClients] = useState<ClientOption[]>([]);
+    83→  const [loading, setLoading] = useState(true);
+    84→
+    85→  const [selectedClientId, setSelectedClientId] = useState<string>('all');
+    86→  const [selectedMonth, setSelectedMonth] = useState<string>(() => {
+    87→    const m = new Date().getMonth() + 1;
+    88→    return m.toString().padStart(2, '0');
+    89→  });
+    90→  const [selectedYear, setSelectedYear] = useState<string>(() =>
+    91→    new Date().getFullYear().toString()
+    92→  );
+    93→  const [returnType, setReturnType] = useState<string>('GSTR-1');
+    94→  const [includeSections, setIncludeSections] = useState<Record<GSTR1Section, boolean>>({
+    95→    b2b: true,
+    96→    b2cl: true,
+    97→    b2cs: true,
+    98→    cdnr: true,
+    99→    cdnur: true,
+   100→    exp: true,
+   101→  });
+   102→
+   103→  const [recentExports, setRecentExports] = useState<RecentExport[]>([]);
+   104→  const [generating, setGenerating] = useState<string | null>(null);
+   105→  const [previewOpen, setPreviewOpen] = useState(false);
+   106→  const [previewData, setPreviewData] = useState<RecentExport | null>(null);
+   107→
+   108→  // ─── Data Fetching ────────────────────────────────────────────────────────
+   109→  useEffect(() => {
+   110→    async function fetchData() {
+   111→      setLoading(true);
+   112→      try {
+   113→        const [invoicesRes, filingsRes] = await Promise.all([
+   114→          fetch('/api/invoices'),
+   115→          fetch('/api/gstr-filing'),
+   116→        ]);
+   117→
+   118→        if (invoicesRes.ok) {
+   119→          const invData = await invoicesRes.json();
+   120→          setInvoices(invData.invoices ?? invData ?? []);
+   121→        }
+   122→        if (filingsRes.ok) {
+   123→          const filData = await filingsRes.json();
+   124→          setFilings(filData.filings ?? filData ?? []);
+   125→        }
+   126→      } catch (err) {
+   127→        console.error('Failed to fetch data:', err);
+   128→      } finally {
+   129→        setLoading(false);
+   130→      }
+   131→    }
+   132→    fetchData();
+   133→  }, []);
+   134→
+   135→  // Extract clients
+   136→  useEffect(() => {
+   137→    const clientMap = new Map<string, ClientOption>();
+   138→    invoices.forEach((inv) => {
+   139→      if (inv.client && !clientMap.has(inv.clientId)) {
+   140→        clientMap.set(inv.clientId, {
+   141→          id: inv.clientId,
+   142→          tradeName: inv.client.tradeName,
+   143→          gstin: inv.client.gstin,
+   144→        });
+   145→      }
+   146→    });
+   147→    filings.forEach((f) => {
+   148→      if (f.client && !clientMap.has(f.clientId)) {
+   149→        clientMap.set(f.clientId, {
+   150→          id: f.clientId,
+   151→          tradeName: f.client.tradeName,
+   152→          gstin: f.client.gstin,
+   153→        });
+   154→      }
+   155→    });
+   156→    setClients(Array.from(clientMap.values()));
+   157→  }, [invoices, filings]);
+   158→
+   159→  // ─── Derived Data ─────────────────────────────────────────────────────────
+   160→  const selectedPeriod = `${selectedYear}-${selectedMonth}`;
+   161→
+   162→  const filteredInvoices = invoices.filter((inv) => {
+   163→    if (selectedClientId !== 'all' && inv.clientId !== selectedClientId) return false;
+   164→    if (inv.period && inv.period !== selectedPeriod) return false;
+   165→    if (!includeSections[inv.gstr1Section as GSTR1Section]) return false;
+   166→    return true;
+   167→  });
+   168→
+   169→  const sectionPreviews: SectionPreview[] = SECTION_KEYS
+   170→    .filter((s) => includeSections[s])
+   171→    .map((section) => {
+   172→      const sectionInvoices = filteredInvoices.filter((inv) => inv.gstr1Section === section);
+   173→      return {
+   174→        section,
+   175→        invoiceCount: sectionInvoices.length,
+   176→        taxableValue: sectionInvoices.reduce((sum, inv) => sum + inv.taxableValue, 0),
+   177→        totalTax: sectionInvoices.reduce((sum, inv) => sum + inv.cgst + inv.sgst + inv.igst, 0),
+   178→      };
+   179→    });
+   180→
+   181→  const totalTaxableValue = filteredInvoices.reduce((sum, inv) => sum + inv.taxableValue, 0);
+   182→  const totalTax = filteredInvoices.reduce((sum, inv) => sum + inv.cgst + inv.sgst + inv.igst, 0);
+   183→  const totalInvoices = filteredInvoices.length;
+   184→
+   185→  const matchedFiling = filings.find(
+   186→    (f) =>
+   187→      (selectedClientId === 'all' || f.clientId === selectedClientId) &&
+   188→      f.period === selectedPeriod &&
+   189→      f.returnType === returnType
+   190→  );
+   191→
+   192→  // ─── Handlers ────────────────────────────────────────────────────────────
+   193→  const toggleSection = (section: GSTR1Section) => {
+   194→    setIncludeSections((prev) => ({ ...prev, [section]: !prev[section] }));
+   195→  };
+   196→
+   197→  const addRecentExport = useCallback((exp: RecentExport) => {
+   198→    setRecentExports((prev) => [exp, ...prev].slice(0, 10));
+   199→  }, []);
+   200→
+   201→  const handleGenerateJSON = async () => {
+   202→    setGenerating('json');
+   203→    try {
+   204→      const body: Record<string, string> = { type: 'json' };
+   205→      if (matchedFiling) body.filingId = matchedFiling.id;
+   206→      if (selectedClientId !== 'all') body.clientId = selectedClientId;
+   207→
+   208→      const res = await fetch('/api/export', {
+   209→        method: 'POST',
+   210→        headers: { 'Content-Type': 'application/json' },
+   211→        body: JSON.stringify(body),
+   212→      });
+   213→
+   214→      if (!res.ok) throw new Error('Export failed');
+   215→
+   216→      const data = await res.json();
+   217→      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+   218→      const url = URL.createObjectURL(blob);
+   219→      const a = document.createElement('a');
+   220→      a.href = url;
+   221→      a.download = `GSTR1_${selectedPeriod}.json`;
+   222→      document.body.appendChild(a);
+   223→      a.click();
+   224→      document.body.removeChild(a);
+   225→      URL.revokeObjectURL(url);
+   226→
+   227→      const clientName = selectedClientId === 'all'
+   228→        ? 'All Clients'
+   229→        : clients.find((c) => c.id === selectedClientId)?.tradeName ?? 'Unknown';
+   230→
+   231→      addRecentExport({
+   232→        id: crypto.randomUUID(),
+   233→        exportType: 'GSTR-1 JSON',
+   234→        clientName,
+   235→        period: periodToLabel(selectedPeriod),
+   236→        generatedAt: new Date().toISOString(),
+   237→        fileSize: `${(JSON.stringify(data).length / 1024).toFixed(1)} KB`,
+   238→        fileType: 'json',
+   239→        data,
+   240→      });
+   241→    } catch (err) {
+   242→      console.error('JSON export error:', err);
+   243→    } finally {
+   244→      setGenerating(null);
+   245→    }
+   246→  };
+   247→
+   248→  const handleGenerateExcel = async () => {
+   249→    setGenerating('csv');
+   250→    try {
+   251→      const body: Record<string, string> = { type: 'csv' };
+   252→      if (matchedFiling) body.filingId = matchedFiling.id;
+   253→      if (selectedClientId !== 'all') body.clientId = selectedClientId;
+   254→
+   255→      const res = await fetch('/api/export', {
+   256→        method: 'POST',
+   257→        headers: { 'Content-Type': 'application/json' },
+   258→        body: JSON.stringify(body),
+   259→      });
+   260→
+   261→      if (!res.ok) throw new Error('Export failed');
+   262→
+   263→      const csvText = await res.text();
+   264→      const blob = new Blob([csvText], { type: 'text/csv' });
+   265→      const url = URL.createObjectURL(blob);
+   266→      const a = document.createElement('a');
+   267→      a.href = url;
+   268→      a.download = `GSTR1_${selectedPeriod}.csv`;
+   269→      document.body.appendChild(a);
+   270→      a.click();
+   271→      document.body.removeChild(a);
+   272→      URL.revokeObjectURL(url);
+   273→
+   274→      const clientName = selectedClientId === 'all'
+   275→        ? 'All Clients'
+   276→        : clients.find((c) => c.id === selectedClientId)?.tradeName ?? 'Unknown';
+   277→
+   278→      addRecentExport({
+   279→        id: crypto.randomUUID(),
+   280→        exportType: 'GSTR-1 Excel',
+   281→        clientName,
+   282→        period: periodToLabel(selectedPeriod),
+   283→        generatedAt: new Date().toISOString(),
+   284→        fileSize: `${(csvText.length / 1024).toFixed(1)} KB`,
+   285→        fileType: 'csv',
+   286→      });
+   287→    } catch (err) {
+   288→      console.error('Excel export error:', err);
+   289→    } finally {
+   290→      setGenerating(null);
+   291→    }
+   292→  };
+   293→
+   294→  const handleGeneratePDF = async () => {
+   295→    setGenerating('report');
+   296→    try {
+   297→      const body: Record<string, string> = { type: 'report' };
+   298→      if (selectedClientId !== 'all') body.clientId = selectedClientId;
+   299→
+   300→      const res = await fetch('/api/export', {
+   301→        method: 'POST',
+   302→        headers: { 'Content-Type': 'application/json' },
+   303→        body: JSON.stringify(body),
+   304→      });
+   305→
+   306→      if (!res.ok) throw new Error('Report generation failed');
+   307→
+   308→      const data = await res.json();
+   309→      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+   310→      const url = URL.createObjectURL(blob);
+   311→      const a = document.createElement('a');
+   312→      a.href = url;
+   313→      a.download = `FilingSummary_${selectedPeriod}.json`;
+   314→      document.body.appendChild(a);
+   315→      a.click();
+   316→      document.body.removeChild(a);
+   317→      URL.revokeObjectURL(url);
+   318→
+   319→      const clientName = selectedClientId === 'all'
+   320→        ? 'All Clients'
+   321→        : clients.find((c) => c.id === selectedClientId)?.tradeName ?? 'Unknown';
+   322→
+   323→      addRecentExport({
+   324→        id: crypto.randomUUID(),
+   325→        exportType: 'Filing Summary PDF',
+   326→        clientName,
+   327→        period: periodToLabel(selectedPeriod),
+   328→        generatedAt: new Date().toISOString(),
+   329→        fileSize: `${(JSON.stringify(data).length / 1024).toFixed(1)} KB`,
+   330→        fileType: 'json',
+   331→        data,
+   332→      });
+   333→    } catch (err) {
+   334→      console.error('PDF report error:', err);
+   335→    } finally {
+   336→      setGenerating(null);
+   337→    }
+   338→  };
+   339→
+   340→  const handleGenerateWorkingPapers = async () => {
+   341→    setGenerating('working-papers');
+   342→    try {
+   343→      const body: Record<string, string> = { type: 'report' };
+   344→      if (selectedClientId !== 'all') body.clientId = selectedClientId;
+   345→
+   346→      const res = await fetch('/api/export', {
+   347→        method: 'POST',
+   348→        headers: { 'Content-Type': 'application/json' },
+   349→        body: JSON.stringify(body),
+   350→      });
+   351→
+   352→      if (!res.ok) throw new Error('Working papers generation failed');
+   353→
+   354→      const data = await res.json();
+   355→      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+   356→      const url = URL.createObjectURL(blob);
+   357→      const a = document.createElement('a');
+   358→      a.href = url;
+   359→      a.download = `WorkingPapers_${selectedPeriod}.json`;
+   360→      document.body.appendChild(a);
+   361→      a.click();
+   362→      document.body.removeChild(a);
+   363→      URL.revokeObjectURL(url);
+   364→
+   365→      const clientName = selectedClientId === 'all'
+   366→        ? 'All Clients'
+   367→        : clients.find((c) => c.id === selectedClientId)?.tradeName ?? 'Unknown';
+   368→
+   369→      addRecentExport({
+   370→        id: crypto.randomUUID(),
+   371→        exportType: 'Working Papers PDF',
+   372→        clientName,
+   373→        period: periodToLabel(selectedPeriod),
+   374→        generatedAt: new Date().toISOString(),
+   375→        fileSize: `${(JSON.stringify(data).length / 1024).toFixed(1)} KB`,
+   376→        fileType: 'json',
+   377→        data,
+   378→      });
+   379→    } catch (err) {
+   380→      console.error('Working papers error:', err);
+   381→    } finally {
+   382→      setGenerating(null);
+   383→    }
+   384→  };
+   385→
+   386→  const handleDeleteExport = (id: string) => {
+   387→    setRecentExports((prev) => prev.filter((e) => e.id !== id));
+   388→  };
+   389→
+   390→  const handleViewExport = (exp: RecentExport) => {
+   391→    setPreviewData(exp);
+   392→    setPreviewOpen(true);
+   393→  };
+   394→
+   395→  const handleDownloadExport = (exp: RecentExport) => {
+   396→    if (!exp.data) return;
+   397→    const blob = new Blob([JSON.stringify(exp.data, null, 2)], { type: 'application/json' });
+   398→    const url = URL.createObjectURL(blob);
+   399→    const a = document.createElement('a');
+   400→    a.href = url;
+   401→    a.download = `${exp.exportType.replace(/\s+/g, '_')}_${exp.period}.json`;
+   402→    document.body.appendChild(a);
+   403→    a.click();
+   404→    document.body.removeChild(a);
+   405→    URL.revokeObjectURL(url);
+   406→  };
+   407→
+   408→  // ─── Loading Skeleton ────────────────────────────────────────────────────
+   409→  if (loading) {
+   410→    return (
+   411→      <div className="space-y-6 p-6">
+   412→        <div className="flex items-center gap-3">
+   413→          <Skeleton className="size-10 rounded-lg" />
+   414→          <div className="space-y-2">
+   415→            <Skeleton className="h-6 w-64" />
+   416→            <Skeleton className="h-4 w-48" />
+   417→          </div>
+   418→        </div>
+   419→        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+   420→          {[1, 2, 3].map((i) => (
+   421→            <Skeleton key={i} className="h-48 rounded-xl" />
+   422→          ))}
+   423→        </div>
+   424→        <Skeleton className="h-64 rounded-xl" />
+   425→        <Skeleton className="h-48 rounded-xl" />
+   426→      </div>
+   427→    );
+   428→  }
+   429→
+   430→  // ─── Render ──────────────────────────────────────────────────────────────
+   431→  return (
+   432→    <div className="space-y-6 p-4 md:p-6">
+   433→      {/* Header */}
+   434→      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+   435→        <div className="flex items-center gap-3">
+   436→          <div className="flex size-10 items-center justify-center rounded-lg bg-emerald-100">
+   437→            <Package className="size-5 text-emerald-700" />
+   438→          </div>
+   439→          <div>
+   440→            <h1 className="text-xl font-bold tracking-tight sm:text-2xl">
+   441→              Filing Package Generator
+   442→            </h1>
+   443→            <p className="text-sm text-muted-foreground">
+   444→              Generate, export, and download your GST filing packages
+   445→            </p>
+   446→          </div>
+   447→        </div>
+   448→      </div>
+   449→
+   450→      {/* ═══════════════════════════════════════════════════════════════════════
+   451→          Export Options
+   452→      ═══════════════════════════════════════════════════════════════════════ */}
+   453→      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+   454→        {/* GSTR-1 JSON */}
+   455→        <Card className="transition-shadow hover:shadow-md">
+   456→          <CardHeader>
+   457→            <div className="flex items-center gap-3">
+   458→              <div className="flex size-10 items-center justify-center rounded-lg bg-emerald-50">
+   459→                <FileJson className="size-5 text-emerald-700" />
+   460→              </div>
+   461→              <div>
+   462→                <CardTitle className="text-base">GSTR-1 JSON</CardTitle>
+   463→                <CardDescription className="text-xs mt-0.5">GST Portal Upload Format</CardDescription>
+   464→              </div>
+   465→            </div>
+   466→          </CardHeader>
+   467→          <CardContent className="space-y-4">
+   468→            <p className="text-sm text-muted-foreground">
+   469→              Generate GSTR-1 return in JSON format for upload to GST portal
+   470→            </p>
+   471→            <Button
+   472→              onClick={handleGenerateJSON}
+   473→              disabled={generating !== null}
+   474→              className="w-full gap-2 bg-emerald-600 hover:bg-emerald-700"
+   475→            >
+   476→              {generating === 'json' ? (
+   477→                <RefreshCw className="size-4 animate-spin" />
+   478→              ) : (
+   479→                <FileJson className="size-4" />
+   480→              )}
+   481→              {generating === 'json' ? 'Generating...' : 'Generate'}
+   482→            </Button>
+   483→          </CardContent>
+   484→        </Card>
+   485→
+   486→        {/* GSTR-1 Excel */}
+   487→        <Card className="transition-shadow hover:shadow-md">
+   488→          <CardHeader>
+   489→            <div className="flex items-center gap-3">
+   490→              <div className="flex size-10 items-center justify-center rounded-lg bg-amber-50">
+   491→                <FileSpreadsheet className="size-5 text-amber-700" />
+   492→              </div>
+   493→              <div>
+   494→                <CardTitle className="text-base">GSTR-1 Excel</CardTitle>
+   495→                <CardDescription className="text-xs mt-0.5">Spreadsheet Export</CardDescription>
+   496→              </div>
+   497→            </div>
+   498→          </CardHeader>
+   499→          <CardContent className="space-y-4">
+   500→            <p className="text-sm text-muted-foreground">
+   501→              Export GSTR-1 data in Excel format for review and records
+   502→            </p>
+   503→            <Button
+   504→              onClick={handleGenerateExcel}
+   505→              disabled={generating !== null}
+   506→              className="w-full gap-2 bg-amber-600 hover:bg-amber-700"
+   507→            >
+   508→              {generating === 'csv' ? (
+   509→                <RefreshCw className="size-4 animate-spin" />
+   510→              ) : (
+   511→                <FileSpreadsheet className="size-4" />
+   512→              )}
+   513→              {generating === 'csv' ? 'Exporting...' : 'Export'}
+   514→            </Button>
+   515→          </CardContent>
+   516→        </Card>
+   517→
+   518→        {/* Filing Summary PDF */}
+   519→        <Card className="transition-shadow hover:shadow-md">
+   520→          <CardHeader>
+   521→            <div className="flex items-center gap-3">
+   522→              <div className="flex size-10 items-center justify-center rounded-lg bg-red-50">
+   523→                <FileText className="size-5 text-red-700" />
+   524→              </div>
+   525→              <div>
+   526→                <CardTitle className="text-base">Filing Summary PDF</CardTitle>
+   527→                <CardDescription className="text-xs mt-0.5">Comprehensive Report</CardDescription>
+   528→              </div>
+   529→            </div>
+   530→          </CardHeader>
+   531→          <CardContent className="space-y-4">
+   532→            <p className="text-sm text-muted-foreground">
+   533→              Generate comprehensive filing summary report in PDF format
+   534→            </p>
+   535→            <Button
+   536→              onClick={handleGeneratePDF}
+   537→              disabled={generating !== null}
+   538→              className="w-full gap-2 bg-red-600 hover:bg-red-700"
+   539→            >
+   540→              {generating === 'report' ? (
+   541→                <RefreshCw className="size-4 animate-spin" />
+   542→              ) : (
+   543→                <FileText className="size-4" />
+   544→              )}
+   545→              {generating === 'report' ? 'Generating...' : 'Generate PDF'}
+   546→            </Button>
+   547→          </CardContent>
+   548→        </Card>
+   549→      </div>
+   550→
+   551→      {/* ═══════════════════════════════════════════════════════════════════════
+   552→          Configuration Panel
+   553→      ═══════════════════════════════════════════════════════════════════════ */}
+   554→      <Card>
+   555→        <CardHeader>
+   556→          <CardTitle className="flex items-center gap-2 text-base">
+   557→            <Search className="size-4 text-emerald-600" />
+   558→            Export Configuration
+   559→          </CardTitle>
+   560→          <CardDescription>
+   561→            Select the client, period, and sections to include in the export
+   562→          </CardDescription>
+   563→        </CardHeader>
+   564→        <CardContent>
+   565→          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+   566→            {/* Client Selector */}
+   567→            <div className="space-y-2">
+   568→              <label className="text-sm font-medium">Client</label>
+   569→              <Select value={selectedClientId} onValueChange={setSelectedClientId}>
+   570→                <SelectTrigger>
+   571→                  <SelectValue placeholder="Select Client" />
+   572→                </SelectTrigger>
+   573→                <SelectContent>
+   574→                  <SelectItem value="all">All Clients</SelectItem>
+   575→                  {clients.map((c) => (
+   576→                    <SelectItem key={c.id} value={c.id}>
+   577→                      {c.tradeName}
+   578→                    </SelectItem>
+   579→                  ))}
+   580→                </SelectContent>
+   581→              </Select>
+   582→            </div>
+   583→
+   584→            {/* Month Selector */}
+   585→            <div className="space-y-2">
+   586→              <label className="text-sm font-medium">Month</label>
+   587→              <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+   588→                <SelectTrigger>
+   589→                  <SelectValue placeholder="Select Month" />
+   590→                </SelectTrigger>
+   591→                <SelectContent>
+   592→                  {MONTHS.map((m, i) => (
+   593→                    <SelectItem key={i} value={(i + 1).toString().padStart(2, '0')}>
+   594→                      {m}
+   595→                    </SelectItem>
+   596→                  ))}
+   597→                </SelectContent>
+   598→              </Select>
+   599→            </div>
+   600→
+   601→            {/* Year Selector */}
+   602→            <div className="space-y-2">
+   603→              <label className="text-sm font-medium">Year</label>
+   604→              <Select value={selectedYear} onValueChange={setSelectedYear}>
+   605→                <SelectTrigger>
+   606→                  <SelectValue placeholder="Select Year" />
+   607→                </SelectTrigger>
+   608→                <SelectContent>
+   609→                  {[2023, 2024, 2025, 2026].map((y) => (
+   610→                    <SelectItem key={y} value={y.toString()}>
+   611→                      {y}
+   612→                    </SelectItem>
+   613→                  ))}
+   614→                </SelectContent>
+   615→              </Select>
+   616→            </div>
+   617→
+   618→            {/* Return Type */}
+   619→            <div className="space-y-2">
+   620→              <label className="text-sm font-medium">Return Type</label>
+   621→              <Select value={returnType} onValueChange={setReturnType}>
+   622→                <SelectTrigger>
+   623→                  <SelectValue placeholder="Return Type" />
+   624→                </SelectTrigger>
+   625→                <SelectContent>
+   626→                  <SelectItem value="GSTR-1">GSTR-1</SelectItem>
+   627→                  <SelectItem value="GSTR-3B">GSTR-3B</SelectItem>
+   628→                </SelectContent>
+   629→              </Select>
+   630→            </div>
+   631→          </div>
+   632→
+   633→          <Separator className="my-4" />
+   634→
+   635→          {/* Section Checkboxes */}
+   636→          <div className="space-y-2">
+   637→            <label className="text-sm font-medium">Include Sections</label>
+   638→            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+   639→              {SECTION_KEYS.map((section) => (
+   640→                <div key={section} className="flex items-center gap-2">
+   641→                  <Checkbox
+   642→                    id={`section-${section}`}
+   643→                    checked={includeSections[section]}
+   644→                    onCheckedChange={() => toggleSection(section)}
+   645→                  />
+   646→                  <label
+   647→                    htmlFor={`section-${section}`}
+   648→                    className="text-sm cursor-pointer select-none"
+   649→                  >
+   650→                    {section.toUpperCase()}
+   651→                  </label>
+   652→                </div>
+   653→              ))}
+   654→            </div>
+   655→          </div>
+   656→        </CardContent>
+   657→      </Card>
+   658→
+   659→      {/* ═══════════════════════════════════════════════════════════════════════
+   660→          Preview Section
+   661→      ═══════════════════════════════════════════════════════════════════════ */}
+   662→      <Card className="border-emerald-200 bg-gradient-to-r from-emerald-50/50 to-teal-50/50">
+   663→        <CardHeader>
+   664→          <CardTitle className="flex items-center gap-2 text-base text-emerald-800">
+   665→            <Eye className="size-4" />
+   666→            Export Preview
+   667→          </CardTitle>
+   668→          <CardDescription>
+   669→            Summary of data that will be included in the export for{' '}
+   670→            <span className="font-medium text-emerald-700">{periodToLabel(selectedPeriod)}</span>
+   671→            {selectedClientId !== 'all' && (
+   672→              <>
+   673→                {' '}—{' '}
+   674→                <span className="font-medium text-emerald-700">
+   675→                  {clients.find((c) => c.id === selectedClientId)?.tradeName}
+   676→                </span>
+   677→              </>
+   678→            )}
+   679→          </CardDescription>
+   680→        </CardHeader>
+   681→        <CardContent>
+   682→          <div className="grid gap-4 sm:grid-cols-3">
+   683→            <div className="rounded-lg border border-emerald-200 bg-white p-4 text-center">
+   684→              <p className="text-sm text-emerald-600">Total Invoices</p>
+   685→              <p className="text-2xl font-bold text-emerald-900">{formatNumber(totalInvoices)}</p>
+   686→            </div>
+   687→            <div className="rounded-lg border border-emerald-200 bg-white p-4 text-center">
+   688→              <p className="text-sm text-emerald-600">Total Taxable Value</p>
+   689→              <p className="text-2xl font-bold text-emerald-900">{formatCurrency(totalTaxableValue)}</p>
+   690→            </div>
+   691→            <div className="rounded-lg border border-emerald-200 bg-white p-4 text-center">
+   692→              <p className="text-sm text-emerald-600">Total Tax</p>
+   693→              <p className="text-2xl font-bold text-emerald-900">{formatCurrency(totalTax)}</p>
+   694→            </div>
+   695→          </div>
+   696→
+   697→          <Separator className="my-4 bg-emerald-200" />
+   698→
+   699→          {/* Section Breakdown */}
+   700→          <div className="overflow-x-auto rounded-lg border border-emerald-200 bg-white">
+   701→            <Table>
+   702→              <TableHeader>
+   703→                <TableRow className="bg-emerald-50/50">
+   704→                  <TableHead className="whitespace-nowrap">Section</TableHead>
+   705→                  <TableHead className="whitespace-nowrap text-right">Invoices</TableHead>
+   706→                  <TableHead className="whitespace-nowrap text-right">Taxable Value</TableHead>
+   707→                  <TableHead className="whitespace-nowrap text-right">Total Tax</TableHead>
+   708→                </TableRow>
+   709→              </TableHeader>
+   710→              <TableBody>
+   711→                {sectionPreviews.length === 0 ? (
+   712→                  <TableRow>
+   713→                    <TableCell colSpan={4} className="h-20 text-center text-muted-foreground">
+   714→                      No sections selected
+   715→                    </TableCell>
+   716→                  </TableRow>
+   717→                ) : (
+   718→                  sectionPreviews.map((sp) => (
+   719→                    <TableRow key={sp.section} className="hover:bg-emerald-50/30">
+   720→                      <TableCell className="whitespace-nowrap">
+   721→                        <Badge
+   722→                          variant="outline"
+   723→                          className="border-emerald-200 bg-emerald-50 text-emerald-700"
+   724→                        >
+   725→                          {GSTR1_SECTION_LABELS[sp.section]}
+   726→                        </Badge>
+   727→                      </TableCell>
+   728→                      <TableCell className="whitespace-nowrap text-right font-medium">
+   729→                        {formatNumber(sp.invoiceCount)}
+   730→                      </TableCell>
+   731→                      <TableCell className="whitespace-nowrap text-right">
+   732→                        {formatCurrency(sp.taxableValue)}
+   733→                      </TableCell>
+   734→                      <TableCell className="whitespace-nowrap text-right">
+   735→                        {formatCurrency(sp.totalTax)}
+   736→                      </TableCell>
+   737→                    </TableRow>
+   738→                  ))
+   739→                )}
+   740→              </TableBody>
+   741→            </Table>
+   742→          </div>
+   743→        </CardContent>
+   744→      </Card>
+   745→
+   746→      {/* ═══════════════════════════════════════════════════════════════════════
+   747→          Recent Exports
+   748→      ═══════════════════════════════════════════════════════════════════════ */}
+   749→      <Card>
+   750→        <CardHeader>
+   751→          <CardTitle className="flex items-center gap-2 text-base">
+   752→            <Clock className="size-4 text-amber-600" />
+   753→            Recent Exports
+   754→          </CardTitle>
+   755→          <CardDescription>Your last 10 generated exports</CardDescription>
+   756→        </CardHeader>
+   757→        <CardContent>
+   758→          {recentExports.length === 0 ? (
+   759→            <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+   760→              <Download className="size-10 mb-3 text-muted-foreground/40" />
+   761→              <p className="text-sm">No exports generated yet</p>
+   762→              <p className="text-xs mt-1">Use the export options above to generate your first filing package</p>
+   763→            </div>
+   764→          ) : (
+   765→            <div className="overflow-x-auto rounded-lg border">
+   766→              <Table>
+   767→                <TableHeader>
+   768→                  <TableRow className="bg-muted/50">
+   769→                    <TableHead className="whitespace-nowrap">Export Type</TableHead>
+   770→                    <TableHead className="whitespace-nowrap">Client</TableHead>
+   771→                    <TableHead className="whitespace-nowrap">Period</TableHead>
+   772→                    <TableHead className="whitespace-nowrap">Generated At</TableHead>
+   773→                    <TableHead className="whitespace-nowrap">File Size</TableHead>
+   774→                    <TableHead className="whitespace-nowrap">Actions</TableHead>
+   775→                  </TableRow>
+   776→                </TableHeader>
+   777→                <TableBody>
+   778→                  {recentExports.map((exp) => {
+   779→                    const config = EXPORT_TYPE_CONFIG[exp.exportType];
+   780→                    return (
+   781→                      <TableRow key={exp.id} className="hover:bg-muted/30">
+   782→                        <TableCell className="whitespace-nowrap">
+   783→                          <div className="flex items-center gap-2">
+   784→                            <div className={`flex size-7 items-center justify-center rounded ${config?.bgColor ?? 'bg-slate-50'}`}>
+   785→                              {config?.icon ?? <FileText className="size-3.5" />}
+   786→                            </div>
+   787→                            <span className="font-medium text-sm">{exp.exportType}</span>
+   788→                          </div>
+   789→                        </TableCell>
+   790→                        <TableCell className="whitespace-nowrap text-sm">
+   791→                          {exp.clientName}
+   792→                        </TableCell>
+   793→                        <TableCell className="whitespace-nowrap text-sm">
+   794→                          {exp.period}
+   795→                        </TableCell>
+   796→                        <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
+   797→                          {new Date(exp.generatedAt).toLocaleString()}
+   798→                        </TableCell>
+   799→                        <TableCell className="whitespace-nowrap text-sm">
+   800→                          <Badge variant="outline" className="text-xs">
+   801→                            {exp.fileSize}
+   802→                          </Badge>
+   803→                        </TableCell>
+   804→                        <TableCell className="whitespace-nowrap">
+   805→                          <div className="flex items-center gap-1">
+   806→                            <Button
+   807→                              variant="ghost"
+   808→                              size="sm"
+   809→                              className="size-8 p-0"
+   810→                              onClick={() => handleViewExport(exp)}
+   811→                              title="View"
+   812→                            >
+   813→                              <Eye className="size-3.5" />
+   814→                            </Button>
+   815→                            <Button
+   816→                              variant="ghost"
+   817→                              size="sm"
+   818→                              className="size-8 p-0"
+   819→                              onClick={() => handleDownloadExport(exp)}
+   820→                              title="Download"
+   821→                            >
+   822→                              <Download className="size-3.5" />
+   823→                            </Button>
+   824→                            <Button
+   825→                              variant="ghost"
+   826→                              size="sm"
+   827→                              className="size-8 p-0 text-red-500 hover:text-red-700"
+   828→                              onClick={() => handleDeleteExport(exp.id)}
+   829→                              title="Delete"
+   830→                            >
+   831→                              <Trash2 className="size-3.5" />
+   832→                            </Button>
+   833→                          </div>
+   834→                        </TableCell>
+   835→                      </TableRow>
+   836→                    );
+   837→                  })}
+   838→                </TableBody>
+   839→              </Table>
+   840→            </div>
+   841→          )}
+   842→        </CardContent>
+   843→      </Card>
+   844→
+   845→      {/* ═══════════════════════════════════════════════════════════════════════
+   846→          GST Working Papers
+   847→      ═══════════════════════════════════════════════════════════════════════ */}
+   848→      <Card className="border-amber-200 bg-gradient-to-r from-amber-50/50 to-orange-50/50">
+   849→        <CardHeader>
+   850→          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+   851→            <div className="flex items-center gap-3">
+   852→              <div className="flex size-10 items-center justify-center rounded-lg bg-amber-100">
+   853→                <FileText className="size-5 text-amber-700" />
+   854→              </div>
+   855→              <div>
+   856→                <CardTitle className="text-base text-amber-900">GST Working Papers</CardTitle>
+   857→                <CardDescription>
+   858→                  Detailed working papers with reconciliation summaries, tax computations, and section-wise breakdowns for audit and review purposes
+   859→                </CardDescription>
+   860→              </div>
+   861→            </div>
+   862→            <Button
+   863→              onClick={handleGenerateWorkingPapers}
+   864→              disabled={generating !== null}
+   865→              className="gap-2 bg-amber-600 hover:bg-amber-700 shrink-0"
+   866→            >
+   867→              {generating === 'working-papers' ? (
+   868→                <RefreshCw className="size-4 animate-spin" />
+   869→              ) : (
+   870→                <FileText className="size-4" />
+   871→              )}
+   872→              {generating === 'working-papers' ? 'Generating...' : 'Generate Working Papers'}
+   873→            </Button>
+   874→          </div>
+   875→        </CardHeader>
+   876→      </Card>
+   877→
+   878→      {/* ═══════════════════════════════════════════════════════════════════════
+   879→          Preview Dialog
+   880→      ═══════════════════════════════════════════════════════════════════════ */}
+   881→      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+   882→        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+   883→          <DialogHeader>
+   884→            <DialogTitle className="flex items-center gap-2">
+   885→              <Eye className="size-4 text-emerald-600" />
+   886→              Export Preview — {previewData?.exportType}
+   887→            </DialogTitle>
+   888→          </DialogHeader>
+   889→          {previewData?.data && (
+   890→            <div className="rounded-lg border bg-muted/30 p-4">
+   891→              <pre className="max-h-96 overflow-auto text-xs whitespace-pre-wrap break-words">
+   892→                {JSON.stringify(previewData.data, null, 2)}
+   893→              </pre>
+   894→            </div>
+   895→          )}
+   896→          {previewData && !previewData.data && (
+   897→            <div className="py-8 text-center text-muted-foreground">
+   898→              <p className="text-sm">Preview not available for this export type</p>
+   899→              <p className="text-xs mt-1">The file has been downloaded to your device</p>
+   900→            </div>
+   901→          )}
+   902→        </DialogContent>
+   903→      </Dialog>
+   904→    </div>
+   905→  );
+   906→}
+   907→

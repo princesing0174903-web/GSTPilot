@@ -607,6 +607,26 @@ export default function MissionControlPage() {
     metrics.totalTaxVolume > 0
   ), [metrics]);
 
+  // ── Collection Score (0-100): how well are receivables being recovered ──
+  const collectionScore = useMemo(() => {
+    if (!hasData) return null;
+    const matchRate = metrics.matchPercentage;
+    const invoiceCoverage = metrics.totalInvoices > 0
+      ? Math.min(100, (metrics.documentsProcessed / Math.max(metrics.totalInvoices, 1)) * 100)
+      : 50;
+    return Math.round(matchRate * 0.6 + invoiceCoverage * 0.4);
+  }, [metrics, hasData]);
+
+  // ── Risk Score (0-100, higher = safer): inverse of risk indicators ──
+  const riskScore = useMemo(() => {
+    if (!hasData) return null;
+    let score = 100;
+    score -= Math.min(40, metrics.criticalIssues * 8);
+    score -= Math.min(30, metrics.overdueReturns * 10);
+    score -= Math.min(20, metrics.riskPercentage * 0.2);
+    return Math.max(0, Math.round(score));
+  }, [metrics, hasData]);
+
   // ── Getting Started checklist (derived from live data per spec) ──
   // totalClients > 0 → "Connect GSTN" is checked as a proxy for "GSTN connected".
   // The other three (Connect Bank, Invite Team, Activate Oracle) are never checked
@@ -841,6 +861,87 @@ export default function MissionControlPage() {
         />
       </section>
 
+      {/* ═══ 3b. SCORES — Collection Score + Risk Score (restored) ═══ */}
+      <section className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {/* Collection Score */}
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: 0.36 }}
+          className="glass-surface rounded-3xl p-5"
+        >
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-cyan-500/10">
+                <Wallet className="h-4 w-4 text-cyan-400" />
+              </div>
+              <span className="text-sm font-medium text-foreground">Collection Score</span>
+            </div>
+          </div>
+          {hasData && collectionScore !== null ? (
+            <div>
+              <div className="flex items-baseline gap-2">
+                <span className="text-3xl font-semibold text-foreground">{collectionScore}</span>
+                <span className="text-sm text-muted-foreground">/ 100</span>
+              </div>
+              <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-white/[0.06]">
+                <div
+                  className="h-full rounded-full"
+                  style={{
+                    width: `${collectionScore}%`,
+                    background: 'linear-gradient(90deg, #06b6d4 0%, #0891b2 100%)',
+                  }}
+                />
+              </div>
+              <p className="mt-2 text-[11px] text-muted-foreground">
+                {metrics.matchPercentage.toFixed(0)}% invoices reconciled
+              </p>
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">Connect data to measure collections.</p>
+          )}
+        </motion.div>
+
+        {/* Risk Score */}
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: 0.40 }}
+          className="glass-surface rounded-3xl p-5"
+        >
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-500/10">
+                <ShieldAlert className="h-4 w-4 text-amber-400" />
+              </div>
+              <span className="text-sm font-medium text-foreground">Risk Score</span>
+            </div>
+          </div>
+          {hasData && riskScore !== null ? (
+            <div>
+              <div className="flex items-baseline gap-2">
+                <span className="text-3xl font-semibold text-foreground">{riskScore}</span>
+                <span className="text-sm text-muted-foreground">/ 100 · safer</span>
+              </div>
+              <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-white/[0.06]">
+                <div
+                  className="h-full rounded-full"
+                  style={{
+                    width: `${riskScore}%`,
+                    background: 'linear-gradient(90deg, #f59e0b 0%, #d97706 100%)',
+                  }}
+                />
+              </div>
+              <p className="mt-2 text-[11px] text-muted-foreground">
+                {metrics.criticalIssues} critical · {metrics.overdueReturns} overdue
+              </p>
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">Connect data to assess risk.</p>
+          )}
+        </motion.div>
+      </section>
+
       {/* ═══ 4. WIDGETS — exactly 5 (2-col grid, 5th spans full width) ═══ */}
       <section className="grid grid-cols-1 lg:grid-cols-2 gap-5">
 
@@ -1031,6 +1132,45 @@ export default function MissionControlPage() {
               onCta={goToSettings}
             />
           )}
+        </WidgetCard>
+
+        {/* Widget 6: Ask Oracle (restored) */}
+        <WidgetCard icon={Brain} title="Ask Oracle" delay={0.80} className="lg:col-span-2">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl accent-gradient shadow-lg shadow-emerald-500/20">
+              <Sparkles className="h-5 w-5 text-white" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-foreground">
+                Ask GSTPilot Oracle anything
+              </p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                GST · ITC · Cash flow · Compliance — replies in your language, 24/7.
+              </p>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {['What is my compliance score?', 'GST kya hota hai?', 'How do I file GSTR-3B?'].map((q) => (
+                  <button
+                    key={q}
+                    onClick={() => {
+                      window.dispatchEvent(new CustomEvent('oracle-ask', { detail: q }));
+                    }}
+                    className="rounded-full border border-white/[0.08] bg-white/[0.02] px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:border-emerald-400/30 hover:text-foreground"
+                  >
+                    {q}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <Button
+              onClick={() => {
+                window.dispatchEvent(new CustomEvent('oracle-ask', { detail: '' }));
+              }}
+              className="shrink-0 accent-gradient text-white border-0 hover:opacity-90"
+            >
+              Ask Oracle
+              <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
+            </Button>
+          </div>
         </WidgetCard>
 
       </section>

@@ -26,7 +26,8 @@ import {
   ArrowUp, Mic, MicOff, Volume2, VolumeX,
   Send, ArrowRight, Play, Plus, FileText,
   Wallet, BookOpen, Briefcase, Landmark, Receipt, Package,
-  ShieldCheck, Network, TrendingUp, Zap, Users,
+  ShieldCheck, ShieldAlert, Network, TrendingUp, Zap, Users,
+  AlertTriangle, Bell, Lightbulb,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -121,6 +122,11 @@ const QUICK_MODULES: QuickModule[] = [
   { label: 'Payments', view: 'payments', icon: Receipt },
   { label: 'Inventory', view: 'inventory', icon: Package },
   { label: 'Compliance', view: 'reconcile', icon: ShieldCheck },
+  // Intelligence module chips — restored navigation to dedicated AI pages
+  { label: 'Alerts', view: 'ai-compliance', icon: ShieldAlert },
+  { label: 'Risk', view: 'ai-risk', icon: AlertTriangle },
+  { label: 'Insights', view: 'ai-insights', icon: Lightbulb },
+  { label: 'Notices', view: 'notices', icon: Bell },
   { label: 'Graph', view: 'business-graph', icon: Network },
   { label: 'Predict', view: 'ai-predictions', icon: TrendingUp },
 ];
@@ -143,6 +149,10 @@ const QUICK_ACTIONS: QuickAction[] = [
   { label: 'Run my firm', kind: 'execute_workflow', workflow: 'run_my_firm', icon: Zap },
   { label: 'Pending returns', kind: 'navigate', view: 'returns', icon: FileText },
   { label: 'Show risky clients', kind: 'navigate', view: 'clients', icon: Users },
+  // Intelligence quick actions — restored direct navigation to AI pages
+  { label: 'GST notices', kind: 'navigate', view: 'notices', icon: Bell },
+  { label: 'ITC suggestions', kind: 'navigate', view: 'ai-compliance', icon: ShieldAlert },
+  { label: 'Risk engine', kind: 'navigate', view: 'ai-risk', icon: AlertTriangle },
   {
     label: 'What revenue next month?',
     kind: 'ask',
@@ -163,6 +173,8 @@ const FALLBACK_FOLLOWUPS: string[] = [
   'Show pending returns',
   'Which clients are risky?',
   "Show today's priorities",
+  'Show GST notices',
+  'Show ITC suggestions',
 ];
 
 const WORKFLOW_VIEWS: Record<string, AppView> = {

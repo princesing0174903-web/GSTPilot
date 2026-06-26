@@ -140,6 +140,17 @@ const EDGE_COLORS: Record<RelationshipType, string> = {
   CONNECTED_TO: '#64748b',
   PREDICTED_BY: '#c084fc',
   CREATED_BY: '#fb923c',
+  // ── Phase 6 LIVE additions ────────────────────────────────────────────────
+  RECEIVES: '#22d3ee',
+  SUPPLIES: '#f59e0b',
+  CLEARS: '#06d6a0',
+  REDUCES: '#f43f5e',
+  AFFECTS: '#dc2626',
+  MANAGES: '#f472b6',
+  DERIVES_FROM: '#a78bfa',
+  PAID_BY: '#14b8a6',
+  RECORDED_IN: '#0ea5e9',
+  GENERATES_LIABILITY: '#7c3aed',
 };
 
 const EDGE_LABELS: Record<RelationshipType, string> = {
@@ -154,12 +165,26 @@ const EDGE_LABELS: Record<RelationshipType, string> = {
   CONNECTED_TO: 'Connected To',
   PREDICTED_BY: 'Predicted By',
   CREATED_BY: 'Created By',
+  // ── Phase 6 LIVE additions ────────────────────────────────────────────────
+  RECEIVES: 'Receives',
+  SUPPLIES: 'Supplies',
+  CLEARS: 'Clears',
+  REDUCES: 'Reduces',
+  AFFECTS: 'Affects',
+  MANAGES: 'Manages',
+  DERIVES_FROM: 'Derives From',
+  PAID_BY: 'Paid By',
+  RECORDED_IN: 'Recorded In',
+  GENERATES_LIABILITY: 'Generates Liability',
 };
 
 const ALL_NODE_TYPES: NodeType[] = [
   'business', 'client', 'vendor', 'invoice', 'gst-return',
   'bank-account', 'employee', 'task', 'report', 'notice',
   'conversation', 'prediction',
+  // ── Phase 6 LIVE additions ────────────────────────────────────────────────
+  'itc-record', 'transaction', 'payment', 'collection', 'expense',
+  'meeting', 'asset', 'loan', 'tax-payment',
 ];
 
 const RISK_CATEGORIES: { key: RiskCategory; label: string; emoji: string }[] = [

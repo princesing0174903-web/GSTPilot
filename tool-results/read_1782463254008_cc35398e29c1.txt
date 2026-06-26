@@ -1,0 +1,1205 @@
+     1→// ═══════════════════════════════════════════════════════════════════════════════
+     2→// GSTPilot AI CFO™ — Core Engine
+     3→// Phase 3: The brain that turns business data into CFO intelligence.
+     4→//
+     5→// Combines:
+     6→//   Module 1: CFO Dashboard metrics
+     7→//   Module 2: Financial Prediction Engine
+     8→//   Module 3: Business Risk Engine (with WHY explanations)
+     9→//   Module 4: Daily CFO Brief
+    10→//   Module 6: CFO Recommendation Engine
+    11→//   Module 8: CFO Memory (pattern recognition)
+    12→//
+    13→// All models are deterministic & transparent — no black-box LLM in the engine.
+    14→// The LLM is reserved for Oracle conversational replies (Module 5 + 9).
+    15→// ═══════════════════════════════════════════════════════════════════════════════
+    16→
+    17→import { db } from '@/lib/db';
+    18→import type {
+    19→  CFODashboard,
+    20→  CFOPredictions,
+    21→  CFOResponse,
+    22→  CFOMemory,
+    23→  CFORecommendation,
+    24→  DailyBrief,
+    25→  PriorityAction,
+    26→  RiskAssessment,
+    27→  RiskLevel,
+    28→  ClientBehaviorRecord,
+    29→} from './types';
+    30→
+    31→// ─── Time helpers ─────────────────────────────────────────────────────────────
+    32→
+    33→function now(): Date {
+    34→  return new Date();
+    35→}
+    36→
+    37→function startOfToday(d = now()): Date {
+    38→  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    39→}
+    40→
+    41→function startOfMonth(d = now()): Date {
+    42→  return new Date(d.getFullYear(), d.getMonth(), 1);
+    43→}
+    44→
+    45→function startOfLastMonth(d = now()): Date {
+    46→  return new Date(d.getFullYear(), d.getMonth() - 1, 1);
+    47→}
+    48→
+    49→function endOfLastMonth(d = now()): Date {
+    50→  return new Date(d.getFullYear(), d.getMonth(), 0, 23, 59, 59, 999);
+    51→}
+    52→
+    53→function addDays(d: Date, days: number): Date {
+    54→  const r = new Date(d);
+    55→  r.setDate(r.getDate() + days);
+    56→  return r;
+    57→}
+    58→
+    59→function ymd(d: Date): string {
+    60→  return d.toISOString().split('T')[0];
+    61→}
+    62→
+    63→function monthLabel(d: Date): string {
+    64→  return d.toLocaleString('en-IN', { month: 'short', year: '2-digit' });
+    65→}
+    66→
+    67→function periodLabel(year: number, month1Based: number): string {
+    68→  return `${year}-${String(month1Based).padStart(2, '0')}`;
+    69→}
+    70→
+    71→function inrFmt(n: number): string {
+    72→  return new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 }).format(Math.round(n));
+    73→}
+    74→
+    75→function clamp(n: number, min: number, max: number): number {
+    76→  return Math.max(min, Math.min(max, n));
+    77→}
+    78→
+    79→function mean(nums: number[]): number {
+    80→  if (!nums.length) return 0;
+    81→  return nums.reduce((a, b) => a + b, 0) / nums.length;
+    82→}
+    83→
+    84→// ─── Revenue / invoice aggregation ────────────────────────────────────────────
+    85→
+    86→interface InvoiceRow {
+    87→  invoiceDate: string;
+    88→  totalAmount: number;
+    89→  taxableValue: number;
+    90→  cgst: number;
+    91→  sgst: number;
+    92→  igst: number;
+    93→  status?: string;
+    94→  period?: string | null;
+    95→  buyerGstin?: string | null;
+    96→  buyerName?: string | null;
+    97→}
+    98→
+    99→interface ClientRow {
+   100→  id: string;
+   101→  gstin: string;
+   102→  tradeName: string;
+   103→  status?: string;
+   104→  healthScore?: number;
+   105→}
+   106→
+   107→interface FilingRow {
+   108→  id: string;
+   109→  returnType: string;
+   110→  period: string;
+   111→  status: string;
+   112→  clientId?: string | null;
+   113→  totalTax?: number;
+   114→}
+   115→
+   116→interface NoticeRow {
+   117→  id: string;
+   118→  noticeType?: string;
+   119→  status?: string;
+   120→  noticeDate?: string | null;
+   121→  dueDate?: string | null;
+   122→  clientId?: string | null;
+   123→}
+   124→
+   125→// ─── Computation primitives ───────────────────────────────────────────────────
+   126→
+   127→function revenueForRange(invoices: InvoiceRow[], from: Date, to: Date): number {
+   128→  return invoices
+   129→    .filter((i) => {
+   130→      const d = new Date(i.invoiceDate);
+   131→      return d >= from && d <= to;
+   132→    })
+   133→    .reduce((s, i) => s + (i.totalAmount || 0), 0);
+   134→}
+   135→
+   136→function overdueInvoices(invoices: InvoiceRow[]): InvoiceRow[] {
+   137→  // Invoices are considered overdue if their period is in the past AND status
+   138→  // is still 'draft' / 'pending' / 'unpaid' (i.e. not 'filed' or 'paid').
+   139→  const today = now();
+   140→  return invoices.filter((i) => {
+   141→    if (!i.period) return false;
+   142→    // period format: "YYYY-MM"
+   143→    const [year, month] = i.period.split('-').map(Number);
+   144→    if (!year || !month) return false;
+   145→    // Due date for an invoice is ~30 days after period end
+   146→    const due = new Date(year, month, 30);
+   147→    if (due >= today) return false;
+   148→    const st = (i.status || '').toLowerCase();
+   149→    return st !== 'filed' && st !== 'paid' && st !== 'cancelled';
+   150→  });
+   151→}
+   152→
+   153→function unpaidInvoices(invoices: InvoiceRow[]): InvoiceRow[] {
+   154→  // Treat 'paid'/'filed' as paid; everything else as outstanding.
+   155→  return invoices.filter((i) => {
+   156→    const st = (i.status || '').toLowerCase();
+   157→    return st !== 'paid' && st !== 'filed' && st !== 'cancelled';
+   158→  });
+   159→}
+   160→
+   161→function gstLiabilityForRange(invoices: InvoiceRow[], from: Date, to: Date): number {
+   162→  // Output tax: total CGST + SGST + IGST billed in the range
+   163→  return invoices
+   164→    .filter((i) => {
+   165→      const d = new Date(i.invoiceDate);
+   166→      return d >= from && d <= to;
+   167→    })
+   168→    .reduce((s, i) => s + (i.cgst || 0) + (i.sgst || 0) + (i.igst || 0), 0);
+   169→}
+   170→
+   171→// ─── Module 1: CFO Dashboard ──────────────────────────────────────────────────
+   172→
+   173→function computeRevenue(invoices: InvoiceRow[]): CFODashboard['revenue'] {
+   174→  const today = startOfToday();
+   175→  const tomorrow = addDays(today, 1);
+   176→  const mStart = startOfMonth();
+   177→  const lmStart = startOfLastMonth();
+   178→  const lmEnd = endOfLastMonth();
+   179→
+   180→  const todayRev = revenueForRange(invoices, today, tomorrow);
+   181→  const thisMonthRev = revenueForRange(invoices, mStart, tomorrow);
+   182→  const lastMonthRev = revenueForRange(invoices, lmStart, lmEnd);
+   183→
+   184→  const growthPct =
+   185→    lastMonthRev > 0
+   186→      ? ((thisMonthRev - lastMonthRev) / lastMonthRev) * 100
+   187→      : thisMonthRev > 0
+   188→      ? 100
+   189→      : 0;
+   190→
+   191→  // Sparkline — last 8 months of revenue
+   192→  const sparkline: number[] = [];
+   193→  for (let i = 7; i >= 0; i--) {
+   194→    const d = new Date(now().getFullYear(), now().getMonth() - i, 1);
+   195→    const start = d;
+   196→    const end = new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59, 999);
+   197→    sparkline.push(revenueForRange(invoices, start, end));
+   198→  }
+   199→
+   200→  return {
+   201→    today: Math.round(todayRev),
+   202→    thisMonth: Math.round(thisMonthRev),
+   203→    lastMonth: Math.round(lastMonthRev),
+   204→    growthPct: Math.round(growthPct * 10) / 10,
+   205→    sparkline,
+   206→  };
+   207→}
+   208→
+   209→function computeProfit(revenue: CFODashboard['revenue']): CFODashboard['profit'] {
+   210→  // CA firms typically run 55-70% gross margin (services business).
+   211→  // Use a conservative blended margin derived from revenue stability.
+   212→  const monthlyRevenue = revenue.thisMonth || revenue.lastMonth;
+   213→  const grossMarginPctConst = 62; // services margin
+   214→  const operatingExpenseRatio = 38; // salaries, rent, software, etc.
+   215→  const taxRatio = 8; // approx net of deductions
+   216→
+   217→  const grossProfit = Math.round(monthlyRevenue * (grossMarginPctConst / 100));
+   218→  const netProfit = Math.round(
+   219→    monthlyRevenue * (1 - operatingExpenseRatio / 100 - taxRatio / 100),
+   220→  );
+   221→  const marginPct = monthlyRevenue > 0 ? Math.round((netProfit / monthlyRevenue) * 100) : 0;
+   222→  const grossMarginPct = monthlyRevenue > 0 ? grossMarginPctConst : 0;
+   223→
+   224→  return { grossProfit, netProfit, marginPct, grossMarginPct };
+   225→}
+   226→
+   227→function computeCash(
+   228→  revenue: CFODashboard['revenue'],
+   229→  receivables: CFODashboard['receivables'],
+   230→  payables: CFODashboard['payables'],
+   231→): CFODashboard['cash'] {
+   232→  // Heuristic cash model: available cash ≈ collected this month - payables - burn buffer
+   233→  // For a CA firm, collected revenue ≈ 75% of billed (rest is receivables).
+   234→  const collectedThisMonth = Math.round(revenue.thisMonth * 0.75);
+   235→  const monthlyBurn = Math.max(revenue.thisMonth * 0.38, 50000); // expenses
+   236→  const buffer = Math.max(collectedThisMonth - payables.upcomingPayments - monthlyBurn, 0);
+   237→  const currentBalance = Math.max(
+   238→    collectedThisMonth + (revenue.lastMonth * 0.6) - monthlyBurn,
+   239→    50000,
+   240→  );
+   241→  const availableCash = Math.max(currentBalance - 50000, 0); // reserve
+   242→  const burnRatePerDay = Math.round(monthlyBurn / 30);
+   243→  const runwayDays =
+   244→    burnRatePerDay > 0 ? Math.round(availableCash / burnRatePerDay) : 0;
+   245→
+   246→  return {
+   247→    currentBalance: Math.round(currentBalance),
+   248→    availableCash: Math.round(availableCash),
+   249→    runwayDays,
+   250→    burnRatePerDay,
+   251→  };
+   252→}
+   253→
+   254→function computeReceivables(invoices: InvoiceRow[]): CFODashboard['receivables'] {
+   255→  const unpaid = unpaidInvoices(invoices);
+   256→  const overdue = overdueInvoices(invoices);
+   257→  const pendingCollections = unpaid.reduce((s, i) => s + (i.totalAmount || 0), 0);
+   258→  const overdueCollections = overdue.reduce((s, i) => s + (i.totalAmount || 0), 0);
+   259→
+   260→  const totalBilled = invoices.reduce((s, i) => s + (i.totalAmount || 0), 0);
+   261→  const collected = totalBilled - pendingCollections;
+   262→  const collectionEfficiencyPct =
+   263→    totalBilled > 0 ? Math.round((collected / totalBilled) * 100) : 100;
+   264→
+   265→  return {
+   266→    pendingCollections: Math.round(pendingCollections),
+   267→    overdueCollections: Math.round(overdueCollections),
+   268→    collectionEfficiencyPct: clamp(collectionEfficiencyPct, 0, 100),
+   269→    overdueCount: overdue.length,
+   270→  };
+   271→}
+   272→
+   273→function computePayables(
+   274→  revenue: CFODashboard['revenue'],
+   275→  gstLiability: number,
+   276→): CFODashboard['payables'] {
+   277→  // Vendor dues: software subscriptions, office rent, professional services, contractor fees
+   278→  // Heuristic: ~12% of monthly revenue goes to vendors
+   279→  const monthlyVendorDues = Math.round((revenue.thisMonth || revenue.lastMonth) * 0.12);
+   280→  // Next 30 days payables = vendor dues + GST liability
+   281→  const upcomingPayments = monthlyVendorDues + gstLiability;
+   282→  return {
+   283→    vendorDues: monthlyVendorDues,
+   284→    upcomingPayments,
+   285→    upcomingCount: 4, // rent, software, GST, contractors
+   286→  };
+   287→}
+   288→
+   289→function computeGST(invoices: InvoiceRow[], filings: FilingRow[]): CFODashboard['gst'] {
+   290→  const mStart = startOfMonth();
+   291→  const tomorrow = addDays(startOfToday(), 1);
+   292→  const lmStart = startOfLastMonth();
+   293→  const lmEnd = endOfLastMonth();
+   294→
+   295→  // GST liability = output tax this month - input tax (we treat input tax as ITC available)
+   296→  const outputTaxThisMonth = gstLiabilityForRange(invoices, mStart, tomorrow);
+   297→  const outputTaxLastMonth = gstLiabilityForRange(invoices, lmStart, lmEnd);
+   298→  // Pending GST liability = last month's output tax not yet paid (GSTR-3B due by 20th)
+   299→  const liability = outputTaxLastMonth;
+   300→
+   301→  // ITC available: heuristic — firms accumulate ITC on expenses (~38% of revenue × 12% GST = ~4.5% of revenue)
+   302→  const estimatedITC = Math.round((revenueForRange(invoices, lmStart, tomorrow) * 0.045));
+   303→
+   304→  // Upcoming due dates — derived from filing `period` using statutory GST
+   305→  // deadlines: GSTR-1 by 11th, GSTR-3B by 20th of the following month.
+   306→  const today = now();
+   307→  const upcomingDueDates: CFODashboard['gst']['upcomingDueDates'] = [];
+   308→  const seen = new Set<string>();
+   309→  for (const f of filings) {
+   310→    if (f.status === 'filed') continue;
+   311→    if (seen.has(`${f.returnType}-${f.period}`)) continue;
+   312→    seen.add(`${f.returnType}-${f.period}`);
+   313→    const dueDate = filingDueDate(f.returnType, f.period);
+   314→    if (!dueDate) continue;
+   315→    const daysLeft = Math.ceil((dueDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+   316→    if (daysLeft < -60 || daysLeft > 90) continue;
+   317→    upcomingDueDates.push({
+   318→      returnType: f.returnType,
+   319→      period: f.period,
+   320→      dueDate: ymd(dueDate),
+   321→      daysLeft,
+   322→    });
+   323→  }
+   324→  upcomingDueDates.sort((a, b) => a.daysLeft - b.daysLeft);
+   325→
+   326→  // If no real filings, synthesize next-month GST due dates
+   327→  if (upcomingDueDates.length === 0) {
+   328→    const gstr1Due = addDays(startOfNextMonth(), 10);
+   329→    const gstr3bDue = addDays(startOfNextMonth(), 19);
+   330→    upcomingDueDates.push(
+   331→      {
+   332→        returnType: 'GSTR-1',
+   333→        period: periodLabel(now().getFullYear(), now().getMonth() + 1),
+   334→        dueDate: ymd(gstr1Due),
+   335→        daysLeft: Math.ceil((gstr1Due.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)),
+   336→      },
+   337→      {
+   338→        returnType: 'GSTR-3B',
+   339→        period: periodLabel(now().getFullYear(), now().getMonth() + 1),
+   340→        dueDate: ymd(gstr3bDue),
+   341→        daysLeft: Math.ceil((gstr3bDue.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)),
+   342→      },
+   343→    );
+   344→  }
+   345→
+   346→  return {
+   347→    liability: Math.round(liability),
+   348→    itcAvailable: estimatedITC,
+   349→    upcomingDueDates,
+   350→  };
+   351→}
+   352→
+   353→function startOfNextMonth(d = now()): Date {
+   354→  return new Date(d.getFullYear(), d.getMonth() + 1, 1);
+   355→}
+   356→
+   357→/** Compute statutory GST due date from a "YYYY-MM" period.
+   358→ *  - GSTR-1: 11th of the following month
+   359→ *  - GSTR-3B: 20th of the following month
+   360→ *  - GSTR-9: 31st December of the following year
+   361→ *  - others: 20th of the following month (default)
+   362→ */
+   363→function filingDueDate(returnType: string, period: string): Date | null {
+   364→  const [year, month] = period.split('-').map(Number);
+   365→  if (!year || !month) return null;
+   366→  const nextMonth = new Date(year, month, 1); // first day of next month
+   367→  const rt = returnType.toUpperCase().replace('-', '');
+   368→  let dueDay = 20;
+   369→  if (rt === 'GSTR1') dueDay = 11;
+   370→  else if (rt === 'GSTR3B') dueDay = 20;
+   371→  else if (rt === 'GSTR9') {
+   372→    // Annual — Dec 31 of next year
+   373→    return new Date(year + 1, 11, 31);
+   374→  }
+   375→  return new Date(nextMonth.getFullYear(), nextMonth.getMonth(), dueDay);
+   376→}
+   377→
+   378→function computeHealthScore(
+   379→  receivables: CFODashboard['receivables'],
+   380→  revenue: CFODashboard['revenue'],
+   381→  cash: CFODashboard['cash'],
+   382→  filings: FilingRow[],
+   383→  risks: RiskAssessment[],
+   384→): CFODashboard['healthScore'] {
+   385→  // Compliance: % of filed returns
+   386→  const totalFilings = filings.length || 1;
+   387→  const filed = filings.filter((f) => f.status === 'filed').length;
+   388→  const compliance = Math.round((filed / totalFilings) * 100);
+   389→
+   390→  // Cash flow: runway proxy
+   391→  const cashFlow = clamp(100 - (cash.runwayDays < 30 ? 60 - cash.runwayDays * 2 : 0), 0, 100);
+   392→
+   393→  // Growth: signed growth
+   394→  const growth = clamp(50 + revenue.growthPct, 0, 100);
+   395→
+   396→  // Profitability: derived from margin (heuristic 52% = healthy)
+   397→  const profitability = clamp(revenue.thisMonth > 0 ? 70 : 50, 0, 100);
+   398→
+   399→  // Risk: inverse of worst risk score
+   400→  const maxRisk = risks.length > 0 ? Math.max(...risks.map((r) => r.score)) : 20;
+   401→  const risk = clamp(100 - maxRisk, 0, 100);
+   402→
+   403→  // Collections: collection efficiency
+   404→  const collections = receivables.collectionEfficiencyPct;
+   405→
+   406→  const overall = Math.round(
+   407→    mean([compliance, cashFlow, growth, profitability, risk, collections]),
+   408→  );
+   409→
+   410→  return { overall, compliance, cashFlow, growth, profitability, risk, collections };
+   411→}
+   412→
+   413→function buildDashboard(
+   414→  invoices: InvoiceRow[],
+   415→  filings: FilingRow[],
+   416→  risks: RiskAssessment[],
+   417→): CFODashboard {
+   418→  const revenue = computeRevenue(invoices);
+   419→  const receivables = computeReceivables(invoices);
+   420→  const gst = computeGST(invoices, filings);
+   421→  const payables = computePayables(revenue, gst.liability);
+   422→  const cash = computeCash(revenue, receivables, payables);
+   423→  const profit = computeProfit(revenue);
+   424→  const healthScore = computeHealthScore(receivables, revenue, cash, filings, risks);
+   425→  return { revenue, profit, cash, receivables, payables, gst, healthScore };
+   426→}
+   427→
+   428→// ─── Module 2: Financial Prediction Engine ────────────────────────────────────
+   429→
+   430→function buildPredictions(
+   431→  invoices: InvoiceRow[],
+   432→  clients: ClientRow[],
+   433→  dashboard: CFODashboard,
+   434→  risks: RiskAssessment[],
+   435→): CFOPredictions {
+   436→  // Revenue forecast — based on 90-day moving average + trend
+   437→  const today = startOfToday();
+   438→  const ninetyDaysAgo = addDays(today, -90);
+   439→  const trailing90 = revenueForRange(invoices, ninetyDaysAgo, today);
+   440→  const dailyAvg = trailing90 / 90;
+   441→  const monthlyAvg = dailyAvg * 30;
+   442→
+   443→  // Trend from last vs previous month
+   444→  const trendMul = 1 + clamp(dashboard.revenue.growthPct / 100, -0.4, 0.4);
+   445→
+   446→  const sevenDay = Math.round(monthlyAvg * (7 / 30) * trendMul);
+   447→  const thirtyDay = Math.round(monthlyAvg * trendMul);
+   448→  const ninetyDay = Math.round(monthlyAvg * 3 * trendMul);
+   449→
+   450→  // Year-end projection — remaining months × monthly avg × trend
+   451→  const monthsLeft = 12 - now().getMonth() - 1;
+   452→  const yearEnd = Math.round(monthlyAvg * monthsLeft * trendMul + trailing90);
+   453→
+   454→  const revenueConfidence = invoices.length > 20 ? 82 : invoices.length > 5 ? 65 : 45;
+   455→
+   456→  // Cash flow forecast
+   457→  const burnRatePerDay = dashboard.cash.burnRatePerDay;
+   458→  const expectedCollections30d = Math.round(
+   459→    dashboard.receivables.pendingCollections * 0.4,
+   460→  );
+   461→  const dailyPosition = Math.round(
+   462→    dashboard.cash.currentBalance - burnRatePerDay + dailyAvg * 0.75,
+   463→  );
+   464→  const monthlyPosition = Math.round(
+   465→    dashboard.cash.currentBalance + expectedCollections30d - burnRatePerDay * 30,
+   466→  );
+   467→  const runwayDays = dashboard.cash.runwayDays;
+   468→  const cashConfidence = invoices.length > 20 ? 78 : 50;
+   469→
+   470→  // GST forecast
+   471→  const upcomingLiability = Math.round(
+   472→    dashboard.gst.liability * trendMul + dashboard.revenue.thisMonth * 0.18 * 0.5,
+   473→  );
+   474→  const itcUtilization = clamp(
+   475→    Math.round((dashboard.gst.itcAvailable / Math.max(upcomingLiability, 1)) * 100),
+   476→    0,
+   477→    100,
+   478→  );
+   479→  const refundPrediction = Math.round(Math.max(0, dashboard.gst.itcAvailable - upcomingLiability) * 0.6);
+   480→  const gstConfidence = invoices.length > 10 ? 75 : 50;
+   481→
+   482→  // Collection forecast
+   483→  const riskyClients = clients
+   484→    .map((c) => {
+   485→      const cInvoices = invoices.filter((i) => i.buyerGstin === c.gstin);
+   486→      const outstanding = unpaidInvoices(cInvoices).reduce((s, i) => s + i.totalAmount, 0);
+   487→      const overdueCnt = overdueInvoices(cInvoices).length;
+   488→      const riskScore = clamp(
+   489→        Math.round(
+   490→          (overdueCnt * 25) + (c.healthScore && c.healthScore < 50 ? 20 : 0) + (outstanding > 100000 ? 15 : 0),
+   491→        ),
+   492→        0,
+   493→        100,
+   494→      );
+   495→      return {
+   496→        name: c.tradeName,
+   497→        gstin: c.gstin,
+   498→        riskScore,
+   499→        outstanding: Math.round(outstanding),
+   500→      };
+   501→    })
+   502→    .filter((c) => c.riskScore > 30 && c.outstanding > 0)
+   503→    .sort((a, b) => b.riskScore - a.riskScore)
+   504→    .slice(0, 5);
+   505→
+   506→  const paymentDelays = riskyClients.length + Math.round(clients.length * 0.15);
+   507→  const expectedCollections = expectedCollections30d;
+   508→  const collectionConfidence = invoices.length > 20 ? 72 : 48;
+   509→
+   510→  return {
+   511→    revenue: {
+   512→      sevenDay,
+   513→      thirtyDay,
+   514→      ninetyDay,
+   515→      yearEnd,
+   516→      confidencePct: revenueConfidence,
+   517→    },
+   518→    cashFlow: {
+   519→      dailyPosition,
+   520→      monthlyPosition,
+   521→      burnRatePerDay,
+   522→      runwayDays,
+   523→      confidencePct: cashConfidence,
+   524→    },
+   525→    gst: {
+   526→      upcomingLiability,
+   527→      itcUtilization,
+   528→      refundPrediction,
+   529→      confidencePct: gstConfidence,
+   530→    },
+   531→    collections: {
+   532→      paymentDelays,
+   533→      riskyClients,
+   534→      expectedCollections,
+   535→      confidencePct: collectionConfidence,
+   536→    },
+   537→  };
+   538→}
+   539→
+   540→// ─── Module 3: Business Risk Engine ───────────────────────────────────────────
+   541→
+   542→function scoreToLevel(score: number): RiskLevel {
+   543→  if (score >= 60) return 'high';
+   544→  if (score >= 35) return 'medium';
+   545→  return 'low';
+   546→}
+   547→
+   548→function buildRisks(
+   549→  invoices: InvoiceRow[],
+   550→  filings: FilingRow[],
+   551→  notices: NoticeRow[],
+   552→  dashboard: CFODashboard,
+   553→): RiskAssessment[] {
+   554→  const risks: RiskAssessment[] = [];
+   555→
+   556→  // ── Revenue risk ──────────────────────────────────────────────────────────
+   557→  const growth = dashboard.revenue.growthPct;
+   558→  let revenueScore = 0;
+   559→  const revenueReasons: string[] = [];
+   560→  if (growth < -20) {
+   561→    revenueScore = 70;
+   562→    revenueReasons.push(`Revenue declined ${Math.abs(growth).toFixed(1)}% month-over-month.`);
+   563→  } else if (growth < -5) {
+   564→    revenueScore = 45;
+   565→    revenueReasons.push(`Revenue is softening (${growth.toFixed(1)}% vs last month).`);
+   566→  } else if (growth < 5) {
+   567→    revenueScore = 25;
+   568→    revenueReasons.push('Revenue is flat — no meaningful growth this month.');
+   569→  } else {
+   570→    revenueScore = 10;
+   571→    revenueReasons.push(`Revenue growing at ${growth.toFixed(1)}% — healthy trend.`);
+   572→  }
+   573→  if (dashboard.revenue.thisMonth === 0) {
+   574→    revenueScore = 65;
+   575→    revenueReasons.length = 0;
+   576→    revenueReasons.push('No revenue recorded this month yet.');
+   577→  }
+   578→  risks.push({
+   579→    category: 'revenue',
+   580→    level: scoreToLevel(revenueScore),
+   581→    score: revenueScore,
+   582→    reasons: revenueReasons,
+   583→    recommendation:
+   584→      revenueScore >= 60
+   585→        ? 'Activate the top-5 client outreach plan and review pricing.'
+   586→        : revenueScore >= 35
+   587→        ? 'Increase follow-up cadence with dormant clients.'
+   588→        : 'Maintain current trajectory; explore upsell to top accounts.',
+   589→  });
+   590→
+   591→  // ── Compliance risk ───────────────────────────────────────────────────────
+   592→  const totalFilings = filings.length;
+   593→  const overdueFilings = filings.filter((f) => {
+   594→    if (f.status === 'filed') return false;
+   595→    const due = filingDueDate(f.returnType, f.period);
+   596→    return due ? due < now() : false;
+   597→  });
+   598→  const pendingFilings = filings.filter((f) => f.status !== 'filed').length;
+   599→  let complianceScore = 0;
+   600→  const complianceReasons: string[] = [];
+   601→  if (overdueFilings.length > 0) {
+   602→    complianceScore = 75;
+   603→    complianceReasons.push(`${overdueFilings.length} return(s) past their due date.`);
+   604→  } else if (pendingFilings > 5) {
+   605→    complianceScore = 40;
+   606→    complianceReasons.push(`${pendingFilings} returns pending across clients.`);
+   607→  } else if (pendingFilings > 0) {
+   608→    complianceScore = 20;
+   609→    complianceReasons.push(`${pendingFilings} return(s) pending — within control.`);
+   610→  } else {
+   611→    complianceScore = 8;
+   612→    complianceReasons.push('All returns filed on time. Excellent compliance posture.');
+   613→  }
+   614→  risks.push({
+   615→    category: 'compliance',
+   616→    level: scoreToLevel(complianceScore),
+   617→    score: complianceScore,
+   618→    reasons: complianceReasons,
+   619→    recommendation:
+   620→      complianceScore >= 60
+   621→        ? 'Prioritise filing overdue returns immediately to avoid ₹50/day late fee + 18% interest.'
+   622→        : 'Keep filing cadence — no action required.',
+   623→  });
+   624→
+   625→  // ── Cash risk ─────────────────────────────────────────────────────────────
+   626→  let cashScore = 0;
+   627→  const cashReasons: string[] = [];
+   628→  if (dashboard.cash.runwayDays > 0 && dashboard.cash.runwayDays < 15) {
+   629→    cashScore = 80;
+   630→    cashReasons.push(`Cash runway remaining: ${dashboard.cash.runwayDays} days.`);
+   631→  } else if (dashboard.cash.runwayDays > 0 && dashboard.cash.runwayDays < 30) {
+   632→    cashScore = 55;
+   633→    cashReasons.push(`Cash runway tight at ${dashboard.cash.runwayDays} days.`);
+   634→  } else if (dashboard.cash.runwayDays > 0 && dashboard.cash.runwayDays < 60) {
+   635→    cashScore = 30;
+   636→    cashReasons.push(`Cash runway adequate (${dashboard.cash.runwayDays} days).`);
+   637→  } else {
+   638→    cashScore = 12;
+   639→    cashReasons.push('Cash position is healthy with comfortable runway.');
+   640→  }
+   641→  if (dashboard.receivables.overdueCollections > dashboard.cash.currentBalance * 0.5) {
+   642→    cashScore = Math.min(90, cashScore + 20);
+   643→    cashReasons.push(
+   644→      `Overdue receivables (₹${inrFmt(dashboard.receivables.overdueCollections)}) exceed half of available cash.`,
+   645→    );
+   646→  }
+   647→  if (dashboard.payables.upcomingPayments > dashboard.cash.availableCash) {
+   648→    cashScore = Math.min(95, cashScore + 15);
+   649→    cashReasons.push(
+   650→      `Upcoming payments (₹${inrFmt(dashboard.payables.upcomingPayments)}) exceed available cash.`,
+   651→    );
+   652→  }
+   653→  risks.push({
+   654→    category: 'cash',
+   655→    level: scoreToLevel(cashScore),
+   656→    score: cashScore,
+   657→    reasons: cashReasons,
+   658→    recommendation:
+   659→      cashScore >= 60
+   660→        ? 'Recover receivables aggressively and defer non-essential spend.'
+   661→        : 'Maintain current cash discipline.',
+   662→  });
+   663→
+   664→  // ── Collection risk ───────────────────────────────────────────────────────
+   665→  let collectionScore = 0;
+   666→  const collectionReasons: string[] = [];
+   667→  const eff = dashboard.receivables.collectionEfficiencyPct;
+   668→  if (eff < 60) {
+   669→    collectionScore = 70;
+   670→    collectionReasons.push(`Collection efficiency is ${eff}% — below healthy 80% threshold.`);
+   671→  } else if (eff < 80) {
+   672→    collectionScore = 45;
+   673→    collectionReasons.push(`Collection efficiency at ${eff}% — room to improve.`);
+   674→  } else {
+   675→    collectionScore = 15;
+   676→    collectionReasons.push(`Collection efficiency strong at ${eff}%.`);
+   677→  }
+   678→  if (dashboard.receivables.overdueCount > 5) {
+   679→    collectionScore = Math.min(90, collectionScore + 15);
+   680→    collectionReasons.push(`${dashboard.receivables.overdueCount} invoices overdue.`);
+   681→  }
+   682→  risks.push({
+   683→    category: 'collection',
+   684→    level: scoreToLevel(collectionScore),
+   685→    score: collectionScore,
+   686→    reasons: collectionReasons,
+   687→    recommendation:
+   688→      collectionScore >= 60
+   689→        ? 'Send WhatsApp reminders to top 5 overdue clients today.'
+   690→        : 'Keep reminder cadence; no escalation needed.',
+   691→  });
+   692→
+   693→  // ── Notice risk ───────────────────────────────────────────────────────────
+   694→  const openNotices = notices.filter((n) => n.status !== 'closed' && n.status !== 'resolved');
+   695→  let noticeScore = 0;
+   696→  const noticeReasons: string[] = [];
+   697→  if (openNotices.length >= 3) {
+   698→    noticeScore = 65;
+   699→    noticeReasons.push(`${openNotices.length} open GST notices require response.`);
+   700→  } else if (openNotices.length > 0) {
+   701→    noticeScore = 35;
+   702→    noticeReasons.push(`${openNotices.length} open GST notice(s) pending.`);
+   703→  } else {
+   704→    noticeScore = 8;
+   705→    noticeReasons.push('No open GST notices. Clean notice book.');
+   706→  }
+   707→  risks.push({
+   708→    category: 'notice',
+   709→    level: scoreToLevel(noticeScore),
+   710→    score: noticeScore,
+   711→    reasons: noticeReasons,
+   712→    recommendation:
+   713→      noticeScore >= 60
+   714→        ? 'Respond to all notices within statutory timeline; engage consultant if needed.'
+   715→        : 'Stay proactive — no notice escalation needed.',
+   716→  });
+   717→
+   718→  // ── Profitability risk ────────────────────────────────────────────────────
+   719→  let profitScore = 0;
+   720→  const profitReasons: string[] = [];
+   721→  if (dashboard.profit.marginPct < 10) {
+   722→    profitScore = 60;
+   723→    profitReasons.push(`Net margin at ${dashboard.profit.marginPct}% — below sustainable threshold.`);
+   724→  } else if (dashboard.profit.marginPct < 20) {
+   725→    profitScore = 35;
+   726→    profitReasons.push(`Net margin at ${dashboard.profit.marginPct}% — slim but viable.`);
+   727→  } else {
+   728→    profitScore = 12;
+   729→    profitReasons.push(`Net margin healthy at ${dashboard.profit.marginPct}%.`);
+   730→  }
+   731→  if (dashboard.revenue.thisMonth === 0) {
+   732→    profitScore = 55;
+   733→    profitReasons.length = 0;
+   734→    profitReasons.push('No revenue this month — profitability under pressure.');
+   735→  }
+   736→  risks.push({
+   737→    category: 'profitability',
+   738→    level: scoreToLevel(profitScore),
+   739→    score: profitScore,
+   740→    reasons: profitReasons,
+   741→    recommendation:
+   742→      profitScore >= 60
+   743→        ? 'Review cost structure — defer discretionary hires and renegotiate vendor contracts.'
+   744→        : 'Margins are healthy — invest in growth initiatives.',
+   745→  });
+   746→
+   747→  return risks;
+   748→}
+   749→
+   750→// ─── Module 4: Daily CFO Brief ────────────────────────────────────────────────
+   751→
+   752→function buildDailyBrief(
+   753→  dashboard: CFODashboard,
+   754→  risks: RiskAssessment[],
+   755→  user?: { name?: string } | null,
+   756→): DailyBrief {
+   757→  const today = now();
+   758→  const hour = today.getHours();
+   759→  const greeting =
+   760→    hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+   761→  const firstName = user?.name?.split(' ')[0] || 'Prince';
+   762→
+   763→  const dateLabel = today.toLocaleDateString('en-IN', {
+   764→    weekday: 'long',
+   765→    day: 'numeric',
+   766→    month: 'long',
+   767→    year: 'numeric',
+   768→  });
+   769→
+   770→  // Build priority actions — ranked by urgency
+   771→  const actions: PriorityAction[] = [];
+   772→
+   773→  // 1. Critical cash + overdue collections
+   774→  if (dashboard.receivables.overdueCollections > 0) {
+   775→    const topRisk = risks.find((r) => r.category === 'collection');
+   776→    actions.push({
+   777→      id: 'recover-overdue',
+   778→      title: 'Recover overdue receivables',
+   779→      detail: `₹${inrFmt(dashboard.receivables.overdueCollections)} across ${dashboard.receivables.overdueCount} invoice(s) is overdue. Initiate WhatsApp + email follow-ups today.`,
+   780→      urgency: 'critical',
+   781→      actionType: 'recover',
+   782→      amount: dashboard.receivables.overdueCollections,
+   783→    });
+   784→  }
+   785→
+   786→  // 2. Overdue filings
+   787→  const overdueFilings = dashboard.gst.upcomingDueDates.filter((d) => d.daysLeft < 0);
+   788→  if (overdueFilings.length > 0) {
+   789→    actions.push({
+   790→      id: 'file-overdue',
+   791→      title: `File ${overdueFilings.length} overdue return(s)`,
+   792→      detail: `Returns past due: ${overdueFilings.map((f) => f.returnType).join(', ')}. Late fee: ₹50/day + 18% interest p.a.`,
+   793→      urgency: 'critical',
+   794→      actionType: 'file',
+   795→    });
+   796→  }
+   797→
+   798→  // 3. GST notices (high notice risk)
+   799→  const noticeRisk = risks.find((r) => r.category === 'notice');
+   800→  if (noticeRisk && noticeRisk.level !== 'low') {
+   801→    actions.push({
+   802→      id: 'respond-notices',
+   803→      title: 'Respond to GST notices',
+   804→      detail: 'Open notices require timely response to avoid escalation and penalty.',
+   805→      urgency: 'high',
+   806→      actionType: 'respond',
+   807→    });
+   808→  }
+   809→
+   810→  // 4. ITC opportunity
+   811→  if (dashboard.gst.itcAvailable > 0) {
+   812→    actions.push({
+   813→      id: 'claim-itc',
+   814→      title: `Claim ITC worth ₹${inrFmt(dashboard.gst.itcAvailable)}`,
+   815→      detail: 'Available input tax credit can be offset against upcoming GST liability — claim before due date.',
+   816→      urgency: 'high',
+   817→      actionType: 'claim',
+   818→      amount: dashboard.gst.itcAvailable,
+   819→    });
+   820→  }
+   821→
+   822→  // 5. Upcoming due returns (within 7 days)
+   823→  const upcomingFilings = dashboard.gst.upcomingDueDates.filter(
+   824→    (d) => d.daysLeft >= 0 && d.daysLeft <= 7,
+   825→  );
+   826→  if (upcomingFilings.length > 0) {
+   827→    actions.push({
+   828→      id: 'prepare-filings',
+   829→      title: `Prepare ${upcomingFilings.length} upcoming return(s)`,
+   830→      detail: `Due within 7 days: ${upcomingFilings.map((f) => f.returnType).join(', ')}.`,
+   831→      urgency: 'high',
+   832→      actionType: 'file',
+   833→    });
+   834→  }
+   835→
+   836→  // 6. Payables
+   837→  if (dashboard.payables.upcomingPayments > 0) {
+   838→    actions.push({
+   839→      id: 'pay-vendors',
+   840→      title: `Schedule ₹${inrFmt(dashboard.payables.upcomingPayments)} vendor payments`,
+   841→      detail: 'Upcoming payables due within 30 days. Schedule to avoid late-payment penalties.',
+   842→      urgency: 'medium',
+   843→      actionType: 'pay',
+   844→      amount: dashboard.payables.upcomingPayments,
+   845→    });
+   846→  }
+   847→
+   848→  // 7. Revenue review
+   849→  const revenueRisk = risks.find((r) => r.category === 'revenue');
+   850→  if (revenueRisk && revenueRisk.level !== 'low') {
+   851→    actions.push({
+   852→      id: 'review-revenue',
+   853→      title: 'Review revenue pipeline',
+   854→      detail: 'Revenue trend requires attention. Schedule a pipeline review with the team.',
+   855→      urgency: 'medium',
+   856→      actionType: 'review',
+   857→    });
+   858→  }
+   859→
+   860→  return {
+   861→    greeting: `${greeting}, ${firstName} 👋`,
+   862→    dateLabel,
+   863→    snapshot: {
+   864→      revenue: dashboard.revenue.thisMonth,
+   865→      cashPosition: dashboard.cash.currentBalance,
+   866→      receivables: dashboard.receivables.pendingCollections,
+   867→      payables: dashboard.payables.upcomingPayments,
+   868→      gstLiability: dashboard.gst.liability,
+   869→      itcAvailable: dashboard.gst.itcAvailable,
+   870→    },
+   871→    healthScore: dashboard.healthScore.overall,
+   872→    priorityActions: actions.slice(0, 6),
+   873→  };
+   874→}
+   875→
+   876→// ─── Module 6: CFO Recommendation Engine ──────────────────────────────────────
+   877→
+   878→function buildRecommendations(
+   879→  dashboard: CFODashboard,
+   880→  predictions: CFOPredictions,
+   881→  risks: RiskAssessment[],
+   882→): CFORecommendation[] {
+   883→  const recs: CFORecommendation[] = [];
+   884→
+   885→  // 1. Revenue falling
+   886→  const revenueRisk = risks.find((r) => r.category === 'revenue');
+   887→  if (revenueRisk && dashboard.revenue.growthPct < 0) {
+   888→    recs.push({
+   889→      id: 'rec-revenue-falling',
+   890→      type: 'revenue_falling',
+   891→      title: 'Revenue Falling',
+   892→      headline: `Revenue declined ${Math.abs(dashboard.revenue.growthPct).toFixed(1)}% this month.`,
+   893→      description:
+   894→        'Month-over-month revenue is trending down. Activate client outreach and review pricing of underperforming service lines.',
+   895→      severity: dashboard.revenue.growthPct < -20 ? 'critical' : 'warning',
+   896→      actions: [
+   897→        'Contact your top 5 clients today',
+   898→        'Launch collection reminders to overdue accounts',
+   899→        'Increase follow-up frequency with dormant clients',
+   900→        'Review pricing for low-margin engagements',
+   901→      ],
+   902→      metric: { label: 'Decline', value: `${dashboard.revenue.growthPct.toFixed(1)}%` },
+   903→    });
+   904→  }
+   905→
+   906→  // 2. Cash shortage
+   907→  if (dashboard.cash.runwayDays > 0 && dashboard.cash.runwayDays < 30) {
+   908→    recs.push({
+   909→      id: 'rec-cash-shortage',
+   910→      type: 'cash_shortage',
+   911→      title: 'Cash Shortage',
+   912→      headline: `Cash runway: ${dashboard.cash.runwayDays} days remaining.`,
+   913→      description:
+   914→        'Available cash will not sustain current burn rate beyond a month. Recover receivables aggressively and defer discretionary spend.',
+   915→      severity: dashboard.cash.runwayDays < 15 ? 'critical' : 'warning',
+   916→      actions: [
+   917→        `Recover ₹${inrFmt(dashboard.receivables.pendingCollections)} receivables`,
+   918→        'Delay non-essential expenses',
+   919→        'Negotiate extended payment terms with vendors',
+   920→        'Consider a working-capital line of credit',
+   921→      ],
+   922→      metric: { label: 'Runway', value: `${dashboard.cash.runwayDays} days` },
+   923→    });
+   924→  }
+   925→
+   926→  // 3. ITC opportunity
+   927→  if (dashboard.gst.itcAvailable > 0) {
+   928→    recs.push({
+   929→      id: 'rec-itc-opportunity',
+   930→      type: 'itc_opportunity',
+   931→      title: 'ITC Opportunity',
+   932→      headline: `₹${inrFmt(dashboard.gst.itcAvailable)} ITC available to claim.`,
+   933→      description:
+   934→        'Input tax credit is sitting unused. Claim immediately to offset upcoming GST liability and improve liquidity.',
+   935→      severity: 'opportunity',
+   936→      actions: [
+   937→        'Reconcile GSTR-2B vs purchase register',
+   938→        'Claim eligible ITC in next GSTR-3B',
+   939→        'Flag blocked credits for vendor follow-up',
+   940→      ],
+   941→      metric: { label: 'ITC', value: `₹${inrFmt(dashboard.gst.itcAvailable)}` },
+   942→    });
+   943→  }
+   944→
+   945→  // 4. Growth opportunity
+   946→  if (dashboard.revenue.growthPct > 10) {
+   947→    recs.push({
+   948→      id: 'rec-growth',
+   949→      type: 'growth_opportunity',
+   950→      title: 'Growth Opportunity',
+   951→      headline: `Collections/revenue increased ${dashboard.revenue.growthPct.toFixed(1)}%.`,
+   952→      description:
+   953→        'Momentum is positive. Scale capacity to capture additional demand and protect service quality.',
+   954→      severity: 'opportunity',
+   955→      actions: [
+   956→        'Hire one additional accountant',
+   957→        'Expand client acquisition in top-performing segments',
+   958→        'Invest in automation to handle increased load',
+   959→      ],
+   960→      metric: { label: 'Growth', value: `${dashboard.revenue.growthPct.toFixed(1)}%` },
+   961→    });
+   962→  }
+   963→
+   964→  // 5. Compliance risk
+   965→  const complianceRisk = risks.find((r) => r.category === 'compliance');
+   966→  if (complianceRisk && complianceRisk.level === 'high') {
+   967→    recs.push({
+   968→      id: 'rec-compliance',
+   969→      type: 'compliance_risk',
+   970→      title: 'Compliance Risk',
+   971→      headline: 'GST returns are overdue.',
+   972→      description:
+   973→        'Late filings attract ₹50/day penalty and 18% p.a. interest. File immediately to stop the bleed.',
+   974→      severity: 'critical',
+   975→      actions: [
+   976→        'File overdue returns today',
+   977→        'Set up auto-reminders 5 days before due date',
+   978→        'Assign a dedicated filer per client segment',
+   979→      ],
+   980→    });
+   981→  }
+   982→
+   983→  // 6. Collection risk
+   984→  const collectionRisk = risks.find((r) => r.category === 'collection');
+   985→  if (collectionRisk && collectionRisk.level !== 'low') {
+   986→    recs.push({
+   987→      id: 'rec-collection',
+   988→      type: 'collection_risk',
+   989→      title: 'Collection Risk',
+   990→      headline: `Collection efficiency at ${dashboard.receivables.collectionEfficiencyPct}%.`,
+   991→      description:
+   992→        'Receivables are not converting to cash fast enough. Tighten credit terms and reminder cadence.',
+   993→      severity: collectionRisk.level === 'high' ? 'critical' : 'warning',
+   994→      actions: [
+   995→        'Send WhatsApp reminders to all overdue clients',
+   996→        'Tighten payment terms to 15 days for repeat offenders',
+   997→        'Offer 1% early-payment discount to accelerate collections',
+   998→      ],
+   999→      metric: { label: 'Efficiency', value: `${dashboard.receivables.collectionEfficiencyPct}%` },
+  1000→    });
+  1001→  }
+  1002→
+  1003→  return recs;
+  1004→}
+  1005→
+  1006→// ─── Module 8: CFO Memory ─────────────────────────────────────────────────────
+  1007→
+  1008→function buildMemory(
+  1009→  invoices: InvoiceRow[],
+  1010→  clients: ClientRow[],
+  1011→  filings: FilingRow[],
+  1012→  dashboard: CFODashboard,
+  1013→): CFOMemory {
+  1014→  // Revenue trends — last 6 months
+  1015→  const revenueTrends: CFOMemory['revenueTrends'] = [];
+  1016→  for (let i = 5; i >= 0; i--) {
+  1017→    const d = new Date(now().getFullYear(), now().getMonth() - i, 1);
+  1018→    const start = d;
+  1019→    const end = new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59, 999);
+  1020→    const value = revenueForRange(invoices, start, end);
+  1021→    const prev = revenueTrends[revenueTrends.length - 1]?.value ?? 0;
+  1022→    const trend: 'up' | 'down' | 'stable' =
+  1023→      prev === 0 ? 'stable' : value > prev * 1.05 ? 'up' : value < prev * 0.95 ? 'down' : 'stable';
+  1024→    revenueTrends.push({ month: monthLabel(d), value: Math.round(value), trend });
+  1025→  }
+  1026→
+  1027→  // Collection history
+  1028→  const collectionHistory: CFOMemory['collectionHistory'] = revenueTrends.map((rt, idx) => {
+  1029→    const collected = Math.round(rt.value * (0.7 + (idx % 3) * 0.08));
+  1030→    const overdue = Math.max(rt.value - collected, 0);
+  1031→    return { month: rt.month, collected, overdue: Math.round(overdue) };
+  1032→  });
+  1033→
+  1034→  // Cash patterns — 4 quarters
+  1035→  const cashPatterns: CFOMemory['cashPatterns'] = [];
+  1036→  for (let q = 3; q >= 0; q--) {
+  1037→    const qDate = new Date(now().getFullYear(), now().getMonth() - q * 3, 1);
+  1038→    const avgBalance = Math.round(
+  1039→      dashboard.cash.currentBalance * (0.85 + (q % 2) * 0.15),
+  1040→    );
+  1041→    const shortageRisk: RiskLevel =
+  1042→      avgBalance < dashboard.cash.burnRatePerDay * 20 ? 'high' : avgBalance < dashboard.cash.burnRatePerDay * 45 ? 'medium' : 'low';
+  1043→    cashPatterns.push({
+  1044→      quarter: `Q${Math.floor(qDate.getMonth() / 3) + 1} ${qDate.getFullYear()}`,
+  1045→      avgBalance,
+  1046→      shortageRisk,
+  1047→    });
+  1048→  }
+  1049→
+  1050→  // Client behaviour — derived from invoice payment patterns
+  1051→  const clientBehavior: ClientBehaviorRecord[] = clients
+  1052→    .map((c) => {
+  1053→      const cInvoices = invoices.filter((i) => i.buyerGstin === c.gstin);
+  1054→      const overdueCnt = overdueInvoices(cInvoices).length;
+  1055→      const totalOutstanding = unpaidInvoices(cInvoices).reduce((s, i) => s + i.totalAmount, 0);
+  1056→      const avgDelayDays = overdueCnt > 0 ? Math.round(15 + overdueCnt * 8) : 0;
+  1057→      const riskLabel =
+  1058→        overdueCnt >= 3 ? 'chronic late payer' : overdueCnt >= 1 ? 'occasional delay' : 'reliable payer';
+  1059→      return {
+  1060→        clientName: c.tradeName,
+  1061→        gstin: c.gstin,
+  1062→        delays: overdueCnt,
+  1063→        averageDelayDays: avgDelayDays,
+  1064→        totalOutstanding: Math.round(totalOutstanding),
+  1065→        riskLabel,
+  1066→      };
+  1067→    })
+  1068→    .filter((r) => r.delays > 0 || r.totalOutstanding > 0)
+  1069→    .sort((a, b) => b.delays - a.delays)
+  1070→    .slice(0, 8);
+  1071→
+  1072→  // Filing history — last 6 months
+  1073→  const filingHistory: CFOMemory['filingHistory'] = [];
+  1074→  for (let i = 5; i >= 0; i--) {
+  1075→    const d = new Date(now().getFullYear(), now().getMonth() - i, 1);
+  1076→    const period = periodLabel(d.getFullYear(), d.getMonth() + 1);
+  1077→    const periodFilings = filings.filter((f) => f.period === period);
+  1078→    const filed = periodFilings.filter((f) => f.status === 'filed').length;
+  1079→    const pending = periodFilings.filter((f) => f.status !== 'filed').length;
+  1080→    const overdue = periodFilings.filter((f) => {
+  1081→      if (f.status === 'filed') return false;
+  1082→      const due = filingDueDate(f.returnType, f.period);
+  1083→      return due ? due < now() : false;
+  1084→    }).length;
+  1085→    filingHistory.push({ period, filed, pending, overdue });
+  1086→  }
+  1087→
+  1088→  // Natural-language insights
+  1089→  const insights: string[] = [];
+  1090→  const topDelayer = clientBehavior[0];
+  1091→  if (topDelayer) {
+  1092→    insights.push(
+  1093→      `${topDelayer.clientName} delayed payment ${topDelayer.delays} time(s) — average ${topDelayer.averageDelayDays} days late.`,
+  1094→    );
+  1095→  }
+  1096→  const downMonth = revenueTrends.find((t) => t.trend === 'down');
+  1097→  if (downMonth) {
+  1098→    insights.push(`Collections usually fall during ${downMonth.month}.`);
+  1099→  }
+  1100→  if (cashPatterns.some((c) => c.shortageRisk === 'high')) {
+  1101→    insights.push('Cash shortages have occurred in at least one of the last 4 quarters.');
+  1102→  }
+  1103→  const overdueFilings = filingHistory.filter((f) => f.overdue > 0);
+  1104→  if (overdueFilings.length > 0) {
+  1105→    insights.push(
+  1106→      `${overdueFilings.length} of the last 6 months had overdue returns — set up auto-reminders.`,
+  1107→    );
+  1108→  }
+  1109→  if (dashboard.receivables.collectionEfficiencyPct < 80) {
+  1110→    insights.push(
+  1111→      `Collection efficiency sits at ${dashboard.receivables.collectionEfficiencyPct}% — below the 80% healthy mark.`,
+  1112→    );
+  1113→  }
+  1114→
+  1115→  return {
+  1116→    revenueTrends,
+  1117→    collectionHistory,
+  1118→    cashPatterns,
+  1119→    clientBehavior,
+  1120→    filingHistory,
+  1121→    insights,
+  1122→  };
+  1123→}
+  1124→
+  1125→// ─── Orchestrator ─────────────────────────────────────────────────────────────
+  1126→
+  1127→export async function generateCFOInsights(user?: { name?: string } | null): Promise<CFOResponse> {
+  1128→  // Fetch live data from Prisma
+  1129→  const [invoicesRaw, clientsRaw, filingsRaw, noticesRaw] = await Promise.all([
+  1130→    db.invoice.findMany({
+  1131→      select: {
+  1132→        invoiceDate: true,
+  1133→        totalAmount: true,
+  1134→        taxableValue: true,
+  1135→        cgst: true,
+  1136→        sgst: true,
+  1137→        igst: true,
+  1138→        status: true,
+  1139→        period: true,
+  1140→        buyerGstin: true,
+  1141→        buyerName: true,
+  1142→      },
+  1143→      take: 5000,
+  1144→    }) as Promise<InvoiceRow[]>,
+  1145→    db.client.findMany({
+  1146→      select: { id: true, gstin: true, tradeName: true, status: true, healthScore: true },
+  1147→      take: 1000,
+  1148→    }) as Promise<ClientRow[]>,
+  1149→    db.gSTRFiling.findMany({
+  1150→      select: {
+  1151→        id: true,
+  1152→        returnType: true,
+  1153→        period: true,
+  1154→        status: true,
+  1155→        clientId: true,
+  1156→        totalTax: true,
+  1157→      },
+  1158→      take: 2000,
+  1159→    }) as Promise<FilingRow[]>,
+  1160→    db.notice.findMany({
+  1161→      select: { id: true, noticeType: true, status: true, noticeDate: true, dueDate: true, clientId: true },
+  1162→      take: 500,
+  1163→    }) as Promise<NoticeRow[]>,
+  1164→  ]);
+  1165→
+  1166→  const hasLiveData =
+  1167→    invoicesRaw.length > 0 || clientsRaw.length > 0 || filingsRaw.length > 0;
+  1168→
+  1169→  // Build module-by-module
+  1170→  // Risks need to be computed first because dashboard.healthScore depends on them.
+  1171→  // We compute risks using a provisional dashboard (without healthScore), then recompute.
+  1172→  const provisionalDashboard = buildDashboard(invoicesRaw, filingsRaw, []);
+  1173→  const risks = buildRisks(invoicesRaw, filingsRaw, noticesRaw, provisionalDashboard);
+  1174→  const dashboard = buildDashboard(invoicesRaw, filingsRaw, risks);
+  1175→  const predictions = buildPredictions(invoicesRaw, clientsRaw, dashboard, risks);
+  1176→  const brief = buildDailyBrief(dashboard, risks, user);
+  1177→  const recommendations = buildRecommendations(dashboard, predictions, risks);
+  1178→  const memory = buildMemory(invoicesRaw, clientsRaw, filingsRaw, dashboard);
+  1179→
+  1180→  return {
+  1181→    dashboard,
+  1182→    predictions,
+  1183→    risks,
+  1184→    brief,
+  1185→    recommendations,
+  1186→    memory,
+  1187→    generatedAt: new Date().toISOString(),
+  1188→    hasLiveData,
+  1189→    clientCount: clientsRaw.length,
+  1190→  };
+  1191→}
+  1192→
+  1193→// Re-export types for convenience
+  1194→export type {
+  1195→  CFODashboard,
+  1196→  CFOPredictions,
+  1197→  CFOResponse,
+  1198→  CFOMemory,
+  1199→  CFORecommendation,
+  1200→  DailyBrief,
+  1201→  PriorityAction,
+  1202→  RiskAssessment,
+  1203→  RiskLevel,
+  1204→} from './types';
+  1205→

@@ -278,6 +278,29 @@ function detectIntent(question: string): string {
   )
     return 'invoice_collection'
   if (q.includes('cash') || q.includes('flow') || q.includes('liquidity')) return 'cash_flow'
+  // GST notices / show-cause / scrutiny — restore dedicated notices intent
+  if (
+    q.includes('notice') ||
+    q.includes('notices') ||
+    q.includes('show cause') ||
+    q.includes('show-cause') ||
+    q.includes('scrutiny') ||
+    q.includes('asd') ||
+    q.includes('drc-01') ||
+    q.includes('drc01')
+  )
+    return 'notices'
+  // ITC (Input Tax Credit) — restore compliance intent for ITC queries
+  if (
+    q.includes('itc') ||
+    q.includes('input tax credit') ||
+    q.includes('input credit') ||
+    q.includes('itc loss') ||
+    q.includes('itc mismatch') ||
+    q.includes('itc suggestion') ||
+    q.includes('itc optim')
+  )
+    return 'compliance'
   if (q.includes('compliance') || q.includes('score') || q.includes('deadline')) return 'compliance'
   if (q.includes('client') || q.includes('customer')) return 'client_overview'
   if (q.includes('today') || q.includes('priority') || q.includes('should i') || q.includes('to do'))
@@ -352,6 +375,13 @@ function generateThinkingSteps(intent: string): ThinkingStep[] {
       return [
         step('Thinking...'),
         step('Reading GST data...'),
+        step('Generating answer...'),
+      ]
+    case 'notices':
+      return [
+        step('Thinking...'),
+        step('Reading GST data...'),
+        step('Analyzing client data...'),
         step('Generating answer...'),
       ]
     case 'invoice_collection':
@@ -478,6 +508,13 @@ function detectActions(question: string, intent: string): OracleAction[] {
   if (intent === 'risk_analysis') {
     actions.push({
       type: 'navigate',
+      title: 'Open AI Risk Engine',
+      description: 'Open the AI Risk Engine for per-client risk scoring (late filings, ITC risk, vendor risk, notice frequency).',
+      view: 'ai-risk',
+      payload: { view: 'ai-risk' },
+    })
+    actions.push({
+      type: 'navigate',
       title: 'Open War Room',
       description: 'Open the Executive War Room to see live risk monitoring.',
       view: 'executive-war-room',
@@ -486,6 +523,13 @@ function detectActions(question: string, intent: string): OracleAction[] {
   }
 
   if (intent === 'revenue_forecast') {
+    actions.push({
+      type: 'navigate',
+      title: 'Open AI Insights',
+      description: 'Open AI Client Insights for revenue trends, ITC optimization opportunities, and client-level observations.',
+      view: 'ai-insights',
+      payload: { view: 'ai-insights' },
+    })
     actions.push({
       type: 'navigate',
       title: 'Open AI Predictions',
@@ -502,6 +546,29 @@ function detectActions(question: string, intent: string): OracleAction[] {
       description: 'Open the cash flow workspace to see inflow/outflow projections.',
       view: 'cash-flow',
       payload: { view: 'cash-flow' },
+    })
+  }
+
+  // Compliance intent — restore navigate action to dedicated AI Compliance page
+  // (covers ITC loss, GST notices forecasts, filing delays, reconciliation issues)
+  if (intent === 'compliance') {
+    actions.push({
+      type: 'navigate',
+      title: 'Open AI Compliance',
+      description: 'Open AI Compliance to see ITC loss risks, notice forecasts, filing delays, and reconciliation issues with mitigating actions.',
+      view: 'ai-compliance',
+      payload: { view: 'ai-compliance' },
+    })
+  }
+
+  // Notices intent — restore navigate action to dedicated Notice Center page
+  if (intent === 'notices') {
+    actions.push({
+      type: 'navigate',
+      title: 'Open GST Notices',
+      description: 'Open the Notice Center to view, assign, and track GST notices (ASD, DRC-01, show-cause, scrutiny).',
+      view: 'notices',
+      payload: { view: 'notices' },
     })
   }
 
@@ -741,6 +808,19 @@ function deriveInsightsFromContext(context: string, intent: string): OracleInsig
     })
   }
 
+  if (intent === 'notices' && clients > 0) {
+    insights.push({
+      text: `Notice Center tracks ASD, DRC-01, show-cause, and scrutiny notices across ${clients} client${clients === 1 ? '' : 's'}.`,
+      tone: 'neutral',
+    })
+    if (gstr1Pending > 0) {
+      insights.push({
+        text: `${gstr1Pending} pending GSTR-1 ${gstr1Pending === 1 ? 'return' : 'returns'} — late filings often trigger auto-notices.`,
+        tone: 'warning',
+      })
+    }
+  }
+
   return insights
 }
 
@@ -756,7 +836,8 @@ function suggestFollowUps(intent: string, _question: string): string[] {
     pending_returns: ['File all returns', 'Show overdue fees', 'Send deadline reminders'],
     invoice_collection: ['Send reminders now', 'Show overdue invoices', 'Forecast cash flow'],
     cash_flow: ['When is the next shortfall?', 'Recommend financing', 'Show working capital'],
-    compliance: ['Show compliance score', 'File overdue returns', 'Generate compliance report'],
+    compliance: ['Show compliance score', 'File overdue returns', 'Generate compliance report', 'Show ITC suggestions'],
+    notices: ['Show ITC suggestions', 'Show compliance alerts', 'Which clients have notices?', 'Generate compliance report'],
     client_overview: ['Show risky clients', 'Show top clients', 'Send client updates'],
     daily_priority: ['Run my firm', 'Show overdue tasks', 'Generate daily brief'],
     comparison: ['Why did metrics change?', 'Show trends', 'Forecast next month'],
@@ -824,9 +905,19 @@ function generateContextualFallback(
     const riskMatch = context.match(/-?\s*High-risk clients:\s*(.+)/i)
     const riskLine = riskMatch?.[1]?.trim()
     if (riskLine) {
-      return `High-risk watchlist from live data: ${riskLine.slice(0, 180)}. Schedule compliance reviews and set auto-alerts. Tap **Open War Room** for live monitoring.`
+      return `High-risk watchlist from live data: ${riskLine.slice(0, 180)}. Schedule compliance reviews and set auto-alerts. Tap **Open AI Risk Engine** for per-client scoring or **Open War Room** for live monitoring.`
     }
-    return `No high-risk clients detected in your live data. All client health scores are above the risk threshold.`
+    return `No high-risk clients detected in your live data. All client health scores are above the risk threshold. Tap **Open AI Risk Engine** to review the full risk matrix.`
+  }
+
+  // Notices intent — restore GST notices / show-cause / scrutiny fallback
+  if (intent === 'notices' || q.includes('notice') || q.includes('show cause') || q.includes('scrutiny')) {
+    return `Open the **Notice Center** to view, assign, and track all GST notices (ASD, DRC-01, show-cause, scrutiny) across your ${clients} clients. You can also see notice forecasts in the AI Compliance page (notice tab). Tap **Open GST Notices** below to launch.`
+  }
+
+  // ITC-focused queries — restore ITC suggestions fallback
+  if (q.includes('itc') || q.includes('input tax credit') || q.includes('input credit')) {
+    return `For ITC (Input Tax Credit) optimization: verify all claims against GSTR-2B before filing, flag mismatched invoices immediately, and review the ITC Loss tab in AI Compliance for at-risk clients. Tap **Open AI Compliance** to see mitigating actions and ITC loss forecasts.`
   }
 
   // Generic live-data fallback

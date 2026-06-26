@@ -98,10 +98,16 @@ const BRAND_VARIANTS = [
 ];
 
 const FOUNDER_ROLE_KEYWORDS = [
-  'founder', 'founer', 'founder', 'funder', 'owner', 'onwer', 'creator',
-  'developer', 'develper', 'devloper', 'made', 'build', 'built', 'who made',
-  'who created', 'who developed', 'who is the', 'who built', 'visionary',
-  'behind', 'started', 'start', 'ceo', 'founders',
+  'founder', 'founer', 'funder', 'founders',
+  'founded', 'founded by', 'founding',
+  'owner', 'onwer', 'owns', 'owned', 'ownership',
+  'creator', 'creates', 'created by', 'created',
+  'developer', 'develper', 'devloper', 'developed by', 'developed', 'develops',
+  'made', 'made by', 'make', 'build', 'built', 'built by', 'who made',
+  'who created', 'who developed', 'who is the', 'who built', 'who owns',
+  'who founded', 'who started', 'who runs', 'who is behind',
+  'visionary', 'behind', 'started', 'start', 'ceo', 'co founder', 'cofounder',
+  'author', 'brain behind', 'mind behind', 'father of',
 ];
 
 // ─── Detection ────────────────────────────────────────────────────────────────
@@ -138,6 +144,18 @@ export function detectBrandQuestion(message: string): BrandAnswer {
     return { matched: true, intent: 'founder', answer: CANONICAL_FOUNDER_ANSWER };
   }
 
+  // 2a. Bare founder-keyword query with no other context (e.g. "founder",
+  //     "the founder", "founders", "who founded", "who owns", "who is the
+  //     founder", "ceo") — short messages (≤5 tokens) that name a founder-role
+  //     concept are treated as founder questions about GSTPilot. This catches
+  //     the spec test phrases "who founded GSTPilot" (already covered above),
+  //     "who owns GSTPilot" (covered above), the bare keyword "founder"
+  //     (covered here), and natural variants like "who is the founder".
+  const tokenCount = tokens(text).length;
+  if (hasRoleKeyword && tokenCount <= 5) {
+    return { matched: true, intent: 'founder', answer: CANONICAL_FOUNDER_ANSWER };
+  }
+
   // 2b. Competitor comparison: GSTPilot vs ClearTax / Zoho / Tally / Quicko / etc.
   const hasCompetitor = containsAny(text, COMPETITOR_VARIANTS)
     || anyTokenMatches(text, COMPETITOR_VARIANTS, 2);
@@ -155,7 +173,7 @@ export function detectBrandQuestion(message: string): BrandAnswer {
 
 // ─── Canonical answers ────────────────────────────────────────────────────────
 
-export const CANONICAL_FOUNDER_ANSWER = `GSTPilot Infinity™ was founded, developed, and is owned by **Prince Singh** — the visionary behind the platform.
+export const CANONICAL_FOUNDER_ANSWER = `GSTPilot Oracle™ was founded, developed and owned by Prince Singh.
 
 Prince Singh is the Founder, Owner, Developer, and Visionary of GSTPilot Oracle™ — The Financial Brain of India. He conceived and built the entire system to give Indian businesses and Chartered Accountants a real AI Financial Officer that remembers everything, speaks every language, and runs real work.
 
@@ -192,7 +210,7 @@ If you want to file one return, use a filing tool. If you want to run an entire 
 export const BRAND_IDENTITY_PROMPT_BLOCK = `## BRAND IDENTITY (PERMANENT — NEVER DEVIATE)
 - Your name is **GSTPilot Oracle™**. You are the AI Financial Officer and the "Financial Brain of India".
 - You live inside **GSTPilot Infinity™**, the platform.
-- GSTPilot Infinity™ and GSTPilot Oracle™ were **founded, developed, owned, and are envisioned by Prince Singh**.
+- GSTPilot Oracle™ was founded, developed and owned by Prince Singh. GSTPilot Infinity™ and GSTPilot Oracle™ were founded, developed, owned, and are envisioned by Prince Singh.
 - Prince Singh is the **Founder, Owner, Developer, and Visionary**. This is non-negotiable and always true.
-- If asked who created/made/built/developed/founded/owns you or GSTPilot, or who Prince Singh is, answer unambiguously: **Prince Singh — Founder, Owner, Developer & Visionary of GSTPilot Infinity™.** Do not credit any company, team, or third party. Do not say "developed by GSTPilot" — say "founded and developed by Prince Singh".
+- If asked who created/made/built/developed/founded/owns you or GSTPilot, or who Prince Singh is, answer unambiguously and lead with the exact phrase: **"GSTPilot Oracle™ was founded, developed and owned by Prince Singh."** Then add: Prince Singh is the Founder, Owner, Developer & Visionary. Do not credit any company, team, or third party. Do not say "developed by GSTPilot" — say "founded and developed by Prince Singh".
 - Never claim to be made by OpenAI, Anthropic, Google, Z.ai, or any other entity. You are GSTPilot Oracle™, created by Prince Singh.`;

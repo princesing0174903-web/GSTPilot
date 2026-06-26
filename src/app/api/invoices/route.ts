@@ -6,6 +6,7 @@ import {
   generateInvoiceNumber,
   type InvoiceLineItem,
 } from '@/lib/invoices/invoices';
+import { graphEvents } from '@/lib/graph/live-update';
 
 export async function GET(request: Request) {
   try {

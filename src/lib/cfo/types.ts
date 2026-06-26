@@ -68,6 +68,18 @@ export interface HealthScoreSnapshot {
   profitability: number;
   risk: number;
   collections: number;
+  // Phase 3 — extended to 8 dimensions
+  revenue: number;
+  liquidity: number;
+  /** Human-readable explanation of WHY the score changed */
+  drivers: HealthScoreDriver[];
+}
+
+export interface HealthScoreDriver {
+  label: string;
+  direction: 'up' | 'down' | 'stable';
+  impact: number; // signed contribution to overall
+  note: string;
 }
 
 export interface CFODashboard {
@@ -217,4 +229,168 @@ export interface CFOResponse {
   generatedAt: string;
   hasLiveData: boolean;
   clientCount: number;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// PHASE 3 — AI CFO™ Extensions
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ─── Extended CFO Dashboard metrics (Phase 3) ──────────────────────────────────
+
+export interface ExtendedCFOMetrics {
+  expenses: number;                  // this month
+  operatingMarginPct: number;        // operating margin %
+  bankBalance: number;               // distinct from cash — bank account balance
+  workingCapital: number;            // AR - AP
+  monthlyBurnRate: number;           // avg monthly cash outflow
+  revenueGrowthPct: number;          // signed % (already in revenue but explicit)
+  profitTrend: 'up' | 'down' | 'stable';
+  upcomingPayments: number;          // next 30 days (already in payables but explicit)
+  upcomingCollections: number;       // next 30 days expected
+}
+
+// ─── Module 10: Automatic Financial Analysis (Phase 3) ────────────────────────
+
+export type AnalysisConditionType =
+  | 'revenue_decline'
+  | 'expense_increase'
+  | 'profit_reduction'
+  | 'negative_cash_flow'
+  | 'collection_delays'
+  | 'gst_penalties'
+  | 'itc_opportunities'
+  | 'duplicate_expenses'
+  | 'vendor_risks'
+  | 'customer_risks'
+  | 'late_payments';
+
+export interface FinancialCondition {
+  type: AnalysisConditionType;
+  severity: 'critical' | 'warning' | 'info' | 'opportunity';
+  title: string;
+  description: string;
+  metric?: { label: string; value: string; delta?: string };
+  detected: boolean;
+  evidence?: string[];
+}
+
+export interface FinancialAnalysis {
+  conditions: FinancialCondition[];
+  detectedCount: number;
+  criticalCount: number;
+}
+
+// ─── Module 11: Smart CFO Insights (Phase 3) ───────────────────────────────────
+
+export interface SmartInsight {
+  id: string;
+  category: 'risk' | 'opportunity' | 'action' | 'summary';
+  title: string;
+  detail: string;
+  priority: 'critical' | 'high' | 'medium' | 'low';
+  metric?: { label: string; value: string };
+  actionLabel?: string;
+  actionView?: string;
+}
+
+export type SummaryPeriod = 'weekly' | 'monthly' | 'quarterly' | 'yearly';
+
+export interface PeriodSummary {
+  period: SummaryPeriod;
+  label: string;
+  headline: string;
+  revenue: number;
+  expenses: number;
+  profit: number;
+  highlights: string[];
+  concerns: string[];
+  outlook: string;
+}
+
+export interface SmartCFOInsights {
+  topRisks: SmartInsight[];
+  topOpportunities: SmartInsight[];
+  urgentActions: SmartInsight[];
+  summaries: PeriodSummary[];
+}
+
+// ─── Module 12: What-If Simulator (Phase 3) ────────────────────────────────────
+
+export type WhatIfScenarioType =
+  | 'revenue_change'
+  | 'expense_change'
+  | 'headcount_change'
+  | 'gst_change'
+  | 'collection_improvement';
+
+export interface WhatIfScenario {
+  type: WhatIfScenarioType;
+  label: string;
+  description: string;
+  /** The user-facing change magnitude (e.g. -20 for "revenue falls 20%") */
+  changePct: number;
+  /** Optional absolute headcount delta for headcount_change */
+  headcountDelta?: number;
+}
+
+export interface WhatIfResult {
+  scenario: WhatIfScenario;
+  projectedRevenue: number;
+  projectedExpenses: number;
+  projectedProfit: number;
+  projectedCash: number;
+  projectedRunwayDays: number;
+  projectedHealthScore: number;
+  deltaRevenue: number;
+  deltaProfit: number;
+  deltaCash: number;
+  deltaHealthScore: number;
+  verdict: string;
+  recommendation: string;
+  confidencePct: number;
+}
+
+// ─── Module 13: CFO Report Generation (Phase 3) ───────────────────────────────
+
+export type CFOReportType =
+  | 'executive_summary'
+  | 'financial_report'
+  | 'cash_flow_report'
+  | 'profit_report'
+  | 'gst_report'
+  | 'risk_report'
+  | 'board_report'
+  | 'monthly_cfo'
+  | 'quarterly_cfo'
+  | 'annual_review';
+
+export interface CFOReportSection {
+  title: string;
+  /** Key-value pairs rendered as a clean two-column table */
+  metrics?: Array<{ label: string; value: string; delta?: string }>;
+  /** Narrative paragraphs */
+  narrative?: string[];
+  /** Tabular data with headers */
+  table?: { headers: string[]; rows: string[][] };
+  /** Bullet recommendations */
+  bullets?: string[];
+}
+
+export interface CFOReport {
+  type: CFOReportType;
+  title: string;
+  subtitle: string;
+  generatedAt: string;
+  period: string;
+  sections: CFOReportSection[];
+  healthScore: number;
+  firmName?: string;
+}
+
+// ─── Extended CFOResponse (Phase 3) ───────────────────────────────────────────
+
+export interface CFOResponseV2 extends CFOResponse {
+  extended: ExtendedCFOMetrics;
+  analysis: FinancialAnalysis;
+  insights: SmartCFOInsights;
 }

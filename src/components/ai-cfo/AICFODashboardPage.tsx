@@ -36,6 +36,7 @@ import { useApp } from '@/contexts/AppContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import type { CFOResponse, RiskLevel, CFORecommendation } from '@/lib/cfo/types';
+import AICFOPhase1Sections from './AICFOPhase1Sections';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -873,6 +874,15 @@ export default function AICFODashboardPage() {
         )}
       </FadeIn>
 
+      {/* ═══ PHASE 1 — FINANCIAL INTELLIGENCE ENGINE ═══ */}
+      {/* New Phase 1 sections: Executive Summary, Real Health Score (0-100),
+          Revenue Analytics, Profitability, Cash Flow, Working Capital, Expense
+          Engine, Collection Engine, GST & ITC Position, Forecast Engine,
+          Business Risk Engine (with Critical severity), AI Recommendations
+          (with Reason/Impact/Priority/Confidence).
+          Additive — does NOT modify or replace any existing Phase 3 module. */}
+      <AICFOPhase1Sections />
+
       {/* ═══ MODULE 4: DAILY CFO BRIEF ═══ */}
       <DailyBriefCard brief={data.brief} delay={0.05} />
 
@@ -1076,6 +1086,9 @@ export default function AICFODashboardPage() {
           </p>
           <p className="mt-1 text-[11px] text-muted-foreground">
             Understand Your Business · Predict Your Future · Recommend Your Next Move · Run Your Business
+          </p>
+          <p className="mt-2 text-xs font-medium accent-text">
+            Phase 1 — Every business deserves a world-class CFO.
           </p>
           <p className="mt-2 text-[10px] text-muted-foreground/60">
             Founded &amp; developed by Prince Singh

@@ -394,3 +394,376 @@ export interface CFOResponseV2 extends CFOResponse {
   analysis: FinancialAnalysis;
   insights: SmartCFOInsights;
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// PHASE 1 — AI CFO™ FINANCIAL INTELLIGENCE ENGINE
+// "Every business deserves a world-class CFO."
+//
+// Pure server-side TypeScript modules that read connected business data
+// (GSTN, Bank, Invoices, Expenses, Clients, Collections, Returns, Reports,
+//  Business Graph) and compute real CFO-grade analytics.
+// No mock values. No placeholder analytics.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ─── Real Financial Health Score (Phase 1) ────────────────────────────────────
+
+export type SeverityLevel = 'low' | 'medium' | 'high' | 'critical';
+
+export interface HealthScoreFactor {
+  key: string;                     // 'revenue_growth' | 'profit_margin' | ...
+  label: string;                   // Human-readable label
+  rawValue: number;                // Raw metric (e.g. growthPct=12.5)
+  rawUnit: 'percent' | 'inr' | 'days' | 'count' | 'ratio';
+  score: number;                   // 0-100 sub-score for this factor
+  weight: number;                  // 0-1, weights sum to 1.0
+  contribution: number;            // score * weight (signed contribution to overall)
+  direction: 'up' | 'down' | 'stable';
+  explanation: string;             // WHY this factor scored this way
+  benchmark?: string;              // Industry benchmark text
+}
+
+export interface RealFinancialHealthScore {
+  overall: number;                 // 0-100 weighted
+  tier: 'excellent' | 'healthy' | 'attention' | 'at_risk' | 'critical';
+  factors: HealthScoreFactor[];    // 10 factors with full explanation
+  summary: string;                 // 1-2 sentence executive summary
+  topDriver: string;               // Biggest positive driver
+  topDrag: string;                 // Biggest negative driver
+  asOfDate: string;
+}
+
+// ─── Revenue Engine (Phase 1) ─────────────────────────────────────────────────
+
+export interface RevenuePeriodBreakdown {
+  monthly: Array<{ month: string; revenue: number; growthPct: number }>;
+  quarterly: Array<{ quarter: string; revenue: number; growthPct: number }>;
+  yearly: Array<{ year: string; revenue: number; growthPct: number }>;
+  ytdRevenue: number;
+  ytdGrowthPct: number;
+}
+
+export interface RevenueByClient {
+  clientId: string;
+  clientName: string;
+  gstin: string;
+  revenue: number;
+  invoiceCount: number;
+  sharePct: number;                // % of total revenue
+  trend: 'up' | 'down' | 'stable';
+}
+
+export interface RevenueByIndustry {
+  industry: string;
+  revenue: number;
+  sharePct: number;
+  clientCount: number;
+}
+
+export interface RevenueAnalytics {
+  today: number;
+  thisWeek: number;
+  thisMonth: number;
+  thisQuarter: number;
+  thisYear: number;
+  lastMonth: number;
+  growthPct: number;               // MoM
+  qoqGrowthPct: number;            // Quarter-on-quarter
+  yoyGrowthPct: number;            // Year-on-year
+  periods: RevenuePeriodBreakdown;
+  byClient: RevenueByClient[];     // top 10
+  byIndustry: RevenueByIndustry[]; // top 10
+  topClients: Array<{ name: string; revenue: number; sharePct: number; trend: 'up' | 'down' | 'stable' }>;
+  trend: 'up' | 'down' | 'stable';
+  forecast: { thirtyDay: number; ninetyDay: number; yearEnd: number };
+  sparkline: number[];             // last 12 months
+}
+
+// ─── Profitability Engine (Phase 1) ───────────────────────────────────────────
+
+export interface ProfitMonthlyTrend {
+  month: string;
+  revenue: number;
+  cogs: number;
+  grossProfit: number;
+  opex: number;
+  ebitda: number;
+  netProfit: number;
+  grossMarginPct: number;
+  operatingMarginPct: number;
+  netMarginPct: number;
+  ebitdaMarginPct: number;
+}
+
+export interface CustomerProfitability {
+  clientId: string;
+  clientName: string;
+  revenue: number;
+  directCost: number;              // cost attributable to serving this client
+  grossProfit: number;
+  grossMarginPct: number;
+  netProfit: number;
+  profitRank: number;              // 1 = most profitable
+}
+
+export interface VendorCostRow {
+  vendorName: string;
+  vendorGstin?: string;
+  totalSpend: number;
+  invoiceCount: number;
+  avgInvoiceValue: number;
+  sharePct: number;                // % of total vendor spend
+  overdueAmount: number;
+}
+
+export interface ProfitabilityAnalytics {
+  revenue: number;                 // this month
+  cogs: number;                    // cost of goods/services delivered (purchase bills + attributable)
+  grossProfit: number;
+  grossMarginPct: number;
+  opex: number;                    // operating expenses (excl. COGS)
+  operatingMarginPct: number;
+  ebitda: number;                  // earnings before interest, tax, depreciation, amortization
+  ebitdaMarginPct: number;
+  netProfit: number;
+  netMarginPct: number;
+  expenseRatioPct: number;         // total expenses / revenue
+  monthlyTrends: ProfitMonthlyTrend[]; // last 6 months
+  customerProfitability: CustomerProfitability[]; // top 10 + bottom 5
+  vendorCosts: VendorCostRow[];    // top 10 vendors by spend
+  trend: 'up' | 'down' | 'stable';
+}
+
+// ─── Cash Flow Engine (Phase 1) ───────────────────────────────────────────────
+
+export interface CashFlowProjection {
+  period: '7d' | '30d' | '90d' | '365d';
+  inflow: number;                  // expected collections + other inflows
+  outflow: number;                 // expected expenses + payables + GST
+  net: number;                     // inflow - outflow
+  endingCash: number;              // projected closing balance
+  confidencePct: number;
+}
+
+export interface CashFlowAnalytics {
+  currentCash: number;             // bank + cash on hand
+  availableCash: number;           // current - reserve
+  burnRatePerDay: number;          // daily cash outflow
+  burnRatePerMonth: number;
+  runwayDays: number;              // 0 = infinite
+  runwayDate: string | null;       // ISO date when cash runs out (null if >365d)
+  inflowThisMonth: number;
+  outflowThisMonth: number;
+  netThisMonth: number;
+  projections: CashFlowProjection[]; // 4 periods
+  whyDecreasing: string[];         // root-cause explanations for cash decline
+  trend: 'up' | 'down' | 'stable';
+}
+
+// ─── Working Capital Engine (Phase 1) ─────────────────────────────────────────
+
+export interface WorkingCapitalAnalytics {
+  currentAssets: number;           // cash + AR + inventory + prepaid
+  currentLiabilities: number;      // AP + GST payable + accrued + short-term debt
+  workingCapital: number;          // CA - CL
+  workingCapitalRatio: number;     // CA / CL
+  quickRatio: number;              // (CA - inventory) / CL
+  liquidityRisk: SeverityLevel;
+  liquidityRiskReason: string;
+  accountsReceivable: number;
+  accountsPayable: number;
+  inventoryValue: number;
+  prepaidExpenses: number;
+  shortTermDebt: number;
+  trend: 'up' | 'down' | 'stable';
+}
+
+// ─── Expense Engine (Phase 1) ─────────────────────────────────────────────────
+
+export type ExpenseCategory =
+  | 'payroll' | 'gst' | 'rent' | 'utilities' | 'software'
+  | 'marketing' | 'travel' | 'professional_fees' | 'subscriptions' | 'other';
+
+export interface ExpenseCategoryBreakdown {
+  category: ExpenseCategory;
+  label: string;
+  amount: number;
+  sharePct: number;                // % of total expenses
+  invoiceCount: number;
+  momChangePct: number;            // month-over-month change
+  trend: 'up' | 'down' | 'stable';
+}
+
+export interface ExpenseAnalytics {
+  totalThisMonth: number;
+  totalLastMonth: number;
+  momChangePct: number;
+  avgMonthly: number;               // last 6 months average
+  byCategory: ExpenseCategoryBreakdown[];
+  monthlyTrends: Array<{ month: string; total: number; byCategory: Record<ExpenseCategory, number> }>;
+  topVendors: Array<{ vendor: string; amount: number; count: number }>;
+  recurringExpenses: number;       // total monthly recurring
+  oneTimeExpenses: number;
+  trend: 'up' | 'down' | 'stable';
+}
+
+// ─── Collection Engine (Phase 1) ──────────────────────────────────────────────
+
+export interface CollectionRow {
+  invoiceId: string;
+  invoiceNumber: string;
+  clientName: string;
+  clientGstin: string;
+  invoiceAmount: number;
+  outstandingAmount: number;
+  invoiceDate: string;
+  dueDate: string | null;
+  daysOverdue: number;             // 0 if not overdue
+  collectionProbabilityPct: number; // 0-100
+  badDebtRisk: SeverityLevel;
+  recoveryStrategy: string;        // recommended action
+}
+
+export interface CollectionAnalytics {
+  totalOutstanding: number;
+  overdueAmount: number;
+  overdueCount: number;
+  expectedCollections30d: number;
+  averageDaysToPay: number;
+  collectionEfficiencyPct: number;
+  badDebtReserve: number;          // estimated uncollectable
+  latePayments: CollectionRow[];   // sorted by daysOverdue desc
+  riskyClients: Array<{ name: string; gstin: string; outstanding: number; overdue: number; riskScore: number }>;
+  recoveryStrategy: string[];      // top-level recommendations
+  trend: 'up' | 'down' | 'stable';
+}
+
+// ─── Forecast Engine (Phase 1) ────────────────────────────────────────────────
+
+export interface ForecastRow {
+  metric: 'revenue' | 'cash_flow' | 'profit' | 'gst_liability' | 'expenses' | 'collections';
+  label: string;
+  currentValue: number;
+  sevenDay: number;
+  thirtyDay: number;
+  ninetyDay: number;
+  yearEnd: number;
+  confidencePct: number;
+  trend: 'up' | 'down' | 'stable';
+  drivers: string[];               // what's driving the forecast
+}
+
+export interface ForecastAnalytics {
+  rows: ForecastRow[];             // 6 metrics
+  overallConfidencePct: number;
+  methodology: string;             // brief explanation of how forecasts are computed
+  generatedAt: string;
+}
+
+// ─── Business Risk Engine v2 (Phase 1) ────────────────────────────────────────
+
+export type BusinessRiskType =
+  | 'cash_shortage' | 'revenue_drop' | 'profit_decline' | 'gst_risk'
+  | 'itc_loss' | 'customer_concentration' | 'vendor_dependency'
+  | 'late_payments' | 'compliance_risk' | 'liquidity_risk';
+
+export interface BusinessRisk {
+  type: BusinessRiskType;
+  label: string;
+  severity: SeverityLevel;         // low | medium | high | critical
+  score: number;                   // 0-100 (higher = riskier)
+  current: string;                 // current state description
+  threshold: string;               // what triggers next severity
+  impact: string;                  // financial/business impact
+  evidence: string[];              // supporting data points
+  recommendation: string;          // mitigation action
+}
+
+export interface BusinessRiskEngine {
+  risks: BusinessRisk[];
+  overallRiskLevel: SeverityLevel;
+  overallRiskScore: number;
+  criticalCount: number;
+  highCount: number;
+  generatedAt: string;
+}
+
+// ─── AI CFO Recommendations v2 (Phase 1) ──────────────────────────────────────
+
+export type RecommendationPriority = 'critical' | 'high' | 'medium' | 'low';
+
+export interface AIRecommendation {
+  id: string;
+  title: string;                   // "Reduce marketing spend"
+  reason: string;                  // WHY this is recommended
+  financialImpact: string;         // "Saves ₹2.4L/month"
+  financialImpactValue: number;    // numeric value for sorting
+  priority: RecommendationPriority;
+  confidencePct: number;           // 0-100
+  category: 'cost_reduction' | 'revenue_acceleration' | 'cash_flow' | 'compliance' | 'growth' | 'risk_mitigation';
+  actions: string[];               // specific steps
+  timeframe: 'immediate' | '7_days' | '30_days' | '90_days';
+}
+
+export interface AIRecommendations {
+  recommendations: AIRecommendation[];
+  totalImpactValue: number;        // sum of financialImpactValue (positive = savings/gains)
+  criticalCount: number;
+  generatedAt: string;
+}
+
+// ─── Executive Summary (Phase 1) ──────────────────────────────────────────────
+
+export interface ExecutiveSummary {
+  headline: string;                // 1-line business status
+  healthScore: number;             // 0-100
+  healthTier: string;
+  revenueThisMonth: number;
+  revenueGrowthPct: number;
+  netProfit: number;
+  netMarginPct: number;
+  cashPosition: number;
+  runwayDays: number;
+  burnRatePerDay: number;
+  topRisk: string;                 // 1-line top risk
+  topOpportunity: string;          // 1-line top opportunity
+  keyMetrics: Array<{ label: string; value: string; trend?: 'up' | 'down' | 'stable' }>;
+  generatedAt: string;
+}
+
+// ─── GST & ITC Position (Phase 1) ─────────────────────────────────────────────
+
+export interface GSTPositionAnalytics {
+  outputLiability: number;         // current period output tax
+  inputTaxCredit: number;          // ITC available
+  netGSTPayable: number;           // output - ITC
+  itcUtilizationPct: number;       // ITC used / available
+  pendingFilings: number;
+  overdueFilings: number;
+  upcomingDueDates: Array<{ returnType: string; period: string; dueDate: string; daysLeft: number; liability: number }>;
+  itcAtRisk: number;               // ITC expiring soon (180-day rule)
+  itcReversalRisk: number;         // ITC to reverse (rule 37)
+  filingHistory: Array<{ period: string; filed: boolean; onTime: boolean; liability: number }>;
+}
+
+// ─── Full Phase 1 Financial Intelligence Bundle ───────────────────────────────
+
+export interface FinancialIntelligenceBundle {
+  executiveSummary: ExecutiveSummary;
+  healthScore: RealFinancialHealthScore;
+  revenue: RevenueAnalytics;
+  profitability: ProfitabilityAnalytics;
+  cashFlow: CashFlowAnalytics;
+  workingCapital: WorkingCapitalAnalytics;
+  expenses: ExpenseAnalytics;
+  collections: CollectionAnalytics;
+  gst: GSTPositionAnalytics;
+  forecast: ForecastAnalytics;
+  risks: BusinessRiskEngine;
+  recommendations: AIRecommendations;
+  generatedAt: string;
+  hasLiveData: boolean;
+  dataSources: string[];           // ['GSTN', 'Bank', 'Invoices', ...]
+  clientCount: number;
+  invoiceCount: number;
+  tagline: string;
+}

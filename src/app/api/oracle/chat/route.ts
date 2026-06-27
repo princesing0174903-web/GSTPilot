@@ -27,6 +27,8 @@ import { BRAND_IDENTITY_PROMPT_BLOCK } from '@/components/oracle/oracle-brand';
 import type { OracleChatRequest, OracleLanguageId } from '@/components/oracle/oracle-types';
 import { generateCFOInsights } from '@/lib/cfo/engine';
 import type { CFOResponse } from '@/lib/cfo/types';
+import { computeFinancialIntelligence } from '@/lib/cfo/phase1/orchestrator';
+import type { FinancialIntelligenceBundle } from '@/lib/cfo/types';
 import { getRmbState, formatRmbContextBlock } from '@/lib/rmb/engine';
 import type { RmbState } from '@/lib/rmb/types';
 import { getGraphState, formatGraphContextBlock, executeQuery } from '@/lib/graph/engine';
@@ -68,7 +70,12 @@ function inrShort(n: number): string {
 
 async function buildCFOContextBlock(): Promise<string> {
   try {
-    const cfo: CFOResponse = await generateCFOInsights(null);
+    // Fetch Phase 3 CFO insights + Phase 1 Financial Intelligence in parallel
+    const [cfo, phase1] = await Promise.all([
+      generateCFOInsights(null),
+      computeFinancialIntelligence().catch(() => null),
+    ]);
+
     if (!cfo.hasLiveData && cfo.clientCount === 0) {
       return `## LIVE CFO CONTEXT
 No business data connected yet. Encourage the user to add clients, invoices, or returns to unlock CFO insights. Do not fabricate financial numbers.`;
@@ -86,6 +93,104 @@ No business data connected yet. Encourage the user to add clients, invoices, or 
       .map((a, i) => `  ${i + 1}. ${a.title}${a.amount ? ` (₹${Math.round(a.amount).toLocaleString('en-IN')})` : ''}`)
       .join('\n');
     const memInsights = cfo.memory.insights.slice(0, 4).map((i) => `  - ${i}`).join('\n');
+
+    // ─── Phase 1 Financial Intelligence block ─────────────────────────────
+    let phase1Block = '';
+    if (phase1) {
+      const p1 = phase1 as FinancialIntelligenceBundle;
+      const topRisksP1 = p1.risks.risks
+        .filter((r) => r.severity === 'critical' || r.severity === 'high')
+        .slice(0, 4)
+        .map((r) => `  - ${r.label} (${r.severity.toUpperCase()}, score ${r.score}/100): ${r.current}`)
+        .join('\n');
+      const topRecs = p1.recommendations.recommendations
+        .slice(0, 4)
+        .map((r, i) => `  ${i + 1}. ${r.title} — ${r.financialImpact} [${r.priority.toUpperCase()}, ${r.confidencePct}% conf]`)
+        .join('\n');
+      const healthFactors = p1.healthScore.factors
+        .slice(0, 6)
+        .map((f) => `  - ${f.label}: ${f.score}/100 (weight ${Math.round(f.weight * 100)}%) — ${f.explanation}`)
+        .join('\n');
+
+      phase1Block = `
+
+### ═══ PHASE 1 — FINANCIAL INTELLIGENCE ENGINE (AI CFO™) ═══
+You are now equipped with Phase 1 CFO-grade analytics. Use these numbers when the user asks CFO questions.
+
+#### Real Financial Health Score: ${p1.healthScore.overall}/100 (Tier: ${p1.healthScore.tier.toUpperCase()})
+${p1.healthScore.summary}
+Top Driver: ${p1.healthScore.topDriver}
+Top Drag: ${p1.healthScore.topDrag}
+Health factors (10 total, top 6 shown):
+${healthFactors}
+
+#### Revenue Analytics (Phase 1)
+- Today: ${inrShort(p1.revenue.today)} · This Week: ${inrShort(p1.revenue.thisWeek)} · This Month: ${inrShort(p1.revenue.thisMonth)}
+- This Quarter: ${inrShort(p1.revenue.thisQuarter)} · YTD: ${inrShort(p1.revenue.thisYear)}
+- MoM Growth: ${p1.revenue.growthPct >= 0 ? '+' : ''}${p1.revenue.growthPct}% · QoQ: ${p1.revenue.qoqGrowthPct >= 0 ? '+' : ''}${p1.revenue.qoqGrowthPct}% · YoY: ${p1.revenue.yoyGrowthPct >= 0 ? '+' : ''}${p1.revenue.yoyGrowthPct}%
+- Top clients: ${p1.revenue.topClients.slice(0, 3).map((c) => `${c.name} (${formatINRCompact(c.revenue)}, ${c.sharePct}%)`).join(' · ') || 'none yet'}
+- Revenue forecast: 30d ${inrShort(p1.revenue.forecast.thirtyDay)}, 90d ${inrShort(p1.revenue.forecast.ninetyDay)}, year-end ${inrShort(p1.revenue.forecast.yearEnd)}
+
+#### Profitability Engine (Phase 1)
+- Gross Profit: ${inrShort(p1.profitability.grossProfit)} (${p1.profitability.grossMarginPct}% margin)
+- Net Profit: ${inrShort(p1.profitability.netProfit)} (${p1.profitability.netMarginPct}% margin)
+- EBITDA: ${inrShort(p1.profitability.ebitda)} (${p1.profitability.ebitdaMarginPct}% margin)
+- Operating Margin: ${p1.profitability.operatingMarginPct}% · Expense Ratio: ${p1.profitability.expenseRatioPct}%
+
+#### Cash Flow Engine (Phase 1)
+- Current Cash: ${inrShort(p1.cashFlow.currentCash)} · Available: ${inrShort(p1.cashFlow.availableCash)}
+- Daily Burn: ${inrShort(p1.cashFlow.burnRatePerDay)} · Monthly Burn: ${inrShort(p1.cashFlow.burnRatePerMonth)}
+- Runway: ${p1.cashFlow.runwayDays > 0 ? p1.cashFlow.runwayDays + ' days (runs out ' + (p1.cashFlow.runwayDate || 'soon') + ')' : '> 1 year (healthy)'}
+- Inflow MTD: ${inrShort(p1.cashFlow.inflowThisMonth)} · Outflow MTD: ${inrShort(p1.cashFlow.outflowThisMonth)} · Net MTD: ${inrShort(p1.cashFlow.netThisMonth)}
+- 7d projection: ${inrShort(p1.cashFlow.projections[0]?.endingCash || 0)} · 30d: ${inrShort(p1.cashFlow.projections[1]?.endingCash || 0)} · 90d: ${inrShort(p1.cashFlow.projections[2]?.endingCash || 0)} · 365d: ${inrShort(p1.cashFlow.projections[3]?.endingCash || 0)}
+- Why cash is changing: ${p1.cashFlow.whyDecreasing.slice(0, 2).join(' | ')}
+
+#### Working Capital Engine (Phase 1)
+- Current Assets: ${inrShort(p1.workingCapital.currentAssets)} · Current Liabilities: ${inrShort(p1.workingCapital.currentLiabilities)}
+- Working Capital: ${inrShort(p1.workingCapital.workingCapital)} · WC Ratio: ${p1.workingCapital.workingCapitalRatio.toFixed(2)} · Quick Ratio: ${p1.workingCapital.quickRatio.toFixed(2)}
+- Liquidity Risk: ${p1.workingCapital.liquidityRisk.toUpperCase()} — ${p1.workingCapital.liquidityRiskReason}
+
+#### Collection Engine (Phase 1)
+- Total Outstanding: ${inrShort(p1.collections.totalOutstanding)} · Overdue: ${inrShort(p1.collections.overdueAmount)} (${p1.collections.overdueCount} invoices)
+- Expected Collections 30d: ${inrShort(p1.collections.expectedCollections30d)}
+- Avg Days to Pay: ${p1.collections.averageDaysToPay} · Collection Efficiency: ${p1.collections.collectionEfficiencyPct}%
+- Bad Debt Reserve: ${inrShort(p1.collections.badDebtReserve)}
+- Recovery strategy: ${p1.collections.recoveryStrategy[0]}
+
+#### GST & ITC Position (Phase 1)
+- Output Liability: ${inrShort(p1.gst.outputLiability)} · ITC Available: ${inrShort(p1.gst.inputTaxCredit)} · Net GST Payable: ${inrShort(p1.gst.netGSTPayable)}
+- ITC Utilization: ${p1.gst.itcUtilizationPct}% · ITC At Risk (>180d): ${inrShort(p1.gst.itcAtRisk)}
+- Pending Filings: ${p1.gst.pendingFilings} · Overdue Filings: ${p1.gst.overdueFilings}
+
+#### Expense Engine (Phase 1)
+- Total This Month: ${inrShort(p1.expenses.totalThisMonth)} · Last Month: ${inrShort(p1.expenses.totalLastMonth)} · MoM: ${p1.expenses.momChangePct >= 0 ? '+' : ''}${p1.expenses.momChangePct}%
+- 6-mo Avg: ${inrShort(p1.expenses.avgMonthly)} · Recurring: ${inrShort(p1.expenses.recurringExpenses)} · One-time: ${inrShort(p1.expenses.oneTimeExpenses)}
+- Top categories: ${p1.expenses.byCategory.slice(0, 4).map((c) => `${c.label} (${inrShort(c.amount)}, ${c.sharePct}%)`).join(' · ') || 'none'}
+
+#### Forecast Engine (Phase 1) — 6 metrics × 4 horizons
+${p1.forecast.rows.map((r) => `  - ${r.label}: current ${inrShort(r.currentValue)} → 7d ${inrShort(r.sevenDay)}, 30d ${inrShort(r.thirtyDay)}, 90d ${inrShort(r.ninetyDay)}, year-end ${inrShort(r.yearEnd)} [${r.confidencePct}% conf, ${r.trend}]`).join('\n')}
+Overall forecast confidence: ${p1.forecast.overallConfidencePct}%
+
+#### Business Risk Engine (Phase 1) — Critical/High/Medium/Low
+Overall: ${p1.risks.overallRiskLevel.toUpperCase()} (score ${p1.risks.overallRiskScore}/100) · ${p1.risks.criticalCount} critical, ${p1.risks.highCount} high
+${topRisksP1 || '  · All risks LOW — business is healthy.'}
+
+#### AI CFO Recommendations (Phase 1) — with Reason/Impact/Priority/Confidence
+${topRecs || '  · No active recommendations — business is healthy.'}
+Total potential financial impact: ${inrShort(p1.recommendations.totalImpactValue)}
+
+### ═══ HOW TO ANSWER CFO QUESTIONS (Phase 1) ═══
+When the user asks any of these questions, use the Phase 1 numbers above:
+- "How healthy is my business?" → Health Score ${p1.healthScore.overall}/100, tier "${p1.healthScore.tier}". Explain the top driver and top drag.
+- "Can I hire 5 employees?" → Check runway (${p1.cashFlow.runwayDays > 0 ? p1.cashFlow.runwayDays + ' days' : '>365 days'}), monthly burn (₹${inrShort(p1.cashFlow.burnRatePerMonth)}), and net margin (${p1.profitability.netMarginPct}%). Add 5 × avg salary to burn, recompute runway.
+- "Can I open another office?" → Check working capital ratio (${p1.workingCapital.workingCapitalRatio.toFixed(2)}), cash position, and monthly burn. Recommend if WC ratio > 1.5 and runway > 90 days.
+- "Will I face a cash shortage?" → Check runway days, 30d/90d projections, and the "why decreasing" reasons. Be direct.
+- "Can I afford a new machine?" → Check available cash, runway, working capital. Defer if runway < 90 days.
+- "Should I increase salaries?" → Check net margin, profit trend, cash position. Recommend if margin > 15% and runway > 120 days.
+- "How much profit did I earn?" → Net profit ${inrShort(p1.profitability.netProfit)} (${p1.profitability.netMarginPct}% margin), EBITDA ${inrShort(p1.profitability.ebitda)}.
+- "What is my valuation trend?" → Use revenue growth (YoY ${p1.revenue.yoyGrowthPct}%), profit margin, and health score trend.
+Always cite the specific numbers from Phase 1 context. Be decisive like a real CFO.`;
+    }
 
     return `## LIVE CFO CONTEXT (Phase 3 — AI CFO™ Operating System)
 You have real-time access to the user's CFO intelligence. Treat these numbers as authoritative when the user asks about their business.
@@ -116,13 +221,24 @@ ${briefActions || '  · No priority actions today — you are all caught up.'}
 
 ### CFO Memory Insights (Module 8)
 ${memInsights || '  · No long-term patterns detected yet.'}
+${phase1Block}
 
-When answering CFO questions (revenue, cash, runway, risk, recommendations, GST outlook), use these exact numbers. Round to lakhs/crores when natural. Explain WHY a risk is elevated using the reasons above. Recommend the priority actions verbatim when relevant.`;
+When answering CFO questions (revenue, cash, runway, risk, recommendations, GST outlook, hiring decisions, capex decisions, salary decisions, valuation), use the EXACT numbers above. Round to lakhs/crores when natural. Explain WHY a risk is elevated using the reasons above. Recommend the priority actions verbatim when relevant. Be decisive — you are the CFO.`;
   } catch (err) {
     console.warn('[Oracle] CFO context unavailable:', err);
     return `## LIVE CFO CONTEXT
 CFO engine is not available right now. Fall back to general CFO/GST guidance without fabricating specific numbers.`;
   }
+}
+
+// Helper for compact INR formatting inside the Phase 1 block
+function formatINRCompact(n: number): string {
+  if (!isFinite(n) || isNaN(n)) return '₹0';
+  const abs = Math.abs(n);
+  if (abs >= 10000000) return `₹${(n / 10000000).toFixed(2)} Cr`;
+  if (abs >= 100000) return `₹${(n / 100000).toFixed(2)} L`;
+  if (abs >= 1000) return `₹${(n / 1000).toFixed(1)}K`;
+  return '₹' + Math.round(n).toLocaleString('en-IN');
 }
 
 // ─── RMB context block (Phase 4 — Run My Business™ Operating System) ──────────

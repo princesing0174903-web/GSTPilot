@@ -1,0 +1,1088 @@
+     1→     1→'use client';
+     2→     2→
+     3→     3→// ═══════════════════════════════════════════════════════════════════════════════
+     4→     4→// GSTPilot AI CFO™ — Operating System Dashboard
+     5→     5→// Phase 3 — The CFO that runs your business 24/7.
+     6→     6→//
+     7→     7→// Modules rendered here:
+     8→     8→//   Module 1 — CFO Dashboard cards (Revenue/Profit/Cash/Receivables/Payables/GST)
+     9→     9→//   Module 2 — Financial Prediction Engine (forecasts with confidence)
+    10→    10→//   Module 3 — Business Risk Engine (level + WHY explanation)
+    11→    11→//   Module 4 — Daily CFO Brief (greeting + snapshot + priority actions)
+    12→    12→//   Module 6 — CFO Recommendation Engine (actionable cards)
+    13→    13→//   Module 7 — Action Engine (execute from recommendations)
+    14→    14→//   Module 8 — CFO Memory (trends, client behaviour, insights)
+    15→    15→//
+    16→    16→// Module 5 (Ask CFO) + Module 9 (CFO Personality) live in the Oracle chat
+    17→    17→// workspace — /api/oracle/chat system prompt.
+    18→    18→//
+    19→    19→// Tagline: Understand Your Business. Predict Your Future. Recommend Your Next Move.
+    20→    20→// ═══════════════════════════════════════════════════════════════════════════════
+    21→    21→
+    22→    22→import { useEffect, useMemo, useState, useCallback } from 'react';
+    23→    23→import { motion, AnimatePresence } from 'framer-motion';
+    24→    24→import {
+    25→    25→  Brain, TrendingUp, TrendingDown, Wallet, IndianRupee, FileText, CreditCard,
+    26→    26→  Sparkles, AlertTriangle, CheckCircle2, Lightbulb, Activity, Clock,
+    27→    27→  RefreshCw, ChevronRight, Zap, Target, ShieldAlert, Users, Send,
+    28→    28→  FileBarChart, MessageSquare, Eye, type LucideIcon,
+    29→    29→} from 'lucide-react';
+    30→    30→import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+    31→    31→import { Skeleton } from '@/components/ui/skeleton';
+    32→    32→import { Button } from '@/components/ui/button';
+    33→    33→import { Badge } from '@/components/ui/badge';
+    34→    34→import { ScrollArea } from '@/components/ui/scroll-area';
+    35→    35→import { useApp } from '@/contexts/AppContext';
+    36→    36→import { useAuth } from '@/contexts/AuthContext';
+    37→    37→import { useToast } from '@/hooks/use-toast';
+    38→    38→import type { CFOResponse, RiskLevel, CFORecommendation } from '@/lib/cfo/types';
+    39→    39→
+    40→    40→// ─── Helpers ──────────────────────────────────────────────────────────────────
+    41→    41→
+    42→    42→function formatINR(amount: number): string {
+    43→    43→  if (!isFinite(amount) || isNaN(amount)) return '₹0';
+    44→    44→  const abs = Math.abs(amount);
+    45→    45→  if (abs >= 10000000) return `₹${(amount / 10000000).toFixed(2)} Cr`;
+    46→    46→  if (abs >= 100000) return `₹${(amount / 100000).toFixed(2)} L`;
+    47→    47→  if (abs >= 1000) return `₹${(amount / 1000).toFixed(1)}K`;
+    48→    48→  return '₹' + Math.round(amount).toLocaleString('en-IN');
+    49→    49→}
+    50→    50→
+    51→    51→function formatINRFull(amount: number): string {
+    52→    52→  if (!isFinite(amount) || isNaN(amount)) return '₹0';
+    53→    53→  return '₹' + Math.round(amount).toLocaleString('en-IN');
+    54→    54→}
+    55→    55→
+    56→    56→function formatPct(pct: number): string {
+    57→    57→  const sign = pct > 0 ? '+' : '';
+    58→    58→  return `${sign}${pct.toFixed(1)}%`;
+    59→    59→}
+    60→    60→
+    61→    61→function timeAgo(iso: string): string {
+    62→    62→  const diff = Date.now() - new Date(iso).getTime();
+    63→    63→  const s = Math.floor(diff / 1000);
+    64→    64→  if (s < 60) return 'just now';
+    65→    65→  const m = Math.floor(s / 60);
+    66→    66→  if (m < 60) return `${m}m ago`;
+    67→    67→  const h = Math.floor(m / 60);
+    68→    68→  if (h < 24) return `${h}h ago`;
+    69→    69→  return `${Math.floor(h / 24)}d ago`;
+    70→    70→}
+    71→    71→
+    72→    72→function riskColor(level: RiskLevel): string {
+    73→    73→  switch (level) {
+    74→    74→    case 'high': return 'text-red-400';
+    75→    75→    case 'medium': return 'text-amber-400';
+    76→    76→    default: return 'text-emerald-400';
+    77→    77→  }
+    78→    78→}
+    79→    79→
+    80→    80→function riskBg(level: RiskLevel): string {
+    81→    81→  switch (level) {
+    82→    82→    case 'high': return 'bg-red-500/10 border-red-500/20';
+    83→    83→    case 'medium': return 'bg-amber-500/10 border-amber-500/20';
+    84→    84→    default: return 'bg-emerald-500/10 border-emerald-500/20';
+    85→    85→  }
+    86→    86→}
+    87→    87→
+    88→    88→function severityColor(severity: CFORecommendation['severity']): string {
+    89→    89→  switch (severity) {
+    90→    90→    case 'critical': return 'border-red-500/30 bg-red-500/[0.04]';
+    91→    91→    case 'warning': return 'border-amber-500/30 bg-amber-500/[0.04]';
+    92→    92→    case 'opportunity': return 'border-emerald-500/30 bg-emerald-500/[0.04]';
+    93→    93→    default: return 'border-cyan-500/30 bg-cyan-500/[0.04]';
+    94→    94→  }
+    95→    95→}
+    96→    96→
+    97→    97→// ─── Animated number ──────────────────────────────────────────────────────────
+    98→    98→
+    99→    99→function useAnimatedNumber(target: number, duration = 1200) {
+   100→   100→  const [value, setValue] = useState(0);
+   101→   101→  useEffect(() => {
+   102→   102→    let raf = 0;
+   103→   103→    const start = performance.now();
+   104→   104→    const initial = 0;
+   105→   105→    const tick = (t: number) => {
+   106→   106→      const progress = Math.min((t - start) / duration, 1);
+   107→   107→      const eased = 1 - Math.pow(1 - progress, 3);
+   108→   108→      setValue(initial + (target - initial) * eased);
+   109→   109→      if (progress < 1) raf = requestAnimationFrame(tick);
+   110→   110→    };
+   111→   111→    raf = requestAnimationFrame(tick);
+   112→   112→    return () => cancelAnimationFrame(raf);
+   113→   113→  }, [target, duration]);
+   114→   114→  return value;
+   115→   115→}
+   116→   116→
+   117→   117→// ─── Mini Sparkline (SVG) ─────────────────────────────────────────────────────
+   118→   118→
+   119→   119→function Sparkline({ data, color = '#10b981', width = 100, height = 32 }: { data: number[]; color?: string; width?: number; height?: number }) {
+   120→   120→  if (data.length < 2) return <div style={{ width, height }} />;
+   121→   121→  const min = Math.min(...data);
+   122→   122→  const max = Math.max(...data);
+   123→   123→  const range = max - min || 1;
+   124→   124→  const pad = 2;
+   125→   125→  const points = data.map((v, i) => {
+   126→   126→    const x = pad + (i / (data.length - 1)) * (width - pad * 2);
+   127→   127→    const y = height - pad - ((v - min) / range) * (height - pad * 2);
+   128→   128→    return `${x},${y}`;
+   129→   129→  }).join(' ');
+   130→   130→  const area = `${pad},${height - pad} ${points} ${width - pad},${height - pad}`;
+   131→   131→  const id = `spark-${color.replace('#', '')}-${Math.round(Math.random() * 1e6)}`;
+   132→   132→  return (
+   133→   133→    <svg width={width} height={height} className="shrink-0">
+   134→   134→      <defs>
+   135→   135→        <linearGradient id={id} x1="0" y1="0" x2="0" y2="1">
+   136→   136→          <stop offset="0%" stopColor={color} stopOpacity={0.3} />
+   137→   137→          <stop offset="100%" stopColor={color} stopOpacity={0} />
+   138→   138→        </linearGradient>
+   139→   139→      </defs>
+   140→   140→      <polygon points={area} fill={`url(#${id})`} />
+   141→   141→      <polyline points={points} fill="none" stroke={color} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
+   142→   142→    </svg>
+   143→   143→  );
+   144→   144→}
+   145→   145→
+   146→   146→// ─── Wrap with stagger animation ──────────────────────────────────────────────
+   147→   147→
+   148→   148→function FadeIn({ children, delay = 0 }: { children: React.ReactNode; delay?: number }) {
+   149→   149→  return (
+   150→   150→    <motion.div
+   151→   151→      initial={{ opacity: 0, y: 12 }}
+   152→   152→      animate={{ opacity: 1, y: 0 }}
+   153→   153→      transition={{ duration: 0.5, delay, ease: 'easeOut' }}
+   154→   154→    >
+   155→   155→      {children}
+   156→   156→    </motion.div>
+   157→   157→  );
+   158→   158→}
+   159→   159→
+   160→   160→// ─── Section header ───────────────────────────────────────────────────────────
+   161→   161→
+   162→   162→function SectionHeader({ icon: Icon, title, subtitle, action }: { icon: LucideIcon; title: string; subtitle?: string; action?: React.ReactNode }) {
+   163→   163→  return (
+   164→   164→    <div className="mb-3 flex items-end justify-between gap-3">
+   165→   165→      <div className="flex items-center gap-2.5">
+   166→   166→        <div className="flex h-8 w-8 items-center justify-center rounded-lg accent-gradient-soft">
+   167→   167→          <Icon className="h-4 w-4 accent-text" />
+   168→   168→        </div>
+   169→   169→        <div>
+   170→   170→          <h2 className="text-base font-semibold text-foreground">{title}</h2>
+   171→   171→          {subtitle && <p className="text-xs text-muted-foreground">{subtitle}</p>}
+   172→   172→        </div>
+   173→   173→      </div>
+   174→   174→      {action}
+   175→   175→    </div>
+   176→   176→  );
+   177→   177→}
+   178→   178→
+   179→   179→// ─── Dashboard metric card ────────────────────────────────────────────────────
+   180→   180→
+   181→   181→interface MetricCardProps {
+   182→   182→  icon: LucideIcon;
+   183→   183→  label: string;
+   184→   184→  primary: string;
+   185→   185→  secondary?: string;
+   186→   186→  trend?: { value: number; label: string };
+   187→   187→  sparkData?: number[];
+   188→   188→  sparkColor?: string;
+   189→   189→  rows?: Array<{ label: string; value: string }>;
+   190→   190→  delay?: number;
+   191→   191→}
+   192→   192→
+   193→   193→function MetricCard({ icon: Icon, label, primary, secondary, trend, sparkData, sparkColor, rows, delay = 0 }: MetricCardProps) {
+   194→   194→  return (
+   195→   195→    <FadeIn delay={delay}>
+   196→   196→      <Card className="border-white/[0.06] bg-card/60 backdrop-blur-sm hover:bg-card/80 transition-colors">
+   197→   197→        <CardContent className="p-5">
+   198→   198→          <div className="mb-3 flex items-center justify-between">
+   199→   199→            <div className="flex items-center gap-2">
+   200→   200→              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/[0.04]">
+   201→   201→                <Icon className="h-4 w-4 text-muted-foreground" />
+   202→   202→              </div>
+   203→   203→              <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{label}</span>
+   204→   204→            </div>
+   205→   205→            {sparkData && <Sparkline data={sparkData} color={sparkColor} />}
+   206→   206→          </div>
+   207→   207→          <div className="space-y-1">
+   208→   208→            <p className="text-2xl font-bold tracking-tight text-foreground">{primary}</p>
+   209→   209→            {secondary && <p className="text-xs text-muted-foreground">{secondary}</p>}
+   210→   210→          </div>
+   211→   211→          {trend && (
+   212→   212→            <div className="mt-3 flex items-center gap-1.5">
+   213→   213→              {trend.value >= 0 ? (
+   214→   214→                <TrendingUp className="h-3.5 w-3.5 text-emerald-400" />
+   215→   215→              ) : (
+   216→   216→                <TrendingDown className="h-3.5 w-3.5 text-red-400" />
+   217→   217→              )}
+   218→   218→              <span className={`text-xs font-medium ${trend.value >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+   219→   219→                {formatPct(trend.value)}
+   220→   220→              </span>
+   221→   221→              <span className="text-[11px] text-muted-foreground">{trend.label}</span>
+   222→   222→            </div>
+   223→   223→          )}
+   224→   224→          {rows && rows.length > 0 && (
+   225→   225→            <div className="mt-3 space-y-1.5 border-t border-white/[0.04] pt-3">
+   226→   226→              {rows.map((r, i) => (
+   227→   227→                <div key={i} className="flex items-center justify-between text-xs">
+   228→   228→                  <span className="text-muted-foreground">{r.label}</span>
+   229→   229→                  <span className="font-medium text-foreground">{r.value}</span>
+   230→   230→                </div>
+   231→   231→              ))}
+   232→   232→            </div>
+   233→   233→          )}
+   234→   234→        </CardContent>
+   235→   235→      </Card>
+   236→   236→    </FadeIn>
+   237→   237→  );
+   238→   238→}
+   239→   239→
+   240→   240→// ─── Risk Card (Module 3) ─────────────────────────────────────────────────────
+   241→   241→
+   242→   242→function RiskCard({ risk, delay }: { risk: CFOResponse['risks'][number]; delay: number }) {
+   243→   243→  const levelLabel = risk.level === 'high' ? 'HIGH' : risk.level === 'medium' ? 'MEDIUM' : 'LOW';
+   244→   244→  return (
+   245→   245→    <FadeIn delay={delay}>
+   246→   246→      <Card className={`border ${riskBg(risk.level)} backdrop-blur-sm`}>
+   247→   247→        <CardContent className="p-4">
+   248→   248→          <div className="mb-2 flex items-center justify-between">
+   249→   249→            <div className="flex items-center gap-2">
+   250→   250→              <ShieldAlert className={`h-4 w-4 ${riskColor(risk.level)}`} />
+   251→   251→              <span className="text-sm font-semibold capitalize text-foreground">{risk.category} Risk</span>
+   252→   252→            </div>
+   253→   253→            <span className={`text-xs font-bold ${riskColor(risk.level)}`}>
+   254→   254→              {levelLabel}
+   255→   255→            </span>
+   256→   256→          </div>
+   257→   257→          <div className="mb-2 h-1.5 w-full overflow-hidden rounded-full bg-white/[0.05]">
+   258→   258→            <motion.div
+   259→   259→              initial={{ width: 0 }}
+   260→   260→              animate={{ width: `${risk.score}%` }}
+   261→   261→              transition={{ duration: 0.8, delay: delay + 0.2 }}
+   262→   262→              className={`h-full rounded-full ${risk.level === 'high' ? 'bg-red-500' : risk.level === 'medium' ? 'bg-amber-500' : 'bg-emerald-500'}`}
+   263→   263→            />
+   264→   264→          </div>
+   265→   265→          <div className="space-y-1">
+   266→   266→            {risk.reasons.map((reason, i) => (
+   267→   267→              <p key={i} className="text-xs leading-relaxed text-muted-foreground">
+   268→   268→                {reason}
+   269→   269→              </p>
+   270→   270→            ))}
+   271→   271→          </div>
+   272→   272→          {risk.recommendation && (
+   273→   273→            <div className="mt-2 rounded-lg bg-white/[0.03] p-2">
+   274→   274→              <p className="text-[11px] leading-relaxed text-foreground/80">
+   275→   275→                <span className="font-medium">Action:</span> {risk.recommendation}
+   276→   276→              </p>
+   277→   277→            </div>
+   278→   278→          )}
+   279→   279→        </CardContent>
+   280→   280→      </Card>
+   281→   281→    </FadeIn>
+   282→   282→  );
+   283→   283→}
+   284→   284→
+   285→   285→// ─── Recommendation Card (Module 6) ───────────────────────────────────────────
+   286→   286→
+   287→   287→function RecommendationCard({ rec, delay, onAction }: { rec: CFORecommendation; delay: number; onAction: (rec: CFORecommendation) => void }) {
+   288→   288→  const severityIcon: Record<CFORecommendation['severity'], LucideIcon> = {
+   289→   289→    critical: AlertTriangle,
+   290→   290→    warning: AlertTriangle,
+   291→   291→    opportunity: Lightbulb,
+   292→   292→    info: Sparkles,
+   293→   293→  };
+   294→   294→  const Icon = severityIcon[rec.severity];
+   295→   295→  const iconColor = rec.severity === 'critical' ? 'text-red-400' : rec.severity === 'warning' ? 'text-amber-400' : rec.severity === 'opportunity' ? 'text-emerald-400' : 'text-cyan-400';
+   296→   296→  return (
+   297→   297→    <FadeIn delay={delay}>
+   298→   298→      <Card className={`border ${severityColor(rec.severity)} backdrop-blur-sm`}>
+   299→   299→        <CardContent className="p-4">
+   300→   300→          <div className="mb-2 flex items-start justify-between gap-3">
+   301→   301→            <div className="flex items-start gap-2">
+   302→   302→              <Icon className={`h-4 w-4 mt-0.5 ${iconColor}`} />
+   303→   303→              <div>
+   304→   304→                <p className="text-sm font-semibold text-foreground">{rec.title}</p>
+   305→   305→                <p className="text-xs text-muted-foreground mt-0.5">{rec.headline}</p>
+   306→   306→              </div>
+   307→   307→            </div>
+   308→   308→            {rec.metric && (
+   309→   309→              <Badge variant="outline" className="shrink-0 border-white/10 bg-white/[0.03]">
+   310→   310→                {rec.metric.value}
+   311→   311→              </Badge>
+   312→   312→            )}
+   313→   313→          </div>
+   314→   314→          <p className="mb-3 text-xs leading-relaxed text-muted-foreground">{rec.description}</p>
+   315→   315→          <div className="space-y-1">
+   316→   316→            {rec.actions.map((action, i) => (
+   317→   317→              <div key={i} className="flex items-start gap-2 text-xs text-foreground/80">
+   318→   318→                <ChevronRight className="h-3 w-3 mt-0.5 shrink-0 text-muted-foreground" />
+   319→   319→                <span>{action}</span>
+   320→   320→              </div>
+   321→   321→            ))}
+   322→   322→          </div>
+   323→   323→          <Button
+   324→   324→            size="sm"
+   325→   325→            variant="outline"
+   326→   326→            className="mt-3 h-7 border-white/10 bg-white/[0.03] text-xs hover:bg-white/[0.06]"
+   327→   327→            onClick={() => onAction(rec)}
+   328→   328→          >
+   329→   329→            <Zap className="h-3 w-3 mr-1.5" />
+   330→   330→            Take Action
+   331→   331→          </Button>
+   332→   332→        </CardContent>
+   333→   333→      </Card>
+   334→   334→    </FadeIn>
+   335→   335→  );
+   336→   336→}
+   337→   337→
+   338→   338→// ─── Action Engine button ─────────────────────────────────────────────────────
+   339→   339→
+   340→   340→interface ActionButton {
+   341→   341→  label: string;
+   342→   342→  icon: LucideIcon;
+   343→   343→  view?: Parameters<ReturnType<typeof useApp>['setCurrentView']>[0];
+   344→   344→  eventName?: string;
+   345→   345→  prompt?: string;
+   346→   346→}
+   347→   347→
+   348→   348→const ACTION_BUTTONS: ActionButton[] = [
+   349→   349→  { label: 'Generate Report', icon: FileBarChart, eventName: 'oracle-ask', prompt: 'Generate a CFO report for this month.' },
+   350→   350→  { label: 'Export PDF', icon: FileText, eventName: 'cfo-export-pdf' },
+   351→   351→  { label: 'Create Forecast', icon: TrendingUp, eventName: 'oracle-ask', prompt: 'Create a 90-day cash flow forecast.' },
+   352→   352→  { label: 'Recover Collections', icon: Wallet, view: 'reconcile' },
+   353→   353→  { label: 'Create Reminder', icon: MessageSquare, eventName: 'oracle-ask', prompt: 'Draft a WhatsApp reminder for overdue clients.' },
+   354→   354→  { label: 'Prepare Returns', icon: FileText, view: 'returns' },
+   355→   355→  { label: 'Send WhatsApp', icon: Send, eventName: 'cfo-send-whatsapp' },
+   356→   356→  { label: 'Open Analytics', icon: Activity, view: 'analytics' },
+   357→   357→];
+   358→   358→
+   359→   359→function ActionEngine({ onNavigate }: { onNavigate: (view: Parameters<ReturnType<typeof useApp>['setCurrentView']>[0]) => void }) {
+   360→   360→  const { toast } = useToast();
+   361→   361→  return (
+   362→   362→    <div className="flex flex-wrap gap-2">
+   363→   363→      {ACTION_BUTTONS.map((btn) => {
+   364→   364→        const Icon = btn.icon;
+   365→   365→        return (
+   366→   366→          <button
+   367→   367→            key={btn.label}
+   368→   368→            onClick={() => {
+   369→   369→              if (btn.view) {
+   370→   370→                onNavigate(btn.view);
+   371→   371→              } else if (btn.eventName === 'oracle-ask' && btn.prompt) {
+   372→   372→                window.dispatchEvent(new CustomEvent('oracle-ask', { detail: btn.prompt }));
+   373→   373→              } else if (btn.eventName) {
+   374→   374→                toast({
+   375→   375→                  title: `${btn.label}`,
+   376→   376→                  description: `${btn.label} workflow initiated. Oracle will prepare the deliverable.`,
+   377→   377→                });
+   378→   378→              }
+   379→   379→            }}
+   380→   380→            className="group flex items-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.02] px-3 py-2 text-xs font-medium text-foreground transition-all hover:border-emerald-500/30 hover:bg-emerald-500/[0.04] hover-lift"
+   381→   381→          >
+   382→   382→            <Icon className="h-3.5 w-3.5 text-muted-foreground group-hover:accent-text" />
+   383→   383→            <span>{btn.label}</span>
+   384→   384→          </button>
+   385→   385→        );
+   386→   386→      })}
+   387→   387→    </div>
+   388→   388→  );
+   389→   389→}
+   390→   390→
+   391→   391→// ─── Health Score Gauge (Module 1) ────────────────────────────────────────────
+   392→   392→
+   393→   393→function HealthGauge({ score, size = 160 }: { score: number; size?: number }) {
+   394→   394→  const stroke = 12;
+   395→   395→  const r = (size - stroke) / 2;
+   396→   396→  const c = 2 * Math.PI * r;
+   397→   397→  const offset = c - (score / 100) * c;
+   398→   398→  const tier = score >= 80 ? 'Excellent' : score >= 65 ? 'Healthy' : score >= 50 ? 'Needs Attention' : 'At Risk';
+   399→   399→  const color = score >= 80 ? '#10b981' : score >= 65 ? '#06b6d4' : score >= 50 ? '#f59e0b' : '#ef4444';
+   400→   400→  return (
+   401→   401→    <div className="relative" style={{ width: size, height: size }}>
+   402→   402→      <svg width={size} height={size} className="-rotate-90">
+   403→   403→        <defs>
+   404→   404→          <linearGradient id="cfoHealthGrad" x1="0" y1="0" x2="1" y2="1">
+   405→   405→            <stop offset="0%" stopColor={color} />
+   406→   406→            <stop offset="100%" stopColor={color} stopOpacity={0.6} />
+   407→   407→          </linearGradient>
+   408→   408→        </defs>
+   409→   409→        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth={stroke} />
+   410→   410→        <motion.circle
+   411→   411→          cx={size / 2}
+   412→   412→          cy={size / 2}
+   413→   413→          r={r}
+   414→   414→          fill="none"
+   415→   415→          stroke="url(#cfoHealthGrad)"
+   416→   416→          strokeWidth={stroke}
+   417→   417→          strokeLinecap="round"
+   418→   418→          strokeDasharray={c}
+   419→   419→          initial={{ strokeDashoffset: c }}
+   420→   420→          animate={{ strokeDashoffset: offset }}
+   421→   421→          transition={{ duration: 1.2, ease: 'easeOut' }}
+   422→   422→        />
+   423→   423→      </svg>
+   424→   424→      <div className="absolute inset-0 flex flex-col items-center justify-center">
+   425→   425→        <motion.span
+   426→   426→          initial={{ opacity: 0, scale: 0.7 }}
+   427→   427→          animate={{ opacity: 1, scale: 1 }}
+   428→   428→          transition={{ delay: 0.4, duration: 0.4 }}
+   429→   429→          className="text-4xl font-bold"
+   430→   430→          style={{ color }}
+   431→   431→        >
+   432→   432→          {score}
+   433→   433→        </motion.span>
+   434→   434→        <span className="text-[10px] uppercase tracking-wider text-muted-foreground">/ 100</span>
+   435→   435→        <span className="mt-1 text-xs font-medium" style={{ color }}>{tier}</span>
+   436→   436→      </div>
+   437→   437→    </div>
+   438→   438→  );
+   439→   439→}
+   440→   440→
+   441→   441→// ─── Daily Brief (Module 4) ───────────────────────────────────────────────────
+   442→   442→
+   443→   443→function DailyBriefCard({ brief, delay }: { brief: CFOResponse['brief']; delay: number }) {
+   444→   444→  const urgencyStyles: Record<string, string> = {
+   445→   445→    critical: 'border-red-500/30 bg-red-500/[0.05]',
+   446→   446→    high: 'border-amber-500/30 bg-amber-500/[0.05]',
+   447→   447→    medium: 'border-cyan-500/20 bg-cyan-500/[0.03]',
+   448→   448→    low: 'border-white/[0.06] bg-white/[0.02]',
+   449→   449→  };
+   450→   450→  const urgencyLabel: Record<string, string> = {
+   451→   451→    critical: 'CRITICAL',
+   452→   452→    high: 'HIGH',
+   453→   453→    medium: 'MEDIUM',
+   454→   454→    low: 'LOW',
+   455→   455→  };
+   456→   456→  const urgencyColor: Record<string, string> = {
+   457→   457→    critical: 'text-red-400',
+   458→   458→    high: 'text-amber-400',
+   459→   459→    medium: 'text-cyan-400',
+   460→   460→    low: 'text-muted-foreground',
+   461→   461→  };
+   462→   462→  return (
+   463→   463→    <FadeIn delay={delay}>
+   464→   464→      <Card className="border-white/[0.06] bg-gradient-to-br from-emerald-500/[0.04] via-card/60 to-cyan-500/[0.04] backdrop-blur-sm">
+   465→   465→        <CardContent className="p-6">
+   466→   466→          {/* Greeting */}
+   467→   467→          <div className="mb-4 flex items-start justify-between gap-4">
+   468→   468→            <div>
+   469→   469→              <p className="text-xl font-bold text-foreground">{brief.greeting}</p>
+   470→   470→              <p className="text-xs text-muted-foreground mt-0.5">{brief.dateLabel}</p>
+   471→   471→            </div>
+   472→   472→            <div className="flex flex-col items-end gap-1">
+   473→   473→              <Badge variant="outline" className="border-emerald-500/30 bg-emerald-500/[0.08] text-emerald-300">
+   474→   474→                <Activity className="h-3 w-3 mr-1" />
+   475→   475→                Live Brief
+   476→   476→              </Badge>
+   477→   477→              <span className="text-[10px] text-muted-foreground">Business Health: {brief.healthScore}/100</span>
+   478→   478→            </div>
+   479→   479→          </div>
+   480→   480→
+   481→   481→          {/* Snapshot grid */}
+   482→   482→          <div className="mb-5 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+   483→   483→            {[
+   484→   484→              { label: 'Revenue', value: brief.snapshot.revenue, icon: TrendingUp },
+   485→   485→              { label: 'Cash Position', value: brief.snapshot.cashPosition, icon: Wallet },
+   486→   486→              { label: 'Receivables', value: brief.snapshot.receivables, icon: IndianRupee },
+   487→   487→              { label: 'Payables', value: brief.snapshot.payables, icon: CreditCard },
+   488→   488→              { label: 'GST Liability', value: brief.snapshot.gstLiability, icon: FileText },
+   489→   489→              { label: 'ITC Available', value: brief.snapshot.itcAvailable, icon: CheckCircle2 },
+   490→   490→            ].map((s, i) => {
+   491→   491→              const Icon = s.icon;
+   492→   492→              return (
+   493→   493→                <div key={s.label} className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-2.5">
+   494→   494→                  <div className="mb-1 flex items-center gap-1.5">
+   495→   495→                    <Icon className="h-3 w-3 text-muted-foreground" />
+   496→   496→                    <span className="text-[10px] uppercase tracking-wider text-muted-foreground">{s.label}</span>
+   497→   497→                  </div>
+   498→   498→                  <p className="text-sm font-bold text-foreground">{formatINR(s.value)}</p>
+   499→   499→                </div>
+   500→   500→              );
+   501→   501→            })}
+   502→   502→          </div>
+   503→   503→
+   504→   504→          {/* Priority actions */}
+   505→   505→          <div>
+   506→   506→            <div className="mb-2 flex items-center gap-2">
+   507→   507→              <Target className="h-3.5 w-3.5 accent-text" />
+   508→   508→              <h3 className="text-xs font-semibold uppercase tracking-wider text-foreground">Priority Actions</h3>
+   509→   509→            </div>
+   510→   510→            {brief.priorityActions.length === 0 ? (
+   511→   511→              <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/[0.04] p-3 text-center">
+   512→   512→                <CheckCircle2 className="mx-auto mb-1 h-5 w-5 text-emerald-400" />
+   513→   513→                <p className="text-xs text-foreground">You're all caught up. No priority actions today.</p>
+   514→   514→              </div>
+   515→   515→            ) : (
+   516→   516→              <div className="space-y-2">
+   517→   517→                {brief.priorityActions.map((action, i) => (
+   518→   518→                  <motion.div
+   519→   519→                    key={action.id}
+   520→   520→                    initial={{ opacity: 0, x: -8 }}
+   521→   521→                    animate={{ opacity: 1, x: 0 }}
+   522→   522→                    transition={{ delay: delay + 0.1 + i * 0.05 }}
+   523→   523→                    className={`flex items-start gap-3 rounded-xl border p-3 ${urgencyStyles[action.urgency]}`}
+   524→   524→                  >
+   525→   525→                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white/[0.04] text-xs font-bold">
+   526→   526→                      {i + 1}
+   527→   527→                    </div>
+   528→   528→                    <div className="min-w-0 flex-1">
+   529→   529→                      <div className="flex items-start justify-between gap-2">
+   530→   530→                        <p className="text-sm font-medium text-foreground">{action.title}</p>
+   531→   531→                        <span className={`shrink-0 text-[10px] font-bold ${urgencyColor[action.urgency]}`}>
+   532→   532→                          {urgencyLabel[action.urgency]}
+   533→   533→                        </span>
+   534→   534→                      </div>
+   535→   535→                      <p className="mt-0.5 text-xs text-muted-foreground leading-relaxed">{action.detail}</p>
+   536→   536→                    </div>
+   537→   537→                  </motion.div>
+   538→   538→                ))}
+   539→   539→              </div>
+   540→   540→            )}
+   541→   541→          </div>
+   542→   542→        </CardContent>
+   543→   543→      </Card>
+   544→   544→    </FadeIn>
+   545→   545→  );
+   546→   546→}
+   547→   547→
+   548→   548→// ─── Predictions Card (Module 2) ──────────────────────────────────────────────
+   549→   549→
+   550→   550→function PredictionCard({ predictions, delay }: { predictions: CFOResponse['predictions']; delay: number }) {
+   551→   551→  return (
+   552→   552→    <FadeIn delay={delay}>
+   553→   553→      <Card className="border-white/[0.06] bg-card/60 backdrop-blur-sm">
+   554→   554→        <CardHeader className="pb-3">
+   555→   555→          <CardTitle className="flex items-center gap-2 text-sm">
+   556→   556→            <Brain className="h-4 w-4 accent-text" />
+   557→   557→            Financial Predictions
+   558→   558→          </CardTitle>
+   559→   559→        </CardHeader>
+   560→   560→        <CardContent className="space-y-4">
+   561→   561→          {/* Revenue forecast */}
+   562→   562→          <div>
+   563→   563→            <div className="mb-2 flex items-center justify-between">
+   564→   564→              <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Revenue Forecast</span>
+   565→   565→              <Badge variant="outline" className="border-emerald-500/20 bg-emerald-500/[0.05] text-emerald-300 text-[10px]">
+   566→   566→                {predictions.revenue.confidencePct}% confidence
+   567→   567→              </Badge>
+   568→   568→            </div>
+   569→   569→            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+   570→   570→              {[
+   571→   571→                { label: '7 Days', value: predictions.revenue.sevenDay },
+   572→   572→                { label: '30 Days', value: predictions.revenue.thirtyDay },
+   573→   573→                { label: '90 Days', value: predictions.revenue.ninetyDay },
+   574→   574→                { label: 'Year End', value: predictions.revenue.yearEnd },
+   575→   575→              ].map((r) => (
+   576→   576→                <div key={r.label} className="rounded-lg border border-white/[0.05] bg-white/[0.02] p-2.5">
+   577→   577→                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{r.label}</p>
+   578→   578→                  <p className="text-sm font-bold text-foreground">{formatINR(r.value)}</p>
+   579→   579→                </div>
+   580→   580→              ))}
+   581→   581→            </div>
+   582→   582→          </div>
+   583→   583→
+   584→   584→          {/* Cash flow + GST + Collections */}
+   585→   585→          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+   586→   586→            <div className="rounded-lg border border-white/[0.05] bg-white/[0.02] p-3">
+   587→   587→              <div className="mb-1.5 flex items-center gap-1.5">
+   588→   588→                <Wallet className="h-3.5 w-3.5 text-cyan-400" />
+   589→   589→                <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Cash Flow</span>
+   590→   590→              </div>
+   591→   591→              <div className="space-y-1 text-xs">
+   592→   592→                <div className="flex justify-between"><span className="text-muted-foreground">Daily</span><span className="font-medium text-foreground">{formatINR(predictions.cashFlow.dailyPosition)}</span></div>
+   593→   593→                <div className="flex justify-between"><span className="text-muted-foreground">Monthly</span><span className="font-medium text-foreground">{formatINR(predictions.cashFlow.monthlyPosition)}</span></div>
+   594→   594→                <div className="flex justify-between"><span className="text-muted-foreground">Runway</span><span className="font-medium text-foreground">{predictions.cashFlow.runwayDays || '∞'} days</span></div>
+   595→   595→              </div>
+   596→   596→            </div>
+   597→   597→            <div className="rounded-lg border border-white/[0.05] bg-white/[0.02] p-3">
+   598→   598→              <div className="mb-1.5 flex items-center gap-1.5">
+   599→   599→                <FileText className="h-3.5 w-3.5 text-emerald-400" />
+   600→   600→                <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">GST Forecast</span>
+   601→   601→              </div>
+   602→   602→              <div className="space-y-1 text-xs">
+   603→   603→                <div className="flex justify-between"><span className="text-muted-foreground">Liability</span><span className="font-medium text-foreground">{formatINR(predictions.gst.upcomingLiability)}</span></div>
+   604→   604→                <div className="flex justify-between"><span className="text-muted-foreground">ITC Use</span><span className="font-medium text-foreground">{predictions.gst.itcUtilization}%</span></div>
+   605→   605→                <div className="flex justify-between"><span className="text-muted-foreground">Refund</span><span className="font-medium text-foreground">{formatINR(predictions.gst.refundPrediction)}</span></div>
+   606→   606→              </div>
+   607→   607→            </div>
+   608→   608→            <div className="rounded-lg border border-white/[0.05] bg-white/[0.02] p-3">
+   609→   609→              <div className="mb-1.5 flex items-center gap-1.5">
+   610→   610→                <Users className="h-3.5 w-3.5 text-amber-400" />
+   611→   611→                <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Collections</span>
+   612→   612→              </div>
+   613→   613→              <div className="space-y-1 text-xs">
+   614→   614→                <div className="flex justify-between"><span className="text-muted-foreground">Expected</span><span className="font-medium text-foreground">{formatINR(predictions.collections.expectedCollections)}</span></div>
+   615→   615→                <div className="flex justify-between"><span className="text-muted-foreground">Delays</span><span className="font-medium text-foreground">{predictions.collections.paymentDelays} clients</span></div>
+   616→   616→                <div className="flex justify-between"><span className="text-muted-foreground">Risky</span><span className="font-medium text-foreground">{predictions.collections.riskyClients.length}</span></div>
+   617→   617→              </div>
+   618→   618→            </div>
+   619→   619→          </div>
+   620→   620→
+   621→   621→          {/* Risky clients */}
+   622→   622→          {predictions.collections.riskyClients.length > 0 && (
+   623→   623→            <div>
+   624→   624→              <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Risky Clients (top 5)</p>
+   625→   625→              <div className="max-h-32 overflow-y-auto custom-scrollbar space-y-1">
+   626→   626→                {predictions.collections.riskyClients.map((c, i) => (
+   627→   627→                  <div key={i} className="flex items-center justify-between rounded-md border border-white/[0.04] bg-white/[0.01] px-2.5 py-1.5 text-xs">
+   628→   628→                    <div className="min-w-0 flex-1">
+   629→   629→                      <p className="truncate font-medium text-foreground">{c.name}</p>
+   630→   630→                      <p className="truncate text-[10px] text-muted-foreground">{c.gstin}</p>
+   631→   631→                    </div>
+   632→   632→                    <div className="ml-2 text-right">
+   633→   633→                      <p className="font-medium text-amber-300">{formatINR(c.outstanding)}</p>
+   634→   634→                      <p className="text-[10px] text-muted-foreground">risk {c.riskScore}/100</p>
+   635→   635→                    </div>
+   636→   636→                  </div>
+   637→   637→                ))}
+   638→   638→              </div>
+   639→   639→            </div>
+   640→   640→          )}
+   641→   641→        </CardContent>
+   642→   642→      </Card>
+   643→   643→    </FadeIn>
+   644→   644→  );
+   645→   645→}
+   646→   646→
+   647→   647→// ─── Memory Section (Module 8) ────────────────────────────────────────────────
+   648→   648→
+   649→   649→function MemoryCard({ memory, delay }: { memory: CFOResponse['memory']; delay: number }) {
+   650→   650→  return (
+   651→   651→    <FadeIn delay={delay}>
+   652→   652→      <Card className="border-white/[0.06] bg-card/60 backdrop-blur-sm">
+   653→   653→        <CardHeader className="pb-3">
+   654→   654→          <CardTitle className="flex items-center gap-2 text-sm">
+   655→   655→            <Brain className="h-4 w-4 accent-text" />
+   656→   656→            CFO Memory
+   657→   657→            <Badge variant="outline" className="ml-1 border-white/10 bg-white/[0.03] text-[10px]">
+   658→   658→              <Clock className="h-3 w-3 mr-1" />
+   659→   659→              Pattern recognition
+   660→   660→            </Badge>
+   661→   661→          </CardTitle>
+   662→   662→        </CardHeader>
+   663→   663→        <CardContent className="space-y-4">
+   664→   664→          {/* Insights */}
+   665→   665→          {memory.insights.length > 0 && (
+   666→   666→            <div>
+   667→   667→              <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Remembered Insights</p>
+   668→   668→              <ul className="space-y-1.5">
+   669→   669→                {memory.insights.map((insight, i) => (
+   670→   670→                  <li key={i} className="flex items-start gap-2 text-xs text-foreground/90">
+   671→   671→                    <Sparkles className="h-3 w-3 mt-0.5 shrink-0 accent-text" />
+   672→   672→                    <span>{insight}</span>
+   673→   673→                  </li>
+   674→   674→                ))}
+   675→   675→              </ul>
+   676→   676→            </div>
+   677→   677→          )}
+   678→   678→
+   679→   679→          {/* Client behaviour */}
+   680→   680→          {memory.clientBehavior.length > 0 && (
+   681→   681→            <div>
+   682→   682→              <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Client Payment Behaviour</p>
+   683→   683→              <div className="max-h-40 overflow-y-auto custom-scrollbar space-y-1">
+   684→   684→                {memory.clientBehavior.map((c, i) => (
+   685→   685→                  <div key={i} className="flex items-center justify-between rounded-md border border-white/[0.04] bg-white/[0.01] px-2.5 py-1.5 text-xs">
+   686→   686→                    <div className="min-w-0 flex-1">
+   687→   687→                      <p className="truncate font-medium text-foreground">{c.clientName}</p>
+   688→   688→                      <p className="text-[10px] text-muted-foreground">
+   689→   689→                        {c.delays} delay(s) · avg {c.averageDelayDays}d late · {c.riskLabel}
+   690→   690→                      </p>
+   691→   691→                    </div>
+   692→   692→                    <span className="ml-2 shrink-0 font-medium text-amber-300">{formatINR(c.totalOutstanding)}</span>
+   693→   693→                  </div>
+   694→   694→                ))}
+   695→   695→              </div>
+   696→   696→            </div>
+   697→   697→          )}
+   698→   698→
+   699→   699→          {/* Revenue trend mini-chart */}
+   700→   700→          {memory.revenueTrends.length > 0 && (
+   701→   701→            <div>
+   702→   702→              <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Revenue Trend (6 mo)</p>
+   703→   703→              <div className="flex items-end gap-1.5 h-16">
+   704→   704→                {memory.revenueTrends.map((r, i) => {
+   705→   705→                  const max = Math.max(...memory.revenueTrends.map(t => t.value), 1);
+   706→   706→                  const h = Math.max(4, (r.value / max) * 100);
+   707→   707→                  const color = r.trend === 'up' ? '#10b981' : r.trend === 'down' ? '#ef4444' : '#06b6d4';
+   708→   708→                  return (
+   709→   709→                    <div key={i} className="flex flex-1 flex-col items-center gap-1">
+   710→   710→                      <motion.div
+   711→   711→                        initial={{ height: 0 }}
+   712→   712→                        animate={{ height: `${h}%` }}
+   713→   713→                        transition={{ duration: 0.6, delay: delay + 0.1 + i * 0.05 }}
+   714→   714→                        className="w-full rounded-t-sm"
+   715→   715→                        style={{ background: color, minHeight: 4 }}
+   716→   716→                      />
+   717→   717→                      <span className="text-[9px] text-muted-foreground">{r.month}</span>
+   718→   718→                    </div>
+   719→   719→                  );
+   720→   720→                })}
+   721→   721→              </div>
+   722→   722→            </div>
+   723→   723→          )}
+   724→   724→
+   725→   725→          {/* Filing history */}
+   726→   726→          {memory.filingHistory.length > 0 && (
+   727→   727→            <div>
+   728→   728→              <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Filing History (6 mo)</p>
+   729→   729→              <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
+   730→   730→                {memory.filingHistory.map((f, i) => (
+   731→   731→                  <div key={i} className="rounded-md border border-white/[0.04] bg-white/[0.01] p-2 text-center">
+   732→   732→                    <p className="text-[9px] text-muted-foreground">{f.period}</p>
+   733→   733→                    <p className="text-xs font-bold text-emerald-400">{f.filed}</p>
+   734→   734→                    {f.overdue > 0 && <p className="text-[9px] text-red-400">{f.overdue} overdue</p>}
+   735→   735→                  </div>
+   736→   736→                ))}
+   737→   737→              </div>
+   738→   738→            </div>
+   739→   739→          )}
+   740→   740→        </CardContent>
+   741→   741→      </Card>
+   742→   742→    </FadeIn>
+   743→   743→  );
+   744→   744→}
+   745→   745→
+   746→   746→// ─── Skeletons ────────────────────────────────────────────────────────────────
+   747→   747→
+   748→   748→function CFOSkeleton() {
+   749→   749→  return (
+   750→   750→    <div className="space-y-6 p-4 sm:p-6">
+   751→   751→      <Skeleton className="h-12 w-full rounded-xl" />
+   752→   752→      <Skeleton className="h-64 w-full rounded-2xl" />
+   753→   753→      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+   754→   754→        {Array.from({ length: 6 }).map((_, i) => (
+   755→   755→          <Skeleton key={i} className="h-40 rounded-2xl" />
+   756→   756→        ))}
+   757→   757→      </div>
+   758→   758→    </div>
+   759→   759→  );
+   760→   760→}
+   761→   761→
+   762→   762→// ─── Main ─────────────────────────────────────────────────────────────────────
+   763→   763→
+   764→   764→export default function AICFODashboardPage() {
+   765→   765→  const { user } = useAuth();
+   766→   766→  const { setCurrentView } = useApp();
+   767→   767→  const { toast } = useToast();
+   768→   768→  const [data, setData] = useState<CFOResponse | null>(null);
+   769→   769→  const [loading, setLoading] = useState(true);
+   770→   770→  const [refreshing, setRefreshing] = useState(false);
+   771→   771→  const [error, setError] = useState<string | null>(null);
+   772→   772→
+   773→   773→  const fetchData = useCallback(async () => {
+   774→   774→    try {
+   775→   775→      setRefreshing(true);
+   776→   776→      const res = await fetch('/api/ai-cfo', { cache: 'no-store' });
+   777→   777→      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+   778→   778→      const json = (await res.json()) as CFOResponse;
+   779→   779→      setData(json);
+   780→   780→      setError(null);
+   781→   781→    } catch (e) {
+   782→   782→      setError(e instanceof Error ? e.message : 'Failed to load CFO insights');
+   783→   783→    } finally {
+   784→   784→      setLoading(false);
+   785→   785→      setRefreshing(false);
+   786→   786→    }
+   787→   787→  }, []);
+   788→   788→
+   789→   789→  useEffect(() => {
+   790→   790→    fetchData();
+   791→   791→    // Auto-refresh every 5 minutes
+   792→   792→    const interval = setInterval(fetchData, 5 * 60 * 1000);
+   793→   793→    return () => clearInterval(interval);
+   794→   794→  }, [fetchData]);
+   795→   795→
+   796→   796→  const handleRecommendationAction = useCallback((rec: CFORecommendation) => {
+   797→   797→    // Open Oracle with the recommendation context
+   798→   798→    const prompt = `As my CFO, help me execute this recommendation:\n\n${rec.title}: ${rec.headline}\n\n${rec.description}\n\nActions:\n${rec.actions.map((a, i) => `${i + 1}. ${a}`).join('\n')}`;
+   799→   799→    window.dispatchEvent(new CustomEvent('oracle-ask', { detail: prompt }));
+   800→   800→    toast({
+   801→   801→      title: 'Oracle engaged',
+   802→   802→      description: `Opening Oracle to execute: ${rec.title}`,
+   803→   803→    });
+   804→   804→  }, [toast]);
+   805→   805→
+   806→   806→  const animatedOverall = useAnimatedNumber(data?.dashboard.healthScore.overall || 0);
+   807→   807→
+   808→   808→  if (loading) return <CFOSkeleton />;
+   809→   809→
+   810→   810→  if (error || !data) {
+   811→   811→    return (
+   812→   812→      <div className="flex min-h-[400px] items-center justify-center p-6">
+   813→   813→        <Card className="max-w-md border-white/[0.06] bg-card/60">
+   814→   814→          <CardContent className="p-6 text-center">
+   815→   815→            <AlertTriangle className="mx-auto mb-3 h-8 w-8 text-amber-400" />
+   816→   816→            <p className="text-sm font-medium text-foreground">Couldn't load CFO insights</p>
+   817→   817→            <p className="mt-1 text-xs text-muted-foreground">{error || 'Unknown error'}</p>
+   818→   818→            <Button onClick={fetchData} variant="outline" className="mt-4 border-white/10 bg-white/[0.03]">
+   819→   819→              <RefreshCw className="h-3.5 w-3.5 mr-2" />
+   820→   820→              Retry
+   821→   821→            </Button>
+   822→   822→          </CardContent>
+   823→   823→        </Card>
+   824→   824→      </div>
+   825→   825→    );
+   826→   826→  }
+   827→   827→
+   828→   828→  return (
+   829→   829→    <div className="mx-auto max-w-7xl space-y-6 p-4 pb-24 sm:p-6">
+   830→   830→      {/* ═══ HEADER ═══ */}
+   831→   831→      <FadeIn>
+   832→   832→        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+   833→   833→          <div>
+   834→   834→            <div className="flex items-center gap-2">
+   835→   835→              <div className="flex h-9 w-9 items-center justify-center rounded-xl accent-gradient shadow-lg shadow-emerald-500/20">
+   836→   836→                <Brain className="h-5 w-5 text-white" />
+   837→   837→              </div>
+   838→   838→              <div>
+   839→   839→                <h1 className="text-xl font-bold tracking-tight text-foreground sm:text-2xl">
+   840→   840→                  GSTPilot AI CFO<span className="accent-text">™</span>
+   841→   841→                </h1>
+   842→   842→                <p className="text-xs text-muted-foreground">
+   843→   843→                  Understand Your Business · Predict Your Future · Recommend Your Next Move
+   844→   844→                </p>
+   845→   845→              </div>
+   846→   846→            </div>
+   847→   847→          </div>
+   848→   848→          <div className="flex items-center gap-2">
+   849→   849→            <Button
+   850→   850→              size="sm"
+   851→   851→              variant="outline"
+   852→   852→              onClick={fetchData}
+   853→   853→              disabled={refreshing}
+   854→   854→              className="border-white/10 bg-white/[0.03] hover:bg-white/[0.06]"
+   855→   855→            >
+   856→   856→              <RefreshCw className={`h-3.5 w-3.5 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
+   857→   857→              {refreshing ? 'Refreshing...' : 'Refresh'}
+   858→   858→            </Button>
+   859→   859→            <Button
+   860→   860→              size="sm"
+   861→   861→              onClick={() => window.dispatchEvent(new CustomEvent('oracle-ask', { detail: 'Act as my CFO. Give me a quick read on my business.' }))}
+   862→   862→              className="accent-gradient text-white hover:opacity-90"
+   863→   863→            >
+   864→   864→              <MessageSquare className="h-3.5 w-3.5 mr-2" />
+   865→   865→              Ask CFO
+   866→   866→            </Button>
+   867→   867→          </div>
+   868→   868→        </div>
+   869→   869→        {data.generatedAt && (
+   870→   870→          <p className="mt-2 text-[10px] text-muted-foreground">
+   871→   871→            Last updated {timeAgo(data.generatedAt)} · {data.clientCount} clients analysed · {data.hasLiveData ? 'Live data' : 'Limited data — connect sources for full insights'}
+   872→   872→          </p>
+   873→   873→        )}
+   874→   874→      </FadeIn>
+   875→   875→
+   876→   876→      {/* ═══ MODULE 4: DAILY CFO BRIEF ═══ */}
+   877→   877→      <DailyBriefCard brief={data.brief} delay={0.05} />
+   878→   878→
+   879→   879→      {/* ═══ MODULE 1: CFO DASHBOARD CARDS ═══ */}
+   880→   880→      <div>
+   881→   881→        <SectionHeader
+   882→   882→          icon={Activity}
+   883→   883→          title="CFO Dashboard"
+   884→   884→          subtitle="Real-time financial snapshot"
+   885→   885→          action={<Badge variant="outline" className="border-emerald-500/20 bg-emerald-500/[0.05] text-emerald-300">Live</Badge>}
+   886→   886→        />
+   887→   887→        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+   888→   888→          <MetricCard
+   889→   889→            icon={TrendingUp}
+   890→   890→            label="Revenue"
+   891→   891→            primary={formatINR(data.dashboard.revenue.thisMonth)}
+   892→   892→            secondary="This month"
+   893→   893→            trend={{ value: data.dashboard.revenue.growthPct, label: 'vs last month' }}
+   894→   894→            sparkData={data.dashboard.revenue.sparkline}
+   895→   895→            sparkColor="#10b981"
+   896→   896→            rows={[
+   897→   897→              { label: 'Today', value: formatINRFull(data.dashboard.revenue.today) },
+   898→   898→              { label: 'Last Month', value: formatINRFull(data.dashboard.revenue.lastMonth) },
+   899→   899→            ]}
+   900→   900→            delay={0.1}
+   901→   901→          />
+   902→   902→          <MetricCard
+   903→   903→            icon={IndianRupee}
+   904→   904→            label="Profit"
+   905→   905→            primary={formatINR(data.dashboard.profit.netProfit)}
+   906→   906→            secondary={`Net margin ${data.dashboard.profit.marginPct}%`}
+   907→   907→            rows={[
+   908→   908→              { label: 'Gross Profit', value: formatINRFull(data.dashboard.profit.grossProfit) },
+   909→   909→              { label: 'Gross Margin', value: `${data.dashboard.profit.grossMarginPct}%` },
+   910→   910→            ]}
+   911→   911→            delay={0.15}
+   912→   912→          />
+   913→   913→          <MetricCard
+   914→   914→            icon={Wallet}
+   915→   915→            label="Cash Position"
+   916→   916→            primary={formatINR(data.dashboard.cash.currentBalance)}
+   917→   917→            secondary={data.dashboard.cash.runwayDays > 0 ? `${data.dashboard.cash.runwayDays} days runway` : 'Healthy balance'}
+   918→   918→            rows={[
+   919→   919→              { label: 'Available Cash', value: formatINRFull(data.dashboard.cash.availableCash) },
+   920→   920→              { label: 'Daily Burn', value: formatINRFull(data.dashboard.cash.burnRatePerDay) },
+   921→   921→            ]}
+   922→   922→            delay={0.2}
+   923→   923→          />
+   924→   924→          <MetricCard
+   925→   925→            icon={CreditCard}
+   926→   926→            label="Receivables"
+   927→   927→            primary={formatINR(data.dashboard.receivables.pendingCollections)}
+   928→   928→            secondary={`${data.dashboard.receivables.overdueCount} overdue invoice(s)`}
+   929→   929→            rows={[
+   930→   930→              { label: 'Overdue', value: formatINRFull(data.dashboard.receivables.overdueCollections) },
+   931→   931→              { label: 'Efficiency', value: `${data.dashboard.receivables.collectionEfficiencyPct}%` },
+   932→   932→            ]}
+   933→   933→            delay={0.25}
+   934→   934→          />
+   935→   935→          <MetricCard
+   936→   936→            icon={FileText}
+   937→   937→            label="Payables"
+   938→   938→            primary={formatINR(data.dashboard.payables.upcomingPayments)}
+   939→   939→            secondary="Next 30 days"
+   940→   940→            rows={[
+   941→   941→              { label: 'Vendor Dues', value: formatINRFull(data.dashboard.payables.vendorDues) },
+   942→   942→              { label: 'Upcoming', value: `${data.dashboard.payables.upcomingCount} payments` },
+   943→   943→            ]}
+   944→   944→            delay={0.3}
+   945→   945→          />
+   946→   946→          <MetricCard
+   947→   947→            icon={CheckCircle2}
+   948→   948→            label="GST"
+   949→   949→            primary={formatINR(data.dashboard.gst.liability)}
+   950→   950→            secondary={`ITC available: ${formatINR(data.dashboard.gst.itcAvailable)}`}
+   951→   951→            rows={data.dashboard.gst.upcomingDueDates.slice(0, 3).map(d => ({
+   952→   952→              label: `${d.returnType} · ${d.period}`,
+   953→   953→              value: d.daysLeft < 0 ? `${Math.abs(d.daysLeft)}d overdue` : `${d.daysLeft}d left`,
+   954→   954→            }))}
+   955→   955→            delay={0.35}
+   956→   956→          />
+   957→   957→        </div>
+   958→   958→      </div>
+   959→   959→
+   960→   960→      {/* ═══ MODULE 1 (cont): BUSINESS HEALTH SCORE ═══ */}
+   961→   961→      <div>
+   962→   962→        <SectionHeader icon={Target} title="Business Health Score" subtitle="Composite of 6 dimensions" />
+   963→   963→        <FadeIn delay={0.4}>
+   964→   964→          <Card className="border-white/[0.06] bg-card/60 backdrop-blur-sm">
+   965→   965→            <CardContent className="p-6">
+   966→   966→              <div className="flex flex-col items-center gap-6 sm:flex-row sm:items-center">
+   967→   967→                <HealthGauge score={Math.round(animatedOverall)} />
+   968→   968→                <div className="grid flex-1 grid-cols-2 gap-3 sm:grid-cols-3">
+   969→   969→                  {[
+   970→   970→                    { label: 'Compliance', value: data.dashboard.healthScore.compliance, icon: CheckCircle2 },
+   971→   971→                    { label: 'Cash Flow', value: data.dashboard.healthScore.cashFlow, icon: Wallet },
+   972→   972→                    { label: 'Growth', value: data.dashboard.healthScore.growth, icon: TrendingUp },
+   973→   973→                    { label: 'Profitability', value: data.dashboard.healthScore.profitability, icon: IndianRupee },
+   974→   974→                    { label: 'Risk', value: data.dashboard.healthScore.risk, icon: ShieldAlert },
+   975→   975→                    { label: 'Collections', value: data.dashboard.healthScore.collections, icon: CreditCard },
+   976→   976→                  ].map((s) => {
+   977→   977→                    const Icon = s.icon;
+   978→   978→                    const color = s.value >= 80 ? 'text-emerald-400' : s.value >= 60 ? 'text-amber-400' : 'text-red-400';
+   979→   979→                    return (
+   980→   980→                      <div key={s.label} className="rounded-xl border border-white/[0.05] bg-white/[0.02] p-3">
+   981→   981→                        <div className="mb-1.5 flex items-center gap-1.5">
+   982→   982→                          <Icon className={`h-3 w-3 ${color}`} />
+   983→   983→                          <span className="text-[10px] uppercase tracking-wider text-muted-foreground">{s.label}</span>
+   984→   984→                        </div>
+   985→   985→                        <p className={`text-xl font-bold ${color}`}>{s.value}</p>
+   986→   986→                        <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-white/[0.05]">
+   987→   987→                          <motion.div
+   988→   988→                            initial={{ width: 0 }}
+   989→   989→                            animate={{ width: `${s.value}%` }}
+   990→   990→                            transition={{ duration: 0.8, delay: 0.5 }}
+   991→   991→                            className={`h-full rounded-full ${s.value >= 80 ? 'bg-emerald-500' : s.value >= 60 ? 'bg-amber-500' : 'bg-red-500'}`}
+   992→   992→                          />
+   993→   993→                        </div>
+   994→   994→                      </div>
+   995→   995→                    );
+   996→   996→                  })}
+   997→   997→                </div>
+   998→   998→              </div>
+   999→   999→            </CardContent>
+  1000→  1000→          </Card>
+  1001→  1001→        </FadeIn>
+  1002→  1002→      </div>
+  1003→  1003→
+  1004→  1004→      {/* ═══ MODULE 2: PREDICTIONS ═══ */}
+  1005→  1005→      <div>
+  1006→  1006→        <SectionHeader
+  1007→  1007→          icon={Brain}
+  1008→  1008→          title="Financial Prediction Engine"
+  1009→  1009→          subtitle="Forecasts with confidence intervals"
+  1010→  1010→        />
+  1011→  1011→        <PredictionCard predictions={data.predictions} delay={0.45} />
+  1012→  1012→      </div>
+  1013→  1013→
+  1014→  1014→      {/* ═══ MODULE 3: RISK ENGINE ═══ */}
+  1015→  1015→      <div>
+  1016→  1016→        <SectionHeader
+  1017→  1017→          icon={ShieldAlert}
+  1018→  1018→          title="Business Risk Engine"
+  1019→  1019→          subtitle="Calculated risks with explanations"
+  1020→  1020→        />
+  1021→  1021→        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+  1022→  1022→          {data.risks.map((risk, i) => (
+  1023→  1023→            <RiskCard key={risk.category} risk={risk} delay={0.5 + i * 0.05} />
+  1024→  1024→          ))}
+  1025→  1025→        </div>
+  1026→  1026→      </div>
+  1027→  1027→
+  1028→  1028→      {/* ═══ MODULE 6: RECOMMENDATIONS ═══ */}
+  1029→  1029→      {data.recommendations.length > 0 && (
+  1030→  1030→        <div>
+  1031→  1031→          <SectionHeader
+  1032→  1032→            icon={Lightbulb}
+  1033→  1033→            title="CFO Recommendations"
+  1034→  1034→            subtitle="Continuous AI-generated actions"
+  1035→  1035→            action={<Badge variant="outline" className="border-white/10 bg-white/[0.03]">{data.recommendations.length} active</Badge>}
+  1036→  1036→          />
+  1037→  1037→          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+  1038→  1038→            {data.recommendations.map((rec, i) => (
+  1039→  1039→              <RecommendationCard key={rec.id} rec={rec} delay={0.55 + i * 0.05} onAction={handleRecommendationAction} />
+  1040→  1040→            ))}
+  1041→  1041→          </div>
+  1042→  1042→        </div>
+  1043→  1043→      )}
+  1044→  1044→
+  1045→  1045→      {/* ═══ MODULE 7: ACTION ENGINE ═══ */}
+  1046→  1046→      <div>
+  1047→  1047→        <SectionHeader
+  1048→  1048→          icon={Zap}
+  1049→  1049→          title="Action Engine"
+  1050→  1050→          subtitle="Execute directly from recommendations"
+  1051→  1051→        />
+  1052→  1052→        <FadeIn delay={0.6}>
+  1053→  1053→          <Card className="border-white/[0.06] bg-card/60 backdrop-blur-sm">
+  1054→  1054→            <CardContent className="p-4">
+  1055→  1055→              <ActionEngine onNavigate={setCurrentView} />
+  1056→  1056→            </CardContent>
+  1057→  1057→          </Card>
+  1058→  1058→        </FadeIn>
+  1059→  1059→      </div>
+  1060→  1060→
+  1061→  1061→      {/* ═══ MODULE 8: CFO MEMORY ═══ */}
+  1062→  1062→      <div>
+  1063→  1063→        <SectionHeader
+  1064→  1064→          icon={Brain}
+  1065→  1065→          title="CFO Memory"
+  1066→  1066→          subtitle="Long-term patterns and client behaviour"
+  1067→  1067→        />
+  1068→  1068→        <MemoryCard memory={data.memory} delay={0.65} />
+  1069→  1069→      </div>
+  1070→  1070→
+  1071→  1071→      {/* ═══ FOOTER ═══ */}
+  1072→  1072→      <FadeIn delay={0.7}>
+  1073→  1073→        <div className="rounded-2xl border border-white/[0.06] bg-gradient-to-br from-emerald-500/[0.04] to-cyan-500/[0.04] p-5 text-center">
+  1074→  1074→          <p className="text-sm font-medium text-foreground">
+  1075→  1075→            GSTPilot AI CFO<span className="accent-text">™</span> — Always Watching. Always Predicting. Always Advising.
+  1076→  1076→          </p>
+  1077→  1077→          <p className="mt-1 text-[11px] text-muted-foreground">
+  1078→  1078→            Understand Your Business · Predict Your Future · Recommend Your Next Move · Run Your Business
+  1079→  1079→          </p>
+  1080→  1080→          <p className="mt-2 text-[10px] text-muted-foreground/60">
+  1081→  1081→            Founded &amp; developed by Prince Singh
+  1082→  1082→          </p>
+  1083→  1083→        </div>
+  1084→  1084→      </FadeIn>
+  1085→  1085→    </div>
+  1086→  1086→  );
+  1087→  1087→}
+  1088→  1088→

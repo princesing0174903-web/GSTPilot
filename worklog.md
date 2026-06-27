@@ -3948,3 +3948,119 @@ Stage Summary:
 - Zero UI redesign. Zero layout changes. Zero features removed. Zero working code overwritten. Only additive wiring + one additive engine section.
 - Tagline live: GSTPilot Business Graph™ — Understand Everything. Connect Everything. Predict Everything.
 - Files modified: src/lib/graph/types.ts, src/lib/graph/live-update.ts, src/lib/graph/engine.ts, + 16 route files (invoices, payments, notices, expenses, clients, purchases, returns, gstr-filing/[id]/file, ai-reports, whatsapp, email, sms, payroll, team-members, reconciliation, oracle/chat) + 5 connector files (gstn, bank, gmail, whatsapp, accounting).
+
+---
+Task ID: AICFO-Phase1
+Agent: GSTPilot Architect (Main)
+Task: GSTPILOT AI CFO™ PHASE 1 — FINANCIAL INTELLIGENCE ENGINE. Transform GSTPilot Oracle into a real AI Chief Financial Officer. Constraints: Do NOT redesign UI, Do NOT modify Oracle Chat, Do NOT create mock data. Use ONLY connected business data (GSTN, Bank, Invoices, Expenses, Clients, Collections, Returns, Reports, Business Graph).
+
+Work Log:
+- Read worklog (recovery complete + Graph Engine live). Read existing AI CFO files: types.ts (397 lines, Phase 3 types), engine.ts (1205 lines), AICFODashboardPage.tsx (1087 lines, Phase 3 dashboard with 8 modules), /api/ai-cfo route, /api/oracle/chat route (1162 lines, already imports generateCFOInsights + builds CFO context block).
+- Inspected Prisma schema: Invoice (with financial fields), Expense (category/vendor/gst), Payment (partyType/status), PurchaseBill (vendor/ITC), Client, GSTRFiling, Notice, Employee (designation/department), SyncedRecord (sourceType/rawData), DataConnection (type/label).
+
+PHASE 1 IMPLEMENTATION (additive — 0 existing files redesigned, 0 features removed):
+
+1. Types (src/lib/cfo/types.ts — appended ~370 lines):
+   • RealFinancialHealthScore (0-100, 10 factors, tier, summary, topDriver, topDrag)
+   • HealthScoreFactor (key/label/rawValue/score/weight/contribution/direction/explanation/benchmark)
+   • RevenueAnalytics (today/week/month/quarter/year/YTD, MoM/QoQ/YoY growth, periods, byClient, byIndustry, topClients, forecast, sparkline)
+   • ProfitabilityAnalytics (gross/net/operating/EBITDA margins, expense ratio, monthly trends, customer profitability, vendor costs)
+   • CashFlowAnalytics (current/available cash, burn rate day/month, runway days+date, 4 projections, whyDecreasing root causes)
+   • WorkingCapitalAnalytics (CA/CL/WC, WC ratio, quick ratio, liquidity risk Low/Med/High/Critical, breakdown)
+   • ExpenseAnalytics (9 categories: payroll/gst/rent/utilities/software/marketing/travel/prof_fees/subscriptions/other, MoM, top vendors, recurring vs one-time)
+   • CollectionAnalytics (outstanding, overdue, expected 30d, avg days to pay, efficiency, bad debt reserve, late payments with per-invoice probability + recovery strategy, risky clients)
+   • ForecastAnalytics (6 metrics × 4 horizons: 7d/30d/90d/365d, each with confidence %, drivers, methodology)
+   • BusinessRiskEngine (10 risks with severity Low/Medium/High/Critical, score, current, threshold, impact, evidence, recommendation)
+   • AIRecommendations (with title/reason/financialImpact/financialImpactValue/priority/confidence/category/actions/timeframe)
+   • ExecutiveSummary (headline, health, revenue, profit, cash, runway, burn, topRisk, topOpportunity, keyMetrics)
+   • GSTPositionAnalytics (output/input/net, ITC at risk, pending/overdue filings, upcoming dues, filing history)
+   • FinancialIntelligenceBundle (combines all 12 sections + metadata)
+
+2. Shared data fetcher (src/lib/cfo/phase1/data.ts — 380 lines):
+   • fetchRawCFOData() — Promise.all of 10 Prisma queries (invoices, expenses, payments, purchaseBills, clients, filings, notices, employees, syncedRecords, dataConnections)
+   • Strongly-typed Row interfaces for each model
+   • Auto-derives dataSources list from actual records (Bank, GSTN, Invoices, Expenses, etc.)
+   • 15+ shared helpers: now/startOfToday/startOfMonth/startOfLastMonth/endOfLastMonth/startOfWeek/startOfQuarter/startOfLastQuarter/endOfLastQuarter/startOfYear/addDays/addMonths/ymd/monthLabel/quarterLabel/yearLabel/periodLabel/inrFmt/inrFull/inrCompact/clamp/mean/pctChange/trendFromPct/roundTo/filingDueDate
+
+3. Engines (each a pure server-side TypeScript module, never throws — wrapped in safe()):
+   • revenue-analytics.ts — Today/Week/Month/Quarter/Year revenue, MoM/QoQ/YoY growth, 12-month sparkline, 8-quarter + 3-year period breakdowns, by-client (top 10 with trend), by-industry (top 10), top 5 clients, 30d/90d/year-end forecast (trend-dampened)
+   • profitability.ts — Gross/Net/Operating/EBITDA margins, expense ratio, 6-month monthly trends table, per-client profitability (top 10 + bottom 5 with rank), top 10 vendor costs with overdue flagging
+   • cash-flow.ts — Current cash (bank-synced balance or derived from payments history), available (after reserve), daily/monthly burn rate, runway days + ISO date when cash runs out, 4 projections (7d/30d/90d/365d with confidence), "why decreasing" root-cause explanations (overdue receivables, vendor dues, top expense category)
+   • working-capital.ts — CA (cash+AR+inventory+prepaid), CL (AP+GST payable+short-term debt), WC, WC ratio (with 999 sentinel for "no CL" = ∞), quick ratio, liquidity risk (Low/Med/High/Critical) with explanation
+   • expense-engine.ts — Normalizes free-form Expense.category into 9 Phase 1 categories via keyword map, MoM comparison, 6-month trends by category, top vendors, recurring vs one-time detection (vendor appears in 2+ months OR subscription/software category)
+   • collection-engine.ts — Per-invoice daysOverdue, collection probability (factors: days late, client history avg days to pay + overdue count, client health score, invoice amount), bad debt risk (Low/Med/High/Critical), per-invoice recovery strategy (escalating from polite reminder → call → demand letter → collection agency → write-off), top-level recovery strategies, bad debt reserve, risky clients ranked by risk score
+   • forecast-engine.ts — 6 metrics (revenue/cash_flow/profit/gst_liability/expenses/collections) × 4 horizons (7d/30d/90d/365d), each with confidence %, trend, drivers; trend-extrapolation with horizon-dependent dampening (full at 7d, 40% at 365d), confidence boosted by data volume
+   • risk-engine.ts — 10 risks with severity Low/Medium/High/Critical: Cash Shortage, Revenue Drop, Profit Decline, GST Risk, ITC Loss, Customer Concentration, Vendor Dependency, Late Payments, Compliance Risk, Liquidity Risk. Each with score, current, threshold, impact, evidence, recommendation. Overall level = worst severity present.
+   • recommendations.ts — 12 recommendation triggers: Recover Receivables, Claim ITC, Reduce Marketing (if >15% of expenses), Delay Equipment (if runway <90d), Reduce Vendor Dependency (if >40% share), Improve Cash Runway (if <60d), Deploy Excess Cash (if WC ratio >2.5), File Overdue Returns, Diversify Clients (if >25% concentration), Reduce Opex (if ratio >75%), Accelerate Invoicing (if efficiency <80%), Build Emergency Reserve. Each with reason, financial impact (₹ amount + description), priority (critical/high/medium/low), confidence %, category, actions, timeframe.
+   • health-score.ts — 10 weighted factors (Revenue Growth 15%, Profit Margin 15%, Cash Position 12%, Collections 10%, Outstanding Invoices 8%, GST Compliance 10%, Bank Balance 10%, Expenses 5%, Debt 10%, Working Capital 5%). Each factor returns raw value, sub-score (0-100), weight, contribution, direction, explanation, benchmark. Overall = weighted sum. Tier: excellent (80+) / healthy (65+) / attention (50+) / at_risk (35+) / critical (<35).
+
+4. Orchestrator (src/lib/cfo/phase1/orchestrator.ts — 290 lines):
+   • computeFinancialIntelligence() — fetches raw data, runs all 10 engines, builds Executive Summary + GST Position inline, returns complete FinancialIntelligenceBundle
+   • Every engine wrapped in safe() — failures return empty state, never break the bundle
+   • Includes empty-state fallbacks for every engine
+
+5. API route (src/app/api/ai-cfo/intelligence/route.ts):
+   • GET /api/ai-cfo/intelligence — returns full Phase 1 bundle
+   • 60s in-memory cache for snappy dashboard performance
+   • Response headers: X-AI-CFO-Phase: 1, X-Data-Sources: <list>
+   • Never throws — returns 500 with error message on failure
+
+6. UI component (src/components/ai-cfo/AICFOPhase1Sections.tsx — 880 lines):
+   • Self-contained React client component that fetches /api/ai-cfo/intelligence
+   • Renders all 12 Phase 1 sections with premium dark-themed UI (emerald accent, consistent with existing dashboard)
+   • Sections: Phase 1 Header, Executive Summary (with Top Risk + Top Opportunity), Real Financial Health Score (animated gauge + 10 factor cards with explanations + top driver/drag), Revenue Analytics (6 metric boxes + 12-month bar chart + top clients + forecast), Profitability (5 metric boxes + 6-month trend table + top vendors), Cash Flow (5 metrics + inflow/outflow/net MTD + 4 projection cards + why decreasing), Working Capital (5 metrics + CA/CL breakdown + liquidity assessment), Expense Engine (4 metrics + category bars with MoM + top vendor chips), Collection Engine (6 metrics + recovery strategy + late payments scrollable list with per-invoice probability bars), GST & ITC Position (5 metrics + upcoming dues + 6-month filing history grid), Forecast Engine (6×4 table with confidence + trend + methodology), Business Risk Engine (9 risk cards with severity color/badge/score bar), AI CFO Recommendations (8 cards with priority badge/confidence/financial impact/reason/actions)
+   • Animated gauges, bar charts, sparklines, progress bars, fade-in transitions (Framer Motion)
+   • Auto-refreshes every 5 minutes
+   • Inserted INTO existing AICFODashboardPage.tsx (additive — existing Phase 3 modules preserved below)
+
+7. Oracle integration (src/app/api/oracle/chat/route.ts — backend only, Oracle Chat UI untouched):
+   • buildCFOContextBlock() now fetches Phase 3 + Phase 1 in parallel
+   • Appends ~80-line "PHASE 1 — FINANCIAL INTELLIGENCE ENGINE" context block with all key numbers from every Phase 1 engine
+   • Includes explicit "HOW TO ANSWER CFO QUESTIONS" section mapping user questions to specific Phase 1 data: "How healthy is my business?" → health score, "Can I hire 5 employees?" → runway/burn/margin check, "Can I open another office?" → WC ratio/cash/burn, "Will I face a cash shortage?" → runway/projections, "Can I afford a new machine?" → cash/runway/WC, "Should I increase salaries?" → margin/profit/cash, "How much profit did I earn?" → net profit/EBITDA, "What is my valuation trend?" → YoY growth/margin/health
+
+8. Bug fixes during integration:
+   • Fixed Prisma schema mismatches: Employee uses designation (not role), SyncedRecord uses sourceType/rawData (not source/payload/recordType), DataConnection uses type (not source)
+   • Fixed collection-engine.ts shadow issue: renamed recoveryStrategy() function to recoveryStrategyFor() to avoid clash with const recoveryStrategy array
+   • Fixed working-capital.ts: when CL=0 and CA>0, WC ratio now uses 999 sentinel (displayed as ∞) instead of Infinity→0 conversion (which was incorrectly triggering "critical liquidity risk")
+   • Updated risk-engine.ts to handle the 999 sentinel correctly (treats as low risk)
+   • Updated UI to display ∞ when ratio === 999
+
+VERIFICATION:
+- bun run lint → exit 0, 0 errors, 0 warnings
+- npx tsc --noEmit --skipLibCheck → 0 errors in phase1/ai-cfo files
+- curl /api/ai-cfo/intelligence → HTTP 200 in 205ms (first), 7ms (cached)
+- Inspected API response: real data from 6 connected sources (Bank, Clients, Expenses, Invoices, Notices, Payments), 1 client, 1 invoice
+  • Executive Summary: Health 66/100 (healthy tier), real top risk (Compliance Risk - overdue notice), real top opportunity (Recover ₹82,600 receivables)
+  • Health Score: 10 factors with explanations, top driver Cash Position 95/100 (+11.4 pts), top drag Outstanding Invoices 10/100 (+0.8 pts)
+  • Revenue: YTD ₹1.18 L, YoY +100%, top client TechCorp Solutions 100% share
+  • Cash Flow: ₹50.5K current, ₹48K available, runway > 1 year, 4 projections with confidence
+  • Working Capital: CA ₹1.69 L, CL ₹0, WC ratio ∞ (no current liabilities), liquidity risk low
+  • Collections: ₹1.18 L outstanding (1 overdue invoice), ₹82.6K bad debt reserve, 4 recovery strategies
+  • Forecast: 6 metrics × 4 horizons, 77% overall confidence
+  • Risks: 2 critical (Compliance Risk 85/100, Customer Concentration 80/100), 2 high, with impact + recommendation
+  • Recommendations: 3 active (HIGH: Recover receivables ₹82.6K, HIGH: Diversify clients ₹35.4K, MEDIUM: Accelerate invoicing ₹23.6K), ₹1.42 L total impact
+
+AGENT BROWSER VERIFICATION (cfo-demo@gstpilot.in account created):
+- Signed in → onboarding → dashboard → clicked "AI CFO" in left nav
+- AI CFO dashboard rendered with Phase 1 sections ABOVE existing Phase 3 modules (additive integration confirmed)
+- All 12 Phase 1 section headings present: Executive Summary, Real Financial Health Score, Revenue Analytics, Profitability Engine, Cash Flow Engine, Working Capital Engine, Expense Engine, Collection Engine, GST & ITC Position, Forecast Engine, Business Risk Engine, AI CFO Recommendations
+- All existing Phase 3 modules preserved below: CFO Dashboard, Business Health Score, Financial Prediction Engine, Business Risk Engine, CFO Recommendations, Action Engine, CFO Memory
+- Real data rendered (not mock): Health 66/100, Cash ₹50.5K, YTD ₹1.18 L, 2 critical risks, 3 recommendations with ₹1.42 L impact
+- Screenshots saved: cfo-phase1-dashboard.png, cfo-phase1-health-score.png, cfo-phase1-revenue-profit.png, cfo-phase1-cashflow-wc.png, cfo-phase1-expenses-collections.png, cfo-phase1-gst-forecast.png, cfo-phase1-risks-recs.png
+- Oracle CFO question test: "How healthy is my business financially?" → Oracle responded with Phase 1 data: "Health score 66/100, HEALTHY tier. Strongest area: Cash Position 95/100. Biggest drag: Outstanding Invoices 10/100. ₹47,975 available cash, ₹1.18 lakh overdue, 0% collection efficiency. Top recommendations: Recover ₹82,600 receivables, Diversify client base, Accelerate invoicing." Founder attribution preserved: "GSTPilot Oracle™ · Founded by Prince Singh"
+- Oracle CFO decision test: "Can I hire 5 new employees right now?" → Oracle gave CFO-grade decisive advice: "Technically yes, but I would not recommend it at this time. Net profit margin 0%, no revenue this month, ₹50,000 cash with long runway but hiring would increase burn rate ₹2-3L/month without revenue. First focus on revenue + recovering ₹1.18L overdue receivables." — grounded entirely in Phase 1 data, decisive like a real CFO.
+- Dev log: GET /api/ai-cfo/intelligence 200 (205ms first, 7ms cached), GET /api/ai-cfo 200 (137ms), POST /api/oracle/chat 200 (4-6s with Phase 1 context included). No errors.
+
+Stage Summary:
+- GSTPilot AI CFO™ Phase 1 — Financial Intelligence Engine is LIVE.
+- 12 new Phase 1 sections render on the AI CFO dashboard with REAL data from 6 connected sources.
+- Real Financial Health Score (66/100) computed from 10 weighted factors with full explanations.
+- All 6 engines (Revenue, Profitability, Cash Flow, Working Capital, Expense, Collection) compute real analytics from Prisma data.
+- Forecast Engine predicts 6 metrics × 4 horizons with confidence scores.
+- Business Risk Engine detects 10 risks with Low/Medium/High/Critical severity (2 critical found: Compliance + Customer Concentration).
+- AI CFO Recommendations generates 3 actionable recs with Reason/Financial Impact/Priority/Confidence (₹1.42 L total impact).
+- Oracle answers CFO questions ("How healthy is my business?", "Can I hire 5 employees?", etc.) using Phase 1 real data — decisive, CFO-grade advice.
+- Zero UI redesigned. Zero existing features removed. Zero mock data. Zero Oracle Chat UI changes. Founder attribution preserved.
+- Tagline live: "GSTPilot AI CFO™ — Every business deserves a world-class CFO."
+- Files created: src/lib/cfo/phase1/{data,revenue-analytics,profitability,cash-flow,working-capital,expense-engine,collection-engine,forecast-engine,risk-engine,recommendations,health-score,orchestrator}.ts (12 files, ~3500 lines), src/app/api/ai-cfo/intelligence/route.ts, src/components/ai-cfo/AICFOPhase1Sections.tsx
+- Files modified (additive only): src/lib/cfo/types.ts (appended Phase 1 types), src/components/ai-cfo/AICFODashboardPage.tsx (imported + inserted AICFOPhase1Sections + updated footer tagline), src/app/api/oracle/chat/route.ts (extended buildCFOContextBlock to include Phase 1 intelligence)

@@ -54,6 +54,8 @@ import { seedTimeline, getTimelineSummary } from '@/lib/execution/timeline';
 import { getAgentRoster } from '@/lib/execution/agents';
 import type { WorkflowStep } from '@/lib/execution/types';
 import { buildRealDataSnapshot, formatRealDataContextBlock } from '@/lib/oracle/real-data';
+import { computeTwinOracleContext } from '@/lib/twin/orchestrator';
+import type { TwinOracleContext } from '@/lib/twin/types';
 
 // ─── INR formatting (server-side) ─────────────────────────────────────────────
 
@@ -582,6 +584,94 @@ Execution Engine is not available right now. Fall back to general execution/auto
   }
 }
 
+// ─── Digital Twin context block (Phase 9 — GSTPilot Digital Twin™) ────────────
+// Pulls live business state, recent timeline events, latest snapshot, and
+// active anomalies from the Digital Twin engine so Oracle can answer questions
+// like "What changed today?", "Show today's timeline", "Replay yesterday",
+// "Why is my Health Score lower?", "Compare this quarter with last quarter" —
+// all grounded in REAL connected business data, never fabricated.
+async function buildTwinContextBlock(): Promise<string> {
+  let ctx: TwinOracleContext;
+  try {
+    ctx = await computeTwinOracleContext();
+  } catch (err) {
+    console.warn('[Oracle] Digital Twin context unavailable:', err);
+    return `## GSTPILOT DIGITAL TWIN™ — LIVE BUSINESS STATE
+Tagline: Remember Everything. Understand Everything. Simulate Everything. Predict Everything.
+
+Digital Twin engine is not available right now. Fall back to general business guidance without fabricating events, snapshots, or metrics.`;
+  }
+
+  const asOf = new Date().toLocaleString('en-IN', {
+    weekday: 'short', day: '2-digit', month: 'short', year: 'numeric',
+    hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Kolkata',
+  });
+
+  // No live data → prompt the user to connect sources, keep block tiny.
+  if (!ctx.hasLiveData) {
+    return `## GSTPILOT DIGITAL TWIN™ — LIVE BUSINESS STATE
+Tagline: Remember Everything. Understand Everything. Simulate Everything. Predict Everything.
+
+CURRENT BUSINESS REALITY (as of ${asOf}):
+- No live business data connected yet — the Digital Twin is empty.
+- Connected Data Sources: ${ctx.dataSources.length > 0 ? ctx.dataSources.join(', ') : 'none'}
+
+ORACLE DIGITAL TWIN CAPABILITIES:
+- Tell the user to connect business data sources (GSTN, Bank, Gmail, Tally, etc.) from the Connections page to unlock the Business Timeline™, Snapshots™, and Playback™ features.
+- Never fabricate events, snapshots, or metrics — only use the data above.`;
+  }
+
+  const dataSources = ctx.dataSources.length > 0
+    ? ctx.dataSources.join(', ')
+    : 'none yet';
+
+  // Recent events — orchestrator already caps at 8; render compactly.
+  const recentEventsBlock = ctx.recentEvents.length > 0
+    ? ctx.recentEvents.map((e) => {
+        const ts = new Date(e.timestamp).toLocaleString('en-IN', {
+          day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit',
+          hour12: false, timeZone: 'Asia/Kolkata',
+        });
+        const detail = e.description && e.description.trim().length > 0
+          ? e.description.trim()
+          : 'no detail';
+        return `- [${ts}] ${e.title}: ${detail} (${e.source}, ${e.severity})`;
+      }).join('\n')
+    : '- No recent events recorded yet.';
+
+  // Latest snapshot — single line summary (or fallback).
+  const snapshotBlock = ctx.latestSnapshot
+    ? `- Period: ${ctx.latestSnapshot.periodLabel} | Revenue: ${inrShort(ctx.latestSnapshot.revenue)} | Profit: ${inrShort(ctx.latestSnapshot.profit)} | Cash: ${inrShort(ctx.latestSnapshot.cash)} | Health: ${ctx.latestSnapshot.healthScore}/100 | Risk: ${ctx.latestSnapshot.riskScore}/100`
+    : '- No snapshot data yet';
+
+  return `## GSTPILOT DIGITAL TWIN™ — LIVE BUSINESS STATE
+Tagline: Remember Everything. Understand Everything. Simulate Everything. Predict Everything.
+
+### CURRENT BUSINESS REALITY (as of ${asOf}):
+- Health Score: ${ctx.healthScore}/100
+- Risk Score: ${ctx.riskScore}/100
+- Revenue (MTD): ${inrShort(ctx.revenue)}
+- Net Profit (MTD): ${inrShort(ctx.profit)}
+- Cash Position: ${inrShort(ctx.cash)}
+- Runway: ${ctx.runwayDays} days (0 = > 1 year)
+- Active Anomalies: ${ctx.activeAnomalies} (${ctx.criticalAnomalies} critical)
+- Events Today: ${ctx.todayEventCount}
+- Connected Data Sources: ${dataSources}
+
+### RECENT BUSINESS EVENTS (last ${ctx.recentEvents.length}):
+${recentEventsBlock}
+
+### LATEST SNAPSHOT:
+${snapshotBlock}
+
+### ORACLE DIGITAL TWIN CAPABILITIES:
+- When the user asks about business changes, history, or "what happened", use the timeline events above.
+- When the user asks "what changed today", reference todayEventCount (${ctx.todayEventCount}) and the recentEvents list.
+- When the user asks to "replay" or "compare" periods, mention the Digital Twin Playback™ and Snapshot™ features.
+- When the user asks "why is my Health Score lower/higher", reference the healthScore (${ctx.healthScore}/100) and riskScore (${ctx.riskScore}/100).
+- Never fabricate events or metrics — only use the data above.`;
+}
+
 // ─── Helpers for Execution Engine JSON parsing ────────────────────────────────
 function safeJsonParse(s: string): Record<string, unknown> | null {
   try { return JSON.parse(s) as Record<string, unknown>; } catch { return null; }
@@ -644,6 +734,11 @@ async function buildSystemPrompt(req: OracleChatRequest): Promise<string> {
 
   // Fetch live Execution Engine state (Phase 8 Step 5 — Execution Engine™) — fail-safe.
   const executionContextBlock = await buildExecutionContextBlock();
+
+  // Fetch live Digital Twin state (Phase 9 — GSTPilot Digital Twin™) — fail-safe.
+  // Used to answer "what changed today?", "replay yesterday", "why is my Health
+  // Score lower?", and "compare this quarter with last quarter" questions.
+  const twinContextBlock = await buildTwinContextBlock();
 
   // Fetch REAL connected data (Phase 2 — Real Data Engine™) — fail-safe.
   // Uses the user's Firebase UID to pull from DataConnection + SyncedRecord tables.
@@ -1063,6 +1158,8 @@ ${invoiceEngineContextBlock}
 ${executionContextBlock}
 
 ${realDataContextBlock}
+
+${twinContextBlock}
 
 Remember: you are Oracle — the AI CFO + COO + Business Graph of India. You understand the business, predict the future, recommend the next move, execute real work via your AI Employees Team, AND traverse the full relationship graph to explain causes and predict outcomes. Observe. Think. Decide. Execute. Learn. Ask Anything. Delegate Everything. Be fast, reliable, professional, and always ready.`;
 }

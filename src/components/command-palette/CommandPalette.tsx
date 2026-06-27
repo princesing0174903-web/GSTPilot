@@ -24,6 +24,7 @@ import {
   Search,
   ArrowRight,
   Receipt,
+  Copy,
 } from 'lucide-react';
 import { useApp } from '@/contexts/AppContext';
 import {
@@ -232,6 +233,18 @@ export default function CommandPalette() {
         action: () => {
           setCurrentView('execution-engine');
           addToRecent('cmd-execution-engine', 'Open Execution Engine', 'command');
+        },
+        group: 'Commands',
+      },
+      {
+        id: 'cmd-digital-twin',
+        label: 'Open Digital Twin™',
+        description: 'Live business simulator — Mirror · Simulate · Predict · Replay history',
+        icon: Copy,
+        shortcut: 'G D',
+        action: () => {
+          setCurrentView('digital-twin');
+          addToRecent('cmd-digital-twin', 'Open Digital Twin™', 'command');
         },
         group: 'Commands',
       },

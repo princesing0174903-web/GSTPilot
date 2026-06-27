@@ -56,6 +56,8 @@ import type { WorkflowStep } from '@/lib/execution/types';
 import { buildRealDataSnapshot, formatRealDataContextBlock } from '@/lib/oracle/real-data';
 import { computeTwinOracleContext } from '@/lib/twin/orchestrator';
 import type { TwinOracleContext } from '@/lib/twin/types';
+import { computeCEOOracleContext } from '@/lib/ceo/orchestrator';
+import type { CEOOracleContext } from '@/lib/ceo/types';
 
 // ─── INR formatting (server-side) ─────────────────────────────────────────────
 
@@ -672,6 +674,92 @@ ${snapshotBlock}
 - Never fabricate events or metrics — only use the data above.`;
 }
 
+// ─── AI CEO context block (Phase 10 — GSTPilot AI CEO™) ───────────────────────
+// Pulls live CEO state, top decision, top alert, today's focus one-liner, and
+// active strategy/task/decision counts from the AI CEO orchestrator so Oracle
+// can answer questions like "what should I do today?", "what's the biggest
+// risk?", "can I afford X?", and "what's our strategy?" — all grounded in REAL
+// connected business data, never fabricated.
+async function buildCEOContextBlock(): Promise<string> {
+  let ctx: CEOOracleContext;
+  try {
+    ctx = await computeCEOOracleContext();
+  } catch (err) {
+    console.warn('[Oracle] AI CEO context unavailable:', err);
+    return `## GSTPILOT AI CEO™ — LIVE CEO STATE
+Tagline: GSTPilot AI CEO™ — Run Your Business. Not Your Software.
+
+AI CEO engine is not available right now. Fall back to general business guidance without fabricating decisions, alerts, or strategies.`;
+  }
+
+  const asOf = new Date().toLocaleString('en-IN', {
+    weekday: 'short', day: '2-digit', month: 'short', year: 'numeric',
+    hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Kolkata',
+  });
+
+  // No live data → prompt the user to connect sources, keep block tiny.
+  if (!ctx.hasLiveData) {
+    return `## GSTPILOT AI CEO™ — LIVE CEO STATE
+Tagline: GSTPilot AI CEO™ — Run Your Business. Not Your Software.
+
+CURRENT CEO STATE (as of ${asOf}):
+- No live business data connected yet — the AI CEO is idle.
+- Connected Data Sources: ${ctx.dataSources.length > 0 ? ctx.dataSources.join(', ') : 'none'}
+
+ORACLE CEO CAPABILITIES:
+- Ask the user to connect business data sources (GSTN, Bank, Gmail, Tally, etc.) from the Connections page to unlock decisions, alerts, strategies, and the daily brief.
+- Never fabricate decisions, alerts, or strategies — only use the data above.`;
+  }
+
+  const dataSources = ctx.dataSources.length > 0
+    ? ctx.dataSources.join(', ')
+    : 'none yet';
+
+  const topDecisionLine = ctx.topDecisionTitle
+    ? `Top proposed decision: ${ctx.topDecisionTitle}`
+    : '- No pending decisions.';
+
+  const topAlertLine = ctx.topAlertTitle
+    ? `Top alert: ${ctx.topAlertTitle}`
+    : '- No active alerts.';
+
+  const focusLine = ctx.briefOneLiner
+    ? `Today's focus: ${ctx.briefOneLiner}`
+    : '- No brief generated yet.';
+
+  return `## GSTPILOT AI CEO™ — LIVE CEO STATE
+Tagline: GSTPilot AI CEO™ — Run Your Business. Not Your Software.
+
+### CURRENT CEO STATE (as of ${asOf}):
+- Health Score: ${ctx.healthScore}/100
+- Risk Score: ${ctx.riskScore}/100
+- Cash Position: ${inrShort(ctx.cash)}
+- Revenue (MTD): ${inrShort(ctx.revenueMTD)}
+- Net Profit (MTD): ${inrShort(ctx.profitMTD)}
+- Runway: ${ctx.runwayDays} days (0 = > 1 year)
+- Pending Decisions: ${ctx.pendingDecisions}
+- Critical Alerts: ${ctx.criticalAlerts}
+- Open Tasks: ${ctx.openTasks}
+- Active Strategies: ${ctx.activeStrategies}
+- Connected Data Sources: ${dataSources}
+
+### TOP DECISION
+${topDecisionLine}
+
+### TOP ALERT
+${topAlertLine}
+
+### TODAY'S FOCUS
+${focusLine}
+
+### ORACLE CEO CAPABILITIES:
+- When the user asks "what should I do today?" → use the brief one-liner + pendingDecisions.
+- When the user asks "what's the biggest risk?" → use topAlert + riskScore.
+- When the user asks "can I afford X?" → use cash, runwayDays, profitMTD.
+- When the user asks about strategy → mention activeStrategies count.
+- Never fabricate decisions or alerts. If hasLiveData=false, ask the user to connect data sources.`;
+}
+
 // ─── Helpers for Execution Engine JSON parsing ────────────────────────────────
 function safeJsonParse(s: string): Record<string, unknown> | null {
   try { return JSON.parse(s) as Record<string, unknown>; } catch { return null; }
@@ -739,6 +827,11 @@ async function buildSystemPrompt(req: OracleChatRequest): Promise<string> {
   // Used to answer "what changed today?", "replay yesterday", "why is my Health
   // Score lower?", and "compare this quarter with last quarter" questions.
   const twinContextBlock = await buildTwinContextBlock();
+
+  // Fetch live AI CEO state (Phase 10 — GSTPilot AI CEO™) — fail-safe.
+  // Used to answer "what should I do today?", "what's the biggest risk?",
+  // "can I afford X?", and "what's our strategy?" questions.
+  const ceoContextBlock = await buildCEOContextBlock();
 
   // Fetch REAL connected data (Phase 2 — Real Data Engine™) — fail-safe.
   // Uses the user's Firebase UID to pull from DataConnection + SyncedRecord tables.
@@ -1160,6 +1253,8 @@ ${executionContextBlock}
 ${realDataContextBlock}
 
 ${twinContextBlock}
+
+${ceoContextBlock}
 
 Remember: you are Oracle — the AI CFO + COO + Business Graph of India. You understand the business, predict the future, recommend the next move, execute real work via your AI Employees Team, AND traverse the full relationship graph to explain causes and predict outcomes. Observe. Think. Decide. Execute. Learn. Ask Anything. Delegate Everything. Be fast, reliable, professional, and always ready.`;
 }

@@ -9,6 +9,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
+import AICEOSections from '@/components/ceo/AICEOSections'
 import {
   Crown, TrendingUp, TrendingDown, Users, Zap,
   Activity, BarChart3, Target, ArrowUpRight, ArrowDownRight,
@@ -318,6 +319,9 @@ export default function FirmCommandCenterPage() {
 
   return (
     <div className="p-4 md:p-6 space-y-6 max-w-7xl mx-auto">
+      {/* ── AI CEO Engine™ Sections (additive — autonomous decision engine) ── */}
+      <AICEOSections />
+
       {/* ── Header ── */}
       <motion.div {...fadeUp} className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-3">

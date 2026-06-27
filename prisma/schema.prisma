@@ -1153,3 +1153,132 @@ model DataQualityAlert {
 
   connection    DataConnection? @relation(fields: [connectionId], references: [id], onDelete: SetNull)
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// GSTPILOT AI CEO™ — AUTONOMOUS BUSINESS OPERATING SYSTEM
+// 7 models: CEODecision, CEODailyBrief, CEOAlert, CEOStrategy, CEOTask, CEOGoal, CEOMemory
+// Oracle continuously monitors, recommends decisions, plans strategy, creates tasks,
+// predicts risks, executes approved workflows — behaving like a world-class CEO.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ─── CEO MODEL 1 — CEODecision (persists ExecutiveDecision) ─────────────────────
+model CEODecision {
+  id                  String    @id @default(cuid())
+  type                String                              // DecisionType — recover_payment | remind_client | follow_up_lead | increase_prices | reduce_expenses | pause_marketing | increase_marketing | delay_purchase | pay_gst | claim_itc | hire_employees | delay_hiring | suggest_loan | repay_loan | optimize_cash | reduce_vendor_dependency | improve_collections | improve_profitability | improve_runway | review_compliance | review_expense | approve_payroll | renew_subscription | review_contract | pay_vendor | reply_customer | schedule_meeting | file_overdue_return | investigate_anomaly | create_quotation
+  title               String
+  reason              String
+  businessImpact      String
+  rollbackPlan        String
+  financialImpact     Float
+  financialImpactLabel String
+  confidence          Float
+  priority            String    @default("medium")        // DecisionPriority — critical | high | medium | low
+  risk                String    @default("low")            // DecisionRisk — none | low | medium | high | critical
+  approvalRequired    String    @default("manager")        // ApprovalRequirement — none | notify | manager | cfo | ceo | board
+  requiresRole        String    @default("manager")        // ExecutiveRole — ceo | cfo | manager | employee | auditor
+  actions             String                              // JSON string of DecisionAction[]
+  evidence            String                              // JSON string of DecisionEvidence[]
+  relatedEntityType   String?
+  relatedEntityId     String?
+  relatedEntityLabel  String?
+  status              String    @default("pending")        // DecisionStatus — pending | approved | rejected | executing | executed | failed | superseded | auto_approved
+  expiresAt           DateTime?
+  executedAt          DateTime?
+  executedBy          String?
+  approvedBy          String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+}
+
+// ─── CEO MODEL 2 — CEODailyBrief (1 row per day, cached) ────────────────────────
+model CEODailyBrief {
+  id          String   @id @default(cuid())
+  asOfDay     String   @unique                    // ISO date YYYY-MM-DD
+  briefJson   String                              // full DailyCEOBrief JSON
+  generatedAt DateTime @default(now())
+}
+
+// ─── CEO MODEL 3 — CEOAlert (Executive Alert System) ───────────────────────────
+model CEOAlert {
+  id                    String    @id @default(cuid())
+  type                  String                              // AlertType — cash_shortage | compliance_risk | fraud_suspected | revenue_drop | profit_decline | customer_churn | vendor_risk | payroll_issue | gst_issue | bank_anomaly | collections_problem | inventory_issue | anomaly_detected
+  title                 String
+  message               String
+  severity              String    @default("info")          // AlertSeverity — info | low | medium | high | critical
+  detectedAt            DateTime  @default(now())
+  relatedEntityType     String?
+  relatedEntityId       String?
+  suggestedDecisionType String?                             // DecisionType
+  acknowledged          Boolean   @default(false)
+  acknowledgedBy        String?
+  acknowledgedAt        DateTime?
+  metadata              String?                             // JSON
+}
+
+// ─── CEO MODEL 4 — CEOStrategy (AI Strategy Engine) ────────────────────────────
+model CEOStrategy {
+  id            String   @id @default(cuid())
+  title         String
+  description   String
+  category      String                              // revenue | expenses | collections | gst | margin | runway | diversification | growth
+  objectives    String                              // JSON string[]
+  milestones    String                              // JSON StrategyMilestone[]
+  kpis          String                              // JSON StrategyKPI[]
+  timeline      String
+  expectedROI   Float
+  expectedROIPct Float
+  confidence    Float
+  status        String   @default("proposed")       // StrategyStatus — proposed | active | on_track | at_risk | completed | paused
+  progressPct   Float    @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+// ─── CEO MODEL 5 — CEOTask (Autonomous Task Engine) ────────────────────────────
+model CEOTask {
+  id                  String    @id @default(cuid())
+  type                String                              // TaskType — recover_overdue | file_gst | reply_customer | review_expense | approve_payroll | review_compliance | renew_subscription | review_contract | pay_vendor | follow_up_lead | generate_invoice | send_reminder | schedule_meeting | generate_report | send_proposal | create_quotation | investigate_anomaly
+  title               String
+  description         String
+  businessImpact      String
+  aiExplanation       String
+  priority            String    @default("medium")        // DecisionPriority — critical | high | medium | low
+  deadline            DateTime
+  owner               String                              // oracle | gst_agent | collection_agent | compliance_agent | cfo_agent | reporting_agent | user
+  status              String    @default("open")          // TaskStatus — open | in_progress | completed | blocked | cancelled
+  relatedDecisionId   String?
+  relatedEntityType   String?
+  relatedEntityId     String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+}
+
+// ─── CEO MODEL 6 — CEOGoal (Business Goals) ────────────────────────────────────
+model CEOGoal {
+  id           String   @id @default(cuid())
+  category     String                              // GoalCategory — revenue | profit | collections | gst_compliance | customer_growth | employee_growth | runway | market_expansion
+  title        String
+  description  String
+  baseline     Float
+  current      Float
+  target       Float
+  unit         String                              // inr | pct | days | count
+  deadline     DateTime
+  progressPct  Float    @default(0)
+  status       String   @default("on_track")       // on_track | at_risk | behind | achieved | overdue
+  trendPct     Float    @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+// ─── CEO MODEL 7 — CEOMemory (CEO Memory) ──────────────────────────────────────
+model CEOMemory {
+  id           String   @id @default(cuid())
+  memoryType   String                              // MemoryType — decision | strategy | milestone | board_meeting | market_change | growth_event | risk_event | learning
+  title        String
+  description  String
+  importance   Float    @default(0.5)
+  occurredAt   DateTime @default(now())
+  tags         String                              // JSON string[]
+  metadata     String?                             // JSON
+}

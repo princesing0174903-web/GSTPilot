@@ -1,5 +1,6 @@
 import { db } from '@/lib/db'
 import { NextResponse } from 'next/server'
+import { graphEvents } from '@/lib/graph/live-update'
 
 const VALID_REPORT_TYPES = ['client_health', 'gst_risk', 'compliance', 'firm_performance', 'board'] as const
 type ReportType = (typeof VALID_REPORT_TYPES)[number]
@@ -116,6 +117,9 @@ export async function POST(request: Request) {
 
     // Construct download URL
     const downloadUrl = `/api/ai-reports/${report.id}/download`
+
+    // ── Real Business Graph Engine™ — auto-create report node + live event ──
+    graphEvents.reportGenerated(report.id, report.reportType, report.title)
 
     return NextResponse.json({ report, downloadUrl }, { status: 201 })
   } catch (error) {

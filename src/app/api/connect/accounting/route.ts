@@ -14,6 +14,7 @@ import {
   accountingInvoiceToRecord,
   type AccountingSoftware,
 } from '@/lib/connectors/accounting';
+import { graphEvents, invalidateGraph } from '@/lib/graph/live-update';
 
 export async function POST(request: NextRequest) {
   let body: {
@@ -119,6 +120,10 @@ export async function POST(request: NextRequest) {
 
     const salesCount = invoices.filter((i) => i.invoiceType === 'sales').length;
     const purchaseCount = invoices.filter((i) => i.invoiceType === 'purchase').length;
+
+    // ── Real Business Graph Engine™ — accounting connection builds graph; log + refresh ──
+    graphEvents.connectorSynced(software, `${software.charAt(0).toUpperCase() + software.slice(1)} — ${companyName}`);
+    invalidateGraph();
 
     return NextResponse.json({
       success: true,

@@ -278,4 +278,48 @@ export const graphEvents = {
       description: `Source: ${type}`,
       nodeId: 'business:firm',
     }),
+
+  // ── Phase: Real Business Graph Engine™ — additional helpers ──
+
+  smsSent: (msgId: string, to: string, body: string) =>
+    notifyGraphEvent({
+      source: 'sms',
+      type: 'sms_sent',
+      title: `SMS sent to ${to}`,
+      description: body.slice(0, 80),
+      nodeId: `conversation:${msgId}`,
+      relatedNodeIds: ['conversation:sms', 'business:firm'],
+    }),
+
+  returnCreated: (returnId: string, returnType: string, period: string, taxAmount: number) =>
+    notifyGraphEvent({
+      source: 'returns',
+      type: 'gst_return_created',
+      title: `${returnType} return created for ${period}`,
+      description: `Draft return · output tax ₹${taxAmount.toLocaleString('en-IN')}`,
+      nodeId: `gst-return:${returnId}`,
+      relatedNodeIds: ['business:firm', 'tax-payment:govt'],
+      amount: taxAmount,
+    }),
+
+  teamMemberAdded: (memberId: string, name: string, role: string) =>
+    notifyGraphEvent({
+      source: 'employees',
+      type: 'team_member_added',
+      title: `Team member added: ${name}`,
+      description: `Role: ${role}`,
+      nodeId: `employee:${memberId}`,
+      relatedNodeIds: ['business:firm'],
+    }),
+
+  transactionRecorded: (txId: string, description: string, amount: number, type: 'credit' | 'debit') =>
+    notifyGraphEvent({
+      source: 'bank',
+      type: 'transaction_recorded',
+      title: `Bank ${type}: ${description.slice(0, 50)}`,
+      description: `₹${amount.toLocaleString('en-IN')} ${type}`,
+      nodeId: `transaction:${txId}`,
+      relatedNodeIds: ['bank-account:primary', 'business:firm'],
+      amount,
+    }),
 };

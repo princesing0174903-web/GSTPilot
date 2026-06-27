@@ -7,6 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { validateGstin, deriveGstProfile } from '@/lib/connectors/gstn';
+import { graphEvents, invalidateGraph } from '@/lib/graph/live-update';
 
 export async function POST(request: NextRequest) {
   let body: { userId?: string; gstin?: string };
@@ -60,6 +61,9 @@ export async function POST(request: NextRequest) {
           errorMessage: null,
         },
       });
+      // ── Real Business Graph Engine™ — connection builds graph; log + refresh ──
+      graphEvents.connectorSynced('gstn', `GSTN: ${validation.gstin}`);
+      invalidateGraph();
       return NextResponse.json({
         success: true,
         connectionId: updated.id,
@@ -82,6 +86,10 @@ export async function POST(request: NextRequest) {
         syncInterval: '15m',
       },
     });
+
+    // ── Real Business Graph Engine™ — connection builds graph; log + refresh ──
+    graphEvents.connectorSynced('gstn', `GSTN: ${validation.gstin}`);
+    invalidateGraph();
 
     return NextResponse.json({
       success: true,

@@ -15,6 +15,7 @@ import {
   validateBankAccount,
   parseTransactionsFromStatement,
 } from '@/lib/connectors/bank';
+import { graphEvents, invalidateGraph } from '@/lib/graph/live-update';
 
 export async function POST(request: NextRequest) {
   let body: {
@@ -119,7 +120,21 @@ export async function POST(request: NextRequest) {
           processed: true,
         },
       }).catch(() => {});
+      // ── Real Business Graph Engine™ — live event per bank transaction ──
+      graphEvents.transactionRecorded(
+        tx.transactionId || `banktx_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        tx.description,
+        tx.amount,
+        tx.type === 'credit' ? 'credit' : 'debit',
+      );
     }
+
+    // ── Real Business Graph Engine™ — bank connection builds graph; log + refresh ──
+    graphEvents.connectorSynced('bank', bankConnectionLabel(metadata));
+    if (transactions.length > 0) {
+      graphEvents.bankSynced(metadata.bankName ?? 'Bank', transactions.length);
+    }
+    invalidateGraph();
 
     return NextResponse.json({
       success: true,

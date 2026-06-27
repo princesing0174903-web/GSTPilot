@@ -444,6 +444,7 @@ export type LiveEventSource =
   | 'notices'
   | 'payments'
   | 'expenses'
+  | 'sms'
   | 'system';
 
 export type LiveEventType =
@@ -468,7 +469,10 @@ export type LiveEventType =
   | 'employee_added'
   | 'itc_claimed'
   | 'prediction_updated'
-  | 'connector_synced';
+  | 'connector_synced'
+  | 'sms_sent'
+  | 'gst_return_created'
+  | 'team_member_added';
 
 export interface LiveGraphEvent {
   id: string;

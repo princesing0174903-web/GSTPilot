@@ -1,5 +1,6 @@
 import { db } from '@/lib/db'
 import { NextResponse } from 'next/server'
+import { graphEvents } from '@/lib/graph/live-update'
 
 // Generate ARN: "AA" + date digits + random 6 digits (acceptable for simulated filing)
 function generateARN(): string {
@@ -107,6 +108,9 @@ export async function POST(
         details: `${filing.returnType} for period ${filing.period} filed for ${filing.client.tradeName}. ARN: ${acknowledgmentNumber}`,
       },
     })
+
+    // ── Real Business Graph Engine™ — auto-create/refresh GST-return node + tax-payment node + live event ──
+    graphEvents.gstFiled(updatedFiling.id, filing.returnType, filing.period, filing.totalTax ?? 0)
 
     return NextResponse.json({
       filing: updatedFiling,

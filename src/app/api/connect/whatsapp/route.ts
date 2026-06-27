@@ -14,6 +14,7 @@ import {
   validatePhoneNumber,
   classifyMessage,
 } from '@/lib/connectors/whatsapp';
+import { graphEvents, invalidateGraph } from '@/lib/graph/live-update';
 
 export async function POST(request: NextRequest) {
   let body: {
@@ -109,11 +110,19 @@ export async function POST(request: NextRequest) {
           processed: true,
         },
       }).catch(() => {});
+      // ── Real Business Graph Engine™ — live event for inbound WhatsApp messages ──
+      if (msg.direction === 'inbound') {
+        graphEvents.whatsappReceived(`wa_${msg.timestamp}`, msg.contactPhone, msg.messageText);
+      }
     }
 
     const remindersSent = messages.filter(
       (m) => classifyMessage(m.messageText) === 'payment_reminder' && m.direction === 'outbound',
     ).length;
+
+    // ── Real Business Graph Engine™ — WhatsApp connection builds graph; log + refresh ──
+    graphEvents.connectorSynced('whatsapp', `WhatsApp ${display}`);
+    invalidateGraph();
 
     return NextResponse.json({
       success: true,

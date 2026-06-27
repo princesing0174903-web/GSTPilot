@@ -22,6 +22,7 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import ZAI from 'z-ai-web-dev-sdk';
+import { graphEvents } from '@/lib/graph/live-update';
 import { BRAND_IDENTITY_PROMPT_BLOCK } from '@/components/oracle/oracle-brand';
 import type { OracleChatRequest, OracleLanguageId } from '@/components/oracle/oracle-types';
 import { generateCFOInsights } from '@/lib/cfo/engine';
@@ -1018,6 +1019,10 @@ export async function POST(request: Request) {
 
   const systemPrompt = await buildSystemPrompt(body);
   const languageHint = inferLanguageHint(messages);
+
+  // ── Real Business Graph Engine™ — log Oracle conversation as a live event ──
+  const lastUser = [...messages].reverse().find((m) => m.role === 'user');
+  graphEvents.oracleAnswered(lastUser?.content ?? '');
 
   const modelMessages: { role: 'assistant' | 'user' | 'system'; content: string }[] = [
     { role: 'assistant', content: systemPrompt },

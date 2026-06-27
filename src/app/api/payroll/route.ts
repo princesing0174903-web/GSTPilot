@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { seedEmployees, generatePayslip } from '@/lib/invoices/payroll'
 import type { Employee } from '@/lib/invoices/types'
+import { graphEvents, invalidateGraph } from '@/lib/graph/live-update'
 
 // GET /api/payroll — Fetch all Employees with their most recent payslip
 export async function GET() {
@@ -90,6 +91,9 @@ export async function POST(request: NextRequest) {
         },
       })
 
+      // ── Real Business Graph Engine™ — invalidate cache so payroll reflects instantly (bulk op) ──
+      invalidateGraph()
+
       return NextResponse.json(
         { generated: created, payrolls: payslips, period },
         { status: 201 }
@@ -172,6 +176,9 @@ export async function POST(request: NextRequest) {
         details: `New employee ${name} (${designation}) added — gross ₹${grossSalary}`,
       },
     })
+
+    // ── Real Business Graph Engine™ — auto-create employee node + live event ──
+    graphEvents.employeeAdded(employee.id, employee.name)
 
     return NextResponse.json({ employees: [employee] }, { status: 201 })
   } catch (error) {

@@ -4,6 +4,7 @@ import {
   seedWhatsAppMessages,
   getWhatsAppStats,
 } from '@/lib/communication/whatsapp'
+import { graphEvents } from '@/lib/graph/live-update'
 import type {
   WhatsAppMessage,
   WhatsAppCategory,
@@ -179,6 +180,9 @@ export async function POST(request: Request) {
         details: `WhatsApp message sent to ${recipientPhone} (${finalCategory}) — ${messagePreview.slice(0, 80)}`,
       },
     })
+
+    // ── Real Business Graph Engine™ — live event: WhatsApp sent ──
+    graphEvents.whatsappSent(message.id, String(recipientPhone), String(messageBody))
 
     return NextResponse.json({ message: mapRow(message) }, { status: 201 })
   } catch (error) {

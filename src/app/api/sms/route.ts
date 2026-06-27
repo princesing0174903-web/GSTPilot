@@ -4,6 +4,7 @@ import {
   seedSMSMessages,
   getSMSStats,
 } from '@/lib/communication/sms'
+import { graphEvents } from '@/lib/graph/live-update'
 import type {
   SMSMessage,
   SMSCategory,
@@ -157,6 +158,9 @@ export async function POST(request: Request) {
         details: `SMS sent to ${recipientPhone} (${finalCategory}) — ${messagePreview.slice(0, 80)}`,
       },
     })
+
+    // ── Real Business Graph Engine™ — live event: SMS sent ──
+    graphEvents.smsSent(smsMessage.id, String(recipientPhone), String(message))
 
     return NextResponse.json({ message: mapRow(smsMessage) }, { status: 201 })
   } catch (error) {

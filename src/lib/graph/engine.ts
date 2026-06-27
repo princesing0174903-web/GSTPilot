@@ -155,6 +155,8 @@ interface RawRows {
   emailMessages: Array<{ id: string; clientId: string | null; recipientName: string | null; subject: string; status: string; createdAt: Date }>;
   businessEvents: Array<{ id: string; type: string; source: string; severity: string; status: string; createdAt: Date }>;
   dataConnections: Array<{ id: string; type: string; status: string; label: string; lastSyncAt: Date | null }>;
+  // ── Real Business Graph Engine™ — synced records streamed in from connectors ──
+  syncedRecords: Array<{ id: string; connectionId: string; sourceType: string; externalId: string | null; title: string | null; amount: number | null; date: string | null; category: string | null }>;
 }
 
 async function fetchRawRows(): Promise<RawRows> {
@@ -162,6 +164,7 @@ async function fetchRawRows(): Promise<RawRows> {
     clients, invoices, filings, notices,
     purchaseBills, expenses, payments, employees,
     reports, whatsappMessages, emailMessages, businessEvents, dataConnections,
+    syncedRecords,
   ] = await Promise.all([
     db.client.findMany({
       select: { id: true, gstin: true, tradeName: true, status: true, healthScore: true },
@@ -236,12 +239,19 @@ async function fetchRawRows(): Promise<RawRows> {
       select: { id: true, type: true, status: true, label: true, lastSyncAt: true },
       take: 100,
     }),
+    // ── Real Business Graph Engine™ — synced records (bank tx, emails, WhatsApp, accounting invoices) ──
+    db.syncedRecord.findMany({
+      select: { id: true, connectionId: true, sourceType: true, externalId: true, title: true, amount: true, date: true, category: true },
+      take: 5000,
+      orderBy: { createdAt: 'desc' },
+    }) as Promise<Array<{ id: string; connectionId: string; sourceType: string; externalId: string | null; title: string | null; amount: number | null; date: string | null; category: string | null }>>,
   ]);
 
   return {
     clients, invoices, filings, notices,
     purchaseBills, expenses, payments, employees,
     reports, whatsappMessages, emailMessages, businessEvents, dataConnections,
+    syncedRecords,
   };
 }
 
@@ -677,6 +687,72 @@ export function buildKnowledgeGraph(rows: RawRows, cfo: CFOResponse): KnowledgeG
       x: -600 + i * 60, y: -100,
     });
     pushEdge(businessId, `conversation:${c.type}`, 'CONNECTED_TO');
+  });
+
+  // 18. Synced Records (Real Business Graph Engine™) — bank transactions, emails,
+  // WhatsApp messages, and accounting invoices synced from connected services
+  // become REAL graph nodes. This is what makes the graph self-build the moment a
+  // connector runs (GSTN / Bank / Gmail / WhatsApp / Tally / Zoho / QuickBooks).
+  // No demo values — every node here is a real synced record from a real connector.
+  const connectedTypes = new Set(rows.dataConnections.filter((c) => c.status === 'connected').map((c) => c.type));
+  const SYNCED_RENDER_CAP = 400; // cap per render for 100k+ node performance
+  rows.syncedRecords.slice(0, SYNCED_RENDER_CAP).forEach((rec, i) => {
+    if (rec.sourceType === 'bank_tx') {
+      const amt = rec.amount ?? 0;
+      const isCredit = rec.category === 'credit';
+      const txNodeId = `transaction:${rec.id}`;
+      pushNode({
+        id: txNodeId,
+        type: 'transaction',
+        entityId: rec.id,
+        label: (rec.title || 'Bank Transaction').slice(0, 42),
+        subtitle: `${isCredit ? 'Credit' : 'Debit'} · ${inrShort(amt)}`,
+        amount: amt,
+        meta: { source: 'bank', category: rec.category || '', date: rec.date || '' },
+        x: 250 + (i % 14) * 28, y: 200 + Math.floor(i / 14) * 28,
+      });
+      pushEdge('bank-account:primary', txNodeId, 'RECORDED_IN', amt);
+      if (isCredit) pushEdge(txNodeId, businessId, 'CLEARS', amt);
+      else pushEdge(businessId, txNodeId, 'PAYS', amt);
+    } else if (rec.sourceType === 'email' && connectedTypes.has('gmail')) {
+      const msgNodeId = `transaction:${rec.id}`;
+      pushNode({
+        id: msgNodeId,
+        type: 'conversation',
+        entityId: rec.id,
+        label: (rec.title || 'Email').slice(0, 42),
+        subtitle: rec.category || 'gmail',
+        meta: { source: 'gmail', category: rec.category || '', date: rec.date || '' },
+        x: -600 + (i % 10) * 50, y: -40 + Math.floor(i / 10) * 30,
+      });
+      pushEdge('conversation:gmail', msgNodeId, 'CONNECTED_TO');
+    } else if (rec.sourceType === 'whatsapp_msg' && connectedTypes.has('whatsapp')) {
+      const msgNodeId = `transaction:${rec.id}`;
+      pushNode({
+        id: msgNodeId,
+        type: 'conversation',
+        entityId: rec.id,
+        label: (rec.title || 'WhatsApp').slice(0, 42),
+        subtitle: rec.category || 'whatsapp',
+        meta: { source: 'whatsapp', category: rec.category || '', date: rec.date || '' },
+        x: -600 + (i % 10) * 50, y: 20 + Math.floor(i / 10) * 30,
+      });
+      pushEdge('conversation:whatsapp', msgNodeId, 'CONNECTED_TO');
+    } else if (rec.sourceType === 'accounting_invoice') {
+      const amt = rec.amount ?? 0;
+      const invNodeId = `transaction:${rec.id}`;
+      pushNode({
+        id: invNodeId,
+        type: 'transaction',
+        entityId: rec.id,
+        label: (rec.title || 'Accounting Invoice').slice(0, 42),
+        subtitle: inrShort(amt),
+        amount: amt,
+        meta: { source: 'accounting', category: rec.category || '', date: rec.date || '' },
+        x: 300 + (i % 14) * 28, y: 260 + Math.floor(i / 14) * 28,
+      });
+      pushEdge(businessId, invNodeId, 'CONNECTED_TO', amt);
+    }
   });
 
   // Index edges by type and nodes by type for stats

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { seedPurchaseBills, calculatePurchaseTotals } from '@/lib/invoices/purchases'
+import { graphEvents } from '@/lib/graph/live-update'
 
 // GET /api/purchases — Fetch all Purchase Bills (vendor invoices)
 export async function GET() {
@@ -106,6 +107,12 @@ export async function POST(request: NextRequest) {
         details: `Vendor ${vendorName} invoice ${invoiceNo} recorded (₹${totalAmount})`,
       },
     })
+
+    // ── Real Business Graph Engine™ — auto-create vendor node + ITC node + live events ──
+    graphEvents.vendorCreated(purchase.id, vendorName)
+    if (gstAmount > 0) {
+      graphEvents.itcClaimed(purchase.id, gstAmount)
+    }
 
     return NextResponse.json({ purchase }, { status: 201 })
   } catch (error) {

@@ -11,6 +11,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { syncGmailEmails, emailsToRecords } from '@/lib/connectors/gmail';
+import { graphEvents, invalidateGraph } from '@/lib/graph/live-update';
 
 export async function POST(request: NextRequest) {
   let body: { userId?: string; accessToken?: string };
@@ -110,6 +111,13 @@ export async function POST(request: NextRequest) {
     const vendorInvoices = emails.filter((e) => e.category === 'vendor_invoice').length;
     const clientInvoices = emails.filter((e) => e.category === 'client_invoice').length;
     const taxComms = emails.filter((e) => e.category === 'tax_communication').length;
+
+    // ── Real Business Graph Engine™ — live event per synced email + connection refresh ──
+    for (const e of emails) {
+      graphEvents.emailReceived(e.messageId, e.from, e.subject);
+    }
+    graphEvents.connectorSynced('gmail', profile.emailAddress);
+    invalidateGraph();
 
     return NextResponse.json({
       success: true,

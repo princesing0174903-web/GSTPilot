@@ -1,5 +1,6 @@
 import { db } from '@/lib/db'
 import { NextResponse } from 'next/server'
+import { graphEvents, invalidateGraph } from '@/lib/graph/live-update'
 
 // GET /api/returns — List returns with optional filters
 export async function GET(request: Request) {
@@ -131,6 +132,9 @@ export async function POST(request: Request) {
       },
     })
 
+    // ── Real Business Graph Engine™ — auto-create GST-return node + live event ──
+    graphEvents.returnCreated(ret.id, ret.returnType, ret.period, ret.totalTax ?? 0)
+
     return NextResponse.json({ return: ret }, { status: 201 })
   } catch (error) {
     console.error('POST /api/returns error:', error)
@@ -209,8 +213,14 @@ export async function PATCH(request: Request) {
             description: `${existing.returnType} for ${existing.period} filed for ${existing.client.businessName}`,
           },
         })
+
+        // ── Real Business Graph Engine™ — GST return filed live event ──
+        graphEvents.gstFiled(ret.id, existing.returnType, existing.period, ret.totalTax ?? 0)
       }
     }
+
+    // ── Real Business Graph Engine™ — invalidate cache for any status change ──
+    invalidateGraph()
 
     return NextResponse.json({ return: ret })
   } catch (error) {

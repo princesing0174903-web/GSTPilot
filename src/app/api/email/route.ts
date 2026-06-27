@@ -4,6 +4,7 @@ import {
   seedEmailMessages,
   getEmailStats,
 } from '@/lib/communication/email'
+import { graphEvents } from '@/lib/graph/live-update'
 import type {
   EmailMessage,
   EmailCategory,
@@ -184,6 +185,9 @@ export async function POST(request: Request) {
         details: `Email sent to ${recipientEmail} — subject: "${subject}" (${finalCategory})`,
       },
     })
+
+    // ── Real Business Graph Engine™ — live event: email sent ──
+    graphEvents.emailSent(message.id, String(recipientEmail), String(subject))
 
     return NextResponse.json({ message: mapRow(message) }, { status: 201 })
   } catch (error) {

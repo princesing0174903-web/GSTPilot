@@ -6,7 +6,7 @@ import {
   generateInvoiceNumber,
   type InvoiceLineItem,
 } from '@/lib/invoices/invoices';
-import { graphEvents } from '@/lib/graph/live-update';
+import { graphEvents, invalidateGraph } from '@/lib/graph/live-update';
 
 export async function GET(request: Request) {
   try {
@@ -195,6 +195,9 @@ export async function POST(request: Request) {
         },
       });
 
+      // ── Real Business Graph Engine™ — auto-create invoice node + live event ──
+      graphEvents.invoiceCreated(invoice.id, invoice.invoiceNumber, totals.totalAmount, cloudBuyerGstin ?? undefined);
+
       return NextResponse.json({ invoice }, { status: 201 });
     }
 
@@ -269,6 +272,9 @@ export async function POST(request: Request) {
       },
     });
 
+    // ── Real Business Graph Engine™ — auto-create invoice node + live event ──
+    graphEvents.invoiceCreated(invoice.id, invoice.invoiceNumber, invoice.totalAmount, buyerGstin ?? undefined);
+
     return NextResponse.json({ invoice }, { status: 201 });
   } catch (error) {
     console.error('POST /api/invoices error:', error);
@@ -312,6 +318,9 @@ export async function PATCH(request: Request) {
         details: `Invoice ${invoice.invoiceNumber} updated`,
       },
     });
+
+    // ── Real Business Graph Engine™ — invalidate cache so edits reflect instantly ──
+    invalidateGraph();
 
     return NextResponse.json({ invoice });
   } catch (error) {

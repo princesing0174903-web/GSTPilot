@@ -1,6 +1,7 @@
 import { db } from '@/lib/db'
 import { NextResponse } from 'next/server'
 import { validateGSTIN, getRiskLevel, calculateRiskScore } from '@/lib/gst-utils'
+import { invalidateGraph } from '@/lib/graph/live-update'
 
 type MatchStatus = 'perfect_match' | 'partial_match' | 'mismatch' | 'missing_in_books' | 'missing_in_gstr' | 'unmatched' | 'duplicate'
 type RiskLevel = 'low' | 'medium' | 'high' | 'critical'
@@ -693,6 +694,9 @@ export async function POST(request: Request) {
         },
       })
 
+      // ── Real Business Graph Engine™ — reconciliation updates invoice match status; refresh graph ──
+      invalidateGraph()
+
       return NextResponse.json({
         message: `Reconciliation completed — ${invoices.length} records processed, ${matched} matched, ${partialMatches} partial, ${unmatched} unmatched`,
         run: updatedRun,
@@ -765,6 +769,9 @@ export async function POST(request: Request) {
           details: `Workflow status changed from '${previousStatus}' to '${workflowStatus}' for invoice ${existing.invoice?.invoiceNumber ?? id}`,
         },
       })
+
+      // ── Real Business Graph Engine™ — invalidate cache so workflow change reflects instantly ──
+      invalidateGraph()
 
       return NextResponse.json({ result })
     }

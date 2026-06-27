@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { seedExpenses, autoCategorize } from '@/lib/invoices/expenses'
+import { graphEvents } from '@/lib/graph/live-update'
 
 // GET /api/expenses — Fetch all Expenses
 export async function GET() {
@@ -80,6 +81,9 @@ export async function POST(request: NextRequest) {
         details: `Expense ₹${expense.amount} (${finalCategory}) recorded — ${vendor ?? 'unknown vendor'}`,
       },
     })
+
+    // ── Real Business Graph Engine™ — auto-create expense node + live event ──
+    graphEvents.expenseRecorded(expense.id, vendor ?? 'unknown', expense.amount, finalCategory)
 
     return NextResponse.json({ expense }, { status: 201 })
   } catch (error) {

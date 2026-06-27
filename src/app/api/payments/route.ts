@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { seedPayments } from '@/lib/invoices/payments'
+import { graphEvents, invalidateGraph } from '@/lib/graph/live-update'
 
 // GET /api/payments — Fetch all Payments (customer collections + vendor settlements)
 export async function GET() {
@@ -88,6 +89,10 @@ export async function POST(request: NextRequest) {
             paymentMode: paymentMode ?? invoice.paymentMode,
           },
         })
+        // ── Real Business Graph Engine™ — invoice cleared event ──
+        if (paymentStatus === 'paid') {
+          graphEvents.invoicePaid(invoiceId, invoice.invoiceNumber, paymentAmount)
+        }
       }
     }
 
@@ -129,6 +134,13 @@ export async function POST(request: NextRequest) {
         details: `${partyType === 'vendor' ? 'Vendor' : 'Customer'} payment ₹${paymentAmount} — ${partyName}${invoiceId ? ` (invoice ${invoiceId})` : ''}${purchaseBillId ? ` (bill ${purchaseBillId})` : ''}`,
       },
     })
+
+    // ── Real Business Graph Engine™ — auto-create payment/collection node + live event ──
+    if (partyType === 'vendor') {
+      graphEvents.paymentMade(payment.id, partyName, paymentAmount)
+    } else {
+      graphEvents.paymentReceived(payment.id, partyName, paymentAmount)
+    }
 
     return NextResponse.json({ payment }, { status: 201 })
   } catch (error) {

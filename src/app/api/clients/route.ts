@@ -1,5 +1,6 @@
 import { db } from '@/lib/db'
 import { NextResponse } from 'next/server'
+import { graphEvents, invalidateGraph } from '@/lib/graph/live-update'
 
 // GET /api/clients — Fetch all clients with aggregated stats
 export async function GET() {
@@ -144,6 +145,9 @@ export async function POST(request: Request) {
       },
     })
 
+    // ── Real Business Graph Engine™ — auto-create client node + live event ──
+    graphEvents.clientCreated(client.id, client.tradeName)
+
     return NextResponse.json({ client }, { status: 201 })
   } catch (error) {
     console.error('POST /api/clients error:', error)
@@ -202,6 +206,9 @@ export async function PATCH(request: Request) {
       },
     })
 
+    // ── Real Business Graph Engine™ — invalidate cache so edits reflect instantly ──
+    invalidateGraph()
+
     return NextResponse.json({ client })
   } catch (error) {
     console.error('PATCH /api/clients error:', error)
@@ -244,6 +251,9 @@ export async function DELETE(request: Request) {
     })
 
     await db.client.delete({ where: { id } })
+
+    // ── Real Business Graph Engine™ — invalidate cache so removal reflects instantly ──
+    invalidateGraph()
 
     return NextResponse.json({ success: true })
   } catch (error) {

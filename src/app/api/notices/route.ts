@@ -1,5 +1,6 @@
 import { db } from '@/lib/db'
 import { NextResponse } from 'next/server'
+import { graphEvents, invalidateGraph } from '@/lib/graph/live-update'
 
 // GET /api/notices — List notices with client and assignee info
 export async function GET(request: Request) {
@@ -146,6 +147,9 @@ export async function POST(request: Request) {
       },
     })
 
+    // ── Real Business Graph Engine™ — auto-create notice node + live event ──
+    graphEvents.gstNoticeReceived(notice.id, notice.noticeType, clientId)
+
     return NextResponse.json({ notice }, { status: 201 })
   } catch (error) {
     console.error('POST /api/notices error:', error)
@@ -220,6 +224,9 @@ export async function PATCH(request: Request) {
         },
       },
     })
+
+    // ── Real Business Graph Engine™ — invalidate cache so edits reflect instantly ──
+    invalidateGraph()
 
     return NextResponse.json({ notice })
   } catch (error) {

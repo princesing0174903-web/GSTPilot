@@ -1,5 +1,6 @@
 import { db } from '@/lib/db'
 import { NextResponse } from 'next/server'
+import { graphEvents } from '@/lib/graph/live-update'
 
 // GET /api/team-members — List team members with latest performance
 export async function GET(request: Request) {
@@ -101,6 +102,9 @@ export async function POST(request: Request) {
         avatar: avatar ?? null,
       },
     })
+
+    // ── Real Business Graph Engine™ — auto-create employee node + live event ──
+    graphEvents.teamMemberAdded(teamMember.id, teamMember.name, teamMember.role)
 
     return NextResponse.json({ teamMember }, { status: 201 })
   } catch (error) {

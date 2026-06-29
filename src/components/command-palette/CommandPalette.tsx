@@ -26,6 +26,7 @@ import {
   Receipt,
   Copy,
   Cpu,
+  Crown,
 } from 'lucide-react';
 import { useApp } from '@/contexts/AppContext';
 import {
@@ -356,6 +357,17 @@ export default function CommandPalette() {
         action: () => {
           setCurrentView('ai-software-factory');
           addToRecent('cmd-open-software-factory', 'Open AI Software Factory™', 'command');
+        },
+        group: 'Commands',
+      },
+      {
+        id: 'cmd-open-autonomous-enterprise',
+        label: 'Open Autonomous Enterprise™',
+        description: 'Self-running business OS — 9 AI executives plan, decide, execute, learn',
+        icon: Crown,
+        action: () => {
+          setCurrentView('autonomous-enterprise');
+          addToRecent('cmd-open-autonomous-enterprise', 'Open Autonomous Enterprise™', 'command');
         },
         group: 'Commands',
       },

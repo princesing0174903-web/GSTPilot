@@ -1483,3 +1483,67 @@ model DevMemory {
   occurredAt   DateTime @default(now())
   createdAt    DateTime @default(now())
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// GSTPILOT AUTONOMOUS ENTERPRISE™ — SELF-RUNNING BUSINESS OS
+// The World's First Autonomous Enterprise Operating System.
+// 9 AI executives collaborate continuously; Oracle plans, decides, executes,
+// monitors, learns & continuously improves every business operation from
+// REAL connected data. Tagline: Think. Decide. Execute. Learn. Grow.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ─── AE MODEL 1 — AutonomousStrategyMeeting (AI Strategy Room debates) ────────
+model AutonomousStrategyMeeting {
+  id              String   @id @default(cuid())
+  topic           String                              // agenda of the debate
+  trigger         String                              // what triggered the meeting: scheduled | anomaly | decision | goal_review | risk_alert
+  opinions        String                              // JSON: ExecutiveOpinion[] (one per exec)
+  disagreements   String                              // JSON string[] of recorded disagreements
+  consensus       String                              // agreed-upon decision summary
+  ceoApproval     String    @default("pending")       // pending | approved | rejected | deferred
+  financialImpact Float     @default(0)
+  riskLevel       String    @default("low")           // none | low | medium | high | critical
+  confidence      Float     @default(0)
+  status          String    @default("completed")     // opened | debating | completed | archived
+  relatedEntityType String?
+  relatedEntityId String?
+  transcript      String?                             // optional full transcript
+  metadata        String?                             // JSON
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+// ─── AE MODEL 2 — AutonomousSimulation (Digital Twin Simulator 2.0) ───────────
+model AutonomousSimulation {
+  id              String   @id @default(cuid())
+  scenario        String                              // hire_employees | increase_prices | expand_city | launch_product | acquire_company | open_office | raise_funding | cut_costs | delay_payment | switch_vendor
+  title           String
+  description     String
+  parameters      String                              // JSON: input parameters (e.g. { headcount: 5 })
+  baseline        String                              // JSON: current-state snapshot used as control
+  predictions     String                              // JSON: SimulationPrediction (revenue/profit/cashFlow/gst/risk/hiring/compliance/roi)
+  confidence      Float     @default(0)
+  recommendation  String                              // proceed | caution | avoid | needs_review
+  status          String    @default("completed")     // queued | running | completed | failed
+  approvedBy      String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+// ─── AE MODEL 3 — AutonomousPlan (Continuous Planning — nightly Oracle plans) ─
+model AutonomousPlan {
+  id              String   @id @default(cuid())
+  horizon         String                              // daily | weekly | monthly | quarterly | yearly
+  asOfDate        String                              // ISO date the plan applies to
+  title           String
+  summary         String
+  focusAreas      String                              // JSON string[]
+  initiatives     String                              // JSON: PlanInitiative[]
+  kpis            String                              // JSON: PlanKPI[]
+  risks           String                              // JSON string[]
+  department      String?                             // sales | finance | operations | hr | gst | marketing | product | legal | it
+  confidence      Float     @default(0)
+  generatedAt     DateTime @default(now())
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}

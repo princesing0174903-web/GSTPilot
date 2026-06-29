@@ -145,7 +145,9 @@ export type AppView =
   | 'marketplace'
   | 'agents'
   // AI Software Factory™ — Self-building software ecosystem
-  | 'ai-software-factory';
+  | 'ai-software-factory'
+  // Autonomous Enterprise™ — Self-Running Business OS
+  | 'autonomous-enterprise';
 
 export interface ReturnPrepContext {
   clientId: string | null;

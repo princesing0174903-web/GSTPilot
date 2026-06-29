@@ -122,6 +122,7 @@ import ClientPortalPage from '@/components/client-portal/ClientPortalPage'
 import MarketplacePage from '@/components/marketplace/MarketplacePage'
 import AgentsPage from '@/components/agents/AgentsPage'
 import ConnectionsPage from '@/components/connections/ConnectionsPage'
+import AISoftwareFactoryPage from '@/components/ai-software-factory/AISoftwareFactoryPage'
 
 const VIEW_TITLES: Record<string, string> = {
   dashboard: 'Mission Control',
@@ -223,6 +224,7 @@ const VIEW_TITLES: Record<string, string> = {
   marketplace: 'Marketplace',
   agents: 'Agents',
   connections: 'Connections',
+  'ai-software-factory': 'AI Software Factory™',
 }
 
 function DashboardContent() {
@@ -428,6 +430,8 @@ function DashboardContent() {
         return <AgentsPage />
       case 'connections':
         return <ConnectionsPage />
+      case 'ai-software-factory':
+        return <AISoftwareFactoryPage />
       default:
         return <MissionControlPage />
     }

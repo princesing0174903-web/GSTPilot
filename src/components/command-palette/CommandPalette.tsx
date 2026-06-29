@@ -25,6 +25,7 @@ import {
   ArrowRight,
   Receipt,
   Copy,
+  Cpu,
 } from 'lucide-react';
 import { useApp } from '@/contexts/AppContext';
 import {
@@ -344,6 +345,17 @@ export default function CommandPalette() {
         action: () => {
           setCurrentView('autopilot');
           addToRecent('cmd-run-autopilot', 'Run Autopilot', 'command');
+        },
+        group: 'Commands',
+      },
+      {
+        id: 'cmd-open-software-factory',
+        label: 'Open AI Software Factory™',
+        description: 'Build apps from natural language — Oracle™ + 10 AI dev employees',
+        icon: Cpu,
+        action: () => {
+          setCurrentView('ai-software-factory');
+          addToRecent('cmd-open-software-factory', 'Open AI Software Factory™', 'command');
         },
         group: 'Commands',
       },

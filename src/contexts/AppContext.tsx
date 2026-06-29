@@ -143,7 +143,9 @@ export type AppView =
   | 'esignatures'
   | 'client-portal'
   | 'marketplace'
-  | 'agents';
+  | 'agents'
+  // AI Software Factory™ — Self-building software ecosystem
+  | 'ai-software-factory';
 
 export interface ReturnPrepContext {
   clientId: string | null;

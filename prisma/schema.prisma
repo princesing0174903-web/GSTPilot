@@ -1282,3 +1282,204 @@ model CEOMemory {
   tags         String                              // JSON string[]
   metadata     String?                             // JSON
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// GSTPILOT AI SOFTWARE FACTORY™ — Production Models
+// Self-building software ecosystem: AI dev employees collaborate to design,
+// generate, test, deploy, monitor & continuously improve enterprise apps.
+// Every record is derived from REAL connected business data.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ─── SF MODEL 1 — DevProject (software projects) ──────────────────────────────
+model DevProject {
+  id              String   @id @default(cuid())
+  name            String
+  slug            String   @unique
+  description     String
+  appType         String                              // crm | hr | erp | vendor_portal | hospital_mgmt | banking_dashboard | custom
+  category        String                              // Finance | HR | Operations | Manufacturing | Retail | Healthcare | Custom
+  status          String   @default("planning")       // planning | generating | building | testing | reviewing | deploying | live | failed | archived
+  lifecycleStage  String   @default("idea")            // idea | requirements | architecture | design | development | testing | staging | production
+  stack           String                              // JSON: { frontend, backend, database, deployment }
+  prompt          String                              // original natural-language prompt that created it
+  aiEmployees     String                              // JSON string[] of dev-employee IDs that worked on it
+  modules         String                              // JSON: generated modules (pages, APIs, tables, workflows, reports)
+  spec            String                              // JSON: full generated spec (requirements, architecture, db, api, auth, permissions)
+  healthScore     Int      @default(100)              // derived: build pass rate + test coverage + uptime
+  coveragePct     Float    @default(0)                // test coverage percentage
+  fileCount       Int      @default(0)                // generated file count
+  lineCount       Int      @default(0)                // generated lines of code
+  version         String   @default("0.1.0")
+  repoUrl         String?
+  previewUrl      String?
+  liveUrl         String?
+  businessDataSnapshot String                          // JSON: real business-data snapshot at generation time
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  builds          DevBuild[]
+  deployments     DevDeployment[]
+  testRuns        DevTestRun[]
+  releases        DevRelease[]
+  reviews         DevReview[]
+  memory          DevMemory[]
+  components      DevComponent[]
+}
+
+// ─── SF MODEL 2 — DevBuild (build records) ────────────────────────────────────
+model DevBuild {
+  id           String   @id @default(cuid())
+  projectId    String
+  project      DevProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  buildNumber  Int
+  status       String                              // queued | building | success | failed | cancelled
+  stage        String                              // install | compile | lint | test | package | upload
+  trigger      String                              // manual | ai_employee | webhook | ci | rollback
+  triggeredBy  String                              // employee id | user | oracle
+  durationMs   Int      @default(0)
+  fileSizeMb   Float    @default(0)
+  logTail      String                              // last N lines of build log
+  errors       Int      @default(0)
+  warnings     Int      @default(0)
+  artifactUrl  String?
+  createdAt    DateTime @default(now())
+}
+
+// ─── SF MODEL 3 — DevDeployment (deployment records) ──────────────────────────
+model DevDeployment {
+  id           String   @id @default(cuid())
+  projectId    String
+  project      DevProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  environment  String                              // development | staging | production | canary | preview
+  strategy     String                              // rolling | blue_green | canary | recreate
+  status       String                              // pending | deploying | healthy | unhealthy | rolled_back
+  buildId      String?
+  region       String   @default("ap-south-1")
+  url          String?
+  replicas     Int      @default(1)
+  cpuUsagePct  Float    @default(0)
+  memUsageMb   Float    @default(0)
+  latencyMs    Float    @default(0)
+  errorRatePct Float    @default(0)
+  uptimePct    Float    @default(100)
+  deployedBy   String                              // employee id | user | oracle | ci
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+// ─── SF MODEL 4 — DevTestRun (test runs) ──────────────────────────────────────
+model DevTestRun {
+  id           String   @id @default(cuid())
+  projectId    String
+  project      DevProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  buildId      String?
+  testType     String                              // unit | integration | e2e | performance | load | security | accessibility | regression | visual
+  status       String                              // running | passed | failed | skipped
+  total        Int      @default(0)
+  passed       Int      @default(0)
+  failed       Int      @default(0)
+  skipped      Int      @default(0)
+  durationMs   Int      @default(0)
+  coveragePct  Float    @default(0)
+  failures     String                              // JSON: array of failing test names + messages
+  ranBy        String                              // ai_qa | ci | user
+  createdAt    DateTime @default(now())
+}
+
+// ─── SF MODEL 5 — DevRelease (release records) ────────────────────────────────
+model DevRelease {
+  id            String   @id @default(cuid())
+  projectId     String
+  project       DevProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  version       String
+  channel       String                              // development | staging | production | canary
+  strategy      String                              // rolling | blue_green | canary | feature_flag
+  status        String                              // draft | pending_approval | approved | releasing | released | rolled_back | failed
+  featureFlags  String                              // JSON string[]
+  releaseNotes  String
+  rollbackOf    String?                             // release id this rolls back (if any)
+  approvedBy    String?
+  releasedBy    String?
+  createdAt     DateTime @default(now())
+  releasedAt    DateTime?
+}
+
+// ─── SF MODEL 6 — DevPipeline (CI/CD pipelines) ───────────────────────────────
+model DevPipeline {
+  id           String   @id @default(cuid())
+  projectId    String
+  name         String
+  provider     String                              // github | gitlab | azure_devops | docker | kubernetes | vercel | cloudflare | aws | gcp | azure
+  stages       String                              // JSON: [{ name, status, durationMs }]
+  status       String   @default("idle")           // idle | running | success | failed | cancelled
+  lastRunAt    DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+// ─── SF MODEL 7 — DevRepository (code repositories) ───────────────────────────
+model DevRepository {
+  id           String   @id @default(cuid())
+  projectId    String?
+  name         String
+  provider     String                              // github | gitlab | bitbucket | azure_devops
+  url          String
+  defaultBranch String  @default("main")
+  branchCount  Int      @default(1)
+  commitCount  Int      @default(0)
+  openPRs      Int      @default(0)
+  contributors Int      @default(1)
+  lastCommitAt DateTime?
+  createdAt    DateTime @default(now())
+}
+
+// ─── SF MODEL 8 — DevComponent (enterprise component library) ─────────────────
+model DevComponent {
+  id           String   @id @default(cuid())
+  projectId    String?
+  project      DevProject? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name         String
+  kind         String                              // page | layout | widget | form | report | chart | table | workflow | automation | ai_employee | theme | template | application
+  description  String
+  category     String
+  tags         String                              // JSON string[]
+  version      String   @default("1.0.0")
+  usageCount   Int      @default(0)
+  rating       Float    @default(0)
+  isPublished  Boolean  @default(false)
+  author       String                              // ai_employee id | user
+  spec         String                              // JSON: component definition
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+// ─── SF MODEL 9 — DevReview (AI code reviews) ─────────────────────────────────
+model DevReview {
+  id           String   @id @default(cuid())
+  projectId    String
+  project      DevProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  reviewType   String                              // performance | security | architecture | maintainability | accessibility | best_practices | complexity | test_coverage
+  reviewer     String                              // ai_security | ai_qa | user | oracle
+  status       String   @default("open")           // open | approved | changes_requested | resolved
+  score        Float    @default(0)                // 0-100
+  findings     String                              // JSON: [{ severity, file, line, message, suggestion }]
+  summary      String
+  prUrl        String?
+  createdAt    DateTime @default(now())
+  resolvedAt   DateTime?
+}
+
+// ─── SF MODEL 10 — DevMemory (AI Memory — project context that persists) ──────
+model DevMemory {
+  id           String   @id @default(cuid())
+  projectId    String
+  project      DevProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  memoryType   String                              // architecture | decision | bug | deployment | feedback | performance | code_evolution | ai_discussion
+  title        String
+  description  String
+  importance   Float    @default(0.5)
+  tags         String                              // JSON string[]
+  metadata     String?                             // JSON
+  occurredAt   DateTime @default(now())
+  createdAt    DateTime @default(now())
+}

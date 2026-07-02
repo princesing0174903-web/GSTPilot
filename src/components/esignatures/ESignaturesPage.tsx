@@ -38,6 +38,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { format, isToday, differenceInHours, parseISO } from 'date-fns';
+import { EmptyState } from '@/components/shared/EmptyState';
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -82,85 +83,19 @@ const STATUS_CONFIG: Record<SignatureStatus, { label: string; color: string; ico
 
 // ─── Mock Data ─────────────────────────────────────────────────────────────────
 
+// PT-1-a: No /api/esignatures endpoint exists yet. The list starts empty and
+// renders an empty state with a CTA. The generateMockSignatures helper is kept
+// for future reference but is no longer used to seed the UI.
+
 function generateMockSignatures(): SignatureRequest[] {
-  return [
-    {
-      id: 'SIG-001',
-      documentName: 'GSTR-1 Filing Authorization - Acme Industries',
-      documentType: 'Filing Authorization',
-      sentBy: 'Rajesh Kumar',
-      sentAt: new Date(Date.now() - 2 * 3600000).toISOString(),
-      status: 'sent',
-      expiresAt: new Date(Date.now() + 7 * 86400000).toISOString(),
-      signers: [
-        { id: 's1', name: 'Vikram Mehta', email: 'vikram@acme.com', role: 'Authorized Signatory', status: 'sent' },
-        { id: 's2', name: 'Rajesh Kumar', email: 'rajesh@gstpilot.ai', role: 'CA', status: 'sent' },
-      ],
-    },
-    {
-      id: 'SIG-002',
-      documentName: 'Engagement Letter - Sharma & Associates',
-      documentType: 'Engagement Letter',
-      sentBy: 'Priya Sharma',
-      sentAt: new Date(Date.now() - 24 * 3600000).toISOString(),
-      status: 'viewed',
-      expiresAt: new Date(Date.now() + 6 * 86400000).toISOString(),
-      signers: [
-        { id: 's3', name: 'Sunil Sharma', email: 'sunil@sharma.com', role: 'Partner', status: 'viewed' },
-        { id: 's4', name: 'Priya Sharma', email: 'priya@gstpilot.ai', role: 'CA', status: 'sent' },
-      ],
-    },
-    {
-      id: 'SIG-003',
-      documentName: 'Tax Audit Report - FY 2023-24',
-      documentType: 'Audit Report',
-      sentBy: 'Rajesh Kumar',
-      sentAt: new Date(Date.now() - 72 * 3600000).toISOString(),
-      status: 'signed',
-      expiresAt: new Date(Date.now() - 1 * 86400000).toISOString(),
-      signers: [
-        { id: 's5', name: 'Anita Desai', email: 'anita@beta.com', role: 'Director', status: 'signed', signedAt: new Date(Date.now() - 48 * 3600000).toISOString(), ipAddress: '103.212.88.12' },
-        { id: 's6', name: 'Rajesh Kumar', email: 'rajesh@gstpilot.ai', role: 'CA', status: 'signed', signedAt: new Date(Date.now() - 36 * 3600000).toISOString(), ipAddress: '192.168.1.45' },
-      ],
-      certificateInfo: {
-        issuer: 'GSTPilot Digital CA',
-        serial: 'CERT-2024-00847',
-        validFrom: '2024-01-01',
-        validTo: '2025-12-31',
-      },
-    },
-    {
-      id: 'SIG-004',
-      documentName: 'Power of Attorney - Gamma Corp',
-      documentType: 'POA',
-      sentBy: 'Amit Patel',
-      sentAt: new Date(Date.now() - 96 * 3600000).toISOString(),
-      status: 'declined',
-      expiresAt: new Date(Date.now() - 2 * 86400000).toISOString(),
-      signers: [
-        { id: 's7', name: 'Deepak Rao', email: 'deepak@gamma.com', role: 'MD', status: 'declined' },
-      ],
-    },
-    {
-      id: 'SIG-005',
-      documentName: 'GST Registration Application - Delta Ltd',
-      documentType: 'Registration',
-      sentBy: 'Priya Sharma',
-      sentAt: new Date(Date.now() - 168 * 3600000).toISOString(),
-      status: 'expired',
-      expiresAt: new Date(Date.now() - 24 * 3600000).toISOString(),
-      signers: [
-        { id: 's8', name: 'Kavita Nair', email: 'kavita@delta.com', role: 'Director', status: 'expired' },
-      ],
-    },
-  ];
+  return [];
 }
 
 // ─── Main Component ────────────────────────────────────────────────────────────
 
 export default function ESignaturesPage() {
+  // PT-1-a: No backend endpoint yet; signature list starts empty.
   const [signatures] = useState<SignatureRequest[]>(() => generateMockSignatures());
-  const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('pending');
   const [sendOpen, setSendOpen] = useState(false);
   const [detailOpen, setDetailOpen] = useState(false);
@@ -171,8 +106,9 @@ export default function ESignaturesPage() {
   const [newSignerEmail, setNewSignerEmail] = useState('');
 
   React.useEffect(() => {
-    const t = setTimeout(() => setLoading(false), 500);
-    return () => clearTimeout(t);
+    // PT-1-a: Removed setTimeout(500) loading simulation. With no backend fetch,
+    // the page renders immediately and the empty state guides the user to send
+    // the first signature request.
   }, []);
 
   const pendingSigs = useMemo(() =>
@@ -202,7 +138,9 @@ export default function ESignaturesPage() {
     setNewSignerEmail('');
   };
 
-  if (loading) {
+  if (false) {
+    // Loading skeleton retained for parity but unreachable until a real fetch
+    // is wired in. Kept so the layout stays identical when an API is added.
     return (
       <div className="space-y-6 p-6">
         <Skeleton className="h-10 w-64" />
@@ -388,11 +326,13 @@ export default function ESignaturesPage() {
 
           {displayList.length === 0 && (
             <Card>
-              <CardContent className="py-16">
-                <div className="flex flex-col items-center gap-2 text-muted-foreground">
-                  <PenTool className="size-8 opacity-50" />
-                  <p>No documents in this category</p>
-                </div>
+              <CardContent>
+                <EmptyState
+                  icon={PenTool}
+                  title="No signature requests yet"
+                  description="Send your first signature request to start tracking signer progress and audit trails."
+                  action={{ label: 'New Signature Request', onClick: () => setSendOpen(true), icon: Send }}
+                />
               </CardContent>
             </Card>
           )}

@@ -337,23 +337,11 @@ export default function AIRiskEnginePage() {
       setHeatmapData(data.heatmapData ?? []);
     } catch (err) {
       console.error('AI Risk fetch error:', err);
-      setError('Failed to load risk data. Using fallback data.');
-      // Fallback mock data
-      setClients([
-        { clientId: '1', clientName: 'Acme Corp', gstin: '27AADCA1234F1Z5', overallScore: 85, riskLevel: 'critical', lateFilings: 5, noticeFrequency: 3, gstMismatches: 8, vendorRisk: 72, itcRisk: 65 },
-        { clientId: '2', clientName: 'Beta Industries', gstin: '27AADCB5678G2Z3', overallScore: 62, riskLevel: 'high', lateFilings: 3, noticeFrequency: 2, gstMismatches: 5, vendorRisk: 45, itcRisk: 38 },
-        { clientId: '3', clientName: 'Gamma Solutions', gstin: '27AADCG9012H3Z1', overallScore: 40, riskLevel: 'medium', lateFilings: 1, noticeFrequency: 1, gstMismatches: 2, vendorRisk: 25, itcRisk: 20 },
-        { clientId: '4', clientName: 'Delta Traders', gstin: '27AADCD3456I4Z9', overallScore: 15, riskLevel: 'low', lateFilings: 0, noticeFrequency: 0, gstMismatches: 1, vendorRisk: 8, itcRisk: 5 },
-        { clientId: '5', clientName: 'Epsilon Ltd', gstin: '27AADCE7890J5Z7', overallScore: 78, riskLevel: 'high', lateFilings: 4, noticeFrequency: 2, gstMismatches: 6, vendorRisk: 60, itcRisk: 55 },
-      ]);
-      setAggregate({ low: 1, medium: 1, high: 2, critical: 1, averageScore: 56 });
-      setHeatmapData([
-        { clientId: '1', clientName: 'Acme Corp', scores: { lateFilings: 5, noticeFrequency: 3, gstMismatches: 8, vendorRisk: 72, itcRisk: 65 } },
-        { clientId: '2', clientName: 'Beta Industries', scores: { lateFilings: 3, noticeFrequency: 2, gstMismatches: 5, vendorRisk: 45, itcRisk: 38 } },
-        { clientId: '3', clientName: 'Gamma Solutions', scores: { lateFilings: 1, noticeFrequency: 1, gstMismatches: 2, vendorRisk: 25, itcRisk: 20 } },
-        { clientId: '4', clientName: 'Delta Traders', scores: { lateFilings: 0, noticeFrequency: 0, gstMismatches: 1, vendorRisk: 8, itcRisk: 5 } },
-        { clientId: '5', clientName: 'Epsilon Ltd', scores: { lateFilings: 4, noticeFrequency: 2, gstMismatches: 6, vendorRisk: 60, itcRisk: 55 } },
-      ]);
+      setError('Failed to load risk data. Please try again later.');
+      // Keep state empty — UI will render the error banner + empty states.
+      setClients([]);
+      setAggregate({ low: 0, medium: 0, high: 0, critical: 0, averageScore: 0 });
+      setHeatmapData([]);
     } finally {
       setLoading(false);
     }

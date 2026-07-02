@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { isOverdue } from '@/lib/gst-utils';
+import { emitGstReturnNode } from '@/lib/graph/auto-emit';
 
 export async function GET() {
   try {
@@ -113,6 +114,9 @@ export async function POST(request: Request) {
         details: `New ${returnType} filing created for period ${period}`,
       },
     });
+
+    // PT-2-b: canonical graph node emit — auto-create gst-return node + Client→Filing edge
+    try { await emitGstReturnNode(filing.id); } catch (e) { console.error('[graph] emitGstReturnNode failed', e); }
 
     return NextResponse.json({ filing }, { status: 201 });
   } catch (error) {

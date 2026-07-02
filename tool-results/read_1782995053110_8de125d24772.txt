@@ -1,0 +1,746 @@
+     1→'use client';
+     2→
+     3→import React, { useState, useMemo } from 'react';
+     4→import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+     5→import { Badge } from '@/components/ui/badge';
+     6→import { Button } from '@/components/ui/button';
+     7→import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+     8→import { Input } from '@/components/ui/input';
+     9→import { Separator } from '@/components/ui/separator';
+    10→import { Skeleton } from '@/components/ui/skeleton';
+    11→import { Textarea } from '@/components/ui/textarea';
+    12→import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+    13→import {
+    14→  Dialog,
+    15→  DialogContent,
+    16→  DialogHeader,
+    17→  DialogTitle,
+    18→  DialogFooter,
+    19→} from '@/components/ui/dialog';
+    20→import {
+    21→  CheckCircle,
+    22→  XCircle,
+    23→  MessageSquare,
+    24→  Clock,
+    25→  User,
+    26→  BarChart3,
+    27→  FileText,
+    28→  Receipt,
+    29→  Users,
+    30→  FolderOpen,
+    31→  Filter,
+    32→  ChevronRight,
+    33→  AlertTriangle,
+    34→  ArrowRight,
+    35→  Zap,
+    36→  TrendingUp,
+    37→  Timer,
+    38→  CheckCircle2,
+    39→  RotateCcw,
+    40→} from 'lucide-react';
+    41→import { motion, AnimatePresence } from 'framer-motion';
+    42→import { format, isToday, differenceInHours, parseISO } from 'date-fns';
+    43→
+    44→// ─── Types ─────────────────────────────────────────────────────────────────────
+    45→
+    46→type ApprovalType = 'return_filing' | 'invoice_processing' | 'client_onboarding' | 'document_signoff';
+    47→type ApprovalStatus = 'pending' | 'approved' | 'rejected' | 'changes_requested' | 'in_review';
+    48→type Priority = 'urgent' | 'high' | 'normal' | 'low';
+    49→
+    50→interface ApprovalStep {
+    51→  level: number;
+    52→  role: string;
+    53→  assignee: string;
+    54→  status: 'pending' | 'approved' | 'rejected' | 'skipped';
+    55→  timestamp?: string;
+    56→  comment?: string;
+    57→}
+    58→
+    59→interface ApprovalRequest {
+    60→  id: string;
+    61→  title: string;
+    62→  type: ApprovalType;
+    63→  requestedBy: string;
+    64→  requestedAt: string;
+    65→  priority: Priority;
+    66→  status: ApprovalStatus;
+    67→  currentLevel: number;
+    68→  totalLevels: number;
+    69→  steps: ApprovalStep[];
+    70→  details: string;
+    71→  delegateTo?: string;
+    72→}
+    73→
+    74→// ─── Constants ─────────────────────────────────────────────────────────────────
+    75→
+    76→const TYPE_CONFIG: Record<ApprovalType, { label: string; icon: React.ElementType; color: string }> = {
+    77→  return_filing: { label: 'Return Filing', icon: FileText, color: 'text-purple-600 bg-purple-50 border-purple-200' },
+    78→  invoice_processing: { label: 'Invoice Processing', icon: Receipt, color: 'text-amber-600 bg-amber-50 border-amber-200' },
+    79→  client_onboarding: { label: 'Client Onboarding', icon: Users, color: 'text-emerald-600 bg-emerald-50 border-emerald-200' },
+    80→  document_signoff: { label: 'Document Sign-off', icon: FolderOpen, color: 'text-teal-600 bg-teal-50 border-teal-200' },
+    81→};
+    82→
+    83→const STATUS_CONFIG: Record<ApprovalStatus, { label: string; color: string; icon: React.ReactNode }> = {
+    84→  pending: { label: 'Pending', color: 'text-amber-700 bg-amber-50 border-amber-200', icon: <Clock className="size-3.5" /> },
+    85→  in_review: { label: 'In Review', color: 'text-blue-700 bg-blue-50 border-blue-200', icon: <Eye className="size-3.5" /> },
+    86→  approved: { label: 'Approved', color: 'text-emerald-700 bg-emerald-50 border-emerald-200', icon: <CheckCircle className="size-3.5" /> },
+    87→  rejected: { label: 'Rejected', color: 'text-red-700 bg-red-50 border-red-200', icon: <XCircle className="size-3.5" /> },
+    88→  changes_requested: { label: 'Changes Requested', color: 'text-orange-700 bg-orange-50 border-orange-200', icon: <MessageSquare className="size-3.5" /> },
+    89→};
+    90→
+    91→const PRIORITY_CONFIG: Record<Priority, { label: string; color: string; dot: string }> = {
+    92→  urgent: { label: 'Urgent', color: 'text-red-700 bg-red-50', dot: 'bg-red-500' },
+    93→  high: { label: 'High', color: 'text-orange-700 bg-orange-50', dot: 'bg-orange-500' },
+    94→  normal: { label: 'Normal', color: 'text-blue-700 bg-blue-50', dot: 'bg-blue-500' },
+    95→  low: { label: 'Low', color: 'text-slate-700 bg-slate-50', dot: 'bg-slate-400' },
+    96→};
+    97→
+    98→// ─── Mock Data ─────────────────────────────────────────────────────────────────
+    99→
+   100→function generateMockApprovals(): ApprovalRequest[] {
+   101→  const items: ApprovalRequest[] = [
+   102→    {
+   103→      id: 'APR-001',
+   104→      title: 'GSTR-1 Filing - Acme Industries',
+   105→      type: 'return_filing',
+   106→      requestedBy: 'Amit Patel',
+   107→      requestedAt: new Date(Date.now() - 2 * 3600000).toISOString(),
+   108→      priority: 'urgent',
+   109→      status: 'pending',
+   110→      currentLevel: 1,
+   111→      totalLevels: 2,
+   112→      steps: [
+   113→        { level: 1, role: 'Manager', assignee: 'Priya Sharma', status: 'pending' },
+   114→        { level: 2, role: 'Admin', assignee: 'Rajesh Kumar', status: 'pending' },
+   115→      ],
+   116→      details: 'GSTR-1 for October 2024 period. Total taxable value: ₹15,23,450. 23 invoices processed.',
+   117→    },
+   118→    {
+   119→      id: 'APR-002',
+   120→      title: 'Invoice INV-2024-0156 - Vendor Payment',
+   121→      type: 'invoice_processing',
+   122→      requestedBy: 'Priya Sharma',
+   123→      requestedAt: new Date(Date.now() - 5 * 3600000).toISOString(),
+   124→      priority: 'high',
+   125→      status: 'in_review',
+   126→      currentLevel: 1,
+   127→      totalLevels: 2,
+   128→      steps: [
+   129→        { level: 1, role: 'Manager', assignee: 'Priya Sharma', status: 'approved', timestamp: new Date(Date.now() - 3 * 3600000).toISOString(), comment: 'Amount verified' },
+   130→        { level: 2, role: 'Admin', assignee: 'Rajesh Kumar', status: 'pending' },
+   131→      ],
+   132→      details: 'Invoice amount: ₹4,50,000. Vendor: TechSolutions Pvt Ltd. GST: ₹81,000.',
+   133→    },
+   134→    {
+   135→      id: 'APR-003',
+   136→      title: 'New Client: Sharma & Associates',
+   137→      type: 'client_onboarding',
+   138→      requestedBy: 'Rajesh Kumar',
+   139→      requestedAt: new Date(Date.now() - 24 * 3600000).toISOString(),
+   140→      priority: 'normal',
+   141→      status: 'approved',
+   142→      currentLevel: 2,
+   143→      totalLevels: 2,
+   144→      steps: [
+   145→        { level: 1, role: 'Manager', assignee: 'Priya Sharma', status: 'approved', timestamp: new Date(Date.now() - 20 * 3600000).toISOString(), comment: 'Documents verified' },
+   146→        { level: 2, role: 'Admin', assignee: 'Rajesh Kumar', status: 'approved', timestamp: new Date(Date.now() - 12 * 3600000).toISOString() },
+   147→      ],
+   148→      details: 'New client onboarding. GSTIN: 27AAACR5055K1ZI. Entity: Partnership firm.',
+   149→    },
+   150→    {
+   151→      id: 'APR-004',
+   152→      title: 'Annual Return Document Sign-off',
+   153→      type: 'document_signoff',
+   154→      requestedBy: 'Amit Patel',
+   155→      requestedAt: new Date(Date.now() - 48 * 3600000).toISOString(),
+   156→      priority: 'normal',
+   157→      status: 'changes_requested',
+   158→      currentLevel: 1,
+   159→      totalLevels: 1,
+   160→      steps: [
+   161→        { level: 1, role: 'Manager', assignee: 'Priya Sharma', status: 'rejected', timestamp: new Date(Date.now() - 36 * 3600000).toISOString(), comment: 'Need to update Section 8 details before approval' },
+   162→      ],
+   163→      details: 'Annual return document for FY 2023-24. Client requested revision in depreciation schedule.',
+   164→    },
+   165→    {
+   166→      id: 'APR-005',
+   167→      title: 'GSTR-3B Filing - Beta Corp',
+   168→      type: 'return_filing',
+   169→      requestedBy: 'Anita Desai',
+   170→      requestedAt: new Date(Date.now() - 72 * 3600000).toISOString(),
+   171→      priority: 'high',
+   172→      status: 'rejected',
+   173→      currentLevel: 1,
+   174→      totalLevels: 2,
+   175→      steps: [
+   176→        { level: 1, role: 'Manager', assignee: 'Priya Sharma', status: 'rejected', timestamp: new Date(Date.now() - 60 * 3600000).toISOString(), comment: 'ITC mismatch detected. Please reconcile before resubmitting.' },
+   177→        { level: 2, role: 'Admin', assignee: 'Rajesh Kumar', status: 'skipped' },
+   178→      ],
+   179→      details: 'GSTR-3B for November 2024. ITC claimed: ₹3,45,600. Mismatch with GSTR-2A.',
+   180→    },
+   181→    {
+   182→      id: 'APR-006',
+   183→      title: 'Invoice INV-2024-0187 - Service Fee',
+   184→      type: 'invoice_processing',
+   185→      requestedBy: 'Amit Patel',
+   186→      requestedAt: new Date(Date.now() - 1 * 3600000).toISOString(),
+   187→      priority: 'low',
+   188→      status: 'pending',
+   189→      currentLevel: 1,
+   190→      totalLevels: 1,
+   191→      steps: [
+   192→        { level: 1, role: 'Manager', assignee: 'Priya Sharma', status: 'pending' },
+   193→      ],
+   194→      details: 'Professional services invoice. Amount: ₹1,20,000. Client: Delta Industries.',
+   195→    },
+   196→  ];
+   197→  return items;
+   198→}
+   199→
+   200→function Eye(props: React.SVGProps<SVGSVGElement> & { size?: number | string }) {
+   201→  return (
+   202→    <svg xmlns="http://www.w3.org/2000/svg" width={props.size || 24} height={props.size || 24} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+   203→      <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
+   204→      <circle cx="12" cy="12" r="3" />
+   205→    </svg>
+   206→  );
+   207→}
+   208→
+   209→// ─── Main Component ────────────────────────────────────────────────────────────
+   210→
+   211→export default function ApprovalsPage() {
+   212→  const [approvals] = useState<ApprovalRequest[]>(() => generateMockApprovals());
+   213→  const [loading, setLoading] = useState(true);
+   214→  const [activeTab, setActiveTab] = useState('pending');
+   215→  const [filterType, setFilterType] = useState<string>('all');
+   216→  const [filterPriority, setFilterPriority] = useState<string>('all');
+   217→  const [actionOpen, setActionOpen] = useState(false);
+   218→  const [actionType, setActionType] = useState<'approve' | 'reject' | 'request_changes'>('approve');
+   219→  const [selectedApproval, setSelectedApproval] = useState<ApprovalRequest | null>(null);
+   220→  const [comment, setComment] = useState('');
+   221→
+   222→  React.useEffect(() => {
+   223→    const t = setTimeout(() => setLoading(false), 500);
+   224→    return () => clearTimeout(t);
+   225→  }, []);
+   226→
+   227→  const pendingApprovals = useMemo(() =>
+   228→    approvals.filter((a) => a.status === 'pending' || a.status === 'in_review'),
+   229→  [approvals]);
+   230→
+   231→  const completedApprovals = useMemo(() =>
+   232→    approvals.filter((a) => a.status === 'approved' || a.status === 'rejected' || a.status === 'changes_requested'),
+   233→  [approvals]);
+   234→
+   235→  const displayList = activeTab === 'pending' ? pendingApprovals : completedApprovals;
+   236→
+   237→  const filteredList = useMemo(() => {
+   238→    let result = [...displayList];
+   239→    if (filterType !== 'all') result = result.filter((a) => a.type === filterType);
+   240→    if (filterPriority !== 'all') result = result.filter((a) => a.priority === filterPriority);
+   241→    return result;
+   242→  }, [displayList, filterType, filterPriority]);
+   243→
+   244→  // Analytics
+   245→  const avgApprovalTime = useMemo(() => {
+   246→    const completed = approvals.filter((a) => a.status === 'approved');
+   247→    if (completed.length === 0) return 0;
+   248→    const totalHours = completed.reduce((sum, a) => {
+   249→      const lastStep = a.steps.filter((s) => s.status === 'approved').pop();
+   250→      if (lastStep?.timestamp) {
+   251→        return sum + differenceInHours(parseISO(lastStep.timestamp), parseISO(a.requestedAt));
+   252→      }
+   253→      return sum;
+   254→    }, 0);
+   255→    return Math.round(totalHours / completed.length);
+   256→  }, [approvals]);
+   257→
+   258→  const approvalRate = useMemo(() => {
+   259→    const total = approvals.length;
+   260→    const approved = approvals.filter((a) => a.status === 'approved').length;
+   261→    return total > 0 ? Math.round((approved / total) * 100) : 0;
+   262→  }, [approvals]);
+   263→
+   264→  const handleAction = (approval: ApprovalRequest, type: 'approve' | 'reject' | 'request_changes') => {
+   265→    setSelectedApproval(approval);
+   266→    setActionType(type);
+   267→    setComment('');
+   268→    setActionOpen(true);
+   269→  };
+   270→
+   271→  const submitAction = () => {
+   272→    // In production, this would call an API
+   273→    setActionOpen(false);
+   274→    setSelectedApproval(null);
+   275→    setComment('');
+   276→  };
+   277→
+   278→  if (loading) {
+   279→    return (
+   280→      <div className="space-y-6 p-6">
+   281→        <Skeleton className="h-10 w-64" />
+   282→        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+   283→          {[1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-24 rounded-xl" />)}
+   284→        </div>
+   285→        <Skeleton className="h-96 rounded-xl" />
+   286→      </div>
+   287→    );
+   288→  }
+   289→
+   290→  return (
+   291→    <div className="space-y-6 p-4 md:p-6">
+   292→      {/* Header */}
+   293→      <div className="flex items-center gap-3">
+   294→        <div className="flex size-10 items-center justify-center rounded-lg bg-emerald-100">
+   295→          <CheckCircle className="size-5 text-emerald-700" />
+   296→        </div>
+   297→        <div>
+   298→          <h1 className="text-xl font-bold tracking-tight sm:text-2xl">Approvals</h1>
+   299→          <p className="text-sm text-muted-foreground">Manage approval workflows and delegation</p>
+   300→        </div>
+   301→      </div>
+   302→
+   303→      {/* Stats */}
+   304→      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+   305→        <Card className="transition-shadow hover:shadow-md">
+   306→          <CardContent className="pt-6">
+   307→            <div className="flex items-center justify-between">
+   308→              <div>
+   309→                <p className="text-sm text-muted-foreground">Pending</p>
+   310→                <p className="text-2xl font-bold">{pendingApprovals.length}</p>
+   311→              </div>
+   312→              <div className="flex size-10 items-center justify-center rounded-lg bg-amber-50">
+   313→                <Clock className="size-5 text-amber-600" />
+   314→              </div>
+   315→            </div>
+   316→          </CardContent>
+   317→        </Card>
+   318→        <Card className="transition-shadow hover:shadow-md">
+   319→          <CardContent className="pt-6">
+   320→            <div className="flex items-center justify-between">
+   321→              <div>
+   322→                <p className="text-sm text-muted-foreground">Approval Rate</p>
+   323→                <p className="text-2xl font-bold">{approvalRate}%</p>
+   324→              </div>
+   325→              <div className="flex size-10 items-center justify-center rounded-lg bg-emerald-50">
+   326→                <TrendingUp className="size-5 text-emerald-600" />
+   327→              </div>
+   328→            </div>
+   329→          </CardContent>
+   330→        </Card>
+   331→        <Card className="transition-shadow hover:shadow-md">
+   332→          <CardContent className="pt-6">
+   333→            <div className="flex items-center justify-between">
+   334→              <div>
+   335→                <p className="text-sm text-muted-foreground">Avg. Approval Time</p>
+   336→                <p className="text-2xl font-bold">{avgApprovalTime}h</p>
+   337→              </div>
+   338→              <div className="flex size-10 items-center justify-center rounded-lg bg-purple-50">
+   339→                <Timer className="size-5 text-purple-600" />
+   340→              </div>
+   341→            </div>
+   342→          </CardContent>
+   343→        </Card>
+   344→        <Card className="transition-shadow hover:shadow-md">
+   345→          <CardContent className="pt-6">
+   346→            <div className="flex items-center justify-between">
+   347→              <div>
+   348→                <p className="text-sm text-muted-foreground">Completed</p>
+   349→                <p className="text-2xl font-bold">{completedApprovals.length}</p>
+   350→              </div>
+   351→              <div className="flex size-10 items-center justify-center rounded-lg bg-teal-50">
+   352→                <CheckCircle2 className="size-5 text-teal-600" />
+   353→              </div>
+   354→            </div>
+   355→          </CardContent>
+   356→        </Card>
+   357→      </div>
+   358→
+   359→      {/* Main Tabs */}
+   360→      <Tabs value={activeTab} onValueChange={setActiveTab}>
+   361→        <div className="flex items-center justify-between">
+   362→          <TabsList className="bg-muted/50">
+   363→            <TabsTrigger value="pending" className="gap-2">
+   364→              <Clock className="size-4" />
+   365→              Pending ({pendingApprovals.length})
+   366→            </TabsTrigger>
+   367→            <TabsTrigger value="history" className="gap-2">
+   368→              <CheckCircle className="size-4" />
+   369→              History ({completedApprovals.length})
+   370→            </TabsTrigger>
+   371→            <TabsTrigger value="analytics" className="gap-2">
+   372→              <BarChart3 className="size-4" />
+   373→              Analytics
+   374→            </TabsTrigger>
+   375→          </TabsList>
+   376→        </div>
+   377→
+   378→        <TabsContent value="pending" className="space-y-4 mt-4">
+   379→          {/* Filters */}
+   380→          <div className="flex gap-2 flex-wrap">
+   381→            <Select value={filterType} onValueChange={setFilterType}>
+   382→              <SelectTrigger className="w-40"><SelectValue placeholder="All Types" /></SelectTrigger>
+   383→              <SelectContent>
+   384→                <SelectItem value="all">All Types</SelectItem>
+   385→                {Object.entries(TYPE_CONFIG).map(([k, v]) => (
+   386→                  <SelectItem key={k} value={k}>{v.label}</SelectItem>
+   387→                ))}
+   388→              </SelectContent>
+   389→            </Select>
+   390→            <Select value={filterPriority} onValueChange={setFilterPriority}>
+   391→              <SelectTrigger className="w-36"><SelectValue placeholder="All Priorities" /></SelectTrigger>
+   392→              <SelectContent>
+   393→                <SelectItem value="all">All Priorities</SelectItem>
+   394→                {Object.entries(PRIORITY_CONFIG).map(([k, v]) => (
+   395→                  <SelectItem key={k} value={k}>{v.label}</SelectItem>
+   396→                ))}
+   397→              </SelectContent>
+   398→            </Select>
+   399→          </div>
+   400→
+   401→          {/* Approval Cards */}
+   402→          <div className="space-y-3">
+   403→            <AnimatePresence>
+   404→              {filteredList.map((approval) => {
+   405→                const typeCfg = TYPE_CONFIG[approval.type];
+   406→                const statusCfg = STATUS_CONFIG[approval.status];
+   407→                const priorityCfg = PRIORITY_CONFIG[approval.priority];
+   408→                const TypeIcon = typeCfg.icon;
+   409→                const hoursAgo = differenceInHours(new Date(), parseISO(approval.requestedAt));
+   410→
+   411→                return (
+   412→                  <motion.div
+   413→                    key={approval.id}
+   414→                    initial={{ opacity: 0, y: 10 }}
+   415→                    animate={{ opacity: 1, y: 0 }}
+   416→                    exit={{ opacity: 0, y: -10 }}
+   417→                    transition={{ duration: 0.2 }}
+   418→                  >
+   419→                    <Card className="hover:shadow-md transition-shadow">
+   420→                      <CardContent className="p-4">
+   421→                        <div className="flex flex-col lg:flex-row lg:items-center gap-4">
+   422→                          {/* Left: Info */}
+   423→                          <div className="flex-1 min-w-0">
+   424→                            <div className="flex items-center gap-2 flex-wrap">
+   425→                              <Badge variant="outline" className={`gap-1 text-xs ${typeCfg.color}`}>
+   426→                                <TypeIcon className="size-3" />
+   427→                                {typeCfg.label}
+   428→                              </Badge>
+   429→                              <Badge variant="outline" className={`gap-1 text-xs ${priorityCfg.color}`}>
+   430→                                <div className={`size-1.5 rounded-full ${priorityCfg.dot}`} />
+   431→                                {priorityCfg.label}
+   432→                              </Badge>
+   433→                              <Badge variant="outline" className={`gap-1 text-xs ${statusCfg.color}`}>
+   434→                                {statusCfg.icon}
+   435→                                {statusCfg.label}
+   436→                              </Badge>
+   437→                            </div>
+   438→                            <h3 className="font-semibold mt-2 text-sm">{approval.title}</h3>
+   439→                            <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{approval.details}</p>
+   440→                            <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
+   441→                              <span className="flex items-center gap-1">
+   442→                                <User className="size-3" />
+   443→                                {approval.requestedBy}
+   444→                              </span>
+   445→                              <span className="flex items-center gap-1">
+   446→                                <Clock className="size-3" />
+   447→                                {hoursAgo}h ago
+   448→                              </span>
+   449→                              <span className="flex items-center gap-1">
+   450→                                Level {approval.currentLevel}/{approval.totalLevels}
+   451→                              </span>
+   452→                            </div>
+   453→                          </div>
+   454→
+   455→                          {/* Middle: Approval Chain */}
+   456→                          <div className="flex items-center gap-1 shrink-0">
+   457→                            {approval.steps.map((step, idx) => (
+   458→                              <React.Fragment key={step.level}>
+   459→                                <div className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-xs ${
+   460→                                  step.status === 'approved' ? 'bg-emerald-50 text-emerald-700' :
+   461→                                  step.status === 'rejected' ? 'bg-red-50 text-red-700' :
+   462→                                  step.status === 'pending' ? 'bg-amber-50 text-amber-700' :
+   463→                                  'bg-slate-50 text-slate-400'
+   464→                                }`}>
+   465→                                  {step.status === 'approved' && <CheckCircle2 className="size-3" />}
+   466→                                  {step.status === 'rejected' && <XCircle className="size-3" />}
+   467→                                  {step.status === 'pending' && <Clock className="size-3" />}
+   468→                                  {step.status === 'skipped' && <RotateCcw className="size-3" />}
+   469→                                  <span>{step.assignee.split(' ')[0]}</span>
+   470→                                </div>
+   471→                                {idx < approval.steps.length - 1 && (
+   472→                                  <ArrowRight className="size-3 text-muted-foreground" />
+   473→                                )}
+   474→                              </React.Fragment>
+   475→                            ))}
+   476→                          </div>
+   477→
+   478→                          {/* Right: Actions */}
+   479→                          {(approval.status === 'pending' || approval.status === 'in_review') && (
+   480→                            <div className="flex items-center gap-2 shrink-0">
+   481→                              <Button
+   482→                                size="sm"
+   483→                                className="gap-1 bg-emerald-600 hover:bg-emerald-700"
+   484→                                onClick={() => handleAction(approval, 'approve')}
+   485→                              >
+   486→                                <CheckCircle className="size-3.5" />
+   487→                                Approve
+   488→                              </Button>
+   489→                              <Button
+   490→                                variant="outline"
+   491→                                size="sm"
+   492→                                className="gap-1 text-red-600 border-red-200 hover:bg-red-50"
+   493→                                onClick={() => handleAction(approval, 'reject')}
+   494→                              >
+   495→                                <XCircle className="size-3.5" />
+   496→                                Reject
+   497→                              </Button>
+   498→                              <Button
+   499→                                variant="outline"
+   500→                                size="sm"
+   501→                                className="gap-1"
+   502→                                onClick={() => handleAction(approval, 'request_changes')}
+   503→                              >
+   504→                                <MessageSquare className="size-3.5" />
+   505→                                Changes
+   506→                              </Button>
+   507→                            </div>
+   508→                          )}
+   509→                        </div>
+   510→                      </CardContent>
+   511→                    </Card>
+   512→                  </motion.div>
+   513→                );
+   514→              })}
+   515→            </AnimatePresence>
+   516→
+   517→            {filteredList.length === 0 && (
+   518→              <Card>
+   519→                <CardContent className="py-16">
+   520→                  <div className="flex flex-col items-center gap-2 text-muted-foreground">
+   521→                    <CheckCircle className="size-8 opacity-50" />
+   522→                    <p>No pending approvals</p>
+   523→                  </div>
+   524→                </CardContent>
+   525→              </Card>
+   526→            )}
+   527→          </div>
+   528→        </TabsContent>
+   529→
+   530→        <TabsContent value="history" className="space-y-4 mt-4">
+   531→          <div className="space-y-3">
+   532→            {completedApprovals.map((approval) => {
+   533→              const typeCfg = TYPE_CONFIG[approval.type];
+   534→              const statusCfg = STATUS_CONFIG[approval.status];
+   535→              const TypeIcon = typeCfg.icon;
+   536→
+   537→              return (
+   538→                <Card key={approval.id} className="hover:shadow-md transition-shadow">
+   539→                  <CardContent className="p-4">
+   540→                    <div className="flex items-center gap-3">
+   541→                      <div className={`flex size-9 items-center justify-center rounded-lg ${typeCfg.color.split(' ').slice(1, 3).join(' ')}`}>
+   542→                        <TypeIcon className={`size-4 ${typeCfg.color.split(' ')[0]}`} />
+   543→                      </div>
+   544→                      <div className="flex-1 min-w-0">
+   545→                        <h3 className="font-semibold text-sm">{approval.title}</h3>
+   546→                        <div className="flex items-center gap-2 mt-1">
+   547→                          <Badge variant="outline" className={`gap-1 text-xs ${statusCfg.color}`}>
+   548→                            {statusCfg.icon}
+   549→                            {statusCfg.label}
+   550→                          </Badge>
+   551→                          <span className="text-xs text-muted-foreground">
+   552→                            by {approval.requestedBy} &middot; {format(parseISO(approval.requestedAt), 'MMM d, h:mm a')}
+   553→                          </span>
+   554→                        </div>
+   555→                      </div>
+   556→                      <ChevronRight className="size-4 text-muted-foreground" />
+   557→                    </div>
+   558→                  </CardContent>
+   559→                </Card>
+   560→              );
+   561→            })}
+   562→          </div>
+   563→        </TabsContent>
+   564→
+   565→        <TabsContent value="analytics" className="space-y-4 mt-4">
+   566→          <div className="grid gap-4 md:grid-cols-2">
+   567→            {/* Approval by Type */}
+   568→            <Card>
+   569→              <CardHeader>
+   570→                <CardTitle className="flex items-center gap-2 text-base">
+   571→                  <BarChart3 className="size-4 text-emerald-600" />
+   572→                  Approvals by Type
+   573→                </CardTitle>
+   574→              </CardHeader>
+   575→              <CardContent>
+   576→                {(() => {
+   577→                  const typeCounts: Record<string, number> = {};
+   578→                  approvals.forEach((a) => { typeCounts[a.type] = (typeCounts[a.type] || 0) + 1; });
+   579→                  const sorted = Object.entries(typeCounts).sort((a, b) => b[1] - a[1]);
+   580→                  const max = Math.max(...sorted.map(([, c]) => c), 1);
+   581→                  return (
+   582→                    <div className="space-y-3">
+   583→                      {sorted.map(([type, count], i) => {
+   584→                        const cfg = TYPE_CONFIG[type as ApprovalType];
+   585→                        return (
+   586→                          <div key={type} className="flex items-center gap-3">
+   587→                            <span className="text-xs font-medium w-28 shrink-0">{cfg.label}</span>
+   588→                            <div className="flex-1 h-5 bg-muted/30 rounded-full overflow-hidden">
+   589→                              <motion.div
+   590→                                className="h-full rounded-full bg-emerald-400"
+   591→                                initial={{ width: 0 }}
+   592→                                animate={{ width: `${(count / max) * 100}%` }}
+   593→                                transition={{ duration: 0.6, delay: i * 0.1 }}
+   594→                              />
+   595→                            </div>
+   596→                            <span className="text-xs font-mono text-muted-foreground w-6">{count}</span>
+   597→                          </div>
+   598→                        );
+   599→                      })}
+   600→                    </div>
+   601→                  );
+   602→                })()}
+   603→              </CardContent>
+   604→            </Card>
+   605→
+   606→            {/* Bottleneck Areas */}
+   607→            <Card>
+   608→              <CardHeader>
+   609→                <CardTitle className="flex items-center gap-2 text-base">
+   610→                  <AlertTriangle className="size-4 text-amber-600" />
+   611→                  Bottleneck Areas
+   612→                </CardTitle>
+   613→              </CardHeader>
+   614→              <CardContent>
+   615→                <div className="space-y-3">
+   616→                  {(() => {
+   617→                    const stepTimes: Record<string, { total: number; count: number }> = {};
+   618→                    approvals.forEach((a) => {
+   619→                      a.steps.forEach((s) => {
+   620→                        if (s.timestamp && s.status !== 'skipped') {
+   621→                          const key = `${s.role} (Level ${s.level})`;
+   622→                          const hours = differenceInHours(parseISO(s.timestamp), parseISO(a.requestedAt));
+   623→                          if (!stepTimes[key]) stepTimes[key] = { total: 0, count: 0 };
+   624→                          stepTimes[key].total += hours;
+   625→                          stepTimes[key].count += 1;
+   626→                        }
+   627→                      });
+   628→                    });
+   629→                    const sorted = Object.entries(stepTimes)
+   630→                      .map(([key, data]) => ({ key, avg: Math.round(data.total / data.count) }))
+   631→                      .sort((a, b) => b.avg - a.avg);
+   632→
+   633→                    return sorted.map((item, i) => (
+   634→                      <div key={item.key} className="flex items-center justify-between">
+   635→                        <span className="text-sm">{item.key}</span>
+   636→                        <div className="flex items-center gap-2">
+   637→                          <div className="w-20 h-2 bg-muted rounded-full overflow-hidden">
+   638→                            <div
+   639→                              className={`h-full rounded-full ${i === 0 ? 'bg-red-400' : i === 1 ? 'bg-amber-400' : 'bg-emerald-400'}`}
+   640→                              style={{ width: `${(item.avg / (sorted[0]?.avg || 1)) * 100}%` }}
+   641→                            />
+   642→                          </div>
+   643→                          <span className="text-xs font-mono text-muted-foreground">{item.avg}h avg</span>
+   644→                        </div>
+   645→                      </div>
+   646→                    ));
+   647→                  })()}
+   648→                </div>
+   649→              </CardContent>
+   650→            </Card>
+   651→
+   652→            {/* Delegation Rules */}
+   653→            <Card className="md:col-span-2">
+   654→              <CardHeader>
+   655→                <CardTitle className="flex items-center gap-2 text-base">
+   656→                  <Zap className="size-4 text-emerald-600" />
+   657→                  Auto-Delegation Rules
+   658→                </CardTitle>
+   659→              </CardHeader>
+   660→              <CardContent>
+   661→                <p className="text-sm text-muted-foreground mb-4">
+   662→                  When an approver is unavailable, approvals can be automatically delegated.
+   663→                </p>
+   664→                <div className="space-y-3">
+   665→                  {[
+   666→                    { from: 'Priya Sharma (Manager)', to: 'Rajesh Kumar (Admin)', trigger: 'Away for 4+ hours', active: true },
+   667→                    { from: 'Rajesh Kumar (Admin)', to: 'Priya Sharma (Manager)', trigger: 'Out of office', active: true },
+   668→                    { from: 'Amit Patel (Staff)', to: 'Priya Sharma (Manager)', trigger: 'On leave', active: false },
+   669→                  ].map((rule) => (
+   670→                    <div key={rule.from} className="flex items-center justify-between rounded-lg border p-3">
+   671→                      <div className="flex items-center gap-3">
+   672→                        <div className="flex items-center gap-1.5 text-sm">
+   673→                          <span className="font-medium">{rule.from}</span>
+   674→                          <ArrowRight className="size-3.5 text-muted-foreground" />
+   675→                          <span>{rule.to}</span>
+   676→                        </div>
+   677→                      </div>
+   678→                      <div className="flex items-center gap-3">
+   679→                        <span className="text-xs text-muted-foreground">{rule.trigger}</span>
+   680→                        <Badge variant="outline" className={rule.active ? 'text-emerald-600 border-emerald-200 bg-emerald-50' : 'text-slate-400'}>
+   681→                          {rule.active ? 'Active' : 'Inactive'}
+   682→                        </Badge>
+   683→                      </div>
+   684→                    </div>
+   685→                  ))}
+   686→                </div>
+   687→              </CardContent>
+   688→            </Card>
+   689→          </div>
+   690→        </TabsContent>
+   691→      </Tabs>
+   692→
+   693→      {/* Action Dialog */}
+   694→      <Dialog open={actionOpen} onOpenChange={setActionOpen}>
+   695→        <DialogContent className="max-w-md">
+   696→          <DialogHeader>
+   697→            <DialogTitle className="flex items-center gap-2">
+   698→              {actionType === 'approve' && <CheckCircle className="size-4 text-emerald-600" />}
+   699→              {actionType === 'reject' && <XCircle className="size-4 text-red-600" />}
+   700→              {actionType === 'request_changes' && <MessageSquare className="size-4 text-amber-600" />}
+   701→              {actionType === 'approve' ? 'Approve Request' : actionType === 'reject' ? 'Reject Request' : 'Request Changes'}
+   702→            </DialogTitle>
+   703→          </DialogHeader>
+   704→          {selectedApproval && (
+   705→            <div className="space-y-4">
+   706→              <div className="rounded-lg border p-3 bg-muted/30">
+   707→                <p className="font-medium text-sm">{selectedApproval.title}</p>
+   708→                <p className="text-xs text-muted-foreground mt-1">
+   709→                  Level {selectedApproval.currentLevel} of {selectedApproval.totalLevels} &middot; {TYPE_CONFIG[selectedApproval.type].label}
+   710→                </p>
+   711→              </div>
+   712→              <div>
+   713→                <label className="text-sm font-medium">Comment</label>
+   714→                <Textarea
+   715→                  value={comment}
+   716→                  onChange={(e) => setComment(e.target.value)}
+   717→                  placeholder={
+   718→                    actionType === 'approve' ? 'Optional approval comment...' :
+   719→                    actionType === 'reject' ? 'Reason for rejection...' :
+   720→                    'Describe the changes needed...'
+   721→                  }
+   722→                  className="mt-1"
+   723→                  rows={3}
+   724→                />
+   725→              </div>
+   726→            </div>
+   727→          )}
+   728→          <DialogFooter className="gap-2">
+   729→            <Button variant="outline" onClick={() => setActionOpen(false)}>Cancel</Button>
+   730→            <Button
+   731→              onClick={submitAction}
+   732→              className={
+   733→                actionType === 'approve' ? 'bg-emerald-600 hover:bg-emerald-700' :
+   734→                actionType === 'reject' ? 'bg-red-600 hover:bg-red-700' :
+   735→                'bg-amber-600 hover:bg-amber-700'
+   736→              }
+   737→            >
+   738→              {actionType === 'approve' ? 'Approve' : actionType === 'reject' ? 'Reject' : 'Request Changes'}
+   739→            </Button>
+   740→          </DialogFooter>
+   741→        </DialogContent>
+   742→      </Dialog>
+   743→    </div>
+   744→  );
+   745→}
+   746→

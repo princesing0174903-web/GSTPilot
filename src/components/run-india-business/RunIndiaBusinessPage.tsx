@@ -22,6 +22,8 @@ import {
   useFireClients, useFireInvoices, useFireReturns,
   useFireDocuments, useFireReconciliations, useFireActivities,
 } from '@/hooks/use-firestore'
+import { EmptyState } from '@/components/shared'
+import { Inbox } from 'lucide-react'
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // HELPERS
@@ -132,7 +134,7 @@ const PIPELINE_STEPS: PipelineStep[] = [
 ]
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// DEMO DATA
+// RUN HISTORY (real DB-backed; empty until runs are persisted)
 // ═══════════════════════════════════════════════════════════════════════════════
 
 interface RunHistory {
@@ -146,14 +148,6 @@ interface RunHistory {
   status: 'completed' | 'failed' | 'partial'
 }
 
-const DEMO_RUN_HISTORY: RunHistory[] = [
-  { id: 1, date: '04/03/2026', startTime: '06:00 AM', duration: '4m 12s', tasks: 47, revenue: '₹12,34,50,000', clients: 47, status: 'completed' },
-  { id: 2, date: '03/03/2026', startTime: '06:00 AM', duration: '3m 58s', tasks: 45, revenue: '₹11,87,20,000', clients: 47, status: 'completed' },
-  { id: 3, date: '02/03/2026', startTime: '06:00 AM', duration: '4m 34s', tasks: 47, revenue: '₹13,56,80,000', clients: 47, status: 'completed' },
-  { id: 4, date: '01/03/2026', startTime: '06:00 AM', duration: '3m 22s', tasks: 42, revenue: '₹9,65,30,000', clients: 46, status: 'partial' },
-  { id: 5, date: '28/02/2026', startTime: '06:00 AM', duration: '0m 47s', tasks: 5, revenue: '—', clients: 47, status: 'failed' },
-]
-
 interface PriorityAction {
   id: number
   priority: 'critical' | 'high' | 'medium'
@@ -163,14 +157,6 @@ interface PriorityAction {
   dueDate: string
   status: 'pending' | 'in-progress'
 }
-
-const DEMO_PRIORITY_ACTIONS: PriorityAction[] = [
-  { id: 1, priority: 'critical', action: 'Resolve GST reconciliation mismatch ₹3,45,000', client: 'Sharma Enterprises', category: 'Reconciliation', dueDate: '06/03/2026', status: 'pending' },
-  { id: 2, priority: 'critical', action: 'File GSTR-1 for 8 clients before deadline', client: 'Multiple Clients', category: 'Returns', dueDate: '11/03/2026', status: 'in-progress' },
-  { id: 3, priority: 'high', action: 'Approve ₹45,00,000 financing for Patel Industries', client: 'Patel Industries', category: 'Finance', dueDate: '07/03/2026', status: 'pending' },
-  { id: 4, priority: 'high', action: 'Address 2 cash flow warnings flagged by AI', client: 'Krishna Traders, Mehta Corp', category: 'Cash Flow', dueDate: '08/03/2026', status: 'pending' },
-  { id: 5, priority: 'medium', action: 'Review 3 pending AI decisions from pipeline', client: 'System', category: 'AI Decisions', dueDate: '09/03/2026', status: 'pending' },
-]
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // LOG ENTRY
@@ -325,19 +311,31 @@ export default function RunIndiaBusinessPage() {
   const logEndRef = useRef<HTMLDivElement>(null)
   const pauseLockRef = useRef(false)
 
-  // ── Live Data ──
-  const liveClientCount = clients?.length || 47
-  const liveInvoiceCount = invoices?.length || 234
-  const liveReturnCount = returns?.length || 56
-  const liveDocCount = documents?.length || 456
+  // ── Live Data (no hardcoded fallbacks) ──
+  const liveClientCount = clients?.length ?? 0
+  const liveInvoiceCount = invoices?.length ?? 0
+  const liveReturnCount = returns?.length ?? 0
+  const liveDocCount = documents?.length ?? 0
+  // Reference the live counts so the linter doesn't drop them; the
+  // eventual real surfaces (run history / priority actions) will consume
+  // these once persisted.
+  void liveClientCount; void liveInvoiceCount; void liveReturnCount; void liveDocCount
+
+  // ── Real DB-backed arrays (no demo data) ──
+  const [runHistory, setRunHistory] = useState<RunHistory[]>([])
+  const [priorityActions, setPriorityActions] = useState<PriorityAction[]>([])
+  void setRunHistory; void setPriorityActions
 
   // ── Count-Up Animations ──
-  const countedTasks = useCountUp(47, 1500, showResults)
-  const countedRevenue = useCountUp(123450, 2000, showResults)
-  const countedReturns = useCountUp(20, 1200, showResults)
-  const countedPayments = useCountUp(890, 1800, showResults)
-  const countedReports = useCountUp(23, 1000, showResults)
-  const countedDecisions = useCountUp(8, 800, showResults)
+  // All counts default to 0 — there is no real source yet for run results.
+  // When the autonomous run is wired to persist results, these will pull
+  // from the latest run record.
+  const countedTasks = useCountUp(0, 1500, showResults)
+  const countedRevenue = useCountUp(0, 2000, showResults)
+  const countedReturns = useCountUp(0, 1200, showResults)
+  const countedPayments = useCountUp(0, 1800, showResults)
+  const countedReports = useCountUp(0, 1000, showResults)
+  const countedDecisions = useCountUp(0, 800, showResults)
 
   // ── Elapsed Timer ──
   useEffect(() => {
@@ -1216,33 +1214,42 @@ export default function RunIndiaBusinessPage() {
                     </CardHeader>
                     <CardContent className="pt-0">
                       <div className="space-y-2.5">
-                        {DEMO_PRIORITY_ACTIONS.map((action, i) => (
-                          <motion.div
-                            key={action.id}
-                            initial={{ opacity: 0, x: -10 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            transition={{ delay: 0.6 + i * 0.08 }}
-                            className="flex items-start gap-3 p-2.5 rounded-lg bg-slate-800/50 border border-slate-700/30"
-                          >
-                            <Badge className={`
-                              text-[9px] flex-shrink-0 px-1.5 py-0 h-5
-                              ${action.priority === 'critical' ? 'bg-red-600 text-white' :
-                                action.priority === 'high' ? 'bg-amber-600 text-white' :
-                                'bg-slate-600 text-white'}
-                            `}>
-                              {action.priority.toUpperCase()}
-                            </Badge>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-xs text-slate-300 font-medium leading-tight">{action.action}</p>
-                              <div className="flex items-center gap-2 mt-1">
-                                <span className="text-[10px] text-slate-500">{action.client}</span>
-                                <span className="text-[10px] text-slate-600">•</span>
-                                <span className="text-[10px] text-slate-500">{action.dueDate}</span>
+                        {priorityActions.length === 0 ? (
+                          <EmptyState
+                            icon={Target}
+                            title="No priority actions yet"
+                            description="The AI engine will surface critical, high, and medium priority actions here once an autonomous run completes."
+                            compact
+                          />
+                        ) : (
+                          priorityActions.map((action, i) => (
+                            <motion.div
+                              key={action.id}
+                              initial={{ opacity: 0, x: -10 }}
+                              animate={{ opacity: 1, x: 0 }}
+                              transition={{ delay: 0.6 + i * 0.08 }}
+                              className="flex items-start gap-3 p-2.5 rounded-lg bg-slate-800/50 border border-slate-700/30"
+                            >
+                              <Badge className={`
+                                text-[9px] flex-shrink-0 px-1.5 py-0 h-5
+                                ${action.priority === 'critical' ? 'bg-red-600 text-white' :
+                                  action.priority === 'high' ? 'bg-amber-600 text-white' :
+                                  'bg-slate-600 text-white'}
+                              `}>
+                                {action.priority.toUpperCase()}
+                              </Badge>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-xs text-slate-300 font-medium leading-tight">{action.action}</p>
+                                <div className="flex items-center gap-2 mt-1">
+                                  <span className="text-[10px] text-slate-500">{action.client}</span>
+                                  <span className="text-[10px] text-slate-600">•</span>
+                                  <span className="text-[10px] text-slate-500">{action.dueDate}</span>
+                                </div>
                               </div>
-                            </div>
-                            <ArrowRight className="h-3.5 w-3.5 text-slate-600 flex-shrink-0 mt-0.5" />
-                          </motion.div>
-                        ))}
+                              <ArrowRight className="h-3.5 w-3.5 text-slate-600 flex-shrink-0 mt-0.5" />
+                            </motion.div>
+                          ))
+                        )}
                       </div>
                     </CardContent>
                   </Card>
@@ -1263,40 +1270,49 @@ export default function RunIndiaBusinessPage() {
                     </CardHeader>
                     <CardContent className="pt-0">
                       <div className="space-y-4">
-                        {[
-                          { label: 'Tasks Completed', current: 47, previous: 45, unit: '' },
-                          { label: 'Revenue Processed', current: 1234.5, previous: 1187.2, unit: 'L' },
-                          { label: 'Returns Prepared', current: 20, previous: 18, unit: '' },
-                          { label: 'Execution Time', current: 4.2, previous: 4.0, unit: 'min', inverse: true },
-                          { label: 'Error Rate', current: 0, previous: 1, unit: '%', inverse: true },
-                        ].map((metric, i) => {
-                          const diff = metric.inverse
-                            ? metric.previous - metric.current
-                            : metric.current - metric.previous
-                          const isPositive = diff > 0
+                        {runHistory.length === 0 ? (
+                          <EmptyState
+                            icon={LineChart}
+                            title="No previous run to compare against"
+                            description="Performance deltas will appear here once you have at least one completed autonomous run in history."
+                            compact
+                          />
+                        ) : (
+                          [
+                            { label: 'Tasks Completed', current: 0, previous: 0, unit: '' },
+                            { label: 'Revenue Processed', current: 0, previous: 0, unit: 'L' },
+                            { label: 'Returns Prepared', current: 0, previous: 0, unit: '' },
+                            { label: 'Execution Time', current: 0, previous: 0, unit: 'min', inverse: true },
+                            { label: 'Error Rate', current: 0, previous: 0, unit: '%', inverse: true },
+                          ].map((metric, i) => {
+                            const diff = metric.inverse
+                              ? metric.previous - metric.current
+                              : metric.current - metric.previous
+                            const isPositive = diff > 0
 
-                          return (
-                            <div key={metric.label}>
-                              <div className="flex items-center justify-between mb-1">
-                                <span className="text-xs text-slate-400">{metric.label}</span>
-                                <span className={`text-xs font-bold ${isPositive ? 'text-emerald-400' : diff < 0 ? 'text-red-400' : 'text-slate-400'}`}>
-                                  {diff > 0 ? '+' : ''}{diff}{metric.unit}
-                                </span>
-                              </div>
-                              <div className="flex gap-1.5 items-center">
-                                <div className="flex-1 h-2 bg-slate-800 rounded-full overflow-hidden">
-                                  <div
-                                    className="h-full bg-emerald-500/60 rounded-full"
-                                    style={{ width: `${Math.min((metric.current / (metric.previous * 1.2)) * 100, 100)}%` }}
-                                  />
+                            return (
+                              <div key={metric.label}>
+                                <div className="flex items-center justify-between mb-1">
+                                  <span className="text-xs text-slate-400">{metric.label}</span>
+                                  <span className={`text-xs font-bold ${isPositive ? 'text-emerald-400' : diff < 0 ? 'text-red-400' : 'text-slate-400'}`}>
+                                    {diff > 0 ? '+' : ''}{diff}{metric.unit}
+                                  </span>
                                 </div>
-                                <span className="text-[10px] text-slate-500 w-16 text-right">
-                                  {metric.current}{metric.unit}
-                                </span>
+                                <div className="flex gap-1.5 items-center">
+                                  <div className="flex-1 h-2 bg-slate-800 rounded-full overflow-hidden">
+                                    <div
+                                      className="h-full bg-emerald-500/60 rounded-full"
+                                      style={{ width: `${Math.min((metric.current / (metric.previous * 1.2)) * 100, 100)}%` }}
+                                    />
+                                  </div>
+                                  <span className="text-[10px] text-slate-500 w-16 text-right">
+                                    {metric.current}{metric.unit}
+                                  </span>
+                                </div>
                               </div>
-                            </div>
-                          )
-                        })}
+                            )
+                          })
+                        )}
                       </div>
 
                       {/* System Health */}
@@ -1350,32 +1366,44 @@ export default function RunIndiaBusinessPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {DEMO_RUN_HISTORY.map((run, i) => (
-                      <motion.tr
-                        key={run.id}
-                        initial={{ opacity: 0, x: -10 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ delay: i * 0.05 }}
-                        className="border-b border-slate-800/50 hover:bg-slate-800/30 transition-colors"
-                      >
-                        <td className="px-4 py-2.5 text-xs text-slate-300">{run.date}</td>
-                        <td className="px-4 py-2.5 text-xs text-slate-400 font-mono">{run.startTime}</td>
-                        <td className="px-4 py-2.5 text-xs text-slate-400">{run.duration}</td>
-                        <td className="px-4 py-2.5 text-xs text-slate-300">{run.tasks}</td>
-                        <td className="px-4 py-2.5 text-xs text-emerald-400 font-semibold">{run.revenue}</td>
-                        <td className="px-4 py-2.5 text-xs text-slate-400">{run.clients}</td>
-                        <td className="px-4 py-2.5">
-                          <Badge className={`
-                            text-[9px] px-2 py-0
-                            ${run.status === 'completed' ? 'bg-emerald-600/20 text-emerald-400' :
-                              run.status === 'partial' ? 'bg-amber-600/20 text-amber-400' :
-                              'bg-red-600/20 text-red-400'}
-                          `}>
-                            {run.status.toUpperCase()}
-                          </Badge>
+                    {runHistory.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} className="px-4 py-8">
+                          <EmptyState
+                            icon={Inbox}
+                            title="No run history yet"
+                            description="Completed autonomous runs will be listed here with their duration, tasks, revenue, and clients processed."
+                          />
                         </td>
-                      </motion.tr>
-                    ))}
+                      </tr>
+                    ) : (
+                      runHistory.map((run, i) => (
+                        <motion.tr
+                          key={run.id}
+                          initial={{ opacity: 0, x: -10 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: i * 0.05 }}
+                          className="border-b border-slate-800/50 hover:bg-slate-800/30 transition-colors"
+                        >
+                          <td className="px-4 py-2.5 text-xs text-slate-300">{run.date}</td>
+                          <td className="px-4 py-2.5 text-xs text-slate-400 font-mono">{run.startTime}</td>
+                          <td className="px-4 py-2.5 text-xs text-slate-400">{run.duration}</td>
+                          <td className="px-4 py-2.5 text-xs text-slate-300">{run.tasks}</td>
+                          <td className="px-4 py-2.5 text-xs text-emerald-400 font-semibold">{run.revenue}</td>
+                          <td className="px-4 py-2.5 text-xs text-slate-400">{run.clients}</td>
+                          <td className="px-4 py-2.5">
+                            <Badge className={`
+                              text-[9px] px-2 py-0
+                              ${run.status === 'completed' ? 'bg-emerald-600/20 text-emerald-400' :
+                                run.status === 'partial' ? 'bg-amber-600/20 text-amber-400' :
+                                'bg-red-600/20 text-red-400'}
+                            `}>
+                              {run.status.toUpperCase()}
+                            </Badge>
+                          </td>
+                        </motion.tr>
+                      ))
+                    )}
                   </tbody>
                 </table>
               </div>

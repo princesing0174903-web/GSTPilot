@@ -50,6 +50,8 @@ import {
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
 import { motion, AnimatePresence } from 'framer-motion';
 import { formatCurrency } from '@/lib/gst-utils';
+import { EmptyState } from '@/components/shared/EmptyState';
+import { Inbox } from 'lucide-react';
 
 // ─── Color Palette ─────────────────────────────────────────────────────────
 const COLORS = {
@@ -88,134 +90,6 @@ interface ClientBenchmark {
   riskScore: number;
   overallPercentile: number;
 }
-
-// ─── Mock Data ─────────────────────────────────────────────────────────────
-const mockClientMetrics: Record<string, BenchmarkMetric[]> = {
-  'techcorp-india': [
-    {
-      name: 'Compliance Score',
-      clientValue: 87,
-      industryAverage: 72,
-      stateAverage: 68,
-      firmAverage: 79,
-      industryPercentile: 82,
-      statePercentile: 88,
-      firmPercentile: 71,
-      unit: '%',
-      icon: Shield,
-      color: COLORS.emerald,
-    },
-    {
-      name: 'Filing Timeliness',
-      clientValue: 92,
-      industryAverage: 78,
-      stateAverage: 74,
-      firmAverage: 85,
-      industryPercentile: 90,
-      statePercentile: 93,
-      firmPercentile: 78,
-      unit: '%',
-      icon: Clock,
-      color: COLORS.teal,
-    },
-    {
-      name: 'GST Volume',
-      clientValue: 2450000,
-      industryAverage: 1800000,
-      stateAverage: 1500000,
-      firmAverage: 2100000,
-      industryPercentile: 75,
-      statePercentile: 82,
-      firmPercentile: 65,
-      unit: '₹',
-      icon: BarChart3,
-      color: COLORS.purple,
-    },
-    {
-      name: 'Risk Score',
-      clientValue: 18,
-      industryAverage: 35,
-      stateAverage: 40,
-      firmAverage: 28,
-      industryPercentile: 88,
-      statePercentile: 91,
-      firmPercentile: 76,
-      unit: '',
-      inverted: true,
-      icon: AlertTriangle,
-      color: COLORS.amber,
-    },
-  ],
-};
-
-const defaultMetrics: BenchmarkMetric[] = [
-  {
-    name: 'Compliance Score',
-    clientValue: 82,
-    industryAverage: 72,
-    stateAverage: 68,
-    firmAverage: 79,
-    industryPercentile: 78,
-    statePercentile: 84,
-    firmPercentile: 68,
-    unit: '%',
-    icon: Shield,
-    color: COLORS.emerald,
-  },
-  {
-    name: 'Filing Timeliness',
-    clientValue: 88,
-    industryAverage: 78,
-    stateAverage: 74,
-    firmAverage: 85,
-    industryPercentile: 85,
-    statePercentile: 89,
-    firmPercentile: 72,
-    unit: '%',
-    icon: Clock,
-    color: COLORS.teal,
-  },
-  {
-    name: 'GST Volume',
-    clientValue: 1850000,
-    industryAverage: 1800000,
-    stateAverage: 1500000,
-    firmAverage: 2100000,
-    industryPercentile: 55,
-    statePercentile: 68,
-    firmPercentile: 42,
-    unit: '₹',
-    icon: BarChart3,
-    color: COLORS.purple,
-  },
-  {
-    name: 'Risk Score',
-    clientValue: 25,
-    industryAverage: 35,
-    stateAverage: 40,
-    firmAverage: 28,
-    industryPercentile: 80,
-    statePercentile: 85,
-    firmPercentile: 70,
-    unit: '',
-    inverted: true,
-    icon: AlertTriangle,
-    color: COLORS.amber,
-  },
-];
-
-const mockClients: ClientBenchmark[] = [
-  { id: 'techcorp-india', name: 'TechCorp India Pvt Ltd', complianceScore: 87, filingTimeliness: 92, gstVolume: 2450000, riskScore: 18, overallPercentile: 84 },
-  { id: 'sharma-enterprises', name: 'Sharma Enterprises', complianceScore: 72, filingTimeliness: 68, gstVolume: 890000, riskScore: 42, overallPercentile: 56 },
-  { id: 'global-traders', name: 'Global Traders Ltd', complianceScore: 91, filingTimeliness: 95, gstVolume: 3200000, riskScore: 12, overallPercentile: 92 },
-  { id: 'patel-industries', name: 'Patel Industries', complianceScore: 65, filingTimeliness: 58, gstVolume: 1200000, riskScore: 55, overallPercentile: 38 },
-  { id: 'sunrise-exports', name: 'Sunrise Exports', complianceScore: 78, filingTimeliness: 82, gstVolume: 1800000, riskScore: 30, overallPercentile: 66 },
-  { id: 'metro-retail', name: 'Metro Retail Chain', complianceScore: 84, filingTimeliness: 88, gstVolume: 5600000, riskScore: 22, overallPercentile: 78 },
-  { id: 'kv-associates', name: 'KV Associates', complianceScore: 55, filingTimeliness: 45, gstVolume: 450000, riskScore: 68, overallPercentile: 22 },
-  { id: 'prime-construction', name: 'Prime Construction', complianceScore: 76, filingTimeliness: 71, gstVolume: 2100000, riskScore: 35, overallPercentile: 60 },
-  { id: 'indus-pharma', name: 'Indus Pharma Ltd', complianceScore: 93, filingTimeliness: 97, gstVolume: 4800000, riskScore: 8, overallPercentile: 95 },
-  { id: 'green-energy-co', name: 'Green Energy Co', complianceScore: 69, filingTimeliness: 62, gstVolume: 780000, riskScore: 48, overallPercentile: 44 },
-];
 
 // ─── Animated Card ─────────────────────────────────────────────────────────
 function AnimatedCard({
@@ -356,7 +230,7 @@ export default function AIBenchmarkPage() {
   // ── State ────────────────────────────────────────────────────────────────
   const [selectedClient, setSelectedClient] = useState<string>('all');
   const [clients, setClients] = useState<ClientBenchmark[]>([]);
-  const [metrics, setMetrics] = useState<BenchmarkMetric[]>(defaultMetrics);
+  const [metrics, setMetrics] = useState<BenchmarkMetric[]>([]);
   const [loading, setLoading] = useState(true);
   const [sortColumn, setSortColumn] = useState<string>('overallPercentile');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
@@ -365,26 +239,53 @@ export default function AIBenchmarkPage() {
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
-      const res = await fetch('/api/ai-benchmark');
-      if (res.ok) {
-        const data = await res.json();
-        if (Array.isArray(data.clients) && data.clients.length > 0) {
-          setClients(data.clients);
-        } else {
-          setClients(mockClients);
+      const [clientsRes, benchmarkRes] = await Promise.all([
+        fetch('/api/clients'),
+        fetch('/api/ai-benchmark'),
+      ]);
+      const mappedClients: ClientBenchmark[] = [];
+      if (clientsRes.ok) {
+        const clientsData = await clientsRes.json();
+        const list = Array.isArray(clientsData) ? clientsData : Array.isArray(clientsData.clients) ? clientsData.clients : [];
+        for (const c of list) {
+          mappedClients.push({
+            id: String(c.id ?? ''),
+            name: String(c.tradeName ?? c.legalName ?? c.name ?? 'Client'),
+            complianceScore: Number(c.complianceScore ?? c.healthScore ?? 0),
+            filingTimeliness: Number(c.filingTimeliness ?? 0),
+            gstVolume: Number(c.gstVolume ?? 0),
+            riskScore: Number(c.riskScore ?? 0),
+            overallPercentile: Number(c.overallPercentile ?? 0),
+          });
         }
-        if (data.metrics) {
-          setMetrics(data.metrics);
+      }
+      setClients(mappedClients);
+      if (benchmarkRes.ok) {
+        const data = await benchmarkRes.json();
+        if (Array.isArray(data.aggregateMetrics)) {
+          setMetrics(data.aggregateMetrics.map((m: { metric: string; clientValue: number; industryAverage: number; stateAverage: number; firmAverage: number; industryPercentile: number; statePercentile: number; firmPercentile: number; }) => ({
+            name: m.metric,
+            clientValue: m.clientValue,
+            industryAverage: m.industryAverage,
+            stateAverage: m.stateAverage,
+            firmAverage: m.firmAverage,
+            industryPercentile: m.industryPercentile,
+            statePercentile: m.statePercentile,
+            firmPercentile: m.firmPercentile,
+            unit: m.metric === 'GST Volume' ? '₹' : m.metric === 'Risk Score' ? '' : '%',
+            inverted: m.metric === 'Risk Score',
+            icon: m.metric === 'Compliance Score' ? Shield : m.metric === 'Filing Timeliness' ? Clock : m.metric === 'GST Volume' ? BarChart3 : AlertTriangle,
+            color: m.metric === 'Compliance Score' ? COLORS.emerald : m.metric === 'Filing Timeliness' ? COLORS.teal : m.metric === 'GST Volume' ? COLORS.purple : COLORS.amber,
+          })));
         } else {
-          setMetrics(defaultMetrics);
+          setMetrics([]);
         }
       } else {
-        setClients(mockClients);
-        setMetrics(defaultMetrics);
+        setMetrics([]);
       }
     } catch {
-      setClients(mockClients);
-      setMetrics(defaultMetrics);
+      setClients([]);
+      setMetrics([]);
     } finally {
       setLoading(false);
     }
@@ -396,74 +297,12 @@ export default function AIBenchmarkPage() {
 
   // ── Update metrics when client changes ───────────────────────────────────
   useEffect(() => {
-    if (selectedClient === 'all') {
-      // Show firm-wide averages
-      setMetrics(defaultMetrics);
-    } else {
-      const clientMetrics = mockClientMetrics[selectedClient];
-      if (clientMetrics) {
-        setMetrics(clientMetrics);
-      } else {
-        // Generate varied metrics for other clients
-        const client = clients.find(c => c.id === selectedClient);
-        if (client) {
-          setMetrics([
-            {
-              name: 'Compliance Score',
-              clientValue: client.complianceScore,
-              industryAverage: 72,
-              stateAverage: 68,
-              firmAverage: 79,
-              industryPercentile: Math.round(client.complianceScore * 0.95),
-              statePercentile: Math.round(client.complianceScore * 1.02),
-              firmPercentile: Math.round(client.complianceScore * 0.87),
-              unit: '%',
-              icon: Shield,
-              color: COLORS.emerald,
-            },
-            {
-              name: 'Filing Timeliness',
-              clientValue: client.filingTimeliness,
-              industryAverage: 78,
-              stateAverage: 74,
-              firmAverage: 85,
-              industryPercentile: Math.round(client.filingTimeliness * 0.97),
-              statePercentile: Math.round(client.filingTimeliness * 1.01),
-              firmPercentile: Math.round(client.filingTimeliness * 0.85),
-              unit: '%',
-              icon: Clock,
-              color: COLORS.teal,
-            },
-            {
-              name: 'GST Volume',
-              clientValue: client.gstVolume,
-              industryAverage: 1800000,
-              stateAverage: 1500000,
-              firmAverage: 2100000,
-              industryPercentile: Math.round(40 + Math.random() * 45),
-              statePercentile: Math.round(50 + Math.random() * 40),
-              firmPercentile: Math.round(30 + Math.random() * 50),
-              unit: '₹',
-              icon: BarChart3,
-              color: COLORS.purple,
-            },
-            {
-              name: 'Risk Score',
-              clientValue: client.riskScore,
-              industryAverage: 35,
-              stateAverage: 40,
-              firmAverage: 28,
-              industryPercentile: 100 - Math.round(client.riskScore * 1.1),
-              statePercentile: 100 - Math.round(client.riskScore * 1.15),
-              firmPercentile: 100 - Math.round(client.riskScore * 0.95),
-              unit: '',
-              inverted: true,
-              icon: AlertTriangle,
-              color: COLORS.amber,
-            },
-          ]);
-        }
-      }
+    // Metrics are sourced from /api/ai-benchmark. Per-client metrics are not
+    // fabricated client-side; the firm-wide aggregate is shown for "all" and
+    // the existing metrics array is retained for any specific client (since
+    // the API returns firm-level aggregates only).
+    if (selectedClient !== 'all' && clients.length === 0) {
+      setMetrics([]);
     }
   }, [selectedClient, clients]);
 
@@ -604,6 +443,14 @@ export default function AIBenchmarkPage() {
             <MetricCardSkeleton />
             <MetricCardSkeleton />
           </>
+        ) : metrics.length === 0 ? (
+          <div className="md:col-span-2">
+            <EmptyState
+              icon={BarChart3}
+              title="No benchmark data yet"
+              description="Benchmark metrics will appear here once client benchmarks are computed."
+            />
+          </div>
         ) : (
           metrics.map((metric, index) => {
             const maxValue = Math.max(
@@ -816,6 +663,12 @@ export default function AIBenchmarkPage() {
         <CardContent>
           {loading ? (
             <TableSkeleton />
+          ) : sortedClients.length === 0 ? (
+            <EmptyState
+              icon={Inbox}
+              title="No clients yet"
+              description="Clients will appear here once they are added to the firm."
+            />
           ) : (
             <div className="overflow-x-auto">
               <Table>

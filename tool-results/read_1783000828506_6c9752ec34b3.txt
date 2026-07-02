@@ -1,0 +1,427 @@
+   350→  // ── RK Electronics (Karnataka-29) ──
+   351→  'client-8': [
+   352→    { id: 'inv8-1', clientId: 'client-8', invoiceNumber: 'RKE-2025-0101', date: '2025-06-03', customer: 'Bangalore Circuit Board Ltd', customerGstin: '29AABBC2345A1Z1', taxableValue: 520000, cgst: 46800, sgst: 46800, igst: 0, status: 'validated', hsnCode: '8542', placeOfSupply: '29' },
+   353→    { id: 'inv8-2', clientId: 'client-8', invoiceNumber: 'RKE-2025-0102', date: '2025-06-08', customer: 'Mysore Components Pvt Ltd', customerGstin: '29AABMC6789B1Z3', taxableValue: 345000, cgst: 31050, sgst: 31050, igst: 0, status: 'error', errorDetail: 'CGST ₹27,500 does not match 9% of ₹3,45,000 (expected ₹31,050)', hsnCode: '8541', placeOfSupply: '29' },
+   354→    { id: 'inv8-3', clientId: 'client-8', invoiceNumber: 'RKE-2025-0103', date: '2025-06-13', customer: 'Mangalore Electronics Mart', customerGstin: '29AABME1234C1Z5', taxableValue: 285000, cgst: 25650, sgst: 25650, igst: 0, status: 'validated', hsnCode: '8517', placeOfSupply: '29' },
+   355→    { id: 'inv8-4', clientId: 'client-8', invoiceNumber: 'RKE-2025-0104', date: '2025-06-18', customer: 'Hubli Device Solutions', customerGstin: '29AABHD5678D1Z7', taxableValue: 410000, cgst: 36900, sgst: 36900, igst: 0, status: 'warning', errorDetail: 'HSN code 8517 missing 6-digit sub-classification', hsnCode: '8517', placeOfSupply: '29' },
+   356→    { id: 'inv8-5', clientId: 'client-8', invoiceNumber: 'RKE-2025-0105', date: '2025-06-22', customer: 'Tumkur Semiconductor Ltd', customerGstin: '29AABTS9012E1Z9', taxableValue: 190000, cgst: 17100, sgst: 17100, igst: 0, status: 'validated', hsnCode: '8542', placeOfSupply: '29' },
+   357→    { id: 'inv8-6', clientId: 'client-8', invoiceNumber: 'RKE-2025-0106', date: '2025-06-27', customer: 'Belgaum Electrical Stores', customerGstin: '29AABBE3456F1Z2', taxableValue: 175000, cgst: 0, sgst: 0, igst: 31500, status: 'warning', errorDetail: 'Place of supply 29 is same as supplier — should use CGST+SGST', hsnCode: '8517', placeOfSupply: '29' },
+   358→  ],
+   359→};
+   360→
+   361→// ─── Validation Issues ────────────────────────────────────────────────────────
+   362→export interface SampleValidationIssue {
+   363→  id: string;
+   364→  clientId: string;
+   365→  severity: 'critical' | 'warning' | 'info';
+   366→  category: string;
+   367→  description: string;
+   368→  invoiceRef: string;
+   369→  fixAction: string;
+   370→  resolved: boolean;
+   371→}
+   372→
+   373→export const SAMPLE_ISSUES: Record<string, SampleValidationIssue[]> = {
+   374→  'client-1': [
+   375→    { id: 'v1-1', clientId: 'client-1', severity: 'critical', category: 'Invalid GSTIN', description: 'Buyer GSTIN 27AABND8742Z2ZM in SE-2025-0808 fails checksum validation', invoiceRef: 'SE-2025-0808', fixAction: 'Correct GSTIN', resolved: false },
+   376→    { id: 'v1-2', clientId: 'client-1', severity: 'critical', category: 'Tax Calculation Error', description: 'CGST amount in SE-2025-0814 does not match 9% of taxable value ₹2,95,000 (expected ₹26,550, found ₹25,350)', invoiceRef: 'SE-2025-0814', fixAction: 'Recalculate Tax', resolved: false },
+   377→    { id: 'v1-3', clientId: 'client-1', severity: 'warning', category: 'Missing HSN Code', description: '2 line items in SE-2025-0805 missing HSN/SAC codes as required for GSTR-1 filing', invoiceRef: 'SE-2025-0805', fixAction: 'Add HSN Codes', resolved: false },
+   378→    { id: 'v1-4', clientId: 'client-1', severity: 'warning', category: 'Duplicate Invoice', description: 'SE-2025-0812 has same number as a previously filed invoice in May 2025 return', invoiceRef: 'SE-2025-0812', fixAction: 'Resolve Duplicate', resolved: false },
+   379→    { id: 'v1-5', clientId: 'client-1', severity: 'info', category: 'Missing Mandatory Field', description: 'Place of supply not specified for 2 inter-state invoices (SE-2025-0804, SE-2025-0807)', invoiceRef: 'SE-2025-0804', fixAction: 'Add Place of Supply', resolved: false },
+   380→  ],
+   381→  'client-2': [
+   382→    { id: 'v2-1', clientId: 'client-2', severity: 'critical', category: 'Invalid GSTIN', description: 'Buyer GSTIN 24AABSD7892N1Z3 in PS-2025-0602 fails checksum validation', invoiceRef: 'PS-2025-0602', fixAction: 'Correct GSTIN', resolved: false },
+   383→    { id: 'v2-2', clientId: 'client-2', severity: 'critical', category: 'Tax Calculation Error', description: 'SGST amount in PS-2025-0604 does not match 9% of taxable value ₹2,45,000 (expected ₹22,050, found ₹20,500)', invoiceRef: 'PS-2025-0604', fixAction: 'Recalculate Tax', resolved: false },
+   384→    { id: 'v2-3', clientId: 'client-2', severity: 'warning', category: 'Missing HSN Code', description: 'Line items in PS-2025-0606 missing HSN/SAC codes required for GSTR-1 filing', invoiceRef: 'PS-2025-0606', fixAction: 'Add HSN Codes', resolved: false },
+   385→    { id: 'v2-4', clientId: 'client-2', severity: 'warning', category: 'Missing Place of Supply', description: 'PS-2025-0608 is an export invoice missing place of supply details', invoiceRef: 'PS-2025-0608', fixAction: 'Add Place of Supply', resolved: false },
+   386→  ],
+   387→  'client-3': [
+   388→    { id: 'v3-1', clientId: 'client-3', severity: 'warning', category: 'HSN Classification', description: 'HSN code 0901 in KT-2025-0706 requires 6-digit classification as per new GST rules', invoiceRef: 'KT-2025-0706', fixAction: 'Update HSN Code', resolved: false },
+   389→    { id: 'v3-2', clientId: 'client-3', severity: 'info', category: 'Export Documentation', description: '3 export invoices in June 2025 period — verify shipping bill numbers before filing', invoiceRef: 'KT-2025-0703', fixAction: 'Verify Export Docs', resolved: false },
+   390→  ],
+   391→  'client-4': [
+   392→    { id: 'v4-1', clientId: 'client-4', severity: 'critical', category: 'Invalid GSTIN', description: 'Buyer GSTIN 27AABPC5678B1Z3 in MR-2025-0902 fails checksum validation', invoiceRef: 'MR-2025-0902', fixAction: 'Correct GSTIN', resolved: false },
+   393→    { id: 'v4-2', clientId: 'client-4', severity: 'critical', category: 'Tax Calculation Error', description: 'CGST amount in MR-2025-0904 is ₹23,500 instead of expected ₹25,650 (9% of ₹2,85,000)', invoiceRef: 'MR-2025-0904', fixAction: 'Recalculate Tax', resolved: false },
+   394→    { id: 'v4-3', clientId: 'client-4', severity: 'warning', category: 'Missing Place of Supply', description: 'MR-2025-0907 is inter-state but missing place of supply', invoiceRef: 'MR-2025-0907', fixAction: 'Add Place of Supply', resolved: false },
+   395→    { id: 'v4-4', clientId: 'client-4', severity: 'warning', category: 'Duplicate Invoice', description: 'MR-2025-0910 duplicates a number already filed in May 2025', invoiceRef: 'MR-2025-0910', fixAction: 'Resolve Duplicate', resolved: false },
+   396→  ],
+   397→  'client-5': [
+   398→    { id: 'v5-1', clientId: 'client-5', severity: 'warning', category: 'Export Documentation', description: 'SX-2025-0505 missing shipping bill reference for export invoice', invoiceRef: 'SX-2025-0505', fixAction: 'Add Shipping Bill Ref', resolved: false },
+   399→  ],
+   400→  'client-6': [
+   401→    { id: 'v6-1', clientId: 'client-6', severity: 'warning', category: 'GST Rate Mismatch', description: 'GM-2025-0309 has 18% GST rate applied instead of 12% for HSN 7208', invoiceRef: 'GM-2025-0309', fixAction: 'Correct GST Rate', resolved: false },
+   402→  ],
+   403→  'client-7': [
+   404→    { id: 'v7-1', clientId: 'client-7', severity: 'critical', category: 'Suspended GSTIN', description: 'Buyer GSTIN 27AABNF9012C1Z5 in AL-2025-0403 is cancelled/suspended on GST portal', invoiceRef: 'AL-2025-0403', fixAction: 'Verify GSTIN Status', resolved: false },
+   405→    { id: 'v7-2', clientId: 'client-7', severity: 'warning', category: 'Date Validation', description: 'AL-2025-0405 invoice date may exceed filing period — verify before inclusion', invoiceRef: 'AL-2025-0405', fixAction: 'Check Invoice Date', resolved: false },
+   406→    { id: 'v7-3', clientId: 'client-7', severity: 'warning', category: 'SAC Classification', description: 'SAC code 9965 in AL-2025-0408 requires sub-classification for GSTR-1', invoiceRef: 'AL-2025-0408', fixAction: 'Update SAC Code', resolved: false },
+   407→  ],
+   408→  'client-8': [
+   409→    { id: 'v8-1', clientId: 'client-8', severity: 'critical', category: 'Tax Calculation Error', description: 'CGST in RKE-2025-0102 is ₹27,500 instead of ₹31,050 (9% of ₹3,45,000)', invoiceRef: 'RKE-2025-0102', fixAction: 'Recalculate Tax', resolved: false },
+   410→    { id: 'v8-2', clientId: 'client-8', severity: 'warning', category: 'HSN Classification', description: 'HSN 8517 in RKE-2025-0104 needs 6-digit classification', invoiceRef: 'RKE-2025-0104', fixAction: 'Update HSN Code', resolved: false },
+   411→    { id: 'v8-3', clientId: 'client-8', severity: 'warning', category: 'Place of Supply Error', description: 'RKE-2025-0106 shows IGST but place of supply is same as supplier state — should use CGST+SGST', invoiceRef: 'RKE-2025-0106', fixAction: 'Fix Tax Type', resolved: false },
+   412→  ],
+   413→};
+   414→
+   415→// ─── Reconciliation Drilldown Data ────────────────────────────────────────────
+   416→export interface SampleReconDrilldown {
+   417→  invoiceNumber: string;
+   418→  date: string;
+   419→  vendor: string;
+   420→  booksAmount: number;
+   421→  portalAmount: number;
+   422→  difference: number;
+   423→  reason: string;
+   424→}
+   425→
+   426→export const SAMPLE_RECON_DRILLDOWNS: Record<string, Record<string, SampleReconDrilldown[]>> = {
+   427→  'client-1': {
+   428→    'Partial Match': [
+   429→      { invoiceNumber: 'SE-2025-0789', date: '2025-06-03', vendor: 'Pune Industrial Supply Co.', booksAmount: 285000, portalAmount: 262000, difference: 23000, reason: 'Credit note of ₹23,000 not reflected in GSTR-2B yet' },
+   430→      { invoiceNumber: 'SE-2025-0795', date: '2025-06-08', vendor: 'Nashik Agro Products Ltd', booksAmount: 142000, portalAmount: 135000, difference: 7000, reason: 'Discount of ₹7,000 applied post-filing by supplier' },
+   431→      { invoiceNumber: 'SE-2025-0801', date: '2025-06-12', vendor: 'Thane Metal Works', booksAmount: 96000, portalAmount: 89000, difference: 7000, reason: 'TCS amount included in books but excluded from portal' },
+   432→      { invoiceNumber: 'SE-2025-0803', date: '2025-06-15', vendor: 'Kolhapur Textile Mills', booksAmount: 178000, portalAmount: 164000, difference: 14000, reason: 'Supplier filed partial amount; amended return expected' },
+   433→    ],
+   434→    'Mismatch': [
+   435→      { invoiceNumber: 'SE-2025-0792', date: '2025-06-05', vendor: 'Nagpur Chemical Industries', booksAmount: 340000, portalAmount: 285000, difference: 55000, reason: 'Wrong GSTIN used in portal; supplier filed under different entity' },
+   436→      { invoiceNumber: 'SE-2025-0798', date: '2025-06-10', vendor: 'Mumbai Retail Mart Pvt Ltd', booksAmount: 225000, portalAmount: 180000, difference: 45000, reason: 'IGST vs CGST+SGST mismatch — inter-state filed as intra-state' },
+   437→      { invoiceNumber: 'SE-2025-0810', date: '2025-06-18', vendor: 'Solapur Cotton Industries', booksAmount: 412000, portalAmount: 350000, difference: 62000, reason: 'Tax rate difference: 18% in books vs 12% in portal. HSN reclassification needed.' },
+   438→    ],
+   439→    'Missing in Books': [
+   440→      { invoiceNumber: 'G2B-2025-4421', date: '2025-06-07', vendor: 'Satara Dairy Products', booksAmount: 0, portalAmount: 52000, difference: 52000, reason: 'Invoice present in GSTR-2B but not recorded in purchase register' },
+   441→      { invoiceNumber: 'G2B-2025-4456', date: '2025-06-14', vendor: 'Ratnagiri Sea Foods', booksAmount: 0, portalAmount: 34000, difference: 34000, reason: 'Purchase invoice from vendor not entered; possibly received after month-end' },
+   442→    ],
+   443→    'Missing in Portal': [
+   444→      { invoiceNumber: 'SE-2025-0791', date: '2025-06-02', vendor: 'Amravati Agro Processors', booksAmount: 89000, portalAmount: 0, difference: 89000, reason: 'Supplier has not filed GSTR-1 for June 2025 yet. Follow up required.' },
+   445→      { invoiceNumber: 'SE-2025-0804', date: '2025-06-09', vendor: 'Jalgaon Fruit Processors', booksAmount: 67000, portalAmount: 0, difference: 67000, reason: 'Supplier filing deadline is Jul 11. Check again after due date.' },
+   446→      { invoiceNumber: 'SE-2025-0812', date: '2025-06-16', vendor: 'Sangli Grape Exporters', booksAmount: 38000, portalAmount: 0, difference: 38000, reason: 'Invoice recorded in books; vendor may file under QRMP scheme' },
+   447→    ],
+   448→  },
+   449→  'client-2': {
+   450→    'Partial Match': [
+   451→      { invoiceNumber: 'PS-2025-0591', date: '2025-06-04', vendor: 'Vadodara Chemical Corp', booksAmount: 195000, portalAmount: 178000, difference: 17000, reason: 'Partial credit note of ₹17,000 not yet reflected in GSTR-2B' },
+   452→      { invoiceNumber: 'PS-2025-0596', date: '2025-06-11', vendor: 'Rajkot Auto Parts Ltd', booksAmount: 165000, portalAmount: 152000, difference: 13000, reason: 'Volume discount adjusted post-filing by supplier' },
+   453→    ],
+   454→    'Mismatch': [
+   455→      { invoiceNumber: 'PS-2025-0593', date: '2025-06-06', vendor: 'Surat Diamond Exports Ltd', booksAmount: 340000, portalAmount: 280000, difference: 60000, reason: 'Wrong GSTIN in portal — supplier filed under branch entity' },
+   456→    ],
+   457→    'Missing in Portal': [
+   458→      { invoiceNumber: 'PS-2025-0598', date: '2025-06-13', vendor: 'Gandhinagar Tech Solutions', booksAmount: 88000, portalAmount: 0, difference: 88000, reason: 'Supplier not filed GSTR-1 for June yet' },
+   459→    ],
+   460→  },
+   461→  'client-3': {
+   462→    'Partial Match': [
+   463→      { invoiceNumber: 'KT-2025-0692', date: '2025-06-05', vendor: 'Mysore Sandal Products', booksAmount: 185000, portalAmount: 172000, difference: 13000, reason: 'Supplier adjusted ₹13,000 for damaged goods; credit note pending' },
+   464→    ],
+   465→    'Missing in Portal': [
+   466→      { invoiceNumber: 'KT-2025-0695', date: '2025-06-10', vendor: 'Hubli Steel Traders', booksAmount: 98000, portalAmount: 0, difference: 98000, reason: 'Supplier missed filing deadline — follow up required' },
+   467→    ],
+   468→  },
+   469→  'client-4': {
+   470→    'Partial Match': [
+   471→      { invoiceNumber: 'MR-2025-0885', date: '2025-06-03', vendor: 'Pune Consumer Goods Ltd', booksAmount: 320000, portalAmount: 298000, difference: 22000, reason: 'Credit note for returned goods not yet in GSTR-2B' },
+   472→      { invoiceNumber: 'MR-2025-0891', date: '2025-06-09', vendor: 'Nagpur Supermarket Corp', booksAmount: 490000, portalAmount: 465000, difference: 25000, reason: 'Post-filing discount of ₹25,000 adjusted by supplier' },
+   473→    ],
+   474→    'Mismatch': [
+   475→      { invoiceNumber: 'MR-2025-0887', date: '2025-06-06', vendor: 'Thane Retail Chain', booksAmount: 350000, portalAmount: 295000, difference: 55000, reason: 'Tax rate difference: 18% vs 12%. Supplier reclassified HSN code.' },
+   476→      { invoiceNumber: 'MR-2025-0893', date: '2025-06-11', vendor: 'Aurangabad General Stores', booksAmount: 275000, portalAmount: 225000, difference: 50000, reason: 'IGST vs CGST+SGST — supplier filed under wrong state code' },
+   477→    ],
+   478→    'Missing in Books': [
+   479→      { invoiceNumber: 'G2B-2025-5521', date: '2025-06-08', vendor: 'Navi Mumbai Suppliers', booksAmount: 0, portalAmount: 78000, difference: 78000, reason: 'Purchase not recorded — invoice may be pending with purchase team' },
+   480→    ],
+   481→    'Missing in Portal': [
+   482→      { invoiceNumber: 'MR-2025-0897', date: '2025-06-14', vendor: 'Solapur Traders Association', booksAmount: 145000, portalAmount: 0, difference: 145000, reason: 'Supplier has not filed GSTR-1 for June 2025' },
+   483→      { invoiceNumber: 'MR-2025-0900', date: '2025-06-18', vendor: 'Amravati Consumer Products', booksAmount: 112000, portalAmount: 0, difference: 112000, reason: 'Supplier missed QRMP filing — escalate to client' },
+   484→    ],
+   485→  },
+   486→  'client-5': {
+   487→    'Partial Match': [
+   488→      { invoiceNumber: 'SX-2025-0485', date: '2025-06-04', vendor: 'Mumbai Shipping Agents', booksAmount: 245000, portalAmount: 228000, difference: 17000, reason: 'Exchange rate difference on import invoice' },
+   489→    ],
+   490→    'Missing in Portal': [
+   491→      { invoiceNumber: 'SX-2025-0490', date: '2025-06-12', vendor: 'Pune Freight Forwarders', booksAmount: 68000, portalAmount: 0, difference: 68000, reason: 'Freight forwarder not filed for June yet' },
+   492→    ],
+   493→  },
+   494→  'client-6': {
+   495→    'Partial Match': [
+   496→      { invoiceNumber: 'GM-2025-0285', date: '2025-06-02', vendor: 'Gurgaon Auto Components', booksAmount: 420000, portalAmount: 395000, difference: 25000, reason: 'Volume discount adjusted by supplier after filing' },
+   497→      { invoiceNumber: 'GM-2025-0290', date: '2025-06-08', vendor: 'Ambala Scientific Instruments', booksAmount: 275000, portalAmount: 258000, difference: 17000, reason: 'Partial credit note for defective items pending in GSTR-2B' },
+   498→    ],
+   499→    'Mismatch': [
+   500→      { invoiceNumber: 'GM-2025-0292', date: '2025-06-11', vendor: 'Karnal Rice Mills', booksAmount: 180000, portalAmount: 150000, difference: 30000, reason: 'Supplier filed under 5% rate instead of 18% — HSN reclassification' },
+   501→    ],
+   502→  },
+   503→  'client-7': {
+   504→    'Partial Match': [
+   505→      { invoiceNumber: 'AL-2025-0380', date: '2025-06-03', vendor: 'Mumbai Port Transport', booksAmount: 380000, portalAmount: 355000, difference: 25000, reason: 'Fuel surcharge adjustment not reflected in portal' },
+   506→    ],
+   507→    'Mismatch': [
+   508→      { invoiceNumber: 'AL-2025-0386', date: '2025-06-10', vendor: 'Nashik Fleet Services', booksAmount: 225000, portalAmount: 185000, difference: 40000, reason: 'GSTIN suspended — supplier filed under new entity' },
+   509→    ],
+   510→    'Missing in Portal': [
+   511→      { invoiceNumber: 'AL-2025-0390', date: '2025-06-14', vendor: 'Thane Warehouse Corp', booksAmount: 95000, portalAmount: 0, difference: 95000, reason: 'Supplier not filed for June — follow up' },
+   512→    ],
+   513→  },
+   514→  'client-8': {
+   515→    'Mismatch': [
+   516→      { invoiceNumber: 'RKE-2025-0085', date: '2025-06-05', vendor: 'Bangalore Circuit Board Ltd', booksAmount: 520000, portalAmount: 445000, difference: 75000, reason: 'Supplier filed under 12% rate instead of 18% — HSN code dispute' },
+   517→    ],
+   518→    'Missing in Portal': [
+   519→      { invoiceNumber: 'RKE-2025-0091', date: '2025-06-12', vendor: 'Mysore Components Pvt Ltd', booksAmount: 145000, portalAmount: 0, difference: 145000, reason: 'Supplier missed QRMP deadline — high risk for ITC loss' },
+   520→    ],
+   521→    'Missing in Books': [
+   522→      { invoiceNumber: 'G2B-2025-6611', date: '2025-06-09', vendor: 'Hubli Device Solutions', booksAmount: 0, portalAmount: 67000, difference: 67000, reason: 'Purchase invoice received but not entered in books' },
+   523→    ],
+   524→  },
+   525→};
+   526→
+   527→// ─── Reconciliation Summary ──────────────────────────────────────────────────
+   528→export interface SampleReconCategory {
+   529→  label: string;
+   530→  count: number;
+   531→  amount: number;
+   532→  color: string;
+   533→  bgColor: string;
+   534→}
+   535→
+   536→export const SAMPLE_RECON_SUMMARY: Record<string, SampleReconCategory[]> = {
+   537→  'client-1': [
+   538→    { label: 'Perfect Match', count: 38, amount: 2854000, color: 'text-emerald-700', bgColor: 'bg-emerald-50 border-emerald-200' },
+   539→    { label: 'Partial Match', count: 4, amount: 312000, color: 'text-amber-700', bgColor: 'bg-amber-50 border-amber-200' },
+   540→    { label: 'Mismatch', count: 3, amount: 245000, color: 'text-red-700', bgColor: 'bg-red-50 border-red-200' },
+   541→    { label: 'Missing in Books', count: 2, amount: 86000, color: 'text-orange-700', bgColor: 'bg-orange-50 border-orange-200' },
+   542→    { label: 'Missing in Portal', count: 3, amount: 194000, color: 'text-purple-700', bgColor: 'bg-purple-50 border-purple-200' },
+   543→  ],
+   544→  'client-2': [
+   545→    { label: 'Perfect Match', count: 22, amount: 1425000, color: 'text-emerald-700', bgColor: 'bg-emerald-50 border-emerald-200' },
+   546→    { label: 'Partial Match', count: 2, amount: 245000, color: 'text-amber-700', bgColor: 'bg-amber-50 border-amber-200' },
+   547→    { label: 'Mismatch', count: 1, amount: 185000, color: 'text-red-700', bgColor: 'bg-red-50 border-red-200' },
+   548→    { label: 'Missing in Portal', count: 1, amount: 88000, color: 'text-purple-700', bgColor: 'bg-purple-50 border-purple-200' },
+   549→  ],
+   550→  'client-3': [
+   551→    { label: 'Perfect Match', count: 16, amount: 745000, color: 'text-emerald-700', bgColor: 'bg-emerald-50 border-emerald-200' },
+   552→    { label: 'Partial Match', count: 1, amount: 130000, color: 'text-amber-700', bgColor: 'bg-amber-50 border-amber-200' },
+   553→    { label: 'Missing in Portal', count: 1, amount: 98000, color: 'text-purple-700', bgColor: 'bg-purple-50 border-purple-200' },
+   554→  ],
+   555→  'client-4': [
+   556→    { label: 'Perfect Match', count: 28, amount: 2180000, color: 'text-emerald-700', bgColor: 'bg-emerald-50 border-emerald-200' },
+   557→    { label: 'Partial Match', count: 2, amount: 425000, color: 'text-amber-700', bgColor: 'bg-amber-50 border-amber-200' },
+   558→    { label: 'Mismatch', count: 2, amount: 385000, color: 'text-red-700', bgColor: 'bg-red-50 border-red-200' },
+   559→    { label: 'Missing in Books', count: 1, amount: 78000, color: 'text-orange-700', bgColor: 'bg-orange-50 border-orange-200' },
+   560→    { label: 'Missing in Portal', count: 2, amount: 257000, color: 'text-purple-700', bgColor: 'bg-purple-50 border-purple-200' },
+   561→  ],
+   562→  'client-5': [
+   563→    { label: 'Perfect Match', count: 14, amount: 1845000, color: 'text-emerald-700', bgColor: 'bg-emerald-50 border-emerald-200' },
+   564→    { label: 'Partial Match', count: 1, amount: 145000, color: 'text-amber-700', bgColor: 'bg-amber-50 border-amber-200' },
+   565→    { label: 'Missing in Portal', count: 1, amount: 68000, color: 'text-purple-700', bgColor: 'bg-purple-50 border-purple-200' },
+   566→  ],
+   567→  'client-6': [
+   568→    { label: 'Perfect Match', count: 22, amount: 3250000, color: 'text-emerald-700', bgColor: 'bg-emerald-50 border-emerald-200' },
+   569→    { label: 'Partial Match', count: 2, amount: 395000, color: 'text-amber-700', bgColor: 'bg-amber-50 border-amber-200' },
+   570→    { label: 'Mismatch', count: 1, amount: 180000, color: 'text-red-700', bgColor: 'bg-red-50 border-red-200' },
+   571→  ],
+   572→  'client-7': [
+   573→    { label: 'Perfect Match', count: 18, amount: 1720000, color: 'text-emerald-700', bgColor: 'bg-emerald-50 border-emerald-200' },
+   574→    { label: 'Partial Match', count: 1, amount: 245000, color: 'text-amber-700', bgColor: 'bg-amber-50 border-amber-200' },
+   575→    { label: 'Mismatch', count: 1, amount: 225000, color: 'text-red-700', bgColor: 'bg-red-50 border-red-200' },
+   576→    { label: 'Missing in Portal', count: 1, amount: 95000, color: 'text-purple-700', bgColor: 'bg-purple-50 border-purple-200' },
+   577→  ],
+   578→  'client-8': [
+   579→    { label: 'Perfect Match', count: 10, amount: 945000, color: 'text-emerald-700', bgColor: 'bg-emerald-50 border-emerald-200' },
+   580→    { label: 'Mismatch', count: 1, amount: 245000, color: 'text-red-700', bgColor: 'bg-red-50 border-red-200' },
+   581→    { label: 'Missing in Portal', count: 1, amount: 145000, color: 'text-purple-700', bgColor: 'bg-purple-50 border-purple-200' },
+   582→    { label: 'Missing in Books', count: 1, amount: 67000, color: 'text-orange-700', bgColor: 'bg-orange-50 border-orange-200' },
+   583→  ],
+   584→};
+   585→
+   586→// ─── AI Insights ──────────────────────────────────────────────────────────────
+   587→export interface SampleAIInsight {
+   588→  id: string;
+   589→  clientId: string;
+   590→  type: 'risk_alert' | 'missing_doc' | 'tax_anomaly' | 'filing_rec';
+   591→  title: string;
+   592→  description: string;
+   593→  suggestedAction: string;
+   594→  urgency: 'high' | 'medium' | 'info';
+   595→  dismissed: boolean;
+   596→}
+   597→
+   598→export const SAMPLE_AI_INSIGHTS: Record<string, SampleAIInsight[]> = {
+   599→  'client-1': [
+   600→    { id: 'ai1-1', clientId: 'client-1', type: 'risk_alert', title: 'Invalid GSTIN blocking 1 B2B invoice', description: 'SE-2025-0808 has GSTIN 27AABND8742Z2ZM which fails checksum. This invoice (₹5,20,000 + ₹93,600 tax) cannot be included in filing until corrected.', suggestedAction: 'Fix GSTIN', urgency: 'high', dismissed: false },
+   601→    { id: 'ai1-2', clientId: 'client-1', type: 'tax_anomaly', title: 'Tax calculation discrepancy of ₹1,200', description: 'SE-2025-0814 shows CGST ₹25,350 instead of expected ₹26,550 (9% of ₹2,95,000). Likely a data entry error in the sales register.', suggestedAction: 'Recalculate', urgency: 'high', dismissed: false },
+   602→    { id: 'ai1-3', clientId: 'client-1', type: 'missing_doc', title: '3 invoices missing from GSTR-2B', description: 'Invoices from Amravati Agro (₹89,000), Jalgaon Fruits (₹67,000), and Sangli Exports (₹38,000) not reflected in GSTR-2B. Vendors may not have filed yet.', suggestedAction: 'Review Missing', urgency: 'medium', dismissed: false },
+   603→    { id: 'ai1-4', clientId: 'client-1', type: 'filing_rec', title: 'File GSTR-1 before July 11 deadline', description: '3 days remaining. Resolve 2 critical issues and 2 warnings to achieve 100% filing readiness.', suggestedAction: 'Resolve Issues', urgency: 'high', dismissed: false },
+   604→    { id: 'ai1-5', clientId: 'client-1', type: 'risk_alert', title: 'Duplicate invoice number may cause rejection', description: 'SE-2025-0812 duplicates a number already filed in May 2025. GST portal will reject the JSON. Renumber before filing.', suggestedAction: 'Fix Duplicate', urgency: 'medium', dismissed: false },
+   605→    { id: 'ai1-6', clientId: 'client-1', type: 'filing_rec', title: 'ITC of ₹18,240 at risk from recon mismatches', description: '3 invoices show mismatch between books and GSTR-2B. If unresolved, ITC claims will be disallowed during assessment.', suggestedAction: 'Run Reconciliation', urgency: 'info', dismissed: false },
+   606→  ],
+   607→  'client-2': [
+   608→    { id: 'ai2-1', clientId: 'client-2', type: 'risk_alert', title: 'Invalid GSTIN in diamond export invoice', description: 'PS-2025-0602 has GSTIN 24AABSD7892N1Z3 failing checksum. ₹5,20,000 invoice blocked for filing.', suggestedAction: 'Fix GSTIN', urgency: 'high', dismissed: false },
+   609→    { id: 'ai2-2', clientId: 'client-2', type: 'tax_anomaly', title: 'SGST calculation error of ₹1,550', description: 'PS-2025-0604 has SGST ₹20,500 instead of ₹22,050. Tax under-reporting may trigger notice.', suggestedAction: 'Recalculate', urgency: 'high', dismissed: false },
+   610→    { id: 'ai2-3', clientId: 'client-2', type: 'filing_rec', title: 'Resolve 4 issues before GSTR-1 filing', description: '2 critical and 2 warning issues blocking 3 invoices. Filing deadline approaching.', suggestedAction: 'Resolve Issues', urgency: 'high', dismissed: false },
+   611→  ],
+   612→  'client-3': [
+   613→    { id: 'ai3-1', clientId: 'client-3', type: 'filing_rec', title: 'Update HSN to 6-digit classification', description: 'KT-2025-0706 uses 4-digit HSN 0901. GST rules now require 6-digit for turnover above ₹5Cr.', suggestedAction: 'Update HSN', urgency: 'medium', dismissed: false },
+   614→    { id: 'ai3-2', clientId: 'client-3', type: 'missing_doc', title: '1 invoice missing from GSTR-2B', description: 'Hubli Steel Traders invoice of ₹98,000 not reflected. Supplier may have missed filing deadline.', suggestedAction: 'Follow Up', urgency: 'medium', dismissed: false },
+   615→  ],
+   616→  'client-4': [
+   617→    { id: 'ai4-1', clientId: 'client-4', type: 'risk_alert', title: '2 invalid GSTINs blocking B2B invoices', description: 'MR-2025-0902 and MR-2025-0904 have GSTIN errors blocking ₹7,05,000 worth of invoices.', suggestedAction: 'Fix GSTINs', urgency: 'high', dismissed: false },
+   618→    { id: 'ai4-2', clientId: 'client-4', type: 'tax_anomaly', title: 'CGST under-reporting of ₹2,150', description: 'MR-2025-0904 shows CGST ₹23,500 vs expected ₹25,650. May trigger scrutiny from GST department.', suggestedAction: 'Recalculate', urgency: 'high', dismissed: false },
+   619→    { id: 'ai4-3', clientId: 'client-4', type: 'missing_doc', title: '2 invoices missing from GSTR-2B', description: 'Solapur Traders (₹1,45,000) and Amravati Consumer (₹1,12,000) not reflected in portal. ITC at risk.', suggestedAction: 'Follow Up', urgency: 'medium', dismissed: false },
+   620→    { id: 'ai4-4', clientId: 'client-4', type: 'risk_alert', title: 'Duplicate invoice number detected', description: 'MR-2025-0910 duplicates a number from May return. Filing will be rejected.', suggestedAction: 'Renumber Invoice', urgency: 'high', dismissed: false },
+   621→  ],
+   622→  'client-5': [
+   623→    { id: 'ai5-1', clientId: 'client-5', type: 'missing_doc', title: 'Export invoice missing shipping bill reference', description: 'SX-2025-0505 (₹2,75,000) lacks shipping bill number. Required for export benefit claims.', suggestedAction: 'Add Shipping Bill', urgency: 'medium', dismissed: false },
+   624→    { id: 'ai5-2', clientId: 'client-5', type: 'filing_rec', title: 'File GSTR-1 with export invoices before deadline', description: '7 of 8 invoices validated. Resolve export doc issue for 100% readiness.', suggestedAction: 'Resolve & File', urgency: 'medium', dismissed: false },
+   625→  ],
+   626→  'client-6': [
+   627→    { id: 'ai6-1', clientId: 'client-6', type: 'tax_anomaly', title: 'GST rate mismatch on steel invoice', description: 'GM-2025-0309 has 18% GST instead of 12% for HSN 7208. Over-payment of ₹15,600 may need refund.', suggestedAction: 'Correct Rate', urgency: 'medium', dismissed: false },
+   628→    { id: 'ai6-2', clientId: 'client-6', type: 'filing_rec', title: '9 of 10 invoices ready for GSTR-1 filing', description: 'Resolve GST rate issue on 1 invoice to achieve 100% readiness. Good compliance position.', suggestedAction: 'Resolve & File', urgency: 'info', dismissed: false },
+   629→  ],
+   630→  'client-7': [
+   631→    { id: 'ai7-1', clientId: 'client-7', type: 'risk_alert', title: 'Suspended GSTIN on ₹2,25,000 invoice', description: 'AL-2025-0403 buyer GSTIN 27AABNF9012C1Z5 is cancelled on portal. ITC claim will be denied.', suggestedAction: 'Verify GSTIN', urgency: 'high', dismissed: false },
+   632→    { id: 'ai7-2', clientId: 'client-7', type: 'filing_rec', title: '3 issues must be resolved before filing', description: '1 critical (suspended GSTIN) and 2 warnings blocking filing. Deadline approaching.', suggestedAction: 'Resolve Issues', urgency: 'high', dismissed: false },
+   633→  ],
+   634→  'client-8': [
+   635→    { id: 'ai8-1', clientId: 'client-8', type: 'risk_alert', title: 'CGST under-payment of ₹3,550', description: 'RKE-2025-0102 has CGST ₹27,500 instead of ₹31,050. Short payment will attract interest.', suggestedAction: 'Recalculate', urgency: 'high', dismissed: false },
+   636→    { id: 'ai8-2', clientId: 'client-8', type: 'tax_anomaly', title: 'IGST used for intra-state supply', description: 'RKE-2025-0106 charges IGST but supplier and buyer are in same state (29). Should be CGST+SGST.', suggestedAction: 'Fix Tax Type', urgency: 'high', dismissed: false },
+   637→    { id: 'ai8-3', clientId: 'client-8', type: 'filing_rec', title: 'Quarterly return approaching — resolve 3 issues', description: 'GSTR-1 for Q1 (Apr-Jun) due soon. Resolve 1 critical and 2 warnings for filing readiness.', suggestedAction: 'Resolve Issues', urgency: 'medium', dismissed: false },
+   638→  ],
+   639→};
+   640→
+   641→// ─── Activity Feed ────────────────────────────────────────────────────────────
+   642→export interface SampleActivity {
+   643→  id: string;
+   644→  clientId: string;
+   645→  type: 'invoice_uploaded' | 'return_prepared' | 'return_filed' | 'mismatch_resolved' | 'validation_completed' | 'document_uploaded' | 'payment_received';
+   646→  description: string;
+   647→  timestamp: string;
+   648→  amount?: number;
+   649→}
+   650→
+   651→export const SAMPLE_ACTIVITIES: SampleActivity[] = [
+   652→  // Sharma Enterprises
+   653→  { id: 'act1-1', clientId: 'client-1', type: 'invoice_uploaded', description: '15 invoices uploaded from Sales_Register_Jun2025.xlsx', timestamp: '2025-07-01T10:15:00Z', amount: 3245000 },
+   654→  { id: 'act1-2', clientId: 'client-1', type: 'validation_completed', description: 'GSTR-1 validation completed — 2 warnings, 0 critical errors', timestamp: '2025-07-02T09:00:00Z' },
+   655→  { id: 'act1-3', clientId: 'client-1', type: 'return_prepared', description: 'GSTR-1 for June 2025 prepared and validated', timestamp: '2025-07-02T09:30:00Z' },
+   656→  { id: 'act1-4', clientId: 'client-1', type: 'return_filed', description: 'GSTR-1 for May 2025 filed — ARN AA060625001234', timestamp: '2025-06-10T16:45:00Z', amount: 2980000 },
+   657→  { id: 'act1-5', clientId: 'client-1', type: 'return_filed', description: 'GSTR-3B for May 2025 filed — ARN AA060625005678', timestamp: '2025-06-18T15:30:00Z', amount: 2980000 },
+   658→  { id: 'act1-6', clientId: 'client-1', type: 'mismatch_resolved', description: 'Reconciliation mismatch with Pune Industrial Supply resolved — credit note verified', timestamp: '2025-06-28T11:00:00Z', amount: 23000 },
+   659→
+   660→  // Patel & Sons
+   661→  { id: 'act2-1', clientId: 'client-2', type: 'invoice_uploaded', description: '10 invoices uploaded from sales register', timestamp: '2025-07-01T09:00:00Z', amount: 1876000 },
+   662→  { id: 'act2-2', clientId: 'client-2', type: 'validation_completed', description: 'GSTR-1 validation completed — 2 critical, 2 warnings', timestamp: '2025-07-01T09:30:00Z' },
+   663→  { id: 'act2-3', clientId: 'client-2', type: 'return_filed', description: 'GSTR-1 for May 2025 filed — ARN AA060625009012', timestamp: '2025-06-09T14:30:00Z', amount: 1456000 },
+   664→  { id: 'act2-4', clientId: 'client-2', type: 'document_uploaded', description: 'Purchase register for May 2025 uploaded', timestamp: '2025-06-02T08:30:00Z' },
+   665→
+   666→  // Krishna Traders
+   667→  { id: 'act3-1', clientId: 'client-3', type: 'invoice_uploaded', description: '8 invoices uploaded for June 2025', timestamp: '2025-07-01T09:00:00Z', amount: 890000 },
+   668→  { id: 'act3-2', clientId: 'client-3', type: 'return_prepared', description: 'GSTR-1 for June 2025 prepared — 1 warning found', timestamp: '2025-07-02T10:00:00Z' },
+   669→  { id: 'act3-3', clientId: 'client-3', type: 'return_filed', description: 'GSTR-1 for May 2025 filed — ARN AA060625019012', timestamp: '2025-06-11T12:00:00Z', amount: 720000 },
+   670→  { id: 'act3-4', clientId: 'client-3', type: 'payment_received', description: 'GST payment of ₹95,200 debited from bank account', timestamp: '2025-06-11T12:05:00Z', amount: 95200 },
+   671→
+   672→  // Metro Retail
+   673→  { id: 'act4-1', clientId: 'client-4', type: 'invoice_uploaded', description: '12 invoices uploaded for June 2025', timestamp: '2025-07-02T09:30:00Z', amount: 4120000 },
+   674→  { id: 'act4-2', clientId: 'client-4', type: 'validation_completed', description: 'GSTR-1 validation completed — 2 critical, 2 warnings', timestamp: '2025-07-03T11:00:00Z' },
+   675→  { id: 'act4-3', clientId: 'client-4', type: 'return_prepared', description: 'GSTR-1 for June 2025 reviewed — issues pending', timestamp: '2025-07-04T14:00:00Z' },
+   676→  { id: 'act4-4', clientId: 'client-4', type: 'return_filed', description: 'GSTR-1 for April 2025 filed — ARN AA050625031234', timestamp: '2025-05-11T16:00:00Z', amount: 2850000 },
+   677→  { id: 'act4-5', clientId: 'client-4', type: 'mismatch_resolved', description: 'Tax calculation error on MR-2025-0887 corrected after supplier amended return', timestamp: '2025-06-25T10:00:00Z', amount: 55000 },
+   678→
+   679→  // Sunrise Exports
+   680→  { id: 'act5-1', clientId: 'client-5', type: 'invoice_uploaded', description: '8 export invoices uploaded for June 2025', timestamp: '2025-07-01T09:00:00Z', amount: 2340000 },
+   681→  { id: 'act5-2', clientId: 'client-5', type: 'return_prepared', description: 'GSTR-1 for June 2025 validated — 1 warning', timestamp: '2025-07-02T08:00:00Z' },
+   682→  { id: 'act5-3', clientId: 'client-5', type: 'return_filed', description: 'GSTR-1 for May 2025 filed — ARN AA060625040001', timestamp: '2025-06-10T10:00:00Z', amount: 2150000 },
+   683→
+   684→  // Gupta Manufacturing
+   685→  { id: 'act6-1', clientId: 'client-6', type: 'invoice_uploaded', description: '10 invoices uploaded from ERP export', timestamp: '2025-07-01T09:00:00Z', amount: 4850000 },
+   686→  { id: 'act6-2', clientId: 'client-6', type: 'return_prepared', description: 'GSTR-1 for June 2025 validated — 1 warning on GST rate', timestamp: '2025-07-02T11:00:00Z' },
+   687→  { id: 'act6-3', clientId: 'client-6', type: 'return_filed', description: 'GSTR-3B for May 2025 filed — ARN AA060625050001', timestamp: '2025-06-20T15:00:00Z', amount: 4120000 },
+   688→  { id: 'act6-4', clientId: 'client-6', type: 'payment_received', description: 'GST payment of ₹9,45,300 debited from bank', timestamp: '2025-06-20T15:05:00Z', amount: 945300 },
+   689→
+   690→  // Apex Logistics
+   691→  { id: 'act7-1', clientId: 'client-7', type: 'invoice_uploaded', description: '8 invoices uploaded for June 2025', timestamp: '2025-07-01T09:00:00Z', amount: 2780000 },
+   692→  { id: 'act7-2', clientId: 'client-7', type: 'validation_completed', description: 'GSTR-1 validation found 1 critical (suspended GSTIN), 2 warnings', timestamp: '2025-07-01T09:30:00Z' },
+   693→  { id: 'act7-3', clientId: 'client-7', type: 'return_filed', description: 'GSTR-3B for May 2025 filed — ARN AA060625060001', timestamp: '2025-06-20T14:00:00Z', amount: 2360000 },
+   694→  { id: 'act7-4', clientId: 'client-7', type: 'document_uploaded', description: 'Fuel purchase register for May 2025 uploaded', timestamp: '2025-06-05T10:00:00Z' },
+   695→
+   696→  // RK Electronics
+   697→  { id: 'act8-1', clientId: 'client-8', type: 'invoice_uploaded', description: '6 invoices uploaded for Q1 2025-26', timestamp: '2025-07-01T09:00:00Z', amount: 1920000 },
+   698→  { id: 'act8-2', clientId: 'client-8', type: 'validation_completed', description: 'GSTR-1 validation found 1 critical (tax error), 2 warnings', timestamp: '2025-07-01T09:30:00Z' },
+   699→  { id: 'act8-3', clientId: 'client-8', type: 'return_filed', description: 'GSTR-1 for Q4 2024-25 filed — ARN AA040625070001', timestamp: '2025-04-20T11:00:00Z', amount: 1450000 },
+   700→];
+   701→
+   702→// ─── Blocking Issues ──────────────────────────────────────────────────────────
+   703→export interface SampleBlockingIssue {
+   704→  id: string;
+   705→  clientId: string;
+   706→  clientName: string;
+   707→  category: 'gstin_error' | 'missing_invoice' | 'recon_mismatch' | 'validation_failure';
+   708→  title: string;
+   709→  detail: string;
+   710→  invoiceRef?: string;
+   711→  amount?: number;
+   712→}
+   713→
+   714→export const SAMPLE_BLOCKING_ISSUES: SampleBlockingIssue[] = [
+   715→  { id: 'bi1', clientId: 'client-4', clientName: 'Metro Retail', category: 'gstin_error', title: 'Invalid GSTIN in 2 B2B invoices', detail: '27AABPC5678B1Z3 fails checksum — buyer GSTIN in MR-2025-0902', invoiceRef: 'MR-2025-0902' },
+   716→  { id: 'bi2', clientId: 'client-2', clientName: 'Patel & Sons', category: 'recon_mismatch', title: '₹42,560 ITC mismatch on PS-2025-0604', detail: 'Books: ₹22,050 CGST + ₹22,050 SGST. Portal: ₹20,500 CGST + ₹20,500 SGST. Difference: ₹3,100', invoiceRef: 'PS-2025-0604', amount: 3100 },
+   717→  { id: 'bi3', clientId: 'client-7', clientName: 'Apex Logistics', category: 'missing_invoice', title: '1 invoice with suspended GSTIN', detail: 'Buyer GSTIN 27AABNF9012C1Z5 in AL-2025-0403 is cancelled on GST portal', invoiceRef: 'AL-2025-0403' },
+   718→  { id: 'bi4', clientId: 'client-3', clientName: 'Krishna Traders', category: 'validation_failure', title: 'HSN code validation for coffee products', detail: 'HSN code 0901 returned requires 6-digit classification in KT-2025-0706', invoiceRef: 'KT-2025-0706' },
+   719→  { id: 'bi5', clientId: 'client-8', clientName: 'RK Electronics', category: 'recon_mismatch', title: '₹3,550 CGST under-payment in RKE-2025-0102', detail: 'Books: ₹31,050 CGST expected. Portal: ₹27,500 CGST found. Short payment attracts interest.', invoiceRef: 'RKE-2025-0102', amount: 3550 },
+   720→];
+   721→
+   722→// ─── Recent Uploads ──────────────────────────────────────────────────────────
+   723→export interface SampleUpload {
+   724→  id: string;
+   725→  filename: string;
+   726→  uploadTime: string;
+   727→  status: 'processing' | 'extracted' | 'failed';
+   728→  clientName: string;
+   729→  clientId: string;
+   730→  rowCount?: number;
+   731→  invoiceCount?: number;
+   732→  accuracy?: number;
+   733→}
+   734→
+   735→export const SAMPLE_UPLOADS: SampleUpload[] = [
+   736→  { id: 'u1', filename: 'Sales_Register_Jun2025.xlsx', uploadTime: '2025-07-01T10:15:00Z', status: 'extracted', clientName: 'Sharma Enterprises', clientId: 'client-1', rowCount: 342, invoiceCount: 15, accuracy: 98.7 },
+   737→  { id: 'u2', filename: 'Purchase_Register_Jun2025.pdf', uploadTime: '2025-07-01T09:20:00Z', status: 'processing', clientName: 'Gupta Manufacturing', clientId: 'client-6', rowCount: 186 },
+   738→  { id: 'u3', filename: 'GSTR1_May2025.json', uploadTime: '2025-07-01T08:45:00Z', status: 'extracted', clientName: 'Sunrise Exports', clientId: 'client-5', invoiceCount: 7, accuracy: 100 },
+   739→  { id: 'u4', filename: 'Bank_Statement_Jun2025.pdf', uploadTime: '2025-06-30T16:00:00Z', status: 'failed', clientName: 'Metro Retail', clientId: 'client-4' },
+   740→];
+   741→
+   742→// ─── Helper Functions ─────────────────────────────────────────────────────────
+   743→export function getClientById(id: string): SampleClient | undefined {
+   744→  return SAMPLE_CLIENTS.find(c => c.id === id);
+   745→}
+   746→
+   747→export function getClientInvoices(clientId: string): SampleInvoice[] {
+   748→  return SAMPLE_INVOICES[clientId] ?? [];
+   749→}
+   750→
+   751→export function getClientIssues(clientId: string): SampleValidationIssue[] {
+   752→  return SAMPLE_ISSUES[clientId] ?? [];
+   753→}
+   754→
+   755→export function getClientInsights(clientId: string): SampleAIInsight[] {
+   756→  return SAMPLE_AI_INSIGHTS[clientId] ?? [];
+   757→}
+   758→
+   759→export function getClientFilings(clientId: string): SampleFiling[] {
+   760→  return SAMPLE_FILINGS.filter(f => f.clientId === clientId);
+   761→}
+   762→
+   763→export function getClientReconDrilldowns(clientId: string): Record<string, SampleReconDrilldown[]> {
+   764→  return SAMPLE_RECON_DRILLDOWNS[clientId] ?? {};
+   765→}
+   766→
+   767→export function getClientReconSummary(clientId: string): SampleReconCategory[] {
+   768→  return SAMPLE_RECON_SUMMARY[clientId] ?? [];
+   769→}
+   770→
+   771→export function getClientActivities(clientId: string): SampleActivity[] {
+   772→  return SAMPLE_ACTIVITIES.filter(a => a.clientId === clientId).sort((a, b) =>
+   773→    new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+   774→  );
+   775→}
+   776→

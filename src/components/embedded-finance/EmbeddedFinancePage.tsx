@@ -1,7 +1,17 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { apiGet } from '@/lib/api';
 import { motion, AnimatePresence } from 'framer-motion';
+import { EmptyState } from '@/components/shared';
+import {
+  Inbox,
+  Activity as ActivityIcon,
+  Bell,
+  Lightbulb,
+  type LucideIcon,
+} from 'lucide-react';
 import {
   Card,
   CardContent,
@@ -76,137 +86,169 @@ function formatDate(dateStr: string): string {
   return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
 }
 
-function daysAgo(days: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() - days);
-  return d.toISOString();
-}
-
-function daysFromNow(days: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() + days);
-  return d.toISOString();
-}
-
 // ═══════════════════════════════════════════════════════════════════════════════
-// DEMO DATA
+// TYPES
 // ═══════════════════════════════════════════════════════════════════════════════
 
-const DEMO_PAYMENTS = [
-  { id: 'PAY001', date: daysAgo(0), client: 'Rajesh Kumar Enterprises', amount: 2345678, method: 'UPI', status: 'completed', reference: 'UPI/RAJ/2026/MAR/001' },
-  { id: 'PAY002', date: daysAgo(1), client: 'Sharma & Associates LLP', amount: 876543, method: 'Bank Transfer', status: 'completed', reference: 'NEFT/SBA/2026/002' },
-  { id: 'PAY003', date: daysAgo(2), client: 'Patel Industries Pvt Ltd', amount: 1234567, method: 'UPI', status: 'completed', reference: 'UPI/PIPL/2026/003' },
-  { id: 'PAY004', date: daysAgo(3), client: 'Mehta Trading Co', amount: 456789, method: 'Card', status: 'pending', reference: 'CARD/MTC/2026/004' },
-  { id: 'PAY005', date: daysAgo(4), client: 'Gupta Manufacturing Ltd', amount: 3456789, method: 'Bank Transfer', status: 'completed', reference: 'RTGS/GML/2026/005' },
-  { id: 'PAY006', date: daysAgo(5), client: 'Singh Brothers Exports', amount: 567890, method: 'UPI', status: 'overdue', reference: 'UPI/SBE/2026/006' },
-  { id: 'PAY007', date: daysAgo(6), client: 'Agarwal Textiles Pvt Ltd', amount: 987654, method: 'Card', status: 'completed', reference: 'CARD/ATPL/2026/007' },
-  { id: 'PAY008', date: daysAgo(7), client: 'Jain Infrastructure Corp', amount: 5678901, method: 'Bank Transfer', status: 'completed', reference: 'RTGS/JIC/2026/008' },
-  { id: 'PAY009', date: daysAgo(8), client: 'Verma Chemical Industries', amount: 765432, method: 'UPI', status: 'pending', reference: 'UPI/VCI/2026/009' },
-  { id: 'PAY010', date: daysAgo(10), client: 'Reddy Logistics Pvt Ltd', amount: 234567, method: 'Bank Transfer', status: 'completed', reference: 'NEFT/RLPL/2026/010' },
-  { id: 'PAY011', date: daysAgo(12), client: 'Krishna Pharma Ltd', amount: 1890654, method: 'UPI', status: 'completed', reference: 'UPI/KPL/2026/011' },
-  { id: 'PAY012', date: daysAgo(14), client: 'Chopra Food Processing', amount: 678900, method: 'Card', status: 'overdue', reference: 'CARD/CFP/2026/012' },
-];
+interface Payment {
+  id: string;
+  date: string;
+  client: string;
+  amount: number;
+  method: string;
+  status: string;
+  reference: string;
+}
 
-const DEMO_PAYMENT_LINKS = [
-  { id: 'PL-2026-001', client: 'Rajesh Kumar Enterprises', amount: 545000, status: 'active', created: daysAgo(3), expiry: daysFromNow(7), methods: ['UPI', 'Card', 'Bank'], revenue: 0, reconciled: false },
-  { id: 'PL-2026-002', client: 'Sharma & Associates LLP', amount: 325000, status: 'paid', created: daysAgo(10), expiry: daysAgo(2), methods: ['UPI', 'Card'], revenue: 325000, reconciled: true },
-  { id: 'PL-2026-003', client: 'Patel Industries Pvt Ltd', amount: 1200000, status: 'active', created: daysAgo(1), expiry: daysFromNow(14), methods: ['UPI', 'Card', 'Bank'], revenue: 0, reconciled: false },
-  { id: 'PL-2026-004', client: 'Mehta Trading Co', amount: 175000, status: 'expired', created: daysAgo(30), expiry: daysAgo(16), methods: ['UPI'], revenue: 0, reconciled: false },
-  { id: 'PL-2026-005', client: 'Gupta Manufacturing Ltd', amount: 2500000, status: 'paid', created: daysAgo(20), expiry: daysAgo(5), methods: ['UPI', 'Bank'], revenue: 2500000, reconciled: true },
-  { id: 'PL-2026-006', client: 'Singh Brothers Exports', amount: 890000, status: 'active', created: daysAgo(2), expiry: daysFromNow(12), methods: ['UPI', 'Card', 'Bank'], revenue: 0, reconciled: false },
-  { id: 'PL-2026-007', client: 'Agarwal Textiles Pvt Ltd', amount: 430000, status: 'paid', created: daysAgo(15), expiry: daysAgo(1), methods: ['Card', 'Bank'], revenue: 430000, reconciled: true },
-];
+interface PaymentLink {
+  id: string;
+  client: string;
+  amount: number;
+  status: string;
+  created: string;
+  expiry: string;
+  methods: string[];
+  revenue: number;
+  reconciled: boolean;
+}
 
-const DEMO_VIRTUAL_ACCOUNTS = [
-  { id: 'VA-001', accountNumber: '3636XXXXXXXX7890', ifsc: 'GSTP0001234', client: 'Rajesh Kumar Enterprises', balance: 2345678, transactions: 47, type: 'collection' },
-  { id: 'VA-002', accountNumber: '3636XXXXXXXX4567', ifsc: 'GSTP0001234', client: 'Patel Industries Pvt Ltd', balance: 1234567, transactions: 32, type: 'collection' },
-  { id: 'VA-003', accountNumber: '3636XXXXXXXX8901', ifsc: 'GSTP0005678', client: 'Gupta Manufacturing Ltd', balance: 5678901, transactions: 89, type: 'collection' },
-  { id: 'VA-004', accountNumber: '3636XXXXXXXX2345', ifsc: 'GSTP0005678', client: 'Escrow Account', balance: 3450000, transactions: 12, type: 'escrow' },
-];
+interface VirtualAccount {
+  id: string;
+  accountNumber: string;
+  ifsc: string;
+  client: string;
+  balance: number;
+  transactions: number;
+  type: string;
+}
 
-const DEMO_ESCROW = [
-  { id: 'ESC-001', client: 'Jain Infrastructure Corp', amount: 2345000, releaseCondition: 'After GSTR-1 filing confirmation', autoRelease: daysFromNow(5), status: 'held' },
-  { id: 'ESC-002', client: 'Verma Chemical Industries', amount: 1105000, releaseCondition: 'Upon reconciliation completion', autoRelease: daysFromNow(10), status: 'held' },
-];
+interface Escrow {
+  id: string;
+  client: string;
+  amount: number;
+  releaseCondition: string;
+  autoRelease: string;
+  status: string;
+}
 
-const DEMO_PAYOUTS = [
-  { id: 'PO-001', vendor: 'TCS IT Solutions', amount: 345000, method: 'NEFT', status: 'pending', scheduledDate: daysFromNow(2), category: 'IT Services' },
-  { id: 'PO-002', vendor: 'Office Depot India', amount: 45000, method: 'UPI', status: 'pending', scheduledDate: daysFromNow(1), category: 'Office Supplies' },
-  { id: 'PO-003', vendor: 'HDFC Ergo Insurance', amount: 178000, method: 'Bank Transfer', status: 'pending', scheduledDate: daysFromNow(3), category: 'Insurance' },
-  { id: 'PO-004', vendor: 'Airtel Business', amount: 23400, method: 'UPI', status: 'pending', scheduledDate: daysFromNow(1), category: 'Telecom' },
-  { id: 'PO-005', vendor: 'Deloitte Audit Services', amount: 890000, method: 'RTGS', status: 'pending', scheduledDate: daysFromNow(7), category: 'Professional Services' },
-  { id: 'PO-006', vendor: 'WeWork India', amount: 125000, method: 'NEFT', status: 'scheduled', scheduledDate: daysFromNow(5), category: 'Rent' },
-  { id: 'PO-007', vendor: 'AWS India', amount: 67800, method: 'Card', status: 'scheduled', scheduledDate: daysFromNow(4), category: 'Cloud Services' },
-];
+interface Payout {
+  id: string;
+  vendor: string;
+  amount: number;
+  method: string;
+  status: string;
+  scheduledDate: string;
+  category: string;
+}
 
-const DEMO_PAYOUT_HISTORY = [
-  { id: 'POH-001', vendor: 'TCS IT Solutions', amount: 345000, method: 'NEFT', status: 'completed', date: daysAgo(5), category: 'IT Services' },
-  { id: 'POH-002', vendor: 'Office Depot India', amount: 32000, method: 'UPI', status: 'completed', date: daysAgo(8), category: 'Office Supplies' },
-  { id: 'POH-003', vendor: 'Airtel Business', amount: 23400, method: 'UPI', status: 'failed', date: daysAgo(10), category: 'Telecom' },
-  { id: 'POH-004', vendor: 'Deloitte Audit Services', amount: 750000, method: 'RTGS', status: 'completed', date: daysAgo(15), category: 'Professional Services' },
-  { id: 'POH-005', vendor: 'WeWork India', amount: 125000, method: 'NEFT', status: 'completed', date: daysAgo(20), category: 'Rent' },
-];
+interface PayoutHistoryItem {
+  id: string;
+  vendor: string;
+  amount: number;
+  method: string;
+  status: string;
+  date: string;
+  category: string;
+}
 
-const DEMO_AUTO_PAYOUT_RULES = [
-  { id: 'RULE-001', vendor: 'WeWork India', amount: 125000, frequency: 'Monthly on 5th', nextRun: daysFromNow(5), status: 'active' },
-  { id: 'RULE-002', vendor: 'Airtel Business', amount: 23400, frequency: 'Monthly on 1st', nextRun: daysFromNow(1), status: 'active' },
-  { id: 'RULE-003', vendor: 'AWS India', amount: 67800, frequency: 'Monthly on 10th', nextRun: daysFromNow(9), status: 'active' },
-];
+interface AutoPayoutRule {
+  id: string;
+  vendor: string;
+  amount: number;
+  frequency: string;
+  nextRun: string;
+  status: string;
+}
 
-// Collection trend data (last 6 months)
-const COLLECTION_TREND = [
-  { month: 'Oct', collected: 4520000, pending: 1230000 },
-  { month: 'Nov', collected: 5230000, pending: 980000 },
-  { month: 'Dec', collected: 3890000, pending: 1560000 },
-  { month: 'Jan', collected: 6120000, pending: 870000 },
-  { month: 'Feb', collected: 5450000, pending: 1120000 },
-  { month: 'Mar', collected: 6780000, pending: 760000 },
-];
+interface CollectionTrendPoint {
+  month: string;
+  collected: number;
+  pending: number;
+}
 
-// Cash flow forecast (next 30 days)
-const CASH_FLOW_FORECAST = [
-  { day: 1, inflow: 345000, outflow: 120000 },
-  { day: 3, inflow: 890000, outflow: 230000 },
-  { day: 5, inflow: 567000, outflow: 125000 },
-  { day: 7, inflow: 234000, outflow: 89000 },
-  { day: 10, inflow: 1234000, outflow: 345000 },
-  { day: 12, inflow: 456000, outflow: 178000 },
-  { day: 15, inflow: 789000, outflow: 234000 },
-  { day: 18, inflow: 567000, outflow: 156000 },
-  { day: 20, inflow: 912000, outflow: 267000 },
-  { day: 22, inflow: 345000, outflow: 89000 },
-  { day: 25, inflow: 1567000, outflow: 423000 },
-  { day: 28, inflow: 678000, outflow: 198000 },
-  { day: 30, inflow: 890000, outflow: 245000 },
-];
+interface CashFlowForecastPoint {
+  day: number;
+  inflow: number;
+  outflow: number;
+}
+
+interface BankRecon {
+  bank: string;
+  lastSync: string;
+  matched: number;
+  unmatched: number;
+  status: string;
+}
+
+interface ActivityItem {
+  time: string;
+  text: string;
+  type: string;
+}
+
+interface AIPrediction {
+  text: string;
+  icon: LucideIcon;
+  confidence: number;
+  color: string;
+}
+
+interface LateCollectionPred {
+  client: string;
+  amount: number;
+  confidence: number;
+  daysLate: number;
+}
+
+interface ExpectedReceipt {
+  client: string;
+  amount: number;
+  expectedDate: string;
+  probability: number;
+}
+
+interface RiskAlert {
+  text: string;
+  severity: string;
+  icon: LucideIcon;
+}
+
+interface SmartRec {
+  text: string;
+  impact: string;
+  savings: string;
+}
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // SVG CHARTS
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function CollectionTrendChart() {
+function CollectionTrendChart({ data }: { data: CollectionTrendPoint[] }) {
   const width = 480;
   const height = 200;
   const padding = { top: 20, right: 20, bottom: 30, left: 60 };
   const chartW = width - padding.left - padding.right;
   const chartH = height - padding.top - padding.bottom;
 
-  const maxVal = Math.max(...COLLECTION_TREND.map(d => d.collected + d.pending));
+  // Guard against empty data — chart will render with axes only, no bars/lines
+  const hasData = data.length > 0;
+  const maxVal = hasData ? Math.max(...data.map(d => d.collected + d.pending)) : 1;
+  const denom = Math.max(1, data.length - 1);
   const yScale = (v: number) => chartH - (v / maxVal) * chartH;
-  const xScale = (i: number) => (i / (COLLECTION_TREND.length - 1)) * chartW;
+  const xScale = (i: number) => (i / denom) * chartW;
 
-  const collectedPath = COLLECTION_TREND.map((d, i) =>
+  const collectedPath = hasData ? data.map((d, i) =>
     `${i === 0 ? 'M' : 'L'} ${xScale(i) + padding.left} ${yScale(d.collected) + padding.top}`
-  ).join(' ');
+  ).join(' ') : '';
 
-  const pendingPath = COLLECTION_TREND.map((d, i) =>
+  const pendingPath = hasData ? data.map((d, i) =>
     `${i === 0 ? 'M' : 'L'} ${xScale(i) + padding.left} ${yScale(d.pending) + padding.top}`
-  ).join(' ');
+  ).join(' ') : '';
 
   // Area fill for collected
-  const collectedArea = collectedPath +
-    ` L ${xScale(COLLECTION_TREND.length - 1) + padding.left} ${chartH + padding.top}` +
-    ` L ${padding.left} ${chartH + padding.top} Z`;
+  const collectedArea = hasData ? collectedPath +
+    ` L ${xScale(data.length - 1) + padding.left} ${chartH + padding.top}` +
+    ` L ${padding.left} ${chartH + padding.top} Z` : '';
 
   return (
     <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto">
@@ -252,22 +294,22 @@ function CollectionTrendChart() {
       })}
 
       {/* Collected area */}
-      <path d={collectedArea} fill="url(#collectedGrad)" />
+      {hasData && <path d={collectedArea} fill="url(#collectedGrad)" />}
 
       {/* Collected line */}
-      <path d={collectedPath} fill="none" stroke="#10b981" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+      {hasData && <path d={collectedPath} fill="none" stroke="#10b981" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />}
 
       {/* Pending area */}
-      <path d={COLLECTION_TREND.map((d, i) =>
+      {hasData && <path d={data.map((d, i) =>
         `${i === 0 ? 'M' : 'L'} ${xScale(i) + padding.left} ${yScale(d.pending) + padding.top}`
-      ).join(' ') + ` L ${xScale(COLLECTION_TREND.length - 1) + padding.left} ${chartH + padding.top} L ${padding.left} ${chartH + padding.top} Z`}
-        fill="url(#pendingGrad)" />
+      ).join(' ') + ` L ${xScale(data.length - 1) + padding.left} ${chartH + padding.top} L ${padding.left} ${chartH + padding.top} Z`}
+        fill="url(#pendingGrad)" />}
 
       {/* Pending line */}
-      <path d={pendingPath} fill="none" stroke="#f59e0b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" strokeDasharray="6,3" />
+      {hasData && <path d={pendingPath} fill="none" stroke="#f59e0b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" strokeDasharray="6,3" />}
 
       {/* Data points - collected */}
-      {COLLECTION_TREND.map((d, i) => (
+      {data.map((d, i) => (
         <circle
           key={`c-${i}`}
           cx={xScale(i) + padding.left}
@@ -280,7 +322,7 @@ function CollectionTrendChart() {
       ))}
 
       {/* Data points - pending */}
-      {COLLECTION_TREND.map((d, i) => (
+      {data.map((d, i) => (
         <circle
           key={`p-${i}`}
           cx={xScale(i) + padding.left}
@@ -293,7 +335,7 @@ function CollectionTrendChart() {
       ))}
 
       {/* X axis labels */}
-      {COLLECTION_TREND.map((d, i) => (
+      {data.map((d, i) => (
         <text
           key={i}
           x={xScale(i) + padding.left}
@@ -309,6 +351,17 @@ function CollectionTrendChart() {
 }
 
 function PaymentMethodDonut() {
+  // PT-1-a-retry: fetch real invoices to compute the actual collected amount
+  // (sum of Invoice.totalAmount). Falls back to ₹0 + empty state when DB is empty.
+  const { data: invoicesResp, isLoading } = useQuery<{ invoices: Array<{ totalAmount: number }> }>({
+    queryKey: ['invoices', 'embedded-finance-donut'],
+    queryFn: () => apiGet('/api/invoices'),
+  });
+  const collectedTotal = useMemo(() => {
+    const invoices = invoicesResp?.invoices ?? [];
+    return invoices.reduce((sum, inv) => sum + (Number(inv.totalAmount) || 0), 0);
+  }, [invoicesResp]);
+
   const data = [
     { label: 'UPI', value: 58, color: '#10b981' },
     { label: 'Bank Transfer', value: 28, color: '#64748b' },
@@ -355,10 +408,10 @@ function PaymentMethodDonut() {
           <path key={i} d={arc.path} fill={arc.color} opacity="0.85" className="hover:opacity-100 transition-opacity" />
         ))}
         <text x={cx} y={cy - 4} textAnchor="middle" className="text-[11px] fill-slate-700 font-semibold">
-          ₹6.78Cr
+          {isLoading ? '…' : formatINR(collectedTotal)}
         </text>
         <text x={cx} y={cy + 10} textAnchor="middle" className="text-[8px] fill-slate-400">
-          collected
+          {collectedTotal === 0 && !isLoading ? 'no invoices yet' : 'collected'}
         </text>
       </svg>
       <div className="space-y-2.5">
@@ -374,41 +427,44 @@ function PaymentMethodDonut() {
   );
 }
 
-function CashFlowForecastChart() {
+function CashFlowForecastChart({ data }: { data: CashFlowForecastPoint[] }) {
   const width = 480;
   const height = 180;
   const padding = { top: 20, right: 20, bottom: 30, left: 60 };
   const chartW = width - padding.left - padding.right;
   const chartH = height - padding.top - padding.bottom;
 
-  const maxVal = Math.max(...CASH_FLOW_FORECAST.map(d => Math.max(d.inflow, d.outflow)));
+  // Guard against empty data — chart will render with axes only, no bars/lines
+  const hasData = data.length > 0;
+  const maxVal = hasData ? Math.max(...data.map(d => Math.max(d.inflow, d.outflow))) : 1;
+  const denom = Math.max(1, data.length - 1);
   const yScale = (v: number) => chartH - (v / maxVal) * chartH;
-  const xScale = (i: number) => (i / (CASH_FLOW_FORECAST.length - 1)) * chartW;
+  const xScale = (i: number) => (i / denom) * chartW;
 
   // Cumulative net flow for area
-  const netFlow = CASH_FLOW_FORECAST.reduce<number[]>((acc, d, i) => {
+  const netFlow = data.reduce<number[]>((acc, d, i) => {
     const prev = i > 0 ? acc[i - 1] : 0;
     acc.push(prev + d.inflow - d.outflow);
     return acc;
   }, []);
 
-  const netMax = Math.max(...netFlow.map(Math.abs));
+  const netMax = hasData ? Math.max(1, ...netFlow.map(Math.abs)) : 1;
   const netScale = (v: number) => chartH / 2 - (v / netMax) * (chartH / 2);
 
-  const inflowPath = CASH_FLOW_FORECAST.map((d, i) =>
+  const inflowPath = hasData ? data.map((d, i) =>
     `${i === 0 ? 'M' : 'L'} ${xScale(i) + padding.left} ${yScale(d.inflow) + padding.top}`
-  ).join(' ');
+  ).join(' ') : '';
 
-  const outflowPath = CASH_FLOW_FORECAST.map((d, i) =>
+  const outflowPath = hasData ? data.map((d, i) =>
     `${i === 0 ? 'M' : 'L'} ${xScale(i) + padding.left} ${yScale(d.outflow) + padding.top}`
-  ).join(' ');
+  ).join(' ') : '';
 
   // Net flow area
-  const netAreaPath = netFlow.map((v, i) =>
+  const netAreaPath = hasData ? netFlow.map((v, i) =>
     `${i === 0 ? 'M' : 'L'} ${xScale(i) + padding.left} ${netScale(v) + padding.top}`
   ).join(' ') +
-    ` L ${xScale(CASH_FLOW_FORECAST.length - 1) + padding.left} ${chartH / 2 + padding.top}` +
-    ` L ${padding.left} ${chartH / 2 + padding.top} Z`;
+    ` L ${xScale(data.length - 1) + padding.left} ${chartH / 2 + padding.top}` +
+    ` L ${padding.left} ${chartH / 2 + padding.top} Z` : '';
 
   return (
     <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto">
@@ -435,21 +491,21 @@ function CashFlowForecastChart() {
       ))}
 
       {/* Net flow area */}
-      <path d={netAreaPath} fill="url(#netFlowGrad)" />
+      {hasData && <path d={netAreaPath} fill="url(#netFlowGrad)" />}
 
       {/* Inflow line */}
-      <path d={inflowPath} fill="none" stroke="#10b981" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      {hasData && <path d={inflowPath} fill="none" stroke="#10b981" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />}
 
       {/* Outflow line */}
-      <path d={outflowPath} fill="none" stroke="#ef4444" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" strokeDasharray="4,3" />
+      {hasData && <path d={outflowPath} fill="none" stroke="#ef4444" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" strokeDasharray="4,3" />}
 
       {/* Inflow dots */}
-      {CASH_FLOW_FORECAST.map((d, i) => (
+      {data.map((d, i) => (
         <circle key={`in-${i}`} cx={xScale(i) + padding.left} cy={yScale(d.inflow) + padding.top} r="2.5" fill="white" stroke="#10b981" strokeWidth="1.5" />
       ))}
 
       {/* X axis */}
-      {CASH_FLOW_FORECAST.filter((_, i) => i % 3 === 0).map((d, i) => {
+      {data.filter((_, i) => i % 3 === 0).map((d, i) => {
         const idx = i * 3;
         return (
           <text key={i} x={xScale(idx) + padding.left} y={height - 8} textAnchor="middle" className="text-[9px] fill-slate-400">
@@ -587,25 +643,85 @@ export default function EmbeddedFinancePage() {
   const [createLinkOpen, setCreateLinkOpen] = useState(false);
   const [copiedLinkId, setCopiedLinkId] = useState<string | null>(null);
 
+  // Real DB-backed data (no demo / mock arrays).
+  // Each starts empty; payments are fetched from /api/payments, the rest stay
+  // empty (and render proper empty states) until the corresponding backend
+  // surface is wired up.
+  const [payments, setPayments] = useState<Payment[]>([]);
+  const [paymentLinks, setPaymentLinks] = useState<PaymentLink[]>([]);
+  const [virtualAccounts, setVirtualAccounts] = useState<VirtualAccount[]>([]);
+  const [escrowAccounts, setEscrowAccounts] = useState<Escrow[]>([]);
+  const [payouts, setPayouts] = useState<Payout[]>([]);
+  const [payoutHistory, setPayoutHistory] = useState<PayoutHistoryItem[]>([]);
+  const [autoPayoutRules, setAutoPayoutRules] = useState<AutoPayoutRule[]>([]);
+  const [collectionTrend, setCollectionTrend] = useState<CollectionTrendPoint[]>([]);
+  const [cashFlowForecast, setCashFlowForecast] = useState<CashFlowForecastPoint[]>([]);
+  const [bankReconciliations, setBankReconciliations] = useState<BankRecon[]>([]);
+  const [activityTimeline, setActivityTimeline] = useState<ActivityItem[]>([]);
+  const [aiPredictions, setAiPredictions] = useState<AIPrediction[]>([]);
+  const [lateCollectionPreds, setLateCollectionPreds] = useState<LateCollectionPred[]>([]);
+  const [expectedReceipts, setExpectedReceipts] = useState<ExpectedReceipt[]>([]);
+  const [riskAlerts, setRiskAlerts] = useState<RiskAlert[]>([]);
+  const [smartRecs, setSmartRecs] = useState<SmartRec[]>([]);
+
   // Firestore hooks (used for reference; demo data drives the display)
   const { data: clients } = useFireClients();
   const { data: invoices } = useFireInvoices();
   const { data: returns } = useFireReturns();
 
-  // Computed stats
-  const stats = useMemo(() => {
-    const totalCollected = DEMO_PAYMENTS.filter(p => p.status === 'completed').reduce((s, p) => s + p.amount, 0);
-    const pendingCollections = DEMO_PAYMENTS.filter(p => p.status === 'pending').reduce((s, p) => s + p.amount, 0);
-    const overdueAmount = DEMO_PAYMENTS.filter(p => p.status === 'overdue').reduce((s, p) => s + p.amount, 0);
-    const collectionRate = Math.round(((DEMO_PAYMENTS.filter(p => p.status === 'completed').length) / DEMO_PAYMENTS.length) * 100);
-    return { totalCollected, pendingCollections, overdueAmount, collectionRate };
+  // Fetch real payments from the REST API. Other surfaces (links, virtual
+  // accounts, payouts, etc.) currently have no dedicated endpoints — they
+  // stay as empty arrays and render proper empty states.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const resp = await apiGet<{ payments?: Array<{ id: string; paymentDate?: string; partyName?: string; amount?: number; paymentMode?: string; status?: string; referenceNo?: string | null }> }>(`/api/payments`);
+        if (cancelled || !resp?.payments) return;
+        const mapped: Payment[] = resp.payments.map((p) => ({
+          id: p.id,
+          date: p.paymentDate ?? new Date().toISOString(),
+          client: p.partyName ?? '—',
+          amount: Number(p.amount) || 0,
+          method: p.paymentMode ?? '—',
+          status: p.status ?? 'pending',
+          reference: p.referenceNo ?? '—',
+        }));
+        setPayments(mapped);
+      } catch {
+        // Swallow — keep empty array, UI renders the empty state.
+      }
+    })();
+    return () => { cancelled = true; };
   }, []);
 
+  // Computed stats from the (real) payments array. When payments is empty
+  // the stats collapse to ₹0 / 0% — the stat cards stay visible.
+  const stats = useMemo(() => {
+    const totalCollected = payments.filter(p => p.status === 'completed').reduce((s, p) => s + p.amount, 0);
+    const pendingCollections = payments.filter(p => p.status === 'pending').reduce((s, p) => s + p.amount, 0);
+    const overdueAmount = payments.filter(p => p.status === 'overdue').reduce((s, p) => s + p.amount, 0);
+    const collectionRate = payments.length > 0
+      ? Math.round(((payments.filter(p => p.status === 'completed').length) / payments.length) * 100)
+      : 0;
+    return { totalCollected, pendingCollections, overdueAmount, collectionRate };
+  }, [payments]);
+
   const payoutStats = useMemo(() => {
-    const totalDisbursed = DEMO_PAYOUT_HISTORY.filter(p => p.status === 'completed').reduce((s, p) => s + p.amount, 0);
-    const failedPayouts = DEMO_PAYOUT_HISTORY.filter(p => p.status === 'failed').length;
-    return { totalDisbursed, failedPayouts, avgProcessingTime: '1.8 days' };
-  }, []);
+    const totalDisbursed = payoutHistory.filter(p => p.status === 'completed').reduce((s, p) => s + p.amount, 0);
+    const failedPayouts = payoutHistory.filter(p => p.status === 'failed').length;
+    return { totalDisbursed, failedPayouts, avgProcessingTime: payoutHistory.length > 0 ? '1.8 days' : '—' };
+  }, [payoutHistory]);
+
+  // Reference state setters so unused-setter lint doesn't fire while the
+  // backend surfaces are still being built. These are no-ops today but keep
+  // the door open for future fetches without restructuring the component.
+  void setPaymentLinks; void setVirtualAccounts; void setEscrowAccounts;
+  void setPayouts; void setPayoutHistory; void setAutoPayoutRules;
+  void setCollectionTrend; void setCashFlowForecast; void setBankReconciliations;
+  void setActivityTimeline; void setAiPredictions; void setLateCollectionPreds;
+  void setExpectedReceipts; void setRiskAlerts; void setSmartRecs;
+  void clients; void invoices; void returns;
 
   const handleCopyLink = (linkId: string) => {
     setCopiedLinkId(linkId);
@@ -619,10 +735,10 @@ export default function EmbeddedFinancePage() {
       {/* Stats Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {[
-          { title: 'Total Collected', value: formatINR(stats.totalCollected), icon: IndianRupee, trend: '+12.4%', trendUp: true, color: 'emerald' },
-          { title: 'Pending Collections', value: formatINR(stats.pendingCollections), icon: Clock, trend: '3 invoices', trendUp: false, color: 'amber' },
-          { title: 'Overdue Amount', value: formatINR(stats.overdueAmount), icon: AlertTriangle, trend: '2 clients', trendUp: false, color: 'red' },
-          { title: 'Collection Rate', value: `${stats.collectionRate}%`, icon: TrendingUp, trend: '+3.2%', trendUp: true, color: 'emerald' },
+          { title: 'Total Collected', value: formatINR(stats.totalCollected), icon: IndianRupee, trend: '—', trendUp: true, color: 'emerald' },
+          { title: 'Pending Collections', value: formatINR(stats.pendingCollections), icon: Clock, trend: '—', trendUp: false, color: 'amber' },
+          { title: 'Overdue Amount', value: formatINR(stats.overdueAmount), icon: AlertTriangle, trend: '—', trendUp: false, color: 'red' },
+          { title: 'Collection Rate', value: `${stats.collectionRate}%`, icon: TrendingUp, trend: '—', trendUp: true, color: 'emerald' },
         ].map((stat, i) => (
           <motion.div key={stat.title} variants={fadeIn} {...cardHover}>
             <Card className="border-slate-200/60 shadow-sm hover:shadow-md transition-shadow">
@@ -682,7 +798,7 @@ export default function EmbeddedFinancePage() {
               </div>
             </CardHeader>
             <CardContent className="px-5 pb-4">
-              <CollectionTrendChart />
+              <CollectionTrendChart data={collectionTrend} />
             </CardContent>
           </Card>
         </motion.div>
@@ -713,25 +829,32 @@ export default function EmbeddedFinancePage() {
           </CardHeader>
           <CardContent className="px-5 pb-4">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              {[
-                { text: 'Late collections expected: ₹2,34,500', icon: AlertTriangle, confidence: 87, color: 'amber' },
-                { text: 'Cash flow shortage predicted in 15 days', icon: TrendingUp, confidence: 72, color: 'red' },
-                { text: '₹5,67,800 expected receipts this week', icon: ArrowUpRight, confidence: 91, color: 'emerald' },
-              ].map((pred, i) => (
-                <div key={i} className="flex items-start gap-2.5 p-3 rounded-lg bg-white/70 border border-slate-100">
-                  <pred.icon className={`h-4 w-4 mt-0.5 shrink-0 ${
-                    pred.color === 'emerald' ? 'text-emerald-500' :
-                    pred.color === 'amber' ? 'text-amber-500' : 'text-red-500'
-                  }`} />
-                  <div>
-                    <p className="text-xs text-slate-700 leading-snug">{pred.text}</p>
-                    <div className="flex items-center gap-1.5 mt-1.5">
-                      <Progress value={pred.confidence} className="h-1 flex-1" />
-                      <span className="text-[9px] font-medium text-slate-500">{pred.confidence}%</span>
+              {aiPredictions.length === 0 ? (
+                <div className="sm:col-span-3">
+                  <EmptyState
+                    icon={Lightbulb}
+                    title="No AI predictions yet"
+                    description="Predictions will appear here once the AI engine has enough data to forecast collections and cash flow."
+                    compact
+                  />
+                </div>
+              ) : (
+                aiPredictions.map((pred, i) => (
+                  <div key={i} className="flex items-start gap-2.5 p-3 rounded-lg bg-white/70 border border-slate-100">
+                    <pred.icon className={`h-4 w-4 mt-0.5 shrink-0 ${
+                      pred.color === 'emerald' ? 'text-emerald-500' :
+                      pred.color === 'amber' ? 'text-amber-500' : 'text-red-500'
+                    }`} />
+                    <div>
+                      <p className="text-xs text-slate-700 leading-snug">{pred.text}</p>
+                      <div className="flex items-center gap-1.5 mt-1.5">
+                        <Progress value={pred.confidence} className="h-1 flex-1" />
+                        <span className="text-[9px] font-medium text-slate-500">{pred.confidence}%</span>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </CardContent>
         </Card>
@@ -760,16 +883,25 @@ export default function EmbeddedFinancePage() {
                   <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Status</span>
                   <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Reference</span>
                 </div>
-                {DEMO_PAYMENTS.map((payment) => (
-                  <div key={payment.id} className="grid grid-cols-6 gap-3 py-2.5 border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
-                    <span className="text-xs text-slate-600">{formatDate(payment.date)}</span>
-                    <span className="text-xs text-slate-700 font-medium truncate">{payment.client}</span>
-                    <span className="text-xs text-slate-800 font-semibold text-right">{formatINR(payment.amount)}</span>
-                    <div><MethodBadge method={payment.method} /></div>
-                    <div><StatusBadge status={payment.status} /></div>
-                    <span className="text-[10px] text-slate-400 font-mono truncate">{payment.reference}</span>
-                  </div>
-                ))}
+                {payments.length === 0 ? (
+                  <EmptyState
+                    icon={Inbox}
+                    title="No payments yet"
+                    description="Payments will appear here once you connect a bank and start transacting."
+                    compact
+                  />
+                ) : (
+                  payments.map((payment) => (
+                    <div key={payment.id} className="grid grid-cols-6 gap-3 py-2.5 border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
+                      <span className="text-xs text-slate-600">{formatDate(payment.date)}</span>
+                      <span className="text-xs text-slate-700 font-medium truncate">{payment.client}</span>
+                      <span className="text-xs text-slate-800 font-semibold text-right">{formatINR(payment.amount)}</span>
+                      <div><MethodBadge method={payment.method} /></div>
+                      <div><StatusBadge status={payment.status} /></div>
+                      <span className="text-[10px] text-slate-400 font-mono truncate">{payment.reference}</span>
+                    </div>
+                  ))
+                )}
               </div>
             </ScrollArea>
           </CardContent>
@@ -860,7 +992,7 @@ export default function EmbeddedFinancePage() {
               </div>
               <div>
                 <p className="text-[10px] text-slate-500">Revenue from Links</p>
-                <p className="text-lg font-bold text-slate-800">{formatINR(3255000)}</p>
+                <p className="text-lg font-bold text-slate-800">—</p>
               </div>
             </CardContent>
           </Card>
@@ -871,7 +1003,7 @@ export default function EmbeddedFinancePage() {
               </div>
               <div>
                 <p className="text-[10px] text-slate-500">Auto-Reconciled</p>
-                <p className="text-lg font-bold text-slate-800">3 of 7</p>
+                <p className="text-lg font-bold text-slate-800">— of —</p>
               </div>
             </CardContent>
           </Card>
@@ -882,7 +1014,7 @@ export default function EmbeddedFinancePage() {
               </div>
               <div>
                 <p className="text-[10px] text-slate-500">Active Links</p>
-                <p className="text-lg font-bold text-slate-800">3</p>
+                <p className="text-lg font-bold text-slate-800">—</p>
               </div>
             </CardContent>
           </Card>
@@ -909,41 +1041,50 @@ export default function EmbeddedFinancePage() {
                     <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Reconciled</span>
                     <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Actions</span>
                   </div>
-                  {DEMO_PAYMENT_LINKS.map((link) => (
-                    <div key={link.id} className="grid grid-cols-7 gap-2 py-2.5 border-b border-slate-50 hover:bg-slate-50/50 transition-colors items-center">
-                      <span className="text-[10px] font-mono text-slate-600">{link.id}</span>
-                      <span className="text-xs text-slate-700 font-medium truncate">{link.client}</span>
-                      <span className="text-xs text-slate-800 font-semibold text-right">{formatINR(link.amount)}</span>
-                      <div><StatusBadge status={link.status} /></div>
-                      <span className="text-[10px] text-slate-500">{formatDate(link.created)}</span>
-                      <div>
-                        {link.reconciled ? (
-                          <Badge variant="outline" className="text-[9px] bg-emerald-50 text-emerald-600 border-emerald-200">
-                            <CheckCircle className="h-2.5 w-2.5 mr-0.5" /> Yes
-                          </Badge>
-                        ) : (
-                          <Badge variant="outline" className="text-[9px] bg-slate-50 text-slate-400 border-slate-200">No</Badge>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-6 w-6 p-0"
-                          onClick={() => handleCopyLink(link.id)}
-                        >
-                          {copiedLinkId === link.id ? (
-                            <CheckCircle className="h-3 w-3 text-emerald-500" />
+                  {paymentLinks.length === 0 ? (
+                    <EmptyState
+                      icon={Link}
+                      title="No payment links yet"
+                      description="Create your first payment link to start collecting from clients online."
+                      compact
+                    />
+                  ) : (
+                    paymentLinks.map((link) => (
+                      <div key={link.id} className="grid grid-cols-7 gap-2 py-2.5 border-b border-slate-50 hover:bg-slate-50/50 transition-colors items-center">
+                        <span className="text-[10px] font-mono text-slate-600">{link.id}</span>
+                        <span className="text-xs text-slate-700 font-medium truncate">{link.client}</span>
+                        <span className="text-xs text-slate-800 font-semibold text-right">{formatINR(link.amount)}</span>
+                        <div><StatusBadge status={link.status} /></div>
+                        <span className="text-[10px] text-slate-500">{formatDate(link.created)}</span>
+                        <div>
+                          {link.reconciled ? (
+                            <Badge variant="outline" className="text-[9px] bg-emerald-50 text-emerald-600 border-emerald-200">
+                              <CheckCircle className="h-2.5 w-2.5 mr-0.5" /> Yes
+                            </Badge>
                           ) : (
-                            <Copy className="h-3 w-3 text-slate-400" />
+                            <Badge variant="outline" className="text-[9px] bg-slate-50 text-slate-400 border-slate-200">No</Badge>
                           )}
-                        </Button>
-                        <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
-                          <ExternalLink className="h-3 w-3 text-slate-400" />
-                        </Button>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 w-6 p-0"
+                            onClick={() => handleCopyLink(link.id)}
+                          >
+                            {copiedLinkId === link.id ? (
+                              <CheckCircle className="h-3 w-3 text-emerald-500" />
+                            ) : (
+                              <Copy className="h-3 w-3 text-slate-400" />
+                            )}
+                          </Button>
+                          <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
+                            <ExternalLink className="h-3 w-3 text-slate-400" />
+                          </Button>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    ))
+                  )}
                 </div>
               </ScrollArea>
             </CardContent>
@@ -961,8 +1102,8 @@ export default function EmbeddedFinancePage() {
                 <SimulatedQRCode size={140} />
               </div>
               <div className="text-center w-full">
-                <p className="text-xs font-medium text-slate-700">PL-2026-001</p>
-                <p className="text-[10px] text-slate-500 mt-0.5">Rajesh Kumar Enterprises • {formatINR(545000)}</p>
+                <p className="text-xs font-medium text-slate-700">—</p>
+                <p className="text-[10px] text-slate-500 mt-0.5">Sample payment link preview</p>
               </div>
               <div className="w-full space-y-2">
                 <Button variant="outline" className="w-full text-xs gap-1.5" size="sm">
@@ -995,55 +1136,65 @@ export default function EmbeddedFinancePage() {
       </motion.div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {DEMO_VIRTUAL_ACCOUNTS.map((account) => (
-          <motion.div key={account.id} variants={fadeIn} {...cardHover}>
-            <Card className={`border-slate-200/60 shadow-sm ${account.type === 'escrow' ? 'border-amber-200/60 bg-amber-50/20' : ''}`}>
-              <CardContent className="p-5">
-                <div className="flex items-start justify-between mb-3">
-                  <div className="flex items-center gap-2">
-                    <div className={`p-2 rounded-lg ${account.type === 'escrow' ? 'bg-amber-100' : 'bg-emerald-50'}`}>
-                      {account.type === 'escrow' ? (
-                        <Shield className="h-4 w-4 text-amber-600" />
-                      ) : (
-                        <Building2 className="h-4 w-4 text-emerald-600" />
-                      )}
+        {virtualAccounts.length === 0 ? (
+          <div className="md:col-span-2">
+            <EmptyState
+              icon={Building2}
+              title="No virtual accounts yet"
+              description="Dedicated collection accounts will appear here once you create one for a client."
+            />
+          </div>
+        ) : (
+          virtualAccounts.map((account) => (
+            <motion.div key={account.id} variants={fadeIn} {...cardHover}>
+              <Card className={`border-slate-200/60 shadow-sm ${account.type === 'escrow' ? 'border-amber-200/60 bg-amber-50/20' : ''}`}>
+                <CardContent className="p-5">
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <div className={`p-2 rounded-lg ${account.type === 'escrow' ? 'bg-amber-100' : 'bg-emerald-50'}`}>
+                        {account.type === 'escrow' ? (
+                          <Shield className="h-4 w-4 text-amber-600" />
+                        ) : (
+                          <Building2 className="h-4 w-4 text-emerald-600" />
+                        )}
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-slate-700">{account.client}</p>
+                        <Badge variant="outline" className={`text-[9px] mt-0.5 ${account.type === 'escrow' ? 'bg-amber-50 text-amber-600 border-amber-200' : 'bg-emerald-50 text-emerald-600 border-emerald-200'}`}>
+                          {account.type === 'escrow' ? 'Escrow' : 'Collection'}
+                        </Badge>
+                      </div>
+                    </div>
+                    <Button variant="ghost" size="sm" className="h-7 text-xs gap-1 text-slate-500">
+                      <Eye className="h-3 w-3" /> View
+                    </Button>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 mb-3">
+                    <div>
+                      <p className="text-[10px] text-slate-400">Account Number</p>
+                      <p className="text-xs font-mono font-medium text-slate-700">{account.accountNumber}</p>
                     </div>
                     <div>
-                      <p className="text-sm font-semibold text-slate-700">{account.client}</p>
-                      <Badge variant="outline" className={`text-[9px] mt-0.5 ${account.type === 'escrow' ? 'bg-amber-50 text-amber-600 border-amber-200' : 'bg-emerald-50 text-emerald-600 border-emerald-200'}`}>
-                        {account.type === 'escrow' ? 'Escrow' : 'Collection'}
-                      </Badge>
+                      <p className="text-[10px] text-slate-400">IFSC</p>
+                      <p className="text-xs font-mono font-medium text-slate-700">{account.ifsc}</p>
                     </div>
                   </div>
-                  <Button variant="ghost" size="sm" className="h-7 text-xs gap-1 text-slate-500">
-                    <Eye className="h-3 w-3" /> View
-                  </Button>
-                </div>
-                <div className="grid grid-cols-2 gap-3 mb-3">
-                  <div>
-                    <p className="text-[10px] text-slate-400">Account Number</p>
-                    <p className="text-xs font-mono font-medium text-slate-700">{account.accountNumber}</p>
+                  <Separator className="my-3" />
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-[10px] text-slate-400">Balance</p>
+                      <p className="text-base font-bold text-slate-800">{formatINR(account.balance)}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-[10px] text-slate-400">Transactions</p>
+                      <p className="text-sm font-semibold text-slate-600">{account.transactions}</p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-[10px] text-slate-400">IFSC</p>
-                    <p className="text-xs font-mono font-medium text-slate-700">{account.ifsc}</p>
-                  </div>
-                </div>
-                <Separator className="my-3" />
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-[10px] text-slate-400">Balance</p>
-                    <p className="text-base font-bold text-slate-800">{formatINR(account.balance)}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-[10px] text-slate-400">Transactions</p>
-                    <p className="text-sm font-semibold text-slate-600">{account.transactions}</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
-        ))}
+                </CardContent>
+              </Card>
+            </motion.div>
+          ))
+        )}
       </div>
 
       {/* Escrow Section */}
@@ -1057,26 +1208,35 @@ export default function EmbeddedFinancePage() {
           </CardHeader>
           <CardContent className="px-5 pb-4">
             <div className="space-y-3">
-              {DEMO_ESCROW.map((esc) => (
-                <div key={esc.id} className="p-3 rounded-lg bg-amber-50/50 border border-amber-100">
-                  <div className="flex items-start justify-between mb-2">
-                    <div>
-                      <p className="text-sm font-medium text-slate-700">{esc.client}</p>
-                      <p className="text-xs text-slate-500 mt-0.5">{esc.releaseCondition}</p>
+              {escrowAccounts.length === 0 ? (
+                <EmptyState
+                  icon={Shield}
+                  title="No escrow accounts held"
+                  description="Funds held in escrow will appear here once an escrow arrangement is created."
+                  compact
+                />
+              ) : (
+                escrowAccounts.map((esc) => (
+                  <div key={esc.id} className="p-3 rounded-lg bg-amber-50/50 border border-amber-100">
+                    <div className="flex items-start justify-between mb-2">
+                      <div>
+                        <p className="text-sm font-medium text-slate-700">{esc.client}</p>
+                        <p className="text-xs text-slate-500 mt-0.5">{esc.releaseCondition}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-base font-bold text-amber-700">{formatINR(esc.amount)}</p>
+                        <Badge variant="outline" className="text-[9px] bg-amber-50 text-amber-600 border-amber-200 mt-1">
+                          <Clock className="h-2.5 w-2.5 mr-0.5" /> Auto-release: {formatDate(esc.autoRelease)}
+                        </Badge>
+                      </div>
                     </div>
-                    <div className="text-right">
-                      <p className="text-base font-bold text-amber-700">{formatINR(esc.amount)}</p>
-                      <Badge variant="outline" className="text-[9px] bg-amber-50 text-amber-600 border-amber-200 mt-1">
-                        <Clock className="h-2.5 w-2.5 mr-0.5" /> Auto-release: {formatDate(esc.autoRelease)}
-                      </Badge>
+                    <div className="flex items-center gap-2">
+                      <Progress value={45} className="h-1.5 flex-1" />
+                      <span className="text-[9px] text-slate-500">Awaiting conditions</span>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Progress value={45} className="h-1.5 flex-1" />
-                    <span className="text-[9px] text-slate-500">Awaiting conditions</span>
-                  </div>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </CardContent>
         </Card>
@@ -1093,32 +1253,37 @@ export default function EmbeddedFinancePage() {
               </div>
             </CardHeader>
             <CardContent className="px-5 pb-4 space-y-3">
-              {[
-                { bank: 'HDFC Bank', lastSync: '2 min ago', matched: 34, unmatched: 3, status: 'synced' },
-                { bank: 'ICICI Bank', lastSync: '15 min ago', matched: 28, unmatched: 5, status: 'synced' },
-                { bank: 'SBI', lastSync: '1 hour ago', matched: 19, unmatched: 7, status: 'pending' },
-              ].map((bank, i) => (
-                <div key={i} className="flex items-center justify-between p-3 rounded-lg bg-slate-50/50 border border-slate-100">
-                  <div className="flex items-center gap-3">
-                    <div className="p-1.5 rounded bg-white border border-slate-200">
-                      <Landmark className="h-3.5 w-3.5 text-slate-600" />
+              {bankReconciliations.length === 0 ? (
+                <EmptyState
+                  icon={Landmark}
+                  title="No bank connected"
+                  description="Connect a bank account to start syncing and reconciling transactions automatically."
+                  compact
+                />
+              ) : (
+                bankReconciliations.map((bank, i) => (
+                  <div key={i} className="flex items-center justify-between p-3 rounded-lg bg-slate-50/50 border border-slate-100">
+                    <div className="flex items-center gap-3">
+                      <div className="p-1.5 rounded bg-white border border-slate-200">
+                        <Landmark className="h-3.5 w-3.5 text-slate-600" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-medium text-slate-700">{bank.bank}</p>
+                        <p className="text-[10px] text-slate-400">Last sync: {bank.lastSync}</p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="text-xs font-medium text-slate-700">{bank.bank}</p>
-                      <p className="text-[10px] text-slate-400">Last sync: {bank.lastSync}</p>
+                    <div className="flex items-center gap-3">
+                      <div className="text-right">
+                        <p className="text-[10px] text-slate-500">{bank.matched} matched</p>
+                        <p className="text-[10px] text-amber-600">{bank.unmatched} unmatched</p>
+                      </div>
+                      <Badge variant="outline" className={`text-[9px] ${bank.status === 'synced' ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : 'bg-amber-50 text-amber-600 border-amber-200'}`}>
+                        {bank.status === 'synced' ? '✓ Synced' : 'Pending'}
+                      </Badge>
                     </div>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <div className="text-right">
-                      <p className="text-[10px] text-slate-500">{bank.matched} matched</p>
-                      <p className="text-[10px] text-amber-600">{bank.unmatched} unmatched</p>
-                    </div>
-                    <Badge variant="outline" className={`text-[9px] ${bank.status === 'synced' ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : 'bg-amber-50 text-amber-600 border-amber-200'}`}>
-                      {bank.status === 'synced' ? '✓ Synced' : 'Pending'}
-                    </Badge>
-                  </div>
-                </div>
-              ))}
+                ))
+              )}
             </CardContent>
           </Card>
         </motion.div>
@@ -1131,26 +1296,28 @@ export default function EmbeddedFinancePage() {
             <CardContent className="px-5 pb-4">
               <ScrollArea className="max-h-52">
                 <div className="space-y-3">
-                  {[
-                    { time: '10:30 AM', text: '₹5,45,000 received from Rajesh Kumar Enterprises via UPI', type: 'credit' },
-                    { time: '09:15 AM', text: '₹12,34,567 credited from Patel Industries via NEFT', type: 'credit' },
-                    { time: 'Yesterday', text: 'Escrow release initiated for Jain Infrastructure Corp', type: 'escrow' },
-                    { time: 'Yesterday', text: '₹3,45,000 auto-reconciled for Gupta Manufacturing', type: 'reconcile' },
-                    { time: '2 days ago', text: 'Bank statement imported from HDFC (23 transactions)', type: 'import' },
-                    { time: '3 days ago', text: 'Virtual account VA-002 created for Patel Industries', type: 'create' },
-                  ].map((activity, i) => (
-                    <div key={i} className="flex items-start gap-3">
-                      <div className={`w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 ${
-                        activity.type === 'credit' ? 'bg-emerald-500' :
-                        activity.type === 'escrow' ? 'bg-amber-500' :
-                        activity.type === 'reconcile' ? 'bg-blue-500' : 'bg-slate-400'
-                      }`} />
-                      <div>
-                        <p className="text-xs text-slate-600 leading-snug">{activity.text}</p>
-                        <p className="text-[10px] text-slate-400 mt-0.5">{activity.time}</p>
+                  {activityTimeline.length === 0 ? (
+                    <EmptyState
+                      icon={ActivityIcon}
+                      title="No recent activity"
+                      description="Account activity will appear here once payments, payouts, or reconciliations occur."
+                      compact
+                    />
+                  ) : (
+                    activityTimeline.map((activity, i) => (
+                      <div key={i} className="flex items-start gap-3">
+                        <div className={`w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 ${
+                          activity.type === 'credit' ? 'bg-emerald-500' :
+                          activity.type === 'escrow' ? 'bg-amber-500' :
+                          activity.type === 'reconcile' ? 'bg-blue-500' : 'bg-slate-400'
+                        }`} />
+                        <div>
+                          <p className="text-xs text-slate-600 leading-snug">{activity.text}</p>
+                          <p className="text-[10px] text-slate-400 mt-0.5">{activity.time}</p>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    ))
+                  )}
                 </div>
               </ScrollArea>
             </CardContent>
@@ -1215,16 +1382,25 @@ export default function EmbeddedFinancePage() {
                   <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Scheduled</span>
                   <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Status</span>
                 </div>
-                {DEMO_PAYOUTS.map((payout) => (
-                  <div key={payout.id} className="grid grid-cols-6 gap-3 py-2.5 border-b border-slate-50 hover:bg-slate-50/50 transition-colors items-center">
-                    <span className="text-xs text-slate-700 font-medium">{payout.vendor}</span>
-                    <span className="text-xs text-slate-800 font-semibold text-right">{formatINR(payout.amount)}</span>
-                    <div><MethodBadge method={payout.method} /></div>
-                    <span className="text-xs text-slate-500">{payout.category}</span>
-                    <span className="text-[10px] text-slate-500">{formatDate(payout.scheduledDate)}</span>
-                    <div><StatusBadge status={payout.status} /></div>
-                  </div>
-                ))}
+                {payouts.length === 0 ? (
+                  <EmptyState
+                    icon={Send}
+                    title="No pending payouts"
+                    description="Payouts you schedule will appear here for batch processing."
+                    compact
+                  />
+                ) : (
+                  payouts.map((payout) => (
+                    <div key={payout.id} className="grid grid-cols-6 gap-3 py-2.5 border-b border-slate-50 hover:bg-slate-50/50 transition-colors items-center">
+                      <span className="text-xs text-slate-700 font-medium">{payout.vendor}</span>
+                      <span className="text-xs text-slate-800 font-semibold text-right">{formatINR(payout.amount)}</span>
+                      <div><MethodBadge method={payout.method} /></div>
+                      <span className="text-xs text-slate-500">{payout.category}</span>
+                      <span className="text-[10px] text-slate-500">{formatDate(payout.scheduledDate)}</span>
+                      <div><StatusBadge status={payout.status} /></div>
+                    </div>
+                  ))
+                )}
               </div>
             </ScrollArea>
           </CardContent>
@@ -1248,23 +1424,32 @@ export default function EmbeddedFinancePage() {
               </div>
             </CardHeader>
             <CardContent className="px-5 pb-4 space-y-3">
-              {DEMO_AUTO_PAYOUT_RULES.map((rule) => (
-                <div key={rule.id} className="p-3 rounded-lg bg-emerald-50/30 border border-emerald-100">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <p className="text-xs font-medium text-slate-700">{rule.vendor}</p>
-                      <p className="text-[10px] text-slate-500 mt-0.5">{rule.frequency} • {formatINR(rule.amount)}</p>
+              {autoPayoutRules.length === 0 ? (
+                <EmptyState
+                  icon={Zap}
+                  title="No auto-payout rules yet"
+                  description="Create a rule to automate recurring vendor payouts on a schedule."
+                  compact
+                />
+              ) : (
+                autoPayoutRules.map((rule) => (
+                  <div key={rule.id} className="p-3 rounded-lg bg-emerald-50/30 border border-emerald-100">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <p className="text-xs font-medium text-slate-700">{rule.vendor}</p>
+                        <p className="text-[10px] text-slate-500 mt-0.5">{rule.frequency} • {formatINR(rule.amount)}</p>
+                      </div>
+                      <Badge variant="outline" className="text-[9px] bg-emerald-50 text-emerald-600 border-emerald-200">
+                        <Zap className="h-2.5 w-2.5 mr-0.5" /> Active
+                      </Badge>
                     </div>
-                    <Badge variant="outline" className="text-[9px] bg-emerald-50 text-emerald-600 border-emerald-200">
-                      <Zap className="h-2.5 w-2.5 mr-0.5" /> Active
-                    </Badge>
+                    <div className="flex items-center gap-1.5 mt-2">
+                      <Calendar className="h-3 w-3 text-slate-400" />
+                      <span className="text-[10px] text-slate-500">Next run: {formatDate(rule.nextRun)}</span>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-1.5 mt-2">
-                    <Calendar className="h-3 w-3 text-slate-400" />
-                    <span className="text-[10px] text-slate-500">Next run: {formatDate(rule.nextRun)}</span>
-                  </div>
-                </div>
-              ))}
+                ))
+              )}
             </CardContent>
           </Card>
         </motion.div>
@@ -1278,29 +1463,38 @@ export default function EmbeddedFinancePage() {
             <CardContent className="px-5 pb-4">
               <ScrollArea className="max-h-56">
                 <div className="space-y-2">
-                  {DEMO_PAYOUT_HISTORY.map((payout) => (
-                    <div key={payout.id} className="flex items-center justify-between p-2.5 rounded-lg hover:bg-slate-50 transition-colors">
-                      <div className="flex items-center gap-2.5">
-                        <div className={`p-1.5 rounded ${
-                          payout.status === 'completed' ? 'bg-emerald-50' : 'bg-red-50'
-                        }`}>
-                          {payout.status === 'completed' ? (
-                            <CheckCircle className="h-3.5 w-3.5 text-emerald-600" />
-                          ) : (
-                            <XCircle className="h-3.5 w-3.5 text-red-600" />
-                          )}
+                  {payoutHistory.length === 0 ? (
+                    <EmptyState
+                      icon={Clock}
+                      title="No payout history yet"
+                      description="Completed and failed payouts will appear here once you start disbursing."
+                      compact
+                    />
+                  ) : (
+                    payoutHistory.map((payout) => (
+                      <div key={payout.id} className="flex items-center justify-between p-2.5 rounded-lg hover:bg-slate-50 transition-colors">
+                        <div className="flex items-center gap-2.5">
+                          <div className={`p-1.5 rounded ${
+                            payout.status === 'completed' ? 'bg-emerald-50' : 'bg-red-50'
+                          }`}>
+                            {payout.status === 'completed' ? (
+                              <CheckCircle className="h-3.5 w-3.5 text-emerald-600" />
+                            ) : (
+                              <XCircle className="h-3.5 w-3.5 text-red-600" />
+                            )}
+                          </div>
+                          <div>
+                            <p className="text-xs font-medium text-slate-700">{payout.vendor}</p>
+                            <p className="text-[10px] text-slate-400">{payout.category} • {formatDate(payout.date)}</p>
+                          </div>
                         </div>
-                        <div>
-                          <p className="text-xs font-medium text-slate-700">{payout.vendor}</p>
-                          <p className="text-[10px] text-slate-400">{payout.category} • {formatDate(payout.date)}</p>
+                        <div className="text-right">
+                          <p className="text-xs font-semibold text-slate-800">{formatINR(payout.amount)}</p>
+                          <MethodBadge method={payout.method} />
                         </div>
                       </div>
-                      <div className="text-right">
-                        <p className="text-xs font-semibold text-slate-800">{formatINR(payout.amount)}</p>
-                        <MethodBadge method={payout.method} />
-                      </div>
-                    </div>
-                  ))}
+                    ))
+                  )}
                 </div>
               </ScrollArea>
             </CardContent>
@@ -1327,30 +1521,36 @@ export default function EmbeddedFinancePage() {
           </CardHeader>
           <CardContent className="px-5 pb-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-              {[
-                { client: 'Singh Brothers Exports', amount: 567890, confidence: 89, daysLate: 12 },
-                { client: 'Chopra Food Processing', amount: 678900, confidence: 76, daysLate: 8 },
-                { client: 'Mehta Trading Co', amount: 456789, confidence: 64, daysLate: 5 },
-                { client: 'Verma Chemical Industries', amount: 765432, confidence: 52, daysLate: 3 },
-              ].map((pred, i) => (
-                <div key={i} className="p-3 rounded-lg bg-white border border-slate-100 shadow-sm">
-                  <div className="flex items-start justify-between mb-2">
-                    <p className="text-xs font-medium text-slate-700 truncate pr-2">{pred.client}</p>
-                    <Badge variant="outline" className="text-[9px] shrink-0 bg-amber-50 text-amber-600 border-amber-200">
-                      {pred.daysLate}d late
-                    </Badge>
-                  </div>
-                  <p className="text-base font-bold text-slate-800">{formatINR(pred.amount)}</p>
-                  <div className="flex items-center gap-1.5 mt-2">
-                    <Progress value={pred.confidence} className="h-1 flex-1" />
-                    <span className={`text-[9px] font-medium ${
-                      pred.confidence > 75 ? 'text-red-600' : pred.confidence > 50 ? 'text-amber-600' : 'text-slate-500'
-                    }`}>
-                      {pred.confidence}% likely
-                    </span>
-                  </div>
+              {lateCollectionPreds.length === 0 ? (
+                <div className="sm:col-span-2 lg:col-span-4">
+                  <EmptyState
+                    icon={Clock}
+                    title="No late collection predictions yet"
+                    description="The AI engine will flag invoices at risk of late payment once you have outstanding receivables."
+                    compact
+                  />
                 </div>
-              ))}
+              ) : (
+                lateCollectionPreds.map((pred, i) => (
+                  <div key={i} className="p-3 rounded-lg bg-white border border-slate-100 shadow-sm">
+                    <div className="flex items-start justify-between mb-2">
+                      <p className="text-xs font-medium text-slate-700 truncate pr-2">{pred.client}</p>
+                      <Badge variant="outline" className="text-[9px] shrink-0 bg-amber-50 text-amber-600 border-amber-200">
+                        {pred.daysLate}d late
+                      </Badge>
+                    </div>
+                    <p className="text-base font-bold text-slate-800">{formatINR(pred.amount)}</p>
+                    <div className="flex items-center gap-1.5 mt-2">
+                      <Progress value={pred.confidence} className="h-1 flex-1" />
+                      <span className={`text-[9px] font-medium ${
+                        pred.confidence > 75 ? 'text-red-600' : pred.confidence > 50 ? 'text-amber-600' : 'text-slate-500'
+                      }`}>
+                        {pred.confidence}% likely
+                      </span>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           </CardContent>
         </Card>
@@ -1379,7 +1579,7 @@ export default function EmbeddedFinancePage() {
             </div>
           </CardHeader>
           <CardContent className="px-5 pb-4">
-            <CashFlowForecastChart />
+            <CashFlowForecastChart data={cashFlowForecast} />
           </CardContent>
         </Card>
       </motion.div>
@@ -1393,31 +1593,34 @@ export default function EmbeddedFinancePage() {
           <CardContent className="px-5 pb-4">
             <ScrollArea className="max-h-48">
               <div className="space-y-3">
-                {[
-                  { client: 'Rajesh Kumar Enterprises', amount: 545000, expectedDate: daysFromNow(2), probability: 92 },
-                  { client: 'Gupta Manufacturing Ltd', amount: 1890000, expectedDate: daysFromNow(5), probability: 85 },
-                  { client: 'Patel Industries Pvt Ltd', amount: 1200000, expectedDate: daysFromNow(7), probability: 78 },
-                  { client: 'Agarwal Textiles Pvt Ltd', amount: 430000, expectedDate: daysFromNow(10), probability: 65 },
-                  { client: 'Jain Infrastructure Corp', amount: 2345000, expectedDate: daysFromNow(14), probability: 58 },
-                ].map((receipt, i) => (
-                  <div key={i} className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-slate-50 transition-colors">
-                    <div className={`w-2 h-2 rounded-full shrink-0 ${
-                      receipt.probability > 80 ? 'bg-emerald-500' :
-                      receipt.probability > 60 ? 'bg-amber-500' : 'bg-red-400'
-                    }`} />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between">
-                        <p className="text-xs font-medium text-slate-700 truncate">{receipt.client}</p>
-                        <p className="text-xs font-semibold text-slate-800 ml-2">{formatINR(receipt.amount)}</p>
-                      </div>
-                      <div className="flex items-center gap-2 mt-1">
-                        <span className="text-[10px] text-slate-400">Expected: {formatDate(receipt.expectedDate)}</span>
-                        <Progress value={receipt.probability} className="h-1 flex-1 max-w-20" />
-                        <span className="text-[9px] text-slate-500">{receipt.probability}%</span>
+                {expectedReceipts.length === 0 ? (
+                  <EmptyState
+                    icon={TrendingUp}
+                    title="No expected receipts yet"
+                    description="Forecasted client receipts will appear here once the AI engine has receivables data to project."
+                    compact
+                  />
+                ) : (
+                  expectedReceipts.map((receipt, i) => (
+                    <div key={i} className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-slate-50 transition-colors">
+                      <div className={`w-2 h-2 rounded-full shrink-0 ${
+                        receipt.probability > 80 ? 'bg-emerald-500' :
+                        receipt.probability > 60 ? 'bg-amber-500' : 'bg-red-400'
+                      }`} />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between">
+                          <p className="text-xs font-medium text-slate-700 truncate">{receipt.client}</p>
+                          <p className="text-xs font-semibold text-slate-800 ml-2">{formatINR(receipt.amount)}</p>
+                        </div>
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className="text-[10px] text-slate-400">Expected: {formatDate(receipt.expectedDate)}</span>
+                          <Progress value={receipt.probability} className="h-1 flex-1 max-w-20" />
+                          <span className="text-[9px] text-slate-500">{receipt.probability}%</span>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
             </ScrollArea>
           </CardContent>
@@ -1436,23 +1639,27 @@ export default function EmbeddedFinancePage() {
               </div>
             </CardHeader>
             <CardContent className="px-5 pb-4 space-y-3">
-              {[
-                { text: '3 invoices likely to default — total exposure ₹15,68,221', severity: 'high', icon: XCircle },
-                { text: 'Cash flow gap of ₹1,50,000 predicted in next 15 days', severity: 'high', icon: TrendingUp },
-                { text: 'Chopra Food Processing has 2 overdue invoices exceeding 30 days', severity: 'medium', icon: Clock },
-                { text: 'UPI payment failure rate increased 12% this week', severity: 'low', icon: Smartphone },
-              ].map((alert, i) => (
-                <div key={i} className={`flex items-start gap-2.5 p-3 rounded-lg border ${
-                  alert.severity === 'high' ? 'bg-red-50/50 border-red-100' :
-                  alert.severity === 'medium' ? 'bg-amber-50/50 border-amber-100' : 'bg-slate-50 border-slate-100'
-                }`}>
-                  <alert.icon className={`h-4 w-4 mt-0.5 shrink-0 ${
-                    alert.severity === 'high' ? 'text-red-500' :
-                    alert.severity === 'medium' ? 'text-amber-500' : 'text-slate-400'
-                  }`} />
-                  <p className="text-xs text-slate-700 leading-snug">{alert.text}</p>
-                </div>
-              ))}
+              {riskAlerts.length === 0 ? (
+                <EmptyState
+                  icon={Bell}
+                  title="No active alerts"
+                  description="Risk alerts will surface here when the AI engine detects exposure, cash-flow gaps, or unusual patterns."
+                  compact
+                />
+              ) : (
+                riskAlerts.map((alert, i) => (
+                  <div key={i} className={`flex items-start gap-2.5 p-3 rounded-lg border ${
+                    alert.severity === 'high' ? 'bg-red-50/50 border-red-100' :
+                    alert.severity === 'medium' ? 'bg-amber-50/50 border-amber-100' : 'bg-slate-50 border-slate-100'
+                  }`}>
+                    <alert.icon className={`h-4 w-4 mt-0.5 shrink-0 ${
+                      alert.severity === 'high' ? 'text-red-500' :
+                      alert.severity === 'medium' ? 'text-amber-500' : 'text-slate-400'
+                    }`} />
+                    <p className="text-xs text-slate-700 leading-snug">{alert.text}</p>
+                  </div>
+                ))
+              )}
             </CardContent>
           </Card>
         </motion.div>
@@ -1467,29 +1674,33 @@ export default function EmbeddedFinancePage() {
               </div>
             </CardHeader>
             <CardContent className="px-5 pb-4 space-y-3">
-              {[
-                { text: 'Offer 2% early payment discount to XYZ Industries — could accelerate ₹8,90,000 in collections', impact: 'High', savings: '₹17,800' },
-                { text: 'Follow up on ₹3,45,000 from ABC Traders — 89% chance of collection with reminder', impact: 'High', savings: '₹3,45,000' },
-                { text: 'Switch Singh Brothers Exports to virtual account for faster reconciliation', impact: 'Medium', savings: '2 days' },
-                { text: 'Auto-schedule payout to TCS IT Solutions on 5th — save processing time', impact: 'Medium', savings: '4 hrs/month' },
-              ].map((rec, i) => (
-                <div key={i} className="p-3 rounded-lg bg-emerald-50/30 border border-emerald-100">
-                  <div className="flex items-start gap-2.5">
-                    <div className="p-1 rounded bg-emerald-100 mt-0.5">
-                      <TrendingUp className="h-3 w-3 text-emerald-600" />
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-xs text-slate-700 leading-snug">{rec.text}</p>
-                      <div className="flex items-center gap-2 mt-1.5">
-                        <Badge variant="outline" className="text-[9px] bg-emerald-50 text-emerald-600 border-emerald-200">
-                          {rec.impact} Impact
-                        </Badge>
-                        <span className="text-[10px] text-slate-500">Saves: {rec.savings}</span>
+              {smartRecs.length === 0 ? (
+                <EmptyState
+                  icon={Lightbulb}
+                  title="No smart recommendations yet"
+                  description="Actionable recommendations will appear here once the AI engine analyses your collections and payouts."
+                  compact
+                />
+              ) : (
+                smartRecs.map((rec, i) => (
+                  <div key={i} className="p-3 rounded-lg bg-emerald-50/30 border border-emerald-100">
+                    <div className="flex items-start gap-2.5">
+                      <div className="p-1 rounded bg-emerald-100 mt-0.5">
+                        <TrendingUp className="h-3 w-3 text-emerald-600" />
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-xs text-slate-700 leading-snug">{rec.text}</p>
+                        <div className="flex items-center gap-2 mt-1.5">
+                          <Badge variant="outline" className="text-[9px] bg-emerald-50 text-emerald-600 border-emerald-200">
+                            {rec.impact} Impact
+                          </Badge>
+                          <span className="text-[10px] text-slate-500">Saves: {rec.savings}</span>
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                ))
+              )}
             </CardContent>
           </Card>
         </motion.div>

@@ -214,9 +214,9 @@ const CANONICAL_OPPORTUNITIES: OpportunitySeed[] = [
     forNodeType: 'organization',
     forNodeRank: 0,
     type: 'cost_saving',
-    title: 'Centralize currency hedging via HDFC — ₹22L/yr saving',
+    title: 'Centralize currency hedging via primary bank — ₹22L/yr saving',
     description:
-      'Treasury benchmark shows 18 bps spread reduction by routing FX through HDFC vs current multi-bank setup',
+      'Treasury benchmark shows 18 bps spread reduction by routing FX through the primary bank vs current multi-bank setup',
     potentialValue: 2200000,
     probability: 68,
     source: 'benchmark',

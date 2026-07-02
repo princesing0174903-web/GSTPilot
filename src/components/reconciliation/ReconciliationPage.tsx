@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Card,
@@ -65,11 +65,6 @@ import {
 import { formatCurrency } from '@/lib/gst-utils';
 import { toast } from 'sonner';
 import {
-  useFireReconciliations,
-  useFireClients,
-  useFireAIRecommendations,
-} from '@/hooks/use-firestore';
-import {
   createReconciliation,
   resolveMismatch,
   dismissRecommendation,
@@ -83,6 +78,207 @@ import type {
 import { MATCH_STATUS_CONFIG, RISK_LEVEL_CONFIG } from '@/types/gst';
 import type { MatchStatus, RiskLevel } from '@/types/gst';
 import { EmptyState } from '@/components/shared/EmptyState';
+
+// ─── API response shapes (subset of Prisma models) ─────────────────────────
+
+interface ApiReconciliationRun {
+  id: string;
+  clientId: string;
+  period: string;
+  sources: string;
+  totalRecords: number;
+  matched: number;
+  unmatched: number;
+  partialMatches: number;
+  highRisk: number;
+  gstDifference: number;
+  status: string;
+  runBy?: string | null;
+  createdAt: string;
+  results?: Array<{
+    id: string;
+    matchStatus: string;
+    riskLevel: string;
+    workflowStatus: string;
+  }>;
+}
+
+interface ApiReconciliationResult {
+  id: string;
+  clientId: string;
+  invoiceId: string;
+  sourceType?: string;
+  sourceA?: string | null;
+  sourceB?: string | null;
+  sourceGstin?: string | null;
+  matchedGstin?: string | null;
+  matchStatus: string;
+  matchScore: number;
+  mismatches?: string | null;
+  aiExplanation?: string | null;
+  aiRecommendation?: string | null;
+  confidenceScore: number;
+  workflowStatus: string;
+  resolved: boolean;
+  resolvedBy?: string | null;
+  resolvedAt?: string | null;
+  riskLevel: string;
+  runId?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  invoice?: {
+    id: string;
+    invoiceNumber: string;
+    invoiceDate: string;
+    sellerGstin: string;
+    buyerGstin?: string | null;
+    totalAmount: number;
+    cgst: number;
+    sgst: number;
+    igst: number;
+    cess: number;
+    taxableValue: number;
+    client?: { id: string; tradeName: string; gstin: string } | null;
+  } | null;
+  run?: {
+    id: string;
+    period: string;
+    sources: string;
+    status: string;
+    createdAt: string;
+  } | null;
+}
+
+interface ApiClient {
+  id: string;
+  gstin: string;
+  tradeName: string;
+  legalName?: string | null;
+  status: string;
+  healthScore: number;
+  createdAt: string;
+  updatedAt: string;
+  _aggregations?: {
+    totalInvoices: number;
+    filedReturns: number;
+    pendingReturns: number;
+    matchPercentage: number;
+  };
+}
+
+// Maps a ReconciliationRun + its results to the FirestoreReconciliation shape used by the UI.
+function mapApiRunToRecon(run: ApiReconciliationRun, results: ApiReconciliationResult[]): FirestoreReconciliation & { id: string } {
+  const runResults = results.filter(r => r.runId === run.id);
+  return {
+    id: run.id,
+    reconId: run.id,
+    firmId: '',
+    clientId: run.clientId,
+    period: run.period,
+    sources: run.sources,
+    status: run.status as FirestoreReconciliation['status'],
+    totalRecords: run.totalRecords ?? 0,
+    matched: run.matched ?? 0,
+    unmatched: run.unmatched ?? 0,
+    partialMatches: run.partialMatches ?? 0,
+    highRisk: run.highRisk ?? 0,
+    gstDifference: run.gstDifference ?? 0,
+    mismatches: runResults.map(mapApiResultToMismatch),
+    runBy: run.runBy ?? null,
+    createdAt: run.createdAt,
+    updatedAt: run.createdAt,
+  };
+}
+
+// Maps a ReconciliationResult row to the ReconMismatch shape used by the UI.
+function mapApiResultToMismatch(r: ApiReconciliationResult): ReconMismatch {
+  // Parse the JSON mismatches string to extract booksAmount, portalAmount, difference.
+  let booksAmount = r.invoice?.totalAmount ?? 0;
+  let portalAmount = 0;
+  let difference = 0;
+  if (r.mismatches) {
+    try {
+      const parsed = JSON.parse(r.mismatches);
+      if (Array.isArray(parsed)) {
+        for (const m of parsed) {
+          if (m && typeof m === 'object') {
+            const field = (m as { field?: string }).field;
+            if (field === 'gst_amount' || field === 'total_amount') {
+              const exp = Number((m as { expected?: number }).expected ?? 0);
+              const act = Number((m as { actual?: number }).actual ?? 0);
+              if (field === 'gst_amount') {
+                // Books tax vs portal tax — use the GST amounts.
+                booksAmount = exp;
+                portalAmount = act;
+                difference = Math.abs(exp - act);
+              } else if (difference === 0) {
+                booksAmount = exp;
+                portalAmount = act;
+                difference = Math.abs(exp - act);
+              }
+            }
+          }
+        }
+      }
+    } catch {
+      // Ignore parse errors — fall back to invoice total.
+    }
+  }
+  // If no mismatches and the result is a perfect match, both amounts equal the invoice total.
+  if (r.matchStatus === 'perfect_match' && difference === 0) {
+    portalAmount = booksAmount;
+  }
+  return {
+    invoiceNumber: r.invoice?.invoiceNumber ?? '—',
+    invoiceDate: r.invoice?.invoiceDate ?? '—',
+    sourceGstin: r.sourceGstin ?? r.invoice?.sellerGstin ?? '—',
+    matchedGstin: r.matchedGstin ?? null,
+    matchStatus: r.matchStatus as MatchStatus,
+    matchScore: r.matchScore ?? 0,
+    booksAmount,
+    portalAmount,
+    difference,
+    reason: r.aiExplanation ?? r.matchStatus,
+    resolved: r.resolved ?? false,
+    resolvedBy: r.resolvedBy ?? null,
+    resolvedAt: r.resolvedAt ?? null,
+  };
+}
+
+function mapApiClient(c: ApiClient): FirestoreClient & { id: string } {
+  return {
+    id: c.id,
+    clientId: c.id,
+    firmId: '',
+    gstin: c.gstin,
+    tradeName: c.tradeName,
+    legalName: c.legalName ?? c.tradeName,
+    address: null,
+    state: null,
+    stateCode: null,
+    contactEmail: null,
+    contactPhone: null,
+    entityType: 'regular',
+    returnPeriod: null,
+    lastFilingDate: null,
+    status: c.status as FirestoreClient['status'],
+    healthScore: c.healthScore ?? 0,
+    complianceProfile: {
+      filingCompliance: 0,
+      gstinValidity: true,
+      lastFilingStatus: null,
+      overdueReturns: c._aggregations?.pendingReturns ?? 0,
+      totalReturnsFiled: c._aggregations?.filedReturns ?? 0,
+      averageFilingDelay: 0,
+    },
+    invoiceCount: c._aggregations?.totalInvoices ?? 0,
+    totalTaxPaid: 0,
+    pendingReturnCount: c._aggregations?.pendingReturns ?? 0,
+    documentCount: 0,
+    createdAt: c.createdAt,
+    updatedAt: c.updatedAt,
+  };
+}
 
 // ──────────────────────────────────────────────
 // Animation variants
@@ -266,10 +462,74 @@ function MatchRateRing({
 // Main Component
 // ──────────────────────────────────────────────
 export default function ReconciliationPage() {
-  // ── Firestore hooks ──
-  const { data: reconciliations, loading: reconsLoading, error: reconsError } = useFireReconciliations();
-  const { data: clients, loading: clientsLoading, error: clientsError } = useFireClients();
-  const { data: aiRecommendations, loading: recsLoading, error: recsError } = useFireAIRecommendations();
+  // ── Real API-backed state (replaces former Firestore hooks) ─────────
+  const [reconciliations, setReconciliations] = useState<(FirestoreReconciliation & { id: string })[]>([]);
+  const [clients, setClients] = useState<(FirestoreClient & { id: string })[]>([]);
+  const [aiRecommendations, setAiRecommendations] = useState<FirestoreAIRecommendation[]>([]);
+  const [reconsLoading, setReconsLoading] = useState(true);
+  const [clientsLoading, setClientsLoading] = useState(true);
+  const [recsLoading, setRecsLoading] = useState(true);
+  const [reconsError, setReconsError] = useState<string | null>(null);
+  const [clientsError, setClientsError] = useState<string | null>(null);
+  const [recsError, setRecsError] = useState<string | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    setReconsLoading(true);
+    // Fetch runs + results in parallel; results are used to populate per-run mismatches.
+    Promise.all([
+      fetch('/api/reconciliation?action=runs')
+        .then(r => (r.ok ? r.json() : { runs: [] }))
+        .catch(() => ({ runs: [] })),
+      fetch('/api/reconciliation')
+        .then(r => (r.ok ? r.json() : { results: [] }))
+        .catch(() => ({ results: [] })),
+    ])
+      .then(([runsData, resultsData]) => {
+        if (cancelled) return;
+        const runs: ApiReconciliationRun[] = Array.isArray(runsData?.runs) ? runsData.runs : [];
+        const results: ApiReconciliationResult[] = Array.isArray(resultsData?.results) ? resultsData.results : [];
+        setReconciliations(runs.map(run => mapApiRunToRecon(run, results)));
+        setReconsError(null);
+        setReconsLoading(false);
+      })
+      .catch(err => {
+        if (cancelled) return;
+        setReconsError(err instanceof Error ? err.message : 'Failed to load reconciliations');
+        setReconsLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [refreshKey]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setClientsLoading(true);
+    fetch('/api/clients')
+      .then(r => r.ok ? r.json() : { clients: [] })
+      .then(data => {
+        if (cancelled) return;
+        const items: ApiClient[] = Array.isArray(data?.clients) ? data.clients : [];
+        setClients(items.map(mapApiClient));
+        setClientsError(null);
+        setClientsLoading(false);
+      })
+      .catch(err => {
+        if (cancelled) return;
+        setClients([]);
+        setClientsError(err instanceof Error ? err.message : 'Failed to load clients');
+        setClientsLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [refreshKey]);
+
+  // AI Recommendations have no backing REST API yet — leave the list empty so
+  // the existing "No active recommendations" empty state renders truthfully.
+  useEffect(() => {
+    setAiRecommendations([]);
+    setRecsError(null);
+    setRecsLoading(false);
+  }, []);
 
   const loading = reconsLoading || clientsLoading || recsLoading;
 
@@ -369,6 +629,7 @@ export default function ReconciliationPage() {
       setSelectedClientId('');
       setSelectedPeriod('');
       setSelectedSource('');
+      setRefreshKey(k => k + 1);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to create reconciliation');
     } finally {
@@ -381,6 +642,7 @@ export default function ReconciliationPage() {
     try {
       await resolveMismatch(reconId, invoiceNumber);
       toast.success(`Mismatch for invoice ${invoiceNumber} resolved`);
+      setRefreshKey(k => k + 1);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to resolve mismatch');
     } finally {
@@ -535,7 +797,7 @@ export default function ReconciliationPage() {
 
         <EmptyState
           icon={GitCompareArrows}
-          title="No reconciliations run yet"
+          title="No reconciliations yet"
           description="Run your first reconciliation to compare your books with GST portal data and identify mismatches."
           action={{
             label: 'Run your first reconciliation',

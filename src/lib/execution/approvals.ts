@@ -24,7 +24,6 @@
 
 import type {
   Approval,
-  ApprovalStatus,
   ApprovalSummary,
   ExecutionTask,
   ExecutionTaskType,
@@ -160,129 +159,14 @@ export function createApproval(task: ExecutionTask): Approval {
   };
 }
 
-// ─── Approval Recipe — declarative spec for each seed approval ───────────────
-interface ApprovalRecipe {
-  taskIdx: number;       // 0-based index into the tasks array passed to seedApprovals
-  status: ApprovalStatus;
-  reason: string;
-  approvedBy: string | null;
-  hoursAgo: number;
-  approvedHoursAgo: number | null; // when status is approved/rejected
-}
-
-const SEED_APPROVAL_RECIPE: ApprovalRecipe[] = [
-  // 1. GSTR-3B filing for Sharma Enterprises — pending sign-off
-  {
-    taskIdx: 1,
-    status: 'pending',
-    reason:
-      'GSTR-3B filing requires approval — net liability ₹2,10,000 (output ₹4,20,000 − ITC ₹1,84,000). ' +
-      'Cash ledger short by ₹1,15,000 — must be funded before filing.',
-    approvedBy: null,
-    hoursAgo: 6,
-    approvedHoursAgo: null,
-  },
-  // 2. Payroll payout for January 2026 — pending sign-off
-  {
-    taskIdx: 4,
-    status: 'pending',
-    reason:
-      'Payroll payout ₹7,27,800 for 18 employees requires sign-off — PF ₹71,200 + TDS ₹40,600 + PT ₹2,400 deducted. ' +
-      'Bank file (neft_jan2026.csv) ready for release on pay-date 31/01.',
-    approvedBy: null,
-    hoursAgo: 4.5,
-    approvedHoursAgo: null,
-  },
-  // 3. Q3 TDS deposit — approved by CA
-  {
-    taskIdx: 8,
-    status: 'approved',
-    reason:
-      'TDS Q3 deposit ₹3,40,000 approved — 194C ₹2,10,000 + 194J ₹95,000 + 194I ₹35,000. ' +
-      'Challan ITNS-281 generated (CHN-2026-0117). 26Q return due 31/01.',
-    approvedBy: 'CA Anil Mehta',
-    hoursAgo: 3,
-    approvedHoursAgo: 2.5,
-  },
-  // 4. Vendor payment to Reddy Suppliers — rejected (legal hold)
-  {
-    taskIdx: 13,
-    status: 'rejected',
-    reason:
-      'Vendor payment ₹3,40,000 to Reddy Suppliers requires sign-off — REJECTED. ' +
-      'Account is 68 days overdue (default probability 41%); payment held pending IBC Section 9 notice.',
-    approvedBy: 'CFO Priya Sharma',
-    hoursAgo: 2.5,
-    approvedHoursAgo: 2,
-  },
-  // 5. Low-value GSTR-1 filing — auto-approved (below threshold)
-  {
-    taskIdx: 11,
-    status: 'auto_approved',
-    reason:
-      'GSTR-1 filing auto-approved — net liability ₹12,000 below ₹50,000 auto-approve threshold. ' +
-      'No human sign-off required per firm policy.',
-    approvedBy: 'rule:low_value_filing',
-    hoursAgo: 0.5,
-    approvedHoursAgo: 0.5,
-  },
-  // 6. HDFC MSME loan EMI — approved by CFO
-  {
-    taskIdx: 5,
-    status: 'approved',
-    reason:
-      'HDFC MSME Loan EMI ₹1,24,000 (₹98K principal + ₹26K interest) — approved. ' +
-      'NEFT scheduled to avoid bounce charges + credit-score impact.',
-    approvedBy: 'CFO Priya Sharma',
-    hoursAgo: 8,
-    approvedHoursAgo: 7.5,
-  },
-  // 7. Legal escalation to IBC — pending sign-off (highest risk)
-  {
-    taskIdx: 14,
-    status: 'pending',
-    reason:
-      'Legal escalation to IBC Section 9 (MSME recovery) — Reddy Suppliers ₹2,80,000 overdue 68 days. ' +
-      'Draft notice prepared; requires partner sign-off before dispatch to NCLT.',
-    approvedBy: null,
-    hoursAgo: 1,
-    approvedHoursAgo: null,
-  },
-];
-
-// ─── seedApprovals — materialise 7 demo Approvals against a task stream ──────
-// Each recipe references a task positionally; if the task at that index doesn't
-// exist (e.g. caller passed fewer tasks), the recipe is skipped gracefully.
-export function seedApprovals(tasks: ExecutionTask[]): Approval[] {
-  const now = Date.now();
-  const approvals: Approval[] = [];
-
-  let counter = 0;
-  for (const r of SEED_APPROVAL_RECIPE) {
-    const task = tasks[r.taskIdx];
-    if (!task) continue; // graceful skip if task index out of range
-    counter += 1;
-    const createdAt = new Date(now - r.hoursAgo * 3600 * 1000).toISOString();
-    const approvedAt =
-      r.approvedHoursAgo != null
-        ? new Date(now - r.approvedHoursAgo * 3600 * 1000).toISOString()
-        : null;
-    const updatedAt = approvedAt ?? createdAt;
-
-    approvals.push({
-      id: `appr_${String(counter).padStart(3, '0')}`,
-      taskId: task.id,
-      risk: task.riskScore,
-      status: r.status,
-      reason: r.reason,
-      approvedBy: r.approvedBy,
-      approvedAt,
-      createdAt,
-      updatedAt,
-    } satisfies Approval);
-  }
-
-  return approvals;
+// ─── seedApprovals (no-op) ────────────────────────────────────────────────────
+// Previously this function synthesised demo Approvals from a hardcoded
+// recipe constant referencing fabricated clients, bank accounts, and
+// amounts. The export name is preserved so existing callers continue to
+// compile, but it now returns `[]` so the UI renders a proper empty state.
+// Real approvals come from `db.approval.findMany()` via the API routes.
+export function seedApprovals(_tasks: ExecutionTask[]): Approval[] {
+  return [];
 }
 
 // ─── getApprovalSummary — derive rollup metrics from an approval stream ──────

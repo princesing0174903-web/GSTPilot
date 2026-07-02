@@ -1,5 +1,6 @@
 import { db } from '@/lib/db'
 import { NextResponse } from 'next/server'
+import { safeAudit } from '@/lib/audit/safe-write'
 
 const DEFAULT_SETTINGS = {
   firmName: 'GSTPilot Firm',
@@ -43,6 +44,7 @@ export async function PUT(request: Request) {
       customDomain,
       emailFromName,
       emailTemplate,
+      updatedBy,
     } = body
 
     const existing = await db.firmSettings.findFirst()
@@ -77,6 +79,20 @@ export async function PUT(request: Request) {
       })
     }
 
+    // AuditLog entry
+    try {
+      await safeAudit({
+        userId: updatedBy ?? null,
+        action: 'FIRM_SETTINGS_UPDATED',
+        entity: 'FirmSettings',
+        entityId: settings.id,
+        newValue: JSON.stringify(data),
+        details: `Firm settings updated — ${Object.keys(data).join(', ')}`,
+      })
+    } catch (auditErr) {
+      console.warn('[FirmSettings] AuditLog write failed:', auditErr)
+    }
+
     return NextResponse.json({ settings })
   } catch (error) {
     console.error('PUT /api/firm-settings error:', error)
@@ -85,4 +101,11 @@ export async function PUT(request: Request) {
       { status: 500 }
     )
   }
+}
+
+// PATCH /api/firm-settings — alias for PUT (partial update, upsert)
+// Same body shape as PUT. Provided so the frontend can use a semantic PATCH
+// verb for partial updates (per the Production Transformation spec).
+export async function PATCH(request: Request) {
+  return PUT(request)
 }

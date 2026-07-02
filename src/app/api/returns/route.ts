@@ -19,14 +19,11 @@ export async function GET(request: Request) {
     if (period) where.period = period
     if (status) where.status = status
 
-    const returns = await db.return.findMany({
+    const returns = await db.gSTRFiling.findMany({
       where: Object.keys(where).length > 0 ? where : undefined,
       include: {
         client: {
-          select: { id: true, businessName: true, gstin: true, state: true },
-        },
-        filer: {
-          select: { id: true, name: true },
+          select: { id: true, tradeName: true, gstin: true, state: true },
         },
         _count: {
           select: { events: true },
@@ -65,7 +62,7 @@ export async function POST(request: Request) {
     }
 
     // Check if a return already exists for this client + returnType + period
-    const existing = await db.return.findUnique({
+    const existing = await db.gSTRFiling.findUnique({
       where: { firmId_clientId_returnType_period: { firmId, clientId, returnType, period } },
     })
 
@@ -94,7 +91,7 @@ export async function POST(request: Request) {
     const taxSum =
       (totalTax._sum.cgst ?? 0) + (totalTax._sum.sgst ?? 0) + (totalTax._sum.igst ?? 0)
 
-    const ret = await db.return.create({
+    const ret = await db.gSTRFiling.create({
       data: {
         firmId,
         clientId,
@@ -158,7 +155,7 @@ export async function PATCH(request: Request) {
       )
     }
 
-    const existing = await db.return.findUnique({
+    const existing = await db.gSTRFiling.findUnique({
       where: { id },
       include: { client: true },
     })
@@ -173,7 +170,7 @@ export async function PATCH(request: Request) {
     if (filedBy !== undefined) data.filedBy = filedBy
     if (jsonPayload !== undefined) data.jsonPayload = jsonPayload
 
-    const ret = await db.return.update({
+    const ret = await db.gSTRFiling.update({
       where: { id },
       data,
       include: {

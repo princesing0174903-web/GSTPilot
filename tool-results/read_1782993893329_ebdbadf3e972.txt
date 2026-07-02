@@ -1,0 +1,456 @@
+     1→'use client'
+     2→
+     3→import React, { useState } from 'react'
+     4→import { motion } from 'framer-motion'
+     5→import {
+     6→  FileCheck, ArrowUpRight, ArrowDownRight, TrendingUp,
+     7→  IndianRupee, FileText, ShieldCheck, Clock,
+     8→  AlertCircle, CheckCircle2, Download, Plus,
+     9→  Search, Filter, ChevronRight, Calendar,
+    10→  Building2, Users, Receipt, RotateCw, Send,
+    11→  CircleDot, Banknote,
+    12→} from 'lucide-react'
+    13→import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+    14→import { Badge } from '@/components/ui/badge'
+    15→import { Button } from '@/components/ui/button'
+    16→import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
+    17→import { ScrollArea } from '@/components/ui/scroll-area'
+    18→import { Separator } from '@/components/ui/separator'
+    19→import { Input } from '@/components/ui/input'
+    20→
+    21→// ═══════════════════════════════════════════════════════════════════════════════
+    22→// FORMATTERS
+    23→// ═══════════════════════════════════════════════════════════════════════════════
+    24→
+    25→const fmtINR = (n: number) => '₹' + n.toLocaleString('en-IN')
+    26→const fmtPct = (n: number) => (n >= 0 ? '+' : '') + n.toFixed(1) + '%'
+    27→
+    28→// ═══════════════════════════════════════════════════════════════════════════════
+    29→// SVG CHARTS
+    30→// ═══════════════════════════════════════════════════════════════════════════════
+    31→
+    32→function QuarterlyBarChart({ data }: { data: { quarter: string; deducted: number; deposited: number }[] }) {
+    33→  const max = Math.max(...data.map(d => Math.max(d.deducted, d.deposited)))
+    34→  const barW = 32
+    35→  const gap = 20
+    36→  const h = 100
+    37→  const totalW = data.length * (barW * 2 + gap + 8)
+    38→  return (
+    39→    <svg width={totalW} height={h + 24} className="overflow-visible">
+    40→      {data.map((d, i) => {
+    41→        const x = i * (barW * 2 + gap + 8)
+    42→        const hD = (d.deducted / max) * (h - 10)
+    43→        const hP = (d.deposited / max) * (h - 10)
+    44→        return (
+    45→          <g key={d.quarter}>
+    46→            <rect x={x} y={h - hD} width={barW} height={hD} rx={4} fill="#10b981" opacity={0.7} />
+    47→            <rect x={x + barW + 4} y={h - hP} width={barW} height={hP} rx={4} fill="#64748b" opacity={0.5} />
+    48→            <text x={x + barW + 2} y={h + 16} textAnchor="middle" className="text-[10px] fill-muted-foreground">{d.quarter}</text>
+    49→          </g>
+    50→        )
+    51→      })}
+    52→      <g transform={`translate(${totalW - 120}, 0)`}>
+    53→        <rect x="0" y="0" width="10" height="10" rx="2" fill="#10b981" opacity={0.7} />
+    54→        <text x="14" y="9" className="text-[9px] fill-muted-foreground">Deducted</text>
+    55→        <rect x="70" y="0" width="10" height="10" rx="2" fill="#64748b" opacity={0.5} />
+    56→        <text x="84" y="9" className="text-[9px] fill-muted-foreground">Deposited</text>
+    57→      </g>
+    58→    </svg>
+    59→  )
+    60→}
+    61→
+    62→// ═══════════════════════════════════════════════════════════════════════════════
+    63→// DATA
+    64→// ═══════════════════════════════════════════════════════════════════════════════
+    65→
+    66→const statCards = [
+    67→  { label: 'Total TDS Deducted', value: 1845000, change: 14.2, icon: IndianRupee, color: 'emerald' },
+    68→  { label: 'TDS Deposited', value: 1690000, change: 12.8, icon: Banknote, color: 'emerald' },
+    69→  { label: 'Pending Challans', value: 3, change: -25, icon: AlertCircle, color: 'amber' },
+    70→  { label: 'Returns Filed', value: 4, change: 0, icon: CheckCircle2, color: 'slate' },
+    71→]
+    72→
+    73→const tdsSections = [
+    74→  { section: '192', name: 'TDS on Salary', rate: 'Slab', deducted: 456000, deposited: 456000, deductees: 12, status: 'filed' },
+    75→  { section: '194A', name: 'TDS on Interest', rate: '10%', deducted: 123000, deposited: 123000, deductees: 5, status: 'filed' },
+    76→  { section: '194C', name: 'TDS on Contractor', rate: '1% / 2%', deducted: 567000, deposited: 445000, deductees: 18, status: 'partial' },
+    77→  { section: '194H', name: 'TDS on Commission', rate: '5%', deducted: 89000, deposited: 89000, deductees: 4, status: 'filed' },
+    78→  { section: '194I', name: 'TDS on Rent', rate: '10%', deducted: 234000, deposited: 234000, deductees: 6, status: 'filed' },
+    79→  { section: '194J', name: 'TDS on Professional Fees', rate: '10%', deducted: 378000, deposited: 345000, deductees: 9, status: 'partial' },
+    80→]
+    81→
+    82→const challans = [
+    83→  { id: 'CHL-2026-089', date: '07/03/2026', amount: 156000, section: '192', bank: 'HDFC Bank', status: 'paid', bsrCode: '0001234' },
+    84→  { id: 'CHL-2026-088', date: '07/03/2026', amount: 89000, section: '194H', bank: 'SBI', status: 'paid', bsrCode: '0002345' },
+    85→  { id: 'CHL-2026-087', date: '07/03/2026', amount: 234000, section: '194I', bank: 'HDFC Bank', status: 'paid', bsrCode: '0001234' },
+    86→  { id: 'CHL-2026-086', date: '28/02/2026', amount: 345000, section: '194J', bank: 'ICICI Bank', status: 'paid', bsrCode: '0003456' },
+    87→  { id: 'CHL-2026-085', date: '28/02/2026', amount: 122000, section: '194C', bank: 'SBI', status: 'paid', bsrCode: '0002345' },
+    88→  { id: 'CHL-2026-084', date: '07/02/2026', amount: 456000, section: '192', bank: 'HDFC Bank', status: 'paid', bsrCode: '0001234' },
+    89→  { id: 'CHL-2026-083', date: '07/02/2026', amount: 67000, section: '194A', bank: 'ICICI Bank', status: 'paid', bsrCode: '0003456' },
+    90→  { id: 'CHL-2026-082', date: '07/02/2026', amount: 178000, section: '194C', bank: 'SBI', status: 'pending', bsrCode: '—' },
+    91→  { id: 'CHL-2026-081', date: '07/02/2026', amount: 33000, section: '194J', bank: 'HDFC Bank', status: 'pending', bsrCode: '—' },
+    92→  { id: 'CHL-2026-080', date: '06/01/2026', amount: 450000, section: '192', bank: 'HDFC Bank', status: 'paid', bsrCode: '0001234' },
+    93→]
+    94→
+    95→const quarterlyReturns = [
+    96→  { quarter: 'Q1', period: 'Apr-Jun 2025', dueDate: '15/07/2025', filedDate: '12/07/2025', status: 'filed', forms: '24Q, 26Q, 27Q' },
+    97→  { quarter: 'Q2', period: 'Jul-Sep 2025', dueDate: '15/10/2025', filedDate: '10/10/2025', status: 'filed', forms: '24Q, 26Q, 27Q' },
+    98→  { quarter: 'Q3', period: 'Oct-Dec 2025', dueDate: '15/01/2026', filedDate: '14/01/2026', status: 'filed', forms: '24Q, 26Q, 27Q' },
+    99→  { quarter: 'Q4', period: 'Jan-Mar 2026', dueDate: '31/05/2026', filedDate: null, status: 'upcoming', forms: '24Q, 26Q, 27Q' },
+   100→]
+   101→
+   102→const certificates = [
+   103→  { id: 'CERT-001', deductee: 'Sharma & Associates Pvt Ltd', section: '194J', amount: 145000, quarter: 'Q3', issued: true, issuedDate: '20/01/2026' },
+   104→  { id: 'CERT-002', deductee: 'Patel Constructions', section: '194C', amount: 234000, quarter: 'Q3', issued: true, issuedDate: '22/01/2026' },
+   105→  { id: 'CERT-003', deductee: 'Mehta Consulting Pvt Ltd', section: '194J', amount: 89000, quarter: 'Q3', issued: true, issuedDate: '25/01/2026' },
+   106→  { id: 'CERT-004', deductee: 'Kumar Logistics', section: '194C', amount: 167000, quarter: 'Q3', issued: false, issuedDate: null },
+   107→  { id: 'CERT-005', deductee: 'Singh Properties', section: '194I', amount: 234000, quarter: 'Q3', issued: true, issuedDate: '28/01/2026' },
+   108→  { id: 'CERT-006', deductee: 'Reddy Marketing Solutions', section: '194H', amount: 56000, quarter: 'Q3', issued: false, issuedDate: null },
+   109→  { id: 'CERT-007', deductee: 'Agarwal & Sons Pvt Ltd', section: '194C', amount: 189000, quarter: 'Q3', issued: true, issuedDate: '30/01/2026' },
+   110→  { id: 'CERT-008', deductee: 'Joshi Financial Services', section: '194A', amount: 67000, quarter: 'Q3', issued: true, issuedDate: '01/02/2026' },
+   111→]
+   112→
+   113→const quarterlyData = [
+   114→  { quarter: 'Q1', deducted: 456000, deposited: 456000 },
+   115→  { quarter: 'Q2', deducted: 412000, deposited: 412000 },
+   116→  { quarter: 'Q3', deducted: 534000, deposited: 489000 },
+   117→  { quarter: 'Q4', deducted: 443000, deposited: 333000 },
+   118→]
+   119→
+   120→const statusColors: Record<string, string> = {
+   121→  filed: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
+   122→  partial: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
+   123→  upcoming: 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400',
+   124→  paid: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
+   125→  pending: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
+   126→}
+   127→
+   128→const container = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { staggerChildren: 0.06 } } }
+   129→const item = { hidden: { opacity: 0, y: 16 }, show: { opacity: 1, y: 0 } }
+   130→
+   131→// ═══════════════════════════════════════════════════════════════════════════════
+   132→// COMPONENT
+   133→// ═══════════════════════════════════════════════════════════════════════════════
+   134→
+   135→export default function TDSPage() {
+   136→  const [activeTab, setActiveTab] = useState('overview')
+   137→  const [searchQ, setSearchQ] = useState('')
+   138→
+   139→  const deductorDetails = {
+   140→    tan: 'MUMS12345A',
+   141→    name: 'Sharma & Associates Pvt Ltd',
+   142→    address: '12, MG Road, Fort, Mumbai 400001',
+   143→    type: 'Company',
+   144→    aoCode: 'MUM/C/123/4',
+   145→  }
+   146→
+   147→  return (
+   148→    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-emerald-50/30 dark:from-slate-950 dark:via-slate-900 dark:to-emerald-950/20">
+   149→      {/* Sticky Header */}
+   150→      <div className="sticky top-0 z-20 bg-white/80 backdrop-blur-md border-b dark:bg-slate-900/80">
+   151→        <div className="px-4 sm:px-6 py-4 flex items-center justify-between">
+   152→          <div className="flex items-center gap-3">
+   153→            <div className="h-9 w-9 rounded-lg bg-emerald-600 flex items-center justify-center shadow-md shadow-emerald-600/20">
+   154→              <FileCheck className="h-5 w-5 text-white" />
+   155→            </div>
+   156→            <div>
+   157→              <h1 className="text-lg font-bold text-slate-900 dark:text-white">TDS Management</h1>
+   158→              <p className="text-xs text-muted-foreground">TAN: {deductorDetails.tan} &middot; FY 2025-26</p>
+   159→            </div>
+   160→          </div>
+   161→          <div className="flex items-center gap-2">
+   162→            <Button variant="outline" size="sm" className="gap-1.5"><Download className="h-3.5 w-3.5" />Export</Button>
+   163→            <Button size="sm" className="gap-1.5 bg-emerald-600 hover:bg-emerald-700"><Send className="h-3.5 w-3.5" />File Return</Button>
+   164→          </div>
+   165→        </div>
+   166→        <Tabs value={activeTab} onValueChange={setActiveTab} className="px-4 sm:px-6">
+   167→          <TabsList className="bg-transparent h-9 p-0 gap-1 border-b-0">
+   168→            {['overview', 'deductions', 'challans', 'returns', 'certificates'].map(t => (
+   169→              <TabsTrigger key={t} value={t} className="rounded-t-lg rounded-b-none data-[state=active]:bg-emerald-50 data-[state=active]:text-emerald-700 dark:data-[state=active]:bg-emerald-900/20 dark:data-[state=active]:text-emerald-400 text-xs px-3 h-8 capitalize">
+   170→                {t}
+   171→              </TabsTrigger>
+   172→            ))}
+   173→          </TabsList>
+   174→        </Tabs>
+   175→      </div>
+   176→
+   177→      <div className="px-4 sm:px-6 py-6 max-w-[1400px] mx-auto">
+   178→        <Tabs value={activeTab} onValueChange={setActiveTab}>
+   179→          {/* ─── OVERVIEW TAB ─── */}
+   180→          <TabsContent value="overview" className="mt-0 space-y-6">
+   181→            {/* Stat Cards */}
+   182→            <motion.div variants={container} initial="hidden" animate="show" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+   183→              {statCards.map((s) => {
+   184→                const Icon = s.icon
+   185→                const positive = s.change >= 0
+   186→                return (
+   187→                  <motion.div key={s.label} variants={item}>
+   188→                    <Card className="hover:shadow-md transition-shadow border-slate-200/60 dark:border-slate-800/60">
+   189→                      <CardContent className="p-4">
+   190→                        <div className="flex items-center justify-between mb-3">
+   191→                          <div className={`h-9 w-9 rounded-lg flex items-center justify-center ${s.color === 'emerald' ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400' : s.color === 'amber' ? 'bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400' : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'}`}>
+   192→                            <Icon className="h-4.5 w-4.5" />
+   193→                          </div>
+   194→                          <div className={`flex items-center gap-0.5 text-xs font-medium ${positive ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+   195→                            {positive ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
+   196→                            {fmtPct(s.change)}
+   197→                          </div>
+   198→                        </div>
+   199→                        <p className="text-xl font-bold text-slate-900 dark:text-white">{typeof s.value === 'number' && s.value > 100 ? fmtINR(s.value) : s.value}</p>
+   200→                        <p className="text-xs text-muted-foreground mt-0.5">{s.label}</p>
+   201→                      </CardContent>
+   202→                    </Card>
+   203→                  </motion.div>
+   204→                )
+   205→              })}
+   206→            </motion.div>
+   207→
+   208→            {/* Deductor Details + Quarterly Chart */}
+   209→            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+   210→              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}>
+   211→                <Card className="border-slate-200/60 dark:border-slate-800/60">
+   212→                  <CardHeader className="pb-3">
+   213→                    <CardTitle className="text-sm font-semibold flex items-center gap-2">
+   214→                      <Building2 className="h-4 w-4 text-emerald-600" /> Deductor Details
+   215→                    </CardTitle>
+   216→                  </CardHeader>
+   217→                  <CardContent>
+   218→                    <div className="space-y-3">
+   219→                      {[
+   220→                        { label: 'TAN', value: deductorDetails.tan },
+   221→                        { label: 'Name', value: deductorDetails.name },
+   222→                        { label: 'Address', value: deductorDetails.address },
+   223→                        { label: 'Type', value: deductorDetails.type },
+   224→                        { label: 'AO Code', value: deductorDetails.aoCode },
+   225→                      ].map(row => (
+   226→                        <div key={row.label} className="flex justify-between py-1.5 border-b last:border-b-0 dark:border-slate-800/60">
+   227→                          <span className="text-xs text-muted-foreground">{row.label}</span>
+   228→                          <span className="text-xs font-medium text-slate-900 dark:text-white">{row.value}</span>
+   229→                        </div>
+   230→                      ))}
+   231→                    </div>
+   232→                  </CardContent>
+   233→                </Card>
+   234→              </motion.div>
+   235→
+   236→              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
+   237→                <Card className="border-slate-200/60 dark:border-slate-800/60">
+   238→                  <CardHeader className="pb-3">
+   239→                    <CardTitle className="text-sm font-semibold flex items-center gap-2">
+   240→                      <TrendingUp className="h-4 w-4 text-emerald-600" /> Quarterly TDS Summary
+   241→                    </CardTitle>
+   242→                  </CardHeader>
+   243→                  <CardContent>
+   244→                    <div className="flex justify-center pb-2">
+   245→                      <QuarterlyBarChart data={quarterlyData} />
+   246→                    </div>
+   247→                    <Separator className="my-3" />
+   248→                    <div className="grid grid-cols-4 gap-2">
+   249→                      {quarterlyReturns.map(q => (
+   250→                        <div key={q.quarter} className="text-center p-2 rounded-lg bg-slate-50 dark:bg-slate-800/40">
+   251→                          <Badge className={`text-[9px] ${statusColors[q.status]}`}>{q.quarter}</Badge>
+   252→                          <p className="text-[10px] text-muted-foreground mt-1">{q.period}</p>
+   253→                          <Badge variant="secondary" className={`text-[9px] mt-1 ${statusColors[q.status]}`}>{q.status}</Badge>
+   254→                        </div>
+   255→                      ))}
+   256→                    </div>
+   257→                  </CardContent>
+   258→                </Card>
+   259→              </motion.div>
+   260→            </div>
+   261→
+   262→            {/* TDS Sections Summary */}
+   263→            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.35 }}>
+   264→              <Card className="border-slate-200/60 dark:border-slate-800/60">
+   265→                <CardHeader className="pb-3">
+   266→                  <CardTitle className="text-sm font-semibold flex items-center gap-2">
+   267→                    <Receipt className="h-4 w-4 text-emerald-600" /> TDS Section Summary
+   268→                  </CardTitle>
+   269→                </CardHeader>
+   270→                <CardContent className="p-0">
+   271→                  <div className="divide-y dark:divide-slate-800/60">
+   272→                    {tdsSections.map((s, i) => (
+   273→                      <motion.div key={s.section} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.05 }} className="flex items-center justify-between px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
+   274→                        <div className="flex items-center gap-4">
+   275→                          <div className="h-8 w-8 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center">
+   276→                            <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400">{s.section}</span>
+   277→                          </div>
+   278→                          <div>
+   279→                            <p className="text-xs font-medium text-slate-900 dark:text-white">{s.name}</p>
+   280→                            <p className="text-[10px] text-muted-foreground">Rate: {s.rate} &middot; {s.deductees} deductees</p>
+   281→                          </div>
+   282→                        </div>
+   283→                        <div className="flex items-center gap-4">
+   284→                          <div className="text-right">
+   285→                            <p className="text-xs font-semibold">{fmtINR(s.deducted)}</p>
+   286→                            <p className="text-[10px] text-muted-foreground">Deposited: {fmtINR(s.deposited)}</p>
+   287→                          </div>
+   288→                          <Badge variant="secondary" className={`text-[9px] ${statusColors[s.status]}`}>{s.status}</Badge>
+   289→                        </div>
+   290→                      </motion.div>
+   291→                    ))}
+   292→                  </div>
+   293→                </CardContent>
+   294→              </Card>
+   295→            </motion.div>
+   296→          </TabsContent>
+   297→
+   298→          {/* ─── DEDUCTIONS TAB ─── */}
+   299→          <TabsContent value="deductions" className="mt-0 space-y-4">
+   300→            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+   301→              <div className="flex items-center justify-between mb-4">
+   302→                <div className="flex items-center gap-2">
+   303→                  <Input placeholder="Search deductions..." className="w-64 h-8 text-xs" value={searchQ} onChange={e => setSearchQ(e.target.value)} />
+   304→                  <Button variant="outline" size="sm" className="gap-1.5 h-8"><Filter className="h-3 w-3" />Filter</Button>
+   305→                </div>
+   306→                <Button size="sm" className="gap-1.5 bg-emerald-600 hover:bg-emerald-700"><Plus className="h-3.5 w-3.5" />New Deduction</Button>
+   307→              </div>
+   308→              <Card className="border-slate-200/60 dark:border-slate-800/60">
+   309→                <CardContent className="p-0">
+   310→                  <ScrollArea className="max-h-[600px]">
+   311→                    <div className="divide-y dark:divide-slate-800/60">
+   312→                      {tdsSections.map((s, i) => (
+   313→                        <motion.div key={s.section} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.04 }} className="flex items-center justify-between px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
+   314→                          <div className="flex items-center gap-4">
+   315→                            <div className="h-9 w-9 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
+   316→                              <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">{s.section}</span>
+   317→                            </div>
+   318→                            <div>
+   319→                              <p className="text-xs font-semibold text-slate-900 dark:text-white">{s.name}</p>
+   320→                              <p className="text-[10px] text-muted-foreground">Rate: {s.rate}</p>
+   321→                            </div>
+   322→                          </div>
+   323→                          <div className="flex items-center gap-6">
+   324→                            <div className="text-right">
+   325→                              <p className="text-xs font-semibold">Deducted: {fmtINR(s.deducted)}</p>
+   326→                              <p className="text-[10px] text-muted-foreground">Deposited: {fmtINR(s.deposited)}</p>
+   327→                            </div>
+   328→                            <div className="text-right">
+   329→                              <p className="text-xs text-muted-foreground">{s.deductees} deductees</p>
+   330→                              <Badge variant="secondary" className={`text-[9px] ${statusColors[s.status]}`}>{s.status}</Badge>
+   331→                            </div>
+   332→                            <ChevronRight className="h-4 w-4 text-muted-foreground" />
+   333→                          </div>
+   334→                        </motion.div>
+   335→                      ))}
+   336→                    </div>
+   337→                  </ScrollArea>
+   338→                </CardContent>
+   339→              </Card>
+   340→            </motion.div>
+   341→          </TabsContent>
+   342→
+   343→          {/* ─── CHALLANS TAB ─── */}
+   344→          <TabsContent value="challans" className="mt-0 space-y-4">
+   345→            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+   346→              <div className="flex items-center justify-between mb-4">
+   347→                <div className="flex items-center gap-2">
+   348→                  <Input placeholder="Search challans..." className="w-64 h-8 text-xs" value={searchQ} onChange={e => setSearchQ(e.target.value)} />
+   349→                </div>
+   350→                <Button size="sm" className="gap-1.5 bg-emerald-600 hover:bg-emerald-700"><Plus className="h-3.5 w-3.5" />Create Challan</Button>
+   351→              </div>
+   352→              <Card className="border-slate-200/60 dark:border-slate-800/60">
+   353→                <CardContent className="p-0">
+   354→                  <ScrollArea className="max-h-[600px]">
+   355→                    <div className="divide-y dark:divide-slate-800/60">
+   356→                      {challans.map((c, i) => (
+   357→                        <motion.div key={c.id} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.04 }} className="flex items-center justify-between px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
+   358→                          <div className="flex items-center gap-4">
+   359→                            <div className={`h-9 w-9 rounded-lg flex items-center justify-center ${c.status === 'paid' ? 'bg-emerald-100 dark:bg-emerald-900/30' : 'bg-amber-100 dark:bg-amber-900/30'}`}>
+   360→                              <Receipt className={`h-4 w-4 ${c.status === 'paid' ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}`} />
+   361→                            </div>
+   362→                            <div>
+   363→                              <div className="flex items-center gap-2">
+   364→                                <span className="text-xs font-mono font-semibold text-slate-900 dark:text-white">{c.id}</span>
+   365→                                <Badge variant="secondary" className={`text-[9px] ${statusColors[c.status]}`}>{c.status}</Badge>
+   366→                              </div>
+   367→                              <p className="text-[10px] text-muted-foreground mt-0.5">Section {c.section} &middot; {c.bank} &middot; BSR: {c.bsrCode}</p>
+   368→                              <p className="text-[10px] text-muted-foreground">{c.date}</p>
+   369→                            </div>
+   370→                          </div>
+   371→                          <div className="flex items-center gap-3">
+   372→                            <span className="text-sm font-bold text-slate-900 dark:text-white">{fmtINR(c.amount)}</span>
+   373→                            <ChevronRight className="h-4 w-4 text-muted-foreground" />
+   374→                          </div>
+   375→                        </motion.div>
+   376→                      ))}
+   377→                    </div>
+   378→                  </ScrollArea>
+   379→                </CardContent>
+   380→              </Card>
+   381→            </motion.div>
+   382→          </TabsContent>
+   383→
+   384→          {/* ─── RETURNS TAB ─── */}
+   385→          <TabsContent value="returns" className="mt-0 space-y-4">
+   386→            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+   387→              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+   388→                {quarterlyReturns.map((q, i) => (
+   389→                  <motion.div key={q.quarter} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.08 }}>
+   390→                    <Card className={`border-slate-200/60 dark:border-slate-800/60 ${q.status === 'upcoming' ? 'ring-2 ring-amber-200 dark:ring-amber-800' : ''}`}>
+   391→                      <CardContent className="p-4">
+   392→                        <div className="flex items-center justify-between mb-2">
+   393→                          <Badge variant="secondary" className={`text-[10px] ${statusColors[q.status]}`}>{q.quarter}</Badge>
+   394→                          <Badge variant="secondary" className={`text-[9px] ${statusColors[q.status]}`}>{q.status}</Badge>
+   395→                        </div>
+   396→                        <h3 className="text-sm font-semibold text-slate-900 dark:text-white">{q.period}</h3>
+   397→                        <p className="text-[10px] text-muted-foreground mt-1">Due: {q.dueDate}</p>
+   398→                        <p className="text-[10px] text-muted-foreground">Forms: {q.forms}</p>
+   399→                        {q.filedDate && <p className="text-[10px] text-emerald-600 dark:text-emerald-400 mt-1">Filed: {q.filedDate}</p>}
+   400→                        {q.status === 'upcoming' && (
+   401→                          <Button size="sm" className="w-full mt-3 h-7 text-xs bg-emerald-600 hover:bg-emerald-700 gap-1"><Send className="h-3 w-3" />File Now</Button>
+   402→                        )}
+   403→                      </CardContent>
+   404→                    </Card>
+   405→                  </motion.div>
+   406→                ))}
+   407→              </div>
+   408→            </motion.div>
+   409→          </TabsContent>
+   410→
+   411→          {/* ─── CERTIFICATES TAB ─── */}
+   412→          <TabsContent value="certificates" className="mt-0 space-y-4">
+   413→            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+   414→              <div className="flex items-center justify-between mb-4">
+   415→                <div className="flex items-center gap-2">
+   416→                  <Input placeholder="Search certificates..." className="w-64 h-8 text-xs" value={searchQ} onChange={e => setSearchQ(e.target.value)} />
+   417→                </div>
+   418→                <Button size="sm" className="gap-1.5 bg-emerald-600 hover:bg-emerald-700"><Send className="h-3.5 w-3.5" />Issue Certificates</Button>
+   419→              </div>
+   420→              <Card className="border-slate-200/60 dark:border-slate-800/60">
+   421→                <CardContent className="p-0">
+   422→                  <div className="divide-y dark:divide-slate-800/60">
+   423→                    {certificates.map((c, i) => (
+   424→                      <motion.div key={c.id} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.04 }} className="flex items-center justify-between px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
+   425→                        <div className="flex items-center gap-4">
+   426→                          <div className={`h-9 w-9 rounded-lg flex items-center justify-center ${c.issued ? 'bg-emerald-100 dark:bg-emerald-900/30' : 'bg-amber-100 dark:bg-amber-900/30'}`}>
+   427→                            {c.issued ? <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" /> : <Clock className="h-4 w-4 text-amber-600 dark:text-amber-400" />}
+   428→                          </div>
+   429→                          <div>
+   430→                            <div className="flex items-center gap-2">
+   431→                              <span className="text-xs font-mono font-semibold text-slate-900 dark:text-white">{c.id}</span>
+   432→                              <Badge variant="secondary" className={`text-[9px] ${c.issued ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'}`}>
+   433→                                {c.issued ? 'Issued' : 'Pending'}
+   434→                              </Badge>
+   435→                            </div>
+   436→                            <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">{c.deductee}</p>
+   437→                            <p className="text-[10px] text-muted-foreground">Section {c.section} &middot; {c.quarter} {c.issuedDate ? `&middot; Issued: ${c.issuedDate}` : ''}</p>
+   438→                          </div>
+   439→                        </div>
+   440→                        <div className="flex items-center gap-3">
+   441→                          <span className="text-sm font-bold text-slate-900 dark:text-white">{fmtINR(c.amount)}</span>
+   442→                          <ChevronRight className="h-4 w-4 text-muted-foreground" />
+   443→                        </div>
+   444→                      </motion.div>
+   445→                    ))}
+   446→                  </div>
+   447→                </CardContent>
+   448→              </Card>
+   449→            </motion.div>
+   450→          </TabsContent>
+   451→        </Tabs>
+   452→      </div>
+   453→    </div>
+   454→  )
+   455→}
+   456→

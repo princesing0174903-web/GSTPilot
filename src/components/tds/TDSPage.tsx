@@ -1,7 +1,11 @@
 'use client'
 
 import React, { useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { apiGet } from '@/lib/api'
 import { motion } from 'framer-motion'
+import { EmptyState } from '@/components/shared/EmptyState'
+import { useApp } from '@/contexts/AppContext'
 import {
   FileCheck, ArrowUpRight, ArrowDownRight, TrendingUp,
   IndianRupee, FileText, ShieldCheck, Clock,
@@ -63,59 +67,25 @@ function QuarterlyBarChart({ data }: { data: { quarter: string; deducted: number
 // DATA
 // ═══════════════════════════════════════════════════════════════════════════════
 
-const statCards = [
-  { label: 'Total TDS Deducted', value: 1845000, change: 14.2, icon: IndianRupee, color: 'emerald' },
-  { label: 'TDS Deposited', value: 1690000, change: 12.8, icon: Banknote, color: 'emerald' },
-  { label: 'Pending Challans', value: 3, change: -25, icon: AlertCircle, color: 'amber' },
-  { label: 'Returns Filed', value: 4, change: 0, icon: CheckCircle2, color: 'slate' },
-]
+// PT-1-a: All TDS data is sourced from /api/tds. Stat cards, sections, and the
+// quarterly chart are derived at render time from real records. Tabs without an
+// API (challans, certificates, returns) render proper empty states with CTAs.
 
-const tdsSections = [
-  { section: '192', name: 'TDS on Salary', rate: 'Slab', deducted: 456000, deposited: 456000, deductees: 12, status: 'filed' },
-  { section: '194A', name: 'TDS on Interest', rate: '10%', deducted: 123000, deposited: 123000, deductees: 5, status: 'filed' },
-  { section: '194C', name: 'TDS on Contractor', rate: '1% / 2%', deducted: 567000, deposited: 445000, deductees: 18, status: 'partial' },
-  { section: '194H', name: 'TDS on Commission', rate: '5%', deducted: 89000, deposited: 89000, deductees: 4, status: 'filed' },
-  { section: '194I', name: 'TDS on Rent', rate: '10%', deducted: 234000, deposited: 234000, deductees: 6, status: 'filed' },
-  { section: '194J', name: 'TDS on Professional Fees', rate: '10%', deducted: 378000, deposited: 345000, deductees: 9, status: 'partial' },
-]
+type TdsRecord = {
+  id: string
+  clientId?: string | null
+  section: string
+  deducteeName: string
+  deducteePan?: string | null
+  paymentAmount: number
+  tdsRate: number
+  tdsAmount: number
+  date: string
+  status: string
+  quarter: string
+}
 
-const challans = [
-  { id: 'CHL-2026-089', date: '07/03/2026', amount: 156000, section: '192', bank: 'HDFC Bank', status: 'paid', bsrCode: '0001234' },
-  { id: 'CHL-2026-088', date: '07/03/2026', amount: 89000, section: '194H', bank: 'SBI', status: 'paid', bsrCode: '0002345' },
-  { id: 'CHL-2026-087', date: '07/03/2026', amount: 234000, section: '194I', bank: 'HDFC Bank', status: 'paid', bsrCode: '0001234' },
-  { id: 'CHL-2026-086', date: '28/02/2026', amount: 345000, section: '194J', bank: 'ICICI Bank', status: 'paid', bsrCode: '0003456' },
-  { id: 'CHL-2026-085', date: '28/02/2026', amount: 122000, section: '194C', bank: 'SBI', status: 'paid', bsrCode: '0002345' },
-  { id: 'CHL-2026-084', date: '07/02/2026', amount: 456000, section: '192', bank: 'HDFC Bank', status: 'paid', bsrCode: '0001234' },
-  { id: 'CHL-2026-083', date: '07/02/2026', amount: 67000, section: '194A', bank: 'ICICI Bank', status: 'paid', bsrCode: '0003456' },
-  { id: 'CHL-2026-082', date: '07/02/2026', amount: 178000, section: '194C', bank: 'SBI', status: 'pending', bsrCode: '—' },
-  { id: 'CHL-2026-081', date: '07/02/2026', amount: 33000, section: '194J', bank: 'HDFC Bank', status: 'pending', bsrCode: '—' },
-  { id: 'CHL-2026-080', date: '06/01/2026', amount: 450000, section: '192', bank: 'HDFC Bank', status: 'paid', bsrCode: '0001234' },
-]
-
-const quarterlyReturns = [
-  { quarter: 'Q1', period: 'Apr-Jun 2025', dueDate: '15/07/2025', filedDate: '12/07/2025', status: 'filed', forms: '24Q, 26Q, 27Q' },
-  { quarter: 'Q2', period: 'Jul-Sep 2025', dueDate: '15/10/2025', filedDate: '10/10/2025', status: 'filed', forms: '24Q, 26Q, 27Q' },
-  { quarter: 'Q3', period: 'Oct-Dec 2025', dueDate: '15/01/2026', filedDate: '14/01/2026', status: 'filed', forms: '24Q, 26Q, 27Q' },
-  { quarter: 'Q4', period: 'Jan-Mar 2026', dueDate: '31/05/2026', filedDate: null, status: 'upcoming', forms: '24Q, 26Q, 27Q' },
-]
-
-const certificates = [
-  { id: 'CERT-001', deductee: 'Sharma & Associates Pvt Ltd', section: '194J', amount: 145000, quarter: 'Q3', issued: true, issuedDate: '20/01/2026' },
-  { id: 'CERT-002', deductee: 'Patel Constructions', section: '194C', amount: 234000, quarter: 'Q3', issued: true, issuedDate: '22/01/2026' },
-  { id: 'CERT-003', deductee: 'Mehta Consulting Pvt Ltd', section: '194J', amount: 89000, quarter: 'Q3', issued: true, issuedDate: '25/01/2026' },
-  { id: 'CERT-004', deductee: 'Kumar Logistics', section: '194C', amount: 167000, quarter: 'Q3', issued: false, issuedDate: null },
-  { id: 'CERT-005', deductee: 'Singh Properties', section: '194I', amount: 234000, quarter: 'Q3', issued: true, issuedDate: '28/01/2026' },
-  { id: 'CERT-006', deductee: 'Reddy Marketing Solutions', section: '194H', amount: 56000, quarter: 'Q3', issued: false, issuedDate: null },
-  { id: 'CERT-007', deductee: 'Agarwal & Sons Pvt Ltd', section: '194C', amount: 189000, quarter: 'Q3', issued: true, issuedDate: '30/01/2026' },
-  { id: 'CERT-008', deductee: 'Joshi Financial Services', section: '194A', amount: 67000, quarter: 'Q3', issued: true, issuedDate: '01/02/2026' },
-]
-
-const quarterlyData = [
-  { quarter: 'Q1', deducted: 456000, deposited: 456000 },
-  { quarter: 'Q2', deducted: 412000, deposited: 412000 },
-  { quarter: 'Q3', deducted: 534000, deposited: 489000 },
-  { quarter: 'Q4', deducted: 443000, deposited: 333000 },
-]
+type TdsResponse = { records: TdsRecord[] }
 
 const statusColors: Record<string, string> = {
   filed: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
@@ -123,6 +93,8 @@ const statusColors: Record<string, string> = {
   upcoming: 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400',
   paid: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
   pending: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
+  deducted: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
+  deposited: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
 }
 
 const container = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { staggerChildren: 0.06 } } }
@@ -133,8 +105,59 @@ const item = { hidden: { opacity: 0, y: 16 }, show: { opacity: 1, y: 0 } }
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export default function TDSPage() {
+  const { setCurrentView } = useApp()
   const [activeTab, setActiveTab] = useState('overview')
   const [searchQ, setSearchQ] = useState('')
+
+  // Real TDS records from /api/tds
+  const { data: tdsRes } = useQuery<TdsResponse>({
+    queryKey: ['tds', 'all'],
+    queryFn: () => apiGet<TdsResponse>('/api/tds'),
+  })
+  const records: TdsRecord[] = tdsRes?.records ?? []
+
+  // Derived: stat cards from real records
+  const totalDeducted = records.reduce((sum, r) => sum + (r.tdsAmount ?? 0), 0)
+  const totalDeposited = records
+    .filter(r => r.status === 'deposited' || r.status === 'paid')
+    .reduce((sum, r) => sum + (r.tdsAmount ?? 0), 0)
+  const pendingCount = records.filter(r => r.status === 'pending' || r.status === 'deducted').length
+  const filedCount = records.filter(r => r.status === 'filed' || r.status === 'deposited').length
+
+  const statCards = [
+    { label: 'Total TDS Deducted', value: totalDeducted, change: 0, icon: IndianRupee, color: 'emerald' },
+    { label: 'TDS Deposited', value: totalDeposited, change: 0, icon: Banknote, color: 'emerald' },
+    { label: 'Pending Challans', value: pendingCount, change: 0, icon: AlertCircle, color: 'amber' },
+    { label: 'Returns Filed', value: filedCount, change: 0, icon: CheckCircle2, color: 'slate' },
+  ]
+
+  // Derived: section roll-ups
+  const sectionMap: Record<string, { section: string; deducted: number; deposited: number; deductees: number; status: string; rate: string }> = {}
+  for (const r of records) {
+    const key = r.section
+    if (!sectionMap[key]) sectionMap[key] = { section: key, deducted: 0, deposited: 0, deductees: 0, status: 'pending', rate: `${r.tdsRate}%` }
+    sectionMap[key].deducted += r.tdsAmount ?? 0
+    if (r.status === 'deposited' || r.status === 'paid') sectionMap[key].deposited += r.tdsAmount ?? 0
+    sectionMap[key].deductees += 1
+    if (r.status === 'deposited' || r.status === 'paid') sectionMap[key].status = 'filed'
+    else sectionMap[key].status = 'partial'
+  }
+  const tdsSections = Object.values(sectionMap)
+
+  // Derived: quarterly chart data
+  const quarterMap: Record<string, { quarter: string; deducted: number; deposited: number }> = {}
+  for (const r of records) {
+    const q = r.quarter || 'Unknown'
+    if (!quarterMap[q]) quarterMap[q] = { quarter: q, deducted: 0, deposited: 0 }
+    quarterMap[q].deducted += r.tdsAmount ?? 0
+    if (r.status === 'deposited' || r.status === 'paid') quarterMap[q].deposited += r.tdsAmount ?? 0
+  }
+  const quarterlyData = Object.values(quarterMap)
+
+  // No API exists yet for challans, certificates, or quarterly return filings.
+  const challans: { id: string; date: string; amount: number; section: string; bank: string; status: string; bsrCode: string }[] = []
+  const quarterlyReturns: { quarter: string; period: string; dueDate: string; filedDate: string | null; status: string; forms: string }[] = []
+  const certificates: { id: string; deductee: string; section: string; amount: number; quarter: string; issued: boolean; issuedDate: string | null }[] = []
 
   const deductorDetails = {
     tan: 'MUMS12345A',
@@ -268,6 +291,14 @@ export default function TDSPage() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="p-0">
+                  {tdsSections.length === 0 ? (
+                    <EmptyState
+                      icon={Receipt}
+                      title="No TDS sections yet"
+                      description="Record your first TDS deduction to see per-section summaries here."
+                      action={{ label: 'Add Deduction', onClick: () => setCurrentView('tds'), icon: Plus }}
+                    />
+                  ) : (
                   <div className="divide-y dark:divide-slate-800/60">
                     {tdsSections.map((s, i) => (
                       <motion.div key={s.section} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.05 }} className="flex items-center justify-between px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
@@ -276,7 +307,7 @@ export default function TDSPage() {
                             <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400">{s.section}</span>
                           </div>
                           <div>
-                            <p className="text-xs font-medium text-slate-900 dark:text-white">{s.name}</p>
+                            <p className="text-xs font-medium text-slate-900 dark:text-white">Section {s.section}</p>
                             <p className="text-[10px] text-muted-foreground">Rate: {s.rate} &middot; {s.deductees} deductees</p>
                           </div>
                         </div>
@@ -285,11 +316,12 @@ export default function TDSPage() {
                             <p className="text-xs font-semibold">{fmtINR(s.deducted)}</p>
                             <p className="text-[10px] text-muted-foreground">Deposited: {fmtINR(s.deposited)}</p>
                           </div>
-                          <Badge variant="secondary" className={`text-[9px] ${statusColors[s.status]}`}>{s.status}</Badge>
+                          <Badge variant="secondary" className={`text-[9px] ${statusColors[s.status] ?? statusColors.pending}`}>{s.status}</Badge>
                         </div>
                       </motion.div>
                     ))}
                   </div>
+                  )}
                 </CardContent>
               </Card>
             </motion.div>
@@ -307,27 +339,38 @@ export default function TDSPage() {
               </div>
               <Card className="border-slate-200/60 dark:border-slate-800/60">
                 <CardContent className="p-0">
+                  {records.length === 0 ? (
+                    <EmptyState
+                      icon={Receipt}
+                      title="No TDS deductions recorded"
+                      description="Add your first TDS deduction entry to start tracking section-wise liability."
+                      action={{ label: 'New Deduction', onClick: () => setCurrentView('tds'), icon: Plus }}
+                    />
+                  ) : (
                   <ScrollArea className="max-h-[600px]">
                     <div className="divide-y dark:divide-slate-800/60">
-                      {tdsSections.map((s, i) => (
-                        <motion.div key={s.section} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.04 }} className="flex items-center justify-between px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
+                      {records.filter(r =>
+                        r.deducteeName?.toLowerCase().includes(searchQ.toLowerCase()) ||
+                        r.section?.toLowerCase().includes(searchQ.toLowerCase())
+                      ).map((r, i) => (
+                        <motion.div key={r.id} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.04 }} className="flex items-center justify-between px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
                           <div className="flex items-center gap-4">
                             <div className="h-9 w-9 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
-                              <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">{s.section}</span>
+                              <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">{r.section}</span>
                             </div>
                             <div>
-                              <p className="text-xs font-semibold text-slate-900 dark:text-white">{s.name}</p>
-                              <p className="text-[10px] text-muted-foreground">Rate: {s.rate}</p>
+                              <p className="text-xs font-semibold text-slate-900 dark:text-white">{r.deducteeName}</p>
+                              <p className="text-[10px] text-muted-foreground">Rate: {r.tdsRate}% &middot; PAN: {r.deducteePan ?? '—'}</p>
                             </div>
                           </div>
                           <div className="flex items-center gap-6">
                             <div className="text-right">
-                              <p className="text-xs font-semibold">Deducted: {fmtINR(s.deducted)}</p>
-                              <p className="text-[10px] text-muted-foreground">Deposited: {fmtINR(s.deposited)}</p>
+                              <p className="text-xs font-semibold">TDS: {fmtINR(r.tdsAmount)}</p>
+                              <p className="text-[10px] text-muted-foreground">Payment: {fmtINR(r.paymentAmount)}</p>
                             </div>
                             <div className="text-right">
-                              <p className="text-xs text-muted-foreground">{s.deductees} deductees</p>
-                              <Badge variant="secondary" className={`text-[9px] ${statusColors[s.status]}`}>{s.status}</Badge>
+                              <p className="text-xs text-muted-foreground">{r.quarter}</p>
+                              <Badge variant="secondary" className={`text-[9px] ${statusColors[r.status] ?? statusColors.pending}`}>{r.status}</Badge>
                             </div>
                             <ChevronRight className="h-4 w-4 text-muted-foreground" />
                           </div>
@@ -335,6 +378,7 @@ export default function TDSPage() {
                       ))}
                     </div>
                   </ScrollArea>
+                  )}
                 </CardContent>
               </Card>
             </motion.div>
@@ -351,6 +395,14 @@ export default function TDSPage() {
               </div>
               <Card className="border-slate-200/60 dark:border-slate-800/60">
                 <CardContent className="p-0">
+                  {challans.length === 0 ? (
+                    <EmptyState
+                      icon={Receipt}
+                      title="No challans created"
+                      description="Generate a challan when depositing TDS with your bank to keep track of payments."
+                      action={{ label: 'Create Challan', onClick: () => setCurrentView('tds'), icon: Plus }}
+                    />
+                  ) : (
                   <ScrollArea className="max-h-[600px]">
                     <div className="divide-y dark:divide-slate-800/60">
                       {challans.map((c, i) => (
@@ -362,7 +414,7 @@ export default function TDSPage() {
                             <div>
                               <div className="flex items-center gap-2">
                                 <span className="text-xs font-mono font-semibold text-slate-900 dark:text-white">{c.id}</span>
-                                <Badge variant="secondary" className={`text-[9px] ${statusColors[c.status]}`}>{c.status}</Badge>
+                                <Badge variant="secondary" className={`text-[9px] ${statusColors[c.status] ?? statusColors.pending}`}>{c.status}</Badge>
                               </div>
                               <p className="text-[10px] text-muted-foreground mt-0.5">Section {c.section} &middot; {c.bank} &middot; BSR: {c.bsrCode}</p>
                               <p className="text-[10px] text-muted-foreground">{c.date}</p>
@@ -376,6 +428,7 @@ export default function TDSPage() {
                       ))}
                     </div>
                   </ScrollArea>
+                  )}
                 </CardContent>
               </Card>
             </motion.div>
@@ -384,14 +437,26 @@ export default function TDSPage() {
           {/* ─── RETURNS TAB ─── */}
           <TabsContent value="returns" className="mt-0 space-y-4">
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+              {quarterlyReturns.length === 0 ? (
+                <Card className="border-slate-200/60 dark:border-slate-800/60">
+                  <CardContent>
+                    <EmptyState
+                      icon={FileCheck}
+                      title="No quarterly returns filed"
+                      description="Once you file a TDS return for a quarter, it will appear here with status and forms."
+                      action={{ label: 'File Return', onClick: () => setCurrentView('tds'), icon: Send }}
+                    />
+                  </CardContent>
+                </Card>
+              ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
                 {quarterlyReturns.map((q, i) => (
                   <motion.div key={q.quarter} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.08 }}>
                     <Card className={`border-slate-200/60 dark:border-slate-800/60 ${q.status === 'upcoming' ? 'ring-2 ring-amber-200 dark:ring-amber-800' : ''}`}>
                       <CardContent className="p-4">
                         <div className="flex items-center justify-between mb-2">
-                          <Badge variant="secondary" className={`text-[10px] ${statusColors[q.status]}`}>{q.quarter}</Badge>
-                          <Badge variant="secondary" className={`text-[9px] ${statusColors[q.status]}`}>{q.status}</Badge>
+                          <Badge variant="secondary" className={`text-[10px] ${statusColors[q.status] ?? statusColors.pending}`}>{q.quarter}</Badge>
+                          <Badge variant="secondary" className={`text-[9px] ${statusColors[q.status] ?? statusColors.pending}`}>{q.status}</Badge>
                         </div>
                         <h3 className="text-sm font-semibold text-slate-900 dark:text-white">{q.period}</h3>
                         <p className="text-[10px] text-muted-foreground mt-1">Due: {q.dueDate}</p>
@@ -405,6 +470,7 @@ export default function TDSPage() {
                   </motion.div>
                 ))}
               </div>
+              )}
             </motion.div>
           </TabsContent>
 
@@ -419,6 +485,14 @@ export default function TDSPage() {
               </div>
               <Card className="border-slate-200/60 dark:border-slate-800/60">
                 <CardContent className="p-0">
+                  {certificates.length === 0 ? (
+                    <EmptyState
+                      icon={FileText}
+                      title="No TDS certificates issued"
+                      description="Issue Form 16A certificates to deductees once TDS is deposited for the quarter."
+                      action={{ label: 'Issue Certificates', onClick: () => setCurrentView('tds'), icon: Send }}
+                    />
+                  ) : (
                   <div className="divide-y dark:divide-slate-800/60">
                     {certificates.map((c, i) => (
                       <motion.div key={c.id} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.04 }} className="flex items-center justify-between px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
@@ -444,6 +518,7 @@ export default function TDSPage() {
                       </motion.div>
                     ))}
                   </div>
+                  )}
                 </CardContent>
               </Card>
             </motion.div>

@@ -52,6 +52,8 @@ import {
   useFireDocuments,
 } from '@/hooks/use-firestore'
 import { useAuth } from '@/contexts/AuthContext'
+import { apiPost } from '@/lib/api'
+import { useToast } from '@/hooks/use-toast'
 
 // ─── Types ──────────────────────────────────────────────────────────────────────
 
@@ -211,6 +213,20 @@ const AGENT_CONFIGS: AgentConfig[] = [
   },
 ]
 
+// ─── PT-1-b: Real-agent dispatch map ───────────────────────────────────────────
+// Maps the 7 AgentsPage agent IDs to the 5 real RMB agents that write REAL
+// DB rows via /api/rmb/run-agent. Lives at module scope so the useCallback
+// dependency array stays stable.
+const REAL_AGENT_MAP: Record<AgentId, 'collections' | 'compliance' | 'finance' | 'reporting' | 'gst'> = {
+  'filing-manager': 'gst',
+  'compliance-officer': 'compliance',
+  'invoice-processor': 'gst',
+  'reconciliation-expert': 'gst',
+  'client-relationship': 'collections',
+  'finance-manager': 'finance',
+  'growth-manager': 'reporting',
+}
+
 // ─── Utility ────────────────────────────────────────────────────────────────────
 
 function formatINR(amount: number): string {
@@ -246,6 +262,7 @@ function formatDuration(seconds: number): string {
 
 export default function AIWorkforcePage() {
   const { user } = useAuth()
+  const { toast } = useToast()
 
   // Live Firestore data
   const clients = useFireClients()
@@ -432,6 +449,12 @@ export default function AIWorkforcePage() {
 
   // ─── Run Agent ──────────────────────────────────────────────────────────────
 
+  // PT-1-b: Every Run button dispatches a REAL DB write via /api/rmb/run-agent
+  // alongside the existing LLM analysis. The mapping is at module scope
+  // (REAL_AGENT_MAP above). This creates real Notification / AITask / AuditLog
+  // / AIPrediction / ExecutiveReport / Issue rows so every Run has a real
+  // effect on the database — not just an LLM summary.
+
   const runAgent = useCallback(async (agentId: AgentId) => {
     const config = AGENT_CONFIGS.find(a => a.id === agentId)
     if (!config) return
@@ -553,11 +576,44 @@ export default function AIWorkforcePage() {
       }))
     }
 
+    // PT-1-b: Dispatch REAL DB-writing agent run alongside the LLM analysis.
+    // This is what creates Notification / AITask / AuditLog / AIPrediction /
+    // ExecutiveReport / Issue rows so every "Run" button has a real effect
+    // on the database — not just an LLM summary.
+    try {
+      const realAgentKey = REAL_AGENT_MAP[agentId]
+      const realResult = await apiPost<{
+        success: boolean
+        summary: string
+        metrics?: Record<string, number | string>
+        error?: string
+      }>('/api/rmb/run-agent', { agent: realAgentKey, userId: user?.id })
+      if (realResult.success) {
+        toast({
+          title: `${config.name} → real DB writes`,
+          description: realResult.summary,
+        })
+      } else {
+        toast({
+          title: `${config.name} → real DB writes failed`,
+          description: realResult.error ?? 'Unknown error',
+          variant: 'destructive',
+        })
+      }
+    } catch (e) {
+      // Don't fail the whole Run button — LLM analysis already succeeded
+      toast({
+        title: `${config.name} → real DB writes failed`,
+        description: e instanceof Error ? e.message : 'Unknown error',
+        variant: 'destructive',
+      })
+    }
+
     // Reset to idle after a moment
     setTimeout(() => {
       setAgentStatuses(prev => ({ ...prev, [agentId]: 'idle' }))
     }, 2000)
-  }, [clients.data, returns.data, invoices.data, reconciliations.data, tasks.data, leads.data, deals.data, firm.data, user])
+  }, [clients.data, returns.data, invoices.data, reconciliations.data, tasks.data, leads.data, deals.data, firm.data, user, toast])
 
   // ─── Run All Agents ─────────────────────────────────────────────────────────
 

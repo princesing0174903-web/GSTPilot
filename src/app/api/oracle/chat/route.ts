@@ -53,7 +53,7 @@ import { seedUserBehaviours, getLearningSummary } from '@/lib/execution/learn';
 import { seedTimeline, getTimelineSummary } from '@/lib/execution/timeline';
 import { getAgentRoster } from '@/lib/execution/agents';
 import type { WorkflowStep } from '@/lib/execution/types';
-import { buildRealDataSnapshot, formatRealDataContextBlock } from '@/lib/oracle/real-data';
+import { buildRealDataSnapshot, formatRealDataContextBlock, formatDynamicRecommendationsBlock } from '@/lib/oracle/real-data';
 import { computeTwinOracleContext } from '@/lib/twin/orchestrator';
 import type { TwinOracleContext } from '@/lib/twin/types';
 import { computeCEOOracleContext } from '@/lib/ceo/orchestrator';
@@ -850,6 +850,19 @@ Real data engine is not available right now. Fall back to general guidance witho
 User identity not provided — cannot fetch real connected data. Encourage the user to connect data sources (GSTN, Bank, Gmail) from the Connections page.`;
   }
 
+  // Fetch DYNAMIC RECOMMENDATIONS (PT-1-b) — fail-safe.
+  // Computed from REAL DB state (Invoice, GSTRFiling, Notice, Issue, Payment,
+  // Expense, FilingEvent). Injected into the system prompt so the LLM answer
+  // is grounded in current business reality — never static / canned.
+  let dynamicRecsBlock = '';
+  try {
+    dynamicRecsBlock = await formatDynamicRecommendationsBlock(mem.userId);
+  } catch (err) {
+    console.warn('[Oracle] Dynamic recommendations unavailable:', err);
+    dynamicRecsBlock = `## DYNAMIC RECOMMENDATIONS (PT-1-b)
+Dynamic recommendation engine is not available right now. If the user asks for recommendations, suggest running the RMB agents (Collections / Compliance / Finance / Reporting / GST) from the Run-My-Business page.`;
+  }
+
   return `${BRAND_IDENTITY_PROMPT_BLOCK}
 
 ## WHO YOU ARE
@@ -1252,6 +1265,8 @@ ${executionContextBlock}
 
 ${realDataContextBlock}
 
+${dynamicRecsBlock}
+
 ${twinContextBlock}
 
 ${ceoContextBlock}
@@ -1332,8 +1347,61 @@ export async function POST(request: Request) {
   const lastUser = [...messages].reverse().find((m) => m.role === 'user');
   graphEvents.oracleAnswered(lastUser?.content ?? '');
 
+  // ── PT-1-b: Detect recommendation-seeking messages ──
+  // When the user asks "What should I do?", "Any recommendations?", "Run my
+  // business", "advice", or any variant, prepend the dynamic recommendations
+  // block (computed from REAL DB state) to the LLM context so the answer is
+  // grounded in real numbers — never static / canned.
+  const RECOMMEND_TRIGGERS = [
+    'what should i do',
+    'what should we do',
+    'any recommendation',
+    'recommend',
+    'advice',
+    'advise',
+    'run my business',
+    'run the business',
+    'next step',
+    'next steps',
+    'prioriti',
+    'action item',
+    'to-do',
+    'todo',
+    'what now',
+    'where do i start',
+    'where should i start',
+    'suggest',
+    'suggestion',
+    'what to do',
+    'help me decide',
+    'plan my day',
+    'today\'s plan',
+    'todays plan',
+  ];
+  const lastUserText = (lastUser?.content ?? '').toLowerCase();
+  const wantsRecs = RECOMMEND_TRIGGERS.some((t) => lastUserText.includes(t));
+
+  // Fetch dynamic recs lazily only if the user wants them (they're already in
+  // the system prompt, but we inject an explicit user-side reminder so the LLM
+  // treats them as the primary answer for THIS turn).
+  let recsPreamble = '';
+  if (wantsRecs) {
+    try {
+      const { formatDynamicRecommendationsBlock } = await import('@/lib/oracle/real-data');
+      recsPreamble = await formatDynamicRecommendationsBlock(body.memory?.userId);
+    } catch {
+      recsPreamble = '';
+    }
+  }
+
   const modelMessages: { role: 'assistant' | 'user' | 'system'; content: string }[] = [
     { role: 'assistant', content: systemPrompt },
+    ...(recsPreamble
+      ? [{
+          role: 'user' as const,
+          content: `Before answering, read these DYNAMIC RECOMMENDATIONS computed from my real DB state just now. Use them as your primary answer — cite the exact numbers and priority levels. If the list says to connect data sources, tell me honestly that I have no business data yet.\n\n${recsPreamble}`,
+        }]
+      : []),
     ...toModelMessages(messages),
   ];
 

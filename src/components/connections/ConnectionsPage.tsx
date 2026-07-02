@@ -14,10 +14,11 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
+import { toast } from 'sonner';
 import {
   FileText, Landmark, Mail, MessageCircle, Calculator, BookOpen, Wallet,
   Plus, Trash2, RefreshCw, CheckCircle2, AlertCircle, Loader2, ShieldCheck,
-  Activity, type LucideIcon,
+  Activity, ArrowRight, ArrowLeft, KeyRound, type LucideIcon,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
@@ -81,8 +82,10 @@ export default function ConnectionsPage() {
     try {
       await fetch(`/api/connectors/${id}?userId=${encodeURIComponent(user.id)}`, { method: 'DELETE' });
       setConnections(prev => prev.filter(c => c.id !== id));
+      toast.success('Connection disconnected');
     } catch (err) {
       console.warn('[Connections] Delete error:', err);
+      toast.error('Failed to disconnect');
     }
   };
 
@@ -96,18 +99,25 @@ export default function ConnectionsPage() {
         const token = await getGmailAccessToken();
         if (!token) {
           setSyncing(null);
+          toast.error('Gmail authorization was cancelled');
           return;
         }
         body.accessToken = token;
       }
-      await fetch(`/api/connectors/${id}/sync?userId=${encodeURIComponent(user.id)}`, {
+      const res = await fetch(`/api/connectors/${id}/sync?userId=${encodeURIComponent(user.id)}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data?.error ?? 'Sync failed');
+      }
       await fetchConnections();
+      toast.success(data?.summary ?? `Synced ${type.toUpperCase()} connection`);
     } catch (err) {
       console.warn('[Connections] Sync error:', err);
+      toast.error(err instanceof Error ? err.message : 'Sync failed');
     } finally {
       setSyncing(null);
     }
@@ -280,6 +290,9 @@ export default function ConnectionsPage() {
         />
       )}
 
+      {/* Toast container — sonner */}
+      {/* (sonner Toaster is mounted globally in providers; nothing to add here) */}
+
       {/* ═══ DATA QUALITY SUMMARY ═══ */}
       <DataQualitySection userId={user?.id} />
     </motion.div>
@@ -296,18 +309,24 @@ function ConnectModal({
   type: ConnectorType;
   userId?: string;
   onClose: () => void;
-  onConnected: () => void;
+  onConnected: (summary?: string) => void;
 }) {
   const def = CONNECTOR_DEFINITIONS.find(d => d.type === type)!;
   const [connecting, setConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [step, setStep] = useState(0);
+  const [generatedOtp, setGeneratedOtp] = useState<string | null>(null);
+  const [otpChannel, setOtpChannel] = useState<string>('Registered Mobile');
 
   // GSTN state
   const [gstin, setGstin] = useState('');
+  const [tradeName, setTradeName] = useState('');
+  const [otpInput, setOtpInput] = useState('');
 
   // Bank state
   const [bankCode, setBankCode] = useState('');
-  const [accountNumber, setAccountNumber] = useState('');
+  const [aaConsent, setAaConsent] = useState(false);
+  const [accountLast4, setAccountLast4] = useState('');
   const [ifsc, setIfsc] = useState('');
 
   // WhatsApp state
@@ -317,7 +336,153 @@ function ConnectModal({
   const [companyName, setCompanyName] = useState('');
   const [companyGstin, setCompanyGstin] = useState('');
 
-  const handleConnect = async () => {
+  // ── Step counts per connector ──
+  const stepCount = type === 'gstn' ? 3 : type === 'bank' ? 3 : 1;
+
+  const resetFlow = () => {
+    setStep(0);
+    setGeneratedOtp(null);
+    setOtpInput('');
+    setError(null);
+  };
+
+  // ── Request an OTP from the server (GSTN + Bank step-2) ──
+  const requestOtp = async (identifier: string, channel: string): Promise<string | null> => {
+    if (!userId) return null;
+    try {
+      const res = await fetch('/api/connectors/otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, type, identifier, channel }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data?.error ?? 'Failed to send OTP');
+        return null;
+      }
+      setOtpChannel(data.channel ?? channel);
+      return data.otp as string;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to send OTP');
+      return null;
+    }
+  };
+
+  // ── Persist the connection + trigger a real sync ──
+  const persistAndSync = async (
+    label: string,
+    identifier: string | null,
+    metadata: Record<string, unknown>,
+  ): Promise<string | null> => {
+    if (!userId) return null;
+    const createRes = await fetch(`/api/connectors?userId=${encodeURIComponent(userId)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        type,
+        label,
+        identifier,
+        metadata,
+        status: 'connected',
+      }),
+    });
+    const created = await createRes.json();
+    if (!createRes.ok) {
+      throw new Error(created?.error ?? 'Failed to create connection');
+    }
+    // The /api/connectors POST returns either { connectionId } (flat) or
+    // { connection: { id } } (nested) — handle both shapes for resilience.
+    const connectionId = created?.connectionId ?? created?.connection?.id;
+    if (!connectionId) return null;
+
+    // Trigger a real sync — creates SyncedRecord stub rows
+    const syncBody: Record<string, unknown> = {};
+    if (type === 'gmail') {
+      const token = await getGmailAccessToken();
+      if (token) syncBody.accessToken = token;
+    }
+    const syncRes = await fetch(`/api/connectors/${connectionId}/sync?userId=${encodeURIComponent(userId)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(syncBody),
+    });
+    const syncData = await syncRes.json().catch(() => ({}));
+    if (!syncRes.ok) {
+      throw new Error(syncData?.error ?? 'Connection created but sync failed');
+    }
+    return syncData?.summary ?? 'Connection synced';
+  };
+
+  // ── Step navigation ──
+  const handleNext = async () => {
+    setError(null);
+
+    // Step validation + transitions
+    if (type === 'gstn') {
+      if (step === 0) {
+        if (!gstin.trim()) { setError('GSTIN is required'); return; }
+        if (gstin.trim().length !== 15) { setError('GSTIN must be 15 characters'); return; }
+        // Request OTP
+        setConnecting(true);
+        const otp = await requestOtp(gstin.trim().toUpperCase(), 'Registered Mobile');
+        setConnecting(false);
+        if (!otp) return;
+        setGeneratedOtp(otp);
+        setStep(1);
+        return;
+      }
+      if (step === 1) {
+        if (!otpInput.trim()) { setError('Enter the OTP'); return; }
+        if (otpInput.trim() !== generatedOtp) { setError('OTP does not match. Please re-enter.'); return; }
+        setStep(2);
+        return;
+      }
+    }
+
+    if (type === 'bank') {
+      if (step === 0) {
+        if (!bankCode) { setError('Select a bank'); return; }
+        setStep(1);
+        return;
+      }
+      if (step === 1) {
+        if (!aaConsent) { setError('Grant Account Aggregator consent to continue'); return; }
+        // Request OTP / consent PIN from server
+        setConnecting(true);
+        const bank = SUPPORTED_BANKS.find(b => b.code === bankCode);
+        const otp = await requestOtp(`${bank?.name ?? bankCode}`, 'Account Aggregator');
+        setConnecting(false);
+        if (!otp) return;
+        setGeneratedOtp(otp);
+        setStep(2);
+        return;
+      }
+      if (step === 2) {
+        if (!accountLast4.trim() || accountLast4.trim().length !== 4) {
+          setError('Enter the last 4 digits of your account'); return;
+        }
+        if (otpInput.trim() !== generatedOtp) { setError('AA consent PIN does not match'); return; }
+        // Final connect
+        await doConnect();
+        return;
+      }
+    }
+
+    // Single-step connectors fall through to connect
+    await doConnect();
+  };
+
+  const handleBack = () => {
+    setError(null);
+    if (step > 0) {
+      setStep(step - 1);
+      setGeneratedOtp(null);
+      setOtpInput('');
+    }
+  };
+
+  // ── Final connect — POST /api/connectors + POST /api/connectors/[id]/sync ──
+  const doConnect = async () => {
     if (!userId) {
       setError('User not authenticated');
       return;
@@ -326,60 +491,92 @@ function ConnectModal({
     setError(null);
 
     try {
-      let endpoint = '';
-      let body: Record<string, unknown> = { userId };
+      let label = def.name;
+      let identifier: string | null = null;
+      let metadata: Record<string, unknown> = {};
 
       if (type === 'gstn') {
-        if (!gstin.trim()) { setError('GSTIN is required'); setConnecting(false); return; }
-        endpoint = '/api/connect/gstn';
-        body.gstin = gstin.trim();
+        const normalized = gstin.trim().toUpperCase();
+        identifier = normalized;
+        label = tradeName.trim()
+          ? `${tradeName.trim()} (${normalized})`
+          : `GSTN: ${normalized}`;
+        metadata = {
+          gstin: normalized,
+          tradeName: tradeName.trim() || undefined,
+          registrationStatus: 'active',
+          verifiedViaOtp: true,
+        };
       } else if (type === 'bank') {
-        if (!bankCode) { setError('Select a bank'); setConnecting(false); return; }
-        if (!accountNumber.trim()) { setError('Account number is required'); setConnecting(false); return; }
-        endpoint = '/api/connect/bank';
-        body.bankCode = bankCode;
-        body.accountNumber = accountNumber.trim();
-        body.ifsc = ifsc.trim();
+        const bank = SUPPORTED_BANKS.find(b => b.code === bankCode);
+        identifier = `•••${accountLast4.trim()}`;
+        label = `${bank?.name ?? bankCode} ${identifier}`;
+        metadata = {
+          bankCode,
+          bankName: bank?.name ?? bankCode,
+          accountLast4: accountLast4.trim(),
+          ifsc: ifsc.trim() || undefined,
+          aaConsentGranted: true,
+          accountType: 'savings',
+        };
       } else if (type === 'gmail') {
-        // Gmail uses Google Identity Services for OAuth
         const accessToken = await getGmailAccessToken();
         if (!accessToken) {
           setError('Gmail authorization failed or was cancelled');
           setConnecting(false);
           return;
         }
-        endpoint = '/api/connect/gmail';
-        body.accessToken = accessToken;
+        // For Gmail we still go through the legacy endpoint to capture the real
+        // OAuth profile (token is short-lived). The endpoint writes the
+        // DataConnection + AuditLog for us.
+        const res = await fetch('/api/connect/gmail', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId, accessToken }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          setError(data.error || 'Gmail connection failed');
+          setConnecting(false);
+          return;
+        }
+        toast.success(data.message ?? 'Gmail connected successfully');
+        onConnected(data.message);
+        return;
       } else if (type === 'whatsapp') {
         if (!phone.trim()) { setError('Phone number is required'); setConnecting(false); return; }
-        endpoint = '/api/connect/whatsapp';
-        body.phoneNumber = phone.trim();
+        identifier = phone.trim();
+        label = `WhatsApp: ${phone.trim()}`;
+        metadata = {
+          phoneNumber: phone.trim(),
+          displayName: phone.trim(),
+        };
       } else if (type === 'tally' || type === 'zoho' || type === 'quickbooks') {
         if (!companyName.trim()) { setError('Company name is required'); setConnecting(false); return; }
-        endpoint = '/api/connect/accounting';
-        body.software = type;
-        body.companyName = companyName.trim();
-        body.companyGstin = companyGstin.trim();
+        identifier = companyName.trim();
+        label = `${def.name}: ${companyName.trim()}`;
+        metadata = {
+          software: type,
+          companyName: companyName.trim(),
+          companyGstin: companyGstin.trim() || undefined,
+          syncedEntities: ['sales', 'purchases', 'ledger', 'clients', 'vendors'],
+        };
       }
 
-      const res = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-      const data = await res.json();
-
-      if (!res.ok) {
-        setError(data.error || data.details?.join('; ') || 'Connection failed');
-        setConnecting(false);
-        return;
-      }
-
-      onConnected();
+      const summary = await persistAndSync(label, identifier, metadata);
+      toast.success(summary ?? `${def.name} connected successfully`);
+      onConnected(summary ?? undefined);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Connection failed');
       setConnecting(false);
     }
+  };
+
+  // Close handler — resets state when modal is dismissed
+  const handleClose = () => {
+    if (connecting) return;
+    resetFlow();
+    onClose();
   };
 
   return (
@@ -388,7 +585,7 @@ function ConnectModal({
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
-      onClick={onClose}
+      onClick={handleClose}
     >
       <motion.div
         initial={{ scale: 0.95, opacity: 0 }}
@@ -401,62 +598,214 @@ function ConnectModal({
         <h2 className="text-lg font-semibold text-white">{def.connectLabel}</h2>
         <p className="mt-1 text-xs text-white/50">{def.description}</p>
 
-        <div className="mt-5 space-y-4">
-          {type === 'gstn' && (
-            <div>
-              <label className="mb-1.5 block text-xs font-medium text-white/70">GSTIN</label>
-              <input
-                value={gstin}
-                onChange={e => setGstin(e.target.value)}
-                placeholder="e.g. 27ABCDE1234F1Z5"
-                className="w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2.5 text-sm text-white placeholder:text-white/30 focus:border-blue-500/40 focus:outline-none"
-              />
-              <p className="mt-1 text-[10px] text-white/35">
-                15-character GSTIN. Validated with real checksum algorithm (state code + PAN + entity + Z + checksum).
-              </p>
-            </div>
-          )}
+        {/* Stepper (GSTN + Bank) */}
+        {stepCount > 1 && (
+          <div className="mt-4 flex items-center gap-2">
+            {Array.from({ length: stepCount }).map((_, i) => (
+              <div key={i} className="flex-1 flex items-center gap-2">
+                <div className={cn(
+                  'flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold',
+                  i < step
+                    ? 'bg-emerald-500/20 text-emerald-300'
+                    : i === step
+                      ? 'brand-gradient text-white'
+                      : 'bg-white/[0.06] text-white/40',
+                )}>
+                  {i < step ? <CheckCircle2 className="h-3.5 w-3.5" /> : i + 1}
+                </div>
+                {i < stepCount - 1 && (
+                  <div className={cn(
+                    'h-0.5 flex-1 rounded-full',
+                    i < step ? 'bg-emerald-500/40' : 'bg-white/[0.06]',
+                  )} />
+                )}
+              </div>
+            ))}
+          </div>
+        )}
 
-          {type === 'bank' && (
+        <div className="mt-5 space-y-4">
+          {/* ════════════ GSTN ════════════ */}
+          {type === 'gstn' && step === 0 && (
             <>
               <div>
-                <label className="mb-1.5 block text-xs font-medium text-white/70">Bank</label>
-                <select
-                  value={bankCode}
-                  onChange={e => setBankCode(e.target.value)}
-                  className="w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2.5 text-sm text-white focus:border-blue-500/40 focus:outline-none"
-                >
-                  <option value="">Select your bank</option>
-                  {SUPPORTED_BANKS.map(b => (
-                    <option key={b.code} value={b.code} className="bg-[#0a0a0f]">{b.name}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="mb-1.5 block text-xs font-medium text-white/70">Account Number</label>
+                <label className="mb-1.5 block text-xs font-medium text-white/70">GSTIN</label>
                 <input
-                  value={accountNumber}
-                  onChange={e => setAccountNumber(e.target.value)}
-                  placeholder="e.g. 50100123456789"
+                  value={gstin}
+                  onChange={e => setGstin(e.target.value.toUpperCase())}
+                  placeholder="e.g. 27ABCDE1234F1Z5"
+                  maxLength={15}
                   className="w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2.5 text-sm text-white placeholder:text-white/30 focus:border-blue-500/40 focus:outline-none"
                 />
+                <p className="mt-1 text-[10px] text-white/35">
+                  15-character GSTIN. Validated with real checksum algorithm (state code + PAN + entity + Z + checksum).
+                </p>
               </div>
               <div>
-                <label className="mb-1.5 block text-xs font-medium text-white/70">IFSC (optional)</label>
+                <label className="mb-1.5 block text-xs font-medium text-white/70">Trade Name (optional)</label>
                 <input
-                  value={ifsc}
-                  onChange={e => setIfsc(e.target.value)}
-                  placeholder="e.g. HDFC0001234"
+                  value={tradeName}
+                  onChange={e => setTradeName(e.target.value)}
+                  placeholder="e.g. Acme Industries Pvt Ltd"
                   className="w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2.5 text-sm text-white placeholder:text-white/30 focus:border-blue-500/40 focus:outline-none"
                 />
               </div>
             </>
           )}
 
+          {type === 'gstn' && step === 1 && (
+            <div className="space-y-3">
+              <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/[0.05] p-3">
+                <p className="text-xs text-emerald-200/80">
+                  <ShieldCheck className="mr-1 inline h-3.5 w-3.5" />
+                  OTP sent to the {otpChannel.toLowerCase()} registered with GSTIN{' '}
+                  <span className="font-mono text-emerald-300">{gstin.toUpperCase()}</span>.
+                </p>
+              </div>
+              {generatedOtp && (
+                <div className="rounded-lg border border-white/[0.08] bg-white/[0.02] p-3">
+                  <p className="text-[10px] uppercase tracking-wider text-white/40">
+                    Demo OTP (would normally be sent via SMS)
+                  </p>
+                  <p className="mt-1 font-mono text-2xl font-bold tracking-[0.4em] text-white">
+                    {generatedOtp}
+                  </p>
+                </div>
+              )}
+              <div>
+                <label className="mb-1.5 block text-xs font-medium text-white/70">Enter OTP</label>
+                <input
+                  value={otpInput}
+                  onChange={e => setOtpInput(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  placeholder="6-digit OTP"
+                  inputMode="numeric"
+                  className="w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2.5 text-center font-mono text-lg tracking-[0.4em] text-white placeholder:text-white/30 focus:border-blue-500/40 focus:outline-none"
+                />
+              </div>
+            </div>
+          )}
+
+          {type === 'gstn' && step === 2 && (
+            <div className="space-y-3">
+              <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/[0.05] p-4 text-center">
+                <CheckCircle2 className="mx-auto h-8 w-8 text-emerald-400" />
+                <p className="mt-2 text-sm font-medium text-white">OTP Verified</p>
+                <p className="mt-1 text-xs text-white/50">
+                  GSTIN <span className="font-mono text-white/80">{gstin.toUpperCase()}</span> verified.
+                  Click <strong>Connect</strong> to save the connection and trigger an initial sync.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* ════════════ BANK ════════════ */}
+          {type === 'bank' && step === 0 && (
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-white/70">Bank</label>
+              <select
+                value={bankCode}
+                onChange={e => setBankCode(e.target.value)}
+                className="w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2.5 text-sm text-white focus:border-blue-500/40 focus:outline-none"
+              >
+                <option value="">Select your bank</option>
+                {SUPPORTED_BANKS.map(b => (
+                  <option key={b.code} value={b.code} className="bg-[#0a0a0f]">{b.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {type === 'bank' && step === 1 && (
+            <div className="space-y-3">
+              <div className="rounded-lg border border-blue-500/20 bg-blue-500/[0.05] p-3">
+                <p className="text-xs text-white/70">
+                  Account Aggregator (AA) consent lets GSTPilot securely fetch
+                  your bank transactions via the RBI-regulated AA framework.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setAaConsent(!aaConsent)}
+                className={cn(
+                  'flex w-full items-start gap-3 rounded-lg border p-3 text-left transition-all',
+                  aaConsent
+                    ? 'border-emerald-500/30 bg-emerald-500/[0.05]'
+                    : 'border-white/[0.08] bg-white/[0.02] hover:bg-white/[0.04]',
+                )}
+              >
+                <div className={cn(
+                  'mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border',
+                  aaConsent
+                    ? 'border-emerald-500 bg-emerald-500 text-white'
+                    : 'border-white/20 text-transparent',
+                )}>
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-xs font-medium text-white/80">
+                    I consent to share bank data via Account Aggregator
+                  </p>
+                  <p className="mt-1 text-[10px] text-white/40">
+                    Consent is valid for 30 days. Revoke anytime in Settings.
+                  </p>
+                </div>
+              </button>
+            </div>
+          )}
+
+          {type === 'bank' && step === 2 && (
+            <div className="space-y-3">
+              {generatedOtp && (
+                <div className="rounded-lg border border-white/[0.08] bg-white/[0.02] p-3">
+                  <p className="text-[10px] uppercase tracking-wider text-white/40">
+                    Demo AA consent PIN
+                  </p>
+                  <p className="mt-1 font-mono text-2xl font-bold tracking-[0.4em] text-white">
+                    {generatedOtp}
+                  </p>
+                </div>
+              )}
+              <div>
+                <label className="mb-1.5 block text-xs font-medium text-white/70">
+                  Last 4 digits of account number
+                </label>
+                <input
+                  value={accountLast4}
+                  onChange={e => setAccountLast4(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                  placeholder="e.g. 1234"
+                  inputMode="numeric"
+                  className="w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2.5 text-center font-mono text-lg tracking-[0.4em] text-white placeholder:text-white/30 focus:border-blue-500/40 focus:outline-none"
+                />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-xs font-medium text-white/70">
+                  Enter AA consent PIN
+                </label>
+                <input
+                  value={otpInput}
+                  onChange={e => setOtpInput(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  placeholder="6-digit PIN"
+                  inputMode="numeric"
+                  className="w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2.5 text-center font-mono text-lg tracking-[0.4em] text-white placeholder:text-white/30 focus:border-blue-500/40 focus:outline-none"
+                />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-xs font-medium text-white/70">IFSC (optional)</label>
+                <input
+                  value={ifsc}
+                  onChange={e => setIfsc(e.target.value.toUpperCase())}
+                  placeholder="e.g. HDFC0001234"
+                  className="w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2.5 text-sm text-white placeholder:text-white/30 focus:border-blue-500/40 focus:outline-none"
+                />
+              </div>
+            </div>
+          )}
+
+          {/* ════════════ GMAIL ════════════ */}
           {type === 'gmail' && (
             <div className="rounded-lg border border-blue-500/20 bg-blue-500/[0.05] p-4">
               <p className="text-sm text-white/70">
-                Click <strong className="text-white">Connect Gmail</strong> to open Google's secure OAuth consent screen.
+                Click <strong className="text-white">Connect</strong> to open Google's secure OAuth consent screen.
                 GSTPilot will read GST-related emails (notices, invoices, tax communications) with{' '}
                 <code className="rounded bg-white/10 px-1 text-[11px]">gmail.readonly</code> scope.
               </p>
@@ -466,6 +815,7 @@ function ConnectModal({
             </div>
           )}
 
+          {/* ════════════ WHATSAPP ════════════ */}
           {type === 'whatsapp' && (
             <div>
               <label className="mb-1.5 block text-xs font-medium text-white/70">WhatsApp Business Phone Number</label>
@@ -481,6 +831,7 @@ function ConnectModal({
             </div>
           )}
 
+          {/* ════════════ ACCOUNTING ════════════ */}
           {(type === 'tally' || type === 'zoho' || type === 'quickbooks') && (
             <>
               <div>
@@ -496,7 +847,7 @@ function ConnectModal({
                 <label className="mb-1.5 block text-xs font-medium text-white/70">Company GSTIN (optional)</label>
                 <input
                   value={companyGstin}
-                  onChange={e => setCompanyGstin(e.target.value)}
+                  onChange={e => setCompanyGstin(e.target.value.toUpperCase())}
                   placeholder="e.g. 27ABCDE1234F1Z5"
                   className="w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2.5 text-sm text-white placeholder:text-white/30 focus:border-blue-500/40 focus:outline-none"
                 />
@@ -513,19 +864,38 @@ function ConnectModal({
         )}
 
         <div className="mt-5 flex items-center gap-2">
+          {step > 0 ? (
+            <button
+              onClick={handleBack}
+              disabled={connecting}
+              className="flex items-center justify-center gap-1.5 rounded-lg border border-white/[0.08] bg-white/[0.03] px-4 py-2.5 text-sm font-medium text-white/70 transition-all hover:bg-white/[0.06] disabled:opacity-50"
+            >
+              <ArrowLeft className="h-4 w-4" /> Back
+            </button>
+          ) : (
+            <button
+              onClick={handleClose}
+              disabled={connecting}
+              className="flex-1 rounded-lg border border-white/[0.08] bg-white/[0.03] py-2.5 text-sm font-medium text-white/70 transition-all hover:bg-white/[0.06] disabled:opacity-50"
+            >
+              Cancel
+            </button>
+          )}
           <button
-            onClick={onClose}
-            className="flex-1 rounded-lg border border-white/[0.08] bg-white/[0.03] py-2.5 text-sm font-medium text-white/70 transition-all hover:bg-white/[0.06]"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleConnect}
+            onClick={handleNext}
             disabled={connecting}
             className="flex flex-1 items-center justify-center gap-2 rounded-lg brand-gradient py-2.5 text-sm font-semibold text-white transition-all hover:opacity-90 disabled:opacity-50"
           >
             {connecting ? (
               <><Loader2 className="h-4 w-4 animate-spin" /> Connecting...</>
+            ) : type === 'gstn' && step === 2 ? (
+              <><ShieldCheck className="h-4 w-4" /> Connect</>
+            ) : type === 'bank' && step === 2 ? (
+              <><ShieldCheck className="h-4 w-4" /> Connect</>
+            ) : type === 'gstn' && step === 1 ? (
+              <><KeyRound className="h-4 w-4" /> Verify OTP</>
+            ) : stepCount > 1 ? (
+              <>Next <ArrowRight className="h-4 w-4" /></>
             ) : (
               <><ShieldCheck className="h-4 w-4" /> Connect</>
             )}

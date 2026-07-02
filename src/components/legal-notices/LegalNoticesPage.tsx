@@ -1,6 +1,8 @@
 'use client'
 
 import { useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { apiGet } from '@/lib/api'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -9,6 +11,8 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import { Input } from '@/components/ui/input'
 import { motion } from 'framer-motion'
+import { EmptyState } from '@/components/shared/EmptyState'
+import { useApp } from '@/contexts/AppContext'
 import {
   Scale, TrendingUp, TrendingDown, Search,
   ChevronRight, Download, Filter, Plus, AlertTriangle,
@@ -29,70 +33,94 @@ function formatINR(n: number): string {
 // DATA
 // ═══════════════════════════════════════════════════════════════════════════════
 
-const statCards = [
-  { label: 'Active Notices', value: '8', change: '+2', up: false, icon: Scale, color: 'emerald' },
-  { label: 'Pending Response', value: '5', change: '+1', up: false, icon: Clock, color: 'amber' },
-  { label: 'Overdue', value: '2', change: '+1', up: false, icon: AlertTriangle, color: 'red' },
-  { label: 'Resolved', value: '23', change: '+4', up: true, icon: CheckCircle2, color: 'emerald' },
-  { label: 'Avg Response Time', value: '6.2 days', change: '-1.3', up: true, icon: TrendingDown, color: 'emerald' },
-]
-
+// PT-1-a: Active notices are sourced from /api/notices. Response tracker,
+// templates, and archive do not yet have dedicated APIs and render empty states.
 type NoticeCategory = 'GST' | 'Income Tax' | 'ROC' | 'Labour' | 'Custom'
 type NoticeStatus = 'Active' | 'Pending Response' | 'Responded' | 'Overdue' | 'Resolved' | 'Closed'
 
-const notices = [
-  { id: 'NTC001', type: 'GST SCN' as const, category: 'GST' as NoticeCategory, authority: 'GST Commissioner, Mumbai', subject: 'Show Cause Notice for ITC mismatch FY 2023-24', client: 'Sharma Enterprises Pvt Ltd', date: '15/02/2026', dueDate: '15/03/2026', amount: '₹4,56,780', status: 'Active' as NoticeStatus, priority: 'High' },
-  { id: 'NTC002', type: 'IT Assessment' as const, category: 'Income Tax' as NoticeCategory, authority: 'AO Ward 2(3), Delhi', subject: 'Scrutiny Assessment u/s 143(2) for AY 2024-25', client: 'Mehta Consulting Pvt Ltd', date: '28/01/2026', dueDate: '10/03/2026', amount: '—', status: 'Pending Response' as NoticeStatus, priority: 'High' },
-  { id: 'NTC003', type: 'ROC Notice' as const, category: 'ROC' as NoticeCategory, authority: 'ROC Jaipur', subject: 'Non-filing of ADT-1 for FY 2023-24', client: 'Kumar Textiles Pvt Ltd', date: '10/02/2026', dueDate: '10/03/2026', amount: '₹12,000', status: 'Overdue' as NoticeStatus, priority: 'Medium' },
-  { id: 'NTC004', type: 'GST Assessment' as const, category: 'GST' as NoticeCategory, authority: 'ACST, Ahmedabad', subject: 'Best Judgment Assessment u/s 62 for GSTR-3B non-filing', client: 'Patel Industries LLP', date: '05/02/2026', dueDate: '05/04/2026', amount: '₹2,34,500', status: 'Active' as NoticeStatus, priority: 'Medium' },
-  { id: 'NTC005', type: 'Labour Notice' as const, category: 'Labour' as NoticeCategory, authority: 'Labour Commissioner, Mumbai', subject: 'PF compliance inspection for Q3 FY25', client: 'Sharma Enterprises Pvt Ltd', date: '20/02/2026', dueDate: '20/03/2026', amount: '—', status: 'Pending Response' as NoticeStatus, priority: 'Medium' },
-  { id: 'NTC006', type: 'IT Demand' as const, category: 'Income Tax' as NoticeCategory, authority: 'CIT(A), Mumbai', subject: 'Demand notice u/s 156 for AY 2022-23', client: 'Reddy Infra Pvt Ltd', date: '01/02/2026', dueDate: '01/03/2026', amount: '₹8,90,000', status: 'Overdue' as NoticeStatus, priority: 'Critical' },
-  { id: 'NTC007', type: 'GST Summons' as const, category: 'GST' as NoticeCategory, authority: 'DGGI, Hyderabad', subject: 'Summons u/s 70 for records verification', client: 'Reddy Infra Pvt Ltd', date: '12/02/2026', dueDate: '12/04/2026', amount: '—', status: 'Active' as NoticeStatus, priority: 'High' },
-  { id: 'NTC008', type: 'Custom Notice' as const, category: 'Custom' as NoticeCategory, authority: 'DGFT, New Delhi', subject: 'EPCG export obligation shortfall', client: 'Singh Logistics LLP', date: '18/02/2026', dueDate: '18/04/2026', amount: '₹1,45,600', status: 'Active' as NoticeStatus, priority: 'Low' },
-]
+type ApiNotice = {
+  id: string
+  clientId?: string | null
+  clientTradeName?: string | null
+  clientGstin?: string | null
+  noticeType?: string | null
+  noticeNumber?: string | null
+  noticeDate?: string | null
+  subject?: string | null
+  description?: string | null
+  status?: string | null
+  priority?: string | null
+  dueDate?: string | null
+  responseDate?: string | null
+  resolution?: string | null
+  attachments?: unknown
+  createdAt?: string
+}
 
-const responseTracker = [
-  { noticeId: 'NTC001', stage: 'Notice Received', date: '15/02/2026', action: 'Reviewed notice details and gathered documents', assignee: 'Rajesh Sharma' },
-  { noticeId: 'NTC001', stage: 'Draft Response', date: '22/02/2026', action: 'Prepared detailed reply with ITC reconciliation', assignee: 'Priya Patel' },
-  { noticeId: 'NTC001', stage: 'Review', date: '28/02/2026', action: 'Senior review of draft response', assignee: 'Amit Kumar' },
-  { noticeId: 'NTC002', stage: 'Notice Received', date: '28/01/2026', action: 'Scrutiny notice received, initiated document collection', assignee: 'Arjun Gupta' },
-  { noticeId: 'NTC002', stage: 'Document Collection', date: '10/02/2026', action: 'Gathering bank statements, invoices, and proofs', assignee: 'Meera Joshi' },
-  { noticeId: 'NTC006', stage: 'Notice Received', date: '01/02/2026', action: 'Demand notice received, appeal under consideration', assignee: 'Vikram Singh' },
-  { noticeId: 'NTC006', stage: 'Appeal Filed', date: '15/02/2026', action: 'Filed appeal with CIT(A) for stay of demand', assignee: 'Nisha Agarwal' },
-]
+type Notice = {
+  id: string
+  type: string
+  category: NoticeCategory
+  authority: string
+  subject: string
+  client: string
+  date: string
+  dueDate: string
+  amount: string
+  status: NoticeStatus
+  priority: string
+}
 
-const templates = [
-  { name: 'GST SCN Reply Template', category: 'GST', lastUsed: '22/02/2026', uses: 15, description: 'Standard reply format for GST Show Cause Notices covering ITC mismatch, short payment, and wrong availing of credit' },
-  { name: 'IT Scrutiny Response', category: 'Income Tax', lastUsed: '10/02/2026', uses: 12, description: 'Comprehensive response template for scrutiny assessment u/s 143(2) and 143(3)' },
-  { name: 'ROC Filing Reply', category: 'ROC', lastUsed: '05/01/2026', uses: 8, description: 'Reply template for ROC notices related to non-filing of annual returns and financial statements' },
-  { name: 'PF Inspection Response', category: 'Labour', lastUsed: '20/12/2025', uses: 5, description: 'Response template for PF inspection notices and compliance verification requests' },
-  { name: 'GST Assessment Reply', category: 'GST', lastUsed: '28/01/2026', uses: 10, description: 'Reply template for best judgment assessment u/s 62 and ex-parte assessment orders' },
-  { name: 'IT Demand Appeal', category: 'Income Tax', lastUsed: '15/02/2026', uses: 7, description: 'Template for filing appeal against demand notice u/s 156 with stay application' },
-]
+const NoticesResponse = { notices: [] as ApiNotice[] }
 
-const archiveNotices = [
-  { id: 'NTC-A01', type: 'GST SCN', client: 'Sharma Enterprises Pvt Ltd', subject: 'ITC mismatch Q2 FY23', resolvedDate: '15/12/2025', outcome: 'Resolved - ITC allowed', amount: '₹2,34,500' },
-  { id: 'NTC-A02', type: 'IT Assessment', client: 'Mehta Consulting Pvt Ltd', subject: 'Scrutiny AY 2022-23', resolvedDate: '20/11/2025', outcome: 'No adjustment required', amount: '—' },
-  { id: 'NTC-A03', type: 'ROC Notice', client: 'Patel Industries LLP', subject: 'DIR-3 KYC pending', resolvedDate: '05/10/2025', outcome: 'KYC completed', amount: '₹5,000' },
-  { id: 'NTC-A04', type: 'GST Summons', client: 'Kumar Textiles Pvt Ltd', subject: 'Records verification', resolvedDate: '30/09/2025', outcome: 'Documents submitted', amount: '—' },
-  { id: 'NTC-A05', type: 'IT Demand', client: 'Singh Logistics LLP', subject: 'Demand AY 2021-22', resolvedDate: '18/08/2025', outcome: 'Appeal allowed', amount: '₹3,45,000' },
-  { id: 'NTC-A06', type: 'Labour Notice', client: 'Reddy Infra Pvt Ltd', subject: 'ESI compliance check', resolvedDate: '25/07/2025', outcome: 'Compliance confirmed', amount: '—' },
-  { id: 'NTC-A07', type: 'GST SCN', client: 'Sharma Enterprises Pvt Ltd', subject: 'E-way bill mismatch', resolvedDate: '12/06/2025', outcome: 'Penalty waived', amount: '₹50,000' },
-  { id: 'NTC-A08', type: 'Custom Notice', client: 'Patel Industries LLP', subject: 'Import duty classification', resolvedDate: '28/05/2025', outcome: 'Classification corrected', amount: '₹78,900' },
-]
+function mapNotice(n: ApiNotice): Notice {
+  const type = (n.noticeType || 'notice').toUpperCase()
+  const category: NoticeCategory =
+    type.includes('GST') ? 'GST' :
+    type.includes('IT') || type.includes('INCOME') ? 'Income Tax' :
+    type.includes('ROC') ? 'ROC' :
+    type.includes('LABOUR') || type.includes('PF') || type.includes('ESI') ? 'Labour' :
+    'Custom'
+  const rawStatus = (n.status || 'open').toLowerCase()
+  const status: NoticeStatus =
+    rawStatus === 'open' || rawStatus === 'active' ? 'Active' :
+    rawStatus === 'pending' ? 'Pending Response' :
+    rawStatus === 'responded' ? 'Responded' :
+    rawStatus === 'overdue' ? 'Overdue' :
+    rawStatus === 'resolved' || rawStatus === 'closed' ? 'Resolved' :
+    'Active'
+  return {
+    id: n.id,
+    type,
+    category,
+    authority: '—',
+    subject: n.subject || 'Untitled notice',
+    client: n.clientTradeName || '—',
+    date: n.noticeDate || (n.createdAt ? new Date(n.createdAt).toLocaleDateString('en-IN') : '—'),
+    dueDate: n.dueDate || '—',
+    amount: '—',
+    status,
+    priority: (n.priority || 'medium').charAt(0).toUpperCase() + (n.priority || 'medium').slice(1),
+  }
+}
+
+// Tabs without dedicated APIs render empty states.
+const responseTracker: { noticeId: string; stage: string; date: string; action: string; assignee: string }[] = []
+const templates: { name: string; category: string; lastUsed: string; uses: number; description: string }[] = []
+const archiveNotices: { id: string; type: string; client: string; subject: string; resolvedDate: string; outcome: string; amount: string }[] = []
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // SVG CHARTS
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function NoticeCategoryChart() {
-  const data = [
-    { label: 'GST', value: 3, color: '#10b981' },
-    { label: 'Income Tax', value: 2, color: '#f59e0b' },
-    { label: 'ROC', value: 1, color: '#6ee7b7' },
-    { label: 'Labour', value: 1, color: '#94a3b8' },
-    { label: 'Custom', value: 1, color: '#a7f3d0' },
-  ]
+function NoticeCategoryChart({ notices }: { notices: Notice[] }) {
+  // Derived from real notices.
+  const catCounts: Record<string, number> = {}
+  for (const n of notices) catCounts[n.category] = (catCounts[n.category] ?? 0) + 1
+  const palette: Record<string, string> = {
+    GST: '#10b981', 'Income Tax': '#f59e0b', ROC: '#6ee7b7', Labour: '#94a3b8', Custom: '#a7f3d0',
+  }
+  const data = Object.entries(catCounts).map(([label, value]) => ({ label, value, color: palette[label] ?? '#94a3b8' }))
   const cx = 75
   const cy = 75
   const r = 55
@@ -142,6 +170,7 @@ function NoticeCategoryChart() {
 }
 
 function ResponseTimeChart() {
+  // Static content — response-time trend requires historical notice-response data not yet tracked.
   const months = ['Oct', 'Nov', 'Dec', 'Jan', 'Feb']
   const avgDays = [9.5, 8.2, 7.8, 7.1, 6.2]
   const w = 320
@@ -202,14 +231,31 @@ const stagger = {
 }
 
 export default function LegalNoticesPage() {
+  const { setCurrentView } = useApp()
   const [activeTab, setActiveTab] = useState('overview')
   const [searchQuery, setSearchQuery] = useState('')
+
+  const { data: noticesRes } = useQuery<{ notices: ApiNotice[] }>({
+    queryKey: ['notices', 'all'],
+    queryFn: () => apiGet<{ notices: ApiNotice[] }>('/api/notices'),
+  })
+  const notices: Notice[] = (noticesRes?.notices ?? []).map(mapNotice)
 
   const filteredNotices = notices.filter(n =>
     n.subject.toLowerCase().includes(searchQuery.toLowerCase()) ||
     n.client.toLowerCase().includes(searchQuery.toLowerCase()) ||
     n.type.toLowerCase().includes(searchQuery.toLowerCase())
   )
+
+  // Derived stat cards from real notices.
+  const statCards = [
+    { label: 'Active Notices', value: String(notices.filter(n => n.status === 'Active').length), change: '—', up: false, icon: Scale, color: 'emerald' },
+    { label: 'Pending Response', value: String(notices.filter(n => n.status === 'Pending Response').length), change: '—', up: false, icon: Clock, color: 'amber' },
+    { label: 'Overdue', value: String(notices.filter(n => n.status === 'Overdue').length), change: '—', up: false, icon: AlertTriangle, color: 'red' },
+    { label: 'Resolved', value: String(notices.filter(n => n.status === 'Resolved').length), change: '—', up: true, icon: CheckCircle2, color: 'emerald' },
+    // Static content — average response time requires historical notice-response data not yet tracked.
+    { label: 'Avg Response Time', value: '— days', change: '—', up: true, icon: TrendingDown, color: 'emerald' },
+  ]
 
   const statusColor = (s: NoticeStatus) => {
     switch (s) {
@@ -324,7 +370,7 @@ export default function LegalNoticesPage() {
                   <CardTitle className="text-sm font-semibold">Notices by Category</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <NoticeCategoryChart />
+                  <NoticeCategoryChart notices={notices} />
                 </CardContent>
               </Card>
               <Card>
@@ -342,7 +388,15 @@ export default function LegalNoticesPage() {
                 <CardTitle className="text-sm font-semibold">Overdue Notices</CardTitle>
               </CardHeader>
               <CardContent>
-                {notices.filter(n => n.status === 'Overdue').map((n, i) => (
+                {notices.filter(n => n.status === 'Overdue').length === 0 ? (
+                  <EmptyState
+                    icon={CheckCircle2}
+                    title="No overdue notices"
+                    description="Overdue notices will surface here so you can respond before deadlines pass."
+                    action={{ label: 'Add Notice', onClick: () => setCurrentView('legal-notices'), icon: Plus }}
+                  />
+                ) : (
+                notices.filter(n => n.status === 'Overdue').map((n, i) => (
                   <motion.div
                     key={n.id}
                     initial={{ opacity: 0, x: -8 }}
@@ -365,7 +419,8 @@ export default function LegalNoticesPage() {
                       <Reply className="h-3 w-3" /> Respond Now
                     </Button>
                   </motion.div>
-                ))}
+                ))
+                )}
               </CardContent>
             </Card>
           </TabsContent>
@@ -393,6 +448,14 @@ export default function LegalNoticesPage() {
                 </div>
               </CardHeader>
               <CardContent>
+                {filteredNotices.length === 0 ? (
+                  <EmptyState
+                    icon={Scale}
+                    title="No active notices"
+                    description="Register a notice received from any authority to start tracking responses and deadlines."
+                    action={{ label: 'Add Notice', onClick: () => setCurrentView('legal-notices'), icon: Plus }}
+                  />
+                ) : (
                 <ScrollArea className="max-h-96">
                   <div className="space-y-2">
                     {filteredNotices.map((n, i) => (
@@ -433,6 +496,7 @@ export default function LegalNoticesPage() {
                     ))}
                   </div>
                 </ScrollArea>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
@@ -444,6 +508,14 @@ export default function LegalNoticesPage() {
                 <CardTitle className="text-sm font-semibold">Response Progress Tracker</CardTitle>
               </CardHeader>
               <CardContent>
+                {responseTracker.length === 0 ? (
+                  <EmptyState
+                    icon={Clock}
+                    title="No response activities logged"
+                    description="Once you start drafting replies, each stage (received, draft, review, filed) will be tracked here."
+                    action={{ label: 'Add Notice', onClick: () => setCurrentView('legal-notices'), icon: Plus }}
+                  />
+                ) : (
                 <ScrollArea className="max-h-96">
                   <div className="space-y-2">
                     {responseTracker.map((r, i) => (
@@ -482,6 +554,7 @@ export default function LegalNoticesPage() {
                     ))}
                   </div>
                 </ScrollArea>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
@@ -498,6 +571,14 @@ export default function LegalNoticesPage() {
                 </div>
               </CardHeader>
               <CardContent>
+                {templates.length === 0 ? (
+                  <EmptyState
+                    icon={FileText}
+                    title="No response templates yet"
+                    description="Save your first reply template to speed up responses to recurring notice types."
+                    action={{ label: 'Create Template', onClick: () => setCurrentView('legal-notices'), icon: Plus }}
+                  />
+                ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                   {templates.map((t, i) => (
                     <motion.div
@@ -529,6 +610,7 @@ export default function LegalNoticesPage() {
                     </motion.div>
                   ))}
                 </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
@@ -540,6 +622,14 @@ export default function LegalNoticesPage() {
                 <CardTitle className="text-sm font-semibold">Resolved & Archived Notices</CardTitle>
               </CardHeader>
               <CardContent>
+                {archiveNotices.length === 0 ? (
+                  <EmptyState
+                    icon={Archive}
+                    title="No archived notices"
+                    description="Resolved notices will move here automatically, preserving outcomes and amounts for audit."
+                    action={{ label: 'View Active', onClick: () => setActiveTab('active'), icon: Eye }}
+                  />
+                ) : (
                 <ScrollArea className="max-h-96">
                   <div className="space-y-2">
                     {archiveNotices.map((n, i) => (
@@ -571,6 +661,7 @@ export default function LegalNoticesPage() {
                     ))}
                   </div>
                 </ScrollArea>
+                )}
               </CardContent>
             </Card>
           </TabsContent>

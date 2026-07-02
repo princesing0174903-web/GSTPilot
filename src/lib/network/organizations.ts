@@ -188,27 +188,11 @@ const CANONICAL_EXTERNAL_NODES: Array<{
     verified: true, verificationSource: 'gst', website: 'skytrack.in', email: 'support@skytrack.in', phone: '+91 11 4567 8900',
   },
   // ── Banks ──
-  {
-    nodeType: 'bank', legalName: 'HDFC Bank Limited', tradeName: 'HDFC Bank',
-    industry: 'Finance', sector: 'finance', city: 'Mumbai', state: 'Maharashtra', country: 'IN',
-    employeeCount: 177000, annualRevenue: 950000000000, yearsInBusiness: 31,
-    complianceScore: 97, paymentReliabilityScore: 96, supplierRating: 4.5, customerRating: 4.3,
-    verified: true, verificationSource: 'mca', website: 'hdfcbank.com', email: 'corporate@hdfcbank.com', phone: '+91 22 6160 6161',
-  },
-  {
-    nodeType: 'bank', legalName: 'ICICI Bank Limited', tradeName: 'ICICI Bank',
-    industry: 'Finance', sector: 'finance', city: 'Mumbai', state: 'Maharashtra', country: 'IN',
-    employeeCount: 132000, annualRevenue: 780000000000, yearsInBusiness: 30,
-    complianceScore: 96, paymentReliabilityScore: 95, supplierRating: 4.4, customerRating: 4.2,
-    verified: true, verificationSource: 'mca', website: 'icicibank.com', email: 'corporate@icicibank.com', phone: '+91 22 2653 1414',
-  },
-  {
-    nodeType: 'bank', legalName: 'State Bank of India', tradeName: 'SBI',
-    industry: 'Finance', sector: 'finance', city: 'Mumbai', state: 'Maharashtra', country: 'IN',
-    employeeCount: 245000, annualRevenue: 1100000000000, yearsInBusiness: 69,
-    complianceScore: 95, paymentReliabilityScore: 93, supplierRating: 4.2, customerRating: 4.0,
-    verified: true, verificationSource: 'mca', website: 'sbi.co.in', email: 'customercare@sbi.co.in', phone: '+91 22 2274 0888',
-  },
+  // (Previously this section hardcoded a handful of Indian bank nodes.
+  // Real bank nodes are now derived from the user's connected bank
+  // DataConnection rows — see the network sync flow. This block is
+  // intentionally empty so the canonical seed does not fabricate bank
+  // relationships the user has not actually established.)
   // ── Government ──
   {
     nodeType: 'government', legalName: 'Goods & Services Tax Network', tradeName: 'GSTN',

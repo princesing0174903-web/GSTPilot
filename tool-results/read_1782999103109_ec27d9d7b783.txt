@@ -1,0 +1,1261 @@
+     1→'use client';
+     2→
+     3→import React, { useState, useMemo, useCallback } from 'react';
+     4→import { motion, AnimatePresence } from 'framer-motion';
+     5→import {
+     6→  Card,
+     7→  CardContent,
+     8→} from '@/components/ui/card';
+     9→import { Badge } from '@/components/ui/badge';
+    10→import { Button } from '@/components/ui/button';
+    11→import { Skeleton } from '@/components/ui/skeleton';
+    12→import { ScrollArea } from '@/components/ui/scroll-area';
+    13→import {
+    14→  Sheet,
+    15→  SheetContent,
+    16→  SheetHeader,
+    17→  SheetTitle,
+    18→  SheetDescription,
+    19→} from '@/components/ui/sheet';
+    20→import { Separator } from '@/components/ui/separator';
+    21→import {
+    22→  Select,
+    23→  SelectContent,
+    24→  SelectItem,
+    25→  SelectTrigger,
+    26→  SelectValue,
+    27→} from '@/components/ui/select';
+    28→import {
+    29→  Dialog,
+    30→  DialogContent,
+    31→  DialogHeader,
+    32→  DialogTitle,
+    33→  DialogDescription,
+    34→  DialogFooter,
+    35→} from '@/components/ui/dialog';
+    36→import { Input } from '@/components/ui/input';
+    37→import {
+    38→  FileText,
+    39→  CheckCircle2,
+    40→  AlertTriangle,
+    41→  Plus,
+    42→  Download,
+    43→  ArrowRight,
+    44→  Zap,
+    45→  Send,
+    46→  Loader2,
+    47→  ChevronRight,
+    48→  AlertCircle,
+    49→  Clock,
+    50→  Wrench,
+    51→  Eye,
+    52→  Info,
+    53→  ShieldCheck,
+    54→  FileOutput,
+    55→  Inbox,
+    56→} from 'lucide-react';
+    57→import { toast } from 'sonner';
+    58→import { EmptyState } from '@/components/shared/EmptyState';
+    59→import {
+    60→  useFireReturns,
+    61→  useFireClients,
+    62→  useFireReadyReturns,
+    63→  useFireFiledReturns,
+    64→} from '@/hooks/use-firestore';
+    65→import { createReturn, fileReturn } from '@/lib/firestore-service';
+    66→import type { FirestoreReturn, FirestoreClient } from '@/lib/firestore-schema';
+    67→import type { FilingStatus } from '@/types/gst';
+    68→import { FILING_STATUS_CONFIG } from '@/types/gst';
+    69→import {
+    70→  formatCurrency,
+    71→  periodToLabel,
+    72→  getFinancialYear,
+    73→} from '@/lib/gst-utils';
+    74→
+    75→// ─── Types ────────────────────────────────────────────────────────────────────
+    76→
+    77→type ReturnItem = FirestoreReturn & { id: string };
+    78→type ClientItem = FirestoreClient & { id: string };
+    79→
+    80→type KanbanColumn = 'draft' | 'ready' | 'filed' | 'attention';
+    81→
+    82→interface SectionBreakdown {
+    83→  section: string;
+    84→  invoiceCount: number;
+    85→  taxableValue: number;
+    86→  taxAmount: number;
+    87→}
+    88→
+    89→// ─── Kanban Column Config ────────────────────────────────────────────────────
+    90→
+    91→const KANBAN_COLUMNS: {
+    92→  key: KanbanColumn;
+    93→  label: string;
+    94→  borderTopColor: string;
+    95→  bgColor: string;
+    96→  headerBg: string;
+    97→  countBadgeClass: string;
+    98→  icon: React.ReactNode;
+    99→  emptyText: string;
+   100→}[] = [
+   101→  {
+   102→    key: 'draft',
+   103→    label: 'Draft',
+   104→    borderTopColor: 'border-t-slate-400',
+   105→    bgColor: 'bg-slate-50',
+   106→    headerBg: 'bg-slate-100/80',
+   107→    countBadgeClass: 'bg-slate-200 text-slate-700',
+   108→    icon: <FileText className="size-4 text-slate-500" />,
+   109→    emptyText: 'No draft returns',
+   110→  },
+   111→  {
+   112→    key: 'ready',
+   113→    label: 'Ready to File',
+   114→    borderTopColor: 'border-t-emerald-500',
+   115→    bgColor: 'bg-emerald-50',
+   116→    headerBg: 'bg-emerald-100/80',
+   117→    countBadgeClass: 'bg-emerald-200 text-emerald-800',
+   118→    icon: <Zap className="size-4 text-emerald-600" />,
+   119→    emptyText: 'No returns ready to file',
+   120→  },
+   121→  {
+   122→    key: 'filed',
+   123→    label: 'Filed',
+   124→    borderTopColor: 'border-t-green-600',
+   125→    bgColor: 'bg-green-50',
+   126→    headerBg: 'bg-green-100/80',
+   127→    countBadgeClass: 'bg-green-200 text-green-800',
+   128→    icon: <CheckCircle2 className="size-4 text-green-600" />,
+   129→    emptyText: 'No filed returns yet',
+   130→  },
+   131→  {
+   132→    key: 'attention',
+   133→    label: 'Requires Attention',
+   134→    borderTopColor: 'border-t-red-500',
+   135→    bgColor: 'bg-red-50',
+   136→    headerBg: 'bg-red-100/80',
+   137→    countBadgeClass: 'bg-red-200 text-red-800',
+   138→    icon: <AlertTriangle className="size-4 text-red-500" />,
+   139→    emptyText: 'No issues found',
+   140→  },
+   141→];
+   142→
+   143→// ─── Timeline Steps ──────────────────────────────────────────────────────────
+   144→
+   145→const TIMELINE_STEPS: { key: FilingStatus; label: string }[] = [
+   146→  { key: 'draft', label: 'Draft' },
+   147→  { key: 'prepared', label: 'Prepared' },
+   148→  { key: 'validated', label: 'Validated' },
+   149→  { key: 'reviewed', label: 'Reviewed' },
+   150→  { key: 'generated', label: 'Generated' },
+   151→  { key: 'filed', label: 'Filed' },
+   152→];
+   153→
+   154→const TIMELINE_ORDER: FilingStatus[] = ['draft', 'prepared', 'validated', 'reviewed', 'generated', 'filed'];
+   155→
+   156→// ─── Helpers ─────────────────────────────────────────────────────────────────
+   157→
+   158→function getKanbanColumn(status: FilingStatus): KanbanColumn {
+   159→  switch (status) {
+   160→    case 'draft':
+   161→    case 'prepared':
+   162→      return 'draft';
+   163→    case 'validated':
+   164→    case 'reviewed':
+   165→    case 'generated':
+   166→      return 'ready';
+   167→    case 'filed':
+   168→      return 'filed';
+   169→    case 'reopened':
+   170→      return 'attention';
+   171→    default:
+   172→      return 'draft';
+   173→  }
+   174→}
+   175→
+   176→function getTimelineStepIndex(status: FilingStatus): number {
+   177→  const idx = TIMELINE_ORDER.indexOf(status);
+   178→  return idx >= 0 ? idx : -1;
+   179→}
+   180→
+   181→function getAttentionSummary(ret: ReturnItem): string {
+   182→  if (ret.issuesFound <= 0) return 'No issues';
+   183→  const parts: string[] = [];
+   184→  if (ret.criticalErrors > 0) parts.push(`${ret.criticalErrors} critical error${ret.criticalErrors > 1 ? 's' : ''}`);
+   185→  if (ret.warnings > 0) parts.push(`${ret.warnings} warning${ret.warnings > 1 ? 's' : ''}`);
+   186→  if (ret.issuesFound > 0 && parts.length === 0) parts.push(`${ret.issuesFound} issue${ret.issuesFound > 1 ? 's' : ''}`);
+   187→  return parts.join(' · ');
+   188→}
+   189→
+   190→function getReturnTypeBadgeClass(returnType: string): string {
+   191→  if (returnType === 'GSTR-1') return 'border-teal-200 bg-teal-50 text-teal-700';
+   192→  return 'border-emerald-200 bg-emerald-50 text-emerald-700';
+   193→}
+   194→
+   195→function getClientName(clientId: string, clients: ClientItem[]): string {
+   196→  const client = clients.find(c => c.clientId === clientId || c.id === clientId);
+   197→  return client?.tradeName ?? 'Unknown Client';
+   198→}
+   199→
+   200→function getClientGstin(clientId: string, clients: ClientItem[]): string {
+   201→  const client = clients.find(c => c.clientId === clientId || c.id === clientId);
+   202→  return client?.gstin ?? '';
+   203→}
+   204→
+   205→// ─── Animation Variants ──────────────────────────────────────────────────────
+   206→
+   207→const fadeInUp = {
+   208→  hidden: { opacity: 0, y: 20 },
+   209→  show: { opacity: 1, y: 0, transition: { duration: 0.4, ease: 'easeOut' } },
+   210→};
+   211→
+   212→const staggerContainer = {
+   213→  hidden: { opacity: 0 },
+   214→  show: { opacity: 1, transition: { staggerChildren: 0.07 } },
+   215→};
+   216→
+   217→const staggerItem = {
+   218→  hidden: { opacity: 0, y: 12, scale: 0.97 },
+   219→  show: { opacity: 1, y: 0, scale: 1, transition: { duration: 0.3, ease: 'easeOut' } },
+   220→};
+   221→
+   222→const cardHover = {
+   223→  y: -2,
+   224→  boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+   225→  transition: { duration: 0.18 },
+   226→};
+   227→
+   228→const columnEnter = {
+   229→  hidden: { opacity: 0, y: 24 },
+   230→  show: (i: number) => ({
+   231→    opacity: 1,
+   232→    y: 0,
+   233→    transition: { duration: 0.4, delay: i * 0.1, ease: 'easeOut' },
+   234→  }),
+   235→};
+   236→
+   237→// ═════════════════════════════════════════════════════════════════════════════
+   238→// Main Component
+   239→// ═════════════════════════════════════════════════════════════════════════════
+   240→
+   241→export default function ReturnsPage() {
+   242→  // ── Firestore hooks ─────────────────────────────────────────────────
+   243→  const { data: returns, loading: returnsLoading, error: returnsError } = useFireReturns();
+   244→  const { data: clients, loading: clientsLoading } = useFireClients();
+   245→  const { data: readyReturns } = useFireReadyReturns();
+   246→  const { data: filedReturns } = useFireFiledReturns();
+   247→
+   248→  // ── State ───────────────────────────────────────────────────────────
+   249→  const [selectedReturn, setSelectedReturn] = useState<ReturnItem | null>(null);
+   250→  const [sheetOpen, setSheetOpen] = useState(false);
+   251→  const [filingAction, setFilingAction] = useState<string | null>(null);
+   252→  const [statusFilter, setStatusFilter] = useState<string>('all');
+   253→  const [returnTypeFilter, setReturnTypeFilter] = useState<string>('all');
+   254→  const [periodFilter, setPeriodFilter] = useState<string>('all');
+   255→
+   256→  // Create return dialog
+   257→  const [createDialogOpen, setCreateDialogOpen] = useState(false);
+   258→  const [newClientId, setNewClientId] = useState('');
+   259→  const [newReturnType, setNewReturnType] = useState<'GSTR-1' | 'GSTR-3B'>('GSTR-1');
+   260→  const [newPeriod, setNewPeriod] = useState('');
+   261→  const [creating, setCreating] = useState(false);
+   262→
+   263→  // ── Filtered returns ────────────────────────────────────────────────
+   264→  const filteredReturns = useMemo(() => {
+   265→    let items = returns;
+   266→    if (statusFilter !== 'all') {
+   267→      items = items.filter(r => r.status === statusFilter);
+   268→    }
+   269→    if (returnTypeFilter !== 'all') {
+   270→      items = items.filter(r => r.returnType === returnTypeFilter);
+   271→    }
+   272→    if (periodFilter !== 'all') {
+   273→      items = items.filter(r => r.period === periodFilter);
+   274→    }
+   275→    return items;
+   276→  }, [returns, statusFilter, returnTypeFilter, periodFilter]);
+   277→
+   278→  // ── Unique periods for filter ───────────────────────────────────────
+   279→  const periodOptions = useMemo(() => {
+   280→    const periods = new Set(returns.map(r => r.period));
+   281→    return Array.from(periods).sort().reverse();
+   282→  }, [returns]);
+   283→
+   284→  // ── Derived Kanban data ────────────────────────────────────────────
+   285→  const kanbanData = useMemo(() => {
+   286→    const columns: Record<KanbanColumn, ReturnItem[]> = {
+   287→      draft: [],
+   288→      ready: [],
+   289→      filed: [],
+   290→      attention: [],
+   291→    };
+   292→    filteredReturns.forEach((r) => {
+   293→      const col = getKanbanColumn(r.status);
+   294→      columns[col].push(r);
+   295→    });
+   296→    return columns;
+   297→  }, [filteredReturns]);
+   298→
+   299→  // ── Health metrics ─────────────────────────────────────────────────
+   300→  const healthMetrics = useMemo(() => {
+   301→    const filedCount = returns.filter(r => r.status === 'filed').length;
+   302→    const criticalCount = returns.filter(r => r.criticalErrors > 0).length;
+   303→    const totalReturns = returns.length;
+   304→    const avgCompliance = clients.length > 0
+   305→      ? Math.round(clients.reduce((sum, c) => sum + c.healthScore, 0) / clients.length)
+   306→      : 0;
+   307→
+   308→    const overallHealth = avgCompliance;
+   309→    const filingTimeliness = totalReturns > 0
+   310→      ? Math.round((filedCount / totalReturns) * 100)
+   311→      : 0;
+   312→    const dataAccuracy = totalReturns > 0
+   313→      ? Math.round(((totalReturns - criticalCount) / totalReturns) * 100)
+   314→      : 100;
+   315→    const compliance = avgCompliance;
+   316→    return { overallHealth, filingTimeliness, dataAccuracy, compliance };
+   317→  }, [returns, clients]);
+   318→
+   319→  // ── Handlers ────────────────────────────────────────────────────────
+   320→  const handleCardClick = (ret: ReturnItem) => {
+   321→    setSelectedReturn(ret);
+   322→    setSheetOpen(true);
+   323→  };
+   324→
+   325→  const handleFileReturn = useCallback(async (ret: ReturnItem) => {
+   326→    setFilingAction(ret.id);
+   327→    try {
+   328→      const arn = await fileReturn(ret.id);
+   329→      setFilingAction(null);
+   330→      setSheetOpen(false);
+   331→      setSelectedReturn(null);
+   332→      toast.success(`${ret.returnType} filed successfully!`, {
+   333→        description: `ARN: ${arn}`,
+   334→        duration: 5000,
+   335→      });
+   336→    } catch (error) {
+   337→      setFilingAction(null);
+   338→      toast.error('Filing failed', {
+   339→        description: error instanceof Error ? error.message : 'Unknown error',
+   340→        duration: 5000,
+   341→      });
+   342→    }
+   343→  }, []);
+   344→
+   345→  const handlePrepare = (ret: ReturnItem) => {
+   346→    setSelectedReturn(ret);
+   347→    setSheetOpen(true);
+   348→  };
+   349→
+   350→  const handleDownloadJSON = (ret: ReturnItem) => {
+   351→    toast.success('JSON downloaded', {
+   352→      description: `${ret.returnType} for ${getClientName(ret.clientId, clients)} · ${periodToLabel(ret.period)}`,
+   353→    });
+   354→  };
+   355→
+   356→  const handleCreateReturn = useCallback(async () => {
+   357→    if (!newClientId || !newPeriod) {
+   358→      toast.error('Missing fields', { description: 'Please select a client and period.' });
+   359→      return;
+   360→    }
+   361→    const periodRegex = /^(0[1-9]|1[0-2])-\d{4}$/;
+   362→    if (!periodRegex.test(newPeriod)) {
+   363→      toast.error('Invalid period', { description: 'Period must be in MM-YYYY format (e.g., 06-2025).' });
+   364→      return;
+   365→    }
+   366→    setCreating(true);
+   367→    try {
+   368→      const financialYear = getFinancialYear(newPeriod);
+   369→      await createReturn({
+   370→        returnId: '',
+   371→        clientId: newClientId,
+   372→        returnType: newReturnType,
+   373→        period: newPeriod,
+   374→        financialYear,
+   375→        status: 'draft',
+   376→        filedDate: null,
+   377→        acknowledgmentNumber: null,
+   378→        totalInvoices: 0,
+   379→        readyForFiling: 0,
+   380→        issuesFound: 0,
+   381→        criticalErrors: 0,
+   382→        warnings: 0,
+   383→        totalTaxableValue: 0,
+   384→        totalTax: 0,
+   385→        jsonPayload: null,
+   386→        assignedTo: null,
+   387→        reviewedBy: null,
+   388→      });
+   389→      toast.success('Return created', {
+   390→        description: `${newReturnType} for ${newPeriod} created as Draft.`,
+   391→      });
+   392→      setCreateDialogOpen(false);
+   393→      setNewClientId('');
+   394→      setNewReturnType('GSTR-1');
+   395→      setNewPeriod('');
+   396→    } catch (error) {
+   397→      toast.error('Failed to create return', {
+   398→        description: error instanceof Error ? error.message : 'Unknown error',
+   399→      });
+   400→    } finally {
+   401→      setCreating(false);
+   402→    }
+   403→  }, [newClientId, newReturnType, newPeriod, clients]);
+   404→
+   405→  // ── Loading State ──────────────────────────────────────────────────
+   406→  if (returnsLoading || clientsLoading) {
+   407→    return (
+   408→      <div className="space-y-5 p-4 md:p-6">
+   409→        <div className="flex items-center justify-between">
+   410→          <div className="flex items-center gap-3">
+   411→            <Skeleton className="h-8 w-44" />
+   412→            <Skeleton className="h-6 w-20 rounded-full" />
+   413→          </div>
+   414→          <div className="flex items-center gap-2">
+   415→            <Skeleton className="h-9 w-32" />
+   416→            <Skeleton className="h-9 w-36" />
+   417→          </div>
+   418→        </div>
+   419→        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+   420→          {[1, 2, 3, 4].map((i) => (
+   421→            <div key={i} className="space-y-3">
+   422→              <Skeleton className="h-12 w-full rounded-t-lg" />
+   423→              <div className="space-y-2 p-2">
+   424→                <Skeleton className="h-28 w-full rounded-lg" />
+   425→                <Skeleton className="h-28 w-full rounded-lg" />
+   426→              </div>
+   427→            </div>
+   428→          ))}
+   429→        </div>
+   430→      </div>
+   431→    );
+   432→  }
+   433→
+   434→  // ── Error State ────────────────────────────────────────────────────
+   435→  if (returnsError) {
+   436→    return (
+   437→      <div className="flex flex-col items-center justify-center h-full min-h-[400px] space-y-4 p-6">
+   438→        <AlertCircle className="size-12 text-red-400" />
+   439→        <h2 className="text-lg font-semibold text-foreground">Failed to load returns</h2>
+   440→        <p className="text-sm text-muted-foreground">{returnsError}</p>
+   441→      </div>
+   442→    );
+   443→  }
+   444→
+   445→  // ═════════════════════════════════════════════════════════════════════
+   446→  // Card Renderers
+   447→  // ═════════════════════════════════════════════════════════════════════
+   448→
+   449→  const renderDraftCard = (ret: ReturnItem) => {
+   450→    const clientName = getClientName(ret.clientId, clients);
+   451→    const periodLabel = periodToLabel(ret.period);
+   452→
+   453→    return (
+   454→      <motion.div
+   455→        key={ret.id}
+   456→        variants={staggerItem}
+   457→        whileHover={cardHover}
+   458→        className="cursor-pointer"
+   459→        onClick={() => handleCardClick(ret)}
+   460→      >
+   461→        <Card className="border shadow-sm bg-white transition-shadow hover:shadow-md">
+   462→          <CardContent className="p-3.5 space-y-2.5">
+   463→            <p className="text-sm font-semibold truncate leading-tight">{clientName}</p>
+   464→            <div className="flex items-center gap-1.5">
+   465→              <Badge variant="outline" className={`text-[10px] px-1.5 py-0 h-5 font-semibold ${getReturnTypeBadgeClass(ret.returnType)}`}>
+   466→                {ret.returnType}
+   467→              </Badge>
+   468→              <span className="text-[11px] text-muted-foreground">{periodLabel}</span>
+   469→            </div>
+   470→            <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+   471→              <FileText className="size-3" />
+   472→              <span>{ret.totalInvoices} invoices</span>
+   473→            </div>
+   474→            {ret.issuesFound > 0 && (
+   475→              <div className="flex items-center gap-1">
+   476→                <Badge className="text-[10px] px-1.5 py-0 h-5 bg-amber-100 text-amber-700 border-amber-200 hover:bg-amber-100 font-medium">
+   477→                  <AlertCircle className="size-2.5 mr-0.5" />
+   478→                  {ret.issuesFound} issues
+   479→                </Badge>
+   480→              </div>
+   481→            )}
+   482→            <Button
+   483→              size="sm"
+   484→              variant="outline"
+   485→              className="w-full h-7 text-xs gap-1.5 border-slate-300 hover:border-emerald-400 hover:text-emerald-700 hover:bg-emerald-50"
+   486→              onClick={(e) => { e.stopPropagation(); handlePrepare(ret); }}
+   487→            >
+   488→              <ArrowRight className="size-3" />
+   489→              Prepare
+   490→            </Button>
+   491→          </CardContent>
+   492→        </Card>
+   493→      </motion.div>
+   494→    );
+   495→  };
+   496→
+   497→  const renderReadyCard = (ret: ReturnItem) => {
+   498→    const clientName = getClientName(ret.clientId, clients);
+   499→    const periodLabel = periodToLabel(ret.period);
+   500→    const isFiling = filingAction === ret.id;
+   501→
+   502→    return (
+   503→      <motion.div
+   504→        key={ret.id}
+   505→        variants={staggerItem}
+   506→        whileHover={cardHover}
+   507→        className="cursor-pointer"
+   508→        onClick={() => handleCardClick(ret)}
+   509→      >
+   510→        <Card className="border shadow-sm bg-white transition-shadow hover:shadow-md">
+   511→          <CardContent className="p-3.5 space-y-2.5">
+   512→            <p className="text-sm font-semibold truncate leading-tight">{clientName}</p>
+   513→            <div className="flex items-center gap-1.5">
+   514→              <Badge variant="outline" className={`text-[10px] px-1.5 py-0 h-5 font-semibold ${getReturnTypeBadgeClass(ret.returnType)}`}>
+   515→                {ret.returnType}
+   516→              </Badge>
+   517→              <span className="text-[11px] text-muted-foreground">{periodLabel}</span>
+   518→            </div>
+   519→            <div className="flex items-baseline gap-1">
+   520→              <span className="text-lg font-bold text-emerald-700">{formatCurrency(ret.totalTax)}</span>
+   521→              <span className="text-[10px] text-muted-foreground">total tax</span>
+   522→            </div>
+   523→            <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+   524→              <FileText className="size-3" />
+   525→              <span>{ret.totalInvoices} invoices</span>
+   526→            </div>
+   527→            <Button
+   528→              size="sm"
+   529→              className="w-full h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm font-semibold"
+   530→              onClick={(e) => { e.stopPropagation(); handleFileReturn(ret); }}
+   531→              disabled={isFiling}
+   532→            >
+   533→              {isFiling ? <Loader2 className="size-3.5 animate-spin" /> : <Send className="size-3.5" />}
+   534→              {isFiling ? 'Filing...' : 'File Return'}
+   535→            </Button>
+   536→          </CardContent>
+   537→        </Card>
+   538→      </motion.div>
+   539→    );
+   540→  };
+   541→
+   542→  const renderFiledCard = (ret: ReturnItem) => {
+   543→    const clientName = getClientName(ret.clientId, clients);
+   544→
+   545→    return (
+   546→      <motion.div
+   547→        key={ret.id}
+   548→        variants={staggerItem}
+   549→        whileHover={cardHover}
+   550→        className="cursor-pointer"
+   551→        onClick={() => handleCardClick(ret)}
+   552→      >
+   553→        <Card className="border shadow-sm bg-white transition-shadow hover:shadow-md">
+   554→          <CardContent className="p-3.5 space-y-2.5">
+   555→            <p className="text-sm font-semibold truncate leading-tight">{clientName}</p>
+   556→            <div className="flex items-center gap-1.5">
+   557→              <Badge variant="outline" className={`text-[10px] px-1.5 py-0 h-5 font-semibold ${getReturnTypeBadgeClass(ret.returnType)}`}>
+   558→                {ret.returnType}
+   559→              </Badge>
+   560→            </div>
+   561→            {ret.acknowledgmentNumber && (
+   562→              <div className="rounded-md bg-green-50 border border-green-100 px-2.5 py-1.5">
+   563→                <p className="text-[10px] text-green-600 font-medium">ARN</p>
+   564→                <p className="text-xs font-mono font-semibold text-green-800">{ret.acknowledgmentNumber}</p>
+   565→              </div>
+   566→            )}
+   567→            {ret.filedDate && (
+   568→              <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+   569→                <Clock className="size-3" />
+   570→                <span>
+   571→                  Filed {new Date(ret.filedDate).toLocaleDateString('en-IN', {
+   572→                    day: '2-digit', month: 'short', year: 'numeric',
+   573→                  })}
+   574→                </span>
+   575→              </div>
+   576→            )}
+   577→            <button
+   578→              className="flex items-center gap-1 text-[11px] font-medium text-emerald-600 hover:text-emerald-800 transition-colors"
+   579→              onClick={(e) => { e.stopPropagation(); handleDownloadJSON(ret); }}
+   580→            >
+   581→              <Download className="size-3" />
+   582→              Download JSON
+   583→            </button>
+   584→          </CardContent>
+   585→        </Card>
+   586→      </motion.div>
+   587→    );
+   588→  };
+   589→
+   590→  const renderAttentionCard = (ret: ReturnItem) => {
+   591→    const clientName = getClientName(ret.clientId, clients);
+   592→    const issueSummary = getAttentionSummary(ret);
+   593→
+   594→    return (
+   595→      <motion.div
+   596→        key={ret.id}
+   597→        variants={staggerItem}
+   598→        whileHover={cardHover}
+   599→        className="cursor-pointer"
+   600→        onClick={() => handleCardClick(ret)}
+   601→      >
+   602→        <Card className="border shadow-sm bg-white transition-shadow hover:shadow-md border-l-4 border-l-red-400">
+   603→          <CardContent className="p-3.5 space-y-2.5">
+   604→            <p className="text-sm font-semibold truncate leading-tight">{clientName}</p>
+   605→            <div className="flex items-center gap-1.5">
+   606→              <Badge variant="outline" className={`text-[10px] px-1.5 py-0 h-5 font-semibold ${getReturnTypeBadgeClass(ret.returnType)}`}>
+   607→                {ret.returnType}
+   608→              </Badge>
+   609→            </div>
+   610→            <div className="rounded-md bg-red-50 border border-red-100 px-2.5 py-2">
+   611→              <div className="flex items-center gap-1.5 text-[11px] font-semibold text-red-700">
+   612→                <AlertTriangle className="size-3 shrink-0" />
+   613→                <span>{issueSummary}</span>
+   614→              </div>
+   615→            </div>
+   616→            <Button
+   617→              size="sm"
+   618→              variant="outline"
+   619→              className="w-full h-7 text-xs gap-1.5 border-red-200 text-red-700 hover:bg-red-50 hover:border-red-300"
+   620→              onClick={(e) => {
+   621→                e.stopPropagation();
+   622→                toast.info('Navigate to Reconciliation to fix issues');
+   623→              }}
+   624→            >
+   625→              <Wrench className="size-3" />
+   626→              Fix Issues
+   627→            </Button>
+   628→            <button
+   629→              className="flex items-center gap-1 text-[11px] font-medium text-slate-500 hover:text-slate-700 transition-colors"
+   630→              onClick={(e) => { e.stopPropagation(); handleCardClick(ret); }}
+   631→            >
+   632→              <Eye className="size-3" />
+   633→              View Details
+   634→            </button>
+   635→          </CardContent>
+   636→        </Card>
+   637→      </motion.div>
+   638→    );
+   639→  };
+   640→
+   641→  const renderCard = (ret: ReturnItem, column: KanbanColumn) => {
+   642→    switch (column) {
+   643→      case 'draft': return renderDraftCard(ret);
+   644→      case 'ready': return renderReadyCard(ret);
+   645→      case 'filed': return renderFiledCard(ret);
+   646→      case 'attention': return renderAttentionCard(ret);
+   647→    }
+   648→  };
+   649→
+   650→  // ── Kanban Column Renderer ─────────────────────────────────────────
+   651→  const renderKanbanColumn = (colConfig: typeof KANBAN_COLUMNS[number], index: number) => {
+   652→    const items = kanbanData[colConfig.key];
+   653→
+   654→    return (
+   655→      <motion.div
+   656→        key={colConfig.key}
+   657→        custom={index}
+   658→        variants={columnEnter}
+   659→        initial="hidden"
+   660→        animate="show"
+   661→        className={`flex flex-col rounded-xl border-t-4 ${colConfig.borderTopColor} ${colConfig.bgColor} border border-slate-200/60 min-h-0`}
+   662→      >
+   663→        <div className={`flex items-center justify-between px-3.5 py-3 ${colConfig.headerBg} rounded-t-[8px] shrink-0`}>
+   664→          <div className="flex items-center gap-2">
+   665→            {colConfig.icon}
+   666→            <span className="text-sm font-semibold tracking-tight">{colConfig.label}</span>
+   667→            {colConfig.key === 'filed' && items.length > 0 && <CheckCircle2 className="size-3.5 text-green-600" />}
+   668→            {colConfig.key === 'attention' && items.length > 0 && <AlertCircle className="size-3.5 text-red-500" />}
+   669→          </div>
+   670→          <Badge className={`h-5 min-w-[22px] justify-center text-[11px] font-bold border-0 ${colConfig.countBadgeClass}`}>
+   671→            {items.length}
+   672→          </Badge>
+   673→        </div>
+   674→        <ScrollArea className="flex-1 max-h-[calc(100vh-280px)]">
+   675→          <div className="p-2.5 space-y-2.5">
+   676→            {items.length === 0 ? (
+   677→              <div className="flex flex-col items-center justify-center py-10 text-center">
+   678→                <div className="size-12 rounded-full bg-white/60 flex items-center justify-center mb-2">
+   679→                  {React.cloneElement(colConfig.icon as React.ReactElement, { className: 'size-5 opacity-25' })}
+   680→                </div>
+   681→                <p className="text-xs text-muted-foreground/70">{colConfig.emptyText}</p>
+   682→              </div>
+   683→            ) : (
+   684→              <motion.div variants={staggerContainer} initial="hidden" animate="show" className="space-y-2.5">
+   685→                {items.map((ret) => renderCard(ret, colConfig.key))}
+   686→              </motion.div>
+   687→            )}
+   688→          </div>
+   689→        </ScrollArea>
+   690→      </motion.div>
+   691→    );
+   692→  };
+   693→
+   694→  // ── Detail Sheet ───────────────────────────────────────────────────
+   695→  const renderDetailSheet = () => {
+   696→    if (!selectedReturn) return null;
+   697→    const ret = selectedReturn;
+   698→    const clientName = getClientName(ret.clientId, clients);
+   699→    const clientGstin = getClientGstin(ret.clientId, clients);
+   700→    const column = getKanbanColumn(ret.status);
+   701→    const timelineIndex = getTimelineStepIndex(ret.status);
+   702→    const isFiling = filingAction === ret.id;
+   703→
+   704→    return (
+   705→      <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
+   706→        <SheetContent side="right" className="w-full sm:max-w-lg overflow-y-auto p-0">
+   707→          <SheetHeader className="p-6 pb-4 border-b bg-gradient-to-b from-emerald-50/60 to-transparent">
+   708→            <SheetTitle className="text-lg font-bold">{clientName}</SheetTitle>
+   709→            <SheetDescription className="text-sm font-mono">{clientGstin}</SheetDescription>
+   710→            <div className="flex items-center gap-2 mt-1">
+   711→              <Badge variant="outline" className={`text-xs font-semibold ${getReturnTypeBadgeClass(ret.returnType)}`}>
+   712→                {ret.returnType}
+   713→              </Badge>
+   714→              <Badge
+   715→                variant="outline"
+   716→                className={`text-xs ${FILING_STATUS_CONFIG[ret.status]?.bgColor ?? 'bg-slate-100'} ${FILING_STATUS_CONFIG[ret.status]?.color ?? 'text-slate-700'}`}
+   717→              >
+   718→                {FILING_STATUS_CONFIG[ret.status]?.label ?? ret.status}
+   719→              </Badge>
+   720→              <span className="text-xs text-muted-foreground">{periodToLabel(ret.period)}</span>
+   721→            </div>
+   722→          </SheetHeader>
+   723→
+   724→          <div className="p-6 space-y-6">
+   725→            {/* ── Filing Timeline ──────────────────────────────────── */}
+   726→            <div className="space-y-2">
+   727→              <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+   728→                Filing Timeline
+   729→              </h4>
+   730→              <div className="flex items-center gap-0">
+   731→                {TIMELINE_STEPS.map((step, i) => {
+   732→                  const isCompleted = timelineIndex >= 0 && i <= timelineIndex;
+   733→                  const isCurrent = timelineIndex >= 0 && i === timelineIndex;
+   734→                  const isReopened = timelineIndex === -1;
+   735→
+   736→                  return (
+   737→                    <React.Fragment key={step.key}>
+   738→                      {i > 0 && (
+   739→                        <div
+   740→                          className={`flex-1 h-0.5 mx-1 rounded-full ${
+   741→                            isCompleted && !isReopened ? 'bg-emerald-400' : 'bg-slate-200'
+   742→                          }`}
+   743→                        />
+   744→                      )}
+   745→                      <div className="flex flex-col items-center gap-1.5">
+   746→                        <div
+   747→                          className={`flex size-7 items-center justify-center rounded-full shrink-0 ${
+   748→                            isReopened
+   749→                              ? 'bg-red-100 text-red-500 ring-2 ring-red-200'
+   750→                              : isCompleted
+   751→                              ? 'bg-emerald-600 text-white'
+   752→                              : isCurrent
+   753→                              ? 'bg-emerald-100 text-emerald-700 ring-2 ring-emerald-300'
+   754→                              : 'bg-slate-100 text-slate-400'
+   755→                          }`}
+   756→                        >
+   757→                          {isCompleted && !isReopened ? (
+   758→                            <CheckCircle2 className="size-3.5" />
+   759→                          ) : isReopened && i === 0 ? (
+   760→                            <AlertTriangle className="size-3.5" />
+   761→                          ) : (
+   762→                            <ChevronRight className="size-3.5" />
+   763→                          )}
+   764→                        </div>
+   765→                        <span
+   766→                          className={`text-[10px] font-medium whitespace-nowrap ${
+   767→                            isCompleted && !isReopened
+   768→                              ? 'text-emerald-700'
+   769→                              : isReopened
+   770→                              ? 'text-red-600'
+   771→                              : 'text-muted-foreground'
+   772→                          }`}
+   773→                        >
+   774→                          {step.label}
+   775→                        </span>
+   776→                      </div>
+   777→                    </React.Fragment>
+   778→                  );
+   779→                })}
+   780→              </div>
+   781→            </div>
+   782→
+   783→            <Separator />
+   784→
+   785→            {/* ── Key Metrics ──────────────────────────────────────── */}
+   786→            <div className="grid grid-cols-3 gap-3">
+   787→              <div className="rounded-lg bg-slate-50 p-3 text-center">
+   788→                <p className="text-[10px] text-muted-foreground">Invoices</p>
+   789→                <p className="text-lg font-bold">{ret.totalInvoices}</p>
+   790→              </div>
+   791→              <div className="rounded-lg bg-emerald-50 p-3 text-center">
+   792→                <p className="text-[10px] text-muted-foreground">Taxable Value</p>
+   793→                <p className="text-sm font-bold text-emerald-700">{formatCurrency(ret.totalTaxableValue)}</p>
+   794→              </div>
+   795→              <div className="rounded-lg bg-teal-50 p-3 text-center">
+   796→                <p className="text-[10px] text-muted-foreground">Total Tax</p>
+   797→                <p className="text-sm font-bold text-teal-700">{formatCurrency(ret.totalTax)}</p>
+   798→              </div>
+   799→            </div>
+   800→
+   801→            <Separator />
+   802→
+   803→            {/* ── Issues Summary ───────────────────────────────────── */}
+   804→            <div className="space-y-3">
+   805→              <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+   806→                <AlertTriangle className="size-3" />
+   807→                Issues
+   808→              </h4>
+   809→              <div className="rounded-lg border bg-white p-3.5 space-y-2">
+   810→                <div className="flex items-center justify-between text-xs">
+   811→                  <span className="text-muted-foreground">Critical Errors</span>
+   812→                  <span className={`font-medium ${ret.criticalErrors > 0 ? 'text-red-700' : 'text-emerald-700'}`}>
+   813→                    {ret.criticalErrors}
+   814→                  </span>
+   815→                </div>
+   816→                <div className="flex items-center justify-between text-xs">
+   817→                  <span className="text-muted-foreground">Warnings</span>
+   818→                  <span className={`font-medium ${ret.warnings > 0 ? 'text-amber-700' : 'text-emerald-700'}`}>
+   819→                    {ret.warnings}
+   820→                  </span>
+   821→                </div>
+   822→                <div className="flex items-center justify-between text-xs">
+   823→                  <span className="text-muted-foreground">Total Issues</span>
+   824→                  <span className={`font-medium ${ret.issuesFound > 0 ? 'text-amber-700' : 'text-emerald-700'}`}>
+   825→                    {ret.issuesFound}
+   826→                  </span>
+   827→                </div>
+   828→                <Separator />
+   829→                <div className="flex items-center justify-between text-xs">
+   830→                  <span className="text-muted-foreground">Ready for Filing</span>
+   831→                  <span className="font-medium text-emerald-700">{ret.readyForFiling}</span>
+   832→                </div>
+   833→              </div>
+   834→            </div>
+   835→
+   836→            <Separator />
+   837→
+   838→            {/* ── Tax Breakdown ────────────────────────────────────── */}
+   839→            <div className="space-y-3">
+   840→              <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+   841→                <Info className="size-3" />
+   842→                Tax Breakdown
+   843→              </h4>
+   844→              <div className="rounded-lg border bg-white p-3.5 space-y-2.5">
+   845→                {(() => {
+   846→                  const total = ret.totalTax;
+   847→                  const cgst = Math.round(total * 0.4);
+   848→                  const sgst = Math.round(total * 0.4);
+   849→                  const igst = total - cgst - sgst;
+   850→                  return (
+   851→                    <>
+   852→                      <div className="flex items-center justify-between text-xs">
+   853→                        <span className="text-muted-foreground">CGST</span>
+   854→                        <span className="font-medium">{formatCurrency(cgst)}</span>
+   855→                      </div>
+   856→                      <div className="flex items-center justify-between text-xs">
+   857→                        <span className="text-muted-foreground">SGST</span>
+   858→                        <span className="font-medium">{formatCurrency(sgst)}</span>
+   859→                      </div>
+   860→                      <div className="flex items-center justify-between text-xs">
+   861→                        <span className="text-muted-foreground">IGST</span>
+   862→                        <span className="font-medium">{formatCurrency(igst)}</span>
+   863→                      </div>
+   864→                      <Separator />
+   865→                      <div className="flex items-center justify-between text-sm font-bold">
+   866→                        <span>Total Tax</span>
+   867→                        <span className="text-emerald-700">{formatCurrency(total)}</span>
+   868→                      </div>
+   869→                    </>
+   870→                  );
+   871→                })()}
+   872→              </div>
+   873→            </div>
+   874→
+   875→            <Separator />
+   876→
+   877→            {/* ── ARN & Filed Date ─────────────────────────────────── */}
+   878→            {(ret.acknowledgmentNumber || ret.filedDate) && (
+   879→              <>
+   880→                <div className="space-y-3">
+   881→                  <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+   882→                    <ShieldCheck className="size-3" />
+   883→                    Filing Details
+   884→                  </h4>
+   885→                  <div className="rounded-lg border bg-green-50 p-3.5 space-y-2">
+   886→                    {ret.acknowledgmentNumber && (
+   887→                      <div className="flex items-center justify-between text-xs">
+   888→                        <span className="text-muted-foreground">ARN</span>
+   889→                        <span className="font-mono font-semibold text-green-800">{ret.acknowledgmentNumber}</span>
+   890→                      </div>
+   891→                    )}
+   892→                    {ret.filedDate && (
+   893→                      <div className="flex items-center justify-between text-xs">
+   894→                        <span className="text-muted-foreground">Filed Date</span>
+   895→                        <span className="font-medium">
+   896→                          {new Date(ret.filedDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+   897→                        </span>
+   898→                      </div>
+   899→                    )}
+   900→                  </div>
+   901→                </div>
+   902→                <Separator />
+   903→              </>
+   904→            )}
+   905→
+   906→            {/* ── Action Buttons ───────────────────────────────────── */}
+   907→            <div className="pt-2">
+   908→              {column === 'draft' && (
+   909→                <Button
+   910→                  className="w-full gap-2 bg-emerald-600 hover:bg-emerald-700 text-white"
+   911→                  onClick={() => handlePrepare(ret)}
+   912→                >
+   913→                  <ArrowRight className="size-4" />
+   914→                  Prepare Return
+   915→                </Button>
+   916→              )}
+   917→              {column === 'ready' && (
+   918→                <Button
+   919→                  className="w-full gap-2 bg-emerald-600 hover:bg-emerald-700 text-white"
+   920→                  onClick={() => handleFileReturn(ret)}
+   921→                  disabled={isFiling}
+   922→                >
+   923→                  {isFiling ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
+   924→                  {isFiling ? 'Filing...' : 'File Return'}
+   925→                </Button>
+   926→              )}
+   927→              {column === 'filed' && (
+   928→                <Button
+   929→                  variant="outline"
+   930→                  className="w-full gap-2 border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+   931→                  onClick={() => handleDownloadJSON(ret)}
+   932→                >
+   933→                  <Download className="size-4" />
+   934→                  Download JSON
+   935→                </Button>
+   936→              )}
+   937→              {column === 'attention' && (
+   938→                <div className="flex gap-2">
+   939→                  <Button
+   940→                    variant="outline"
+   941→                    className="flex-1 gap-2 border-red-200 text-red-700 hover:bg-red-50"
+   942→                    onClick={() => toast.info('Navigate to Reconciliation to fix issues')}
+   943→                  >
+   944→                    <Wrench className="size-4" />
+   945→                    Fix Issues
+   946→                  </Button>
+   947→                  <Button variant="outline" className="flex-1 gap-2" onClick={() => handleCardClick(ret)}>
+   948→                    <Eye className="size-4" />
+   949→                    View Details
+   950→                  </Button>
+   951→                </div>
+   952→              )}
+   953→            </div>
+   954→          </div>
+   955→        </SheetContent>
+   956→      </Sheet>
+   957→    );
+   958→  };
+   959→
+   960→  // ── Create Return Dialog ──────────────────────────────────────────
+   961→  const renderCreateDialog = () => (
+   962→    <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
+   963→      <DialogContent className="sm:max-w-md">
+   964→        <DialogHeader>
+   965→          <DialogTitle>Create New Return</DialogTitle>
+   966→          <DialogDescription>
+   967→            Select a client, return type, and filing period to create a new GST return.
+   968→          </DialogDescription>
+   969→        </DialogHeader>
+   970→        <div className="space-y-4 py-2">
+   971→          <div className="space-y-2">
+   972→            <label className="text-sm font-medium">Client</label>
+   973→            <Select value={newClientId} onValueChange={setNewClientId}>
+   974→              <SelectTrigger className="w-full">
+   975→                <SelectValue placeholder="Select client" />
+   976→              </SelectTrigger>
+   977→              <SelectContent>
+   978→                {clients.map((client) => (
+   979→                  <SelectItem key={client.id} value={client.clientId}>
+   980→                    {client.tradeName}
+   981→                  </SelectItem>
+   982→                ))}
+   983→              </SelectContent>
+   984→            </Select>
+   985→          </div>
+   986→          <div className="space-y-2">
+   987→            <label className="text-sm font-medium">Return Type</label>
+   988→            <Select value={newReturnType} onValueChange={(v: 'GSTR-1' | 'GSTR-3B') => setNewReturnType(v)}>
+   989→              <SelectTrigger className="w-full">
+   990→                <SelectValue placeholder="Select return type" />
+   991→              </SelectTrigger>
+   992→              <SelectContent>
+   993→                <SelectItem value="GSTR-1">GSTR-1 (Outward Supplies)</SelectItem>
+   994→                <SelectItem value="GSTR-3B">GSTR-3B (Summary Return)</SelectItem>
+   995→              </SelectContent>
+   996→            </Select>
+   997→          </div>
+   998→          <div className="space-y-2">
+   999→            <label className="text-sm font-medium">Period (MM-YYYY)</label>
+  1000→            <Input
+  1001→              placeholder="e.g. 06-2025"
+  1002→              value={newPeriod}
+  1003→              onChange={(e) => setNewPeriod(e.target.value)}
+  1004→              maxLength={7}
+  1005→            />
+  1006→            <p className="text-[11px] text-muted-foreground">
+  1007→              Enter the filing period in MM-YYYY format
+  1008→            </p>
+  1009→          </div>
+  1010→        </div>
+  1011→        <DialogFooter className="gap-2 sm:gap-0">
+  1012→          <Button variant="outline" onClick={() => setCreateDialogOpen(false)} disabled={creating}>
+  1013→            Cancel
+  1014→          </Button>
+  1015→          <Button
+  1016→            className="bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5"
+  1017→            onClick={handleCreateReturn}
+  1018→            disabled={creating || !newClientId || !newPeriod}
+  1019→          >
+  1020→            {creating ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
+  1021→            {creating ? 'Creating...' : 'Create Return'}
+  1022→          </Button>
+  1023→        </DialogFooter>
+  1024→      </DialogContent>
+  1025→    </Dialog>
+  1026→  );
+  1027→
+  1028→  // ═════════════════════════════════════════════════════════════════════
+  1029→  // Main Render
+  1030→  // ═════════════════════════════════════════════════════════════════════
+  1031→
+  1032→  const healthScore = healthMetrics.overallHealth;
+  1033→  const healthColor = healthScore > 80 ? '#10b981' : healthScore > 50 ? '#f59e0b' : '#ef4444';
+  1034→
+  1035→  // ── Empty state when no returns exist ──────────────────────────────
+  1036→  if (returns.length === 0 && !returnsLoading && !clientsLoading) {
+  1037→    return (
+  1038→      <div className="flex flex-col h-full min-h-0">
+  1039→        <motion.div
+  1040→          variants={fadeInUp}
+  1041→          initial="hidden"
+  1042→          animate="show"
+  1043→          className="flex items-center justify-between px-4 md:px-6 py-4 border-b bg-white shrink-0"
+  1044→        >
+  1045→          <div className="flex items-center gap-3">
+  1046→            <h1 className="text-xl font-bold tracking-tight">Filing Workspace</h1>
+  1047→          </div>
+  1048→          <Button
+  1049→            size="sm"
+  1050→            className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white h-9"
+  1051→            onClick={() => setCreateDialogOpen(true)}
+  1052→          >
+  1053→            <Plus className="size-4" />
+  1054→            Create Return
+  1055→          </Button>
+  1056→        </motion.div>
+  1057→
+  1058→        <div className="flex-1 flex items-center justify-center">
+  1059→          <EmptyState
+  1060→            icon={FileOutput}
+  1061→            title="No returns prepared"
+  1062→            description="Create your first GST return to get started with the filing workflow."
+  1063→            action={{
+  1064→              label: 'Create First Return',
+  1065→              onClick: () => setCreateDialogOpen(true),
+  1066→              icon: Plus,
+  1067→            }}
+  1068→          />
+  1069→        </div>
+  1070→
+  1071→        {renderCreateDialog()}
+  1072→      </div>
+  1073→    );
+  1074→  }
+  1075→
+  1076→  return (
+  1077→    <div className="flex flex-col h-full min-h-0">
+  1078→      {/* ── Header with Filters ──────────────────────────────────── */}
+  1079→      <motion.div
+  1080→        variants={fadeInUp}
+  1081→        initial="hidden"
+  1082→        animate="show"
+  1083→        className="flex flex-col sm:flex-row items-start sm:items-center justify-between px-4 md:px-6 py-4 border-b bg-white shrink-0 gap-3"
+  1084→      >
+  1085→        <div className="flex items-center gap-3">
+  1086→          <h1 className="text-xl font-bold tracking-tight">Filing Workspace</h1>
+  1087→          <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200 text-xs font-semibold hover:bg-emerald-100">
+  1088→            {returns.length} return{returns.length !== 1 ? 's' : ''}
+  1089→          </Badge>
+  1090→        </div>
+  1091→        <div className="flex items-center gap-2 flex-wrap">
+  1092→          <Select value={statusFilter} onValueChange={setStatusFilter}>
+  1093→            <SelectTrigger className="h-9 w-[130px] text-xs">
+  1094→              <SelectValue placeholder="Status" />
+  1095→            </SelectTrigger>
+  1096→            <SelectContent>
+  1097→              <SelectItem value="all" className="text-xs">All Status</SelectItem>
+  1098→              {Object.entries(FILING_STATUS_CONFIG).map(([key, cfg]) => (
+  1099→                <SelectItem key={key} value={key} className="text-xs">{cfg.label}</SelectItem>
+  1100→              ))}
+  1101→            </SelectContent>
+  1102→          </Select>
+  1103→          <Select value={returnTypeFilter} onValueChange={setReturnTypeFilter}>
+  1104→            <SelectTrigger className="h-9 w-[120px] text-xs">
+  1105→              <SelectValue placeholder="Type" />
+  1106→            </SelectTrigger>
+  1107→            <SelectContent>
+  1108→              <SelectItem value="all" className="text-xs">All Types</SelectItem>
+  1109→              <SelectItem value="GSTR-1" className="text-xs">GSTR-1</SelectItem>
+  1110→              <SelectItem value="GSTR-3B" className="text-xs">GSTR-3B</SelectItem>
+  1111→            </SelectContent>
+  1112→          </Select>
+  1113→          <Select value={periodFilter} onValueChange={setPeriodFilter}>
+  1114→            <SelectTrigger className="h-9 w-[130px] text-xs">
+  1115→              <SelectValue placeholder="Period" />
+  1116→            </SelectTrigger>
+  1117→            <SelectContent>
+  1118→              <SelectItem value="all" className="text-xs">All Periods</SelectItem>
+  1119→              {periodOptions.map((p) => (
+  1120→                <SelectItem key={p} value={p} className="text-xs">{periodToLabel(p)}</SelectItem>
+  1121→              ))}
+  1122→            </SelectContent>
+  1123→          </Select>
+  1124→          <Button
+  1125→            size="sm"
+  1126→            className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white h-9"
+  1127→            onClick={() => setCreateDialogOpen(true)}
+  1128→          >
+  1129→            <Plus className="size-4" />
+  1130→            Create Return
+  1131→          </Button>
+  1132→        </div>
+  1133→      </motion.div>
+  1134→
+  1135→      {/* ── Health Score ──────────────────────────────────────────── */}
+  1136→      <motion.div
+  1137→        initial={{ opacity: 0, y: 10 }}
+  1138→        animate={{ opacity: 1, y: 0 }}
+  1139→        transition={{ duration: 0.4, delay: 0.1 }}
+  1140→        className="px-4 md:px-6 pt-4"
+  1141→      >
+  1142→        <Card className="border-0 shadow-sm bg-gradient-to-b from-background to-muted/20">
+  1143→          <CardContent className="py-4 px-4 md:px-6">
+  1144→            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 sm:gap-8">
+  1145→              <div className="relative flex items-center justify-center" style={{ width: 72, height: 72 }}>
+  1146→                <svg width={72} height={72} className="-rotate-90">
+  1147→                  <circle cx={36} cy={36} r={30} fill="none" stroke="#f1f5f9" strokeWidth={6} />
+  1148→                  <motion.circle
+  1149→                    cx={36} cy={36} r={30} fill="none"
+  1150→                    stroke={healthColor}
+  1151→                    strokeWidth={6}
+  1152→                    strokeLinecap="round"
+  1153→                    strokeDasharray={`${(healthScore / 100) * 2 * Math.PI * 30} ${2 * Math.PI * 30}`}
+  1154→                    initial={{ strokeDasharray: `0 ${2 * Math.PI * 30}` }}
+  1155→                    animate={{ strokeDasharray: `${(healthScore / 100) * 2 * Math.PI * 30} ${2 * Math.PI * 30}` }}
+  1156→                    transition={{ duration: 1.2, ease: [0.25, 0.46, 0.45, 0.94] }}
+  1157→                  />
+  1158→                </svg>
+  1159→                <div className="absolute inset-0 flex flex-col items-center justify-center">
+  1160→                  <span className="text-lg font-bold text-foreground">{healthScore}</span>
+  1161→                  <span className="text-[8px] font-medium text-muted-foreground leading-none">/100</span>
+  1162→                </div>
+  1163→              </div>
+  1164→
+  1165→              <div className="flex-1 grid grid-cols-1 sm:grid-cols-3 gap-3 w-full">
+  1166→                {[
+  1167→                  { label: 'Filing Timeliness', value: healthMetrics.filingTimeliness },
+  1168→                  { label: 'Data Accuracy', value: healthMetrics.dataAccuracy },
+  1169→                  { label: 'Compliance', value: healthMetrics.compliance },
+  1170→                ].map((metric, idx) => (
+  1171→                  <div key={metric.label} className="space-y-1.5">
+  1172→                    <div className="flex items-center justify-between">
+  1173→                      <span className="text-[11px] font-medium text-muted-foreground">{metric.label}</span>
+  1174→                      <span className={`text-[11px] font-bold ${metric.value > 80 ? 'text-emerald-700' : metric.value > 50 ? 'text-amber-700' : 'text-red-700'}`}>
+  1175→                        {metric.value}%
+  1176→                      </span>
+  1177→                    </div>
+  1178→                    <div className="h-1.5 rounded-full bg-slate-100 overflow-hidden">
+  1179→                      <motion.div
+  1180→                        className={`h-full rounded-full ${metric.value > 80 ? 'bg-emerald-500' : metric.value > 50 ? 'bg-amber-500' : 'bg-red-500'}`}
+  1181→                        initial={{ width: 0 }}
+  1182→                        animate={{ width: `${metric.value}%` }}
+  1183→                        transition={{ duration: 1, ease: 'easeOut', delay: 0.3 + idx * 0.1 }}
+  1184→                      />
+  1185→                    </div>
+  1186→                  </div>
+  1187→                ))}
+  1188→              </div>
+  1189→
+  1190→              <div className="hidden sm:flex flex-col items-end shrink-0">
+  1191→                <span className="text-xs font-semibold text-foreground">Return Health</span>
+  1192→                <span className="text-[10px] text-muted-foreground">Across all clients</span>
+  1193→              </div>
+  1194→            </div>
+  1195→          </CardContent>
+  1196→        </Card>
+  1197→      </motion.div>
+  1198→
+  1199→      {/* ── Ready-to-File Banner ────────────────────────────────── */}
+  1200→      {kanbanData.ready.length > 0 && (
+  1201→        <motion.div
+  1202→          initial={{ opacity: 0, y: 8 }}
+  1203→          animate={{ opacity: 1, y: 0 }}
+  1204→          transition={{ duration: 0.3, delay: 0.2 }}
+  1205→          className="px-4 md:px-6 pt-3"
+  1206→        >
+  1207→          <div className="flex items-center justify-between rounded-lg border border-emerald-200 bg-emerald-50/60 px-4 py-2.5">
+  1208→            <div className="flex items-center gap-2">
+  1209→              <div className="flex items-center justify-center size-7 rounded-full bg-emerald-100">
+  1210→                <Send className="size-3.5 text-emerald-700" />
+  1211→              </div>
+  1212→              <span className="text-sm font-medium text-emerald-800">
+  1213→                {kanbanData.ready.length} return{kanbanData.ready.length !== 1 ? 's' : ''} ready to file
+  1214→              </span>
+  1215→            </div>
+  1216→            <div className="flex items-center gap-2">
+  1217→              <Button
+  1218→                size="sm"
+  1219→                variant="outline"
+  1220→                className="h-8 text-xs gap-1.5 border-emerald-300 text-emerald-700 hover:bg-emerald-50"
+  1221→                onClick={() => kanbanData.ready.forEach((r) => handleDownloadJSON(r))}
+  1222→              >
+  1223→                <FileOutput className="size-3.5" />
+  1224→                Download JSON for All
+  1225→              </Button>
+  1226→              <Button
+  1227→                size="sm"
+  1228→                className="h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm font-semibold"
+  1229→                onClick={() => {
+  1230→                  toast.success(`Filing ${kanbanData.ready.length} returns`, {
+  1231→                    description: 'All ready returns have been submitted for filing',
+  1232→                    duration: 4000,
+  1233→                  });
+  1234→                }}
+  1235→              >
+  1236→                <Send className="size-3.5" />
+  1237→                File All
+  1238→              </Button>
+  1239→            </div>
+  1240→          </div>
+  1241→        </motion.div>
+  1242→      )}
+  1243→
+  1244→      {/* ── Kanban Board ─────────────────────────────────────────── */}
+  1245→      <div className="flex-1 min-h-0 overflow-hidden">
+  1246→        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 p-4 md:p-6 h-full">
+  1247→          {KANBAN_COLUMNS.map((col, i) => renderKanbanColumn(col, i))}
+  1248→        </div>
+  1249→      </div>
+  1250→
+  1251→      {/* ── Detail Sheet ────────────────────────────────────────── */}
+  1252→      <AnimatePresence>
+  1253→        {sheetOpen && renderDetailSheet()}
+  1254→      </AnimatePresence>
+  1255→
+  1256→      {/* ── Create Return Dialog ────────────────────────────────── */}
+  1257→      {renderCreateDialog()}
+  1258→    </div>
+  1259→  );
+  1260→}
+  1261→

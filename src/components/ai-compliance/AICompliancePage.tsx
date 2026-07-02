@@ -466,85 +466,10 @@ export default function AICompliancePage() {
       setOverallConfidence(data.overallConfidence ?? 0);
     } catch (err) {
       console.error('AI Compliance fetch error:', err);
-      setError('Failed to load compliance forecasts. Using fallback data.');
-      // Fallback mock data
-      setForecasts({
-        notice: [
-          {
-            clientId: '1',
-            clientName: 'Acme Corp',
-            forecastType: 'notice',
-            predictedEvent: 'GST notice likely for Acme Corp due to low compliance health (45/100)',
-            probability: 0.55,
-            confidence: 0.78,
-            expectedDate: '2026-05-15',
-            impact: 'high',
-            mitigatingActions: ['Ensure timely filing of all pending GSTR returns', 'Respond to all open notices within due date', 'Schedule compliance health review with client'],
-          },
-          {
-            clientId: '2',
-            clientName: 'Beta Industries',
-            forecastType: 'notice',
-            predictedEvent: 'GST notice possible for Beta Industries due to repeated mismatches',
-            probability: 0.38,
-            confidence: 0.72,
-            expectedDate: '2026-06-01',
-            impact: 'medium',
-            mitigatingActions: ['Verify vendor GSTIN details', 'Maintain proper documentation for all transactions'],
-          },
-        ],
-        filing_delay: [
-          {
-            clientId: '1',
-            clientName: 'Acme Corp',
-            forecastType: 'filing_delay',
-            predictedEvent: 'Filing delay expected for Acme Corp - 3 late filing(s) in history',
-            probability: 0.65,
-            confidence: 0.82,
-            expectedDate: '2026-04-01',
-            impact: 'high',
-            mitigatingActions: ['Set up automated filing reminders 15 days before due date', 'Assign dedicated team member for this client\'s filings', 'Pre-validate invoice data before filing period starts'],
-          },
-        ],
-        reconciliation_issue: [
-          {
-            clientId: '2',
-            clientName: 'Beta Industries',
-            forecastType: 'reconciliation_issue',
-            predictedEvent: '5 reconciliation mismatch(es) expected for Beta Industries',
-            probability: 0.7,
-            confidence: 0.75,
-            expectedDate: '2026-04-01',
-            impact: 'high',
-            mitigatingActions: ['Run reconciliation before filing period', 'Verify vendor GSTIN details before booking invoices', 'Enable automated 2B matching alerts'],
-          },
-          {
-            clientId: '3',
-            clientName: 'Gamma Solutions',
-            forecastType: 'reconciliation_issue',
-            predictedEvent: '2 reconciliation mismatch(es) expected for Gamma Solutions',
-            probability: 0.4,
-            confidence: 0.65,
-            expectedDate: '2026-04-01',
-            impact: 'medium',
-            mitigatingActions: ['Run reconciliation before filing period', 'Enable automated 2B matching alerts'],
-          },
-        ],
-        itc_loss: [
-          {
-            clientId: '1',
-            clientName: 'Acme Corp',
-            forecastType: 'itc_loss',
-            predictedEvent: 'Potential ITC loss of ₹1,25,000 for Acme Corp',
-            probability: 0.45,
-            confidence: 0.68,
-            expectedDate: '2026-05-01',
-            impact: 'high',
-            mitigatingActions: ['Verify all ITC claims against GSTR-2B before filing', 'Flag and resolve mismatched invoices immediately', 'Implement vendor compliance verification process'],
-          },
-        ],
-      });
-      setOverallConfidence(0.72);
+      setError('Failed to load compliance forecasts. Please try again later.');
+      // On error, keep forecasts empty — UI will render the error banner + empty states.
+      setForecasts({ notice: [], filing_delay: [], reconciliation_issue: [], itc_loss: [] });
+      setOverallConfidence(0);
     } finally {
       setLoading(false);
     }

@@ -1,0 +1,518 @@
+     1→'use client'
+     2→
+     3→import { useState } from 'react'
+     4→import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+     5→import { Button } from '@/components/ui/button'
+     6→import { Badge } from '@/components/ui/badge'
+     7→import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
+     8→import { ScrollArea } from '@/components/ui/scroll-area'
+     9→import { Separator } from '@/components/ui/separator'
+    10→import { Input } from '@/components/ui/input'
+    11→import { motion } from 'framer-motion'
+    12→import {
+    13→  Package, TrendingUp, TrendingDown, Search,
+    14→  ChevronRight, Download, Filter, Plus, AlertTriangle,
+    15→  Warehouse, ShoppingCart, BarChart3, ArrowUpRight,
+    16→  Boxes, Truck, Clock, CheckCircle2, XCircle,
+    17→} from 'lucide-react'
+    18→
+    19→// ═══════════════════════════════════════════════════════════════════════════════
+    20→// HELPERS
+    21→// ═══════════════════════════════════════════════════════════════════════════════
+    22→
+    23→function formatINR(n: number): string {
+    24→  return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(n)
+    25→}
+    26→
+    27→// ═══════════════════════════════════════════════════════════════════════════════
+    28→// DATA
+    29→// ═══════════════════════════════════════════════════════════════════════════════
+    30→
+    31→const statCards = [
+    32→  { label: 'Total Products', value: '1,247', change: '+34', up: true, icon: Package, color: 'emerald' },
+    33→  { label: 'Total Value', value: '₹2,45,67,890', change: '+12.3%', up: true, icon: BarChart3, color: 'emerald' },
+    34→  { label: 'Low Stock Items', value: '18', change: '+3', up: false, icon: AlertTriangle, color: 'amber' },
+    35→  { label: 'Pending Orders', value: '12', change: '-2', up: true, icon: ShoppingCart, color: 'emerald' },
+    36→  { label: 'Stock Turnover', value: '4.8x', change: '+0.3', up: true, icon: TrendingUp, color: 'emerald' },
+    37→]
+    38→
+    39→const products = [
+    40→  { id: 'SKU001', name: 'HP LaserJet Pro M404dn', category: 'Printers', stock: 24, minStock: 10, price: 28500, warehouse: 'Mumbai', status: 'In Stock' },
+    41→  { id: 'SKU002', name: 'Dell UltraSharp 27 Monitor', category: 'Monitors', stock: 8, minStock: 10, price: 34200, warehouse: 'Delhi', status: 'Low Stock' },
+    42→  { id: 'SKU003', name: 'Logitech MX Master 3S', category: 'Accessories', stock: 156, minStock: 30, price: 8499, warehouse: 'Mumbai', status: 'In Stock' },
+    43→  { id: 'SKU004', name: 'Canon PIXMA G6070', category: 'Printers', stock: 3, minStock: 5, price: 22499, warehouse: 'Bangalore', status: 'Low Stock' },
+    44→  { id: 'SKU005', name: 'Seagate Barracuda 2TB HDD', category: 'Storage', stock: 89, minStock: 20, price: 5499, warehouse: 'Delhi', status: 'In Stock' },
+    45→  { id: 'SKU006', name: 'APC Back-UPS 1100VA', category: 'Power', stock: 12, minStock: 8, price: 6200, warehouse: 'Mumbai', status: 'In Stock' },
+    46→  { id: 'SKU007', name: 'TP-Link Archer AX73', category: 'Networking', stock: 2, minStock: 5, price: 7999, warehouse: 'Chennai', status: 'Critical' },
+    47→  { id: 'SKU008', name: 'Samsung 870 EVO 1TB SSD', category: 'Storage', stock: 67, minStock: 15, price: 6999, warehouse: 'Mumbai', status: 'In Stock' },
+    48→  { id: 'SKU009', name: 'Epson L3250 InkTank', category: 'Printers', stock: 0, minStock: 5, price: 13999, warehouse: 'Delhi', status: 'Out of Stock' },
+    49→  { id: 'SKU010', name: 'Cisco SG250-26 Switch', category: 'Networking', stock: 5, minStock: 3, price: 24500, warehouse: 'Bangalore', status: 'In Stock' },
+    50→  { id: 'SKU011', name: 'Kingston FURY 16GB RAM', category: 'Memory', stock: 34, minStock: 10, price: 4299, warehouse: 'Mumbai', status: 'In Stock' },
+    51→  { id: 'SKU012', name: 'Intel Core i5-14400F', category: 'Processors', stock: 4, minStock: 6, price: 22999, warehouse: 'Delhi', status: 'Low Stock' },
+    52→]
+    53→
+    54→const warehouses = [
+    55→  { name: 'Mumbai Central', code: 'WH-MUM', manager: 'Rajesh Sharma', capacity: 85, items: 542, value: '₹1,12,45,000', city: 'Mumbai' },
+    56→  { name: 'Delhi North', code: 'WH-DEL', manager: 'Amit Kumar', capacity: 72, items: 389, value: '₹78,23,000', city: 'New Delhi' },
+    57→  { name: 'Bangalore Tech', code: 'WH-BLR', manager: 'Kavita Iyer', capacity: 60, items: 198, value: '₹34,56,000', city: 'Bangalore' },
+    58→  { name: 'Chennai South', code: 'WH-MAA', manager: 'Priya Patel', capacity: 45, items: 118, value: '₹20,43,890', city: 'Chennai' },
+    59→]
+    60→
+    61→const purchaseOrders = [
+    62→  { id: 'PO-2026-0145', supplier: 'Redington India Pvt Ltd', items: 24, value: '₹4,56,780', date: '28/02/2026', expected: '05/03/2026', status: 'In Transit' },
+    63→  { id: 'PO-2026-0144', supplier: 'Ingram Micro India Pvt Ltd', items: 18, value: '₹2,34,500', date: '25/02/2026', expected: '03/03/2026', status: 'Delivered' },
+    64→  { id: 'PO-2026-0143', supplier: 'Dell India Pvt Ltd', items: 12, value: '₹3,12,000', date: '22/02/2026', expected: '01/03/2026', status: 'Delivered' },
+    65→  { id: 'PO-2026-0142', supplier: 'HP India Sales Pvt Ltd', items: 30, value: '₹5,67,890', date: '20/02/2026', expected: '28/02/2026', status: 'Delivered' },
+    66→  { id: 'PO-2026-0146', supplier: 'Tech Data India Pvt Ltd', items: 15, value: '₹1,89,450', date: '02/03/2026', expected: '08/03/2026', status: 'Pending' },
+    67→  { id: 'PO-2026-0147', supplier: 'Savex Technologies Pvt Ltd', items: 22, value: '₹3,45,600', date: '03/03/2026', expected: '10/03/2026', status: 'Pending' },
+    68→]
+    69→
+    70→const lowStockAlerts = [
+    71→  { product: 'TP-Link Archer AX73', current: 2, min: 5, warehouse: 'Chennai', urgency: 'Critical' },
+    72→  { product: 'Epson L3250 InkTank', current: 0, min: 5, warehouse: 'Delhi', urgency: 'Critical' },
+    73→  { product: 'Dell UltraSharp 27 Monitor', current: 8, min: 10, warehouse: 'Delhi', urgency: 'Warning' },
+    74→  { product: 'Canon PIXMA G6070', current: 3, min: 5, warehouse: 'Bangalore', urgency: 'Warning' },
+    75→  { product: 'Intel Core i5-14400F', current: 4, min: 6, warehouse: 'Delhi', urgency: 'Warning' },
+    76→]
+    77→
+    78→// ═══════════════════════════════════════════════════════════════════════════════
+    79→// SVG CHARTS
+    80→// ═══════════════════════════════════════════════════════════════════════════════
+    81→
+    82→function StockByCategoryChart() {
+    83→  const data = [
+    84→    { label: 'Printers', value: 27, color: '#10b981' },
+    85→    { label: 'Storage', value: 156, color: '#34d399' },
+    86→    { label: 'Networking', value: 7, color: '#f59e0b' },
+    87→    { label: 'Monitors', value: 8, color: '#6ee7b7' },
+    88→    { label: 'Accessories', value: 156, color: '#a7f3d0' },
+    89→    { label: 'Power', value: 12, color: '#fbbf24' },
+    90→    { label: 'Memory', value: 34, color: '#94a3b8' },
+    91→    { label: 'Processors', value: 4, color: '#d1d5db' },
+    92→  ]
+    93→  const maxVal = Math.max(...data.map(d => d.value))
+    94→  const barH = 26
+    95→  const gap = 6
+    96→  const h = data.length * (barH + gap) + 30
+    97→  const chartW = 280
+    98→
+    99→  return (
+   100→    <svg viewBox={`0 0 ${chartW + 100} ${h}`} className="w-full h-auto">
+   101→      {data.map((d, i) => {
+   102→        const w = (d.value / maxVal) * chartW
+   103→        return (
+   104→          <g key={d.label} transform={`translate(0, ${i * (barH + gap) + 15})`}>
+   105→            <text x="0" y={barH / 2 + 4} className="text-[10px] fill-slate-600" textAnchor="start">{d.label}</text>
+   106→            <rect x="70" y="0" width={w} height={barH} rx="4" fill={d.color} opacity="0.85">
+   107→              <animate attributeName="width" from="0" to={w} dur="0.6s" fill="freeze" />
+   108→            </rect>
+   109→            <text x={70 + w + 6} y={barH / 2 + 4} className="text-[9px] fill-slate-500">
+   110→              {d.value} units
+   111→            </text>
+   112→          </g>
+   113→        )
+   114→      })}
+   115→    </svg>
+   116→  )
+   117→}
+   118→
+   119→function WarehouseCapacityChart() {
+   120→  const data = warehouses
+   121→  const w = 300
+   122→  const h = 140
+   123→  const padL = 40
+   124→  const padB = 25
+   125→  const padT = 10
+   126→  const chartW = w - padL - 10
+   127→  const chartH = h - padB - padT
+   128→  const barW = chartW / data.length * 0.6
+   129→  const gapX = chartW / data.length
+   130→
+   131→  return (
+   132→    <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-auto">
+   133→      {[0, 1, 2, 3, 4].map(i => {
+   134→        const y = padT + (i / 4) * chartH
+   135→        return <line key={i} x1={padL} y1={y} x2={w - 10} y2={y} stroke="#e2e8f0" strokeWidth="0.5" />
+   136→      })}
+   137→      {data.map((d, i) => {
+   138→        const x = padL + i * gapX + (gapX - barW) / 2
+   139→        const barH = (d.capacity / 100) * chartH
+   140→        const fillColor = d.capacity > 80 ? '#ef4444' : d.capacity > 60 ? '#f59e0b' : '#10b981'
+   141→        return (
+   142→          <g key={d.code}>
+   143→            <rect x={x} y={padT + chartH - barH} width={barW} height={barH} rx="3" fill={fillColor} opacity="0.8">
+   144→              <animate attributeName="height" from="0" to={barH} dur="0.5s" fill="freeze" />
+   145→              <animate attributeName="y" from={padT + chartH} to={padT + chartH - barH} dur="0.5s" fill="freeze" />
+   146→            </rect>
+   147→            <text x={x + barW / 2} y={padT + chartH - barH - 5} className="text-[8px] fill-slate-600" textAnchor="middle">{d.capacity}%</text>
+   148→            <text x={x + barW / 2} y={h - 6} className="text-[8px] fill-slate-400" textAnchor="middle">{d.city}</text>
+   149→          </g>
+   150→        )
+   151→      })}
+   152→    </svg>
+   153→  )
+   154→}
+   155→
+   156→// ═══════════════════════════════════════════════════════════════════════════════
+   157→// COMPONENT
+   158→// ═══════════════════════════════════════════════════════════════════════════════
+   159→
+   160→const stagger = {
+   161→  container: { transition: { staggerChildren: 0.06 } },
+   162→  item: { initial: { opacity: 0, y: 16 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.35 } },
+   163→}
+   164→
+   165→export default function InventoryPage() {
+   166→  const [activeTab, setActiveTab] = useState('overview')
+   167→  const [searchQuery, setSearchQuery] = useState('')
+   168→
+   169→  const filteredProducts = products.filter(p =>
+   170→    p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+   171→    p.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
+   172→    p.id.toLowerCase().includes(searchQuery.toLowerCase())
+   173→  )
+   174→
+   175→  const stockStatusColor = (s: string) => {
+   176→    switch (s) {
+   177→      case 'In Stock': return 'bg-emerald-100 text-emerald-700 border-emerald-200'
+   178→      case 'Low Stock': return 'bg-amber-100 text-amber-700 border-amber-200'
+   179→      case 'Critical': return 'bg-red-100 text-red-700 border-red-200'
+   180→      case 'Out of Stock': return 'bg-slate-200 text-slate-700 border-slate-300'
+   181→      default: return 'bg-slate-100 text-slate-700 border-slate-200'
+   182→    }
+   183→  }
+   184→
+   185→  const orderStatusColor = (s: string) => {
+   186→    switch (s) {
+   187→      case 'Delivered': return 'bg-emerald-100 text-emerald-700 border-emerald-200'
+   188→      case 'In Transit': return 'bg-sky-100 text-sky-700 border-sky-200'
+   189→      case 'Pending': return 'bg-amber-100 text-amber-700 border-amber-200'
+   190→      default: return 'bg-slate-100 text-slate-700 border-slate-200'
+   191→    }
+   192→  }
+   193→
+   194→  return (
+   195→    <div className="min-h-screen bg-slate-50/50">
+   196→      {/* Sticky Header */}
+   197→      <div className="sticky top-0 z-20 bg-white/90 backdrop-blur-sm border-b px-4 sm:px-6 py-4">
+   198→        <div className="flex items-center justify-between gap-4">
+   199→          <div className="flex items-center gap-3">
+   200→            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-100">
+   201→              <Package className="h-5 w-5 text-emerald-600" />
+   202→            </div>
+   203→            <div>
+   204→              <h1 className="text-lg font-bold text-slate-900">Inventory</h1>
+   205→              <p className="text-xs text-slate-500">Stock & Warehouse Management</p>
+   206→            </div>
+   207→          </div>
+   208→          <div className="flex items-center gap-2">
+   209→            <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5">
+   210→              <Download className="h-3.5 w-3.5" /> Export
+   211→            </Button>
+   212→            <Button size="sm" className="h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700">
+   213→              <Plus className="h-3.5 w-3.5" /> Add Product
+   214→            </Button>
+   215→          </div>
+   216→        </div>
+   217→      </div>
+   218→
+   219→      <div className="p-4 sm:p-6 space-y-6">
+   220→        {/* Stat Cards */}
+   221→        <motion.div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4" variants={stagger.container} initial="initial" animate="animate">
+   222→          {statCards.map((s) => (
+   223→            <motion.div key={s.label} variants={stagger.item}>
+   224→              <Card className="hover:shadow-md transition-shadow">
+   225→                <CardContent className="p-4">
+   226→                  <div className="flex items-center justify-between mb-2">
+   227→                    <div className={`flex h-8 w-8 items-center justify-center rounded-lg ${s.label === 'Low Stock Items' ? 'bg-amber-100' : 'bg-emerald-100'}`}>
+   228→                      <s.icon className={`h-4 w-4 ${s.label === 'Low Stock Items' ? 'text-amber-600' : 'text-emerald-600'}`} />
+   229→                    </div>
+   230→                    <div className={`flex items-center gap-0.5 text-[11px] font-medium ${s.up ? 'text-emerald-600' : 'text-red-500'}`}>
+   231→                      {s.up ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
+   232→                      {s.change}
+   233→                    </div>
+   234→                  </div>
+   235→                  <p className="text-lg font-bold text-slate-900">{s.value}</p>
+   236→                  <p className="text-[11px] text-slate-500">{s.label}</p>
+   237→                </CardContent>
+   238→              </Card>
+   239→            </motion.div>
+   240→          ))}
+   241→        </motion.div>
+   242→
+   243→        {/* Tabs */}
+   244→        <Tabs value={activeTab} onValueChange={setActiveTab}>
+   245→          <TabsList className="bg-slate-100 h-9 p-0.5">
+   246→            <TabsTrigger value="overview" className="text-xs px-3 h-8">Overview</TabsTrigger>
+   247→            <TabsTrigger value="products" className="text-xs px-3 h-8">Products</TabsTrigger>
+   248→            <TabsTrigger value="warehouses" className="text-xs px-3 h-8">Warehouses</TabsTrigger>
+   249→            <TabsTrigger value="orders" className="text-xs px-3 h-8">Purchase Orders</TabsTrigger>
+   250→            <TabsTrigger value="alerts" className="text-xs px-3 h-8">Alerts</TabsTrigger>
+   251→          </TabsList>
+   252→
+   253→          {/* Overview Tab */}
+   254→          <TabsContent value="overview" className="mt-4 space-y-6">
+   255→            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+   256→              <Card>
+   257→                <CardHeader className="pb-2">
+   258→                  <CardTitle className="text-sm font-semibold">Stock by Category</CardTitle>
+   259→                </CardHeader>
+   260→                <CardContent>
+   261→                  <StockByCategoryChart />
+   262→                </CardContent>
+   263→              </Card>
+   264→              <Card>
+   265→                <CardHeader className="pb-2">
+   266→                  <CardTitle className="text-sm font-semibold">Warehouse Capacity Utilization</CardTitle>
+   267→                </CardHeader>
+   268→                <CardContent>
+   269→                  <WarehouseCapacityChart />
+   270→                </CardContent>
+   271→              </Card>
+   272→            </div>
+   273→
+   274→            <Card>
+   275→              <CardHeader className="pb-2">
+   276→                <CardTitle className="text-sm font-semibold">Quick Stats</CardTitle>
+   277→              </CardHeader>
+   278→              <CardContent>
+   279→                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+   280→                  <div className="p-3 rounded-lg bg-emerald-50 border border-emerald-200">
+   281→                    <p className="text-xl font-bold text-emerald-800">1,247</p>
+   282→                    <p className="text-[11px] text-emerald-600">Total SKUs</p>
+   283→                  </div>
+   284→                  <div className="p-3 rounded-lg bg-slate-50 border border-slate-200">
+   285→                    <p className="text-xl font-bold text-slate-800">4</p>
+   286→                    <p className="text-[11px] text-slate-600">Warehouses</p>
+   287→                  </div>
+   288→                  <div className="p-3 rounded-lg bg-amber-50 border border-amber-200">
+   289→                    <p className="text-xl font-bold text-amber-800">18</p>
+   290→                    <p className="text-[11px] text-amber-600">Low Stock Alerts</p>
+   291→                  </div>
+   292→                  <div className="p-3 rounded-lg bg-red-50 border border-red-200">
+   293→                    <p className="text-xl font-bold text-red-800">1</p>
+   294→                    <p className="text-[11px] text-red-600">Out of Stock</p>
+   295→                  </div>
+   296→                </div>
+   297→              </CardContent>
+   298→            </Card>
+   299→          </TabsContent>
+   300→
+   301→          {/* Products Tab */}
+   302→          <TabsContent value="products" className="mt-4 space-y-4">
+   303→            <Card>
+   304→              <CardHeader className="pb-2">
+   305→                <div className="flex items-center justify-between">
+   306→                  <CardTitle className="text-sm font-semibold">Product List</CardTitle>
+   307→                  <div className="flex items-center gap-2">
+   308→                    <div className="relative">
+   309→                      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+   310→                      <Input
+   311→                        placeholder="Search products..."
+   312→                        value={searchQuery}
+   313→                        onChange={(e) => setSearchQuery(e.target.value)}
+   314→                        className="h-8 w-56 pl-8 text-xs"
+   315→                      />
+   316→                    </div>
+   317→                    <Button variant="outline" size="sm" className="h-8 gap-1 text-xs">
+   318→                      <Filter className="h-3.5 w-3.5" /> Filter
+   319→                    </Button>
+   320→                  </div>
+   321→                </div>
+   322→              </CardHeader>
+   323→              <CardContent>
+   324→                <ScrollArea className="max-h-96">
+   325→                  <div className="space-y-2">
+   326→                    {filteredProducts.map((prod) => (
+   327→                      <motion.div
+   328→                        key={prod.id}
+   329→                        initial={{ opacity: 0, x: -8 }}
+   330→                        animate={{ opacity: 1, x: 0 }}
+   331→                        className="flex items-center gap-3 p-3 rounded-lg border hover:bg-slate-50 transition-colors"
+   332→                      >
+   333→                        <div className={`flex h-8 w-8 items-center justify-center rounded-lg ${
+   334→                          prod.status === 'In Stock' ? 'bg-emerald-100' :
+   335→                          prod.status === 'Low Stock' ? 'bg-amber-100' :
+   336→                          prod.status === 'Critical' ? 'bg-red-100' : 'bg-slate-100'
+   337→                        }`}>
+   338→                          <Boxes className={`h-4 w-4 ${
+   339→                            prod.status === 'In Stock' ? 'text-emerald-600' :
+   340→                            prod.status === 'Low Stock' ? 'text-amber-600' :
+   341→                            prod.status === 'Critical' ? 'text-red-600' : 'text-slate-500'
+   342→                          }`} />
+   343→                        </div>
+   344→                        <div className="flex-1 min-w-0">
+   345→                          <div className="flex items-center gap-2">
+   346→                            <span className="text-xs font-semibold text-slate-900 truncate">{prod.name}</span>
+   347→                            <Badge variant="outline" className="text-[9px] h-4 px-1">{prod.category}</Badge>
+   348→                          </div>
+   349→                          <span className="text-[11px] text-slate-500">{prod.id} · {prod.warehouse}</span>
+   350→                        </div>
+   351→                        <div className="text-right hidden sm:block">
+   352→                          <p className="text-xs font-semibold text-slate-900">{prod.stock} units</p>
+   353→                          <p className="text-[10px] text-slate-500">Min: {prod.minStock}</p>
+   354→                        </div>
+   355→                        <div className="text-right hidden sm:block">
+   356→                          <p className="text-xs font-semibold text-slate-900">{formatINR(prod.price)}</p>
+   357→                          <p className="text-[10px] text-slate-500">per unit</p>
+   358→                        </div>
+   359→                        <Badge className={`text-[10px] ${stockStatusColor(prod.status)}`}>{prod.status}</Badge>
+   360→                        <ChevronRight className="h-4 w-4 text-slate-300" />
+   361→                      </motion.div>
+   362→                    ))}
+   363→                  </div>
+   364→                </ScrollArea>
+   365→              </CardContent>
+   366→            </Card>
+   367→          </TabsContent>
+   368→
+   369→          {/* Warehouses Tab */}
+   370→          <TabsContent value="warehouses" className="mt-4 space-y-4">
+   371→            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+   372→              {warehouses.map((wh, i) => (
+   373→                <motion.div
+   374→                  key={wh.code}
+   375→                  initial={{ opacity: 0, scale: 0.95 }}
+   376→                  animate={{ opacity: 1, scale: 1 }}
+   377→                  transition={{ delay: i * 0.08 }}
+   378→                >
+   379→                  <Card className="hover:shadow-md transition-shadow">
+   380→                    <CardContent className="p-4">
+   381→                      <div className="flex items-center gap-3 mb-3">
+   382→                        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-100">
+   383→                          <Warehouse className="h-5 w-5 text-emerald-600" />
+   384→                        </div>
+   385→                        <div>
+   386→                          <span className="text-sm font-semibold text-slate-900">{wh.name}</span>
+   387→                          <p className="text-[10px] text-slate-500">{wh.code} · {wh.city}</p>
+   388→                        </div>
+   389→                      </div>
+   390→                      <Separator className="mb-3" />
+   391→                      <div className="space-y-2">
+   392→                        <div className="flex justify-between text-[11px]">
+   393→                          <span className="text-slate-500">Manager</span>
+   394→                          <span className="font-medium text-slate-700">{wh.manager}</span>
+   395→                        </div>
+   396→                        <div className="flex justify-between text-[11px]">
+   397→                          <span className="text-slate-500">Items</span>
+   398→                          <span className="font-medium text-slate-700">{wh.items}</span>
+   399→                        </div>
+   400→                        <div className="flex justify-between text-[11px]">
+   401→                          <span className="text-slate-500">Total Value</span>
+   402→                          <span className="font-medium text-slate-700">{wh.value}</span>
+   403→                        </div>
+   404→                        <div>
+   405→                          <div className="flex justify-between text-[11px] mb-1">
+   406→                            <span className="text-slate-500">Capacity</span>
+   407→                            <span className={`font-medium ${wh.capacity > 80 ? 'text-red-600' : wh.capacity > 60 ? 'text-amber-600' : 'text-emerald-600'}`}>{wh.capacity}%</span>
+   408→                          </div>
+   409→                          <div className="w-full bg-slate-100 rounded-full h-2">
+   410→                            <div
+   411→                              className={`h-2 rounded-full ${wh.capacity > 80 ? 'bg-red-500' : wh.capacity > 60 ? 'bg-amber-500' : 'bg-emerald-500'}`}
+   412→                              style={{ width: `${wh.capacity}%` }}
+   413→                            />
+   414→                          </div>
+   415→                        </div>
+   416→                      </div>
+   417→                    </CardContent>
+   418→                  </Card>
+   419→                </motion.div>
+   420→              ))}
+   421→            </div>
+   422→          </TabsContent>
+   423→
+   424→          {/* Purchase Orders Tab */}
+   425→          <TabsContent value="orders" className="mt-4 space-y-4">
+   426→            <Card>
+   427→              <CardHeader className="pb-2">
+   428→                <div className="flex items-center justify-between">
+   429→                  <CardTitle className="text-sm font-semibold">Purchase Orders</CardTitle>
+   430→                  <Button size="sm" className="h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700">
+   431→                    <Plus className="h-3.5 w-3.5" /> New PO
+   432→                  </Button>
+   433→                </div>
+   434→              </CardHeader>
+   435→              <CardContent>
+   436→                <ScrollArea className="max-h-96">
+   437→                  <div className="space-y-2">
+   438→                    {purchaseOrders.map((po, i) => (
+   439→                      <motion.div
+   440→                        key={po.id}
+   441→                        initial={{ opacity: 0, y: 8 }}
+   442→                        animate={{ opacity: 1, y: 0 }}
+   443→                        transition={{ delay: i * 0.04 }}
+   444→                        className="flex items-center gap-3 p-3 rounded-lg border hover:bg-slate-50 transition-colors"
+   445→                      >
+   446→                        <div className={`flex h-8 w-8 items-center justify-center rounded-lg ${
+   447→                          po.status === 'Delivered' ? 'bg-emerald-100' :
+   448→                          po.status === 'In Transit' ? 'bg-sky-100' : 'bg-amber-100'
+   449→                        }`}>
+   450→                          {po.status === 'Delivered' ? <CheckCircle2 className="h-4 w-4 text-emerald-600" /> :
+   451→                           po.status === 'In Transit' ? <Truck className="h-4 w-4 text-sky-600" /> :
+   452→                           <Clock className="h-4 w-4 text-amber-600" />}
+   453→                        </div>
+   454→                        <div className="flex-1 min-w-0">
+   455→                          <div className="flex items-center gap-2">
+   456→                            <span className="text-xs font-semibold text-slate-900">{po.id}</span>
+   457→                            <Badge variant="outline" className="text-[9px] h-4 px-1">{po.items} items</Badge>
+   458→                          </div>
+   459→                          <span className="text-[11px] text-slate-500">{po.supplier} · Expected: {po.expected}</span>
+   460→                        </div>
+   461→                        <span className="text-xs font-semibold text-slate-700">{po.value}</span>
+   462→                        <Badge className={`text-[10px] ${orderStatusColor(po.status)}`}>{po.status}</Badge>
+   463→                        <ChevronRight className="h-4 w-4 text-slate-300" />
+   464→                      </motion.div>
+   465→                    ))}
+   466→                  </div>
+   467→                </ScrollArea>
+   468→              </CardContent>
+   469→            </Card>
+   470→          </TabsContent>
+   471→
+   472→          {/* Alerts Tab */}
+   473→          <TabsContent value="alerts" className="mt-4 space-y-4">
+   474→            <Card>
+   475→              <CardHeader className="pb-2">
+   476→                <CardTitle className="text-sm font-semibold">Low Stock Alerts</CardTitle>
+   477→              </CardHeader>
+   478→              <CardContent>
+   479→                <div className="space-y-3">
+   480→                  {lowStockAlerts.map((alert, i) => (
+   481→                    <motion.div
+   482→                      key={alert.product}
+   483→                      initial={{ opacity: 0, x: -8 }}
+   484→                      animate={{ opacity: 1, x: 0 }}
+   485→                      transition={{ delay: i * 0.06 }}
+   486→                      className={`flex items-center gap-3 p-3 rounded-lg border ${
+   487→                        alert.urgency === 'Critical' ? 'border-red-200 bg-red-50/50' : 'border-amber-200 bg-amber-50/50'
+   488→                      }`}
+   489→                    >
+   490→                      <div className={`flex h-8 w-8 items-center justify-center rounded-lg ${
+   491→                        alert.urgency === 'Critical' ? 'bg-red-100' : 'bg-amber-100'
+   492→                      }`}>
+   493→                        <AlertTriangle className={`h-4 w-4 ${alert.urgency === 'Critical' ? 'text-red-600' : 'text-amber-600'}`} />
+   494→                      </div>
+   495→                      <div className="flex-1 min-w-0">
+   496→                        <div className="flex items-center gap-2">
+   497→                          <span className="text-xs font-semibold text-slate-900">{alert.product}</span>
+   498→                          <Badge className={`text-[9px] ${alert.urgency === 'Critical' ? 'bg-red-100 text-red-700 border-red-200' : 'bg-amber-100 text-amber-700 border-amber-200'}`}>
+   499→                            {alert.urgency}
+   500→                          </Badge>
+   501→                        </div>
+   502→                        <span className="text-[11px] text-slate-500">Current: {alert.current} units · Minimum: {alert.min} · {alert.warehouse}</span>
+   503→                      </div>
+   504→                      <Button size="sm" variant="outline" className="h-7 text-[10px] gap-1">
+   505→                        <ShoppingCart className="h-3 w-3" /> Reorder
+   506→                      </Button>
+   507→                    </motion.div>
+   508→                  ))}
+   509→                </div>
+   510→              </CardContent>
+   511→            </Card>
+   512→          </TabsContent>
+   513→        </Tabs>
+   514→      </div>
+   515→    </div>
+   516→  )
+   517→}
+   518→

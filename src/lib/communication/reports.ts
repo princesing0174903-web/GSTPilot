@@ -84,141 +84,16 @@ export function getReportTypeDef(type: string): ReportTypeDef | undefined {
   return REPORT_TYPES.find((r) => r.type === type);
 }
 
-// ─── Seed data ─────────────────────────────────────────────────────────────────
+// ─── Seed placeholder (no-op) ─────────────────────────────────────────────────
+// Previously this module shipped 12 hardcoded report distribution records
+// attributed to fake Indian recipients. The export name is preserved so
+// existing callers continue to compile, but it now returns `[]` so the UI
+// renders a proper empty state. Real report distributions come from
+// `db.communicationLog.findMany({ where: { channel: 'email', category: 'report' } })`
+// (or equivalent) via the API routes.
 
-const daysAgo = (d: number) => {
-  const dt = new Date();
-  dt.setDate(dt.getDate() - d);
-  return dt.toISOString();
-};
-
-/**
- * Returns 12 realistic report distribution records showing reports sent via
- * various channels to different recipients.
- */
 export function seedReportDistributions(): ReportDistribution[] {
-  return [
-    {
-      id: 'rpt-seed-001',
-      reportType: 'gst_summary',
-      recipient: 'priya@sharmasons.com',
-      recipientName: 'Priya Sharma',
-      channel: 'email',
-      status: 'delivered',
-      sentAt: daysAgo(3),
-      summary: 'GST Summary Dec 2025 — Output ₹4.2L, ITC ₹1.4L, Net Payable ₹2.8L, Returns Filed: 4/4',
-    },
-    {
-      id: 'rpt-seed-002',
-      reportType: 'cash_flow',
-      recipient: 'sunita@patelent.in',
-      recipientName: 'Sunita Patel',
-      channel: 'email',
-      status: 'delivered',
-      sentAt: daysAgo(1),
-      summary: 'Cash Flow Forecast — Inflow ₹14.2L, Outflow ₹9.1L, Net Surplus ₹5.1L, Runway 180 days',
-    },
-    {
-      id: 'rpt-seed-003',
-      reportType: 'receivables',
-      recipient: 'vikram@singhlogistics.in',
-      recipientName: 'Vikram Singh',
-      channel: 'email',
-      status: 'opened',
-      sentAt: daysAgo(3),
-      summary: 'Receivables Aging — Outstanding ₹18.2L, Overdue ₹4.6L, Collection Rate 74%, DSO 47 days',
-    },
-    {
-      id: 'rpt-seed-004',
-      reportType: 'payables',
-      recipient: 'accounts@vermaindustries.in',
-      recipientName: 'Rajesh Verma',
-      channel: 'email',
-      status: 'opened',
-      sentAt: daysAgo(2),
-      summary: 'Payables Report — Total ₹8.6L, Due This Week ₹2.5L, Overdue ₹1.2L',
-    },
-    {
-      id: 'rpt-seed-005',
-      reportType: 'tds',
-      recipient: 'pooja@bhatassociates.in',
-      recipientName: 'Pooja Bhat',
-      channel: 'email',
-      status: 'opened',
-      sentAt: daysAgo(4),
-      summary: 'TDS Q3 FY26 — Total Deducted ₹84,000, Paid ₹84,000, Pending ₹0, 24 deductee records',
-    },
-    {
-      id: 'rpt-seed-006',
-      reportType: 'payroll',
-      recipient: 'sai@krishnatraders.in',
-      recipientName: 'Sai Krishna',
-      channel: 'email',
-      status: 'failed',
-      sentAt: daysAgo(2),
-      summary: 'Payroll Dec 2025 — 8 employees, Gross ₹6.4L, Net ₹5.2L, Deductions ₹1.2L',
-    },
-    {
-      id: 'rpt-seed-007',
-      reportType: 'ai_cfo',
-      recipient: 'meera@joshiconsulting.in',
-      recipientName: 'Meera Joshi',
-      channel: 'email',
-      status: 'opened',
-      sentAt: daysAgo(2),
-      summary: 'AI CFO Briefing Dec 2025 — Revenue ₹42L, Net Profit ₹8.4L, Cash ₹15.2L, Health 78/100',
-    },
-    {
-      id: 'rpt-seed-008',
-      reportType: 'gst_summary',
-      recipient: '+91 98765 43210',
-      recipientName: 'Rajesh Verma',
-      channel: 'whatsapp',
-      status: 'read',
-      sentAt: daysAgo(3),
-      summary: 'GST Summary Dec 2025 — Net Payable ₹2.8L. Full report sent to email.',
-    },
-    {
-      id: 'rpt-seed-009',
-      reportType: 'cash_flow',
-      recipient: 'dashboard',
-      recipientName: 'Dashboard',
-      channel: 'dashboard',
-      status: 'delivered',
-      sentAt: daysAgo(1),
-      summary: 'Cash Flow Forecast pinned to dashboard. Surplus ₹5.1L predicted.',
-    },
-    {
-      id: 'rpt-seed-010',
-      reportType: 'receivables',
-      recipient: '+91 98200 11223',
-      recipientName: 'Priya Sharma',
-      channel: 'whatsapp',
-      status: 'delivered',
-      sentAt: daysAgo(2),
-      summary: 'Receivables snapshot — Outstanding ₹18.2L, 3 invoices overdue. Full report on email.',
-    },
-    {
-      id: 'rpt-seed-011',
-      reportType: 'ai_cfo',
-      recipient: 'pdf-download',
-      recipientName: 'PDF Export',
-      channel: 'pdf',
-      status: 'delivered',
-      sentAt: daysAgo(1),
-      summary: 'AI CFO Monthly Briefing PDF generated. Revenue ₹42L, Health 78/100.',
-    },
-    {
-      id: 'rpt-seed-012',
-      reportType: 'gst_summary',
-      recipient: 'amit@mehtatraders.in',
-      recipientName: 'Amit Mehta',
-      channel: 'email',
-      status: 'opened',
-      sentAt: daysAgo(5),
-      summary: 'GST Summary Nov 2025 — Output ₹3.8L, ITC ₹1.2L, Net Payable ₹2.6L, Returns Filed: 4/4',
-    },
-  ];
+  return [];
 }
 
 // ─── Stats ─────────────────────────────────────────────────────────────────────

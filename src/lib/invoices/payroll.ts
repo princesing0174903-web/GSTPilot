@@ -133,170 +133,18 @@ export function getPayrollStats(employees: Employee[], payrolls: Payroll[]): Pay
   };
 }
 
-// ─── Seed data: 8 Indian employees ────────────────────────────────────────────
-
-interface EmployeeSeedInput {
-  name: string;
-  designation: string;
-  department: string;
-  employeeId: string;
-  pan: string;
-  bankAccount: string;
-  ifsc: string;
-  salary: number;
-  joinedAt: string;
-}
-
-const EMPLOYEE_SEED_INPUTS: EmployeeSeedInput[] = [
-  {
-    name: 'Arjun Sharma',
-    designation: 'Senior Accountant',
-    department: 'Finance',
-    employeeId: 'GST-EMP-001',
-    pan: 'ABOPS1234K',
-    bankAccount: '12345678901',
-    ifsc: 'HDFC0000123',
-    salary: 65000,
-    joinedAt: '2022-04-01',
-  },
-  {
-    name: 'Meera Iyer',
-    designation: 'GST Compliance Manager',
-    department: 'Finance',
-    employeeId: 'GST-EMP-002',
-    pan: 'ABMPI5678L',
-    bankAccount: '98765432109',
-    ifsc: 'ICIC0000456',
-    salary: 95000,
-    joinedAt: '2021-07-15',
-  },
-  {
-    name: 'Rahul Verma',
-    designation: 'Full Stack Developer',
-    department: 'Engineering',
-    employeeId: 'GST-EMP-003',
-    pan: 'ABPRV9012M',
-    bankAccount: '45678901234',
-    ifsc: 'SBIN0000789',
-    salary: 120000,
-    joinedAt: '2023-02-01',
-  },
-  {
-    name: 'Priya Nair',
-    designation: 'Engineering Manager',
-    department: 'Engineering',
-    employeeId: 'GST-EMP-004',
-    pan: 'ABPPN3456N',
-    bankAccount: '78901234567',
-    ifsc: 'AXIS0000123',
-    salary: 150000,
-    joinedAt: '2020-11-10',
-  },
-  {
-    name: 'Karthik Reddy',
-    designation: 'DevOps Engineer',
-    department: 'Engineering',
-    employeeId: 'GST-EMP-005',
-    pan: 'ABPKR7890P',
-    bankAccount: '23456789012',
-    ifsc: 'KOTK0000456',
-    salary: 85000,
-    joinedAt: '2023-08-01',
-  },
-  {
-    name: 'Anjali Desai',
-    designation: 'HR Executive',
-    department: 'People Ops',
-    employeeId: 'GST-EMP-006',
-    pan: 'ABPAD2345Q',
-    bankAccount: '67890123456',
-    ifsc: 'HDFC0000789',
-    salary: 42000,
-    joinedAt: '2024-01-15',
-  },
-  {
-    name: 'Vikram Singh',
-    designation: 'Sales Manager',
-    department: 'Sales',
-    employeeId: 'GST-EMP-007',
-    pan: 'ABPVS6789R',
-    bankAccount: '34567890123',
-    ifsc: 'ICIC0000123',
-    salary: 78000,
-    joinedAt: '2022-06-20',
-  },
-  {
-    name: 'Sneha Patil',
-    designation: 'Junior Accountant',
-    department: 'Finance',
-    employeeId: 'GST-EMP-008',
-    pan: 'ABPSP1357S',
-    bankAccount: '90123456789',
-    ifsc: 'SBIN0000456',
-    salary: 28000,
-    joinedAt: '2024-09-01',
-  },
-];
+// ─── Seed placeholders (no-op) ───────────────────────────────────────────────
+// Previously these functions emitted 8 fake Indian employees + 1 month of
+// payslips. They now return empty arrays so callers fall through to a clean
+// empty state. Real employees/payrolls are read from `db.employee.findMany()`
+// and `db.payroll.findMany()` by the API routes.
 
 export function seedEmployees(): Employee[] {
-  const nowIso = new Date().toISOString();
-  return EMPLOYEE_SEED_INPUTS.map((e, idx) => {
-    const breakdown = calculateSalaryBreakdown(e.salary);
-    return {
-      id: `seed-emp-${idx + 1}`,
-      clientId: null,
-      name: e.name,
-      designation: e.designation,
-      department: e.department,
-      employeeId: e.employeeId,
-      pan: e.pan,
-      aadhaar: null,
-      bankAccount: e.bankAccount,
-      ifsc: e.ifsc,
-      salary: round2(e.salary),
-      basic: breakdown.basic,
-      hra: breakdown.hra,
-      allowances: breakdown.allowances,
-      pf: breakdown.pf,
-      esi: breakdown.esi,
-      tds: breakdown.tds,
-      professionalTax: breakdown.professionalTax,
-      netSalary: breakdown.netSalary,
-      status: 'active',
-      joinedAt: e.joinedAt,
-      createdAt: nowIso,
-      updatedAt: nowIso,
-    };
-  });
+  return [];
 }
 
-// ─── Seed data: 1 month payroll for the seeded employees ──────────────────────
-
-export function seedPayroll(employees: Employee[]): Payroll[] {
-  const nowIso = new Date().toISOString();
-  const period = '2026-02'; // last completed month relative to seed data spread
-  return employees.map((emp, idx) => {
-    const breakdown = calculateSalaryBreakdown(emp.salary);
-    return {
-      id: `seed-payroll-${idx + 1}`,
-      employeeId: emp.id,
-      period,
-      grossSalary: round2(emp.salary),
-      basic: breakdown.basic,
-      hra: breakdown.hra,
-      allowances: breakdown.allowances,
-      pf: breakdown.pf,
-      esi: breakdown.esi,
-      tds: breakdown.tds,
-      professionalTax: breakdown.professionalTax,
-      netSalary: breakdown.netSalary,
-      status: 'paid',
-      paidAt: `${period}-28`,
-      payslipUrl: null,
-      createdAt: nowIso,
-      updatedAt: nowIso,
-    };
-  });
+export function seedPayroll(_employees: Employee[]): Payroll[] {
+  return [];
 }
 
 // ─── helpers ───────────────────────────────────────────────────────────────────

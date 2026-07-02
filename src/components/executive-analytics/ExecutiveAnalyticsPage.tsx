@@ -56,6 +56,8 @@ import {
 import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend, ChartLegendContent } from '@/components/ui/chart';
 import { motion, AnimatePresence } from 'framer-motion';
 import { formatCurrency, formatNumber } from '@/lib/gst-utils';
+import { EmptyState } from '@/components/shared/EmptyState';
+import { Lightbulb as LightbulbIcon } from 'lucide-react';
 
 // ─── Color Palette ────────────────────────────────────────────────────────
 const COLORS = {
@@ -107,103 +109,6 @@ interface AnalyticsData {
   employeeProductivity: EmployeeProductivityEntry[];
   aiInsights: string[];
 }
-
-// ─── Mock Fallback Data ────────────────────────────────────────────────────
-const mockRevenueData = [
-  { period: '2025-01', totalRevenue: 2400000, month: 'Jan' },
-  { period: '2025-02', totalRevenue: 3100000, month: 'Feb' },
-  { period: '2025-03', totalRevenue: 2800000, month: 'Mar' },
-  { period: '2025-04', totalRevenue: 3500000, month: 'Apr' },
-  { period: '2025-05', totalRevenue: 3200000, month: 'May' },
-  { period: '2025-06', totalRevenue: 4100000, month: 'Jun' },
-  { period: '2025-07', totalRevenue: 3800000, month: 'Jul' },
-  { period: '2025-08', totalRevenue: 4600000, month: 'Aug' },
-  { period: '2025-09', totalRevenue: 5200000, month: 'Sep' },
-  { period: '2025-10', totalRevenue: 4900000, month: 'Oct' },
-  { period: '2025-11', totalRevenue: 5500000, month: 'Nov' },
-  { period: '2025-12', totalRevenue: 5800000, month: 'Dec' },
-];
-
-const mockClientGrowth = [
-  { month: 'Jan', newClients: 4, count: 18 },
-  { month: 'Feb', newClients: 2, count: 20 },
-  { month: 'Mar', newClients: 3, count: 23 },
-  { month: 'Apr', newClients: 5, count: 28 },
-  { month: 'May', newClients: 2, count: 30 },
-  { month: 'Jun', newClients: 4, count: 34 },
-  { month: 'Jul', newClients: 3, count: 37 },
-  { month: 'Aug', newClients: 6, count: 43 },
-  { month: 'Sep', newClients: 3, count: 46 },
-  { month: 'Oct', newClients: 5, count: 51 },
-  { month: 'Nov', newClients: 4, count: 55 },
-  { month: 'Dec', newClients: 7, count: 62 },
-];
-
-const mockGSTData = [
-  { month: 'Jan', cgst: 420000, sgst: 420000, igst: 180000 },
-  { month: 'Feb', cgst: 510000, sgst: 510000, igst: 220000 },
-  { month: 'Mar', cgst: 480000, sgst: 480000, igst: 200000 },
-  { month: 'Apr', cgst: 580000, sgst: 580000, igst: 260000 },
-  { month: 'May', cgst: 540000, sgst: 540000, igst: 240000 },
-  { month: 'Jun', cgst: 680000, sgst: 680000, igst: 320000 },
-  { month: 'Jul', cgst: 640000, sgst: 640000, igst: 290000 },
-  { month: 'Aug', cgst: 760000, sgst: 760000, igst: 350000 },
-  { month: 'Sep', cgst: 860000, sgst: 860000, igst: 400000 },
-  { month: 'Oct', cgst: 820000, sgst: 820000, igst: 380000 },
-  { month: 'Nov', cgst: 910000, sgst: 910000, igst: 420000 },
-  { month: 'Dec', cgst: 960000, sgst: 960000, igst: 450000 },
-];
-
-const mockProductivity = [
-  { department: 'Filing', accuracy: 92, speed: 85, volume: 78, reviews: 88, score: 86 },
-  { department: 'Audit', accuracy: 95, speed: 72, volume: 65, reviews: 90, score: 81 },
-  { department: 'Tax', accuracy: 88, speed: 80, volume: 82, reviews: 75, score: 81 },
-  { department: 'Compliance', accuracy: 90, speed: 78, volume: 70, reviews: 82, score: 80 },
-  { department: 'Advisory', accuracy: 85, speed: 68, volume: 60, reviews: 72, score: 71 },
-];
-
-const mockAIInsights = [
-  {
-    id: '1',
-    icon: 'trending-up',
-    color: 'emerald',
-    text: 'Revenue is trending up by 12.4% compared to the previous period. Consider scaling operations to maintain momentum.',
-    confidence: 92,
-    action: 'Scale team capacity',
-  },
-  {
-    id: '2',
-    icon: 'alert',
-    color: 'amber',
-    text: 'Team utilization at 87% — approaching burnout risk. Consider redistributing workload or hiring additional staff.',
-    confidence: 85,
-    action: 'Review workload distribution',
-  },
-  {
-    id: '3',
-    icon: 'trending-up',
-    color: 'emerald',
-    text: 'Client base grew by 7 new clients this month. Ensure onboarding processes can handle increased volume.',
-    confidence: 88,
-    action: 'Optimize onboarding flow',
-  },
-  {
-    id: '4',
-    icon: 'lightbulb',
-    color: 'purple',
-    text: 'Profitability is strong at 28.5%. Reinvest in technology and training to sustain margins.',
-    confidence: 79,
-    action: 'Plan tech investments',
-  },
-  {
-    id: '5',
-    icon: 'trending-down',
-    color: 'red',
-    text: 'Filing efficiency dropped 3.2% this quarter. Review process bottlenecks in the compliance department.',
-    confidence: 81,
-    action: 'Audit filing processes',
-  },
-];
 
 // ─── Animated Number Hook ──────────────────────────────────────────────────
 function useAnimatedNumber(target: number, duration: number = 1200) {
@@ -360,7 +265,7 @@ export default function ExecutiveAnalyticsPage() {
         totalRevenue: r.totalRevenue,
         period: r.period,
       }))
-    : mockRevenueData;
+    : [];
 
   const clientGrowthData = (data?.clientGrowth?.length ?? 0) > 0
     ? data!.clientGrowth.map((c, i) => ({
@@ -368,9 +273,9 @@ export default function ExecutiveAnalyticsPage() {
         newClients: i === 0 ? c.count : c.count - (data!.clientGrowth[i - 1]?.count ?? 0),
         count: c.count,
       }))
-    : mockClientGrowth;
+    : [];
 
-  const gstData = mockGSTData;
+  const gstData: Array<{ month: string; cgst: number; sgst: number; igst: number }> = [];
 
   const productivityData = (data?.employeeProductivity?.length ?? 0) > 0
     ? (() => {
@@ -391,27 +296,31 @@ export default function ExecutiveAnalyticsPage() {
           reviews: Math.min(100, Math.round(vals.reviews.reduce((a, b) => a + b, 0) / vals.reviews.length)),
         }));
       })()
-    : mockProductivity;
+    : [];
 
   const aiInsights = (data?.aiInsights?.length ?? 0) > 0
-    ? data!.aiInsights.map((text, i) => {
-        const mockItem = mockAIInsights[i] ?? mockAIInsights[i % mockAIInsights.length];
-        return { ...mockItem, text, id: String(i + 1) };
-      })
-    : mockAIInsights;
+    ? data!.aiInsights.map((text, i) => ({
+        id: String(i + 1),
+        icon: 'lightbulb',
+        color: 'emerald',
+        text,
+        confidence: 0,
+        action: 'Review',
+      }))
+    : [];
 
   // ── KPI values ───────────────────────────────────────────────────────────
   const monthlyRevenue = revenueData.length > 0 ? revenueData[revenueData.length - 1]?.totalRevenue ?? 0 : 0;
   const clientGrowthPct = clientGrowthData.length >= 2
     ? (() => {
-        const prev = clientGrowthData[clientGrowthData.length - 2]?.count ?? 1;
+        const prev = clientGrowthData[clientGrowthData.length - 2]?.count ?? 0;
         const curr = clientGrowthData[clientGrowthData.length - 1]?.count ?? 0;
         return prev > 0 ? ((curr - prev) / prev) * 100 : 0;
       })()
-    : 12.4;
-  const gstProcessed = data?.gstProcessed ?? 28560000;
-  const teamProductivity = data?.teamUtilization ?? 82;
-  const profitability = data?.profitability ?? 28.5;
+    : 0;
+  const gstProcessed = data?.gstProcessed ?? 0;
+  const teamProductivity = data?.teamUtilization ?? 0;
+  const profitability = data?.profitability ?? 0;
 
   const animRevenue = useAnimatedNumber(Math.round(monthlyRevenue / 1000), 1500);
   const animGst = useAnimatedNumber(Math.round(gstProcessed / 1000), 1500);
@@ -441,10 +350,16 @@ export default function ExecutiveAnalyticsPage() {
     reviews: { label: 'Reviews', color: COLORS.amber },
   };
 
-  // ── Period comparison (mock) ─────────────────────────────────────────────
-  const revenueChange = 12.4;
+  // ── Period comparison ─────────────────────────────────────────────────────
+  const revenueChange = revenueData.length >= 2
+    ? (() => {
+        const prev = revenueData[revenueData.length - 2]?.totalRevenue ?? 0;
+        const curr = revenueData[revenueData.length - 1]?.totalRevenue ?? 0;
+        return prev > 0 ? ((curr - prev) / prev) * 100 : 0;
+      })()
+    : 0;
   const clientChange = clientGrowthPct;
-  const filingEfficiencyChange = -3.2;
+  const filingEfficiencyChange = 0;
 
   // ── Render ───────────────────────────────────────────────────────────────
   return (
@@ -555,7 +470,7 @@ export default function ExecutiveAnalyticsPage() {
                     <ArrowDownRight className="h-3.5 w-3.5 text-red-500" />
                   )}
                   <span className="text-[10px] text-muted-foreground">
-                    {data?.activeClients ?? 62} active clients
+                    {data?.activeClients ?? 0} active clients
                   </span>
                 </div>
               </>
@@ -904,6 +819,12 @@ export default function ExecutiveAnalyticsPage() {
                     <InsightSkeleton key={i} />
                   ))}
                 </div>
+              ) : aiInsights.length === 0 ? (
+                <EmptyState
+                  icon={LightbulbIcon}
+                  title="No AI insights yet"
+                  description="AI-powered insights will appear here once analytics data is available."
+                />
               ) : (
                 <div className="space-y-2">
                   <AnimatePresence>
@@ -1045,7 +966,7 @@ export default function ExecutiveAnalyticsPage() {
                     />
                   </div>
                   <p className="text-[10px] text-muted-foreground mt-1.5">
-                    {data?.activeClients ?? 62} active clients ({clientChange >= 0 ? 'growing' : 'declining'})
+                    {data?.activeClients ?? 0} active clients ({clientChange >= 0 ? 'growing' : 'declining'})
                   </p>
                 </motion.div>
 

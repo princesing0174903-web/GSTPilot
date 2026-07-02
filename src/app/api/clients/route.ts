@@ -1,6 +1,7 @@
 import { db } from '@/lib/db'
 import { NextResponse } from 'next/server'
 import { graphEvents, invalidateGraph } from '@/lib/graph/live-update'
+import { emitClientNode } from '@/lib/graph/auto-emit'
 
 // GET /api/clients — Fetch all clients with aggregated stats
 export async function GET() {
@@ -147,6 +148,9 @@ export async function POST(request: Request) {
 
     // ── Real Business Graph Engine™ — auto-create client node + live event ──
     graphEvents.clientCreated(client.id, client.tradeName)
+
+    // PT-2-b: canonical graph node emit (verifies entity + pushes live event + invalidates cache)
+    try { await emitClientNode(client.id) } catch (e) { console.error('[graph] emitClientNode failed', e) }
 
     return NextResponse.json({ client }, { status: 201 })
   } catch (error) {

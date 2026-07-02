@@ -1,0 +1,302 @@
+    50→  },
+    51→  {
+    52→    id: 'client-2',
+    53→    gstin: '24AABCP5678Q1Z3',
+    54→    tradeName: 'Patel & Sons',
+    55→    legalName: 'Patel & Sons Trading Co.',
+    56→    state: 'Gujarat',
+    57→    stateCode: '24',
+    58→    entityType: 'regular',
+    59→    returnPeriod: 'monthly',
+    60→    lastFilingDate: '2025-06-09',
+    61→    status: 'active',
+    62→    healthScore: 62,
+    63→    contactEmail: 'gst@patelsons.in',
+    64→    contactPhone: '+91 79123 45678',
+    65→    createdAt: '2025-01-20T09:00:00Z',
+    66→    updatedAt: '2025-06-09T11:20:00Z',
+    67→  },
+    68→  {
+    69→    id: 'client-3',
+    70→    gstin: '29AABCK9012L1Z7',
+    71→    tradeName: 'Krishna Traders',
+    72→    legalName: 'Krishna Traders Pvt Ltd',
+    73→    state: 'Karnataka',
+    74→    stateCode: '29',
+    75→    entityType: 'regular',
+    76→    returnPeriod: 'monthly',
+    77→    lastFilingDate: '2025-06-11',
+    78→    status: 'active',
+    79→    healthScore: 88,
+    80→    contactEmail: 'finance@krishnatraders.in',
+    81→    contactPhone: '+91 80123 98765',
+    82→    createdAt: '2025-02-01T08:00:00Z',
+    83→    updatedAt: '2025-06-11T16:00:00Z',
+    84→  },
+    85→  {
+    86→    id: 'client-4',
+    87→    gstin: '27AABCM3456N1Z9',
+    88→    tradeName: 'Metro Retail',
+    89→    legalName: 'Metro Retail Solutions Pvt Ltd',
+    90→    state: 'Maharashtra',
+    91→    stateCode: '27',
+    92→    entityType: 'regular',
+    93→    returnPeriod: 'monthly',
+    94→    lastFilingDate: '2025-05-11',
+    95→    status: 'active',
+    96→    healthScore: 45,
+    97→    contactEmail: 'accounts@metroretail.in',
+    98→    contactPhone: '+91 22345 67890',
+    99→    createdAt: '2025-02-10T07:30:00Z',
+   100→    updatedAt: '2025-05-11T12:00:00Z',
+   101→  },
+   102→  {
+   103→    id: 'client-5',
+   104→    gstin: '27AABCX7890P1Z2',
+   105→    tradeName: 'Sunrise Exports',
+   106→    legalName: 'Sunrise Exports India Pvt Ltd',
+   107→    state: 'Maharashtra',
+   108→    stateCode: '27',
+   109→    entityType: 'regular',
+   110→    returnPeriod: 'monthly',
+   111→    lastFilingDate: '2025-06-10',
+   112→    status: 'active',
+   113→    healthScore: 85,
+   114→    contactEmail: 'gst@sunriseexports.in',
+   115→    contactPhone: '+91 98765 43210',
+   116→    createdAt: '2025-02-15T06:00:00Z',
+   117→    updatedAt: '2025-06-10T09:30:00Z',
+   118→  },
+   119→  {
+   120→    id: 'client-6',
+   121→    gstin: '06AABCG2345R1Z4',
+   122→    tradeName: 'Gupta Manufacturing',
+   123→    legalName: 'Gupta Manufacturing Industries Pvt Ltd',
+   124→    state: 'Haryana',
+   125→    stateCode: '06',
+   126→    entityType: 'regular',
+   127→    returnPeriod: 'monthly',
+   128→    lastFilingDate: '2025-06-10',
+   129→    status: 'active',
+   130→    healthScore: 78,
+   131→    contactEmail: 'finance@guptamfg.in',
+   132→    contactPhone: '+91 12451 23456',
+   133→    createdAt: '2025-03-01T10:00:00Z',
+   134→    updatedAt: '2025-06-10T15:00:00Z',
+   135→  },
+   136→  {
+   137→    id: 'client-7',
+   138→    gstin: '27AABCA6789S1Z6',
+   139→    tradeName: 'Apex Logistics',
+   140→    legalName: 'Apex Logistics Solutions Pvt Ltd',
+   141→    state: 'Maharashtra',
+   142→    stateCode: '27',
+   143→    entityType: 'regular',
+   144→    returnPeriod: 'monthly',
+   145→    lastFilingDate: '2025-05-20',
+   146→    status: 'active',
+   147→    healthScore: 70,
+   148→    contactEmail: 'accounts@apexlogistics.in',
+   149→    contactPhone: '+91 98333 11111',
+   150→    createdAt: '2025-03-15T08:00:00Z',
+   151→    updatedAt: '2025-05-20T14:00:00Z',
+   152→  },
+   153→  {
+   154→    id: 'client-8',
+   155→    gstin: '29AABCR0123T1Z8',
+   156→    tradeName: 'RK Electronics',
+   157→    legalName: 'RK Electronics Pvt Ltd',
+   158→    state: 'Karnataka',
+   159→    stateCode: '29',
+   160→    entityType: 'regular',
+   161→    returnPeriod: 'quarterly',
+   162→    lastFilingDate: '2025-04-20',
+   163→    status: 'active',
+   164→    healthScore: 55,
+   165→    contactEmail: 'gst@rkelectronics.in',
+   166→    contactPhone: '+91 80555 22222',
+   167→    createdAt: '2025-04-01T09:00:00Z',
+   168→    updatedAt: '2025-04-20T11:00:00Z',
+   169→  },
+   170→];
+   171→
+   172→// ─── Filing Data ──────────────────────────────────────────────────────────────
+   173→export interface SampleFiling {
+   174→  id: string;
+   175→  clientId: string;
+   176→  returnType: 'GSTR-1' | 'GSTR-3B';
+   177→  period: string;
+   178→  status: FilingStatus;
+   179→  filedDate?: string;
+   180→  acknowledgmentNumber?: string;
+   181→  totalInvoices: number;
+   182→  readyForFiling: number;
+   183→  issuesFound: number;
+   184→  criticalErrors: number;
+   185→  warnings: number;
+   186→  totalTaxableValue: number;
+   187→  totalTax: number;
+   188→  createdAt: string;
+   189→  updatedAt: string;
+   190→}
+   191→
+   192→export const SAMPLE_FILINGS: SampleFiling[] = [
+   193→  // Sharma Enterprises — Health 92, mostly clean
+   194→  { id: 'f1', clientId: 'client-1', returnType: 'GSTR-1', period: '2025-06', status: 'validated', totalInvoices: 15, readyForFiling: 13, issuesFound: 2, criticalErrors: 0, warnings: 2, totalTaxableValue: 3245000, totalTax: 452310, createdAt: '2025-07-01T10:15:00Z', updatedAt: '2025-07-02T09:00:00Z' },
+   195→  { id: 'f2', clientId: 'client-1', returnType: 'GSTR-3B', period: '2025-06', status: 'draft', totalInvoices: 15, readyForFiling: 0, issuesFound: 3, criticalErrors: 0, warnings: 3, totalTaxableValue: 3245000, totalTax: 245800, createdAt: '2025-07-01T10:15:00Z', updatedAt: '2025-07-01T10:15:00Z' },
+   196→  { id: 'f3', clientId: 'client-1', returnType: 'GSTR-1', period: '2025-05', status: 'filed', filedDate: '2025-06-10', acknowledgmentNumber: 'AA060625001234', totalInvoices: 13, readyForFiling: 13, issuesFound: 0, criticalErrors: 0, warnings: 0, totalTaxableValue: 2980000, totalTax: 218400, createdAt: '2025-06-01T10:00:00Z', updatedAt: '2025-06-10T16:45:00Z' },
+   197→  { id: 'f4', clientId: 'client-1', returnType: 'GSTR-3B', period: '2025-05', status: 'filed', filedDate: '2025-06-18', acknowledgmentNumber: 'AA060625005678', totalInvoices: 13, readyForFiling: 13, issuesFound: 0, criticalErrors: 0, warnings: 0, totalTaxableValue: 2980000, totalTax: 234100, createdAt: '2025-06-01T10:00:00Z', updatedAt: '2025-06-18T15:30:00Z' },
+   198→
+   199→  // Patel & Sons — Health 62, several issues
+   200→  { id: 'f5', clientId: 'client-2', returnType: 'GSTR-1', period: '2025-06', status: 'draft', totalInvoices: 10, readyForFiling: 0, issuesFound: 4, criticalErrors: 2, warnings: 2, totalTaxableValue: 1876000, totalTax: 341200, createdAt: '2025-07-01T09:00:00Z', updatedAt: '2025-07-01T09:00:00Z' },
+   201→  { id: 'f6', clientId: 'client-2', returnType: 'GSTR-3B', period: '2025-05', status: 'prepared', totalInvoices: 10, readyForFiling: 7, issuesFound: 3, criticalErrors: 1, warnings: 2, totalTaxableValue: 1654000, totalTax: 272300, createdAt: '2025-06-01T09:00:00Z', updatedAt: '2025-06-29T11:15:00Z' },
+   202→  { id: 'f7', clientId: 'client-2', returnType: 'GSTR-1', period: '2025-05', status: 'filed', filedDate: '2025-06-09', acknowledgmentNumber: 'AA060625009012', totalInvoices: 9, readyForFiling: 9, issuesFound: 0, criticalErrors: 0, warnings: 0, totalTaxableValue: 1456000, totalTax: 212500, createdAt: '2025-06-01T09:00:00Z', updatedAt: '2025-06-09T14:30:00Z' },
+   203→
+   204→  // Krishna Traders — Health 88, clean
+   205→  { id: 'f8', clientId: 'client-3', returnType: 'GSTR-1', period: '2025-06', status: 'validated', totalInvoices: 8, readyForFiling: 7, issuesFound: 1, criticalErrors: 0, warnings: 1, totalTaxableValue: 890000, totalTax: 110000, createdAt: '2025-07-01T09:00:00Z', updatedAt: '2025-07-02T10:00:00Z' },
+   206→  { id: 'f9', clientId: 'client-3', returnType: 'GSTR-3B', period: '2025-06', status: 'prepared', totalInvoices: 8, readyForFiling: 6, issuesFound: 2, criticalErrors: 0, warnings: 2, totalTaxableValue: 890000, totalTax: 118500, createdAt: '2025-07-01T09:00:00Z', updatedAt: '2025-07-03T08:00:00Z' },
+   207→  { id: 'f10', clientId: 'client-3', returnType: 'GSTR-1', period: '2025-05', status: 'filed', filedDate: '2025-06-11', acknowledgmentNumber: 'AA060625019012', totalInvoices: 7, readyForFiling: 7, issuesFound: 0, criticalErrors: 0, warnings: 0, totalTaxableValue: 720000, totalTax: 95200, createdAt: '2025-06-01T09:00:00Z', updatedAt: '2025-06-11T12:00:00Z' },
+   208→
+   209→  // Metro Retail — Health 45, many issues
+   210→  { id: 'f11', clientId: 'client-4', returnType: 'GSTR-1', period: '2025-06', status: 'reviewed', totalInvoices: 12, readyForFiling: 8, issuesFound: 4, criticalErrors: 2, warnings: 2, totalTaxableValue: 4120000, totalTax: 337445, createdAt: '2025-07-02T09:30:00Z', updatedAt: '2025-07-04T14:00:00Z' },
+   211→  { id: 'f12', clientId: 'client-4', returnType: 'GSTR-3B', period: '2025-05', status: 'prepared', totalInvoices: 11, readyForFiling: 6, issuesFound: 5, criticalErrors: 2, warnings: 3, totalTaxableValue: 3550000, totalTax: 296200, createdAt: '2025-06-01T09:00:00Z', updatedAt: '2025-06-30T14:10:00Z' },
+   212→  { id: 'f13', clientId: 'client-4', returnType: 'GSTR-1', period: '2025-05', status: 'prepared', totalInvoices: 10, readyForFiling: 7, issuesFound: 3, criticalErrors: 1, warnings: 2, totalTaxableValue: 3180000, totalTax: 268900, createdAt: '2025-06-01T09:00:00Z', updatedAt: '2025-06-30T14:00:00Z' },
+   213→  { id: 'f14', clientId: 'client-4', returnType: 'GSTR-1', period: '2025-04', status: 'filed', filedDate: '2025-05-11', acknowledgmentNumber: 'AA050625031234', totalInvoices: 10, readyForFiling: 10, issuesFound: 0, criticalErrors: 0, warnings: 0, totalTaxableValue: 2850000, totalTax: 235600, createdAt: '2025-05-01T09:00:00Z', updatedAt: '2025-05-11T16:00:00Z' },
+   214→
+   215→  // Sunrise Exports — Health 85, clean
+   216→  { id: 'f15', clientId: 'client-5', returnType: 'GSTR-1', period: '2025-06', status: 'validated', totalInvoices: 8, readyForFiling: 7, issuesFound: 1, criticalErrors: 0, warnings: 1, totalTaxableValue: 2340000, totalTax: 893420, createdAt: '2025-07-01T09:00:00Z', updatedAt: '2025-07-02T08:00:00Z' },
+   217→  { id: 'f16', clientId: 'client-5', returnType: 'GSTR-1', period: '2025-05', status: 'filed', filedDate: '2025-06-10', acknowledgmentNumber: 'AA060625040001', totalInvoices: 7, readyForFiling: 7, issuesFound: 0, criticalErrors: 0, warnings: 0, totalTaxableValue: 2150000, totalTax: 812500, createdAt: '2025-06-01T09:00:00Z', updatedAt: '2025-06-10T10:00:00Z' },
+   218→
+   219→  // Gupta Manufacturing — Health 78, moderate
+   220→  { id: 'f17', clientId: 'client-6', returnType: 'GSTR-1', period: '2025-06', status: 'validated', totalInvoices: 10, readyForFiling: 9, issuesFound: 1, criticalErrors: 0, warnings: 1, totalTaxableValue: 4850000, totalTax: 1287650, createdAt: '2025-07-01T09:00:00Z', updatedAt: '2025-07-02T11:00:00Z' },
+   221→  { id: 'f18', clientId: 'client-6', returnType: 'GSTR-3B', period: '2025-05', status: 'filed', filedDate: '2025-06-20', acknowledgmentNumber: 'AA060625050001', totalInvoices: 9, readyForFiling: 9, issuesFound: 0, criticalErrors: 0, warnings: 0, totalTaxableValue: 4120000, totalTax: 945300, createdAt: '2025-06-01T09:00:00Z', updatedAt: '2025-06-20T15:00:00Z' },
+   222→
+   223→  // Apex Logistics — Health 70, some issues
+   224→  { id: 'f19', clientId: 'client-7', returnType: 'GSTR-1', period: '2025-06', status: 'draft', totalInvoices: 8, readyForFiling: 0, issuesFound: 3, criticalErrors: 1, warnings: 2, totalTaxableValue: 2780000, totalTax: 489200, createdAt: '2025-07-01T09:00:00Z', updatedAt: '2025-07-01T09:00:00Z' },
+   225→  { id: 'f20', clientId: 'client-7', returnType: 'GSTR-3B', period: '2025-05', status: 'filed', filedDate: '2025-06-20', acknowledgmentNumber: 'AA060625060001', totalInvoices: 7, readyForFiling: 7, issuesFound: 0, criticalErrors: 0, warnings: 0, totalTaxableValue: 2360000, totalTax: 412800, createdAt: '2025-06-01T09:00:00Z', updatedAt: '2025-06-20T14:00:00Z' },
+   226→
+   227→  // RK Electronics — Health 55, quarterly filer with issues
+   228→  { id: 'f21', clientId: 'client-8', returnType: 'GSTR-1', period: '2025-06', status: 'draft', totalInvoices: 6, readyForFiling: 0, issuesFound: 3, criticalErrors: 1, warnings: 2, totalTaxableValue: 1920000, totalTax: 312400, createdAt: '2025-07-01T09:00:00Z', updatedAt: '2025-07-01T09:00:00Z' },
+   229→  { id: 'f22', clientId: 'client-8', returnType: 'GSTR-1', period: '2025-03', status: 'filed', filedDate: '2025-04-20', acknowledgmentNumber: 'AA040625070001', totalInvoices: 5, readyForFiling: 5, issuesFound: 0, criticalErrors: 0, warnings: 0, totalTaxableValue: 1450000, totalTax: 238500, createdAt: '2025-04-01T09:00:00Z', updatedAt: '2025-04-20T11:00:00Z' },
+   230→];
+   231→
+   232→// ─── Invoice Data ─────────────────────────────────────────────────────────────
+   233→export interface SampleInvoice {
+   234→  id: string;
+   235→  clientId: string;
+   236→  invoiceNumber: string;
+   237→  date: string;
+   238→  customer: string;
+   239→  customerGstin?: string;
+   240→  taxableValue: number;
+   241→  cgst: number;
+   242→  sgst: number;
+   243→  igst: number;
+   244→  status: 'validated' | 'warning' | 'error';
+   245→  errorDetail?: string;
+   246→  hsnCode?: string;
+   247→  placeOfSupply?: string;
+   248→}
+   249→
+   250→export const SAMPLE_INVOICES: Record<string, SampleInvoice[]> = {
+   251→  // ── Sharma Enterprises (Maharashtra-27) ──
+   252→  'client-1': [
+   253→    { id: 'inv1-1', clientId: 'client-1', invoiceNumber: 'SE-2025-0801', date: '2025-06-02', customer: 'Pune Industrial Supply Co.', customerGstin: '27AABPI5672M1Z3', taxableValue: 450000, cgst: 40500, sgst: 40500, igst: 0, status: 'validated', hsnCode: '8471', placeOfSupply: '27' },
+   254→    { id: 'inv1-2', clientId: 'client-1', invoiceNumber: 'SE-2025-0802', date: '2025-06-04', customer: 'Nashik Agro Products Ltd', customerGstin: '27AABNA2341K1Z7', taxableValue: 320000, cgst: 28800, sgst: 28800, igst: 0, status: 'validated', hsnCode: '0804', placeOfSupply: '27' },
+   255→    { id: 'inv1-3', clientId: 'client-1', invoiceNumber: 'SE-2025-0803', date: '2025-06-05', customer: 'Thane Metal Works', customerGstin: '27AABTM7893N1Z1', taxableValue: 185000, cgst: 16650, sgst: 16650, igst: 0, status: 'validated', hsnCode: '7208', placeOfSupply: '27' },
+   256→    { id: 'inv1-4', clientId: 'client-1', invoiceNumber: 'SE-2025-0804', date: '2025-06-07', customer: 'Kolhapur Textile Mills', customerGstin: '27AABKT4521P1Z9', taxableValue: 275000, cgst: 0, sgst: 0, igst: 49500, status: 'validated', hsnCode: '5208', placeOfSupply: '24' },
+   257→    { id: 'inv1-5', clientId: 'client-1', invoiceNumber: 'SE-2025-0805', date: '2025-06-08', customer: 'Nagpur Chemical Industries', customerGstin: '27AABNC3218R1Z4', taxableValue: 142000, cgst: 12780, sgst: 12780, igst: 0, status: 'warning', errorDetail: 'Missing HSN code for 2 line items', hsnCode: '' },
+   258→    { id: 'inv1-6', clientId: 'client-1', invoiceNumber: 'SE-2025-0806', date: '2025-06-10', customer: 'Mumbai Retail Mart Pvt Ltd', customerGstin: '27AABMR6724T1Z2', taxableValue: 95000, cgst: 8550, sgst: 8550, igst: 0, status: 'validated', hsnCode: '9997', placeOfSupply: '27' },
+   259→    { id: 'inv1-7', clientId: 'client-1', invoiceNumber: 'SE-2025-0807', date: '2025-06-11', customer: 'Aurangabad Packaging Ltd', customerGstin: '29AABAP5136S1Z6', taxableValue: 210000, cgst: 0, sgst: 0, igst: 37800, status: 'validated', hsnCode: '3923', placeOfSupply: '29' },
+   260→    { id: 'inv1-8', clientId: 'client-1', invoiceNumber: 'SE-2025-0808', date: '2025-06-12', customer: 'Navi Mumbai Distributors', customerGstin: '27AABND8742Z2ZM', taxableValue: 520000, cgst: 46800, sgst: 46800, igst: 0, status: 'error', errorDetail: 'Invalid GSTIN: 27AABND8742Z2ZM fails checksum', hsnCode: '8479', placeOfSupply: '27' },
+   261→    { id: 'inv1-9', clientId: 'client-1', invoiceNumber: 'SE-2025-0809', date: '2025-06-14', customer: 'Solapur Cotton Industries', customerGstin: '27AABSC1923K1Z8', taxableValue: 168000, cgst: 15120, sgst: 15120, igst: 0, status: 'validated', hsnCode: '5201', placeOfSupply: '27' },
+   262→    { id: 'inv1-10', clientId: 'client-1', invoiceNumber: 'SE-2025-0810', date: '2025-06-15', customer: 'Amravati Agro Processors', customerGstin: '06AABAA6420B1Z2', taxableValue: 390000, cgst: 0, sgst: 0, igst: 70200, status: 'validated', hsnCode: '0804', placeOfSupply: '06' },
+   263→    { id: 'inv1-11', clientId: 'client-1', invoiceNumber: 'SE-2025-0811', date: '2025-06-17', customer: 'Jalgaon Fruit Processors', customerGstin: '27AABJF7392N1Z5', taxableValue: 245000, cgst: 22050, sgst: 22050, igst: 0, status: 'validated', hsnCode: '2008', placeOfSupply: '27' },
+   264→    { id: 'inv1-12', clientId: 'client-1', invoiceNumber: 'SE-2025-0812', date: '2025-06-18', customer: 'Dhule Engineering Corp', customerGstin: '27AABDE6472H1Z3', taxableValue: 178000, cgst: 0, sgst: 0, igst: 32040, status: 'warning', errorDetail: 'Duplicate invoice number detected', hsnCode: '8479', placeOfSupply: '29' },
+   265→    { id: 'inv1-13', clientId: 'client-1', invoiceNumber: 'SE-2025-0813', date: '2025-06-20', customer: 'Satara Dairy Products', customerGstin: '27AABSD1847J1Z6', taxableValue: 134000, cgst: 12060, sgst: 12060, igst: 0, status: 'validated', hsnCode: '0401', placeOfSupply: '27' },
+   266→    { id: 'inv1-14', clientId: 'client-1', invoiceNumber: 'SE-2025-0814', date: '2025-06-22', customer: 'Ratnagiri Sea Foods', customerGstin: '27AABRS1542Q1Z3', taxableValue: 295000, cgst: 26550, sgst: 26550, igst: 0, status: 'error', errorDetail: 'Tax calculation error: CGST should be ₹26,550 but found ₹25,350', hsnCode: '0304', placeOfSupply: '27' },
+   267→    { id: 'inv1-15', clientId: 'client-1', invoiceNumber: 'SE-2025-0815', date: '2025-06-25', customer: 'Sangli Grape Exporters', customerGstin: '27AABSG5321K1Z7', taxableValue: 88000, cgst: 7920, sgst: 7920, igst: 0, status: 'validated', hsnCode: '0806', placeOfSupply: '27' },
+   268→  ],
+   269→
+   270→  // ── Patel & Sons (Gujarat-24) ──
+   271→  'client-2': [
+   272→    { id: 'inv2-1', clientId: 'client-2', invoiceNumber: 'PS-2025-0601', date: '2025-06-01', customer: 'Ahmedabad Textile Traders', customerGstin: '24AABAT3421M1Z5', taxableValue: 380000, cgst: 0, sgst: 0, igst: 68400, status: 'validated', hsnCode: '5208', placeOfSupply: '27' },
+   273→    { id: 'inv2-2', clientId: 'client-2', invoiceNumber: 'PS-2025-0602', date: '2025-06-03', customer: 'Surat Diamond Exports Ltd', customerGstin: '24AABSD7892N1Z3', taxableValue: 520000, cgst: 46800, sgst: 46800, igst: 0, status: 'error', errorDetail: 'Invalid GSTIN: 24AABSD7892N1Z3 fails checksum', hsnCode: '7102', placeOfSupply: '24' },
+   274→    { id: 'inv2-3', clientId: 'client-2', invoiceNumber: 'PS-2025-0603', date: '2025-06-05', customer: 'Vadodara Chemical Corp', customerGstin: '24AABVC2345P1Z7', taxableValue: 195000, cgst: 17550, sgst: 17550, igst: 0, status: 'validated', hsnCode: '2902', placeOfSupply: '24' },
+   275→    { id: 'inv2-4', clientId: 'client-2', invoiceNumber: 'PS-2025-0604', date: '2025-06-08', customer: 'Rajkot Auto Parts Ltd', customerGstin: '24AABRA6789Q1Z9', taxableValue: 245000, cgst: 22050, sgst: 22050, igst: 0, status: 'error', errorDetail: 'Tax calculation error: SGST should be ₹22,050 but found ₹20,500', hsnCode: '8708', placeOfSupply: '24' },
+   276→    { id: 'inv2-5', clientId: 'client-2', invoiceNumber: 'PS-2025-0605', date: '2025-06-10', customer: 'Jamnagar Polymer Industries', customerGstin: '24AABJP1234R1Z2', taxableValue: 165000, cgst: 14850, sgst: 14850, igst: 0, status: 'validated', hsnCode: '3901', placeOfSupply: '24' },
+   277→    { id: 'inv2-6', clientId: 'client-2', invoiceNumber: 'PS-2025-0606', date: '2025-06-12', customer: 'Gandhinagar Tech Solutions', customerGstin: '24AABGT5678S1Z4', taxableValue: 88000, cgst: 7920, sgst: 7920, igst: 0, status: 'warning', errorDetail: 'Missing HSN code for line items', hsnCode: '', placeOfSupply: '24' },
+   278→    { id: 'inv2-7', clientId: 'client-2', invoiceNumber: 'PS-2025-0607', date: '2025-06-15', customer: 'Bhavnagar Ship Components', customerGstin: '24AABBS9012T1Z6', taxableValue: 312000, cgst: 28080, sgst: 28080, igst: 0, status: 'validated', hsnCode: '8901', placeOfSupply: '24' },
+   279→    { id: 'inv2-8', clientId: 'client-2', invoiceNumber: 'PS-2025-0608', date: '2025-06-18', customer: 'Kandla Export House', customerGstin: '24AABKE3456U1Z8', taxableValue: 425000, cgst: 38250, sgst: 38250, igst: 0, status: 'warning', errorDetail: 'Place of supply missing for export invoice', hsnCode: '8471', placeOfSupply: '24' },
+   280→    { id: 'inv2-9', clientId: 'client-2', invoiceNumber: 'PS-2025-0609', date: '2025-06-22', customer: 'Morbi Ceramic Tiles', customerGstin: '24AABMC7890V1Z1', taxableValue: 275000, cgst: 24750, sgst: 24750, igst: 0, status: 'validated', hsnCode: '6907', placeOfSupply: '24' },
+   281→    { id: 'inv2-10', clientId: 'client-2', invoiceNumber: 'PS-2025-0610', date: '2025-06-25', customer: 'Anand Dairy Products', customerGstin: '24AABAD2345W1Z3', taxableValue: 142000, cgst: 12780, sgst: 12780, igst: 0, status: 'validated', hsnCode: '0401', placeOfSupply: '24' },
+   282→  ],
+   283→
+   284→  // ── Krishna Traders (Karnataka-29) ──
+   285→  'client-3': [
+   286→    { id: 'inv3-1', clientId: 'client-3', invoiceNumber: 'KT-2025-0701', date: '2025-06-01', customer: 'Bangalore Software Park Ltd', customerGstin: '29AABBS4567M1Z3', taxableValue: 320000, cgst: 28800, sgst: 28800, igst: 0, status: 'validated', hsnCode: '9983', placeOfSupply: '29' },
+   287→    { id: 'inv3-2', clientId: 'client-3', invoiceNumber: 'KT-2025-0702', date: '2025-06-04', customer: 'Mysore Sandal Products', customerGstin: '29AABMS8901N1Z5', taxableValue: 185000, cgst: 16650, sgst: 16650, igst: 0, status: 'validated', hsnCode: '3303', placeOfSupply: '29' },
+   288→    { id: 'inv3-3', clientId: 'client-3', invoiceNumber: 'KT-2025-0703', date: '2025-06-07', customer: 'Mangalore Spice Exporters', customerGstin: '29AABMS2345P1Z7', taxableValue: 245000, cgst: 0, sgst: 0, igst: 44100, status: 'validated', hsnCode: '0908', placeOfSupply: '27' },
+   289→    { id: 'inv3-4', clientId: 'client-3', invoiceNumber: 'KT-2025-0704', date: '2025-06-10', customer: 'Hubli Steel Traders', customerGstin: '29AABHS6789Q1Z9', taxableValue: 410000, cgst: 36900, sgst: 36900, igst: 0, status: 'validated', hsnCode: '7208', placeOfSupply: '29' },
+   290→    { id: 'inv3-5', clientId: 'client-3', invoiceNumber: 'KT-2025-0705', date: '2025-06-13', customer: 'Belgaum Sugar Industries', customerGstin: '29AABBS1234R1Z2', taxableValue: 156000, cgst: 14040, sgst: 14040, igst: 0, status: 'validated', hsnCode: '1701', placeOfSupply: '29' },
+   291→    { id: 'inv3-6', clientId: 'client-3', invoiceNumber: 'KT-2025-0706', date: '2025-06-16', customer: 'Coorg Coffee Exporters', customerGstin: '29AABCC5678S1Z4', taxableValue: 128000, cgst: 11520, sgst: 11520, igst: 0, status: 'warning', errorDetail: 'HSN code 0901 requires 6-digit classification', hsnCode: '0901', placeOfSupply: '29' },
+   292→    { id: 'inv3-7', clientId: 'client-3', invoiceNumber: 'KT-2025-0707', date: '2025-06-20', customer: 'Davanagere Cotton Mills', customerGstin: '29AABDC9012T1Z6', taxableValue: 275000, cgst: 24750, sgst: 24750, igst: 0, status: 'validated', hsnCode: '5201', placeOfSupply: '29' },
+   293→    { id: 'inv3-8', clientId: 'client-3', invoiceNumber: 'KT-2025-0708', date: '2025-06-24', customer: 'Shimoga Timber Works', customerGstin: '29AABST3456U1Z8', taxableValue: 92000, cgst: 8280, sgst: 8280, igst: 0, status: 'validated', hsnCode: '4407', placeOfSupply: '29' },
+   294→  ],
+   295→
+   296→  // ── Metro Retail (Maharashtra-27) ──
+   297→  'client-4': [
+   298→    { id: 'inv4-1', clientId: 'client-4', invoiceNumber: 'MR-2025-0901', date: '2025-06-01', customer: 'Mumbai Wholesale Mart', customerGstin: '27AABMW1234A1Z1', taxableValue: 580000, cgst: 52200, sgst: 52200, igst: 0, status: 'validated', hsnCode: '2106', placeOfSupply: '27' },
+   299→    { id: 'inv4-2', clientId: 'client-4', invoiceNumber: 'MR-2025-0902', date: '2025-06-03', customer: 'Pune Consumer Goods Ltd', customerGstin: '27AABPC5678B1Z3', taxableValue: 420000, cgst: 37800, sgst: 37800, igst: 0, status: 'error', errorDetail: 'Invalid GSTIN: 27AABPC5678B1Z3 fails checksum', hsnCode: '3304', placeOfSupply: '27' },
+   300→    { id: 'inv4-3', clientId: 'client-4', invoiceNumber: 'MR-2025-0903', date: '2025-06-05', customer: 'Thane Retail Chain', customerGstin: '27AABTR9012C1Z5', taxableValue: 350000, cgst: 31500, sgst: 31500, igst: 0, status: 'validated', hsnCode: '3401', placeOfSupply: '27' },
+   301→    { id: 'inv4-4', clientId: 'client-4', invoiceNumber: 'MR-2025-0904', date: '2025-06-07', customer: 'Nashik FMCG Distributors', customerGstin: '27AABNF3456D1Z7', taxableValue: 285000, cgst: 25650, sgst: 25650, igst: 0, status: 'error', errorDetail: 'Tax calculation error: CGST ₹23,500 instead of ₹25,650', hsnCode: '2106', placeOfSupply: '27' },
+   302→    { id: 'inv4-5', clientId: 'client-4', invoiceNumber: 'MR-2025-0905', date: '2025-06-09', customer: 'Nagpur Supermarket Corp', customerGstin: '27AABNS7890E1Z9', taxableValue: 490000, cgst: 44100, sgst: 44100, igst: 0, status: 'validated', hsnCode: '2106', placeOfSupply: '27' },
+   303→    { id: 'inv4-6', clientId: 'client-4', invoiceNumber: 'MR-2025-0906', date: '2025-06-11', customer: 'Aurangabad General Stores', customerGstin: '27AABAG1234F1Z2', taxableValue: 175000, cgst: 0, sgst: 0, igst: 31500, status: 'validated', hsnCode: '2106', placeOfSupply: '29' },
+   304→    { id: 'inv4-7', clientId: 'client-4', invoiceNumber: 'MR-2025-0907', date: '2025-06-13', customer: 'Kolhapur Retail Hub', customerGstin: '27AABKR5678G1Z4', taxableValue: 220000, cgst: 19800, sgst: 19800, igst: 0, status: 'warning', errorDetail: 'Missing place of supply for inter-state invoice', hsnCode: '3401', placeOfSupply: '27' },
+   305→    { id: 'inv4-8', clientId: 'client-4', invoiceNumber: 'MR-2025-0908', date: '2025-06-16', customer: 'Navi Mumbai Suppliers', customerGstin: '27AABNM9012H1Z6', taxableValue: 310000, cgst: 27900, sgst: 27900, igst: 0, status: 'validated', hsnCode: '3304', placeOfSupply: '27' },
+   306→    { id: 'inv4-9', clientId: 'client-4', invoiceNumber: 'MR-2025-0909', date: '2025-06-18', customer: 'Solapur Traders Association', customerGstin: '27AABST3456I1Z8', taxableValue: 145000, cgst: 13050, sgst: 13050, igst: 0, status: 'validated', hsnCode: '5208', placeOfSupply: '27' },
+   307→    { id: 'inv4-10', clientId: 'client-4', invoiceNumber: 'MR-2025-0910', date: '2025-06-21', customer: 'Amravati Consumer Products', customerGstin: '27AABAC7890J1Z1', taxableValue: 265000, cgst: 23850, sgst: 23850, igst: 0, status: 'warning', errorDetail: 'Duplicate invoice number detected in May return', hsnCode: '2106', placeOfSupply: '27' },
+   308→    { id: 'inv4-11', clientId: 'client-4', invoiceNumber: 'MR-2025-0911', date: '2025-06-24', customer: 'Jalgaon Agro Retail', customerGstin: '27AABJA1234K1Z3', taxableValue: 198000, cgst: 17820, sgst: 17820, igst: 0, status: 'validated', hsnCode: '0804', placeOfSupply: '27' },
+   309→    { id: 'inv4-12', clientId: 'client-4', invoiceNumber: 'MR-2025-0912', date: '2025-06-27', customer: 'Latur Wholesale Dealers', customerGstin: '27AABLW5678L1Z5', taxableValue: 375000, cgst: 33750, sgst: 33750, igst: 0, status: 'validated', hsnCode: '2106', placeOfSupply: '27' },
+   310→  ],
+   311→
+   312→  // ── Sunrise Exports (Maharashtra-27) ──
+   313→  'client-5': [
+   314→    { id: 'inv5-1', clientId: 'client-5', invoiceNumber: 'SX-2025-0501', date: '2025-06-02', customer: 'Dubai Trading Co LLC', customerGstin: '', taxableValue: 680000, cgst: 0, sgst: 0, igst: 0, status: 'validated', hsnCode: '6203', placeOfSupply: '27' },
+   315→    { id: 'inv5-2', clientId: 'client-5', invoiceNumber: 'SX-2025-0502', date: '2025-06-05', customer: 'Singapore Marine Supplies', customerGstin: '', taxableValue: 425000, cgst: 0, sgst: 0, igst: 0, status: 'validated', hsnCode: '8901', placeOfSupply: '27' },
+   316→    { id: 'inv5-3', clientId: 'client-5', invoiceNumber: 'SX-2025-0503', date: '2025-06-08', customer: 'London Imports Ltd', customerGstin: '', taxableValue: 520000, cgst: 0, sgst: 0, igst: 93600, status: 'validated', hsnCode: '6204', placeOfSupply: '27' },
+   317→    { id: 'inv5-4', clientId: 'client-5', invoiceNumber: 'SX-2025-0504', date: '2025-06-11', customer: 'New York Trade Corp', customerGstin: '', taxableValue: 390000, cgst: 0, sgst: 0, igst: 70200, status: 'validated', hsnCode: '6110', placeOfSupply: '27' },
+   318→    { id: 'inv5-5', clientId: 'client-5', invoiceNumber: 'SX-2025-0505', date: '2025-06-14', customer: 'Tokyo Exim Solutions', customerGstin: '', taxableValue: 275000, cgst: 0, sgst: 0, igst: 0, status: 'warning', errorDetail: 'Export invoice without shipping bill reference', hsnCode: '6203', placeOfSupply: '27' },
+   319→    { id: 'inv5-6', clientId: 'client-5', invoiceNumber: 'SX-2025-0506', date: '2025-06-17', customer: 'Frankfurt Export House', customerGstin: '', taxableValue: 480000, cgst: 0, sgst: 0, igst: 86400, status: 'validated', hsnCode: '6205', placeOfSupply: '27' },
+   320→    { id: 'inv5-7', clientId: 'client-5', invoiceNumber: 'SX-2025-0507', date: '2025-06-20', customer: 'Sydney Pacific Traders', customerGstin: '', taxableValue: 345000, cgst: 0, sgst: 0, igst: 0, status: 'validated', hsnCode: '6212', placeOfSupply: '27' },
+   321→    { id: 'inv5-8', clientId: 'client-5', invoiceNumber: 'SX-2025-0508', date: '2025-06-24', customer: 'Hong Kong Commerce Ltd', customerGstin: '', taxableValue: 560000, cgst: 0, sgst: 0, igst: 100800, status: 'validated', hsnCode: '6110', placeOfSupply: '27' },
+   322→  ],
+   323→
+   324→  // ── Gupta Manufacturing (Haryana-06) ──
+   325→  'client-6': [
+   326→    { id: 'inv6-1', clientId: 'client-6', invoiceNumber: 'GM-2025-0301', date: '2025-06-01', customer: 'Gurgaon Auto Components', customerGstin: '06AABGA1234A1Z1', taxableValue: 620000, cgst: 55800, sgst: 55800, igst: 0, status: 'validated', hsnCode: '8708', placeOfSupply: '06' },
+   327→    { id: 'inv6-2', clientId: 'client-6', invoiceNumber: 'GM-2025-0302', date: '2025-06-03', customer: 'Faridabad Steel Products Ltd', customerGstin: '06AABFS5678B1Z3', taxableValue: 485000, cgst: 43650, sgst: 43650, igst: 0, status: 'validated', hsnCode: '7208', placeOfSupply: '06' },
+   328→    { id: 'inv6-3', clientId: 'client-6', invoiceNumber: 'GM-2025-0303', date: '2025-06-06', customer: 'Panipat Blanket Manufacturers', customerGstin: '06AABPM9012C1Z5', taxableValue: 320000, cgst: 28800, sgst: 28800, igst: 0, status: 'validated', hsnCode: '6301', placeOfSupply: '06' },
+   329→    { id: 'inv6-4', clientId: 'client-6', invoiceNumber: 'GM-2025-0304', date: '2025-06-09', customer: 'Ambala Scientific Instruments', customerGstin: '06AABAS3456D1Z7', taxableValue: 275000, cgst: 24750, sgst: 24750, igst: 0, status: 'validated', hsnCode: '9026', placeOfSupply: '06' },
+   330→    { id: 'inv6-5', clientId: 'client-6', invoiceNumber: 'GM-2025-0305', date: '2025-06-12', customer: 'Karnal Rice Mills', customerGstin: '06AABKR7890E1Z9', taxableValue: 180000, cgst: 16200, sgst: 16200, igst: 0, status: 'validated', hsnCode: '1006', placeOfSupply: '06' },
+   331→    { id: 'inv6-6', clientId: 'client-6', invoiceNumber: 'GM-2025-0306', date: '2025-06-14', customer: 'Sonipat Building Materials', customerGstin: '27AABSB1234F1Z2', taxableValue: 445000, cgst: 0, sgst: 0, igst: 80100, status: 'validated', hsnCode: '6907', placeOfSupply: '27' },
+   332→    { id: 'inv6-7', clientId: 'client-6', invoiceNumber: 'GM-2025-0307', date: '2025-06-17', customer: 'Rohtak Pharmaceutical Supplies', customerGstin: '06AABRP5678G1Z4', taxableValue: 530000, cgst: 47700, sgst: 47700, igst: 0, status: 'validated', hsnCode: '3004', placeOfSupply: '06' },
+   333→    { id: 'inv6-8', clientId: 'client-6', invoiceNumber: 'GM-2025-0308', date: '2025-06-20', customer: 'Hisar Metal Industries', customerGstin: '06AABHM9012H1Z6', taxableValue: 380000, cgst: 34200, sgst: 34200, igst: 0, status: 'validated', hsnCode: '7208', placeOfSupply: '06' },
+   334→    { id: 'inv6-9', clientId: 'client-6', invoiceNumber: 'GM-2025-0309', date: '2025-06-23', customer: 'Rewari Engineering Works', customerGstin: '06AABRE3456I1Z8', taxableValue: 290000, cgst: 26100, sgst: 26100, igst: 0, status: 'warning', errorDetail: 'GST rate mismatch: 18% applied instead of 12% for HSN 7208', hsnCode: '7208', placeOfSupply: '06' },
+   335→    { id: 'inv6-10', clientId: 'client-6', invoiceNumber: 'GM-2025-0310', date: '2025-06-26', customer: 'Jindal Steel Fabricators', customerGstin: '06AABJS7890J1Z1', taxableValue: 510000, cgst: 45900, sgst: 45900, igst: 0, status: 'validated', hsnCode: '7208', placeOfSupply: '06' },
+   336→  ],
+   337→
+   338→  // ── Apex Logistics (Maharashtra-27) ──
+   339→  'client-7': [
+   340→    { id: 'inv7-1', clientId: 'client-7', invoiceNumber: 'AL-2025-0401', date: '2025-06-02', customer: 'Mumbai Port Transport', customerGstin: '27AABMP1234A1Z1', taxableValue: 480000, cgst: 43200, sgst: 43200, igst: 0, status: 'validated', hsnCode: '9965', placeOfSupply: '27' },
+   341→    { id: 'inv7-2', clientId: 'client-7', invoiceNumber: 'AL-2025-0402', date: '2025-06-05', customer: 'Pune Cargo Movers', customerGstin: '27AABPC5678B1Z3', taxableValue: 355000, cgst: 31950, sgst: 31950, igst: 0, status: 'validated', hsnCode: '9965', placeOfSupply: '27' },
+   342→    { id: 'inv7-3', clientId: 'client-7', invoiceNumber: 'AL-2025-0403', date: '2025-06-08', customer: 'Nashik Fleet Services', customerGstin: '27AABNF9012C1Z5', taxableValue: 225000, cgst: 20250, sgst: 20250, igst: 0, status: 'error', errorDetail: 'GSTIN 27AABNF9012C1Z5 is cancelled/suspended', hsnCode: '9965', placeOfSupply: '27' },
+   343→    { id: 'inv7-4', clientId: 'client-7', invoiceNumber: 'AL-2025-0404', date: '2025-06-12', customer: 'Thane Warehouse Corp', customerGstin: '27AABTW3456D1Z7', taxableValue: 310000, cgst: 27900, sgst: 27900, igst: 0, status: 'validated', hsnCode: '9965', placeOfSupply: '27' },
+   344→    { id: 'inv7-5', clientId: 'client-7', invoiceNumber: 'AL-2025-0405', date: '2025-06-16', customer: 'Nagpur Road Carriers', customerGstin: '27AABNR7890E1Z9', taxableValue: 420000, cgst: 37800, sgst: 37800, igst: 0, status: 'warning', errorDetail: 'Invoice date exceeds filing period by 1 day', hsnCode: '9965', placeOfSupply: '27' },
+   345→    { id: 'inv7-6', clientId: 'client-7', invoiceNumber: 'AL-2025-0406', date: '2025-06-19', customer: 'Aurangabad Express Logistics', customerGstin: '27AABAEL234F1Z2', taxableValue: 285000, cgst: 0, sgst: 0, igst: 51300, status: 'validated', hsnCode: '9965', placeOfSupply: '29' },
+   346→    { id: 'inv7-7', clientId: 'client-7', invoiceNumber: 'AL-2025-0407', date: '2025-06-22', customer: 'Navi Mumbai Shipping', customerGstin: '27AABNS5678G1Z4', taxableValue: 380000, cgst: 34200, sgst: 34200, igst: 0, status: 'validated', hsnCode: '9965', placeOfSupply: '27' },
+   347→    { id: 'inv7-8', clientId: 'client-7', invoiceNumber: 'AL-2025-0408', date: '2025-06-26', customer: 'Kolhapur Distribution Ltd', customerGstin: '27AABKD9012H1Z6', taxableValue: 325000, cgst: 29250, sgst: 29250, igst: 0, status: 'warning', errorDetail: 'SAC code 9965 requires sub-classification', hsnCode: '9965', placeOfSupply: '27' },
+   348→  ],
+   349→
+
+[showing lines 50-349 of 776; use offset=350 with limit to continue reading]

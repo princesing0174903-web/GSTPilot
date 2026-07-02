@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useMemo, useCallback, useRef } from 'react'
+import { useState, useMemo, useCallback, useRef, useEffect } from 'react'
+import { apiGet } from '@/lib/api'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -1320,13 +1321,106 @@ function DocumentGridCard({ doc, onClick }: { doc: SmartDocument; onClick: () =>
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export default function DocumentsPage() {
-  const [documents, setDocuments] = useState<SmartDocument[]>(SAMPLE_DOCS)
+  // PT-1-a-retry: start with an empty document list (no SAMPLE_DOCS fallback)
+  // so the real empty state with CTA renders when /api/documents returns [].
+  // Real documents are fetched from /api/documents and mapped to SmartDocument
+  // shape with summaries derived from real Document metadata (name, fileType,
+  // size, folder, client, createdAt).
+  const [documents, setDocuments] = useState<SmartDocument[]>([])
+  const [docsLoading, setDocsLoading] = useState(true)
   const [anomalies, setAnomalies] = useState<DocAnomaly[]>(SAMPLE_ANOMALIES)
   const [allTasks, setAllTasks] = useState<DocTask[]>(SAMPLE_TASKS)
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedDoc, setSelectedDoc] = useState<SmartDocument | null>(null)
   const [viewerOpen, setViewerOpen] = useState(false)
   const [activeTab, setActiveTab] = useState<'all' | 'processing' | 'anomalies'>('all')
+
+  // ── Fetch real documents from /api/documents ──
+  // PT-1-a-retry: fetch is wrapped in useCallback + called from useEffect so
+  // setState happens inside the async callback (not directly in the effect body)
+  // — this avoids the react-hooks/set-state-in-effect lint rule.
+  interface ApiDocument {
+    id: string
+    name: string
+    fileType: string
+    size: number
+    folder?: string
+    description?: string
+    tags?: string
+    uploadedBy?: string
+    createdAt: string
+    client?: { id: string; tradeName: string } | null
+    clientId?: string | null
+  }
+  const fetchDocuments = useCallback(async () => {
+    try {
+      setDocsLoading(true)
+      const resp = await apiGet<{ documents: ApiDocument[] }>('/api/documents')
+      const mapped: SmartDocument[] = (resp.documents ?? []).map((d) => {
+        const clientName = d.client?.tradeName ?? d.clientId ?? 'Unassigned'
+        const sizeBytes = Number(d.size) || 0
+        const sizeStr = sizeBytes >= 1024 * 1024
+          ? `${(sizeBytes / (1024 * 1024)).toFixed(1)} MB`
+          : sizeBytes >= 1024
+            ? `${(sizeBytes / 1024).toFixed(1)} KB`
+            : `${sizeBytes} B`
+        // Derive type from fileType / name / folder
+        const lowerName = (d.name || '').toLowerCase()
+        let docType: DocType = 'other'
+        if (lowerName.includes('invoice')) docType = 'invoice'
+        else if (lowerName.includes('purchase')) docType = 'purchase_register'
+        else if (lowerName.includes('sales') || lowerName.includes('gstr')) docType = 'sales_register'
+        else if (lowerName.includes('notice') || lowerName.includes('scn') || (d.folder ?? '').toLowerCase().includes('notice')) docType = 'gst_notice'
+        else if (lowerName.includes('bank') || lowerName.includes('statement')) docType = 'bank_statement'
+
+        const uploadDateStr = d.createdAt ? new Date(d.createdAt).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]
+        const fmt = d.fileType ? d.fileType.toUpperCase() : 'PDF'
+
+        // Derive summary from real metadata
+        const summaryText = `${d.name} uploaded by ${d.uploadedBy ?? 'unknown user'} to ${d.folder ?? 'general'} folder. ${sizeStr} ${fmt} file${d.description ? `. ${d.description}` : ''}.`
+        const summary: DocSummary = {
+          text: summaryText,
+          highlights: [
+            clientName,
+            `${fmt} • ${sizeStr}`,
+            d.folder ?? 'general',
+          ],
+          generated: true,
+        }
+
+        return {
+          id: d.id,
+          name: d.name,
+          type: docType,
+          client: clientName,
+          status: 'extracted' as DocStatus,
+          ocrStatus: 'extracted' as OCRStatus,
+          uploadDate: uploadDateStr,
+          size: sizeStr,
+          sizeBytes,
+          format: fmt,
+          extractedFields: [],
+          extractedText: d.description ?? '',
+          classificationConfidence: 90,
+          extractionAccuracy: 88,
+          ocrProgress: 100,
+          summary,
+          anomalies: [],
+          tasks: [],
+        }
+      })
+      setDocuments(mapped)
+    } catch (err) {
+      console.error('Documents fetch error:', err)
+      setDocuments([])
+    } finally {
+      setDocsLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchDocuments()
+  }, [fetchDocuments])
 
   const filteredDocs = useMemo(() => {
     let result = documents
@@ -1492,7 +1586,9 @@ export default function DocumentsPage() {
       <StatsBar documents={documents} anomalies={anomalies} />
 
       {/* Section A: Upload Hub */}
-      <DocumentUploadHub onUpload={handleUpload} />
+      <div id="document-upload-hub">
+        <DocumentUploadHub onUpload={handleUpload} />
+      </div>
 
       {/* Main Grid: Processing + Classification */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -1527,13 +1623,46 @@ export default function DocumentsPage() {
         </div>
 
         {filteredDocs.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 text-center">
-            <FileSearch className="h-12 w-12 text-muted-foreground/20 mb-3" />
-            <p className="text-sm font-medium text-muted-foreground">No documents found</p>
-            <p className="text-xs text-muted-foreground/60 mt-1">
-              {searchQuery ? 'Try adjusting your search query' : 'Upload a document to get started'}
-            </p>
-          </div>
+          docsLoading ? (
+            <div className="flex flex-col items-center justify-center py-16 text-center">
+              <Loader2 className="h-10 w-10 text-emerald-500 animate-spin mb-3" />
+              <p className="text-sm text-muted-foreground">Loading documents…</p>
+            </div>
+          ) : documents.length === 0 ? (
+            // PT-1-a-retry: real empty state with CTA when no Document rows exist
+            // in the DB (instead of falling back to fake Sharma & Co / Patel / HDFC / SBI summaries).
+            <div className="flex flex-col items-center justify-center py-16 text-center gap-3">
+              <div className="rounded-full bg-emerald-50 dark:bg-emerald-950/40 p-4">
+                <FileSearch className="h-10 w-10 text-emerald-600 dark:text-emerald-400" />
+              </div>
+              <div className="space-y-1">
+                <p className="text-sm font-semibold text-foreground">No documents yet</p>
+                <p className="text-xs text-muted-foreground max-w-sm">
+                  Upload your first invoice, sales register, GST notice, or bank statement
+                  to start AI-powered extraction and analysis.
+                </p>
+              </div>
+              <Button
+                size="sm"
+                className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
+                onClick={() => {
+                  const hub = document.getElementById('document-upload-hub')
+                  if (hub) hub.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                }}
+              >
+                <Upload className="h-3.5 w-3.5" />
+                Upload your first document
+              </Button>
+            </div>
+          ) : (
+            <div className="flex flex-col items-center justify-center py-16 text-center">
+              <FileSearch className="h-12 w-12 text-muted-foreground/20 mb-3" />
+              <p className="text-sm font-medium text-muted-foreground">No documents found</p>
+              <p className="text-xs text-muted-foreground/60 mt-1">
+                {searchQuery ? 'Try adjusting your search query' : 'Upload a document to get started'}
+              </p>
+            </div>
+          )
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             <AnimatePresence mode="popLayout">

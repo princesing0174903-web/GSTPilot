@@ -1,7 +1,20 @@
 import { db } from '@/lib/db'
 import { NextResponse } from 'next/server'
+import { safeAudit } from '@/lib/audit/safe-write'
 
 const VALID_TRIGGERS = ['invoice_uploaded', 'return_ready', 'return_filed', 'notice_received']
+
+// ─── Oracle Activation ─────────────────────────────────────────────────────
+// POST /api/automation with body { type: 'oracle_activation', enabled: true,
+// schedule: 'daily', createdBy? } is a shortcut that creates an AutomationRule
+// representing the daily Oracle analytics job. It also writes an AuditLog entry
+// (action='ORACLE_ACTIVATED') so the activation is fully traceable.
+const ORACLE_SCHEDULE_TO_TRIGGER: Record<string, string> = {
+  daily: 'return_ready',
+  hourly: 'invoice_uploaded',
+  weekly: 'return_filed',
+  monthly: 'notice_received',
+}
 
 // GET /api/automation — List all AutomationRules with latest logs
 export async function GET() {
@@ -27,9 +40,102 @@ export async function GET() {
 }
 
 // POST /api/automation — Create a new AutomationRule
+// Two accepted shapes:
+//   1. { name, description?, trigger, conditions?, actions, createdBy? }
+//   2. { type: 'oracle_activation', enabled?, schedule?, createdBy? } — shortcut
+//      that creates an AutomationRule named "Oracle Daily Analytics Job" with a
+//      daily schedule + an AuditLog entry (action='ORACLE_ACTIVATED').
 export async function POST(request: Request) {
   try {
     const body = await request.json()
+
+    // ── Oracle activation shortcut ──
+    if (body?.type === 'oracle_activation') {
+      const schedule = (body.schedule ?? 'daily').toString().toLowerCase()
+      const enabled = body.enabled !== false // default true
+      const trigger = ORACLE_SCHEDULE_TO_TRIGGER[schedule] ?? 'return_ready'
+      const ruleName = `Oracle ${schedule.charAt(0).toUpperCase() + schedule.slice(1)} Analytics Job`
+      const description = `Autopilot Oracle activated — runs ${schedule} analytics across all connected data sources (GSTN, Bank, Accounting, WhatsApp, Gmail).`
+
+      // Reuse an existing Oracle rule if present (idempotent activate)
+      const existing = await db.automationRule.findFirst({
+        where: { name: { startsWith: 'Oracle ' } },
+      })
+
+      let rule
+      if (existing) {
+        rule = await db.automationRule.update({
+          where: { id: existing.id },
+          data: {
+            description,
+            trigger,
+            actions: JSON.stringify({
+              type: 'oracle_activation',
+              schedule,
+              enabled,
+              jobs: ['gst_recon', 'itc_match', 'cash_position', 'compliance_score'],
+            }),
+            isActive: enabled,
+            lastRunAt: enabled ? new Date() : existing.lastRunAt,
+          },
+          include: {
+            logs: {
+              orderBy: { executedAt: 'desc' },
+              take: 5,
+            },
+          },
+        })
+      } else {
+        rule = await db.automationRule.create({
+          data: {
+            name: ruleName,
+            description,
+            trigger,
+            conditions: JSON.stringify({ schedule, type: 'oracle_activation' }),
+            actions: JSON.stringify({
+              type: 'oracle_activation',
+              schedule,
+              enabled,
+              jobs: ['gst_recon', 'itc_match', 'cash_position', 'compliance_score'],
+            }),
+            isActive: enabled,
+            createdBy: body.createdBy ?? null,
+          },
+          include: {
+            logs: {
+              orderBy: { executedAt: 'desc' },
+              take: 5,
+            },
+          },
+        })
+      }
+
+      // AuditLog entry — ORACLE_ACTIVATED
+      try {
+        await safeAudit({
+          userId: body.createdBy ?? null,
+          action: 'ORACLE_ACTIVATED',
+          entity: 'AutomationRule',
+          entityId: rule.id,
+          newValue: JSON.stringify({
+            schedule,
+            enabled,
+            type: 'oracle_activation',
+          }),
+          details: `Oracle ${schedule} analytics job ${enabled ? 'activated' : 'deactivated'}`,
+        })
+      } catch (auditErr) {
+        console.warn('[Automation] AuditLog write failed:', auditErr)
+      }
+
+      return NextResponse.json({
+        rule,
+        oracleActivated: enabled,
+        message: `Oracle ${enabled ? 'activated' : 'deactivated'}. ${schedule.charAt(0).toUpperCase() + schedule.slice(1)} analytics job ${enabled ? 'scheduled' : 'cancelled'}.`,
+      }, { status: 201 })
+    }
+
+    // ── Standard automation-rule shape ──
     const { name, description, trigger, conditions, actions, createdBy } = body
 
     if (!name || !trigger || !actions) {

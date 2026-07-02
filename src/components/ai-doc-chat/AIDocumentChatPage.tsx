@@ -28,6 +28,8 @@ import {
   BookOpen,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { EmptyState } from '@/components/shared/EmptyState';
+import { Inbox } from 'lucide-react';
 
 // ─── Color Palette (Emerald) ──────────────────────────────────────────────
 const COLORS = {
@@ -55,44 +57,6 @@ interface ChatSession {
   documentType: string;
   createdAt: string;
   messageCount: number;
-}
-
-// ─── Mock Data ─────────────────────────────────────────────────────────────
-const mockSessions: ChatSession[] = [
-  { id: 's1', documentName: 'GSTR-3B_Q3_2025.pdf', documentType: 'PDF', createdAt: '2025-03-04T10:30:00Z', messageCount: 8 },
-  { id: 's2', documentName: 'Invoice_Register_Feb.xlsx', documentType: 'Excel', createdAt: '2025-03-03T14:15:00Z', messageCount: 5 },
-  { id: 's3', documentName: 'ITC_Reconciliation_Jan.pdf', documentType: 'PDF', createdAt: '2025-03-02T09:45:00Z', messageCount: 12 },
-  { id: 's4', documentName: 'GST_Audit_Report.pdf', documentType: 'PDF', createdAt: '2025-02-28T16:20:00Z', messageCount: 6 },
-];
-
-const mockAIResponse: Record<string, { content: string; citations: string[] }> = {
-  default: {
-    content: 'I\'ve analyzed the uploaded document. Here are the key findings:\n\n• **Total taxable value**: ₹12,45,000 across 45 invoices\n• **IGST liability**: ₹2,24,100 (18% on inter-state supplies)\n• **ITC available**: ₹1,87,650 claimable input tax credit\n• **Net GST payable**: ₹36,450\n\nThe document appears to be in compliance with GST filing requirements. Would you like me to extract specific details or check for discrepancies?',
-    citations: ['Page 3 — Summary Table', 'Page 7 — ITC Computation', 'Page 12 — Tax Liability'],
-  },
-};
-
-function getAIResponse(message: string): { content: string; citations: string[] } {
-  const lower = message.toLowerCase();
-  if (lower.includes('itc') || lower.includes('input tax')) {
-    return {
-      content: '**ITC Analysis from the document:**\n\n• Total ITC claimed: **₹1,87,650**\n• ITC from B2B invoices: ₹1,42,300\n• ITC from reverse charge: ₹45,350\n• ITC reversal (Rule 42/43): ₹12,200\n\n**Net eligible ITC**: ₹1,75,450\n\nI noticed a potential discrepancy in ITC claimed vs. GSTR-2B reflected amounts on page 7.',
-      citations: ['Page 7 — ITC Computation', 'GSTR-2B Auto-Match Report'],
-    };
-  }
-  if (lower.includes('risk') || lower.includes('issue') || lower.includes('error')) {
-    return {
-      content: '**Risk Assessment from the document:**\n\n⚠️ **3 issues identified:**\n\n1. **GSTIN Mismatch**: Invoice #INV-234 has a different GSTIN than recorded in GSTR-2B\n2. **Amount Discrepancy**: ₹15,000 difference on Invoice #INV-189 vs portal data\n3. **Late Filing**: 2 invoices from previous period included in current filing\n\n**Risk Level**: Medium — These require attention before filing.',
-      citations: ['Page 5 — GSTIN Validation Report', 'Page 9 — Reconciliation Summary'],
-    };
-  }
-  if (lower.includes('summary') || lower.includes('overview') || lower.includes('brief')) {
-    return {
-      content: '**Document Summary:**\n\nThis is a **GSTR-3B return** for Q3 2025 containing:\n\n• 45 invoices (32 B2B, 13 B2C)\n• Total turnover: ₹12,45,000\n• Tax liability breakdown:\n  - CGST: ₹62,250\n  - SGST: ₹62,250\n  - IGST: ₹2,24,100\n• Eligible ITC: ₹1,75,450\n• Net tax payable: ₹36,450\n\nThe return is ready for filing with minor reconciliation pending.',
-      citations: ['Page 1 — Cover Sheet', 'Page 3 — Summary Table'],
-    };
-  }
-  return mockAIResponse.default;
 }
 
 // ─── Animated Card Wrapper ─────────────────────────────────────────────────
@@ -206,16 +170,12 @@ export default function AIDocumentChatPage() {
       const res = await fetch('/api/ai-doc-chat');
       if (res.ok) {
         const data = await res.json();
-        if (Array.isArray(data.sessions) && data.sessions.length > 0) {
-          setSessions(data.sessions);
-        } else {
-          setSessions(mockSessions);
-        }
+        setSessions(Array.isArray(data.sessions) ? data.sessions : []);
       } else {
-        setSessions(mockSessions);
+        setSessions([]);
       }
     } catch {
-      setSessions(mockSessions);
+      setSessions([]);
     } finally {
       setLoading(false);
     }
@@ -322,31 +282,28 @@ export default function AIDocumentChatPage() {
         const assistantMsg: ChatMessage = {
           id: `assistant-${Date.now()}`,
           role: 'assistant',
-          content: data.content || getAIResponse(messageText).content,
+          content: data.content || "I don't have data to answer that yet. Please upload a document or try again later.",
           timestamp: new Date().toISOString(),
-          citations: data.citations || getAIResponse(messageText).citations,
+          citations: Array.isArray(data.citations) ? data.citations : [],
         };
         setMessages(prev => [...prev, assistantMsg]);
       } else {
-        // Fallback to local AI
-        const response = getAIResponse(messageText);
         const assistantMsg: ChatMessage = {
           id: `assistant-${Date.now()}`,
           role: 'assistant',
-          content: response.content,
+          content: "I couldn't process your request right now. Please try again later.",
           timestamp: new Date().toISOString(),
-          citations: response.citations,
+          citations: [],
         };
         setMessages(prev => [...prev, assistantMsg]);
       }
     } catch {
-      const response = getAIResponse(messageText);
       const assistantMsg: ChatMessage = {
         id: `assistant-${Date.now()}`,
         role: 'assistant',
-        content: response.content,
+        content: "I couldn't process your request right now. Please try again later.",
         timestamp: new Date().toISOString(),
-        citations: response.citations,
+        citations: [],
       };
       setMessages(prev => [...prev, assistantMsg]);
     } finally {
@@ -702,6 +659,13 @@ export default function AIDocumentChatPage() {
             <CardContent>
               {loading ? (
                 <SessionSkeleton />
+              ) : sessions.length === 0 ? (
+                <EmptyState
+                  icon={Inbox}
+                  title="No chat sessions yet"
+                  description="Start a new conversation to see sessions here."
+                  compact
+                />
               ) : (
                 <ScrollArea className="max-h-64">
                   <div className="space-y-2 pr-1">

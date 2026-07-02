@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -35,6 +35,8 @@ import {
   Calendar,
   TimerReset,
 } from 'lucide-react'
+import { EmptyState } from '@/components/shared/EmptyState'
+import { Inbox, CalendarClock as CalendarClockIcon } from 'lucide-react'
 
 // ─── Animation Variants ───────────────────────────────────────────────────
 const stagger = {
@@ -46,86 +48,46 @@ const fadeUp = {
   show: { opacity: 1, y: 0, transition: { duration: 0.35, ease: 'easeOut' } },
 }
 
-// ─── Sample Data ───────────────────────────────────────────────────────────
+// ─── Types ────────────────────────────────────────────────────────────────
+interface DeadlineEntry {
+  date: number;
+  type: string;
+  client: string;
+  status: string;
+  fee: number;
+}
+interface TomorrowFiling {
+  client: string;
+  type: string;
+  due: string;
+  status: string;
+}
+interface LateFeeEntry {
+  client: string;
+  type: string;
+  overdueDays: number;
+  dailyFee: number;
+  totalFee: number;
+}
+interface WorkloadEntry {
+  day: string;
+  filings: number;
+}
+interface RiskForecastEntry {
+  client: string;
+  deadline: string;
+  probability: number;
+  reason: string;
+}
+
+// ─── Helpers ───────────────────────────────────────────────────────────────
 const now = new Date()
 const currentYear = now.getFullYear()
 const currentMonth = now.getMonth()
 const currentDay = now.getDate()
 
-const deadlines = [
-  { date: 5, type: 'GSTR-3B', client: 'ABC Traders', status: 'due-soon', fee: 0 },
-  { date: 5, type: 'GSTR-3B', client: 'XYZ Industries', status: 'due-soon', fee: 0 },
-  { date: 6, type: 'GSTR-1', client: 'Sharma Enterprises', status: 'due-soon', fee: 0 },
-  { date: 7, type: 'GSTR-3B', client: 'Singh Trading', status: 'due-soon', fee: 0 },
-  { date: 7, type: 'TDS Return Q4', client: 'Kumar Associates', status: 'due-soon', fee: 0 },
-  { date: 10, type: 'GSTR-1', client: 'Mehta Corp', status: 'pending', fee: 0 },
-  { date: 11, type: 'GSTR-3B', client: 'Patel & Sons', status: 'pending', fee: 0 },
-  { date: 11, type: 'GSTR-3B', client: 'Joshi Infra', status: 'pending', fee: 0 },
-  { date: 15, type: 'GST Notice', client: 'Patel & Sons', status: 'pending', fee: 0 },
-  { date: 18, type: 'GSTR-1', client: 'ABC Traders', status: 'pending', fee: 0 },
-  { date: 20, type: 'GSTR-3B', client: 'XYZ Industries', status: 'pending', fee: 0 },
-  { date: 22, type: 'ROC Filing', client: 'Mehta Corp', status: 'upcoming', fee: 0 },
-  { date: 25, type: 'GSTR-1', client: 'Sharma Enterprises', status: 'upcoming', fee: 0 },
-  { date: 28, type: 'GSTR-3B', client: 'Singh Trading', status: 'upcoming', fee: 0 },
-  { date: 30, type: 'GSTR-9', client: 'Kumar Associates', status: 'upcoming', fee: 0 },
-]
-
-const tomorrowFilings = [
-  { client: 'ABC Traders', type: 'GSTR-3B', due: `05/03/${currentYear}`, status: 'data-partial' },
-  { client: 'XYZ Industries', type: 'GSTR-3B', due: `05/03/${currentYear}`, status: 'pending' },
-  { client: 'Sharma Enterprises', type: 'GSTR-1', due: `06/03/${currentYear}`, status: 'data-ready' },
-  { client: 'Singh Trading', type: 'GSTR-3B', due: `07/03/${currentYear}`, status: 'pending' },
-  { client: 'Kumar Associates', type: 'TDS Return Q4', due: `07/03/${currentYear}`, status: 'in-progress' },
-]
-
-const lateFeeData = [
-  { client: 'ABC Traders', type: 'GSTR-1', overdueDays: 5, dailyFee: 50, totalFee: 250 },
-  { client: 'Singh Trading', type: 'GSTR-3B', overdueDays: 8, dailyFee: 50, totalFee: 400 },
-  { client: 'Kumar Associates', type: 'GSTR-3B', overdueDays: 3, dailyFee: 50, totalFee: 150 },
-  { client: 'Patel & Sons', type: 'GSTR-1', overdueDays: 12, dailyFee: 50, totalFee: 600 },
-  { client: 'Sharma Enterprises', type: 'GSTR-3B', overdueDays: 2, dailyFee: 50, totalFee: 100 },
-]
-
-const weeklyWorkload = [
-  { day: 'Mon', filings: 3 },
-  { day: 'Tue', filings: 5 },
-  { day: 'Wed', filings: 2 },
-  { day: 'Thu', filings: 4 },
-  { day: 'Fri', filings: 6 },
-  { day: 'Sat', filings: 1 },
-  { day: 'Sun', filings: 0 },
-]
-
-const riskForecasts = [
-  { client: 'Singh Trading', deadline: 'GSTR-3B Mar', probability: 85, reason: '3 consecutive late filings' },
-  { client: 'ABC Traders', deadline: 'GSTR-1 Mar', probability: 72, reason: 'Missing purchase data' },
-  { client: 'Patel & Sons', deadline: 'GST Notice Response', probability: 65, reason: 'No response in 10 days' },
-  { client: 'Kumar Associates', deadline: 'TDS Return Q4', probability: 45, reason: 'Partial docs received' },
-  { client: 'Sharma Enterprises', deadline: 'GSTR-3B Mar', probability: 38, reason: 'Slow document sharing' },
-  { client: 'XYZ Industries', deadline: 'GSTR-1 Mar', probability: 22, reason: 'Usually on time, minor risk' },
-]
-
-const complianceCalendar = [
-  { month: 'Jan', events: ['GSTR-1 (11th)', 'GSTR-3B (20th)', 'TDS Return Q3 (31st)'] },
-  { month: 'Feb', events: ['GSTR-1 (11th)', 'GSTR-3B (20th)'] },
-  { month: 'Mar', events: ['GSTR-1 (11th)', 'GSTR-3B (20th)', 'GSTR-9 (31st)', 'TDS Return Q4 (31st)'] },
-  { month: 'Apr', events: ['GSTR-1 (11th)', 'GSTR-3B (20th)', 'ROC Annual (30th)'] },
-  { month: 'May', events: ['GSTR-1 (11th)', 'GSTR-3B (20th)'] },
-  { month: 'Jun', events: ['GSTR-1 (11th)', 'GSTR-3B (20th)', 'TDS Return Q1 (30th)'] },
-  { month: 'Jul', events: ['GSTR-1 (11th)', 'GSTR-3B (20th)'] },
-  { month: 'Aug', events: ['GSTR-1 (11th)', 'GSTR-3B (20th)'] },
-  { month: 'Sep', events: ['GSTR-1 (11th)', 'GSTR-3B (20th)', 'TDS Return Q2 (30th)'] },
-  { month: 'Oct', events: ['GSTR-1 (11th)', 'GSTR-3B (20th)'] },
-  { month: 'Nov', events: ['GSTR-1 (11th)', 'GSTR-3B (20th)'] },
-  { month: 'Dec', events: ['GSTR-1 (11th)', 'GSTR-3B (20th)', 'TDS Return Q3 (31st)'] },
-]
-
-// ─── Helpers ───────────────────────────────────────────────────────────────
 const fmtINR = (n: number) =>
   '₹' + Math.round(n).toLocaleString('en-IN', { maximumFractionDigits: 0 })
-
-const totalLateFee = lateFeeData.reduce((s, d) => s + d.totalFee, 0)
-const totalOverdue = lateFeeData.length
 
 const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate()
@@ -148,7 +110,7 @@ const riskProbabilityColor = (p: number) => {
 }
 
 // ─── Calendar SVG Grid ────────────────────────────────────────────────────
-function DeadlineCalendar() {
+function DeadlineCalendar({ deadlines }: { deadlines: DeadlineEntry[] }) {
   const cellSize = 36
   const gap = 4
   const cols = 7
@@ -222,8 +184,8 @@ function DeadlineCalendar() {
 }
 
 // ─── 7-Day Workload SVG Chart ─────────────────────────────────────────────
-function WorkloadChart() {
-  const maxFilings = Math.max(...weeklyWorkload.map(d => d.filings))
+function WorkloadChart({ weeklyWorkload }: { weeklyWorkload: WorkloadEntry[] }) {
+  const maxFilings = Math.max(...weeklyWorkload.map(d => d.filings), 1)
   const h = 120
   const barW = 40
   const gap = 16
@@ -259,7 +221,7 @@ function WorkloadChart() {
 }
 
 // ─── Late Fee Sparkline SVG ────────────────────────────────────────────────
-function LateFeeSparkline() {
+function LateFeeSparkline({ lateFeeData }: { lateFeeData: LateFeeEntry[] }) {
   const cumulativeData = lateFeeData.map((_, i) =>
     lateFeeData.slice(0, i + 1).reduce((s, d) => s + d.totalFee, 0)
   )
@@ -323,6 +285,36 @@ function MetricCard({ icon: Icon, label, value, sub, color }: {
 // ─── Main Page ─────────────────────────────────────────────────────────────
 export default function AIDeadlineEnginePage() {
   const [activeTab, setActiveTab] = useState('dashboard')
+  const [deadlines, setDeadlines] = useState<DeadlineEntry[]>([])
+  const [tomorrowFilings, setTomorrowFilings] = useState<TomorrowFiling[]>([])
+  const [lateFeeData, setLateFeeData] = useState<LateFeeEntry[]>([])
+  const [weeklyWorkload, setWeeklyWorkload] = useState<WorkloadEntry[]>([])
+  const [riskForecasts, setRiskForecasts] = useState<RiskForecastEntry[]>([])
+
+  // ── Fetch data ───────────────────────────────────────────────────────────
+  useEffect(() => {
+    let cancelled = false
+    async function load() {
+      try {
+        const res = await fetch('/api/ai-deadline-engine')
+        if (!res.ok) return
+        const json = await res.json()
+        if (cancelled) return
+        if (Array.isArray(json.deadlines)) setDeadlines(json.deadlines)
+        if (Array.isArray(json.tomorrowFilings)) setTomorrowFilings(json.tomorrowFilings)
+        if (Array.isArray(json.lateFeeData)) setLateFeeData(json.lateFeeData)
+        if (Array.isArray(json.weeklyWorkload)) setWeeklyWorkload(json.weeklyWorkload)
+        if (Array.isArray(json.riskForecasts)) setRiskForecasts(json.riskForecasts)
+      } catch {
+        // Leave empty arrays in place — UI will render empty states.
+      }
+    }
+    load()
+    return () => { cancelled = true }
+  }, [])
+
+  const totalLateFee = lateFeeData.reduce((s, d) => s + d.totalFee, 0)
+  const totalOverdue = lateFeeData.length
 
   return (
     <div className="min-h-screen bg-slate-50/50">
@@ -351,7 +343,7 @@ export default function AIDeadlineEnginePage() {
           <div className="flex items-center gap-4 text-xs text-slate-400">
             <div className="flex items-center gap-1.5">
               <Timer className="h-3.5 w-3.5" />
-              <span>Last scan: 1 min ago</span>
+              <span>Last scan: —</span>
             </div>
             <div className="flex items-center gap-1.5">
               <Activity className="h-3.5 w-3.5 text-emerald-500" />
@@ -376,11 +368,11 @@ export default function AIDeadlineEnginePage() {
             <motion.div variants={stagger} initial="hidden" animate="show" className="space-y-6">
               {/* Metrics */}
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-                <MetricCard icon={CalendarDays} label="Upcoming" value="15" sub="This month" color="bg-emerald-500" />
-                <MetricCard icon={IndianRupee} label="Late Fee Exposure" value={fmtINR(totalLateFee)} sub="5 overdue returns" color="bg-red-500" />
+                <MetricCard icon={CalendarDays} label="Upcoming" value={String(deadlines.length)} sub="This month" color="bg-emerald-500" />
+                <MetricCard icon={IndianRupee} label="Late Fee Exposure" value={lateFeeData.length > 0 ? fmtINR(totalLateFee) : '—'} sub={`${totalOverdue} overdue returns`} color="bg-red-500" />
                 <MetricCard icon={AlertCircle} label="Overdue Returns" value={String(totalOverdue)} sub="Need attention" color="bg-amber-500" />
-                <MetricCard icon={Target} label="At-Risk Clients" value="6" sub="May miss deadlines" color="bg-red-600" />
-                <MetricCard icon={Gauge} label="Workload Score" value="72/100" sub="High this week" color="bg-emerald-600" />
+                <MetricCard icon={Target} label="At-Risk Clients" value={String(riskForecasts.length)} sub="May miss deadlines" color="bg-red-600" />
+                <MetricCard icon={Gauge} label="Workload Score" value={weeklyWorkload.length > 0 ? `${weeklyWorkload.reduce((s, d) => s + d.filings, 0)}/100` : '—'} sub="This week" color="bg-emerald-600" />
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -401,7 +393,7 @@ export default function AIDeadlineEnginePage() {
                       </div>
                     </CardHeader>
                     <CardContent className="pt-0">
-                      <DeadlineCalendar />
+                      <DeadlineCalendar deadlines={deadlines} />
                     </CardContent>
                   </Card>
                 </motion.div>
@@ -419,23 +411,32 @@ export default function AIDeadlineEnginePage() {
                       </div>
                     </CardHeader>
                     <CardContent className="pt-0">
-                      <div className="space-y-2.5">
-                        {tomorrowFilings.map((f, i) => (
-                          <motion.div
-                            key={i}
-                            initial={{ opacity: 0, x: -8 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            transition={{ delay: i * 0.06 }}
-                            className="flex items-center justify-between p-3 rounded-lg bg-slate-50/80 hover:bg-red-50/50 transition-colors border border-slate-200/60"
-                          >
-                            <div className="min-w-0">
-                              <p className="text-xs font-semibold text-slate-700">{f.client}</p>
-                              <p className="text-[10px] text-slate-400">{f.type} · Due: {f.due}</p>
-                            </div>
-                            {filingStatusBadge(f.status)}
-                          </motion.div>
-                        ))}
-                      </div>
+                      {tomorrowFilings.length === 0 ? (
+                        <EmptyState
+                          icon={Inbox}
+                          title="No upcoming deadlines"
+                          description="Filings due tomorrow will appear here once scheduled."
+                          compact
+                        />
+                      ) : (
+                        <div className="space-y-2.5">
+                          {tomorrowFilings.map((f, i) => (
+                            <motion.div
+                              key={i}
+                              initial={{ opacity: 0, x: -8 }}
+                              animate={{ opacity: 1, x: 0 }}
+                              transition={{ delay: i * 0.06 }}
+                              className="flex items-center justify-between p-3 rounded-lg bg-slate-50/80 hover:bg-red-50/50 transition-colors border border-slate-200/60"
+                            >
+                              <div className="min-w-0">
+                                <p className="text-xs font-semibold text-slate-700">{f.client}</p>
+                                <p className="text-[10px] text-slate-400">{f.type} · Due: {f.due}</p>
+                              </div>
+                              {filingStatusBadge(f.status)}
+                            </motion.div>
+                          ))}
+                        </div>
+                      )}
                     </CardContent>
                   </Card>
                 </motion.div>
@@ -453,26 +454,35 @@ export default function AIDeadlineEnginePage() {
                       </div>
                     </CardHeader>
                     <CardContent className="pt-0">
-                      <LateFeeSparkline />
+                      <LateFeeSparkline lateFeeData={lateFeeData} />
                       <div className="mt-3 space-y-2">
-                        {lateFeeData.map((d, i) => (
-                          <motion.div
-                            key={i}
-                            initial={{ opacity: 0, x: -6 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            transition={{ delay: i * 0.05 }}
-                            className="flex items-center justify-between py-1.5 px-2 rounded hover:bg-slate-50 transition-colors"
-                          >
-                            <div className="min-w-0">
-                              <span className="text-xs text-slate-700 font-medium">{d.client}</span>
-                              <span className="text-[10px] text-slate-400 ml-2">{d.type}</span>
-                            </div>
-                            <div className="flex items-center gap-3">
-                              <span className="text-[10px] text-slate-400">{d.overdueDays}d × ₹{d.dailyFee}/day</span>
-                              <span className="text-xs font-semibold text-red-600">{fmtINR(d.totalFee)}</span>
-                            </div>
-                          </motion.div>
-                        ))}
+                        {lateFeeData.length === 0 ? (
+                          <EmptyState
+                            icon={Inbox}
+                            title="No overdue deadlines"
+                            description="Overdue filings and late fees will appear here."
+                            compact
+                          />
+                        ) : (
+                          lateFeeData.map((d, i) => (
+                            <motion.div
+                              key={i}
+                              initial={{ opacity: 0, x: -6 }}
+                              animate={{ opacity: 1, x: 0 }}
+                              transition={{ delay: i * 0.05 }}
+                              className="flex items-center justify-between py-1.5 px-2 rounded hover:bg-slate-50 transition-colors"
+                            >
+                              <div className="min-w-0">
+                                <span className="text-xs text-slate-700 font-medium">{d.client}</span>
+                                <span className="text-[10px] text-slate-400 ml-2">{d.type}</span>
+                              </div>
+                              <div className="flex items-center gap-3">
+                                <span className="text-[10px] text-slate-400">{d.overdueDays}d × ₹{d.dailyFee}/day</span>
+                                <span className="text-xs font-semibold text-red-600">{fmtINR(d.totalFee)}</span>
+                              </div>
+                            </motion.div>
+                          ))
+                        )}
                       </div>
                       <Separator className="my-2" />
                       <div className="flex items-center justify-between px-2">
@@ -498,7 +508,7 @@ export default function AIDeadlineEnginePage() {
                       </div>
                     </CardHeader>
                     <CardContent className="pt-0">
-                      <WorkloadChart />
+                      <WorkloadChart weeklyWorkload={weeklyWorkload} />
                       <div className="mt-3 flex items-center justify-between px-1 text-[10px]">
                         <span className="text-slate-400">Filings per day</span>
                         <div className="flex items-center gap-2">
@@ -523,38 +533,46 @@ export default function AIDeadlineEnginePage() {
                       </div>
                     </CardHeader>
                     <CardContent className="pt-0">
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                        {riskForecasts.map((r, i) => (
-                          <motion.div
-                            key={r.client}
-                            initial={{ opacity: 0, y: 6 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: i * 0.06 }}
-                            className="p-3 rounded-lg border border-slate-200/60 hover:border-amber-200 transition-colors"
-                          >
-                            <div className="flex items-center justify-between mb-2">
-                              <span className="text-xs font-semibold text-slate-700">{r.client}</span>
-                              <span
-                                className="text-[11px] font-bold"
-                                style={{ color: riskProbabilityColor(r.probability) }}
-                              >
-                                {r.probability}%
-                              </span>
-                            </div>
-                            <p className="text-[10px] text-slate-500 mb-2">{r.deadline}</p>
-                            <div className="h-1.5 w-full rounded-full bg-slate-100 overflow-hidden mb-1.5">
-                              <motion.div
-                                initial={{ width: 0 }}
-                                animate={{ width: `${r.probability}%` }}
-                                transition={{ delay: 0.3 + i * 0.08, duration: 0.6 }}
-                                className="h-full rounded-full"
-                                style={{ backgroundColor: riskProbabilityColor(r.probability) }}
-                              />
-                            </div>
-                            <p className="text-[10px] text-slate-400">{r.reason}</p>
-                          </motion.div>
-                        ))}
-                      </div>
+                      {riskForecasts.length === 0 ? (
+                        <EmptyState
+                          icon={Target}
+                          title="No risk forecasts yet"
+                          description="Risk forecasts will appear here once the AI engine has analysed filing history."
+                        />
+                      ) : (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                          {riskForecasts.map((r, i) => (
+                            <motion.div
+                              key={r.client}
+                              initial={{ opacity: 0, y: 6 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              transition={{ delay: i * 0.06 }}
+                              className="p-3 rounded-lg border border-slate-200/60 hover:border-amber-200 transition-colors"
+                            >
+                              <div className="flex items-center justify-between mb-2">
+                                <span className="text-xs font-semibold text-slate-700">{r.client}</span>
+                                <span
+                                  className="text-[11px] font-bold"
+                                  style={{ color: riskProbabilityColor(r.probability) }}
+                                >
+                                  {r.probability}%
+                                </span>
+                              </div>
+                              <p className="text-[10px] text-slate-500 mb-2">{r.deadline}</p>
+                              <div className="h-1.5 w-full rounded-full bg-slate-100 overflow-hidden mb-1.5">
+                                <motion.div
+                                  initial={{ width: 0 }}
+                                  animate={{ width: `${r.probability}%` }}
+                                  transition={{ delay: 0.3 + i * 0.08, duration: 0.6 }}
+                                  className="h-full rounded-full"
+                                  style={{ backgroundColor: riskProbabilityColor(r.probability) }}
+                                />
+                              </div>
+                              <p className="text-[10px] text-slate-400">{r.reason}</p>
+                            </motion.div>
+                          ))}
+                        </div>
+                      )}
                     </CardContent>
                   </Card>
                 </motion.div>
@@ -574,7 +592,7 @@ export default function AIDeadlineEnginePage() {
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="pt-0">
-                    <DeadlineCalendar />
+                    <DeadlineCalendar deadlines={deadlines} />
                   </CardContent>
                 </Card>
               </motion.div>
@@ -594,26 +612,35 @@ export default function AIDeadlineEnginePage() {
                   <CardContent className="pt-0">
                     <ScrollArea className="max-h-96">
                       <div className="space-y-2">
-                        {deadlines.map((d, i) => (
-                          <motion.div
-                            key={i}
-                            initial={{ opacity: 0, x: -6 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            transition={{ delay: i * 0.03 }}
-                            className="flex items-center justify-between p-3 rounded-lg bg-slate-50/80 hover:bg-slate-100/80 transition-colors border border-slate-200/40"
-                          >
-                            <div className="flex items-center gap-3">
-                              <div className="h-8 w-8 rounded-lg bg-emerald-100 flex items-center justify-center shrink-0">
-                                <span className="text-xs font-bold text-emerald-700">{d.date}</span>
+                        {deadlines.length === 0 ? (
+                          <EmptyState
+                            icon={Inbox}
+                            title="No deadlines yet"
+                            description="Deadlines scheduled this month will appear here."
+                            compact
+                          />
+                        ) : (
+                          deadlines.map((d, i) => (
+                            <motion.div
+                              key={i}
+                              initial={{ opacity: 0, x: -6 }}
+                              animate={{ opacity: 1, x: 0 }}
+                              transition={{ delay: i * 0.03 }}
+                              className="flex items-center justify-between p-3 rounded-lg bg-slate-50/80 hover:bg-slate-100/80 transition-colors border border-slate-200/40"
+                            >
+                              <div className="flex items-center gap-3">
+                                <div className="h-8 w-8 rounded-lg bg-emerald-100 flex items-center justify-center shrink-0">
+                                  <span className="text-xs font-bold text-emerald-700">{d.date}</span>
+                                </div>
+                                <div>
+                                  <p className="text-xs font-medium text-slate-700">{d.client}</p>
+                                  <p className="text-[10px] text-slate-400">{d.type}</p>
+                                </div>
                               </div>
-                              <div>
-                                <p className="text-xs font-medium text-slate-700">{d.client}</p>
-                                <p className="text-[10px] text-slate-400">{d.type}</p>
-                              </div>
-                            </div>
-                            {filingStatusBadge(d.status)}
-                          </motion.div>
-                        ))}
+                              {filingStatusBadge(d.status)}
+                            </motion.div>
+                          ))
+                        )}
                       </div>
                     </ScrollArea>
                   </CardContent>
@@ -634,7 +661,7 @@ export default function AIDeadlineEnginePage() {
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="pt-0">
-                    <WorkloadChart />
+                    <WorkloadChart weeklyWorkload={weeklyWorkload} />
                   </CardContent>
                 </Card>
               </motion.div>
@@ -648,38 +675,47 @@ export default function AIDeadlineEnginePage() {
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="pt-0">
-                    <div className="space-y-3">
-                      {weeklyWorkload.map((d, i) => {
-                        const dayDeadlines = deadlines.filter(dl => (dl.date - currentDay) === i && dl.date >= currentDay)
-                        return (
-                          <motion.div
-                            key={d.day}
-                            initial={{ opacity: 0, x: -6 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            transition={{ delay: i * 0.05 }}
-                            className="p-3 rounded-lg border border-slate-200/60"
-                          >
-                            <div className="flex items-center justify-between mb-2">
-                              <div className="flex items-center gap-2">
-                                <span className="text-sm font-semibold text-slate-700">{d.day}</span>
-                                <Badge className={`text-[10px] ${d.filings >= 5 ? 'bg-amber-100 text-amber-700 border-amber-200' : 'bg-emerald-100 text-emerald-700 border-emerald-200'}`}>
-                                  {d.filings} filing{d.filings !== 1 ? 's' : ''}
-                                </Badge>
+                    {weeklyWorkload.length === 0 ? (
+                      <EmptyState
+                        icon={BarChart3}
+                        title="No workload data yet"
+                        description="Daily workload will appear here once filings are scheduled."
+                        compact
+                      />
+                    ) : (
+                      <div className="space-y-3">
+                        {weeklyWorkload.map((d, i) => {
+                          const dayDeadlines = deadlines.filter(dl => (dl.date - currentDay) === i && dl.date >= currentDay)
+                          return (
+                            <motion.div
+                              key={d.day}
+                              initial={{ opacity: 0, x: -6 }}
+                              animate={{ opacity: 1, x: 0 }}
+                              transition={{ delay: i * 0.05 }}
+                              className="p-3 rounded-lg border border-slate-200/60"
+                            >
+                              <div className="flex items-center justify-between mb-2">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-sm font-semibold text-slate-700">{d.day}</span>
+                                  <Badge className={`text-[10px] ${d.filings >= 5 ? 'bg-amber-100 text-amber-700 border-amber-200' : 'bg-emerald-100 text-emerald-700 border-emerald-200'}`}>
+                                    {d.filings} filing{d.filings !== 1 ? 's' : ''}
+                                  </Badge>
+                                </div>
+                                {i === 0 && <Badge className="bg-blue-100 text-blue-700 border-blue-200 text-[10px]">Today</Badge>}
                               </div>
-                              {i === 0 && <Badge className="bg-blue-100 text-blue-700 border-blue-200 text-[10px]">Today</Badge>}
-                            </div>
-                            <div className="h-1.5 w-full rounded-full bg-slate-100 overflow-hidden">
-                              <motion.div
-                                initial={{ width: 0 }}
-                                animate={{ width: `${(d.filings / Math.max(...weeklyWorkload.map(w => w.filings))) * 100}%` }}
-                                transition={{ delay: 0.2 + i * 0.08, duration: 0.5 }}
-                                className={`h-full rounded-full ${d.filings >= 5 ? 'bg-amber-400' : 'bg-emerald-400'}`}
-                              />
-                            </div>
-                          </motion.div>
-                        )
-                      })}
-                    </div>
+                              <div className="h-1.5 w-full rounded-full bg-slate-100 overflow-hidden">
+                                <motion.div
+                                  initial={{ width: 0 }}
+                                  animate={{ width: `${(d.filings / Math.max(...weeklyWorkload.map(w => w.filings))) * 100}%` }}
+                                  transition={{ delay: 0.2 + i * 0.08, duration: 0.5 }}
+                                  className={`h-full rounded-full ${d.filings >= 5 ? 'bg-amber-400' : 'bg-emerald-400'}`}
+                                />
+                              </div>
+                            </motion.div>
+                          )
+                        })}
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               </motion.div>
@@ -703,54 +739,68 @@ export default function AIDeadlineEnginePage() {
                       </div>
                       <div className="ml-auto text-right">
                         <p className="text-xs text-slate-500">{lateFeeData.length} overdue returns</p>
-                        <p className="text-xs text-slate-400">₹50/day per return</p>
+                        <p className="text-xs text-slate-400">—</p>
                       </div>
                     </div>
                     <div className="mt-4">
-                      <LateFeeSparkline />
+                      <LateFeeSparkline lateFeeData={lateFeeData} />
                     </div>
                   </CardContent>
                 </Card>
               </motion.div>
 
               {/* Detail List */}
-              {lateFeeData.map((d, i) => (
-                <motion.div key={i} variants={fadeUp}>
-                  <Card className="border-slate-200/60 hover:shadow-md transition-shadow border-l-4 border-l-red-400">
-                    <CardContent className="p-4">
-                      <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
-                        <div className="flex items-center gap-3">
-                          <div className="h-9 w-9 rounded-lg bg-red-100 flex items-center justify-center">
-                            <TimerReset className="h-4 w-4 text-red-600" />
-                          </div>
-                          <div>
-                            <p className="text-sm font-semibold text-slate-700">{d.client}</p>
-                            <p className="text-xs text-slate-400">{d.type}</p>
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-lg font-bold text-red-600">{fmtINR(d.totalFee)}</p>
-                          <p className="text-[10px] text-slate-400">{d.overdueDays} days × ₹{d.dailyFee}/day</p>
-                        </div>
-                      </div>
-                      <div className="h-1.5 w-full rounded-full bg-slate-100 overflow-hidden">
-                        <motion.div
-                          initial={{ width: 0 }}
-                          animate={{ width: `${Math.min((d.overdueDays / 15) * 100, 100)}%` }}
-                          transition={{ delay: 0.3, duration: 0.5 }}
-                          className="h-full rounded-full bg-red-400"
-                        />
-                      </div>
-                      <div className="flex items-center justify-between mt-2">
-                        <span className="text-[10px] text-slate-400">Overdue by {d.overdueDays} days</span>
-                        <Button size="sm" variant="outline" className="h-6 text-[10px] px-2">
-                          <Zap className="h-3 w-3 mr-1" />File Now
-                        </Button>
-                      </div>
+              {lateFeeData.length === 0 ? (
+                <motion.div variants={fadeUp}>
+                  <Card className="border-slate-200/60">
+                    <CardContent className="pt-6">
+                      <EmptyState
+                        icon={Inbox}
+                        title="No overdue deadlines"
+                        description="Overdue filings and late fees will appear here once they exist."
+                      />
                     </CardContent>
                   </Card>
                 </motion.div>
-              ))}
+              ) : (
+                lateFeeData.map((d, i) => (
+                  <motion.div key={i} variants={fadeUp}>
+                    <Card className="border-slate-200/60 hover:shadow-md transition-shadow border-l-4 border-l-red-400">
+                      <CardContent className="p-4">
+                        <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
+                          <div className="flex items-center gap-3">
+                            <div className="h-9 w-9 rounded-lg bg-red-100 flex items-center justify-center">
+                              <TimerReset className="h-4 w-4 text-red-600" />
+                            </div>
+                            <div>
+                              <p className="text-sm font-semibold text-slate-700">{d.client}</p>
+                              <p className="text-xs text-slate-400">{d.type}</p>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-lg font-bold text-red-600">{fmtINR(d.totalFee)}</p>
+                            <p className="text-[10px] text-slate-400">{d.overdueDays} days × ₹{d.dailyFee}/day</p>
+                          </div>
+                        </div>
+                        <div className="h-1.5 w-full rounded-full bg-slate-100 overflow-hidden">
+                          <motion.div
+                            initial={{ width: 0 }}
+                            animate={{ width: `${Math.min((d.overdueDays / 15) * 100, 100)}%` }}
+                            transition={{ delay: 0.3, duration: 0.5 }}
+                            className="h-full rounded-full bg-red-400"
+                          />
+                        </div>
+                        <div className="flex items-center justify-between mt-2">
+                          <span className="text-[10px] text-slate-400">Overdue by {d.overdueDays} days</span>
+                          <Button size="sm" variant="outline" className="h-6 text-[10px] px-2">
+                            <Zap className="h-3 w-3 mr-1" />File Now
+                          </Button>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </motion.div>
+                ))
+              )}
             </motion.div>
           </TabsContent>
 
@@ -758,49 +808,63 @@ export default function AIDeadlineEnginePage() {
           <TabsContent value="forecasts">
             <motion.div variants={stagger} initial="hidden" animate="show" className="space-y-4">
               {/* Risk Forecast Cards */}
-              {riskForecasts.map((r, i) => (
-                <motion.div key={r.client} variants={fadeUp}>
-                  <Card className={`border-slate-200/60 hover:shadow-md transition-shadow ${r.probability >= 70 ? 'border-l-4 border-l-red-400' : r.probability >= 40 ? 'border-l-4 border-l-amber-400' : 'border-l-4 border-l-emerald-400'}`}>
-                    <CardContent className="p-4">
-                      <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
-                        <div className="flex items-center gap-3">
-                          <div className="h-9 w-9 rounded-lg flex items-center justify-center"
-                            style={{ backgroundColor: riskProbabilityColor(r.probability) + '18' }}>
-                            <Target className="h-4 w-4" style={{ color: riskProbabilityColor(r.probability) }} />
-                          </div>
-                          <div>
-                            <p className="text-sm font-semibold text-slate-700">{r.client}</p>
-                            <p className="text-xs text-slate-400">{r.deadline}</p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <div className="text-right">
-                            <p className="text-2xl font-bold" style={{ color: riskProbabilityColor(r.probability) }}>
-                              {r.probability}%
-                            </p>
-                            <p className="text-[10px] text-slate-400">miss probability</p>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="h-2 w-full rounded-full bg-slate-100 overflow-hidden mb-2">
-                        <motion.div
-                          initial={{ width: 0 }}
-                          animate={{ width: `${r.probability}%` }}
-                          transition={{ delay: 0.2, duration: 0.6 }}
-                          className="h-full rounded-full"
-                          style={{ backgroundColor: riskProbabilityColor(r.probability) }}
-                        />
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <p className="text-[11px] text-slate-500">{r.reason}</p>
-                        <Button size="sm" variant="outline" className="h-7 text-[11px]">
-                          <Shield className="h-3 w-3 mr-1" />Prevent
-                        </Button>
-                      </div>
+              {riskForecasts.length === 0 ? (
+                <motion.div variants={fadeUp}>
+                  <Card className="border-slate-200/60">
+                    <CardContent className="pt-6">
+                      <EmptyState
+                        icon={Target}
+                        title="No risk forecasts yet"
+                        description="Risk forecasts will appear here once the AI engine has analysed filing history."
+                      />
                     </CardContent>
                   </Card>
                 </motion.div>
-              ))}
+              ) : (
+                riskForecasts.map((r, i) => (
+                  <motion.div key={r.client} variants={fadeUp}>
+                    <Card className={`border-slate-200/60 hover:shadow-md transition-shadow ${r.probability >= 70 ? 'border-l-4 border-l-red-400' : r.probability >= 40 ? 'border-l-4 border-l-amber-400' : 'border-l-4 border-l-emerald-400'}`}>
+                      <CardContent className="p-4">
+                        <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+                          <div className="flex items-center gap-3">
+                            <div className="h-9 w-9 rounded-lg flex items-center justify-center"
+                              style={{ backgroundColor: riskProbabilityColor(r.probability) + '18' }}>
+                              <Target className="h-4 w-4" style={{ color: riskProbabilityColor(r.probability) }} />
+                            </div>
+                            <div>
+                              <p className="text-sm font-semibold text-slate-700">{r.client}</p>
+                              <p className="text-xs text-slate-400">{r.deadline}</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <div className="text-right">
+                              <p className="text-2xl font-bold" style={{ color: riskProbabilityColor(r.probability) }}>
+                                {r.probability}%
+                              </p>
+                              <p className="text-[10px] text-slate-400">miss probability</p>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="h-2 w-full rounded-full bg-slate-100 overflow-hidden mb-2">
+                          <motion.div
+                            initial={{ width: 0 }}
+                            animate={{ width: `${r.probability}%` }}
+                            transition={{ delay: 0.2, duration: 0.6 }}
+                            className="h-full rounded-full"
+                            style={{ backgroundColor: riskProbabilityColor(r.probability) }}
+                          />
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <p className="text-[11px] text-slate-500">{r.reason}</p>
+                          <Button size="sm" variant="outline" className="h-7 text-[11px]">
+                            <Shield className="h-3 w-3 mr-1" />Prevent
+                          </Button>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </motion.div>
+                ))
+              )}
 
               <Separator className="my-4" />
 
@@ -814,33 +878,11 @@ export default function AIDeadlineEnginePage() {
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="pt-0">
-                    <ScrollArea className="max-h-72">
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                        {complianceCalendar.map((m, i) => (
-                          <div
-                            key={m.month}
-                            className={`p-3 rounded-lg border ${i === currentMonth ? 'border-emerald-300 bg-emerald-50/50' : 'border-slate-200/60'}`}
-                          >
-                            <div className="flex items-center gap-2 mb-2">
-                              <span className={`text-xs font-bold ${i === currentMonth ? 'text-emerald-700' : 'text-slate-600'}`}>
-                                {m.month}
-                              </span>
-                              {i === currentMonth && (
-                                <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 text-[9px] h-4">Current</Badge>
-                              )}
-                            </div>
-                            <div className="space-y-1">
-                              {m.events.map((e, j) => (
-                                <p key={j} className="text-[10px] text-slate-500 flex items-center gap-1.5">
-                                  <CircleDot className="h-2 w-2 text-emerald-400 shrink-0" />
-                                  {e}
-                                </p>
-                              ))}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </ScrollArea>
+                    <EmptyState
+                      icon={CalendarClockIcon}
+                      title="No compliance calendar yet"
+                      description="Statutory compliance deadlines will appear here once configured."
+                    />
                   </CardContent>
                 </Card>
               </motion.div>

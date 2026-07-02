@@ -1,6 +1,8 @@
 'use client'
 
 import React, { useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { apiGet } from '@/lib/api'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -9,6 +11,8 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import { Progress } from '@/components/ui/progress'
 import { motion } from 'framer-motion'
+import { EmptyState } from '@/components/shared/EmptyState'
+import { useApp } from '@/contexts/AppContext'
 import {
   UserCheck,
   AlertTriangle,
@@ -50,56 +54,42 @@ const fadeUp = {
 }
 
 // ─── Sample Data ───────────────────────────────────────────────────────────
-const clients = [
-  { name: 'ABC Traders', gstin: '27AABCT1234F1ZH', health: 42, risk: 78, communication: 35, revenue: 65, retention: 40 },
-  { name: 'XYZ Industries', gstin: '27AABCX5678G2ZK', health: 85, risk: 22, communication: 90, revenue: 88, retention: 92 },
-  { name: 'Sharma Enterprises', gstin: '27AABCS9012H3ZL', health: 68, risk: 45, communication: 55, revenue: 72, retention: 60 },
-  { name: 'Patel & Sons', gstin: '27AABCP3456J4ZM', health: 55, risk: 62, communication: 48, revenue: 58, retention: 45 },
-  { name: 'Kumar Associates', gstin: '27AABCK7890K5ZN', health: 51, risk: 68, communication: 42, revenue: 55, retention: 38 },
-  { name: 'Singh Trading', gstin: '27AABCS2345L6ZO', health: 38, risk: 82, communication: 30, revenue: 45, retention: 32 },
-  { name: 'Mehta Corp', gstin: '27AABCM6789M7ZP', health: 92, risk: 12, communication: 95, revenue: 90, retention: 96 },
-  { name: 'Joshi Infra', gstin: '27AABCJ0123N8ZQ', health: 75, risk: 35, communication: 70, revenue: 78, retention: 72 },
-]
+// PT-1-a: Client list is sourced from /api/clients and risk scores from
+// /api/ai-risk. Automated actions, reminders, missing docs and escalations do
+// not yet have dedicated APIs — they render empty states until data is added.
+type ApiClient = {
+  id: string
+  gstin: string
+  tradeName: string
+  legalName?: string | null
+}
+type ApiRisk = {
+  clientId: string
+  clientName: string
+  gstin: string
+  overallScore: number
+  riskLevel: string
+  lateFilings: number
+  noticeFrequency: number
+  gstMismatches: number
+  vendorRisk: number
+  itcRisk: number
+}
+type ManagedClient = {
+  id: string
+  name: string
+  gstin: string
+  health: number
+  risk: number
+  communication: number
+  revenue: number
+  retention: number
+}
 
-const automatedActions = [
-  { time: '11:20 AM', action: 'Sent reminder to ABC Traders for pending GSTR-3B', type: 'reminder' },
-  { time: '11:05 AM', action: 'Requested Purchase Register from Sharma Enterprises', type: 'document' },
-  { time: '10:48 AM', action: 'Followed up on GST notice response for Patel & Sons', type: 'followup' },
-  { time: '10:30 AM', action: 'Escalated Singh Trading — 3 overdue filings', type: 'escalate' },
-  { time: '10:15 AM', action: 'Sent payment receipt reminder to Kumar Associates', type: 'reminder' },
-  { time: '09:52 AM', action: 'Requested bank statements from ABC Traders', type: 'document' },
-  { time: '09:35 AM', action: 'Followed up on TDS certificates from Patel & Sons', type: 'followup' },
-  { time: '09:18 AM', action: 'Escalated Kumar Associates — fee payment overdue 30 days', type: 'escalate' },
-  { time: '09:00 AM', action: 'Sent onboarding completion reminder to Singh Trading', type: 'reminder' },
-  { time: '08:40 AM', action: 'Requested sales register from Sharma Enterprises', type: 'document' },
-]
-
-const reminders = [
-  { client: 'ABC Traders', type: 'Filing Reminder', sentDate: '04/03/2026', status: 'sent' },
-  { client: 'Singh Trading', type: 'Document Request', sentDate: '04/03/2026', status: 'delivered' },
-  { client: 'Sharma Enterprises', type: 'Payment Reminder', sentDate: '03/03/2026', status: 'read' },
-  { client: 'Patel & Sons', type: 'GST Notice Response', sentDate: '03/03/2026', status: 'sent' },
-  { client: 'Kumar Associates', type: 'Fee Payment', sentDate: '02/03/2026', status: 'delivered' },
-  { client: 'ABC Traders', type: 'Document Request', sentDate: '02/03/2026', status: 'read' },
-  { client: 'Singh Trading', type: 'Filing Reminder', sentDate: '01/03/2026', status: 'ignored' },
-  { client: 'Patel & Sons', type: 'Onboarding', sentDate: '01/03/2026', status: 'sent' },
-]
-
-const missingDocs = [
-  { client: 'Sharma Enterprises', doc: 'Purchase Register Feb 2026', days: 12, priority: 'high' },
-  { client: 'ABC Traders', doc: 'Bank Statement Q4 2025-26', days: 8, priority: 'urgent' },
-  { client: 'Singh Trading', doc: 'GST Notice Copy', days: 18, priority: 'urgent' },
-  { client: 'Kumar Associates', doc: 'Sales Register Jan 2026', days: 6, priority: 'high' },
-  { client: 'Patel & Sons', doc: 'TDS Certificates FY 2025-26', days: 4, priority: 'normal' },
-  { client: 'ABC Traders', doc: 'Profit & Loss Statement', days: 15, priority: 'high' },
-]
-
-const escalations = [
-  { client: 'Singh Trading', reason: '3 overdue filings — no response to 4 reminders', since: '15/02/2026', severity: 'critical' },
-  { client: 'ABC Traders', reason: 'GSTR-3B due in 24 hrs — no data received', since: '03/03/2026', severity: 'critical' },
-  { client: 'Kumar Associates', reason: 'Fee payment overdue 30+ days', since: '01/02/2026', severity: 'high' },
-  { client: 'Patel & Sons', reason: 'GST notice response deadline approaching', since: '25/02/2026', severity: 'medium' },
-]
+const automatedActions: { time: string; action: string; type: string }[] = []
+const reminders: { client: string; type: string; sentDate: string; status: string }[] = []
+const missingDocs: { client: string; doc: string; days: number; priority: string }[] = []
+const escalations: { client: string; reason: string; since: string; severity: string }[] = []
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
 const scoreColor = (score: number) => {
@@ -179,7 +169,7 @@ function MetricCard({ icon: Icon, label, value, sub, color }: {
 }
 
 // ─── Client Scorecard ─────────────────────────────────────────────────────
-function ClientScorecard({ client }: { client: typeof clients[0] }) {
+function ClientScorecard({ client }: { client: ManagedClient }) {
   const avgScore = Math.round((client.health + client.risk + client.communication + client.revenue + client.retention) / 5)
   return (
     <Card className="border-slate-200/60 hover:shadow-md transition-shadow h-full">
@@ -272,8 +262,37 @@ const severityBadge = (s: string) => {
 
 // ─── Main Page ─────────────────────────────────────────────────────────────
 export default function AIAccountManagerPage() {
+  const { setCurrentView } = useApp()
   const [activeTab, setActiveTab] = useState('dashboard')
-  const avgHealth = Math.round(clients.reduce((s, c) => s + c.health, 0) / clients.length)
+
+  const { data: clientsRes } = useQuery<{ clients: ApiClient[] }>({
+    queryKey: ['clients', 'all'],
+    queryFn: () => apiGet<{ clients: ApiClient[] }>('/api/clients'),
+  })
+  const { data: riskRes } = useQuery<{ clients: ApiRisk[] }>({
+    queryKey: ['ai-risk', 'all'],
+    queryFn: () => apiGet<{ clients: ApiRisk[] }>('/api/ai-risk'),
+  })
+
+  const riskMap: Record<string, ApiRisk> = {}
+  for (const r of riskRes?.clients ?? []) riskMap[r.clientId] = r
+
+  const clients: ManagedClient[] = (clientsRes?.clients ?? []).map(c => {
+    const risk = riskMap[c.id]
+    const health = risk ? Math.max(0, 100 - risk.overallScore) : 0
+    return {
+      id: c.id,
+      name: c.tradeName || c.legalName || 'Unnamed client',
+      gstin: c.gstin,
+      health,
+      risk: risk?.overallScore ?? 0,
+      communication: 0,
+      revenue: 0,
+      retention: 0,
+    }
+  })
+
+  const avgHealth = clients.length ? Math.round(clients.reduce((s, c) => s + c.health, 0) / clients.length) : 0
   const atRiskCount = clients.filter(c => c.health < 60).length
 
   return (

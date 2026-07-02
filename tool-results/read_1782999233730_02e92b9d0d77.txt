@@ -1,0 +1,1045 @@
+     1→'use client';
+     2→
+     3→import React, { useState, useMemo, useCallback } from 'react';
+     4→import { motion, AnimatePresence } from 'framer-motion';
+     5→import {
+     6→  Card,
+     7→  CardContent,
+     8→  CardHeader,
+     9→  CardTitle,
+    10→  CardDescription,
+    11→} from '@/components/ui/card';
+    12→import { Badge } from '@/components/ui/badge';
+    13→import { Button } from '@/components/ui/button';
+    14→import {
+    15→  Dialog,
+    16→  DialogContent,
+    17→  DialogDescription,
+    18→  DialogFooter,
+    19→  DialogHeader,
+    20→  DialogTitle,
+    21→  DialogTrigger,
+    22→} from '@/components/ui/dialog';
+    23→import {
+    24→  Select,
+    25→  SelectContent,
+    26→  SelectItem,
+    27→  SelectTrigger,
+    28→  SelectValue,
+    29→} from '@/components/ui/select';
+    30→import { Input } from '@/components/ui/input';
+    31→import { Label } from '@/components/ui/label';
+    32→import { Skeleton } from '@/components/ui/skeleton';
+    33→import { ScrollArea } from '@/components/ui/scroll-area';
+    34→import { Separator } from '@/components/ui/separator';
+    35→import {
+    36→  Table,
+    37→  TableBody,
+    38→  TableCell,
+    39→  TableHead,
+    40→  TableHeader,
+    41→  TableRow,
+    42→} from '@/components/ui/table';
+    43→import {
+    44→  CheckCircle2,
+    45→  AlertTriangle,
+    46→  XCircle,
+    47→  Play,
+    48→  Loader2,
+    49→  GitCompareArrows,
+    50→  FileSpreadsheet,
+    51→  Sparkles,
+    52→  ShieldCheck,
+    53→  ShieldAlert,
+    54→  ShieldX,
+    55→  ArrowRight,
+    56→  ChevronRight,
+    57→  Clock,
+    58→  Inbox,
+    59→  Zap,
+    60→  TrendingDown,
+    61→  BarChart3,
+    62→  Brain,
+    63→  X,
+    64→} from 'lucide-react';
+    65→import { formatCurrency } from '@/lib/gst-utils';
+    66→import { toast } from 'sonner';
+    67→import {
+    68→  useFireReconciliations,
+    69→  useFireClients,
+    70→  useFireAIRecommendations,
+    71→} from '@/hooks/use-firestore';
+    72→import {
+    73→  createReconciliation,
+    74→  resolveMismatch,
+    75→  dismissRecommendation,
+    76→} from '@/lib/firestore-service';
+    77→import type {
+    78→  FirestoreReconciliation,
+    79→  FirestoreClient,
+    80→  FirestoreAIRecommendation,
+    81→  ReconMismatch,
+    82→} from '@/lib/firestore-schema';
+    83→import { MATCH_STATUS_CONFIG, RISK_LEVEL_CONFIG } from '@/types/gst';
+    84→import type { MatchStatus, RiskLevel } from '@/types/gst';
+    85→import { EmptyState } from '@/components/shared/EmptyState';
+    86→
+    87→// ──────────────────────────────────────────────
+    88→// Animation variants
+    89→// ──────────────────────────────────────────────
+    90→const pageVariants = {
+    91→  hidden: { opacity: 0 },
+    92→  visible: { opacity: 1, transition: { duration: 0.4 } },
+    93→};
+    94→
+    95→const staggerContainer = {
+    96→  hidden: {},
+    97→  visible: { transition: { staggerChildren: 0.05 } },
+    98→};
+    99→
+   100→const cardEntrance = {
+   101→  hidden: { opacity: 0, y: 12, scale: 0.97 },
+   102→  visible: { opacity: 1, y: 0, scale: 1, transition: { duration: 0.3, ease: 'easeOut' } },
+   103→};
+   104→
+   105→const slideInRight = {
+   106→  hidden: { opacity: 0, x: 20 },
+   107→  visible: { opacity: 1, x: 0, transition: { duration: 0.35, ease: 'easeOut' } },
+   108→};
+   109→
+   110→// ──────────────────────────────────────────────
+   111→// Source options for reconciliation
+   112→// ──────────────────────────────────────────────
+   113→const SOURCE_OPTIONS = [
+   114→  'GSTR-2B vs Purchase Register',
+   115→  'GSTR-1 vs Sales Register',
+   116→  'GSTR-2B vs GSTR-1',
+   117→  'Purchase Register vs Sales Register',
+   118→];
+   119→
+   120→// ──────────────────────────────────────────────
+   121→// Period generator (last 12 months)
+   122→// ──────────────────────────────────────────────
+   123→function getRecentPeriods(count: number = 12): string[] {
+   124→  const periods: string[] = [];
+   125→  const now = new Date();
+   126→  for (let i = 0; i < count; i++) {
+   127→    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+   128→    const yyyy = d.getFullYear();
+   129→    const mm = String(d.getMonth() + 1).padStart(2, '0');
+   130→    periods.push(`${yyyy}-${mm}`);
+   131→  }
+   132→  return periods;
+   133→}
+   134→
+   135→function periodLabel(period: string): string {
+   136→  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+   137→  const [year, month] = period.split('-').map(Number);
+   138→  return `${months[month - 1]} ${year}`;
+   139→}
+   140→
+   141→// ──────────────────────────────────────────────
+   142→// Summary Card
+   143→// ──────────────────────────────────────────────
+   144→function SummaryCard({
+   145→  title,
+   146→  value,
+   147→  icon: Icon,
+   148→  iconColor,
+   149→  iconBg,
+   150→  subtitle,
+   151→}: {
+   152→  title: string;
+   153→  value: string | number;
+   154→  icon: React.ElementType;
+   155→  iconColor: string;
+   156→  iconBg: string;
+   157→  subtitle?: string;
+   158→}) {
+   159→  return (
+   160→    <motion.div variants={cardEntrance}>
+   161→      <Card className="relative overflow-hidden border-border/60">
+   162→        <CardContent className="p-4">
+   163→          <div className="flex items-start justify-between">
+   164→            <div className="space-y-1">
+   165→              <p className="text-xs font-medium text-muted-foreground">{title}</p>
+   166→              <p className="text-2xl font-bold tracking-tight text-foreground">{value}</p>
+   167→              {subtitle && (
+   168→                <p className="text-[11px] text-muted-foreground">{subtitle}</p>
+   169→              )}
+   170→            </div>
+   171→            <div className={`flex h-9 w-9 items-center justify-center rounded-lg ${iconBg}`}>
+   172→              <Icon className={`h-4.5 w-4.5 ${iconColor}`} />
+   173→            </div>
+   174→          </div>
+   175→        </CardContent>
+   176→      </Card>
+   177→    </motion.div>
+   178→  );
+   179→}
+   180→
+   181→// ──────────────────────────────────────────────
+   182→// Match Rate Ring
+   183→// ──────────────────────────────────────────────
+   184→function MatchRateRing({
+   185→  matchPercent,
+   186→  partialPercent,
+   187→  size = 140,
+   188→  strokeWidth = 12,
+   189→}: {
+   190→  matchPercent: number;
+   191→  partialPercent: number;
+   192→  size?: number;
+   193→  strokeWidth?: number;
+   194→}) {
+   195→  const radius = (size - strokeWidth) / 2;
+   196→  const circumference = 2 * Math.PI * radius;
+   197→  const mismatchPercent = Math.max(0, 100 - matchPercent - partialPercent);
+   198→
+   199→  const matchLen = (matchPercent / 100) * circumference;
+   200→  const partialLen = (partialPercent / 100) * circumference;
+   201→  const mismatchLen = (mismatchPercent / 100) * circumference;
+   202→
+   203→  const partialOffset = -(matchLen);
+   204→  const mismatchOffset = -(matchLen + partialLen);
+   205→
+   206→  return (
+   207→    <div className="relative inline-flex items-center justify-center" style={{ width: size, height: size }}>
+   208→      <svg width={size} height={size} className="-rotate-90">
+   209→        <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="#f1f5f9" strokeWidth={strokeWidth} />
+   210→        <defs>
+   211→          <filter id="ringGlow" x="-20%" y="-20%" width="140%" height="140%">
+   212→            <feGaussianBlur stdDeviation="2" result="blur" />
+   213→            <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+   214→          </filter>
+   215→        </defs>
+   216→        {matchPercent > 0 && (
+   217→          <motion.circle
+   218→            cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="#10b981"
+   219→            strokeWidth={strokeWidth} strokeLinecap="round"
+   220→            strokeDasharray={`${matchLen} ${circumference - matchLen}`} strokeDashoffset={0}
+   221→            initial={{ strokeDasharray: `0 ${circumference}` }}
+   222→            animate={{ strokeDasharray: `${matchLen} ${circumference - matchLen}` }}
+   223→            transition={{ duration: 1.2, ease: [0.25, 0.46, 0.45, 0.94] }}
+   224→            filter="url(#ringGlow)"
+   225→          />
+   226→        )}
+   227→        {partialPercent > 0 && (
+   228→          <motion.circle
+   229→            cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="#f59e0b"
+   230→            strokeWidth={strokeWidth} strokeLinecap="round"
+   231→            strokeDasharray={`${partialLen} ${circumference - partialLen}`} strokeDashoffset={partialOffset}
+   232→            initial={{ strokeDasharray: `0 ${circumference}`, strokeDashoffset: 0 }}
+   233→            animate={{ strokeDasharray: `${partialLen} ${circumference - partialLen}`, strokeDashoffset: partialOffset }}
+   234→            transition={{ duration: 1.2, ease: [0.25, 0.46, 0.45, 0.94], delay: 0.2 }}
+   235→            filter="url(#ringGlow)"
+   236→          />
+   237→        )}
+   238→        {mismatchPercent > 0 && (
+   239→          <motion.circle
+   240→            cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="#ef4444"
+   241→            strokeWidth={strokeWidth} strokeLinecap="round"
+   242→            strokeDasharray={`${mismatchLen} ${circumference - mismatchLen}`} strokeDashoffset={mismatchOffset}
+   243→            initial={{ strokeDasharray: `0 ${circumference}`, strokeDashoffset: 0 }}
+   244→            animate={{ strokeDasharray: `${mismatchLen} ${circumference - mismatchLen}`, strokeDashoffset: mismatchOffset }}
+   245→            transition={{ duration: 1.2, ease: [0.25, 0.46, 0.45, 0.94], delay: 0.4 }}
+   246→            filter="url(#ringGlow)"
+   247→          />
+   248→        )}
+   249→      </svg>
+   250→      <div className="absolute inset-0 flex flex-col items-center justify-center">
+   251→        <motion.span
+   252→          className="text-3xl font-bold tracking-tight text-foreground"
+   253→          initial={{ opacity: 0, scale: 0.5 }}
+   254→          animate={{ opacity: 1, scale: 1 }}
+   255→          transition={{ delay: 0.7, duration: 0.4, type: 'spring' }}
+   256→        >
+   257→          {matchPercent}%
+   258→        </motion.span>
+   259→        <span className="text-[10px] font-medium text-muted-foreground">Match Rate</span>
+   260→      </div>
+   261→    </div>
+   262→  );
+   263→}
+   264→
+   265→// ──────────────────────────────────────────────
+   266→// Main Component
+   267→// ──────────────────────────────────────────────
+   268→export default function ReconciliationPage() {
+   269→  // ── Firestore hooks ──
+   270→  const { data: reconciliations, loading: reconsLoading, error: reconsError } = useFireReconciliations();
+   271→  const { data: clients, loading: clientsLoading, error: clientsError } = useFireClients();
+   272→  const { data: aiRecommendations, loading: recsLoading, error: recsError } = useFireAIRecommendations();
+   273→
+   274→  const loading = reconsLoading || clientsLoading || recsLoading;
+   275→
+   276→  // ── Dialog state ──
+   277→  const [dialogOpen, setDialogOpen] = useState(false);
+   278→  const [selectedClientId, setSelectedClientId] = useState<string>('');
+   279→  const [selectedPeriod, setSelectedPeriod] = useState<string>('');
+   280→  const [selectedSource, setSelectedSource] = useState<string>('');
+   281→  const [creating, setCreating] = useState(false);
+   282→
+   283→  // ── Mismatch filter ──
+   284→  const [filterStatus, setFilterStatus] = useState<string>('all');
+   285→  const [expandedReconId, setExpandedReconId] = useState<string | null>(null);
+   286→  const [resolvingInvoice, setResolvingInvoice] = useState<string | null>(null);
+   287→  const [dismissingRecId, setDismissingRecId] = useState<string | null>(null);
+   288→
+   289→  // ── Client map ──
+   290→  const clientMap = useMemo(() => {
+   291→    const map = new Map<string, FirestoreClient & { id: string }>();
+   292→    for (const c of clients) {
+   293→      map.set(c.clientId, c);
+   294→    }
+   295→    return map;
+   296→  }, [clients]);
+   297→
+   298→  // ── Aggregate stats ──
+   299→  const stats = useMemo(() => {
+   300→    let totalRuns = 0;
+   301→    let totalRecords = 0;
+   302→    let totalMatched = 0;
+   303→    let totalUnmatched = 0;
+   304→    let totalPartial = 0;
+   305→    let totalHighRisk = 0;
+   306→    let totalGstDiff = 0;
+   307→
+   308→    for (const r of reconciliations) {
+   309→      totalRuns++;
+   310→      totalRecords += r.totalRecords;
+   311→      totalMatched += r.matched;
+   312→      totalUnmatched += r.unmatched;
+   313→      totalPartial += r.partialMatches;
+   314→      totalHighRisk += r.highRisk;
+   315→      totalGstDiff += Math.abs(r.gstDifference);
+   316→    }
+   317→
+   318→    return { totalRuns, totalRecords, totalMatched, totalUnmatched, totalPartial, totalHighRisk, totalGstDiff };
+   319→  }, [reconciliations]);
+   320→
+   321→  // ── All mismatches from all reconciliations (flattened) ──
+   322→  const allMismatches = useMemo(() => {
+   323→    const items: Array<ReconMismatch & { reconId: string; reconDocId: string; clientId: string; period: string }> = [];
+   324→    for (const r of reconciliations) {
+   325→      for (const m of r.mismatches) {
+   326→        items.push({ ...m, reconId: r.reconId, reconDocId: r.id, clientId: r.clientId, period: r.period });
+   327→      }
+   328→    }
+   329→    return items;
+   330→  }, [reconciliations]);
+   331→
+   332→  // ── Filtered mismatches ──
+   333→  const filteredMismatches = useMemo(() => {
+   334→    if (filterStatus === 'all') return allMismatches;
+   335→    if (filterStatus === 'unresolved') return allMismatches.filter(m => !m.resolved);
+   336→    if (filterStatus === 'resolved') return allMismatches.filter(m => m.resolved);
+   337→    return allMismatches.filter(m => m.matchStatus === filterStatus);
+   338→  }, [allMismatches, filterStatus]);
+   339→
+   340→  // ── Match rate calculation ──
+   341→  const matchPercent = stats.totalRecords > 0 ? Math.round((stats.totalMatched / stats.totalRecords) * 100) : 0;
+   342→  const partialPercent = stats.totalRecords > 0 ? Math.round((stats.totalPartial / stats.totalRecords) * 100) : 0;
+   343→
+   344→  const isEmpty = reconciliations.length === 0 && !loading;
+   345→
+   346→  // ── Active AI recommendations ──
+   347→  const activeRecommendations = useMemo(
+   348→    () => aiRecommendations.filter(r => r.status === 'active'),
+   349→    [aiRecommendations]
+   350→  );
+   351→
+   352→  // ──────────────────────────────────────────
+   353→  // Actions
+   354→  // ──────────────────────────────────────────
+   355→  const handleCreateReconciliation = useCallback(async () => {
+   356→    if (!selectedClientId || !selectedPeriod || !selectedSource) {
+   357→      toast.error('Please select client, period, and source');
+   358→      return;
+   359→    }
+   360→    setCreating(true);
+   361→    try {
+   362→      await createReconciliation({
+   363→        clientId: selectedClientId,
+   364→        period: selectedPeriod,
+   365→        sources: selectedSource,
+   366→      });
+   367→      toast.success('Reconciliation run started successfully');
+   368→      setDialogOpen(false);
+   369→      setSelectedClientId('');
+   370→      setSelectedPeriod('');
+   371→      setSelectedSource('');
+   372→    } catch (err) {
+   373→      toast.error(err instanceof Error ? err.message : 'Failed to create reconciliation');
+   374→    } finally {
+   375→      setCreating(false);
+   376→    }
+   377→  }, [selectedClientId, selectedPeriod, selectedSource]);
+   378→
+   379→  const handleResolveMismatch = useCallback(async (reconId: string, invoiceNumber: string) => {
+   380→    setResolvingInvoice(invoiceNumber);
+   381→    try {
+   382→      await resolveMismatch(reconId, invoiceNumber);
+   383→      toast.success(`Mismatch for invoice ${invoiceNumber} resolved`);
+   384→    } catch (err) {
+   385→      toast.error(err instanceof Error ? err.message : 'Failed to resolve mismatch');
+   386→    } finally {
+   387→      setResolvingInvoice(null);
+   388→    }
+   389→  }, []);
+   390→
+   391→  const handleDismissRecommendation = useCallback(async (recId: string) => {
+   392→    setDismissingRecId(recId);
+   393→    try {
+   394→      await dismissRecommendation(recId);
+   395→      toast.success('Recommendation dismissed');
+   396→    } catch (err) {
+   397→      toast.error(err instanceof Error ? err.message : 'Failed to dismiss recommendation');
+   398→    } finally {
+   399→      setDismissingRecId(null);
+   400→    }
+   401→  }, []);
+   402→
+   403→  // ──────────────────────────────────────────
+   404→  // Render: Loading
+   405→  // ──────────────────────────────────────────
+   406→  if (loading) {
+   407→    return (
+   408→      <div className="p-4 md:p-6 space-y-6 max-w-[1440px] mx-auto">
+   409→        <div className="flex items-center justify-between">
+   410→          <div className="space-y-2">
+   411→            <Skeleton className="h-8 w-56" />
+   412→            <Skeleton className="h-4 w-72" />
+   413→          </div>
+   414→          <div className="flex gap-3">
+   415→            <Skeleton className="h-9 w-44 rounded-lg" />
+   416→          </div>
+   417→        </div>
+   418→        <div className="flex flex-col md:flex-row items-center gap-6 py-4">
+   419→          <Skeleton className="h-[140px] w-[140px] rounded-full" />
+   420→          <div className="grid grid-cols-2 md:grid-cols-5 gap-3 flex-1 w-full">
+   421→            {Array.from({ length: 5 }).map((_, i) => (
+   422→              <Skeleton key={i} className="h-24 rounded-xl" />
+   423→            ))}
+   424→          </div>
+   425→        </div>
+   426→        <Skeleton className="h-96 w-full rounded-xl" />
+   427→      </div>
+   428→    );
+   429→  }
+   430→
+   431→  // ──────────────────────────────────────────
+   432→  // Render: Error
+   433→  // ──────────────────────────────────────────
+   434→  if (reconsError || clientsError) {
+   435→    return (
+   436→      <div className="p-4 md:p-6 max-w-[1440px] mx-auto">
+   437→        <Card className="border-red-200 bg-red-50">
+   438→          <CardContent className="p-6 text-center">
+   439→            <AlertTriangle className="h-8 w-8 text-red-500 mx-auto mb-2" />
+   440→            <p className="text-sm font-medium text-red-800">
+   441→              Failed to load reconciliation data
+   442→            </p>
+   443→            <p className="text-xs text-red-600 mt-1">
+   444→              {reconsError || clientsError || 'Unknown error'}
+   445→            </p>
+   446→          </CardContent>
+   447→        </Card>
+   448→      </div>
+   449→    );
+   450→  }
+   451→
+   452→  // ──────────────────────────────────────────
+   453→  // Render: Empty State
+   454→  // ──────────────────────────────────────────
+   455→  if (isEmpty) {
+   456→    return (
+   457→      <motion.div
+   458→        variants={pageVariants}
+   459→        initial="hidden"
+   460→        animate="visible"
+   461→        className="p-4 md:p-6 max-w-[1440px] mx-auto"
+   462→      >
+   463→        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
+   464→          <div>
+   465→            <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground">
+   466→              Reconciliation Center
+   467→            </h1>
+   468→            <p className="text-muted-foreground text-sm mt-1">
+   469→              Reconcile books with GST portal data
+   470→            </p>
+   471→          </div>
+   472→          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+   473→            <DialogTrigger asChild>
+   474→              <Button className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm">
+   475→                <Play className="h-4 w-4" />
+   476→                New Reconciliation
+   477→              </Button>
+   478→            </DialogTrigger>
+   479→            <DialogContent>
+   480→              <DialogHeader>
+   481→                <DialogTitle>New Reconciliation</DialogTitle>
+   482→                <DialogDescription>Select client, period, and data sources to start.</DialogDescription>
+   483→              </DialogHeader>
+   484→              <div className="space-y-4 py-2">
+   485→                <div className="space-y-2">
+   486→                  <Label>Client</Label>
+   487→                  <Select value={selectedClientId} onValueChange={setSelectedClientId}>
+   488→                    <SelectTrigger><SelectValue placeholder="Select client" /></SelectTrigger>
+   489→                    <SelectContent>
+   490→                      {clients.map(c => (
+   491→                        <SelectItem key={c.id} value={c.clientId}>
+   492→                          {c.tradeName} — {c.gstin}
+   493→                        </SelectItem>
+   494→                      ))}
+   495→                    </SelectContent>
+   496→                  </Select>
+   497→                </div>
+   498→                <div className="space-y-2">
+   499→                  <Label>Period</Label>
+   500→                  <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
+   501→                    <SelectTrigger><SelectValue placeholder="Select period" /></SelectTrigger>
+   502→                    <SelectContent>
+   503→                      {getRecentPeriods().map(p => (
+   504→                        <SelectItem key={p} value={p}>{periodLabel(p)}</SelectItem>
+   505→                      ))}
+   506→                    </SelectContent>
+   507→                  </Select>
+   508→                </div>
+   509→                <div className="space-y-2">
+   510→                  <Label>Source</Label>
+   511→                  <Select value={selectedSource} onValueChange={setSelectedSource}>
+   512→                    <SelectTrigger><SelectValue placeholder="Select source" /></SelectTrigger>
+   513→                    <SelectContent>
+   514→                      {SOURCE_OPTIONS.map(s => (
+   515→                        <SelectItem key={s} value={s}>{s}</SelectItem>
+   516→                      ))}
+   517→                    </SelectContent>
+   518→                  </Select>
+   519→                </div>
+   520→              </div>
+   521→              <DialogFooter>
+   522→                <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
+   523→                <Button
+   524→                  onClick={handleCreateReconciliation}
+   525→                  disabled={creating || !selectedClientId || !selectedPeriod || !selectedSource}
+   526→                  className="bg-emerald-600 hover:bg-emerald-700 gap-2"
+   527→                >
+   528→                  {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+   529→                  Run Reconciliation
+   530→                </Button>
+   531→              </DialogFooter>
+   532→            </DialogContent>
+   533→          </Dialog>
+   534→        </div>
+   535→
+   536→        <EmptyState
+   537→          icon={GitCompareArrows}
+   538→          title="No reconciliations run yet"
+   539→          description="Run your first reconciliation to compare your books with GST portal data and identify mismatches."
+   540→          action={{
+   541→            label: 'Run your first reconciliation',
+   542→            onClick: () => setDialogOpen(true),
+   543→            icon: Play,
+   544→          }}
+   545→        />
+   546→      </motion.div>
+   547→    );
+   548→  }
+   549→
+   550→  // ──────────────────────────────────────────
+   551→  // Render: Main Content
+   552→  // ──────────────────────────────────────────
+   553→  return (
+   554→    <motion.div
+   555→      variants={pageVariants}
+   556→      initial="hidden"
+   557→      animate="visible"
+   558→      className="p-4 md:p-6 max-w-[1440px] mx-auto space-y-5"
+   559→    >
+   560→      {/* ═══ HEADER ═══ */}
+   561→      <motion.div
+   562→        initial={{ opacity: 0, y: -10 }}
+   563→        animate={{ opacity: 1, y: 0 }}
+   564→        transition={{ duration: 0.4 }}
+   565→        className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4"
+   566→      >
+   567→        <div>
+   568→          <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground">
+   569→            Reconciliation Center
+   570→          </h1>
+   571→          <p className="text-muted-foreground text-sm mt-1">
+   572→            Reconcile books with GST portal data
+   573→          </p>
+   574→        </div>
+   575→        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+   576→          <DialogTrigger asChild>
+   577→            <Button className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm">
+   578→              <Play className="h-4 w-4" />
+   579→              New Reconciliation
+   580→            </Button>
+   581→          </DialogTrigger>
+   582→          <DialogContent>
+   583→            <DialogHeader>
+   584→              <DialogTitle>New Reconciliation</DialogTitle>
+   585→              <DialogDescription>Select client, period, and data sources to start.</DialogDescription>
+   586→            </DialogHeader>
+   587→            <div className="space-y-4 py-2">
+   588→              <div className="space-y-2">
+   589→                <Label>Client</Label>
+   590→                <Select value={selectedClientId} onValueChange={setSelectedClientId}>
+   591→                  <SelectTrigger><SelectValue placeholder="Select client" /></SelectTrigger>
+   592→                  <SelectContent>
+   593→                    {clients.map(c => (
+   594→                      <SelectItem key={c.id} value={c.clientId}>
+   595→                        {c.tradeName} — {c.gstin}
+   596→                      </SelectItem>
+   597→                    ))}
+   598→                  </SelectContent>
+   599→                </Select>
+   600→              </div>
+   601→              <div className="space-y-2">
+   602→                <Label>Period</Label>
+   603→                <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
+   604→                  <SelectTrigger><SelectValue placeholder="Select period" /></SelectTrigger>
+   605→                  <SelectContent>
+   606→                    {getRecentPeriods().map(p => (
+   607→                      <SelectItem key={p} value={p}>{periodLabel(p)}</SelectItem>
+   608→                    ))}
+   609→                  </SelectContent>
+   610→                </Select>
+   611→              </div>
+   612→              <div className="space-y-2">
+   613→                <Label>Source</Label>
+   614→                <Select value={selectedSource} onValueChange={setSelectedSource}>
+   615→                  <SelectTrigger><SelectValue placeholder="Select source" /></SelectTrigger>
+   616→                  <SelectContent>
+   617→                    {SOURCE_OPTIONS.map(s => (
+   618→                      <SelectItem key={s} value={s}>{s}</SelectItem>
+   619→                    ))}
+   620→                  </SelectContent>
+   621→                </Select>
+   622→              </div>
+   623→            </div>
+   624→            <DialogFooter>
+   625→              <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
+   626→              <Button
+   627→                onClick={handleCreateReconciliation}
+   628→                disabled={creating || !selectedClientId || !selectedPeriod || !selectedSource}
+   629→                className="bg-emerald-600 hover:bg-emerald-700 gap-2"
+   630→              >
+   631→                {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+   632→                Run Reconciliation
+   633→              </Button>
+   634→            </DialogFooter>
+   635→          </DialogContent>
+   636→        </Dialog>
+   637→      </motion.div>
+   638→
+   639→      {/* ═══ SUMMARY CARDS + MATCH RING ═══ */}
+   640→      <motion.div
+   641→        variants={staggerContainer}
+   642→        initial="hidden"
+   643→        animate="visible"
+   644→        className="flex flex-col md:flex-row items-center gap-6"
+   645→      >
+   646→        {/* Match Rate Ring */}
+   647→        <Card className="border-border/60">
+   648→          <CardContent className="p-4 flex items-center justify-center">
+   649→            <MatchRateRing matchPercent={matchPercent} partialPercent={partialPercent} />
+   650→          </CardContent>
+   651→        </Card>
+   652→
+   653→        {/* Summary cards */}
+   654→        <div className="grid grid-cols-2 md:grid-cols-5 gap-3 flex-1 w-full">
+   655→          <SummaryCard
+   656→            title="Total Runs"
+   657→            value={stats.totalRuns}
+   658→            icon={BarChart3}
+   659→            iconColor="text-slate-700"
+   660→            iconBg="bg-slate-100"
+   661→            subtitle="Reconciliation runs"
+   662→          />
+   663→          <SummaryCard
+   664→            title="Matched"
+   665→            value={stats.totalMatched}
+   666→            icon={CheckCircle2}
+   667→            iconColor="text-emerald-700"
+   668→            iconBg="bg-emerald-50"
+   669→            subtitle={`${matchPercent}% match rate`}
+   670→          />
+   671→          <SummaryCard
+   672→            title="Unmatched"
+   673→            value={stats.totalUnmatched}
+   674→            icon={XCircle}
+   675→            iconColor="text-red-700"
+   676→            iconBg="bg-red-50"
+   677→            subtitle={`${stats.totalHighRisk} high-risk`}
+   678→          />
+   679→          <SummaryCard
+   680→            title="ITC Difference"
+   681→            value={formatCurrency(stats.totalGstDiff)}
+   682→            icon={TrendingDown}
+   683→            iconColor="text-amber-700"
+   684→            iconBg="bg-amber-50"
+   685→            subtitle="Potential ITC loss"
+   686→          />
+   687→          <SummaryCard
+   688→            title="AI Insights"
+   689→            value={activeRecommendations.length}
+   690→            icon={Brain}
+   691→            iconColor="text-violet-700"
+   692→            iconBg="bg-violet-50"
+   693→            subtitle="Active recommendations"
+   694→          />
+   695→        </div>
+   696→      </motion.div>
+   697→
+   698→      {/* ═══ MAIN CONTENT: Mismatch Table + AI Panel ═══ */}
+   699→      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+   700→        {/* Mismatch Table */}
+   701→        <motion.div variants={slideInRight} initial="hidden" animate="visible" className="lg:col-span-2">
+   702→          <Card className="border-border/60">
+   703→            <CardHeader className="pb-3">
+   704→              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+   705→                <div>
+   706→                  <CardTitle className="text-base font-semibold">Mismatch Records</CardTitle>
+   707→                  <CardDescription className="text-xs mt-0.5">
+   708→                    {filteredMismatches.length} record{filteredMismatches.length !== 1 ? 's' : ''} found
+   709→                  </CardDescription>
+   710→                </div>
+   711→                <div className="flex items-center gap-2">
+   712→                  <Select value={filterStatus} onValueChange={setFilterStatus}>
+   713→                    <SelectTrigger className="h-8 w-[160px] text-xs">
+   714→                      <SelectValue />
+   715→                    </SelectTrigger>
+   716→                    <SelectContent>
+   717→                      <SelectItem value="all">All Statuses</SelectItem>
+   718→                      <SelectItem value="unresolved">Unresolved</SelectItem>
+   719→                      <SelectItem value="resolved">Resolved</SelectItem>
+   720→                      <SelectItem value="mismatch">Mismatch</SelectItem>
+   721→                      <SelectItem value="partial_match">Partial Match</SelectItem>
+   722→                      <SelectItem value="missing_in_books">Missing in Books</SelectItem>
+   723→                      <SelectItem value="missing_in_gstr">Missing in GSTR</SelectItem>
+   724→                    </SelectContent>
+   725→                  </Select>
+   726→                </div>
+   727→              </div>
+   728→            </CardHeader>
+   729→            <CardContent className="px-0 pb-2">
+   730→              {filteredMismatches.length === 0 ? (
+   731→                <div className="py-12 text-center">
+   732→                  <Inbox className="h-8 w-8 text-slate-300 mx-auto mb-2" />
+   733→                  <p className="text-sm text-muted-foreground">No mismatches found</p>
+   734→                  <p className="text-xs text-muted-foreground mt-1">
+   735→                    {filterStatus !== 'all' ? 'Try adjusting the filter' : 'All records are matched'}
+   736→                  </p>
+   737→                </div>
+   738→              ) : (
+   739→                <ScrollArea className="max-h-96">
+   740→                  <Table>
+   741→                    <TableHeader>
+   742→                      <TableRow>
+   743→                        <TableHead className="text-[11px] font-medium">Invoice</TableHead>
+   744→                        <TableHead className="text-[11px] font-medium">Status</TableHead>
+   745→                        <TableHead className="text-[11px] font-medium text-right">Books Amount</TableHead>
+   746→                        <TableHead className="text-[11px] font-medium text-right">Portal Amount</TableHead>
+   747→                        <TableHead className="text-[11px] font-medium text-right">Difference</TableHead>
+   748→                        <TableHead className="text-[11px] font-medium">Reason</TableHead>
+   749→                        <TableHead className="text-[11px] font-medium text-right">Action</TableHead>
+   750→                      </TableRow>
+   751→                    </TableHeader>
+   752→                    <TableBody>
+   753→                      <AnimatePresence>
+   754→                        {filteredMismatches.map((m, idx) => {
+   755→                          const statusConfig = MATCH_STATUS_CONFIG[m.matchStatus as MatchStatus];
+   756→                          return (
+   757→                            <motion.tr
+   758→                              key={`${m.reconId}-${m.invoiceNumber}-${idx}`}
+   759→                              initial={{ opacity: 0, y: 6 }}
+   760→                              animate={{ opacity: 1, y: 0 }}
+   761→                              exit={{ opacity: 0, y: -6 }}
+   762→                              transition={{ duration: 0.2, delay: idx * 0.02 }}
+   763→                              className="border-b border-border/40 hover:bg-muted/30 transition-colors"
+   764→                            >
+   765→                              <TableCell className="py-2.5">
+   766→                                <div>
+   767→                                  <p className="text-xs font-medium text-foreground">{m.invoiceNumber}</p>
+   768→                                  <p className="text-[10px] text-muted-foreground">{m.invoiceDate}</p>
+   769→                                </div>
+   770→                              </TableCell>
+   771→                              <TableCell className="py-2.5">
+   772→                                <Badge
+   773→                                  variant="outline"
+   774→                                  className={`text-[10px] px-1.5 py-0 ${statusConfig?.bgColor ?? 'bg-slate-50'} ${statusConfig?.color ?? 'text-slate-700'} border-0`}
+   775→                                >
+   776→                                  {statusConfig?.label ?? m.matchStatus}
+   777→                                </Badge>
+   778→                              </TableCell>
+   779→                              <TableCell className="py-2.5 text-right text-xs text-foreground">
+   780→                                {formatCurrency(m.booksAmount)}
+   781→                              </TableCell>
+   782→                              <TableCell className="py-2.5 text-right text-xs text-foreground">
+   783→                                {formatCurrency(m.portalAmount)}
+   784→                              </TableCell>
+   785→                              <TableCell className="py-2.5 text-right">
+   786→                                <span className={`text-xs font-semibold ${m.difference > 0 ? 'text-red-600' : 'text-emerald-600'}`}>
+   787→                                  {m.difference > 0 ? '+' : ''}{formatCurrency(m.difference)}
+   788→                                </span>
+   789→                              </TableCell>
+   790→                              <TableCell className="py-2.5 text-xs text-muted-foreground max-w-[180px] truncate">
+   791→                                {m.reason}
+   792→                              </TableCell>
+   793→                              <TableCell className="py-2.5 text-right">
+   794→                                {m.resolved ? (
+   795→                                  <Badge variant="outline" className="text-[10px] bg-emerald-50 text-emerald-700 border-emerald-200 px-1.5 py-0">
+   796→                                    Resolved
+   797→                                  </Badge>
+   798→                                ) : (
+   799→                                  <Button
+   800→                                    size="sm"
+   801→                                    variant="outline"
+   802→                                    className="h-6 text-[10px] px-2 gap-1"
+   803→                                    disabled={resolvingInvoice === m.invoiceNumber}
+   804→                                    onClick={() => handleResolveMismatch(m.reconId, m.invoiceNumber)}
+   805→                                  >
+   806→                                    {resolvingInvoice === m.invoiceNumber ? (
+   807→                                      <Loader2 className="h-3 w-3 animate-spin" />
+   808→                                    ) : (
+   809→                                      <CheckCircle2 className="h-3 w-3" />
+   810→                                    )}
+   811→                                    Resolve
+   812→                                  </Button>
+   813→                                )}
+   814→                              </TableCell>
+   815→                            </motion.tr>
+   816→                          );
+   817→                        })}
+   818→                      </AnimatePresence>
+   819→                    </TableBody>
+   820→                  </Table>
+   821→                </ScrollArea>
+   822→              )}
+   823→            </CardContent>
+   824→          </Card>
+   825→        </motion.div>
+   826→
+   827→        {/* AI Recommendations Panel */}
+   828→        <motion.div variants={slideInRight} initial="hidden" animate="visible" className="lg:col-span-1">
+   829→          <Card className="border-border/60 h-full">
+   830→            <CardHeader className="pb-3">
+   831→              <div className="flex items-center gap-2">
+   832→                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-violet-100">
+   833→                  <Sparkles className="h-3.5 w-3.5 text-violet-700" />
+   834→                </div>
+   835→                <div>
+   836→                  <CardTitle className="text-base font-semibold">AI Recommendations</CardTitle>
+   837→                  <CardDescription className="text-[11px]">
+   838→                    {activeRecommendations.length} active insight{activeRecommendations.length !== 1 ? 's' : ''}
+   839→                  </CardDescription>
+   840→                </div>
+   841→              </div>
+   842→            </CardHeader>
+   843→            <CardContent className="px-3 pb-3">
+   844→              {activeRecommendations.length === 0 ? (
+   845→                <div className="py-10 text-center">
+   846→                  <Sparkles className="h-6 w-6 text-slate-200 mx-auto mb-2" />
+   847→                  <p className="text-xs text-muted-foreground">No active recommendations</p>
+   848→                  <p className="text-[11px] text-muted-foreground mt-1">
+   849→                    AI insights will appear after reconciliation
+   850→                  </p>
+   851→                </div>
+   852→              ) : (
+   853→                <ScrollArea className="max-h-96">
+   854→                  <div className="space-y-2.5">
+   855→                    <AnimatePresence>
+   856→                      {activeRecommendations.map((rec, idx) => {
+   857→                        const riskCfg = RISK_LEVEL_CONFIG[rec.riskLevel as RiskLevel];
+   858→                        return (
+   859→                          <motion.div
+   860→                            key={rec.id}
+   861→                            initial={{ opacity: 0, x: 12 }}
+   862→                            animate={{ opacity: 1, x: 0 }}
+   863→                            exit={{ opacity: 0, x: -12 }}
+   864→                            transition={{ duration: 0.25, delay: idx * 0.04 }}
+   865→                            className="rounded-lg border border-border/60 p-3 hover:border-border transition-colors"
+   866→                          >
+   867→                            <div className="flex items-start justify-between gap-2">
+   868→                              <div className="flex-1 min-w-0">
+   869→                                <div className="flex items-center gap-1.5 mb-1">
+   870→                                  <Badge
+   871→                                    variant="outline"
+   872→                                    className={`text-[9px] px-1 py-0 ${riskCfg?.bgColor ?? 'bg-slate-50'} ${riskCfg?.color ?? 'text-slate-700'} border-0`}
+   873→                                  >
+   874→                                    {riskCfg?.label ?? rec.riskLevel}
+   875→                                  </Badge>
+   876→                                  <span className="text-[10px] text-muted-foreground">
+   877→                                    {rec.confidenceScore}% confidence
+   878→                                  </span>
+   879→                                </div>
+   880→                                <p className="text-xs font-medium text-foreground leading-tight">
+   881→                                  {rec.title}
+   882→                                </p>
+   883→                                <p className="text-[11px] text-muted-foreground mt-0.5 line-clamp-2">
+   884→                                  {rec.description}
+   885→                                </p>
+   886→                                {rec.suggestedAction && (
+   887→                                  <div className="mt-1.5 flex items-center gap-1 text-[10px] text-emerald-700">
+   888→                                    <Zap className="h-3 w-3" />
+   889→                                    <span className="truncate">{rec.suggestedAction}</span>
+   890→                                  </div>
+   891→                                )}
+   892→                              </div>
+   893→                              <Button
+   894→                                size="sm"
+   895→                                variant="ghost"
+   896→                                className="h-6 w-6 p-0 shrink-0 text-muted-foreground hover:text-foreground"
+   897→                                disabled={dismissingRecId === rec.id}
+   898→                                onClick={() => handleDismissRecommendation(rec.id)}
+   899→                              >
+   900→                                {dismissingRecId === rec.id ? (
+   901→                                  <Loader2 className="h-3 w-3 animate-spin" />
+   902→                                ) : (
+   903→                                  <X className="h-3 w-3" />
+   904→                                )}
+   905→                              </Button>
+   906→                            </div>
+   907→                          </motion.div>
+   908→                        );
+   909→                      })}
+   910→                    </AnimatePresence>
+   911→                  </div>
+   912→                </ScrollArea>
+   913→              )}
+   914→            </CardContent>
+   915→          </Card>
+   916→        </motion.div>
+   917→      </div>
+   918→
+   919→      {/* ═══ RECONCILIATION RUNS HISTORY ═══ */}
+   920→      <motion.div
+   921→        initial={{ opacity: 0, y: 12 }}
+   922→        animate={{ opacity: 1, y: 0 }}
+   923→        transition={{ duration: 0.35, delay: 0.15 }}
+   924→      >
+   925→        <Card className="border-border/60">
+   926→          <CardHeader className="pb-3">
+   927→            <CardTitle className="text-base font-semibold">Reconciliation Runs</CardTitle>
+   928→            <CardDescription className="text-xs">
+   929→              {reconciliations.length} run{reconciliations.length !== 1 ? 's' : ''} completed
+   930→            </CardDescription>
+   931→          </CardHeader>
+   932→          <CardContent className="px-3 pb-3">
+   933→            <ScrollArea className="max-h-64">
+   934→              <div className="space-y-2">
+   935→                {reconciliations.map((r, idx) => {
+   936→                  const client = clientMap.get(r.clientId);
+   937→                  const isExpanded = expandedReconId === r.id;
+   938→                  const runMatchPercent = r.totalRecords > 0 ? Math.round((r.matched / r.totalRecords) * 100) : 0;
+   939→                  const unresolvedCount = r.mismatches.filter(m => !m.resolved).length;
+   940→
+   941→                  return (
+   942→                    <motion.div
+   943→                      key={r.id}
+   944→                      initial={{ opacity: 0, y: 6 }}
+   945→                      animate={{ opacity: 1, y: 0 }}
+   946→                      transition={{ duration: 0.2, delay: idx * 0.03 }}
+   947→                    >
+   948→                      <button
+   949→                        onClick={() => setExpandedReconId(isExpanded ? null : r.id)}
+   950→                        className="w-full text-left rounded-lg border border-border/60 hover:border-border hover:bg-muted/20 transition-colors p-3"
+   951→                      >
+   952→                        <div className="flex items-center justify-between gap-3">
+   953→                          <div className="flex items-center gap-3 min-w-0">
+   954→                            <div className={`flex h-8 w-8 items-center justify-center rounded-lg ${
+   955→                              r.status === 'completed' ? 'bg-emerald-50' : r.status === 'running' ? 'bg-amber-50' : 'bg-red-50'
+   956→                            }`}>
+   957→                              {r.status === 'completed' ? (
+   958→                                <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+   959→                              ) : r.status === 'running' ? (
+   960→                                <Loader2 className="h-4 w-4 text-amber-600 animate-spin" />
+   961→                              ) : (
+   962→                                <XCircle className="h-4 w-4 text-red-600" />
+   963→                              )}
+   964→                            </div>
+   965→                            <div className="min-w-0">
+   966→                              <p className="text-xs font-medium text-foreground truncate">
+   967→                                {client?.tradeName ?? 'Unknown Client'} — {periodLabel(r.period)}
+   968→                              </p>
+   969→                              <p className="text-[11px] text-muted-foreground">
+   970→                                {r.sources} &middot; {r.totalRecords} records &middot; {runMatchPercent}% match
+   971→                              </p>
+   972→                            </div>
+   973→                          </div>
+   974→                          <div className="flex items-center gap-3 shrink-0">
+   975→                            <div className="hidden sm:flex items-center gap-4 text-[11px]">
+   976→                              <span className="text-emerald-700 font-medium">{r.matched} matched</span>
+   977→                              <span className="text-amber-700 font-medium">{r.partialMatches} partial</span>
+   978→                              <span className="text-red-700 font-medium">{r.unmatched} unmatched</span>
+   979→                              {unresolvedCount > 0 && (
+   980→                                <Badge variant="outline" className="text-[10px] bg-red-50 text-red-700 border-red-200 px-1.5 py-0">
+   981→                                  {unresolvedCount} unresolved
+   982→                                </Badge>
+   983→                              )}
+   984→                            </div>
+   985→                            <motion.div
+   986→                              animate={{ rotate: isExpanded ? 90 : 0 }}
+   987→                              transition={{ duration: 0.2 }}
+   988→                            >
+   989→                              <ChevronRight className="h-4 w-4 text-muted-foreground" />
+   990→                            </motion.div>
+   991→                          </div>
+   992→                        </div>
+   993→                      </button>
+   994→
+   995→                      {/* Expanded detail */}
+   996→                      <AnimatePresence>
+   997→                        {isExpanded && (
+   998→                          <motion.div
+   999→                            initial={{ height: 0, opacity: 0 }}
+  1000→                            animate={{ height: 'auto', opacity: 1 }}
+  1001→                            exit={{ height: 0, opacity: 0 }}
+  1002→                            transition={{ duration: 0.25 }}
+  1003→                            className="overflow-hidden"
+  1004→                          >
+  1005→                            <div className="pl-11 pr-3 pt-2 pb-1 space-y-1.5">
+  1006→                              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
+  1007→                                <div className="rounded-md bg-emerald-50 border border-emerald-100 p-2">
+  1008→                                  <p className="text-emerald-700 font-semibold">{r.matched}</p>
+  1009→                                  <p className="text-emerald-600">Matched</p>
+  1010→                                </div>
+  1011→                                <div className="rounded-md bg-amber-50 border border-amber-100 p-2">
+  1012→                                  <p className="text-amber-700 font-semibold">{r.partialMatches}</p>
+  1013→                                  <p className="text-amber-600">Partial</p>
+  1014→                                </div>
+  1015→                                <div className="rounded-md bg-red-50 border border-red-100 p-2">
+  1016→                                  <p className="text-red-700 font-semibold">{r.unmatched}</p>
+  1017→                                  <p className="text-red-600">Unmatched</p>
+  1018→                                </div>
+  1019→                                <div className="rounded-md bg-orange-50 border border-orange-100 p-2">
+  1020→                                  <p className="text-orange-700 font-semibold">{formatCurrency(Math.abs(r.gstDifference))}</p>
+  1021→                                  <p className="text-orange-600">ITC Diff</p>
+  1022→                                </div>
+  1023→                              </div>
+  1024→                              {r.highRisk > 0 && (
+  1025→                                <div className="flex items-center gap-1.5 text-[11px] text-orange-700 bg-orange-50 rounded-md px-2 py-1.5">
+  1026→                                  <ShieldAlert className="h-3 w-3" />
+  1027→                                  <span>{r.highRisk} high-risk record{r.highRisk !== 1 ? 's' : ''} require attention</span>
+  1028→                                </div>
+  1029→                              )}
+  1030→                            </div>
+  1031→                          </motion.div>
+  1032→                        )}
+  1033→                      </AnimatePresence>
+  1034→                    </motion.div>
+  1035→                  );
+  1036→                })}
+  1037→              </div>
+  1038→            </ScrollArea>
+  1039→          </CardContent>
+  1040→        </Card>
+  1041→      </motion.div>
+  1042→    </motion.div>
+  1043→  );
+  1044→}
+  1045→

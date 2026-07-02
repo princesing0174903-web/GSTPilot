@@ -1,6 +1,7 @@
 import { db } from '@/lib/db'
 import { NextResponse } from 'next/server'
 import { graphEvents, invalidateGraph } from '@/lib/graph/live-update'
+import { emitNoticeNode } from '@/lib/graph/auto-emit'
 
 // GET /api/notices — List notices with client and assignee info
 export async function GET(request: Request) {
@@ -149,6 +150,9 @@ export async function POST(request: Request) {
 
     // ── Real Business Graph Engine™ — auto-create notice node + live event ──
     graphEvents.gstNoticeReceived(notice.id, notice.noticeType, clientId)
+
+    // PT-2-b: canonical graph node emit — notice node + Client→Notice edge
+    try { await emitNoticeNode(notice.id) } catch (e) { console.error('[graph] emitNoticeNode failed', e) }
 
     return NextResponse.json({ notice }, { status: 201 })
   } catch (error) {

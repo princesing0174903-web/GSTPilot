@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Card,
@@ -56,12 +56,6 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { EmptyState } from '@/components/shared/EmptyState';
-import {
-  useFireReturns,
-  useFireClients,
-  useFireReadyReturns,
-  useFireFiledReturns,
-} from '@/hooks/use-firestore';
 import { createReturn, fileReturn } from '@/lib/firestore-service';
 import type { FirestoreReturn, FirestoreClient } from '@/lib/firestore-schema';
 import type { FilingStatus } from '@/types/gst';
@@ -71,6 +65,119 @@ import {
   periodToLabel,
   getFinancialYear,
 } from '@/lib/gst-utils';
+
+// ─── API response shapes (subset of Prisma models) ─────────────────────────
+
+interface ApiGSTRFiling {
+  id: string;
+  clientId: string;
+  returnType: string;
+  period: string;
+  financialYear?: string | null;
+  status: string;
+  filedDate?: string | null;
+  acknowledgmentNumber?: string | null;
+  totalInvoices: number;
+  readyForFiling: number;
+  issuesFound: number;
+  criticalErrors: number;
+  warnings: number;
+  totalTaxableValue: number;
+  totalTax: number;
+  jsonPayload?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  client?: { id: string; tradeName: string; gstin: string; state?: string | null } | null;
+}
+
+interface ApiClient {
+  id: string;
+  gstin: string;
+  tradeName: string;
+  legalName?: string | null;
+  address?: string | null;
+  state?: string | null;
+  stateCode?: string | null;
+  contactEmail?: string | null;
+  contactPhone?: string | null;
+  entityType?: string;
+  returnPeriod?: string | null;
+  lastFilingDate?: string | null;
+  status: string;
+  healthScore: number;
+  createdAt: string;
+  updatedAt: string;
+  _aggregations?: {
+    totalInvoices: number;
+    filedReturns: number;
+    pendingReturns: number;
+    matchPercentage: number;
+  };
+}
+
+// Maps a GSTRFiling row from /api/returns to the ReturnItem shape used by the UI.
+function mapApiReturnToItem(r: ApiGSTRFiling): ReturnItem {
+  return {
+    id: r.id,
+    returnId: r.id,
+    firmId: '',
+    clientId: r.clientId,
+    returnType: (r.returnType === 'GSTR-3B' ? 'GSTR-3B' : 'GSTR-1') as 'GSTR-1' | 'GSTR-3B',
+    period: r.period,
+    financialYear: r.financialYear ?? '',
+    status: r.status as FilingStatus,
+    filedDate: r.filedDate ?? null,
+    acknowledgmentNumber: r.acknowledgmentNumber ?? null,
+    totalInvoices: r.totalInvoices ?? 0,
+    readyForFiling: r.readyForFiling ?? 0,
+    issuesFound: r.issuesFound ?? 0,
+    criticalErrors: r.criticalErrors ?? 0,
+    warnings: r.warnings ?? 0,
+    totalTaxableValue: r.totalTaxableValue ?? 0,
+    totalTax: r.totalTax ?? 0,
+    jsonPayload: r.jsonPayload ?? null,
+    assignedTo: null,
+    reviewedBy: null,
+    createdAt: r.createdAt,
+    updatedAt: r.updatedAt,
+  };
+}
+
+// Maps a Client row from /api/clients to the ClientItem shape used by the UI.
+function mapApiClientToItem(c: ApiClient): ClientItem {
+  return {
+    id: c.id,
+    clientId: c.id,
+    firmId: '',
+    gstin: c.gstin,
+    tradeName: c.tradeName,
+    legalName: c.legalName ?? c.tradeName,
+    address: c.address ?? null,
+    state: c.state ?? null,
+    stateCode: c.stateCode ?? null,
+    contactEmail: c.contactEmail ?? null,
+    contactPhone: c.contactPhone ?? null,
+    entityType: c.entityType ?? 'regular',
+    returnPeriod: c.returnPeriod ?? null,
+    lastFilingDate: c.lastFilingDate ?? null,
+    status: c.status as 'active' | 'inactive',
+    healthScore: c.healthScore ?? 0,
+    complianceProfile: {
+      filingCompliance: 0,
+      gstinValidity: true,
+      lastFilingStatus: null,
+      overdueReturns: c._aggregations?.pendingReturns ?? 0,
+      totalReturnsFiled: c._aggregations?.filedReturns ?? 0,
+      averageFilingDelay: 0,
+    },
+    invoiceCount: c._aggregations?.totalInvoices ?? 0,
+    totalTaxPaid: 0,
+    pendingReturnCount: c._aggregations?.pendingReturns ?? 0,
+    documentCount: 0,
+    createdAt: c.createdAt,
+    updatedAt: c.updatedAt,
+  };
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -239,11 +346,52 @@ const columnEnter = {
 // ═════════════════════════════════════════════════════════════════════════════
 
 export default function ReturnsPage() {
-  // ── Firestore hooks ─────────────────────────────────────────────────
-  const { data: returns, loading: returnsLoading, error: returnsError } = useFireReturns();
-  const { data: clients, loading: clientsLoading } = useFireClients();
-  const { data: readyReturns } = useFireReadyReturns();
-  const { data: filedReturns } = useFireFiledReturns();
+  // ── Real API-backed state (replaces former Firestore hooks) ─────────
+  const [returns, setReturns] = useState<ReturnItem[]>([]);
+  const [clients, setClients] = useState<ClientItem[]>([]);
+  const [returnsLoading, setReturnsLoading] = useState(true);
+  const [clientsLoading, setClientsLoading] = useState(true);
+  const [returnsError, setReturnsError] = useState<string | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    setReturnsLoading(true);
+    fetch('/api/returns')
+      .then(r => r.json())
+      .then(data => {
+        if (cancelled) return;
+        const items: ApiGSTRFiling[] = Array.isArray(data?.returns) ? data.returns : [];
+        setReturns(items.map(mapApiReturnToItem));
+        setReturnsError(null);
+        setReturnsLoading(false);
+      })
+      .catch(err => {
+        if (cancelled) return;
+        setReturnsError(err instanceof Error ? err.message : 'Failed to load returns');
+        setReturnsLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [refreshKey]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setClientsLoading(true);
+    fetch('/api/clients')
+      .then(r => r.json())
+      .then(data => {
+        if (cancelled) return;
+        const items: ApiClient[] = Array.isArray(data?.clients) ? data.clients : [];
+        setClients(items.map(mapApiClientToItem));
+        setClientsLoading(false);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setClients([]);
+        setClientsLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [refreshKey]);
 
   // ── State ───────────────────────────────────────────────────────────
   const [selectedReturn, setSelectedReturn] = useState<ReturnItem | null>(null);
@@ -333,6 +481,8 @@ export default function ReturnsPage() {
         description: `ARN: ${arn}`,
         duration: 5000,
       });
+      // Re-fetch returns so the filed status reflects in the kanban.
+      setRefreshKey(k => k + 1);
     } catch (error) {
       setFilingAction(null);
       toast.error('Filing failed', {
@@ -393,6 +543,8 @@ export default function ReturnsPage() {
       setNewClientId('');
       setNewReturnType('GSTR-1');
       setNewPeriod('');
+      // Re-fetch returns so the newly created draft shows up.
+      setRefreshKey(k => k + 1);
     } catch (error) {
       toast.error('Failed to create return', {
         description: error instanceof Error ? error.message : 'Unknown error',

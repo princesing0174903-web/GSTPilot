@@ -1,0 +1,1036 @@
+     1→import { db } from '@/lib/db'
+     2→import { NextResponse } from 'next/server'
+     3→import { validateGSTIN, getRiskLevel, calculateRiskScore } from '@/lib/gst-utils'
+     4→import { invalidateGraph } from '@/lib/graph/live-update'
+     5→
+     6→type MatchStatus = 'perfect_match' | 'partial_match' | 'mismatch' | 'missing_in_books' | 'missing_in_gstr' | 'unmatched' | 'duplicate'
+     7→type RiskLevel = 'low' | 'medium' | 'high' | 'critical'
+     8→type AIRecommendation = 'correct_gstin' | 'correct_invoice_number' | 'adjust_gst_amount' | 'review_vendor_data' | 'mark_as_duplicate' | 'review_manually'
+     9→type WorkflowStatus = 'pending' | 'under_review' | 'resolved' | 'ignored' | 'escalated'
+    10→
+    11→const VALID_WORKFLOW_STATUSES: WorkflowStatus[] = ['pending', 'under_review', 'resolved', 'ignored', 'escalated']
+    12→
+    13→// Helper: detect mismatches between two invoice-like records
+    14→interface InvoiceLike {
+    15→  invoiceNumber: string
+    16→  invoiceDate: string
+    17→  sellerGstin: string
+    18→  buyerGstin?: string | null
+    19→  totalAmount: number
+    20→  cgst: number
+    21→  sgst: number
+    22→  igst: number
+    23→  cess: number
+    24→  taxableValue: number
+    25→}
+    26→
+    27→interface MismatchDetail {
+    28→  field: string
+    29→  expected: string | number
+    30→  actual: string | number
+    31→  difference?: number
+    32→}
+    33→
+    34→function detectMismatches(sourceA: InvoiceLike, sourceB: InvoiceLike | null): {
+    35→  mismatches: MismatchDetail[]
+    36→  matchStatus: MatchStatus
+    37→  matchScore: number
+    38→  confidenceScore: number
+    39→  riskLevel: RiskLevel
+    40→  aiRecommendation: AIRecommendation
+    41→  aiExplanation: string
+    42→} {
+    43→  const mismatchDetails: MismatchDetail[] = []
+    44→  let scoreDeduction = 0
+    45→  let recommendation: AIRecommendation = 'review_manually'
+    46→
+    47→  // No matching record found in sourceB
+    48→  if (!sourceB) {
+    49→    return {
+    50→      mismatches: [],
+    51→      matchStatus: 'missing_in_gstr',
+    52→      matchScore: 0,
+    53→      confidenceScore: 95,
+    54→      riskLevel: 'high',
+    55→      aiRecommendation: 'review_manually',
+    56→      aiExplanation: `Invoice #${sourceA.invoiceNumber} from ${sourceA.sellerGstin} present in Purchase Register but not found in GSTR-2B. This could indicate the supplier has not uploaded this invoice to the GST portal, or there may be a reporting delay. Verify with the vendor and ensure ITC eligibility.`,
+    57→    }
+    58→  }
+    59→
+    60→  // GST Amount Difference
+    61→  const sourceATax = sourceA.cgst + sourceA.sgst + sourceA.igst + sourceA.cess
+    62→  const sourceBTax = sourceB.cgst + sourceB.sgst + sourceB.igst + sourceB.cess
+    63→  const taxDiff = Math.abs(sourceATax - sourceBTax)
+    64→  if (taxDiff > 0) {
+    65→    const tolerance = Math.max(sourceATax * 0.01, 1)
+    66→    if (taxDiff > tolerance) {
+    67→      mismatchDetails.push({
+    68→        field: 'gst_amount',
+    69→        expected: sourceATax,
+    70→        actual: sourceBTax,
+    71→        difference: taxDiff,
+    72→      })
+    73→      scoreDeduction += Math.min(30, Math.floor(taxDiff / 100) + 10)
+    74→    }
+    75→  }
+    76→
+    77→  // Invoice Number Mismatch
+    78→  if (sourceA.invoiceNumber.trim().toLowerCase() !== sourceB.invoiceNumber.trim().toLowerCase()) {
+    79→    const isMinorDiff =
+    80→      sourceA.invoiceNumber.replace(/[^a-zA-Z0-9]/g, '') === sourceB.invoiceNumber.replace(/[^a-zA-Z0-9]/g, '')
+    81→    if (isMinorDiff) {
+    82→      mismatchDetails.push({
+    83→        field: 'invoice_number',
+    84→        expected: sourceA.invoiceNumber,
+    85→        actual: sourceB.invoiceNumber,
+    86→      })
+    87→      scoreDeduction += 5
+    88→    } else {
+    89→      mismatchDetails.push({
+    90→        field: 'invoice_number',
+    91→        expected: sourceA.invoiceNumber,
+    92→        actual: sourceB.invoiceNumber,
+    93→      })
+    94→      scoreDeduction += 20
+    95→    }
+    96→  }
+    97→
+    98→  // Date Mismatch
+    99→  const dateA = new Date(sourceA.invoiceDate)
+   100→  const dateB = new Date(sourceB.invoiceDate)
+   101→  const dateDiffDays = Math.abs(dateA.getTime() - dateB.getTime()) / (1000 * 60 * 60 * 24)
+   102→  if (dateDiffDays > 0) {
+   103→    mismatchDetails.push({
+   104→      field: 'invoice_date',
+   105→      expected: sourceA.invoiceDate,
+   106→      actual: sourceB.invoiceDate,
+   107→      difference: parseFloat(dateDiffDays.toFixed(1)),
+   108→    })
+   109→    if (dateDiffDays > 30) {
+   110→      scoreDeduction += 15
+   111→    } else {
+   112→      scoreDeduction += 5
+   113→    }
+   114→  }
+   115→
+   116→  // Vendor GSTIN Mismatch
+   117→  const sellerA = (sourceA.sellerGstin || '').toUpperCase().trim()
+   118→  const sellerB = (sourceB.sellerGstin || '').toUpperCase().trim()
+   119→  if (sellerA && sellerB && sellerA !== sellerB) {
+   120→    mismatchDetails.push({
+   121→      field: 'vendor_gstin',
+   122→      expected: sellerA,
+   123→      actual: sellerB,
+   124→    })
+   125→    scoreDeduction += 25
+   126→  }
+   127→
+   128→  // Total Amount Difference
+   129→  const amountDiff = Math.abs(sourceA.totalAmount - sourceB.totalAmount)
+   130→  if (amountDiff > 0) {
+   131→    const tolerance = Math.max(sourceA.totalAmount * 0.01, 1)
+   132→    if (amountDiff > tolerance) {
+   133→      mismatchDetails.push({
+   134→        field: 'total_amount',
+   135→        expected: sourceA.totalAmount,
+   136→        actual: sourceB.totalAmount,
+   137→        difference: amountDiff,
+   138→      })
+   139→      scoreDeduction += Math.min(20, Math.floor(amountDiff / 1000) + 5)
+   140→    }
+   141→  }
+   142→
+   143→  // Duplicate Invoice Check (same number + same seller GSTIN but different amount)
+   144→  const isPotentialDuplicate =
+   145→    sourceA.invoiceNumber.trim().toLowerCase() === sourceB.invoiceNumber.trim().toLowerCase() &&
+   146→    sellerA === sellerB &&
+   147→    amountDiff === 0 &&
+   148→    taxDiff === 0
+   149→
+   150→  // Determine match status, score, risk level
+   151→  const matchScore = Math.max(0, 100 - scoreDeduction)
+   152→
+   153→  let matchStatus: MatchStatus
+   154→  let confidenceScore: number
+   155→  let riskLevel: RiskLevel
+   156→  let aiExplanation: string
+   157→
+   158→  if (isPotentialDuplicate) {
+   159→    matchStatus = 'duplicate'
+   160→    confidenceScore = 90
+   161→    riskLevel = 'medium'
+   162→    recommendation = 'mark_as_duplicate'
+   163→    aiExplanation = `Duplicate invoice detected — Invoice #${sourceA.invoiceNumber} from GSTIN ${sellerA} appears multiple times with identical amounts. This may be a data entry error or a genuine duplicate. Verify and mark accordingly to prevent duplicate ITC claims.`
+   164→  } else if (mismatchDetails.length === 0) {
+   165→    matchStatus = 'perfect_match'
+   166→    confidenceScore = 98
+   167→    riskLevel = 'low'
+   168→    recommendation = 'review_manually'
+   169→    aiExplanation = `Invoice #${sourceA.invoiceNumber} matches perfectly between Purchase Register and GSTR-2B. All fields — GST amount, invoice number, date, vendor GSTIN, and total amount — are consistent. No action required.`
+   170→  } else if (matchScore >= 70) {
+   171→    matchStatus = 'partial_match'
+   172→    confidenceScore = Math.max(50, 90 - scoreDeduction)
+   173→    riskLevel = getRiskLevel(calculateRiskScore({
+   174→      matchStatus: 'partial_match',
+   175→      taxDifference: taxDiff,
+   176→      dateDifference: dateDiffDays,
+   177→      gstinValid: sellerA === sellerB,
+   178→      isDuplicate: false,
+   179→    }))
+   180→    // Determine primary recommendation
+   181→    if (mismatchDetails.some(m => m.field === 'gst_amount')) {
+   182→      recommendation = 'adjust_gst_amount'
+   183→    } else if (mismatchDetails.some(m => m.field === 'vendor_gstin')) {
+   184→      recommendation = 'correct_gstin'
+   185→    } else if (mismatchDetails.some(m => m.field === 'invoice_number')) {
+   186→      recommendation = 'correct_invoice_number'
+   187→    } else if (mismatchDetails.some(m => m.field === 'invoice_date')) {
+   188→      recommendation = 'review_vendor_data'
+   189→    }
+   190→
+   191→    const mismatchSummary = mismatchDetails
+   192→      .map(m => `${m.field.replace(/_/g, ' ')}: expected ₹${m.expected}, found ₹${m.actual}`)
+   193→      .join('; ')
+   194→
+   195→    aiExplanation = `Partial match for Invoice #${sourceA.invoiceNumber} — ${mismatchSummary}. The invoice is largely consistent but has minor discrepancies. Review the flagged fields and correct as needed to ensure accurate ITC claims.`
+   196→  } else {
+   197→    matchStatus = 'mismatch'
+   198→    confidenceScore = Math.max(30, 80 - scoreDeduction)
+   199→    riskLevel = getRiskLevel(calculateRiskScore({
+   200→      matchStatus: 'mismatch',
+   201→      taxDifference: taxDiff,
+   202→      dateDifference: dateDiffDays,
+   203→      gstinValid: sellerA === sellerB,
+   204→      isDuplicate: false,
+   205→    }))
+   206→
+   207→    if (mismatchDetails.some(m => m.field === 'vendor_gstin')) {
+   208→      recommendation = 'correct_gstin'
+   209→    } else if (mismatchDetails.some(m => m.field === 'gst_amount')) {
+   210→      recommendation = 'adjust_gst_amount'
+   211→    } else if (mismatchDetails.some(m => m.field === 'invoice_number')) {
+   212→      recommendation = 'correct_invoice_number'
+   213→    } else {
+   214→      recommendation = 'review_manually'
+   215→    }
+   216→
+   217→    const mismatchSummary = mismatchDetails
+   218→      .map(m => {
+   219→        let detail = `${m.field.replace(/_/g, ' ')}: expected ${m.expected}, found ${m.actual}`
+   220→        if (m.difference) detail += ` (diff: ${m.difference})`
+   221→        return detail
+   222→      })
+   223→      .join('; ')
+   224→
+   225→    aiExplanation = `Significant mismatch for Invoice #${sourceA.invoiceNumber} — ${mismatchSummary}. Multiple fields show discrepancies that require manual review. Incorrect reconciliation may lead to ITC mismatch or compliance issues.`
+   226→  }
+   227→
+   228→  return {
+   229→    mismatches: mismatchDetails,
+   230→    matchStatus,
+   231→    matchScore,
+   232→    confidenceScore,
+   233→    riskLevel,
+   234→    aiRecommendation: recommendation,
+   235→    aiExplanation,
+   236→  }
+   237→}
+   238→
+   239→// Simulate GSTR-2B data for a given invoice (with potential variations)
+   240→function simulateGSTR2BData(inv: InvoiceLike): InvoiceLike | null {
+   241→  // Simulate ~15% of invoices missing from GSTR-2B
+   242→  const hash = simpleHash(inv.invoiceNumber + inv.sellerGstin)
+   243→  if (hash % 100 < 15) {
+   244→    return null // Missing in GSTR-2B
+   245→  }
+   246→
+   247→  // Simulate variations in GSTR-2B data
+   248→  const variation = hash % 100
+   249→  const gstr2b = { ...inv }
+   250→
+   251→  // ~10% chance of GST amount difference
+   252→  if (variation >= 15 && variation < 25) {
+   253→    const diffMultiplier = (variation % 5 === 0) ? 0.95 : 1.05
+   254→    gstr2b.cgst = parseFloat((inv.cgst * diffMultiplier).toFixed(2))
+   255→    gstr2b.sgst = parseFloat((inv.sgst * diffMultiplier).toFixed(2))
+   256→    gstr2b.igst = parseFloat((inv.igst * diffMultiplier).toFixed(2))
+   257→    gstr2b.totalAmount = parseFloat((gstr2b.taxableValue + gstr2b.cgst + gstr2b.sgst + gstr2b.igst + gstr2b.cess).toFixed(2))
+   258→  }
+   259→
+   260→  // ~8% chance of invoice number mismatch
+   261→  if (variation >= 25 && variation < 33) {
+   262→    gstr2b.invoiceNumber = inv.invoiceNumber.replace(/0/g, 'O')
+   263→  }
+   264→
+   265→  // ~5% chance of date mismatch
+   266→  if (variation >= 33 && variation < 38) {
+   267→    const origDate = new Date(inv.invoiceDate)
+   268→    origDate.setDate(origDate.getDate() + (variation % 2 === 0 ? 15 : 45))
+   269→    gstr2b.invoiceDate = origDate.toISOString().split('T')[0]
+   270→  }
+   271→
+   272→  // ~5% chance of vendor GSTIN mismatch
+   273→  if (variation >= 38 && variation < 43) {
+   274→    // Change the last character of GSTIN
+   275→    const lastChar = inv.sellerGstin[inv.sellerGstin.length - 1]
+   276→    const newChar = lastChar === 'Z' ? '0' : String.fromCharCode(lastChar.charCodeAt(0) + 1)
+   277→    gstr2b.sellerGstin = inv.sellerGstin.slice(0, -1) + newChar
+   278→  }
+   279→
+   280→  return gstr2b
+   281→}
+   282→
+   283→function simpleHash(str: string): number {
+   284→  let hash = 0
+   285→  for (let i = 0; i < str.length; i++) {
+   286→    const char = str.charCodeAt(i)
+   287→    hash = ((hash << 5) - hash) + char
+   288→    hash = hash & hash // Convert to 32-bit integer
+   289→  }
+   290→  return Math.abs(hash)
+   291→}
+   292→
+   293→// ============================================================
+   294→// GET /api/reconciliation — Fetch reconciliation results with enhanced filters
+   295→// ============================================================
+   296→export async function GET(request: Request) {
+   297→  try {
+   298→    const { searchParams } = new URL(request.url)
+   299→    const action = searchParams.get('action')
+   300→
+   301→    // action=runs — Get ReconciliationRun history
+   302→    if (action === 'runs') {
+   303→      const clientId = searchParams.get('clientId')
+   304→      const where: Record<string, unknown> = {}
+   305→      if (clientId) where.clientId = clientId
+   306→
+   307→      const runs = await db.reconciliationRun.findMany({
+   308→        where,
+   309→        orderBy: { createdAt: 'desc' },
+   310→        include: {
+   311→          results: {
+   312→            select: {
+   313→              id: true,
+   314→              matchStatus: true,
+   315→              riskLevel: true,
+   316→              workflowStatus: true,
+   317→            },
+   318→          },
+   319→        },
+   320→      })
+   321→
+   322→      return NextResponse.json({ runs })
+   323→    }
+   324→
+   325→    // action=stats — Get dashboard aggregate stats
+   326→    if (action === 'stats') {
+   327→      const clientId = searchParams.get('clientId')
+   328→
+   329→      const where: Record<string, unknown> = {}
+   330→      if (clientId) where.clientId = clientId
+   331→
+   332→      const [
+   333→        totalResults,
+   334→        perfectMatches,
+   335→        partialMatches,
+   336→        mismatches,
+   337→        missingInBooks,
+   338→        missingInGstr,
+   339→        duplicates,
+   340→        unresolved,
+   341→        highRisk,
+   342→        criticalRisk,
+   343→        pendingWorkflow,
+   344→        underReviewWorkflow,
+   345→        resolvedWorkflow,
+   346→        ignoredWorkflow,
+   347→        escalatedWorkflow,
+   348→        totalGstDifference,
+   349→        avgMatchScore,
+   350→        avgConfidenceScore,
+   351→        recentRuns,
+   352→      ] = await Promise.all([
+   353→        db.reconciliationResult.count({ where }),
+   354→        db.reconciliationResult.count({ where: { ...where, matchStatus: 'perfect_match' } }),
+   355→        db.reconciliationResult.count({ where: { ...where, matchStatus: 'partial_match' } }),
+   356→        db.reconciliationResult.count({ where: { ...where, matchStatus: 'mismatch' } }),
+   357→        db.reconciliationResult.count({ where: { ...where, matchStatus: 'missing_in_books' } }),
+   358→        db.reconciliationResult.count({ where: { ...where, matchStatus: 'missing_in_gstr' } }),
+   359→        db.reconciliationResult.count({ where: { ...where, matchStatus: 'duplicate' } }),
+   360→        db.reconciliationResult.count({ where: { ...where, resolved: false } }),
+   361→        db.reconciliationResult.count({ where: { ...where, riskLevel: 'high' } }),
+   362→        db.reconciliationResult.count({ where: { ...where, riskLevel: 'critical' } }),
+   363→        db.reconciliationResult.count({ where: { ...where, workflowStatus: 'pending' } }),
+   364→        db.reconciliationResult.count({ where: { ...where, workflowStatus: 'under_review' } }),
+   365→        db.reconciliationResult.count({ where: { ...where, workflowStatus: 'resolved' } }),
+   366→        db.reconciliationResult.count({ where: { ...where, workflowStatus: 'ignored' } }),
+   367→        db.reconciliationResult.count({ where: { ...where, workflowStatus: 'escalated' } }),
+   368→        db.reconciliationResult.aggregate({ where, _sum: { matchScore: true } }),
+   369→        db.reconciliationResult.aggregate({ where, _avg: { matchScore: true, confidenceScore: true } }),
+   370→        db.reconciliationRun.findMany({
+   371→          where: clientId ? { clientId } : {},
+   372→          orderBy: { createdAt: 'desc' },
+   373→          take: 10,
+   374→        }),
+   375→      ])
+   376→
+   377→      // Calculate total GST difference from mismatches
+   378→      const mismatchedResults = await db.reconciliationResult.findMany({
+   379→        where: { ...where, matchStatus: { in: ['mismatch', 'partial_match'] } },
+   380→        select: { mismatches: true },
+   381→      })
+   382→
+   383→      let totalGstDiff = 0
+   384→      for (const r of mismatchedResults) {
+   385→        if (r.mismatches) {
+   386→          try {
+   387→            const parsed = JSON.parse(r.mismatches)
+   388→            if (Array.isArray(parsed)) {
+   389→              for (const m of parsed) {
+   390→                if (m.field === 'gst_amount' && m.difference) {
+   391→                  totalGstDiff += Math.abs(m.difference)
+   392→                }
+   393→              }
+   394→            }
+   395→          } catch {
+   396→            // Ignore parse errors
+   397→          }
+   398→        }
+   399→      }
+   400→
+   401→      const matchPercentage = totalResults > 0 ? parseFloat(((perfectMatches / totalResults) * 100).toFixed(1)) : 0
+   402→      const riskPercentage = totalResults > 0 ? parseFloat((((highRisk + criticalRisk) / totalResults) * 100).toFixed(1)) : 0
+   403→
+   404→      return NextResponse.json({
+   405→        stats: {
+   406→          totalResults,
+   407→          matchBreakdown: {
+   408→            perfect_match: perfectMatches,
+   409→            partial_match: partialMatches,
+   410→            mismatch: mismatches,
+   411→            missing_in_books: missingInBooks,
+   412→            missing_in_gstr: missingInGstr,
+   413→            duplicate: duplicates,
+   414→          },
+   415→          unresolved,
+   416→          riskBreakdown: {
+   417→            high: highRisk,
+   418→            critical: criticalRisk,
+   419→            highAndCritical: highRisk + criticalRisk,
+   420→          },
+   421→          workflowBreakdown: {
+   422→            pending: pendingWorkflow,
+   423→            under_review: underReviewWorkflow,
+   424→            resolved: resolvedWorkflow,
+   425→            ignored: ignoredWorkflow,
+   426→            escalated: escalatedWorkflow,
+   427→          },
+   428→          matchPercentage,
+   429→          riskPercentage,
+   430→          totalGstDifference: parseFloat(totalGstDiff.toFixed(2)),
+   431→          avgMatchScore: avgMatchScore._avg.matchScore ? parseFloat(avgMatchScore._avg.matchScore.toFixed(1)) : 0,
+   432→          avgConfidenceScore: avgMatchScore._avg.confidenceScore ? parseFloat(avgMatchScore._avg.confidenceScore.toFixed(1)) : 0,
+   433→          recentRuns,
+   434→        },
+   435→      })
+   436→    }
+   437→
+   438→    // Default: Fetch reconciliation results with enhanced filters
+   439→    const clientId = searchParams.get('clientId')
+   440→    const matchStatus = searchParams.get('matchStatus')
+   441→    const resolved = searchParams.get('resolved')
+   442→    const workflowStatus = searchParams.get('workflowStatus')
+   443→    const riskLevel = searchParams.get('riskLevel')
+   444→    const runId = searchParams.get('runId')
+   445→    const search = searchParams.get('search')
+   446→
+   447→    const where: Record<string, unknown> = {}
+   448→
+   449→    if (clientId) where.clientId = clientId
+   450→    if (matchStatus) where.matchStatus = matchStatus
+   451→    if (resolved !== null && resolved !== undefined && resolved !== '') {
+   452→      where.resolved = resolved === 'true'
+   453→    }
+   454→    if (workflowStatus) where.workflowStatus = workflowStatus
+   455→    if (riskLevel) where.riskLevel = riskLevel
+   456→    if (runId) where.runId = runId
+   457→
+   458→    // Search filter — search by invoice number, seller GSTIN, or buyer GSTIN
+   459→    if (search) {
+   460→      where.invoice = {
+   461→        OR: [
+   462→          { invoiceNumber: { contains: search } },
+   463→          { sellerGstin: { contains: search } },
+   464→          { buyerGstin: { contains: search } },
+   465→          { buyerName: { contains: search } },
+   466→        ],
+   467→      }
+   468→    }
+   469→
+   470→    const results = await db.reconciliationResult.findMany({
+   471→      where,
+   472→      orderBy: { createdAt: 'desc' },
+   473→      include: {
+   474→        invoice: {
+   475→          include: {
+   476→            client: {
+   477→              select: {
+   478→                id: true,
+   479→                tradeName: true,
+   480→                gstin: true,
+   481→              },
+   482→            },
+   483→          },
+   484→        },
+   485→        run: {
+   486→          select: {
+   487→            id: true,
+   488→            period: true,
+   489→            sources: true,
+   490→            status: true,
+   491→            createdAt: true,
+   492→          },
+   493→        },
+   494→      },
+   495→    })
+   496→
+   497→    return NextResponse.json({ results })
+   498→  } catch (error) {
+   499→    console.error('GET /api/reconciliation error:', error)
+   500→    return NextResponse.json(
+   501→      { error: error instanceof Error ? error.message : 'Failed to fetch reconciliation results' },
+   502→      { status: 500 }
+   503→    )
+   504→  }
+   505→}
+   506→
+   507→// ============================================================
+   508→// POST /api/reconciliation — Run reconciliation, update workflow, or export
+   509→// ============================================================
+   510→export async function POST(request: Request) {
+   511→  try {
+   512→    const body = await request.json()
+   513→    const action = body.action
+   514→
+   515→    // ----------------------------------------------------------
+   516→    // action=run — Run a full reconciliation
+   517→    // ----------------------------------------------------------
+   518→    if (action === 'run' && body.clientId) {
+   519→      const { clientId, period, sources, runBy } = body
+   520→
+   521→      // Verify client exists
+   522→      const client = await db.client.findUnique({ where: { id: clientId } })
+   523→      if (!client) {
+   524→        return NextResponse.json({ error: 'Client not found' }, { status: 404 })
+   525→      }
+   526→
+   527→      // Determine sources
+   528→      const sourceList = sources ? String(sources).split(',').map((s: string) => s.trim()) : ['Purchase Register', 'GSTR-2B']
+   529→      const sourceA = sourceList[0] || 'Purchase Register'
+   530→      const sourceB = sourceList[1] || 'GSTR-2B'
+   531→
+   532→      // Fetch all invoices for this client
+   533→      const invoices = await db.invoice.findMany({
+   534→        where: { clientId },
+   535→      })
+   536→
+   537→      if (invoices.length === 0) {
+   538→        return NextResponse.json(
+   539→          { error: 'No invoices found for this client' },
+   540→          { status: 400 }
+   541→        )
+   542→      }
+   543→
+   544→      // Create ReconciliationRun record
+   545→      const run = await db.reconciliationRun.create({
+   546→        data: {
+   547→          clientId,
+   548→          period: period || new Date().toISOString().slice(0, 7),
+   549→          sources: sourceList.join(','),
+   550→          totalRecords: invoices.length,
+   551→          status: 'running',
+   552→          runBy: runBy || null,
+   553→        },
+   554→      })
+   555→
+   556→      let matched = 0
+   557→      let unmatched = 0
+   558→      let partialMatches = 0
+   559→      let highRiskCount = 0
+   560→      let totalGstDifference = 0
+   561→
+   562→      // Track seen invoices for duplicate detection
+   563→      const seenInvoices = new Map<string, string[]>()
+   564→      const createdResults: Awaited<ReturnType<typeof db.reconciliationResult.create>>[] = []
+   565→
+   566→      for (let i = 0; i < invoices.length; i++) {
+   567→        const inv = invoices[i]
+   568→
+   569→        // Build sourceA representation from the invoice (Purchase Register data)
+   570→        const sourceAData: InvoiceLike = {
+   571→          invoiceNumber: inv.invoiceNumber,
+   572→          invoiceDate: inv.invoiceDate,
+   573→          sellerGstin: inv.sellerGstin,
+   574→          buyerGstin: inv.buyerGstin,
+   575→          totalAmount: inv.totalAmount,
+   576→          cgst: inv.cgst,
+   577→          sgst: inv.sgst,
+   578→          igst: inv.igst,
+   579→          cess: inv.cess,
+   580→          taxableValue: inv.taxableValue,
+   581→        }
+   582→
+   583→        // Simulate sourceB (GSTR-2B) data with potential variations
+   584→        const sourceBData = simulateGSTR2BData(sourceAData)
+   585→
+   586→        // Check for duplicate invoices (same invoice number + seller GSTIN)
+   587→        const duplicateKey = `${inv.invoiceNumber.trim().toLowerCase()}_${inv.sellerGstin.trim().toUpperCase()}`
+   588→        const isDuplicate = seenInvoices.has(duplicateKey)
+   589→        if (!seenInvoices.has(duplicateKey)) {
+   590→          seenInvoices.set(duplicateKey, [inv.id])
+   591→        } else {
+   592→          seenInvoices.get(duplicateKey)!.push(inv.id)
+   593→        }
+   594→
+   595→        let analysis: ReturnType<typeof detectMismatches>
+   596→
+   597→        if (isDuplicate) {
+   598→          // Mark as duplicate
+   599→          analysis = {
+   600→            mismatches: [],
+   601→            matchStatus: 'duplicate',
+   602→            matchScore: 50,
+   603→            confidenceScore: 90,
+   604→            riskLevel: 'medium',
+   605→            aiRecommendation: 'mark_as_duplicate',
+   606→            aiExplanation: `Duplicate invoice detected — Invoice #${inv.invoiceNumber} from GSTIN ${inv.sellerGstin} appears multiple times in the data. This may indicate a data entry error or a genuine duplicate submission. Verify and mark accordingly to prevent duplicate ITC claims.`,
+   607→          }
+   608→        } else {
+   609→          // Perform multi-source comparison
+   610→          analysis = detectMismatches(sourceAData, sourceBData)
+   611→        }
+   612→
+   613→        // Accumulate stats
+   614→        if (analysis.matchStatus === 'perfect_match') matched++
+   615→        else if (analysis.matchStatus === 'partial_match') partialMatches++
+   616→        else unmatched++
+   617→
+   618→        if (analysis.riskLevel === 'high' || analysis.riskLevel === 'critical') highRiskCount++
+   619→
+   620→        // Accumulate GST difference
+   621→        const gstDiffMismatch = analysis.mismatches.find(m => m.field === 'gst_amount')
+   622→        if (gstDiffMismatch && gstDiffMismatch.difference) {
+   623→          totalGstDifference += Math.abs(gstDiffMismatch.difference)
+   624→        }
+   625→
+   626→        // Determine workflow status
+   627→        const workflowStatus: WorkflowStatus = analysis.matchStatus === 'perfect_match' ? 'resolved' : 'pending'
+   628→
+   629→        // Delete existing reconciliation result for this invoice (if any) to allow re-runs
+   630→        await db.reconciliationResult.deleteMany({
+   631→          where: { invoiceId: inv.id },
+   632→        })
+   633→
+   634→        // Create reconciliation result
+   635→        const result = await db.reconciliationResult.create({
+   636→          data: {
+   637→            clientId,
+   638→            invoiceId: inv.id,
+   639→            sourceType: 'books',
+   640→            sourceA,
+   641→            sourceB,
+   642→            sourceGstin: inv.sellerGstin,
+   643→            matchedGstin: inv.buyerGstin,
+   644→            matchStatus: analysis.matchStatus,
+   645→            matchScore: analysis.matchScore,
+   646→            mismatches: analysis.mismatches.length > 0 ? JSON.stringify(analysis.mismatches) : null,
+   647→            aiExplanation: analysis.aiExplanation,
+   648→            aiRecommendation: analysis.aiRecommendation,
+   649→            confidenceScore: analysis.confidenceScore,
+   650→            workflowStatus,
+   651→            riskLevel: analysis.riskLevel,
+   652→            resolved: analysis.matchStatus === 'perfect_match',
+   653→            resolvedBy: analysis.matchStatus === 'perfect_match' ? (runBy || 'system') : null,
+   654→            resolvedAt: analysis.matchStatus === 'perfect_match' ? new Date().toISOString().split('T')[0] : null,
+   655→            runId: run.id,
+   656→          },
+   657→        })
+   658→
+   659→        createdResults.push(result)
+   660→
+   661→        // Update invoice matchStatus and riskLevel
+   662→        await db.invoice.update({
+   663→          where: { id: inv.id },
+   664→          data: {
+   665→            matchStatus: analysis.matchStatus,
+   666→            riskLevel: analysis.riskLevel,
+   667→            riskScore: Math.round(analysis.matchStatus === 'perfect_match' ? 0 : (100 - analysis.matchScore)),
+   668→            aiExplanation: analysis.aiExplanation,
+   669→          },
+   670→        })
+   671→      }
+   672→
+   673→      // Update the run with summary stats
+   674→      const updatedRun = await db.reconciliationRun.update({
+   675→        where: { id: run.id },
+   676→        data: {
+   677→          matched,
+   678→          unmatched,
+   679→          partialMatches,
+   680→          highRisk: highRiskCount,
+   681→          gstDifference: parseFloat(totalGstDifference.toFixed(2)),
+   682→          status: 'completed',
+   683→        },
+   684→      })
+   685→
+   686→      // Create audit log
+   687→      await db.auditLog.create({
+   688→        data: {
+   689→          clientId,
+   690→          action: 'Reconciliation Run',
+   691→          entity: 'reconciliation',
+   692→          entityId: run.id,
+   693→          details: `Reconciliation run completed for ${client.tradeName} (${sourceA} vs ${sourceB}) — Total: ${invoices.length}, Matched: ${matched}, Partial: ${partialMatches}, Unmatched: ${unmatched}, High Risk: ${highRiskCount}, GST Diff: ₹${totalGstDifference.toFixed(2)}`,
+   694→        },
+   695→      })
+   696→
+   697→      // ── Real Business Graph Engine™ — reconciliation updates invoice match status; refresh graph ──
+   698→      invalidateGraph()
+   699→
+   700→      return NextResponse.json({
+   701→        message: `Reconciliation completed — ${invoices.length} records processed, ${matched} matched, ${partialMatches} partial, ${unmatched} unmatched`,
+   702→        run: updatedRun,
+   703→        results: createdResults,
+   704→        summary: {
+   705→          totalRecords: invoices.length,
+   706→          matched,
+   707→          partialMatches,
+   708→          unmatched,
+   709→          highRisk: highRiskCount,
+   710→          totalGstDifference: parseFloat(totalGstDifference.toFixed(2)),
+   711→        },
+   712→      })
+   713→    }
+   714→
+   715→    // ----------------------------------------------------------
+   716→    // action=update_workflow — Update workflow status
+   717→    // ----------------------------------------------------------
+   718→    if (action === 'update_workflow') {
+   719→      const { id, workflowStatus } = body
+   720→
+   721→      if (!id) {
+   722→        return NextResponse.json(
+   723→          { error: 'id is required' },
+   724→          { status: 400 }
+   725→        )
+   726→      }
+   727→
+   728→      if (!workflowStatus || !VALID_WORKFLOW_STATUSES.includes(workflowStatus)) {
+   729→        return NextResponse.json(
+   730→          { error: `workflowStatus must be one of: ${VALID_WORKFLOW_STATUSES.join(', ')}` },
+   731→          { status: 400 }
+   732→        )
+   733→      }
+   734→
+   735→      const existing = await db.reconciliationResult.findUnique({
+   736→        where: { id },
+   737→        include: { invoice: { include: { client: true } } },
+   738→      })
+   739→
+   740→      if (!existing) {
+   741→        return NextResponse.json(
+   742→          { error: 'Reconciliation result not found' },
+   743→          { status: 404 }
+   744→        )
+   745→      }
+   746→
+   747→      const previousStatus = existing.workflowStatus
+   748→
+   749→      const result = await db.reconciliationResult.update({
+   750→        where: { id },
+   751→        data: {
+   752→          workflowStatus,
+   753→          updatedAt: new Date(),
+   754→          // If resolved, also mark as resolved
+   755→          ...(workflowStatus === 'resolved' ? {
+   756→            resolved: true,
+   757→            resolvedAt: new Date().toISOString().split('T')[0],
+   758→          } : {}),
+   759→        },
+   760→      })
+   761→
+   762→      // Create audit log
+   763→      await db.auditLog.create({
+   764→        data: {
+   765→          clientId: existing.clientId,
+   766→          action: 'Workflow Status Updated',
+   767→          entity: 'reconciliation',
+   768→          entityId: id,
+   769→          details: `Workflow status changed from '${previousStatus}' to '${workflowStatus}' for invoice ${existing.invoice?.invoiceNumber ?? id}`,
+   770→        },
+   771→      })
+   772→
+   773→      // ── Real Business Graph Engine™ — invalidate cache so workflow change reflects instantly ──
+   774→      invalidateGraph()
+   775→
+   776→      return NextResponse.json({ result })
+   777→    }
+   778→
+   779→    // ----------------------------------------------------------
+   780→    // action=export — Export reconciliation data
+   781→    // ----------------------------------------------------------
+   782→    if (action === 'export') {
+   783→      const { format, clientId, filters } = body
+   784→
+   785→      if (!format || !['excel', 'pdf', 'summary', 'mismatch', 'risk'].includes(format)) {
+   786→        return NextResponse.json(
+   787→          { error: 'format must be one of: excel, pdf, summary, mismatch, risk' },
+   788→          { status: 400 }
+   789→        )
+   790→      }
+   791→
+   792→      // Build where clause from filters
+   793→      const where: Record<string, unknown> = {}
+   794→      if (clientId) where.clientId = clientId
+   795→      if (filters?.matchStatus) where.matchStatus = filters.matchStatus
+   796→      if (filters?.riskLevel) where.riskLevel = filters.riskLevel
+   797→      if (filters?.workflowStatus) where.workflowStatus = filters.workflowStatus
+   798→      if (filters?.runId) where.runId = filters.runId
+   799→      if (filters?.resolved !== undefined && filters?.resolved !== null && filters?.resolved !== '') {
+   800→        where.resolved = filters.resolved === 'true'
+   801→      }
+   802→      if (filters?.search) {
+   803→        where.invoice = {
+   804→          OR: [
+   805→            { invoiceNumber: { contains: filters.search } },
+   806→            { sellerGstin: { contains: filters.search } },
+   807→            { buyerGstin: { contains: filters.search } },
+   808→            { buyerName: { contains: filters.search } },
+   809→          ],
+   810→        }
+   811→      }
+   812→
+   813→      // Apply format-specific filters
+   814→      if (format === 'mismatch') {
+   815→        where.matchStatus = { in: ['mismatch', 'partial_match', 'missing_in_books', 'missing_in_gstr', 'duplicate'] }
+   816→      }
+   817→      if (format === 'risk') {
+   818→        where.riskLevel = { in: ['high', 'critical'] }
+   819→      }
+   820→
+   821→      const results = await db.reconciliationResult.findMany({
+   822→        where,
+   823→        orderBy: { createdAt: 'desc' },
+   824→        include: {
+   825→          invoice: {
+   826→            include: {
+   827→              client: {
+   828→                select: {
+   829→                  id: true,
+   830→                  tradeName: true,
+   831→                  gstin: true,
+   832→                },
+   833→              },
+   834→            },
+   835→          },
+   836→        },
+   837→      })
+   838→
+   839→      // Build export data based on format
+   840→      let exportData: Record<string, unknown> = {}
+   841→
+   842→      if (format === 'summary') {
+   843→        const statusCounts: Record<string, number> = {}
+   844→        const riskCounts: Record<string, number> = {}
+   845→        const workflowCounts: Record<string, number> = {}
+   846→        let totalGstDiff = 0
+   847→
+   848→        for (const r of results) {
+   849→          statusCounts[r.matchStatus] = (statusCounts[r.matchStatus] || 0) + 1
+   850→          riskCounts[r.riskLevel || 'unknown'] = (riskCounts[r.riskLevel || 'unknown'] || 0) + 1
+   851→          workflowCounts[r.workflowStatus || 'unknown'] = (workflowCounts[r.workflowStatus || 'unknown'] || 0) + 1
+   852→
+   853→          if (r.mismatches) {
+   854→            try {
+   855→              const parsed = JSON.parse(r.mismatches)
+   856→              if (Array.isArray(parsed)) {
+   857→                for (const m of parsed) {
+   858→                  if (m.field === 'gst_amount' && m.difference) {
+   859→                    totalGstDiff += Math.abs(m.difference)
+   860→                  }
+   861→                }
+   862→              }
+   863→            } catch { /* ignore */ }
+   864→          }
+   865→        }
+   866→
+   867→        exportData = {
+   868→          totalRecords: results.length,
+   869→          matchStatusBreakdown: statusCounts,
+   870→          riskLevelBreakdown: riskCounts,
+   871→          workflowStatusBreakdown: workflowCounts,
+   872→          totalGstDifference: parseFloat(totalGstDiff.toFixed(2)),
+   873→          unresolved: results.filter(r => !r.resolved).length,
+   874→        }
+   875→      } else {
+   876→        // Excel, PDF, mismatch, risk — return detailed records
+   877→        exportData = {
+   878→          records: results.map(r => ({
+   879→            id: r.id,
+   880→            clientName: (r.invoice as { client?: { tradeName: string } })?.client?.tradeName ?? 'Unknown',
+   881→            clientGstin: (r.invoice as { client?: { gstin: string } })?.client?.gstin ?? 'Unknown',
+   882→            invoiceNumber: (r.invoice as { invoiceNumber?: string })?.invoiceNumber ?? 'Unknown',
+   883→            invoiceDate: (r.invoice as { invoiceDate?: string })?.invoiceDate ?? 'Unknown',
+   884→            sellerGstin: (r.invoice as { sellerGstin?: string })?.sellerGstin ?? 'Unknown',
+   885→            buyerGstin: (r.invoice as { buyerGstin?: string })?.buyerGstin ?? 'Unknown',
+   886→            totalAmount: (r.invoice as { totalAmount?: number })?.totalAmount ?? 0,
+   887→            cgst: (r.invoice as { cgst?: number })?.cgst ?? 0,
+   888→            sgst: (r.invoice as { sgst?: number })?.sgst ?? 0,
+   889→            igst: (r.invoice as { igst?: number })?.igst ?? 0,
+   890→            matchStatus: r.matchStatus,
+   891→            matchScore: r.matchScore,
+   892→            confidenceScore: r.confidenceScore,
+   893→            riskLevel: r.riskLevel,
+   894→            workflowStatus: r.workflowStatus,
+   895→            sourceA: r.sourceA,
+   896→            sourceB: r.sourceB,
+   897→            aiRecommendation: r.aiRecommendation,
+   898→            aiExplanation: r.aiExplanation,
+   899→            mismatches: r.mismatches,
+   900→            resolved: r.resolved,
+   901→            createdAt: r.createdAt,
+   902→            updatedAt: r.updatedAt,
+   903→          })),
+   904→        }
+   905→      }
+   906→
+   907→      return NextResponse.json({
+   908→        export: {
+   909→          format,
+   910→          generatedAt: new Date().toISOString(),
+   911→          clientId: clientId || 'all',
+   912→          filters: filters || {},
+   913→          totalRecords: results.length,
+   914→          ...exportData,
+   915→        },
+   916→      })
+   917→    }
+   918→
+   919→    // ----------------------------------------------------------
+   920→    // Default: Create a single reconciliation result
+   921→    // ----------------------------------------------------------
+   922→    const {
+   923→      clientId,
+   924→      invoiceId,
+   925→      sourceType,
+   926→      sourceA,
+   927→      sourceB,
+   928→      sourceGstin,
+   929→      matchedGstin,
+   930→      matchStatus,
+   931→      matchScore,
+   932→      mismatches,
+   933→      aiExplanation,
+   934→      aiRecommendation,
+   935→      confidenceScore,
+   936→      workflowStatus,
+   937→      riskLevel,
+   938→      runId,
+   939→    } = body
+   940→
+   941→    if (!clientId || !invoiceId) {
+   942→      return NextResponse.json(
+   943→        { error: 'clientId and invoiceId are required' },
+   944→        { status: 400 }
+   945→      )
+   946→    }
+   947→
+   948→    const result = await db.reconciliationResult.create({
+   949→      data: {
+   950→        clientId,
+   951→        invoiceId,
+   952→        sourceType: sourceType ?? 'books',
+   953→        sourceA: sourceA ?? 'Purchase Register',
+   954→        sourceB: sourceB ?? 'GSTR-2B',
+   955→        sourceGstin: sourceGstin ?? null,
+   956→        matchedGstin: matchedGstin ?? null,
+   957→        matchStatus: matchStatus ?? 'unmatched',
+   958→        matchScore: matchScore ?? 0,
+   959→        mismatches: mismatches ?? null,
+   960→        aiExplanation: aiExplanation ?? null,
+   961→        aiRecommendation: aiRecommendation ?? null,
+   962→        confidenceScore: confidenceScore ?? 0,
+   963→        workflowStatus: workflowStatus ?? 'pending',
+   964→        riskLevel: riskLevel ?? 'low',
+   965→        runId: runId ?? null,
+   966→      },
+   967→    })
+   968→
+   969→    return NextResponse.json({ result }, { status: 201 })
+   970→  } catch (error) {
+   971→    console.error('POST /api/reconciliation error:', error)
+   972→    return NextResponse.json(
+   973→      { error: error instanceof Error ? error.message : 'Failed to process reconciliation' },
+   974→      { status: 500 }
+   975→    )
+   976→  }
+   977→}
+   978→
+   979→// ============================================================
+   980→// PUT /api/reconciliation — Resolve a reconciliation result
+   981→// ============================================================
+   982→export async function PUT(request: Request) {
+   983→  try {
+   984→    const body = await request.json()
+   985→    const { id, resolvedBy } = body
+   986→
+   987→    if (!id) {
+   988→      return NextResponse.json(
+   989→        { error: 'id is required' },
+   990→        { status: 400 }
+   991→      )
+   992→    }
+   993→
+   994→    const existing = await db.reconciliationResult.findUnique({
+   995→      where: { id },
+   996→      include: { invoice: { include: { client: true } } },
+   997→    })
+   998→    if (!existing) {
+   999→      return NextResponse.json(
+  1000→        { error: 'Reconciliation result not found' },
+  1001→        { status: 404 }
+  1002→      )
+  1003→    }
+  1004→
+  1005→    const result = await db.reconciliationResult.update({
+  1006→      where: { id },
+  1007→      data: {
+  1008→        resolved: true,
+  1009→        resolvedBy: resolvedBy ?? null,
+  1010→        resolvedAt: new Date().toISOString().split('T')[0],
+  1011→        workflowStatus: 'resolved',
+  1012→        updatedAt: new Date(),
+  1013→      },
+  1014→    })
+  1015→
+  1016→    // Create audit log
+  1017→    await db.auditLog.create({
+  1018→      data: {
+  1019→        clientId: existing.clientId,
+  1020→        action: 'Reconciliation Resolved',
+  1021→        entity: 'reconciliation',
+  1022→        entityId: id,
+  1023→        details: `Reconciliation result resolved for invoice ${existing.invoice?.invoiceNumber ?? id}. Workflow status updated to 'resolved'.`,
+  1024→      },
+  1025→    })
+  1026→
+  1027→    return NextResponse.json({ result })
+  1028→  } catch (error) {
+  1029→    console.error('PUT /api/reconciliation error:', error)
+  1030→    return NextResponse.json(
+  1031→      { error: error instanceof Error ? error.message : 'Failed to resolve reconciliation' },
+  1032→      { status: 500 }
+  1033→    )
+  1034→  }
+  1035→}
+  1036→

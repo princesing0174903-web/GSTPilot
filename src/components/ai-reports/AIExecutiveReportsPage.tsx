@@ -51,6 +51,7 @@ import {
   Eye,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { EmptyState } from '@/components/shared/EmptyState';
 
 // ─── Color Palette (Emerald) ──────────────────────────────────────────────
 const COLORS = {
@@ -154,14 +155,9 @@ const reportTypes: ReportType[] = [
 ];
 
 // ─── Mock Generated Reports ────────────────────────────────────────────────
-const mockReports: GeneratedReport[] = [
-  { id: 'r1', title: 'Client Health Report — Q3 2025', type: 'client-health', period: 'Q3 2025', format: 'PDF', generatedDate: '2025-03-04', status: 'generated' },
-  { id: 'r2', title: 'GST Risk Report — Feb 2025', type: 'gst-risk', period: 'Feb 2025', format: 'Excel', generatedDate: '2025-03-03', status: 'generated' },
-  { id: 'r3', title: 'Compliance Report — Feb 2025', type: 'compliance', period: 'Feb 2025', format: 'PDF', generatedDate: '2025-03-02', status: 'generated' },
-  { id: 'r4', title: 'Firm Performance — Q3 2025', type: 'firm-performance', period: 'Q3 2025', format: 'PDF', generatedDate: '2025-03-01', status: 'generated' },
-  { id: 'r5', title: 'Board Report — FY 2024-25', type: 'board-report', period: 'FY 2024-25', format: 'PDF', generatedDate: '2025-02-28', status: 'generated' },
-  { id: 'r6', title: 'Client Health Report — Feb 2025', type: 'client-health', period: 'Feb 2025', format: 'Excel', generatedDate: '2025-03-05', status: 'processing' },
-];
+// PT-1-a: Real reports are now sourced from /api/ai-reports. The previous mock
+// list is removed; an empty state is shown until the first report is generated.
+const mockReports: GeneratedReport[] = [];
 
 const periodOptions = [
   'Mar 2025', 'Feb 2025', 'Jan 2025',
@@ -249,16 +245,24 @@ export default function AIExecutiveReportsPage() {
       const res = await fetch('/api/ai-reports');
       if (res.ok) {
         const data = await res.json();
-        if (Array.isArray(data.reports) && data.reports.length > 0) {
-          setReports(data.reports);
-        } else {
-          setReports(mockReports);
-        }
+        // PT-1-a: Use only real reports from the API. No mock fallback.
+        const list: GeneratedReport[] = Array.isArray(data.reports)
+          ? data.reports.map((r: any) => ({
+              id: String(r.id ?? `r-${Math.random().toString(36).slice(2)}`),
+              title: r.title ?? r.reportType ?? 'Untitled report',
+              type: r.reportType ?? r.type ?? 'business_snapshot',
+              period: r.period ?? '',
+              format: r.format === 'Excel' || r.format === 'excel' ? 'Excel' : 'PDF',
+              generatedDate: r.generatedDate ?? new Date().toISOString().split('T')[0],
+              status: r.status === 'processing' ? 'processing' : 'generated',
+            }))
+          : [];
+        setReports(list);
       } else {
-        setReports(mockReports);
+        setReports([]);
       }
     } catch {
-      setReports(mockReports);
+      setReports([]);
     } finally {
       setLoading(false);
     }
@@ -302,25 +306,12 @@ export default function AIExecutiveReportsPage() {
         };
         setReports(prev => [newReport, ...prev]);
       } else {
-        // Simulate generation
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        setGeneratedLink(`/reports/${selectedType}-${Date.now()}.${selectedFormat === 'PDF' ? 'pdf' : 'xlsx'}`);
-
-        const newReport: GeneratedReport = {
-          id: `r-${Date.now()}`,
-          title: `${reportTypes.find(r => r.id === selectedType)?.title || 'Report'} — ${selectedPeriod}`,
-          type: selectedType,
-          period: selectedPeriod,
-          format: selectedFormat,
-          generatedDate: new Date().toISOString().split('T')[0],
-          status: 'generated',
-        };
-        setReports(prev => [newReport, ...prev]);
+        // PT-1-a: API failed — surface a no-op state instead of simulating generation.
+        setGeneratedLink(null);
       }
     } catch {
-      // Simulate generation on error
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      setGeneratedLink(`/reports/${selectedType}-${Date.now()}.${selectedFormat === 'PDF' ? 'pdf' : 'xlsx'}`);
+      // PT-1-a: Network error — do not simulate generation.
+      setGeneratedLink(null);
     } finally {
       setGenerating(false);
     }
@@ -584,6 +575,13 @@ export default function AIExecutiveReportsPage() {
         <CardContent>
           {loading ? (
             <TableSkeleton />
+          ) : reports.length === 0 ? (
+            <EmptyState
+              icon={FileBarChart2}
+              title="No reports generated yet"
+              description="Pick a report type above and click Generate to create your first AI executive report."
+              action={{ label: 'Generate Report', onClick: () => openGenerateDialog(reportTypes[0]?.id ?? ''), icon: Sparkles }}
+            />
           ) : (
             <div className="overflow-x-auto">
               <Table>

@@ -9,6 +9,8 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import { Input } from '@/components/ui/input'
 import { motion } from 'framer-motion'
+import { EmptyState } from '@/components/shared/EmptyState'
+import { useApp } from '@/contexts/AppContext'
 import {
   Package, TrendingUp, TrendingDown, Search,
   ChevronRight, Download, Filter, Plus, AlertTriangle,
@@ -28,51 +30,27 @@ function formatINR(n: number): string {
 // DATA
 // ═══════════════════════════════════════════════════════════════════════════════
 
+// PT-1-a: All inventory data now comes from real database state. The page renders
+// proper empty states until an inventory data source is connected.
+type Product = { id: string; name: string; category: string; stock: number; minStock: number; price: number; warehouse: string; status: string }
+type Warehouse = { name: string; code: string; manager: string; capacity: number; items: number; value: string; city: string }
+type PurchaseOrder = { id: string; supplier: string; items: number; value: string; date: string; expected: string; status: string }
+type LowStockAlert = { product: string; current: number; min: number; warehouse: string; urgency: string }
+
+// No /api/inventory endpoint exists yet — initialise empty and let the empty states guide the user.
+const products: Product[] = []
+const warehouses: Warehouse[] = []
+const purchaseOrders: PurchaseOrder[] = []
+const lowStockAlerts: LowStockAlert[] = []
+
+// Stat cards derived from real (empty) inventory state.
 const statCards = [
-  { label: 'Total Products', value: '1,247', change: '+34', up: true, icon: Package, color: 'emerald' },
-  { label: 'Total Value', value: '₹2,45,67,890', change: '+12.3%', up: true, icon: BarChart3, color: 'emerald' },
-  { label: 'Low Stock Items', value: '18', change: '+3', up: false, icon: AlertTriangle, color: 'amber' },
-  { label: 'Pending Orders', value: '12', change: '-2', up: true, icon: ShoppingCart, color: 'emerald' },
-  { label: 'Stock Turnover', value: '4.8x', change: '+0.3', up: true, icon: TrendingUp, color: 'emerald' },
-]
-
-const products = [
-  { id: 'SKU001', name: 'HP LaserJet Pro M404dn', category: 'Printers', stock: 24, minStock: 10, price: 28500, warehouse: 'Mumbai', status: 'In Stock' },
-  { id: 'SKU002', name: 'Dell UltraSharp 27 Monitor', category: 'Monitors', stock: 8, minStock: 10, price: 34200, warehouse: 'Delhi', status: 'Low Stock' },
-  { id: 'SKU003', name: 'Logitech MX Master 3S', category: 'Accessories', stock: 156, minStock: 30, price: 8499, warehouse: 'Mumbai', status: 'In Stock' },
-  { id: 'SKU004', name: 'Canon PIXMA G6070', category: 'Printers', stock: 3, minStock: 5, price: 22499, warehouse: 'Bangalore', status: 'Low Stock' },
-  { id: 'SKU005', name: 'Seagate Barracuda 2TB HDD', category: 'Storage', stock: 89, minStock: 20, price: 5499, warehouse: 'Delhi', status: 'In Stock' },
-  { id: 'SKU006', name: 'APC Back-UPS 1100VA', category: 'Power', stock: 12, minStock: 8, price: 6200, warehouse: 'Mumbai', status: 'In Stock' },
-  { id: 'SKU007', name: 'TP-Link Archer AX73', category: 'Networking', stock: 2, minStock: 5, price: 7999, warehouse: 'Chennai', status: 'Critical' },
-  { id: 'SKU008', name: 'Samsung 870 EVO 1TB SSD', category: 'Storage', stock: 67, minStock: 15, price: 6999, warehouse: 'Mumbai', status: 'In Stock' },
-  { id: 'SKU009', name: 'Epson L3250 InkTank', category: 'Printers', stock: 0, minStock: 5, price: 13999, warehouse: 'Delhi', status: 'Out of Stock' },
-  { id: 'SKU010', name: 'Cisco SG250-26 Switch', category: 'Networking', stock: 5, minStock: 3, price: 24500, warehouse: 'Bangalore', status: 'In Stock' },
-  { id: 'SKU011', name: 'Kingston FURY 16GB RAM', category: 'Memory', stock: 34, minStock: 10, price: 4299, warehouse: 'Mumbai', status: 'In Stock' },
-  { id: 'SKU012', name: 'Intel Core i5-14400F', category: 'Processors', stock: 4, minStock: 6, price: 22999, warehouse: 'Delhi', status: 'Low Stock' },
-]
-
-const warehouses = [
-  { name: 'Mumbai Central', code: 'WH-MUM', manager: 'Rajesh Sharma', capacity: 85, items: 542, value: '₹1,12,45,000', city: 'Mumbai' },
-  { name: 'Delhi North', code: 'WH-DEL', manager: 'Amit Kumar', capacity: 72, items: 389, value: '₹78,23,000', city: 'New Delhi' },
-  { name: 'Bangalore Tech', code: 'WH-BLR', manager: 'Kavita Iyer', capacity: 60, items: 198, value: '₹34,56,000', city: 'Bangalore' },
-  { name: 'Chennai South', code: 'WH-MAA', manager: 'Priya Patel', capacity: 45, items: 118, value: '₹20,43,890', city: 'Chennai' },
-]
-
-const purchaseOrders = [
-  { id: 'PO-2026-0145', supplier: 'Redington India Pvt Ltd', items: 24, value: '₹4,56,780', date: '28/02/2026', expected: '05/03/2026', status: 'In Transit' },
-  { id: 'PO-2026-0144', supplier: 'Ingram Micro India Pvt Ltd', items: 18, value: '₹2,34,500', date: '25/02/2026', expected: '03/03/2026', status: 'Delivered' },
-  { id: 'PO-2026-0143', supplier: 'Dell India Pvt Ltd', items: 12, value: '₹3,12,000', date: '22/02/2026', expected: '01/03/2026', status: 'Delivered' },
-  { id: 'PO-2026-0142', supplier: 'HP India Sales Pvt Ltd', items: 30, value: '₹5,67,890', date: '20/02/2026', expected: '28/02/2026', status: 'Delivered' },
-  { id: 'PO-2026-0146', supplier: 'Tech Data India Pvt Ltd', items: 15, value: '₹1,89,450', date: '02/03/2026', expected: '08/03/2026', status: 'Pending' },
-  { id: 'PO-2026-0147', supplier: 'Savex Technologies Pvt Ltd', items: 22, value: '₹3,45,600', date: '03/03/2026', expected: '10/03/2026', status: 'Pending' },
-]
-
-const lowStockAlerts = [
-  { product: 'TP-Link Archer AX73', current: 2, min: 5, warehouse: 'Chennai', urgency: 'Critical' },
-  { product: 'Epson L3250 InkTank', current: 0, min: 5, warehouse: 'Delhi', urgency: 'Critical' },
-  { product: 'Dell UltraSharp 27 Monitor', current: 8, min: 10, warehouse: 'Delhi', urgency: 'Warning' },
-  { product: 'Canon PIXMA G6070', current: 3, min: 5, warehouse: 'Bangalore', urgency: 'Warning' },
-  { product: 'Intel Core i5-14400F', current: 4, min: 6, warehouse: 'Delhi', urgency: 'Warning' },
+  { label: 'Total Products', value: String(products.length), change: '—', up: true, icon: Package, color: 'emerald' },
+  { label: 'Total Value', value: formatINR(0), change: '—', up: true, icon: BarChart3, color: 'emerald' },
+  { label: 'Low Stock Items', value: String(lowStockAlerts.length), change: '—', up: false, icon: AlertTriangle, color: 'amber' },
+  { label: 'Pending Orders', value: String(purchaseOrders.filter(p => p.status === 'Pending').length), change: '—', up: true, icon: ShoppingCart, color: 'emerald' },
+  // Static content — stock turnover ratio requires historical transaction data not yet tracked.
+  { label: 'Stock Turnover', value: '0x', change: '—', up: true, icon: TrendingUp, color: 'emerald' },
 ]
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -80,17 +58,14 @@ const lowStockAlerts = [
 // ═══════════════════════════════════════════════════════════════════════════════
 
 function StockByCategoryChart() {
-  const data = [
-    { label: 'Printers', value: 27, color: '#10b981' },
-    { label: 'Storage', value: 156, color: '#34d399' },
-    { label: 'Networking', value: 7, color: '#f59e0b' },
-    { label: 'Monitors', value: 8, color: '#6ee7b7' },
-    { label: 'Accessories', value: 156, color: '#a7f3d0' },
-    { label: 'Power', value: 12, color: '#fbbf24' },
-    { label: 'Memory', value: 34, color: '#94a3b8' },
-    { label: 'Processors', value: 4, color: '#d1d5db' },
-  ]
-  const maxVal = Math.max(...data.map(d => d.value))
+  // Derived from real (currently empty) products list.
+  const categoryMap = products.reduce<Record<string, number>>((acc, p) => {
+    acc[p.category] = (acc[p.category] ?? 0) + p.stock
+    return acc
+  }, {})
+  const palette = ['#10b981', '#34d399', '#f59e0b', '#6ee7b7', '#a7f3d0', '#fbbf24', '#94a3b8', '#d1d5db']
+  const data = Object.entries(categoryMap).map(([label, value], i) => ({ label, value, color: palette[i % palette.length] }))
+  const maxVal = Math.max(1, ...data.map(d => d.value))
   const barH = 26
   const gap = 6
   const h = data.length * (barH + gap) + 30
@@ -117,7 +92,7 @@ function StockByCategoryChart() {
 }
 
 function WarehouseCapacityChart() {
-  const data = warehouses
+  const data = warehouses.length ? warehouses : []
   const w = 300
   const h = 140
   const padL = 40
@@ -163,6 +138,7 @@ const stagger = {
 }
 
 export default function InventoryPage() {
+  const { setCurrentView } = useApp()
   const [activeTab, setActiveTab] = useState('overview')
   const [searchQuery, setSearchQuery] = useState('')
 
@@ -278,19 +254,19 @@ export default function InventoryPage() {
               <CardContent>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                   <div className="p-3 rounded-lg bg-emerald-50 border border-emerald-200">
-                    <p className="text-xl font-bold text-emerald-800">1,247</p>
+                    <p className="text-xl font-bold text-emerald-800">{products.length.toLocaleString('en-IN')}</p>
                     <p className="text-[11px] text-emerald-600">Total SKUs</p>
                   </div>
                   <div className="p-3 rounded-lg bg-slate-50 border border-slate-200">
-                    <p className="text-xl font-bold text-slate-800">4</p>
+                    <p className="text-xl font-bold text-slate-800">{warehouses.length}</p>
                     <p className="text-[11px] text-slate-600">Warehouses</p>
                   </div>
                   <div className="p-3 rounded-lg bg-amber-50 border border-amber-200">
-                    <p className="text-xl font-bold text-amber-800">18</p>
+                    <p className="text-xl font-bold text-amber-800">{lowStockAlerts.length}</p>
                     <p className="text-[11px] text-amber-600">Low Stock Alerts</p>
                   </div>
                   <div className="p-3 rounded-lg bg-red-50 border border-red-200">
-                    <p className="text-xl font-bold text-red-800">1</p>
+                    <p className="text-xl font-bold text-red-800">{products.filter(p => p.status === 'Out of Stock').length}</p>
                     <p className="text-[11px] text-red-600">Out of Stock</p>
                   </div>
                 </div>
@@ -321,6 +297,14 @@ export default function InventoryPage() {
                 </div>
               </CardHeader>
               <CardContent>
+                {filteredProducts.length === 0 ? (
+                  <EmptyState
+                    icon={Package}
+                    title="No products in inventory"
+                    description="Add your first product to start tracking stock levels across warehouses."
+                    action={{ label: 'Add Product', onClick: () => setCurrentView('inventory'), icon: Plus }}
+                  />
+                ) : (
                 <ScrollArea className="max-h-96">
                   <div className="space-y-2">
                     {filteredProducts.map((prod) => (
@@ -362,12 +346,25 @@ export default function InventoryPage() {
                     ))}
                   </div>
                 </ScrollArea>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
 
           {/* Warehouses Tab */}
           <TabsContent value="warehouses" className="mt-4 space-y-4">
+            {warehouses.length === 0 ? (
+              <Card>
+                <CardContent>
+                  <EmptyState
+                    icon={Warehouse}
+                    title="No warehouses configured"
+                    description="Register a warehouse to start allocating stock and tracking capacity."
+                    action={{ label: 'Add Warehouse', onClick: () => setCurrentView('inventory'), icon: Plus }}
+                  />
+                </CardContent>
+              </Card>
+            ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {warehouses.map((wh, i) => (
                 <motion.div
@@ -419,6 +416,7 @@ export default function InventoryPage() {
                 </motion.div>
               ))}
             </div>
+            )}
           </TabsContent>
 
           {/* Purchase Orders Tab */}
@@ -433,6 +431,14 @@ export default function InventoryPage() {
                 </div>
               </CardHeader>
               <CardContent>
+                {purchaseOrders.length === 0 ? (
+                  <EmptyState
+                    icon={Truck}
+                    title="No purchase orders"
+                    description="Create a purchase order to restock products from your suppliers."
+                    action={{ label: 'New Purchase Order', onClick: () => setCurrentView('inventory'), icon: Plus }}
+                  />
+                ) : (
                 <ScrollArea className="max-h-96">
                   <div className="space-y-2">
                     {purchaseOrders.map((po, i) => (
@@ -465,6 +471,7 @@ export default function InventoryPage() {
                     ))}
                   </div>
                 </ScrollArea>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
@@ -476,6 +483,14 @@ export default function InventoryPage() {
                 <CardTitle className="text-sm font-semibold">Low Stock Alerts</CardTitle>
               </CardHeader>
               <CardContent>
+                {lowStockAlerts.length === 0 ? (
+                  <EmptyState
+                    icon={CheckCircle2}
+                    title="No low stock alerts"
+                    description="Products below their minimum stock threshold will appear here. Add products to begin monitoring stock health."
+                    action={{ label: 'Add Product', onClick: () => setCurrentView('inventory'), icon: Plus }}
+                  />
+                ) : (
                 <div className="space-y-3">
                   {lowStockAlerts.map((alert, i) => (
                     <motion.div
@@ -507,6 +522,7 @@ export default function InventoryPage() {
                     </motion.div>
                   ))}
                 </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>

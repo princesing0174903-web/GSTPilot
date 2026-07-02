@@ -66,6 +66,7 @@ import {
   LockKeyhole,
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { toast } from 'sonner'
 import { useAuth } from '@/contexts/AuthContext'
 import { useIsMobile } from '@/hooks/use-mobile'
 
@@ -309,6 +310,7 @@ export default function SettingsPage() {
   const [showInviteDialog, setShowInviteDialog] = useState(false)
   const [inviteEmail, setInviteEmail] = useState('')
   const [inviteRole, setInviteRole] = useState<'Manager' | 'Staff' | 'Viewer'>('Staff')
+  const [inviting, setInviting] = useState(false)
   const [showRemoveDialog, setShowRemoveDialog] = useState(false)
   const [memberToRemove, setMemberToRemove] = useState<TeamMember | null>(null)
   const [editingMemberId, setEditingMemberId] = useState<string | null>(null)
@@ -340,40 +342,118 @@ export default function SettingsPage() {
 
   // ── Handlers ────────────────────────────────────────────────────────
   const handleSave = async () => {
-    await new Promise(resolve => setTimeout(resolve, 1200))
+    // Real firm-settings PATCH — persists to DB + AuditLog
+    try {
+      const res = await fetch('/api/firm-settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          firmName,
+          primaryColor: '#059669',
+          accentColor: '#7c3aed',
+          updatedBy: user?.id,
+        }),
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data?.error ?? 'Save failed')
+      }
+      toast.success('Firm profile saved')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to save firm profile')
+      throw err
+    }
   }
 
-  const handleInviteMember = () => {
+  const handleInviteMember = async () => {
     if (!inviteEmail.trim()) return
-    const initials = inviteEmail.split('@')[0].slice(0, 2).toUpperCase()
-    const newMember: TeamMember = {
-      id: Date.now().toString(),
-      name: inviteEmail.split('@')[0],
-      email: inviteEmail,
-      role: inviteRole,
-      status: 'Invited',
-      initials,
+    setInviting(true)
+    try {
+      const res = await fetch('/api/team-members', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: inviteEmail.trim(),
+          role: inviteRole.toLowerCase(),
+          permissions: [
+            inviteRole === 'Manager' ? 'read' : 'read',
+            inviteRole === 'Manager' ? 'update' : 'create',
+            ...(inviteRole === 'Manager' ? ['file'] : []),
+          ],
+          invitedBy: user?.id,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        throw new Error(data?.error ?? 'Failed to send invite')
+      }
+      // Optimistically add the invited member to the visible list
+      const initials = inviteEmail.split('@')[0].slice(0, 2).toUpperCase()
+      const newMember: TeamMember = {
+        id: data?.teamMember?.id ?? Date.now().toString(),
+        name: data?.teamMember?.name ?? inviteEmail.split('@')[0],
+        email: inviteEmail,
+        role: inviteRole,
+        status: 'Invited',
+        initials,
+      }
+      setTeamMembers(prev => [...prev, newMember])
+      toast.success(`Invitation sent to ${inviteEmail}`)
+      setInviteEmail('')
+      setInviteRole('Staff')
+      setShowInviteDialog(false)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to send invite')
+    } finally {
+      setInviting(false)
     }
-    setTeamMembers(prev => [...prev, newMember])
-    setInviteEmail('')
-    setInviteRole('Staff')
-    setShowInviteDialog(false)
   }
 
-  const handleRemoveMember = () => {
-    if (memberToRemove) {
+  const handleRemoveMember = async () => {
+    if (!memberToRemove) return
+    try {
+      const res = await fetch(`/api/team-members/${memberToRemove.id}?removedBy=${encodeURIComponent(user?.id ?? '')}`, {
+        method: 'DELETE',
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data?.error ?? 'Failed to remove member')
+      }
       setTeamMembers(prev => prev.filter(m => m.id !== memberToRemove.id))
+      toast.success(`${memberToRemove.name} removed from team`)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to remove member')
+    } finally {
+      setShowRemoveDialog(false)
+      setMemberToRemove(null)
     }
-    setShowRemoveDialog(false)
-    setMemberToRemove(null)
   }
 
-  const handleUpdateRole = (memberId: string, role: string) => {
-    setTeamMembers(prev => prev.map(m =>
-      m.id === memberId ? { ...m, role: role as TeamMember['role'] } : m
-    ))
-    setEditingMemberId(null)
-    setEditRole('')
+  const handleUpdateRole = async (memberId: string, role: string) => {
+    const member = teamMembers.find(m => m.id === memberId)
+    if (!member) return
+    try {
+      const res = await fetch(`/api/team-members/${memberId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          role: role.toLowerCase(),
+          updatedBy: user?.id,
+        }),
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data?.error ?? 'Failed to update role')
+      }
+      setTeamMembers(prev => prev.map(m =>
+        m.id === memberId ? { ...m, role: role as TeamMember['role'] } : m
+      ))
+      toast.success(`${member.name}'s role updated to ${role}`)
+      setEditingMemberId(null)
+      setEditRole('')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to update role')
+    }
   }
 
   // ── Password strength ───────────────────────────────────────────────
@@ -888,14 +968,29 @@ export default function SettingsPage() {
                   </div>
                 </div>
                 <DialogFooter>
-                  <Button variant="outline" onClick={() => setShowInviteDialog(false)}>Cancel</Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => setShowInviteDialog(false)}
+                    disabled={inviting}
+                  >
+                    Cancel
+                  </Button>
                   <Button
                     onClick={handleInviteMember}
-                    disabled={!inviteEmail.trim()}
+                    disabled={!inviteEmail.trim() || inviting}
                     className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2"
                   >
-                    <Mail className="h-4 w-4" />
-                    Send Invite
+                    {inviting ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Sending...
+                      </>
+                    ) : (
+                      <>
+                        <Mail className="h-4 w-4" />
+                        Send Invite
+                      </>
+                    )}
                   </Button>
                 </DialogFooter>
               </DialogContent>
@@ -1497,8 +1592,26 @@ export default function SettingsPage() {
                           size="sm"
                           className="h-8 text-xs gap-1.5"
                           onClick={async () => {
-                            // Simulate test connection
-                            await new Promise(resolve => setTimeout(resolve, 1500))
+                            try {
+                              // Test by hitting the GSTN connect endpoint with the
+                              // firm's own GSTIN — if it returns a valid profile,
+                              // the connection is healthy.
+                              const res = await fetch('/api/connect/gstn', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                  userId: user?.id ?? 'system-test',
+                                  gstin: firmGstin || '27AABCS1429B1Z5',
+                                }),
+                              })
+                              const data = await res.json()
+                              if (!res.ok) {
+                                throw new Error(data?.error ?? 'Test failed')
+                              }
+                              toast.success(`${connection.name} — connection OK`)
+                            } catch (err) {
+                              toast.error(err instanceof Error ? err.message : 'Test failed')
+                            }
                           }}
                         >
                           <Activity className="h-3.5 w-3.5" />
@@ -1508,6 +1621,7 @@ export default function SettingsPage() {
                           variant="ghost"
                           size="sm"
                           className="h-8 text-xs text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/30"
+                          onClick={() => toast.info(`Configure ${connection.name} — coming soon`)}
                         >
                           Configure
                         </Button>

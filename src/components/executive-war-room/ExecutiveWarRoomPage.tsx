@@ -1,6 +1,8 @@
 'use client'
 
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { apiGet } from '@/lib/api'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -26,6 +28,8 @@ import {
   useFireAIRecommendations, useFirePredictions,
 } from '@/hooks/use-firestore'
 import { useApp } from '@/contexts/AppContext'
+import { EmptyState } from '@/components/shared'
+import { Inbox } from 'lucide-react'
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // HELPERS
@@ -513,21 +517,13 @@ function MiniNetworkGraph({ nodeCount }: { nodeCount: { orgs: number; clients: n
 
 function LiveTicker({ activities }: { activities: Array<{ title: string; type: string; createdAt: unknown }> }) {
   const items = useMemo(() => {
+    // Real DB activities only — no demo fallback. When activities is empty
+    // the ticker bar still renders (LIVE indicator visible) but scrolls
+    // nothing, which is the correct empty state.
     if (activities.length > 0) {
       return activities.slice(0, 10).map(a => a.title)
     }
-    return [
-      'ABC Traders GSTR-1 filed successfully',
-      '₹3,45,000 collected from Patel Enterprises',
-      '3 new notices detected — action required',
-      'GSTR-3B filed for Sharma & Co.',
-      'Reconciliation completed for Mehta Industries',
-      '₹12,50,000 invoice extracted from purchase register',
-      'Compliance score improved to 94.2%',
-      'New client onboarding: Sunrise Pvt Ltd',
-      'AI detected anomaly in GSTR-2B matching',
-      'Team productivity up 8% this week',
-    ]
+    return [] as string[]
   }, [activities])
 
   const doubled = [...items, ...items]
@@ -684,49 +680,6 @@ function generateSparkline(points = 12): number[] {
   return data
 }
 
-const DEMO_TICKER_ITEMS = [
-  'ABC Traders GSTR-1 filed successfully',
-  '₹3,45,000 collected from Patel Enterprises',
-  '3 new notices detected — action required',
-  'GSTR-3B filed for Sharma & Co.',
-  'Reconciliation completed for Mehta Industries',
-  '₹12,50,000 invoice extracted from purchase register',
-  'Compliance score improved to 94.2%',
-  'New client onboarding: Sunrise Pvt Ltd',
-  'AI detected anomaly in GSTR-2B matching',
-  'Team productivity up 8% this week',
-]
-
-const DEMO_AI_RECS = [
-  { priority: 'critical', category: 'Filing', action: 'File GSTR-3B for 5 clients before 20th March', impact: '₹2,50,000 penalty risk' },
-  { priority: 'high', category: 'Collection', action: 'Follow up with Patel Enterprises on overdue ₹4,50,000', impact: 'Cash flow improvement' },
-  { priority: 'high', category: 'Compliance', action: 'Resolve 3 mismatch notices from GST portal', impact: 'ITC recovery ₹1,20,000' },
-  { priority: 'medium', category: 'Revenue', action: 'Upsell advisory package to 8 clients', impact: '₹6,00,000 potential revenue' },
-  { priority: 'medium', category: 'Operations', action: 'Assign 12 pending returns to team members', impact: 'Reduce filing delay by 5 days' },
-]
-
-const DEMO_PREDICTIONS = [
-  { label: 'Revenue Forecast', value: '₹5,12,34,500', trend: 'up', confidence: 87 },
-  { label: 'Risk Forecast', value: 'Low (18/100)', trend: 'down', confidence: 92 },
-  { label: 'Compliance Forecast', value: '96.1%', trend: 'up', confidence: 89 },
-]
-
-const DEMO_ANOMALIES = [
-  { severity: 'high', text: 'Unusual spike in GSTR-1 errors detected (3x normal)' },
-  { severity: 'medium', text: 'ITC claim deviation of ₹1.8L from historical pattern' },
-  { severity: 'low', text: 'Client churn rate trending 2% above baseline' },
-]
-
-const DEMO_AI_AGENTS = [
-  { name: 'AI CA Manager', status: 'active', tasks: 42, efficiency: 96 },
-  { name: 'AI Account Manager', status: 'active', tasks: 38, efficiency: 94 },
-  { name: 'AI Doc Employee', status: 'active', tasks: 56, efficiency: 98 },
-  { name: 'AI Deadline Engine', status: 'active', tasks: 24, efficiency: 99 },
-  { name: 'AI Voice Assistant', status: 'idle', tasks: 8, efficiency: 91 },
-  { name: 'AI Firm Memory', status: 'active', tasks: 15, efficiency: 95 },
-  { name: 'AI Priority Engine', status: 'active', tasks: 31, efficiency: 97 },
-]
-
 const MONTH_LABELS = ['Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar']
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -746,6 +699,94 @@ export default function ExecutiveWarRoomPage() {
   const { scores, loading: scoresLoading } = useFirmExecutiveScores()
   const { data: aiRecommendations, loading: recsLoading } = useFireAIRecommendations()
   const { data: predictions, loading: predsLoading } = useFirePredictions()
+
+  // ── PT-1-a-retry: real DB-backed risk alerts + overdue amount ──
+  // Replaces the prior hardcoded anomaly list (incl. a fake ₹1.8L ITC
+  // deviation alert) and the fake overdue collection next-action with
+  // real values.
+  interface RiskClient {
+    clientId: string
+    clientName: string
+    overallScore: number
+    riskLevel: string
+    lateFilings: number
+    noticeFrequency: number
+    gstMismatches: number
+    vendorRisk: number
+    itcRisk: number
+  }
+  interface AiInsightRecord {
+    category: string
+    trend: string
+    observation: string
+    confidence: number
+  }
+  const { data: riskData } = useQuery<{ clients: RiskClient[]; aggregate: Record<string, number> }>({
+    queryKey: ['ai-risk', 'executive-war-room'],
+    queryFn: () => apiGet('/api/ai-risk'),
+  })
+  const { data: aiInsightsResp } = useQuery<{ insights: Record<string, { clientName: string; insights: AiInsightRecord[] }> }>({
+    queryKey: ['ai-insights', 'executive-war-room'],
+    queryFn: () => apiGet('/api/ai-insights'),
+  })
+  const { data: invoicesApiResp } = useQuery<{ invoices: Array<{ status: string; totalAmount: number; taxableValue: number; balanceAmount?: number }> }>({
+    queryKey: ['invoices', 'executive-war-room-overdue'],
+    queryFn: () => apiGet('/api/invoices'),
+  })
+
+  // ── AI Agent fleet (real DB-backed; empty until agents are configured) ──
+  // Empty until agents are configured. When empty, the "AI Agent Fleet"
+  // panel renders an EmptyState ("No AI agents deployed yet").
+  interface AiAgent {
+    name: string
+    status: 'active' | 'idle'
+    tasks: number
+    efficiency: number
+  }
+  const [aiAgents, setAiAgents] = useState<AiAgent[]>([])
+  // Setter is referenced so the linter doesn't drop it; once the agents API
+  // is wired, a useQuery result can be poured into setAiAgents.
+  void setAiAgents
+
+  // Real anomaly alerts derived from /api/ai-risk + /api/ai-insights
+  const realAnomalies = useMemo(() => {
+    const alerts: Array<{ severity: 'high' | 'medium' | 'low'; text: string }> = []
+    // 1. Critical/high-risk clients from /api/ai-risk
+    const riskClients = riskData?.clients ?? []
+    riskClients
+      .filter((c) => c.riskLevel === 'critical' || c.riskLevel === 'high')
+      .slice(0, 3)
+      .forEach((c) => {
+        alerts.push({
+          severity: c.riskLevel === 'critical' ? 'high' : 'medium',
+          text: `${c.clientName} flagged as ${c.riskLevel} risk (score ${c.overallScore}/100) — ${c.noticeFrequency} notice(s), ${c.lateFilings} late filing(s)`,
+        })
+      })
+    // 2. Declining compliance insights from /api/ai-insights
+    const insightsMap = aiInsightsResp?.insights ?? {}
+    Object.values(insightsMap).forEach(({ clientName, insights }) => {
+      insights
+        .filter((i) => i.trend === 'declining' && (i.category === 'compliance' || i.category === 'gst'))
+        .slice(0, 2)
+        .forEach((i) => {
+          alerts.push({
+            severity: 'medium',
+            text: `${clientName}: ${i.observation.length > 110 ? i.observation.slice(0, 110) + '…' : i.observation}`,
+          })
+        })
+    })
+    // Cap at 5 alerts; if none, return empty (no fake fallback)
+    return alerts.slice(0, 5)
+  }, [riskData, aiInsightsResp])
+
+  // Real overdue amount = sum of invoice.totalAmount where status='overdue'
+  const realOverdueAmount = useMemo(() => {
+    const invs = invoicesApiResp?.invoices ?? []
+    return invs
+      .filter((i) => (i.status ?? '').toLowerCase() === 'overdue')
+      .reduce((sum, i) => sum + (Number(i.totalAmount) || Number(i.taxableValue) || 0), 0)
+  }, [invoicesApiResp])
+
 
   const isLoading = clientsLoading && invoicesLoading && returnsLoading
 
@@ -817,38 +858,19 @@ export default function ExecutiveWarRoomPage() {
       }
       clientRevenue[inv.clientId].total += tax
     })
-    const sorted = Object.values(clientRevenue).sort((a, b) => b.total - a.total).slice(0, 5)
-    if (sorted.length === 0) {
-      return [
-        { name: 'Patel Enterprises', total: 4500000 },
-        { name: 'Sharma & Co.', total: 3800000 },
-        { name: 'Mehta Industries', total: 3200000 },
-        { name: 'Sunrise Pvt Ltd', total: 2800000 },
-        { name: 'ABC Traders', total: 2100000 },
-      ]
-    }
-    return sorted
+    // No demo fallback — empty array renders the empty state below.
+    return Object.values(clientRevenue).sort((a, b) => b.total - a.total).slice(0, 5)
   }, [invoices])
 
   // ── Revenue by Service Type ──
   const revenueByService = useMemo(() => {
     const gstRevenue = invoices.filter(i => i.gstr1Section?.includes('B2B') || i.invoiceType === 'tax_invoice').reduce((s, i) => s + (i.totalTax || 0), 0)
     const tdsRevenue = invoices.filter(i => i.gstr1Section?.includes('TDS') || i.invoiceType === 'tds_invoice').reduce((s, i) => s + (i.totalTax || 0), 0)
-    const hasData = gstRevenue > 0 || tdsRevenue > 0
-
-    if (hasData) {
-      return [
-        { label: 'GST Filing', value: gstRevenue || 18000000, color: '#10b981' },
-        { label: 'TDS', value: tdsRevenue || 8500000, color: '#3b82f6' },
-        { label: 'Audit', value: 6200000, color: '#f59e0b' },
-        { label: 'Advisory', value: 4800000, color: '#8b5cf6' },
-      ]
-    }
+    // No demo fallback — return only real revenue. Empty array renders
+    // nothing inside the HorizontalBars component.
     return [
-      { label: 'GST Filing', value: 18000000, color: '#10b981' },
-      { label: 'TDS', value: 8500000, color: '#3b82f6' },
-      { label: 'Audit', value: 6200000, color: '#f59e0b' },
-      { label: 'Advisory', value: 4800000, color: '#8b5cf6' },
+      { label: 'GST Filing', value: gstRevenue, color: '#10b981' },
+      { label: 'TDS', value: tdsRevenue, color: '#3b82f6' },
     ]
   }, [invoices])
 
@@ -860,58 +882,45 @@ export default function ExecutiveWarRoomPage() {
         labels: ['Filing Speed', 'Accuracy', 'Timeliness', 'Documentation', 'Response Rate', 'Overall'],
       }
     }
+    // No demo fallback — zeroed values so the radar chart renders empty.
     return {
-      values: [88, 92, 78, 85, 91, 87],
+      values: [0, 0, 0, 0, 0, 0],
       labels: ['Filing Speed', 'Accuracy', 'Timeliness', 'Documentation', 'Response Rate', 'Overall'],
     }
   }, [scores])
 
   // ── Collection Funnel ──
   const collectionFunnel = useMemo(() => {
-    const totalInvoiced = invoices.reduce((s, i) => s + (i.totalAmount || 0), 0) || 85000000
-    const collected = totalInvoiced * 0.873
-    const overdue = totalInvoiced * 0.08
-    const writtenOff = totalInvoiced * 0.012
+    // No hardcoded ₹8.5 Cr fallback — if invoices is empty, all four
+    // funnel buckets collapse to 0 and the chart renders empty.
+    const totalInvoiced = invoices.reduce((s, i) => s + (i.totalAmount || 0), 0)
+    const collected = 0
+    const overdue = 0
+    const writtenOff = 0
     return { totalInvoiced, collected, overdue, writtenOff }
   }, [invoices])
 
   // ── Overdue Clients ──
   const overdueClients = useMemo(() => {
     const overdue = clients.filter(c => c.status === 'active' && (c.pendingReturnCount || 0) > 0)
-    if (overdue.length > 0) {
-      return overdue.slice(0, 5).map(c => ({
-        name: c.tradeName,
-        amount: (c.totalTaxPaid || 0) * 0.15,
-        days: Math.round(Math.random() * 60 + 15),
-      }))
-    }
-    return [
-      { name: 'Patel Enterprises', amount: 450000, days: 67 },
-      { name: 'Sunrise Pvt Ltd', amount: 320000, days: 45 },
-      { name: 'ABC Traders', amount: 280000, days: 38 },
-      { name: 'Mehta Industries', amount: 190000, days: 22 },
-      { name: 'Sharma & Co.', amount: 150000, days: 15 },
-    ]
+    // No demo fallback — empty array renders the empty state below.
+    return overdue.slice(0, 5).map(c => ({
+      name: c.tradeName,
+      amount: (c.totalTaxPaid || 0) * 0.15,
+      days: 0,
+    }))
   }, [clients])
 
   // ── Upcoming Deadlines ──
   const upcomingDeadlines = useMemo(() => {
     const pending = returns.filter(r => r.status !== 'filed')
-    if (pending.length > 0) {
-      return pending.slice(0, 5).map(r => ({
-        type: r.returnType,
-        client: r.clientId?.slice(0, 8) || 'Client',
-        dueDate: r.period || '—',
-        status: r.status,
-      }))
-    }
-    return [
-      { type: 'GSTR-3B', client: 'Patel Enterprises', dueDate: '20/03/2026', status: 'draft' },
-      { type: 'GSTR-1', client: 'Sharma & Co.', dueDate: '11/03/2026', status: 'generated' },
-      { type: 'GSTR-3B', client: 'Mehta Industries', dueDate: '20/03/2026', status: 'validated' },
-      { type: 'GSTR-1', client: 'Sunrise Pvt Ltd', dueDate: '11/03/2026', status: 'draft' },
-      { type: 'TDS Return', client: 'ABC Traders', dueDate: '31/03/2026', status: 'pending' },
-    ]
+    // No demo fallback — empty array renders the empty state below.
+    return pending.slice(0, 5).map(r => ({
+      type: r.returnType,
+      client: r.clientId?.slice(0, 8) || 'Client',
+      dueDate: r.period || '—',
+      status: r.status,
+    }))
   }, [returns])
 
   // ── Current Date/Time ──
@@ -941,12 +950,8 @@ export default function ExecutiveWarRoomPage() {
         type: a.type,
       }))
     }
-    return DEMO_TICKER_ITEMS.map((text, i) => ({
-      icon: [CheckCircle, Zap, AlertTriangle, Landmark, Shield, FileText, Activity, CheckCircle, Brain, TrendingUp][i % 10],
-      title: text,
-      time: `${Math.floor(Math.random() * 12 + 1)}:${String(Math.floor(Math.random() * 60)).padStart(2, '0')} ${Math.random() > 0.5 ? 'AM' : 'PM'}`,
-      type: 'system',
-    }))
+    // No demo fallback — empty array renders the empty state below.
+    return [] as Array<{ icon: React.ElementType; title: string; time: string; type: string }>
   }, [activities])
 
   // ── AI Recommendations ──
@@ -959,7 +964,8 @@ export default function ExecutiveWarRoomPage() {
         impact: r.suggestedAction,
       }))
     }
-    return DEMO_AI_RECS
+    // No demo fallback — empty array renders the empty state below.
+    return [] as Array<{ priority: string; category: string; action: string; impact: string }>
   }, [aiRecommendations])
 
   // ── Predictions Display ──
@@ -972,41 +978,35 @@ export default function ExecutiveWarRoomPage() {
         confidence: p.confidence,
       }))
     }
-    return DEMO_PREDICTIONS
+    // No demo fallback — empty array renders the empty state below.
+    return [] as Array<{ label: string; value: string; trend: 'up' | 'down'; confidence: number }>
   }, [predictions])
 
   // ── Node count for network graph ──
+  // No hardcoded fallbacks (was || 247 / || 1243 / || 892) — counts
+  // collapse to 0 when the DB is empty, which the MiniNetworkGraph
+  // already handles gracefully.
   const nodeCount = useMemo(() => ({
     orgs: 1,
-    clients: clients.length || 247,
-    invoices: invoices.length || 1243,
-    returns: returns.length || 892,
+    clients: clients.length,
+    invoices: invoices.length,
+    returns: returns.length,
   }), [clients, invoices, returns])
 
   // ── Payment method distribution ──
-  const paymentMethods = useMemo(() => [
-    { label: 'NEFT/RTGS', value: 4500000, color: '#10b981' },
-    { label: 'UPI', value: 2800000, color: '#3b82f6' },
-    { label: 'Cheque', value: 1200000, color: '#f59e0b' },
-    { label: 'Cash', value: 800000, color: '#8b5cf6' },
-  ], [])
+  // No hardcoded values (was 4500000 / 2800000 / 1200000 / 800000) —
+  // empty array renders nothing inside the chart container.
+  const paymentMethods = useMemo(() => [] as Array<{ label: string; value: number; color: string }>, [])
 
   // ── Risk clients ──
   const riskClients = useMemo(() => {
     const atRisk = clients.filter(c => (c.healthScore || 0) < 60)
-    if (atRisk.length > 0) {
-      return atRisk.slice(0, 4).map(c => ({
-        name: c.tradeName,
-        score: c.healthScore || 0,
-        issue: `${c.pendingReturnCount || 0} pending returns`,
-      }))
-    }
-    return [
-      { name: 'XYZ Corp', score: 32, issue: '3 overdue filings' },
-      { name: 'PQR Ltd', score: 45, issue: 'GSTR-2B mismatch' },
-      { name: 'LMN Industries', score: 51, issue: '2 pending returns' },
-      { name: 'DEF Traders', score: 55, issue: 'ITC discrepancy' },
-    ]
+    // No demo fallback — empty array renders the empty state below.
+    return atRisk.slice(0, 4).map(c => ({
+      name: c.tradeName,
+      score: c.healthScore || 0,
+      issue: `${c.pendingReturnCount || 0} pending returns`,
+    }))
   }, [clients])
 
   // ═══════════════════════════════════════════════════════════════════════════════
@@ -1151,16 +1151,25 @@ export default function ExecutiveWarRoomPage() {
             <div>
               <p className="text-[11px] text-slate-500 mb-2">Top Revenue Clients</p>
               <div className="space-y-2">
-                {topClients.map((client, i) => (
-                  <div key={i} className="flex items-center justify-between py-1.5 px-2 rounded-lg hover:bg-slate-800/40 transition-colors">
-                    <div className="flex items-center gap-2">
-                      <span className="text-[10px] font-bold text-slate-600 w-4">{i + 1}</span>
-                      <Building2 className="h-3.5 w-3.5 text-emerald-500/60" />
-                      <span className="text-xs text-slate-300">{client.name}</span>
+                {topClients.length === 0 ? (
+                  <EmptyState
+                    icon={Building2}
+                    title="No revenue clients yet"
+                    description="Your top revenue-generating clients will appear here once invoices are recorded."
+                    compact
+                  />
+                ) : (
+                  topClients.map((client, i) => (
+                    <div key={i} className="flex items-center justify-between py-1.5 px-2 rounded-lg hover:bg-slate-800/40 transition-colors">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-bold text-slate-600 w-4">{i + 1}</span>
+                        <Building2 className="h-3.5 w-3.5 text-emerald-500/60" />
+                        <span className="text-xs text-slate-300">{client.name}</span>
+                      </div>
+                      <span className="text-xs font-semibold text-emerald-400">{fmtINR(client.total)}</span>
                     </div>
-                    <span className="text-xs font-semibold text-emerald-400">{fmtINR(client.total)}</span>
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
             </div>
 
@@ -1266,28 +1275,37 @@ export default function ExecutiveWarRoomPage() {
             <div>
               <p className="text-[10px] text-slate-500 mb-2 font-medium uppercase tracking-wider">Top Recommendations</p>
               <div className="space-y-2">
-                {displayRecs.map((rec, i) => (
-                  <motion.div
-                    key={i}
-                    initial={{ opacity: 0, x: 10 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: 0.8 + i * 0.1 }}
-                    className="p-2.5 rounded-lg bg-slate-800/40 border border-slate-700/30 hover:border-slate-600/50 transition-colors"
-                  >
-                    <div className="flex items-center gap-1.5 mb-1">
-                      <Badge className={`text-[8px] px-1 py-0 h-4 ${
-                        rec.priority === 'critical' ? 'bg-red-500/20 text-red-400 border-red-500/30'
-                        : rec.priority === 'high' ? 'bg-amber-500/20 text-amber-400 border-amber-500/30'
-                        : 'bg-blue-500/20 text-blue-400 border-blue-500/30'
-                      }`}>
-                        {rec.priority.toUpperCase()}
-                      </Badge>
-                      <span className="text-[9px] text-slate-500">{rec.category}</span>
-                    </div>
-                    <p className="text-[11px] text-slate-300 leading-tight mb-1">{rec.action}</p>
-                    <p className="text-[9px] text-emerald-500/80">Impact: {rec.impact}</p>
-                  </motion.div>
-                ))}
+                {displayRecs.length === 0 ? (
+                  <EmptyState
+                    icon={Sparkles}
+                    title="No AI recommendations yet"
+                    description="Recommendations will appear here once the AI engine analyses your clients, filings, and receivables."
+                    compact
+                  />
+                ) : (
+                  displayRecs.map((rec, i) => (
+                    <motion.div
+                      key={i}
+                      initial={{ opacity: 0, x: 10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: 0.8 + i * 0.1 }}
+                      className="p-2.5 rounded-lg bg-slate-800/40 border border-slate-700/30 hover:border-slate-600/50 transition-colors"
+                    >
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <Badge className={`text-[8px] px-1 py-0 h-4 ${
+                          rec.priority === 'critical' ? 'bg-red-500/20 text-red-400 border-red-500/30'
+                          : rec.priority === 'high' ? 'bg-amber-500/20 text-amber-400 border-amber-500/30'
+                          : 'bg-blue-500/20 text-blue-400 border-blue-500/30'
+                        }`}>
+                          {rec.priority.toUpperCase()}
+                        </Badge>
+                        <span className="text-[9px] text-slate-500">{rec.category}</span>
+                      </div>
+                      <p className="text-[11px] text-slate-300 leading-tight mb-1">{rec.action}</p>
+                      <p className="text-[9px] text-emerald-500/80">Impact: {rec.impact}</p>
+                    </motion.div>
+                  ))
+                )}
               </div>
             </div>
 
@@ -1297,27 +1315,36 @@ export default function ExecutiveWarRoomPage() {
             <div>
               <p className="text-[10px] text-slate-500 mb-2 font-medium uppercase tracking-wider">Predictions</p>
               <div className="space-y-2">
-                {displayPredictions.map((pred, i) => (
-                  <div key={i} className="flex items-center justify-between py-2 px-2.5 rounded-lg bg-slate-800/30">
-                    <div>
-                      <p className="text-[11px] text-slate-300">{pred.label}</p>
-                      <p className="text-sm font-bold text-white">{pred.value}</p>
-                    </div>
-                    <div className="flex flex-col items-end gap-1">
-                      <div className="flex items-center gap-1">
-                        {pred.trend === 'up' ? (
-                          <TrendingUp className="h-3 w-3 text-emerald-400" />
-                        ) : (
-                          <TrendingDown className="h-3 w-3 text-red-400" />
-                        )}
-                        <span className={`text-[10px] font-medium ${pred.trend === 'up' ? 'text-emerald-400' : 'text-red-400'}`}>
-                          {pred.trend === 'up' ? 'Bullish' : 'Bearish'}
-                        </span>
+                {displayPredictions.length === 0 ? (
+                  <EmptyState
+                    icon={TrendingUp}
+                    title="No predictions yet"
+                    description="Revenue, risk, and compliance forecasts will appear here once the AI engine has enough data."
+                    compact
+                  />
+                ) : (
+                  displayPredictions.map((pred, i) => (
+                    <div key={i} className="flex items-center justify-between py-2 px-2.5 rounded-lg bg-slate-800/30">
+                      <div>
+                        <p className="text-[11px] text-slate-300">{pred.label}</p>
+                        <p className="text-sm font-bold text-white">{pred.value}</p>
                       </div>
-                      <span className="text-[9px] text-slate-500">{pred.confidence}% confidence</span>
+                      <div className="flex flex-col items-end gap-1">
+                        <div className="flex items-center gap-1">
+                          {pred.trend === 'up' ? (
+                            <TrendingUp className="h-3 w-3 text-emerald-400" />
+                          ) : (
+                            <TrendingDown className="h-3 w-3 text-red-400" />
+                          )}
+                          <span className={`text-[10px] font-medium ${pred.trend === 'up' ? 'text-emerald-400' : 'text-red-400'}`}>
+                            {pred.trend === 'up' ? 'Bullish' : 'Bearish'}
+                          </span>
+                        </div>
+                        <span className="text-[9px] text-slate-500">{pred.confidence}% confidence</span>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
             </div>
 
@@ -1330,20 +1357,28 @@ export default function ExecutiveWarRoomPage() {
                 Anomaly Alerts
               </p>
               <div className="space-y-1.5">
-                {DEMO_ANOMALIES.map((anomaly, i) => (
-                  <motion.div
-                    key={i}
-                    initial={{ opacity: 0, y: 5 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 1.2 + i * 0.15 }}
-                    className="flex items-start gap-2 p-2 rounded-lg bg-red-500/5 border border-red-500/10"
-                  >
-                    <AlertTriangle className={`h-3 w-3 mt-0.5 ${
-                      anomaly.severity === 'high' ? 'text-red-400' : anomaly.severity === 'medium' ? 'text-amber-400' : 'text-blue-400'
-                    }`} />
-                    <p className="text-[10px] text-slate-400 leading-tight">{anomaly.text}</p>
-                  </motion.div>
-                ))}
+                {realAnomalies.length === 0 ? (
+                  <div className="p-2 rounded-lg bg-emerald-500/5 border border-emerald-500/10">
+                    <p className="text-[10px] text-emerald-300/80 leading-tight">
+                      No anomalies detected — all clients within normal risk parameters.
+                    </p>
+                  </div>
+                ) : (
+                  realAnomalies.map((anomaly, i) => (
+                    <motion.div
+                      key={i}
+                      initial={{ opacity: 0, y: 5 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 1.2 + i * 0.15 }}
+                      className="flex items-start gap-2 p-2 rounded-lg bg-red-500/5 border border-red-500/10"
+                    >
+                      <AlertTriangle className={`h-3 w-3 mt-0.5 ${
+                        anomaly.severity === 'high' ? 'text-red-400' : anomaly.severity === 'medium' ? 'text-amber-400' : 'text-blue-400'
+                      }`} />
+                      <p className="text-[10px] text-slate-400 leading-tight">{anomaly.text}</p>
+                    </motion.div>
+                  ))
+                )}
               </div>
             </div>
 
@@ -1353,7 +1388,11 @@ export default function ExecutiveWarRoomPage() {
                 <Zap className="h-3 w-3" /> Next Actions
               </p>
               <p className="text-[11px] text-slate-300">File GSTR-3B for 5 clients by 20th</p>
-              <p className="text-[11px] text-slate-300">Follow up on ₹4.5L overdue collection</p>
+              <p className="text-[11px] text-slate-300">
+                {realOverdueAmount > 0
+                  ? `Follow up on ${fmtINR(realOverdueAmount)} overdue collection`
+                  : 'No overdue collections to follow up on'}
+              </p>
             </div>
           </GlassPanel>
         </div>
@@ -1419,18 +1458,27 @@ export default function ExecutiveWarRoomPage() {
             <div>
               <p className="text-[10px] text-slate-500 mb-2 font-medium uppercase tracking-wider">Top Overdue</p>
               <div className="space-y-1.5">
-                {overdueClients.map((client, i) => (
-                  <div key={i} className="flex items-center justify-between py-1.5 px-2 rounded-lg hover:bg-slate-800/30 transition-colors">
-                    <div className="flex items-center gap-2">
-                      <Building2 className="h-3.5 w-3.5 text-red-400/60" />
-                      <span className="text-[11px] text-slate-300">{client.name}</span>
+                {overdueClients.length === 0 ? (
+                  <EmptyState
+                    icon={AlertTriangle}
+                    title="No overdue clients"
+                    description="Clients with overdue returns will appear here once the system detects them."
+                    compact
+                  />
+                ) : (
+                  overdueClients.map((client, i) => (
+                    <div key={i} className="flex items-center justify-between py-1.5 px-2 rounded-lg hover:bg-slate-800/30 transition-colors">
+                      <div className="flex items-center gap-2">
+                        <Building2 className="h-3.5 w-3.5 text-red-400/60" />
+                        <span className="text-[11px] text-slate-300">{client.name}</span>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <span className="text-[10px] text-red-400">{client.days}d</span>
+                        <span className="text-[11px] font-semibold text-red-400">{fmtINR(client.amount)}</span>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-3">
-                      <span className="text-[10px] text-red-400">{client.days}d</span>
-                      <span className="text-[11px] font-semibold text-red-400">{fmtINR(client.amount)}</span>
-                    </div>
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
             </div>
           </GlassPanel>
@@ -1444,7 +1492,7 @@ export default function ExecutiveWarRoomPage() {
                 <Gauge className="h-4 w-4 text-purple-400" />
                 <h3 className="text-sm font-semibold text-white">Compliance Radar</h3>
               </div>
-              <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 text-[10px]">94.2%</Badge>
+              <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 text-[10px]">—</Badge>
             </div>
 
             {/* Radar Chart */}
@@ -1462,7 +1510,7 @@ export default function ExecutiveWarRoomPage() {
             <div>
               <p className="text-[10px] text-slate-500 mb-2 font-medium uppercase tracking-wider">Monthly Trend</p>
               <div className="flex items-end gap-1.5 h-16">
-                {[82, 85, 88, 86, 90, 89, 92, 91, 93, 94, 92, 94].map((v, i) => (
+                {([] as number[]).map((v, i) => (
                   <motion.div
                     key={i}
                     className="flex-1 rounded-sm"
@@ -1491,26 +1539,35 @@ export default function ExecutiveWarRoomPage() {
                 Upcoming Deadlines (7 days)
               </p>
               <div className="space-y-1.5">
-                {upcomingDeadlines.map((dl, i) => (
-                  <div key={i} className="flex items-center justify-between py-1.5 px-2 rounded-lg bg-slate-800/30">
-                    <div className="flex items-center gap-2">
-                      <Badge className="text-[8px] px-1 py-0 h-4 bg-purple-500/20 text-purple-400 border-purple-500/30">
-                        {dl.type}
-                      </Badge>
-                      <span className="text-[10px] text-slate-400 truncate max-w-[100px]">{dl.client}</span>
+                {upcomingDeadlines.length === 0 ? (
+                  <EmptyState
+                    icon={Clock}
+                    title="No upcoming deadlines"
+                    description="Pending returns and filing deadlines will appear here once they are scheduled."
+                    compact
+                  />
+                ) : (
+                  upcomingDeadlines.map((dl, i) => (
+                    <div key={i} className="flex items-center justify-between py-1.5 px-2 rounded-lg bg-slate-800/30">
+                      <div className="flex items-center gap-2">
+                        <Badge className="text-[8px] px-1 py-0 h-4 bg-purple-500/20 text-purple-400 border-purple-500/30">
+                          {dl.type}
+                        </Badge>
+                        <span className="text-[10px] text-slate-400 truncate max-w-[100px]">{dl.client}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] text-amber-400">{dl.dueDate}</span>
+                        <Badge className={`text-[8px] px-1 py-0 h-4 ${
+                          dl.status === 'draft' ? 'bg-slate-500/20 text-slate-400 border-slate-500/30'
+                          : dl.status === 'generated' ? 'bg-blue-500/20 text-blue-400 border-blue-500/30'
+                          : 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
+                        }`}>
+                          {dl.status}
+                        </Badge>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-[10px] text-amber-400">{dl.dueDate}</span>
-                      <Badge className={`text-[8px] px-1 py-0 h-4 ${
-                        dl.status === 'draft' ? 'bg-slate-500/20 text-slate-400 border-slate-500/30'
-                        : dl.status === 'generated' ? 'bg-blue-500/20 text-blue-400 border-blue-500/30'
-                        : 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
-                      }`}>
-                        {dl.status}
-                      </Badge>
-                    </div>
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
             </div>
 
@@ -1523,20 +1580,29 @@ export default function ExecutiveWarRoomPage() {
                 Risk Clients
               </p>
               <div className="space-y-1.5">
-                {riskClients.map((client, i) => (
-                  <div key={i} className="flex items-center justify-between py-1.5 px-2 rounded-lg bg-red-500/5 border border-red-500/10">
-                    <div className="flex items-center gap-2">
-                      <Building2 className="h-3.5 w-3.5 text-red-400/60" />
-                      <span className="text-[11px] text-slate-300">{client.name}</span>
+                {riskClients.length === 0 ? (
+                  <EmptyState
+                    icon={Shield}
+                    title="No at-risk clients"
+                    description="Clients with health scores below 60 will appear here once the system has assessed them."
+                    compact
+                  />
+                ) : (
+                  riskClients.map((client, i) => (
+                    <div key={i} className="flex items-center justify-between py-1.5 px-2 rounded-lg bg-red-500/5 border border-red-500/10">
+                      <div className="flex items-center gap-2">
+                        <Building2 className="h-3.5 w-3.5 text-red-400/60" />
+                        <span className="text-[11px] text-slate-300">{client.name}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[9px] text-slate-500">{client.issue}</span>
+                        <Badge className="text-[8px] px-1 py-0 h-4 bg-red-500/20 text-red-400 border-red-500/30">
+                          {client.score}
+                        </Badge>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-[9px] text-slate-500">{client.issue}</span>
-                      <Badge className="text-[8px] px-1 py-0 h-4 bg-red-500/20 text-red-400 border-red-500/30">
-                        {client.score}
-                      </Badge>
-                    </div>
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
             </div>
           </GlassPanel>
@@ -1556,13 +1622,13 @@ export default function ExecutiveWarRoomPage() {
             <div className="grid grid-cols-2 gap-2">
               <div className="p-2.5 rounded-lg bg-slate-800/40 border border-slate-700/30 text-center">
                 <p className="text-[10px] text-slate-500">Task Completion</p>
-                <p className="text-xl font-bold text-emerald-400">87%</p>
-                <Progress value={87} className="h-1.5 mt-1.5 bg-slate-700 [&>div]:bg-emerald-500" />
+                <p className="text-xl font-bold text-emerald-400">—</p>
+                <Progress value={0} className="h-1.5 mt-1.5 bg-slate-700 [&>div]:bg-emerald-500" />
               </div>
               <div className="p-2.5 rounded-lg bg-slate-800/40 border border-slate-700/30 text-center">
                 <p className="text-[10px] text-slate-500">Avg Response</p>
-                <p className="text-xl font-bold text-amber-400">2.4h</p>
-                <Progress value={72} className="h-1.5 mt-1.5 bg-slate-700 [&>div]:bg-amber-500" />
+                <p className="text-xl font-bold text-amber-400">—</p>
+                <Progress value={0} className="h-1.5 mt-1.5 bg-slate-700 [&>div]:bg-amber-500" />
               </div>
             </div>
 
@@ -1575,32 +1641,41 @@ export default function ExecutiveWarRoomPage() {
                 AI Agent Fleet
               </p>
               <div className="space-y-2">
-                {DEMO_AI_AGENTS.map((agent, i) => (
-                  <motion.div
-                    key={i}
-                    initial={{ opacity: 0, x: 10 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: 1.5 + i * 0.08 }}
-                    className="flex items-center gap-2.5"
-                  >
+                {aiAgents.length === 0 ? (
+                  <EmptyState
+                    icon={Brain}
+                    title="No AI agents deployed yet"
+                    description="Your AI agent fleet will appear here once agents are configured and activated."
+                    compact
+                  />
+                ) : (
+                  aiAgents.map((agent, i) => (
                     <motion.div
-                      className={`w-2 h-2 rounded-full ${agent.status === 'active' ? 'bg-emerald-500' : 'bg-slate-500'}`}
-                      animate={agent.status === 'active' ? { opacity: [1, 0.4, 1] } : {}}
-                      transition={{ duration: 2, repeat: Infinity }}
-                    />
-                    <span className="text-[11px] text-slate-300 flex-1 truncate">{agent.name}</span>
-                    <span className="text-[10px] text-slate-500">{agent.tasks} tasks</span>
-                    <div className="w-16 h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                      key={i}
+                      initial={{ opacity: 0, x: 10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: 1.5 + i * 0.08 }}
+                      className="flex items-center gap-2.5"
+                    >
                       <motion.div
-                        className="h-full rounded-full bg-emerald-500"
-                        initial={{ width: 0 }}
-                        animate={{ width: `${agent.efficiency}%` }}
-                        transition={{ delay: 1.8 + i * 0.08, duration: 0.6 }}
+                        className={`w-2 h-2 rounded-full ${agent.status === 'active' ? 'bg-emerald-500' : 'bg-slate-500'}`}
+                        animate={agent.status === 'active' ? { opacity: [1, 0.4, 1] } : {}}
+                        transition={{ duration: 2, repeat: Infinity }}
                       />
-                    </div>
-                    <span className="text-[10px] text-emerald-400 font-medium w-8 text-right">{agent.efficiency}%</span>
-                  </motion.div>
-                ))}
+                      <span className="text-[11px] text-slate-300 flex-1 truncate">{agent.name}</span>
+                      <span className="text-[10px] text-slate-500">{agent.tasks} tasks</span>
+                      <div className="w-16 h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                        <motion.div
+                          className="h-full rounded-full bg-emerald-500"
+                          initial={{ width: 0 }}
+                          animate={{ width: `${agent.efficiency}%` }}
+                          transition={{ delay: 1.8 + i * 0.08, duration: 0.6 }}
+                        />
+                      </div>
+                      <span className="text-[10px] text-emerald-400 font-medium w-8 text-right">{agent.efficiency}%</span>
+                    </motion.div>
+                  ))
+                )}
               </div>
             </div>
 
@@ -1610,12 +1685,7 @@ export default function ExecutiveWarRoomPage() {
             <div>
               <p className="text-[10px] text-slate-500 mb-2 font-medium uppercase tracking-wider">Workload Distribution</p>
               <div className="space-y-2">
-                {[
-                  { name: 'GST Filing', load: 78, color: 'bg-emerald-500' },
-                  { name: 'TDS Returns', load: 52, color: 'bg-blue-500' },
-                  { name: 'Reconciliation', load: 65, color: 'bg-amber-500' },
-                  { name: 'Client Communication', load: 41, color: 'bg-purple-500' },
-                ].map((item, i) => (
+                {([] as Array<{ name: string; load: number; color: string }>).map((item, i) => (
                   <div key={i}>
                     <div className="flex justify-between text-[10px] mb-1">
                       <span className="text-slate-400">{item.name}</span>
@@ -1637,12 +1707,11 @@ export default function ExecutiveWarRoomPage() {
             <Separator className="bg-slate-800" />
 
             {/* Bottleneck Detection */}
-            <div className="p-2.5 rounded-lg bg-amber-500/5 border border-amber-500/20">
-              <p className="text-[10px] text-amber-400 font-medium mb-1 flex items-center gap-1.5">
-                <AlertTriangle className="h-3 w-3" /> Bottleneck Detected
+            <div className="p-2.5 rounded-lg bg-slate-500/5 border border-slate-500/10">
+              <p className="text-[10px] text-slate-400 font-medium mb-1 flex items-center gap-1.5">
+                <AlertTriangle className="h-3 w-3" /> No active bottlenecks
               </p>
-              <p className="text-[11px] text-slate-300">GSTR-3B review queue is 3x normal — consider parallel processing</p>
-              <p className="text-[9px] text-slate-500 mt-1">Est. resolution: 2 hours with AI assistance</p>
+              <p className="text-[11px] text-slate-400">Bottleneck alerts will surface here when the AI engine detects processing queue anomalies.</p>
             </div>
           </GlassPanel>
         </div>
@@ -1668,25 +1737,34 @@ export default function ExecutiveWarRoomPage() {
         </div>
         <ScrollArea className="h-40">
           <div className="px-4 py-2 space-y-1">
-            {activityFeed.map((item, i) => {
-              const IconComp = item.icon
-              return (
-                <motion.div
-                  key={i}
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 1.7 + i * 0.04, duration: 0.3 }}
-                  className="flex items-center gap-3 py-1.5 px-2 rounded-lg hover:bg-slate-800/30 transition-colors group"
-                >
-                  <div className="flex h-6 w-6 items-center justify-center rounded-full bg-slate-800/60 group-hover:bg-slate-700/60 transition-colors">
-                    <IconComp className="h-3 w-3 text-emerald-500/70" />
-                  </div>
-                  <span className="text-[11px] text-slate-300 flex-1">{item.title}</span>
-                  <span className="text-[9px] text-slate-600 shrink-0">{item.time}</span>
-                  <div className="w-1 h-1 rounded-full bg-emerald-500/40" />
-                </motion.div>
-              )
-            })}
+            {activityFeed.length === 0 ? (
+              <EmptyState
+                icon={Inbox}
+                title="No live ticker data yet"
+                description="Real-time activity from your firm will stream here once filings, payments, and reconciliations start happening."
+                compact
+              />
+            ) : (
+              activityFeed.map((item, i) => {
+                const IconComp = item.icon
+                return (
+                  <motion.div
+                    key={i}
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 1.7 + i * 0.04, duration: 0.3 }}
+                    className="flex items-center gap-3 py-1.5 px-2 rounded-lg hover:bg-slate-800/30 transition-colors group"
+                  >
+                    <div className="flex h-6 w-6 items-center justify-center rounded-full bg-slate-800/60 group-hover:bg-slate-700/60 transition-colors">
+                      <IconComp className="h-3 w-3 text-emerald-500/70" />
+                    </div>
+                    <span className="text-[11px] text-slate-300 flex-1">{item.title}</span>
+                    <span className="text-[9px] text-slate-600 shrink-0">{item.time}</span>
+                    <div className="w-1 h-1 rounded-full bg-emerald-500/40" />
+                  </motion.div>
+                )
+              })
+            )}
           </div>
         </ScrollArea>
       </GlassPanel>

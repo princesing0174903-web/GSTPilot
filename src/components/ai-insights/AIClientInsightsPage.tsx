@@ -75,93 +75,12 @@ interface InsightsData {
   clients: ClientInsight[];
 }
 
-// ─── Default / Mock Data ──────────────────────────────────────────────────
-const mockInsightsData: InsightsData = {
-  totalObservations: 47,
-  highConfidence: 32,
-  trending: 8,
-  clients: [
-    {
-      id: '1',
-      clientName: 'TechVista Solutions Pvt Ltd',
-      gstin: '27AABCT1234F1ZP',
-      healthScore: 87,
-      trends: { growth: 'up', compliance: 'up', risk: 'stable', gst: 'up', payment: 'up' },
-      observations: [
-        { id: 'o1', text: 'Consistent improvement in filing timeliness over the past 3 quarters suggests improved internal processes.', confidence: 94, category: 'Compliance', isTrending: true },
-        { id: 'o2', text: 'Revenue growth of 18% QoQ outpaces industry average of 12%, indicating strong market position.', confidence: 89, category: 'Growth' },
-        { id: 'o3', text: 'ITC claims have increased proportionally with input purchases — no anomalous patterns detected.', confidence: 92, category: 'GST' },
-        { id: 'o4', text: 'Payment history shows zero delays in the last 6 months — excellent cash flow management.', confidence: 97, category: 'Payment' },
-        { id: 'o5', text: 'Risk score has decreased by 15% since last review, now well within low-risk threshold.', confidence: 85, category: 'Risk' },
-      ],
-    },
-    {
-      id: '2',
-      clientName: 'Maharashtra Traders Corp',
-      gstin: '27AADCM5678G2ZR',
-      healthScore: 62,
-      trends: { growth: 'stable', compliance: 'down', risk: 'up', gst: 'down', payment: 'stable' },
-      observations: [
-        { id: 'o6', text: 'Two consecutive quarters of delayed GSTR-3B filings detected. Pattern suggests cash flow constraints.', confidence: 91, category: 'Compliance', isTrending: true },
-        { id: 'o7', text: 'ITC reversal amounts have increased 22% — potential classification errors in purchase invoices.', confidence: 78, category: 'GST' },
-        { id: 'o8', text: 'Risk profile has shifted from medium to medium-high due to recent compliance gaps.', confidence: 86, category: 'Risk' },
-        { id: 'o9', text: 'Revenue has remained flat for 2 quarters despite seasonal uptick in industry.', confidence: 72, category: 'Growth' },
-      ],
-    },
-    {
-      id: '3',
-      clientName: 'GreenLeaf Exports Ltd',
-      gstin: '27AABCG9012H3ZK',
-      healthScore: 45,
-      trends: { growth: 'down', compliance: 'down', risk: 'up', gst: 'down', payment: 'down' },
-      observations: [
-        { id: 'o10', text: 'Critical: Three mismatch entries in GSTR-2B reconciliation requiring immediate attention.', confidence: 96, category: 'GST', isTrending: true },
-        { id: 'o11', text: 'Export turnover declined 30% — may warrant a review of HSN code classifications.', confidence: 83, category: 'Growth' },
-        { id: 'o12', text: 'Outstanding tax liability of ₹4.2L detected — payment overdue by 45 days.', confidence: 95, category: 'Payment' },
-        { id: 'o13', text: 'Risk of show-cause notice due to persistent ITC claim discrepancies in 3 return periods.', confidence: 88, category: 'Risk' },
-      ],
-    },
-    {
-      id: '4',
-      clientName: 'Sunrise Retail Chain',
-      gstin: '27AABCS3456J4ZL',
-      healthScore: 78,
-      trends: { growth: 'up', compliance: 'up', risk: 'stable', gst: 'stable', payment: 'up' },
-      observations: [
-        { id: 'o14', text: 'Multi-location compliance is well-managed with consistent filing across all 5 GSTIN registrations.', confidence: 90, category: 'Compliance' },
-        { id: 'o15', text: 'B2C small invoice volume increased 40% — ensure correct E-invoice thresholds are met.', confidence: 82, category: 'GST' },
-        { id: 'o16', text: 'Payment patterns are improving with advance tax payments observed in the last 2 months.', confidence: 87, category: 'Payment' },
-      ],
-    },
-    {
-      id: '5',
-      clientName: 'Pinnacle Infrastructure Pvt Ltd',
-      gstin: '27AABCP7890K5ZM',
-      healthScore: 71,
-      trends: { growth: 'up', compliance: 'stable', risk: 'up', gst: 'stable', payment: 'down' },
-      observations: [
-        { id: 'o17', text: 'Large project-based revenue spikes may trigger scrutiny — ensure proportional ITC documentation.', confidence: 79, category: 'Risk', isTrending: true },
-        { id: 'o18', text: 'Compliance status stable but one delayed filing in Q3 may impact composite score.', confidence: 84, category: 'Compliance' },
-        { id: 'o19', text: 'Working capital pressure indicated by delayed vendor payments — monitor GST outflow timing.', confidence: 76, category: 'Payment' },
-        { id: 'o20', text: 'Construction sector GST rate changes from next quarter may affect current invoicing patterns.', confidence: 88, category: 'GST' },
-      ],
-    },
-    {
-      id: '6',
-      clientName: 'Digital Dreams Software',
-      gstin: '27AABCD1234L6ZN',
-      healthScore: 93,
-      trends: { growth: 'up', compliance: 'up', risk: 'down', gst: 'up', payment: 'up' },
-      observations: [
-        { id: 'o21', text: 'Exemplary compliance record — all filings on time with zero discrepancies for 12 consecutive months.', confidence: 99, category: 'Compliance' },
-        { id: 'o22', text: 'ITC optimization opportunity: ₹1.8L in unclaimed input credit from overseas software subscriptions.', confidence: 81, category: 'GST' },
-        { id: 'o23', text: 'Low risk profile maintained — eligible for simplified compliance pathway under new CBIC framework.', confidence: 93, category: 'Risk' },
-      ],
-    },
-  ],
-};
-
 // ─── Animated Card Wrapper ────────────────────────────────────────────────
+// PT-1-a-retry: the previous mockInsightsData constant (47 fake observations
+// across 6 fake clients incl. "Outstanding tax liability of ₹4.2L" and
+// "₹1.8L ITC optimization opportunity") has been removed. All insight data
+// now flows from /api/ai-insights (real ClientInsight rows) via fetchData()
+// below. When the DB has no insights, the empty state with CTA renders.
 function AnimatedCard({
   children,
   delay = 0,
@@ -337,10 +256,78 @@ function ClientCardSkeleton() {
 // MAIN COMPONENT
 // ═══════════════════════════════════════════════════════════════════════════
 export default function AIClientInsightsPage() {
-  const [data, setData] = useState<InsightsData>(mockInsightsData);
+  // PT-1-a-retry: start with an empty InsightsData (no mock fallback) so the
+  // empty state with CTA renders when /api/ai-insights returns no observations.
+  // Real insights are loaded and mapped from /api/ai-insights in fetchData().
+  const [data, setData] = useState<InsightsData>({
+    totalObservations: 0,
+    highConfidence: 0,
+    trending: 0,
+    clients: [],
+  });
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [expandedClientId, setExpandedClientId] = useState<string | null>(null);
+
+  // ── Map /api/ai-insights response → InsightsData shape ──
+  // API returns: { insights: { [clientId]: { clientName, insights: [{ category, trend, observation, confidence, dataPoints }] } }, summary: { totalObservations, highConfidence, trending: { improving, declining, stable } } }
+  function mapApiToInsightsData(json: Record<string, unknown>): InsightsData {
+    const insightsMap = (json.insights ?? {}) as Record<string, { clientName?: string; insights?: Array<Record<string, unknown>> }>;
+    const summary = (json.summary ?? {}) as { totalObservations?: number; highConfidence?: number; trending?: { improving?: number; declining?: number; stable?: number } };
+
+    const clients: ClientInsight[] = Object.entries(insightsMap).map(([clientId, payload]) => {
+      const rawInsights = Array.isArray(payload.insights) ? payload.insights : [];
+      // Derive per-category trend from API insights (improving→up, declining→down, stable→stable)
+      const trendByCat: Record<string, 'up' | 'down' | 'stable'> = {};
+      rawInsights.forEach((i) => {
+        const cat = String(i.category ?? 'other').toLowerCase();
+        const trend = String(i.trend ?? 'stable');
+        if (cat === 'growth' || cat === 'compliance' || cat === 'risk' || cat === 'gst' || cat === 'payment') {
+          trendByCat[cat] = trend === 'improving' ? 'up' : trend === 'declining' ? 'down' : 'stable';
+        }
+      });
+
+      // Derive healthScore from dataPoints (compliance insight's healthScore)
+      let healthScore = 70;
+      rawInsights.forEach((i) => {
+        const dp = i.dataPoints ? (() => { try { return JSON.parse(String(i.dataPoints)); } catch { return {}; } })() : {};
+        if (typeof dp.healthScore === 'number') healthScore = dp.healthScore;
+      });
+
+      const observations: AIObservation[] = rawInsights.map((i, idx) => ({
+        id: `${clientId}-o${idx + 1}`,
+        text: String(i.observation ?? ''),
+        confidence: Math.round((Number(i.confidence) || 0) * 100),
+        category: String(i.category ?? 'general').charAt(0).toUpperCase() + String(i.category ?? 'general').slice(1),
+        isTrending: String(i.trend ?? '') === 'improving' || String(i.trend ?? '') === 'declining',
+      }));
+
+      return {
+        id: clientId,
+        clientName: payload.clientName ?? 'Unknown client',
+        gstin: '',
+        healthScore,
+        trends: {
+          growth: trendByCat.growth ?? 'stable',
+          compliance: trendByCat.compliance ?? 'stable',
+          risk: trendByCat.risk ?? 'stable',
+          gst: trendByCat.gst ?? 'stable',
+          payment: trendByCat.payment ?? 'stable',
+        },
+        observations,
+      };
+    });
+
+    const trendingCount = (summary.trending?.improving ?? 0) + (summary.trending?.declining ?? 0);
+
+    return {
+      totalObservations: summary.totalObservations ?? clients.reduce((s, c) => s + c.observations.length, 0),
+      highConfidence: summary.highConfidence ?? clients.reduce((s, c) => s + c.observations.filter((o) => o.confidence >= 80).length, 0),
+      trending: trendingCount,
+      clients,
+    };
+  }
 
   // ── Fetch data ──────────────────────────────────────────────────────────
   const fetchData = useCallback(async () => {
@@ -350,19 +337,37 @@ export default function AIClientInsightsPage() {
       const res = await fetch('/api/ai-insights');
       if (res.ok) {
         const json = await res.json();
-        if (json.clients && json.clients.length > 0) {
-          setData(json);
-        } else {
-          setData(mockInsightsData);
-        }
+        // PT-1-a-retry: always map the real API response (no mock fallback).
+        // If insights object is empty, the empty state with CTA renders.
+        setData(mapApiToInsightsData(json));
       } else {
-        setData(mockInsightsData);
+        setError(`Failed to load insights (HTTP ${res.status})`);
       }
     } catch (err) {
       console.error('AI Insights fetch error:', err);
-      setData(mockInsightsData);
+      setError(err instanceof Error ? err.message : 'Failed to load insights');
     } finally {
       setLoading(false);
+    }
+  }, []);
+
+  // ── Run Oracle (re-fetch /api/ai-insights which regenerates from DB) ──
+  const runOracle = useCallback(async () => {
+    try {
+      setRefreshing(true);
+      setError(null);
+      const res = await fetch('/api/ai-insights', { cache: 'no-store' });
+      if (res.ok) {
+        const json = await res.json();
+        setData(mapApiToInsightsData(json));
+      } else {
+        setError(`Oracle run failed (HTTP ${res.status})`);
+      }
+    } catch (err) {
+      console.error('Oracle run error:', err);
+      setError(err instanceof Error ? err.message : 'Oracle run failed');
+    } finally {
+      setRefreshing(false);
     }
   }, []);
 
@@ -484,6 +489,47 @@ export default function AIClientInsightsPage() {
             <ClientCardSkeleton key={i} />
           ))}
         </div>
+      ) : data.clients.length === 0 ? (
+        // PT-1-a-retry: real empty state with CTA when no ClientInsight rows exist
+        // in the DB (instead of falling back to fake ₹4.2L liability / ₹1.8L ITC opportunity insights).
+        <Card className="border-border/50">
+          <CardContent className="p-0">
+            <div className="flex flex-col items-center justify-center py-16 gap-4 text-center">
+              <div className="rounded-full bg-emerald-50 dark:bg-emerald-950/40 p-4">
+                <Sparkles className="h-10 w-10 text-emerald-600 dark:text-emerald-400" />
+              </div>
+              <div className="space-y-1.5 max-w-md">
+                <p className="text-base font-semibold text-foreground">No AI insights yet</p>
+                <p className="text-sm text-muted-foreground">
+                  Oracle generates client insights from your invoices, returns, notices, and
+                  reconciliation data. Run Oracle now to analyze your clients and produce
+                  observations, trends, and risk signals.
+                </p>
+              </div>
+              <Button
+                size="default"
+                className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white"
+                onClick={runOracle}
+                disabled={refreshing}
+              >
+                {refreshing ? (
+                  <>
+                    <Activity className="h-4 w-4 animate-spin" />
+                    Running Oracle…
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="h-4 w-4" />
+                    Run Oracle to generate insights
+                  </>
+                )}
+              </Button>
+              {error && (
+                <p className="text-xs text-red-600 dark:text-red-400 mt-2">{error}</p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <AnimatePresence>

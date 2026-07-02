@@ -1,0 +1,840 @@
+     1→'use client';
+     2→
+     3→import React, { useState, useEffect, useCallback } from 'react';
+     4→import {
+     5→  Card,
+     6→  CardContent,
+     7→  CardHeader,
+     8→  CardTitle,
+     9→  CardDescription,
+    10→} from '@/components/ui/card';
+    11→import {
+    12→  Dialog,
+    13→  DialogContent,
+    14→  DialogHeader,
+    15→  DialogTitle,
+    16→  DialogDescription,
+    17→  DialogFooter,
+    18→} from '@/components/ui/dialog';
+    19→import { Badge } from '@/components/ui/badge';
+    20→import { Button } from '@/components/ui/button';
+    21→import { Input } from '@/components/ui/input';
+    22→import { Textarea } from '@/components/ui/textarea';
+    23→import { Label } from '@/components/ui/label';
+    24→import { Skeleton } from '@/components/ui/skeleton';
+    25→import { ScrollArea } from '@/components/ui/scroll-area';
+    26→import {
+    27→  Select,
+    28→  SelectContent,
+    29→  SelectItem,
+    30→  SelectTrigger,
+    31→  SelectValue,
+    32→} from '@/components/ui/select';
+    33→import {
+    34→  BookOpen,
+    35→  Sparkles,
+    36→  Search,
+    37→  ChevronDown,
+    38→  ChevronUp,
+    39→  FileText,
+    40→  Bell,
+    41→  Scale,
+    42→  Landmark,
+    43→  AlertCircle,
+    44→  Tag,
+    45→  Calendar,
+    46→  BarChart3,
+    47→  Plus,
+    48→} from 'lucide-react';
+    49→import { motion, AnimatePresence } from 'framer-motion';
+    50→import { formatNumber } from '@/lib/gst-utils';
+    51→
+    52→// ─── Types ────────────────────────────────────────────────────────────────
+    53→type KnowledgeCategory = 'gst_rule' | 'circular' | 'notification' | 'case_law' | 'department_update';
+    54→
+    55→interface KnowledgeEntry {
+    56→  id: string;
+    57→  title: string;
+    58→  category: KnowledgeCategory;
+    59→  content: string;
+    60→  summary: string;
+    61→  referenceNumber?: string;
+    62→  effectiveDate?: string;
+    63→  tags: string[];
+    64→  relevanceScore: number; // 0-100
+    65→  source?: string;
+    66→  createdAt: string;
+    67→}
+    68→
+    69→interface KnowledgeData {
+    70→  entries: KnowledgeEntry[];
+    71→  stats: {
+    72→    totalEntries: number;
+    73→    gstRules: number;
+    74→    circulars: number;
+    75→    caseLaws: number;
+    76→  };
+    77→}
+    78→
+    79→// ─── Config Maps ──────────────────────────────────────────────────────────
+    80→const CATEGORY_CONFIG: Record<KnowledgeCategory, { label: string; color: string; bgColor: string; icon: React.ReactNode }> = {
+    81→  gst_rule: { label: 'GST Rule', color: 'text-emerald-700 dark:text-emerald-400', bgColor: 'bg-emerald-50 border-emerald-200 dark:bg-emerald-950/40 dark:border-emerald-800', icon: <FileText className="h-3 w-3" /> },
+    82→  circular: { label: 'Circular', color: 'text-teal-700 dark:text-teal-400', bgColor: 'bg-teal-50 border-teal-200 dark:bg-teal-950/40 dark:border-teal-800', icon: <Bell className="h-3 w-3" /> },
+    83→  notification: { label: 'Notification', color: 'text-amber-700 dark:text-amber-400', bgColor: 'bg-amber-50 border-amber-200 dark:bg-amber-950/40 dark:border-amber-800', icon: <AlertCircle className="h-3 w-3" /> },
+    84→  case_law: { label: 'Case Law', color: 'text-orange-700 dark:text-orange-400', bgColor: 'bg-orange-50 border-orange-200 dark:bg-orange-950/40 dark:border-orange-800', icon: <Scale className="h-3 w-3" /> },
+    85→  department_update: { label: 'Dept Update', color: 'text-purple-700 dark:text-purple-400', bgColor: 'bg-purple-50 border-purple-200 dark:bg-purple-950/40 dark:border-purple-800', icon: <Landmark className="h-3 w-3" /> },
+    86→};
+    87→
+    88→const CATEGORY_FILTER_OPTIONS = [
+    89→  { key: 'all', label: 'All Categories' },
+    90→  { key: 'gst_rule', label: 'GST Rules' },
+    91→  { key: 'circular', label: 'Circulars' },
+    92→  { key: 'notification', label: 'Notifications' },
+    93→  { key: 'case_law', label: 'Case Laws' },
+    94→  { key: 'department_update', label: 'Department Updates' },
+    95→] as const;
+    96→
+    97→// ─── Default / Mock Data ──────────────────────────────────────────────────
+    98→const mockKnowledgeData: KnowledgeData = {
+    99→  stats: {
+   100→    totalEntries: 1284,
+   101→    gstRules: 432,
+   102→    circulars: 356,
+   103→    caseLaws: 218,
+   104→  },
+   105→  entries: [
+   106→    {
+   107→      id: 'k1',
+   108→      title: 'CGST Rule 36(4): ITC Claim Restriction on Unmatched Invoices',
+   109→      category: 'gst_rule',
+   110→      content: 'As per CGST Rule 36(4), inserted w.e.f. 09-Oct-2019, the input tax credit that can be claimed by a registered person in his GSTR-3B shall be restricted to the extent of eligible ITC available in his GSTR-2B. This effectively means that ITC can only be claimed for invoices that have been uploaded by the supplier in their GSTR-1 and are reflected in the recipient\'s GSTR-2B. Any ITC claimed in excess of GSTR-2B is liable to be reversed along with interest. The rule was further amended to provide that ITC shall be available as per GSTR-2B irrespective of the same being claimed in GSTR-3B, providing a self-correcting mechanism.',
+   111→      summary: 'ITC claims in GSTR-3B are restricted to the extent available in GSTR-2B. Excess claims are subject to reversal with interest.',
+   112→      referenceNumber: 'CGST Rule 36(4)',
+   113→      effectiveDate: '2019-10-09',
+   114→      tags: ['ITC', 'GSTR-2B', 'Rule 36', 'Input Tax Credit'],
+   115→      relevanceScore: 95,
+   116→      source: 'Central GST Rules',
+   117→      createdAt: '2024-01-15',
+   118→    },
+   119→    {
+   120→      id: 'k2',
+   121→      title: 'CBIC Circular 170/2022: Clarification on Refund of ITC',
+   122→      category: 'circular',
+   123→      content: 'CBIC Circular No. 170/02/2022-GST dated 26-Apr-2022 provides detailed clarification on various issues related to refund of Input Tax Credit under GST. The circular addresses scenarios including refund of accumulated ITC, refund on account of inverted duty structure, and the procedure for calculating the "adjusted total turnover" for refund purposes. It clarifies that the term "Net ITC" for refund computation should include only the ITC availed on inputs and input services, excluding capital goods ITC. The circular also provides guidance on the treatment of debit notes for refund calculations and the methodology for computing the refund amount under Rule 89(5).',
+   124→      summary: 'Clarifies ITC refund computation methodology including inverted duty structure refunds and adjusted total turnover calculation.',
+   125→      referenceNumber: 'Circular No. 170/02/2022-GST',
+   126→      effectiveDate: '2022-04-26',
+   127→      tags: ['Refund', 'ITC', 'Inverted Duty', 'Circular 170'],
+   128→      relevanceScore: 88,
+   129→      source: 'CBIC',
+   130→      createdAt: '2024-02-20',
+   131→    },
+   132→    {
+   133→      id: 'k3',
+   134→      title: 'Notification 13/2020: Extension of GST Return Filing Due Dates',
+   135→      category: 'notification',
+   136→      content: 'CBIC Notification No. 13/2020-Central Tax dated 23-March-2020 extended the due dates for filing various GST returns for the months of February 2020 and March 2020, and for the quarter ending March 2020. This notification was issued in the context of the COVID-19 pandemic and provided relief to taxpayers by extending the time limits for furnishing GSTR-3B, GSTR-1, and other returns. The extension ranged from 30 days to 90 days depending on the return type and the taxpayer category. The notification also extended the time limit for issuing notices, orders, and compliance-related activities under various provisions of the CGST Act.',
+   137→      summary: 'Extended due dates for GST return filing for Feb-Mar 2020 period due to COVID-19 pandemic relief measures.',
+   138→      referenceNumber: 'Notification No. 13/2020-CT',
+   139→      effectiveDate: '2020-03-23',
+   140→      tags: ['Due Date Extension', 'COVID-19', 'Filing', 'GSTR-3B'],
+   141→      relevanceScore: 72,
+   142→      source: 'CBIC',
+   143→      createdAt: '2024-03-10',
+   144→    },
+   145→    {
+   146→      id: 'k4',
+   147→      title: 'VKC Footwear India Pvt Ltd vs CCE: ITC Eligibility on Capital Goods',
+   148→      category: 'case_law',
+   149→      content: 'In the case of VKC Footwear India Pvt Ltd vs Commissioner of Central Excise & Service Tax (2019), the Madras High Court held that Input Tax Credit on capital goods used for manufacturing taxable goods cannot be denied merely on the ground of delayed filing of returns, provided the goods have been received and used in the business. The court emphasized that the right to claim ITC is a statutory right and cannot be taken away on procedural grounds alone. The court distinguished between the right to claim ITC and the procedural requirement of filing returns, holding that the latter is directory and not mandatory in nature. This judgment has significant implications for ITC claims where returns have been filed belatedly.',
+   150→      summary: 'HC held that ITC on capital goods cannot be denied solely due to delayed return filing, as ITC is a statutory right.',
+   151→      referenceNumber: '2019 (26) GSTL 337 (Mad.)',
+   152→      effectiveDate: '2019-08-14',
+   153→      tags: ['ITC', 'Capital Goods', 'Case Law', 'Madras HC', 'Delayed Filing'],
+   154→      relevanceScore: 82,
+   155→      source: 'Madras High Court',
+   156→      createdAt: '2024-04-05',
+   157→    },
+   158→    {
+   159→      id: 'k5',
+   160→      title: 'CBIC Advisory: E-Invoice Generation for B2B Transactions',
+   161→      category: 'department_update',
+   162→      content: 'CBIC has issued an advisory regarding the mandatory generation of e-invoices for B2B transactions for taxpayers with aggregate turnover exceeding ₹5 crore in any of the preceding financial years from 2017-18 onwards. The e-invoice must be generated on the IRN portal within the prescribed time limit. For invoices issued in the current financial year, the time limit is 30 days from the date of invoice. For credit/debit notes, the same time limit applies. Failure to generate e-invoices within the prescribed time may attract penalties under Section 122 of the CGST Act. The advisory also clarifies the process for canceling e-invoices and the treatment of invoices issued in multiple modes.',
+   163→      summary: 'E-invoice mandatory for B2B transactions for taxpayers with turnover > ₹5Cr. 30-day generation window applies.',
+   164→      effectiveDate: '2025-01-01',
+   165→      tags: ['E-Invoice', 'B2B', 'IRN', 'Turnover Threshold'],
+   166→      relevanceScore: 91,
+   167→      source: 'CBIC Advisory',
+   168→      createdAt: '2025-01-10',
+   169→    },
+   170→    {
+   171→      id: 'k6',
+   172→      title: 'CGST Rule 46: Tax Invoice Requirements and Mandatory Fields',
+   173→      category: 'gst_rule',
+   174→      content: 'CGST Rule 46 prescribes the mandatory fields that must be included in a tax invoice issued by a registered person under GST. These include: (a) name, address, and GSTIN of the supplier, (b) name, address, and GSTIN/UID of the recipient (if registered), (c) name and address of the recipient and address of delivery along with State name (for unregistered recipients in inter-state supply), (d) HSN code of goods or SAC code of services, (e) description of goods or services, (f) quantity and unit of measurement, (g) total value, (h) taxable value, (i) rate of tax (CGST, SGST, IGST), (j) amount of tax charged, (k) total invoice value, (l) place of supply, (m) whether reverse charge applies, (n) signature or digital signature of the supplier. Non-compliance may render the invoice invalid for ITC purposes.',
+   175→      summary: 'Specifies all mandatory fields for a valid GST tax invoice. Non-compliant invoices may be rejected for ITC claims.',
+   176→      referenceNumber: 'CGST Rule 46',
+   177→      effectiveDate: '2017-07-01',
+   178→      tags: ['Invoice', 'Rule 46', 'Tax Invoice', 'HSN', 'Mandatory Fields'],
+   179→      relevanceScore: 93,
+   180→      source: 'Central GST Rules',
+   181→      createdAt: '2024-01-05',
+   182→    },
+   183→    {
+   184→      id: 'k7',
+   185→      title: 'Circular 183/2023: Procedure for Filing Refund Claims on Unutilized ITC',
+   186→      category: 'circular',
+   187→      content: 'CBIC Circular No. 183/15/2022-GST provides the detailed procedure for filing and processing refund claims of unutilized Input Tax Credit under Section 54(3) of the CGST Act. The circular outlines the documentation requirements, the format of the application (RFD-01), and the timeline for processing refund claims. It also addresses the issue of provisional attachment of bank accounts during refund processing and provides safeguards to prevent misuse. The circular emphasizes that the jurisdictional officer must process refund applications within 60 days from the date of receipt of a complete application, failing which interest becomes payable to the applicant.',
+   188→      summary: 'Details the RFD-01 filing procedure for unutilized ITC refunds with 60-day processing timeline and safeguards.',
+   189→      referenceNumber: 'Circular No. 183/15/2022-GST',
+   190→      effectiveDate: '2022-12-27',
+   191→      tags: ['Refund', 'Unutilized ITC', 'RFD-01', 'Section 54'],
+   192→      relevanceScore: 79,
+   193→      source: 'CBIC',
+   194→      createdAt: '2024-05-15',
+   195→    },
+   196→    {
+   197→      id: 'k8',
+   198→      title: 'Bosch Ltd vs CTT: Classification Dispute on Automotive Components',
+   199→      category: 'case_law',
+   200→      content: 'In Bosch Ltd vs Commissioner of Central Tax, Thane (2023), the Mumbai CESTAT held that classification of automotive components must be determined based on their primary function and not merely on the basis of the end-use in the automotive industry. The tribunal applied the principle of noscitur a sociis and held that components that serve a dual purpose must be classified under the heading that describes their essential character. This decision has implications for HSN classification disputes where products can potentially fall under multiple tariff headings.',
+   201→      summary: 'CESTAT ruled that automotive component HSN classification should follow primary function, not end-use. Essential character test applies.',
+   202→      referenceNumber: '2023 (12) TMI 1025 - CESTAT MUMBAI',
+   203→      effectiveDate: '2023-10-18',
+   204→      tags: ['HSN Classification', 'CESTAT', 'Automotive', 'Essential Character'],
+   205→      relevanceScore: 68,
+   206→      source: 'Mumbai CESTAT',
+   207→      createdAt: '2024-06-20',
+   208→    },
+   209→  ],
+   210→};
+   211→
+   212→// ─── Animated Card Wrapper ────────────────────────────────────────────────
+   213→function AnimatedCard({
+   214→  children,
+   215→  delay = 0,
+   216→  className = '',
+   217→}: {
+   218→  children: React.ReactNode;
+   219→  delay?: number;
+   220→  className?: string;
+   221→}) {
+   222→  return (
+   223→    <motion.div
+   224→      initial={{ opacity: 0, y: 20 }}
+   225→      animate={{ opacity: 1, y: 0 }}
+   226→      transition={{ delay, duration: 0.5, ease: 'easeOut' }}
+   227→    >
+   228→      <Card className={`hover:shadow-lg hover:shadow-emerald-500/5 transition-all duration-300 border-border/50 backdrop-blur-sm bg-card/80 ${className}`}>
+   229→        {children}
+   230→      </Card>
+   231→    </motion.div>
+   232→  );
+   233→}
+   234→
+   235→// ─── Relevance Score Bar ──────────────────────────────────────────────────
+   236→function RelevanceBar({ score }: { score: number }) {
+   237→  const getColor = (s: number) => {
+   238→    if (s >= 85) return 'bg-emerald-500';
+   239→    if (s >= 70) return 'bg-teal-500';
+   240→    if (s >= 50) return 'bg-amber-500';
+   241→    return 'bg-slate-400';
+   242→  };
+   243→
+   244→  return (
+   245→    <div className="flex items-center gap-2">
+   246→      <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider shrink-0">
+   247→        Relevance
+   248→      </span>
+   249→      <div className="h-1.5 w-16 rounded-full bg-muted/30 overflow-hidden">
+   250→        <motion.div
+   251→          className={`h-full rounded-full ${getColor(score)}`}
+   252→          initial={{ width: 0 }}
+   253→          animate={{ width: `${score}%` }}
+   254→          transition={{ duration: 0.8, delay: 0.3, ease: 'easeOut' }}
+   255→        />
+   256→      </div>
+   257→      <span className="text-[10px] font-bold text-foreground">{score}%</span>
+   258→    </div>
+   259→  );
+   260→}
+   261→
+   262→// ─── Skeletons ────────────────────────────────────────────────────────────
+   263→function StatsSkeleton() {
+   264→  return (
+   265→    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+   266→      {[1, 2, 3, 4].map((i) => (
+   267→        <Card key={i} className="border-border/50">
+   268→          <CardContent className="p-6">
+   269→            <div className="flex items-center gap-3">
+   270→              <Skeleton className="h-10 w-10 rounded-xl" />
+   271→              <div className="space-y-2">
+   272→                <Skeleton className="h-3 w-16" />
+   273→                <Skeleton className="h-6 w-12" />
+   274→              </div>
+   275→            </div>
+   276→          </CardContent>
+   277→        </Card>
+   278→      ))}
+   279→    </div>
+   280→  );
+   281→}
+   282→
+   283→function EntrySkeleton() {
+   284→  return (
+   285→    <div className="space-y-3">
+   286→      {Array.from({ length: 4 }).map((_, i) => (
+   287→        <div key={i} className="p-4 rounded-xl border border-border/30">
+   288→          <div className="flex items-center gap-3 mb-3">
+   289→            <Skeleton className="h-5 w-20 rounded-full" />
+   290→            <Skeleton className="h-4 w-3/4" />
+   291→          </div>
+   292→          <Skeleton className="h-3 w-full mb-2" />
+   293→          <Skeleton className="h-3 w-2/3 mb-3" />
+   294→          <div className="flex gap-2">
+   295→            <Skeleton className="h-5 w-12 rounded-full" />
+   296→            <Skeleton className="h-5 w-14 rounded-full" />
+   297→            <Skeleton className="h-5 w-16 rounded-full" />
+   298→          </div>
+   299→        </div>
+   300→      ))}
+   301→    </div>
+   302→  );
+   303→}
+   304→
+   305→// ═══════════════════════════════════════════════════════════════════════════
+   306→// MAIN COMPONENT
+   307→// ═══════════════════════════════════════════════════════════════════════════
+   308→export default function AIKnowledgeCenterPage() {
+   309→  const [data, setData] = useState<KnowledgeData>(mockKnowledgeData);
+   310→  const [loading, setLoading] = useState(true);
+   311→  const [error, setError] = useState<string | null>(null);
+   312→  const [searchQuery, setSearchQuery] = useState('');
+   313→  const [categoryFilter, setCategoryFilter] = useState<string>('all');
+   314→  const [expandedEntryId, setExpandedEntryId] = useState<string | null>(null);
+   315→  const [addDialogOpen, setAddDialogOpen] = useState(false);
+   316→
+   317→  // Add entry form state
+   318→  const [formTitle, setFormTitle] = useState('');
+   319→  const [formCategory, setFormCategory] = useState<KnowledgeCategory>('gst_rule');
+   320→  const [formContent, setFormContent] = useState('');
+   321→  const [formSummary, setFormSummary] = useState('');
+   322→  const [formTags, setFormTags] = useState('');
+   323→  const [formSource, setFormSource] = useState('');
+   324→  const [formEffectiveDate, setFormEffectiveDate] = useState('');
+   325→  const [formReferenceNumber, setFormReferenceNumber] = useState('');
+   326→
+   327→  // ── Fetch data ──────────────────────────────────────────────────────────
+   328→  const fetchData = useCallback(async () => {
+   329→    try {
+   330→      setLoading(true);
+   331→      setError(null);
+   332→      const res = await fetch('/api/ai-knowledge');
+   333→      if (res.ok) {
+   334→        const json = await res.json();
+   335→        if (json.entries && json.entries.length > 0) {
+   336→          setData(json);
+   337→        } else {
+   338→          setData(mockKnowledgeData);
+   339→        }
+   340→      } else {
+   341→        setData(mockKnowledgeData);
+   342→      }
+   343→    } catch (err) {
+   344→      console.error('AI Knowledge fetch error:', err);
+   345→      setData(mockKnowledgeData);
+   346→    } finally {
+   347→      setLoading(false);
+   348→    }
+   349→  }, []);
+   350→
+   351→  useEffect(() => {
+   352→    fetchData();
+   353→  }, [fetchData]);
+   354→
+   355→  // ── Filtered entries ────────────────────────────────────────────────────
+   356→  const filteredEntries = data.entries.filter((entry) => {
+   357→    const matchesCategory = categoryFilter === 'all' || entry.category === categoryFilter;
+   358→    if (!matchesCategory) return false;
+   359→    if (!searchQuery.trim()) return true;
+   360→    const q = searchQuery.toLowerCase();
+   361→    return (
+   362→      entry.title.toLowerCase().includes(q) ||
+   363→      entry.summary.toLowerCase().includes(q) ||
+   364→      entry.content.toLowerCase().includes(q) ||
+   365→      entry.tags.some((tag) => tag.toLowerCase().includes(q)) ||
+   366→      (entry.referenceNumber ?? '').toLowerCase().includes(q)
+   367→    );
+   368→  });
+   369→
+   370→  // ── Toggle expand ───────────────────────────────────────────────────────
+   371→  function toggleExpand(entryId: string) {
+   372→    setExpandedEntryId((prev) => (prev === entryId ? null : entryId));
+   373→  }
+   374→
+   375→  // ── Format date ─────────────────────────────────────────────────────────
+   376→  function formatDate(dateStr: string): string {
+   377→    const d = new Date(dateStr);
+   378→    return d.toLocaleDateString('en-IN', {
+   379→      day: 'numeric',
+   380→      month: 'short',
+   381→      year: 'numeric',
+   382→    });
+   383→  }
+   384→
+   385→  // ── Handle add entry ────────────────────────────────────────────────────
+   386→  function handleAddEntry() {
+   387→    if (!formTitle.trim() || !formContent.trim()) return;
+   388→
+   389→    const newEntry: KnowledgeEntry = {
+   390→      id: `k${Date.now()}`,
+   391→      title: formTitle.trim(),
+   392→      category: formCategory,
+   393→      content: formContent.trim(),
+   394→      summary: formSummary.trim() || formContent.trim().slice(0, 120) + '...',
+   395→      referenceNumber: formReferenceNumber.trim() || undefined,
+   396→      effectiveDate: formEffectiveDate || undefined,
+   397→      tags: formTags
+   398→        .split(',')
+   399→        .map((t) => t.trim())
+   400→        .filter(Boolean),
+   401→      relevanceScore: 75,
+   402→      source: formSource.trim() || undefined,
+   403→      createdAt: new Date().toISOString().split('T')[0],
+   404→    };
+   405→
+   406→    setData((prev) => ({
+   407→      ...prev,
+   408→      entries: [newEntry, ...prev.entries],
+   409→      stats: {
+   410→        ...prev.stats,
+   411→        totalEntries: prev.stats.totalEntries + 1,
+   412→        gstRules: prev.stats.gstRules + (formCategory === 'gst_rule' ? 1 : 0),
+   413→        circulars: prev.stats.circulars + (formCategory === 'circular' ? 1 : 0),
+   414→        caseLaws: prev.stats.caseLaws + (formCategory === 'case_law' ? 1 : 0),
+   415→      },
+   416→    }));
+   417→
+   418→    // Reset form
+   419→    setFormTitle('');
+   420→    setFormCategory('gst_rule');
+   421→    setFormContent('');
+   422→    setFormSummary('');
+   423→    setFormTags('');
+   424→    setFormSource('');
+   425→    setFormEffectiveDate('');
+   426→    setFormReferenceNumber('');
+   427→    setAddDialogOpen(false);
+   428→  }
+   429→
+   430→  // ── Render ──────────────────────────────────────────────────────────────
+   431→  return (
+   432→    <div className="p-4 md:p-6 space-y-4">
+   433→      {/* ═══ PAGE HEADER ═══ */}
+   434→      <motion.div
+   435→        initial={{ opacity: 0, y: -10 }}
+   436→        animate={{ opacity: 1, y: 0 }}
+   437→        transition={{ duration: 0.4 }}
+   438→        className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
+   439→      >
+   440→        <div className="flex items-center gap-3">
+   441→          <div className="flex items-center justify-center h-10 w-10 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800">
+   442→            <BookOpen className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+   443→          </div>
+   444→          <div>
+   445→            <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground">
+   446→              AI Knowledge Center
+   447→            </h1>
+   448→            <p className="text-sm text-muted-foreground mt-0.5">
+   449→              GST rules, circulars, and case law database
+   450→            </p>
+   451→          </div>
+   452→        </div>
+   453→        <div className="flex items-center gap-2">
+   454→          <Badge
+   455→            variant="outline"
+   456→            className="gap-1.5 px-3 py-1.5 border-emerald-200 text-emerald-700 bg-emerald-50/80 dark:border-emerald-800 dark:text-emerald-400 dark:bg-emerald-950/40 font-medium"
+   457→          >
+   458→            <Sparkles className="h-3.5 w-3.5" />
+   459→            AI Powered
+   460→          </Badge>
+   461→          <Button
+   462→            size="sm"
+   463→            onClick={() => setAddDialogOpen(true)}
+   464→            className="gap-1.5 h-8 bg-emerald-600 hover:bg-emerald-700 text-white text-xs"
+   465→          >
+   466→            <Plus className="h-3.5 w-3.5" />
+   467→            Add Entry
+   468→          </Button>
+   469→        </div>
+   470→      </motion.div>
+   471→
+   472→      {/* ═══ SEARCH BAR ═══ */}
+   473→      <AnimatedCard delay={0.05}>
+   474→        <CardContent className="p-4">
+   475→          <div className="flex flex-col sm:flex-row gap-3">
+   476→            <div className="relative flex-1">
+   477→              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+   478→              <Input
+   479→                placeholder="Search GST rules, circulars, case laws, notifications..."
+   480→                value={searchQuery}
+   481→                onChange={(e) => setSearchQuery(e.target.value)}
+   482→                className="pl-9 h-10 text-sm"
+   483→              />
+   484→            </div>
+   485→            <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+   486→              <SelectTrigger className="w-full sm:w-[200px] h-10">
+   487→                <SelectValue placeholder="Category" />
+   488→              </SelectTrigger>
+   489→              <SelectContent>
+   490→                {CATEGORY_FILTER_OPTIONS.map((opt) => (
+   491→                  <SelectItem key={opt.key} value={opt.key}>
+   492→                    {opt.label}
+   493→                  </SelectItem>
+   494→                ))}
+   495→              </SelectContent>
+   496→            </Select>
+   497→          </div>
+   498→        </CardContent>
+   499→      </AnimatedCard>
+   500→
+   501→      {/* ═══ KNOWLEDGE STATS ROW ═══ */}
+   502→      {loading ? (
+   503→        <StatsSkeleton />
+   504→      ) : (
+   505→        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+   506→          <AnimatedCard delay={0.1}>
+   507→            <CardContent className="p-4 md:p-6">
+   508→              <div className="flex items-center gap-3">
+   509→                <div className="flex items-center justify-center h-10 w-10 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-100 dark:border-emerald-900/50">
+   510→                  <BookOpen className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+   511→                </div>
+   512→                <div>
+   513→                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Total Entries</p>
+   514→                  <p className="text-2xl font-bold text-foreground">{formatNumber(data.stats.totalEntries)}</p>
+   515→                </div>
+   516→              </div>
+   517→            </CardContent>
+   518→          </AnimatedCard>
+   519→
+   520→          <AnimatedCard delay={0.13}>
+   521→            <CardContent className="p-4 md:p-6">
+   522→              <div className="flex items-center gap-3">
+   523→                <div className="flex items-center justify-center h-10 w-10 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-100 dark:border-emerald-900/50">
+   524→                  <FileText className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+   525→                </div>
+   526→                <div>
+   527→                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">GST Rules</p>
+   528→                  <p className="text-2xl font-bold text-foreground">{formatNumber(data.stats.gstRules)}</p>
+   529→                </div>
+   530→              </div>
+   531→            </CardContent>
+   532→          </AnimatedCard>
+   533→
+   534→          <AnimatedCard delay={0.16}>
+   535→            <CardContent className="p-4 md:p-6">
+   536→              <div className="flex items-center gap-3">
+   537→                <div className="flex items-center justify-center h-10 w-10 rounded-xl bg-teal-50 dark:bg-teal-950/30 border border-teal-100 dark:border-teal-900/50">
+   538→                  <Bell className="h-5 w-5 text-teal-600 dark:text-teal-400" />
+   539→                </div>
+   540→                <div>
+   541→                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Circulars</p>
+   542→                  <p className="text-2xl font-bold text-foreground">{formatNumber(data.stats.circulars)}</p>
+   543→                </div>
+   544→              </div>
+   545→            </CardContent>
+   546→          </AnimatedCard>
+   547→
+   548→          <AnimatedCard delay={0.19}>
+   549→            <CardContent className="p-4 md:p-6">
+   550→              <div className="flex items-center gap-3">
+   551→                <div className="flex items-center justify-center h-10 w-10 rounded-xl bg-orange-50 dark:bg-orange-950/30 border border-orange-100 dark:border-orange-900/50">
+   552→                  <Scale className="h-5 w-5 text-orange-600 dark:text-orange-400" />
+   553→                </div>
+   554→                <div>
+   555→                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Case Laws</p>
+   556→                  <p className="text-2xl font-bold text-foreground">{formatNumber(data.stats.caseLaws)}</p>
+   557→                </div>
+   558→              </div>
+   559→            </CardContent>
+   560→          </AnimatedCard>
+   561→        </div>
+   562→      )}
+   563→
+   564→      {/* ═══ ERROR STATE ═══ */}
+   565→      {error && !loading && (
+   566→        <div className="p-4 rounded-xl bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 text-sm flex items-center gap-2">
+   567→          <AlertCircle className="h-4 w-4 shrink-0" />
+   568→          {error}
+   569→        </div>
+   570→      )}
+   571→
+   572→      {/* ═══ KNOWLEDGE ENTRY LIST ═══ */}
+   573→      <AnimatedCard delay={0.22}>
+   574→        <CardHeader className="pb-2">
+   575→          <div className="flex items-center justify-between">
+   576→            <CardTitle className="flex items-center gap-2 text-base">
+   577→              <BarChart3 className="h-5 w-5 text-emerald-500" />
+   578→              Knowledge Base
+   579→              <Badge
+   580→                variant="outline"
+   581→                className="text-[10px] px-2 py-0.5 border-emerald-200 text-emerald-700 bg-emerald-50/80 dark:border-emerald-800 dark:text-emerald-400 dark:bg-emerald-950/40"
+   582→              >
+   583→                {formatNumber(filteredEntries.length)} entries
+   584→              </Badge>
+   585→            </CardTitle>
+   586→          </div>
+   587→          <CardDescription>
+   588→            {searchQuery
+   589→              ? `Search results for "${searchQuery}"`
+   590→              : categoryFilter !== 'all'
+   591→                ? `Filtered by ${CATEGORY_FILTER_OPTIONS.find((o) => o.key === categoryFilter)?.label}`
+   592→                : 'Browse all GST knowledge entries'}
+   593→          </CardDescription>
+   594→        </CardHeader>
+   595→        <CardContent>
+   596→          {loading ? (
+   597→            <EntrySkeleton />
+   598→          ) : filteredEntries.length === 0 ? (
+   599→            <div className="py-12 text-center text-muted-foreground text-sm">
+   600→              No knowledge entries found matching your search criteria.
+   601→            </div>
+   602→          ) : (
+   603→            <ScrollArea className="max-h-[700px]">
+   604→              <div className="space-y-2 pr-2">
+   605→                <AnimatePresence>
+   606→                  {filteredEntries.map((entry, index) => {
+   607→                    const isExpanded = expandedEntryId === entry.id;
+   608→                    const catConfig = CATEGORY_CONFIG[entry.category];
+   609→
+   610→                    return (
+   611→                      <motion.div
+   612→                        key={entry.id}
+   613→                        initial={{ opacity: 0, y: 10 }}
+   614→                        animate={{ opacity: 1, y: 0 }}
+   615→                        transition={{ delay: index * 0.04, duration: 0.4 }}
+   616→                        className="p-4 rounded-xl border border-border/30 hover:border-emerald-200/50 dark:hover:border-emerald-800/50 transition-all group"
+   617→                      >
+   618→                        {/* Entry Header */}
+   619→                        <div className="flex items-start gap-3 cursor-pointer" onClick={() => toggleExpand(entry.id)}>
+   620→                          <Badge
+   621→                            variant="outline"
+   622→                            className={`gap-1 px-2 py-1 text-[10px] font-semibold border shrink-0 mt-0.5 ${catConfig.bgColor} ${catConfig.color}`}
+   623→                          >
+   624→                            {catConfig.icon}
+   625→                            {catConfig.label}
+   626→                          </Badge>
+   627→
+   628→                          <div className="flex-1 min-w-0">
+   629→                            <div className="flex items-center gap-2">
+   630→                              <h3 className="text-sm font-semibold text-foreground leading-snug">
+   631→                                {entry.title}
+   632→                              </h3>
+   633→                              {isExpanded ? (
+   634→                                <ChevronUp className="h-4 w-4 text-muted-foreground shrink-0" />
+   635→                              ) : (
+   636→                                <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
+   637→                              )}
+   638→                            </div>
+   639→
+   640→                            {/* Summary (always visible) */}
+   641→                            <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+   642→                              {entry.summary}
+   643→                            </p>
+   644→
+   645→                            {/* Meta row */}
+   646→                            <div className="flex flex-wrap items-center gap-3 mt-2">
+   647→                              {entry.referenceNumber && (
+   648→                                <span className="text-[10px] font-mono font-medium text-emerald-600 dark:text-emerald-400 bg-emerald-50/50 dark:bg-emerald-950/30 px-1.5 py-0.5 rounded">
+   649→                                  {entry.referenceNumber}
+   650→                                </span>
+   651→                              )}
+   652→                              {entry.effectiveDate && (
+   653→                                <span className="text-[10px] text-muted-foreground flex items-center gap-1">
+   654→                                  <Calendar className="h-3 w-3" />
+   655→                                  {formatDate(entry.effectiveDate)}
+   656→                                </span>
+   657→                              )}
+   658→                              <RelevanceBar score={entry.relevanceScore} />
+   659→                            </div>
+   660→
+   661→                            {/* Tags */}
+   662→                            <div className="flex flex-wrap gap-1 mt-2">
+   663→                              {entry.tags.slice(0, isExpanded ? undefined : 4).map((tag) => (
+   664→                                <Badge
+   665→                                  key={tag}
+   666→                                  variant="outline"
+   667→                                  className="px-1.5 py-0 text-[9px] font-medium border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 bg-slate-50/50 dark:bg-slate-950/30"
+   668→                                >
+   669→                                  <Tag className="h-2.5 w-2.5 mr-0.5" />
+   670→                                  {tag}
+   671→                                </Badge>
+   672→                              ))}
+   673→                              {!isExpanded && entry.tags.length > 4 && (
+   674→                                <span className="text-[9px] text-muted-foreground ml-1">
+   675→                                  +{entry.tags.length - 4} more
+   676→                                </span>
+   677→                              )}
+   678→                            </div>
+   679→                          </div>
+   680→                        </div>
+   681→
+   682→                        {/* Expanded Content */}
+   683→                        <AnimatePresence>
+   684→                          {isExpanded && (
+   685→                            <motion.div
+   686→                              initial={{ opacity: 0, height: 0 }}
+   687→                              animate={{ opacity: 1, height: 'auto' }}
+   688→                              exit={{ opacity: 0, height: 0 }}
+   689→                              transition={{ duration: 0.3 }}
+   690→                              className="overflow-hidden"
+   691→                            >
+   692→                              <div className="mt-3 pt-3 border-t border-border/30">
+   693→                                <p className="text-xs text-foreground leading-relaxed whitespace-pre-line">
+   694→                                  {entry.content}
+   695→                                </p>
+   696→                                {entry.source && (
+   697→                                  <p className="text-[10px] text-muted-foreground mt-3">
+   698→                                    Source: {entry.source}
+   699→                                  </p>
+   700→                                )}
+   701→                              </div>
+   702→                            </motion.div>
+   703→                          )}
+   704→                        </AnimatePresence>
+   705→                      </motion.div>
+   706→                    );
+   707→                  })}
+   708→                </AnimatePresence>
+   709→              </div>
+   710→            </ScrollArea>
+   711→          )}
+   712→        </CardContent>
+   713→      </AnimatedCard>
+   714→
+   715→      {/* ═══ ADD ENTRY DIALOG ═══ */}
+   716→      <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
+   717→        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+   718→          <DialogHeader>
+   719→            <DialogTitle className="flex items-center gap-2">
+   720→              <BookOpen className="h-5 w-5 text-emerald-500" />
+   721→              Add Knowledge Entry
+   722→            </DialogTitle>
+   723→            <DialogDescription>
+   724→              Add a new entry to the AI Knowledge Center
+   725→            </DialogDescription>
+   726→          </DialogHeader>
+   727→
+   728→          <div className="space-y-4">
+   729→            {/* Title */}
+   730→            <div className="space-y-1.5">
+   731→              <Label className="text-xs font-medium">Title *</Label>
+   732→              <Input
+   733→                placeholder="Entry title..."
+   734→                value={formTitle}
+   735→                onChange={(e) => setFormTitle(e.target.value)}
+   736→              />
+   737→            </div>
+   738→
+   739→            {/* Category */}
+   740→            <div className="space-y-1.5">
+   741→              <Label className="text-xs font-medium">Category</Label>
+   742→              <Select value={formCategory} onValueChange={(v) => setFormCategory(v as KnowledgeCategory)}>
+   743→                <SelectTrigger>
+   744→                  <SelectValue />
+   745→                </SelectTrigger>
+   746→                <SelectContent>
+   747→                  {Object.entries(CATEGORY_CONFIG).map(([key, cfg]) => (
+   748→                    <SelectItem key={key} value={key}>
+   749→                      {cfg.label}
+   750→                    </SelectItem>
+   751→                  ))}
+   752→                </SelectContent>
+   753→              </Select>
+   754→            </div>
+   755→
+   756→            {/* Content */}
+   757→            <div className="space-y-1.5">
+   758→              <Label className="text-xs font-medium">Content *</Label>
+   759→              <Textarea
+   760→                placeholder="Full knowledge content..."
+   761→                value={formContent}
+   762→                onChange={(e) => setFormContent(e.target.value)}
+   763→                className="min-h-[120px]"
+   764→              />
+   765→            </div>
+   766→
+   767→            {/* Summary */}
+   768→            <div className="space-y-1.5">
+   769→              <Label className="text-xs font-medium">Summary</Label>
+   770→              <Textarea
+   771→                placeholder="Brief summary (auto-generated from content if empty)..."
+   772→                value={formSummary}
+   773→                onChange={(e) => setFormSummary(e.target.value)}
+   774→                className="min-h-[60px]"
+   775→              />
+   776→            </div>
+   777→
+   778→            {/* Tags */}
+   779→            <div className="space-y-1.5">
+   780→              <Label className="text-xs font-medium">Tags (comma separated)</Label>
+   781→              <Input
+   782→                placeholder="ITC, Refund, GSTR-2B..."
+   783→                value={formTags}
+   784→                onChange={(e) => setFormTags(e.target.value)}
+   785→              />
+   786→            </div>
+   787→
+   788→            {/* Source + Effective Date */}
+   789→            <div className="grid grid-cols-2 gap-3">
+   790→              <div className="space-y-1.5">
+   791→                <Label className="text-xs font-medium">Source</Label>
+   792→                <Input
+   793→                  placeholder="CBIC, HC, etc."
+   794→                  value={formSource}
+   795→                  onChange={(e) => setFormSource(e.target.value)}
+   796→                />
+   797→              </div>
+   798→              <div className="space-y-1.5">
+   799→                <Label className="text-xs font-medium">Effective Date</Label>
+   800→                <Input
+   801→                  type="date"
+   802→                  value={formEffectiveDate}
+   803→                  onChange={(e) => setFormEffectiveDate(e.target.value)}
+   804→                />
+   805→              </div>
+   806→            </div>
+   807→
+   808→            {/* Reference Number */}
+   809→            <div className="space-y-1.5">
+   810→              <Label className="text-xs font-medium">Reference Number</Label>
+   811→              <Input
+   812→                placeholder="CGST Rule 36(4), Circular No. 170..."
+   813→                value={formReferenceNumber}
+   814→                onChange={(e) => setFormReferenceNumber(e.target.value)}
+   815→              />
+   816→            </div>
+   817→          </div>
+   818→
+   819→          <DialogFooter className="mt-4">
+   820→            <Button
+   821→              variant="outline"
+   822→              onClick={() => setAddDialogOpen(false)}
+   823→              className="border-border"
+   824→            >
+   825→              Cancel
+   826→            </Button>
+   827→            <Button
+   828→              onClick={handleAddEntry}
+   829→              disabled={!formTitle.trim() || !formContent.trim()}
+   830→              className="bg-emerald-600 hover:bg-emerald-700 text-white"
+   831→            >
+   832→              Add Entry
+   833→            </Button>
+   834→          </DialogFooter>
+   835→        </DialogContent>
+   836→      </Dialog>
+   837→    </div>
+   838→  );
+   839→}
+   840→

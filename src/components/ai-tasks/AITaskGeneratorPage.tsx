@@ -51,6 +51,8 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { formatNumber } from '@/lib/gst-utils';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { EmptyState } from '@/components/shared/EmptyState';
+import { Inbox, Users as UsersIcon } from 'lucide-react';
 
 // ─── Types ────────────────────────────────────────────────────────────────
 type TaskSourceType = 'notice' | 'risk_alert' | 'missing_document' | 'pending_reconciliation' | 'pending_approval';
@@ -118,66 +120,6 @@ const FILTER_TABS = [
   { key: 'pending_reconciliation', label: 'Pending Reconciliations' },
   { key: 'pending_approval', label: 'Pending Approvals' },
 ] as const;
-
-// ─── Default / Mock Data ──────────────────────────────────────────────────
-const mockTeamMembers: TeamMember[] = [
-  { id: 'tm1', name: 'Rajesh Sharma' },
-  { id: 'tm2', name: 'Priya Patel' },
-  { id: 'tm3', name: 'Amit Desai' },
-  { id: 'tm4', name: 'Sneha Iyer' },
-];
-
-const mockClients: ClientOption[] = [
-  { id: '1', tradeName: 'TechVista Solutions Pvt Ltd' },
-  { id: '2', tradeName: 'Maharashtra Traders Corp' },
-  { id: '3', tradeName: 'GreenLeaf Exports Ltd' },
-  { id: '4', tradeName: 'Sunrise Retail Chain' },
-  { id: '5', tradeName: 'Pinnacle Infrastructure Pvt Ltd' },
-  { id: '6', tradeName: 'Digital Dreams Software' },
-];
-
-const mockTasks: AITask[] = [
-  {
-    id: 't1', sourceType: 'notice', title: 'Respond to GST Show Cause Notice', description: 'Show cause notice received for ITC discrepancy in Q3 FY24-25. Draft response needed within 15 days.',
-    clientName: 'GreenLeaf Exports Ltd', clientId: '3', priority: 'urgent', dueDate: '2026-03-10', status: 'pending', autoAssigned: true, assignedTo: 'Rajesh Sharma', createdAt: '2026-02-25',
-  },
-  {
-    id: 't2', sourceType: 'risk_alert', title: 'Review High-Value ITC Claims', description: 'ITC claims exceeding ₹10L detected — verify supplier GSTIN validity before filing.',
-    clientName: 'Pinnacle Infrastructure Pvt Ltd', clientId: '5', priority: 'high', dueDate: '2026-03-12', status: 'in_progress', autoAssigned: true, assignedTo: 'Priya Patel', createdAt: '2026-02-26',
-  },
-  {
-    id: 't3', sourceType: 'missing_document', title: 'Upload Missing Purchase Invoices', description: '23 purchase invoices from Q3 are not yet uploaded to the system. Reconciliation blocked.',
-    clientName: 'Maharashtra Traders Corp', clientId: '2', priority: 'medium', dueDate: '2026-03-15', status: 'pending', autoAssigned: false, assignedTo: 'Amit Desai', createdAt: '2026-02-27',
-  },
-  {
-    id: 't4', sourceType: 'pending_reconciliation', title: 'Complete GSTR-2B Reconciliation', description: 'Auto-reconciliation flagged 14 mismatches for February period. Manual review required.',
-    clientName: 'TechVista Solutions Pvt Ltd', clientId: '1', priority: 'high', dueDate: '2026-03-08', status: 'in_progress', autoAssigned: true, assignedTo: 'Sneha Iyer', createdAt: '2026-02-28',
-  },
-  {
-    id: 't5', sourceType: 'pending_approval', title: 'Approve GSTR-1 Filing for February', description: 'GSTR-1 JSON generated and validated. Awaiting final approval before submission.',
-    clientName: 'Sunrise Retail Chain', clientId: '4', priority: 'medium', dueDate: '2026-03-07', status: 'pending', autoAssigned: false, assignedTo: 'Rajesh Sharma', createdAt: '2026-03-01',
-  },
-  {
-    id: 't6', sourceType: 'risk_alert', title: 'Investigate Duplicate ITC Claim', description: 'Potential duplicate ITC claim of ₹3.2L detected across two return periods. Verify and rectify.',
-    clientName: 'Maharashtra Traders Corp', clientId: '2', priority: 'urgent', dueDate: '2026-03-05', status: 'pending', autoAssigned: true, assignedTo: 'Priya Patel', createdAt: '2026-03-01',
-  },
-  {
-    id: 't7', sourceType: 'notice', title: 'File Response to GST Assessment Order', description: 'Assessment order for FY 2023-24 received. Response must be filed within 30 days.',
-    clientName: 'Pinnacle Infrastructure Pvt Ltd', clientId: '5', priority: 'high', dueDate: '2026-03-20', status: 'pending', autoAssigned: false, assignedTo: 'Amit Desai', createdAt: '2026-02-20',
-  },
-  {
-    id: 't8', sourceType: 'missing_document', title: 'Collect Pending E-Way Bills', description: '8 e-way bills for inter-state movement are missing from records. Coordinate with logistics.',
-    clientName: 'GreenLeaf Exports Ltd', clientId: '3', priority: 'low', dueDate: '2026-03-25', status: 'completed', autoAssigned: true, assignedTo: 'Sneha Iyer', createdAt: '2026-02-15',
-  },
-  {
-    id: 't9', sourceType: 'pending_reconciliation', title: 'Resolve GSTR-3B vs Books Discrepancy', description: 'Tax liability difference of ₹87,000 between GSTR-3B and books for January.',
-    clientName: 'Digital Dreams Software', clientId: '6', priority: 'medium', dueDate: '2026-03-18', status: 'pending', autoAssigned: false, assignedTo: 'Rajesh Sharma', createdAt: '2026-03-02',
-  },
-  {
-    id: 't10', sourceType: 'pending_approval', title: 'Approve Annual Return Filing', description: 'GSTR-9 annual return prepared and ready for final review and approval.',
-    clientName: 'TechVista Solutions Pvt Ltd', clientId: '1', priority: 'low', dueDate: '2026-03-30', status: 'completed', autoAssigned: true, assignedTo: 'Priya Patel', createdAt: '2026-02-10',
-  },
-];
 
 // ─── Animated Card Wrapper ────────────────────────────────────────────────
 function AnimatedCard({
@@ -268,9 +210,12 @@ function TaskSkeleton() {
 // ═══════════════════════════════════════════════════════════════════════════
 export default function AITaskGeneratorPage() {
   // ── State ───────────────────────────────────────────────────────────────
-  const [tasks, setTasks] = useState<AITask[]>(mockTasks);
-  const [teamMembers, setTeamMembers] = useState<TeamMember[]>(mockTeamMembers);
-  const [clients, setClients] = useState<ClientOption[]>(mockClients);
+  // PT-1-a-retry: start with an empty task list (no mock fallback) so the empty
+  // state with CTA renders when the API returns no AITask rows. Real tasks are
+  // loaded from /api/ai-tasks in fetchData() below.
+  const [tasks, setTasks] = useState<AITask[]>([]);
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
+  const [clients, setClients] = useState<ClientOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeFilter, setActiveFilter] = useState<string>('all');
@@ -300,28 +245,48 @@ export default function AITaskGeneratorPage() {
 
       if (tasksRes.status === 'fulfilled' && tasksRes.value.ok) {
         const tasksData = await tasksRes.value.json();
-        if (tasksData.tasks && tasksData.tasks.length > 0) {
-          setTasks(tasksData.tasks);
-        }
+        // PT-1-a-retry: always use the real API response, even if empty — so the
+        // empty state with CTA renders instead of stale mock data (which contained
+        // a fake ₹3.2L duplicate ITC claim alert). Map DB rows → AITask shape.
+        const apiTasks: AITask[] = Array.isArray(tasksData.tasks) ? tasksData.tasks.map((t: Record<string, unknown>) => ({
+          id: String(t.id ?? ''),
+          sourceType: (String(t.sourceType ?? t.source ?? 'pending_reconciliation') as TaskSourceType),
+          title: String(t.title ?? 'Untitled task'),
+          description: t.description ? String(t.description) : undefined,
+          clientName: t.clientName ? String(t.clientName) : undefined,
+          clientId: t.clientId ? String(t.clientId) : undefined,
+          priority: (String(t.priority ?? 'medium') as TaskPriority),
+          dueDate: t.dueDate ? String(t.dueDate) : '',
+          status: (String(t.status ?? 'pending') === 'in_progress' ? 'in_progress' : String(t.status ?? 'pending') === 'completed' ? 'completed' : 'pending') as TaskStatus,
+          autoAssigned: Boolean(t.autoAssigned ?? false),
+          assignedTo: t.assignedTo ? String(t.assignedTo) : undefined,
+          createdAt: t.createdAt ? String(t.createdAt) : new Date().toISOString(),
+        })) : [];
+        setTasks(apiTasks);
       }
 
       if (teamRes.status === 'fulfilled' && teamRes.value.ok) {
         const teamData = await teamRes.value.json();
-        if (teamData.members && teamData.members.length > 0) {
-          setTeamMembers(teamData.members);
-        }
+        const list = Array.isArray(teamData) ? teamData : Array.isArray(teamData.members) ? teamData.members : [];
+        setTeamMembers(list.map((m: { id?: string; name?: string }) => ({
+          id: String(m.id ?? ''),
+          name: String(m.name ?? 'Team member'),
+        })));
+      } else {
+        setTeamMembers([]);
       }
 
       if (clientsRes.status === 'fulfilled' && clientsRes.value.ok) {
         const clientsData = await clientsRes.value.json();
-        if (clientsData.clients && clientsData.clients.length > 0) {
-          setClients(
-            clientsData.clients.map((c: { id: string; tradeName: string }) => ({
-              id: c.id,
-              tradeName: c.tradeName,
-            }))
-          );
-        }
+        const list = Array.isArray(clientsData) ? clientsData : Array.isArray(clientsData.clients) ? clientsData.clients : [];
+        setClients(
+          list.map((c: { id?: string; tradeName?: string; name?: string }) => ({
+            id: String(c.id ?? ''),
+            tradeName: String(c.tradeName ?? c.name ?? 'Client'),
+          }))
+        );
+      } else {
+        setClients([]);
       }
     } catch (err) {
       console.error('AI Tasks fetch error:', err);
@@ -585,9 +550,35 @@ export default function AITaskGeneratorPage() {
           {loading ? (
             <TaskSkeleton />
           ) : filteredTasks.length === 0 ? (
-            <div className="py-12 text-center text-muted-foreground text-sm">
-              No tasks found for this filter.
-            </div>
+            tasks.length === 0 ? (
+              // PT-1-a-retry: real empty state with CTA when no AITask rows exist
+              // in the DB (instead of falling back to fake ₹3.2L ITC claim alert).
+              <div className="flex flex-col items-center justify-center py-12 gap-3 text-center">
+                <div className="rounded-full bg-emerald-50 dark:bg-emerald-950/40 p-3">
+                  <Sparkles className="h-8 w-8 text-emerald-600 dark:text-emerald-400" />
+                </div>
+                <div className="space-y-1">
+                  <p className="text-sm font-semibold text-foreground">No AI tasks yet</p>
+                  <p className="text-xs text-muted-foreground max-w-sm">
+                    AI tasks are generated automatically from GST notices, risk alerts,
+                    reconciliation mismatches, and pending approvals. Generate your first
+                    task to get started.
+                  </p>
+                </div>
+                <Button
+                  size="sm"
+                  className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
+                  onClick={() => setCreateDialogOpen(true)}
+                >
+                  <Sparkles className="h-3.5 w-3.5" />
+                  Generate your first AI task
+                </Button>
+              </div>
+            ) : (
+              <div className="py-12 text-center text-muted-foreground text-sm">
+                No tasks found for this filter.
+              </div>
+            )
           ) : (
             <ScrollArea className="max-h-[600px]">
               <div className="space-y-2 pr-2">

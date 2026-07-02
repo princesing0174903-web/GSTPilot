@@ -1,7 +1,8 @@
 'use client'
 
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useEffect } from 'react'
 import { motion } from 'framer-motion'
+import { toast } from 'sonner'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -10,11 +11,15 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
+  Dialog, DialogContent, DialogDescription, DialogFooter,
+  DialogHeader, DialogTitle,
+} from '@/components/ui/dialog'
+import {
   Gauge, TrendingUp, AlertTriangle, AlertOctagon, ShieldAlert,
   Users, CheckCircle, Activity, Eye, Zap, ArrowUpRight,
   ArrowDownRight, Radio, Brain, Building, Wallet,
   FileText, Clock, ListChecks, Target, ChevronRight,
-  Lightbulb, Star, XCircle, Info,
+  Lightbulb, Star, XCircle, Info, Loader2,
 } from 'lucide-react'
 import {
   useFirmExecutiveScores, useFireNotifications,
@@ -203,6 +208,53 @@ export default function AIOperatingRoomPage() {
   const { setCurrentView } = useApp()
   const { user } = useAuth()
   const [activeTab, setActiveTab] = useState('scores')
+  const [oracleDialogOpen, setOracleDialogOpen] = useState(false)
+  const [oracleActivating, setOracleActivating] = useState(false)
+  const [oracleActivated, setOracleActivated] = useState(false)
+
+  // ── On mount, fetch current Oracle activation state from /api/automation ──
+  useEffect(() => {
+    let cancelled = false
+    fetch('/api/automation')
+      .then(res => res.ok ? res.json() : null)
+      .then(data => {
+        if (cancelled || !data?.rules) return
+        const oracleRule = data.rules.find((r: { name?: string; isActive?: boolean }) =>
+          typeof r.name === 'string' && r.name.startsWith('Oracle ') && r.isActive === true,
+        )
+        if (oracleRule) setOracleActivated(true)
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [])
+
+  // ── Activate Oracle — POST /api/automation { type: 'oracle_activation' } ──
+  const handleActivateOracle = async () => {
+    setOracleActivating(true)
+    try {
+      const res = await fetch('/api/automation', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'oracle_activation',
+          enabled: true,
+          schedule: 'daily',
+          createdBy: user?.id,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        throw new Error(data?.error ?? 'Failed to activate Oracle')
+      }
+      setOracleActivated(true)
+      setOracleDialogOpen(false)
+      toast.success(data?.message ?? 'Oracle activated. Daily analytics job scheduled.')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to activate Oracle')
+    } finally {
+      setOracleActivating(false)
+    }
+  }
 
   // ── Live Firestore Data ──
   const { scores, loading: scoresLoading } = useFirmExecutiveScores()
@@ -288,8 +340,95 @@ export default function AIOperatingRoomPage() {
               <AlertOctagon className="h-3 w-3" /> {criticalIssues.length} Critical
             </Badge>
           )}
+          <Button
+            size="sm"
+            className={
+              oracleActivated
+                ? 'gap-1.5 bg-emerald-100 text-emerald-700 border border-emerald-200 hover:bg-emerald-200'
+                : 'gap-1.5 bg-gradient-to-br from-emerald-500 to-teal-600 text-white hover:opacity-90'
+            }
+            onClick={() => setOracleDialogOpen(true)}
+          >
+            {oracleActivated ? (
+              <>
+                <CheckCircle className="h-3.5 w-3.5" /> Oracle Active
+              </>
+            ) : (
+              <>
+                <Zap className="h-3.5 w-3.5" /> Activate Oracle
+              </>
+            )}
+          </Button>
         </div>
       </motion.div>
+
+      {/* ── Activate Oracle Dialog ── */}
+      <Dialog open={oracleDialogOpen} onOpenChange={setOracleDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <Brain className="h-5 w-5 text-emerald-600" />
+              Activate GSTPilot Oracle
+            </DialogTitle>
+            <DialogDescription>
+              Oracle is your firm's autonomous analytics brain. When activated, it runs a
+              daily job across all your connected data sources — GSTN, Bank, Accounting,
+              WhatsApp, Gmail — to surface insights, detect compliance risks, and brief you
+              on the day's priorities.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div className="rounded-lg border border-emerald-200 bg-emerald-50 dark:bg-emerald-950/30 dark:border-emerald-800 p-3">
+              <p className="text-xs font-medium text-emerald-800 dark:text-emerald-300">
+                What you'll get:
+              </p>
+              <ul className="mt-1.5 space-y-1 text-xs text-emerald-700 dark:text-emerald-400">
+                <li className="flex items-center gap-2">
+                  <CheckCircle className="h-3 w-3" /> Daily GST reconciliation & ITC matching
+                </li>
+                <li className="flex items-center gap-2">
+                  <CheckCircle className="h-3 w-3" /> Cash-position & compliance-score updates
+                </li>
+                <li className="flex items-center gap-2">
+                  <CheckCircle className="h-3 w-3" /> Auto-generated priorities in Mission Control
+                </li>
+              </ul>
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              Schedule: <strong>Daily at 06:00 IST</strong>. You can change this anytime in
+              Automations. A one-time AuditLog entry will record the activation.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setOracleDialogOpen(false)}
+              disabled={oracleActivating}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleActivateOracle}
+              disabled={oracleActivating || oracleActivated}
+              className="bg-gradient-to-br from-emerald-500 to-teal-600 text-white hover:opacity-90 gap-1.5"
+            >
+              {oracleActivating ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" /> Activating...
+                </>
+              ) : oracleActivated ? (
+                <>
+                  <CheckCircle className="h-4 w-4" /> Already Active
+                </>
+              ) : (
+                <>
+                  <Zap className="h-4 w-4" /> Activate Oracle
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* ── Overall Score Banner ── */}
       {!scoresLoading && (

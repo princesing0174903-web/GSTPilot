@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import {
   Receipt, ArrowUpRight, ArrowDownRight, TrendingUp,
@@ -9,7 +9,7 @@ import {
   ChevronRight, Link2, CreditCard, Building2,
   Wallet, RefreshCw, Send, ArrowRightLeft,
   Smartphone, Monitor, BadgeCheck, XCircle,
-  CircleDot, Banknote, Calendar,
+  CircleDot, Banknote, Calendar, Loader2,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -18,6 +18,8 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import { Input } from '@/components/ui/input'
+import { EmptyState } from '@/components/shared'
+import { useApp } from '@/contexts/AppContext'
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // FORMATTERS
@@ -77,67 +79,56 @@ function PaymentTrendChart({ data }: { data: { week: string; collected: number; 
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// DATA
+// TYPES — derived from real API responses
 // ═══════════════════════════════════════════════════════════════════════════════
 
-const statCards = [
-  { label: 'Total Collected', value: 4567000, change: 15.3, icon: TrendingUp, color: 'emerald' },
-  { label: 'Total Paid', value: 2834000, change: 8.7, icon: Banknote, color: 'amber' },
-  { label: 'Outstanding', value: 1890000, change: -5.2, icon: Clock, color: 'slate' },
-  { label: 'Overdue', value: 456000, change: -12.4, icon: AlertCircle, color: 'rose' },
-]
+interface Receivable {
+  id: string
+  client: string
+  invoice: string
+  amount: number
+  dueDate: string
+  status: 'pending' | 'received' | 'overdue'
+  method: string | null
+}
 
-const receivables = [
-  { id: 'REC-001', client: 'Sharma & Associates Pvt Ltd', invoice: 'INV-2026-0345', amount: 450000, dueDate: '20/03/2026', status: 'pending', method: null },
-  { id: 'REC-002', client: 'Patel Traders', invoice: 'INV-2026-0344', amount: 234000, dueDate: '18/03/2026', status: 'received', method: 'UPI' },
-  { id: 'REC-003', client: 'Mehta Suppliers Pvt Ltd', invoice: 'INV-2026-0340', amount: 567000, dueDate: '25/03/2026', status: 'pending', method: null },
-  { id: 'REC-004', client: 'Kumar Logistics', invoice: 'INV-2026-0338', amount: 89000, dueDate: '10/03/2026', status: 'overdue', method: null },
-  { id: 'REC-005', client: 'Singh Properties', invoice: 'INV-2026-0335', amount: 1230000, dueDate: '30/03/2026', status: 'pending', method: null },
-  { id: 'REC-006', client: 'Reddy Marketing Solutions', invoice: 'INV-2026-0332', amount: 178000, dueDate: '05/03/2026', status: 'overdue', method: null },
-  { id: 'REC-007', client: 'Agarwal & Sons Pvt Ltd', invoice: 'INV-2026-0330', amount: 345000, dueDate: '15/03/2026', status: 'received', method: 'Net Banking' },
-  { id: 'REC-008', client: 'Joshi Financial Services', invoice: 'INV-2026-0328', amount: 67000, dueDate: '12/03/2026', status: 'received', method: 'Card' },
-]
+interface Payable {
+  id: string
+  vendor: string
+  category: string
+  amount: number
+  dueDate: string
+  status: 'scheduled' | 'pending' | 'paid'
+}
 
-const payables = [
-  { id: 'PAY-001', vendor: 'Patel Properties', category: 'Rent', amount: 85000, dueDate: '01/04/2026', status: 'scheduled' },
-  { id: 'PAY-002', vendor: 'Mehta Suppliers Pvt Ltd', category: 'Purchase', amount: 234000, dueDate: '20/03/2026', status: 'pending' },
-  { id: 'PAY-003', vendor: 'Kumar IT Solutions', category: 'IT Services', amount: 45000, dueDate: '25/03/2026', status: 'pending' },
-  { id: 'PAY-004', vendor: 'Singh Legal Associates', category: 'Legal', amount: 125000, dueDate: '15/03/2026', status: 'paid' },
-  { id: 'PAY-005', vendor: 'GST Department', category: 'GST Payment', amount: 156000, dueDate: '20/03/2026', status: 'scheduled' },
-  { id: 'PAY-006', vendor: 'TDS Department', category: 'TDS Payment', amount: 89000, dueDate: '07/04/2026', status: 'pending' },
-  { id: 'PAY-007', vendor: 'Reddy Transport', category: 'Logistics', amount: 34000, dueDate: '18/03/2026', status: 'paid' },
-]
+interface PaymentLink {
+  id: string
+  client: string
+  amount: number
+  createdDate: string
+  expiry: string
+  status: 'active' | 'expired' | 'paid'
+  visits: number
+}
 
-const paymentLinks = [
-  { id: 'PL-001', client: 'Sharma & Associates Pvt Ltd', amount: 450000, createdDate: '10/03/2026', expiry: '25/03/2026', status: 'active', visits: 3 },
-  { id: 'PL-002', client: 'Kumar Logistics', amount: 89000, createdDate: '08/03/2026', expiry: '22/03/2026', status: 'active', visits: 5 },
-  { id: 'PL-003', client: 'Reddy Marketing Solutions', amount: 178000, createdDate: '05/03/2026', expiry: '19/03/2026', status: 'expired', visits: 2 },
-  { id: 'PL-004', client: 'Mehta Suppliers Pvt Ltd', amount: 567000, createdDate: '12/03/2026', expiry: '26/03/2026', status: 'active', visits: 1 },
-  { id: 'PL-005', client: 'Joshi Financial Services', amount: 67000, createdDate: '11/03/2026', expiry: '25/03/2026', status: 'paid', visits: 4 },
-]
+interface ReconciliationItem {
+  id: string
+  date: string
+  bankRef: string
+  amount: number
+  invoice: string | null
+  status: 'matched' | 'unmatched' | 'disputed'
+}
 
-const reconciliationItems = [
-  { id: 'RECON-001', date: '15/03/2026', bankRef: 'HDFC-NEFT-45678', amount: 234000, invoice: 'INV-2026-0344', status: 'matched' },
-  { id: 'RECON-002', date: '15/03/2026', bankRef: 'HDFC-UPI-12345', amount: 67000, invoice: 'INV-2026-0328', status: 'matched' },
-  { id: 'RECON-003', date: '14/03/2026', bankRef: 'ICICI-NEFT-78901', amount: 345000, invoice: 'INV-2026-0330', status: 'matched' },
-  { id: 'RECON-004', date: '14/03/2026', bankRef: 'SBI-RTGS-23456', amount: 156000, invoice: null, status: 'unmatched' },
-  { id: 'RECON-005', date: '13/03/2026', bankRef: 'HDFC-NEFT-34567', amount: 89000, invoice: 'INV-2026-0338', status: 'disputed' },
-  { id: 'RECON-006', date: '13/03/2026', bankRef: 'ICICI-UPI-67890', amount: 45000, invoice: null, status: 'unmatched' },
-]
+interface CollectionMethod {
+  method: string
+  amount: number
+  color: string
+}
 
-const collectionByMethod = [
-  { method: 'UPI', amount: 2345000, color: '#10b981' },
-  { method: 'Net Banking', amount: 1567000, color: '#64748b' },
-  { method: 'Card', amount: 456000, color: '#f59e0b' },
-  { method: 'Cheque', amount: 199000, color: '#8b5cf6' },
-]
-
-const weeklyTrend = [
-  { week: 'W1', collected: 890000, paid: 567000 },
-  { week: 'W2', collected: 1234000, paid: 789000 },
-  { week: 'W3', collected: 1123000, paid: 654000 },
-  { week: 'W4', collected: 1316000, paid: 824000 },
-]
+// ═══════════════════════════════════════════════════════════════════════════════
+// DATA — color maps (UI styling only, no fake data)
+// ═══════════════════════════════════════════════════════════════════════════════
 
 const statusColors: Record<string, string> = {
   received: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
@@ -165,9 +156,172 @@ const item = { hidden: { opacity: 0, y: 16 }, show: { opacity: 1, y: 0 } }
 // COMPONENT
 // ═══════════════════════════════════════════════════════════════════════════════
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// HELPERS — derive display strings from raw API rows
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function formatTxnDate(iso: string): string {
+  if (!iso) return '—'
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return iso
+  const dd = String(d.getDate()).padStart(2, '0')
+  const mm = String(d.getMonth() + 1).padStart(2, '0')
+  const yyyy = d.getFullYear()
+  return `${dd}/${mm}/${yyyy}`
+}
+
+function titleCaseMode(mode: string): string {
+  if (!mode) return 'Bank'
+  const lower = mode.toLowerCase()
+  if (lower === 'upi') return 'UPI'
+  if (lower === 'bank') return 'Net Banking'
+  if (lower === 'card') return 'Card'
+  if (lower === 'cheque') return 'Cheque'
+  if (lower === 'cash') return 'Cash'
+  return mode.charAt(0).toUpperCase() + mode.slice(1)
+}
+
+const METHOD_COLOR: Record<string, string> = {
+  UPI: '#10b981',
+  'Net Banking': '#64748b',
+  Card: '#f59e0b',
+  Cheque: '#8b5cf6',
+  Cash: '#0ea5e9',
+}
+
 export default function PaymentsPage() {
+  const { setCurrentView } = useApp()
   const [activeTab, setActiveTab] = useState('overview')
   const [searchQ, setSearchQ] = useState('')
+
+  const [receivables, setReceivables] = useState<Receivable[]>([])
+  const [payables, setPayables] = useState<Payable[]>([])
+  const [paymentLinks, setPaymentLinks] = useState<PaymentLink[]>([])
+  const [reconciliationItems, setReconciliationItems] = useState<ReconciliationItem[]>([])
+  const [collectionByMethod, setCollectionByMethod] = useState<CollectionMethod[]>([])
+  const [weeklyTrend, setWeeklyTrend] = useState<{ week: string; collected: number; paid: number }[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let cancelled = false
+    async function loadAll() {
+      setLoading(true)
+      try {
+        const paymentsPromise = fetch('/api/payments').then((r) => r.ok ? r.json() : { payments: [] }).catch(() => ({ payments: [] }))
+        const expensesPromise = fetch('/api/expenses').then((r) => r.ok ? r.json() : { expenses: [] }).catch(() => ({ expenses: [] }))
+        const [paymentsResp, expensesResp] = await Promise.all([paymentsPromise, expensesPromise])
+        if (cancelled) return
+
+        const rawPayments: Array<Record<string, unknown>> = paymentsResp.payments ?? []
+        const rawExpenses: Array<Record<string, unknown>> = expensesResp.expenses ?? []
+
+        // ── Receivables: customer-side payments (partyType=customer or undefined) ──
+        const recs: Receivable[] = rawPayments
+          .filter((p) => String(p.partyType ?? 'customer') !== 'vendor')
+          .map((p) => {
+            const status = String(p.status ?? 'completed')
+            const isReconciled = Boolean(p.reconciled ?? false)
+            let recStatus: Receivable['status'] = 'pending'
+            if (isReconciled || status === 'completed') recStatus = 'received'
+            if (status === 'failed') recStatus = 'overdue'
+            return {
+              id: String(p.id ?? ''),
+              client: String(p.partyName ?? 'Unknown'),
+              invoice: p.invoiceId ? String(p.invoiceId) : '—',
+              amount: Number(p.amount ?? 0),
+              dueDate: formatTxnDate(String(p.paymentDate ?? '')),
+              status: recStatus,
+              method: p.paymentMode ? titleCaseMode(String(p.paymentMode)) : null,
+            }
+          })
+        setReceivables(recs)
+
+        // ── Payables: vendor-side payments + expenses ──
+        const vendorPayables: Payable[] = rawPayments
+          .filter((p) => String(p.partyType ?? 'customer') === 'vendor')
+          .map((p) => {
+            const status = String(p.status ?? 'completed')
+            let payStatus: Payable['status'] = 'pending'
+            if (status === 'completed') payStatus = 'paid'
+            else if (status === 'pending') payStatus = 'scheduled'
+            return {
+              id: String(p.id ?? ''),
+              vendor: String(p.partyName ?? 'Unknown'),
+              category: 'Vendor Payment',
+              amount: Number(p.amount ?? 0),
+              dueDate: formatTxnDate(String(p.paymentDate ?? '')),
+              status: payStatus,
+            }
+          })
+        const expensePayables: Payable[] = rawExpenses.map((e) => ({
+          id: String(e.id ?? ''),
+          vendor: String(e.vendor ?? e.description ?? 'Vendor'),
+          category: String(e.category ?? 'Expense'),
+          amount: Number(e.amount ?? 0),
+          dueDate: formatTxnDate(String(e.date ?? '')),
+          status: 'paid',
+        }))
+        setPayables([...vendorPayables, ...expensePayables])
+
+        // ── Reconciliation: derive from payments ──
+        const recon: ReconciliationItem[] = rawPayments.map((p) => {
+          const status = String(p.status ?? 'completed')
+          const isReconciled = Boolean(p.reconciled ?? false)
+          let recStatus: ReconciliationItem['status'] = 'unmatched'
+          if (isReconciled) recStatus = 'matched'
+          else if (status === 'failed') recStatus = 'disputed'
+          return {
+            id: String(p.id ?? ''),
+            date: formatTxnDate(String(p.paymentDate ?? '')),
+            bankRef: (p.referenceNo as string) || `${String(p.paymentMode ?? 'BANK').toUpperCase()}-${String(p.id ?? '').slice(-6)}`,
+            amount: Number(p.amount ?? 0),
+            invoice: (p.invoiceId as string) || null,
+            status: recStatus,
+          }
+        })
+        setReconciliationItems(recon)
+
+        // ── Collection by method: group payments by paymentMode ──
+        const methodMap = new Map<string, number>()
+        for (const p of rawPayments) {
+          if (String(p.partyType ?? 'customer') === 'vendor') continue
+          const mode = titleCaseMode(String(p.paymentMode ?? 'bank'))
+          methodMap.set(mode, (methodMap.get(mode) ?? 0) + Number(p.amount ?? 0))
+        }
+        const methodList: CollectionMethod[] = Array.from(methodMap.entries())
+          .map(([method, amount]) => ({ method, amount, color: METHOD_COLOR[method] ?? '#94a3b8' }))
+          .sort((a, b) => b.amount - a.amount)
+        setCollectionByMethod(methodList)
+
+        // ── Payment links + weekly trend: no API endpoints exist yet ──
+        // We deliberately leave these empty so the UI shows real empty states.
+        setPaymentLinks([])
+        setWeeklyTrend([])
+      } catch (err) {
+        console.warn('[PaymentsPage] data fetch error:', err)
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+    loadAll()
+    return () => { cancelled = true }
+  }, [])
+
+  const totalCollected = receivables.reduce((s, r) => s + r.amount, 0)
+  const totalPaid = payables.reduce((s, p) => s + p.amount, 0)
+  const outstandingCount = receivables.filter((r) => r.status === 'pending').length
+  const overdueCount = receivables.filter((r) => r.status === 'overdue').length
+
+  const statCards = [
+    { label: 'Total Collected', value: receivables.length > 0 ? totalCollected : null, icon: TrendingUp, color: 'emerald' as const },
+    { label: 'Total Paid', value: payables.length > 0 ? totalPaid : null, icon: Banknote, color: 'amber' as const },
+    { label: 'Outstanding', value: receivables.length > 0 ? outstandingCount : null, icon: Clock, color: 'slate' as const },
+    { label: 'Overdue', value: receivables.length > 0 ? overdueCount : null, icon: AlertCircle, color: 'rose' as const },
+  ]
+
+  const matchedReconCount = reconciliationItems.filter((r) => r.status === 'matched').length
+  const unmatchedReconCount = reconciliationItems.filter((r) => r.status === 'unmatched').length
+  const disputedReconCount = reconciliationItems.filter((r) => r.status === 'disputed').length
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-emerald-50/30 dark:from-slate-950 dark:via-slate-900 dark:to-emerald-950/20">
@@ -204,31 +358,35 @@ export default function PaymentsPage() {
           {/* ─── OVERVIEW TAB ─── */}
           <TabsContent value="overview" className="mt-0 space-y-6">
             {/* Stat Cards */}
-            <motion.div variants={container} initial="hidden" animate="show" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              {statCards.map((s) => {
-                const Icon = s.icon
-                const positive = s.change >= 0
-                return (
-                  <motion.div key={s.label} variants={item}>
-                    <Card className="hover:shadow-md transition-shadow border-slate-200/60 dark:border-slate-800/60">
-                      <CardContent className="p-4">
-                        <div className="flex items-center justify-between mb-3">
-                          <div className={`h-9 w-9 rounded-lg flex items-center justify-center ${s.color === 'emerald' ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400' : s.color === 'amber' ? 'bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400' : s.color === 'rose' ? 'bg-rose-100 text-rose-600 dark:bg-rose-900/30 dark:text-rose-400' : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'}`}>
-                            <Icon className="h-4.5 w-4.5" />
+            {loading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="h-5 w-5 animate-spin text-emerald-600" />
+              </div>
+            ) : (
+              <motion.div variants={container} initial="hidden" animate="show" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                {statCards.map((s) => {
+                  const Icon = s.icon
+                  const hasValue = s.value !== null && s.value !== undefined
+                  return (
+                    <motion.div key={s.label} variants={item}>
+                      <Card className="hover:shadow-md transition-shadow border-slate-200/60 dark:border-slate-800/60">
+                        <CardContent className="p-4">
+                          <div className="flex items-center justify-between mb-3">
+                            <div className={`h-9 w-9 rounded-lg flex items-center justify-center ${s.color === 'emerald' ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400' : s.color === 'amber' ? 'bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400' : s.color === 'rose' ? 'bg-rose-100 text-rose-600 dark:bg-rose-900/30 dark:text-rose-400' : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'}`}>
+                              <Icon className="h-4.5 w-4.5" />
+                            </div>
                           </div>
-                          <div className={`flex items-center gap-0.5 text-xs font-medium ${positive ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
-                            {positive ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
-                            {fmtPct(s.change)}
-                          </div>
-                        </div>
-                        <p className="text-xl font-bold text-slate-900 dark:text-white">{fmtINR(s.value)}</p>
-                        <p className="text-xs text-muted-foreground mt-0.5">{s.label}</p>
-                      </CardContent>
-                    </Card>
-                  </motion.div>
-                )
-              })}
-            </motion.div>
+                          <p className="text-xl font-bold text-slate-900 dark:text-white">
+                            {hasValue ? (typeof s.value === 'number' && s.value > 100 ? fmtINR(s.value) : s.value) : '—'}
+                          </p>
+                          <p className="text-xs text-muted-foreground mt-0.5">{s.label}</p>
+                        </CardContent>
+                      </Card>
+                    </motion.div>
+                  )
+                })}
+              </motion.div>
+            )}
 
             {/* Collection Method + Trend */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -240,22 +398,33 @@ export default function PaymentsPage() {
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <CollectionMethodChart data={collectionByMethod} />
-                    <Separator className="my-4" />
-                    <div className="grid grid-cols-2 gap-3">
-                      {collectionByMethod.map(m => {
-                        const Icon = methodIcons[m.method] || Building2
-                        return (
-                          <div key={m.method} className="flex items-center gap-2 p-2 rounded-lg bg-slate-50 dark:bg-slate-800/40">
-                            <Icon className="h-4 w-4 text-slate-500" />
-                            <div>
-                              <p className="text-xs font-medium">{m.method}</p>
-                              <p className="text-[10px] text-muted-foreground">{fmtINR(m.amount)}</p>
-                            </div>
-                          </div>
-                        )
-                      })}
-                    </div>
+                    {collectionByMethod.length === 0 ? (
+                      <EmptyState
+                        icon={CreditCard}
+                        title="No collections yet"
+                        description="Collection breakdown by payment method will appear here once payments are recorded."
+                        compact
+                      />
+                    ) : (
+                      <>
+                        <CollectionMethodChart data={collectionByMethod} />
+                        <Separator className="my-4" />
+                        <div className="grid grid-cols-2 gap-3">
+                          {collectionByMethod.map(m => {
+                            const Icon = methodIcons[m.method] || Building2
+                            return (
+                              <div key={m.method} className="flex items-center gap-2 p-2 rounded-lg bg-slate-50 dark:bg-slate-800/40">
+                                <Icon className="h-4 w-4 text-slate-500" />
+                                <div>
+                                  <p className="text-xs font-medium">{m.method}</p>
+                                  <p className="text-[10px] text-muted-foreground">{fmtINR(m.amount)}</p>
+                                </div>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </>
+                    )}
                   </CardContent>
                 </Card>
               </motion.div>
@@ -268,20 +437,31 @@ export default function PaymentsPage() {
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <div className="flex justify-center pb-2">
-                      <PaymentTrendChart data={weeklyTrend} />
-                    </div>
-                    <Separator className="my-3" />
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="text-center p-3 rounded-lg bg-emerald-50 dark:bg-emerald-900/20">
-                        <p className="text-lg font-bold text-emerald-600 dark:text-emerald-400">{fmtINR(4563000)}</p>
-                        <p className="text-[10px] text-muted-foreground">Total Collected (Mar)</p>
-                      </div>
-                      <div className="text-center p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20">
-                        <p className="text-lg font-bold text-amber-600 dark:text-amber-400">{fmtINR(2834000)}</p>
-                        <p className="text-[10px] text-muted-foreground">Total Paid (Mar)</p>
-                      </div>
-                    </div>
+                    {weeklyTrend.length === 0 ? (
+                      <EmptyState
+                        icon={TrendingUp}
+                        title="No payment trend yet"
+                        description="Weekly collected vs paid trend will appear here once you have payment history."
+                        compact
+                      />
+                    ) : (
+                      <>
+                        <div className="flex justify-center pb-2">
+                          <PaymentTrendChart data={weeklyTrend} />
+                        </div>
+                        <Separator className="my-3" />
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="text-center p-3 rounded-lg bg-emerald-50 dark:bg-emerald-900/20">
+                            <p className="text-lg font-bold text-emerald-600 dark:text-emerald-400">{receivables.length > 0 ? fmtINR(totalCollected) : '—'}</p>
+                            <p className="text-[10px] text-muted-foreground">Total Collected</p>
+                          </div>
+                          <div className="text-center p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20">
+                            <p className="text-lg font-bold text-amber-600 dark:text-amber-400">{payables.length > 0 ? fmtINR(totalPaid) : '—'}</p>
+                            <p className="text-[10px] text-muted-foreground">Total Paid</p>
+                          </div>
+                        </div>
+                      </>
+                    )}
                   </CardContent>
                 </Card>
               </motion.div>
@@ -296,27 +476,36 @@ export default function PaymentsPage() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="p-0">
-                  <ScrollArea className="max-h-72">
-                    <div className="divide-y dark:divide-slate-800/60">
-                      {receivables.slice(0, 5).map((r, i) => (
-                        <motion.div key={r.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.04 }} className="flex items-center justify-between px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
-                          <div className="flex items-center gap-3">
-                            <div className={`h-8 w-8 rounded-lg flex items-center justify-center ${r.status === 'received' ? 'bg-emerald-100 dark:bg-emerald-900/30' : r.status === 'overdue' ? 'bg-rose-100 dark:bg-rose-900/30' : 'bg-amber-100 dark:bg-amber-900/30'}`}>
-                              <IndianRupee className={`h-4 w-4 ${r.status === 'received' ? 'text-emerald-600 dark:text-emerald-400' : r.status === 'overdue' ? 'text-rose-500 dark:text-rose-400' : 'text-amber-600 dark:text-amber-400'}`} />
+                  {receivables.length === 0 ? (
+                    <EmptyState
+                      icon={IndianRupee}
+                      title="No receivables yet"
+                      description="Customer payments will appear here once you record a receipt or sync an invoice."
+                      compact
+                    />
+                  ) : (
+                    <ScrollArea className="max-h-72">
+                      <div className="divide-y dark:divide-slate-800/60">
+                        {receivables.slice(0, 5).map((r, i) => (
+                          <motion.div key={r.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.04 }} className="flex items-center justify-between px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
+                            <div className="flex items-center gap-3">
+                              <div className={`h-8 w-8 rounded-lg flex items-center justify-center ${r.status === 'received' ? 'bg-emerald-100 dark:bg-emerald-900/30' : r.status === 'overdue' ? 'bg-rose-100 dark:bg-rose-900/30' : 'bg-amber-100 dark:bg-amber-900/30'}`}>
+                                <IndianRupee className={`h-4 w-4 ${r.status === 'received' ? 'text-emerald-600 dark:text-emerald-400' : r.status === 'overdue' ? 'text-rose-500 dark:text-rose-400' : 'text-amber-600 dark:text-amber-400'}`} />
+                              </div>
+                              <div>
+                                <p className="text-xs font-medium text-slate-900 dark:text-white">{r.client}</p>
+                                <p className="text-[10px] text-muted-foreground">{r.invoice} &middot; Due: {r.dueDate}</p>
+                              </div>
                             </div>
-                            <div>
-                              <p className="text-xs font-medium text-slate-900 dark:text-white">{r.client}</p>
-                              <p className="text-[10px] text-muted-foreground">{r.invoice} &middot; Due: {r.dueDate}</p>
+                            <div className="flex items-center gap-3">
+                              <span className="text-xs font-bold">{fmtINR(r.amount)}</span>
+                              <Badge variant="secondary" className={`text-[9px] ${statusColors[r.status]}`}>{r.status}</Badge>
                             </div>
-                          </div>
-                          <div className="flex items-center gap-3">
-                            <span className="text-xs font-bold">{fmtINR(r.amount)}</span>
-                            <Badge variant="secondary" className={`text-[9px] ${statusColors[r.status]}`}>{r.status}</Badge>
-                          </div>
-                        </motion.div>
-                      ))}
-                    </div>
-                  </ScrollArea>
+                          </motion.div>
+                        ))}
+                      </div>
+                    </ScrollArea>
+                  )}
                 </CardContent>
               </Card>
             </motion.div>
@@ -338,31 +527,39 @@ export default function PaymentsPage() {
               </div>
               <Card className="border-slate-200/60 dark:border-slate-800/60">
                 <CardContent className="p-0">
-                  <ScrollArea className="max-h-[600px]">
-                    <div className="divide-y dark:divide-slate-800/60">
-                      {receivables.map((r, i) => (
-                        <motion.div key={r.id} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.04 }} className="flex items-center justify-between px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
-                          <div className="flex items-center gap-3">
-                            <div className={`h-9 w-9 rounded-lg flex items-center justify-center ${r.status === 'received' ? 'bg-emerald-100 dark:bg-emerald-900/30' : r.status === 'overdue' ? 'bg-rose-100 dark:bg-rose-900/30' : 'bg-amber-100 dark:bg-amber-900/30'}`}>
-                              <ArrowDownRight className={`h-4 w-4 ${r.status === 'received' ? 'text-emerald-600 dark:text-emerald-400' : r.status === 'overdue' ? 'text-rose-500 dark:text-rose-400' : 'text-amber-600 dark:text-amber-400'}`} />
-                            </div>
-                            <div>
-                              <div className="flex items-center gap-2">
-                                <span className="text-xs font-mono font-semibold text-slate-900 dark:text-white">{r.id}</span>
-                                <Badge variant="secondary" className={`text-[9px] ${statusColors[r.status]}`}>{r.status}</Badge>
+                  {receivables.length === 0 ? (
+                    <EmptyState
+                      icon={IndianRupee}
+                      title="No receivables yet"
+                      description="Customer payments will appear here once you record a receipt or sync an invoice."
+                    />
+                  ) : (
+                    <ScrollArea className="max-h-[600px]">
+                      <div className="divide-y dark:divide-slate-800/60">
+                        {receivables.map((r, i) => (
+                          <motion.div key={r.id} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.04 }} className="flex items-center justify-between px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
+                            <div className="flex items-center gap-3">
+                              <div className={`h-9 w-9 rounded-lg flex items-center justify-center ${r.status === 'received' ? 'bg-emerald-100 dark:bg-emerald-900/30' : r.status === 'overdue' ? 'bg-rose-100 dark:bg-rose-900/30' : 'bg-amber-100 dark:bg-amber-900/30'}`}>
+                                <ArrowDownRight className={`h-4 w-4 ${r.status === 'received' ? 'text-emerald-600 dark:text-emerald-400' : r.status === 'overdue' ? 'text-rose-500 dark:text-rose-400' : 'text-amber-600 dark:text-amber-400'}`} />
                               </div>
-                              <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">{r.client}</p>
-                              <p className="text-[10px] text-muted-foreground">{r.invoice} &middot; Due: {r.dueDate}{r.method ? ` &middot; Via: ${r.method}` : ''}</p>
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs font-mono font-semibold text-slate-900 dark:text-white">{r.id}</span>
+                                  <Badge variant="secondary" className={`text-[9px] ${statusColors[r.status]}`}>{r.status}</Badge>
+                                </div>
+                                <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">{r.client}</p>
+                                <p className="text-[10px] text-muted-foreground">{r.invoice} &middot; Due: {r.dueDate}{r.method ? ` &middot; Via: ${r.method}` : ''}</p>
+                              </div>
                             </div>
-                          </div>
-                          <div className="flex items-center gap-3">
-                            <span className="text-sm font-bold text-slate-900 dark:text-white">{fmtINR(r.amount)}</span>
-                            <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                          </div>
-                        </motion.div>
-                      ))}
-                    </div>
-                  </ScrollArea>
+                            <div className="flex items-center gap-3">
+                              <span className="text-sm font-bold text-slate-900 dark:text-white">{fmtINR(r.amount)}</span>
+                              <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                            </div>
+                          </motion.div>
+                        ))}
+                      </div>
+                    </ScrollArea>
+                  )}
                 </CardContent>
               </Card>
             </motion.div>
@@ -377,29 +574,37 @@ export default function PaymentsPage() {
               </div>
               <Card className="border-slate-200/60 dark:border-slate-800/60">
                 <CardContent className="p-0">
-                  <div className="divide-y dark:divide-slate-800/60">
-                    {payables.map((p, i) => (
-                      <motion.div key={p.id} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.04 }} className="flex items-center justify-between px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
-                        <div className="flex items-center gap-3">
-                          <div className={`h-9 w-9 rounded-lg flex items-center justify-center ${p.status === 'paid' ? 'bg-emerald-100 dark:bg-emerald-900/30' : p.status === 'scheduled' ? 'bg-sky-100 dark:bg-sky-900/30' : 'bg-amber-100 dark:bg-amber-900/30'}`}>
-                            <ArrowUpRight className={`h-4 w-4 ${p.status === 'paid' ? 'text-emerald-600 dark:text-emerald-400' : p.status === 'scheduled' ? 'text-sky-600 dark:text-sky-400' : 'text-amber-600 dark:text-amber-400'}`} />
-                          </div>
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <span className="text-xs font-mono font-semibold text-slate-900 dark:text-white">{p.id}</span>
-                              <Badge variant="secondary" className={`text-[9px] ${statusColors[p.status]}`}>{p.status}</Badge>
+                  {payables.length === 0 ? (
+                    <EmptyState
+                      icon={Send}
+                      title="No payables yet"
+                      description="Vendor payments and recorded expenses will appear here."
+                    />
+                  ) : (
+                    <div className="divide-y dark:divide-slate-800/60">
+                      {payables.map((p, i) => (
+                        <motion.div key={p.id} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.04 }} className="flex items-center justify-between px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
+                          <div className="flex items-center gap-3">
+                            <div className={`h-9 w-9 rounded-lg flex items-center justify-center ${p.status === 'paid' ? 'bg-emerald-100 dark:bg-emerald-900/30' : p.status === 'scheduled' ? 'bg-sky-100 dark:bg-sky-900/30' : 'bg-amber-100 dark:bg-amber-900/30'}`}>
+                              <ArrowUpRight className={`h-4 w-4 ${p.status === 'paid' ? 'text-emerald-600 dark:text-emerald-400' : p.status === 'scheduled' ? 'text-sky-600 dark:text-sky-400' : 'text-amber-600 dark:text-amber-400'}`} />
                             </div>
-                            <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">{p.vendor}</p>
-                            <p className="text-[10px] text-muted-foreground">{p.category} &middot; Due: {p.dueDate}</p>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs font-mono font-semibold text-slate-900 dark:text-white">{p.id}</span>
+                                <Badge variant="secondary" className={`text-[9px] ${statusColors[p.status]}`}>{p.status}</Badge>
+                              </div>
+                              <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">{p.vendor}</p>
+                              <p className="text-[10px] text-muted-foreground">{p.category} &middot; Due: {p.dueDate}</p>
+                            </div>
                           </div>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <span className="text-sm font-bold text-slate-900 dark:text-white">{fmtINR(p.amount)}</span>
-                          <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                        </div>
-                      </motion.div>
-                    ))}
-                  </div>
+                          <div className="flex items-center gap-3">
+                            <span className="text-sm font-bold text-slate-900 dark:text-white">{fmtINR(p.amount)}</span>
+                            <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                          </div>
+                        </motion.div>
+                      ))}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </motion.div>
@@ -413,29 +618,44 @@ export default function PaymentsPage() {
                 <Button size="sm" className="gap-1.5 bg-emerald-600 hover:bg-emerald-700"><Link2 className="h-3.5 w-3.5" />Create Link</Button>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {paymentLinks.map((pl, i) => (
-                  <motion.div key={pl.id} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.06 }}>
-                    <Card className="hover:shadow-md transition-shadow border-slate-200/60 dark:border-slate-800/60">
-                      <CardContent className="p-4">
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-xs font-mono font-semibold text-slate-900 dark:text-white">{pl.id}</span>
-                          <Badge variant="secondary" className={`text-[9px] ${statusColors[pl.status]}`}>{pl.status}</Badge>
-                        </div>
-                        <p className="text-sm font-bold text-slate-900 dark:text-white">{fmtINR(pl.amount)}</p>
-                        <p className="text-xs text-muted-foreground mt-1">{pl.client}</p>
-                        <Separator className="my-2" />
-                        <div className="flex justify-between text-[10px] text-muted-foreground">
-                          <span>Created: {pl.createdDate}</span>
-                          <span>Expiry: {pl.expiry}</span>
-                        </div>
-                        <div className="flex items-center justify-between mt-2">
-                          <span className="text-[10px] text-muted-foreground">{pl.visits} visits</span>
-                          <Button variant="outline" size="sm" className="h-6 text-[10px] gap-1"><Link2 className="h-3 w-3" />Copy Link</Button>
-                        </div>
+                {paymentLinks.length === 0 ? (
+                  <div className="col-span-full">
+                    <Card className="border-slate-200/60 dark:border-slate-800/60">
+                      <CardContent>
+                        <EmptyState
+                          icon={Link2}
+                          title="No payment links yet"
+                          description="Create a payment link to share with clients and start collecting online."
+                          action={{ label: 'Create Link', onClick: () => setCurrentView('payments') }}
+                        />
                       </CardContent>
                     </Card>
-                  </motion.div>
-                ))}
+                  </div>
+                ) : (
+                  paymentLinks.map((pl, i) => (
+                    <motion.div key={pl.id} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.06 }}>
+                      <Card className="hover:shadow-md transition-shadow border-slate-200/60 dark:border-slate-800/60">
+                        <CardContent className="p-4">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-xs font-mono font-semibold text-slate-900 dark:text-white">{pl.id}</span>
+                            <Badge variant="secondary" className={`text-[9px] ${statusColors[pl.status]}`}>{pl.status}</Badge>
+                          </div>
+                          <p className="text-sm font-bold text-slate-900 dark:text-white">{fmtINR(pl.amount)}</p>
+                          <p className="text-xs text-muted-foreground mt-1">{pl.client}</p>
+                          <Separator className="my-2" />
+                          <div className="flex justify-between text-[10px] text-muted-foreground">
+                            <span>Created: {pl.createdDate}</span>
+                            <span>Expiry: {pl.expiry}</span>
+                          </div>
+                          <div className="flex items-center justify-between mt-2">
+                            <span className="text-[10px] text-muted-foreground">{pl.visits} visits</span>
+                            <Button variant="outline" size="sm" className="h-6 text-[10px] gap-1"><Link2 className="h-3 w-3" />Copy Link</Button>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </motion.div>
+                  ))
+                )}
               </div>
             </motion.div>
           </TabsContent>
@@ -446,39 +666,47 @@ export default function PaymentsPage() {
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-3">
                   <div className="flex gap-2 text-xs">
-                    <span className="flex items-center gap-1"><CircleDot className="h-3 w-3 text-emerald-500" />Matched: 3</span>
-                    <span className="flex items-center gap-1"><CircleDot className="h-3 w-3 text-amber-500" />Unmatched: 2</span>
-                    <span className="flex items-center gap-1"><CircleDot className="h-3 w-3 text-rose-500" />Disputed: 1</span>
+                    <span className="flex items-center gap-1"><CircleDot className="h-3 w-3 text-emerald-500" />Matched: {matchedReconCount}</span>
+                    <span className="flex items-center gap-1"><CircleDot className="h-3 w-3 text-amber-500" />Unmatched: {unmatchedReconCount}</span>
+                    <span className="flex items-center gap-1"><CircleDot className="h-3 w-3 text-rose-500" />Disputed: {disputedReconCount}</span>
                   </div>
                 </div>
                 <Button size="sm" variant="outline" className="gap-1.5"><RefreshCw className="h-3.5 w-3.5" />Auto-Reconcile</Button>
               </div>
               <Card className="border-slate-200/60 dark:border-slate-800/60">
                 <CardContent className="p-0">
-                  <div className="divide-y dark:divide-slate-800/60">
-                    {reconciliationItems.map((rc, i) => (
-                      <motion.div key={rc.id} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.04 }} className="flex items-center justify-between px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
-                        <div className="flex items-center gap-3">
-                          <div className={`h-9 w-9 rounded-lg flex items-center justify-center ${rc.status === 'matched' ? 'bg-emerald-100 dark:bg-emerald-900/30' : rc.status === 'disputed' ? 'bg-rose-100 dark:bg-rose-900/30' : 'bg-amber-100 dark:bg-amber-900/30'}`}>
-                            <ArrowRightLeft className={`h-4 w-4 ${rc.status === 'matched' ? 'text-emerald-600 dark:text-emerald-400' : rc.status === 'disputed' ? 'text-rose-500 dark:text-rose-400' : 'text-amber-600 dark:text-amber-400'}`} />
-                          </div>
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <span className="text-xs font-mono font-semibold text-slate-900 dark:text-white">{rc.bankRef}</span>
-                              <Badge variant="secondary" className={`text-[9px] ${statusColors[rc.status]}`}>{rc.status}</Badge>
+                  {reconciliationItems.length === 0 ? (
+                    <EmptyState
+                      icon={ArrowRightLeft}
+                      title="No reconciliations yet"
+                      description="Bank-to-book matches will appear here once payments are reconciled."
+                    />
+                  ) : (
+                    <div className="divide-y dark:divide-slate-800/60">
+                      {reconciliationItems.map((rc, i) => (
+                        <motion.div key={rc.id} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.04 }} className="flex items-center justify-between px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
+                          <div className="flex items-center gap-3">
+                            <div className={`h-9 w-9 rounded-lg flex items-center justify-center ${rc.status === 'matched' ? 'bg-emerald-100 dark:bg-emerald-900/30' : rc.status === 'disputed' ? 'bg-rose-100 dark:bg-rose-900/30' : 'bg-amber-100 dark:bg-amber-900/30'}`}>
+                              <ArrowRightLeft className={`h-4 w-4 ${rc.status === 'matched' ? 'text-emerald-600 dark:text-emerald-400' : rc.status === 'disputed' ? 'text-rose-500 dark:text-rose-400' : 'text-amber-600 dark:text-amber-400'}`} />
                             </div>
-                            <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">{rc.invoice || 'No invoice linked'}</p>
-                            <p className="text-[10px] text-muted-foreground">{rc.date} &middot; {rc.amount}</p>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs font-mono font-semibold text-slate-900 dark:text-white">{rc.bankRef}</span>
+                                <Badge variant="secondary" className={`text-[9px] ${statusColors[rc.status]}`}>{rc.status}</Badge>
+                              </div>
+                              <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">{rc.invoice || 'No invoice linked'}</p>
+                              <p className="text-[10px] text-muted-foreground">{rc.date}</p>
+                            </div>
                           </div>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <span className="text-sm font-bold text-slate-900 dark:text-white">{fmtINR(rc.amount)}</span>
-                          {rc.status === 'unmatched' && <Button variant="outline" size="sm" className="h-7 text-[10px] gap-1">Match</Button>}
-                          {rc.status === 'disputed' && <Button variant="outline" size="sm" className="h-7 text-[10px] gap-1">Resolve</Button>}
-                        </div>
-                      </motion.div>
-                    ))}
-                  </div>
+                          <div className="flex items-center gap-3">
+                            <span className="text-sm font-bold text-slate-900 dark:text-white">{fmtINR(rc.amount)}</span>
+                            {rc.status === 'unmatched' && <Button variant="outline" size="sm" className="h-7 text-[10px] gap-1">Match</Button>}
+                            {rc.status === 'disputed' && <Button variant="outline" size="sm" className="h-7 text-[10px] gap-1">Resolve</Button>}
+                          </div>
+                        </motion.div>
+                      ))}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </motion.div>

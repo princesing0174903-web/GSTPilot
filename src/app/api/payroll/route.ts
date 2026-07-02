@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { seedEmployees, generatePayslip } from '@/lib/invoices/payroll'
+import { generatePayslip } from '@/lib/invoices/payroll'
 import type { Employee } from '@/lib/invoices/types'
 import { graphEvents, invalidateGraph } from '@/lib/graph/live-update'
+import { emitEmployeeNode } from '@/lib/graph/auto-emit'
 
 // GET /api/payroll — Fetch all Employees with their most recent payslip
 export async function GET() {
@@ -15,7 +16,7 @@ export async function GET() {
     })
 
     if (!employees || employees.length === 0) {
-      return NextResponse.json({ employees: seedEmployees() })
+      return NextResponse.json({ employees: [] })
     }
 
     return NextResponse.json({ employees })
@@ -179,6 +180,9 @@ export async function POST(request: NextRequest) {
 
     // ── Real Business Graph Engine™ — auto-create employee node + live event ──
     graphEvents.employeeAdded(employee.id, employee.name)
+
+    // PT-2-b: canonical graph node emit — employee node + Firm→Employee edge
+    try { await emitEmployeeNode(employee.id) } catch (e) { console.error('[graph] emitEmployeeNode failed', e) }
 
     return NextResponse.json({ employees: [employee] }, { status: 201 })
   } catch (error) {

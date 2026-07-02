@@ -1,0 +1,1584 @@
+     1→'use client';
+     2→
+     3→import React, { useState, useMemo } from 'react';
+     4→import { useQuery } from '@tanstack/react-query';
+     5→import { apiGet } from '@/lib/api';
+     6→import { motion, AnimatePresence } from 'framer-motion';
+     7→import {
+     8→  Card,
+     9→  CardContent,
+    10→  CardHeader,
+    11→  CardTitle,
+    12→} from '@/components/ui/card';
+    13→import { Badge } from '@/components/ui/badge';
+    14→import { Button } from '@/components/ui/button';
+    15→import {
+    16→  Tabs,
+    17→  TabsList,
+    18→  TabsTrigger,
+    19→  TabsContent,
+    20→} from '@/components/ui/tabs';
+    21→import { ScrollArea } from '@/components/ui/scroll-area';
+    22→import { Separator } from '@/components/ui/separator';
+    23→import { Progress } from '@/components/ui/progress';
+    24→import { Input } from '@/components/ui/input';
+    25→import {
+    26→  Dialog,
+    27→  DialogContent,
+    28→  DialogHeader,
+    29→  DialogTitle,
+    30→  DialogTrigger,
+    31→} from '@/components/ui/dialog';
+    32→import {
+    33→  CreditCard,
+    34→  IndianRupee,
+    35→  ArrowUpRight,
+    36→  ArrowDownRight,
+    37→  Wallet,
+    38→  Building2,
+    39→  Link,
+    40→  QrCode,
+    41→  Clock,
+    42→  CheckCircle,
+    43→  AlertTriangle,
+    44→  TrendingUp,
+    45→  Send,
+    46→  Plus,
+    47→  Smartphone,
+    48→  Landmark,
+    49→  Shield,
+    50→  Zap,
+    51→  Copy,
+    52→  ExternalLink,
+    53→  Calendar,
+    54→  Eye,
+    55→  RefreshCw,
+    56→  ArrowRight,
+    57→  BarChart3,
+    58→  Globe,
+    59→  XCircle,
+    60→  Loader2,
+    61→} from 'lucide-react';
+    62→import {
+    63→  useFireClients,
+    64→  useFireInvoices,
+    65→  useFireReturns,
+    66→} from '@/hooks/use-firestore';
+    67→
+    68→// ═══════════════════════════════════════════════════════════════════════════════
+    69→// HELPERS
+    70→// ═══════════════════════════════════════════════════════════════════════════════
+    71→
+    72→function formatINR(amount: number): string {
+    73→  return '₹' + amount.toLocaleString('en-IN');
+    74→}
+    75→
+    76→function formatDate(dateStr: string): string {
+    77→  const d = new Date(dateStr);
+    78→  return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+    79→}
+    80→
+    81→function daysAgo(days: number): string {
+    82→  const d = new Date();
+    83→  d.setDate(d.getDate() - days);
+    84→  return d.toISOString();
+    85→}
+    86→
+    87→function daysFromNow(days: number): string {
+    88→  const d = new Date();
+    89→  d.setDate(d.getDate() + days);
+    90→  return d.toISOString();
+    91→}
+    92→
+    93→// ═══════════════════════════════════════════════════════════════════════════════
+    94→// DEMO DATA
+    95→// ═══════════════════════════════════════════════════════════════════════════════
+    96→
+    97→const DEMO_PAYMENTS = [
+    98→  { id: 'PAY001', date: daysAgo(0), client: 'Rajesh Kumar Enterprises', amount: 2345678, method: 'UPI', status: 'completed', reference: 'UPI/RAJ/2026/MAR/001' },
+    99→  { id: 'PAY002', date: daysAgo(1), client: 'Sharma & Associates LLP', amount: 876543, method: 'Bank Transfer', status: 'completed', reference: 'NEFT/SBA/2026/002' },
+   100→  { id: 'PAY003', date: daysAgo(2), client: 'Patel Industries Pvt Ltd', amount: 1234567, method: 'UPI', status: 'completed', reference: 'UPI/PIPL/2026/003' },
+   101→  { id: 'PAY004', date: daysAgo(3), client: 'Mehta Trading Co', amount: 456789, method: 'Card', status: 'pending', reference: 'CARD/MTC/2026/004' },
+   102→  { id: 'PAY005', date: daysAgo(4), client: 'Gupta Manufacturing Ltd', amount: 3456789, method: 'Bank Transfer', status: 'completed', reference: 'RTGS/GML/2026/005' },
+   103→  { id: 'PAY006', date: daysAgo(5), client: 'Singh Brothers Exports', amount: 567890, method: 'UPI', status: 'overdue', reference: 'UPI/SBE/2026/006' },
+   104→  { id: 'PAY007', date: daysAgo(6), client: 'Agarwal Textiles Pvt Ltd', amount: 987654, method: 'Card', status: 'completed', reference: 'CARD/ATPL/2026/007' },
+   105→  { id: 'PAY008', date: daysAgo(7), client: 'Jain Infrastructure Corp', amount: 5678901, method: 'Bank Transfer', status: 'completed', reference: 'RTGS/JIC/2026/008' },
+   106→  { id: 'PAY009', date: daysAgo(8), client: 'Verma Chemical Industries', amount: 765432, method: 'UPI', status: 'pending', reference: 'UPI/VCI/2026/009' },
+   107→  { id: 'PAY010', date: daysAgo(10), client: 'Reddy Logistics Pvt Ltd', amount: 234567, method: 'Bank Transfer', status: 'completed', reference: 'NEFT/RLPL/2026/010' },
+   108→  { id: 'PAY011', date: daysAgo(12), client: 'Krishna Pharma Ltd', amount: 1890654, method: 'UPI', status: 'completed', reference: 'UPI/KPL/2026/011' },
+   109→  { id: 'PAY012', date: daysAgo(14), client: 'Chopra Food Processing', amount: 678900, method: 'Card', status: 'overdue', reference: 'CARD/CFP/2026/012' },
+   110→];
+   111→
+   112→const DEMO_PAYMENT_LINKS = [
+   113→  { id: 'PL-2026-001', client: 'Rajesh Kumar Enterprises', amount: 545000, status: 'active', created: daysAgo(3), expiry: daysFromNow(7), methods: ['UPI', 'Card', 'Bank'], revenue: 0, reconciled: false },
+   114→  { id: 'PL-2026-002', client: 'Sharma & Associates LLP', amount: 325000, status: 'paid', created: daysAgo(10), expiry: daysAgo(2), methods: ['UPI', 'Card'], revenue: 325000, reconciled: true },
+   115→  { id: 'PL-2026-003', client: 'Patel Industries Pvt Ltd', amount: 1200000, status: 'active', created: daysAgo(1), expiry: daysFromNow(14), methods: ['UPI', 'Card', 'Bank'], revenue: 0, reconciled: false },
+   116→  { id: 'PL-2026-004', client: 'Mehta Trading Co', amount: 175000, status: 'expired', created: daysAgo(30), expiry: daysAgo(16), methods: ['UPI'], revenue: 0, reconciled: false },
+   117→  { id: 'PL-2026-005', client: 'Gupta Manufacturing Ltd', amount: 2500000, status: 'paid', created: daysAgo(20), expiry: daysAgo(5), methods: ['UPI', 'Bank'], revenue: 2500000, reconciled: true },
+   118→  { id: 'PL-2026-006', client: 'Singh Brothers Exports', amount: 890000, status: 'active', created: daysAgo(2), expiry: daysFromNow(12), methods: ['UPI', 'Card', 'Bank'], revenue: 0, reconciled: false },
+   119→  { id: 'PL-2026-007', client: 'Agarwal Textiles Pvt Ltd', amount: 430000, status: 'paid', created: daysAgo(15), expiry: daysAgo(1), methods: ['Card', 'Bank'], revenue: 430000, reconciled: true },
+   120→];
+   121→
+   122→const DEMO_VIRTUAL_ACCOUNTS = [
+   123→  { id: 'VA-001', accountNumber: '3636XXXXXXXX7890', ifsc: 'GSTP0001234', client: 'Rajesh Kumar Enterprises', balance: 2345678, transactions: 47, type: 'collection' },
+   124→  { id: 'VA-002', accountNumber: '3636XXXXXXXX4567', ifsc: 'GSTP0001234', client: 'Patel Industries Pvt Ltd', balance: 1234567, transactions: 32, type: 'collection' },
+   125→  { id: 'VA-003', accountNumber: '3636XXXXXXXX8901', ifsc: 'GSTP0005678', client: 'Gupta Manufacturing Ltd', balance: 5678901, transactions: 89, type: 'collection' },
+   126→  { id: 'VA-004', accountNumber: '3636XXXXXXXX2345', ifsc: 'GSTP0005678', client: 'Escrow Account', balance: 3450000, transactions: 12, type: 'escrow' },
+   127→];
+   128→
+   129→const DEMO_ESCROW = [
+   130→  { id: 'ESC-001', client: 'Jain Infrastructure Corp', amount: 2345000, releaseCondition: 'After GSTR-1 filing confirmation', autoRelease: daysFromNow(5), status: 'held' },
+   131→  { id: 'ESC-002', client: 'Verma Chemical Industries', amount: 1105000, releaseCondition: 'Upon reconciliation completion', autoRelease: daysFromNow(10), status: 'held' },
+   132→];
+   133→
+   134→const DEMO_PAYOUTS = [
+   135→  { id: 'PO-001', vendor: 'TCS IT Solutions', amount: 345000, method: 'NEFT', status: 'pending', scheduledDate: daysFromNow(2), category: 'IT Services' },
+   136→  { id: 'PO-002', vendor: 'Office Depot India', amount: 45000, method: 'UPI', status: 'pending', scheduledDate: daysFromNow(1), category: 'Office Supplies' },
+   137→  { id: 'PO-003', vendor: 'HDFC Ergo Insurance', amount: 178000, method: 'Bank Transfer', status: 'pending', scheduledDate: daysFromNow(3), category: 'Insurance' },
+   138→  { id: 'PO-004', vendor: 'Airtel Business', amount: 23400, method: 'UPI', status: 'pending', scheduledDate: daysFromNow(1), category: 'Telecom' },
+   139→  { id: 'PO-005', vendor: 'Deloitte Audit Services', amount: 890000, method: 'RTGS', status: 'pending', scheduledDate: daysFromNow(7), category: 'Professional Services' },
+   140→  { id: 'PO-006', vendor: 'WeWork India', amount: 125000, method: 'NEFT', status: 'scheduled', scheduledDate: daysFromNow(5), category: 'Rent' },
+   141→  { id: 'PO-007', vendor: 'AWS India', amount: 67800, method: 'Card', status: 'scheduled', scheduledDate: daysFromNow(4), category: 'Cloud Services' },
+   142→];
+   143→
+   144→const DEMO_PAYOUT_HISTORY = [
+   145→  { id: 'POH-001', vendor: 'TCS IT Solutions', amount: 345000, method: 'NEFT', status: 'completed', date: daysAgo(5), category: 'IT Services' },
+   146→  { id: 'POH-002', vendor: 'Office Depot India', amount: 32000, method: 'UPI', status: 'completed', date: daysAgo(8), category: 'Office Supplies' },
+   147→  { id: 'POH-003', vendor: 'Airtel Business', amount: 23400, method: 'UPI', status: 'failed', date: daysAgo(10), category: 'Telecom' },
+   148→  { id: 'POH-004', vendor: 'Deloitte Audit Services', amount: 750000, method: 'RTGS', status: 'completed', date: daysAgo(15), category: 'Professional Services' },
+   149→  { id: 'POH-005', vendor: 'WeWork India', amount: 125000, method: 'NEFT', status: 'completed', date: daysAgo(20), category: 'Rent' },
+   150→];
+   151→
+   152→const DEMO_AUTO_PAYOUT_RULES = [
+   153→  { id: 'RULE-001', vendor: 'WeWork India', amount: 125000, frequency: 'Monthly on 5th', nextRun: daysFromNow(5), status: 'active' },
+   154→  { id: 'RULE-002', vendor: 'Airtel Business', amount: 23400, frequency: 'Monthly on 1st', nextRun: daysFromNow(1), status: 'active' },
+   155→  { id: 'RULE-003', vendor: 'AWS India', amount: 67800, frequency: 'Monthly on 10th', nextRun: daysFromNow(9), status: 'active' },
+   156→];
+   157→
+   158→// Collection trend data (last 6 months)
+   159→const COLLECTION_TREND = [
+   160→  { month: 'Oct', collected: 4520000, pending: 1230000 },
+   161→  { month: 'Nov', collected: 5230000, pending: 980000 },
+   162→  { month: 'Dec', collected: 3890000, pending: 1560000 },
+   163→  { month: 'Jan', collected: 6120000, pending: 870000 },
+   164→  { month: 'Feb', collected: 5450000, pending: 1120000 },
+   165→  { month: 'Mar', collected: 6780000, pending: 760000 },
+   166→];
+   167→
+   168→// Cash flow forecast (next 30 days)
+   169→const CASH_FLOW_FORECAST = [
+   170→  { day: 1, inflow: 345000, outflow: 120000 },
+   171→  { day: 3, inflow: 890000, outflow: 230000 },
+   172→  { day: 5, inflow: 567000, outflow: 125000 },
+   173→  { day: 7, inflow: 234000, outflow: 89000 },
+   174→  { day: 10, inflow: 1234000, outflow: 345000 },
+   175→  { day: 12, inflow: 456000, outflow: 178000 },
+   176→  { day: 15, inflow: 789000, outflow: 234000 },
+   177→  { day: 18, inflow: 567000, outflow: 156000 },
+   178→  { day: 20, inflow: 912000, outflow: 267000 },
+   179→  { day: 22, inflow: 345000, outflow: 89000 },
+   180→  { day: 25, inflow: 1567000, outflow: 423000 },
+   181→  { day: 28, inflow: 678000, outflow: 198000 },
+   182→  { day: 30, inflow: 890000, outflow: 245000 },
+   183→];
+   184→
+   185→// ═══════════════════════════════════════════════════════════════════════════════
+   186→// SVG CHARTS
+   187→// ═══════════════════════════════════════════════════════════════════════════════
+   188→
+   189→function CollectionTrendChart() {
+   190→  const width = 480;
+   191→  const height = 200;
+   192→  const padding = { top: 20, right: 20, bottom: 30, left: 60 };
+   193→  const chartW = width - padding.left - padding.right;
+   194→  const chartH = height - padding.top - padding.bottom;
+   195→
+   196→  const maxVal = Math.max(...COLLECTION_TREND.map(d => d.collected + d.pending));
+   197→  const yScale = (v: number) => chartH - (v / maxVal) * chartH;
+   198→  const xScale = (i: number) => (i / (COLLECTION_TREND.length - 1)) * chartW;
+   199→
+   200→  const collectedPath = COLLECTION_TREND.map((d, i) =>
+   201→    `${i === 0 ? 'M' : 'L'} ${xScale(i) + padding.left} ${yScale(d.collected) + padding.top}`
+   202→  ).join(' ');
+   203→
+   204→  const pendingPath = COLLECTION_TREND.map((d, i) =>
+   205→    `${i === 0 ? 'M' : 'L'} ${xScale(i) + padding.left} ${yScale(d.pending) + padding.top}`
+   206→  ).join(' ');
+   207→
+   208→  // Area fill for collected
+   209→  const collectedArea = collectedPath +
+   210→    ` L ${xScale(COLLECTION_TREND.length - 1) + padding.left} ${chartH + padding.top}` +
+   211→    ` L ${padding.left} ${chartH + padding.top} Z`;
+   212→
+   213→  return (
+   214→    <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto">
+   215→      <defs>
+   216→        <linearGradient id="collectedGrad" x1="0" y1="0" x2="0" y2="1">
+   217→          <stop offset="0%" stopColor="#10b981" stopOpacity="0.3" />
+   218→          <stop offset="100%" stopColor="#10b981" stopOpacity="0.02" />
+   219→        </linearGradient>
+   220→        <linearGradient id="pendingGrad" x1="0" y1="0" x2="0" y2="1">
+   221→          <stop offset="0%" stopColor="#f59e0b" stopOpacity="0.2" />
+   222→          <stop offset="100%" stopColor="#f59e0b" stopOpacity="0.02" />
+   223→        </linearGradient>
+   224→      </defs>
+   225→
+   226→      {/* Grid lines */}
+   227→      {[0, 0.25, 0.5, 0.75, 1].map((frac) => (
+   228→        <line
+   229→          key={frac}
+   230→          x1={padding.left}
+   231→          y1={padding.top + chartH * (1 - frac)}
+   232→          x2={width - padding.right}
+   233→          y2={padding.top + chartH * (1 - frac)}
+   234→          stroke="#e2e8f0"
+   235→          strokeWidth="0.5"
+   236→          strokeDasharray="4,4"
+   237→        />
+   238→      ))}
+   239→
+   240→      {/* Y axis labels */}
+   241→      {[0, 0.25, 0.5, 0.75, 1].map((frac) => {
+   242→        const val = Math.round(maxVal * frac);
+   243→        return (
+   244→          <text
+   245→            key={frac}
+   246→            x={padding.left - 8}
+   247→            y={padding.top + chartH * (1 - frac) + 3}
+   248→            textAnchor="end"
+   249→            className="text-[9px] fill-slate-400"
+   250→          >
+   251→            {frac === 0 ? '0' : `${(val / 100000).toFixed(1)}L`}
+   252→          </text>
+   253→        );
+   254→      })}
+   255→
+   256→      {/* Collected area */}
+   257→      <path d={collectedArea} fill="url(#collectedGrad)" />
+   258→
+   259→      {/* Collected line */}
+   260→      <path d={collectedPath} fill="none" stroke="#10b981" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+   261→
+   262→      {/* Pending area */}
+   263→      <path d={COLLECTION_TREND.map((d, i) =>
+   264→        `${i === 0 ? 'M' : 'L'} ${xScale(i) + padding.left} ${yScale(d.pending) + padding.top}`
+   265→      ).join(' ') + ` L ${xScale(COLLECTION_TREND.length - 1) + padding.left} ${chartH + padding.top} L ${padding.left} ${chartH + padding.top} Z`}
+   266→        fill="url(#pendingGrad)" />
+   267→
+   268→      {/* Pending line */}
+   269→      <path d={pendingPath} fill="none" stroke="#f59e0b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" strokeDasharray="6,3" />
+   270→
+   271→      {/* Data points - collected */}
+   272→      {COLLECTION_TREND.map((d, i) => (
+   273→        <circle
+   274→          key={`c-${i}`}
+   275→          cx={xScale(i) + padding.left}
+   276→          cy={yScale(d.collected) + padding.top}
+   277→          r="3.5"
+   278→          fill="white"
+   279→          stroke="#10b981"
+   280→          strokeWidth="2"
+   281→        />
+   282→      ))}
+   283→
+   284→      {/* Data points - pending */}
+   285→      {COLLECTION_TREND.map((d, i) => (
+   286→        <circle
+   287→          key={`p-${i}`}
+   288→          cx={xScale(i) + padding.left}
+   289→          cy={yScale(d.pending) + padding.top}
+   290→          r="3"
+   291→          fill="white"
+   292→          stroke="#f59e0b"
+   293→          strokeWidth="1.5"
+   294→        />
+   295→      ))}
+   296→
+   297→      {/* X axis labels */}
+   298→      {COLLECTION_TREND.map((d, i) => (
+   299→        <text
+   300→          key={i}
+   301→          x={xScale(i) + padding.left}
+   302→          y={height - 8}
+   303→          textAnchor="middle"
+   304→          className="text-[10px] fill-slate-500"
+   305→        >
+   306→          {d.month}
+   307→        </text>
+   308→      ))}
+   309→    </svg>
+   310→  );
+   311→}
+   312→
+   313→function PaymentMethodDonut() {
+   314→  // PT-1-a-retry: fetch real invoices to compute the actual collected amount
+   315→  // (sum of Invoice.totalAmount). Falls back to ₹0 + empty state when DB is empty.
+   316→  const { data: invoicesResp, isLoading } = useQuery<{ invoices: Array<{ totalAmount: number }> }>({
+   317→    queryKey: ['invoices', 'embedded-finance-donut'],
+   318→    queryFn: () => apiGet('/api/invoices'),
+   319→  });
+   320→  const collectedTotal = useMemo(() => {
+   321→    const invoices = invoicesResp?.invoices ?? [];
+   322→    return invoices.reduce((sum, inv) => sum + (Number(inv.totalAmount) || 0), 0);
+   323→  }, [invoicesResp]);
+   324→
+   325→  const data = [
+   326→    { label: 'UPI', value: 58, color: '#10b981' },
+   327→    { label: 'Bank Transfer', value: 28, color: '#64748b' },
+   328→    { label: 'Card', value: 14, color: '#f59e0b' },
+   329→  ];
+   330→
+   331→  const total = data.reduce((s, d) => s + d.value, 0);
+   332→  const cx = 80;
+   333→  const cy = 80;
+   334→  const r = 55;
+   335→  const innerR = 35;
+   336→
+   337→  let currentAngle = -90;
+   338→  const arcs = data.map((d) => {
+   339→    const angle = (d.value / total) * 360;
+   340→    const startAngle = currentAngle;
+   341→    const endAngle = currentAngle + angle;
+   342→    currentAngle = endAngle;
+   343→
+   344→    const startRad = (startAngle * Math.PI) / 180;
+   345→    const endRad = (endAngle * Math.PI) / 180;
+   346→    const largeArc = angle > 180 ? 1 : 0;
+   347→
+   348→    const outerStart = { x: cx + r * Math.cos(startRad), y: cy + r * Math.sin(startRad) };
+   349→    const outerEnd = { x: cx + r * Math.cos(endRad), y: cy + r * Math.sin(endRad) };
+   350→    const innerStart = { x: cx + innerR * Math.cos(endRad), y: cy + innerR * Math.sin(endRad) };
+   351→    const innerEnd = { x: cx + innerR * Math.cos(startRad), y: cy + innerR * Math.sin(startRad) };
+   352→
+   353→    const path = [
+   354→      `M ${outerStart.x} ${outerStart.y}`,
+   355→      `A ${r} ${r} 0 ${largeArc} 1 ${outerEnd.x} ${outerEnd.y}`,
+   356→      `L ${innerStart.x} ${innerStart.y}`,
+   357→      `A ${innerR} ${innerR} 0 ${largeArc} 0 ${innerEnd.x} ${innerEnd.y}`,
+   358→      'Z',
+   359→    ].join(' ');
+   360→
+   361→    return { ...d, path, percentage: Math.round((d.value / total) * 100) };
+   362→  });
+   363→
+   364→  return (
+   365→    <div className="flex items-center gap-6">
+   366→      <svg viewBox="0 0 160 160" className="w-32 h-32 shrink-0">
+   367→        {arcs.map((arc, i) => (
+   368→          <path key={i} d={arc.path} fill={arc.color} opacity="0.85" className="hover:opacity-100 transition-opacity" />
+   369→        ))}
+   370→        <text x={cx} y={cy - 4} textAnchor="middle" className="text-[11px] fill-slate-700 font-semibold">
+   371→          {isLoading ? '…' : formatINR(collectedTotal)}
+   372→        </text>
+   373→        <text x={cx} y={cy + 10} textAnchor="middle" className="text-[8px] fill-slate-400">
+   374→          {collectedTotal === 0 && !isLoading ? 'no invoices yet' : 'collected'}
+   375→        </text>
+   376→      </svg>
+   377→      <div className="space-y-2.5">
+   378→        {data.map((d, i) => (
+   379→          <div key={i} className="flex items-center gap-2">
+   380→            <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: d.color }} />
+   381→            <span className="text-xs text-slate-600">{d.label}</span>
+   382→            <span className="text-xs font-semibold text-slate-800 ml-auto">{d.value}%</span>
+   383→          </div>
+   384→        ))}
+   385→      </div>
+   386→    </div>
+   387→  );
+   388→}
+   389→
+   390→function CashFlowForecastChart() {
+   391→  const width = 480;
+   392→  const height = 180;
+   393→  const padding = { top: 20, right: 20, bottom: 30, left: 60 };
+   394→  const chartW = width - padding.left - padding.right;
+   395→  const chartH = height - padding.top - padding.bottom;
+   396→
+   397→  const maxVal = Math.max(...CASH_FLOW_FORECAST.map(d => Math.max(d.inflow, d.outflow)));
+   398→  const yScale = (v: number) => chartH - (v / maxVal) * chartH;
+   399→  const xScale = (i: number) => (i / (CASH_FLOW_FORECAST.length - 1)) * chartW;
+   400→
+   401→  // Cumulative net flow for area
+   402→  const netFlow = CASH_FLOW_FORECAST.reduce<number[]>((acc, d, i) => {
+   403→    const prev = i > 0 ? acc[i - 1] : 0;
+   404→    acc.push(prev + d.inflow - d.outflow);
+   405→    return acc;
+   406→  }, []);
+   407→
+   408→  const netMax = Math.max(...netFlow.map(Math.abs));
+   409→  const netScale = (v: number) => chartH / 2 - (v / netMax) * (chartH / 2);
+   410→
+   411→  const inflowPath = CASH_FLOW_FORECAST.map((d, i) =>
+   412→    `${i === 0 ? 'M' : 'L'} ${xScale(i) + padding.left} ${yScale(d.inflow) + padding.top}`
+   413→  ).join(' ');
+   414→
+   415→  const outflowPath = CASH_FLOW_FORECAST.map((d, i) =>
+   416→    `${i === 0 ? 'M' : 'L'} ${xScale(i) + padding.left} ${yScale(d.outflow) + padding.top}`
+   417→  ).join(' ');
+   418→
+   419→  // Net flow area
+   420→  const netAreaPath = netFlow.map((v, i) =>
+   421→    `${i === 0 ? 'M' : 'L'} ${xScale(i) + padding.left} ${netScale(v) + padding.top}`
+   422→  ).join(' ') +
+   423→    ` L ${xScale(CASH_FLOW_FORECAST.length - 1) + padding.left} ${chartH / 2 + padding.top}` +
+   424→    ` L ${padding.left} ${chartH / 2 + padding.top} Z`;
+   425→
+   426→  return (
+   427→    <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto">
+   428→      <defs>
+   429→        <linearGradient id="netFlowGrad" x1="0" y1="0" x2="0" y2="1">
+   430→          <stop offset="0%" stopColor="#10b981" stopOpacity="0.25" />
+   431→          <stop offset="50%" stopColor="#10b981" stopOpacity="0.02" />
+   432→          <stop offset="100%" stopColor="#ef4444" stopOpacity="0.1" />
+   433→        </linearGradient>
+   434→      </defs>
+   435→
+   436→      {/* Grid */}
+   437→      {[0, 0.5, 1].map((frac) => (
+   438→        <line
+   439→          key={frac}
+   440→          x1={padding.left}
+   441→          y1={padding.top + chartH * (1 - frac)}
+   442→          x2={width - padding.right}
+   443→          y2={padding.top + chartH * (1 - frac)}
+   444→          stroke="#e2e8f0"
+   445→          strokeWidth="0.5"
+   446→          strokeDasharray="4,4"
+   447→        />
+   448→      ))}
+   449→
+   450→      {/* Net flow area */}
+   451→      <path d={netAreaPath} fill="url(#netFlowGrad)" />
+   452→
+   453→      {/* Inflow line */}
+   454→      <path d={inflowPath} fill="none" stroke="#10b981" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+   455→
+   456→      {/* Outflow line */}
+   457→      <path d={outflowPath} fill="none" stroke="#ef4444" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" strokeDasharray="4,3" />
+   458→
+   459→      {/* Inflow dots */}
+   460→      {CASH_FLOW_FORECAST.map((d, i) => (
+   461→        <circle key={`in-${i}`} cx={xScale(i) + padding.left} cy={yScale(d.inflow) + padding.top} r="2.5" fill="white" stroke="#10b981" strokeWidth="1.5" />
+   462→      ))}
+   463→
+   464→      {/* X axis */}
+   465→      {CASH_FLOW_FORECAST.filter((_, i) => i % 3 === 0).map((d, i) => {
+   466→        const idx = i * 3;
+   467→        return (
+   468→          <text key={i} x={xScale(idx) + padding.left} y={height - 8} textAnchor="middle" className="text-[9px] fill-slate-400">
+   469→            Day {d.day}
+   470→          </text>
+   471→        );
+   472→      })}
+   473→    </svg>
+   474→  );
+   475→}
+   476→
+   477→function SimulatedQRCode({ size = 120 }: { size?: number }) {
+   478→  // Generate a simulated QR pattern
+   479→  const cells = 21;
+   480→  const cellSize = size / cells;
+   481→  const pattern: boolean[][] = [];
+   482→
+   483→  // Seed-based pseudo-random for consistency
+   484→  let seed = 42;
+   485→  const rand = () => {
+   486→    seed = (seed * 16807 + 0) % 2147483647;
+   487→    return (seed - 1) / 2147483646;
+   488→  };
+   489→
+   490→  for (let r = 0; r < cells; r++) {
+   491→    pattern[r] = [];
+   492→    for (let c = 0; c < cells; c++) {
+   493→      // Finder patterns (3 corners)
+   494→      const isFinderTL = r < 7 && c < 7;
+   495→      const isFinderTR = r < 7 && c >= cells - 7;
+   496→      const isFinderBL = r >= cells - 7 && c < 7;
+   497→
+   498→      if (isFinderTL || isFinderTR || isFinderBL) {
+   499→        const fr = isFinderBL ? r - (cells - 7) : r;
+   500→        const fc = isFinderTR ? c - (cells - 7) : c;
+   501→        if (fr === 0 || fr === 6 || fc === 0 || fc === 6) pattern[r][c] = true;
+   502→        else if (fr >= 2 && fr <= 4 && fc >= 2 && fc <= 4) pattern[r][c] = true;
+   503→        else pattern[r][c] = false;
+   504→      } else {
+   505→        pattern[r][c] = rand() > 0.5;
+   506→      }
+   507→    }
+   508→  }
+   509→
+   510→  return (
+   511→    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+   512→      <rect width={size} height={size} fill="white" rx="4" />
+   513→      {pattern.map((row, r) =>
+   514→        row.map((cell, c) =>
+   515→          cell ? (
+   516→            <rect
+   517→              key={`${r}-${c}`}
+   518→              x={c * cellSize}
+   519→              y={r * cellSize}
+   520→              width={cellSize}
+   521→              height={cellSize}
+   522→              fill="#1e293b"
+   523→              rx={0.5}
+   524→            />
+   525→          ) : null
+   526→        )
+   527→      )}
+   528→    </svg>
+   529→  );
+   530→}
+   531→
+   532→// ═══════════════════════════════════════════════════════════════════════════════
+   533→// STATUS BADGES
+   534→// ═══════════════════════════════════════════════════════════════════════════════
+   535→
+   536→function StatusBadge({ status }: { status: string }) {
+   537→  const config: Record<string, { label: string; className: string }> = {
+   538→    completed: { label: 'Completed', className: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+   539→    paid: { label: 'Paid', className: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+   540→    active: { label: 'Active', className: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+   541→    pending: { label: 'Pending', className: 'bg-amber-50 text-amber-700 border-amber-200' },
+   542→    overdue: { label: 'Overdue', className: 'bg-red-50 text-red-700 border-red-200' },
+   543→    expired: { label: 'Expired', className: 'bg-slate-50 text-slate-500 border-slate-200' },
+   544→    scheduled: { label: 'Scheduled', className: 'bg-blue-50 text-blue-700 border-blue-200' },
+   545→    failed: { label: 'Failed', className: 'bg-red-50 text-red-700 border-red-200' },
+   546→    held: { label: 'Held', className: 'bg-amber-50 text-amber-700 border-amber-200' },
+   547→  };
+   548→
+   549→  const c = config[status] || { label: status, className: 'bg-slate-50 text-slate-600 border-slate-200' };
+   550→
+   551→  return (
+   552→    <Badge variant="outline" className={`text-[10px] font-medium ${c.className}`}>
+   553→      {c.label}
+   554→    </Badge>
+   555→  );
+   556→}
+   557→
+   558→function MethodBadge({ method }: { method: string }) {
+   559→  const config: Record<string, { icon: React.ReactNode; className: string }> = {
+   560→    UPI: { icon: <Smartphone className="h-3 w-3" />, className: 'bg-violet-50 text-violet-700 border-violet-200' },
+   561→    'Bank Transfer': { icon: <Landmark className="h-3 w-3" />, className: 'bg-slate-50 text-slate-700 border-slate-200' },
+   562→    Card: { icon: <CreditCard className="h-3 w-3" />, className: 'bg-amber-50 text-amber-700 border-amber-200' },
+   563→    NEFT: { icon: <Landmark className="h-3 w-3" />, className: 'bg-slate-50 text-slate-700 border-slate-200' },
+   564→    RTGS: { icon: <Landmark className="h-3 w-3" />, className: 'bg-slate-50 text-slate-700 border-slate-200' },
+   565→  };
+   566→
+   567→  const c = config[method] || { icon: <CreditCard className="h-3 w-3" />, className: 'bg-slate-50 text-slate-600 border-slate-200' };
+   568→
+   569→  return (
+   570→    <Badge variant="outline" className={`text-[10px] font-medium gap-1 ${c.className}`}>
+   571→      {c.icon} {method}
+   572→    </Badge>
+   573→  );
+   574→}
+   575→
+   576→// ═══════════════════════════════════════════════════════════════════════════════
+   577→// ANIMATION VARIANTS
+   578→// ═══════════════════════════════════════════════════════════════════════════════
+   579→
+   580→const fadeIn = {
+   581→  initial: { opacity: 0, y: 12 },
+   582→  animate: { opacity: 1, y: 0 },
+   583→  exit: { opacity: 0, y: -12 },
+   584→};
+   585→
+   586→const stagger = {
+   587→  animate: { transition: { staggerChildren: 0.05 } },
+   588→};
+   589→
+   590→const cardHover = {
+   591→  whileHover: { y: -2, transition: { duration: 0.2 } },
+   592→};
+   593→
+   594→// ═══════════════════════════════════════════════════════════════════════════════
+   595→// MAIN COMPONENT
+   596→// ═══════════════════════════════════════════════════════════════════════════════
+   597→
+   598→export default function EmbeddedFinancePage() {
+   599→  const [activeTab, setActiveTab] = useState('dashboard');
+   600→  const [createLinkOpen, setCreateLinkOpen] = useState(false);
+   601→  const [copiedLinkId, setCopiedLinkId] = useState<string | null>(null);
+   602→
+   603→  // Firestore hooks (used for reference; demo data drives the display)
+   604→  const { data: clients } = useFireClients();
+   605→  const { data: invoices } = useFireInvoices();
+   606→  const { data: returns } = useFireReturns();
+   607→
+   608→  // Computed stats
+   609→  const stats = useMemo(() => {
+   610→    const totalCollected = DEMO_PAYMENTS.filter(p => p.status === 'completed').reduce((s, p) => s + p.amount, 0);
+   611→    const pendingCollections = DEMO_PAYMENTS.filter(p => p.status === 'pending').reduce((s, p) => s + p.amount, 0);
+   612→    const overdueAmount = DEMO_PAYMENTS.filter(p => p.status === 'overdue').reduce((s, p) => s + p.amount, 0);
+   613→    const collectionRate = Math.round(((DEMO_PAYMENTS.filter(p => p.status === 'completed').length) / DEMO_PAYMENTS.length) * 100);
+   614→    return { totalCollected, pendingCollections, overdueAmount, collectionRate };
+   615→  }, []);
+   616→
+   617→  const payoutStats = useMemo(() => {
+   618→    const totalDisbursed = DEMO_PAYOUT_HISTORY.filter(p => p.status === 'completed').reduce((s, p) => s + p.amount, 0);
+   619→    const failedPayouts = DEMO_PAYOUT_HISTORY.filter(p => p.status === 'failed').length;
+   620→    return { totalDisbursed, failedPayouts, avgProcessingTime: '1.8 days' };
+   621→  }, []);
+   622→
+   623→  const handleCopyLink = (linkId: string) => {
+   624→    setCopiedLinkId(linkId);
+   625→    setTimeout(() => setCopiedLinkId(null), 2000);
+   626→  };
+   627→
+   628→  // ─── TAB 1: PAYMENT DASHBOARD ───────────────────────────────────────────────
+   629→
+   630→  const renderDashboard = () => (
+   631→    <motion.div variants={stagger} initial="initial" animate="animate" className="space-y-6">
+   632→      {/* Stats Cards */}
+   633→      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+   634→        {[
+   635→          { title: 'Total Collected', value: formatINR(stats.totalCollected), icon: IndianRupee, trend: '+12.4%', trendUp: true, color: 'emerald' },
+   636→          { title: 'Pending Collections', value: formatINR(stats.pendingCollections), icon: Clock, trend: '3 invoices', trendUp: false, color: 'amber' },
+   637→          { title: 'Overdue Amount', value: formatINR(stats.overdueAmount), icon: AlertTriangle, trend: '2 clients', trendUp: false, color: 'red' },
+   638→          { title: 'Collection Rate', value: `${stats.collectionRate}%`, icon: TrendingUp, trend: '+3.2%', trendUp: true, color: 'emerald' },
+   639→        ].map((stat, i) => (
+   640→          <motion.div key={stat.title} variants={fadeIn} {...cardHover}>
+   641→            <Card className="border-slate-200/60 shadow-sm hover:shadow-md transition-shadow">
+   642→              <CardContent className="p-5">
+   643→                <div className="flex items-start justify-between">
+   644→                  <div>
+   645→                    <p className="text-xs font-medium text-slate-500 mb-1">{stat.title}</p>
+   646→                    <p className="text-xl font-bold text-slate-800">{stat.value}</p>
+   647→                  </div>
+   648→                  <div className={`p-2 rounded-lg ${
+   649→                    stat.color === 'emerald' ? 'bg-emerald-50' :
+   650→                    stat.color === 'amber' ? 'bg-amber-50' : 'bg-red-50'
+   651→                  }`}>
+   652→                    <stat.icon className={`h-4 w-4 ${
+   653→                      stat.color === 'emerald' ? 'text-emerald-600' :
+   654→                      stat.color === 'amber' ? 'text-amber-600' : 'text-red-600'
+   655→                    }`} />
+   656→                  </div>
+   657→                </div>
+   658→                <div className="flex items-center gap-1 mt-2">
+   659→                  {stat.trendUp ? (
+   660→                    <ArrowUpRight className="h-3 w-3 text-emerald-500" />
+   661→                  ) : (
+   662→                    <ArrowDownRight className="h-3 w-3 text-amber-500" />
+   663→                  )}
+   664→                  <span className={`text-[11px] font-medium ${
+   665→                    stat.trendUp ? 'text-emerald-600' : 'text-amber-600'
+   666→                  }`}>
+   667→                    {stat.trend}
+   668→                  </span>
+   669→                  <span className="text-[10px] text-slate-400 ml-1">vs last month</span>
+   670→                </div>
+   671→              </CardContent>
+   672→            </Card>
+   673→          </motion.div>
+   674→        ))}
+   675→      </div>
+   676→
+   677→      {/* Charts Row */}
+   678→      <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+   679→        {/* Collection Trend */}
+   680→        <motion.div variants={fadeIn} className="lg:col-span-3">
+   681→          <Card className="border-slate-200/60 shadow-sm">
+   682→            <CardHeader className="pb-2 pt-4 px-5">
+   683→              <div className="flex items-center justify-between">
+   684→                <CardTitle className="text-sm font-semibold text-slate-700">Collection Trend</CardTitle>
+   685→                <div className="flex items-center gap-4">
+   686→                  <div className="flex items-center gap-1.5">
+   687→                    <div className="w-2 h-2 rounded-full bg-emerald-500" />
+   688→                    <span className="text-[10px] text-slate-500">Collected</span>
+   689→                  </div>
+   690→                  <div className="flex items-center gap-1.5">
+   691→                    <div className="w-2 h-2 rounded-full bg-amber-500" />
+   692→                    <span className="text-[10px] text-slate-500">Pending</span>
+   693→                  </div>
+   694→                </div>
+   695→              </div>
+   696→            </CardHeader>
+   697→            <CardContent className="px-5 pb-4">
+   698→              <CollectionTrendChart />
+   699→            </CardContent>
+   700→          </Card>
+   701→        </motion.div>
+   702→
+   703→        {/* Payment Method Breakdown */}
+   704→        <motion.div variants={fadeIn} className="lg:col-span-2">
+   705→          <Card className="border-slate-200/60 shadow-sm h-full">
+   706→            <CardHeader className="pb-2 pt-4 px-5">
+   707→              <CardTitle className="text-sm font-semibold text-slate-700">Payment Methods</CardTitle>
+   708→            </CardHeader>
+   709→            <CardContent className="px-5 pb-4">
+   710→              <PaymentMethodDonut />
+   711→            </CardContent>
+   712→          </Card>
+   713→        </motion.div>
+   714→      </div>
+   715→
+   716→      {/* AI Predictions */}
+   717→      <motion.div variants={fadeIn}>
+   718→        <Card className="border-emerald-200/60 bg-gradient-to-r from-emerald-50/50 to-slate-50/50 shadow-sm">
+   719→          <CardHeader className="pb-2 pt-4 px-5">
+   720→            <div className="flex items-center gap-2">
+   721→              <div className="p-1.5 rounded-lg bg-emerald-100">
+   722→                <Zap className="h-3.5 w-3.5 text-emerald-600" />
+   723→              </div>
+   724→              <CardTitle className="text-sm font-semibold text-slate-700">AI Predictions</CardTitle>
+   725→            </div>
+   726→          </CardHeader>
+   727→          <CardContent className="px-5 pb-4">
+   728→            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+   729→              {[
+   730→                { text: 'Late collections expected: ₹2,34,500', icon: AlertTriangle, confidence: 87, color: 'amber' },
+   731→                { text: 'Cash flow shortage predicted in 15 days', icon: TrendingUp, confidence: 72, color: 'red' },
+   732→                { text: '₹5,67,800 expected receipts this week', icon: ArrowUpRight, confidence: 91, color: 'emerald' },
+   733→              ].map((pred, i) => (
+   734→                <div key={i} className="flex items-start gap-2.5 p-3 rounded-lg bg-white/70 border border-slate-100">
+   735→                  <pred.icon className={`h-4 w-4 mt-0.5 shrink-0 ${
+   736→                    pred.color === 'emerald' ? 'text-emerald-500' :
+   737→                    pred.color === 'amber' ? 'text-amber-500' : 'text-red-500'
+   738→                  }`} />
+   739→                  <div>
+   740→                    <p className="text-xs text-slate-700 leading-snug">{pred.text}</p>
+   741→                    <div className="flex items-center gap-1.5 mt-1.5">
+   742→                      <Progress value={pred.confidence} className="h-1 flex-1" />
+   743→                      <span className="text-[9px] font-medium text-slate-500">{pred.confidence}%</span>
+   744→                    </div>
+   745→                  </div>
+   746→                </div>
+   747→              ))}
+   748→            </div>
+   749→          </CardContent>
+   750→        </Card>
+   751→      </motion.div>
+   752→
+   753→      {/* Recent Payments Table */}
+   754→      <motion.div variants={fadeIn}>
+   755→        <Card className="border-slate-200/60 shadow-sm">
+   756→          <CardHeader className="pb-2 pt-4 px-5">
+   757→            <div className="flex items-center justify-between">
+   758→              <CardTitle className="text-sm font-semibold text-slate-700">Recent Payments</CardTitle>
+   759→              <Button variant="ghost" size="sm" className="text-xs text-emerald-600 hover:text-emerald-700">
+   760→                View All <ArrowRight className="h-3 w-3 ml-1" />
+   761→              </Button>
+   762→            </div>
+   763→          </CardHeader>
+   764→          <CardContent className="px-5 pb-4">
+   765→            <ScrollArea className="max-h-80">
+   766→              <div className="space-y-0">
+   767→                {/* Header */}
+   768→                <div className="grid grid-cols-6 gap-3 pb-2 border-b border-slate-100">
+   769→                  <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Date</span>
+   770→                  <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Client</span>
+   771→                  <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider text-right">Amount</span>
+   772→                  <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Method</span>
+   773→                  <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Status</span>
+   774→                  <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Reference</span>
+   775→                </div>
+   776→                {DEMO_PAYMENTS.map((payment) => (
+   777→                  <div key={payment.id} className="grid grid-cols-6 gap-3 py-2.5 border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
+   778→                    <span className="text-xs text-slate-600">{formatDate(payment.date)}</span>
+   779→                    <span className="text-xs text-slate-700 font-medium truncate">{payment.client}</span>
+   780→                    <span className="text-xs text-slate-800 font-semibold text-right">{formatINR(payment.amount)}</span>
+   781→                    <div><MethodBadge method={payment.method} /></div>
+   782→                    <div><StatusBadge status={payment.status} /></div>
+   783→                    <span className="text-[10px] text-slate-400 font-mono truncate">{payment.reference}</span>
+   784→                  </div>
+   785→                ))}
+   786→              </div>
+   787→            </ScrollArea>
+   788→          </CardContent>
+   789→        </Card>
+   790→      </motion.div>
+   791→    </motion.div>
+   792→  );
+   793→
+   794→  // ─── TAB 2: PAYMENT LINKS ──────────────────────────────────────────────────
+   795→
+   796→  const renderPaymentLinks = () => (
+   797→    <motion.div variants={stagger} initial="initial" animate="animate" className="space-y-6">
+   798→      {/* Header with Create button */}
+   799→      <motion.div variants={fadeIn} className="flex items-center justify-between">
+   800→        <div>
+   801→          <h3 className="text-sm font-semibold text-slate-700">Payment Links</h3>
+   802→          <p className="text-xs text-slate-500 mt-0.5">Create and share payment links with your clients</p>
+   803→        </div>
+   804→        <Dialog open={createLinkOpen} onOpenChange={setCreateLinkOpen}>
+   805→          <DialogTrigger asChild>
+   806→            <Button className="bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5">
+   807→              <Plus className="h-3.5 w-3.5" /> Create Payment Link
+   808→            </Button>
+   809→          </DialogTrigger>
+   810→          <DialogContent className="sm:max-w-lg">
+   811→            <DialogHeader>
+   812→              <DialogTitle className="flex items-center gap-2">
+   813→                <Link className="h-4 w-4 text-emerald-600" />
+   814→                Create Payment Link
+   815→              </DialogTitle>
+   816→            </DialogHeader>
+   817→            <div className="space-y-4 mt-4">
+   818→              <div className="grid grid-cols-2 gap-4">
+   819→                <div className="space-y-1.5">
+   820→                  <label className="text-xs font-medium text-slate-600">Amount (₹)</label>
+   821→                  <Input type="number" placeholder="1,00,000" className="text-sm" />
+   822→                </div>
+   823→                <div className="space-y-1.5">
+   824→                  <label className="text-xs font-medium text-slate-600">Client</label>
+   825→                  <Input placeholder="Select client" className="text-sm" />
+   826→                </div>
+   827→              </div>
+   828→              <div className="space-y-1.5">
+   829→                <label className="text-xs font-medium text-slate-600">Description</label>
+   830→                <Input placeholder="Payment for GSTR-1 filing - March 2026" className="text-sm" />
+   831→              </div>
+   832→              <div className="grid grid-cols-2 gap-4">
+   833→                <div className="space-y-1.5">
+   834→                  <label className="text-xs font-medium text-slate-600">Due Date</label>
+   835→                  <Input type="date" className="text-sm" />
+   836→                </div>
+   837→                <div className="space-y-1.5">
+   838→                  <label className="text-xs font-medium text-slate-600">Expiry (days)</label>
+   839→                  <Input type="number" placeholder="15" className="text-sm" />
+   840→                </div>
+   841→              </div>
+   842→              <div className="space-y-1.5">
+   843→                <label className="text-xs font-medium text-slate-600">Payment Methods</label>
+   844→                <div className="flex gap-2">
+   845→                  {['UPI', 'Card', 'Bank Transfer'].map((method) => (
+   846→                    <Badge key={method} variant="outline" className="cursor-pointer hover:bg-emerald-50 hover:border-emerald-300 hover:text-emerald-700 transition-colors text-xs py-1.5 px-3">
+   847→                      {method === 'UPI' && <Smartphone className="h-3 w-3 mr-1" />}
+   848→                      {method === 'Card' && <CreditCard className="h-3 w-3 mr-1" />}
+   849→                      {method === 'Bank Transfer' && <Landmark className="h-3 w-3 mr-1" />}
+   850→                      {method}
+   851→                    </Badge>
+   852→                  ))}
+   853→                </div>
+   854→              </div>
+   855→              <div className="flex gap-3 pt-2">
+   856→                <Button variant="outline" className="flex-1" onClick={() => setCreateLinkOpen(false)}>Cancel</Button>
+   857→                <Button className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => setCreateLinkOpen(false)}>
+   858→                  <Send className="h-3.5 w-3.5 mr-1.5" /> Create & Share
+   859→                </Button>
+   860→              </div>
+   861→            </div>
+   862→          </DialogContent>
+   863→        </Dialog>
+   864→      </motion.div>
+   865→
+   866→      {/* Revenue Summary */}
+   867→      <motion.div variants={fadeIn}>
+   868→        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+   869→          <Card className="border-slate-200/60 shadow-sm">
+   870→            <CardContent className="p-4 flex items-center gap-3">
+   871→              <div className="p-2 rounded-lg bg-emerald-50">
+   872→                <IndianRupee className="h-4 w-4 text-emerald-600" />
+   873→              </div>
+   874→              <div>
+   875→                <p className="text-[10px] text-slate-500">Revenue from Links</p>
+   876→                <p className="text-lg font-bold text-slate-800">{formatINR(3255000)}</p>
+   877→              </div>
+   878→            </CardContent>
+   879→          </Card>
+   880→          <Card className="border-slate-200/60 shadow-sm">
+   881→            <CardContent className="p-4 flex items-center gap-3">
+   882→              <div className="p-2 rounded-lg bg-emerald-50">
+   883→                <CheckCircle className="h-4 w-4 text-emerald-600" />
+   884→              </div>
+   885→              <div>
+   886→                <p className="text-[10px] text-slate-500">Auto-Reconciled</p>
+   887→                <p className="text-lg font-bold text-slate-800">3 of 7</p>
+   888→              </div>
+   889→            </CardContent>
+   890→          </Card>
+   891→          <Card className="border-slate-200/60 shadow-sm">
+   892→            <CardContent className="p-4 flex items-center gap-3">
+   893→              <div className="p-2 rounded-lg bg-amber-50">
+   894→                <Clock className="h-4 w-4 text-amber-600" />
+   895→              </div>
+   896→              <div>
+   897→                <p className="text-[10px] text-slate-500">Active Links</p>
+   898→                <p className="text-lg font-bold text-slate-800">3</p>
+   899→              </div>
+   900→            </CardContent>
+   901→          </Card>
+   902→        </div>
+   903→      </motion.div>
+   904→
+   905→      {/* Payment Links Table + QR Code */}
+   906→      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+   907→        {/* Links Table */}
+   908→        <motion.div variants={fadeIn} className="lg:col-span-2">
+   909→          <Card className="border-slate-200/60 shadow-sm">
+   910→            <CardHeader className="pb-2 pt-4 px-5">
+   911→              <CardTitle className="text-sm font-semibold text-slate-700">All Payment Links</CardTitle>
+   912→            </CardHeader>
+   913→            <CardContent className="px-5 pb-4">
+   914→              <ScrollArea className="max-h-72">
+   915→                <div className="space-y-0">
+   916→                  <div className="grid grid-cols-7 gap-2 pb-2 border-b border-slate-100">
+   917→                    <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Link ID</span>
+   918→                    <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Client</span>
+   919→                    <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider text-right">Amount</span>
+   920→                    <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Status</span>
+   921→                    <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Created</span>
+   922→                    <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Reconciled</span>
+   923→                    <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Actions</span>
+   924→                  </div>
+   925→                  {DEMO_PAYMENT_LINKS.map((link) => (
+   926→                    <div key={link.id} className="grid grid-cols-7 gap-2 py-2.5 border-b border-slate-50 hover:bg-slate-50/50 transition-colors items-center">
+   927→                      <span className="text-[10px] font-mono text-slate-600">{link.id}</span>
+   928→                      <span className="text-xs text-slate-700 font-medium truncate">{link.client}</span>
+   929→                      <span className="text-xs text-slate-800 font-semibold text-right">{formatINR(link.amount)}</span>
+   930→                      <div><StatusBadge status={link.status} /></div>
+   931→                      <span className="text-[10px] text-slate-500">{formatDate(link.created)}</span>
+   932→                      <div>
+   933→                        {link.reconciled ? (
+   934→                          <Badge variant="outline" className="text-[9px] bg-emerald-50 text-emerald-600 border-emerald-200">
+   935→                            <CheckCircle className="h-2.5 w-2.5 mr-0.5" /> Yes
+   936→                          </Badge>
+   937→                        ) : (
+   938→                          <Badge variant="outline" className="text-[9px] bg-slate-50 text-slate-400 border-slate-200">No</Badge>
+   939→                        )}
+   940→                      </div>
+   941→                      <div className="flex items-center gap-1">
+   942→                        <Button
+   943→                          variant="ghost"
+   944→                          size="sm"
+   945→                          className="h-6 w-6 p-0"
+   946→                          onClick={() => handleCopyLink(link.id)}
+   947→                        >
+   948→                          {copiedLinkId === link.id ? (
+   949→                            <CheckCircle className="h-3 w-3 text-emerald-500" />
+   950→                          ) : (
+   951→                            <Copy className="h-3 w-3 text-slate-400" />
+   952→                          )}
+   953→                        </Button>
+   954→                        <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
+   955→                          <ExternalLink className="h-3 w-3 text-slate-400" />
+   956→                        </Button>
+   957→                      </div>
+   958→                    </div>
+   959→                  ))}
+   960→                </div>
+   961→              </ScrollArea>
+   962→            </CardContent>
+   963→          </Card>
+   964→        </motion.div>
+   965→
+   966→        {/* QR Code Preview */}
+   967→        <motion.div variants={fadeIn}>
+   968→          <Card className="border-slate-200/60 shadow-sm">
+   969→            <CardHeader className="pb-2 pt-4 px-5">
+   970→              <CardTitle className="text-sm font-semibold text-slate-700">QR Code Preview</CardTitle>
+   971→            </CardHeader>
+   972→            <CardContent className="px-5 pb-4 flex flex-col items-center gap-4">
+   973→              <div className="p-3 bg-white rounded-xl border border-slate-100 shadow-sm">
+   974→                <SimulatedQRCode size={140} />
+   975→              </div>
+   976→              <div className="text-center w-full">
+   977→                <p className="text-xs font-medium text-slate-700">PL-2026-001</p>
+   978→                <p className="text-[10px] text-slate-500 mt-0.5">Rajesh Kumar Enterprises • {formatINR(545000)}</p>
+   979→              </div>
+   980→              <div className="w-full space-y-2">
+   981→                <Button variant="outline" className="w-full text-xs gap-1.5" size="sm">
+   982→                  <Copy className="h-3 w-3" /> Copy Payment Link
+   983→                </Button>
+   984→                <Button variant="outline" className="w-full text-xs gap-1.5" size="sm">
+   985→                  <QrCode className="h-3 w-3" /> Download QR Code
+   986→                </Button>
+   987→              </div>
+   988→            </CardContent>
+   989→          </Card>
+   990→        </motion.div>
+   991→      </div>
+   992→    </motion.div>
+   993→  );
+   994→
+   995→  // ─── TAB 3: VIRTUAL ACCOUNTS ───────────────────────────────────────────────
+   996→
+   997→  const renderVirtualAccounts = () => (
+   998→    <motion.div variants={stagger} initial="initial" animate="animate" className="space-y-6">
+   999→      {/* Account List */}
+  1000→      <motion.div variants={fadeIn} className="flex items-center justify-between">
+  1001→        <div>
+  1002→          <h3 className="text-sm font-semibold text-slate-700">Virtual Accounts</h3>
+  1003→          <p className="text-xs text-slate-500 mt-0.5">Dedicated collection accounts for each client</p>
+  1004→        </div>
+  1005→        <Button className="bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5">
+  1006→          <Plus className="h-3.5 w-3.5" /> Create Account
+  1007→        </Button>
+  1008→      </motion.div>
+  1009→
+  1010→      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+  1011→        {DEMO_VIRTUAL_ACCOUNTS.map((account) => (
+  1012→          <motion.div key={account.id} variants={fadeIn} {...cardHover}>
+  1013→            <Card className={`border-slate-200/60 shadow-sm ${account.type === 'escrow' ? 'border-amber-200/60 bg-amber-50/20' : ''}`}>
+  1014→              <CardContent className="p-5">
+  1015→                <div className="flex items-start justify-between mb-3">
+  1016→                  <div className="flex items-center gap-2">
+  1017→                    <div className={`p-2 rounded-lg ${account.type === 'escrow' ? 'bg-amber-100' : 'bg-emerald-50'}`}>
+  1018→                      {account.type === 'escrow' ? (
+  1019→                        <Shield className="h-4 w-4 text-amber-600" />
+  1020→                      ) : (
+  1021→                        <Building2 className="h-4 w-4 text-emerald-600" />
+  1022→                      )}
+  1023→                    </div>
+  1024→                    <div>
+  1025→                      <p className="text-sm font-semibold text-slate-700">{account.client}</p>
+  1026→                      <Badge variant="outline" className={`text-[9px] mt-0.5 ${account.type === 'escrow' ? 'bg-amber-50 text-amber-600 border-amber-200' : 'bg-emerald-50 text-emerald-600 border-emerald-200'}`}>
+  1027→                        {account.type === 'escrow' ? 'Escrow' : 'Collection'}
+  1028→                      </Badge>
+  1029→                    </div>
+  1030→                  </div>
+  1031→                  <Button variant="ghost" size="sm" className="h-7 text-xs gap-1 text-slate-500">
+  1032→                    <Eye className="h-3 w-3" /> View
+  1033→                  </Button>
+  1034→                </div>
+  1035→                <div className="grid grid-cols-2 gap-3 mb-3">
+  1036→                  <div>
+  1037→                    <p className="text-[10px] text-slate-400">Account Number</p>
+  1038→                    <p className="text-xs font-mono font-medium text-slate-700">{account.accountNumber}</p>
+  1039→                  </div>
+  1040→                  <div>
+  1041→                    <p className="text-[10px] text-slate-400">IFSC</p>
+  1042→                    <p className="text-xs font-mono font-medium text-slate-700">{account.ifsc}</p>
+  1043→                  </div>
+  1044→                </div>
+  1045→                <Separator className="my-3" />
+  1046→                <div className="flex items-center justify-between">
+  1047→                  <div>
+  1048→                    <p className="text-[10px] text-slate-400">Balance</p>
+  1049→                    <p className="text-base font-bold text-slate-800">{formatINR(account.balance)}</p>
+  1050→                  </div>
+  1051→                  <div className="text-right">
+  1052→                    <p className="text-[10px] text-slate-400">Transactions</p>
+  1053→                    <p className="text-sm font-semibold text-slate-600">{account.transactions}</p>
+  1054→                  </div>
+  1055→                </div>
+  1056→              </CardContent>
+  1057→            </Card>
+  1058→          </motion.div>
+  1059→        ))}
+  1060→      </div>
+  1061→
+  1062→      {/* Escrow Section */}
+  1063→      <motion.div variants={fadeIn}>
+  1064→        <Card className="border-amber-200/60 shadow-sm">
+  1065→          <CardHeader className="pb-2 pt-4 px-5">
+  1066→            <div className="flex items-center gap-2">
+  1067→              <Shield className="h-4 w-4 text-amber-600" />
+  1068→              <CardTitle className="text-sm font-semibold text-slate-700">Escrow Accounts</CardTitle>
+  1069→            </div>
+  1070→          </CardHeader>
+  1071→          <CardContent className="px-5 pb-4">
+  1072→            <div className="space-y-3">
+  1073→              {DEMO_ESCROW.map((esc) => (
+  1074→                <div key={esc.id} className="p-3 rounded-lg bg-amber-50/50 border border-amber-100">
+  1075→                  <div className="flex items-start justify-between mb-2">
+  1076→                    <div>
+  1077→                      <p className="text-sm font-medium text-slate-700">{esc.client}</p>
+  1078→                      <p className="text-xs text-slate-500 mt-0.5">{esc.releaseCondition}</p>
+  1079→                    </div>
+  1080→                    <div className="text-right">
+  1081→                      <p className="text-base font-bold text-amber-700">{formatINR(esc.amount)}</p>
+  1082→                      <Badge variant="outline" className="text-[9px] bg-amber-50 text-amber-600 border-amber-200 mt-1">
+  1083→                        <Clock className="h-2.5 w-2.5 mr-0.5" /> Auto-release: {formatDate(esc.autoRelease)}
+  1084→                      </Badge>
+  1085→                    </div>
+  1086→                  </div>
+  1087→                  <div className="flex items-center gap-2">
+  1088→                    <Progress value={45} className="h-1.5 flex-1" />
+  1089→                    <span className="text-[9px] text-slate-500">Awaiting conditions</span>
+  1090→                  </div>
+  1091→                </div>
+  1092→              ))}
+  1093→            </div>
+  1094→          </CardContent>
+  1095→        </Card>
+  1096→      </motion.div>
+  1097→
+  1098→      {/* Bank Reconciliation Status + Activity Timeline */}
+  1099→      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+  1100→        <motion.div variants={fadeIn}>
+  1101→          <Card className="border-slate-200/60 shadow-sm">
+  1102→            <CardHeader className="pb-2 pt-4 px-5">
+  1103→              <div className="flex items-center gap-2">
+  1104→                <RefreshCw className="h-4 w-4 text-emerald-600" />
+  1105→                <CardTitle className="text-sm font-semibold text-slate-700">Bank Reconciliation</CardTitle>
+  1106→              </div>
+  1107→            </CardHeader>
+  1108→            <CardContent className="px-5 pb-4 space-y-3">
+  1109→              {[
+  1110→                { bank: 'HDFC Bank', lastSync: '2 min ago', matched: 34, unmatched: 3, status: 'synced' },
+  1111→                { bank: 'ICICI Bank', lastSync: '15 min ago', matched: 28, unmatched: 5, status: 'synced' },
+  1112→                { bank: 'SBI', lastSync: '1 hour ago', matched: 19, unmatched: 7, status: 'pending' },
+  1113→              ].map((bank, i) => (
+  1114→                <div key={i} className="flex items-center justify-between p-3 rounded-lg bg-slate-50/50 border border-slate-100">
+  1115→                  <div className="flex items-center gap-3">
+  1116→                    <div className="p-1.5 rounded bg-white border border-slate-200">
+  1117→                      <Landmark className="h-3.5 w-3.5 text-slate-600" />
+  1118→                    </div>
+  1119→                    <div>
+  1120→                      <p className="text-xs font-medium text-slate-700">{bank.bank}</p>
+  1121→                      <p className="text-[10px] text-slate-400">Last sync: {bank.lastSync}</p>
+  1122→                    </div>
+  1123→                  </div>
+  1124→                  <div className="flex items-center gap-3">
+  1125→                    <div className="text-right">
+  1126→                      <p className="text-[10px] text-slate-500">{bank.matched} matched</p>
+  1127→                      <p className="text-[10px] text-amber-600">{bank.unmatched} unmatched</p>
+  1128→                    </div>
+  1129→                    <Badge variant="outline" className={`text-[9px] ${bank.status === 'synced' ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : 'bg-amber-50 text-amber-600 border-amber-200'}`}>
+  1130→                      {bank.status === 'synced' ? '✓ Synced' : 'Pending'}
+  1131→                    </Badge>
+  1132→                  </div>
+  1133→                </div>
+  1134→              ))}
+  1135→            </CardContent>
+  1136→          </Card>
+  1137→        </motion.div>
+  1138→
+  1139→        <motion.div variants={fadeIn}>
+  1140→          <Card className="border-slate-200/60 shadow-sm">
+  1141→            <CardHeader className="pb-2 pt-4 px-5">
+  1142→              <CardTitle className="text-sm font-semibold text-slate-700">Account Activity</CardTitle>
+  1143→            </CardHeader>
+  1144→            <CardContent className="px-5 pb-4">
+  1145→              <ScrollArea className="max-h-52">
+  1146→                <div className="space-y-3">
+  1147→                  {[
+  1148→                    { time: '10:30 AM', text: '₹5,45,000 received from Rajesh Kumar Enterprises via UPI', type: 'credit' },
+  1149→                    { time: '09:15 AM', text: '₹12,34,567 credited from Patel Industries via NEFT', type: 'credit' },
+  1150→                    { time: 'Yesterday', text: 'Escrow release initiated for Jain Infrastructure Corp', type: 'escrow' },
+  1151→                    { time: 'Yesterday', text: '₹3,45,000 auto-reconciled for Gupta Manufacturing', type: 'reconcile' },
+  1152→                    { time: '2 days ago', text: 'Bank statement imported from HDFC (23 transactions)', type: 'import' },
+  1153→                    { time: '3 days ago', text: 'Virtual account VA-002 created for Patel Industries', type: 'create' },
+  1154→                  ].map((activity, i) => (
+  1155→                    <div key={i} className="flex items-start gap-3">
+  1156→                      <div className={`w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 ${
+  1157→                        activity.type === 'credit' ? 'bg-emerald-500' :
+  1158→                        activity.type === 'escrow' ? 'bg-amber-500' :
+  1159→                        activity.type === 'reconcile' ? 'bg-blue-500' : 'bg-slate-400'
+  1160→                      }`} />
+  1161→                      <div>
+  1162→                        <p className="text-xs text-slate-600 leading-snug">{activity.text}</p>
+  1163→                        <p className="text-[10px] text-slate-400 mt-0.5">{activity.time}</p>
+  1164→                      </div>
+  1165→                    </div>
+  1166→                  ))}
+  1167→                </div>
+  1168→              </ScrollArea>
+  1169→            </CardContent>
+  1170→          </Card>
+  1171→        </motion.div>
+  1172→      </div>
+  1173→    </motion.div>
+  1174→  );
+  1175→
+  1176→  // ─── TAB 4: PAYOUT MANAGEMENT ──────────────────────────────────────────────
+  1177→
+  1178→  const renderPayouts = () => (
+  1179→    <motion.div variants={stagger} initial="initial" animate="animate" className="space-y-6">
+  1180→      {/* Payout Stats */}
+  1181→      <motion.div variants={fadeIn}>
+  1182→        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+  1183→          {[
+  1184→            { title: 'Total Disbursed', value: formatINR(payoutStats.totalDisbursed), icon: Send, color: 'emerald' },
+  1185→            { title: 'Avg Processing Time', value: payoutStats.avgProcessingTime, icon: Clock, color: 'slate' },
+  1186→            { title: 'Failed Payouts', value: String(payoutStats.failedPayouts), icon: XCircle, color: 'red' },
+  1187→          ].map((stat) => (
+  1188→            <Card key={stat.title} className="border-slate-200/60 shadow-sm">
+  1189→              <CardContent className="p-4 flex items-center gap-3">
+  1190→                <div className={`p-2 rounded-lg ${
+  1191→                  stat.color === 'emerald' ? 'bg-emerald-50' :
+  1192→                  stat.color === 'red' ? 'bg-red-50' : 'bg-slate-100'
+  1193→                }`}>
+  1194→                  <stat.icon className={`h-4 w-4 ${
+  1195→                    stat.color === 'emerald' ? 'text-emerald-600' :
+  1196→                    stat.color === 'red' ? 'text-red-600' : 'text-slate-600'
+  1197→                  }`} />
+  1198→                </div>
+  1199→                <div>
+  1200→                  <p className="text-[10px] text-slate-500">{stat.title}</p>
+  1201→                  <p className="text-lg font-bold text-slate-800">{stat.value}</p>
+  1202→                </div>
+  1203→              </CardContent>
+  1204→            </Card>
+  1205→          ))}
+  1206→        </div>
+  1207→      </motion.div>
+  1208→
+  1209→      {/* Pending Payouts */}
+  1210→      <motion.div variants={fadeIn}>
+  1211→        <Card className="border-slate-200/60 shadow-sm">
+  1212→          <CardHeader className="pb-2 pt-4 px-5">
+  1213→            <div className="flex items-center justify-between">
+  1214→              <CardTitle className="text-sm font-semibold text-slate-700">Pending Payouts</CardTitle>
+  1215→              <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs gap-1.5">
+  1216→                <Send className="h-3 w-3" /> Batch Process
+  1217→              </Button>
+  1218→            </div>
+  1219→          </CardHeader>
+  1220→          <CardContent className="px-5 pb-4">
+  1221→            <ScrollArea className="max-h-72">
+  1222→              <div className="space-y-0">
+  1223→                <div className="grid grid-cols-6 gap-3 pb-2 border-b border-slate-100">
+  1224→                  <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Vendor</span>
+  1225→                  <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider text-right">Amount</span>
+  1226→                  <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Method</span>
+  1227→                  <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Category</span>
+  1228→                  <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Scheduled</span>
+  1229→                  <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Status</span>
+  1230→                </div>
+  1231→                {DEMO_PAYOUTS.map((payout) => (
+  1232→                  <div key={payout.id} className="grid grid-cols-6 gap-3 py-2.5 border-b border-slate-50 hover:bg-slate-50/50 transition-colors items-center">
+  1233→                    <span className="text-xs text-slate-700 font-medium">{payout.vendor}</span>
+  1234→                    <span className="text-xs text-slate-800 font-semibold text-right">{formatINR(payout.amount)}</span>
+  1235→                    <div><MethodBadge method={payout.method} /></div>
+  1236→                    <span className="text-xs text-slate-500">{payout.category}</span>
+  1237→                    <span className="text-[10px] text-slate-500">{formatDate(payout.scheduledDate)}</span>
+  1238→                    <div><StatusBadge status={payout.status} /></div>
+  1239→                  </div>
+  1240→                ))}
+  1241→              </div>
+  1242→            </ScrollArea>
+  1243→          </CardContent>
+  1244→        </Card>
+  1245→      </motion.div>
+  1246→
+  1247→      {/* Auto-Payout Rules + History */}
+  1248→      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+  1249→        {/* Auto-Payout Rules */}
+  1250→        <motion.div variants={fadeIn}>
+  1251→          <Card className="border-slate-200/60 shadow-sm">
+  1252→            <CardHeader className="pb-2 pt-4 px-5">
+  1253→              <div className="flex items-center justify-between">
+  1254→                <div className="flex items-center gap-2">
+  1255→                  <Zap className="h-4 w-4 text-emerald-600" />
+  1256→                  <CardTitle className="text-sm font-semibold text-slate-700">Auto-Payout Rules</CardTitle>
+  1257→                </div>
+  1258→                <Button variant="outline" size="sm" className="text-xs gap-1">
+  1259→                  <Plus className="h-3 w-3" /> Add Rule
+  1260→                </Button>
+  1261→              </div>
+  1262→            </CardHeader>
+  1263→            <CardContent className="px-5 pb-4 space-y-3">
+  1264→              {DEMO_AUTO_PAYOUT_RULES.map((rule) => (
+  1265→                <div key={rule.id} className="p-3 rounded-lg bg-emerald-50/30 border border-emerald-100">
+  1266→                  <div className="flex items-start justify-between">
+  1267→                    <div>
+  1268→                      <p className="text-xs font-medium text-slate-700">{rule.vendor}</p>
+  1269→                      <p className="text-[10px] text-slate-500 mt-0.5">{rule.frequency} • {formatINR(rule.amount)}</p>
+  1270→                    </div>
+  1271→                    <Badge variant="outline" className="text-[9px] bg-emerald-50 text-emerald-600 border-emerald-200">
+  1272→                      <Zap className="h-2.5 w-2.5 mr-0.5" /> Active
+  1273→                    </Badge>
+  1274→                  </div>
+  1275→                  <div className="flex items-center gap-1.5 mt-2">
+  1276→                    <Calendar className="h-3 w-3 text-slate-400" />
+  1277→                    <span className="text-[10px] text-slate-500">Next run: {formatDate(rule.nextRun)}</span>
+  1278→                  </div>
+  1279→                </div>
+  1280→              ))}
+  1281→            </CardContent>
+  1282→          </Card>
+  1283→        </motion.div>
+  1284→
+  1285→        {/* Payout History */}
+  1286→        <motion.div variants={fadeIn}>
+  1287→          <Card className="border-slate-200/60 shadow-sm">
+  1288→            <CardHeader className="pb-2 pt-4 px-5">
+  1289→              <CardTitle className="text-sm font-semibold text-slate-700">Payout History</CardTitle>
+  1290→            </CardHeader>
+  1291→            <CardContent className="px-5 pb-4">
+  1292→              <ScrollArea className="max-h-56">
+  1293→                <div className="space-y-2">
+  1294→                  {DEMO_PAYOUT_HISTORY.map((payout) => (
+  1295→                    <div key={payout.id} className="flex items-center justify-between p-2.5 rounded-lg hover:bg-slate-50 transition-colors">
+  1296→                      <div className="flex items-center gap-2.5">
+  1297→                        <div className={`p-1.5 rounded ${
+  1298→                          payout.status === 'completed' ? 'bg-emerald-50' : 'bg-red-50'
+  1299→                        }`}>
+  1300→                          {payout.status === 'completed' ? (
+  1301→                            <CheckCircle className="h-3.5 w-3.5 text-emerald-600" />
+  1302→                          ) : (
+  1303→                            <XCircle className="h-3.5 w-3.5 text-red-600" />
+  1304→                          )}
+  1305→                        </div>
+  1306→                        <div>
+  1307→                          <p className="text-xs font-medium text-slate-700">{payout.vendor}</p>
+  1308→                          <p className="text-[10px] text-slate-400">{payout.category} • {formatDate(payout.date)}</p>
+  1309→                        </div>
+  1310→                      </div>
+  1311→                      <div className="text-right">
+  1312→                        <p className="text-xs font-semibold text-slate-800">{formatINR(payout.amount)}</p>
+  1313→                        <MethodBadge method={payout.method} />
+  1314→                      </div>
+  1315→                    </div>
+  1316→                  ))}
+  1317→                </div>
+  1318→              </ScrollArea>
+  1319→            </CardContent>
+  1320→          </Card>
+  1321→        </motion.div>
+  1322→      </div>
+  1323→    </motion.div>
+  1324→  );
+  1325→
+  1326→  // ─── TAB 5: AI FINANCE INTELLIGENCE ────────────────────────────────────────
+  1327→
+  1328→  const renderAIIntelligence = () => (
+  1329→    <motion.div variants={stagger} initial="initial" animate="animate" className="space-y-6">
+  1330→      {/* Late Collection Predictions */}
+  1331→      <motion.div variants={fadeIn}>
+  1332→        <Card className="border-emerald-200/60 shadow-sm bg-gradient-to-r from-emerald-50/30 to-white">
+  1333→          <CardHeader className="pb-2 pt-4 px-5">
+  1334→            <div className="flex items-center gap-2">
+  1335→              <div className="p-1.5 rounded-lg bg-emerald-100">
+  1336→                <Zap className="h-3.5 w-3.5 text-emerald-600" />
+  1337→              </div>
+  1338→              <CardTitle className="text-sm font-semibold text-slate-700">Late Collection Predictions</CardTitle>
+  1339→            </div>
+  1340→          </CardHeader>
+  1341→          <CardContent className="px-5 pb-4">
+  1342→            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+  1343→              {[
+  1344→                { client: 'Singh Brothers Exports', amount: 567890, confidence: 89, daysLate: 12 },
+  1345→                { client: 'Chopra Food Processing', amount: 678900, confidence: 76, daysLate: 8 },
+  1346→                { client: 'Mehta Trading Co', amount: 456789, confidence: 64, daysLate: 5 },
+  1347→                { client: 'Verma Chemical Industries', amount: 765432, confidence: 52, daysLate: 3 },
+  1348→              ].map((pred, i) => (
+  1349→                <div key={i} className="p-3 rounded-lg bg-white border border-slate-100 shadow-sm">
+  1350→                  <div className="flex items-start justify-between mb-2">
+  1351→                    <p className="text-xs font-medium text-slate-700 truncate pr-2">{pred.client}</p>
+  1352→                    <Badge variant="outline" className="text-[9px] shrink-0 bg-amber-50 text-amber-600 border-amber-200">
+  1353→                      {pred.daysLate}d late
+  1354→                    </Badge>
+  1355→                  </div>
+  1356→                  <p className="text-base font-bold text-slate-800">{formatINR(pred.amount)}</p>
+  1357→                  <div className="flex items-center gap-1.5 mt-2">
+  1358→                    <Progress value={pred.confidence} className="h-1 flex-1" />
+  1359→                    <span className={`text-[9px] font-medium ${
+  1360→                      pred.confidence > 75 ? 'text-red-600' : pred.confidence > 50 ? 'text-amber-600' : 'text-slate-500'
+  1361→                    }`}>
+  1362→                      {pred.confidence}% likely
+  1363→                    </span>
+  1364→                  </div>
+  1365→                </div>
+  1366→              ))}
+  1367→            </div>
+  1368→          </CardContent>
+  1369→        </Card>
+  1370→      </motion.div>
+  1371→
+  1372→      {/* Cash Flow Forecast Chart */}
+  1373→      <motion.div variants={fadeIn}>
+  1374→        <Card className="border-slate-200/60 shadow-sm">
+  1375→          <CardHeader className="pb-2 pt-4 px-5">
+  1376→            <div className="flex items-center justify-between">
+  1377→              <CardTitle className="text-sm font-semibold text-slate-700">Cash Flow Forecast (Next 30 Days)</CardTitle>
+  1378→              <div className="flex items-center gap-4">
+  1379→                <div className="flex items-center gap-1.5">
+  1380→                  <div className="w-2 h-2 rounded-full bg-emerald-500" />
+  1381→                  <span className="text-[10px] text-slate-500">Inflow</span>
+  1382→                </div>
+  1383→                <div className="flex items-center gap-1.5">
+  1384→                  <div className="w-2 h-2 rounded-full bg-red-400" />
+  1385→                  <span className="text-[10px] text-slate-500">Outflow</span>
+  1386→                </div>
+  1387→                <div className="flex items-center gap-1.5">
+  1388→                  <div className="w-2 h-2 rounded-full bg-emerald-200" />
+  1389→                  <span className="text-[10px] text-slate-500">Net Flow</span>
+  1390→                </div>
+  1391→              </div>
+  1392→            </div>
+  1393→          </CardHeader>
+  1394→          <CardContent className="px-5 pb-4">
+  1395→            <CashFlowForecastChart />
+  1396→          </CardContent>
+  1397→        </Card>
+  1398→      </motion.div>
+  1399→
+  1400→      {/* Expected Receipts Timeline */}
+  1401→      <motion.div variants={fadeIn}>
+  1402→        <Card className="border-slate-200/60 shadow-sm">
+  1403→          <CardHeader className="pb-2 pt-4 px-5">
+  1404→            <CardTitle className="text-sm font-semibold text-slate-700">Expected Receipts Timeline</CardTitle>
+  1405→          </CardHeader>
+  1406→          <CardContent className="px-5 pb-4">
+  1407→            <ScrollArea className="max-h-48">
+  1408→              <div className="space-y-3">
+  1409→                {[
+  1410→                  { client: 'Rajesh Kumar Enterprises', amount: 545000, expectedDate: daysFromNow(2), probability: 92 },
+  1411→                  { client: 'Gupta Manufacturing Ltd', amount: 1890000, expectedDate: daysFromNow(5), probability: 85 },
+  1412→                  { client: 'Patel Industries Pvt Ltd', amount: 1200000, expectedDate: daysFromNow(7), probability: 78 },
+  1413→                  { client: 'Agarwal Textiles Pvt Ltd', amount: 430000, expectedDate: daysFromNow(10), probability: 65 },
+  1414→                  { client: 'Jain Infrastructure Corp', amount: 2345000, expectedDate: daysFromNow(14), probability: 58 },
+  1415→                ].map((receipt, i) => (
+  1416→                  <div key={i} className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-slate-50 transition-colors">
+  1417→                    <div className={`w-2 h-2 rounded-full shrink-0 ${
+  1418→                      receipt.probability > 80 ? 'bg-emerald-500' :
+  1419→                      receipt.probability > 60 ? 'bg-amber-500' : 'bg-red-400'
+  1420→                    }`} />
+  1421→                    <div className="flex-1 min-w-0">
+  1422→                      <div className="flex items-center justify-between">
+  1423→                        <p className="text-xs font-medium text-slate-700 truncate">{receipt.client}</p>
+  1424→                        <p className="text-xs font-semibold text-slate-800 ml-2">{formatINR(receipt.amount)}</p>
+  1425→                      </div>
+  1426→                      <div className="flex items-center gap-2 mt-1">
+  1427→                        <span className="text-[10px] text-slate-400">Expected: {formatDate(receipt.expectedDate)}</span>
+  1428→                        <Progress value={receipt.probability} className="h-1 flex-1 max-w-20" />
+  1429→                        <span className="text-[9px] text-slate-500">{receipt.probability}%</span>
+  1430→                      </div>
+  1431→                    </div>
+  1432→                  </div>
+  1433→                ))}
+  1434→              </div>
+  1435→            </ScrollArea>
+  1436→          </CardContent>
+  1437→        </Card>
+  1438→      </motion.div>
+  1439→
+  1440→      {/* Risk Alerts + Smart Recommendations */}
+  1441→      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+  1442→        {/* Risk Alerts */}
+  1443→        <motion.div variants={fadeIn}>
+  1444→          <Card className="border-red-200/60 shadow-sm">
+  1445→            <CardHeader className="pb-2 pt-4 px-5">
+  1446→              <div className="flex items-center gap-2">
+  1447→                <AlertTriangle className="h-4 w-4 text-red-500" />
+  1448→                <CardTitle className="text-sm font-semibold text-slate-700">Risk Alerts</CardTitle>
+  1449→              </div>
+  1450→            </CardHeader>
+  1451→            <CardContent className="px-5 pb-4 space-y-3">
+  1452→              {[
+  1453→                { text: '3 invoices likely to default — total exposure ₹15,68,221', severity: 'high', icon: XCircle },
+  1454→                { text: 'Cash flow gap of ₹1,50,000 predicted in next 15 days', severity: 'high', icon: TrendingUp },
+  1455→                { text: 'Chopra Food Processing has 2 overdue invoices exceeding 30 days', severity: 'medium', icon: Clock },
+  1456→                { text: 'UPI payment failure rate increased 12% this week', severity: 'low', icon: Smartphone },
+  1457→              ].map((alert, i) => (
+  1458→                <div key={i} className={`flex items-start gap-2.5 p-3 rounded-lg border ${
+  1459→                  alert.severity === 'high' ? 'bg-red-50/50 border-red-100' :
+  1460→                  alert.severity === 'medium' ? 'bg-amber-50/50 border-amber-100' : 'bg-slate-50 border-slate-100'
+  1461→                }`}>
+  1462→                  <alert.icon className={`h-4 w-4 mt-0.5 shrink-0 ${
+  1463→                    alert.severity === 'high' ? 'text-red-500' :
+  1464→                    alert.severity === 'medium' ? 'text-amber-500' : 'text-slate-400'
+  1465→                  }`} />
+  1466→                  <p className="text-xs text-slate-700 leading-snug">{alert.text}</p>
+  1467→                </div>
+  1468→              ))}
+  1469→            </CardContent>
+  1470→          </Card>
+  1471→        </motion.div>
+  1472→
+  1473→        {/* Smart Recommendations */}
+  1474→        <motion.div variants={fadeIn}>
+  1475→          <Card className="border-emerald-200/60 shadow-sm">
+  1476→            <CardHeader className="pb-2 pt-4 px-5">
+  1477→              <div className="flex items-center gap-2">
+  1478→                <Zap className="h-4 w-4 text-emerald-600" />
+  1479→                <CardTitle className="text-sm font-semibold text-slate-700">Smart Recommendations</CardTitle>
+  1480→              </div>
+  1481→            </CardHeader>
+  1482→            <CardContent className="px-5 pb-4 space-y-3">
+  1483→              {[
+  1484→                { text: 'Offer 2% early payment discount to XYZ Industries — could accelerate ₹8,90,000 in collections', impact: 'High', savings: '₹17,800' },
+  1485→                { text: 'Follow up on ₹3,45,000 from ABC Traders — 89% chance of collection with reminder', impact: 'High', savings: '₹3,45,000' },
+  1486→                { text: 'Switch Singh Brothers Exports to virtual account for faster reconciliation', impact: 'Medium', savings: '2 days' },
+  1487→                { text: 'Auto-schedule payout to TCS IT Solutions on 5th — save processing time', impact: 'Medium', savings: '4 hrs/month' },
+  1488→              ].map((rec, i) => (
+  1489→                <div key={i} className="p-3 rounded-lg bg-emerald-50/30 border border-emerald-100">
+  1490→                  <div className="flex items-start gap-2.5">
+  1491→                    <div className="p-1 rounded bg-emerald-100 mt-0.5">
+  1492→                      <TrendingUp className="h-3 w-3 text-emerald-600" />
+  1493→                    </div>
+  1494→                    <div className="flex-1">
+  1495→                      <p className="text-xs text-slate-700 leading-snug">{rec.text}</p>
+  1496→                      <div className="flex items-center gap-2 mt-1.5">
+  1497→                        <Badge variant="outline" className="text-[9px] bg-emerald-50 text-emerald-600 border-emerald-200">
+  1498→                          {rec.impact} Impact
+  1499→                        </Badge>
+  1500→                        <span className="text-[10px] text-slate-500">Saves: {rec.savings}</span>
+  1501→                      </div>
+  1502→                    </div>
+  1503→                  </div>
+  1504→                </div>
+  1505→              ))}
+  1506→            </CardContent>
+  1507→          </Card>
+  1508→        </motion.div>
+  1509→      </div>
+  1510→    </motion.div>
+  1511→  );
+  1512→
+  1513→  // ═══════════════════════════════════════════════════════════════════════════════
+  1514→  // RENDER
+  1515→  // ═══════════════════════════════════════════════════════════════════════════════
+  1516→
+  1517→  return (
+  1518→    <div className="p-4 md:p-6 space-y-6 max-w-7xl mx-auto">
+  1519→      {/* Page Header */}
+  1520→      <motion.div
+  1521→        initial={{ opacity: 0, y: -10 }}
+  1522→        animate={{ opacity: 1, y: 0 }}
+  1523→        transition={{ duration: 0.3 }}
+  1524→      >
+  1525→        <div className="flex items-center gap-3 mb-1">
+  1526→          <div className="p-2 rounded-xl bg-emerald-600 shadow-md shadow-emerald-600/20">
+  1527→            <CreditCard className="h-5 w-5 text-white" />
+  1528→          </div>
+  1529→          <div>
+  1530→            <h1 className="text-lg font-bold text-slate-800">
+  1531→              GSTPilot Payments<sup className="text-emerald-500 text-[10px] ml-0.5">™</sup>
+  1532→            </h1>
+  1533→            <p className="text-xs text-slate-500">Embedded Finance Layer — Collect, Pay & Manage</p>
+  1534→          </div>
+  1535→        </div>
+  1536→      </motion.div>
+  1537→
+  1538→      {/* Tabs */}
+  1539→      <Tabs value={activeTab} onValueChange={setActiveTab}>
+  1540→        <TabsList className="bg-slate-100/80 p-1 h-auto rounded-lg">
+  1541→          <TabsTrigger value="dashboard" className="text-xs data-[state=active]:bg-white data-[state=active]:text-emerald-700 data-[state=active]:shadow-sm rounded-md px-3 py-1.5">
+  1542→            <BarChart3 className="h-3.5 w-3.5 mr-1.5" />
+  1543→            Dashboard
+  1544→          </TabsTrigger>
+  1545→          <TabsTrigger value="links" className="text-xs data-[state=active]:bg-white data-[state=active]:text-emerald-700 data-[state=active]:shadow-sm rounded-md px-3 py-1.5">
+  1546→            <Link className="h-3.5 w-3.5 mr-1.5" />
+  1547→            Payment Links
+  1548→          </TabsTrigger>
+  1549→          <TabsTrigger value="accounts" className="text-xs data-[state=active]:bg-white data-[state=active]:text-emerald-700 data-[state=active]:shadow-sm rounded-md px-3 py-1.5">
+  1550→            <Building2 className="h-3.5 w-3.5 mr-1.5" />
+  1551→            Virtual Accounts
+  1552→          </TabsTrigger>
+  1553→          <TabsTrigger value="payouts" className="text-xs data-[state=active]:bg-white data-[state=active]:text-emerald-700 data-[state=active]:shadow-sm rounded-md px-3 py-1.5">
+  1554→            <Send className="h-3.5 w-3.5 mr-1.5" />
+  1555→            Payouts
+  1556→          </TabsTrigger>
+  1557→          <TabsTrigger value="intelligence" className="text-xs data-[state=active]:bg-white data-[state=active]:text-emerald-700 data-[state=active]:shadow-sm rounded-md px-3 py-1.5">
+  1558→            <Zap className="h-3.5 w-3.5 mr-1.5" />
+  1559→            AI Intelligence
+  1560→          </TabsTrigger>
+  1561→        </TabsList>
+  1562→
+  1563→        <AnimatePresence mode="wait">
+  1564→          <TabsContent value="dashboard" className="mt-4" forceMount={activeTab === 'dashboard'}>
+  1565→            {renderDashboard()}
+  1566→          </TabsContent>
+  1567→          <TabsContent value="links" className="mt-4" forceMount={activeTab === 'links'}>
+  1568→            {renderPaymentLinks()}
+  1569→          </TabsContent>
+  1570→          <TabsContent value="accounts" className="mt-4" forceMount={activeTab === 'accounts'}>
+  1571→            {renderVirtualAccounts()}
+  1572→          </TabsContent>
+  1573→          <TabsContent value="payouts" className="mt-4" forceMount={activeTab === 'payouts'}>
+  1574→            {renderPayouts()}
+  1575→          </TabsContent>
+  1576→          <TabsContent value="intelligence" className="mt-4" forceMount={activeTab === 'intelligence'}>
+  1577→            {renderAIIntelligence()}
+  1578→          </TabsContent>
+  1579→        </AnimatePresence>
+  1580→      </Tabs>
+  1581→    </div>
+  1582→  );
+  1583→}
+  1584→

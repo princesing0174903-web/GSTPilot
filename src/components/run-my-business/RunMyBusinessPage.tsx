@@ -46,6 +46,8 @@ import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { useApp } from '@/contexts/AppContext';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/contexts/AuthContext';
+import { apiPost } from '@/lib/api';
 import type {
   AgentId, AutopilotState, BusinessAgent, CommandCenter, CommandCenterItem,
   CommandCenterSection, CommandIntent, DailyCEOBrief, DelegationPlan,
@@ -896,7 +898,17 @@ function agentStatusDot(s: BusinessAgent['status']): string {
   }
 }
 
-function AgentCard({ agent, delay }: { agent: BusinessAgent; delay: number }) {
+function AgentCard({
+  agent,
+  delay,
+  running = false,
+  onRun,
+}: {
+  agent: BusinessAgent;
+  delay: number;
+  running?: boolean;
+  onRun?: (agentId: AgentId) => void;
+}) {
   const statusLabel = agent.status === 'working' ? 'Working'
     : agent.status === 'alert' ? 'Alert'
     : agent.status === 'monitoring' ? 'Monitoring' : 'Idle';
@@ -957,7 +969,7 @@ function AgentCard({ agent, delay }: { agent: BusinessAgent; delay: number }) {
           )}
 
           {/* Handles */}
-          <div>
+          <div className="mb-3">
             <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Handles</p>
             <ul className="space-y-0.5">
               {agent.handles.map((h, i) => (
@@ -968,24 +980,85 @@ function AgentCard({ agent, delay }: { agent: BusinessAgent; delay: number }) {
               ))}
             </ul>
           </div>
+
+          {/* Run Agent button (PT-1-b: dispatches REAL DB writes) */}
+          {onRun && (
+            <Button
+              size="sm"
+              onClick={() => onRun(agent.id)}
+              disabled={running}
+              className="w-full accent-gradient text-white hover:opacity-90"
+            >
+              {running ? (
+                <>
+                  <RefreshCw className="mr-1.5 h-3 w-3 animate-spin" />
+                  Running…
+                </>
+              ) : (
+                <>
+                  <PlayCircle className="mr-1.5 h-3 w-3" />
+                  Run {agent.name.replace(' Agent', '')}
+                </>
+              )}
+            </Button>
+          )}
         </CardContent>
       </Card>
     </FadeIn>
   );
 }
 
-function AgentsModule({ agents, delay }: { agents: BusinessAgent[]; delay: number }) {
+function AgentsModule({
+  agents,
+  delay,
+  runningAgentId,
+  onRunAgent,
+  onRunAll,
+  runAllLoading,
+}: {
+  agents: BusinessAgent[];
+  delay: number;
+  runningAgentId?: AgentId | null;
+  onRunAgent?: (agentId: AgentId) => void;
+  onRunAll?: () => void;
+  runAllLoading?: boolean;
+}) {
   return (
     <div>
       <SectionHeader
         icon={Bot}
         title="Business Agents"
-        subtitle="Specialised AI employees that execute work autonomously"
-        action={<Badge variant="outline" className="border-emerald-500/20 bg-emerald-500/[0.05] text-emerald-300">{agents.length} active</Badge>}
+        subtitle="Specialised AI employees that execute real work — each Run dispatches DB writes (Notification / AITask / AuditLog)"
+        action={
+          <div className="flex items-center gap-2">
+            {onRunAll && (
+              <Button
+                size="sm"
+                onClick={onRunAll}
+                disabled={runAllLoading}
+                className="accent-gradient text-white hover:opacity-90"
+              >
+                {runAllLoading ? (
+                  <RefreshCw className="mr-1.5 h-3 w-3 animate-spin" />
+                ) : (
+                  <PlayCircle className="mr-1.5 h-3 w-3" />
+                )}
+                {runAllLoading ? 'Running All…' : 'Run All Agents'}
+              </Button>
+            )}
+            <Badge variant="outline" className="border-emerald-500/20 bg-emerald-500/[0.05] text-emerald-300">{agents.length} active</Badge>
+          </div>
+        }
       />
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5">
         {agents.map((a, i) => (
-          <AgentCard key={a.id} agent={a} delay={delay + i * 0.05} />
+          <AgentCard
+            key={a.id}
+            agent={a}
+            delay={delay + i * 0.05}
+            running={runningAgentId === a.id}
+            onRun={onRunAgent}
+          />
         ))}
       </div>
     </div>
@@ -1611,7 +1684,7 @@ function PersonalityModule({ personality, delay }: { personality: RmbPersonality
               Think · Delegate · Execute · Operate.
             </p>
             <p className="mt-2 text-[10px] text-muted-foreground/60">
-              Founded &amp; developed by Prince Singh
+              Founded &amp; developed by the GSTPilot team
             </p>
           </div>
         </CardContent>
@@ -1627,6 +1700,7 @@ function PersonalityModule({ personality, delay }: { personality: RmbPersonality
 export default function RunMyBusinessPage() {
   const { setCurrentView } = useApp();
   const { toast } = useToast();
+  const { user } = useAuth();
   const [data, setData] = useState<RmbState | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -1634,6 +1708,8 @@ export default function RunMyBusinessPage() {
   const [masterAutopilot, setMasterAutopilot] = useState(true);
   const [orchestrating, setOrchestrating] = useState(false);
   const [liveOrchestration, setLiveOrchestration] = useState<OrchestrationPlan | null>(null);
+  const [runningAgentId, setRunningAgentId] = useState<AgentId | null>(null);
+  const [runAllLoading, setRunAllLoading] = useState(false);
 
   const fetchData = useCallback(async () => {
     try {
@@ -1657,6 +1733,83 @@ export default function RunMyBusinessPage() {
     return () => clearInterval(interval);
   }, [fetchData]);
 
+  // ─── PT-1-b: Map RMB AgentId → /api/rmb/run-agent agent key ──────────────
+  const agentKeyMap: Record<AgentId, 'collections' | 'compliance' | 'finance' | 'reporting' | 'gst'> = {
+    'collections-agent': 'collections',
+    'compliance-agent': 'compliance',
+    'finance-agent': 'finance',
+    'reporting-agent': 'reporting',
+    'gst-agent': 'gst',
+  };
+
+  const dispatchAgent = useCallback(async (agentId: AgentId) => {
+    const agentKey = agentKeyMap[agentId];
+    setRunningAgentId(agentId);
+    try {
+      const result = await apiPost<{
+        success: boolean;
+        agent: string;
+        summary: string;
+        metrics?: Record<string, number | string>;
+        error?: string;
+      }>('/api/rmb/run-agent', { agent: agentKey, userId: user?.id });
+      if (result.success) {
+        toast({
+          title: `${AGENT_LABEL[agentId]} executed`,
+          description: result.summary,
+        });
+        // Refresh the RMB state so the user sees the new tasks/notifications
+        void fetchData();
+      } else {
+        toast({
+          title: `${AGENT_LABEL[agentId]} failed`,
+          description: result.error ?? 'Unknown error',
+          variant: 'destructive',
+        });
+      }
+    } catch (e) {
+      toast({
+        title: `${AGENT_LABEL[agentId]} failed`,
+        description: e instanceof Error ? e.message : 'Unknown error',
+        variant: 'destructive',
+      });
+    } finally {
+      setRunningAgentId(null);
+    }
+  }, [toast, user?.id, fetchData]);
+
+  const runAllAgents = useCallback(async () => {
+    setRunAllLoading(true);
+    const order: AgentId[] = ['collections-agent', 'compliance-agent', 'finance-agent', 'gst-agent', 'reporting-agent'];
+    const summaries: string[] = [];
+    for (const agentId of order) {
+      const agentKey = agentKeyMap[agentId];
+      setRunningAgentId(agentId);
+      try {
+        const result = await apiPost<{ success: boolean; summary?: string; error?: string }>(
+          '/api/rmb/run-agent',
+          { agent: agentKey, userId: user?.id },
+        );
+        if (result.success && result.summary) {
+          summaries.push(`• ${AGENT_LABEL[agentId]}: ${result.summary}`);
+        } else {
+          summaries.push(`• ${AGENT_LABEL[agentId]}: ${result.error ?? 'failed'}`);
+        }
+      } catch (e) {
+        summaries.push(
+          `• ${AGENT_LABEL[agentId]}: ${e instanceof Error ? e.message : 'failed'}`,
+        );
+      }
+    }
+    setRunningAgentId(null);
+    setRunAllLoading(false);
+    void fetchData();
+    toast({
+      title: 'All 5 agents executed',
+      description: summaries.join('\n'),
+    });
+  }, [toast, user?.id, fetchData]);
+
   const runMyBusinessToday = useCallback(async () => {
     setOrchestrating(true);
     try {
@@ -1668,10 +1821,31 @@ export default function RunMyBusinessPage() {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const plan = (await res.json()) as OrchestrationPlan;
       setLiveOrchestration(plan);
-      toast({
-        title: 'Orchestration complete',
-        description: `${plan.tasksCreated} tasks dispatched across ${Object.values(plan.tasksByAgent).filter((n) => n > 0).length} agents.`,
-      });
+
+      // PT-1-b: Also dispatch REAL DB-writing agent runs after orchestrate
+      try {
+        const agentResults = await Promise.allSettled([
+          apiPost<{ success: boolean; summary?: string }>('/api/rmb/run-agent', { agent: 'collections', userId: user?.id }),
+          apiPost<{ success: boolean; summary?: string }>('/api/rmb/run-agent', { agent: 'compliance', userId: user?.id }),
+          apiPost<{ success: boolean; summary?: string }>('/api/rmb/run-agent', { agent: 'finance', userId: user?.id }),
+          apiPost<{ success: boolean; summary?: string }>('/api/rmb/run-agent', { agent: 'gst', userId: user?.id }),
+          apiPost<{ success: boolean; summary?: string }>('/api/rmb/run-agent', { agent: 'reporting', userId: user?.id }),
+        ]);
+        const succeeded = agentResults
+          .filter((r): r is PromiseFulfilledResult<{ success: boolean; summary?: string }> => r.status === 'fulfilled' && r.value.success)
+          .map((r) => r.value.summary ?? '');
+        toast({
+          title: 'Orchestration complete',
+          description: `${plan.tasksCreated} tasks dispatched. ${succeeded.length}/5 real agents wrote DB rows.${succeeded.length > 0 ? '\n' + succeeded.join('\n') : ''}`,
+        });
+      } catch (err) {
+        toast({
+          title: 'Orchestration complete (agent dispatch warning)',
+          description: `${plan.tasksCreated} tasks dispatched. Real agent execution had an issue: ${err instanceof Error ? err.message : 'unknown'}`,
+        });
+      }
+
+      void fetchData();
       // scroll to orchestrator section
       const el = document.getElementById('rmb-orchestrator');
       if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -1683,7 +1857,7 @@ export default function RunMyBusinessPage() {
     } finally {
       setOrchestrating(false);
     }
-  }, [toast]);
+  }, [toast, user?.id, fetchData]);
 
   const askOracle = useCallback((prompt: string) => {
     window.dispatchEvent(new CustomEvent('oracle-ask', { detail: { prompt } }));
@@ -1798,7 +1972,14 @@ export default function RunMyBusinessPage() {
       </div>
 
       {/* ═══ MODULE 5: BUSINESS AGENTS ═══ */}
-      <AgentsModule agents={data.agents} delay={0.3} />
+      <AgentsModule
+        agents={data.agents}
+        delay={0.3}
+        runningAgentId={runningAgentId}
+        onRunAgent={dispatchAgent}
+        onRunAll={runAllAgents}
+        runAllLoading={runAllLoading}
+      />
 
       {/* ═══ MODULE 6: ORCHESTRATOR ═══ */}
       <div id="rmb-orchestrator" className="scroll-mt-4">

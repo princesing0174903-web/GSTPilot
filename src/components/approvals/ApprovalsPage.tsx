@@ -40,6 +40,9 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { format, isToday, differenceInHours, parseISO } from 'date-fns';
+import { useQuery } from '@tanstack/react-query';
+import { apiGet } from '@/lib/api';
+import { EmptyState } from '@/components/shared/EmptyState';
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -97,104 +100,12 @@ const PRIORITY_CONFIG: Record<Priority, { label: string; color: string; dot: str
 
 // ─── Mock Data ─────────────────────────────────────────────────────────────────
 
+// PT-1-a: Real approvals come from /api/approvals. The previous mock generator
+// returned demo rows; we now fall back to an empty list so the empty state
+// can guide the user to create real approval workflows.
+
 function generateMockApprovals(): ApprovalRequest[] {
-  const items: ApprovalRequest[] = [
-    {
-      id: 'APR-001',
-      title: 'GSTR-1 Filing - Acme Industries',
-      type: 'return_filing',
-      requestedBy: 'Amit Patel',
-      requestedAt: new Date(Date.now() - 2 * 3600000).toISOString(),
-      priority: 'urgent',
-      status: 'pending',
-      currentLevel: 1,
-      totalLevels: 2,
-      steps: [
-        { level: 1, role: 'Manager', assignee: 'Priya Sharma', status: 'pending' },
-        { level: 2, role: 'Admin', assignee: 'Rajesh Kumar', status: 'pending' },
-      ],
-      details: 'GSTR-1 for October 2024 period. Total taxable value: ₹15,23,450. 23 invoices processed.',
-    },
-    {
-      id: 'APR-002',
-      title: 'Invoice INV-2024-0156 - Vendor Payment',
-      type: 'invoice_processing',
-      requestedBy: 'Priya Sharma',
-      requestedAt: new Date(Date.now() - 5 * 3600000).toISOString(),
-      priority: 'high',
-      status: 'in_review',
-      currentLevel: 1,
-      totalLevels: 2,
-      steps: [
-        { level: 1, role: 'Manager', assignee: 'Priya Sharma', status: 'approved', timestamp: new Date(Date.now() - 3 * 3600000).toISOString(), comment: 'Amount verified' },
-        { level: 2, role: 'Admin', assignee: 'Rajesh Kumar', status: 'pending' },
-      ],
-      details: 'Invoice amount: ₹4,50,000. Vendor: TechSolutions Pvt Ltd. GST: ₹81,000.',
-    },
-    {
-      id: 'APR-003',
-      title: 'New Client: Sharma & Associates',
-      type: 'client_onboarding',
-      requestedBy: 'Rajesh Kumar',
-      requestedAt: new Date(Date.now() - 24 * 3600000).toISOString(),
-      priority: 'normal',
-      status: 'approved',
-      currentLevel: 2,
-      totalLevels: 2,
-      steps: [
-        { level: 1, role: 'Manager', assignee: 'Priya Sharma', status: 'approved', timestamp: new Date(Date.now() - 20 * 3600000).toISOString(), comment: 'Documents verified' },
-        { level: 2, role: 'Admin', assignee: 'Rajesh Kumar', status: 'approved', timestamp: new Date(Date.now() - 12 * 3600000).toISOString() },
-      ],
-      details: 'New client onboarding. GSTIN: 27AAACR5055K1ZI. Entity: Partnership firm.',
-    },
-    {
-      id: 'APR-004',
-      title: 'Annual Return Document Sign-off',
-      type: 'document_signoff',
-      requestedBy: 'Amit Patel',
-      requestedAt: new Date(Date.now() - 48 * 3600000).toISOString(),
-      priority: 'normal',
-      status: 'changes_requested',
-      currentLevel: 1,
-      totalLevels: 1,
-      steps: [
-        { level: 1, role: 'Manager', assignee: 'Priya Sharma', status: 'rejected', timestamp: new Date(Date.now() - 36 * 3600000).toISOString(), comment: 'Need to update Section 8 details before approval' },
-      ],
-      details: 'Annual return document for FY 2023-24. Client requested revision in depreciation schedule.',
-    },
-    {
-      id: 'APR-005',
-      title: 'GSTR-3B Filing - Beta Corp',
-      type: 'return_filing',
-      requestedBy: 'Anita Desai',
-      requestedAt: new Date(Date.now() - 72 * 3600000).toISOString(),
-      priority: 'high',
-      status: 'rejected',
-      currentLevel: 1,
-      totalLevels: 2,
-      steps: [
-        { level: 1, role: 'Manager', assignee: 'Priya Sharma', status: 'rejected', timestamp: new Date(Date.now() - 60 * 3600000).toISOString(), comment: 'ITC mismatch detected. Please reconcile before resubmitting.' },
-        { level: 2, role: 'Admin', assignee: 'Rajesh Kumar', status: 'skipped' },
-      ],
-      details: 'GSTR-3B for November 2024. ITC claimed: ₹3,45,600. Mismatch with GSTR-2A.',
-    },
-    {
-      id: 'APR-006',
-      title: 'Invoice INV-2024-0187 - Service Fee',
-      type: 'invoice_processing',
-      requestedBy: 'Amit Patel',
-      requestedAt: new Date(Date.now() - 1 * 3600000).toISOString(),
-      priority: 'low',
-      status: 'pending',
-      currentLevel: 1,
-      totalLevels: 1,
-      steps: [
-        { level: 1, role: 'Manager', assignee: 'Priya Sharma', status: 'pending' },
-      ],
-      details: 'Professional services invoice. Amount: ₹1,20,000. Client: Delta Industries.',
-    },
-  ];
-  return items;
+  return [];
 }
 
 function Eye(props: React.SVGProps<SVGSVGElement> & { size?: number | string }) {
@@ -209,8 +120,27 @@ function Eye(props: React.SVGProps<SVGSVGElement> & { size?: number | string }) 
 // ─── Main Component ────────────────────────────────────────────────────────────
 
 export default function ApprovalsPage() {
-  const [approvals] = useState<ApprovalRequest[]>(() => generateMockApprovals());
-  const [loading, setLoading] = useState(true);
+  // PT-1-a: Approvals come from /api/approvals. The previous mock generator
+  // returned demo rows; we now fall back to an empty list when no live data.
+  const { data: approvalsRes } = useQuery<{ approvals: any[] }>({
+    queryKey: ['approvals', 'all'],
+    queryFn: () => apiGet<{ approvals: any[] }>('/api/approvals'),
+  });
+  const apiApprovals: ApprovalRequest[] = (approvalsRes?.approvals ?? []).map((a: any) => ({
+    id: String(a.id ?? `apr-${Math.random().toString(36).slice(2)}`),
+    title: a.reason || a.title || 'Approval request',
+    type: (a.taskId?.includes('return') || a.taskId?.includes('filing') ? 'return_filing' : 'invoice_processing') as ApprovalType,
+    requestedBy: a.approvedBy || 'System',
+    requestedAt: a.approvedAt || new Date().toISOString(),
+    priority: a.risk >= 70 ? 'urgent' : a.risk >= 40 ? 'high' : 'normal',
+    status: (a.status === 'approved' ? 'approved' : a.status === 'rejected' ? 'rejected' : 'pending') as ApprovalStatus,
+    currentLevel: 1,
+    totalLevels: 1,
+    steps: [{ level: 1, role: 'Approver', assignee: a.approvedBy || '—', status: a.status === 'approved' ? 'approved' : a.status === 'rejected' ? 'rejected' : 'pending' as const }],
+    details: a.reason || '',
+  }));
+  const [approvals, setApprovals] = useState<ApprovalRequest[]>(apiApprovals);
+  const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('pending');
   const [filterType, setFilterType] = useState<string>('all');
   const [filterPriority, setFilterPriority] = useState<string>('all');
@@ -220,9 +150,9 @@ export default function ApprovalsPage() {
   const [comment, setComment] = useState('');
 
   React.useEffect(() => {
-    const t = setTimeout(() => setLoading(false), 500);
-    return () => clearTimeout(t);
-  }, []);
+    if (apiApprovals.length > 0) setApprovals(apiApprovals);
+    // PT-1-a: Removed setTimeout(500) loading simulation.
+  }, [apiApprovals]);
 
   const pendingApprovals = useMemo(() =>
     approvals.filter((a) => a.status === 'pending' || a.status === 'in_review'),

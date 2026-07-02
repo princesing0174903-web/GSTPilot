@@ -7,6 +7,7 @@ import {
   type InvoiceLineItem,
 } from '@/lib/invoices/invoices';
 import { graphEvents, invalidateGraph } from '@/lib/graph/live-update';
+import { emitInvoiceNode } from '@/lib/graph/auto-emit';
 
 export async function GET(request: Request) {
   try {
@@ -198,6 +199,9 @@ export async function POST(request: Request) {
       // ── Real Business Graph Engine™ — auto-create invoice node + live event ──
       graphEvents.invoiceCreated(invoice.id, invoice.invoiceNumber, totals.totalAmount, cloudBuyerGstin ?? undefined);
 
+      // PT-2-b: canonical graph node emit (verifies entity + pushes live event + invalidates cache)
+      try { await emitInvoiceNode(invoice.id); } catch (e) { console.error('[graph] emitInvoiceNode failed', e); }
+
       return NextResponse.json({ invoice }, { status: 201 });
     }
 
@@ -274,6 +278,9 @@ export async function POST(request: Request) {
 
     // ── Real Business Graph Engine™ — auto-create invoice node + live event ──
     graphEvents.invoiceCreated(invoice.id, invoice.invoiceNumber, invoice.totalAmount, buyerGstin ?? undefined);
+
+    // PT-2-b: canonical graph node emit (verifies entity + pushes live event + invalidates cache)
+    try { await emitInvoiceNode(invoice.id); } catch (e) { console.error('[graph] emitInvoiceNode failed', e); }
 
     return NextResponse.json({ invoice }, { status: 201 });
   } catch (error) {

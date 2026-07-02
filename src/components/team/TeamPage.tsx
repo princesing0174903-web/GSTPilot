@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { toast } from 'sonner';
 import {
   Card,
   CardContent,
@@ -12,7 +13,10 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Loader2 } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -107,8 +111,24 @@ const ROLES: RoleDefinition[] = [
 ];
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// PERMISSIONS TABLE
+// INVITE PERMISSION CHECKLIST
 // ═══════════════════════════════════════════════════════════════════════════════
+
+const PERMISSION_OPTIONS = [
+  { key: 'read', label: 'View clients & returns' },
+  { key: 'create', label: 'Upload documents' },
+  { key: 'update', label: 'Edit clients & returns' },
+  { key: 'file', label: 'File returns' },
+  { key: 'manage_team', label: 'Manage team' },
+  { key: 'manage_billing', label: 'Manage billing' },
+] as const;
+
+// Default permissions per role (pre-checked when role changes)
+const ROLE_DEFAULT_PERMISSIONS: Record<string, string[]> = {
+  partner: ['read', 'create', 'update', 'file', 'manage_team'],
+  manager: ['read', 'create', 'update', 'file'],
+  staff: ['read', 'create'],
+};
 
 const PERMISSION_ROWS: {
   entity: PermissionEntity;
@@ -187,8 +207,52 @@ export default function TeamPage() {
   const { data: firm, loading: firmLoading } = useFireFirm();
 
   const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteName, setInviteName] = useState('');
   const [inviteRole, setInviteRole] = useState('staff');
+  const [invitePermissions, setInvitePermissions] = useState<string[]>(
+    ROLE_DEFAULT_PERMISSIONS['staff'],
+  );
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
+  const [inviting, setInviting] = useState(false);
+
+  // Team members list — fetched from /api/team-members (real DB rows). The
+  // current authenticated user is prepended as the firm owner so the list is
+  // never empty even before any invites are sent.
+  const [dbMembers, setDbMembers] = useState<Array<{
+    id: string;
+    name: string;
+    email: string;
+    role: string;
+    isActive: boolean;
+  }>>([]);
+  const [loadingMembers, setLoadingMembers] = useState(true);
+
+  const fetchMembers = useCallback(async () => {
+    try {
+      const res = await fetch('/api/team-members');
+      const data = await res.json();
+      if (res.ok && Array.isArray(data.teamMembers)) {
+        setDbMembers(data.teamMembers.map((m: {
+          id: string; name: string; email: string;
+          role: string; isActive: boolean;
+        }) => ({
+          id: m.id,
+          name: m.name,
+          email: m.email,
+          role: m.role,
+          isActive: m.isActive,
+        })));
+      }
+    } catch (err) {
+      console.warn('[Team] Fetch members failed:', err);
+    } finally {
+      setLoadingMembers(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchMembers();
+  }, [fetchMembers]);
 
   // Current user info derived from auth context
   const currentUser = useMemo(() => {
@@ -199,15 +263,66 @@ export default function TeamPage() {
       email: user.email,
       role: 'owner' as const,
       picture: user.picture,
+      isActive: true,
     };
   }, [user]);
 
-  // Team members list — currently just the owner from auth context
-  // In a real app, this would be a Firestore collection of team members
+  // Merge current user (owner) with DB team members — the owner is always
+  // displayed first, even if their auth user doesn't have a TeamMember row yet.
   const teamMembers = useMemo(() => {
-    if (!currentUser) return [];
-    return [currentUser];
-  }, [currentUser]);
+    if (!currentUser) return dbMembers;
+    const filtered = dbMembers.filter(m => m.email !== currentUser.email);
+    return [currentUser, ...filtered];
+  }, [currentUser, dbMembers]);
+
+  // ── Handle role change → reset default permissions ──
+  const handleRoleChange = (role: string) => {
+    setInviteRole(role);
+    setInvitePermissions(ROLE_DEFAULT_PERMISSIONS[role] ?? ['read']);
+  };
+
+  const togglePermission = (key: string) => {
+    setInvitePermissions(prev =>
+      prev.includes(key) ? prev.filter(p => p !== key) : [...prev, key],
+    );
+  };
+
+  // ── Real invite POST → /api/team-members ──
+  const handleSendInvite = async () => {
+    if (!inviteEmail.includes('@')) {
+      toast.error('Enter a valid email address');
+      return;
+    }
+    setInviting(true);
+    try {
+      const res = await fetch('/api/team-members', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: inviteEmail.trim(),
+          name: inviteName.trim() || undefined,
+          role: inviteRole,
+          permissions: invitePermissions,
+          invitedBy: user?.id,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data?.error ?? 'Failed to send invitation');
+      }
+      toast.success(`Invitation sent to ${inviteEmail.trim()}`);
+      setInviteEmail('');
+      setInviteName('');
+      setInviteRole('staff');
+      setInvitePermissions(ROLE_DEFAULT_PERMISSIONS['staff']);
+      setInviteDialogOpen(false);
+      await fetchMembers();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to send invitation');
+    } finally {
+      setInviting(false);
+    }
+  };
 
   if (firmLoading) {
     return <TeamSkeleton />;
@@ -259,8 +374,19 @@ export default function TeamPage() {
                   </div>
                 </div>
                 <div className="space-y-2">
+                  <label className="text-sm font-medium text-foreground">Name (optional)</label>
+                  <Input
+                    placeholder="Priya Sharma"
+                    value={inviteName}
+                    onChange={(e) => setInviteName(e.target.value)}
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    If omitted, we derive a display name from the email.
+                  </p>
+                </div>
+                <div className="space-y-2">
                   <label className="text-sm font-medium text-foreground">Role</label>
-                  <Select value={inviteRole} onValueChange={setInviteRole}>
+                  <Select value={inviteRole} onValueChange={handleRoleChange}>
                     <SelectTrigger>
                       <SelectValue placeholder="Select a role" />
                     </SelectTrigger>
@@ -276,26 +402,48 @@ export default function TeamPage() {
                     {inviteRole === 'staff' && 'Staff can view and prepare returns and documents.'}
                   </p>
                 </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-foreground">Permissions</label>
+                  <div className="grid grid-cols-2 gap-2 rounded-lg border border-border/60 p-3">
+                    {PERMISSION_OPTIONS.map(opt => (
+                      <label
+                        key={opt.key}
+                        className="flex items-center gap-2 cursor-pointer text-xs"
+                      >
+                        <Checkbox
+                          checked={invitePermissions.includes(opt.key)}
+                          onCheckedChange={() => togglePermission(opt.key)}
+                        />
+                        <span>{opt.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
               </div>
               <DialogFooter>
                 <Button
                   variant="outline"
                   onClick={() => setInviteDialogOpen(false)}
+                  disabled={inviting}
                 >
                   Cancel
                 </Button>
                 <Button
                   className="bg-emerald-600 hover:bg-emerald-700"
-                  disabled={!inviteEmail.includes('@')}
-                  onClick={() => {
-                    // UI only — no actual invitation sent
-                    setInviteEmail('');
-                    setInviteRole('staff');
-                    setInviteDialogOpen(false);
-                  }}
+                  disabled={!inviteEmail.includes('@') || inviting}
+                  onClick={handleSendInvite}
                 >
-                  <UserPlus className="h-4 w-4 mr-1.5" />
-                  Send Invitation
+                  {inviting ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+                      Sending...
+                    </>
+                  ) : (
+                    <>
+                      <UserPlus className="h-4 w-4 mr-1.5" />
+                      Send Invitation
+                    </>
+                  )}
                 </Button>
               </DialogFooter>
             </DialogContent>
@@ -321,7 +469,13 @@ export default function TeamPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {teamMembers.length === 0 ? (
+            {loadingMembers ? (
+              <div className="space-y-3">
+                {Array.from({ length: 2 }).map((_, i) => (
+                  <Skeleton key={i} className="h-14 w-full" />
+                ))}
+              </div>
+            ) : teamMembers.length === 0 ? (
               <motion.div
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -373,8 +527,15 @@ export default function TeamPage() {
 
                     {/* Role badge */}
                     <Badge variant="outline" className="text-[11px] shrink-0">
-                      {member.role.charAt(0).toUpperCase() + member.role.slice(1)}
+                      {member.role === 'owner'
+                        ? 'Owner'
+                        : member.role.charAt(0).toUpperCase() + member.role.slice(1)}
                     </Badge>
+                    {member.role !== 'owner' && member.isActive === false && (
+                      <Badge className="text-[10px] px-2 py-0 border bg-amber-50 text-amber-700 border-amber-200">
+                        Invited
+                      </Badge>
+                    )}
                   </div>
                 ))}
               </div>

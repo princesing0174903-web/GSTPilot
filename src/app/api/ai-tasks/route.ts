@@ -1,5 +1,6 @@
 import { db } from '@/lib/db'
 import { NextResponse } from 'next/server'
+import { emitTaskNode } from '@/lib/graph/auto-emit'
 
 type TaskStatus = 'pending' | 'in_progress' | 'completed'
 type SourceType = 'notice' | 'risk_alert' | 'missing_document' | 'pending_reconciliation' | 'pending_approval'
@@ -248,6 +249,9 @@ export async function POST(request: Request) {
         autoAssigned: autoAssigned ?? false,
       },
     })
+
+    // PT-2-b: canonical graph node emit — task node + Employee→Task + Client→Task edges
+    try { await emitTaskNode(task.id) } catch (e) { console.error('[graph] emitTaskNode failed', e) }
 
     return NextResponse.json({ task }, { status: 201 })
   } catch (error) {

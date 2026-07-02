@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { seedPayments } from '@/lib/invoices/payments'
 import { graphEvents, invalidateGraph } from '@/lib/graph/live-update'
+import { emitCollectionNode } from '@/lib/graph/auto-emit'
 
 // GET /api/payments — Fetch all Payments (customer collections + vendor settlements)
 export async function GET() {
@@ -141,6 +142,9 @@ export async function POST(request: NextRequest) {
     } else {
       graphEvents.paymentReceived(payment.id, partyName, paymentAmount)
     }
+
+    // PT-2-b: canonical graph node emit — collection/payment node + Client→Collection edge
+    try { await emitCollectionNode(payment.id) } catch (e) { console.error('[graph] emitCollectionNode failed', e) }
 
     return NextResponse.json({ payment }, { status: 201 })
   } catch (error) {

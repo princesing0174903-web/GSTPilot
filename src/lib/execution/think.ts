@@ -18,7 +18,6 @@ import type {
   Decision,
   DecisionAction,
   DecisionPriority,
-  DecisionStatus,
   DecisionSummary,
   EventSeverity,
 } from './types';
@@ -234,161 +233,15 @@ export function applyRules(event: BusinessEvent): {
   return { reason, priority, action: rule.action };
 }
 
-// ─── 12 seed decisions linked to seed events ──────────────────────────────────
-// Each decision's eventId matches a specific seed event id from observe.ts.
-// The first decision links to evt_gstr3b_due_001 (the first seed event).
-interface DecisionRecipe {
-  eventId: string;
-  reason: string;
-  priority: DecisionPriority;
-  action: DecisionAction;
-  status: DecisionStatus;
-  hoursAgo: number;
-}
-
-const SEED_DECISION_RECIPE: DecisionRecipe[] = [
-  {
-    eventId: 'evt_gstr3b_due_001',
-    reason:
-      'GSTR-3B due in 24 hours with ₹4,20,000 output liability (₹2,10,000 net after ITC) and only ₹95,000 in cash ledger. ' +
-      'Prioritising return preparation to avoid ₹50/day late fee + 18% p.a. interest. ' +
-      'Funding gap of ₹1,15,000 must be bridged by EOD tomorrow.',
-    priority: 'urgent',
-    action: 'prepare_return',
-    status: 'pending',
-    hoursAgo: 0.25,
-  },
-  {
-    eventId: 'evt_gstr2b_download_002',
-    reason:
-      'GSTR-2B for December 2025 not yet downloaded — ₹2,10,000 ITC across 24 vendors at risk of being unclaimed. ' +
-      'Auto-download scheduled to unblock reconciliation before GSTR-3B filing.',
-    priority: 'high',
-    action: 'download_2b',
-    status: 'pending',
-    hoursAgo: 2.5,
-  },
-  {
-    eventId: 'evt_bank_credit_003',
-    reason:
-      '₹3,20,000 UPI credit from Sharma Enterprises LLP matched against INV-2025-0184. ' +
-      'Auto-reconciling to close the receivable and update client payment-pattern memory.',
-    priority: 'low',
-    action: 'reconcile',
-    status: 'executed',
-    hoursAgo: 1.5,
-  },
-  {
-    eventId: 'evt_recv_overdue_005',
-    reason:
-      'Verma Industries LLP has ₹18,20,000 overdue by 32 days on INV-2025-0172 (DSO 62 vs 30-day terms). ' +
-      'Initiating collection recovery: WhatsApp reminder today + email statement + escalation in 7 days if unpaid.',
-    priority: 'urgent',
-    action: 'send_reminder',
-    status: 'pending',
-    hoursAgo: 4.5,
-  },
-  {
-    eventId: 'evt_recv_aging_006',
-    reason:
-      'Receivables aging shows ₹18,40,000 in 0-30 bucket but ₹9,80,000 in 61-90 and ₹8,40,000 in 90+. ' +
-      'Total ₹42,80,000 outstanding across 11 clients — re-segmenting risk and tightening credit terms.',
-    priority: 'high',
-    action: 'forecast',
-    status: 'approved',
-    hoursAgo: 10.5,
-  },
-  {
-    eventId: 'evt_payable_patel_007',
-    reason:
-      'Patel & Sons bill ₹2,40,000 due in 7 days — 2% early-pay discount available if cleared in 5 days. ' +
-      'Scheduling payment on Day 4 to capture ₹4,800 discount while preserving runway.',
-    priority: 'medium',
-    action: 'delay_payment',
-    status: 'pending',
-    hoursAgo: 8.5,
-  },
-  {
-    eventId: 'evt_payable_emi_008',
-    reason:
-      'HDFC MSME Loan EMI ₹1,24,000 (₹98K principal + ₹26K interest) due in 5 days. Loan outstanding ₹14,20,000. ' +
-      'Auto-scheduling NEFT to avoid bounce charges + credit-score impact.',
-    priority: 'high',
-    action: 'delay_payment',
-    status: 'pending',
-    hoursAgo: 13.5,
-  },
-  {
-    eventId: 'evt_payroll_run_009',
-    reason:
-      'January 2026 payroll for 18 employees — gross ₹8,42,000, net ₹7,27,800 after PF ₹71,200 + TDS ₹40,600 + PT ₹2,400. ' +
-      'Pay-date 31/01. Locking attendance + generating bank file.',
-    priority: 'high',
-    action: 'run_payroll',
-    status: 'pending',
-    hoursAgo: 15.5,
-  },
-  {
-    eventId: 'evt_tds_q3_pending_010',
-    reason:
-      'Q3 (Oct–Dec) TDS ₹3,40,000 pending — 194C ₹2,10,000 + 194J ₹95,000 + 194I ₹35,000. ' +
-      'One challan of ₹85,000 unpaid. 26Q due 31/01. Generating ITNS-281 + filing return.',
-    priority: 'high',
-    action: 'calc_tds',
-    status: 'pending',
-    hoursAgo: 12.5,
-  },
-  {
-    eventId: 'evt_behaviour_sharma_012',
-    reason:
-      'Sharma Enterprises LLP pays in 47 days vs 30-day terms (sample 12 invoices, 92% confidence). ' +
-      'Reclassifying to amber risk-segment + updating cash forecast for +17 day delay on ₹3,20,000 monthly bills.',
-    priority: 'medium',
-    action: 'forecast',
-    status: 'approved',
-    hoursAgo: 17.5,
-  },
-  {
-    eventId: 'evt_cash_shortage_014',
-    reason:
-      '13-week cash forecast predicts ₹18,60,000 deficit in 12 days — current bank balance ₹18,40,000 against ₹28,40,000 outflows. ' +
-      'Activating invoice-discounting bridge + deferring ₹6,20,000 non-essential capex.',
-    priority: 'urgent',
-    action: 'forecast',
-    status: 'pending',
-    hoursAgo: 0.75,
-  },
-  {
-    eventId: 'evt_collection_risk_016',
-    reason:
-      'Reddy Suppliers ₹2,80,000 overdue 68 days, default-probability 41% (red segment). Recovery stage: escalation. ' +
-      'Drafting IBC Section 9 notice (MSME recovery) + flagging for legal counsel review.',
-    priority: 'urgent',
-    action: 'escalate',
-    status: 'approved',
-    hoursAgo: 39.5,
-  },
-];
-
-export function seedDecisions(events: BusinessEvent[]): Decision[] {
-  if (events.length === 0) return [];
-  const now = Date.now();
-  return SEED_DECISION_RECIPE.map((d, idx) => {
-    // Link by event id if present; otherwise fall back positionally.
-    const matched = events.find((e) => e.id === d.eventId);
-    const eventId = matched ? matched.id : events[idx % events.length].id;
-    const ts = new Date(now - d.hoursAgo * 3600 * 1000).toISOString();
-    return {
-      id: `dec_${d.eventId.replace(/^evt_/, '')}`,
-      eventId,
-      reason: d.reason,
-      priority: d.priority,
-      action: d.action,
-      status: d.status,
-      createdAt: ts,
-      updatedAt: ts,
-    } satisfies Decision;
-  });
+// ─── seedDecisions (no-op) ────────────────────────────────────────────────────
+// Previously this function synthesised demo Decisions from a hardcoded
+// recipe constant referencing fabricated clients, bank accounts, invoice
+// numbers, and amounts. The export name is preserved so existing callers
+// continue to compile, but it now returns `[]` so the UI renders a proper
+// empty state. Real decisions come from `db.decision.findMany()` via the
+// API routes.
+export function seedDecisions(_events: BusinessEvent[]): Decision[] {
+  return [];
 }
 
 // ─── Decision Summary — derived from decision stream ──────────────────────────

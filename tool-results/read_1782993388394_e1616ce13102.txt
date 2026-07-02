@@ -1,0 +1,677 @@
+     1→'use client';
+     2→
+     3→// ═══════════════════════════════════════════════════════════════════════════════
+     4→// GSTPilot Real Data Engine™ — Connections Page
+     5→// ═══════════════════════════════════════════════════════════════════════════════
+     6→//
+     7→// Manage all real data connections: GSTN, Bank, Gmail, WhatsApp, Tally/Zoho/QB.
+     8→// Each connector shows connection status, last sync, record count, and capabilities.
+     9→// Connect buttons trigger real OAuth flows (Gmail) or validation (GSTIN).
+    10→//
+    11→// Design: matches the existing GSTPilot premium design system (black bg, glass,
+    12→// blue→purple gradients). This is a NEW page — does not redesign any existing UI.
+    13→// ═══════════════════════════════════════════════════════════════════════════════
+    14→
+    15→import { useState, useEffect, useCallback } from 'react';
+    16→import { motion } from 'framer-motion';
+    17→import {
+    18→  FileText, Landmark, Mail, MessageCircle, Calculator, BookOpen, Wallet,
+    19→  Plus, Trash2, RefreshCw, CheckCircle2, AlertCircle, Loader2, ShieldCheck,
+    20→  Activity, type LucideIcon,
+    21→} from 'lucide-react';
+    22→import { useAuth } from '@/contexts/AuthContext';
+    23→import { cn } from '@/lib/utils';
+    24→import {
+    25→  CONNECTOR_DEFINITIONS,
+    26→  SUPPORTED_BANKS,
+    27→  type ConnectorType,
+    28→  type Connection,
+    29→} from '@/lib/connectors/types';
+    30→
+    31→const EASE = [0.22, 1, 0.36, 1] as const;
+    32→
+    33→// ─── Icon map ─────────────────────────────────────────────────────────────────
+    34→const ICON_MAP: Record<string, LucideIcon> = {
+    35→  FileText, Landmark, Mail, MessageCircle, Calculator, BookOpen, Wallet,
+    36→};
+    37→
+    38→// ─── Connection state from API ────────────────────────────────────────────────
+    39→interface ApiConnection {
+    40→  id: string;
+    41→  type: ConnectorType;
+    42→  status: string;
+    43→  label: string;
+    44→  identifier: string | null;
+    45→  metadata: Record<string, unknown>;
+    46→  lastSyncAt: string | null;
+    47→  syncInterval: string;
+    48→  errorMessage: string | null;
+    49→  recordCount: number;
+    50→  createdAt: string;
+    51→}
+    52→
+    53→export default function ConnectionsPage() {
+    54→  const { user } = useAuth();
+    55→  const [connections, setConnections] = useState<ApiConnection[]>([]);
+    56→  const [loading, setLoading] = useState(true);
+    57→  const [syncing, setSyncing] = useState<string | null>(null);
+    58→  const [activeConnector, setActiveConnector] = useState<ConnectorType | null>(null);
+    59→
+    60→  const fetchConnections = useCallback(async () => {
+    61→    if (!user?.id) return;
+    62→    try {
+    63→      const res = await fetch(`/api/connectors?userId=${encodeURIComponent(user.id)}`);
+    64→      if (res.ok) {
+    65→        const data = await res.json();
+    66→        setConnections(data.connections ?? []);
+    67→      }
+    68→    } catch (err) {
+    69→      console.warn('[Connections] Fetch error:', err);
+    70→    } finally {
+    71→      setLoading(false);
+    72→    }
+    73→  }, [user?.id]);
+    74→
+    75→  useEffect(() => {
+    76→    fetchConnections();
+    77→  }, [fetchConnections]);
+    78→
+    79→  const handleDelete = async (id: string) => {
+    80→    if (!user?.id) return;
+    81→    try {
+    82→      await fetch(`/api/connectors/${id}?userId=${encodeURIComponent(user.id)}`, { method: 'DELETE' });
+    83→      setConnections(prev => prev.filter(c => c.id !== id));
+    84→    } catch (err) {
+    85→      console.warn('[Connections] Delete error:', err);
+    86→    }
+    87→  };
+    88→
+    89→  const handleSync = async (id: string, type: string) => {
+    90→    if (!user?.id) return;
+    91→    setSyncing(id);
+    92→    try {
+    93→      const body: Record<string, unknown> = {};
+    94→      // Gmail sync needs a fresh access token — trigger GIS flow
+    95→      if (type === 'gmail') {
+    96→        const token = await getGmailAccessToken();
+    97→        if (!token) {
+    98→          setSyncing(null);
+    99→          return;
+   100→        }
+   101→        body.accessToken = token;
+   102→      }
+   103→      await fetch(`/api/connectors/${id}/sync?userId=${encodeURIComponent(user.id)}`, {
+   104→        method: 'POST',
+   105→        headers: { 'Content-Type': 'application/json' },
+   106→        body: JSON.stringify(body),
+   107→      });
+   108→      await fetchConnections();
+   109→    } catch (err) {
+   110→      console.warn('[Connections] Sync error:', err);
+   111→    } finally {
+   112→      setSyncing(null);
+   113→    }
+   114→  };
+   115→
+   116→  const connectedCount = connections.filter(c => c.status === 'connected').length;
+   117→
+   118→  return (
+   119→    <motion.div
+   120→      initial={{ opacity: 0, y: 12 }}
+   121→      animate={{ opacity: 1, y: 0 }}
+   122→      transition={{ duration: 0.5, ease: EASE }}
+   123→      className="mx-auto max-w-6xl px-4 py-6 md:px-6 md:py-8"
+   124→    >
+   125→      {/* ═══ HEADER ═══ */}
+   126→      <div className="mb-6">
+   127→        <div className="flex items-center gap-2">
+   128→          <span className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-white/70">
+   129→            <span className="relative flex h-1.5 w-1.5">
+   130→              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+   131→              <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-400" />
+   132→            </span>
+   133→            Real Data Engine™
+   134→          </span>
+   135→        </div>
+   136→        <h1 className="mt-2 text-2xl font-semibold tracking-tight text-white md:text-3xl">
+   137→          <span className="brand-text">Connections</span>
+   138→        </h1>
+   139→        <p className="mt-1 text-sm text-white/50">
+   140→          Connect your real data sources. Oracle uses only connected data — no demo values, no mock values.
+   141→        </p>
+   142→        <div className="mt-3 flex items-center gap-4 text-xs">
+   143→          <span className="flex items-center gap-1.5 text-white/60">
+   144→            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
+   145→            {connectedCount} active connection{connectedCount !== 1 ? 's' : ''}
+   146→          </span>
+   147→          <span className="text-white/40">
+   148→            {connections.length} total
+   149→          </span>
+   150→        </div>
+   151→      </div>
+   152→
+   153→      {/* ═══ CONNECTOR GRID ═══ */}
+   154→      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+   155→        {CONNECTOR_DEFINITIONS.map((def, i) => {
+   156→          const Icon = ICON_MAP[def.icon] ?? FileText;
+   157→          const conn = connections.find(c => c.type === def.type);
+   158→          const isConnected = conn?.status === 'connected';
+   159→
+   160→          return (
+   161→            <motion.div
+   162→              key={def.type}
+   163→              initial={{ opacity: 0, y: 12 }}
+   164→              animate={{ opacity: 1, y: 0 }}
+   165→              transition={{ delay: 0.05 + i * 0.04, duration: 0.4, ease: EASE }}
+   166→              className={cn(
+   167→                'group relative overflow-hidden rounded-2xl border p-5 transition-all duration-300',
+   168→                isConnected
+   169→                  ? 'border-emerald-500/20 bg-emerald-500/[0.03]'
+   170→                  : 'border-white/[0.08] bg-white/[0.02] hover:border-white/[0.14] hover:bg-white/[0.04]',
+   171→              )}
+   172→            >
+   173→              {/* Status badge */}
+   174→              <div className="flex items-start justify-between">
+   175→                <span className={cn(
+   176→                  'flex h-10 w-10 items-center justify-center rounded-xl',
+   177→                  isConnected
+   178→                    ? 'bg-emerald-500/15 text-emerald-300'
+   179→                    : 'bg-gradient-to-br from-blue-500/15 to-violet-500/15 text-blue-300',
+   180→                )}>
+   181→                  <Icon className="h-5 w-5" />
+   182→                </span>
+   183→                {isConnected ? (
+   184→                  <span className="flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-emerald-300">
+   185→                    <CheckCircle2 className="h-3 w-3" />
+   186→                    Connected
+   187→                  </span>
+   188→                ) : (
+   189→                  <span className="rounded-full bg-white/[0.06] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-white/40">
+   190→                    Not Connected
+   191→                  </span>
+   192→                )}
+   193→              </div>
+   194→
+   195→              {/* Name + description */}
+   196→              <h3 className="mt-3 text-base font-semibold text-white">{def.name}</h3>
+   197→              <p className="mt-1 text-xs leading-relaxed text-white/45">{def.description}</p>
+   198→
+   199→              {/* Capabilities */}
+   200→              <div className="mt-3 flex flex-wrap gap-1">
+   201→                {def.capabilities.slice(0, 4).map(cap => (
+   202→                  <span key={cap} className="rounded-md bg-white/[0.04] px-1.5 py-0.5 text-[10px] font-medium text-white/50">
+   203→                    {cap}
+   204→                  </span>
+   205→                ))}
+   206→                {def.capabilities.length > 4 && (
+   207→                  <span className="rounded-md bg-white/[0.04] px-1.5 py-0.5 text-[10px] font-medium text-white/40">
+   208→                    +{def.capabilities.length - 4}
+   209→                  </span>
+   210→                )}
+   211→              </div>
+   212→
+   213→              {/* Connection details (if connected) */}
+   214→              {conn && (
+   215→                <div className="mt-3 border-t border-white/[0.05] pt-3">
+   216→                  <p className="text-xs font-medium text-white/70">{conn.label}</p>
+   217→                  <div className="mt-1 flex items-center gap-3 text-[10px] text-white/40">
+   218→                    <span className="flex items-center gap-1">
+   219→                      <Activity className="h-3 w-3" />
+   220→                      {conn.recordCount} records
+   221→                    </span>
+   222→                    <span>
+   223→                      {conn.lastSyncAt
+   224→                        ? `Synced ${timeAgo(conn.lastSyncAt)}`
+   225→                        : 'Never synced'}
+   226→                    </span>
+   227→                  </div>
+   228→                </div>
+   229→              )}
+   230→
+   231→              {/* Actions */}
+   232→              <div className="mt-4 flex items-center gap-2">
+   233→                {isConnected ? (
+   234→                  <>
+   235→                    <button
+   236→                      onClick={() => handleSync(conn!.id, conn!.type)}
+   237→                      disabled={syncing === conn!.id}
+   238→                      className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-white/[0.08] bg-white/[0.03] py-2 text-xs font-medium text-white/70 transition-all hover:bg-white/[0.06] hover:text-white disabled:opacity-50"
+   239→                    >
+   240→                      {syncing === conn!.id ? (
+   241→                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+   242→                      ) : (
+   243→                        <RefreshCw className="h-3.5 w-3.5" />
+   244→                      )}
+   245→                      Sync
+   246→                    </button>
+   247→                    <button
+   248→                      onClick={() => handleDelete(conn!.id)}
+   249→                      className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/[0.08] bg-white/[0.03] text-white/40 transition-all hover:bg-red-500/10 hover:text-red-300"
+   250→                      aria-label="Disconnect"
+   251→                    >
+   252→                      <Trash2 className="h-3.5 w-3.5" />
+   253→                    </button>
+   254→                  </>
+   255→                ) : (
+   256→                  <button
+   257→                    onClick={() => setActiveConnector(def.type)}
+   258→                    className="flex w-full items-center justify-center gap-1.5 rounded-lg brand-gradient py-2 text-xs font-semibold text-white transition-all hover:opacity-90"
+   259→                  >
+   260→                    <Plus className="h-3.5 w-3.5" />
+   261→                    {def.connectLabel}
+   262→                  </button>
+   263→                )}
+   264→              </div>
+   265→            </motion.div>
+   266→          );
+   267→        })}
+   268→      </div>
+   269→
+   270→      {/* ═══ CONNECT MODAL ═══ */}
+   271→      {activeConnector && (
+   272→        <ConnectModal
+   273→          type={activeConnector}
+   274→          userId={user?.id}
+   275→          onClose={() => setActiveConnector(null)}
+   276→          onConnected={() => {
+   277→            setActiveConnector(null);
+   278→            fetchConnections();
+   279→          }}
+   280→        />
+   281→      )}
+   282→
+   283→      {/* ═══ DATA QUALITY SUMMARY ═══ */}
+   284→      <DataQualitySection userId={user?.id} />
+   285→    </motion.div>
+   286→  );
+   287→}
+   288→
+   289→// ═══════════════════════════════════════════════════════════════════════════════
+   290→// CONNECT MODAL — handles each connector type's connection flow
+   291→// ═══════════════════════════════════════════════════════════════════════════════
+   292→
+   293→function ConnectModal({
+   294→  type, userId, onClose, onConnected,
+   295→}: {
+   296→  type: ConnectorType;
+   297→  userId?: string;
+   298→  onClose: () => void;
+   299→  onConnected: () => void;
+   300→}) {
+   301→  const def = CONNECTOR_DEFINITIONS.find(d => d.type === type)!;
+   302→  const [connecting, setConnecting] = useState(false);
+   303→  const [error, setError] = useState<string | null>(null);
+   304→
+   305→  // GSTN state
+   306→  const [gstin, setGstin] = useState('');
+   307→
+   308→  // Bank state
+   309→  const [bankCode, setBankCode] = useState('');
+   310→  const [accountNumber, setAccountNumber] = useState('');
+   311→  const [ifsc, setIfsc] = useState('');
+   312→
+   313→  // WhatsApp state
+   314→  const [phone, setPhone] = useState('');
+   315→
+   316→  // Accounting state
+   317→  const [companyName, setCompanyName] = useState('');
+   318→  const [companyGstin, setCompanyGstin] = useState('');
+   319→
+   320→  const handleConnect = async () => {
+   321→    if (!userId) {
+   322→      setError('User not authenticated');
+   323→      return;
+   324→    }
+   325→    setConnecting(true);
+   326→    setError(null);
+   327→
+   328→    try {
+   329→      let endpoint = '';
+   330→      let body: Record<string, unknown> = { userId };
+   331→
+   332→      if (type === 'gstn') {
+   333→        if (!gstin.trim()) { setError('GSTIN is required'); setConnecting(false); return; }
+   334→        endpoint = '/api/connect/gstn';
+   335→        body.gstin = gstin.trim();
+   336→      } else if (type === 'bank') {
+   337→        if (!bankCode) { setError('Select a bank'); setConnecting(false); return; }
+   338→        if (!accountNumber.trim()) { setError('Account number is required'); setConnecting(false); return; }
+   339→        endpoint = '/api/connect/bank';
+   340→        body.bankCode = bankCode;
+   341→        body.accountNumber = accountNumber.trim();
+   342→        body.ifsc = ifsc.trim();
+   343→      } else if (type === 'gmail') {
+   344→        // Gmail uses Google Identity Services for OAuth
+   345→        const accessToken = await getGmailAccessToken();
+   346→        if (!accessToken) {
+   347→          setError('Gmail authorization failed or was cancelled');
+   348→          setConnecting(false);
+   349→          return;
+   350→        }
+   351→        endpoint = '/api/connect/gmail';
+   352→        body.accessToken = accessToken;
+   353→      } else if (type === 'whatsapp') {
+   354→        if (!phone.trim()) { setError('Phone number is required'); setConnecting(false); return; }
+   355→        endpoint = '/api/connect/whatsapp';
+   356→        body.phoneNumber = phone.trim();
+   357→      } else if (type === 'tally' || type === 'zoho' || type === 'quickbooks') {
+   358→        if (!companyName.trim()) { setError('Company name is required'); setConnecting(false); return; }
+   359→        endpoint = '/api/connect/accounting';
+   360→        body.software = type;
+   361→        body.companyName = companyName.trim();
+   362→        body.companyGstin = companyGstin.trim();
+   363→      }
+   364→
+   365→      const res = await fetch(endpoint, {
+   366→        method: 'POST',
+   367→        headers: { 'Content-Type': 'application/json' },
+   368→        body: JSON.stringify(body),
+   369→      });
+   370→      const data = await res.json();
+   371→
+   372→      if (!res.ok) {
+   373→        setError(data.error || data.details?.join('; ') || 'Connection failed');
+   374→        setConnecting(false);
+   375→        return;
+   376→      }
+   377→
+   378→      onConnected();
+   379→    } catch (err) {
+   380→      setError(err instanceof Error ? err.message : 'Connection failed');
+   381→      setConnecting(false);
+   382→    }
+   383→  };
+   384→
+   385→  return (
+   386→    <motion.div
+   387→      initial={{ opacity: 0 }}
+   388→      animate={{ opacity: 1 }}
+   389→      exit={{ opacity: 0 }}
+   390→      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+   391→      onClick={onClose}
+   392→    >
+   393→      <motion.div
+   394→        initial={{ scale: 0.95, opacity: 0 }}
+   395→        animate={{ scale: 1, opacity: 1 }}
+   396→        exit={{ scale: 0.95, opacity: 0 }}
+   397→        transition={{ duration: 0.2, ease: EASE }}
+   398→        onClick={e => e.stopPropagation()}
+   399→        className="w-full max-w-md overflow-hidden rounded-2xl border border-white/[0.1] bg-[#0a0a0f] p-6 backdrop-blur-xl"
+   400→      >
+   401→        <h2 className="text-lg font-semibold text-white">{def.connectLabel}</h2>
+   402→        <p className="mt-1 text-xs text-white/50">{def.description}</p>
+   403→
+   404→        <div className="mt-5 space-y-4">
+   405→          {type === 'gstn' && (
+   406→            <div>
+   407→              <label className="mb-1.5 block text-xs font-medium text-white/70">GSTIN</label>
+   408→              <input
+   409→                value={gstin}
+   410→                onChange={e => setGstin(e.target.value)}
+   411→                placeholder="e.g. 27ABCDE1234F1Z5"
+   412→                className="w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2.5 text-sm text-white placeholder:text-white/30 focus:border-blue-500/40 focus:outline-none"
+   413→              />
+   414→              <p className="mt-1 text-[10px] text-white/35">
+   415→                15-character GSTIN. Validated with real checksum algorithm (state code + PAN + entity + Z + checksum).
+   416→              </p>
+   417→            </div>
+   418→          )}
+   419→
+   420→          {type === 'bank' && (
+   421→            <>
+   422→              <div>
+   423→                <label className="mb-1.5 block text-xs font-medium text-white/70">Bank</label>
+   424→                <select
+   425→                  value={bankCode}
+   426→                  onChange={e => setBankCode(e.target.value)}
+   427→                  className="w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2.5 text-sm text-white focus:border-blue-500/40 focus:outline-none"
+   428→                >
+   429→                  <option value="">Select your bank</option>
+   430→                  {SUPPORTED_BANKS.map(b => (
+   431→                    <option key={b.code} value={b.code} className="bg-[#0a0a0f]">{b.name}</option>
+   432→                  ))}
+   433→                </select>
+   434→              </div>
+   435→              <div>
+   436→                <label className="mb-1.5 block text-xs font-medium text-white/70">Account Number</label>
+   437→                <input
+   438→                  value={accountNumber}
+   439→                  onChange={e => setAccountNumber(e.target.value)}
+   440→                  placeholder="e.g. 50100123456789"
+   441→                  className="w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2.5 text-sm text-white placeholder:text-white/30 focus:border-blue-500/40 focus:outline-none"
+   442→                />
+   443→              </div>
+   444→              <div>
+   445→                <label className="mb-1.5 block text-xs font-medium text-white/70">IFSC (optional)</label>
+   446→                <input
+   447→                  value={ifsc}
+   448→                  onChange={e => setIfsc(e.target.value)}
+   449→                  placeholder="e.g. HDFC0001234"
+   450→                  className="w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2.5 text-sm text-white placeholder:text-white/30 focus:border-blue-500/40 focus:outline-none"
+   451→                />
+   452→              </div>
+   453→            </>
+   454→          )}
+   455→
+   456→          {type === 'gmail' && (
+   457→            <div className="rounded-lg border border-blue-500/20 bg-blue-500/[0.05] p-4">
+   458→              <p className="text-sm text-white/70">
+   459→                Click <strong className="text-white">Connect Gmail</strong> to open Google's secure OAuth consent screen.
+   460→                GSTPilot will read GST-related emails (notices, invoices, tax communications) with{' '}
+   461→                <code className="rounded bg-white/10 px-1 text-[11px]">gmail.readonly</code> scope.
+   462→              </p>
+   463→              <p className="mt-2 text-[11px] text-white/40">
+   464→                Your access token is used once for sync, then discarded. Only parsed email data is stored.
+   465→              </p>
+   466→            </div>
+   467→          )}
+   468→
+   469→          {type === 'whatsapp' && (
+   470→            <div>
+   471→              <label className="mb-1.5 block text-xs font-medium text-white/70">WhatsApp Business Phone Number</label>
+   472→              <input
+   473→                value={phone}
+   474→                onChange={e => setPhone(e.target.value)}
+   475→                placeholder="e.g. +91 98765 43210"
+   476→                className="w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2.5 text-sm text-white placeholder:text-white/30 focus:border-blue-500/40 focus:outline-none"
+   477→              />
+   478→              <p className="mt-1 text-[10px] text-white/35">
+   479→                Indian mobile number. Validated for 10-digit format starting with 6-9.
+   480→              </p>
+   481→            </div>
+   482→          )}
+   483→
+   484→          {(type === 'tally' || type === 'zoho' || type === 'quickbooks') && (
+   485→            <>
+   486→              <div>
+   487→                <label className="mb-1.5 block text-xs font-medium text-white/70">Company Name</label>
+   488→                <input
+   489→                  value={companyName}
+   490→                  onChange={e => setCompanyName(e.target.value)}
+   491→                  placeholder="e.g. Acme Industries Pvt Ltd"
+   492→                  className="w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2.5 text-sm text-white placeholder:text-white/30 focus:border-blue-500/40 focus:outline-none"
+   493→                />
+   494→              </div>
+   495→              <div>
+   496→                <label className="mb-1.5 block text-xs font-medium text-white/70">Company GSTIN (optional)</label>
+   497→                <input
+   498→                  value={companyGstin}
+   499→                  onChange={e => setCompanyGstin(e.target.value)}
+   500→                  placeholder="e.g. 27ABCDE1234F1Z5"
+   501→                  className="w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2.5 text-sm text-white placeholder:text-white/30 focus:border-blue-500/40 focus:outline-none"
+   502→                />
+   503→              </div>
+   504→            </>
+   505→          )}
+   506→        </div>
+   507→
+   508→        {error && (
+   509→          <div className="mt-4 flex items-start gap-2 rounded-lg border border-red-500/20 bg-red-500/[0.05] p-3">
+   510→            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-400" />
+   511→            <p className="text-xs text-red-300">{error}</p>
+   512→          </div>
+   513→        )}
+   514→
+   515→        <div className="mt-5 flex items-center gap-2">
+   516→          <button
+   517→            onClick={onClose}
+   518→            className="flex-1 rounded-lg border border-white/[0.08] bg-white/[0.03] py-2.5 text-sm font-medium text-white/70 transition-all hover:bg-white/[0.06]"
+   519→          >
+   520→            Cancel
+   521→          </button>
+   522→          <button
+   523→            onClick={handleConnect}
+   524→            disabled={connecting}
+   525→            className="flex flex-1 items-center justify-center gap-2 rounded-lg brand-gradient py-2.5 text-sm font-semibold text-white transition-all hover:opacity-90 disabled:opacity-50"
+   526→          >
+   527→            {connecting ? (
+   528→              <><Loader2 className="h-4 w-4 animate-spin" /> Connecting...</>
+   529→            ) : (
+   530→              <><ShieldCheck className="h-4 w-4" /> Connect</>
+   531→            )}
+   532→          </button>
+   533→        </div>
+   534→      </motion.div>
+   535→    </motion.div>
+   536→  );
+   537→}
+   538→
+   539→// ═══════════════════════════════════════════════════════════════════════════════
+   540→// DATA QUALITY SECTION — shows auto-detected issues
+   541→// ═══════════════════════════════════════════════════════════════════════════════
+   542→
+   543→function DataQualitySection({ userId }: { userId?: string }) {
+   544→  const [report, setReport] = useState<{ totalAlerts: number; critical: number; high: number; alerts: Array<{ title: string; severity: string; category: string }> } | null>(null);
+   545→
+   546→  useEffect(() => {
+   547→    if (!userId) return;
+   548→    fetch(`/api/data-quality?userId=${encodeURIComponent(userId)}`)
+   549→      .then(res => res.json())
+   550→      .then(data => setReport(data))
+   551→      .catch(() => {});
+   552→  }, [userId]);
+   553→
+   554→  if (!report) return null;
+   555→
+   556→  return (
+   557→    <motion.div
+   558→      initial={{ opacity: 0, y: 12 }}
+   559→      animate={{ opacity: 1, y: 0 }}
+   560→      transition={{ delay: 0.3, duration: 0.4, ease: EASE }}
+   561→      className="mt-6 overflow-hidden rounded-2xl border border-white/[0.08] bg-white/[0.02] p-6"
+   562→    >
+   563→      <div className="flex items-center gap-2">
+   564→        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-violet-500/15 text-violet-300">
+   565→          <ShieldCheck className="h-4 w-4" />
+   566→        </span>
+   567→        <div>
+   568→          <h2 className="text-base font-semibold text-white">
+   569→            <span className="brand-text">Data Quality Engine™</span>
+   570→          </h2>
+   571→          <p className="text-xs text-white/40">Auto-detected issues across your connected data</p>
+   572→        </div>
+   573→      </div>
+   574→
+   575→      {report.totalAlerts === 0 ? (
+   576→        <div className="mt-4 flex items-center gap-2 rounded-lg border border-emerald-500/15 bg-emerald-500/[0.04] p-3">
+   577→          <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+   578→          <p className="text-sm text-emerald-300/80">All data quality checks passed. No issues detected.</p>
+   579→        </div>
+   580→      ) : (
+   581→        <>
+   582→          <div className="mt-4 flex gap-3">
+   583→            <div className="flex-1 rounded-lg border border-red-500/15 bg-red-500/[0.04] p-3 text-center">
+   584→              <p className="text-2xl font-semibold text-red-300">{report.critical}</p>
+   585→              <p className="text-[10px] font-medium uppercase tracking-wider text-red-300/60">Critical</p>
+   586→            </div>
+   587→            <div className="flex-1 rounded-lg border border-orange-500/15 bg-orange-500/[0.04] p-3 text-center">
+   588→              <p className="text-2xl font-semibold text-orange-300">{report.high}</p>
+   589→              <p className="text-[10px] font-medium uppercase tracking-wider text-orange-300/60">High</p>
+   590→            </div>
+   591→            <div className="flex-1 rounded-lg border border-white/[0.06] bg-white/[0.02] p-3 text-center">
+   592→              <p className="text-2xl font-semibold text-white">{report.totalAlerts}</p>
+   593→              <p className="text-[10px] font-medium uppercase tracking-wider text-white/40">Total</p>
+   594→            </div>
+   595→          </div>
+   596→          <div className="mt-3 space-y-2 max-h-64 overflow-y-auto custom-scrollbar">
+   597→            {report.alerts.slice(0, 8).map((alert, i) => (
+   598→              <div key={i} className="flex items-start gap-2 rounded-lg border border-white/[0.05] bg-white/[0.015] p-2.5">
+   599→                <span className={cn(
+   600→                  'mt-0.5 h-2 w-2 shrink-0 rounded-full',
+   601→                  alert.severity === 'critical' && 'bg-red-400',
+   602→                  alert.severity === 'high' && 'bg-orange-400',
+   603→                  alert.severity === 'medium' && 'bg-amber-400',
+   604→                  alert.severity === 'low' && 'bg-white/30',
+   605→                )} />
+   606→                <div className="min-w-0 flex-1">
+   607→                  <p className="text-xs font-medium text-white">{alert.title}</p>
+   608→                  <p className="text-[10px] text-white/35">{alert.category}</p>
+   609→                </div>
+   610→              </div>
+   611→            ))}
+   612→          </div>
+   613→        </>
+   614→      )}
+   615→    </motion.div>
+   616→  );
+   617→}
+   618→
+   619→// ═══════════════════════════════════════════════════════════════════════════════
+   620→// GMAIL OAUTH — Google Identity Services (GIS) token client
+   621→// ═══════════════════════════════════════════════════════════════════════════════
+   622→
+   623→let googleClient: { requestAccessToken: (config: { callback: (resp: { access_token?: string }) => void }) => void } | null = null;
+   624→
+   625→function loadGoogleIdentityServices(): Promise<void> {
+   626→  return new Promise((resolve) => {
+   627→    if (typeof window === 'undefined') return resolve();
+   628→    if ((window as unknown as { google?: unknown }).google) return resolve();
+   629→    const script = document.createElement('script');
+   630→    script.src = 'https://accounts.google.com/gsi/client';
+   631→    script.async = true;
+   632→    script.defer = true;
+   633→    script.onload = () => resolve();
+   634→    document.head.appendChild(script);
+   635→  });
+   636→}
+   637→
+   638→async function getGmailAccessToken(): Promise<string | null> {
+   639→  try {
+   640→    await loadGoogleIdentityServices();
+   641→    const google = (window as unknown as { google?: { accounts?: { oauth2?: { initTokenClient: (config: unknown) => { requestAccessToken: (c: unknown) => void } } } } }).google;
+   642→    if (!google?.accounts?.oauth2) return null;
+   643→
+   644→    // Use the Firebase project's OAuth client ID (public, safe for frontend)
+   645→    const clientId = '44040248808-466c38a29dd3f7a8dd185d.apps.googleusercontent.com';
+   646→
+   647→    return new Promise<string | null>((resolve) => {
+   648→      const client = google.accounts.oauth2.initTokenClient({
+   649→        client_id: clientId,
+   650→        scope: 'https://www.googleapis.com/auth/gmail.readonly',
+   651→        callback: (response: { access_token?: string }) => {
+   652→          resolve(response.access_token ?? null);
+   653→        },
+   654→      });
+   655→      client.requestAccessToken({});
+   656→    });
+   657→  } catch (err) {
+   658→    console.warn('[Gmail] OAuth error:', err);
+   659→    return null;
+   660→  }
+   661→}
+   662→
+   663→// ─── Helpers ──────────────────────────────────────────────────────────────────
+   664→
+   665→function timeAgo(iso: string): string {
+   666→  const date = new Date(iso);
+   667→  const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
+   668→  if (seconds < 60) return 'just now';
+   669→  const minutes = Math.floor(seconds / 60);
+   670→  if (minutes < 60) return `${minutes}m ago`;
+   671→  const hours = Math.floor(minutes / 60);
+   672→  if (hours < 24) return `${hours}h ago`;
+   673→  const days = Math.floor(hours / 24);
+   674→  if (days < 7) return `${days}d ago`;
+   675→  return date.toLocaleDateString('en-IN');
+   676→}
+   677→

@@ -148,13 +148,16 @@ interface RawRows {
   payments: Array<{
     id: string; partyName: string; partyType: string; amount: number; paymentDate: string;
     status: string; invoiceId: string | null; purchaseBillId: string | null; paymentMode: string;
+    clientId: string | null;
   }>;
   employees: Array<{ id: string; name: string; designation: string | null; department: string | null; status: string }>;
+  // ── PT-2-b: real AITask rows power task nodes (auto-emitted on create) ──
+  tasks: Array<{ id: string; title: string; sourceType: string; priority: string; status: string; assignedTo: string | null; clientId: string | null; dueDate: string | null }>;
   reports: Array<{ id: string; reportType: string; title: string; period: string; status: string; createdAt: Date }>;
   whatsappMessages: Array<{ id: string; clientId: string | null; recipientName: string | null; status: string; category: string; createdAt: Date }>;
   emailMessages: Array<{ id: string; clientId: string | null; recipientName: string | null; subject: string; status: string; createdAt: Date }>;
   businessEvents: Array<{ id: string; type: string; source: string; severity: string; status: string; createdAt: Date }>;
-  dataConnections: Array<{ id: string; type: string; status: string; label: string; lastSyncAt: Date | null }>;
+  dataConnections: Array<{ id: string; type: string; status: string; label: string; identifier: string | null; lastSyncAt: Date | null }>;
   // ── Real Business Graph Engine™ — synced records streamed in from connectors ──
   syncedRecords: Array<{ id: string; connectionId: string; sourceType: string; externalId: string | null; title: string | null; amount: number | null; date: string | null; category: string | null }>;
 }
@@ -164,7 +167,7 @@ async function fetchRawRows(): Promise<RawRows> {
     clients, invoices, filings, notices,
     purchaseBills, expenses, payments, employees,
     reports, whatsappMessages, emailMessages, businessEvents, dataConnections,
-    syncedRecords,
+    syncedRecords, tasks,
   ] = await Promise.all([
     db.client.findMany({
       select: { id: true, gstin: true, tradeName: true, status: true, healthScore: true },
@@ -207,6 +210,7 @@ async function fetchRawRows(): Promise<RawRows> {
       select: {
         id: true, partyName: true, partyType: true, amount: true, paymentDate: true,
         status: true, invoiceId: true, purchaseBillId: true, paymentMode: true,
+        clientId: true,
       },
       take: 10000,
       orderBy: { paymentDate: 'desc' },
@@ -236,7 +240,7 @@ async function fetchRawRows(): Promise<RawRows> {
       orderBy: { createdAt: 'desc' },
     }),
     db.dataConnection.findMany({
-      select: { id: true, type: true, status: true, label: true, lastSyncAt: true },
+      select: { id: true, type: true, status: true, label: true, identifier: true, lastSyncAt: true },
       take: 100,
     }),
     // ── Real Business Graph Engine™ — synced records (bank tx, emails, WhatsApp, accounting invoices) ──
@@ -245,13 +249,19 @@ async function fetchRawRows(): Promise<RawRows> {
       take: 5000,
       orderBy: { createdAt: 'desc' },
     }) as Promise<Array<{ id: string; connectionId: string; sourceType: string; externalId: string | null; title: string | null; amount: number | null; date: string | null; category: string | null }>>,
+    // ── PT-2-b: real AITask rows power the graph task nodes (auto-emitted on create) ──
+    db.aITask.findMany({
+      select: { id: true, title: true, sourceType: true, priority: true, status: true, assignedTo: true, clientId: true, dueDate: true },
+      take: 500,
+      orderBy: { createdAt: 'desc' },
+    }),
   ]);
 
   return {
     clients, invoices, filings, notices,
     purchaseBills, expenses, payments, employees,
     reports, whatsappMessages, emailMessages, businessEvents, dataConnections,
-    syncedRecords,
+    syncedRecords, tasks,
   };
 }
 
@@ -291,6 +301,29 @@ export function buildKnowledgeGraph(rows: RawRows, cfo: CFOResponse): KnowledgeG
     x: -200, y: 0,
   });
   pushEdge(businessId, bankId, 'OWNS');
+
+  // 2b. Bank accounts — REAL data from DataConnection type=bank (PT-2-b)
+  //     Each connected bank becomes its own bank-account node, owned by the firm.
+  rows.dataConnections
+    .filter((dc) => dc.type === 'bank')
+    .slice(0, 25)
+    .forEach((dc, i) => {
+      const bankNodeId = `bank-account:${dc.id}`;
+      pushNode({
+        id: bankNodeId,
+        type: 'bank-account',
+        entityId: dc.id,
+        label: dc.label || 'Bank Account',
+        subtitle: `${dc.status}${dc.lastSyncAt ? ` · synced ${new Date(dc.lastSyncAt).toLocaleDateString()}` : ''}`,
+        meta: {
+          status: dc.status,
+          identifier: dc.identifier ?? '',
+          type: 'bank',
+        },
+        x: -350 + (i % 4) * 80, y: -120 + Math.floor(i / 4) * 50,
+      });
+      pushEdge(businessId, bankNodeId, 'OWNS');
+    });
 
   // 3. Employees — REAL data from Employee table (Phase 6: no more hardcoded names)
   const activeEmployees = rows.employees.filter((e) => e.status === 'active' || e.status !== 'inactive');
@@ -533,6 +566,10 @@ export function buildKnowledgeGraph(rows: RawRows, cfo: CFOResponse): KnowledgeG
       if (p.invoiceId) {
         pushEdge(collId, `invoice:${p.invoiceId}`, 'CLEARS', p.amount);
       }
+      // PT-2-b: Client → Collection direct edge (when payment references a client)
+      if (p.clientId) {
+        pushEdge(`client:${p.clientId}`, collId, 'PAYS', p.amount);
+      }
       // Collection RECORDED_IN bank account
       pushEdge(collId, bankId, 'RECORDED_IN', p.amount);
     } else {
@@ -572,6 +609,43 @@ export function buildKnowledgeGraph(rows: RawRows, cfo: CFOResponse): KnowledgeG
       x: 300 + i * 50, y: -200,
     });
     pushEdge(businessId, nodeId, 'CREATED_BY');
+  });
+
+  // 12b. Tasks — REAL data from AITask table (PT-2-b: auto-emitted on create)
+  //      Each AITask becomes a task node with edges:
+  //        business → task (CREATED_BY)
+  //        employee → task (ASSIGNED_TO) when assignedTo is set
+  //        client   → task (AFFECTS)       when clientId is set
+  const existingTaskNodeIds = new Set(
+    nodes.filter((n) => n.type === 'task').map((n) => n.id),
+  );
+  rows.tasks.slice(0, 200).forEach((t, i) => {
+    const nodeId = `task:${t.id}`;
+    if (existingTaskNodeIds.has(nodeId)) return; // dedup vs CFO priorityActions
+    existingTaskNodeIds.add(nodeId);
+    pushNode({
+      id: nodeId,
+      type: 'task',
+      entityId: t.id,
+      label: t.title,
+      subtitle: `${t.sourceType} · ${t.priority} · ${t.status}`,
+      meta: {
+        sourceType: t.sourceType,
+        priority: t.priority,
+        status: t.status,
+        dueDate: t.dueDate ?? '',
+      },
+      x: 280 + (i % 8) * 50, y: -260 + Math.floor(i / 8) * 40,
+    });
+    pushEdge(businessId, nodeId, 'CREATED_BY');
+    // Employee → Task (when task assigned to an employee/team-member)
+    if (t.assignedTo) {
+      pushEdge(`employee:${t.assignedTo}`, nodeId, 'ASSIGNED_TO');
+    }
+    // Client → Task (when task references a client)
+    if (t.clientId) {
+      pushEdge(`client:${t.clientId}`, nodeId, 'AFFECTS');
+    }
   });
 
   // 13. Reports — REAL data from ExecutiveReport table (Phase 6: no more hardcoded names)

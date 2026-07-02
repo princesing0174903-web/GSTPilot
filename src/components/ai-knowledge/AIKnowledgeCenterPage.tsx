@@ -48,6 +48,8 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { formatNumber } from '@/lib/gst-utils';
+import { EmptyState } from '@/components/shared/EmptyState';
+import { Inbox } from 'lucide-react';
 
 // ─── Types ────────────────────────────────────────────────────────────────
 type KnowledgeCategory = 'gst_rule' | 'circular' | 'notification' | 'case_law' | 'department_update';
@@ -93,121 +95,6 @@ const CATEGORY_FILTER_OPTIONS = [
   { key: 'case_law', label: 'Case Laws' },
   { key: 'department_update', label: 'Department Updates' },
 ] as const;
-
-// ─── Default / Mock Data ──────────────────────────────────────────────────
-const mockKnowledgeData: KnowledgeData = {
-  stats: {
-    totalEntries: 1284,
-    gstRules: 432,
-    circulars: 356,
-    caseLaws: 218,
-  },
-  entries: [
-    {
-      id: 'k1',
-      title: 'CGST Rule 36(4): ITC Claim Restriction on Unmatched Invoices',
-      category: 'gst_rule',
-      content: 'As per CGST Rule 36(4), inserted w.e.f. 09-Oct-2019, the input tax credit that can be claimed by a registered person in his GSTR-3B shall be restricted to the extent of eligible ITC available in his GSTR-2B. This effectively means that ITC can only be claimed for invoices that have been uploaded by the supplier in their GSTR-1 and are reflected in the recipient\'s GSTR-2B. Any ITC claimed in excess of GSTR-2B is liable to be reversed along with interest. The rule was further amended to provide that ITC shall be available as per GSTR-2B irrespective of the same being claimed in GSTR-3B, providing a self-correcting mechanism.',
-      summary: 'ITC claims in GSTR-3B are restricted to the extent available in GSTR-2B. Excess claims are subject to reversal with interest.',
-      referenceNumber: 'CGST Rule 36(4)',
-      effectiveDate: '2019-10-09',
-      tags: ['ITC', 'GSTR-2B', 'Rule 36', 'Input Tax Credit'],
-      relevanceScore: 95,
-      source: 'Central GST Rules',
-      createdAt: '2024-01-15',
-    },
-    {
-      id: 'k2',
-      title: 'CBIC Circular 170/2022: Clarification on Refund of ITC',
-      category: 'circular',
-      content: 'CBIC Circular No. 170/02/2022-GST dated 26-Apr-2022 provides detailed clarification on various issues related to refund of Input Tax Credit under GST. The circular addresses scenarios including refund of accumulated ITC, refund on account of inverted duty structure, and the procedure for calculating the "adjusted total turnover" for refund purposes. It clarifies that the term "Net ITC" for refund computation should include only the ITC availed on inputs and input services, excluding capital goods ITC. The circular also provides guidance on the treatment of debit notes for refund calculations and the methodology for computing the refund amount under Rule 89(5).',
-      summary: 'Clarifies ITC refund computation methodology including inverted duty structure refunds and adjusted total turnover calculation.',
-      referenceNumber: 'Circular No. 170/02/2022-GST',
-      effectiveDate: '2022-04-26',
-      tags: ['Refund', 'ITC', 'Inverted Duty', 'Circular 170'],
-      relevanceScore: 88,
-      source: 'CBIC',
-      createdAt: '2024-02-20',
-    },
-    {
-      id: 'k3',
-      title: 'Notification 13/2020: Extension of GST Return Filing Due Dates',
-      category: 'notification',
-      content: 'CBIC Notification No. 13/2020-Central Tax dated 23-March-2020 extended the due dates for filing various GST returns for the months of February 2020 and March 2020, and for the quarter ending March 2020. This notification was issued in the context of the COVID-19 pandemic and provided relief to taxpayers by extending the time limits for furnishing GSTR-3B, GSTR-1, and other returns. The extension ranged from 30 days to 90 days depending on the return type and the taxpayer category. The notification also extended the time limit for issuing notices, orders, and compliance-related activities under various provisions of the CGST Act.',
-      summary: 'Extended due dates for GST return filing for Feb-Mar 2020 period due to COVID-19 pandemic relief measures.',
-      referenceNumber: 'Notification No. 13/2020-CT',
-      effectiveDate: '2020-03-23',
-      tags: ['Due Date Extension', 'COVID-19', 'Filing', 'GSTR-3B'],
-      relevanceScore: 72,
-      source: 'CBIC',
-      createdAt: '2024-03-10',
-    },
-    {
-      id: 'k4',
-      title: 'VKC Footwear India Pvt Ltd vs CCE: ITC Eligibility on Capital Goods',
-      category: 'case_law',
-      content: 'In the case of VKC Footwear India Pvt Ltd vs Commissioner of Central Excise & Service Tax (2019), the Madras High Court held that Input Tax Credit on capital goods used for manufacturing taxable goods cannot be denied merely on the ground of delayed filing of returns, provided the goods have been received and used in the business. The court emphasized that the right to claim ITC is a statutory right and cannot be taken away on procedural grounds alone. The court distinguished between the right to claim ITC and the procedural requirement of filing returns, holding that the latter is directory and not mandatory in nature. This judgment has significant implications for ITC claims where returns have been filed belatedly.',
-      summary: 'HC held that ITC on capital goods cannot be denied solely due to delayed return filing, as ITC is a statutory right.',
-      referenceNumber: '2019 (26) GSTL 337 (Mad.)',
-      effectiveDate: '2019-08-14',
-      tags: ['ITC', 'Capital Goods', 'Case Law', 'Madras HC', 'Delayed Filing'],
-      relevanceScore: 82,
-      source: 'Madras High Court',
-      createdAt: '2024-04-05',
-    },
-    {
-      id: 'k5',
-      title: 'CBIC Advisory: E-Invoice Generation for B2B Transactions',
-      category: 'department_update',
-      content: 'CBIC has issued an advisory regarding the mandatory generation of e-invoices for B2B transactions for taxpayers with aggregate turnover exceeding ₹5 crore in any of the preceding financial years from 2017-18 onwards. The e-invoice must be generated on the IRN portal within the prescribed time limit. For invoices issued in the current financial year, the time limit is 30 days from the date of invoice. For credit/debit notes, the same time limit applies. Failure to generate e-invoices within the prescribed time may attract penalties under Section 122 of the CGST Act. The advisory also clarifies the process for canceling e-invoices and the treatment of invoices issued in multiple modes.',
-      summary: 'E-invoice mandatory for B2B transactions for taxpayers with turnover > ₹5Cr. 30-day generation window applies.',
-      effectiveDate: '2025-01-01',
-      tags: ['E-Invoice', 'B2B', 'IRN', 'Turnover Threshold'],
-      relevanceScore: 91,
-      source: 'CBIC Advisory',
-      createdAt: '2025-01-10',
-    },
-    {
-      id: 'k6',
-      title: 'CGST Rule 46: Tax Invoice Requirements and Mandatory Fields',
-      category: 'gst_rule',
-      content: 'CGST Rule 46 prescribes the mandatory fields that must be included in a tax invoice issued by a registered person under GST. These include: (a) name, address, and GSTIN of the supplier, (b) name, address, and GSTIN/UID of the recipient (if registered), (c) name and address of the recipient and address of delivery along with State name (for unregistered recipients in inter-state supply), (d) HSN code of goods or SAC code of services, (e) description of goods or services, (f) quantity and unit of measurement, (g) total value, (h) taxable value, (i) rate of tax (CGST, SGST, IGST), (j) amount of tax charged, (k) total invoice value, (l) place of supply, (m) whether reverse charge applies, (n) signature or digital signature of the supplier. Non-compliance may render the invoice invalid for ITC purposes.',
-      summary: 'Specifies all mandatory fields for a valid GST tax invoice. Non-compliant invoices may be rejected for ITC claims.',
-      referenceNumber: 'CGST Rule 46',
-      effectiveDate: '2017-07-01',
-      tags: ['Invoice', 'Rule 46', 'Tax Invoice', 'HSN', 'Mandatory Fields'],
-      relevanceScore: 93,
-      source: 'Central GST Rules',
-      createdAt: '2024-01-05',
-    },
-    {
-      id: 'k7',
-      title: 'Circular 183/2023: Procedure for Filing Refund Claims on Unutilized ITC',
-      category: 'circular',
-      content: 'CBIC Circular No. 183/15/2022-GST provides the detailed procedure for filing and processing refund claims of unutilized Input Tax Credit under Section 54(3) of the CGST Act. The circular outlines the documentation requirements, the format of the application (RFD-01), and the timeline for processing refund claims. It also addresses the issue of provisional attachment of bank accounts during refund processing and provides safeguards to prevent misuse. The circular emphasizes that the jurisdictional officer must process refund applications within 60 days from the date of receipt of a complete application, failing which interest becomes payable to the applicant.',
-      summary: 'Details the RFD-01 filing procedure for unutilized ITC refunds with 60-day processing timeline and safeguards.',
-      referenceNumber: 'Circular No. 183/15/2022-GST',
-      effectiveDate: '2022-12-27',
-      tags: ['Refund', 'Unutilized ITC', 'RFD-01', 'Section 54'],
-      relevanceScore: 79,
-      source: 'CBIC',
-      createdAt: '2024-05-15',
-    },
-    {
-      id: 'k8',
-      title: 'Bosch Ltd vs CTT: Classification Dispute on Automotive Components',
-      category: 'case_law',
-      content: 'In Bosch Ltd vs Commissioner of Central Tax, Thane (2023), the Mumbai CESTAT held that classification of automotive components must be determined based on their primary function and not merely on the basis of the end-use in the automotive industry. The tribunal applied the principle of noscitur a sociis and held that components that serve a dual purpose must be classified under the heading that describes their essential character. This decision has implications for HSN classification disputes where products can potentially fall under multiple tariff headings.',
-      summary: 'CESTAT ruled that automotive component HSN classification should follow primary function, not end-use. Essential character test applies.',
-      referenceNumber: '2023 (12) TMI 1025 - CESTAT MUMBAI',
-      effectiveDate: '2023-10-18',
-      tags: ['HSN Classification', 'CESTAT', 'Automotive', 'Essential Character'],
-      relevanceScore: 68,
-      source: 'Mumbai CESTAT',
-      createdAt: '2024-06-20',
-    },
-  ],
-};
 
 // ─── Animated Card Wrapper ────────────────────────────────────────────────
 function AnimatedCard({
@@ -306,7 +193,7 @@ function EntrySkeleton() {
 // MAIN COMPONENT
 // ═══════════════════════════════════════════════════════════════════════════
 export default function AIKnowledgeCenterPage() {
-  const [data, setData] = useState<KnowledgeData>(mockKnowledgeData);
+  const [data, setData] = useState<KnowledgeData>({ entries: [], stats: { totalEntries: 0, gstRules: 0, circulars: 0, caseLaws: 0 } });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -332,17 +219,21 @@ export default function AIKnowledgeCenterPage() {
       const res = await fetch('/api/ai-knowledge');
       if (res.ok) {
         const json = await res.json();
-        if (json.entries && json.entries.length > 0) {
-          setData(json);
-        } else {
-          setData(mockKnowledgeData);
-        }
+        const entries: KnowledgeEntry[] = Array.isArray(json.entries) ? json.entries : [];
+        const stats = json.stats ?? {
+          totalEntries: entries.length,
+          gstRules: entries.filter((e: KnowledgeEntry) => e.category === 'gst_rule').length,
+          circulars: entries.filter((e: KnowledgeEntry) => e.category === 'circular').length,
+          caseLaws: entries.filter((e: KnowledgeEntry) => e.category === 'case_law').length,
+        };
+        setData({ entries, stats });
       } else {
-        setData(mockKnowledgeData);
+        setData({ entries: [], stats: { totalEntries: 0, gstRules: 0, circulars: 0, caseLaws: 0 } });
       }
     } catch (err) {
       console.error('AI Knowledge fetch error:', err);
-      setData(mockKnowledgeData);
+      setError('Failed to load knowledge entries. Please try again later.');
+      setData({ entries: [], stats: { totalEntries: 0, gstRules: 0, circulars: 0, caseLaws: 0 } });
     } finally {
       setLoading(false);
     }
@@ -596,9 +487,11 @@ export default function AIKnowledgeCenterPage() {
           {loading ? (
             <EntrySkeleton />
           ) : filteredEntries.length === 0 ? (
-            <div className="py-12 text-center text-muted-foreground text-sm">
-              No knowledge entries found matching your search criteria.
-            </div>
+            <EmptyState
+              icon={Inbox}
+              title="No knowledge entries yet"
+              description={searchQuery || categoryFilter !== 'all' ? 'No entries match your search criteria.' : 'Knowledge entries will appear here once they are added.'}
+            />
           ) : (
             <ScrollArea className="max-h-[700px]">
               <div className="space-y-2 pr-2">

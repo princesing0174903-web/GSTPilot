@@ -1,6 +1,8 @@
 'use client';
 
 import React, { useState, useMemo, useCallback } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { apiGet } from '@/lib/api';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   TrendingUp, TrendingDown, Shield, Wallet, CreditCard as CreditScore, BarChart3,
@@ -833,9 +835,62 @@ function WorkingCapitalLoansTab() {
   const [emiRate, setEmiRate] = useState(12);
   const [emiTenure, setEmiTenure] = useState(24);
 
+  // ── Real data fetch for eligibility checks ──
+  // Annual invoice volume = sum of Invoice.taxableValue over the last 12 months
+  // GST filing regularity = filedReturns / (filedReturns + pendingReturns + overdueReturns)
+  const { data: invoicesResp, isLoading: invoicesLoading } = useQuery<{ invoices: Array<{ taxableValue: number; invoiceDate: string }> }>({
+    queryKey: ['invoices', 'wc-loans'],
+    queryFn: () => apiGet('/api/invoices'),
+  });
+  const { data: dashboard } = useQuery<{ filedReturns: number; pendingReturns: number; overdueReturns: number }>({
+    queryKey: ['dashboard', 'wc-loans'],
+    queryFn: () => apiGet('/api/dashboard'),
+  });
+
+  const annualInvoiceVolume = useMemo(() => {
+    const invoices = invoicesResp?.invoices ?? [];
+    if (invoices.length === 0) return 0;
+    const oneYearAgo = Date.now() - 365 * 24 * 60 * 60 * 1000;
+    return invoices
+      .filter((inv) => {
+        if (!inv.invoiceDate) return true;
+        const d = new Date(inv.invoiceDate).getTime();
+        return Number.isNaN(d) || d >= oneYearAgo;
+      })
+      .reduce((sum, inv) => sum + (Number(inv.taxableValue) || 0), 0);
+  }, [invoicesResp]);
+
+  const filingRegularity = useMemo(() => {
+    const filed = dashboard?.filedReturns ?? 0;
+    const pending = dashboard?.pendingReturns ?? 0;
+    const overdue = dashboard?.overdueReturns ?? 0;
+    const total = filed + pending + overdue;
+    if (total === 0) return { filed: 0, total: 0, pct: 0 };
+    return { filed, total, pct: Math.round((filed / total) * 100) };
+  }, [dashboard]);
+
+  // 1.2 Cr threshold = 12,000,000. Below this → status flips to 'review'.
+  const INVOICE_VOLUME_THRESHOLD = 12000000;
+  const invoiceVolumePass = annualInvoiceVolume >= INVOICE_VOLUME_THRESHOLD;
+  // Filing regularity "pass" if >= 90% of returns filed on time
+  const filingRegularityPass = filingRegularity.total === 0 ? false : filingRegularity.pct >= 90;
+
   const eligibilityChecks = [
-    { label: 'GST Filing Regularity', status: 'pass' as const, detail: 'Filed 11/12 returns on time' },
-    { label: 'Invoice Volume', status: 'pass' as const, detail: '₹1.2 Cr+ annual invoice volume' },
+    {
+      label: 'GST Filing Regularity',
+      status: (filingRegularity.total === 0 ? 'warn' : filingRegularityPass ? 'pass' : 'review') as 'pass' | 'warn' | 'review',
+      detail:
+        filingRegularity.total === 0
+          ? 'No returns on record yet'
+          : `Filed ${filingRegularity.filed}/${filingRegularity.total} returns on time (${filingRegularity.pct}%)`,
+    },
+    {
+      label: 'Invoice Volume',
+      status: (invoicesLoading ? 'warn' : invoiceVolumePass ? 'pass' : 'review') as 'pass' | 'warn' | 'review',
+      detail: invoicesLoading
+        ? 'Calculating annual invoice volume…'
+        : `${formatINR(annualInvoiceVolume)} annual invoice volume${invoiceVolumePass ? '' : ' (below ₹1.2 Cr threshold)'}`,
+    },
     { label: 'Payment History', status: 'pass' as const, detail: 'No defaults in last 24 months' },
     { label: 'Business Vintage', status: 'pass' as const, detail: '3+ years in operation' },
     { label: 'Collateral Available', status: 'warn' as const, detail: 'Partial collateral available' },

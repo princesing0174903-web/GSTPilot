@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -46,11 +46,230 @@ import {
   FileSearch,
 } from 'lucide-react';
 import { useApp } from '@/contexts/AppContext';
-import { useFireClient, useFireReturns, useFireInvoices, useFireDocuments } from '@/hooks/use-firestore';
 import { fileReturn, updateReturnStatus, createReturn } from '@/lib/firestore-service';
 import { formatCurrency, periodToLabel } from '@/lib/gst-utils';
 import { toast } from 'sonner';
 import type { FirestoreClient, FirestoreReturn, FirestoreInvoice, FirestoreDocument } from '@/lib/firestore-schema';
+
+// ─── API response shapes (subset of Prisma models) ─────────────────────────
+
+interface ApiGSTRFiling {
+  id: string;
+  clientId: string;
+  returnType: string;
+  period: string;
+  financialYear?: string | null;
+  status: string;
+  filedDate?: string | null;
+  acknowledgmentNumber?: string | null;
+  totalInvoices: number;
+  readyForFiling: number;
+  issuesFound: number;
+  criticalErrors: number;
+  warnings: number;
+  totalTaxableValue: number;
+  totalTax: number;
+  jsonPayload?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  client?: { id: string; tradeName: string; gstin: string; state?: string | null } | null;
+}
+
+interface ApiInvoice {
+  id: string;
+  clientId: string;
+  invoiceNumber: string;
+  invoiceDate: string;
+  sellerGstin: string;
+  buyerGstin?: string | null;
+  buyerName?: string | null;
+  invoiceType: string;
+  gstr1Section: string;
+  taxableValue: number;
+  cgst: number;
+  sgst: number;
+  igst: number;
+  cess: number;
+  totalAmount: number;
+  hsnCode?: string | null;
+  reverseCharge: boolean;
+  status: string;
+  matchStatus: string;
+  riskLevel: string;
+  riskScore: number;
+  aiExplanation?: string | null;
+  notes?: string | null;
+  period?: string | null;
+  assignedTo?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  client?: { id: string; tradeName: string; gstin: string } | null;
+}
+
+interface ApiClient {
+  id: string;
+  gstin: string;
+  tradeName: string;
+  legalName?: string | null;
+  address?: string | null;
+  state?: string | null;
+  stateCode?: string | null;
+  contactEmail?: string | null;
+  contactPhone?: string | null;
+  entityType?: string;
+  returnPeriod?: string | null;
+  lastFilingDate?: string | null;
+  status: string;
+  healthScore: number;
+  createdAt: string;
+  updatedAt: string;
+  _aggregations?: {
+    totalInvoices: number;
+    filedReturns: number;
+    pendingReturns: number;
+    matchPercentage: number;
+  };
+}
+
+interface ApiDocument {
+  id: string;
+  clientId?: string | null;
+  folder: string;
+  name: string;
+  fileType: string;
+  size: number;
+  path?: string | null;
+  tags?: string | null;
+  description?: string | null;
+  uploadedBy?: string | null;
+  version: number;
+  isLatest: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ─── Mappers ─────────────────────────────────────────────────────────────────
+
+function mapApiReturn(r: ApiGSTRFiling): FirestoreReturn & { id: string } {
+  return {
+    id: r.id,
+    returnId: r.id,
+    firmId: '',
+    clientId: r.clientId,
+    returnType: (r.returnType === 'GSTR-3B' ? 'GSTR-3B' : 'GSTR-1') as 'GSTR-1' | 'GSTR-3B',
+    period: r.period,
+    financialYear: r.financialYear ?? '',
+    status: r.status as FirestoreReturn['status'],
+    filedDate: r.filedDate ?? null,
+    acknowledgmentNumber: r.acknowledgmentNumber ?? null,
+    totalInvoices: r.totalInvoices ?? 0,
+    readyForFiling: r.readyForFiling ?? 0,
+    issuesFound: r.issuesFound ?? 0,
+    criticalErrors: r.criticalErrors ?? 0,
+    warnings: r.warnings ?? 0,
+    totalTaxableValue: r.totalTaxableValue ?? 0,
+    totalTax: r.totalTax ?? 0,
+    jsonPayload: r.jsonPayload ?? null,
+    assignedTo: null,
+    reviewedBy: null,
+    createdAt: r.createdAt,
+    updatedAt: r.updatedAt,
+  };
+}
+
+function mapApiInvoice(inv: ApiInvoice): FirestoreInvoice & { id: string } {
+  return {
+    id: inv.id,
+    invoiceId: inv.id,
+    firmId: '',
+    clientId: inv.clientId,
+    documentId: null,
+    invoiceNumber: inv.invoiceNumber,
+    invoiceDate: inv.invoiceDate,
+    sellerGstin: inv.sellerGstin,
+    buyerGstin: inv.buyerGstin ?? null,
+    buyerName: inv.buyerName ?? null,
+    invoiceType: inv.invoiceType as FirestoreInvoice['invoiceType'],
+    gstr1Section: inv.gstr1Section as FirestoreInvoice['gstr1Section'],
+    taxableValue: inv.taxableValue ?? 0,
+    cgst: inv.cgst ?? 0,
+    sgst: inv.sgst ?? 0,
+    igst: inv.igst ?? 0,
+    cess: inv.cess ?? 0,
+    totalAmount: inv.totalAmount ?? 0,
+    hsnCode: inv.hsnCode ?? null,
+    reverseCharge: inv.reverseCharge ?? false,
+    placeOfSupply: null,
+    status: inv.status as FirestoreInvoice['status'],
+    matchStatus: inv.matchStatus as FirestoreInvoice['matchStatus'],
+    riskLevel: inv.riskLevel as FirestoreInvoice['riskLevel'],
+    riskScore: inv.riskScore ?? 0,
+    aiExplanation: inv.aiExplanation ?? null,
+    notes: inv.notes ?? null,
+    period: inv.period ?? null,
+    createdAt: inv.createdAt,
+    updatedAt: inv.updatedAt,
+  };
+}
+
+function mapApiClient(c: ApiClient): FirestoreClient & { id: string } {
+  return {
+    id: c.id,
+    clientId: c.id,
+    firmId: '',
+    gstin: c.gstin,
+    tradeName: c.tradeName,
+    legalName: c.legalName ?? c.tradeName,
+    address: c.address ?? null,
+    state: c.state ?? null,
+    stateCode: c.stateCode ?? null,
+    contactEmail: c.contactEmail ?? null,
+    contactPhone: c.contactPhone ?? null,
+    entityType: c.entityType ?? 'regular',
+    returnPeriod: c.returnPeriod ?? null,
+    lastFilingDate: c.lastFilingDate ?? null,
+    status: c.status as FirestoreClient['status'],
+    healthScore: c.healthScore ?? 0,
+    complianceProfile: {
+      filingCompliance: 0,
+      gstinValidity: true,
+      lastFilingStatus: null,
+      overdueReturns: c._aggregations?.pendingReturns ?? 0,
+      totalReturnsFiled: c._aggregations?.filedReturns ?? 0,
+      averageFilingDelay: 0,
+    },
+    invoiceCount: c._aggregations?.totalInvoices ?? 0,
+    totalTaxPaid: 0,
+    pendingReturnCount: c._aggregations?.pendingReturns ?? 0,
+    documentCount: 0,
+    createdAt: c.createdAt,
+    updatedAt: c.updatedAt,
+  };
+}
+
+function mapApiDocument(d: ApiDocument): FirestoreDocument & { id: string } {
+  return {
+    id: d.id,
+    docId: d.id,
+    firmId: '',
+    clientId: d.clientId ?? '',
+    uploadedBy: d.uploadedBy ?? '',
+    fileName: d.name,
+    filePath: d.path ?? null,
+    fileSize: d.size ?? 0,
+    fileType: d.fileType ?? 'other',
+    documentType: 'other',
+    status: 'archived',
+    extractionStatus: 'pending',
+    extractedInvoiceCount: 0,
+    extractionAccuracy: 0,
+    extractionError: null,
+    period: null,
+    metadata: {},
+    createdAt: d.createdAt,
+    updatedAt: d.updatedAt,
+  };
+}
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // STEP DEFINITIONS
@@ -174,11 +393,112 @@ export default function ReturnPrepWorkspace() {
   const returnType = returnPrepCtx.returnType;
   const period = returnPrepCtx.period;
 
-  // ── Firestore live data ──
-  const { data: clientDoc, loading: clientLoading } = useFireClient(clientId);
-  const { data: invoices, loading: invoicesLoading } = useFireInvoices(clientId);
-  const { data: returns, loading: returnsLoading } = useFireReturns(clientId);
-  const { data: documents, loading: documentsLoading } = useFireDocuments(clientId);
+  // ── Real API-backed state (replaces former Firestore hooks) ─────────
+  const [clientDoc, setClientDoc] = useState<(FirestoreClient & { id: string }) | null>(null);
+  const [invoices, setInvoices] = useState<(FirestoreInvoice & { id: string })[]>([]);
+  const [returns, setReturns] = useState<(FirestoreReturn & { id: string })[]>([]);
+  const [documents, setDocuments] = useState<(FirestoreDocument & { id: string })[]>([]);
+  const [clientLoading, setClientLoading] = useState(true);
+  const [invoicesLoading, setInvoicesLoading] = useState(true);
+  const [returnsLoading, setReturnsLoading] = useState(true);
+  const [documentsLoading, setDocumentsLoading] = useState(true);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  useEffect(() => {
+    if (!clientId) {
+      setClientDoc(null);
+      setClientLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setClientLoading(true);
+    fetch(`/api/clients/${encodeURIComponent(clientId)}`)
+      .then(r => r.ok ? r.json() : { client: null })
+      .then(data => {
+        if (cancelled) return;
+        const c = data?.client as ApiClient | undefined;
+        setClientDoc(c ? mapApiClient(c) : null);
+        setClientLoading(false);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setClientDoc(null);
+        setClientLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [clientId, refreshKey]);
+
+  useEffect(() => {
+    if (!clientId) {
+      setInvoices([]);
+      setInvoicesLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setInvoicesLoading(true);
+    fetch(`/api/invoices?clientId=${encodeURIComponent(clientId)}`)
+      .then(r => r.ok ? r.json() : { invoices: [] })
+      .then(data => {
+        if (cancelled) return;
+        const items: ApiInvoice[] = Array.isArray(data?.invoices) ? data.invoices : [];
+        setInvoices(items.map(mapApiInvoice));
+        setInvoicesLoading(false);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setInvoices([]);
+        setInvoicesLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [clientId, refreshKey]);
+
+  useEffect(() => {
+    if (!clientId) {
+      setReturns([]);
+      setReturnsLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setReturnsLoading(true);
+    fetch(`/api/returns?clientId=${encodeURIComponent(clientId)}`)
+      .then(r => r.ok ? r.json() : { returns: [] })
+      .then(data => {
+        if (cancelled) return;
+        const items: ApiGSTRFiling[] = Array.isArray(data?.returns) ? data.returns : [];
+        setReturns(items.map(mapApiReturn));
+        setReturnsLoading(false);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setReturns([]);
+        setReturnsLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [clientId, refreshKey]);
+
+  useEffect(() => {
+    if (!clientId) {
+      setDocuments([]);
+      setDocumentsLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setDocumentsLoading(true);
+    fetch(`/api/documents?clientId=${encodeURIComponent(clientId)}`)
+      .then(r => r.ok ? r.json() : { documents: [] })
+      .then(data => {
+        if (cancelled) return;
+        const items: ApiDocument[] = Array.isArray(data?.documents) ? data.documents : [];
+        setDocuments(items.map(mapApiDocument));
+        setDocumentsLoading(false);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setDocuments([]);
+        setDocumentsLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [clientId, refreshKey]);
 
   const client = clientDoc;
   const invoicesList = invoices ?? [];
@@ -281,6 +601,7 @@ export default function ReturnPrepWorkspace() {
       }
       handleAdvanceStep(2);
       toast.success('Validation Complete', { description: `${invoicesList.length} invoices processed` });
+      setRefreshKey(k => k + 1);
     } catch (err) {
       toast.error('Validation failed', { description: err instanceof Error ? err.message : 'Unknown error' });
     } finally {
@@ -311,6 +632,7 @@ export default function ReturnPrepWorkspace() {
       await updateReturnStatus(currentReturn.id, 'generated');
       handleAdvanceStep(4);
       toast.success('Return marked as Ready to File');
+      setRefreshKey(k => k + 1);
     } catch (err) {
       toast.error('Failed to mark ready', { description: err instanceof Error ? err.message : 'Unknown error' });
     } finally {
@@ -334,6 +656,7 @@ export default function ReturnPrepWorkspace() {
         setFilingProgress('success');
         handleAdvanceStep(5);
         toast.success(`${returnType} Filed Successfully!`, { description: `Period: ${periodToLabel(period)} · ARN: ${arn}` });
+        setRefreshKey(k => k + 1);
       } catch (err) {
         setFilingModalOpen(false);
         setFilingProgress('idle');

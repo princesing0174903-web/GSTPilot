@@ -1,0 +1,802 @@
+     1→'use client';
+     2→
+     3→import React, { useState, useMemo, useCallback } from 'react';
+     4→import { motion, AnimatePresence } from 'framer-motion';
+     5→import { Badge } from '@/components/ui/badge';
+     6→import { Button } from '@/components/ui/button';
+     7→import { Card, CardContent } from '@/components/ui/card';
+     8→import { Skeleton } from '@/components/ui/skeleton';
+     9→import { ScrollArea } from '@/components/ui/scroll-area';
+    10→import { Separator } from '@/components/ui/separator';
+    11→import {
+    12→  Dialog,
+    13→  DialogContent,
+    14→  DialogHeader,
+    15→  DialogTitle,
+    16→} from '@/components/ui/dialog';
+    17→import {
+    18→  ArrowLeft,
+    19→  ShieldCheck,
+    20→  GitCompareArrows,
+    21→  CheckCircle2,
+    22→  Send,
+    23→  FileText,
+    24→  AlertTriangle,
+    25→  AlertCircle,
+    26→  XCircle,
+    27→  Clock,
+    28→  Eye,
+    29→  Check,
+    30→  Sparkles,
+    31→  Building2,
+    32→  FileWarning,
+    33→  IndianRupee,
+    34→  TrendingUp,
+    35→  TrendingDown,
+    36→  AlertOctagon,
+    37→  FilePlus2,
+    38→  Shield,
+    39→  Zap,
+    40→  X,
+    41→  Loader2,
+    42→  PartyPopper,
+    43→  ArrowRight,
+    44→  ClipboardCheck,
+    45→  Upload,
+    46→  FileSearch,
+    47→} from 'lucide-react';
+    48→import { useApp } from '@/contexts/AppContext';
+    49→import { useFireClient, useFireReturns, useFireInvoices, useFireDocuments } from '@/hooks/use-firestore';
+    50→import { fileReturn, updateReturnStatus, createReturn } from '@/lib/firestore-service';
+    51→import { formatCurrency, periodToLabel } from '@/lib/gst-utils';
+    52→import { toast } from 'sonner';
+    53→import type { FirestoreClient, FirestoreReturn, FirestoreInvoice, FirestoreDocument } from '@/lib/firestore-schema';
+    54→
+    55→// ═══════════════════════════════════════════════════════════════════════════════
+    56→// STEP DEFINITIONS
+    57→// ═══════════════════════════════════════════════════════════════════════════════
+    58→
+    59→const PREP_STEPS = [
+    60→  { id: 's0', label: 'Upload', icon: Upload },
+    61→  { id: 's1', label: 'Extraction', icon: FileSearch },
+    62→  { id: 's2', label: 'Validation', icon: ShieldCheck },
+    63→  { id: 's3', label: 'Reconciliation', icon: GitCompareArrows },
+    64→  { id: 's4', label: 'Preparation', icon: ClipboardCheck },
+    65→  { id: 's5', label: 'Filing', icon: Send },
+    66→] as const;
+    67→
+    68→// ═══════════════════════════════════════════════════════════════════════════════
+    69→// HELPERS
+    70→// ═══════════════════════════════════════════════════════════════════════════════
+    71→
+    72→function getStatusBadge(status: string) {
+    73→  switch (status) {
+    74→    case 'approved': case 'validated': return <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px] px-1.5 py-0 h-5 gap-0.5"><CheckCircle2 className="size-2.5" />Validated</Badge>;
+    75→    case 'draft': return <Badge className="bg-slate-50 text-slate-700 border-slate-200 text-[10px] px-1.5 py-0 h-5 gap-0.5"><Clock className="size-2.5" />Draft</Badge>;
+    76→    case 'cancelled': return <Badge className="bg-red-50 text-red-700 border-red-200 text-[10px] px-1.5 py-0 h-5 gap-0.5"><XCircle className="size-2.5" />Cancelled</Badge>;
+    77→    case 'filed': return <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px] px-1.5 py-0 h-5 gap-0.5"><CheckCircle2 className="size-2.5" />Filed</Badge>;
+    78→    default: return <Badge variant="secondary" className="text-[10px]">{status}</Badge>;
+    79→  }
+    80→}
+    81→
+    82→function getMatchBadge(status: string) {
+    83→  switch (status) {
+    84→    case 'perfect_match': return <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px] px-1.5 py-0">Matched</Badge>;
+    85→    case 'partial_match': return <Badge className="bg-amber-50 text-amber-700 border-amber-200 text-[10px] px-1.5 py-0">Partial</Badge>;
+    86→    case 'mismatch': case 'missing_in_books': case 'missing_in_gstr': return <Badge className="bg-red-50 text-red-700 border-red-200 text-[10px] px-1.5 py-0">Mismatch</Badge>;
+    87→    default: return <Badge variant="secondary" className="text-[10px]">{status}</Badge>;
+    88→  }
+    89→}
+    90→
+    91→function getRiskColor(risk: string) {
+    92→  switch (risk) {
+    93→    case 'critical': return 'text-red-600 bg-red-50';
+    94→    case 'high': return 'text-orange-600 bg-orange-50';
+    95→    case 'medium': return 'text-amber-600 bg-amber-50';
+    96→    default: return 'text-slate-600 bg-slate-50';
+    97→  }
+    98→}
+    99→
+   100→// ═══════════════════════════════════════════════════════════════════════════════
+   101→// ANIMATION
+   102→// ═══════════════════════════════════════════════════════════════════════════════
+   103→
+   104→const fadeUp = {
+   105→  hidden: { opacity: 0, y: 12 },
+   106→  visible: { opacity: 1, y: 0, transition: { duration: 0.35 } },
+   107→};
+   108→
+   109→// ═══════════════════════════════════════════════════════════════════════════════
+   110→// STEP PROGRESS BAR
+   111→// ═══════════════════════════════════════════════════════════════════════════════
+   112→
+   113→function StepProgressBar({ currentStep }: { currentStep: number }) {
+   114→  const percent = Math.round(((currentStep + 1) / PREP_STEPS.length) * 100);
+   115→
+   116→  return (
+   117→    <div className="border border-border/60 rounded-xl p-4 md:p-6">
+   118→      <div className="flex items-center justify-between mb-4">
+   119→        <h3 className="text-sm font-semibold text-foreground uppercase tracking-wider">Preparation Progress</h3>
+   120→        <span className="text-xs font-medium text-muted-foreground">{percent}% Complete</span>
+   121→      </div>
+   122→      <div className="h-2 rounded-full bg-slate-100 mb-6 overflow-hidden">
+   123→        <motion.div className="h-full rounded-full bg-emerald-500" animate={{ width: `${percent}%` }} transition={{ duration: 0.6, ease: 'easeOut' }} />
+   124→      </div>
+   125→      <div className="flex items-start">
+   126→        {PREP_STEPS.map((step, idx) => {
+   127→          const isCompleted = idx < currentStep;
+   128→          const isActive = idx === currentStep;
+   129→          const Icon = step.icon;
+   130→          return (
+   131→            <React.Fragment key={step.id}>
+   132→              <div className="flex flex-col items-center" style={{ minWidth: idx === 0 || idx === PREP_STEPS.length - 1 ? '60px' : '80px', flex: '1 1 0' }}>
+   133→                <motion.div
+   134→                  className={`flex items-center justify-center h-9 w-9 rounded-full shrink-0 text-sm font-semibold transition-all duration-500 ${
+   135→                    isCompleted ? 'bg-emerald-500 text-white shadow-sm shadow-emerald-500/30'
+   136→                      : isActive ? 'bg-emerald-50 text-emerald-700 border-2 border-emerald-500 shadow-sm'
+   137→                        : 'bg-slate-100 text-slate-400'
+   138→                  }`}
+   139→                  animate={isActive ? { scale: [1, 1.08, 1] } : {}}
+   140→                  transition={isActive ? { duration: 2, repeat: Infinity, ease: 'easeInOut' } : {}}
+   141→                >
+   142→                  {isCompleted ? <Check className="h-4 w-4" /> : <Icon className="h-4 w-4" />}
+   143→                </motion.div>
+   144→                <span className={`text-[10px] text-center leading-tight mt-2 whitespace-nowrap ${
+   145→                  isCompleted ? 'text-emerald-700 font-medium' : isActive ? 'text-foreground font-semibold' : 'text-muted-foreground'
+   146→                }`}>
+   147→                  {step.label}
+   148→                </span>
+   149→              </div>
+   150→              {idx < PREP_STEPS.length - 1 && (
+   151→                <div className="flex items-center pt-[18px] flex-1 min-w-[12px]">
+   152→                  <motion.div
+   153→                    className={`h-[3px] w-full rounded-full transition-colors duration-500 ${isCompleted ? 'bg-emerald-400' : 'bg-slate-200'}`}
+   154→                    animate={isActive ? { opacity: [0.5, 1, 0.5] } : {}}
+   155→                    transition={isActive ? { duration: 2, repeat: Infinity, ease: 'easeInOut' } : {}}
+   156→                  />
+   157→                </div>
+   158→              )}
+   159→            </React.Fragment>
+   160→          );
+   161→        })}
+   162→      </div>
+   163→    </div>
+   164→  );
+   165→}
+   166→
+   167→// ═══════════════════════════════════════════════════════════════════════════════
+   168→// MAIN COMPONENT
+   169→// ═══════════════════════════════════════════════════════════════════════════════
+   170→
+   171→export default function ReturnPrepWorkspace() {
+   172→  const { returnPrepCtx, setCurrentView } = useApp();
+   173→  const clientId = returnPrepCtx.clientId;
+   174→  const returnType = returnPrepCtx.returnType;
+   175→  const period = returnPrepCtx.period;
+   176→
+   177→  // ── Firestore live data ──
+   178→  const { data: clientDoc, loading: clientLoading } = useFireClient(clientId);
+   179→  const { data: invoices, loading: invoicesLoading } = useFireInvoices(clientId);
+   180→  const { data: returns, loading: returnsLoading } = useFireReturns(clientId);
+   181→  const { data: documents, loading: documentsLoading } = useFireDocuments(clientId);
+   182→
+   183→  const client = clientDoc;
+   184→  const invoicesList = invoices ?? [];
+   185→  const returnsList = returns ?? [];
+   186→  const documentsList = documents ?? [];
+   187→
+   188→  // ── Local UI state ──
+   189→  const [currentStep, setCurrentStep] = useState(0);
+   190→  const [invoiceFilter, setInvoiceFilter] = useState<'all' | 'approved' | 'draft' | 'filed'>('all');
+   191→  const [selectedInvoice, setSelectedInvoice] = useState<(FirestoreInvoice & { id: string }) | null>(null);
+   192→  const [filingModalOpen, setFilingModalOpen] = useState(false);
+   193→  const [filingProgress, setFilingProgress] = useState<'idle' | 'validating' | 'generating' | 'submitting' | 'success'>('idle');
+   194→  const [actionLoading, setActionLoading] = useState(false);
+   195→
+   196→  // ── Derived state ──
+   197→  const clientName = client?.tradeName ?? 'Select a Client';
+   198→  const clientGSTIN = client?.gstin ?? '';
+   199→
+   200→  // Current return for this client+type+period
+   201→  const currentReturn = useMemo(() =>
+   202→    returnsList.find(r => r.returnType === returnType && r.period === period),
+   203→    [returnsList, returnType, period]
+   204→  );
+   205→
+   206→  const filteredInvoices = useMemo(() => {
+   207→    if (invoiceFilter === 'all') return invoicesList;
+   208→    return invoicesList.filter(inv => inv.status === invoiceFilter);
+   209→  }, [invoicesList, invoiceFilter]);
+   210→
+   211→  const totalTaxable = invoicesList.reduce((sum, inv) => sum + inv.taxableValue, 0);
+   212→  const totalCGST = invoicesList.reduce((sum, inv) => sum + inv.cgst, 0);
+   213→  const totalSGST = invoicesList.reduce((sum, inv) => sum + inv.sgst, 0);
+   214→  const totalIGST = invoicesList.reduce((sum, inv) => sum + inv.igst, 0);
+   215→  const totalTax = totalCGST + totalSGST + totalIGST;
+   216→
+   217→  const approvedCount = invoicesList.filter(i => i.status === 'approved' || i.status === 'filed').length;
+   218→  const draftCount = invoicesList.filter(i => i.status === 'draft').length;
+   219→  const highRiskCount = invoicesList.filter(i => i.riskLevel === 'high' || i.riskLevel === 'critical').length;
+   220→
+   221→  const matchedCount = invoicesList.filter(i => i.matchStatus === 'perfect_match').length;
+   222→  const partialCount = invoicesList.filter(i => i.matchStatus === 'partial_match').length;
+   223→  const mismatchedCount = invoicesList.filter(i => ['mismatch', 'missing_in_books', 'missing_in_gstr'].includes(i.matchStatus)).length;
+   224→
+   225→  const validationScore = invoicesList.length > 0 ? Math.min(100, Math.round((approvedCount / invoicesList.length) * 100)) : 0;
+   226→  const matchRate = invoicesList.length > 0 ? Math.round((matchedCount / invoicesList.length) * 100) : 0;
+   227→  const complianceScore = client?.healthScore ?? 0;
+   228→
+   229→  const allChecksPass = validationScore >= 95 && highRiskCount === 0;
+   230→  const isGSTR1 = returnType === 'GSTR-1';
+   231→  const loading = clientLoading || invoicesLoading;
+   232→
+   233→  // ── Computed step based on data ──
+   234→  const computedStep = useMemo(() => {
+   235→    if (currentReturn?.status === 'filed') return 5;
+   236→    if (currentReturn?.status === 'generated') return 4;
+   237→    if (currentReturn?.status === 'reviewed' || currentReturn?.status === 'validated') return 3;
+   238→    if (documentsList.some(d => d.extractionStatus === 'completed')) return 1;
+   239→    if (documentsList.length > 0) return 0;
+   240→    return 0;
+   241→  }, [currentReturn, documentsList]);
+   242→
+   243→  const effectiveStep = Math.max(currentStep, computedStep);
+   244→
+   245→  // ── Actions ──
+   246→  const handleBack = () => setCurrentView('client-workspace');
+   247→
+   248→  const handleAdvanceStep = useCallback((step: number) => {
+   249→    setCurrentStep(step);
+   250→  }, []);
+   251→
+   252→  const handleRunValidation = useCallback(async () => {
+   253→    if (!clientId) return;
+   254→    setActionLoading(true);
+   255→    try {
+   256→      // Create return if not exists
+   257→      let returnId = currentReturn?.id;
+   258→      if (!returnId) {
+   259→        returnId = await createReturn({
+   260→          returnId: '',
+   261→          clientId,
+   262→          returnType,
+   263→          period,
+   264→          financialYear: period.split('-')[0],
+   265→          status: 'prepared',
+   266→          filedDate: null,
+   267→          acknowledgmentNumber: null,
+   268→          totalInvoices: invoicesList.length,
+   269→          readyForFiling: approvedCount,
+   270→          issuesFound: highRiskCount,
+   271→          criticalErrors: 0,
+   272→          warnings: 0,
+   273→          totalTaxableValue: totalTaxable,
+   274→          totalTax,
+   275→          jsonPayload: null,
+   276→          assignedTo: null,
+   277→          reviewedBy: null,
+   278→        });
+   279→      } else {
+   280→        await updateReturnStatus(returnId, 'validated');
+   281→      }
+   282→      handleAdvanceStep(2);
+   283→      toast.success('Validation Complete', { description: `${invoicesList.length} invoices processed` });
+   284→    } catch (err) {
+   285→      toast.error('Validation failed', { description: err instanceof Error ? err.message : 'Unknown error' });
+   286→    } finally {
+   287→      setActionLoading(false);
+   288→    }
+   289→  }, [clientId, currentReturn, returnType, period, invoicesList, approvedCount, highRiskCount, totalTaxable, totalTax, handleAdvanceStep]);
+   290→
+   291→  const handleRunReconciliation = useCallback(() => {
+   292→    if (effectiveStep < 2) {
+   293→      toast.warning('Complete validation first');
+   294→      return;
+   295→    }
+   296→    handleAdvanceStep(3);
+   297→    toast.success('Reconciliation Complete', { description: 'Books vs GSTR-2B matching finished.' });
+   298→  }, [effectiveStep, handleAdvanceStep]);
+   299→
+   300→  const handleMarkReady = useCallback(async () => {
+   301→    if (!currentReturn?.id) {
+   302→      toast.error('No return found to mark ready');
+   303→      return;
+   304→    }
+   305→    if (highRiskCount > 0) {
+   306→      toast.warning('Cannot mark ready', { description: `${highRiskCount} high-risk invoices must be resolved first` });
+   307→      return;
+   308→    }
+   309→    setActionLoading(true);
+   310→    try {
+   311→      await updateReturnStatus(currentReturn.id, 'generated');
+   312→      handleAdvanceStep(4);
+   313→      toast.success('Return marked as Ready to File');
+   314→    } catch (err) {
+   315→      toast.error('Failed to mark ready', { description: err instanceof Error ? err.message : 'Unknown error' });
+   316→    } finally {
+   317→      setActionLoading(false);
+   318→    }
+   319→  }, [currentReturn, highRiskCount, handleAdvanceStep]);
+   320→
+   321→  const handleFileReturn = useCallback(() => {
+   322→    if (!currentReturn?.id) {
+   323→      toast.error('No return to file');
+   324→      return;
+   325→    }
+   326→    setFilingModalOpen(true);
+   327→    setFilingProgress('validating');
+   328→
+   329→    setTimeout(() => setFilingProgress('generating'), 1500);
+   330→    setTimeout(() => setFilingProgress('submitting'), 3000);
+   331→    setTimeout(async () => {
+   332→      try {
+   333→        const arn = await fileReturn(currentReturn.id);
+   334→        setFilingProgress('success');
+   335→        handleAdvanceStep(5);
+   336→        toast.success(`${returnType} Filed Successfully!`, { description: `Period: ${periodToLabel(period)} · ARN: ${arn}` });
+   337→      } catch (err) {
+   338→        setFilingModalOpen(false);
+   339→        setFilingProgress('idle');
+   340→        toast.error('Filing failed', { description: err instanceof Error ? err.message : 'Unknown error' });
+   341→      }
+   342→    }, 4500);
+   343→  }, [currentReturn, returnType, period, handleAdvanceStep]);
+   344→
+   345→  // ── Return Summary ──
+   346→  const gstr1Summary = useMemo(() => {
+   347→    const b2bSales = invoicesList.filter(i => i.invoiceType === 'B2B').reduce((s, i) => s + i.taxableValue, 0);
+   348→    const b2cSales = invoicesList.filter(i => i.invoiceType === 'B2C Large' || i.invoiceType === 'B2C Small').reduce((s, i) => s + i.taxableValue, 0);
+   349→    const exports = invoicesList.filter(i => i.invoiceType === 'Export').reduce((s, i) => s + i.taxableValue, 0);
+   350→    return { b2bSales, b2cSales, exports, creditNotes: -Math.round(totalTaxable * 0.04), debitNotes: Math.round(totalTaxable * 0.02) };
+   351→  }, [invoicesList, totalTaxable]);
+   352→
+   353→  const gstr3bSummary = useMemo(() => {
+   354→    const outputTax = totalTax;
+   355→    const itcAvailable = Math.round(outputTax * 0.65);
+   356→    const netTaxPayable = Math.max(0, outputTax - itcAvailable);
+   357→    return { taxableSupplies: totalTaxable, itcAvailable, outputTax, netTaxPayable };
+   358→  }, [totalTaxable, totalTax]);
+   359→
+   360→  // ── Loading skeleton ──
+   361→  if (loading && !client) {
+   362→    return (
+   363→      <div className="max-w-7xl mx-auto px-4 md:px-6 py-6 space-y-6">
+   364→        <Skeleton className="h-6 w-40" />
+   365→        <div className="border rounded-xl p-6 space-y-4">
+   366→          <div className="flex gap-4"><Skeleton className="h-10 w-10 rounded-lg" /><div className="space-y-2 flex-1"><Skeleton className="h-6 w-64" /><Skeleton className="h-4 w-48" /></div></div>
+   367→        </div>
+   368→        <div className="flex gap-2">{Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-10 flex-1 rounded-lg" />)}</div>
+   369→      </div>
+   370→    );
+   371→  }
+   372→
+   373→  return (
+   374→    <div className="max-w-7xl mx-auto px-4 md:px-6 py-6 space-y-8">
+   375→
+   376→      {/* ═══ INVOICE DETAIL DIALOG ═══ */}
+   377→      <Dialog open={!!selectedInvoice} onOpenChange={(open) => { if (!open) setSelectedInvoice(null); }}>
+   378→        <DialogContent className="sm:max-w-lg">
+   379→          <DialogHeader>
+   380→            <DialogTitle className="flex items-center gap-2">
+   381→              <FileText className="h-4 w-4 text-emerald-600" /> Invoice Detail
+   382→            </DialogTitle>
+   383→          </DialogHeader>
+   384→          {selectedInvoice && (
+   385→            <div className="space-y-4 mt-2">
+   386→              <div className="grid grid-cols-2 gap-3">
+   387→                <div><span className="text-[10px] text-muted-foreground uppercase tracking-wider">Invoice Number</span><p className="text-sm font-mono font-semibold">{selectedInvoice.invoiceNumber}</p></div>
+   388→                <div><span className="text-[10px] text-muted-foreground uppercase tracking-wider">Date</span><p className="text-sm">{selectedInvoice.invoiceDate}</p></div>
+   389→                <div><span className="text-[10px] text-muted-foreground uppercase tracking-wider">Seller GSTIN</span><p className="text-sm font-mono">{selectedInvoice.sellerGstin}</p></div>
+   390→                <div><span className="text-[10px] text-muted-foreground uppercase tracking-wider">Buyer</span><p className="text-sm">{selectedInvoice.buyerName || '—'}</p></div>
+   391→                <div><span className="text-[10px] text-muted-foreground uppercase tracking-wider">HSN Code</span><p className="text-sm font-mono">{selectedInvoice.hsnCode || 'Missing'}</p></div>
+   392→                <div><span className="text-[10px] text-muted-foreground uppercase tracking-wider">Place of Supply</span><p className="text-sm">{selectedInvoice.placeOfSupply || '—'}</p></div>
+   393→              </div>
+   394→              <Separator />
+   395→              <div className="grid grid-cols-2 gap-3">
+   396→                <div><span className="text-[10px] text-muted-foreground uppercase tracking-wider">Taxable Value</span><p className="text-sm font-bold">{formatCurrency(selectedInvoice.taxableValue)}</p></div>
+   397→                <div><span className="text-[10px] text-muted-foreground uppercase tracking-wider">Status</span><div className="mt-0.5">{getStatusBadge(selectedInvoice.status)}</div></div>
+   398→                <div><span className="text-[10px] text-muted-foreground uppercase tracking-wider">Match Status</span><div className="mt-0.5">{getMatchBadge(selectedInvoice.matchStatus)}</div></div>
+   399→                <div><span className="text-[10px] text-muted-foreground uppercase tracking-wider">Risk Level</span><div className="mt-0.5"><span className={`inline-flex items-center text-[10px] font-medium px-1.5 py-0.5 rounded ${getRiskColor(selectedInvoice.riskLevel)}`}>{selectedInvoice.riskLevel}</span></div></div>
+   400→                <div><span className="text-[10px] text-muted-foreground uppercase tracking-wider">CGST</span><p className="text-sm">{selectedInvoice.cgst > 0 ? formatCurrency(selectedInvoice.cgst) : '—'}</p></div>
+   401→                <div><span className="text-[10px] text-muted-foreground uppercase tracking-wider">SGST</span><p className="text-sm">{selectedInvoice.sgst > 0 ? formatCurrency(selectedInvoice.sgst) : '—'}</p></div>
+   402→                <div><span className="text-[10px] text-muted-foreground uppercase tracking-wider">IGST</span><p className="text-sm">{selectedInvoice.igst > 0 ? formatCurrency(selectedInvoice.igst) : '—'}</p></div>
+   403→                <div><span className="text-[10px] text-muted-foreground uppercase tracking-wider">Total Amount</span><p className="text-sm font-bold text-emerald-700">{formatCurrency(selectedInvoice.totalAmount)}</p></div>
+   404→              </div>
+   405→              {selectedInvoice.aiExplanation && (
+   406→                <>
+   407→                  <Separator />
+   408→                  <div className="p-3 rounded-lg bg-amber-50 border border-amber-200">
+   409→                    <p className="text-xs font-semibold text-amber-700 mb-1">AI Insight</p>
+   410→                    <p className="text-[11px] text-amber-800 leading-relaxed">{selectedInvoice.aiExplanation}</p>
+   411→                  </div>
+   412→                </>
+   413→              )}
+   414→            </div>
+   415→          )}
+   416→        </DialogContent>
+   417→      </Dialog>
+   418→
+   419→      {/* ═══ FILING MODAL ═══ */}
+   420→      <Dialog open={filingModalOpen} onOpenChange={(open) => { if (!open && filingProgress !== 'submitting') { setFilingModalOpen(false); setFilingProgress('idle'); } }}>
+   421→        <DialogContent className="sm:max-w-md">
+   422→          <div className="py-8 text-center space-y-4">
+   423→            {filingProgress === 'validating' && (
+   424→              <><Loader2 className="h-10 w-10 animate-spin text-emerald-600 mx-auto" /><div><p className="text-sm font-semibold text-foreground">Validating return data...</p><p className="text-xs text-muted-foreground mt-1">Checking JSON schema compliance</p></div></>
+   425→            )}
+   426→            {filingProgress === 'generating' && (
+   427→              <><Loader2 className="h-10 w-10 animate-spin text-emerald-600 mx-auto" /><div><p className="text-sm font-semibold text-foreground">Generating JSON payload...</p><p className="text-xs text-muted-foreground mt-1">{invoicesList.length} invoices being packaged</p></div></>
+   428→            )}
+   429→            {filingProgress === 'submitting' && (
+   430→              <><Loader2 className="h-10 w-10 animate-spin text-emerald-600 mx-auto" /><div><p className="text-sm font-semibold text-foreground">Submitting to GST portal...</p><p className="text-xs text-muted-foreground mt-1">Connecting to GSTN via APIs</p></div></>
+   431→            )}
+   432→            {filingProgress === 'success' && (
+   433→              <>
+   434→                <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', stiffness: 200 }}>
+   435→                  <PartyPopper className="h-12 w-12 text-emerald-600 mx-auto" />
+   436→                </motion.div>
+   437→                <div>
+   438→                  <p className="text-lg font-bold text-emerald-700">Filed Successfully!</p>
+   439→                  <div className="mt-3 p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-left space-y-1.5">
+   440→                    <div className="flex justify-between text-xs"><span className="text-muted-foreground">Return Type</span><span className="font-medium">{returnType}</span></div>
+   441→                    <div className="flex justify-between text-xs"><span className="text-muted-foreground">Period</span><span className="font-medium">{periodToLabel(period)}</span></div>
+   442→                    <div className="flex justify-between text-xs"><span className="text-muted-foreground">Total Tax</span><span className="font-bold">{formatCurrency(totalTax)}</span></div>
+   443→                    <div className="flex justify-between text-xs"><span className="text-muted-foreground">Filed On</span><span className="font-medium">{new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</span></div>
+   444→                  </div>
+   445→                  <Button className="mt-4 bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => { setFilingModalOpen(false); setFilingProgress('idle'); }}>Done</Button>
+   446→                </div>
+   447→              </>
+   448→            )}
+   449→          </div>
+   450→        </DialogContent>
+   451→      </Dialog>
+   452→
+   453→      {/* ═══ HEADER ═══ */}
+   454→      <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
+   455→        <div className="border border-border/60 rounded-xl p-4 md:p-5">
+   456→          <div className="flex items-center justify-between flex-wrap gap-3">
+   457→            <div className="flex items-center gap-3">
+   458→              <Button variant="ghost" size="sm" className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground gap-1" onClick={handleBack}>
+   459→                <ArrowLeft className="h-3.5 w-3.5" /> Back
+   460→              </Button>
+   461→            </div>
+   462→            <div className="flex items-center gap-2">
+   463→              <div className="flex items-center gap-2 mr-3">
+   464→                <div className="flex items-center justify-center h-9 w-9 rounded-lg bg-emerald-50 text-emerald-700">
+   465→                  <Building2 className="h-4 w-4" />
+   466→                </div>
+   467→                <div>
+   468→                  <p className="text-sm font-semibold text-foreground leading-tight">{clientName}</p>
+   469→                  <p className="text-[10px] font-mono text-muted-foreground">{clientGSTIN}</p>
+   470→                </div>
+   471→              </div>
+   472→              <Badge variant="outline" className="text-xs font-medium">{returnType}</Badge>
+   473→              <Badge variant="outline" className="text-xs font-medium">{periodToLabel(period)}</Badge>
+   474→              {currentReturn && <Badge className={`text-[10px] ${currentReturn.status === 'filed' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>{currentReturn.status}</Badge>}
+   475→            </div>
+   476→            <div className="flex items-center gap-2 flex-wrap">
+   477→              <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 border-amber-200 text-amber-700 hover:bg-amber-50" onClick={handleRunValidation} disabled={effectiveStep >= 2 || actionLoading}>
+   478→                <ShieldCheck className="size-3.5" /> Validate
+   479→              </Button>
+   480→              <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5" onClick={handleRunReconciliation} disabled={effectiveStep < 2 || effectiveStep >= 3}>
+   481→                <GitCompareArrows className="size-3.5" /> Reconcile
+   482→              </Button>
+   483→              <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 border-emerald-200 text-emerald-700 hover:bg-emerald-50" onClick={handleMarkReady} disabled={effectiveStep < 3 || effectiveStep >= 5 || actionLoading}>
+   484→                <CheckCircle2 className="size-3.5" /> Mark Ready
+   485→              </Button>
+   486→              <Button size="sm" className={`h-8 text-xs gap-1.5 ${allChecksPass ? 'bg-emerald-600 hover:bg-emerald-700 text-white' : 'bg-slate-200 text-slate-500 cursor-not-allowed'}`} disabled={!allChecksPass || effectiveStep < 4} onClick={handleFileReturn}>
+   487→                <Send className="size-3.5" /> File Return
+   488→              </Button>
+   489→            </div>
+   490→          </div>
+   491→        </div>
+   492→      </motion.div>
+   493→
+   494→      {/* ═══ PROGRESS BAR ═══ */}
+   495→      <motion.section initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1, duration: 0.4 }}>
+   496→        <StepProgressBar currentStep={effectiveStep} />
+   497→      </motion.section>
+   498→
+   499→      {/* ═══ STEP-BASED CONTENT ═══ */}
+   500→      <AnimatePresence mode="wait">
+   501→        {/* STEP 0: Upload */}
+   502→        {effectiveStep === 0 && (
+   503→          <motion.section key="step0" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -16 }} transition={{ duration: 0.3 }}>
+   504→            <div className="flex items-center justify-between mb-3">
+   505→              <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">Step 1: Upload Documents</h2>
+   506→              <span className="text-xs text-muted-foreground">{documentsList.length} documents uploaded</span>
+   507→            </div>
+   508→            <div className="border border-border/60 rounded-xl p-6">
+   509→              {documentsList.length > 0 ? (
+   510→                <div className="space-y-2.5">
+   511→                  {documentsList.map((doc) => (
+   512→                    <div key={doc.id} className="flex items-center justify-between p-3 rounded-lg border bg-slate-50 border-slate-200">
+   513→                      <div className="flex items-center gap-3">
+   514→                        <FileText className="h-4 w-4 text-muted-foreground" />
+   515→                        <div>
+   516→                          <p className="text-xs font-medium text-foreground">{doc.fileName}</p>
+   517→                          <p className="text-[10px] text-muted-foreground">{doc.documentType} · {(doc.fileSize / 1024).toFixed(1)} KB</p>
+   518→                        </div>
+   519→                      </div>
+   520→                      <div className="flex items-center gap-2">
+   521→                        <Badge className={`text-[10px] ${doc.extractionStatus === 'completed' ? 'bg-emerald-50 text-emerald-700' : doc.extractionStatus === 'in_progress' ? 'bg-amber-50 text-amber-700' : 'bg-slate-50 text-slate-700'}`}>
+   522→                          {doc.extractionStatus}
+   523→                        </Badge>
+   524→                      </div>
+   525→                    </div>
+   526→                  ))}
+   527→                </div>
+   528→              ) : (
+   529→                <div className="py-8 text-center">
+   530→                  <Upload className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
+   531→                  <p className="text-sm font-medium text-muted-foreground">No documents uploaded yet</p>
+   532→                  <p className="text-xs text-muted-foreground mt-1">Upload purchase/sales registers to begin return preparation</p>
+   533→                </div>
+   534→              )}
+   535→            </div>
+   536→          </motion.section>
+   537→        )}
+   538→
+   539→        {/* STEP 1: Extraction */}
+   540→        {effectiveStep === 1 && (
+   541→          <motion.section key="step1" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -16 }} transition={{ duration: 0.3 }}>
+   542→            <div className="flex items-center justify-between mb-3">
+   543→              <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">Step 2: Data Extraction</h2>
+   544→              <span className="text-xs text-muted-foreground">{invoicesList.length} invoices extracted</span>
+   545→            </div>
+   546→            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+   547→              {documentsList.filter(d => d.extractionStatus === 'completed').map((doc) => (
+   548→                <Card key={doc.id} className="border-border/60">
+   549→                  <CardContent className="p-4">
+   550→                    <div className="flex items-center gap-2 mb-3">
+   551→                      <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+   552→                      <p className="text-xs font-medium text-foreground">{doc.fileName}</p>
+   553→                    </div>
+   554→                    <div className="space-y-1.5">
+   555→                      <div className="flex justify-between text-[11px]"><span className="text-muted-foreground">Invoices Found</span><span className="font-medium">{doc.extractedInvoiceCount}</span></div>
+   556→                      <div className="flex justify-between text-[11px]"><span className="text-muted-foreground">Accuracy</span><span className="font-medium">{doc.extractionAccuracy}%</span></div>
+   557→                      <div className="h-1.5 rounded-full bg-slate-100 mt-2 overflow-hidden">
+   558→                        <motion.div className="h-full rounded-full bg-emerald-500" animate={{ width: `${doc.extractionAccuracy}%` }} transition={{ duration: 0.8 }} />
+   559→                      </div>
+   560→                    </div>
+   561→                  </CardContent>
+   562→                </Card>
+   563→              ))}
+   564→            </div>
+   565→          </motion.section>
+   566→        )}
+   567→
+   568→        {/* STEP 2-3: Validation & Reconciliation (Invoice Review) */}
+   569→        {(effectiveStep === 2 || effectiveStep === 3) && (
+   570→          <motion.section key="step2-3" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -16 }} transition={{ duration: 0.3 }}>
+   571→            <div className="flex items-center justify-between mb-3">
+   572→              <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">
+   573→                {effectiveStep === 2 ? 'Step 3: Validation' : 'Step 4: Reconciliation'}
+   574→              </h2>
+   575→              <span className="text-xs text-muted-foreground">{invoicesList.length} invoices · {formatCurrency(totalTaxable)} taxable</span>
+   576→            </div>
+   577→
+   578→            {/* Invoice filter tabs */}
+   579→            <div className="border border-border/60 rounded-xl overflow-hidden">
+   580→              <div className="flex items-center gap-1.5 px-4 py-2.5 border-b border-border/40 bg-slate-50/50 overflow-x-auto">
+   581→                {(['all', 'approved', 'draft', 'filed'] as const).map(filter => {
+   582→                  const count = filter === 'all' ? invoicesList.length : invoicesList.filter(i => i.status === filter).length;
+   583→                  const isActive = invoiceFilter === filter;
+   584→                  return (
+   585→                    <Button key={filter} variant={isActive ? 'secondary' : 'ghost'} size="sm"
+   586→                      className={`h-7 text-xs font-medium px-2.5 gap-1 capitalize shrink-0 ${isActive ? 'bg-white shadow-sm border border-border/60' : 'text-muted-foreground hover:text-foreground'}`}
+   587→                      onClick={() => setInvoiceFilter(filter)}
+   588→                    >
+   589→                      {filter === 'all' ? 'All' : filter.charAt(0).toUpperCase() + filter.slice(1)}
+   590→                      <span className={`text-[10px] px-1 py-0 rounded-full ${isActive ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-muted-foreground'}`}>{count}</span>
+   591→                    </Button>
+   592→                  );
+   593→                })}
+   594→                <div className="flex-1" />
+   595→                <div className="hidden md:flex items-center gap-2 text-xs text-muted-foreground shrink-0">
+   596→                  <span>CGST: <span className="font-medium text-foreground">{formatCurrency(totalCGST)}</span></span>
+   597→                  <span>SGST: <span className="font-medium text-foreground">{formatCurrency(totalSGST)}</span></span>
+   598→                  <span>IGST: <span className="font-medium text-foreground">{formatCurrency(totalIGST)}</span></span>
+   599→                </div>
+   600→              </div>
+   601→
+   602→              <ScrollArea className="max-h-[360px]">
+   603→                <table className="w-full">
+   604→                  <thead className="sticky top-0 bg-white z-10">
+   605→                    <tr className="border-b border-border/40">
+   606→                      <th className="text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-4 py-2.5">Invoice #</th>
+   607→                      <th className="text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-4 py-2.5 hidden sm:table-cell">Date</th>
+   608→                      <th className="text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-4 py-2.5">Buyer</th>
+   609→                      <th className="text-right text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-4 py-2.5 hidden md:table-cell">Taxable</th>
+   610→                      <th className="text-center text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-4 py-2.5 hidden lg:table-cell">Match</th>
+   611→                      <th className="text-center text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-4 py-2.5">Status</th>
+   612→                      <th className="text-center text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-4 py-2.5">Actions</th>
+   613→                    </tr>
+   614→                  </thead>
+   615→                  <tbody>
+   616→                    <AnimatePresence mode="popLayout">
+   617→                      {filteredInvoices.map((inv) => (
+   618→                        <motion.tr key={inv.id} layout
+   619→                          initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, scale: 0.98 }}
+   620→                          className={`border-b border-border/20 hover:bg-muted/30 transition-colors cursor-pointer ${inv.riskLevel === 'high' || inv.riskLevel === 'critical' ? 'bg-red-50/30' : inv.matchStatus === 'partial_match' ? 'bg-amber-50/30' : ''}`}
+   621→                          onClick={() => setSelectedInvoice(inv)}
+   622→                        >
+   623→                          <td className="px-4 py-2.5 text-xs font-mono font-medium text-foreground">{inv.invoiceNumber}</td>
+   624→                          <td className="px-4 py-2.5 text-xs text-muted-foreground hidden sm:table-cell">{inv.invoiceDate}</td>
+   625→                          <td className="px-4 py-2.5 text-xs text-foreground max-w-[180px] truncate">{inv.buyerName || inv.buyerGstin || '—'}</td>
+   626→                          <td className="px-4 py-2.5 text-xs text-right font-medium text-foreground hidden md:table-cell">{formatCurrency(inv.taxableValue)}</td>
+   627→                          <td className="px-4 py-2.5 text-center hidden lg:table-cell">{getMatchBadge(inv.matchStatus)}</td>
+   628→                          <td className="px-4 py-2.5 text-center">{getStatusBadge(inv.status)}</td>
+   629→                          <td className="px-4 py-2.5" onClick={(e) => e.stopPropagation()}>
+   630→                            <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground" onClick={() => setSelectedInvoice(inv)}><Eye className="h-3 w-3" /></Button>
+   631→                          </td>
+   632→                        </motion.tr>
+   633→                      ))}
+   634→                    </AnimatePresence>
+   635→                  </tbody>
+   636→                </table>
+   637→              </ScrollArea>
+   638→
+   639→              <div className="flex items-center justify-between px-4 py-2.5 border-t border-border/40 bg-slate-50/50">
+   640→                <span className="text-xs text-muted-foreground">Showing {filteredInvoices.length} of {invoicesList.length}</span>
+   641→                <span className="text-xs font-medium text-foreground">Total Tax: {formatCurrency(totalTax)}</span>
+   642→              </div>
+   643→            </div>
+   644→
+   645→            {/* Reconciliation summary cards (step 3) */}
+   646→            {effectiveStep === 3 && (
+   647→              <div className="grid grid-cols-3 gap-3 mt-4">
+   648→                <div className="border border-emerald-200 rounded-xl p-4 bg-emerald-50/50 text-center">
+   649→                  <p className="text-xl font-bold text-emerald-700">{matchedCount}</p>
+   650→                  <p className="text-[10px] text-emerald-600 font-medium">Matched</p>
+   651→                </div>
+   652→                <div className="border border-amber-200 rounded-xl p-4 bg-amber-50/50 text-center">
+   653→                  <p className="text-xl font-bold text-amber-700">{partialCount}</p>
+   654→                  <p className="text-[10px] text-amber-600 font-medium">Partial Matches</p>
+   655→                </div>
+   656→                <div className="border border-red-200 rounded-xl p-4 bg-red-50/50 text-center">
+   657→                  <p className="text-xl font-bold text-red-700">{mismatchedCount}</p>
+   658→                  <p className="text-[10px] text-red-600 font-medium">Mismatches</p>
+   659→                </div>
+   660→              </div>
+   661→            )}
+   662→          </motion.section>
+   663→        )}
+   664→
+   665→        {/* STEP 4: Preparation (Return Summary) */}
+   666→        {effectiveStep === 4 && (
+   667→          <motion.section key="step4" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -16 }} transition={{ duration: 0.3 }}>
+   668→            <div className="flex items-center justify-between mb-3">
+   669→              <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">Step 5: Return Summary — {returnType}</h2>
+   670→              <Badge variant="outline" className="text-[10px] font-medium text-muted-foreground">{periodToLabel(period)}</Badge>
+   671→            </div>
+   672→
+   673→            {isGSTR1 ? (
+   674→              <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+   675→                {[
+   676→                  { label: 'B2B Sales', value: gstr1Summary.b2bSales, icon: <Building2 className="h-4 w-4" />, color: 'text-emerald-700', bg: 'bg-emerald-50' },
+   677→                  { label: 'B2C Sales', value: gstr1Summary.b2cSales, icon: <IndianRupee className="h-4 w-4" />, color: 'text-teal-700', bg: 'bg-teal-50' },
+   678→                  { label: 'Exports', value: gstr1Summary.exports, icon: <TrendingUp className="h-4 w-4" />, color: 'text-blue-700', bg: 'bg-blue-50' },
+   679→                  { label: 'Credit Notes', value: gstr1Summary.creditNotes, icon: <TrendingDown className="h-4 w-4" />, color: 'text-orange-700', bg: 'bg-orange-50' },
+   680→                  { label: 'Debit Notes', value: gstr1Summary.debitNotes, icon: <FilePlus2 className="h-4 w-4" />, color: 'text-purple-700', bg: 'bg-purple-50' },
+   681→                ].map((item, idx) => (
+   682→                  <motion.div key={item.label} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: idx * 0.05, duration: 0.3 }}
+   683→                    className="border border-border/60 rounded-xl p-4 hover:border-border transition-colors"
+   684→                  >
+   685→                    <div className="flex items-center gap-2 mb-2">
+   686→                      <div className={`flex items-center justify-center h-7 w-7 rounded-lg ${item.bg} ${item.color}`}>{item.icon}</div>
+   687→                      <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">{item.label}</span>
+   688→                    </div>
+   689→                    <p className={`text-lg font-bold ${item.color}`}>{formatCurrency(item.value)}</p>
+   690→                  </motion.div>
+   691→                ))}
+   692→              </div>
+   693→            ) : (
+   694→              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+   695→                {[
+   696→                  { label: 'Taxable Supplies', value: gstr3bSummary.taxableSupplies, icon: <IndianRupee className="h-4 w-4" />, color: 'text-emerald-700', bg: 'bg-emerald-50' },
+   697→                  { label: 'ITC Available', value: gstr3bSummary.itcAvailable, icon: <Shield className="h-4 w-4" />, color: 'text-teal-700', bg: 'bg-teal-50' },
+   698→                  { label: 'Output Tax', value: gstr3bSummary.outputTax, icon: <FileText className="h-4 w-4" />, color: 'text-amber-700', bg: 'bg-amber-50' },
+   699→                  { label: 'Net Tax Payable', value: gstr3bSummary.netTaxPayable, icon: <Zap className="h-4 w-4" />, color: 'text-violet-700', bg: 'bg-violet-50' },
+   700→                ].map((item, idx) => (
+   701→                  <motion.div key={item.label} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: idx * 0.05, duration: 0.3 }}
+   702→                    className="border border-border/60 rounded-xl p-4 hover:border-border transition-colors"
+   703→                  >
+   704→                    <div className="flex items-center gap-2 mb-2">
+   705→                      <div className={`flex items-center justify-center h-7 w-7 rounded-lg ${item.bg} ${item.color}`}>{item.icon}</div>
+   706→                      <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">{item.label}</span>
+   707→                    </div>
+   708→                    <p className={`text-lg font-bold ${item.color}`}>{formatCurrency(item.value)}</p>
+   709→                  </motion.div>
+   710→                ))}
+   711→              </div>
+   712→            )}
+   713→          </motion.section>
+   714→        )}
+   715→
+   716→        {/* STEP 5: Filing */}
+   717→        {effectiveStep === 5 && (
+   718→          <motion.section key="step5" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -16 }} transition={{ duration: 0.3 }}>
+   719→            <div className="flex items-center justify-between mb-3">
+   720→              <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">Step 6: Filing</h2>
+   721→              {currentReturn?.status === 'filed' && <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200"><CheckCircle2 className="size-3 mr-1" />Filed</Badge>}
+   722→            </div>
+   723→            <div className="border border-emerald-200 rounded-xl p-6 bg-emerald-50/30 text-center">
+   724→              <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', stiffness: 200 }}>
+   725→                <CheckCircle2 className="h-12 w-12 text-emerald-600 mx-auto mb-4" />
+   726→              </motion.div>
+   727→              <p className="text-lg font-bold text-emerald-700 mb-2">Return Filed Successfully</p>
+   728→              {currentReturn?.acknowledgmentNumber && (
+   729→                <p className="text-sm text-muted-foreground">ARN: <span className="font-mono font-semibold text-foreground">{currentReturn.acknowledgmentNumber}</span></p>
+   730→              )}
+   731→              {currentReturn?.filedDate && (
+   732→                <p className="text-sm text-muted-foreground mt-1">Filed on: {currentReturn.filedDate}</p>
+   733→              )}
+   734→            </div>
+   735→          </motion.section>
+   736→        )}
+   737→      </AnimatePresence>
+   738→
+   739→      {/* ═══ FILING READINESS PANEL ═══ */}
+   740→      {effectiveStep < 5 && (
+   741→        <motion.section initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3, duration: 0.4 }}>
+   742→          <div className="flex items-center justify-between mb-3">
+   743→            <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">Filing Readiness</h2>
+   744→          </div>
+   745→
+   746→          <div className="border border-border/60 rounded-xl p-5 space-y-5">
+   747→            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+   748→              {[
+   749→                { label: 'Validation', value: validationScore, target: 95, icon: <ClipboardCheck className="h-4 w-4" />, color: validationScore >= 95 ? 'text-emerald-700' : validationScore >= 80 ? 'text-amber-700' : 'text-red-700', bg: validationScore >= 95 ? 'bg-emerald-50' : validationScore >= 80 ? 'bg-amber-50' : 'bg-red-50', stroke: validationScore >= 95 ? '#10b981' : validationScore >= 80 ? '#f59e0b' : '#ef4444' },
+   750→                { label: 'Match Rate', value: matchRate, target: 90, icon: <GitCompareArrows className="h-4 w-4" />, color: matchRate >= 90 ? 'text-emerald-700' : matchRate >= 70 ? 'text-amber-700' : 'text-red-700', bg: matchRate >= 90 ? 'bg-emerald-50' : matchRate >= 70 ? 'bg-amber-50' : 'bg-red-50', stroke: matchRate >= 90 ? '#10b981' : matchRate >= 70 ? '#f59e0b' : '#ef4444' },
+   751→                { label: 'Compliance', value: complianceScore, target: 85, icon: <ShieldCheck className="h-4 w-4" />, color: complianceScore >= 85 ? 'text-emerald-700' : complianceScore >= 65 ? 'text-amber-700' : 'text-red-700', bg: complianceScore >= 85 ? 'bg-emerald-50' : complianceScore >= 65 ? 'bg-amber-50' : 'bg-red-50', stroke: complianceScore >= 85 ? '#10b981' : complianceScore >= 65 ? '#f59e0b' : '#ef4444' },
+   752→                { label: 'High Risk', value: highRiskCount, target: 0, icon: <AlertTriangle className="h-4 w-4" />, color: highRiskCount === 0 ? 'text-emerald-700' : 'text-red-700', bg: highRiskCount === 0 ? 'bg-emerald-50' : 'bg-red-50', stroke: highRiskCount === 0 ? '#10b981' : '#ef4444' },
+   753→              ].map((score) => (
+   754→                <div key={score.label} className="border border-border/40 rounded-lg p-3 text-center">
+   755→                  <div className={`flex items-center justify-center h-7 w-7 rounded-lg mx-auto mb-1.5 ${score.bg} ${score.color}`}>{score.icon}</div>
+   756→                  <p className="text-xl font-bold text-foreground">{score.label === 'High Risk' ? score.value : `${score.value}%`}</p>
+   757→                  <p className="text-[10px] text-muted-foreground">{score.label}</p>
+   758→                  {score.label !== 'High Risk' && (
+   759→                    <div className="h-1.5 rounded-full bg-slate-100 mt-2 overflow-hidden">
+   760→                      <motion.div className="h-full rounded-full" style={{ backgroundColor: score.stroke }}
+   761→                        animate={{ width: `${score.value}%` }} transition={{ duration: 0.8, delay: 0.5 }}
+   762→                      />
+   763→                    </div>
+   764→                  )}
+   765→                  <p className="text-[9px] text-muted-foreground mt-1">Target: {score.label === 'High Risk' ? '0' : `${score.target}%`}</p>
+   766→                </div>
+   767→              ))}
+   768→            </div>
+   769→
+   770→            <div className={`rounded-lg p-4 border ${allChecksPass ? 'bg-emerald-50 border-emerald-200' : 'bg-amber-50 border-amber-200'}`}>
+   771→              <div className="flex items-center gap-2 mb-2">
+   772→                {allChecksPass ? <CheckCircle2 className="h-5 w-5 text-emerald-600" /> : <AlertTriangle className="h-5 w-5 text-amber-600" />}
+   773→                <span className={`text-sm font-semibold ${allChecksPass ? 'text-emerald-700' : 'text-amber-700'}`}>
+   774→                  {allChecksPass ? 'All Checks Passed' : 'Action Required Before Filing'}
+   775→                </span>
+   776→              </div>
+   777→              {!allChecksPass && (
+   778→                <ul className="text-xs text-amber-700 space-y-1 ml-7">
+   779→                  {draftCount > 0 && <li>• {draftCount} invoice{draftCount > 1 ? 's' : ''} still in draft</li>}
+   780→                  {highRiskCount > 0 && <li>• {highRiskCount} high-risk invoice{highRiskCount > 1 ? 's' : ''} need review</li>}
+   781→                  {validationScore < 95 && <li>• Validation score below 95% ({validationScore}%)</li>}
+   782→                </ul>
+   783→              )}
+   784→            </div>
+   785→
+   786→            <Button className={`w-full h-12 text-sm font-semibold gap-2 shadow-lg ${allChecksPass ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/20' : 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'}`}
+   787→              disabled={!allChecksPass || effectiveStep < 4} onClick={handleFileReturn}
+   788→            >
+   789→              {allChecksPass && effectiveStep >= 4 ? <><Send className="h-4 w-4" /> File GST Return</> : <><Clock className="h-4 w-4" /> Resolve Issues to File</>}
+   790→            </Button>
+   791→
+   792→            {!allChecksPass && (
+   793→              <p className="text-[10px] text-center text-muted-foreground">Fix all issues above to unlock filing</p>
+   794→            )}
+   795→          </div>
+   796→        </motion.section>
+   797→      )}
+   798→
+   799→    </div>
+   800→  );
+   801→}
+   802→

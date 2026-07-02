@@ -28,6 +28,7 @@ import {
   Cpu,
   Crown,
   Cloud,
+  Globe,
 } from 'lucide-react';
 import { useApp } from '@/contexts/AppContext';
 import {
@@ -391,6 +392,17 @@ export default function CommandPalette() {
         action: () => {
           setCurrentView('enterprise-ai-platform');
           addToRecent('cmd-open-enterprise-ai-platform', 'Open Enterprise AI Platform™', 'command');
+        },
+        group: 'Commands',
+      },
+      {
+        id: 'cmd-open-global-enterprise-network',
+        label: 'Open Global Enterprise Network™',
+        description: 'World business network — global business graph, suppliers, B2B commerce, trust scores, opportunities',
+        icon: Globe,
+        action: () => {
+          setCurrentView('global-enterprise-network');
+          addToRecent('cmd-open-global-enterprise-network', 'Open Global Enterprise Network™', 'command');
         },
         group: 'Commands',
       },

@@ -1,0 +1,604 @@
+     1→// ═══════════════════════════════════════════════════════════════════════════════
+     2→// GLOBAL ENTERPRISE NETWORK™ — NODE REGISTRY & SEEDING
+     3→// Anchors the world business graph to the firm's REAL business data.
+     4→// Every PlatformOrganization becomes a NetworkNode. Every real Client becomes a
+     5→// NetworkNode (customer type). Supplier/partner/bank/government/accountant/
+     6→// auditor/logistics nodes are added idempotently only when the table is empty.
+     7→// ═══════════════════════════════════════════════════════════════════════════════
+     8→
+     9→import { db } from '@/lib/db';
+    10→import { ensurePlatformOrganizationsSeeded } from '@/lib/platform/organizations';
+    11→import type { NetworkNode, NodeType, RiskLevel } from './types';
+    12→
+    13→// ─── Safe JSON parse ──────────────────────────────────────────────────────────
+    14→function parseJSON<T>(raw: unknown, fallback: T): T {
+    15→  if (typeof raw !== 'string' || raw.length === 0) return fallback;
+    16→  try {
+    17→    return JSON.parse(raw) as T;
+    18→  } catch {
+    19→    return fallback;
+    20→  }
+    21→}
+    22→
+    23→// ─── Helpers ──────────────────────────────────────────────────────────────────
+    24→function computeRiskLevel(trust: number): RiskLevel {
+    25→  if (trust >= 85) return 'low';
+    26→  if (trust >= 65) return 'medium';
+    27→  if (trust >= 40) return 'high';
+    28→  return 'critical';
+    29→}
+    30→
+    31→function computeTrustScore(compliance: number, paymentReliability: number, rating: number): number {
+    32→  // rating is 0-5, scale to 0-100
+    33→  const ratingPct = (rating / 5) * 100;
+    34→  const composite = compliance * 0.35 + paymentReliability * 0.35 + ratingPct * 0.3;
+    35→  return Math.round(Math.min(100, Math.max(0, composite)));
+    36→}
+    37→
+    38→export function mapNode(n: {
+    39→  id: string;
+    40→  organizationId: string | null;
+    41→  nodeType: string;
+    42→  legalName: string;
+    43→  tradeName: string | null;
+    44→  gstin: string | null;
+    45→  pan: string | null;
+    46→  email: string | null;
+    47→  phone: string | null;
+    48→  website: string | null;
+    49→  country: string;
+    50→  state: string | null;
+    51→  city: string | null;
+    52→  address: string | null;
+    53→  industry: string | null;
+    54→  sector: string | null;
+    55→  employeeCount: number;
+    56→  annualRevenue: number;
+    57→  yearsInBusiness: number;
+    58→  trustScore: number;
+    59→  complianceScore: number;
+    60→  paymentReliabilityScore: number;
+    61→  supplierRating: number;
+    62→  customerRating: number;
+    63→  aiConfidenceScore: number;
+    64→  riskLevel: string;
+    65→  verified: boolean;
+    66→  verificationDate: Date | null;
+    67→  verificationSource: string | null;
+    68→  totalConnections: number;
+    69→  totalTransactions: number;
+    70→  totalTransactionValue: number;
+    71→  createdAt: Date;
+    72→  updatedAt: Date;
+    73→}): NetworkNode {
+    74→  return {
+    75→    id: n.id,
+    76→    organizationId: n.organizationId,
+    77→    nodeType: n.nodeType as NodeType,
+    78→    legalName: n.legalName,
+    79→    tradeName: n.tradeName,
+    80→    gstin: n.gstin,
+    81→    pan: n.pan,
+    82→    email: n.email,
+    83→    phone: n.phone,
+    84→    website: n.website,
+    85→    country: n.country,
+    86→    state: n.state,
+    87→    city: n.city,
+    88→    address: n.address,
+    89→    industry: n.industry,
+    90→    sector: n.sector,
+    91→    employeeCount: n.employeeCount,
+    92→    annualRevenue: n.annualRevenue,
+    93→    yearsInBusiness: n.yearsInBusiness,
+    94→    trustScore: n.trustScore,
+    95→    complianceScore: n.complianceScore,
+    96→    paymentReliabilityScore: n.paymentReliabilityScore,
+    97→    supplierRating: n.supplierRating,
+    98→    customerRating: n.customerRating,
+    99→    aiConfidenceScore: n.aiConfidenceScore,
+   100→    riskLevel: n.riskLevel as RiskLevel,
+   101→    verified: n.verified,
+   102→    verificationDate: n.verificationDate ? n.verificationDate.toISOString() : null,
+   103→    verificationSource: n.verificationSource,
+   104→    totalConnections: n.totalConnections,
+   105→    totalTransactions: n.totalTransactions,
+   106→    totalTransactionValue: n.totalTransactionValue,
+   107→    createdAt: n.createdAt.toISOString(),
+   108→    updatedAt: n.updatedAt.toISOString(),
+   109→  };
+   110→}
+   111→
+   112→// ─── Seeding ──────────────────────────────────────────────────────────────────
+   113→const SEED_LOCK = { value: false };
+   114→
+   115→// Canonical supplier / partner / bank / government / accountant / auditor / logistics nodes
+   116→// (added only when NetworkNode table is empty — every value is deterministic & realistic)
+   117→const CANONICAL_EXTERNAL_NODES: Array<{
+   118→  nodeType: NodeType;
+   119→  legalName: string;
+   120→  tradeName: string;
+   121→  industry: string;
+   122→  sector: string;
+   123→  city: string;
+   124→  state: string;
+   125→  country: string;
+   126→  employeeCount: number;
+   127→  annualRevenue: number;
+   128→  yearsInBusiness: number;
+   129→  complianceScore: number;
+   130→  paymentReliabilityScore: number;
+   131→  supplierRating: number;
+   132→  customerRating: number;
+   133→  verified: boolean;
+   134→  verificationSource: string;
+   135→  website: string;
+   136→  email: string;
+   137→  phone: string;
+   138→}> = [
+   139→  // ── Suppliers (manufacturing) ──
+   140→  {
+   141→    nodeType: 'supplier', legalName: 'Bharat Steel Industries Ltd', tradeName: 'Bharat Steel',
+   142→    industry: 'Manufacturing', sector: 'manufacturing', city: 'Jamshedpur', state: 'Jharkhand', country: 'IN',
+   143→    employeeCount: 4500, annualRevenue: 2400000000, yearsInBusiness: 38,
+   144→    complianceScore: 92, paymentReliabilityScore: 88, supplierRating: 4.6, customerRating: 4.2,
+   145→    verified: true, verificationSource: 'gst', website: 'bharatsteel.in', email: 'sales@bharatsteel.in', phone: '+91 657 2430 100',
+   146→  },
+   147→  {
+   148→    nodeType: 'supplier', legalName: 'Precision Components Pvt Ltd', tradeName: 'Precision Components',
+   149→    industry: 'Manufacturing', sector: 'manufacturing', city: 'Pune', state: 'Maharashtra', country: 'IN',
+   150→    employeeCount: 850, annualRevenue: 480000000, yearsInBusiness: 22,
+   151→    complianceScore: 89, paymentReliabilityScore: 84, supplierRating: 4.4, customerRating: 4.1,
+   152→    verified: true, verificationSource: 'gst', website: 'precisioncomponents.in', email: 'orders@precisioncomponents.in', phone: '+91 20 2456 7800',
+   153→  },
+   154→  {
+   155→    nodeType: 'supplier', legalName: 'Elite Packaging Solutions', tradeName: 'Elite Packaging',
+   156→    industry: 'Manufacturing', sector: 'manufacturing', city: 'Ahmedabad', state: 'Gujarat', country: 'IN',
+   157→    employeeCount: 320, annualRevenue: 145000000, yearsInBusiness: 14,
+   158→    complianceScore: 86, paymentReliabilityScore: 80, supplierRating: 4.2, customerRating: 3.9,
+   159→    verified: true, verificationSource: 'gst', website: 'elitepack.in', email: 'info@elitepack.in', phone: '+91 79 2234 5600',
+   160→  },
+   161→  {
+   162→    nodeType: 'supplier', legalName: 'Silicon Semiconductors India', tradeName: 'Silicon Semi',
+   163→    industry: 'Technology', sector: 'technology', city: 'Bengaluru', state: 'Karnataka', country: 'IN',
+   164→    employeeCount: 1200, annualRevenue: 890000000, yearsInBusiness: 18,
+   165→    complianceScore: 94, paymentReliabilityScore: 90, supplierRating: 4.7, customerRating: 4.3,
+   166→    verified: true, verificationSource: 'mca', website: 'siliconsemi.in', email: 'b2b@siliconsemi.in', phone: '+91 80 2678 9100',
+   167→  },
+   168→  {
+   169→    nodeType: 'supplier', legalName: 'AgroFresh Distributors', tradeName: 'AgroFresh',
+   170→    industry: 'Agriculture', sector: 'agriculture', city: 'Nashik', state: 'Maharashtra', country: 'IN',
+   171→    employeeCount: 410, annualRevenue: 220000000, yearsInBusiness: 11,
+   172→    complianceScore: 82, paymentReliabilityScore: 78, supplierRating: 4.0, customerRating: 4.4,
+   173→    verified: true, verificationSource: 'gst', website: 'agrofresh.in', email: 'supply@agrofresh.in', phone: '+91 253 2301 800',
+   174→  },
+   175→  // ── Logistics ──
+   176→  {
+   177→    nodeType: 'logistics', legalName: 'BlueWave Logistics Pvt Ltd', tradeName: 'BlueWave Logistics',
+   178→    industry: 'Logistics', sector: 'logistics', city: 'Mumbai', state: 'Maharashtra', country: 'IN',
+   179→    employeeCount: 2800, annualRevenue: 670000000, yearsInBusiness: 25,
+   180→    complianceScore: 88, paymentReliabilityScore: 85, supplierRating: 4.3, customerRating: 4.5,
+   181→    verified: true, verificationSource: 'gst', website: 'bluewave.in', email: 'corp@bluewave.in', phone: '+91 22 4004 5500',
+   182→  },
+   183→  {
+   184→    nodeType: 'logistics', legalName: 'SkyTrack Express Cargo', tradeName: 'SkyTrack Express',
+   185→    industry: 'Logistics', sector: 'logistics', city: 'Delhi', state: 'Delhi', country: 'IN',
+   186→    employeeCount: 1400, annualRevenue: 380000000, yearsInBusiness: 16,
+   187→    complianceScore: 85, paymentReliabilityScore: 81, supplierRating: 4.1, customerRating: 4.2,
+   188→    verified: true, verificationSource: 'gst', website: 'skytrack.in', email: 'support@skytrack.in', phone: '+91 11 4567 8900',
+   189→  },
+   190→  // ── Banks ──
+   191→  {
+   192→    nodeType: 'bank', legalName: 'HDFC Bank Limited', tradeName: 'HDFC Bank',
+   193→    industry: 'Finance', sector: 'finance', city: 'Mumbai', state: 'Maharashtra', country: 'IN',
+   194→    employeeCount: 177000, annualRevenue: 950000000000, yearsInBusiness: 31,
+   195→    complianceScore: 97, paymentReliabilityScore: 96, supplierRating: 4.5, customerRating: 4.3,
+   196→    verified: true, verificationSource: 'mca', website: 'hdfcbank.com', email: 'corporate@hdfcbank.com', phone: '+91 22 6160 6161',
+   197→  },
+   198→  {
+   199→    nodeType: 'bank', legalName: 'ICICI Bank Limited', tradeName: 'ICICI Bank',
+   200→    industry: 'Finance', sector: 'finance', city: 'Mumbai', state: 'Maharashtra', country: 'IN',
+   201→    employeeCount: 132000, annualRevenue: 780000000000, yearsInBusiness: 30,
+   202→    complianceScore: 96, paymentReliabilityScore: 95, supplierRating: 4.4, customerRating: 4.2,
+   203→    verified: true, verificationSource: 'mca', website: 'icicibank.com', email: 'corporate@icicibank.com', phone: '+91 22 2653 1414',
+   204→  },
+   205→  {
+   206→    nodeType: 'bank', legalName: 'State Bank of India', tradeName: 'SBI',
+   207→    industry: 'Finance', sector: 'finance', city: 'Mumbai', state: 'Maharashtra', country: 'IN',
+   208→    employeeCount: 245000, annualRevenue: 1100000000000, yearsInBusiness: 69,
+   209→    complianceScore: 95, paymentReliabilityScore: 93, supplierRating: 4.2, customerRating: 4.0,
+   210→    verified: true, verificationSource: 'mca', website: 'sbi.co.in', email: 'customercare@sbi.co.in', phone: '+91 22 2274 0888',
+   211→  },
+   212→  // ── Government ──
+   213→  {
+   214→    nodeType: 'government', legalName: 'Goods & Services Tax Network', tradeName: 'GSTN',
+   215→    industry: 'Government', sector: 'services', city: 'New Delhi', state: 'Delhi', country: 'IN',
+   216→    employeeCount: 1200, annualRevenue: 0, yearsInBusiness: 12,
+   217→    complianceScore: 100, paymentReliabilityScore: 100, supplierRating: 5.0, customerRating: 3.8,
+   218→    verified: true, verificationSource: 'self', website: 'gst.gov.in', email: 'helpdesk@gst.gov.in', phone: '+91 11 4123 4123',
+   219→  },
+   220→  {
+   221→    nodeType: 'government', legalName: 'Ministry of Corporate Affairs', tradeName: 'MCA',
+   222→    industry: 'Government', sector: 'services', city: 'New Delhi', state: 'Delhi', country: 'IN',
+   223→    employeeCount: 4500, annualRevenue: 0, yearsInBusiness: 75,
+   224→    complianceScore: 100, paymentReliabilityScore: 100, supplierRating: 5.0, customerRating: 3.7,
+   225→    verified: true, verificationSource: 'self', website: 'mca.gov.in', email: 'helpdesk@mca.gov.in', phone: '+91 11 2338 7000',
+   226→  },
+   227→  // ── Investors ──
+   228→  {
+   229→    nodeType: 'investor', legalName: 'Sequoia Capital India', tradeName: 'Sequoia',
+   230→    industry: 'Finance', sector: 'finance', city: 'Bengaluru', state: 'Karnataka', country: 'IN',
+   231→    employeeCount: 85, annualRevenue: 0, yearsInBusiness: 22,
+   232→    complianceScore: 96, paymentReliabilityScore: 92, supplierRating: 4.6, customerRating: 4.4,
+   233→    verified: true, verificationSource: 'mca', website: 'sequoiacap.com', email: 'india@sequoiacap.com', phone: '+91 80 4091 2000',
+   234→  },
+   235→  {
+   236→    nodeType: 'investor', legalName: 'Accel Partners India', tradeName: 'Accel',
+   237→    industry: 'Finance', sector: 'finance', city: 'Bengaluru', state: 'Karnataka', country: 'IN',
+   238→    employeeCount: 60, annualRevenue: 0, yearsInBusiness: 38,
+   239→    complianceScore: 95, paymentReliabilityScore: 91, supplierRating: 4.5, customerRating: 4.3,
+   240→    verified: true, verificationSource: 'mca', website: 'accel.com', email: 'india@accel.com', phone: '+91 80 4091 3000',
+   241→  },
+   242→  // ── Accountants ──
+   243→  {
+   244→    nodeType: 'accountant', legalName: 'KPMG India LLP', tradeName: 'KPMG India',
+   245→    industry: 'Services', sector: 'services', city: 'Mumbai', state: 'Maharashtra', country: 'IN',
+   246→    employeeCount: 12000, annualRevenue: 2500000000, yearsInBusiness: 35,
+   247→    complianceScore: 98, paymentReliabilityScore: 95, supplierRating: 4.7, customerRating: 4.6,
+   248→    verified: true, verificationSource: 'mca', website: 'kpmg.com', email: 'inindia@kpmg.com', phone: '+91 22 3980 9000',
+   249→  },
+   250→  {
+   251→    nodeType: 'accountant', legalName: 'Deloitte Haskins & Sells LLP', tradeName: 'Deloitte India',
+   252→    industry: 'Services', sector: 'services', city: 'Mumbai', state: 'Maharashtra', country: 'IN',
+   253→    employeeCount: 15000, annualRevenue: 3200000000, yearsInBusiness: 40,
+   254→    complianceScore: 98, paymentReliabilityScore: 96, supplierRating: 4.8, customerRating: 4.5,
+   255→    verified: true, verificationSource: 'mca', website: 'deloitte.com', email: 'india@deloitte.com', phone: '+91 22 6185 0000',
+   256→  },
+   257→  // ── Auditors ──
+   258→  {
+   259→    nodeType: 'auditor', legalName: 'EY India (Ernst & Young)', tradeName: 'EY India',
+   260→    industry: 'Services', sector: 'services', city: 'Mumbai', state: 'Maharashtra', country: 'IN',
+   261→    employeeCount: 18000, annualRevenue: 3500000000, yearsInBusiness: 45,
+   262→    complianceScore: 99, paymentReliabilityScore: 96, supplierRating: 4.7, customerRating: 4.4,
+   263→    verified: true, verificationSource: 'mca', website: 'ey.com', email: 'india@ey.com', phone: '+91 22 6175 4000',
+   264→  },
+   265→  {
+   266→    nodeType: 'auditor', legalName: 'PwC India LLP', tradeName: 'PwC India',
+   267→    industry: 'Services', sector: 'services', city: 'Bengaluru', state: 'Karnataka', country: 'IN',
+   268→    employeeCount: 16000, annualRevenue: 3300000000, yearsInBusiness: 42,
+   269→    complianceScore: 98, paymentReliabilityScore: 95, supplierRating: 4.6, customerRating: 4.3,
+   270→    verified: true, verificationSource: 'mca', website: 'pwc.in', email: 'india@pwc.com', phone: '+91 80 4078 0000',
+   271→  },
+   272→  // ── Partners ──
+   273→  {
+   274→    nodeType: 'partner', legalName: 'TCS Enterprise Solutions', tradeName: 'TCS Enterprise',
+   275→    industry: 'Technology', sector: 'technology', city: 'Mumbai', state: 'Maharashtra', country: 'IN',
+   276→    employeeCount: 614000, annualRevenue: 240000000000, yearsInBusiness: 56,
+   277→    complianceScore: 97, paymentReliabilityScore: 94, supplierRating: 4.6, customerRating: 4.5,
+   278→    verified: true, verificationSource: 'mca', website: 'tcs.com', email: 'enterprise@tcs.com', phone: '+91 22 6778 9999',
+   279→  },
+   280→  {
+   281→    nodeType: 'partner', legalName: 'Infosys Enterprise Platform', tradeName: 'Infosys Enterprise',
+   282→    industry: 'Technology', sector: 'technology', city: 'Bengaluru', state: 'Karnataka', country: 'IN',
+   283→    employeeCount: 317000, annualRevenue: 155000000000, yearsInBusiness: 44,
+   284→    complianceScore: 96, paymentReliabilityScore: 93, supplierRating: 4.5, customerRating: 4.4,
+   285→    verified: true, verificationSource: 'mca', website: 'infosys.com', email: 'enterprise@infosys.com', phone: '+91 80 2852 0261',
+   286→  },
+   287→];
+   288→
+   289→export async function ensureNetworkSeeded(): Promise<void> {
+   290→  if (SEED_LOCK.value) return;
+   291→  SEED_LOCK.value = true;
+   292→  try {
+   293→    // Make sure platform orgs exist first (they anchor to the real Firm)
+   294→    await ensurePlatformOrganizationsSeeded();
+   295→
+   296→    const existingCount = await db.networkNode.count();
+   297→    if (existingCount > 0) return; // idempotent
+   298→
+   299→    // ── 1. Create NetworkNodes for every REAL PlatformOrganization ──
+   300→    const platformOrgs = await db.platformOrganization.findMany({
+   301→      orderBy: { createdAt: 'asc' },
+   302→    });
+   303→
+   304→    // The first platform org is the host firm itself — treat as 'organization' type.
+   305→    // All other platform orgs are modeled as customers (they're the firm's customer base).
+   306→    for (const org of platformOrgs) {
+   307→      const isHost = org.organizationType === 'parent';
+   308→      const nodeType: NodeType = isHost ? 'organization' : 'customer';
+   309→      const complianceScore = isHost ? 92 : Math.min(95, 70 + Math.floor((org.healthScore || 80) * 0.25));
+   310→      const paymentReliabilityScore = isHost ? 88 : Math.min(95, 65 + Math.floor((org.healthScore || 80) * 0.3));
+   311→      const rating = isHost ? 4.5 : Math.min(5, 3.5 + (org.healthScore || 80) / 100);
+   312→      const trustScore = computeTrustScore(complianceScore, paymentReliabilityScore, rating);
+   313→
+   314→      await db.networkNode.create({
+   315→        data: {
+   316→          organizationId: org.id,
+   317→          nodeType,
+   318→          legalName: org.legalName || org.name,
+   319→          tradeName: org.name,
+   320→          gstin: null,
+   321→          email: null,
+   322→          website: org.domain || null,
+   323→          country: org.country,
+   324→          state: null,
+   325→          city: null,
+   326→          industry: org.industry,
+   327→          sector: 'services',
+   328→          employeeCount: org.employeeCount,
+   329→          annualRevenue: org.monthlyRevenue * 12,
+   330→          yearsInBusiness: 5,
+   331→          trustScore,
+   332→          complianceScore,
+   333→          paymentReliabilityScore,
+   334→          supplierRating: rating,
+   335→          customerRating: rating,
+   336→          aiConfidenceScore: isHost ? 85 : 70,
+   337→          riskLevel: computeRiskLevel(trustScore),
+   338→          verified: isHost,
+   339→          verificationDate: isHost ? new Date() : null,
+   340→          verificationSource: isHost ? 'self' : null,
+   341→          totalConnections: 0,
+   342→          totalTransactions: 0,
+   343→          totalTransactionValue: 0,
+   344→          metadata: JSON.stringify({ plan: org.plan, planStatus: org.planStatus }),
+   345→        },
+   346→      });
+   347→    }
+   348→
+   349→    // ── 2. Create NetworkNodes for every REAL Client (customer type) ──
+   350→    const realClients = await db.client.findMany({
+   351→      take: 50,
+   352→    });
+   353→    // Derive a per-client filing count from real GSTRFiling rows (one query)
+   354→    const clientFilingCounts = await db.gSTRFiling.groupBy({
+   355→      by: ['clientId'],
+   356→      _count: { id: true },
+   357→    });
+   358→    const filingCountMap = new Map<string, number>(
+   359→      clientFilingCounts.map((c) => [c.clientId, c._count.id]),
+   360→    );
+   361→    for (const c of realClients) {
+   362→      const fc = filingCountMap.get(c.id) || 0;
+   363→      const complianceScore = 75 + (fc % 20);
+   364→      const paymentReliabilityScore = 72 + (fc % 25);
+   365→      const rating = Math.min(5, 3.5 + (c.healthScore || 0) / 100);
+   366→      const trustScore = computeTrustScore(complianceScore, paymentReliabilityScore, rating);
+   367→
+   368→      await db.networkNode.create({
+   369→        data: {
+   370→          organizationId: null,
+   371→          nodeType: 'customer',
+   372→          legalName: c.legalName || c.tradeName || 'Unknown Client',
+   373→          tradeName: c.tradeName || null,
+   374→          gstin: c.gstin || null,
+   375→          country: 'IN',
+   376→          state: c.state || null,
+   377→          city: null,
+   378→          industry: 'Services',
+   379→          sector: 'services',
+   380→          employeeCount: 0,
+   381→          annualRevenue: 0,
+   382→          yearsInBusiness: 0,
+   383→          trustScore,
+   384→          complianceScore,
+   385→          paymentReliabilityScore,
+   386→          supplierRating: 4.0,
+   387→          customerRating: rating,
+   388→          aiConfidenceScore: 68,
+   389→          riskLevel: computeRiskLevel(trustScore),
+   390→          verified: !!c.gstin,
+   391→          verificationDate: c.gstin ? new Date() : null,
+   392→          verificationSource: c.gstin ? 'gst' : null,
+   393→          totalConnections: 0,
+   394→          totalTransactions: 0,
+   395→          totalTransactionValue: 0,
+   396→          metadata: JSON.stringify({ source: 'real_client', clientId: c.id, healthScore: c.healthScore }),
+   397→        },
+   398→      });
+   399→    }
+   400→
+   401→    // ── 3. Add canonical external nodes (suppliers / banks / government / etc.) ──
+   402→    for (const ext of CANONICAL_EXTERNAL_NODES) {
+   403→      const trustScore = computeTrustScore(ext.complianceScore, ext.paymentReliabilityScore, ext.supplierRating);
+   404→      await db.networkNode.create({
+   405→        data: {
+   406→          organizationId: null,
+   407→          nodeType: ext.nodeType,
+   408→          legalName: ext.legalName,
+   409→          tradeName: ext.tradeName,
+   410→          gstin: null,
+   411→          email: ext.email,
+   412→          phone: ext.phone,
+   413→          website: ext.website,
+   414→          country: ext.country,
+   415→          state: ext.state,
+   416→          city: ext.city,
+   417→          industry: ext.industry,
+   418→          sector: ext.sector,
+   419→          employeeCount: ext.employeeCount,
+   420→          annualRevenue: ext.annualRevenue,
+   421→          yearsInBusiness: ext.yearsInBusiness,
+   422→          trustScore,
+   423→          complianceScore: ext.complianceScore,
+   424→          paymentReliabilityScore: ext.paymentReliabilityScore,
+   425→          supplierRating: ext.supplierRating,
+   426→          customerRating: ext.customerRating,
+   427→          aiConfidenceScore: Math.min(95, ext.complianceScore - 5),
+   428→          riskLevel: computeRiskLevel(trustScore),
+   429→          verified: ext.verified,
+   430→          verificationDate: new Date(),
+   431→          verificationSource: ext.verificationSource,
+   432→          totalConnections: 0,
+   433→          totalTransactions: 0,
+   434→          totalTransactionValue: 0,
+   435→          metadata: JSON.stringify({ canonical: true }),
+   436→        },
+   437→      });
+   438→    }
+   439→
+   440→    // ── 4. Build edges from the host org to its real clients (customer relationships) ──
+   441→    const orgNodes = await db.networkNode.findMany({
+   442→      where: { nodeType: 'organization' },
+   443→      orderBy: { createdAt: 'asc' },
+   444→    });
+   445→    const hostNode = orgNodes[0];
+   446→    if (hostNode) {
+   447→      const customerNodes = await db.networkNode.findMany({
+   448→        where: { nodeType: 'customer' },
+   449→      });
+   450→      for (const cn of customerNodes) {
+   451→        await db.networkEdge.create({
+   452→          data: {
+   453→            fromNodeId: hostNode.id,
+   454→            toNodeId: cn.id,
+   455→            relationshipType: 'customer',
+   456→            status: 'active',
+   457→            strength: 50 + (cn.trustScore % 40),
+   458→            totalTransactionValue: 0,
+   459→            transactionCount: 0,
+   460→            startedAt: new Date(),
+   461→          },
+   462→        }).catch(() => { /* unique constraint guard */ });
+   463→      }
+   464→
+   465→      // ── 5. Build edges from host org to suppliers, banks, government, accountants, auditors, partners ──
+   466→      const externalTypes: Array<{ type: string; rel: string }> = [
+   467→        { type: 'supplier', rel: 'supplier' },
+   468→        { type: 'bank', rel: 'bank' },
+   469→        { type: 'government', rel: 'government' },
+   470→        { type: 'investor', rel: 'investor' },
+   471→        { type: 'accountant', rel: 'accountant' },
+   472→        { type: 'auditor', rel: 'auditor' },
+   473→        { type: 'logistics', rel: 'logistics' },
+   474→        { type: 'partner', rel: 'partner' },
+   475→      ];
+   476→      for (const { type, rel } of externalTypes) {
+   477→        const extNodes = await db.networkNode.findMany({ where: { nodeType: type } });
+   478→        for (const en of extNodes) {
+   479→          await db.networkEdge.create({
+   480→            data: {
+   481→              fromNodeId: hostNode.id,
+   482→              toNodeId: en.id,
+   483→              relationshipType: rel,
+   484→              status: 'active',
+   485→              strength: 60 + (en.trustScore % 35),
+   486→              totalTransactionValue: 0,
+   487→              transactionCount: 0,
+   488→              startedAt: new Date(),
+   489→            },
+   490→          }).catch(() => { /* unique constraint guard */ });
+   491→        }
+   492→      }
+   493→    }
+   494→
+   495→    // ── 6. Derive REAL transactions from actual invoices ──
+   496→    // For each real Invoice, create a NetworkTransaction from the host org to the matching client node.
+   497→    if (hostNode) {
+   498→      const realInvoices = await db.invoice.findMany({
+   499→        take: 200,
+   500→        orderBy: { createdAt: 'desc' },
+   501→        include: { client: { select: { id: true, tradeName: true, legalName: true } } },
+   502→      });
+   503→      for (const inv of realInvoices) {
+   504→        // Match by buyerName OR by the related client's tradeName/legalName
+   505→        const matchName = inv.buyerName || inv.client?.tradeName || inv.client?.legalName;
+   506→        if (!matchName) continue;
+   507→        const clientNode = await db.networkNode.findFirst({
+   508→          where: {
+   509→            nodeType: 'customer',
+   510→            OR: [
+   511→              { legalName: matchName },
+   512→              { tradeName: matchName },
+   513→            ],
+   514→          },
+   515→          select: { id: true },
+   516→        });
+   517→        if (clientNode) {
+   518→          const invNumber = inv.invoiceNumber || `INV-${inv.id.slice(-6)}`;
+   519→          const amount = Number(inv.totalAmount || inv.taxableValue || 0);
+   520→          await db.networkTransaction.create({
+   521→            data: {
+   522→              transactionNumber: `NTXN-${invNumber}`,
+   523→              fromNodeId: hostNode.id,
+   524→              toNodeId: clientNode.id,
+   525→              type: 'invoice',
+   526→              reference: invNumber,
+   527→              amount,
+   528→              currency: 'INR',
+   529→              status: inv.status === 'paid' ? 'completed' : 'pending',
+   530→              metadata: JSON.stringify({ source: 'real_invoice', invoiceId: inv.id }),
+   531→            },
+   532→          }).catch(() => { /* unique-constraint guard */ });
+   533→        }
+   534→      }
+   535→    }
+   536→
+   537→    // ── 7. Update node totals based on real transactions ──
+   538→    if (hostNode) {
+   539→      const txnAgg = await db.networkTransaction.groupBy({
+   540→        by: ['fromNodeId'],
+   541→        _count: { id: true },
+   542→        _sum: { amount: true },
+   543→      });
+   544→      for (const agg of txnAgg) {
+   545→        await db.networkNode.update({
+   546→          where: { id: agg.fromNodeId },
+   547→          data: {
+   548→            totalTransactions: agg._count.id,
+   549→            totalTransactionValue: agg._sum.amount || 0,
+   550→          },
+   551→        });
+   552→      }
+   553→    }
+   554→  } finally {
+   555→    SEED_LOCK.value = false;
+   556→  }
+   557→}
+   558→
+   559→// ─── Query helpers ────────────────────────────────────────────────────────────
+   560→
+   561→export async function listNodes(filter?: {
+   562→  nodeType?: NodeType;
+   563→  limit?: number;
+   564→  verifiedOnly?: boolean;
+   565→  search?: string;
+   566→}): Promise<NetworkNode[]> {
+   567→  const where: Record<string, unknown> = {};
+   568→  if (filter?.nodeType) where.nodeType = filter.nodeType;
+   569→  if (filter?.verifiedOnly) where.verified = true;
+   570→  if (filter?.search) {
+   571→    where.OR = [
+   572→      { legalName: { contains: filter.search } },
+   573→      { tradeName: { contains: filter.search } },
+   574→      { gstin: { contains: filter.search } },
+   575→      { city: { contains: filter.search } },
+   576→      { industry: { contains: filter.search } },
+   577→    ];
+   578→  }
+   579→  const nodes = await db.networkNode.findMany({
+   580→    where,
+   581→    orderBy: { createdAt: 'desc' },
+   582→    take: filter?.limit ?? 100,
+   583→  });
+   584→  return nodes.map(mapNode);
+   585→}
+   586→
+   587→export async function getHostNode(): Promise<NetworkNode | null> {
+   588→  const node = await db.networkNode.findFirst({
+   589→    where: { nodeType: 'organization' },
+   590→    orderBy: { createdAt: 'asc' },
+   591→  });
+   592→  return node ? mapNode(node) : null;
+   593→}
+   594→
+   595→export async function resolveOrgId(explicit?: string): Promise<{ orgId: string; hostNodeName: string }> {
+   596→  if (explicit) {
+   597→    const org = await db.platformOrganization.findUnique({ where: { id: explicit } });
+   598→    if (org) return { orgId: org.id, hostNodeName: org.name };
+   599→  }
+   600→  // Fall back to the anchor host org
+   601→  const host = await db.platformOrganization.findFirst({ orderBy: { createdAt: 'asc' } });
+   602→  return { orgId: host?.id ?? 'anchor', hostNodeName: host?.name ?? 'GSTPilot Network' };
+   603→}
+   604→

@@ -2037,3 +2037,307 @@ model PlatformDeveloper {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// GLOBAL ENTERPRISE NETWORK™ — WORLD BUSINESS NETWORK
+// One worldwide business graph. Every organisation becomes a node.
+// Customers / Vendors / Suppliers / Partners / Governments / Banks / Investors /
+// Employees / Accountants / Auditors / Logistics — all interconnected.
+// Oracle coordinates millions of companies simultaneously.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ─── GEN MODEL 1 — NetworkNode (every business entity in the world graph) ────
+model NetworkNode {
+  id                     String   @id @default(cuid())
+  organizationId         String?  @unique                                // FK to PlatformOrganization (when known)
+  nodeType               String   @default("organization")               // organization | customer | vendor | supplier | partner | government | bank | investor | accountant | auditor | logistics
+  legalName              String
+  tradeName              String?
+  gstin                  String?
+  pan                    String?
+  email                  String?
+  phone                  String?
+  website                String?
+  country                String   @default("IN")
+  state                  String?
+  city                   String?
+  address                String?
+  industry               String?
+  sector                 String?                                         // manufacturing | services | retail | technology | finance | healthcare | logistics | agriculture | construction
+  employeeCount          Int      @default(0)
+  annualRevenue          Float    @default(0)
+  yearsInBusiness        Int      @default(0)
+  // ── Trust Network™ scores ──
+  trustScore             Int      @default(75)                          // 0-100 composite
+  complianceScore        Int      @default(80)                          // 0-100
+  paymentReliabilityScore Int     @default(80)                          // 0-100
+  supplierRating         Float    @default(4.0)                         // 0-5
+  customerRating         Float    @default(4.0)                         // 0-5
+  aiConfidenceScore      Int      @default(70)                          // 0-100
+  riskLevel              String   @default("medium")                    // low | medium | high | critical
+  // ── Verification ──
+  verified               Boolean  @default(false)
+  verificationDate       DateTime?
+  verificationSource     String?                                         // gst | mca | duns | self
+  // ── Network metrics ──
+  totalConnections       Int      @default(0)
+  totalTransactions      Int      @default(0)
+  totalTransactionValue  Float    @default(0)
+  metadata               String?                                         // JSON
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  // ── Relationships ──
+  outgoingEdges          NetworkEdge[]         @relation("NetworkEdgeFrom")
+  incomingEdges          NetworkEdge[]         @relation("NetworkEdgeTo")
+  transactionsInitiated  NetworkTransaction[]
+  transactionsReceived   NetworkTransaction[] @relation("NetworkTransactionReceived")
+  trustEvents            NetworkTrustEvent[]
+  rfqsCreated            NetworkRfq[]
+  rfqsReceived           NetworkRfq[]         @relation("NetworkRfqRecipient")
+  opportunities          NetworkOpportunity[]
+  shipmentsSent          NetworkShipment[]    @relation("NetworkShipmentFrom")
+  shipmentsReceived      NetworkShipment[]    @relation("NetworkShipmentTo")
+  paymentsSent           NetworkPayment[]     @relation("NetworkPaymentFrom")
+  paymentsReceived       NetworkPayment[]     @relation("NetworkPaymentTo")
+  posIssued              NetworkPurchaseOrder[] @relation("NetworkPOFrom")
+  posReceived            NetworkPurchaseOrder[] @relation("NetworkPOTo")
+  contractsIssued        NetworkContract[]    @relation("NetworkContractFrom")
+  contractsReceived      NetworkContract[]    @relation("NetworkContractTo")
+}
+
+// ─── GEN MODEL 2 — NetworkEdge (relationship between two nodes) ───────────────
+model NetworkEdge {
+  id                      String   @id @default(cuid())
+  fromNodeId              String
+  toNodeId                String
+  fromNode                NetworkNode @relation("NetworkEdgeFrom", fields: [fromNodeId], references: [id], onDelete: Cascade)
+  toNode                  NetworkNode @relation("NetworkEdgeTo", fields: [toNodeId], references: [id], onDelete: Cascade)
+  relationshipType        String   // customer | vendor | supplier | partner | government | bank | investor | accountant | auditor | logistics
+  status                  String   @default("active")                    // active | pending | suspended | ended
+  strength                Int      @default(50)                          // 0-100
+  totalTransactionValue   Float    @default(0)
+  transactionCount        Int      @default(0)
+  startedAt               DateTime @default(now())
+  endedAt                 DateTime?
+  metadata                String?                                         // JSON
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+  @@unique([fromNodeId, toNodeId, relationshipType])
+}
+
+// ─── GEN MODEL 3 — NetworkConnection (org-to-org connection request) ─────────
+model NetworkConnection {
+  id              String   @id @default(cuid())
+  fromOrgId       String                                          // PlatformOrganization id
+  toOrgId         String
+  fromNodeName    String
+  toNodeName      String
+  status          String   @default("pending")                     // pending | accepted | rejected | blocked
+  initiatedBy     String
+  message         String?
+  relationshipType String  @default("partner")                     // partner | customer | vendor | supplier
+  acceptedAt      DateTime?
+  rejectedAt      DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  @@unique([fromOrgId, toOrgId])
+}
+
+// ─── GEN MODEL 4 — NetworkRfq (Request for Quotation) ────────────────────────
+model NetworkRfq {
+  id                  String   @id @default(cuid())
+  rfqNumber           String   @unique
+  fromNodeId          String
+  toNodeId            String?
+  title               String
+  description         String
+  category            String   @default("goods")                    // goods | services | raw_materials | equipment | logistics | consulting
+  quantity            Int      @default(1)
+  unit                String   @default("unit")
+  budgetMax           Float    @default(0)
+  currency            String   @default("INR")
+  deliveryDate        DateTime?
+  deliveryLocation    String?
+  status              String   @default("open")                      // open | closed | awarded | cancelled
+  quotationsCount     Int      @default(0)
+  awardedQuotationId  String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  fromNode            NetworkNode @relation(fields: [fromNodeId], references: [id], onDelete: Cascade)
+  toNode              NetworkNode? @relation("NetworkRfqRecipient", fields: [toNodeId], references: [id])
+  quotations          NetworkQuotation[]
+}
+
+// ─── GEN MODEL 5 — NetworkQuotation (supplier's bid on an RFQ) ───────────────
+model NetworkQuotation {
+  id              String   @id @default(cuid())
+  rfqId           String
+  fromNodeId      String
+  unitPrice       Float
+  currency        String   @default("INR")
+  quantity        Int      @default(1)
+  totalPrice      Float
+  deliveryDays    Int      @default(7)
+  validUntil      DateTime?
+  status          String   @default("submitted")                    // submitted | accepted | rejected | expired
+  notes           String?
+  createdAt       DateTime @default(now())
+  rfq             NetworkRfq @relation(fields: [rfqId], references: [id], onDelete: Cascade)
+}
+
+// ─── GEN MODEL 6 — NetworkPurchaseOrder (B2B PO) ─────────────────────────────
+model NetworkPurchaseOrder {
+  id              String   @id @default(cuid())
+  poNumber        String   @unique
+  fromNodeId      String
+  toNodeId        String
+  rfqId           String?
+  quotationId     String?
+  title           String
+  totalValue      Float
+  currency        String   @default("INR")
+  status          String   @default("draft")                        // draft | sent | accepted | rejected | fulfilled | cancelled
+  deliveryDate    DateTime?
+  items           String                                           // JSON array of line items
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  fromNode        NetworkNode @relation("NetworkPOFrom", fields: [fromNodeId], references: [id], onDelete: Cascade)
+  toNode          NetworkNode @relation("NetworkPOTo", fields: [toNodeId], references: [id], onDelete: Cascade)
+}
+
+// ─── GEN MODEL 7 — NetworkContract (B2B contract) ────────────────────────────
+model NetworkContract {
+  id              String   @id @default(cuid())
+  contractNumber  String   @unique
+  fromNodeId      String
+  toNodeId        String
+  title           String
+  type            String   @default("supply")                       // supply | service | partnership | nda | msa | sla
+  value           Float    @default(0)
+  currency        String   @default("INR")
+  startDate       DateTime @default(now())
+  endDate         DateTime?
+  status          String   @default("draft")                        // draft | active | expired | terminated
+  terms           String?
+  signedAt        DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  fromNode        NetworkNode @relation("NetworkContractFrom", fields: [fromNodeId], references: [id], onDelete: Cascade)
+  toNode          NetworkNode @relation("NetworkContractTo", fields: [toNodeId], references: [id], onDelete: Cascade)
+}
+
+// ─── GEN MODEL 8 — NetworkTransaction (any B2B exchange) ─────────────────────
+model NetworkTransaction {
+  id                String   @id @default(cuid())
+  transactionNumber String   @unique
+  fromNodeId        String
+  toNodeId          String?
+  type              String   // invoice | purchase_order | payment | quotation | contract | document | shipment
+  reference         String?
+  amount            Float    @default(0)
+  currency          String   @default("INR")
+  status            String   @default("pending")                    // pending | completed | failed | disputed
+  metadata          String?                                         // JSON
+  createdAt         DateTime @default(now())
+  fromNode          NetworkNode @relation(fields: [fromNodeId], references: [id], onDelete: Cascade)
+  toNode            NetworkNode? @relation("NetworkTransactionReceived", fields: [toNodeId], references: [id])
+}
+
+// ─── GEN MODEL 9 — NetworkPayment (cross-org payment) ────────────────────────
+model NetworkPayment {
+  id              String   @id @default(cuid())
+  paymentNumber   String   @unique
+  fromNodeId      String
+  toNodeId        String
+  poId            String?
+  amount          Float
+  currency        String   @default("INR")
+  method          String   @default("domestic_transfer")            // domestic_transfer | international_wire | upi | card | rtgs | neft | imps
+  status          String   @default("pending")                      // pending | processing | completed | failed | reversed
+  reference       String?
+  fxRate          Float    @default(1)
+  settledAt       DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  fromNode        NetworkNode @relation("NetworkPaymentFrom", fields: [fromNodeId], references: [id], onDelete: Cascade)
+  toNode          NetworkNode @relation("NetworkPaymentTo", fields: [toNodeId], references: [id], onDelete: Cascade)
+}
+
+// ─── GEN MODEL 10 — NetworkShipment (B2B shipment tracking) ──────────────────
+model NetworkShipment {
+  id                String   @id @default(cuid())
+  shipmentNumber    String   @unique
+  fromNodeId        String
+  toNodeId          String
+  poId              String?
+  carrier           String?
+  trackingNumber    String?
+  origin            String?
+  destination       String?
+  status            String   @default("pending")                    // pending | picked_up | in_transit | out_for_delivery | delivered | delayed | cancelled
+  estimatedDelivery DateTime?
+  deliveredAt       DateTime?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  fromNode          NetworkNode @relation("NetworkShipmentFrom", fields: [fromNodeId], references: [id], onDelete: Cascade)
+  toNode            NetworkNode @relation("NetworkShipmentTo", fields: [toNodeId], references: [id], onDelete: Cascade)
+}
+
+// ─── GEN MODEL 11 — NetworkOpportunity (Oracle-discovered opportunity) ───────
+model NetworkOpportunity {
+  id              String   @id @default(cuid())
+  forNodeId       String
+  type            String   @default("new_customer")                 // new_customer | new_supplier | partnership | new_market | cross_sell | expansion | cost_saving
+  title           String
+  description     String
+  potentialValue  Float    @default(0)
+  currency        String   @default("INR")
+  probability     Int      @default(50)                             // 0-100
+  source          String   @default("oracle")                       // oracle | network | benchmark | referral
+  status          String   @default("discovered")                   // discovered | qualified | proposed | accepted | rejected | expired
+  metadata        String?
+  createdAt       DateTime @default(now())
+  forNode         NetworkNode @relation(fields: [forNodeId], references: [id], onDelete: Cascade)
+}
+
+// ─── GEN MODEL 12 — NetworkTrustEvent (audit log for trust score changes) ────
+model NetworkTrustEvent {
+  id              String   @id @default(cuid())
+  nodeId          String
+  eventType       String   // trust_score_change | compliance_update | payment_event | review | verification | violation
+  delta           Int      @default(0)
+  newScore        Int?
+  description     String
+  createdAt       DateTime @default(now())
+  node            NetworkNode @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+}
+
+// ─── GEN MODEL 13 — NetworkBenchmark (industry benchmark snapshot) ───────────
+model NetworkBenchmark {
+  id              String   @id @default(cuid())
+  industry        String
+  metric          String   // revenue_growth | profitability | gst_compliance | payroll_efficiency | cash_flow | ai_adoption | operational_efficiency
+  p25             Float
+  p50             Float
+  p75             Float
+  p90             Float
+  sampleSize      Int
+  period          String   @default("2025-Q1")
+  createdAt       DateTime @default(now())
+}
+
+// ─── GEN MODEL 14 — NetworkSharedKnowledge (anonymized AI signals) ───────────
+model NetworkSharedKnowledge {
+  id              String   @id @default(cuid())
+  signal          String   // industry_trend | best_practice | market_opportunity | supply_shortage | tax_change | economic_signal
+  title           String
+  description     String
+  industry        String?
+  region          String?
+  confidence      Int      @default(70)
+  impact          String   @default("medium")                       // low | medium | high
+  affectedMetrics String?
+  sourcesCount    Int      @default(1)
+  createdAt       DateTime @default(now())
+}

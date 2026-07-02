@@ -126,6 +126,7 @@ import AISoftwareFactoryPage from '@/components/ai-software-factory/AISoftwareFa
 import AutonomousEnterprisePage from '@/components/autonomous-enterprise/AutonomousEnterprisePage'
 import EnterpriseCloudPlatformPage from '@/components/enterprise-cloud-platform/EnterpriseCloudPlatformPage'
 import EnterpriseAIPlatformPage from '@/components/enterprise-ai-platform/EnterpriseAIPlatformPage'
+import GlobalEnterpriseNetworkPage from '@/components/global-enterprise-network/GlobalEnterpriseNetworkPage'
 
 const VIEW_TITLES: Record<string, string> = {
   dashboard: 'Mission Control',
@@ -231,6 +232,7 @@ const VIEW_TITLES: Record<string, string> = {
   'autonomous-enterprise': 'Autonomous Enterprise™',
   'enterprise-cloud-platform': 'Enterprise Cloud Platform™',
   'enterprise-ai-platform': 'Enterprise AI Platform™',
+  'global-enterprise-network': 'Global Enterprise Network™',
 }
 
 function DashboardContent() {
@@ -444,6 +446,8 @@ function DashboardContent() {
         return <EnterpriseCloudPlatformPage />
       case 'enterprise-ai-platform':
         return <EnterpriseAIPlatformPage />
+      case 'global-enterprise-network':
+        return <GlobalEnterpriseNetworkPage />
       default:
         return <MissionControlPage />
     }

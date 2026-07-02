@@ -151,7 +151,9 @@ export type AppView =
   // Enterprise Cloud Platform™ — Global SaaS Infrastructure
   | 'enterprise-cloud-platform'
   // Enterprise AI Platform™ — Ecosystem Edition (Developer Platform)
-  | 'enterprise-ai-platform';
+  | 'enterprise-ai-platform'
+  // Global Enterprise Network™ — World Business Network
+  | 'global-enterprise-network';
 
 export interface ReturnPrepContext {
   clientId: string | null;

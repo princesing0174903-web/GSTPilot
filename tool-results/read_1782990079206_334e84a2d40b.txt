@@ -1,0 +1,1457 @@
+     1→'use client';
+     2→
+     3→// ═══════════════════════════════════════════════════════════════════════════════
+     4→// GSTPILOT ENTERPRISE AI PLATFORM™ — DEVELOPER PLATFORM CONSOLE
+     5→//
+     6→// Turns GSTPilot from an enterprise application into a platform developers &
+     7→// partners can build on. 12 subsystems, all extended on REAL connected data:
+     8→//
+     9→//   1.  Enterprise App Marketplace™  — browse + install apps
+    10→//   2.  Developer Platform™         — SDKs (TS/Python/Java/Go/PHP/Ruby)
+    11→//   3.  Enterprise Extensions™      — publish private apps
+    12→//   4.  Plugin System™              — install/uninstall/version tracking
+    13→//   5.  API Gateway™                — keys, rate limits, RBAC, usage
+    14→//   6.  Webhook Engine™             — subscriptions + real delivery
+    15→//   7.  Low-Code Studio™            — forms + workflows builder
+    16→//   8.  Enterprise App Store™       — reviews, ratings, revenue
+    17→//   9.  Enterprise Tenant Platform™ — unlimited orgs/users
+    18→//  10.  Observability™              — API/plugin/SDK/dev analytics
+    19→//  11.  Security™                   — RBAC, ABAC, sandbox, signatures
+    20→//  12.  Performance™                — millions of orgs, edge, multi-region
+    21→//
+    22→// Tagline: One Platform. Unlimited Enterprise Intelligence.
+    23→// ═══════════════════════════════════════════════════════════════════════════════
+    24→
+    25→import { useEffect, useState, useCallback } from 'react';
+    26→import { motion, AnimatePresence } from 'framer-motion';
+    27→import {
+    28→  Store, Code2, Puzzle, Plug, KeyRound, Webhook, LayoutDashboard,
+    29→  Package, Activity, ShieldCheck, Gauge, RefreshCw, Sparkles, Loader2,
+    30→  CheckCircle2, XCircle, Clock, Plus, Star, Download, Trash2, Send,
+    31→  Play, Key, Zap, TrendingUp, Search, ExternalLink, BookOpen, Users2,
+    32→  Crown, Rocket, Layers, Database, Server, Cpu, AlertTriangle,
+    33→  ChevronRight, type LucideIcon,
+    34→} from 'lucide-react';
+    35→import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+    36→import { Button } from '@/components/ui/button';
+    37→import { Badge } from '@/components/ui/badge';
+    38→import { Input } from '@/components/ui/input';
+    39→import { Textarea } from '@/components/ui/textarea';
+    40→import { Label } from '@/components/ui/label';
+    41→import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+    42→import { ScrollArea } from '@/components/ui/scroll-area';
+    43→import { Progress } from '@/components/ui/progress';
+    44→import { Skeleton } from '@/components/ui/skeleton';
+    45→import { Separator } from '@/components/ui/separator';
+    46→import {
+    47→  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
+    48→} from '@/components/ui/dialog';
+    49→import {
+    50→  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+    51→} from '@/components/ui/select';
+    52→import { useToast } from '@/hooks/use-toast';
+    53→import {
+    54→  ECOSYSTEM_TAGLINE,
+    55→  ECOSYSTEM_SUBSYSTEMS,
+    56→  type EcosystemDashboard,
+    57→  type Extension,
+    58→  type ExtensionInstall,
+    59→  type WebhookSubscription,
+    60→  type FormField,
+    61→  type WorkflowTrigger,
+    62→} from '@/lib/ecosystem/types';
+    63→
+    64→// ─── Helpers ──────────────────────────────────────────────────────────────────
+    65→function fmtINR(n: number): string {
+    66→  if (!isFinite(n)) return '₹0';
+    67→  const abs = Math.abs(n);
+    68→  if (abs >= 10000000) return `₹${(n / 10000000).toFixed(2)}Cr`;
+    69→  if (abs >= 100000) return `₹${(n / 100000).toFixed(2)}L`;
+    70→  if (abs >= 1000) return `₹${(n / 1000).toFixed(1)}K`;
+    71→  return `₹${Math.round(n).toLocaleString('en-IN')}`;
+    72→}
+    73→
+    74→function fmtNum(n: number): string {
+    75→  if (n >= 10000000) return `${(n / 10000000).toFixed(2)}Cr`;
+    76→  if (n >= 100000) return `${(n / 100000).toFixed(2)}L`;
+    77→  if (n >= 1000) return `${(n / 1000).toFixed(1)}K`;
+    78→  return n.toLocaleString('en-IN');
+    79→}
+    80→
+    81→function timeAgo(iso: string | null): string {
+    82→  if (!iso) return 'never';
+    83→  const diff = Date.now() - new Date(iso).getTime();
+    84→  const s = Math.floor(diff / 1000);
+    85→  if (s < 60) return 'just now';
+    86→  const m = Math.floor(s / 60);
+    87→  if (m < 60) return `${m}m ago`;
+    88→  const h = Math.floor(m / 60);
+    89→  if (h < 24) return `${h}h ago`;
+    90→  const d = Math.floor(h / 24);
+    91→  if (d < 30) return `${d}d ago`;
+    92→  return new Date(iso).toLocaleDateString('en-IN');
+    93→}
+    94→
+    95→// ─── Subsystem pill data ──────────────────────────────────────────────────────
+    96→const SUBSYSTEM_PILLS: { name: string; icon: LucideIcon }[] = [
+    97→  { name: 'App Marketplace', icon: Store },
+    98→  { name: 'Developer Platform', icon: Code2 },
+    99→  { name: 'Enterprise Extensions', icon: Puzzle },
+   100→  { name: 'Plugin System', icon: Plug },
+   101→  { name: 'API Gateway', icon: KeyRound },
+   102→  { name: 'Webhook Engine', icon: Webhook },
+   103→  { name: 'Low-Code Studio', icon: LayoutDashboard },
+   104→  { name: 'App Store', icon: Package },
+   105→  { name: 'Tenant Platform', icon: Users2 },
+   106→  { name: 'Observability', icon: Activity },
+   107→  { name: 'Security', icon: ShieldCheck },
+   108→  { name: 'Performance', icon: Gauge },
+   109→];
+   110→
+   111→// ─── Main component ───────────────────────────────────────────────────────────
+   112→export default function EnterpriseAIPlatformPage() {
+   113→  const { toast } = useToast();
+   114→  const [dashboard, setDashboard] = useState<EcosystemDashboard | null>(null);
+   115→  const [loading, setLoading] = useState(true);
+   116→  const [error, setError] = useState<string | null>(null);
+   117→  const [activeTab, setActiveTab] = useState('overview');
+   118→  const [search, setSearch] = useState('');
+   119→
+   120→  // Dialog state
+   121→  const [publishOpen, setPublishOpen] = useState(false);
+   122→  const [webhookOpen, setWebhookOpen] = useState(false);
+   123→  const [formOpen, setFormOpen] = useState(false);
+   124→  const [workflowOpen, setWorkflowOpen] = useState(false);
+   125→  const [apiKeyOpen, setApiKeyOpen] = useState(false);
+   126→  const [newApiKey, setNewApiKey] = useState<string | null>(null);
+   127→
+   128→  const load = useCallback(async () => {
+   129→    setLoading(true);
+   130→    setError(null);
+   131→    try {
+   132→      const res = await fetch('/api/ecosystem/dashboard', { cache: 'no-store' });
+   133→      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+   134→      const data = (await res.json()) as EcosystemDashboard;
+   135→      setDashboard(data);
+   136→    } catch (e) {
+   137→      setError(e instanceof Error ? e.message : 'Failed to load dashboard');
+   138→    } finally {
+   139→      setLoading(false);
+   140→    }
+   141→  }, []);
+   142→
+   143→  useEffect(() => {
+   144→    load();
+   145→  }, [load]);
+   146→
+   147→  // ─── Action helpers ────────────────────────────────────────────────────────
+   148→  async function apiPost(endpoint: string, body: unknown): Promise<{ ok: boolean; data: unknown }> {
+   149→    try {
+   150→      const res = await fetch(`/api/ecosystem/${endpoint}`, {
+   151→        method: 'POST',
+   152→        headers: { 'Content-Type': 'application/json' },
+   153→        body: JSON.stringify(body),
+   154→        cache: 'no-store',
+   155→      });
+   156→      const data = await res.json().catch(() => ({}));
+   157→      if (!res.ok) {
+   158→        toast({ title: 'Action failed', description: (data as { error?: string }).error ?? `HTTP ${res.status}`, variant: 'destructive' });
+   159→        return { ok: false, data };
+   160→      }
+   161→      return { ok: true, data };
+   162→    } catch (e) {
+   163→      toast({ title: 'Network error', description: e instanceof Error ? e.message : 'Unknown', variant: 'destructive' });
+   164→      return { ok: false, data: null };
+   165→    }
+   166→  }
+   167→
+   168→  async function handleInstall(slug: string, name: string) {
+   169→    const { ok } = await apiPost('install-extension', { extensionSlug: slug });
+   170→    if (ok) {
+   171→      toast({ title: 'Extension installed', description: `${name} is now active in your workspace.` });
+   172→      load();
+   173→    }
+   174→  }
+   175→
+   176→  async function handleUninstall(slug: string, name: string) {
+   177→    const { ok } = await apiPost('uninstall-extension', { extensionSlug: slug });
+   178→    if (ok) {
+   179→      toast({ title: 'Extension uninstalled', description: `${name} was removed.` });
+   180→      load();
+   181→    }
+   182→  }
+   183→
+   184→  async function handleDeleteWebhook(id: string, label: string) {
+   185→    const { ok } = await apiPost('delete-webhook', { subscriptionId: id });
+   186→    if (ok) {
+   187→      toast({ title: 'Webhook deleted', description: label });
+   188→      load();
+   189→    }
+   190→  }
+   191→
+   192→  async function handleEmitEvent(eventType: string) {
+   193→    const { ok, data } = await apiPost('emit-event', { eventType, payload: { triggered: 'manual', at: new Date().toISOString() } });
+   194→    if (ok) {
+   195→      const r = data as { delivered: number; failed: number; skipped: number };
+   196→      toast({ title: 'Event emitted', description: `${eventType} — ${r.delivered} delivered, ${r.failed} failed, ${r.skipped} skipped` });
+   197→      load();
+   198→    }
+   199→  }
+   200→
+   201→  async function handleRunWorkflow(id: string, title: string) {
+   202→    const { ok } = await apiPost('run-workflow', { workflowId: id });
+   203→    if (ok) {
+   204→      toast({ title: 'Workflow executed', description: title });
+   205→      load();
+   206→    }
+   207→  }
+   208→
+   209→  async function handleRevokeKey(id: string, name: string) {
+   210→    const { ok } = await apiPost('revoke-api-key', { apiKeyId: id });
+   211→    if (ok) {
+   212→      toast({ title: 'API key revoked', description: name, variant: 'destructive' });
+   213→      load();
+   214→    }
+   215→  }
+   216→
+   217→  // ─── Render ────────────────────────────────────────────────────────────────
+   218→  if (loading && !dashboard) {
+   219→    return (
+   220→      <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-slate-100 p-6 space-y-4">
+   221→        <div className="flex items-center gap-3">
+   222→          <Loader2 className="h-6 w-6 animate-spin text-emerald-400" />
+   223→          <span className="text-lg font-semibold">Loading Enterprise AI Platform™…</span>
+   224→        </div>
+   225→        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+   226→          {Array.from({ length: 8 }).map((_, i) => (
+   227→            <Skeleton key={i} className="h-28 rounded-xl bg-slate-800/60" />
+   228→          ))}
+   229→        </div>
+   230→      </div>
+   231→    );
+   232→  }
+   233→
+   234→  if (error || !dashboard) {
+   235→    return (
+   236→      <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-6">
+   237→        <Card className="max-w-md bg-slate-900 border-red-500/40">
+   238→          <CardHeader>
+   239→            <CardTitle className="flex items-center gap-2 text-red-300">
+   240→              <AlertTriangle className="h-5 w-5" /> Failed to load platform
+   241→            </CardTitle>
+   242→          </CardHeader>
+   243→          <CardContent className="space-y-4">
+   244→            <p className="text-sm text-slate-400">{error ?? 'Unknown error'}</p>
+   245→            <Button onClick={load} variant="outline" className="w-full">
+   246→              <RefreshCw className="h-4 w-4 mr-2" /> Retry
+   247→            </Button>
+   248→          </CardContent>
+   249→        </Card>
+   250→      </div>
+   251→    );
+   252→  }
+   253→
+   254→  const d = dashboard;
+   255→  const filteredExtensions = d.extensions.filter(
+   256→    (e) =>
+   257→      e.displayName.toLowerCase().includes(search.toLowerCase()) ||
+   258→      e.description.toLowerCase().includes(search.toLowerCase()) ||
+   259→      e.category.toLowerCase().includes(search.toLowerCase()) ||
+   260→      e.publisher.toLowerCase().includes(search.toLowerCase()),
+   261→  );
+   262→  const installedSlugs = new Set(d.myInstalls.filter((i) => i.status === 'installed').map((i) => i.extensionSlug));
+   263→
+   264→  return (
+   265→    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-slate-100">
+   266→      {/* ─── Header ─── */}
+   267→      <header className="border-b border-slate-800/60 bg-slate-950/70 backdrop-blur-xl sticky top-0 z-30">
+   268→        <div className="max-w-[1400px] mx-auto px-4 md:px-6 py-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+   269→          <div className="flex items-center gap-3">
+   270→            <div className="h-11 w-11 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-lg shadow-emerald-500/20">
+   271→              <Sparkles className="h-6 w-6 text-white" />
+   272→            </div>
+   273→            <div>
+   274→              <h1 className="text-xl md:text-2xl font-bold tracking-tight bg-gradient-to-r from-emerald-300 to-teal-200 bg-clip-text text-transparent">
+   275→                Enterprise AI Platform™
+   276→              </h1>
+   277→              <p className="text-xs text-slate-400">{ECOSYSTEM_TAGLINE}</p>
+   278→            </div>
+   279→          </div>
+   280→          <div className="flex items-center gap-2">
+   281→            <Badge variant="outline" className="border-emerald-500/40 text-emerald-300">
+   282→              <CheckCircle2 className="h-3 w-3 mr-1" /> {d.subsystemsImplemented}/{d.subsystemsTotal} subsystems
+   283→            </Badge>
+   284→            <Badge variant="outline" className="border-sky-500/40 text-sky-300">
+   285→              <Database className="h-3 w-3 mr-1" /> {d.dataSources.length} sources
+   286→            </Badge>
+   287→            <Button onClick={load} variant="outline" size="sm" disabled={loading} className="border-slate-700">
+   288→              <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} /> Refresh
+   289→            </Button>
+   290→          </div>
+   291→        </div>
+   292→      </header>
+   293→
+   294→      <main className="max-w-[1400px] mx-auto px-4 md:px-6 py-6 space-y-6 pb-20">
+   295→        {/* ─── Subsystem pills ─── */}
+   296→        <div className="flex flex-wrap gap-2">
+   297→          {SUBSYSTEM_PILLS.map((p) => {
+   298→            const Icon = p.icon;
+   299→            return (
+   300→              <span
+   301→                key={p.name}
+   302→                className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/5 px-3 py-1 text-xs text-emerald-200"
+   303→              >
+   304→                <Icon className="h-3 w-3" /> {p.name}
+   305→              </span>
+   306→            );
+   307→          })}
+   308→        </div>
+   309→
+   310→        {/* ─── Headline KPIs ─── */}
+   311→        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+   312→          <KpiCard icon={Package} label="Extensions" value={fmtNum(d.totalExtensions)} sub={`${d.publicExtensions} public · ${d.privateExtensions} private`} accent="emerald" />
+   313→          <KpiCard icon={Download} label="Total Installs" value={fmtNum(d.totalInstalls)} sub="across all orgs" accent="teal" />
+   314→          <KpiCard icon={Webhook} label="Active Webhooks" value={fmtNum(d.activeWebhooks)} sub={`${fmtNum(d.webhooks.totalDeliveries)} deliveries`} accent="sky" />
+   315→          <KpiCard icon={KeyRound} label="API Keys" value={fmtNum(d.totalApiKeys)} sub={`${fmtNum(d.apiCallsToday)} calls today`} accent="violet" />
+   316→          <KpiCard icon={Users2} label="Developers" value={fmtNum(d.totalDevelopers)} sub={`${d.developers.certifiedCount} certified`} accent="amber" />
+   317→          <KpiCard icon={TrendingUp} label="Marketplace Revenue" value={fmtINR(d.marketplaceRevenue)} sub="rolling 30d" accent="rose" />
+   318→        </div>
+   319→
+   320→        {/* ─── Tabs ─── */}
+   321→        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+   322→          <ScrollArea className="w-full">
+   323→            <TabsList className="bg-slate-900/60 border border-slate-800 h-auto flex flex-nowrap p-1 gap-1">
+   324→              {[
+   325→                ['overview', 'Overview', LayoutDashboard],
+   326→                ['marketplace', 'Marketplace', Store],
+   327→                ['my-apps', 'My Extensions', Puzzle],
+   328→                ['webhooks', 'Webhooks', Webhook],
+   329→                ['api-keys', 'API Keys', KeyRound],
+   330→                ['lowcode', 'Low-Code Studio', LayoutDashboard],
+   331→                ['observability', 'Observability', Activity],
+   332→                ['developers', 'Developers', Code2],
+   333→              ].map(([v, label, Icon]) => {
+   334→                const I = Icon as LucideIcon;
+   335→                return (
+   336→                  <TabsTrigger
+   337→                    key={v as string}
+   338→                    value={v as string}
+   339→                    className="data-[state=active]:bg-emerald-500/15 data-[state=active]:text-emerald-200 text-slate-300 flex items-center gap-1.5 whitespace-nowrap"
+   340→                  >
+   341→                    <I className="h-3.5 w-3.5" /> {label as string}
+   342→                  </TabsTrigger>
+   343→                );
+   344→              })}
+   345→            </TabsList>
+   346→          </ScrollArea>
+   347→
+   348→          {/* ─── Overview ─── */}
+   349→          <TabsContent value="overview" className="space-y-4 mt-4">
+   350→            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+   351→              <Card className="bg-slate-900/60 border-slate-800 lg:col-span-2">
+   352→                <CardHeader>
+   353→                  <CardTitle className="text-slate-100 flex items-center gap-2">
+   354→                    <Rocket className="h-5 w-5 text-emerald-400" /> Platform Snapshot
+   355→                  </CardTitle>
+   356→                  <CardDescription className="text-slate-400">Real-time platform health, derived from {d.dataSources.length} live data sources.</CardDescription>
+   357→                </CardHeader>
+   358→                <CardContent className="space-y-3">
+   359→                  <StatRow label="Extensions published" value={`${d.totalExtensions} (${d.marketplace.paidApps} paid, ${d.marketplace.freeApps} free)`} />
+   360→                  <StatRow label="Total installs (all orgs)" value={fmtNum(d.marketplace.totalInstalls)} />
+   361→                  <StatRow label="Avg rating" value={`${d.marketplace.avgRating.toFixed(2)} ★ (${d.marketplace.totalReviews} reviews)`} />
+   362→                  <StatRow label="Active webhook subscriptions" value={fmtNum(d.webhooks.activeSubscriptions)} />
+   363→                  <StatRow label="Webhook delivery success rate" value={`${d.webhooks.successRate.toFixed(1)}%`} />
+   364→                  <StatRow label="API keys (active / revoked)" value={`${d.apiGateway.activeKeys} / ${d.apiGateway.revokedKeys}`} />
+   365→                  <StatRow label="API calls today / 30d" value={`${fmtNum(d.apiCallsToday)} / ${fmtNum(d.apiCalls30d)}`} />
+   366→                  <StatRow label="Low-code forms / workflows" value={`${d.lowCodeForms} / ${d.lowCodeWorkflows}`} />
+   367→                  <StatRow label="Registered developers" value={`${d.totalDevelopers} (${d.developers.strategicCount} strategic, ${d.developers.certifiedCount} certified)`} />
+   368→                  <Separator className="bg-slate-800" />
+   369→                  <StatRow label="Sandboxed installs" value={fmtNum(d.security.sandboxedExtensions)} />
+   370→                  <StatRow label="Audit events (30d)" value={fmtNum(d.security.auditEvents30d)} />
+   371→                  <StatRow label="Tenant isolation" value={d.security.tenantIsolation ? '✓ Enforced' : '✗ Off'} />
+   372→                </CardContent>
+   373→              </Card>
+   374→
+   375→              <Card className="bg-slate-900/60 border-slate-800">
+   376→                <CardHeader>
+   377→                  <CardTitle className="text-slate-100 flex items-center gap-2">
+   378→                    <Crown className="h-5 w-5 text-amber-400" /> Top Categories
+   379→                  </CardTitle>
+   380→                </CardHeader>
+   381→                <CardContent className="space-y-2">
+   382→                  {d.marketplace.topCategories.slice(0, 8).map((c) => (
+   383→                    <div key={c.category} className="flex items-center justify-between text-sm">
+   384→                      <span className="capitalize text-slate-300">{c.category}</span>
+   385→                      <div className="flex items-center gap-2">
+   386→                        <span className="text-slate-400">{c.count} apps</span>
+   387→                        <Badge variant="outline" className="border-emerald-500/40 text-emerald-300">{fmtNum(c.installs)}</Badge>
+   388→                      </div>
+   389→                    </div>
+   390→                  ))}
+   391→                  {d.marketplace.topCategories.length === 0 && (
+   392→                    <p className="text-sm text-slate-500">No categories yet.</p>
+   393→                  )}
+   394→                </CardContent>
+   395→              </Card>
+   396→            </div>
+   397→
+   398→            <Card className="bg-slate-900/60 border-slate-800">
+   399→              <CardHeader>
+   400→                <CardTitle className="text-slate-100 flex items-center gap-2">
+   401→                  <Layers className="h-5 w-5 text-sky-400" /> Featured Extensions
+   402→                </CardTitle>
+   403→              </CardHeader>
+   404→              <CardContent>
+   405→                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+   406→                  {d.marketplace.featured.slice(0, 6).map((e) => (
+   407→                    <ExtensionCard key={e.id} ext={e} installed={installedSlugs.has(e.slug)} onInstall={() => handleInstall(e.slug, e.displayName)} onUninstall={() => handleUninstall(e.slug, e.displayName)} compact />
+   408→                  ))}
+   409→                </div>
+   410→              </CardContent>
+   411→            </Card>
+   412→          </TabsContent>
+   413→
+   414→          {/* ─── Marketplace ─── */}
+   415→          <TabsContent value="marketplace" className="space-y-4 mt-4">
+   416→            <Card className="bg-slate-900/60 border-slate-800">
+   417→              <CardContent className="pt-4 flex flex-col md:flex-row gap-3 md:items-center justify-between">
+   418→                <div className="relative flex-1 max-w-md">
+   419→                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
+   420→                  <Input
+   421→                    placeholder="Search apps by name, category, publisher…"
+   422→                    value={search}
+   423→                    onChange={(e) => setSearch(e.target.value)}
+   424→                    className="pl-9 bg-slate-950 border-slate-700 text-slate-100"
+   425→                  />
+   426→                </div>
+   427→                <div className="flex items-center gap-2 text-xs text-slate-400">
+   428→                  <Package className="h-4 w-4" /> {filteredExtensions.length} of {d.extensions.length} apps
+   429→                  <Badge variant="outline" className="border-amber-500/40 text-amber-300 ml-2">{fmtINR(d.marketplace.revenue)} revenue</Badge>
+   430→                </div>
+   431→              </CardContent>
+   432→            </Card>
+   433→
+   434→            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+   435→              {filteredExtensions.map((e) => (
+   436→                <ExtensionCard
+   437→                  key={e.id}
+   438→                  ext={e}
+   439→                  installed={installedSlugs.has(e.slug)}
+   440→                  onInstall={() => handleInstall(e.slug, e.displayName)}
+   441→                  onUninstall={() => handleUninstall(e.slug, e.displayName)}
+   442→                />
+   443→              ))}
+   444→            </div>
+   445→            {filteredExtensions.length === 0 && (
+   446→              <Card className="bg-slate-900/60 border-slate-800">
+   447→                <CardContent className="py-12 text-center text-slate-400">
+   448→                  <Package className="h-10 w-10 mx-auto mb-3 opacity-50" />
+   449→                  No apps match your search.
+   450→                </CardContent>
+   451→              </Card>
+   452→            )}
+   453→          </TabsContent>
+   454→
+   455→          {/* ─── My Extensions ─── */}
+   456→          <TabsContent value="my-apps" className="space-y-4 mt-4">
+   457→            <div className="flex items-center justify-between">
+   458→              <div>
+   459→                <h2 className="text-lg font-semibold text-slate-100">Installed Extensions</h2>
+   460→                <p className="text-sm text-slate-400">{d.myInstalls.filter((i) => i.status === 'installed').length} active in your workspace</p>
+   461→              </div>
+   462→              <Button onClick={() => setPublishOpen(true)} className="bg-emerald-600 hover:bg-emerald-700">
+   463→                <Plus className="h-4 w-4 mr-2" /> Publish Private App
+   464→              </Button>
+   465→            </div>
+   466→
+   467→            {d.myInstalls.length === 0 ? (
+   468→              <Card className="bg-slate-900/60 border-slate-800">
+   469→                <CardContent className="py-12 text-center text-slate-400 space-y-3">
+   470→                  <Puzzle className="h-10 w-10 mx-auto opacity-50" />
+   471→                  <p>No extensions installed yet.</p>
+   472→                  <Button variant="outline" onClick={() => setActiveTab('marketplace')} className="border-slate-700">
+   473→                    Browse Marketplace <ChevronRight className="h-4 w-4 ml-1" />
+   474→                  </Button>
+   475→                </CardContent>
+   476→              </Card>
+   477→            ) : (
+   478→              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+   479→                {d.myInstalls.map((inst) => (
+   480→                  <InstallCard key={inst.id} inst={inst} onUninstall={() => handleUninstall(inst.extensionSlug, inst.extensionName)} />
+   481→                ))}
+   482→              </div>
+   483→            )}
+   484→          </TabsContent>
+   485→
+   486→          {/* ─── Webhooks ─── */}
+   487→          <TabsContent value="webhooks" className="space-y-4 mt-4">
+   488→            <div className="flex items-center justify-between">
+   489→              <div>
+   490→                <h2 className="text-lg font-semibold text-slate-100">Webhook Subscriptions</h2>
+   491→                <p className="text-sm text-slate-400">{d.webhooks.activeSubscriptions} active · {d.webhooks.successRate.toFixed(1)}% delivery success</p>
+   492→              </div>
+   493→              <Button onClick={() => setWebhookOpen(true)} className="bg-sky-600 hover:bg-sky-700">
+   494→                <Plus className="h-4 w-4 mr-2" /> New Webhook
+   495→              </Button>
+   496→            </div>
+   497→
+   498→            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+   499→              <Card className="bg-slate-900/60 border-slate-800">
+   500→                <CardHeader>
+   501→                  <CardTitle className="text-slate-100 text-base">Subscriptions</CardTitle>
+   502→                </CardHeader>
+   503→                <CardContent className="space-y-2 max-h-96 overflow-y-auto">
+   504→                  {d.webhooks.subscriptions.length === 0 ? (
+   505→                    <p className="text-sm text-slate-500 py-6 text-center">No subscriptions. Create one to receive events.</p>
+   506→                  ) : (
+   507→                    d.webhooks.subscriptions.map((s) => (
+   508→                      <WebhookRow key={s.id} sub={s} onDelete={() => handleDeleteWebhook(s.id, s.label)} />
+   509→                    ))
+   510→                  )}
+   511→                </CardContent>
+   512→              </Card>
+   513→
+   514→              <Card className="bg-slate-900/60 border-slate-800">
+   515→                <CardHeader>
+   516→                  <CardTitle className="text-slate-100 text-base">Event Catalog</CardTitle>
+   517→                  <CardDescription className="text-slate-400">Fire any event to test your subscriptions.</CardDescription>
+   518→                </CardHeader>
+   519→                <CardContent className="space-y-1.5 max-h-96 overflow-y-auto">
+   520→                  {d.webhooks.eventCatalog.map((ev) => (
+   521→                    <div key={ev.type} className="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-950/40 px-3 py-2">
+   522→                      <div className="min-w-0">
+   523→                        <div className="flex items-center gap-2">
+   524→                          <code className="text-xs text-emerald-300">{ev.type}</code>
+   525→                          <Badge variant="outline" className="border-slate-700 text-slate-400 text-[10px]">{ev.module}</Badge>
+   526→                        </div>
+   527→                        <p className="text-xs text-slate-500 truncate">{ev.description}</p>
+   528→                      </div>
+   529→                      <Button size="sm" variant="ghost" onClick={() => handleEmitEvent(ev.type)} className="text-sky-300 hover:text-sky-200 h-7 px-2">
+   530→                        <Send className="h-3 w-3" />
+   531→                      </Button>
+   532→                    </div>
+   533→                  ))}
+   534→                </CardContent>
+   535→              </Card>
+   536→            </div>
+   537→
+   538→            <Card className="bg-slate-900/60 border-slate-800">
+   539→              <CardHeader>
+   540→                <CardTitle className="text-slate-100 text-base">Recent Deliveries</CardTitle>
+   541→              </CardHeader>
+   542→              <CardContent className="space-y-1.5 max-h-80 overflow-y-auto">
+   543→                {d.webhooks.recentDeliveries.length === 0 ? (
+   544→                  <p className="text-sm text-slate-500 py-6 text-center">No deliveries yet. Emit an event to test.</p>
+   545→                ) : (
+   546→                  d.webhooks.recentDeliveries.map((dl) => (
+   547→                    <div key={dl.id} className="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-950/40 px-3 py-2 text-xs">
+   548→                      <div className="flex items-center gap-2 min-w-0">
+   549→                        {dl.status === 'success' ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 shrink-0" /> : <XCircle className="h-3.5 w-3.5 text-red-400 shrink-0" />}
+   550→                        <code className="text-emerald-300 truncate">{dl.eventType}</code>
+   551→                        <span className="text-slate-500">{timeAgo(dl.createdAt)}</span>
+   552→                      </div>
+   553→                      <div className="flex items-center gap-2 text-slate-400">
+   554→                        {dl.statusCode && <Badge variant="outline" className="border-slate-700 text-[10px]">{dl.statusCode}</Badge>}
+   555→                        {dl.responseMs != null && <span>{dl.responseMs}ms</span>}
+   556→                      </div>
+   557→                    </div>
+   558→                  ))
+   559→                )}
+   560→              </CardContent>
+   561→            </Card>
+   562→          </TabsContent>
+   563→
+   564→          {/* ─── API Keys ─── */}
+   565→          <TabsContent value="api-keys" className="space-y-4 mt-4">
+   566→            <div className="flex items-center justify-between">
+   567→              <div>
+   568→                <h2 className="text-lg font-semibold text-slate-100">API Keys</h2>
+   569→                <p className="text-sm text-slate-400">{d.apiGateway.activeKeys} active · {d.apiGateway.revokedKeys} revoked · {fmtNum(d.apiGateway.callsToday)} calls today</p>
+   570→              </div>
+   571→              <Button onClick={() => setApiKeyOpen(true)} className="bg-violet-600 hover:bg-violet-700">
+   572→                <Plus className="h-4 w-4 mr-2" /> Create API Key
+   573→              </Button>
+   574→            </div>
+   575→
+   576→            {newApiKey && (
+   577→              <Card className="bg-emerald-950/40 border-emerald-500/40">
+   578→                <CardContent className="pt-4">
+   579→                  <div className="flex items-start gap-3">
+   580→                    <Key className="h-5 w-5 text-emerald-300 mt-0.5" />
+   581→                    <div className="flex-1 min-w-0">
+   582→                      <p className="text-sm font-semibold text-emerald-200">Your new API key — copy it now, it won&apos;t be shown again.</p>
+   583→                      <code className="block mt-2 px-3 py-2 rounded bg-slate-950 border border-emerald-500/30 text-emerald-300 text-xs break-all font-mono">{newApiKey}</code>
+   584→                    </div>
+   585→                    <Button size="sm" variant="outline" onClick={() => navigator.clipboard?.writeText(newApiKey)} className="border-emerald-500/40 text-emerald-200">
+   586→                      Copy
+   587→                    </Button>
+   588→                    <Button size="sm" variant="ghost" onClick={() => setNewApiKey(null)} className="text-slate-400">Dismiss</Button>
+   589→                  </div>
+   590→                </CardContent>
+   591→              </Card>
+   592→            )}
+   593→
+   594→            <Card className="bg-slate-900/60 border-slate-800">
+   595→              <CardContent className="pt-4">
+   596→                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+   597→                  <MiniStat label="Error rate" value={`${d.apiGateway.errorRatePct.toFixed(2)}%`} />
+   598→                  <MiniStat label="Avg latency" value={`${Math.round(d.apiGateway.avgLatencyMs)}ms`} />
+   599→                  <MiniStat label="p95 latency" value={`${Math.round(d.apiGateway.p95LatencyMs)}ms`} />
+   600→                  <MiniStat label="Rate limit" value={`${d.apiGateway.rateLimits.perMin}/min`} />
+   601→                </div>
+   602→                <div className="flex flex-wrap gap-2 mb-4">
+   603→                  {d.apiGateway.authModes.map((m) => (
+   604→                    <Badge key={m} variant="outline" className="border-violet-500/40 text-violet-300">{m}</Badge>
+   605→                  ))}
+   606→                </div>
+   607→              </CardContent>
+   608→            </Card>
+   609→
+   610→            <Card className="bg-slate-900/60 border-slate-800">
+   611→              <CardHeader>
+   612→                <CardTitle className="text-slate-100 text-base">Your Keys</CardTitle>
+   613→              </CardHeader>
+   614→              <CardContent className="space-y-2">
+   615→                {d.apiGateway.keys.length === 0 ? (
+   616→                  <p className="text-sm text-slate-500 py-6 text-center">No API keys yet. Create one to start building.</p>
+   617→                ) : (
+   618→                  d.apiGateway.keys.map((k) => (
+   619→                    <div key={k.id} className="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-950/40 px-3 py-2">
+   620→                      <div className="min-w-0">
+   621→                        <div className="flex items-center gap-2">
+   622→                          <span className="text-sm font-medium text-slate-200">{k.name}</span>
+   623→                          {k.status === 'active' ? (
+   624→                            <Badge variant="outline" className="border-emerald-500/40 text-emerald-300 text-[10px]">active</Badge>
+   625→                          ) : (
+   626→                            <Badge variant="outline" className="border-red-500/40 text-red-300 text-[10px]">{k.status}</Badge>
+   627→                          )}
+   628→                        </div>
+   629→                        <div className="flex items-center gap-2 mt-1 text-xs text-slate-500">
+   630→                          <code className="font-mono">{k.keyPrefix}…</code>
+   631→                          <span>· {fmtNum(k.callsTotal)} calls · last used {timeAgo(k.lastUsedAt)}</span>
+   632→                        </div>
+   633→                        <div className="flex flex-wrap gap-1 mt-1">
+   634→                          {k.scopes.map((s) => (
+   635→                            <Badge key={s} variant="outline" className="border-slate-700 text-slate-400 text-[10px]">{s}</Badge>
+   636→                          ))}
+   637→                        </div>
+   638→                      </div>
+   639→                      {k.status === 'active' && (
+   640→                        <Button size="sm" variant="ghost" onClick={() => handleRevokeKey(k.id, k.name)} className="text-red-300 hover:text-red-200 h-7">
+   641→                          <Trash2 className="h-3.5 w-3.5" />
+   642→                        </Button>
+   643→                      )}
+   644→                    </div>
+   645→                  ))
+   646→                )}
+   647→              </CardContent>
+   648→            </Card>
+   649→          </TabsContent>
+   650→
+   651→          {/* ─── Low-Code Studio ─── */}
+   652→          <TabsContent value="lowcode" className="space-y-4 mt-4">
+   653→            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+   654→              <MiniStat label="Forms" value={fmtNum(d.lowCode.totalForms)} />
+   655→              <MiniStat label="Submissions" value={fmtNum(d.lowCode.totalSubmissions)} />
+   656→              <MiniStat label="Workflows" value={fmtNum(d.lowCode.totalWorkflows)} />
+   657→              <MiniStat label="Workflow runs" value={fmtNum(d.lowCode.totalRuns)} />
+   658→            </div>
+   659→
+   660→            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+   661→              <Card className="bg-slate-900/60 border-slate-800">
+   662→                <CardHeader className="flex-row items-center justify-between space-y-0">
+   663→                  <CardTitle className="text-slate-100 text-base">Forms</CardTitle>
+   664→                  <Button size="sm" onClick={() => setFormOpen(true)} className="bg-emerald-600 hover:bg-emerald-700 h-7">
+   665→                    <Plus className="h-3.5 w-3.5 mr-1" /> New Form
+   666→                  </Button>
+   667→                </CardHeader>
+   668→                <CardContent className="space-y-2 max-h-96 overflow-y-auto">
+   669→                  {d.lowCode.forms.length === 0 ? (
+   670→                    <p className="text-sm text-slate-500 py-6 text-center">No forms yet.</p>
+   671→                  ) : (
+   672→                    d.lowCode.forms.map((f) => (
+   673→                      <div key={f.id} className="rounded-lg border border-slate-800 bg-slate-950/40 px-3 py-2">
+   674→                        <div className="flex items-center justify-between">
+   675→                          <span className="text-sm font-medium text-slate-200">{f.title}</span>
+   676→                          <Badge variant="outline" className="border-emerald-500/40 text-emerald-300 text-[10px]">{f.submissionsCount} submits</Badge>
+   677→                        </div>
+   678→                        <p className="text-xs text-slate-500 mt-0.5">{f.schema.length} fields · /{f.slug}</p>
+   679→                      </div>
+   680→                    ))
+   681→                  )}
+   682→                </CardContent>
+   683→              </Card>
+   684→
+   685→              <Card className="bg-slate-900/60 border-slate-800">
+   686→                <CardHeader className="flex-row items-center justify-between space-y-0">
+   687→                  <CardTitle className="text-slate-100 text-base">Workflows</CardTitle>
+   688→                  <Button size="sm" onClick={() => setWorkflowOpen(true)} className="bg-sky-600 hover:bg-sky-700 h-7">
+   689→                    <Plus className="h-3.5 w-3.5 mr-1" /> New Workflow
+   690→                  </Button>
+   691→                </CardHeader>
+   692→                <CardContent className="space-y-2 max-h-96 overflow-y-auto">
+   693→                  {d.lowCode.workflows.length === 0 ? (
+   694→                    <p className="text-sm text-slate-500 py-6 text-center">No workflows yet.</p>
+   695→                  ) : (
+   696→                    d.lowCode.workflows.map((w) => (
+   697→                      <div key={w.id} className="rounded-lg border border-slate-800 bg-slate-950/40 px-3 py-2">
+   698→                        <div className="flex items-center justify-between">
+   699→                          <span className="text-sm font-medium text-slate-200">{w.title}</span>
+   700→                          <Button size="sm" variant="ghost" onClick={() => handleRunWorkflow(w.id, w.title)} className="text-sky-300 hover:text-sky-200 h-6 px-2">
+   701→                            <Play className="h-3 w-3 mr-1" /> Run
+   702→                          </Button>
+   703→                        </div>
+   704→                        <div className="flex items-center gap-2 mt-1 text-xs text-slate-500">
+   705→                          <Badge variant="outline" className="border-slate-700 text-slate-400 text-[10px]">{w.trigger}</Badge>
+   706→                          <span>{w.steps.length} steps · {w.runsCount} runs · {w.successRate.toFixed(0)}% success</span>
+   707→                        </div>
+   708→                      </div>
+   709→                    ))
+   710→                  )}
+   711→                </CardContent>
+   712→              </Card>
+   713→            </div>
+   714→
+   715→            <Card className="bg-slate-900/60 border-slate-800">
+   716→              <CardHeader>
+   717→                <CardTitle className="text-slate-100 text-base">Recent Submissions</CardTitle>
+   718→              </CardHeader>
+   719→              <CardContent className="space-y-1.5 max-h-72 overflow-y-auto">
+   720→                {d.lowCode.recentSubmissions.length === 0 ? (
+   721→                  <p className="text-sm text-slate-500 py-6 text-center">No submissions yet.</p>
+   722→                ) : (
+   723→                  d.lowCode.recentSubmissions.map((s) => (
+   724→                    <div key={s.id} className="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-950/40 px-3 py-2 text-xs">
+   725→                      <div className="min-w-0">
+   726→                        <span className="text-slate-200">{s.formTitle}</span>
+   727→                        <span className="text-slate-500 ml-2">{s.submitterEmail ?? 'anonymous'}</span>
+   728→                      </div>
+   729→                      <span className="text-slate-500">{timeAgo(s.createdAt)}</span>
+   730→                    </div>
+   731→                  ))
+   732→                )}
+   733→              </CardContent>
+   734→            </Card>
+   735→          </TabsContent>
+   736→
+   737→          {/* ─── Observability ─── */}
+   738→          <TabsContent value="observability" className="space-y-4 mt-4">
+   739→            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+   740→              <MiniStat label="API calls today" value={fmtNum(d.observability.apiCallsToday)} />
+   741→              <MiniStat label="API calls (7d)" value={fmtNum(d.observability.apiCalls7d)} />
+   742→              <MiniStat label="Error rate" value={`${d.observability.errorRatePct.toFixed(2)}%`} />
+   743→              <MiniStat label="Avg latency" value={`${Math.round(d.observability.avgLatencyMs)}ms`} />
+   744→            </div>
+   745→
+   746→            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+   747→              <Card className="bg-slate-900/60 border-slate-800">
+   748→                <CardHeader>
+   749→                  <CardTitle className="text-slate-100 text-base">7-Day API Usage</CardTitle>
+   750→                </CardHeader>
+   751→                <CardContent>
+   752→                  <div className="flex items-end justify-between gap-2 h-40">
+   753→                    {d.observability.callsByDay.map((day) => {
+   754→                      const max = Math.max(1, ...d.observability.callsByDay.map((x) => x.calls));
+   755→                      const h = (day.calls / max) * 100;
+   756→                      return (
+   757→                        <div key={day.date} className="flex-1 flex flex-col items-center gap-1">
+   758→                          <div className="w-full rounded-t bg-gradient-to-t from-emerald-600 to-teal-400" style={{ height: `${Math.max(4, h)}%` }} title={`${day.calls} calls`} />
+   759→                          <span className="text-[10px] text-slate-500">{day.date.slice(5)}</span>
+   760→                        </div>
+   761→                      );
+   762→                    })}
+   763→                  </div>
+   764→                </CardContent>
+   765→              </Card>
+   766→
+   767→              <Card className="bg-slate-900/60 border-slate-800">
+   768→                <CardHeader>
+   769→                  <CardTitle className="text-slate-100 text-base">Top Endpoints</CardTitle>
+   770→                </CardHeader>
+   771→                <CardContent className="space-y-1.5 max-h-52 overflow-y-auto">
+   772→                  {d.observability.callsByEndpoint.length === 0 ? (
+   773→                    <p className="text-sm text-slate-500 py-4 text-center">No endpoint traffic logged yet.</p>
+   774→                  ) : (
+   775→                    d.observability.callsByEndpoint.map((e) => (
+   776→                      <div key={e.endpoint} className="flex items-center justify-between text-xs">
+   777→                        <code className="text-slate-300 truncate font-mono">{e.endpoint}</code>
+   778→                        <div className="flex items-center gap-2 text-slate-500">
+   779→                          <span>{fmtNum(e.calls)} calls</span>
+   780→                          {e.errors > 0 && <Badge variant="outline" className="border-red-500/40 text-red-300 text-[10px]">{e.errors} err</Badge>}
+   781→                          <span>{Math.round(e.avgMs)}ms</span>
+   782→                        </div>
+   783→                      </div>
+   784→                    ))
+   785→                  )}
+   786→                </CardContent>
+   787→              </Card>
+   788→            </div>
+   789→
+   790→            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+   791→              <Card className="bg-slate-900/60 border-slate-800">
+   792→                <CardHeader>
+   793→                  <CardTitle className="text-slate-100 text-base">Plugin Usage</CardTitle>
+   794→                </CardHeader>
+   795→                <CardContent className="space-y-2">
+   796→                  {d.observability.pluginUsage.map((p) => (
+   797→                    <div key={p.plugin} className="flex items-center justify-between text-sm">
+   798→                      <span className="text-slate-200">{p.plugin}</span>
+   799→                      <span className="text-slate-400">{fmtNum(p.installs)} installs</span>
+   800→                    </div>
+   801→                  ))}
+   802→                </CardContent>
+   803→              </Card>
+   804→
+   805→              <Card className="bg-slate-900/60 border-slate-800">
+   806→                <CardHeader>
+   807→                  <CardTitle className="text-slate-100 text-base">SDK Activity</CardTitle>
+   808→                </CardHeader>
+   809→                <CardContent className="space-y-2">
+   810→                  {d.observability.sdkActivity.map((s) => (
+   811→                    <div key={s.sdk} className="flex items-center justify-between text-sm">
+   812→                      <code className="text-slate-300 font-mono">{s.sdk}</code>
+   813→                      <span className="text-slate-400">{fmtNum(s.downloads)} downloads</span>
+   814→                    </div>
+   815→                  ))}
+   816→                </CardContent>
+   817→              </Card>
+   818→            </div>
+   819→
+   820→            <Card className="bg-slate-900/60 border-slate-800">
+   821→              <CardHeader>
+   822→                <CardTitle className="text-slate-100 text-base">Developer Activity</CardTitle>
+   823→              </CardHeader>
+   824→              <CardContent>
+   825→                <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+   826→                  {d.observability.developerActivity.map((a) => (
+   827→                    <div key={a.metric} className="rounded-lg border border-slate-800 bg-slate-950/40 px-3 py-2 text-center">
+   828→                      <div className="text-lg font-semibold text-emerald-300">{fmtNum(a.value)}</div>
+   829→                      <div className="text-[10px] text-slate-500 mt-0.5">{a.metric}</div>
+   830→                    </div>
+   831→                  ))}
+   832→                </div>
+   833→              </CardContent>
+   834→            </Card>
+   835→          </TabsContent>
+   836→
+   837→          {/* ─── Developers ─── */}
+   838→          <TabsContent value="developers" className="space-y-4 mt-4">
+   839→            <Card className="bg-slate-900/60 border-slate-800">
+   840→              <CardHeader>
+   841→                <CardTitle className="text-slate-100 flex items-center gap-2">
+   842→                  <Code2 className="h-5 w-5 text-amber-400" /> SDK Catalog
+   843→                </CardTitle>
+   844→                <CardDescription className="text-slate-400">Official SDKs across 6 languages.</CardDescription>
+   845→              </CardHeader>
+   846→              <CardContent>
+   847→                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+   848→                  {d.developers.sdks.map((s) => (
+   849→                    <div key={s.language} className="rounded-lg border border-slate-800 bg-slate-950/40 p-3">
+   850→                      <div className="flex items-center justify-between">
+   851→                        <span className="font-semibold text-slate-100">{s.language}</span>
+   852→                        <Badge variant="outline" className="border-amber-500/40 text-amber-300 text-[10px]">v{s.version}</Badge>
+   853→                      </div>
+   854→                      <code className="block mt-2 text-xs text-emerald-300 font-mono break-all">{s.package}</code>
+   855→                      <code className="block mt-1 text-[11px] text-slate-400 font-mono break-all">$ {s.installCommand}</code>
+   856→                      <div className="flex flex-wrap gap-1 mt-2">
+   857→                        {s.authSupport.map((a) => (
+   858→                          <Badge key={a} variant="outline" className="border-slate-700 text-slate-400 text-[10px]">{a}</Badge>
+   859→                        ))}
+   860→                      </div>
+   861→                    </div>
+   862→                  ))}
+   863→                </div>
+   864→              </CardContent>
+   865→            </Card>
+   866→
+   867→            <Card className="bg-slate-900/60 border-slate-800">
+   868→              <CardHeader>
+   869→                <CardTitle className="text-slate-100 flex items-center gap-2">
+   870→                  <Users2 className="h-5 w-5 text-sky-400" /> Registered Developers
+   871→                </CardTitle>
+   872→                <CardDescription className="text-slate-400">{d.developers.totalDevelopers} total · {d.developers.certifiedCount} certified · {d.developers.strategicCount} strategic · {fmtNum(d.developers.totalInstalls)} total installs</CardDescription>
+   873→              </CardHeader>
+   874→              <CardContent className="space-y-1.5 max-h-96 overflow-y-auto">
+   875→                {d.developers.developers.map((dev) => (
+   876→                  <div key={dev.id} className="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-950/40 px-3 py-2">
+   877→                    <div className="min-w-0">
+   878→                      <div className="flex items-center gap-2">
+   879→                        <span className="text-sm font-medium text-slate-200">{dev.name}</span>
+   880→                        <code className="text-xs text-slate-500">@{dev.handle}</code>
+   881→                      </div>
+   882→                      <div className="flex items-center gap-2 mt-0.5 text-xs text-slate-500">
+   883→                        <span>{dev.appsPublished} apps</span>
+   884→                        <span>· {fmtNum(dev.totalInstalls)} installs</span>
+   885→                        <span>· joined {timeAgo(dev.joinedAt)}</span>
+   886→                      </div>
+   887→                    </div>
+   888→                    <div className="flex items-center gap-1.5">
+   889→                      <TierBadge tier={dev.tier} />
+   890→                      <Badge variant="outline" className="border-slate-700 text-slate-400 text-[10px]">{dev.status}</Badge>
+   891→                    </div>
+   892→                  </div>
+   893→                ))}
+   894→              </CardContent>
+   895→            </Card>
+   896→          </TabsContent>
+   897→        </Tabs>
+   898→
+   899→        {/* ─── Footer ─── */}
+   900→        <footer className="pt-6 mt-6 border-t border-slate-800/60 text-center text-xs text-slate-500">
+   901→          <p className="font-semibold text-slate-400">{ECOSYSTEM_TAGLINE}</p>
+   902→          <p className="mt-1">{d.subsystemsImplemented}/{d.subsystemsTotal} subsystems · {ECOSYSTEM_SUBSYSTEMS.length} specified · all values derived from {d.dataSources.length} live data sources</p>
+   903→        </footer>
+   904→      </main>
+   905→
+   906→      {/* ─── Publish Extension Dialog ─── */}
+   907→      <PublishDialog open={publishOpen} onOpenChange={setPublishOpen} onDone={load} apiPost={apiPost} />
+   908→
+   909→      {/* ─── Create Webhook Dialog ─── */}
+   910→      <WebhookDialog open={webhookOpen} onOpenChange={setWebhookOpen} onDone={load} apiPost={apiPost} eventCatalog={d.webhooks.eventCatalog.map((e) => e.type)} />
+   911→
+   912→      {/* ─── Create Form Dialog ─── */}
+   913→      <FormDialog open={formOpen} onOpenChange={setFormOpen} onDone={load} apiPost={apiPost} />
+   914→
+   915→      {/* ─── Create Workflow Dialog ─── */}
+   916→      <WorkflowDialog open={workflowOpen} onOpenChange={setWorkflowOpen} onDone={load} apiPost={apiPost} />
+   917→
+   918→      {/* ─── Create API Key Dialog ─── */}
+   919→      <ApiKeyDialog
+   920→        open={apiKeyOpen}
+   921→        onOpenChange={setApiKeyOpen}
+   922→        onCreated={(full) => { setNewApiKey(full); load(); }}
+   923→        apiPost={apiPost}
+   924→      />
+   925→    </div>
+   926→  );
+   927→}
+   928→
+   929→// ─── Sub-components ───────────────────────────────────────────────────────────
+   930→
+   931→const ACCENT_MAP: Record<string, string> = {
+   932→  emerald: 'from-emerald-500/20 to-emerald-600/5 border-emerald-500/30 text-emerald-300',
+   933→  teal: 'from-teal-500/20 to-teal-600/5 border-teal-500/30 text-teal-300',
+   934→  sky: 'from-sky-500/20 to-sky-600/5 border-sky-500/30 text-sky-300',
+   935→  violet: 'from-violet-500/20 to-violet-600/5 border-violet-500/30 text-violet-300',
+   936→  amber: 'from-amber-500/20 to-amber-600/5 border-amber-500/30 text-amber-300',
+   937→  rose: 'from-rose-500/20 to-rose-600/5 border-rose-500/30 text-rose-300',
+   938→};
+   939→
+   940→function KpiCard({ icon: Icon, label, value, sub, accent }: { icon: LucideIcon; label: string; value: string; sub: string; accent: string }) {
+   941→  return (
+   942→    <motion.div
+   943→      initial={{ opacity: 0, y: 8 }}
+   944→      animate={{ opacity: 1, y: 0 }}
+   945→      className={`rounded-xl border bg-gradient-to-br p-4 ${ACCENT_MAP[accent] ?? ACCENT_MAP.emerald}`}
+   946→    >
+   947→      <div className="flex items-center justify-between">
+   948→        <span className="text-xs text-slate-400">{label}</span>
+   949→        <Icon className="h-4 w-4 opacity-70" />
+   950→      </div>
+   951→      <div className="mt-1 text-2xl font-bold text-slate-100">{value}</div>
+   952→      <div className="text-[11px] text-slate-500 mt-0.5">{sub}</div>
+   953→    </motion.div>
+   954→  );
+   955→}
+   956→
+   957→function MiniStat({ label, value }: { label: string; value: string }) {
+   958→  return (
+   959→    <div className="rounded-lg border border-slate-800 bg-slate-950/40 px-3 py-2">
+   960→      <div className="text-lg font-semibold text-slate-100">{value}</div>
+   961→      <div className="text-[10px] text-slate-500 mt-0.5">{label}</div>
+   962→    </div>
+   963→  );
+   964→}
+   965→
+   966→function StatRow({ label, value }: { label: string; value: string }) {
+   967→  return (
+   968→    <div className="flex items-center justify-between text-sm">
+   969→      <span className="text-slate-400">{label}</span>
+   970→      <span className="text-slate-200 font-medium text-right">{value}</span>
+   971→    </div>
+   972→  );
+   973→}
+   974→
+   975→function TierBadge({ tier }: { tier: string }) {
+   976→  const map: Record<string, string> = {
+   977→    strategic: 'border-amber-500/40 text-amber-300 bg-amber-500/10',
+   978→    certified: 'border-emerald-500/40 text-emerald-300 bg-emerald-500/10',
+   979→    partner: 'border-sky-500/40 text-sky-300 bg-sky-500/10',
+   980→    individual: 'border-slate-600 text-slate-400',
+   981→  };
+   982→  return <Badge variant="outline" className={`text-[10px] ${map[tier] ?? map.individual}`}>{tier}</Badge>;
+   983→}
+   984→
+   985→function ExtensionCard({
+   986→  ext,
+   987→  installed,
+   988→  onInstall,
+   989→  onUninstall,
+   990→  compact,
+   991→}: {
+   992→  ext: Extension;
+   993→  installed: boolean;
+   994→  onInstall: () => void;
+   995→  onUninstall: () => void;
+   996→  compact?: boolean;
+   997→}) {
+   998→  return (
+   999→    <motion.div
+  1000→      initial={{ opacity: 0, y: 6 }}
+  1001→      animate={{ opacity: 1, y: 0 }}
+  1002→      className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 flex flex-col"
+  1003→    >
+  1004→      <div className="flex items-start justify-between gap-2">
+  1005→        <div className="min-w-0">
+  1006→          <div className="flex items-center gap-2">
+  1007→            <h3 className="font-semibold text-slate-100 truncate">{ext.displayName}</h3>
+  1008→            <Badge variant="outline" className="border-slate-700 text-slate-400 text-[10px] shrink-0">v{ext.version}</Badge>
+  1009→          </div>
+  1010→          <p className="text-xs text-slate-500 mt-0.5">by {ext.publisher}</p>
+  1011→        </div>
+  1012→        <Badge variant="outline" className="border-emerald-500/40 text-emerald-300 text-[10px] shrink-0 capitalize">{ext.kind}</Badge>
+  1013→      </div>
+  1014→
+  1015→      {!compact && <p className="text-sm text-slate-400 mt-2 line-clamp-2">{ext.description}</p>}
+  1016→
+  1017→      <div className="flex items-center gap-3 mt-3 text-xs text-slate-500">
+  1018→        <span className="capitalize">{ext.category}</span>
+  1019→        <span className="flex items-center gap-0.5">
+  1020→          <Star className="h-3 w-3 text-amber-400 fill-amber-400" />
+  1021→          {ext.ratingAvg > 0 ? ext.ratingAvg.toFixed(1) : '—'} ({ext.ratingCount})
+  1022→        </span>
+  1023→        <span className="flex items-center gap-0.5">
+  1024→          <Download className="h-3 w-3" /> {fmtNum(ext.installCount)}
+  1025→        </span>
+  1026→        {ext.pricingModel !== 'free' && (
+  1027→          <Badge variant="outline" className="border-amber-500/40 text-amber-300 text-[10px]">{fmtINR(ext.priceInr)}/{ext.pricingModel === 'one_time' ? 'once' : 'mo'}</Badge>
+  1028→        )}
+  1029→        {ext.pricingModel === 'free' && (
+  1030→          <Badge variant="outline" className="border-emerald-500/40 text-emerald-300 text-[10px]">Free</Badge>
+  1031→        )}
+  1032→      </div>
+  1033→
+  1034→      <div className="mt-auto pt-3">
+  1035→        {installed ? (
+  1036→          <Button size="sm" variant="outline" onClick={onUninstall} className="w-full border-red-500/40 text-red-300 hover:bg-red-500/10 h-8">
+  1037→            <Trash2 className="h-3.5 w-3.5 mr-1.5" /> Uninstall
+  1038→          </Button>
+  1039→        ) : (
+  1040→          <Button size="sm" onClick={onInstall} className="w-full bg-emerald-600 hover:bg-emerald-700 h-8">
+  1041→            <Download className="h-3.5 w-3.5 mr-1.5" /> Install
+  1042→          </Button>
+  1043→        )}
+  1044→      </div>
+  1045→    </motion.div>
+  1046→  );
+  1047→}
+  1048→
+  1049→function InstallCard({ inst, onUninstall }: { inst: ExtensionInstall; onUninstall: () => void }) {
+  1050→  return (
+  1051→    <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
+  1052→      <div className="flex items-start justify-between gap-2">
+  1053→        <div className="min-w-0">
+  1054→          <div className="flex items-center gap-2">
+  1055→            <h3 className="font-semibold text-slate-100 truncate">{inst.extensionName}</h3>
+  1056→            <Badge variant="outline" className="border-slate-700 text-slate-400 text-[10px] shrink-0">v{inst.version}</Badge>
+  1057→          </div>
+  1058→          <p className="text-xs text-slate-500 mt-0.5">installed {timeAgo(inst.createdAt)}</p>
+  1059→        </div>
+  1060→        <Badge variant="outline" className="border-emerald-500/40 text-emerald-300 text-[10px] shrink-0 capitalize">{inst.status}</Badge>
+  1061→      </div>
+  1062→      <div className="flex flex-wrap gap-1 mt-2">
+  1063→        {inst.permissions.slice(0, 4).map((p) => (
+  1064→          <Badge key={p} variant="outline" className="border-slate-700 text-slate-400 text-[10px]">{p}</Badge>
+  1065→        ))}
+  1066→        {inst.permissions.length > 4 && (
+  1067→          <Badge variant="outline" className="border-slate-700 text-slate-400 text-[10px]">+{inst.permissions.length - 4}</Badge>
+  1068→        )}
+  1069→      </div>
+  1070→      <div className="mt-3">
+  1071→        <Button size="sm" variant="outline" onClick={onUninstall} className="w-full border-red-500/40 text-red-300 hover:bg-red-500/10 h-8">
+  1072→          <Trash2 className="h-3.5 w-3.5 mr-1.5" /> Uninstall
+  1073→        </Button>
+  1074→      </div>
+  1075→    </div>
+  1076→  );
+  1077→}
+  1078→
+  1079→function WebhookRow({ sub, onDelete }: { sub: WebhookSubscription; onDelete: () => void }) {
+  1080→  return (
+  1081→    <div className="rounded-lg border border-slate-800 bg-slate-950/40 px-3 py-2">
+  1082→      <div className="flex items-center justify-between">
+  1083→        <span className="text-sm font-medium text-slate-200">{sub.label}</span>
+  1084→        <Button size="sm" variant="ghost" onClick={onDelete} className="text-red-300 hover:text-red-200 h-6 px-2">
+  1085→          <Trash2 className="h-3 w-3" />
+  1086→        </Button>
+  1087→      </div>
+  1088→      <div className="flex items-center gap-2 mt-0.5 text-xs text-slate-500">
+  1089→        <code className="font-mono truncate max-w-[200px]">{sub.targetUrl}</code>
+  1090→      </div>
+  1091→      <div className="flex items-center gap-2 mt-1 text-xs">
+  1092→        {sub.status === 'active' ? (
+  1093→          <Badge variant="outline" className="border-emerald-500/40 text-emerald-300 text-[10px]">active</Badge>
+  1094→        ) : sub.status === 'failing' ? (
+  1095→          <Badge variant="outline" className="border-amber-500/40 text-amber-300 text-[10px]">failing</Badge>
+  1096→        ) : (
+  1097→          <Badge variant="outline" className="border-slate-600 text-slate-400 text-[10px]">{sub.status}</Badge>
+  1098→        )}
+  1099→        <span className="text-slate-500">{sub.deliveries} deliveries · {sub.successRate.toFixed(0)}% success</span>
+  1100→      </div>
+  1101→      <div className="flex flex-wrap gap-1 mt-1">
+  1102→        {sub.eventTypes.slice(0, 3).map((e) => (
+  1103→          <Badge key={e} variant="outline" className="border-slate-700 text-slate-400 text-[10px]">{e}</Badge>
+  1104→        ))}
+  1105→        {sub.eventTypes.length > 3 && (
+  1106→          <Badge variant="outline" className="border-slate-700 text-slate-400 text-[10px]">+{sub.eventTypes.length - 3}</Badge>
+  1107→        )}
+  1108→      </div>
+  1109→    </div>
+  1110→  );
+  1111→}
+  1112→
+  1113→// ─── Dialogs ──────────────────────────────────────────────────────────────────
+  1114→type ApiPostFn = (endpoint: string, body: unknown) => Promise<{ ok: boolean; data: unknown }>;
+  1115→
+  1116→function PublishDialog({ open, onOpenChange, onDone, apiPost }: { open: boolean; onOpenChange: (o: boolean) => void; onDone: () => void; apiPost: ApiPostFn }) {
+  1117→  const { toast } = useToast();
+  1118→  const [name, setName] = useState('');
+  1119→  const [description, setDescription] = useState('');
+  1120→  const [kind, setKind] = useState('app');
+  1121→  const [category, setCategory] = useState('ai');
+  1122→  const [version, setVersion] = useState('1.0.0');
+  1123→  const [permissions, setPermissions] = useState('read,write');
+  1124→  const [submitting, setSubmitting] = useState(false);
+  1125→
+  1126→  async function submit() {
+  1127→    if (!name) { toast({ title: 'Name required', variant: 'destructive' }); return; }
+  1128→    setSubmitting(true);
+  1129→    const { ok } = await apiPost('publish-extension', {
+  1130→      name, displayName: name, description, kind, category, version,
+  1131→      permissions: permissions.split(',').map((s) => s.trim()).filter(Boolean),
+  1132→      visibility: 'private', pricingModel: 'free',
+  1133→    });
+  1134→    setSubmitting(false);
+  1135→    if (ok) {
+  1136→      toast({ title: 'Extension published', description: `${name} is now in your private app store.` });
+  1137→      setName(''); setDescription(''); setPermissions('read,write'); setVersion('1.0.0');
+  1138→      onOpenChange(false); onDone();
+  1139→    }
+  1140→  }
+  1141→
+  1142→  return (
+  1143→    <Dialog open={open} onOpenChange={onOpenChange}>
+  1144→      <DialogContent className="bg-slate-900 border-slate-700 text-slate-100 max-w-lg">
+  1145→        <DialogHeader>
+  1146→          <DialogTitle>Publish Private App</DialogTitle>
+  1147→          <DialogDescription className="text-slate-400">Add an extension to your organisation&apos;s private app store.</DialogDescription>
+  1148→        </DialogHeader>
+  1149→        <div className="space-y-3">
+  1150→          <div>
+  1151→            <Label className="text-slate-300">App Name</Label>
+  1152→            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="My Custom Tool" className="bg-slate-950 border-slate-700 mt-1" />
+  1153→          </div>
+  1154→          <div>
+  1155→            <Label className="text-slate-300">Description</Label>
+  1156→            <Textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="What does this app do?" className="bg-slate-950 border-slate-700 mt-1 min-h-20" />
+  1157→          </div>
+  1158→          <div className="grid grid-cols-2 gap-3">
+  1159→            <div>
+  1160→              <Label className="text-slate-300">Kind</Label>
+  1161→              <Select value={kind} onValueChange={setKind}>
+  1162→                <SelectTrigger className="bg-slate-950 border-slate-700 mt-1"><SelectValue /></SelectTrigger>
+  1163→                <SelectContent className="bg-slate-900 border-slate-700">
+  1164→                  {['app', 'agent', 'workflow', 'dashboard', 'connector', 'template', 'report', 'compliance_pack', 'plugin'].map((k) => (
+  1165→                    <SelectItem key={k} value={k} className="capitalize">{k}</SelectItem>
+  1166→                  ))}
+  1167→                </SelectContent>
+  1168→              </Select>
+  1169→            </div>
+  1170→            <div>
+  1171→              <Label className="text-slate-300">Category</Label>
+  1172→              <Select value={category} onValueChange={setCategory}>
+  1173→                <SelectTrigger className="bg-slate-950 border-slate-700 mt-1"><SelectValue /></SelectTrigger>
+  1174→                <SelectContent className="bg-slate-900 border-slate-700">
+  1175→                  {['hr', 'banking', 'crm', 'manufacturing', 'retail', 'logistics', 'healthcare', 'legal', 'tax', 'ai'].map((k) => (
+  1176→                    <SelectItem key={k} value={k} className="capitalize">{k}</SelectItem>
+  1177→                  ))}
+  1178→                </SelectContent>
+  1179→              </Select>
+  1180→            </div>
+  1181→          </div>
+  1182→          <div className="grid grid-cols-2 gap-3">
+  1183→            <div>
+  1184→              <Label className="text-slate-300">Version</Label>
+  1185→              <Input value={version} onChange={(e) => setVersion(e.target.value)} className="bg-slate-950 border-slate-700 mt-1" />
+  1186→            </div>
+  1187→            <div>
+  1188→              <Label className="text-slate-300">Permissions (comma-separated)</Label>
+  1189→              <Input value={permissions} onChange={(e) => setPermissions(e.target.value)} placeholder="read,write,ai:execute" className="bg-slate-950 border-slate-700 mt-1" />
+  1190→            </div>
+  1191→          </div>
+  1192→        </div>
+  1193→        <DialogFooter>
+  1194→          <Button variant="outline" onClick={() => onOpenChange(false)} className="border-slate-700">Cancel</Button>
+  1195→          <Button onClick={submit} disabled={submitting} className="bg-emerald-600 hover:bg-emerald-700">
+  1196→            {submitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />} Publish
+  1197→          </Button>
+  1198→        </DialogFooter>
+  1199→      </DialogContent>
+  1200→    </Dialog>
+  1201→  );
+  1202→}
+  1203→
+  1204→function WebhookDialog({ open, onOpenChange, onDone, apiPost, eventCatalog }: { open: boolean; onOpenChange: (o: boolean) => void; onDone: () => void; apiPost: ApiPostFn; eventCatalog: string[] }) {
+  1205→  const { toast } = useToast();
+  1206→  const [label, setLabel] = useState('');
+  1207→  const [url, setUrl] = useState('');
+  1208→  const [events, setEvents] = useState<string[]>(['*']);
+  1209→  const [submitting, setSubmitting] = useState(false);
+  1210→
+  1211→  async function submit() {
+  1212→    if (!label || !url) { toast({ title: 'Label and URL required', variant: 'destructive' }); return; }
+  1213→    setSubmitting(true);
+  1214→    const { ok } = await apiPost('create-webhook', { label, targetUrl: url, eventTypes: events });
+  1215→    setSubmitting(false);
+  1216→    if (ok) {
+  1217→      toast({ title: 'Webhook created', description: 'A signing secret was generated.' });
+  1218→      setLabel(''); setUrl(''); setEvents(['*']);
+  1219→      onOpenChange(false); onDone();
+  1220→    }
+  1221→  }
+  1222→
+  1223→  function toggleEvent(ev: string) {
+  1224→    setEvents((cur) => {
+  1225→      if (ev === '*') return cur.includes('*') ? cur.filter((e) => e !== '*') : ['*'];
+  1226→      const without = cur.filter((e) => e !== '*');
+  1227→      return without.includes(ev) ? without.filter((e) => e !== ev) : [...without, ev];
+  1228→    });
+  1229→  }
+  1230→
+  1231→  return (
+  1232→    <Dialog open={open} onOpenChange={onOpenChange}>
+  1233→      <DialogContent className="bg-slate-900 border-slate-700 text-slate-100 max-w-lg">
+  1234→        <DialogHeader>
+  1235→          <DialogTitle>New Webhook Subscription</DialogTitle>
+  1236→          <DialogDescription className="text-slate-400">Receive real-time event deliveries with HMAC signing.</DialogDescription>
+  1237→        </DialogHeader>
+  1238→        <div className="space-y-3">
+  1239→          <div>
+  1240→            <Label className="text-slate-300">Label</Label>
+  1241→            <Input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Notify Slack on invoice paid" className="bg-slate-950 border-slate-700 mt-1" />
+  1242→          </div>
+  1243→          <div>
+  1244→            <Label className="text-slate-300">Target URL</Label>
+  1245→            <Input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://hooks.example.com/gstpilot" className="bg-slate-950 border-slate-700 mt-1" />
+  1246→          </div>
+  1247→          <div>
+  1248→            <Label className="text-slate-300">Events to subscribe</Label>
+  1249→            <div className="mt-1 max-h-44 overflow-y-auto rounded border border-slate-700 bg-slate-950 p-2 space-y-1">
+  1250→              <button onClick={() => toggleEvent('*')} className={`w-full text-left px-2 py-1 rounded text-xs ${events.includes('*') ? 'bg-emerald-500/20 text-emerald-300' : 'text-slate-400'}`}>
+  1251→                * (all events)
+  1252→              </button>
+  1253→              {eventCatalog.filter((e) => e !== '*').map((ev) => (
+  1254→                <button key={ev} onClick={() => toggleEvent(ev)} className={`w-full text-left px-2 py-1 rounded text-xs ${events.includes(ev) ? 'bg-emerald-500/20 text-emerald-300' : 'text-slate-400'}`}>
+  1255→                  {ev}
+  1256→                </button>
+  1257→              ))}
+  1258→            </div>
+  1259→          </div>
+  1260→        </div>
+  1261→        <DialogFooter>
+  1262→          <Button variant="outline" onClick={() => onOpenChange(false)} className="border-slate-700">Cancel</Button>
+  1263→          <Button onClick={submit} disabled={submitting} className="bg-sky-600 hover:bg-sky-700">
+  1264→            {submitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />} Create
+  1265→          </Button>
+  1266→        </DialogFooter>
+  1267→      </DialogContent>
+  1268→    </Dialog>
+  1269→  );
+  1270→}
+  1271→
+  1272→function FormDialog({ open, onOpenChange, onDone, apiPost }: { open: boolean; onOpenChange: (o: boolean) => void; onDone: () => void; apiPost: ApiPostFn }) {
+  1273→  const { toast } = useToast();
+  1274→  const [title, setTitle] = useState('');
+  1275→  const [description, setDescription] = useState('');
+  1276→  const [fieldsText, setFieldsText] = useState('Name|text\nEmail|email\nMessage|textarea');
+  1277→  const [submitting, setSubmitting] = useState(false);
+  1278→
+  1279→  async function submit() {
+  1280→    if (!title) { toast({ title: 'Title required', variant: 'destructive' }); return; }
+  1281→    const schema: FormField[] = fieldsText
+  1282→      .split('\n')
+  1283→      .filter((l) => l.trim() && l.includes('|'))
+  1284→      .map((l, i) => {
+  1285→        const [label, type] = l.split('|').map((s) => s.trim());
+  1286→        return {
+  1287→          id: `f${i + 1}`,
+  1288→          type: (type || 'text') as FormField['type'],
+  1289→          label,
+  1290→          key: label.toLowerCase().replace(/[^a-z0-9]+/g, '_'),
+  1291→          required: true,
+  1292→        };
+  1293→      });
+  1294→    setSubmitting(true);
+  1295→    const { ok } = await apiPost('create-form', { title, description, schema });
+  1296→    setSubmitting(false);
+  1297→    if (ok) {
+  1298→      toast({ title: 'Form created', description: `${schema.length} fields` });
+  1299→      setTitle(''); setDescription(''); setFieldsText('Name|text\nEmail|email\nMessage|textarea');
+  1300→      onOpenChange(false); onDone();
+  1301→    }
+  1302→  }
+  1303→
+  1304→  return (
+  1305→    <Dialog open={open} onOpenChange={onOpenChange}>
+  1306→      <DialogContent className="bg-slate-900 border-slate-700 text-slate-100 max-w-lg">
+  1307→        <DialogHeader>
+  1308→          <DialogTitle>New Low-Code Form</DialogTitle>
+  1309→          <DialogDescription className="text-slate-400">Define fields as <code className="text-emerald-300">Label|type</code> one per line.</DialogDescription>
+  1310→        </DialogHeader>
+  1311→        <div className="space-y-3">
+  1312→          <div>
+  1313→            <Label className="text-slate-300">Title</Label>
+  1314→            <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Customer Feedback" className="bg-slate-950 border-slate-700 mt-1" />
+  1315→          </div>
+  1316→          <div>
+  1317→            <Label className="text-slate-300">Description</Label>
+  1318→            <Input value={description} onChange={(e) => setDescription(e.target.value)} className="bg-slate-950 border-slate-700 mt-1" />
+  1319→          </div>
+  1320→          <div>
+  1321→            <Label className="text-slate-300">Fields</Label>
+  1322→            <Textarea value={fieldsText} onChange={(e) => setFieldsText(e.target.value)} className="bg-slate-950 border-slate-700 mt-1 min-h-28 font-mono text-xs" />
+  1323→            <p className="text-[11px] text-slate-500 mt-1">Types: text, email, number, textarea, select, checkbox, date, tel</p>
+  1324→          </div>
+  1325→        </div>
+  1326→        <DialogFooter>
+  1327→          <Button variant="outline" onClick={() => onOpenChange(false)} className="border-slate-700">Cancel</Button>
+  1328→          <Button onClick={submit} disabled={submitting} className="bg-emerald-600 hover:bg-emerald-700">
+  1329→            {submitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />} Create Form
+  1330→          </Button>
+  1331→        </DialogFooter>
+  1332→      </DialogContent>
+  1333→    </Dialog>
+  1334→  );
+  1335→}
+  1336→
+  1337→function WorkflowDialog({ open, onOpenChange, onDone, apiPost }: { open: boolean; onOpenChange: (o: boolean) => void; onDone: () => void; apiPost: ApiPostFn }) {
+  1338→  const { toast } = useToast();
+  1339→  const [title, setTitle] = useState('');
+  1340→  const [description, setDescription] = useState('');
+  1341→  const [trigger, setTrigger] = useState<WorkflowTrigger>('manual');
+  1342→  const [stepsText, setStepsText] = useState('action|Create record\nnotify|Send email\nai|Generate insight');
+  1343→  const [submitting, setSubmitting] = useState(false);
+  1344→
+  1345→  async function submit() {
+  1346→    if (!title) { toast({ title: 'Title required', variant: 'destructive' }); return; }
+  1347→    const steps = stepsText
+  1348→      .split('\n')
+  1349→      .filter((l) => l.trim() && l.includes('|'))
+  1350→      .map((l, i) => {
+  1351→        const [type, name] = l.split('|').map((s) => s.trim());
+  1352→        return { id: `s${i + 1}`, type: type || 'action', name: name || `Step ${i + 1}`, config: {} };
+  1353→      });
+  1354→    setSubmitting(true);
+  1355→    const { ok } = await apiPost('create-workflow', { title, description, trigger, steps });
+  1356→    setSubmitting(false);
+  1357→    if (ok) {
+  1358→      toast({ title: 'Workflow created', description: `${steps.length} steps` });
+  1359→      setTitle(''); setDescription(''); setTrigger('manual'); setStepsText('action|Create record\nnotify|Send email\nai|Generate insight');
+  1360→      onOpenChange(false); onDone();
+  1361→    }
+  1362→  }
+  1363→
+  1364→  return (
+  1365→    <Dialog open={open} onOpenChange={onOpenChange}>
+  1366→      <DialogContent className="bg-slate-900 border-slate-700 text-slate-100 max-w-lg">
+  1367→        <DialogHeader>
+  1368→          <DialogTitle>New Low-Code Workflow</DialogTitle>
+  1369→          <DialogDescription className="text-slate-400">Define steps as <code className="text-emerald-300">type|name</code> one per line.</DialogDescription>
+  1370→        </DialogHeader>
+  1371→        <div className="space-y-3">
+  1372→          <div>
+  1373→            <Label className="text-slate-300">Title</Label>
+  1374→            <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Lead Nurture Sequence" className="bg-slate-950 border-slate-700 mt-1" />
+  1375→          </div>
+  1376→          <div>
+  1377→            <Label className="text-slate-300">Description</Label>
+  1378→            <Input value={description} onChange={(e) => setDescription(e.target.value)} className="bg-slate-950 border-slate-700 mt-1" />
+  1379→          </div>
+  1380→          <div>
+  1381→            <Label className="text-slate-300">Trigger</Label>
+  1382→            <Select value={trigger} onValueChange={(v) => setTrigger(v as WorkflowTrigger)}>
+  1383→              <SelectTrigger className="bg-slate-950 border-slate-700 mt-1"><SelectValue /></SelectTrigger>
+  1384→              <SelectContent className="bg-slate-900 border-slate-700">
+  1385→                {['manual', 'form.submitted', 'invoice.created', 'payment.received', 'gst.filed', 'lead.won', 'schedule', 'webhook'].map((t) => (
+  1386→                  <SelectItem key={t} value={t}>{t}</SelectItem>
+  1387→                ))}
+  1388→              </SelectContent>
+  1389→            </Select>
+  1390→          </div>
+  1391→          <div>
+  1392→            <Label className="text-slate-300">Steps</Label>
+  1393→            <Textarea value={stepsText} onChange={(e) => setStepsText(e.target.value)} className="bg-slate-950 border-slate-700 mt-1 min-h-28 font-mono text-xs" />
+  1394→            <p className="text-[11px] text-slate-500 mt-1">Types: action, condition, delay, notify, ai, transform</p>
+  1395→          </div>
+  1396→        </div>
+  1397→        <DialogFooter>
+  1398→          <Button variant="outline" onClick={() => onOpenChange(false)} className="border-slate-700">Cancel</Button>
+  1399→          <Button onClick={submit} disabled={submitting} className="bg-sky-600 hover:bg-sky-700">
+  1400→            {submitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />} Create Workflow
+  1401→          </Button>
+  1402→        </DialogFooter>
+  1403→      </DialogContent>
+  1404→    </Dialog>
+  1405→  );
+  1406→}
+  1407→
+  1408→function ApiKeyDialog({ open, onOpenChange, onCreated, apiPost }: { open: boolean; onOpenChange: (o: boolean) => void; onCreated: (fullKey: string) => void; apiPost: ApiPostFn }) {
+  1409→  const { toast } = useToast();
+  1410→  const [name, setName] = useState('');
+  1411→  const [scopes, setScopes] = useState('read');
+  1412→  const [submitting, setSubmitting] = useState(false);
+  1413→
+  1414→  async function submit() {
+  1415→    if (!name) { toast({ title: 'Name required', variant: 'destructive' }); return; }
+  1416→    setSubmitting(true);
+  1417→    const { ok, data } = await apiPost('create-api-key', {
+  1418→      name,
+  1419→      scopes: scopes.split(',').map((s) => s.trim()).filter(Boolean),
+  1420→    });
+  1421→    setSubmitting(false);
+  1422→    if (ok && data && typeof data === 'object' && 'apiKey' in data) {
+  1423→      const full = (data as { apiKey: { fullKey: string } }).apiKey.fullKey;
+  1424→      setName(''); setScopes('read');
+  1425→      onOpenChange(false);
+  1426→      onCreated(full);
+  1427→    }
+  1428→  }
+  1429→
+  1430→  return (
+  1431→    <Dialog open={open} onOpenChange={onOpenChange}>
+  1432→      <DialogContent className="bg-slate-900 border-slate-700 text-slate-100 max-w-md">
+  1433→        <DialogHeader>
+  1434→          <DialogTitle>Create API Key</DialogTitle>
+  1435→          <DialogDescription className="text-slate-400">The full key will be shown once. Store it securely.</DialogDescription>
+  1436→        </DialogHeader>
+  1437→        <div className="space-y-3">
+  1438→          <div>
+  1439→            <Label className="text-slate-300">Key Name</Label>
+  1440→            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Production backend" className="bg-slate-950 border-slate-700 mt-1" />
+  1441→          </div>
+  1442→          <div>
+  1443→            <Label className="text-slate-300">Scopes (comma-separated)</Label>
+  1444→            <Input value={scopes} onChange={(e) => setScopes(e.target.value)} placeholder="read,write,billing" className="bg-slate-950 border-slate-700 mt-1" />
+  1445→          </div>
+  1446→        </div>
+  1447→        <DialogFooter>
+  1448→          <Button variant="outline" onClick={() => onOpenChange(false)} className="border-slate-700">Cancel</Button>
+  1449→          <Button onClick={submit} disabled={submitting} className="bg-violet-600 hover:bg-violet-700">
+  1450→            {submitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />} Create Key
+  1451→          </Button>
+  1452→        </DialogFooter>
+  1453→      </DialogContent>
+  1454→    </Dialog>
+  1455→  );
+  1456→}
+  1457→

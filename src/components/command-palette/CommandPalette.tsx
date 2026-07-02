@@ -383,6 +383,17 @@ export default function CommandPalette() {
         },
         group: 'Commands',
       },
+      {
+        id: 'cmd-open-enterprise-ai-platform',
+        label: 'Open Enterprise AI Platform™',
+        description: 'Developer platform — marketplace, webhooks, API keys, low-code studio, SDKs',
+        icon: Cloud,
+        action: () => {
+          setCurrentView('enterprise-ai-platform');
+          addToRecent('cmd-open-enterprise-ai-platform', 'Open Enterprise AI Platform™', 'command');
+        },
+        group: 'Commands',
+      },
     ],
     [setCurrentView, setCommandPaletteOpen, addToRecent]
   );

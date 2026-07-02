@@ -149,7 +149,9 @@ export type AppView =
   // Autonomous Enterprise™ — Self-Running Business OS
   | 'autonomous-enterprise'
   // Enterprise Cloud Platform™ — Global SaaS Infrastructure
-  | 'enterprise-cloud-platform';
+  | 'enterprise-cloud-platform'
+  // Enterprise AI Platform™ — Ecosystem Edition (Developer Platform)
+  | 'enterprise-ai-platform';
 
 export interface ReturnPrepContext {
   clientId: string | null;

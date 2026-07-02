@@ -125,6 +125,7 @@ import ConnectionsPage from '@/components/connections/ConnectionsPage'
 import AISoftwareFactoryPage from '@/components/ai-software-factory/AISoftwareFactoryPage'
 import AutonomousEnterprisePage from '@/components/autonomous-enterprise/AutonomousEnterprisePage'
 import EnterpriseCloudPlatformPage from '@/components/enterprise-cloud-platform/EnterpriseCloudPlatformPage'
+import EnterpriseAIPlatformPage from '@/components/enterprise-ai-platform/EnterpriseAIPlatformPage'
 
 const VIEW_TITLES: Record<string, string> = {
   dashboard: 'Mission Control',
@@ -229,6 +230,7 @@ const VIEW_TITLES: Record<string, string> = {
   'ai-software-factory': 'AI Software Factory™',
   'autonomous-enterprise': 'Autonomous Enterprise™',
   'enterprise-cloud-platform': 'Enterprise Cloud Platform™',
+  'enterprise-ai-platform': 'Enterprise AI Platform™',
 }
 
 function DashboardContent() {
@@ -440,6 +442,8 @@ function DashboardContent() {
         return <AutonomousEnterprisePage />
       case 'enterprise-cloud-platform':
         return <EnterpriseCloudPlatformPage />
+      case 'enterprise-ai-platform':
+        return <EnterpriseAIPlatformPage />
       default:
         return <MissionControlPage />
     }

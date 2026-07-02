@@ -1607,6 +1607,12 @@ model PlatformOrganization {
   auditEvents     PlatformAuditEvent[]
   environments    PlatformDevopsEnvironment[]
   identityProviders PlatformIdentityProvider[]
+  // ─── Enterprise AI Platform™ (Ecosystem) back-relations ───
+  extensionInstalls PlatformExtensionInstall[]
+  webhookSubscriptions PlatformWebhookSubscription[]
+  lowCodeForms     PlatformLowCodeForm[]
+  lowCodeWorkflows PlatformLowCodeWorkflow[]
+  developers       PlatformDeveloper[]
 }
 
 // ─── ECP MODEL 2 — PlatformDepartment (org hierarchy) ────────────────────────
@@ -1840,6 +1846,194 @@ model PlatformDevopsEnvironment {
   memUsageMb      Float    @default(0)
   lastDeployAt    DateTime?
   lastDeployBy    String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ENTERPRISE AI PLATFORM™ (ECOSYSTEM EDITION) — DEVELOPER PLATFORM MODELS
+// Turns GSTPilot into a platform developers & partners can build on:
+// extensions/apps, webhooks, low-code studio, api-gateway usage, developers.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ─── EAP MODEL 1 — PlatformExtension (marketplace + private app registry) ───
+model PlatformExtension {
+  id              String   @id @default(cuid())
+  slug            String   @unique
+  name            String
+  displayName     String
+  description     String
+  publisher       String                                          // developer handle / org name
+  developerId     String?
+  kind            String                                          // app | agent | workflow | dashboard | connector | template | report | compliance_pack | plugin
+  category        String                                          // hr | banking | crm | manufacturing | retail | logistics | healthcare | legal | tax | ai
+  version         String
+  visibility      String   @default("public")                     // public | private
+  pricingModel    String   @default("free")                       // free | one_time | subscription | usage_based
+  priceInr        Float    @default(0)
+  status          String   @default("published")                  // draft | in_review | published | suspended | deprecated
+  manifest        String                                          // JSON: permissions, entrypoints, config schema
+  iconUrl         String?
+  screenshots     String?                                         // JSON string[]
+  installCount    Int      @default(0)
+  ratingAvg       Float    @default(0)
+  ratingCount     Int      @default(0)
+  reviews         PlatformExtensionReview[]
+  installs        PlatformExtensionInstall[]
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+// ─── EAP MODEL 2 — PlatformExtensionInstall (per-org install record) ────────
+model PlatformExtensionInstall {
+  id              String   @id @default(cuid())
+  extensionId     String
+  extension       PlatformExtension @relation(fields: [extensionId], references: [id], onDelete: Cascade)
+  organizationId  String
+  organization    PlatformOrganization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  version         String
+  status          String   @default("installed")                  // installing | installed | disabled | update_available | uninstalled
+  permissions     String?                                         // JSON: granted permission scope list
+  config          String?                                         // JSON: install-time config
+  installedBy     String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([extensionId, organizationId])
+}
+
+// ─── EAP MODEL 3 — PlatformExtensionReview (ratings + reviews) ──────────────
+model PlatformExtensionReview {
+  id              String   @id @default(cuid())
+  extensionId     String
+  extension       PlatformExtension @relation(fields: [extensionId], references: [id], onDelete: Cascade)
+  organizationId  String
+  authorEmail     String
+  authorName      String
+  rating          Int                                             // 1..5
+  title           String
+  body            String
+  helpfulCount    Int      @default(0)
+  createdAt       DateTime @default(now())
+}
+
+// ─── EAP MODEL 4 — PlatformWebhookSubscription (event delivery config) ──────
+model PlatformWebhookSubscription {
+  id              String   @id @default(cuid())
+  organizationId  String
+  organization    PlatformOrganization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  label           String
+  targetUrl       String
+  eventTypes      String                                          // JSON string[] — event type filters; ["*"] = all
+  secret          String?                                         // HMAC signing secret
+  status          String   @default("active")                     // active | paused | failing | deleted
+  deliveries      Int      @default(0)
+  successCount    Int      @default(0)
+  failureCount    Int      @default(0)
+  lastDeliveryAt  DateTime?
+  createdBy       String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+// ─── EAP MODEL 5 — PlatformWebhookDelivery (delivery attempt log) ───────────
+model PlatformWebhookDelivery {
+  id              String   @id @default(cuid())
+  subscriptionId  String
+  eventType       String                                          // invoice.created | payment.received | gst.filed | lead.won | etc.
+  payload         String                                          // JSON event body
+  statusCode      Int?
+  responseMs      Int?
+  attempt         Int      @default(1)
+  status          String   @default("pending")                    // pending | success | failed | retrying
+  error           String?
+  deliveredAt     DateTime?
+  createdAt       DateTime @default(now())
+}
+
+// ─── EAP MODEL 6 — PlatformApiUsageLog (observability + rate-limit counters) ─
+model PlatformApiUsageLog {
+  id              String   @id @default(cuid())
+  organizationId  String?
+  apiKeyId        String?
+  endpoint        String                                          // e.g. /api/oracle/ask
+  method          String                                          // GET | POST | ...
+  statusCode      Int
+  responseMs      Int
+  userAgent       String?
+  ipAddress       String?
+  tokensConsumed  Int      @default(0)
+  createdAt       DateTime @default(now())
+
+  @@index([apiKeyId, createdAt])
+  @@index([organizationId, createdAt])
+}
+
+// ─── EAP MODEL 7 — PlatformLowCodeForm (user-built forms) ───────────────────
+model PlatformLowCodeForm {
+  id              String   @id @default(cuid())
+  organizationId  String
+  organization    PlatformOrganization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  slug            String
+  title           String
+  description     String?
+  schema          String                                          // JSON: field definitions
+  status          String   @default("active")                     // active | archived
+  submissionsCount Int     @default(0)
+  createdBy       String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([organizationId, slug])
+}
+
+// ─── EAP MODEL 8 — PlatformLowCodeSubmission (form submission records) ──────
+model PlatformLowCodeSubmission {
+  id              String   @id @default(cuid())
+  formId          String
+  data            String                                          // JSON: submitted values
+  submitterEmail  String?
+  submitterIp     String?
+  createdAt       DateTime @default(now())
+}
+
+// ─── EAP MODEL 9 — PlatformLowCodeWorkflow (user-built automations) ─────────
+model PlatformLowCodeWorkflow {
+  id              String   @id @default(cuid())
+  organizationId  String
+  organization    PlatformOrganization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  slug            String
+  title           String
+  description     String?
+  trigger         String                                          // form.submitted | invoice.created | schedule | manual | webhook
+  triggerConfig   String?                                         // JSON
+  steps           String                                          // JSON: step definitions
+  status          String   @default("active")                     // active | paused | draft
+  runsCount       Int      @default(0)
+  successCount    Int      @default(0)
+  failureCount    Int      @default(0)
+  lastRunAt       DateTime?
+  createdBy       String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([organizationId, slug])
+}
+
+// ─── EAP MODEL 10 — PlatformDeveloper (registered developer profile) ────────
+model PlatformDeveloper {
+  id              String   @id @default(cuid())
+  organizationId  String?
+  organization    PlatformOrganization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  email           String   @unique
+  name            String
+  handle          String   @unique
+  status          String   @default("active")                     // pending | active | suspended
+  tier            String   @default("partner")                    // individual | partner | certified | strategic
+  appsPublished   Int      @default(0)
+  totalInstalls   Int      @default(0)
+  apiKey          String?                                         // developer portal API key (hashed)
+  joinedAt        DateTime @default(now())
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 }

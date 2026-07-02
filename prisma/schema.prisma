@@ -1547,3 +1547,299 @@ model AutonomousPlan {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// GSTPILOT ENTERPRISE CLOUD PLATFORM™ — GLOBAL SAAS INFRASTRUCTURE
+// Transform GSTPilot Infinity™ from an enterprise application into a globally
+// deployable SaaS platform serving thousands of organisations. Oracle™ now
+// powers customers. Every organisation gets its own secure enterprise
+// (workspace + AI memory + Business Graph + Knowledge Graph + Digital Twin +
+// Execution Cloud + Compliance Cloud + Data Intelligence Cloud + Command
+// Network + AGI instance). No data leakage between organisations.
+// Tagline: Build Once. Deploy Globally. Scale Infinitely.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ─── ECP MODEL 1 — PlatformOrganization (multi-tenant orgs) ──────────────────
+model PlatformOrganization {
+  id              String   @id @default(cuid())
+  name            String
+  slug            String   @unique                              // URL-safe identifier
+  domain          String?                                       // white-label domain
+  legalName       String?
+  country         String   @default("IN")
+  timezone        String   @default("Asia/Kolkata")
+  currency        String   @default("INR")
+  parentId        String?                                       // parent org (subsidiaries)
+  organizationType String  @default("standalone")               // standalone | parent | subsidiary | branch
+  plan            String   @default("starter")                  // starter | professional | business | enterprise | enterprise_plus | custom
+  planStatus      String   @default("trial")                    // trial | active | past_due | cancelled | suspended
+  trialEndsAt     DateTime?
+  status          String   @default("active")                   // active | suspended | provisioning | deprovisioned
+  industry        String?
+  employeeCount   Int      @default(1)
+  monthlyRevenue  Float    @default(0)                          // computed MRR for this org
+  seatsUsed       Int      @default(1)
+  seatsLimit      Int      @default(5)
+  storageUsedMb   Float    @default(0)
+  storageLimitMb  Float    @default(5120)                       // 5 GB default
+  apiCallsMonth   Int      @default(0)
+  aiCreditsUsed   Float    @default(0)
+  aiCreditsLimit  Float    @default(1000)
+  healthScore     Int      @default(80)                         // customer success health
+  churnRisk       Float    @default(0)                          // 0-1
+  branding        String                                        // JSON: { logoUrl, primaryColor, accentColor, loginHeading, emailFromName }
+  settings        String                                        // JSON: feature flags + isolation config
+  provisioningState String  @default("provisioned")             // provisioning | provisioned | failed | deprovisioned
+  provisionedAt   DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  departments     PlatformDepartment[]
+  branches        PlatformBranch[]
+  costCenters     PlatformCostCenter[]
+  tenantUsers     PlatformTenantUser[]
+  subscriptions   PlatformSubscription[]
+  invoices        PlatformInvoice[]
+  apiKeys         PlatformApiKey[]
+  installs        PlatformMarketplaceInstall[]
+  metrics         PlatformMonitoringMetric[]
+  healthRecords   PlatformCustomerHealth[]
+  auditEvents     PlatformAuditEvent[]
+  environments    PlatformDevopsEnvironment[]
+  identityProviders PlatformIdentityProvider[]
+}
+
+// ─── ECP MODEL 2 — PlatformDepartment (org hierarchy) ────────────────────────
+model PlatformDepartment {
+  id              String   @id @default(cuid())
+  organizationId  String
+  organization    PlatformOrganization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name            String
+  parentId        String?                                       // nested departments
+  headUserId      String?
+  costCenterId    String?
+  headcount       Int      @default(1)
+  metadata        String?                                       // JSON
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+// ─── ECP MODEL 3 — PlatformBranch (geographic branches) ──────────────────────
+model PlatformBranch {
+  id              String   @id @default(cuid())
+  organizationId  String
+  organization    PlatformOrganization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name            String
+  city            String?
+  state           String?
+  country         String   @default("IN")
+  timezone        String   @default("Asia/Kolkata")
+  gstin           String?
+  isHeadquarters  Boolean  @default(false)
+  headcount       Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+// ─── ECP MODEL 4 — PlatformCostCenter ─────────────────────────────────────────
+model PlatformCostCenter {
+  id              String   @id @default(cuid())
+  organizationId  String
+  organization    PlatformOrganization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  code            String
+  name            String
+  budget          Float    @default(0)
+  spent           Float    @default(0)
+  currency        String   @default("INR")
+  ownerId         String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+// ─── ECP MODEL 5 — PlatformTenantUser (org-scoped users) ─────────────────────
+model PlatformTenantUser {
+  id              String   @id @default(cuid())
+  organizationId  String
+  organization    PlatformOrganization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  email           String
+  name            String?
+  role            String   @default("member")                   // owner | admin | manager | member | viewer | billing | auditor
+  status          String   @default("active")                   // active | invited | suspended | removed
+  mfaEnabled      Boolean  @default(false)
+  lastActiveAt    DateTime?
+  invitedAt       DateTime @default(now())
+  joinedAt        DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+// ─── ECP MODEL 6 — PlatformIdentityProvider (Enterprise Identity Cloud) ──────
+model PlatformIdentityProvider {
+  id              String   @id @default(cuid())
+  organizationId  String
+  organization    PlatformOrganization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  provider        String                                        // email | google | microsoft | github | saml | azure_ad | okta | ldap | passwordless
+  label           String
+  status          String   @default("configured")               // configured | connected | disabled | error
+  config          String                                        // JSON: provider-specific (entityId, ssoUrl, cert, clientId, tenantId, etc.)
+  userCount       Int      @default(0)
+  lastSyncAt      DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+// ─── ECP MODEL 7 — PlatformSubscription ───────────────────────────────────────
+model PlatformSubscription {
+  id              String   @id @default(cuid())
+  organizationId  String
+  organization    PlatformOrganization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  plan            String                                        // starter | professional | business | enterprise | enterprise_plus | custom
+  billingCycle    String   @default("monthly")                  // monthly | annual
+  status          String   @default("active")                   // trial | active | past_due | cancelled | paused
+  seats           Int      @default(1)
+  seatPrice       Float    @default(0)
+  monthlyBase     Float    @default(0)
+  annualBase      Float    @default(0)
+  discountPct     Float    @default(0)
+  couponCode      String?
+  trialStartsAt   DateTime?
+  trialEndsAt     DateTime?
+  currentPeriodStart DateTime?
+  currentPeriodEnd   DateTime?
+  cancelledAt     DateTime?
+  metadata        String?                                       // JSON
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+// ─── ECP MODEL 8 — PlatformInvoice (auto-generated billing invoices) ─────────
+model PlatformInvoice {
+  id              String   @id @default(cuid())
+  organizationId  String
+  organization    PlatformOrganization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  number          String   @unique
+  periodStart     DateTime
+  periodEnd       DateTime
+  subtotal        Float    @default(0)
+  taxPct          Float    @default(18)                         // GST
+  taxAmount       Float    @default(0)
+  discountAmount  Float    @default(0)
+  total           Float    @default(0)
+  currency        String   @default("INR")
+  status          String   @default("draft")                    // draft | issued | paid | void | overdue | refunded
+  lineItems       String                                        // JSON: [{ name, quantity, unitPrice, amount, category }]
+  issuedAt        DateTime?
+  dueAt           DateTime?
+  paidAt          DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+// ─── ECP MODEL 9 — PlatformApiKey (API Platform — OAuth + API keys) ──────────
+model PlatformApiKey {
+  id              String   @id @default(cuid())
+  organizationId  String
+  organization    PlatformOrganization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name            String
+  keyPrefix       String                                        // visible prefix (e.g. gtp_live_abc12345)
+  hashedKey       String                                        // bcrypt hash of full key
+  scopes          String                                        // JSON string[] (read | write | admin | billing | agi:execute)
+  rateLimitPerMin Int      @default(600)
+  rateLimitPerDay Int      @default(100000)
+  callsTotal      Int      @default(0)
+  callsToday      Int      @default(0)
+  lastUsedAt      DateTime?
+  expiresAt       DateTime?
+  status          String   @default("active")                   // active | revoked | expired
+  createdBy       String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+// ─── ECP MODEL 10 — PlatformMarketplaceInstall ───────────────────────────────
+model PlatformMarketplaceInstall {
+  id              String   @id @default(cuid())
+  organizationId  String
+  organization    PlatformOrganization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  appId           String                                        // catalog id
+  appName         String
+  appKind         String                                        // app | agent | workflow | template | dashboard | connector | report | compliance_pack
+  publisher       String
+  version         String
+  status          String   @default("installed")                // installing | installed | failed | uninstalled | update_available
+  installedBy     String?
+  config          String?                                       // JSON: install config
+  rating          Float    @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+// ─── ECP MODEL 11 — PlatformMonitoringMetric (Enterprise Monitoring) ────────
+model PlatformMonitoringMetric {
+  id              String   @id @default(cuid())
+  organizationId  String
+  organization    PlatformOrganization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  bucket          String                                        // YYYY-MM-DDTHH:00
+  metric          String                                        // api_calls | agi_executions | errors | uptime_ms | latency_ms | storage_mb | ai_tokens | active_users | workflow_runs
+  value           Float    @default(0)
+  unit            String   @default("count")
+  createdAt       DateTime @default(now())
+}
+
+// ─── ECP MODEL 12 — PlatformCustomerHealth (Customer Success Center) ─────────
+model PlatformCustomerHealth {
+  id              String   @id @default(cuid())
+  organizationId  String
+  organization    PlatformOrganization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  score           Int      @default(80)                         // 0-100
+  adoptionPct     Float    @default(0)
+  featureUsage    String                                        // JSON: { feature -> usagePct }
+  churnRisk       Float    @default(0)                          // 0-1
+  expansionScore  Float    @default(0)                          // 0-1
+  openTickets     Int      @default(0)
+  satisfaction    Float    @default(0)                          // CSAT 0-5
+  lastContactAt   DateTime?
+  recommendedActions String                                     // JSON string[]
+  computedAt      DateTime @default(now())
+  createdAt       DateTime @default(now())
+}
+
+// ─── ECP MODEL 13 — PlatformAuditEvent (Security audit log) ──────────────────
+model PlatformAuditEvent {
+  id              String   @id @default(cuid())
+  organizationId  String
+  organization    PlatformOrganization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  actor           String                                        // user email | system | oracle
+  action          String                                        // user.invite | role.change | billing.subscribe | api.key.create | data.export | etc.
+  category        String                                        // auth | billing | security | data | config | api | admin
+  targetType      String?
+  targetId        String?
+  severity        String   @default("info")                     // info | warn | critical
+  ipAddress       String?
+  userAgent       String?
+  details         String                                        // JSON
+  createdAt       DateTime @default(now())
+}
+
+// ─── ECP MODEL 14 — PlatformDevopsEnvironment (DevOps Cloud) ─────────────────
+model PlatformDevopsEnvironment {
+  id              String   @id @default(cuid())
+  organizationId  String
+  organization    PlatformOrganization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name            String                                        // production | staging | development | sandbox | preview
+  environmentType String
+  region          String   @default("ap-south-1")
+  version         String?
+  status          String   @default("healthy")                  // provisioning | healthy | deploying | unhealthy | rolled_back
+  strategy        String   @default("rolling")                  // rolling | blue_green | canary | recreate
+  replicas        Int      @default(1)
+  uptimePct       Float    @default(100)
+  latencyMs       Float    @default(0)
+  errorRatePct    Float    @default(0)
+  cpuUsagePct     Float    @default(0)
+  memUsageMb      Float    @default(0)
+  lastDeployAt    DateTime?
+  lastDeployBy    String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}

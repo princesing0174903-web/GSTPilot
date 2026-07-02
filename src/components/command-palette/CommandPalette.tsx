@@ -27,6 +27,7 @@ import {
   Copy,
   Cpu,
   Crown,
+  Cloud,
 } from 'lucide-react';
 import { useApp } from '@/contexts/AppContext';
 import {
@@ -368,6 +369,17 @@ export default function CommandPalette() {
         action: () => {
           setCurrentView('autonomous-enterprise');
           addToRecent('cmd-open-autonomous-enterprise', 'Open Autonomous Enterprise™', 'command');
+        },
+        group: 'Commands',
+      },
+      {
+        id: 'cmd-open-enterprise-cloud-platform',
+        label: 'Open Enterprise Cloud Platform™',
+        description: 'Global SaaS infrastructure — multi-tenant, billing, marketplace, APIs, security',
+        icon: Cloud,
+        action: () => {
+          setCurrentView('enterprise-cloud-platform');
+          addToRecent('cmd-open-enterprise-cloud-platform', 'Open Enterprise Cloud Platform™', 'command');
         },
         group: 'Commands',
       },

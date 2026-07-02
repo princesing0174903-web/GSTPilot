@@ -147,7 +147,9 @@ export type AppView =
   // AI Software Factory™ — Self-building software ecosystem
   | 'ai-software-factory'
   // Autonomous Enterprise™ — Self-Running Business OS
-  | 'autonomous-enterprise';
+  | 'autonomous-enterprise'
+  // Enterprise Cloud Platform™ — Global SaaS Infrastructure
+  | 'enterprise-cloud-platform';
 
 export interface ReturnPrepContext {
   clientId: string | null;

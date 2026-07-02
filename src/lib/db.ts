@@ -5,7 +5,7 @@ import { PrismaClient } from '@prisma/client'
 // PrismaClient instance held in globalThis so a fresh one (with the new
 // model accessors) is created. Without this, a long-running dev server
 // keeps the OLD client in memory even after `prisma generate` runs.
-const PRISMA_CACHE_VERSION = 'v6-autonomous-enterprise'
+const PRISMA_CACHE_VERSION = 'v7-enterprise-cloud-platform'
 
 const globalForPrisma = globalThis as unknown as {
   prisma?: PrismaClient

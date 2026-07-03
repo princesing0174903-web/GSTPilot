@@ -1,0 +1,2002 @@
+     1→'use client';
+     2→
+     3→import React, { useState, useEffect, useCallback, useMemo } from 'react';
+     4→import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+     5→import { Checkbox } from '@/components/ui/checkbox';
+     6→import { Button } from '@/components/ui/button';
+     7→import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+     8→import { Badge } from '@/components/ui/badge';
+     9→import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+    10→import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+    11→import { Separator } from '@/components/ui/separator';
+    12→import { Skeleton } from '@/components/ui/skeleton';
+    13→import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+    14→import {
+    15→  Download,
+    16→  FileText,
+    17→  FileJson,
+    18→  FileSpreadsheet,
+    19→  Package,
+    20→  Eye,
+    21→  Clock,
+    22→  Search,
+    23→  Trash2,
+    24→  RefreshCw,
+    25→  ShieldCheck,
+    26→  TrendingUp,
+    27→  Wallet,
+    28→  BarChart3,
+    29→  Printer,
+    30→} from 'lucide-react';
+    31→import {
+    32→  Invoice,
+    33→  GSTRFiling,
+    34→  GSTR1Section,
+    35→  GSTR1_SECTION_LABELS,
+    36→  Client,
+    37→} from '@/types/gst';
+    38→import { formatCurrency, formatNumber, periodToLabel } from '@/lib/gst-utils';
+    39→import {
+    40→  useFireInvoices,
+    41→  useFireReturns,
+    42→  useFireReconciliations,
+    43→  useLiveDashboardMetrics,
+    44→  useFireReports,
+    45→} from '@/hooks/use-firestore';
+    46→import { createReport, deleteReport } from '@/lib/firestore-service';
+    47→import type {
+    48→  FirestoreInvoice,
+    49→  FirestoreReturn,
+    50→  FirestoreReconciliation,
+    51→  FirestoreReport,
+    52→  ReportType,
+    53→  ReportFormat,
+    54→} from '@/lib/firestore-schema';
+    55→import { EmptyState } from '@/components/shared';
+    56→import { Database } from 'lucide-react';
+    57→import { toast } from 'sonner';
+    58→
+    59→// ─── Types ─────────────────────────────────────────────────────────────────────
+    60→
+    61→interface SectionPreview {
+    62→  section: GSTR1Section;
+    63→  invoiceCount: number;
+    64→  taxableValue: number;
+    65→  totalTax: number;
+    66→}
+    67→
+    68→interface RecentExport {
+    69→  id: string;
+    70→  exportType: string;
+    71→  clientName: string;
+    72→  period: string;
+    73→  generatedAt: string;
+    74→  fileSize: string;
+    75→  fileType: string;
+    76→  data?: unknown;
+    77→  firestoreId?: string | null; // P1-M2: linked Firestore report id for delete-sync
+    78→  storageUrl?: string | null;  // P1-M2: data: URL for JSON reports (re-download)
+    79→}
+    80→
+    81→interface ClientOption {
+    82→  id: string;
+    83→  tradeName: string;
+    84→  gstin: string;
+    85→}
+    86→
+    87→// ─── Constants ─────────────────────────────────────────────────────────────────
+    88→
+    89→const SECTION_KEYS: GSTR1Section[] = ['b2b', 'b2cl', 'b2cs', 'cdnr', 'cdnur', 'exp'];
+    90→
+    91→const EXPORT_TYPE_CONFIG: Record<string, { label: string; icon: React.ReactNode; color: string; bgColor: string }> = {
+    92→  'GSTR-1 JSON': { label: 'GSTR-1 JSON', icon: <FileJson className="size-5" />, color: 'text-emerald-700', bgColor: 'bg-emerald-50' },
+    93→  'GSTR-1 Excel': { label: 'GSTR-1 Excel', icon: <FileSpreadsheet className="size-5" />, color: 'text-amber-700', bgColor: 'bg-amber-50' },
+    94→  'Filing Summary PDF': { label: 'Filing Summary PDF', icon: <FileText className="size-5" />, color: 'text-red-700', bgColor: 'bg-red-50' },
+    95→  'Working Papers PDF': { label: 'Working Papers PDF', icon: <FileText className="size-5" />, color: 'text-purple-700', bgColor: 'bg-purple-50' },
+    96→  'GST Summary PDF': { label: 'GST Summary PDF', icon: <FileText className="size-5" />, color: 'text-emerald-700', bgColor: 'bg-emerald-50' },
+    97→  'Compliance Report PDF': { label: 'Compliance Report PDF', icon: <FileText className="size-5" />, color: 'text-blue-700', bgColor: 'bg-blue-50' },
+    98→  'Financial Report PDF': { label: 'Financial Report PDF', icon: <FileText className="size-5" />, color: 'text-purple-700', bgColor: 'bg-purple-50' },
+    99→  'Cash Flow Report PDF': { label: 'Cash Flow Report PDF', icon: <FileText className="size-5" />, color: 'text-teal-700', bgColor: 'bg-teal-50' },
+   100→};
+   101→
+   102→const MONTHS = [
+   103→  'January', 'February', 'March', 'April', 'May', 'June',
+   104→  'July', 'August', 'September', 'October', 'November', 'December',
+   105→];
+   106→
+   107→// ─── Report Type Mapping (P1-M2: localStorage exportType → Firestore ReportType/ReportFormat) ────
+   108→
+   109→const EXPORT_TYPE_TO_REPORT_TYPE: Record<string, ReportType> = {
+   110→  'GSTR-1 JSON': 'gstr1_json',
+   111→  'GSTR-1 Excel': 'gstr1_excel',
+   112→  'Filing Summary PDF': 'filing_summary_pdf',
+   113→  'Working Papers PDF': 'working_papers_pdf',
+   114→  'GST Summary PDF': 'gst_summary_pdf',
+   115→  'Compliance Report PDF': 'compliance_report_pdf',
+   116→  'Financial Report PDF': 'financial_report_pdf',
+   117→  'Cash Flow Report PDF': 'cash_flow_report_pdf',
+   118→};
+   119→
+   120→function mapFileTypeToReportFormat(fileType: string): ReportFormat {
+   121→  if (fileType === 'json') return 'json';
+   122→  if (fileType === 'pdf') return 'pdf';
+   123→  if (fileType === 'csv') return 'csv';
+   124→  return 'json';
+   125→}
+   126→
+   127→function parseFileSizeBytes(fileSize: string): number {
+   128→  // Accept formats like "12.3 KB", "1.5 MB", or "PDF" (non-numeric → 0)
+   129→  const match = fileSize.match(/([\d.]+)\s*(KB|MB|GB)?/i);
+   130→  if (!match) return 0;
+   131→  const num = parseFloat(match[1]);
+   132→  const unit = (match[2] ?? '').toUpperCase();
+   133→  if (unit === 'KB') return Math.round(num * 1024);
+   134→  if (unit === 'MB') return Math.round(num * 1024 * 1024);
+   135→  if (unit === 'GB') return Math.round(num * 1024 * 1024 * 1024);
+   136→  return Math.round(num);
+   137→}
+   138→
+   139→// ─── Report History (localStorage — Oracle-style persistence) ──────────────────
+   140→
+   141→const HISTORY_KEY = 'gstpilot:reports-history-v1';
+   142→const HISTORY_LIMIT = 25;
+   143→
+   144→function loadHistory(): RecentExport[] {
+   145→  if (typeof window === 'undefined') return [];
+   146→  try {
+   147→    const raw = window.localStorage.getItem(HISTORY_KEY);
+   148→    if (!raw) return [];
+   149→    const parsed = JSON.parse(raw);
+   150→    if (!Array.isArray(parsed)) return [];
+   151→    return parsed.slice(0, HISTORY_LIMIT);
+   152→  } catch {
+   153→    return [];
+   154→  }
+   155→}
+   156→
+   157→function saveHistory(items: RecentExport[]): void {
+   158→  if (typeof window === 'undefined') return;
+   159→  try {
+   160→    window.localStorage.setItem(HISTORY_KEY, JSON.stringify(items.slice(0, HISTORY_LIMIT)));
+   161→  } catch {
+   162→    /* ignore quota errors */
+   163→  }
+   164→}
+   165→
+   166→// ─── PDF Export (print-window approach — no heavy deps) ────────────────────────
+   167→
+   168→interface PdfSection {
+   169→  heading: string;
+   170→  rows: Array<{ label: string; value: string }>;
+   171→}
+   172→
+   173→interface PdfTable {
+   174→  heading: string;
+   175→  columns: string[];
+   176→  rows: string[][];
+   177→}
+   178→
+   179→function escapeHtml(s: string): string {
+   180→  return String(s)
+   181→    .replace(/&/g, '&amp;')
+   182→    .replace(/</g, '&lt;')
+   183→    .replace(/>/g, '&gt;')
+   184→    .replace(/"/g, '&quot;')
+   185→    .replace(/'/g, '&#39;');
+   186→}
+   187→
+   188→function buildPdfHtml(opts: {
+   189→  title: string;
+   190→  subtitle?: string;
+   191→  generatedAt: string;
+   192→  sections?: PdfSection[];
+   193→  tables?: PdfTable[];
+   194→}): string {
+   195→  const { title, subtitle, generatedAt, sections = [], tables = [] } = opts;
+   196→  const sectionHtml = sections.map((sec) => `
+   197→    <section class="block">
+   198→      <h2>${escapeHtml(sec.heading)}</h2>
+   199→      <table class="kv">
+   200→        <tbody>
+   201→          ${sec.rows.map((r) => `
+   202→            <tr><th>${escapeHtml(r.label)}</th><td>${escapeHtml(r.value)}</td></tr>
+   203→          `).join('')}
+   204→        </tbody>
+   205→      </table>
+   206→    </section>
+   207→  `).join('');
+   208→
+   209→  const tableHtml = tables.map((t) => `
+   210→    <section class="block">
+   211→      <h2>${escapeHtml(t.heading)}</h2>
+   212→      <table class="grid">
+   213→        <thead><tr>${t.columns.map((c) => `<th>${escapeHtml(c)}</th>`).join('')}</tr></thead>
+   214→        <tbody>
+   215→          ${t.rows.length === 0
+   216→            ? `<tr><td colspan="${t.columns.length}" class="empty">No records</td></tr>`
+   217→            : t.rows.map((r) => `<tr>${r.map((c) => `<td>${escapeHtml(c)}</td>`).join('')}</tr>`).join('')}
+   218→        </tbody>
+   219→      </table>
+   220→    </section>
+   221→  `).join('');
+   222→
+   223→  return `<!DOCTYPE html>
+   224→<html lang="en">
+   225→<head>
+   226→  <meta charset="utf-8" />
+   227→  <title>${escapeHtml(title)}</title>
+   228→  <style>
+   229→    * { box-sizing: border-box; }
+   230→    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; color: #0f172a; margin: 0; padding: 32px; }
+   231→    .header { border-bottom: 3px solid #10b981; padding-bottom: 16px; margin-bottom: 24px; }
+   232→    .brand { display: flex; align-items: center; gap: 10px; }
+   233→    .brand-mark { width: 36px; height: 36px; border-radius: 8px; background: linear-gradient(135deg, #10b981, #14b8a6); display: inline-flex; align-items: center; justify-content: center; color: #fff; font-weight: 700; font-size: 16px; }
+   234→    .brand-name { font-size: 18px; font-weight: 700; color: #10b981; letter-spacing: -0.01em; }
+   235→    .brand-tag { font-size: 11px; color: #64748b; margin-top: 2px; }
+   236→    h1 { font-size: 22px; margin: 14px 0 4px; color: #0f172a; }
+   237→    .subtitle { font-size: 13px; color: #64748b; margin: 0 0 6px; }
+   238→    .meta { font-size: 11px; color: #94a3b8; }
+   239→    .block { margin-bottom: 22px; page-break-inside: avoid; }
+   240→    h2 { font-size: 14px; color: #0f172a; margin: 0 0 10px; padding-bottom: 6px; border-bottom: 1px solid #e2e8f0; text-transform: uppercase; letter-spacing: 0.04em; }
+   241→    table { width: 100%; border-collapse: collapse; font-size: 12px; }
+   242→    table.kv th { text-align: left; width: 45%; padding: 7px 10px; color: #475569; font-weight: 500; background: #f8fafc; border: 1px solid #e2e8f0; }
+   243→    table.kv td { padding: 7px 10px; color: #0f172a; font-weight: 600; border: 1px solid #e2e8f0; }
+   244→    table.grid th { text-align: left; padding: 8px 10px; background: #ecfdf5; color: #047857; font-weight: 600; border: 1px solid #a7f3d0; font-size: 11px; text-transform: uppercase; letter-spacing: 0.03em; }
+   245→    table.grid td { padding: 7px 10px; color: #0f172a; border: 1px solid #e2e8f0; }
+   246→    table.grid tr:nth-child(even) td { background: #f8fafc; }
+   247→    .empty { text-align: center; color: #94a3b8; font-style: italic; }
+   248→    .footer { margin-top: 32px; padding-top: 12px; border-top: 1px solid #e2e8f0; font-size: 10px; color: #94a3b8; text-align: center; }
+   249→    @media print {
+   250→      body { padding: 18px; }
+   251→      .block { page-break-inside: avoid; }
+   252→      @page { margin: 14mm; }
+   253→    }
+   254→  </style>
+   255→</head>
+   256→<body>
+   257→  <div class="header">
+   258→    <div class="brand">
+   259→      <span class="brand-mark">∞</span>
+   260→      <div>
+   261→        <div class="brand-name">GSTPilot™ Infinity</div>
+   262→        <div class="brand-tag">The Financial Brain of India™</div>
+   263→      </div>
+   264→    </div>
+   265→    <h1>${escapeHtml(title)}</h1>
+   266→    ${subtitle ? `<p class="subtitle">${escapeHtml(subtitle)}</p>` : ''}
+   267→    <p class="meta">Generated: ${escapeHtml(generatedAt)}</p>
+   268→  </div>
+   269→  ${sectionHtml}
+   270→  ${tableHtml}
+   271→  <div class="footer">Confidential — GSTPilot™ Infinity Report Engine • ${escapeHtml(generatedAt)}</div>
+   272→  <script>
+   273→    window.onload = function () {
+   274→      setTimeout(function () { window.print(); }, 250);
+   275→    };
+   276→  </script>
+   277→</body>
+   278→</html>`;
+   279→}
+   280→
+   281→function openPrintWindow(html: string): boolean {
+   282→  if (typeof window === 'undefined') return false;
+   283→  const printWindow = window.open('', '_blank', 'width=900,height=720');
+   284→  if (!printWindow) {
+   285→    // Pop-up blocked — fall back to writing into a hidden iframe
+   286→    const iframe = document.createElement('iframe');
+   287→    iframe.style.position = 'fixed';
+   288→    iframe.style.right = '0';
+   289→    iframe.style.bottom = '0';
+   290→    iframe.style.width = '0';
+   291→    iframe.style.height = '0';
+   292→    iframe.style.border = '0';
+   293→    document.body.appendChild(iframe);
+   294→    const doc = iframe.contentWindow?.document;
+   295→    if (!doc) {
+   296→      document.body.removeChild(iframe);
+   297→      return false;
+   298→    }
+   299→    doc.open();
+   300→    doc.write(html);
+   301→    doc.close();
+   302→    iframe.contentWindow?.focus();
+   303→    setTimeout(() => {
+   304→      try { iframe.contentWindow?.print(); } catch { /* ignore */ }
+   305→      setTimeout(() => document.body.removeChild(iframe), 1000);
+   306→    }, 400);
+   307→    return true;
+   308→  }
+   309→  printWindow.document.open();
+   310→  printWindow.document.write(html);
+   311→  printWindow.document.close();
+   312→  printWindow.focus();
+   313→  return true;
+   314→}
+   315→
+   316→// ─── Main Component ────────────────────────────────────────────────────────────
+   317→
+   318→export default function ReportsPage() {
+   319→  // ─── State ────────────────────────────────────────────────────────────────
+   320→  const [invoices, setInvoices] = useState<Invoice[]>([]);
+   321→  const [filings, setFilings] = useState<GSTRFiling[]>([]);
+   322→  const [clients, setClients] = useState<ClientOption[]>([]);
+   323→  const [loading, setLoading] = useState(true);
+   324→
+   325→  const [selectedClientId, setSelectedClientId] = useState<string>('all');
+   326→  const [selectedMonth, setSelectedMonth] = useState<string>(() => {
+   327→    const m = new Date().getMonth() + 1;
+   328→    return m.toString().padStart(2, '0');
+   329→  });
+   330→  const [selectedYear, setSelectedYear] = useState<string>(() =>
+   331→    new Date().getFullYear().toString()
+   332→  );
+   333→  const [returnType, setReturnType] = useState<string>('GSTR-1');
+   334→  const [includeSections, setIncludeSections] = useState<Record<GSTR1Section, boolean>>({
+   335→    b2b: true,
+   336→    b2cl: true,
+   337→    b2cs: true,
+   338→    cdnr: true,
+   339→    cdnur: true,
+   340→    exp: true,
+   341→  });
+   342→
+   343→  const [recentExports, setRecentExports] = useState<RecentExport[]>(() => loadHistory());
+   344→  const [generating, setGenerating] = useState<string | null>(null);
+   345→  const [previewOpen, setPreviewOpen] = useState(false);
+   346→  const [previewData, setPreviewData] = useState<RecentExport | null>(null);
+   347→  const [activeTab, setActiveTab] = useState<string>('export');
+   348→
+   349→  // ─── Live Firestore data for category tabs ──────────────────────────────
+   350→  const fireInvoicesQ = useFireInvoices();
+   351→  const fireReturnsQ = useFireReturns();
+   352→  const fireReconsQ = useFireReconciliations();
+   353→  const { metrics: liveMetrics } = useLiveDashboardMetrics();
+   354→
+   355→  const fireInvoices = (fireInvoicesQ.data ?? []) as Array<FirestoreInvoice & { id?: string }>;
+   356→  const fireReturns = (fireReturnsQ.data ?? []) as Array<FirestoreReturn & { id?: string }>;
+   357→  const fireRecons = (fireReconsQ.data ?? []) as Array<FirestoreReconciliation & { id?: string }>;
+   358→
+   359→  // ─── Persist Report History to localStorage ──────────────────────────────
+   360→  useEffect(() => {
+   361→    saveHistory(recentExports);
+   362→  }, [recentExports]);
+   363→
+   364→  // ─── Data Fetching ────────────────────────────────────────────────────────
+   365→  useEffect(() => {
+   366→    async function fetchData() {
+   367→      setLoading(true);
+   368→      try {
+   369→        const [invoicesRes, filingsRes] = await Promise.all([
+   370→          fetch('/api/invoices'),
+   371→          fetch('/api/gstr-filing'),
+   372→        ]);
+   373→
+   374→        if (invoicesRes.ok) {
+   375→          const invData = await invoicesRes.json();
+   376→          setInvoices(invData.invoices ?? invData ?? []);
+   377→        }
+   378→        if (filingsRes.ok) {
+   379→          const filData = await filingsRes.json();
+   380→          setFilings(filData.filings ?? filData ?? []);
+   381→        }
+   382→      } catch (err) {
+   383→        console.error('Failed to fetch data:', err);
+   384→      } finally {
+   385→        setLoading(false);
+   386→      }
+   387→    }
+   388→    fetchData();
+   389→  }, []);
+   390→
+   391→  // Extract clients
+   392→  useEffect(() => {
+   393→    const clientMap = new Map<string, ClientOption>();
+   394→    invoices.forEach((inv) => {
+   395→      if (inv.client && !clientMap.has(inv.clientId)) {
+   396→        clientMap.set(inv.clientId, {
+   397→          id: inv.clientId,
+   398→          tradeName: inv.client.tradeName,
+   399→          gstin: inv.client.gstin,
+   400→        });
+   401→      }
+   402→    });
+   403→    filings.forEach((f) => {
+   404→      if (f.client && !clientMap.has(f.clientId)) {
+   405→        clientMap.set(f.clientId, {
+   406→          id: f.clientId,
+   407→          tradeName: f.client.tradeName,
+   408→          gstin: f.client.gstin,
+   409→        });
+   410→      }
+   411→    });
+   412→    setClients(Array.from(clientMap.values()));
+   413→  }, [invoices, filings]);
+   414→
+   415→  // ─── Derived Data ─────────────────────────────────────────────────────────
+   416→  const selectedPeriod = `${selectedYear}-${selectedMonth}`;
+   417→
+   418→  const filteredInvoices = invoices.filter((inv) => {
+   419→    if (selectedClientId !== 'all' && inv.clientId !== selectedClientId) return false;
+   420→    if (inv.period && inv.period !== selectedPeriod) return false;
+   421→    if (!includeSections[inv.gstr1Section as GSTR1Section]) return false;
+   422→    return true;
+   423→  });
+   424→
+   425→  const sectionPreviews: SectionPreview[] = SECTION_KEYS
+   426→    .filter((s) => includeSections[s])
+   427→    .map((section) => {
+   428→      const sectionInvoices = filteredInvoices.filter((inv) => inv.gstr1Section === section);
+   429→      return {
+   430→        section,
+   431→        invoiceCount: sectionInvoices.length,
+   432→        taxableValue: sectionInvoices.reduce((sum, inv) => sum + inv.taxableValue, 0),
+   433→        totalTax: sectionInvoices.reduce((sum, inv) => sum + inv.cgst + inv.sgst + inv.igst, 0),
+   434→      };
+   435→    });
+   436→
+   437→  const totalTaxableValue = filteredInvoices.reduce((sum, inv) => sum + inv.taxableValue, 0);
+   438→  const totalTax = filteredInvoices.reduce((sum, inv) => sum + inv.cgst + inv.sgst + inv.igst, 0);
+   439→  const totalInvoices = filteredInvoices.length;
+   440→
+   441→  const matchedFiling = filings.find(
+   442→    (f) =>
+   443→      (selectedClientId === 'all' || f.clientId === selectedClientId) &&
+   444→      f.period === selectedPeriod &&
+   445→      f.returnType === returnType
+   446→  );
+   447→
+   448→  const clientNameFor = (id: string) =>
+   449→    id === 'all'
+   450→      ? 'All Clients'
+   451→      : clients.find((c) => c.id === id)?.tradeName ?? 'Unknown';
+   452→
+   453→  // ─── Firestore-derived category summaries ─────────────────────────────────
+   454→
+   455→  // GST Reports: GSTR-1 + GSTR-3B summaries
+   456→  const gstSummary = useMemo(() => {
+   457→    const gstr1Returns = fireReturns.filter((r) => r.returnType === 'GSTR-1');
+   458→    const gstr3bReturns = fireReturns.filter((r) => r.returnType === 'GSTR-3B');
+   459→    const outputTax = fireInvoices.reduce(
+   460→      (s, i) => s + (i.cgst || 0) + (i.sgst || 0) + (i.igst || 0) + (i.cess || 0),
+   461→      0,
+   462→    );
+   463→    const outputTaxable = fireInvoices.reduce((s, i) => s + (i.taxableValue || 0), 0);
+   464→    const gstr1Filed = gstr1Returns.filter((r) => r.status === 'filed').length;
+   465→    const gstr3bFiled = gstr3bReturns.filter((r) => r.status === 'filed').length;
+   466→    return {
+   467→      gstr1Total: gstr1Returns.length,
+   468→      gstr1Filed,
+   469→      gstr1Pending: gstr1Returns.length - gstr1Filed,
+   470→      gstr3bTotal: gstr3bReturns.length,
+   471→      gstr3bFiled,
+   472→      gstr3bPending: gstr3bReturns.length - gstr3bFiled,
+   473→      outputTaxable,
+   474→      outputTax,
+   475→    };
+   476→  }, [fireReturns, fireInvoices]);
+   477→
+   478→  // Compliance Reports: filing compliance + match rates + issues
+   479→  const complianceSummary = useMemo(() => {
+   480→    const totalReturns = fireReturns.length;
+   481→    const filedReturns = fireReturns.filter((r) => r.status === 'filed').length;
+   482→    // Per FilingStatus type ('draft' | 'prepared' | 'validated' | 'reviewed' | 'generated' | 'filed' | 'reopened'),
+   483→    // 'overdue' is not a status — we treat non-filed returns as pending/overdue for the report.
+   484→    const draftReturns = fireReturns.filter((r) => r.status === 'draft').length;
+   485→    const overdueReturns = fireReturns.filter((r) =>
+   486→      r.status === 'reopened' || (r.status !== 'filed' && r.status !== 'draft'),
+   487→    ).length;
+   488→    const filingRate = totalReturns > 0 ? Math.round((filedReturns / totalReturns) * 100) : 0;
+   489→    const reconTotal = fireRecons.reduce((s, r) => s + (r.totalRecords || 0), 0);
+   490→    const reconMatched = fireRecons.reduce((s, r) => s + (r.matched || 0), 0);
+   491→    const matchRate = reconTotal > 0 ? Math.round((reconMatched / reconTotal) * 100) : 0;
+   492→    const reconHighRisk = fireRecons.reduce((s, r) => s + (r.highRisk || 0), 0);
+   493→    return {
+   494→      totalReturns,
+   495→      filedReturns,
+   496→      overdueReturns,
+   497→      draftReturns,
+   498→      filingRate,
+   499→      matchRate,
+   500→      reconHighRisk,
+   501→      reconCount: fireRecons.length,
+   502→      avgHealth: liveMetrics.averageHealthScore,
+   503→      criticalIssues: liveMetrics.criticalIssues,
+   504→      warnings: liveMetrics.warnings,
+   505→    };
+   506→  }, [fireReturns, fireRecons, liveMetrics]);
+   507→
+   508→  // Financial Reports: revenue + tax volumes
+   509→  const financialSummary = useMemo(() => {
+   510→    const totalRevenue = fireInvoices.reduce((s, i) => s + (i.totalAmount || 0), 0);
+   511→    const totalTaxVolume = fireInvoices.reduce(
+   512→      (s, i) => s + (i.cgst || 0) + (i.sgst || 0) + (i.igst || 0) + (i.cess || 0),
+   513→      0,
+   514→    );
+   515→    const totalTaxable = fireInvoices.reduce((s, i) => s + (i.taxableValue || 0), 0);
+   516→    const igstTotal = fireInvoices.reduce((s, i) => s + (i.igst || 0), 0);
+   517→    const cgstTotal = fireInvoices.reduce((s, i) => s + (i.cgst || 0), 0);
+   518→    const sgstTotal = fireInvoices.reduce((s, i) => s + (i.sgst || 0), 0);
+   519→    const cessTotal = fireInvoices.reduce((s, i) => s + (i.cess || 0), 0);
+   520→    const bySection = SECTION_KEYS.map((sec) => {
+   521→      const secInvoices = fireInvoices.filter((i) => i.gstr1Section === sec);
+   522→      return {
+   523→        section: sec,
+   524→        count: secInvoices.length,
+   525→        taxable: secInvoices.reduce((s, i) => s + (i.taxableValue || 0), 0),
+   526→        tax: secInvoices.reduce((s, i) => s + (i.cgst || 0) + (i.sgst || 0) + (i.igst || 0), 0),
+   527→      };
+   528→    });
+   529→    return {
+   530→      totalRevenue,
+   531→      totalTaxVolume,
+   532→      totalTaxable,
+   533→      igstTotal,
+   534→      cgstTotal,
+   535→      sgstTotal,
+   536→      cessTotal,
+   537→      bySection,
+   538→      invoiceCount: fireInvoices.length,
+   539→    };
+   540→  }, [fireInvoices]);
+   541→
+   542→  // Cash Flow Reports: reconciliation-based cash flow analysis
+   543→  const cashFlowSummary = useMemo(() => {
+   544→    const totalRecords = fireRecons.reduce((s, r) => s + (r.totalRecords || 0), 0);
+   545→    const matched = fireRecons.reduce((s, r) => s + (r.matched || 0), 0);
+   546→    const unmatched = fireRecons.reduce((s, r) => s + (r.unmatched || 0), 0);
+   547→    const partial = fireRecons.reduce((s, r) => s + (r.partialMatches || 0), 0);
+   548→    const highRisk = fireRecons.reduce((s, r) => s + (r.highRisk || 0), 0);
+   549→    const itcDifference = fireRecons.reduce((s, r) => s + (r.gstDifference || 0), 0);
+   550→    const matchRate = totalRecords > 0 ? Math.round((matched / totalRecords) * 100) : 0;
+   551→    const byRecon = fireRecons.slice(0, 10).map((r) => ({
+   552→      sources: r.sources,
+   553→      period: r.period,
+   554→      status: r.status,
+   555→      total: r.totalRecords,
+   556→      matched: r.matched,
+   557→      itcDiff: r.gstDifference,
+   558→    }));
+   559→    return {
+   560→      totalRecords,
+   561→      matched,
+   562→      unmatched,
+   563→      partial,
+   564→      highRisk,
+   565→      itcDifference,
+   566→      matchRate,
+   567→      byRecon,
+   568→    };
+   569→  }, [fireRecons]);
+   570→
+   571→  // ─── Handlers ────────────────────────────────────────────────────────────
+   572→  const toggleSection = (section: GSTR1Section) => {
+   573→    setIncludeSections((prev) => ({ ...prev, [section]: !prev[section] }));
+   574→  };
+   575→
+   576→  // P1-M2: Live Firestore subscription for SAVED REPORTS (canonical source going
+   577→  // forward). localStorage history is kept as a secondary list for back-compat.
+   578→  const fireReportsQ = useFireReports();
+   579→  const savedReports: Array<FirestoreReport & { id: string }> = fireReportsQ.data ?? [];
+   580→
+   581→  // P1-M2: persist every report generation to Firestore as a `reports` doc.
+   582→  // Failures are logged via toast but do NOT block the export (the user's
+   583→  // downloaded file is already on disk). The returned firestoreId is stored
+   584→  // back onto the RecentExport so we can sync deletes later.
+   585→  const persistReportToFirestore = useCallback(async (exp: RecentExport): Promise<string | null> => {
+   586→    try {
+   587→      const reportType = EXPORT_TYPE_TO_REPORT_TYPE[exp.exportType] ?? 'custom';
+   588→      const format = mapFileTypeToReportFormat(exp.fileType);
+   589→      // For JSON exports, store the data as a data: URL so the user can re-download
+   590→      // the exact payload later. Skip for PDFs (HTML payload too large to persist).
+   591→      let storageUrl: string | null = null;
+   592→      if (exp.data && format === 'json') {
+   593→        try {
+   594→          const jsonStr = JSON.stringify(exp.data);
+   595→          // Firestore docs are capped at 1MB — guard against oversized payloads.
+   596→          if (jsonStr.length < 900_000) {
+   597→            storageUrl = `data:application/json;base64,${btoa(unescape(encodeURIComponent(jsonStr)))}`;
+   598→          }
+   599→        } catch { /* ignore encoding errors */ }
+   600→      }
+   601→      const reportId = await createReport({
+   602→        clientId: null,
+   603→        clientTradeName: exp.clientName,
+   604→        reportType,
+   605→        format,
+   606→        title: exp.exportType,
+   607→        period: exp.period,
+   608→        description: `Generated via ${exp.exportType} export`,
+   609→        status: 'ready',
+   610→        fileSize: parseFileSizeBytes(exp.fileSize),
+   611→        storageUrl,
+   612→        generatedBy: 'system',
+   613→        generatedAt: new Date(exp.generatedAt).toISOString(),
+   614→        metadata: {
+   615→          exportType: exp.exportType,
+   616→          clientName: exp.clientName,
+   617→          period: exp.period,
+   618→          fileType: exp.fileType,
+   619→          fileSizeLabel: exp.fileSize,
+   620→        },
+   621→      });
+   622→      return reportId;
+   623→    } catch (err) {
+   624→      console.error('Failed to persist report to Firestore:', err);
+   625→      toast.error('Report saved to local history but failed to sync to Firestore');
+   626→      return null;
+   627→    }
+   628→  }, []);
+   629→
+   630→  const addRecentExport = useCallback((exp: RecentExport) => {
+   631→    // P1-M2: persist to Firestore in the background; attach the returned id
+   632→    // back onto the localStorage entry so deletes stay in sync.
+   633→    void persistReportToFirestore(exp).then((firestoreId) => {
+   634→      if (firestoreId) {
+   635→        setRecentExports((prev) =>
+   636→          prev.map((e) => (e.id === exp.id ? { ...e, firestoreId } : e))
+   637→        );
+   638→      }
+   639→    });
+   640→    setRecentExports((prev) => [exp, ...prev].slice(0, HISTORY_LIMIT));
+   641→  }, [persistReportToFirestore]);
+   642→
+   643→  const handleGenerateJSON = async () => {
+   644→    setGenerating('json');
+   645→    try {
+   646→      const body: Record<string, string> = { type: 'json' };
+   647→      if (matchedFiling) body.filingId = matchedFiling.id;
+   648→      if (selectedClientId !== 'all') body.clientId = selectedClientId;
+   649→
+   650→      const res = await fetch('/api/export', {
+   651→        method: 'POST',
+   652→        headers: { 'Content-Type': 'application/json' },
+   653→        body: JSON.stringify(body),
+   654→      });
+   655→
+   656→      if (!res.ok) throw new Error('Export failed');
+   657→
+   658→      const data = await res.json();
+   659→      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+   660→      const url = URL.createObjectURL(blob);
+   661→      const a = document.createElement('a');
+   662→      a.href = url;
+   663→      a.download = `GSTR1_${selectedPeriod}.json`;
+   664→      document.body.appendChild(a);
+   665→      a.click();
+   666→      document.body.removeChild(a);
+   667→      URL.revokeObjectURL(url);
+   668→
+   669→      addRecentExport({
+   670→        id: crypto.randomUUID(),
+   671→        exportType: 'GSTR-1 JSON',
+   672→        clientName: clientNameFor(selectedClientId),
+   673→        period: periodToLabel(selectedPeriod),
+   674→        generatedAt: new Date().toISOString(),
+   675→        fileSize: `${(JSON.stringify(data).length / 1024).toFixed(1)} KB`,
+   676→        fileType: 'json',
+   677→        data,
+   678→      });
+   679→    } catch (err) {
+   680→      console.error('JSON export error:', err);
+   681→    } finally {
+   682→      setGenerating(null);
+   683→    }
+   684→  };
+   685→
+   686→  const handleGenerateExcel = async () => {
+   687→    setGenerating('csv');
+   688→    try {
+   689→      const body: Record<string, string> = { type: 'csv' };
+   690→      if (matchedFiling) body.filingId = matchedFiling.id;
+   691→      if (selectedClientId !== 'all') body.clientId = selectedClientId;
+   692→
+   693→      const res = await fetch('/api/export', {
+   694→        method: 'POST',
+   695→        headers: { 'Content-Type': 'application/json' },
+   696→        body: JSON.stringify(body),
+   697→      });
+   698→
+   699→      if (!res.ok) throw new Error('Export failed');
+   700→
+   701→      const csvText = await res.text();
+   702→      const blob = new Blob([csvText], { type: 'text/csv' });
+   703→      const url = URL.createObjectURL(blob);
+   704→      const a = document.createElement('a');
+   705→      a.href = url;
+   706→      a.download = `GSTR1_${selectedPeriod}.csv`;
+   707→      document.body.appendChild(a);
+   708→      a.click();
+   709→      document.body.removeChild(a);
+   710→      URL.revokeObjectURL(url);
+   711→
+   712→      addRecentExport({
+   713→        id: crypto.randomUUID(),
+   714→        exportType: 'GSTR-1 Excel',
+   715→        clientName: clientNameFor(selectedClientId),
+   716→        period: periodToLabel(selectedPeriod),
+   717→        generatedAt: new Date().toISOString(),
+   718→        fileSize: `${(csvText.length / 1024).toFixed(1)} KB`,
+   719→        fileType: 'csv',
+   720→      });
+   721→    } catch (err) {
+   722→      console.error('Excel export error:', err);
+   723→    } finally {
+   724→      setGenerating(null);
+   725→    }
+   726→  };
+   727→
+   728→  // ─── PDF EXPORT (RESTORED — print-to-PDF via window.print) ──────────────────
+   729→  // Previously this downloaded a JSON file disguised as a "PDF". Now it opens a
+   730→  // clean, print-optimized report window. The browser's native Print dialog lets
+   731→  // the user "Save as PDF" — no heavy dependencies required.
+   732→  const handleGeneratePDF = async () => {
+   733→    setGenerating('report');
+   734→    try {
+   735→      const body: Record<string, string> = { type: 'report' };
+   736→      if (selectedClientId !== 'all') body.clientId = selectedClientId;
+   737→
+   738→      const res = await fetch('/api/export', {
+   739→        method: 'POST',
+   740→        headers: { 'Content-Type': 'application/json' },
+   741→        body: JSON.stringify(body),
+   742→      });
+   743→
+   744→      if (!res.ok) throw new Error('Report generation failed');
+   745→
+   746→      const data = await res.json() as {
+   747→        summary?: Record<string, number | string>;
+   748→        clients?: Array<Record<string, unknown>>;
+   749→        filings?: Array<Record<string, unknown>>;
+   750→      };
+   751→
+   752→      const clientName = clientNameFor(selectedClientId);
+   753→      const generatedAt = new Date().toLocaleString('en-IN');
+   754→
+   755→      const sections: PdfSection[] = [];
+   756→      if (data.summary) {
+   757→        sections.push({
+   758→          heading: 'Filing Summary',
+   759→          rows: Object.entries(data.summary).map(([k, v]) => ({
+   760→            label: k.replace(/([A-Z])/g, ' $1').replace(/^./, (c) => c.toUpperCase()),
+   761→            value: typeof v === 'number' ? formatNumber(v) : String(v),
+   762→          })),
+   763→        });
+   764→      }
+   765→
+   766→      const tables: PdfTable[] = [];
+   767→      if (Array.isArray(data.clients) && data.clients.length > 0) {
+   768→        tables.push({
+   769→          heading: 'Client Breakdown',
+   770→          columns: ['Trade Name', 'GSTIN', 'Health Score', 'Invoices', 'Filings'],
+   771→          rows: data.clients.slice(0, 50).map((c) => [
+   772→            String(c.tradeName ?? ''),
+   773→            String(c.gstin ?? ''),
+   774→            String(c.healthScore ?? ''),
+   775→            String(c.invoiceCount ?? ''),
+   776→            String(c.filingCount ?? ''),
+   777→          ]),
+   778→        });
+   779→      }
+   780→      if (Array.isArray(data.filings) && data.filings.length > 0) {
+   781→        tables.push({
+   782→          heading: 'Filing Breakdown',
+   783→          columns: ['Client', 'Return Type', 'Period', 'Status', 'Taxable Value', 'Total Tax'],
+   784→          rows: data.filings.slice(0, 50).map((f) => [
+   785→            String(f.clientName ?? ''),
+   786→            String(f.returnType ?? ''),
+   787→            String(f.period ?? ''),
+   788→            String(f.status ?? ''),
+   789→            formatCurrency(Number(f.totalTaxableValue ?? 0)),
+   790→            formatCurrency(Number(f.totalTax ?? 0)),
+   791→          ]),
+   792→        });
+   793→      }
+   794→
+   795→      const html = buildPdfHtml({
+   796→        title: 'Filing Summary Report',
+   797→        subtitle: `${clientName} — ${periodToLabel(selectedPeriod)}`,
+   798→        generatedAt,
+   799→        sections,
+   800→        tables,
+   801→      });
+   802→
+   803→      const ok = openPrintWindow(html);
+   804→      if (!ok) {
+   805→        alert('Pop-up blocked. Please allow pop-ups for GSTPilot to export PDF reports.');
+   806→        return;
+   807→      }
+   808→
+   809→      addRecentExport({
+   810→        id: crypto.randomUUID(),
+   811→        exportType: 'Filing Summary PDF',
+   812→        clientName,
+   813→        period: periodToLabel(selectedPeriod),
+   814→        generatedAt: new Date().toISOString(),
+   815→        fileSize: 'PDF',
+   816→        fileType: 'pdf',
+   817→        data,
+   818→      });
+   819→    } catch (err) {
+   820→      console.error('PDF report error:', err);
+   821→    } finally {
+   822→      setGenerating(null);
+   823→    }
+   824→  };
+   825→
+   826→  const handleGenerateWorkingPapers = async () => {
+   827→    setGenerating('working-papers');
+   828→    try {
+   829→      const body: Record<string, string> = { type: 'report' };
+   830→      if (selectedClientId !== 'all') body.clientId = selectedClientId;
+   831→
+   832→      const res = await fetch('/api/export', {
+   833→        method: 'POST',
+   834→        headers: { 'Content-Type': 'application/json' },
+   835→        body: JSON.stringify(body),
+   836→      });
+   837→
+   838→      if (!res.ok) throw new Error('Working papers generation failed');
+   839→
+   840→      const data = await res.json() as {
+   841→        summary?: Record<string, number | string>;
+   842→        clients?: Array<Record<string, unknown>>;
+   843→        filings?: Array<Record<string, unknown>>;
+   844→      };
+   845→
+   846→      const clientName = clientNameFor(selectedClientId);
+   847→      const generatedAt = new Date().toLocaleString('en-IN');
+   848→
+   849→      // Working papers = detailed section-by-section tax computation
+   850→      const sections: PdfSection[] = [
+   851→        {
+   852→          heading: 'Working Paper — Overview',
+   853→          rows: [
+   854→            { label: 'Client', value: clientName },
+   855→            { label: 'Period', value: periodToLabel(selectedPeriod) },
+   856→            { label: 'Total Invoices (in selection)', value: formatNumber(totalInvoices) },
+   857→            { label: 'Total Taxable Value', value: formatCurrency(totalTaxableValue) },
+   858→            { label: 'Total Tax (Output)', value: formatCurrency(totalTax) },
+   859→          ],
+   860→        },
+   861→      ];
+   862→      if (data.summary) {
+   863→        sections.push({
+   864→          heading: 'Firm-Wide Summary',
+   865→          rows: Object.entries(data.summary).map(([k, v]) => ({
+   866→            label: k.replace(/([A-Z])/g, ' $1').replace(/^./, (c) => c.toUpperCase()),
+   867→            value: typeof v === 'number' ? formatNumber(v) : String(v),
+   868→          })),
+   869→        });
+   870→      }
+   871→
+   872→      const tables: PdfTable[] = [
+   873→        {
+   874→          heading: 'Section-wise Tax Computation',
+   875→          columns: ['Section', 'Invoices', 'Taxable Value', 'Total Tax'],
+   876→          rows: sectionPreviews.map((sp) => [
+   877→            GSTR1_SECTION_LABELS[sp.section] ?? sp.section.toUpperCase(),
+   878→            formatNumber(sp.invoiceCount),
+   879→            formatCurrency(sp.taxableValue),
+   880→            formatCurrency(sp.totalTax),
+   881→          ]),
+   882→        },
+   883→      ];
+   884→      if (Array.isArray(data.filings) && data.filings.length > 0) {
+   885→        tables.push({
+   886→          heading: 'Filing Reconciliation',
+   887→          columns: ['Client', 'Return Type', 'Period', 'Status', 'Taxable Value', 'Total Tax'],
+   888→          rows: data.filings.slice(0, 50).map((f) => [
+   889→            String(f.clientName ?? ''),
+   890→            String(f.returnType ?? ''),
+   891→            String(f.period ?? ''),
+   892→            String(f.status ?? ''),
+   893→            formatCurrency(Number(f.totalTaxableValue ?? 0)),
+   894→            formatCurrency(Number(f.totalTax ?? 0)),
+   895→          ]),
+   896→        });
+   897→      }
+   898→
+   899→      const html = buildPdfHtml({
+   900→        title: 'GST Working Papers',
+   901→        subtitle: `${clientName} — ${periodToLabel(selectedPeriod)}`,
+   902→        generatedAt,
+   903→        sections,
+   904→        tables,
+   905→      });
+   906→
+   907→      const ok = openPrintWindow(html);
+   908→      if (!ok) {
+   909→        alert('Pop-up blocked. Please allow pop-ups for GSTPilot to export PDF reports.');
+   910→        return;
+   911→      }
+   912→
+   913→      addRecentExport({
+   914→        id: crypto.randomUUID(),
+   915→        exportType: 'Working Papers PDF',
+   916→        clientName,
+   917→        period: periodToLabel(selectedPeriod),
+   918→        generatedAt: new Date().toISOString(),
+   919→        fileSize: 'PDF',
+   920→        fileType: 'pdf',
+   921→        data,
+   922→      });
+   923→    } catch (err) {
+   924→      console.error('Working papers error:', err);
+   925→    } finally {
+   926→      setGenerating(null);
+   927→    }
+   928→  };
+   929→
+   930→  // ─── Category-tab PDF generators (use live Firestore data) ─────────────────
+   931→
+   932→  const handlePrintGSTSummary = () => {
+   933→    setGenerating('gst-pdf');
+   934→    try {
+   935→      const generatedAt = new Date().toLocaleString('en-IN');
+   936→      const html = buildPdfHtml({
+   937→        title: 'GST Summary Report',
+   938→        subtitle: 'GSTR-1 & GSTR-3B Filing Status',
+   939→        generatedAt,
+   940→        sections: [
+   941→          {
+   942→            heading: 'GSTR-1 Filings',
+   943→            rows: [
+   944→              { label: 'Total GSTR-1 Returns', value: formatNumber(gstSummary.gstr1Total) },
+   945→              { label: 'Filed', value: formatNumber(gstSummary.gstr1Filed) },
+   946→              { label: 'Pending', value: formatNumber(gstSummary.gstr1Pending) },
+   947→            ],
+   948→          },
+   949→          {
+   950→            heading: 'GSTR-3B Filings',
+   951→            rows: [
+   952→              { label: 'Total GSTR-3B Returns', value: formatNumber(gstSummary.gstr3bTotal) },
+   953→              { label: 'Filed', value: formatNumber(gstSummary.gstr3bFiled) },
+   954→              { label: 'Pending', value: formatNumber(gstSummary.gstr3bPending) },
+   955→            ],
+   956→          },
+   957→          {
+   958→            heading: 'Output Tax Liability',
+   959→            rows: [
+   960→              { label: 'Total Taxable Value', value: formatCurrency(gstSummary.outputTaxable) },
+   961→              { label: 'Total Output Tax', value: formatCurrency(gstSummary.outputTax) },
+   962→            ],
+   963→          },
+   964→        ],
+   965→        tables: [
+   966→          {
+   967→            heading: 'Recent GSTR-1 & GSTR-3B Returns',
+   968→            columns: ['Return Type', 'Period', 'Status', 'Taxable Value', 'Total Tax'],
+   969→            rows: fireReturns.slice(0, 30).map((r) => [
+   970→              r.returnType,
+   971→              r.period,
+   972→              r.status,
+   973→              formatCurrency(r.totalTaxableValue || 0),
+   974→              formatCurrency(r.totalTax || 0),
+   975→            ]),
+   976→          },
+   977→        ],
+   978→      });
+   979→      const ok = openPrintWindow(html);
+   980→      if (!ok) {
+   981→        alert('Pop-up blocked. Please allow pop-ups for GSTPilot to export PDF reports.');
+   982→        return;
+   983→      }
+   984→      addRecentExport({
+   985→        id: crypto.randomUUID(),
+   986→        exportType: 'GST Summary PDF',
+   987→        clientName: 'All Clients',
+   988→        period: periodToLabel(selectedPeriod),
+   989→        generatedAt: new Date().toISOString(),
+   990→        fileSize: 'PDF',
+   991→        fileType: 'pdf',
+   992→      });
+   993→    } finally {
+   994→      setGenerating(null);
+   995→    }
+   996→  };
+   997→
+   998→  const handlePrintCompliance = () => {
+   999→    setGenerating('compliance-pdf');
+  1000→    try {
+  1001→      const generatedAt = new Date().toLocaleString('en-IN');
+  1002→      const html = buildPdfHtml({
+  1003→        title: 'Compliance Report',
+  1004→        subtitle: 'Filing Compliance & ITC Reconciliation Status',
+  1005→        generatedAt,
+  1006→        sections: [
+  1007→          {
+  1008→            heading: 'Filing Compliance',
+  1009→            rows: [
+  1010→              { label: 'Total Returns', value: formatNumber(complianceSummary.totalReturns) },
+  1011→              { label: 'Filed', value: formatNumber(complianceSummary.filedReturns) },
+  1012→              { label: 'Draft', value: formatNumber(complianceSummary.draftReturns) },
+  1013→              { label: 'Overdue', value: formatNumber(complianceSummary.overdueReturns) },
+  1014→              { label: 'Filing Rate', value: `${complianceSummary.filingRate}%` },
+  1015→            ],
+  1016→          },
+  1017→          {
+  1018→            heading: 'ITC Reconciliation',
+  1019→            rows: [
+  1020→              { label: 'Reconciliation Runs', value: formatNumber(complianceSummary.reconCount) },
+  1021→              { label: 'Match Rate', value: `${complianceSummary.matchRate}%` },
+  1022→              { label: 'High-Risk Records', value: formatNumber(complianceSummary.reconHighRisk) },
+  1023→            ],
+  1024→          },
+  1025→          {
+  1026→            heading: 'Risk & Issues',
+  1027→            rows: [
+  1028→              { label: 'Average Health Score', value: formatNumber(complianceSummary.avgHealth) },
+  1029→              { label: 'Critical Issues', value: formatNumber(complianceSummary.criticalIssues) },
+  1030→              { label: 'Warnings', value: formatNumber(complianceSummary.warnings) },
+  1031→            ],
+  1032→          },
+  1033→        ],
+  1034→      });
+  1035→      const ok = openPrintWindow(html);
+  1036→      if (!ok) {
+  1037→        alert('Pop-up blocked. Please allow pop-ups for GSTPilot to export PDF reports.');
+  1038→        return;
+  1039→      }
+  1040→      addRecentExport({
+  1041→        id: crypto.randomUUID(),
+  1042→        exportType: 'Compliance Report PDF',
+  1043→        clientName: 'All Clients',
+  1044→        period: periodToLabel(selectedPeriod),
+  1045→        generatedAt: new Date().toISOString(),
+  1046→        fileSize: 'PDF',
+  1047→        fileType: 'pdf',
+  1048→      });
+  1049→    } finally {
+  1050→      setGenerating(null);
+  1051→    }
+  1052→  };
+  1053→
+  1054→  const handlePrintFinancial = () => {
+  1055→    setGenerating('financial-pdf');
+  1056→    try {
+  1057→      const generatedAt = new Date().toLocaleString('en-IN');
+  1058→      const html = buildPdfHtml({
+  1059→        title: 'Financial Summary Report',
+  1060→        subtitle: 'Revenue, Tax Liability & Section-wise Breakdown',
+  1061→        generatedAt,
+  1062→        sections: [
+  1063→          {
+  1064→            heading: 'Financial Overview',
+  1065→            rows: [
+  1066→              { label: 'Total Invoices', value: formatNumber(financialSummary.invoiceCount) },
+  1067→              { label: 'Total Revenue', value: formatCurrency(financialSummary.totalRevenue) },
+  1068→              { label: 'Total Taxable Value', value: formatCurrency(financialSummary.totalTaxable) },
+  1069→              { label: 'Total Tax Volume', value: formatCurrency(financialSummary.totalTaxVolume) },
+  1070→            ],
+  1071→          },
+  1072→          {
+  1073→            heading: 'Tax Component Breakdown',
+  1074→            rows: [
+  1075→              { label: 'CGST', value: formatCurrency(financialSummary.cgstTotal) },
+  1076→              { label: 'SGST', value: formatCurrency(financialSummary.sgstTotal) },
+  1077→              { label: 'IGST', value: formatCurrency(financialSummary.igstTotal) },
+  1078→              { label: 'Cess', value: formatCurrency(financialSummary.cessTotal) },
+  1079→            ],
+  1080→          },
+  1081→        ],
+  1082→        tables: [
+  1083→          {
+  1084→            heading: 'Section-wise Financial Breakdown',
+  1085→            columns: ['Section', 'Invoice Count', 'Taxable Value', 'Tax Amount'],
+  1086→            rows: financialSummary.bySection.map((s) => [
+  1087→              GSTR1_SECTION_LABELS[s.section] ?? s.section.toUpperCase(),
+  1088→              formatNumber(s.count),
+  1089→              formatCurrency(s.taxable),
+  1090→              formatCurrency(s.tax),
+  1091→            ]),
+  1092→          },
+  1093→        ],
+  1094→      });
+  1095→      const ok = openPrintWindow(html);
+  1096→      if (!ok) {
+  1097→        alert('Pop-up blocked. Please allow pop-ups for GSTPilot to export PDF reports.');
+  1098→        return;
+  1099→      }
+  1100→      addRecentExport({
+  1101→        id: crypto.randomUUID(),
+  1102→        exportType: 'Financial Report PDF',
+  1103→        clientName: 'All Clients',
+  1104→        period: periodToLabel(selectedPeriod),
+  1105→        generatedAt: new Date().toISOString(),
+  1106→        fileSize: 'PDF',
+  1107→        fileType: 'pdf',
+  1108→      });
+  1109→    } finally {
+  1110→      setGenerating(null);
+  1111→    }
+  1112→  };
+  1113→
+  1114→  const handlePrintCashFlow = () => {
+  1115→    setGenerating('cashflow-pdf');
+  1116→    try {
+  1117→      const generatedAt = new Date().toLocaleString('en-IN');
+  1118→      const html = buildPdfHtml({
+  1119→        title: 'Cash Flow Report',
+  1120→        subtitle: 'ITC Reconciliation & Cash Flow Analysis',
+  1121→        generatedAt,
+  1122→        sections: [
+  1123→          {
+  1124→            heading: 'Reconciliation Summary',
+  1125→            rows: [
+  1126→              { label: 'Total Records', value: formatNumber(cashFlowSummary.totalRecords) },
+  1127→              { label: 'Matched', value: formatNumber(cashFlowSummary.matched) },
+  1128→              { label: 'Unmatched', value: formatNumber(cashFlowSummary.unmatched) },
+  1129→              { label: 'Partial Matches', value: formatNumber(cashFlowSummary.partial) },
+  1130→              { label: 'High-Risk Records', value: formatNumber(cashFlowSummary.highRisk) },
+  1131→              { label: 'Match Rate', value: `${cashFlowSummary.matchRate}%` },
+  1132→            ],
+  1133→          },
+  1134→          {
+  1135→            heading: 'Cash Flow Impact',
+  1136→            rows: [
+  1137→              { label: 'ITC Difference', value: formatCurrency(cashFlowSummary.itcDifference) },
+  1138→            ],
+  1139→          },
+  1140→        ],
+  1141→        tables: [
+  1142→          {
+  1143→            heading: 'Recent Reconciliation Runs',
+  1144→            columns: ['Sources', 'Period', 'Status', 'Total', 'Matched', 'ITC Diff'],
+  1145→            rows: cashFlowSummary.byRecon.map((r) => [
+  1146→              r.sources,
+  1147→              r.period,
+  1148→              r.status,
+  1149→              formatNumber(r.total),
+  1150→              formatNumber(r.matched),
+  1151→              formatCurrency(r.itcDiff),
+  1152→            ]),
+  1153→          },
+  1154→        ],
+  1155→      });
+  1156→      const ok = openPrintWindow(html);
+  1157→      if (!ok) {
+  1158→        alert('Pop-up blocked. Please allow pop-ups for GSTPilot to export PDF reports.');
+  1159→        return;
+  1160→      }
+  1161→      addRecentExport({
+  1162→        id: crypto.randomUUID(),
+  1163→        exportType: 'Cash Flow Report PDF',
+  1164→        clientName: 'All Clients',
+  1165→        period: periodToLabel(selectedPeriod),
+  1166→        generatedAt: new Date().toISOString(),
+  1167→        fileSize: 'PDF',
+  1168→        fileType: 'pdf',
+  1169→      });
+  1170→    } finally {
+  1171→      setGenerating(null);
+  1172→    }
+  1173→  };
+  1174→
+  1175→  const handleDeleteExport = async (id: string) => {
+  1176→    // P1-M2: also delete the linked Firestore report so the saved reports
+  1177→    // section stays in sync.
+  1178→    const exp = recentExports.find((e) => e.id === id);
+  1179→    if (exp?.firestoreId) {
+  1180→      try {
+  1181→        await deleteReport(exp.firestoreId);
+  1182→        toast.success('Report deleted from saved reports');
+  1183→      } catch (err) {
+  1184→        console.error('Failed to delete Firestore report:', err);
+  1185→        toast.error('Failed to delete from saved reports');
+  1186→      }
+  1187→    }
+  1188→    setRecentExports((prev) => prev.filter((e) => e.id !== id));
+  1189→  };
+  1190→
+  1191→  // P1-M2: delete a saved report from Firestore (and also try to remove its
+  1192→  // localStorage mirror if one exists).
+  1193→  const handleDeleteSavedReport = async (reportId: string) => {
+  1194→    try {
+  1195→      await deleteReport(reportId);
+  1196→      // Remove the localStorage mirror entry whose firestoreId matches
+  1197→      setRecentExports((prev) => prev.filter((e) => e.firestoreId !== reportId));
+  1198→      toast.success('Saved report deleted');
+  1199→    } catch (err) {
+  1200→      console.error('Failed to delete saved report:', err);
+  1201→      toast.error('Failed to delete saved report');
+  1202→    }
+  1203→  };
+  1204→
+  1205→  // P1-M2: re-download a saved JSON report from its persisted data: URL.
+  1206→  const handleDownloadSavedReport = (report: FirestoreReport & { id: string }) => {
+  1207→    if (!report.storageUrl) {
+  1208→      toast.error('Re-download not available for this report. Please regenerate from the export tab.');
+  1209→      return;
+  1210→    }
+  1211→    try {
+  1212→      // storageUrl is a data:application/json;base64,... URL
+  1213→      const a = document.createElement('a');
+  1214→      a.href = report.storageUrl;
+  1215→      a.download = `${report.title.replace(/\s+/g, '_')}_${report.period ?? 'report'}.json`;
+  1216→      document.body.appendChild(a);
+  1217→      a.click();
+  1218→      document.body.removeChild(a);
+  1219→      toast.success('Report downloaded');
+  1220→    } catch (err) {
+  1221→      console.error('Failed to download saved report:', err);
+  1222→      toast.error('Failed to download saved report');
+  1223→    }
+  1224→  };
+  1225→
+  1226→  const handleViewExport = (exp: RecentExport) => {
+  1227→    setPreviewData(exp);
+  1228→    setPreviewOpen(true);
+  1229→  };
+  1230→
+  1231→  const handleDownloadExport = (exp: RecentExport) => {
+  1232→    if (!exp.data) return;
+  1233→    const blob = new Blob([JSON.stringify(exp.data, null, 2)], { type: 'application/json' });
+  1234→    const url = URL.createObjectURL(blob);
+  1235→    const a = document.createElement('a');
+  1236→    a.href = url;
+  1237→    a.download = `${exp.exportType.replace(/\s+/g, '_')}_${exp.period}.json`;
+  1238→    document.body.appendChild(a);
+  1239→    a.click();
+  1240→    document.body.removeChild(a);
+  1241→    URL.revokeObjectURL(url);
+  1242→  };
+  1243→
+  1244→  const handleClearHistory = () => {
+  1245→    setRecentExports([]);
+  1246→  };
+  1247→
+  1248→  // ─── Loading Skeleton ────────────────────────────────────────────────────
+  1249→  if (loading) {
+  1250→    return (
+  1251→      <div className="space-y-6 p-6">
+  1252→        <div className="flex items-center gap-3">
+  1253→          <Skeleton className="size-10 rounded-lg" />
+  1254→          <div className="space-y-2">
+  1255→            <Skeleton className="h-6 w-64" />
+  1256→            <Skeleton className="h-4 w-48" />
+  1257→          </div>
+  1258→        </div>
+  1259→        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+  1260→          {[1, 2, 3].map((i) => (
+  1261→            <Skeleton key={i} className="h-48 rounded-xl" />
+  1262→          ))}
+  1263→        </div>
+  1264→        <Skeleton className="h-64 rounded-xl" />
+  1265→        <Skeleton className="h-48 rounded-xl" />
+  1266→      </div>
+  1267→    );
+  1268→  }
+  1269→
+  1270→  // ─── Render ──────────────────────────────────────────────────────────────
+  1271→  return (
+  1272→    <div className="space-y-6 p-4 md:p-6">
+  1273→      {/* Header */}
+  1274→      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+  1275→        <div className="flex items-center gap-3">
+  1276→          <div className="flex size-10 items-center justify-center rounded-lg bg-emerald-100">
+  1277→            <Package className="size-5 text-emerald-700" />
+  1278→          </div>
+  1279→          <div>
+  1280→            <h1 className="text-xl font-bold tracking-tight sm:text-2xl">
+  1281→              Reports & Filing Packages
+  1282→            </h1>
+  1283→            <p className="text-sm text-muted-foreground">
+  1284→              Generate, export, and download GST reports, compliance summaries, and financial statements
+  1285→            </p>
+  1286→          </div>
+  1287→        </div>
+  1288→      </div>
+  1289→
+  1290→      {/* ═══════════════════════════════════════════════════════════════════════
+  1291→          Tab Navigation — RESTORED report categories
+  1292→      ═══════════════════════════════════════════════════════════════════════ */}
+  1293→      <Tabs value={activeTab} onValueChange={setActiveTab}>
+  1294→        <TabsList className="h-auto flex-wrap">
+  1295→          <TabsTrigger value="export" className="gap-1.5">
+  1296→            <Package className="size-3.5" /> Export Package
+  1297→          </TabsTrigger>
+  1298→          <TabsTrigger value="gst" className="gap-1.5">
+  1299→            <FileText className="size-3.5" /> GST Reports
+  1300→          </TabsTrigger>
+  1301→          <TabsTrigger value="compliance" className="gap-1.5">
+  1302→            <ShieldCheck className="size-3.5" /> Compliance
+  1303→          </TabsTrigger>
+  1304→          <TabsTrigger value="financial" className="gap-1.5">
+  1305→            <TrendingUp className="size-3.5" /> Financial
+  1306→          </TabsTrigger>
+  1307→          <TabsTrigger value="cashflow" className="gap-1.5">
+  1308→            <Wallet className="size-3.5" /> Cash Flow
+  1309→          </TabsTrigger>
+  1310→          <TabsTrigger value="history" className="gap-1.5">
+  1311→            <Clock className="size-3.5" /> History
+  1312→          </TabsTrigger>
+  1313→        </TabsList>
+  1314→
+  1315→        {/* ══════════════════════════════════════════════════════════════════
+  1316→            TAB: Export Package (existing UI — preserved)
+  1317→        ══════════════════════════════════════════════════════════════════ */}
+  1318→        <TabsContent value="export" className="space-y-6 mt-4">
+  1319→          {/* Export Options */}
+  1320→          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+  1321→            {/* GSTR-1 JSON */}
+  1322→            <Card className="transition-shadow hover:shadow-md">
+  1323→              <CardHeader>
+  1324→                <div className="flex items-center gap-3">
+  1325→                  <div className="flex size-10 items-center justify-center rounded-lg bg-emerald-50">
+  1326→                    <FileJson className="size-5 text-emerald-700" />
+  1327→                  </div>
+  1328→                  <div>
+  1329→                    <CardTitle className="text-base">GSTR-1 JSON</CardTitle>
+  1330→                    <CardDescription className="text-xs mt-0.5">GST Portal Upload Format</CardDescription>
+  1331→                  </div>
+  1332→                </div>
+  1333→              </CardHeader>
+  1334→              <CardContent className="space-y-4">
+  1335→                <p className="text-sm text-muted-foreground">
+  1336→                  Generate GSTR-1 return in JSON format for upload to GST portal
+  1337→                </p>
+  1338→                <Button
+  1339→                  onClick={handleGenerateJSON}
+  1340→                  disabled={generating !== null}
+  1341→                  className="w-full gap-2 bg-emerald-600 hover:bg-emerald-700"
+  1342→                >
+  1343→                  {generating === 'json' ? (
+  1344→                    <RefreshCw className="size-4 animate-spin" />
+  1345→                  ) : (
+  1346→                    <FileJson className="size-4" />
+  1347→                  )}
+  1348→                  {generating === 'json' ? 'Generating...' : 'Generate'}
+  1349→                </Button>
+  1350→              </CardContent>
+  1351→            </Card>
+  1352→
+  1353→            {/* GSTR-1 Excel */}
+  1354→            <Card className="transition-shadow hover:shadow-md">
+  1355→              <CardHeader>
+  1356→                <div className="flex items-center gap-3">
+  1357→                  <div className="flex size-10 items-center justify-center rounded-lg bg-amber-50">
+  1358→                    <FileSpreadsheet className="size-5 text-amber-700" />
+  1359→                  </div>
+  1360→                  <div>
+  1361→                    <CardTitle className="text-base">GSTR-1 Excel</CardTitle>
+  1362→                    <CardDescription className="text-xs mt-0.5">Spreadsheet Export</CardDescription>
+  1363→                  </div>
+  1364→                </div>
+  1365→              </CardHeader>
+  1366→              <CardContent className="space-y-4">
+  1367→                <p className="text-sm text-muted-foreground">
+  1368→                  Export GSTR-1 data in Excel format for review and records
+  1369→                </p>
+  1370→                <Button
+  1371→                  onClick={handleGenerateExcel}
+  1372→                  disabled={generating !== null}
+  1373→                  className="w-full gap-2 bg-amber-600 hover:bg-amber-700"
+  1374→                >
+  1375→                  {generating === 'csv' ? (
+  1376→                    <RefreshCw className="size-4 animate-spin" />
+  1377→                  ) : (
+  1378→                    <FileSpreadsheet className="size-4" />
+  1379→                  )}
+  1380→                  {generating === 'csv' ? 'Exporting...' : 'Export'}
+  1381→                </Button>
+  1382→              </CardContent>
+  1383→            </Card>
+  1384→
+  1385→            {/* Filing Summary PDF — RESTORED real PDF export */}
+  1386→            <Card className="transition-shadow hover:shadow-md">
+  1387→              <CardHeader>
+  1388→                <div className="flex items-center gap-3">
+  1389→                  <div className="flex size-10 items-center justify-center rounded-lg bg-red-50">
+  1390→                    <FileText className="size-5 text-red-700" />
+  1391→                  </div>
+  1392→                  <div>
+  1393→                    <CardTitle className="text-base">Filing Summary PDF</CardTitle>
+  1394→                    <CardDescription className="text-xs mt-0.5">Comprehensive Report</CardDescription>
+  1395→                  </div>
+  1396→                </div>
+  1397→              </CardHeader>
+  1398→              <CardContent className="space-y-4">
+  1399→                <p className="text-sm text-muted-foreground">
+  1400→                  Generate comprehensive filing summary report in PDF format
+  1401→                </p>
+  1402→                <Button
+  1403→                  onClick={handleGeneratePDF}
+  1404→                  disabled={generating !== null}
+  1405→                  className="w-full gap-2 bg-red-600 hover:bg-red-700"
+  1406→                >
+  1407→                  {generating === 'report' ? (
+  1408→                    <RefreshCw className="size-4 animate-spin" />
+  1409→                  ) : (
+  1410→                    <Printer className="size-4" />
+  1411→                  )}
+  1412→                  {generating === 'report' ? 'Generating...' : 'Generate PDF'}
+  1413→                </Button>
+  1414→              </CardContent>
+  1415→            </Card>
+  1416→          </div>
+  1417→
+  1418→          {/* Configuration Panel */}
+  1419→          <Card>
+  1420→            <CardHeader>
+  1421→              <CardTitle className="flex items-center gap-2 text-base">
+  1422→                <Search className="size-4 text-emerald-600" />
+  1423→                Export Configuration
+  1424→              </CardTitle>
+  1425→              <CardDescription>
+  1426→                Select the client, period, and sections to include in the export
+  1427→              </CardDescription>
+  1428→            </CardHeader>
+  1429→            <CardContent>
+  1430→              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+  1431→                {/* Client Selector */}
+  1432→                <div className="space-y-2">
+  1433→                  <label className="text-sm font-medium">Client</label>
+  1434→                  <Select value={selectedClientId} onValueChange={setSelectedClientId}>
+  1435→                    <SelectTrigger>
+  1436→                      <SelectValue placeholder="Select Client" />
+  1437→                    </SelectTrigger>
+  1438→                    <SelectContent>
+  1439→                      <SelectItem value="all">All Clients</SelectItem>
+  1440→                      {clients.map((c) => (
+  1441→                        <SelectItem key={c.id} value={c.id}>
+  1442→                          {c.tradeName}
+  1443→                        </SelectItem>
+  1444→                      ))}
+  1445→                    </SelectContent>
+  1446→                  </Select>
+  1447→                </div>
+  1448→
+  1449→                {/* Month Selector */}
+  1450→                <div className="space-y-2">
+  1451→                  <label className="text-sm font-medium">Month</label>
+  1452→                  <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+  1453→                    <SelectTrigger>
+  1454→                      <SelectValue placeholder="Select Month" />
+  1455→                    </SelectTrigger>
+  1456→                    <SelectContent>
+  1457→                      {MONTHS.map((m, i) => (
+  1458→                        <SelectItem key={i} value={(i + 1).toString().padStart(2, '0')}>
+  1459→                          {m}
+  1460→                        </SelectItem>
+  1461→                      ))}
+  1462→                    </SelectContent>
+  1463→                  </Select>
+  1464→                </div>
+  1465→
+  1466→                {/* Year Selector */}
+  1467→                <div className="space-y-2">
+  1468→                  <label className="text-sm font-medium">Year</label>
+  1469→                  <Select value={selectedYear} onValueChange={setSelectedYear}>
+  1470→                    <SelectTrigger>
+  1471→                      <SelectValue placeholder="Select Year" />
+  1472→                    </SelectTrigger>
+  1473→                    <SelectContent>
+  1474→                      {[2023, 2024, 2025, 2026].map((y) => (
+  1475→                        <SelectItem key={y} value={y.toString()}>
+  1476→                          {y}
+  1477→                        </SelectItem>
+  1478→                      ))}
+  1479→                    </SelectContent>
+  1480→                  </Select>
+  1481→                </div>
+  1482→
+  1483→                {/* Return Type */}
+  1484→                <div className="space-y-2">
+  1485→                  <label className="text-sm font-medium">Return Type</label>
+  1486→                  <Select value={returnType} onValueChange={setReturnType}>
+  1487→                    <SelectTrigger>
+  1488→                      <SelectValue placeholder="Return Type" />
+  1489→                    </SelectTrigger>
+  1490→                    <SelectContent>
+  1491→                      <SelectItem value="GSTR-1">GSTR-1</SelectItem>
+  1492→                      <SelectItem value="GSTR-3B">GSTR-3B</SelectItem>
+  1493→                    </SelectContent>
+  1494→                  </Select>
+  1495→                </div>
+  1496→              </div>
+  1497→
+  1498→              <Separator className="my-4" />
+  1499→
+  1500→              {/* Section Checkboxes */}
+  1501→              <div className="space-y-2">
+  1502→                <label className="text-sm font-medium">Include Sections</label>
+  1503→                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+  1504→                  {SECTION_KEYS.map((section) => (
+  1505→                    <div key={section} className="flex items-center gap-2">
+  1506→                      <Checkbox
+  1507→                        id={`section-${section}`}
+  1508→                        checked={includeSections[section]}
+  1509→                        onCheckedChange={() => toggleSection(section)}
+  1510→                      />
+  1511→                      <label
+  1512→                        htmlFor={`section-${section}`}
+  1513→                        className="text-sm cursor-pointer select-none"
+  1514→                      >
+  1515→                        {section.toUpperCase()}
+  1516→                      </label>
+  1517→                    </div>
+  1518→                  ))}
+  1519→                </div>
+  1520→              </div>
+  1521→            </CardContent>
+  1522→          </Card>
+  1523→
+  1524→          {/* Preview Section */}
+  1525→          <Card className="border-emerald-200 bg-gradient-to-r from-emerald-50/50 to-teal-50/50">
+  1526→            <CardHeader>
+  1527→              <CardTitle className="flex items-center gap-2 text-base text-emerald-800">
+  1528→                <Eye className="size-4" />
+  1529→                Export Preview
+  1530→              </CardTitle>
+  1531→              <CardDescription>
+  1532→                Summary of data that will be included in the export for{' '}
+  1533→                <span className="font-medium text-emerald-700">{periodToLabel(selectedPeriod)}</span>
+  1534→                {selectedClientId !== 'all' && (
+  1535→                  <>
+  1536→                    {' '}—{' '}
+  1537→                    <span className="font-medium text-emerald-700">
+  1538→                      {clients.find((c) => c.id === selectedClientId)?.tradeName}
+  1539→                    </span>
+  1540→                  </>
+  1541→                )}
+  1542→              </CardDescription>
+  1543→            </CardHeader>
+  1544→            <CardContent>
+  1545→              <div className="grid gap-4 sm:grid-cols-3">
+  1546→                <div className="rounded-lg border border-emerald-200 bg-white p-4 text-center">
+  1547→                  <p className="text-sm text-emerald-600">Total Invoices</p>
+  1548→                  <p className="text-2xl font-bold text-emerald-900">{formatNumber(totalInvoices)}</p>
+  1549→                </div>
+  1550→                <div className="rounded-lg border border-emerald-200 bg-white p-4 text-center">
+  1551→                  <p className="text-sm text-emerald-600">Total Taxable Value</p>
+  1552→                  <p className="text-2xl font-bold text-emerald-900">{formatCurrency(totalTaxableValue)}</p>
+  1553→                </div>
+  1554→                <div className="rounded-lg border border-emerald-200 bg-white p-4 text-center">
+  1555→                  <p className="text-sm text-emerald-600">Total Tax</p>
+  1556→                  <p className="text-2xl font-bold text-emerald-900">{formatCurrency(totalTax)}</p>
+  1557→                </div>
+  1558→              </div>
+  1559→
+  1560→              <Separator className="my-4 bg-emerald-200" />
+  1561→
+  1562→              {/* Section Breakdown */}
+  1563→              <div className="overflow-x-auto rounded-lg border border-emerald-200 bg-white">
+  1564→                <Table>
+  1565→                  <TableHeader>
+  1566→                    <TableRow className="bg-emerald-50/50">
+  1567→                      <TableHead className="whitespace-nowrap">Section</TableHead>
+  1568→                      <TableHead className="whitespace-nowrap text-right">Invoices</TableHead>
+  1569→                      <TableHead className="whitespace-nowrap text-right">Taxable Value</TableHead>
+  1570→                      <TableHead className="whitespace-nowrap text-right">Total Tax</TableHead>
+  1571→                    </TableRow>
+  1572→                  </TableHeader>
+  1573→                  <TableBody>
+  1574→                    {sectionPreviews.length === 0 ? (
+  1575→                      <TableRow>
+  1576→                        <TableCell colSpan={4} className="h-20 text-center text-muted-foreground">
+  1577→                          No sections selected
+  1578→                        </TableCell>
+  1579→                      </TableRow>
+  1580→                    ) : (
+  1581→                      sectionPreviews.map((sp) => (
+  1582→                        <TableRow key={sp.section} className="hover:bg-emerald-50/30">
+  1583→                          <TableCell className="whitespace-nowrap">
+  1584→                            <Badge
+  1585→                              variant="outline"
+  1586→                              className="border-emerald-200 bg-emerald-50 text-emerald-700"
+  1587→                            >
+  1588→                              {GSTR1_SECTION_LABELS[sp.section]}
+  1589→                            </Badge>
+  1590→                          </TableCell>
+  1591→                          <TableCell className="whitespace-nowrap text-right font-medium">
+  1592→                            {formatNumber(sp.invoiceCount)}
+  1593→                          </TableCell>
+  1594→                          <TableCell className="whitespace-nowrap text-right">
+  1595→                            {formatCurrency(sp.taxableValue)}
+  1596→                          </TableCell>
+  1597→                          <TableCell className="whitespace-nowrap text-right">
+  1598→                            {formatCurrency(sp.totalTax)}
+  1599→                          </TableCell>
+  1600→                        </TableRow>
+  1601→                      ))
+  1602→                    )}
+  1603→                  </TableBody>
+  1604→                </Table>
+  1605→              </div>
+  1606→            </CardContent>
+  1607→          </Card>
+  1608→
+  1609→          {/* GST Working Papers */}
+  1610→          <Card className="border-amber-200 bg-gradient-to-r from-amber-50/50 to-orange-50/50">
+  1611→            <CardHeader>
+  1612→              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+  1613→                <div className="flex items-center gap-3">
+  1614→                  <div className="flex size-10 items-center justify-center rounded-lg bg-amber-100">
+  1615→                    <FileText className="size-5 text-amber-700" />
+  1616→                  </div>
+  1617→                  <div>
+  1618→                    <CardTitle className="text-base text-amber-900">GST Working Papers</CardTitle>
+  1619→                    <CardDescription>
+  1620→                      Detailed working papers with reconciliation summaries, tax computations, and section-wise breakdowns for audit and review purposes
+  1621→                    </CardDescription>
+  1622→                  </div>
+  1623→                </div>
+  1624→                <Button
+  1625→                  onClick={handleGenerateWorkingPapers}
+  1626→                  disabled={generating !== null}
+  1627→                  className="gap-2 bg-amber-600 hover:bg-amber-700 shrink-0"
+  1628→                >
+  1629→                  {generating === 'working-papers' ? (
+  1630→                    <RefreshCw className="size-4 animate-spin" />
+  1631→                  ) : (
+  1632→                    <Printer className="size-4" />
+  1633→                  )}
+  1634→                  {generating === 'working-papers' ? 'Generating...' : 'Generate Working Papers PDF'}
+  1635→                </Button>
+  1636→              </div>
+  1637→            </CardHeader>
+  1638→          </Card>
+  1639→        </TabsContent>
+  1640→
+  1641→        {/* ══════════════════════════════════════════════════════════════════
+  1642→            TAB: GST Reports — GSTR-1 + GSTR-3B Summary (RESTORED)
+  1643→        ══════════════════════════════════════════════════════════════════ */}
+  1644→        <TabsContent value="gst" className="space-y-6 mt-4">
+  1645→          <Card>
+  1646→            <CardHeader>
+  1647→              <div className="flex items-center justify-between">
+  1648→                <div className="flex items-center gap-3">
+  1649→                  <div className="flex size-10 items-center justify-center rounded-lg bg-emerald-100">
+  1650→                    <FileText className="size-5 text-emerald-700" />
+  1651→                  </div>
+  1652→                  <div>
+  1653→                    <CardTitle className="text-base">GST Filing Reports</CardTitle>
+  1654→                    <CardDescription>
+  1655→                      GSTR-1 & GSTR-3B summary based on live returns data
+  1656→                    </CardDescription>
+  1657→                  </div>
+  1658→                </div>
+  1659→                <Button
+  1660→                  onClick={handlePrintGSTSummary}
+  1661→                  disabled={generating !== null}
+  1662→                  className="gap-2 bg-emerald-600 hover:bg-emerald-700"
+  1663→                >
+  1664→                  {generating === 'gst-pdf' ? (
+  1665→                    <RefreshCw className="size-4 animate-spin" />
+  1666→                  ) : (
+  1667→                    <Printer className="size-4" />
+  1668→                  )}
+  1669→                  Export PDF
+  1670→                </Button>
+  1671→              </div>
+  1672→            </CardHeader>
+  1673→            <CardContent className="space-y-4">
+  1674→              <div className="grid gap-4 sm:grid-cols-2">
+  1675→                {/* GSTR-1 Summary */}
+  1676→                <div className="rounded-lg border border-emerald-200 bg-emerald-50/40 p-4">
+  1677→                  <div className="mb-3 flex items-center justify-between">
+  1678→                    <h3 className="text-sm font-semibold text-emerald-900">GSTR-1 Summary</h3>
+  1679→                    <Badge variant="outline" className="border-emerald-300 bg-white text-emerald-700">
+  1680→                      {gstSummary.gstr1Total} total
+  1681→                    </Badge>
+  1682→                  </div>
+  1683→                  <div className="space-y-2 text-sm">
+  1684→                    <div className="flex justify-between">
+  1685→                      <span className="text-muted-foreground">Filed</span>
+  1686→                      <span className="font-semibold text-emerald-700">{formatNumber(gstSummary.gstr1Filed)}</span>
+  1687→                    </div>
+  1688→                    <div className="flex justify-between">
+  1689→                      <span className="text-muted-foreground">Pending</span>
+  1690→                      <span className="font-semibold text-amber-700">{formatNumber(gstSummary.gstr1Pending)}</span>
+  1691→                    </div>
+  1692→                  </div>
+  1693→                </div>
+  1694→
+  1695→                {/* GSTR-3B Summary */}
+  1696→                <div className="rounded-lg border border-teal-200 bg-teal-50/40 p-4">
+  1697→                  <div className="mb-3 flex items-center justify-between">
+  1698→                    <h3 className="text-sm font-semibold text-teal-900">GSTR-3B Summary</h3>
+  1699→                    <Badge variant="outline" className="border-teal-300 bg-white text-teal-700">
+  1700→                      {gstSummary.gstr3bTotal} total
+  1701→                    </Badge>
+  1702→                  </div>
+  1703→                  <div className="space-y-2 text-sm">
+  1704→                    <div className="flex justify-between">
+  1705→                      <span className="text-muted-foreground">Filed</span>
+  1706→                      <span className="font-semibold text-teal-700">{formatNumber(gstSummary.gstr3bFiled)}</span>
+  1707→                    </div>
+  1708→                    <div className="flex justify-between">
+  1709→                      <span className="text-muted-foreground">Pending</span>
+  1710→                      <span className="font-semibold text-amber-700">{formatNumber(gstSummary.gstr3bPending)}</span>
+  1711→                    </div>
+  1712→                  </div>
+  1713→                </div>
+  1714→              </div>
+  1715→
+  1716→              <Separator />
+  1717→
+  1718→              {/* Output Tax Liability */}
+  1719→              <div className="grid gap-4 sm:grid-cols-2">
+  1720→                <div className="rounded-lg border bg-white p-4">
+  1721→                  <p className="text-xs text-muted-foreground">Total Taxable Value</p>
+  1722→                  <p className="text-xl font-bold text-foreground">{formatCurrency(gstSummary.outputTaxable)}</p>
+  1723→                </div>
+  1724→                <div className="rounded-lg border bg-white p-4">
+  1725→                  <p className="text-xs text-muted-foreground">Total Output Tax</p>
+  1726→                  <p className="text-xl font-bold text-foreground">{formatCurrency(gstSummary.outputTax)}</p>
+  1727→                </div>
+  1728→              </div>
+  1729→
+  1730→              {/* Returns Table */}
+  1731→              <div className="overflow-x-auto rounded-lg border">
+  1732→                <Table>
+  1733→                  <TableHeader>
+  1734→                    <TableRow className="bg-muted/50">
+  1735→                      <TableHead className="whitespace-nowrap">Return Type</TableHead>
+  1736→                      <TableHead className="whitespace-nowrap">Period</TableHead>
+  1737→                      <TableHead className="whitespace-nowrap">Status</TableHead>
+  1738→                      <TableHead className="whitespace-nowrap text-right">Taxable Value</TableHead>
+  1739→                      <TableHead className="whitespace-nowrap text-right">Total Tax</TableHead>
+  1740→                    </TableRow>
+  1741→                  </TableHeader>
+  1742→                  <TableBody>
+  1743→                    {fireReturns.length === 0 ? (
+  1744→                      <TableRow>
+  1745→                        <TableCell colSpan={5} className="h-20 text-center text-muted-foreground">
+  1746→                          No returns data available
+  1747→                        </TableCell>
+  1748→                      </TableRow>
+  1749→                    ) : (
+  1750→                      fireReturns.slice(0, 15).map((r, idx) => (
+  1751→                        <TableRow key={r.returnId ?? r.id ?? idx} className="hover:bg-muted/30">
+  1752→                          <TableCell className="whitespace-nowrap font-medium">{r.returnType}</TableCell>
+  1753→                          <TableCell className="whitespace-nowrap">{r.period}</TableCell>
+  1754→                          <TableCell>
+  1755→                            <Badge variant="outline" className="text-xs">{r.status}</Badge>
+  1756→                          </TableCell>
+  1757→                          <TableCell className="whitespace-nowrap text-right">{formatCurrency(r.totalTaxableValue || 0)}</TableCell>
+  1758→                          <TableCell className="whitespace-nowrap text-right">{formatCurrency(r.totalTax || 0)}</TableCell>
+  1759→                        </TableRow>
+  1760→                      ))
+  1761→                    )}
+  1762→                  </TableBody>
+  1763→                </Table>
+  1764→              </div>
+  1765→            </CardContent>
+  1766→          </Card>
+  1767→        </TabsContent>
+  1768→
+  1769→        {/* ══════════════════════════════════════════════════════════════════
+  1770→            TAB: Compliance Reports (RESTORED)
+  1771→        ══════════════════════════════════════════════════════════════════ */}
+  1772→        <TabsContent value="compliance" className="space-y-6 mt-4">
+  1773→          <Card>
+  1774→            <CardHeader>
+  1775→              <div className="flex items-center justify-between">
+  1776→                <div className="flex items-center gap-3">
+  1777→                  <div className="flex size-10 items-center justify-center rounded-lg bg-blue-100">
+  1778→                    <ShieldCheck className="size-5 text-blue-700" />
+  1779→                  </div>
+  1780→                  <div>
+  1781→                    <CardTitle className="text-base">Compliance Status Report</CardTitle>
+  1782→                    <CardDescription>
+  1783→                      Filing compliance, ITC reconciliation, and risk metrics across all clients
+  1784→                    </CardDescription>
+  1785→                  </div>
+  1786→                </div>
+  1787→                <Button
+  1788→                  onClick={handlePrintCompliance}
+  1789→                  disabled={generating !== null}
+  1790→                  className="gap-2 bg-blue-600 hover:bg-blue-700"
+  1791→                >
+  1792→                  {generating === 'compliance-pdf' ? (
+  1793→                    <RefreshCw className="size-4 animate-spin" />
+  1794→                  ) : (
+  1795→                    <Printer className="size-4" />
+  1796→                  )}
+  1797→                  Export PDF
+  1798→                </Button>
+  1799→              </div>
+  1800→            </CardHeader>
+  1801→            <CardContent className="space-y-4">
+  1802→              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+  1803→                <div className="rounded-lg border bg-white p-4">
+  1804→                  <p className="text-xs text-muted-foreground">Filing Rate</p>
+  1805→                  <p className="text-xl font-bold text-emerald-700">{complianceSummary.filingRate}%</p>
+  1806→                </div>
+  1807→                <div className="rounded-lg border bg-white p-4">
+  1808→                  <p className="text-xs text-muted-foreground">Filed Returns</p>
+  1809→                  <p className="text-xl font-bold text-foreground">{formatNumber(complianceSummary.filedReturns)}</p>
+  1810→                </div>
+  1811→                <div className="rounded-lg border bg-white p-4">
+  1812→                  <p className="text-xs text-muted-foreground">Overdue</p>
+  1813→                  <p className="text-xl font-bold text-red-700">{formatNumber(complianceSummary.overdueReturns)}</p>
+  1814→                </div>
+  1815→                <div className="rounded-lg border bg-white p-4">
+  1816→                  <p className="text-xs text-muted-foreground">Avg Health Score</p>
+  1817→                  <p className="text-xl font-bold text-foreground">{formatNumber(complianceSummary.avgHealth)}</p>
+  1818→                </div>
+  1819→              </div>
+  1820→
+  1821→              <Separator />
+  1822→
+  1823→              <div className="grid gap-4 sm:grid-cols-3">
+  1824→                <div className="rounded-lg border bg-white p-4">
+  1825→                  <p className="text-xs text-muted-foreground">ITC Match Rate</p>
+  1826→                  <p className="text-xl font-bold text-emerald-700">{complianceSummary.matchRate}%</p>
+  1827→                </div>
+  1828→                <div className="rounded-lg border bg-white p-4">
+  1829→                  <p className="text-xs text-muted-foreground">High-Risk Records</p>
+  1830→                  <p className="text-xl font-bold text-amber-700">{formatNumber(complianceSummary.reconHighRisk)}</p>
+  1831→                </div>
+  1832→                <div className="rounded-lg border bg-white p-4">
+  1833→                  <p className="text-xs text-muted-foreground">Critical Issues</p>
+  1834→                  <p className="text-xl font-bold text-red-700">{formatNumber(complianceSummary.criticalIssues)}</p>
+  1835→                </div>
+  1836→              </div>
+  1837→
+  1838→              <Separator />
+  1839→
+  1840→              <div className="overflow-x-auto rounded-lg border">
+  1841→                <Table>
+  1842→                  <TableHeader>
+  1843→                    <TableRow className="bg-muted/50">
+  1844→                      <TableHead className="whitespace-nowrap">Metric</TableHead>
+  1845→                      <TableHead className="whitespace-nowrap">Value</TableHead>
+  1846→                    </TableRow>
+  1847→                  </TableHeader>
+  1848→                  <TableBody>
+  1849→                    <TableRow><TableCell className="whitespace-nowrap">Total Returns</TableCell><TableCell className="font-medium">{formatNumber(complianceSummary.totalReturns)}</TableCell></TableRow>
+  1850→                    <TableRow><TableCell className="whitespace-nowrap">Filed Returns</TableCell><TableCell className="font-medium">{formatNumber(complianceSummary.filedReturns)}</TableCell></TableRow>
+  1851→                    <TableRow><TableCell className="whitespace-nowrap">Draft Returns</TableCell><TableCell className="font-medium">{formatNumber(complianceSummary.draftReturns)}</TableCell></TableRow>
+  1852→                    <TableRow><TableCell className="whitespace-nowrap">Overdue Returns</TableCell><TableCell className="font-medium">{formatNumber(complianceSummary.overdueReturns)}</TableCell></TableRow>
+  1853→                    <TableRow><TableCell className="whitespace-nowrap">Reconciliation Runs</TableCell><TableCell className="font-medium">{formatNumber(complianceSummary.reconCount)}</TableCell></TableRow>
+  1854→                    <TableRow><TableCell className="whitespace-nowrap">Warnings</TableCell><TableCell className="font-medium">{formatNumber(complianceSummary.warnings)}</TableCell></TableRow>
+  1855→                  </TableBody>
+  1856→                </Table>
+  1857→              </div>
+  1858→            </CardContent>
+  1859→          </Card>
+  1860→        </TabsContent>
+  1861→
+  1862→        {/* ══════════════════════════════════════════════════════════════════
+  1863→            TAB: Financial Reports (RESTORED)
+  1864→        ══════════════════════════════════════════════════════════════════ */}
+  1865→        <TabsContent value="financial" className="space-y-6 mt-4">
+  1866→          <Card>
+  1867→            <CardHeader>
+  1868→              <div className="flex items-center justify-between">
+  1869→                <div className="flex items-center gap-3">
+  1870→                  <div className="flex size-10 items-center justify-center rounded-lg bg-purple-100">
+  1871→                    <TrendingUp className="size-5 text-purple-700" />
+  1872→                  </div>
+  1873→                  <div>
+  1874→                    <CardTitle className="text-base">Financial Summary Report</CardTitle>
+  1875→                    <CardDescription>
+  1876→                      Revenue, tax liability, and section-wise financial breakdown
+  1877→                    </CardDescription>
+  1878→                  </div>
+  1879→                </div>
+  1880→                <Button
+  1881→                  onClick={handlePrintFinancial}
+  1882→                  disabled={generating !== null}
+  1883→                  className="gap-2 bg-purple-600 hover:bg-purple-700"
+  1884→                >
+  1885→                  {generating === 'financial-pdf' ? (
+  1886→                    <RefreshCw className="size-4 animate-spin" />
+  1887→                  ) : (
+  1888→                    <Printer className="size-4" />
+  1889→                  )}
+  1890→                  Export PDF
+  1891→                </Button>
+  1892→              </div>
+  1893→            </CardHeader>
+  1894→            <CardContent className="space-y-4">
+  1895→              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+  1896→                <div className="rounded-lg border bg-white p-4">
+  1897→                  <p className="text-xs text-muted-foreground">Total Revenue</p>
+  1898→                  <p className="text-xl font-bold text-foreground">{formatCurrency(financialSummary.totalRevenue)}</p>
+  1899→                </div>
+  1900→                <div className="rounded-lg border bg-white p-4">
+  1901→                  <p className="text-xs text-muted-foreground">Taxable Value</p>
+  1902→                  <p className="text-xl font-bold text-foreground">{formatCurrency(financialSummary.totalTaxable)}</p>
+  1903→                </div>
+  1904→                <div className="rounded-lg border bg-white p-4">
+  1905→                  <p className="text-xs text-muted-foreground">Total Tax Volume</p>
+  1906→                  <p className="text-xl font-bold text-purple-700">{formatCurrency(financialSummary.totalTaxVolume)}</p>
+  1907→                </div>
+  1908→                <div className="rounded-lg border bg-white p-4">
+  1909→                  <p className="text-xs text-muted-foreground">Invoice Count</p>
+  1910→                  <p className="text-xl font-bold text-foreground">{formatNumber(financialSummary.invoiceCount)}</p>
+  1911→                </div>
+  1912→              </div>
+  1913→
+  1914→              <Separator />
+  1915→
+  1916→              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+  1917→                <div className="rounded-lg border bg-white p-4">
+  1918→                  <p className="text-xs text-muted-foreground">CGST</p>
+  1919→                  <p className="text-lg font-bold text-foreground">{formatCurrency(financialSummary.cgstTotal)}</p>
+  1920→                </div>
+  1921→                <div className="rounded-lg border bg-white p-4">
+  1922→                  <p className="text-xs text-muted-foreground">SGST</p>
+  1923→                  <p className="text-lg font-bold text-foreground">{formatCurrency(financialSummary.sgstTotal)}</p>
+  1924→                </div>
+  1925→                <div className="rounded-lg border bg-white p-4">
+  1926→                  <p className="text-xs text-muted-foreground">IGST</p>
+  1927→                  <p className="text-lg font-bold text-foreground">{formatCurrency(financialSummary.igstTotal)}</p>
+  1928→                </div>
+  1929→                <div className="rounded-lg border bg-white p-4">
+  1930→                  <p className="text-xs text-muted-foreground">Cess</p>
+  1931→                  <p className="text-lg font-bold text-foreground">{formatCurrency(financialSummary.cessTotal)}</p>
+  1932→                </div>
+  1933→              </div>
+  1934→
+  1935→              <Separator />
+  1936→
+  1937→              <div className="overflow-x-auto rounded-lg border">
+  1938→                <Table>
+  1939→                  <TableHeader>
+  1940→                    <TableRow className="bg-muted/50">
+  1941→                      <TableHead className="whitespace-nowrap">Section</TableHead>
+  1942→                      <TableHead className="whitespace-nowrap text-right">Invoices</TableHead>
+  1943→                      <TableHead className="whitespace-nowrap text-right">Taxable Value</TableHead>
+  1944→                      <TableHead className="whitespace-nowrap text-right">Tax</TableHead>
+  1945→                    </TableRow>
+  1946→                  </TableHeader>
+  1947→                  <TableBody>
+  1948→                    {financialSummary.bySection.map((s) => (
+  1949→                      <TableRow key={s.section} className="hover:bg-muted/30">
+  1950→                        <TableCell className="whitespace-nowrap font-medium">
+  1951→                          {GSTR1_SECTION_LABELS[s.section] ?? s.section.toUpperCase()}
+  1952→                        </TableCell>
+  1953→                        <TableCell className="whitespace-nowrap text-right">{formatNumber(s.count)}</TableCell>
+  1954→                        <TableCell className="whitespace-nowrap text-right">{formatCurrency(s.taxable)}</TableCell>
+  1955→                        <TableCell className="whitespace-nowrap text-right">{formatCurrency(s.tax)}</TableCell>
+  1956→                      </TableRow>
+  1957→                    ))}
+  1958→                  </TableBody>
+  1959→                </Table>
+  1960→              </div>
+  1961→            </CardContent>
+  1962→          </Card>
+  1963→        </TabsContent>
+  1964→
+  1965→        {/* ══════════════════════════════════════════════════════════════════
+  1966→            TAB: Cash Flow Reports (RESTORED)
+  1967→        ══════════════════════════════════════════════════════════════════ */}
+  1968→        <TabsContent value="cashflow" className="space-y-6 mt-4">
+  1969→          <Card>
+  1970→            <CardHeader>
+  1971→              <div className="flex items-center justify-between">
+  1972→                <div className="flex items-center gap-3">
+  1973→                  <div className="flex size-10 items-center justify-center rounded-lg bg-teal-100">
+  1974→                    <Wallet className="size-5 text-teal-700" />
+  1975→                  </div>
+  1976→                  <div>
+  1977→                    <CardTitle className="text-base">Cash Flow Analysis Report</CardTitle>
+  1978→                    <CardDescription>
+  1979→                      ITC reconciliation, match rates, and cash flow impact analysis
+  1980→                    </CardDescription>
+  1981→                  </div>
+  1982→                </div>
+  1983→                <Button
+  1984→                  onClick={handlePrintCashFlow}
+  1985→                  disabled={generating !== null}
+  1986→                  className="gap-2 bg-teal-600 hover:bg-teal-700"
+  1987→                >
+  1988→                  {generating === 'cashflow-pdf' ? (
+  1989→                    <RefreshCw className="size-4 animate-spin" />
+  1990→                  ) : (
+  1991→                    <Printer className="size-4" />
+  1992→                  )}
+  1993→                  Export PDF
+  1994→                </Button>
+  1995→              </div>
+  1996→            </CardHeader>
+  1997→            <CardContent className="space-y-4">
+  1998→              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+  1999→                <div className="rounded-lg border bg-white p-4">
+  2000→                  <p className="text-xs text-muted-foreground">Total Records</p>
+
+[showing lines 1-2000 of 2348; use offset=2001 with limit to continue reading]

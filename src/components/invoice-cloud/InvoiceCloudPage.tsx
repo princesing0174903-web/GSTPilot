@@ -19,7 +19,7 @@ import {
 
 // ── Engine libs ────────────────────────────────────────────────────────────────
 import {
-  seedInvoices, formatInvoiceCurrency, getInvoiceStats,
+  formatInvoiceCurrency, getInvoiceStats,
   generateInvoiceNumber, calculateInvoiceTotals,
   daysOverdue,
 } from '@/lib/invoices/invoices'
@@ -54,6 +54,13 @@ import type {
   InvoiceCloudInvoice, PurchaseBill, Expense, ExpenseCategory,
   Payment, TDSRecord, Employee, Payroll,
 } from '@/lib/invoices/types'
+
+// ── Real Invoice Engine™ — Firestore-backed, org-scoped, real-time ─────────────
+import { useInvoices } from '@/hooks/useInvoices'
+import type {
+  Invoice as EngineInvoice,
+  CreateInvoiceInput,
+} from '@/lib/invoice-engine'
 
 // ── UI primitives ──────────────────────────────────────────────────────────────
 import {
@@ -116,6 +123,79 @@ const plusDaysIso = (days: number) => {
   d.setDate(d.getDate() + days)
   return d.toISOString().split('T')[0]
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Real Invoice Engine™ → Invoice Cloud™ shape adapter
+//
+// The new Firestore-backed engine (`@/lib/invoice-engine`) uses a richer data
+// model than the legacy `InvoiceCloudInvoice` shape that the rest of this UI
+// was built against. We map every engine invoice into the legacy shape so the
+// Overview / Sales / Receivables / Forecast tabs keep working untouched.
+//
+// Field mappings:
+//   grandTotal      → totalAmount
+//   balanceDue      → balanceAmount
+//   customerName    → buyerName
+//   customerGstin   → buyerGstin
+//   cgst+sgst+igst  → gstAmount
+//   partially_paid  → partial  (legacy status enum)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function toCloudInvoice(inv: EngineInvoice): InvoiceCloudInvoice {
+  // The new engine uses `partially_paid`; the legacy UI was built around
+  // `partial`. Translate so StatusPill / filters keep working.
+  const legacyStatus: string =
+    inv.status === 'partially_paid' ? 'partial' : inv.status
+
+  return {
+    id: inv.id,
+    clientId: inv.customerId ?? '',
+    invoiceNumber: inv.invoiceNumber,
+    invoiceDate: inv.invoiceDate,
+    sellerGstin: inv.sellerGstin,
+    buyerGstin: inv.customerGstin ?? null,
+    buyerName: inv.customerName,
+    invoiceType: inv.customerGstin ? 'B2B' : 'B2C',
+    gstr1Section: inv.customerGstin ? 'B2B' : 'B2C',
+    taxableValue: inv.taxableValue,
+    cgst: inv.cgst,
+    sgst: inv.sgst,
+    igst: inv.igst,
+    cess: inv.cess,
+    totalAmount: inv.grandTotal,
+    hsnCode: inv.items[0]?.hsnSac ?? null,
+    reverseCharge: false,
+    status: legacyStatus,
+    matchStatus: 'matched',
+    riskLevel: 'low',
+    riskScore: 0,
+    aiExplanation: null,
+    notes: inv.notes ?? null,
+    period: inv.invoiceDate.slice(0, 7),
+    assignedTo: inv.createdBy?.name ?? null,
+    createdAt: inv.createdAt,
+    updatedAt: inv.updatedAt,
+
+    // Invoice Cloud™ financial fields
+    dueDate: inv.dueDate,
+    gstAmount: inv.cgst + inv.sgst + inv.igst,
+    paidAmount: inv.paidAmount,
+    balanceAmount: inv.balanceDue,
+    paymentStatus: inv.paymentStatus,
+    paymentMode: null,
+    paymentDate: null,
+    recurring: inv.recurring,
+    recurringCycle: inv.recurringCycle ?? null,
+    notesFinance: null,
+    sentToCustomer: inv.status === 'sent' || inv.status === 'partially_paid' || inv.status === 'paid',
+    sentAt: null,
+  }
+}
+
+/** Type of the create() function exposed by the useInvoices() hook. */
+type EngineCreateFn = (
+  input: Omit<CreateInvoiceInput, 'organizationId' | 'createdBy'>,
+) => Promise<EngineInvoice | null>
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // HELPER SUB-COMPONENTS
@@ -395,8 +475,24 @@ export default function InvoiceCloudPage() {
   const [loading, setLoading] = useState(true)
   const [loaded, setLoaded] = useState(false)
 
-  // ── Data state ───────────────────────────────────────────────────────────────
-  const [invoices, setInvoices] = useState<InvoiceCloudInvoice[]>([])
+  // ── Real Invoice Engine™ — real-time, org-scoped invoices from Firestore ────
+  // The hook owns the invoices state. We never call setInvoices manually — the
+  // onSnapshot subscription surfaces every create/update/delete automatically.
+  const {
+    invoices: engineInvoices,
+    loading: invoicesLoading,
+    error: invoicesError,
+    create: createInvoice,
+    retry: retryInvoices,
+  } = useInvoices()
+
+  // Adapt engine invoices → legacy InvoiceCloudInvoice shape (read-only memo).
+  const invoices = useMemo<InvoiceCloudInvoice[]>(
+    () => engineInvoices.map(toCloudInvoice),
+    [engineInvoices],
+  )
+
+  // ── Data state — non-invoice tabs still load via their legacy APIs ──────────
   const [bills, setBills] = useState<PurchaseBill[]>([])
   const [expensesArr, setExpensesArr] = useState<Expense[]>([])
   const [payments, setPayments] = useState<Payment[]>([])
@@ -404,12 +500,12 @@ export default function InvoiceCloudPage() {
   const [employees, setEmployees] = useState<Employee[]>([])
   const [payrolls, setPayrolls] = useState<Payroll[]>([])
 
-  // ── Load all entities on mount (parallel, with seed fallback) ────────────────
+  // ── Load non-invoice entities on mount (parallel, with seed fallback) ───────
+  // Invoices are NOT loaded here — they come from the useInvoices() hook above.
   useEffect(() => {
     let cancelled = false
     ;(async () => {
       const results = await Promise.allSettled([
-        fetch('/api/invoices?cloud=true').then((r) => (r.ok ? r.json() : Promise.reject(r.status))),
         fetch('/api/purchases').then((r) => (r.ok ? r.json() : Promise.reject(r.status))),
         fetch('/api/expenses').then((r) => (r.ok ? r.json() : Promise.reject(r.status))),
         fetch('/api/payments').then((r) => (r.ok ? r.json() : Promise.reject(r.status))),
@@ -418,10 +514,7 @@ export default function InvoiceCloudPage() {
       ])
       if (cancelled) return
 
-      const [invR, bilR, expR, payR, tdsR, empR] = results
-      const inv = invR.status === 'fulfilled' && invR.value?.invoices?.length
-        ? invR.value.invoices
-        : seedInvoices()
+      const [bilR, expR, payR, tdsR, empR] = results
       const bil = bilR.status === 'fulfilled' && bilR.value?.purchases?.length
         ? bilR.value.purchases
         : seedPurchaseBills()
@@ -442,7 +535,6 @@ export default function InvoiceCloudPage() {
         ? empR.value.payrolls
         : seedPayroll(emp)
 
-      setInvoices(inv)
       setBills(bil)
       setExpensesArr(exp)
       setPayments(pay)
@@ -457,9 +549,15 @@ export default function InvoiceCloudPage() {
     }
   }, [])
 
+  // ── Combined loading — skeleton shows until BOTH engine + legacy tabs ready
+  const pageLoading = loading || invoicesLoading
+
   // ── Oracle proactive integration — fires ONCE per session ────────────────────
+  // Wait for both legacy-tab load AND the invoice engine's first snapshot so
+  // the proactive prompt reflects real data instead of an empty book.
   useEffect(() => {
     if (!loaded) return
+    if (invoicesLoading) return
     if (typeof window === 'undefined') return
     if (localStorage.getItem('invoice-cloud-oracle-fired')) return
     localStorage.setItem('invoice-cloud-oracle-fired', '1')
@@ -481,16 +579,21 @@ export default function InvoiceCloudPage() {
       }))
     }, 1500)
     return () => clearTimeout(t)
-  }, [loaded, invoices, bills, expensesArr, payrolls])
+  }, [loaded, invoicesLoading, invoices, bills, expensesArr, payrolls])
 
-  // ── Refresh handler ──────────────────────────────────────────────────────────
+  // ── Refresh handler — re-subscribes to the real-time invoice engine ──────────
+  // Previously this reloaded the whole page. Now it just re-triggers the
+  // Firestore onSnapshot subscription via the hook's retry() — the legacy
+  // tab data (bills/expenses/etc.) is already loaded and unaffected.
   const handleSync = useCallback(() => {
-    setLoading(true)
-    setLoaded(false)
     localStorage.removeItem('invoice-cloud-oracle-fired')
-    // Re-trigger the load effect by toggling state — simplest is a page-level reload of state.
-    setTimeout(() => window.location.reload(), 200)
-  }, [])
+    retryInvoices()
+    if (invoicesError) {
+      toast.error(invoicesError)
+    } else {
+      toast.success('Re-syncing invoices from cloud…')
+    }
+  }, [retryInvoices, invoicesError])
 
   // ── Render ───────────────────────────────────────────────────────────────────
   return (
@@ -570,7 +673,7 @@ export default function InvoiceCloudPage() {
             exit={{ opacity: 0, y: -8 }}
             transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
           >
-            {loading ? (
+            {pageLoading ? (
               <div className="space-y-4">
                 <ProSkeleton lines={1} className="h-7 w-64" />
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
@@ -590,7 +693,10 @@ export default function InvoiceCloudPage() {
                 onNavigate={setActiveTab}
               />
             ) : activeTab === 'sales' ? (
-              <SalesTab invoices={invoices} setInvoices={setInvoices} />
+              <SalesTab
+                invoices={invoices}
+                createInvoice={createInvoice}
+              />
             ) : activeTab === 'purchase' ? (
               <PurchaseTab bills={bills} setBills={setBills} />
             ) : activeTab === 'expenses' ? (
@@ -873,10 +979,11 @@ function OverviewTab({
 // ═══════════════════════════════════════════════════════════════════════════════
 
 function SalesTab({
-  invoices, setInvoices,
+  invoices, createInvoice,
 }: {
   invoices: InvoiceCloudInvoice[]
-  setInvoices: React.Dispatch<React.SetStateAction<InvoiceCloudInvoice[]>>
+  /** create() from the useInvoices() hook — Firestore-backed, server-calculated totals. */
+  createInvoice: EngineCreateFn
 }) {
   const [filter, setFilter] = useState<string>('all')
   const [search, setSearch] = useState('')
@@ -987,21 +1094,34 @@ function SalesTab({
         onClose={() => setShowNew(false)}
         existing={invoices.map((i) => i.invoiceNumber)}
         onCreate={async (payload) => {
+          // Hand off to the Real Invoice Engine™ — server computes all totals
+          // (subtotal, CGST/SGST/IGST, round-off, grand total, balance due)
+          // and assigns an atomic invoice number via Firestore transaction.
+          // The hook's onSnapshot subscription surfaces the new invoice in the
+          // table automatically — no manual setInvoices prepend needed.
           try {
-            const res = await fetch('/api/invoices', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ cloud: true, ...payload }),
+            const result = await createInvoice({
+              customerId: null, // ad-hoc invoice — no client linked yet
+              customerName: payload.customerName,
+              invoiceNumber: payload.invoiceNumber || undefined, // engine auto-generates if empty
+              sellerName: 'GSTPilot', // default seller — can be improved later
+              sellerGstin: '',
+              invoiceDate: payload.invoiceDate,
+              dueDate: payload.dueDate,
+              items: payload.items.map((it) => ({
+                description: it.description,
+                hsnSac: '', // modal doesn't collect HSN — empty is fine
+                quantity: it.quantity,
+                unit: 'NOS',
+                unitPrice: it.unitPrice,
+                gstRate: it.gstRate,
+              })),
             })
-            if (res.ok) {
-              const data = await res.json()
-              if (data?.invoice) {
-                setInvoices((prev) => [data.invoice, ...prev])
-              }
-              toast.success(`Invoice ${payload.invoiceNumber ?? 'created'} saved.`)
+            if (result) {
+              toast.success(`Invoice ${result.invoiceNumber} saved.`)
               // Oracle confirmation
               window.dispatchEvent(new CustomEvent('oracle-ask', {
-                detail: { prompt: `I've created Invoice ${payload.invoiceNumber ?? 'INV-NEW'} for ${payload.customerName} totalling ${formatInvoiceCurrency(payload.totals.totalAmount)}. Tracking payment.` },
+                detail: { prompt: `I've created Invoice ${result.invoiceNumber} for ${payload.customerName} totalling ${formatInvoiceCurrency(payload.totals.totalAmount)}. Tracking payment.` },
               }))
               setShowNew(false)
             } else {

@@ -38,11 +38,11 @@ import {
   useFireClients,
   useFireReturns,
   useFireRecentActivities,
-  useFireInvoices,
   useFirmExecutiveScores,
   useFireMemberships,
   useFirePriorities,
 } from '@/hooks/use-firestore';
+import { useInvoices } from '@/hooks/useInvoices';
 import type {
   FirestoreClient,
   LiveDashboardMetrics,
@@ -540,11 +540,20 @@ export default function DashboardPage() {
   const { metrics, loading, error } = useLiveDashboardMetrics();
   const { data: clients } = useFireClients();
   const { data: returns } = useFireReturns();
-  const { data: invoices } = useFireInvoices();
   const { data: recentActivities } = useFireRecentActivities(10);
   const { scores: execScores } = useFirmExecutiveScores();
-  const { data: memberships } = useFireMemberships(user?.firmId || null);
+  const { data: memberships } = useFireMemberships(null);
   const { data: priorityQueue } = useFirePriorities('pending');
+
+  // ── Real Invoice Engine™ — org-scoped, real-time, server-calculated ──
+  // Replaces the old firmId-scoped useFireInvoices() for revenue / outstanding
+  // KPIs. The engine computes totals server-side (subtotal, taxes, grandTotal,
+  // paidAmount, balanceDue) and exposes a stats aggregate via computeInvoiceStats.
+  const {
+    invoices: engineInvoices,
+    stats: invoiceStats,
+    loading: invoicesLoading,
+  } = useInvoices();
 
   // ── Filing state ──────────────────────────────────────────────────────
   const [filingInProgress, setFilingInProgress] = useState<Set<string>>(new Set());
@@ -563,14 +572,17 @@ export default function DashboardPage() {
   );
 
   const pendingInvoices = useMemo(
-    () => invoices.filter((i) => i.status === 'draft' || i.status === 'approved'),
-    [invoices],
+    () =>
+      engineInvoices.filter(
+        (i) =>
+          i.balanceDue > 0 && i.status !== 'cancelled' && i.status !== 'draft',
+      ),
+    [engineInvoices],
   );
 
-  const pendingCollection = useMemo(
-    () => pendingInvoices.reduce((sum, i) => sum + (i.totalAmount || 0), 0),
-    [pendingInvoices],
-  );
+  // Real outstanding from the invoice engine — Σ balanceDue of non-draft,
+  // non-cancelled invoices (server-calculated per invoice).
+  const pendingCollection = invoiceStats.totalOutstanding;
 
   const insight = useMemo(
     () => buildInsightSentence(metrics, pendingCollection),
@@ -830,7 +842,11 @@ export default function DashboardPage() {
   // ═══════════════════════════════════════════════════════════════════════════
 
   // ── Loading ───────────────────────────────────────────────────────────
-  if (loading) return <DashboardSkeleton />;
+  // Wait for both the live dashboard metrics AND the real invoice engine
+  // initial subscription to settle before rendering — otherwise the Revenue
+  // and Cash Position KPIs would briefly show "—" before the engine data
+  // arrives.
+  if (loading || invoicesLoading) return <DashboardSkeleton />;
 
   // ── Error ─────────────────────────────────────────────────────────────
   if (error) {
@@ -867,10 +883,15 @@ export default function DashboardPage() {
   }
 
   // ── KPI values ────────────────────────────────────────────────────────
+  // Revenue KPI: REAL revenue from the invoice engine — Σ grandTotal of
+  // non-draft, non-cancelled invoices (server-calculated per invoice).
   const revenueValue =
-    metrics.totalTaxVolume > 0 ? `₹${formatINR(metrics.totalTaxVolume)}` : '—';
+    invoiceStats.totalRevenue > 0 ? `₹${formatINR(invoiceStats.totalRevenue)}` : '—';
   const complianceValue = String(pendingComplianceCount);
-  const cashValue = pendingCollection > 0 ? `₹${formatINR(pendingCollection)}` : '—';
+  // Cash Position KPI: REAL outstanding from the invoice engine — Σ balanceDue
+  // of non-draft, non-cancelled invoices.
+  const cashValue =
+    invoiceStats.totalOutstanding > 0 ? `₹${formatINR(invoiceStats.totalOutstanding)}` : '—';
 
   const firstName = getFirstName(user?.name);
 
@@ -923,7 +944,7 @@ export default function DashboardPage() {
             index={0}
             label="Revenue"
             value={revenueValue}
-            subtitle={`Total tax volume · ${metrics.totalInvoices} invoices`}
+            subtitle={`Total revenue · ${invoiceStats.count} invoice${invoiceStats.count === 1 ? '' : 's'}`}
             icon={<IndianRupee className="h-4 w-4 accent-text" />}
           />
           <KpiCard

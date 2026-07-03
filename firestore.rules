@@ -301,6 +301,16 @@ service cloud.firestore {
       allow delete: if isSignedIn() && resourceBelongsToUserOrg() && isOwnerOrAdmin(resource.data.organizationId);
     }
 
+    // ─── Invoice Number Counters (org-scoped atomic sequence) ──────────────
+    // Each counter doc id is `{organizationId}_{year}` and carries an
+    // `organizationId` field. Only active org members may read / write.
+    match /invoice_counters/{docId} {
+      allow read:   if isSignedIn() && resourceBelongsToUserOrg();
+      allow create: if isSignedIn() && writeScopedToUserOrg();
+      allow update: if isSignedIn() && resourceBelongsToUserOrg() && canMutate(resource.data.organizationId) && orgIdUnchanged();
+      allow delete: if isSignedIn() && resourceBelongsToUserOrg() && isOwnerOrAdmin(resource.data.organizationId);
+    }
+
     // ─── Default Deny ─────────────────────────────────────────────────────
     // Any collection not explicitly matched above is denied by default.
     match /{document=**} {

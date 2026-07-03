@@ -37,15 +37,14 @@ import {
 } from '@/types/gst';
 import { formatCurrency, formatNumber, periodToLabel } from '@/lib/gst-utils';
 import {
-  useFireInvoices,
   useFireReturns,
   useFireReconciliations,
   useLiveDashboardMetrics,
   useFireReports,
 } from '@/hooks/use-firestore';
+import { useInvoices } from '@/hooks/useInvoices';
 import { createReport, deleteReport } from '@/lib/firestore-service';
 import type {
-  FirestoreInvoice,
   FirestoreReturn,
   FirestoreReconciliation,
   FirestoreReport,
@@ -346,13 +345,18 @@ export default function ReportsPage() {
   const [previewData, setPreviewData] = useState<RecentExport | null>(null);
   const [activeTab, setActiveTab] = useState<string>('export');
 
-  // ─── Live Firestore data for category tabs ──────────────────────────────
-  const fireInvoicesQ = useFireInvoices();
+  // ─── Live data sources for category tabs ────────────────────────────────
+  // Real Invoice Engine™ — org-scoped, real-time invoices + aggregated stats.
+  // Replaces the legacy firmId-scoped useFireInvoices() hook so every revenue,
+  // sales, GST-summary, outstanding, and cash-flow figure on this page reflects
+  // the live invoice collection for the current organization.
+  const { invoices: engineInvoices, stats: invoiceStats, loading: engineLoading } = useInvoices();
+  // Non-invoice live data (returns, reconciliations, dashboard metrics) — kept as-is
+  // per the directive: only invoice-derived values switch to the real engine.
   const fireReturnsQ = useFireReturns();
   const fireReconsQ = useFireReconciliations();
   const { metrics: liveMetrics } = useLiveDashboardMetrics();
 
-  const fireInvoices = (fireInvoicesQ.data ?? []) as Array<FirestoreInvoice & { id?: string }>;
   const fireReturns = (fireReturnsQ.data ?? []) as Array<FirestoreReturn & { id?: string }>;
   const fireRecons = (fireReconsQ.data ?? []) as Array<FirestoreReconciliation & { id?: string }>;
 
@@ -388,7 +392,7 @@ export default function ReportsPage() {
     fetchData();
   }, []);
 
-  // Extract clients
+  // Extract clients (from old invoices API, the Real Invoice Engine™, and filings)
   useEffect(() => {
     const clientMap = new Map<string, ClientOption>();
     invoices.forEach((inv) => {
@@ -397,6 +401,17 @@ export default function ReportsPage() {
           id: inv.clientId,
           tradeName: inv.client.tradeName,
           gstin: inv.client.gstin,
+        });
+      }
+    });
+    // Real Invoice Engine™ — customers may not exist in the legacy /api/invoices
+    // payload; include them so the client filter works against engine invoices too.
+    engineInvoices.forEach((inv) => {
+      if (inv.customerId && !clientMap.has(inv.customerId)) {
+        clientMap.set(inv.customerId, {
+          id: inv.customerId,
+          tradeName: inv.customerName,
+          gstin: inv.customerGstin ?? '',
         });
       }
     });
@@ -410,22 +425,28 @@ export default function ReportsPage() {
       }
     });
     setClients(Array.from(clientMap.values()));
-  }, [invoices, filings]);
+  }, [invoices, engineInvoices, filings]);
 
   // ─── Derived Data ─────────────────────────────────────────────────────────
   const selectedPeriod = `${selectedYear}-${selectedMonth}`;
 
-  const filteredInvoices = invoices.filter((inv) => {
-    if (selectedClientId !== 'all' && inv.clientId !== selectedClientId) return false;
-    if (inv.period && inv.period !== selectedPeriod) return false;
-    if (!includeSections[inv.gstr1Section as GSTR1Section]) return false;
+  // ─── Export Preview filter — driven by the Real Invoice Engine™ ──────────
+  // Real engine invoices are all B2B (inter-state → IGST, intra-state → CGST+SGST),
+  // so every engine invoice maps to GSTR-1 section 'b2b'. Period is derived from
+  // invoiceDate (YYYY-MM-DD → YYYY-MM) to match the selected YYYY-MM period.
+  const filteredInvoices = engineInvoices.filter((inv) => {
+    if (selectedClientId !== 'all' && inv.customerId !== selectedClientId) return false;
+    const invPeriod = inv.invoiceDate.slice(0, 7);
+    if (invPeriod !== selectedPeriod) return false;
+    if (!includeSections.b2b) return false;
     return true;
   });
 
   const sectionPreviews: SectionPreview[] = SECTION_KEYS
     .filter((s) => includeSections[s])
     .map((section) => {
-      const sectionInvoices = filteredInvoices.filter((inv) => inv.gstr1Section === section);
+      // Real engine invoices all map to 'b2b'; other sections stay empty.
+      const sectionInvoices = section === 'b2b' ? filteredInvoices : [];
       return {
         section,
         invoiceCount: sectionInvoices.length,
@@ -452,15 +473,20 @@ export default function ReportsPage() {
 
   // ─── Firestore-derived category summaries ─────────────────────────────────
 
-  // GST Reports: GSTR-1 + GSTR-3B summaries
+  // GST Reports: GSTR-1 + GSTR-3B summaries.
+  // Output tax liability is derived from the Real Invoice Engine™ (org-scoped).
+  // Drafts and cancelled invoices are excluded — they don't represent real output tax.
   const gstSummary = useMemo(() => {
     const gstr1Returns = fireReturns.filter((r) => r.returnType === 'GSTR-1');
     const gstr3bReturns = fireReturns.filter((r) => r.returnType === 'GSTR-3B');
-    const outputTax = fireInvoices.reduce(
-      (s, i) => s + (i.cgst || 0) + (i.sgst || 0) + (i.igst || 0) + (i.cess || 0),
+    const activeInvoices = engineInvoices.filter(
+      (i) => i.status !== 'draft' && i.status !== 'cancelled',
+    );
+    const outputTax = activeInvoices.reduce(
+      (s, i) => s + i.cgst + i.sgst + i.igst + i.cess,
       0,
     );
-    const outputTaxable = fireInvoices.reduce((s, i) => s + (i.taxableValue || 0), 0);
+    const outputTaxable = activeInvoices.reduce((s, i) => s + i.taxableValue, 0);
     const gstr1Filed = gstr1Returns.filter((r) => r.status === 'filed').length;
     const gstr3bFiled = gstr3bReturns.filter((r) => r.status === 'filed').length;
     return {
@@ -473,7 +499,7 @@ export default function ReportsPage() {
       outputTaxable,
       outputTax,
     };
-  }, [fireReturns, fireInvoices]);
+  }, [fireReturns, engineInvoices]);
 
   // Compliance Reports: filing compliance + match rates + issues
   const complianceSummary = useMemo(() => {
@@ -505,25 +531,25 @@ export default function ReportsPage() {
     };
   }, [fireReturns, fireRecons, liveMetrics]);
 
-  // Financial Reports: revenue + tax volumes
+  // Financial Reports: revenue + tax volumes from the Real Invoice Engine™.
+  // Drafts and cancelled invoices are excluded from financial totals.
   const financialSummary = useMemo(() => {
-    const totalRevenue = fireInvoices.reduce((s, i) => s + (i.totalAmount || 0), 0);
-    const totalTaxVolume = fireInvoices.reduce(
-      (s, i) => s + (i.cgst || 0) + (i.sgst || 0) + (i.igst || 0) + (i.cess || 0),
-      0,
-    );
-    const totalTaxable = fireInvoices.reduce((s, i) => s + (i.taxableValue || 0), 0);
-    const igstTotal = fireInvoices.reduce((s, i) => s + (i.igst || 0), 0);
-    const cgstTotal = fireInvoices.reduce((s, i) => s + (i.cgst || 0), 0);
-    const sgstTotal = fireInvoices.reduce((s, i) => s + (i.sgst || 0), 0);
-    const cessTotal = fireInvoices.reduce((s, i) => s + (i.cess || 0), 0);
+    const active = engineInvoices.filter((i) => i.status !== 'draft' && i.status !== 'cancelled');
+    const totalRevenue = active.reduce((s, i) => s + i.grandTotal, 0);
+    const totalTaxVolume = active.reduce((s, i) => s + i.cgst + i.sgst + i.igst + i.cess, 0);
+    const totalTaxable = active.reduce((s, i) => s + i.taxableValue, 0);
+    const igstTotal = active.reduce((s, i) => s + i.igst, 0);
+    const cgstTotal = active.reduce((s, i) => s + i.cgst, 0);
+    const sgstTotal = active.reduce((s, i) => s + i.sgst, 0);
+    const cessTotal = active.reduce((s, i) => s + i.cess, 0);
     const bySection = SECTION_KEYS.map((sec) => {
-      const secInvoices = fireInvoices.filter((i) => i.gstr1Section === sec);
+      // Real engine invoices are all B2B (inter-state → IGST, intra-state → CGST+SGST).
+      const secInvoices = sec === 'b2b' ? active : [];
       return {
         section: sec,
         count: secInvoices.length,
-        taxable: secInvoices.reduce((s, i) => s + (i.taxableValue || 0), 0),
-        tax: secInvoices.reduce((s, i) => s + (i.cgst || 0) + (i.sgst || 0) + (i.igst || 0), 0),
+        taxable: secInvoices.reduce((s, i) => s + i.taxableValue, 0),
+        tax: secInvoices.reduce((s, i) => s + i.cgst + i.sgst + i.igst, 0),
       };
     });
     return {
@@ -535,11 +561,15 @@ export default function ReportsPage() {
       sgstTotal,
       cessTotal,
       bySection,
-      invoiceCount: fireInvoices.length,
+      invoiceCount: active.length,
     };
-  }, [fireInvoices]);
+  }, [engineInvoices]);
 
-  // Cash Flow Reports: reconciliation-based cash flow analysis
+  // Cash Flow Reports: reconciliation-based analysis + Real Invoice Engine™ cash flow.
+  // Inflow = total collected (paid amounts), Outstanding = unpaid balance, Overdue = past-due.
+  // The reconciliation-derived metrics (totalRecords / matched / unmatched / etc.) are
+  // preserved so the on-page cards stay exactly the same; the invoice-derived metrics
+  // (inflow / outstanding / overdue / invoiceCount) flow into the Cash Flow PDF report.
   const cashFlowSummary = useMemo(() => {
     const totalRecords = fireRecons.reduce((s, r) => s + (r.totalRecords || 0), 0);
     const matched = fireRecons.reduce((s, r) => s + (r.matched || 0), 0);
@@ -556,6 +586,11 @@ export default function ReportsPage() {
       matched: r.matched,
       itcDiff: r.gstDifference,
     }));
+    // Invoice-engine-derived cash flow metrics (org-scoped, real-time).
+    const inflow = invoiceStats.totalCollected;
+    const outstanding = invoiceStats.totalOutstanding;
+    const overdue = invoiceStats.totalOverdue;
+    const invoiceCount = invoiceStats.count;
     return {
       totalRecords,
       matched,
@@ -565,8 +600,12 @@ export default function ReportsPage() {
       itcDifference,
       matchRate,
       byRecon,
+      inflow,
+      outstanding,
+      overdue,
+      invoiceCount,
     };
-  }, [fireRecons]);
+  }, [fireRecons, invoiceStats]);
 
   // ─── Handlers ────────────────────────────────────────────────────────────
   const toggleSection = (section: GSTR1Section) => {
@@ -1134,6 +1173,10 @@ export default function ReportsPage() {
           {
             heading: 'Cash Flow Impact',
             rows: [
+              { label: 'Cash Inflow (Collected)', value: formatCurrency(cashFlowSummary.inflow) },
+              { label: 'Outstanding', value: formatCurrency(cashFlowSummary.outstanding) },
+              { label: 'Overdue', value: formatCurrency(cashFlowSummary.overdue) },
+              { label: 'Invoice Count', value: formatNumber(cashFlowSummary.invoiceCount) },
               { label: 'ITC Difference', value: formatCurrency(cashFlowSummary.itcDifference) },
             ],
           },
@@ -1246,7 +1289,10 @@ export default function ReportsPage() {
   };
 
   // ─── Loading Skeleton ────────────────────────────────────────────────────
-  if (loading) {
+  // Wait for BOTH the legacy /api/invoices fetch (for the client dropdown) AND
+  // the real-time invoice engine subscription so the page never renders with
+  // stale engine data.
+  if (loading || engineLoading) {
     return (
       <div className="space-y-6 p-6">
         <div className="flex items-center gap-3">
@@ -2161,7 +2207,7 @@ export default function ReportsPage() {
                             </TableCell>
                             <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
                               {report.generatedAt
-                                ? new Date(report.generatedAt).toLocaleString()
+                                ? new Date(report.generatedAt as string).toLocaleString()
                                 : '—'}
                             </TableCell>
                             <TableCell className="whitespace-nowrap text-sm">

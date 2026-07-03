@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   Card,
   CardContent,
@@ -51,8 +51,9 @@ import { formatNumber } from '@/lib/gst-utils';
 import {
   useUploadedFiles,
   useClients,
-  useUploadFile,
 } from '@/hooks/api';
+import { useDocuments } from '@/hooks/useDocuments';
+import type { DocumentMetadata } from '@/lib/firebase/documents-service';
 import { toast } from 'sonner';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
@@ -80,6 +81,12 @@ interface UploadedFileItem {
   createdAt: string;
   updatedAt: string;
   client?: { id: string; tradeName: string } | null;
+  /**
+   * True when this row represents a real file in Firebase Storage (uploaded via
+   * useDocuments()). Legacy rows from the Prisma API do not have this flag and
+   * fall back to the existing /api/upload DELETE endpoint.
+   */
+  _isReal?: boolean;
 }
 
 interface ClientOption {
@@ -272,13 +279,48 @@ function FileRowSkeleton() {
   );
 }
 
+// ─── Firebase Storage → UI mapper ─────────────────────────────────────────
+// Convert a real Firestore DocumentMetadata (from useDocuments) into the
+// UploadedFileItem shape this component already renders. Real uploads have no
+// OCR / invoice-extraction data (we don't build OCR), so the extraction fields
+// are zeroed out — the row still shows the file name, size, type, date and a
+// Download + Delete button wired to Firebase Storage.
+function metadataToUploadedFile(meta: DocumentMetadata): UploadedFileItem {
+  const ext = (meta.originalName.split('.').pop() ?? '').toLowerCase();
+  return {
+    id: meta.id,
+    clientId: null,
+    originalName: meta.originalName,
+    storedName: meta.storagePath.split('/').pop() ?? meta.originalName,
+    fileType: ext,
+    fileSize: meta.fileSize,
+    mimeType: meta.mimeType,
+    filePath: meta.storagePath,
+    status: 'completed',
+    processingStep: 'completed',
+    progress: 100,
+    extractedData: null,
+    errorMessage: null,
+    invoicesCreated: 0,
+    errorsCount: 0,
+    warningsCount: 0,
+    period: null,
+    tags: meta.tags.length > 0 ? meta.tags.join(', ') : null,
+    uploadedBy: meta.uploadedBy?.name ?? null,
+    createdAt: meta.createdAt,
+    updatedAt: meta.updatedAt,
+    client: null,
+    _isReal: true,
+  };
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // MAIN COMPONENT
 // ═══════════════════════════════════════════════════════════════════════════
 export default function DocumentVaultPage() {
   const queryClient = useQueryClient();
 
-  // ── React Query data hooks ──
+  // ── React Query data hooks (legacy Prisma-backed files) ──
   const { data: filesData, isLoading: filesLoading, error: filesError } = useUploadedFiles(undefined, {
     refetchInterval: (query) => {
       const files = (query.state.data as { files: UploadedFileItem[] } | undefined)?.files ?? [];
@@ -294,8 +336,38 @@ export default function DocumentVaultPage() {
   });
   const { data: clientsData, isLoading: clientsLoading } = useClients();
 
+  // ── Firebase Storage + Firestore documents (real uploads) ──
+  // useDocuments() gives us a real-time, org-scoped list of every file uploaded
+  // to Firebase Storage, plus upload / delete / download helpers and live
+  // upload-progress tracking. Real uploads land here automatically; legacy
+  // Prisma-backed files (from useUploadedFiles) still populate the list so the
+  // UI keeps working during the migration.
+  const {
+    documents: firestoreDocs,
+    uploads,
+    uploadMany,
+    remove,
+    getDownloadUrl,
+    validate,
+  } = useDocuments();
+
   // ── Derived data ──
-  const files: UploadedFileItem[] = (filesData?.files ?? []) as UploadedFileItem[];
+  const legacyFiles: UploadedFileItem[] = (filesData?.files ?? []) as UploadedFileItem[];
+  const realFiles: UploadedFileItem[] = useMemo(
+    () => firestoreDocs.map(metadataToUploadedFile),
+    [firestoreDocs],
+  );
+  const realFileIds = useMemo(
+    () => new Set(realFiles.map(f => f.id)),
+    [realFiles],
+  );
+  // Real Firebase Storage uploads take precedence by id — they are the files the
+  // user just uploaded and can be downloaded / deleted for real. Legacy Prisma
+  // documents fill in the rest (and are skipped if a real doc already has the id).
+  const files: UploadedFileItem[] = useMemo(
+    () => [...realFiles, ...legacyFiles.filter(f => !realFileIds.has(f.id))],
+    [realFiles, legacyFiles, realFileIds],
+  );
   const clients: ClientOption[] = (clientsData?.clients ?? []).map((c: any) => ({
     id: c.id,
     tradeName: c.tradeName,
@@ -311,11 +383,25 @@ export default function DocumentVaultPage() {
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadingFiles, setUploadingFiles] = useState<Set<string>>(new Set());
+  // Tracks the Firestore document id currently being deleted via remove() so we
+  // can disable its row button until the promise settles. Legacy Prisma deletes
+  // are tracked separately via deleteMutation.isPending.
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
-  // ── File upload mutation ──
-  const uploadMutation = useUploadFile();
+  // Live upload count surfaced in the drop-zone spinner. We take the larger of
+  // the local `uploadingFiles` set (instantly populated in handleFileUpload) and
+  // the hook's `uploads` array so the count is never stale during a batch.
+  const activeUploadCount = useMemo(
+    () => Math.max(
+      uploadingFiles.size,
+      uploads.filter(u => u.state === 'uploading').length,
+    ),
+    [uploadingFiles, uploads],
+  );
 
-  // ── Delete mutation ──
+  // ── Delete mutation (legacy Prisma-backed files only) ──
+  // Real Firebase Storage files are deleted via useDocuments().remove(), which
+  // removes the Storage object AND the Firestore metadata atomically.
   const deleteMutation = useMutation({
     mutationFn: async (fileId: string) => {
       const res = await fetch(`/api/upload?id=${fileId}`, { method: 'DELETE' });
@@ -363,54 +449,73 @@ export default function DocumentVaultPage() {
   });
 
   // ── Upload handlers ──────────────────────────────────────────────────────
+  // Replaces the previous FormData-to-/api/upload approach with REAL Firebase
+  // Storage uploads via useDocuments().uploadMany(). Files land in org-isolated
+  // Storage paths (organizations/{orgId}/documents/{timestamp}_{file}) and the
+  // Firestore `documents` collection is updated in real-time, so the merged
+  // `files` list above shows them automatically.
   const handleFileUpload = useCallback(async (fileList: FileList | File[]) => {
     const filesToUpload = Array.from(fileList);
-    const acceptedTypes = [
-      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      'application/vnd.ms-excel',
-      'text/csv',
-      'application/pdf',
-      'application/json',
-      'image/jpeg',
-      'image/png',
-    ];
-    const acceptedExtensions = ['.xlsx', '.xls', '.csv', '.pdf', '.json', '.jpg', '.jpeg', '.png'];
+    if (filesToUpload.length === 0) return;
 
+    // Pre-flight validation using the same rules the Storage service enforces
+    // (100 MB max, supported types only). Skip files that fail validation so
+    // one bad file does not block the rest of the batch.
+    const validFiles: File[] = [];
     for (const file of filesToUpload) {
-      const ext = '.' + (file.name.split('.').pop()?.toLowerCase() ?? '');
-      const isAccepted =
-        acceptedTypes.includes(file.type) ||
-        acceptedExtensions.includes(ext);
-
-      if (!isAccepted) {
-        toast.error(`Unsupported file type: ${file.name}`);
+      const validationError = validate(file);
+      if (validationError) {
+        toast.error(`${file.name}: ${validationError}`);
         continue;
       }
+      validFiles.push(file);
+    }
+    if (validFiles.length === 0) return;
 
-      const formData = new FormData();
-      formData.append('file', file);
-      if (selectedClientId) formData.append('clientId', selectedClientId);
-      if (selectedPeriod) formData.append('period', selectedPeriod);
+    // Mark every file as uploading for the drop-zone count UI. Cleared in the
+    // finally block below so the spinner stays visible for the whole batch.
+    setUploadingFiles(prev => {
+      const next = new Set(prev);
+      validFiles.forEach(f => next.add(f.name));
+      return next;
+    });
 
-      setUploadingFiles(prev => new Set(prev).add(file.name));
+    // Carry the (optional) client + period selection into the document tags so
+    // the metadata is searchable later.
+    const tags: string[] = [];
+    if (selectedClientId) tags.push(`client:${selectedClientId}`);
+    if (selectedPeriod) tags.push(`period:${selectedPeriod}`);
 
-      uploadMutation.mutate(formData, {
-        onSuccess: () => {
-          toast.success(`${file.name} uploaded successfully`);
-        },
-        onError: (err) => {
-          toast.error(`Failed to upload ${file.name}: ${err.message}`);
-        },
-        onSettled: () => {
-          setUploadingFiles(prev => {
-            const next = new Set(prev);
-            next.delete(file.name);
-            return next;
-          });
-        },
+    toast.info(
+      `Uploading ${validFiles.length} file${validFiles.length !== 1 ? 's' : ''} to Firebase Storage…`,
+    );
+
+    try {
+      const uploaded = await uploadMany(validFiles, {
+        category: 'documents',
+        tags: tags.length > 0 ? tags : undefined,
+      });
+      const failed = validFiles.length - uploaded.length;
+      if (uploaded.length > 0) {
+        toast.success(
+          `${uploaded.length} file${uploaded.length !== 1 ? 's' : ''} uploaded successfully`,
+        );
+      }
+      if (failed > 0) {
+        toast.error(
+          `${failed} file${failed !== 1 ? 's' : ''} failed to upload`,
+        );
+      }
+    } catch {
+      toast.error('Upload failed. Please try again.');
+    } finally {
+      setUploadingFiles(prev => {
+        const next = new Set(prev);
+        validFiles.forEach(f => next.delete(f.name));
+        return next;
       });
     }
-  }, [selectedClientId, selectedPeriod, uploadMutation]);
+  }, [uploadMany, validate, selectedClientId, selectedPeriod]);
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -442,8 +547,43 @@ export default function DocumentVaultPage() {
     e.target.value = '';
   };
 
-  const handleDelete = (fileId: string, fileName: string) => {
-    deleteMutation.mutate(fileId);
+  // Real Firebase Storage files are deleted via useDocuments().remove(), which
+  // removes the Storage object AND the Firestore metadata atomically. Legacy
+  // Prisma-backed files fall back to the /api/upload DELETE endpoint.
+  const handleDelete = async (file: UploadedFileItem) => {
+    if (file._isReal) {
+      setDeletingId(file.id);
+      try {
+        await remove(file.id);
+        toast.success('File deleted from Firebase Storage');
+      } catch {
+        toast.error('Could not delete the file. Please try again.');
+      } finally {
+        setDeletingId(null);
+      }
+    } else {
+      deleteMutation.mutate(file.id);
+    }
+  };
+
+  // Fetches a fresh Firebase Storage download URL and opens it in a new tab.
+  // Only real Firestore-backed documents can be downloaded — legacy Prisma
+  // files are not backed by a Storage object.
+  const handleDownload = async (file: UploadedFileItem) => {
+    if (!file._isReal) {
+      toast.info('This file is not backed by a real storage object.');
+      return;
+    }
+    try {
+      const url = await getDownloadUrl(file.id);
+      if (url) {
+        window.open(url, '_blank', 'noopener,noreferrer');
+      } else {
+        toast.error('Could not generate a download link for this file.');
+      }
+    } catch {
+      toast.error('Download failed. Please try again.');
+    }
   };
 
   const handleRetry = () => {
@@ -568,13 +708,13 @@ export default function DocumentVaultPage() {
                   {isDragging ? 'Drop files here to upload' : 'Drag & drop files here, or click to browse'}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  Supports Excel (.xlsx), CSV, PDF, JSON, and Images (.jpg, .png)
+                  Supports PDF, Word (.doc, .docx), Excel (.xlsx), CSV, and Images (.jpg, .png)
                 </p>
-                {uploadingFiles.size > 0 && (
+                {activeUploadCount > 0 && (
                   <div className="mt-3 flex items-center gap-2">
                     <Loader2 className="h-4 w-4 animate-spin text-emerald-600" />
                     <span className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">
-                      Uploading {uploadingFiles.size} file{uploadingFiles.size > 1 ? 's' : ''}...
+                      Uploading {activeUploadCount} file{activeUploadCount > 1 ? 's' : ''}...
                     </span>
                   </div>
                 )}
@@ -582,7 +722,7 @@ export default function DocumentVaultPage() {
               <input
                 ref={fileInputRef}
                 type="file"
-                accept=".xlsx,.xls,.csv,.pdf,.json,.jpg,.jpeg,.png"
+                accept=".pdf,.png,.jpg,.jpeg,.xlsx,.xls,.csv,.doc,.docx"
                 multiple
                 className="hidden"
                 onChange={handleFileSelect}
@@ -919,9 +1059,22 @@ export default function DocumentVaultPage() {
                               size="sm"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                handleDelete(file.id, file.originalName);
+                                handleDownload(file);
                               }}
-                              disabled={deleteMutation.isPending}
+                              disabled={!file._isReal}
+                              className="h-8 w-8 p-0 text-muted-foreground hover:text-emerald-600 opacity-0 group-hover:opacity-100 transition-opacity"
+                              title={file._isReal ? 'Download file' : 'Download not available for this file'}
+                            >
+                              <Download className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDelete(file);
+                              }}
+                              disabled={file._isReal ? deletingId === file.id : deleteMutation.isPending}
                               className="h-8 w-8 p-0 text-muted-foreground hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity"
                               title="Delete file"
                             >

@@ -86,8 +86,9 @@ import {
   createInvoice,
   approveInvoice,
   deleteInvoice,
-  createDocument,
 } from '@/lib/firestore-service';
+import { useDocuments } from '@/hooks/useDocuments';
+import { validateFile } from '@/lib/firebase/storage-service';
 import { toast } from 'sonner';
 import { EmptyState } from '@/components/shared/EmptyState';
 
@@ -160,8 +161,16 @@ export default function InvoiceWorkspacePage() {
   }, [clients]);
 
   // ── Upload State ──
+  // useDocuments() drives real uploads to Firebase Storage (org-isolated,
+  // category='invoices') and surfaces live per-file progress through the
+  // `uploads` array. We project that array into the legacy {id,name,progress}
+  // shape so the existing progress UI stays untouched.
+  const { uploads, uploadMany, isUploading } = useDocuments('invoices');
+  const uploadingFiles = useMemo(
+    () => uploads.map(u => ({ id: u.id, name: u.fileName, progress: Math.round(u.progress) })),
+    [uploads],
+  );
   const [isDragging, setIsDragging] = useState(false);
-  const [uploadingFiles, setUploadingFiles] = useState<Array<{ id: string; name: string; progress: number }>>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // ── Filter State ──
@@ -208,61 +217,36 @@ export default function InvoiceWorkspacePage() {
   }, [invoices, clientFilter, statusFilter, riskFilter, typeFilter, searchQuery, clientMap]);
 
   // ── Upload Handlers ──
+  // Pre-flight each file with the shared `validateFile` helper (100 MB cap +
+  // supported extensions), then delegate to useDocuments().uploadMany() which
+  // uploads to Firebase Storage (organizations/{orgId}/invoices/...) and writes
+  // a Firestore `documents` metadata row. Live progress is tracked in the
+  // `uploads` array and surfaced through `uploadingFiles` above.
   const handleUpload = useCallback(async (files: File[]) => {
+    const valid: File[] = [];
     for (const file of files) {
-      const fileId = `upload-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-      setUploadingFiles(prev => [...prev, { id: fileId, name: file.name, progress: 0 }]);
-
-      try {
-        // Simulate upload progress
-        setUploadingFiles(prev =>
-          prev.map(f => f.id === fileId ? { ...f, progress: 30 } : f)
-        );
-
-        // Determine document type from file extension
-        const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
-        let docType: 'purchase_register' | 'sales_register' | 'gstr1' | 'gstr2b' | 'gstr3b' | 'invoice' | 'other' = 'other';
-        if (ext === 'json') docType = 'gstr1';
-        else if (ext === 'csv' || ext === 'xlsx') docType = 'sales_register';
-        else docType = 'invoice';
-
-        // Use first client if available, otherwise empty string
-        const clientId = clients[0]?.clientId ?? '';
-
-        setUploadingFiles(prev =>
-          prev.map(f => f.id === fileId ? { ...f, progress: 60 } : f)
-        );
-
-        await createDocument({
-          clientId,
-          fileName: file.name,
-          fileSize: file.size,
-          fileType: file.type || 'application/octet-stream',
-          documentType: docType,
-          period: '2025-06',
-        });
-
-        setUploadingFiles(prev =>
-          prev.map(f => f.id === fileId ? { ...f, progress: 100 } : f)
-        );
-
-        toast.success(`${file.name} uploaded successfully`);
-
-        // Remove from uploading list after a short delay
-        setTimeout(() => {
-          setUploadingFiles(prev => prev.filter(f => f.id !== fileId));
-        }, 1500);
-      } catch (err) {
-        setUploadingFiles(prev =>
-          prev.map(f => f.id === fileId ? { ...f, progress: 0 } : f)
-        );
-        toast.error(`Failed to upload ${file.name}: ${err instanceof Error ? err.message : 'Unknown error'}`);
-        setTimeout(() => {
-          setUploadingFiles(prev => prev.filter(f => f.id !== fileId));
-        }, 2000);
+      const err = validateFile(file);
+      if (err) {
+        toast.error(`${file.name}: ${err}`);
+        continue;
       }
+      valid.push(file);
     }
-  }, [clients]);
+    if (valid.length === 0) return;
+
+    try {
+      const uploaded = await uploadMany(valid, { category: 'invoices' });
+      const failed = valid.length - uploaded.length;
+      if (uploaded.length > 0) {
+        toast.success(`${uploaded.length} file${uploaded.length !== 1 ? 's' : ''} uploaded to Firebase Storage`);
+      }
+      if (failed > 0) {
+        toast.error(`${failed} file${failed !== 1 ? 's' : ''} failed to upload`);
+      }
+    } catch (err) {
+      toast.error(`Upload failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    }
+  }, [uploadMany]);
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -350,7 +334,9 @@ export default function InvoiceWorkspacePage() {
   }
 
   // ── Empty state when no invoices exist ──
-  if (invoices.length === 0 && uploadingFiles.length === 0) {
+  // `isUploading` is true while any file is mid-upload, so we never flash the
+  // empty state at the user while their first upload is in flight.
+  if (invoices.length === 0 && !isUploading) {
     return (
       <div className="min-h-screen bg-gradient-to-b from-slate-50/80 to-white">
         <div className="space-y-6 p-4 md:p-6 lg:p-8">
@@ -385,7 +371,7 @@ export default function InvoiceWorkspacePage() {
           ref={fileInputRef}
           type="file"
           multiple
-          accept=".csv,.xlsx,.xls,.json,.pdf"
+          accept=".pdf,.png,.jpg,.jpeg,.xlsx,.xls,.csv,.doc,.docx"
           className="hidden"
           onChange={handleFileSelect}
         />
@@ -554,7 +540,7 @@ export default function InvoiceWorkspacePage() {
           ref={fileInputRef}
           type="file"
           multiple
-          accept=".csv,.xlsx,.xls,.json,.pdf"
+          accept=".pdf,.png,.jpg,.jpeg,.xlsx,.xls,.csv,.doc,.docx"
           className="hidden"
           onChange={handleFileSelect}
         />

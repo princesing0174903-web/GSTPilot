@@ -54,6 +54,8 @@ import {
   queryKeys,
 } from '@/hooks/api';
 import { useQueryClient } from '@tanstack/react-query';
+import { useDocuments } from '@/hooks/useDocuments';
+import { validateFile } from '@/lib/firebase/storage-service';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 function formatRelativeTime(ts: string) {
@@ -72,6 +74,20 @@ function formatFileSize(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / 1048576).toFixed(1)} MB`;
+}
+
+/**
+ * Map a Firebase Storage mimeType to the short file-type token the documents
+ * table expects (matches what `getFileIcon` switches on).
+ */
+function mimeTypeToFileType(mime: string): string {
+  if (!mime) return 'other';
+  if (mime.includes('pdf')) return 'pdf';
+  if (mime.includes('spreadsheet')) return 'xlsx';
+  if (mime.includes('csv')) return 'csv';
+  if (mime.includes('image')) return 'image';
+  if (mime.includes('word')) return 'doc';
+  return 'other';
 }
 
 function getFileIcon(ft: string) {
@@ -160,12 +176,47 @@ export default function ClientDetailPage() {
   const uploadFileMutation = useUploadFile();
   const deleteDocumentMutation = useDeleteDocument();
 
+  // ─── Firebase Storage (real uploads) ────────────────────────────────────
+  // useDocuments() handles org-scoped upload to Firebase Storage + writes
+  // metadata to Firestore. We use it to:
+  //   • upload() — push new files under `documents/{clientId}/...` and link
+  //     them to the selected client via `linkedTo`.
+  //   • documents — read real-time Firestore metadata, filtered to this
+  //     client, so newly uploaded files appear in the Documents tab without
+  //     a page refresh.
+  //   • remove() — delete a Firebase document (Storage file + metadata).
+  const {
+    documents: fireDocuments,
+    upload: uploadToStorage,
+    remove: removeFireDoc,
+  } = useDocuments();
+
   // ─── Derived data ──────────────────────────────────────────────────────
   const client = clientData?.client;
   const docs = useMemo(() => {
+    // Legacy Prisma-backed documents (may include seeded demo docs).
     const files = documentsData?.files ?? documentsData?.documents ?? [];
-    return Array.isArray(files) ? files : [];
-  }, [documentsData]);
+    const prismaDocs = Array.isArray(files) ? files : [];
+
+    // Real Firebase Storage documents linked to this client. These appear in
+    // the table as soon as the Firestore metadata write resolves — usually
+    // within ~1 second of the upload completing.
+    const fireDocsForClient = fireDocuments
+      .filter((d) => d.linkedTo?.id === selectedClientId)
+      .map((d) => ({
+        id: d.id,
+        name: d.originalName,
+        fileName: d.originalName,
+        fileType: mimeTypeToFileType(d.mimeType),
+        status: 'uploaded',
+        createdAt: d.createdAt,
+        uploadedAt: d.createdAt,
+        uploadTime: d.createdAt,
+        _firebase: true as const,
+      }));
+
+    return [...fireDocsForClient, ...prismaDocs];
+  }, [documentsData, fireDocuments, selectedClientId]);
   const returns = filingsData?.filings ?? [];
   const recons = reconRunsData?.runs ?? [];
   const reconResults = reconResultsData?.results ?? [];
@@ -302,17 +353,55 @@ export default function ClientDetailPage() {
     }
   };
 
-  const handleUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
-    if (!files || !selectedClientId) return;
-    for (const f of Array.from(files)) {
-      const formData = new FormData();
-      formData.append('file', f);
-      formData.append('clientId', selectedClientId);
-      uploadFileMutation.mutate(formData);
+    if (!files || !selectedClientId || !client) return;
+
+    const fileArr = Array.from(files);
+    if (fileArr.length === 0) return;
+
+    // Pre-flight validation (100 MB limit + supported file types). Reject the
+    // whole batch if any file is invalid — same UX as the GSTR upload page.
+    for (const f of fileArr) {
+      const err = validateFile(f);
+      if (err) {
+        toast.error(`${f.name}: ${err}`);
+        return;
+      }
     }
-    toast.success(`${files.length} document(s) uploaded`);
+
+    toast.info(`Uploading ${fileArr.length} document(s) to Firebase Storage...`);
     setUploadOpen(false);
+
+    // Upload each file to Firebase Storage under `documents/{clientId}/...`,
+    // linked to this client via `linkedTo` so it shows up in the Documents
+    // tab and the Document Vault.
+    const linkedTo = {
+      type: 'client' as const,
+      id: selectedClientId,
+      label: client.tradeName,
+    };
+
+    try {
+      const results = await Promise.all(
+        fileArr.map((f) =>
+          uploadToStorage({
+            file: f,
+            category: 'documents',
+            subPath: selectedClientId,
+            linkedTo,
+          }),
+        ),
+      );
+      const successCount = results.filter(Boolean).length;
+      if (successCount > 0) {
+        toast.success(`${successCount} document(s) uploaded`);
+      } else {
+        toast.error('Upload failed — please try again.');
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Upload failed');
+    }
   };
 
   const handleAddReturn = async () => {
@@ -368,8 +457,16 @@ export default function ClientDetailPage() {
   };
 
   const handleDeleteDocument = async (docId: string) => {
+    // Firebase Storage docs (marked `_firebase: true` in the merged docs list)
+    // are deleted via the useDocuments() hook. Legacy Prisma docs fall back to
+    // the old REST mutation.
+    const doc = docs.find((d: any) => d.id === docId);
     try {
-      await deleteDocumentMutation.mutateAsync(docId);
+      if (doc?._firebase) {
+        await removeFireDoc(docId);
+      } else {
+        await deleteDocumentMutation.mutateAsync(docId);
+      }
       toast.success('Document removed');
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to delete document');
@@ -658,7 +755,7 @@ export default function ClientDetailPage() {
                   <CloudUpload className="h-8 w-8 text-muted-foreground/40 mx-auto mb-3" />
                   <p className="text-sm font-medium">Click to browse files</p>
                   <p className="text-xs text-muted-foreground mt-1">PDF, Excel, CSV, JSON</p>
-                  <input type="file" className="absolute inset-0 opacity-0 cursor-pointer" multiple accept=".pdf,.xlsx,.xls,.csv,.json" onChange={handleUpload} onClick={e => { e.currentTarget.value = ''; }} />
+                  <input type="file" className="absolute inset-0 opacity-0 cursor-pointer" multiple accept=".pdf,.png,.jpg,.jpeg,.xlsx,.xls,.csv,.doc,.docx" onChange={handleUpload} onClick={e => { e.currentTarget.value = ''; }} />
                 </div>
               </div>
               <DialogFooter><Button variant="outline" onClick={() => setUploadOpen(false)}>Cancel</Button></DialogFooter>

@@ -1,0 +1,723 @@
+     1→'use client';
+     2→
+     3→import React, { useState, useEffect, useRef, useCallback } from 'react';
+     4→import {
+     5→  Card,
+     6→  CardContent,
+     7→  CardHeader,
+     8→  CardTitle,
+     9→  CardDescription,
+    10→} from '@/components/ui/card';
+    11→import { Badge } from '@/components/ui/badge';
+    12→import { Button } from '@/components/ui/button';
+    13→import { Input } from '@/components/ui/input';
+    14→import { ScrollArea } from '@/components/ui/scroll-area';
+    15→import { Skeleton } from '@/components/ui/skeleton';
+    16→import {
+    17→  MessageSquare,
+    18→  Sparkles,
+    19→  Send,
+    20→  Upload,
+    21→  FileText,
+    22→  Plus,
+    23→  File,
+    24→  Clock,
+    25→  Loader2,
+    26→  X,
+    27→  CheckCircle2,
+    28→  BookOpen,
+    29→} from 'lucide-react';
+    30→import { motion, AnimatePresence } from 'framer-motion';
+    31→import { EmptyState } from '@/components/shared/EmptyState';
+    32→import { Inbox } from 'lucide-react';
+    33→
+    34→// ─── Color Palette (Emerald) ──────────────────────────────────────────────
+    35→const COLORS = {
+    36→  emerald: '#10b981',
+    37→  emeraldDark: '#059669',
+    38→  emeraldLight: '#d1fae5',
+    39→  teal: '#14b8a6',
+    40→  amber: '#f59e0b',
+    41→  red: '#ef4444',
+    42→  slate: '#64748b',
+    43→};
+    44→
+    45→// ─── Types ─────────────────────────────────────────────────────────────────
+    46→interface ChatMessage {
+    47→  id: string;
+    48→  role: 'user' | 'assistant';
+    49→  content: string;
+    50→  timestamp: string;
+    51→  citations?: string[];
+    52→}
+    53→
+    54→interface ChatSession {
+    55→  id: string;
+    56→  documentName: string;
+    57→  documentType: string;
+    58→  createdAt: string;
+    59→  messageCount: number;
+    60→}
+    61→
+    62→// ─── Animated Card Wrapper ─────────────────────────────────────────────────
+    63→function AnimatedCard({
+    64→  children,
+    65→  delay = 0,
+    66→  className = '',
+    67→}: {
+    68→  children: React.ReactNode;
+    69→  delay?: number;
+    70→  className?: string;
+    71→}) {
+    72→  return (
+    73→    <motion.div
+    74→      initial={{ opacity: 0, y: 20 }}
+    75→      animate={{ opacity: 1, y: 0 }}
+    76→      transition={{ delay, duration: 0.5, ease: 'easeOut' }}
+    77→    >
+    78→      <Card className={`hover:shadow-lg hover:shadow-emerald-500/5 transition-all duration-300 border-border/50 backdrop-blur-sm bg-card/80 ${className}`}>
+    79→        {children}
+    80→      </Card>
+    81→    </motion.div>
+    82→  );
+    83→}
+    84→
+    85→// ─── Skeletons ─────────────────────────────────────────────────────────────
+    86→function ChatSkeleton() {
+    87→  return (
+    88→    <div className="space-y-4 p-4">
+    89→      {[1, 2, 3].map(i => (
+    90→        <div key={i} className={`flex ${i % 2 === 0 ? 'justify-end' : 'justify-start'}`}>
+    91→          <Skeleton className={`h-16 ${i % 2 === 0 ? 'w-2/3' : 'w-3/4'} rounded-2xl`} />
+    92→        </div>
+    93→      ))}
+    94→    </div>
+    95→  );
+    96→}
+    97→
+    98→function SessionSkeleton() {
+    99→  return (
+   100→    <div className="space-y-2">
+   101→      {[1, 2, 3].map(i => (
+   102→        <Skeleton key={i} className="h-14 w-full rounded-xl" />
+   103→      ))}
+   104→    </div>
+   105→  );
+   106→}
+   107→
+   108→// ─── Format message with simple markdown ───────────────────────────────────
+   109→function formatMessage(content: string) {
+   110→  return content.split('\n').map((line, i) => {
+   111→    const formatted = line
+   112→      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+   113→      .replace(/⚠️/g, '<span class="text-amber-500">⚠️</span>');
+   114→    if (formatted.startsWith('•')) {
+   115→      return (
+   116→        <div key={i} className="ml-2" dangerouslySetInnerHTML={{ __html: formatted }} />
+   117→      );
+   118→    }
+   119→    if (/^\d+\./.test(formatted)) {
+   120→      return (
+   121→        <div key={i} className="ml-3" dangerouslySetInnerHTML={{ __html: formatted }} />
+   122→      );
+   123→    }
+   124→    return (
+   125→      <React.Fragment key={i}>
+   126→        <span dangerouslySetInnerHTML={{ __html: formatted }} />
+   127→        {i < content.split('\n').length - 1 && <br />}
+   128→      </React.Fragment>
+   129→    );
+   130→  });
+   131→}
+   132→
+   133→// ─── Format relative date ──────────────────────────────────────────────────
+   134→function formatRelativeDate(dateStr: string): string {
+   135→  const date = new Date(dateStr);
+   136→  const now = new Date();
+   137→  const diffMs = now.getTime() - date.getTime();
+   138→  const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+   139→  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+   140→
+   141→  if (diffHours < 1) return 'Just now';
+   142→  if (diffHours < 24) return `${diffHours}h ago`;
+   143→  if (diffDays < 7) return `${diffDays}d ago`;
+   144→  return date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+   145→}
+   146→
+   147→// ═══════════════════════════════════════════════════════════════════════════
+   148→// MAIN COMPONENT
+   149→// ═══════════════════════════════════════════════════════════════════════════
+   150→export default function AIDocumentChatPage() {
+   151→  // ── State ────────────────────────────────────────────────────────────────
+   152→  const [messages, setMessages] = useState<ChatMessage[]>([]);
+   153→  const [input, setInput] = useState('');
+   154→  const [isTyping, setIsTyping] = useState(false);
+   155→  const [sessions, setSessions] = useState<ChatSession[]>([]);
+   156→  const [activeSession, setActiveSession] = useState<string | null>(null);
+   157→  const [uploadedDoc, setUploadedDoc] = useState<{ name: string; type: string; size: string } | null>(null);
+   158→  const [isDragging, setIsDragging] = useState(false);
+   159→  const [loading, setLoading] = useState(true);
+   160→  const [sending, setSending] = useState(false);
+   161→
+   162→  const scrollRef = useRef<HTMLDivElement>(null);
+   163→  const inputRef = useRef<HTMLInputElement>(null);
+   164→  const fileInputRef = useRef<HTMLInputElement>(null);
+   165→
+   166→  // ── Fetch sessions ───────────────────────────────────────────────────────
+   167→  const fetchSessions = useCallback(async () => {
+   168→    try {
+   169→      setLoading(true);
+   170→      const res = await fetch('/api/ai-doc-chat');
+   171→      if (res.ok) {
+   172→        const data = await res.json();
+   173→        setSessions(Array.isArray(data.sessions) ? data.sessions : []);
+   174→      } else {
+   175→        setSessions([]);
+   176→      }
+   177→    } catch {
+   178→      setSessions([]);
+   179→    } finally {
+   180→      setLoading(false);
+   181→    }
+   182→  }, []);
+   183→
+   184→  useEffect(() => {
+   185→    fetchSessions();
+   186→  }, [fetchSessions]);
+   187→
+   188→  // Auto-scroll
+   189→  useEffect(() => {
+   190→    if (scrollRef.current) {
+   191→      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+   192→    }
+   193→  }, [messages, isTyping]);
+   194→
+   195→  // ── Handle file upload ───────────────────────────────────────────────────
+   196→  const handleFileUpload = useCallback(async (file: File) => {
+   197→    const docType = file.name.endsWith('.pdf') ? 'PDF'
+   198→      : file.name.endsWith('.xlsx') || file.name.endsWith('.xls') ? 'Excel'
+   199→      : file.name.endsWith('.csv') ? 'CSV'
+   200→      : 'Document';
+   201→
+   202→    const sizeStr = file.size < 1024 * 1024
+   203→      ? `${(file.size / 1024).toFixed(1)} KB`
+   204→      : `${(file.size / (1024 * 1024)).toFixed(1)} MB`;
+   205→
+   206→    setUploadedDoc({ name: file.name, type: docType, size: sizeStr });
+   207→
+   208→    try {
+   209→      const res = await fetch('/api/ai-doc-chat', {
+   210→        method: 'POST',
+   211→        headers: { 'Content-Type': 'application/json' },
+   212→        body: JSON.stringify({ documentName: file.name, documentType: docType }),
+   213→      });
+   214→
+   215→      if (res.ok) {
+   216→        const data = await res.json();
+   217→        setActiveSession(data.sessionId || `session-${Date.now()}`);
+   218→      } else {
+   219→        setActiveSession(`session-${Date.now()}`);
+   220→      }
+   221→    } catch {
+   222→      setActiveSession(`session-${Date.now()}`);
+   223→    }
+   224→
+   225→    // Add system message
+   226→    setMessages([{
+   227→      id: `sys-${Date.now()}`,
+   228→      role: 'assistant',
+   229→      content: `I've received **${file.name}** (${docType}, ${sizeStr}). I'm analyzing the document now. You can ask me questions about its contents, or I can provide a summary.\n\nWhat would you like to know?`,
+   230→      timestamp: new Date().toISOString(),
+   231→      citations: [],
+   232→    }]);
+   233→  }, []);
+   234→
+   235→  // ── Drag & Drop ──────────────────────────────────────────────────────────
+   236→  const handleDragOver = (e: React.DragEvent) => {
+   237→    e.preventDefault();
+   238→    setIsDragging(true);
+   239→  };
+   240→
+   241→  const handleDragLeave = (e: React.DragEvent) => {
+   242→    e.preventDefault();
+   243→    setIsDragging(false);
+   244→  };
+   245→
+   246→  const handleDrop = (e: React.DragEvent) => {
+   247→    e.preventDefault();
+   248→    setIsDragging(false);
+   249→    const file = e.dataTransfer.files[0];
+   250→    if (file) handleFileUpload(file);
+   251→  };
+   252→
+   253→  // ── Send message ─────────────────────────────────────────────────────────
+   254→  const handleSend = useCallback(async (text?: string) => {
+   255→    const messageText = text || input.trim();
+   256→    if (!messageText) return;
+   257→
+   258→    const userMsg: ChatMessage = {
+   259→      id: `user-${Date.now()}`,
+   260→      role: 'user',
+   261→      content: messageText,
+   262→      timestamp: new Date().toISOString(),
+   263→    };
+   264→
+   265→    setMessages(prev => [...prev, userMsg]);
+   266→    setInput('');
+   267→    setIsTyping(true);
+   268→    setSending(true);
+   269→
+   270→    try {
+   271→      const res = await fetch('/api/ai-doc-chat', {
+   272→        method: 'PATCH',
+   273→        headers: { 'Content-Type': 'application/json' },
+   274→        body: JSON.stringify({
+   275→          sessionId: activeSession,
+   276→          message: messageText,
+   277→        }),
+   278→      });
+   279→
+   280→      if (res.ok) {
+   281→        const data = await res.json();
+   282→        const assistantMsg: ChatMessage = {
+   283→          id: `assistant-${Date.now()}`,
+   284→          role: 'assistant',
+   285→          content: data.content || "I don't have data to answer that yet. Please upload a document or try again later.",
+   286→          timestamp: new Date().toISOString(),
+   287→          citations: Array.isArray(data.citations) ? data.citations : [],
+   288→        };
+   289→        setMessages(prev => [...prev, assistantMsg]);
+   290→      } else {
+   291→        const assistantMsg: ChatMessage = {
+   292→          id: `assistant-${Date.now()}`,
+   293→          role: 'assistant',
+   294→          content: "I couldn't process your request right now. Please try again later.",
+   295→          timestamp: new Date().toISOString(),
+   296→          citations: [],
+   297→        };
+   298→        setMessages(prev => [...prev, assistantMsg]);
+   299→      }
+   300→    } catch {
+   301→      const assistantMsg: ChatMessage = {
+   302→        id: `assistant-${Date.now()}`,
+   303→        role: 'assistant',
+   304→        content: "I couldn't process your request right now. Please try again later.",
+   305→        timestamp: new Date().toISOString(),
+   306→        citations: [],
+   307→      };
+   308→      setMessages(prev => [...prev, assistantMsg]);
+   309→    } finally {
+   310→      setIsTyping(false);
+   311→      setSending(false);
+   312→    }
+   313→  }, [input, activeSession]);
+   314→
+   315→  const handleKeyDown = (e: React.KeyboardEvent) => {
+   316→    if (e.key === 'Enter' && !e.shiftKey) {
+   317→      e.preventDefault();
+   318→      handleSend();
+   319→    }
+   320→  };
+   321→
+   322→  // ── New Session ──────────────────────────────────────────────────────────
+   323→  const handleNewSession = () => {
+   324→    setMessages([]);
+   325→    setActiveSession(null);
+   326→    setUploadedDoc(null);
+   327→    setTimeout(() => inputRef.current?.focus(), 100);
+   328→  };
+   329→
+   330→  // ── Load Session ─────────────────────────────────────────────────────────
+   331→  const handleLoadSession = (session: ChatSession) => {
+   332→    setActiveSession(session.id);
+   333→    setUploadedDoc({ name: session.documentName, type: session.documentType, size: '' });
+   334→    setMessages([
+   335→      {
+   336→        id: `sys-${session.id}`,
+   337→        role: 'assistant',
+   338→        content: `Session loaded for **${session.documentName}**. You had ${session.messageCount} messages in this session. How can I help you further?`,
+   339→        timestamp: session.createdAt,
+   340→        citations: [],
+   341→      },
+   342→    ]);
+   343→  };
+   344→
+   345→  // ── Render ───────────────────────────────────────────────────────────────
+   346→  return (
+   347→    <div className="p-4 md:p-6 space-y-4">
+   348→      {/* ═══ PAGE HEADER ═══ */}
+   349→      <motion.div
+   350→        initial={{ opacity: 0, y: -10 }}
+   351→        animate={{ opacity: 1, y: 0 }}
+   352→        transition={{ duration: 0.4 }}
+   353→        className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
+   354→      >
+   355→        <div className="flex items-center gap-3">
+   356→          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-100 dark:bg-emerald-950/50">
+   357→            <MessageSquare className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+   358→          </div>
+   359→          <div>
+   360→            <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground">
+   361→              AI Document Chat
+   362→            </h1>
+   363→            <p className="text-sm text-muted-foreground mt-0.5">
+   364→              Upload documents and ask AI questions
+   365→            </p>
+   366→          </div>
+   367→        </div>
+   368→        <Badge
+   369→          variant="outline"
+   370→          className="gap-1.5 px-3 py-1.5 border-emerald-200 text-emerald-700 bg-emerald-50/80 dark:border-emerald-800 dark:text-emerald-400 dark:bg-emerald-950/40 font-medium"
+   371→        >
+   372→          <Sparkles className="h-3.5 w-3.5" />
+   373→          AI Powered
+   374→        </Badge>
+   375→      </motion.div>
+   376→
+   377→      {/* ═══ TWO-PANEL LAYOUT ═══ */}
+   378→      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4" style={{ minHeight: 'calc(100vh - 180px)' }}>
+   379→
+   380→        {/* ─── LEFT PANEL: Chat Interface (2/3) ─── */}
+   381→        <div className="lg:col-span-2 flex flex-col">
+   382→          <AnimatedCard delay={0.05} className="flex flex-col flex-1">
+   383→            {/* Chat Header */}
+   384→            <CardHeader className="pb-3 border-b border-border/30">
+   385→              <div className="flex items-center justify-between">
+   386→                <CardTitle className="flex items-center gap-2 text-base">
+   387→                  <BookOpen className="h-4 w-4 text-emerald-500" />
+   388→                  {uploadedDoc ? uploadedDoc.name : 'Document Chat'}
+   389→                </CardTitle>
+   390→                <Button
+   391→                  size="sm"
+   392→                  variant="outline"
+   393→                  onClick={handleNewSession}
+   394→                  className="gap-1.5 h-8 border-emerald-200 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-800 dark:text-emerald-400 dark:hover:bg-emerald-950/30 text-xs"
+   395→                >
+   396→                  <Plus className="h-3 w-3" />
+   397→                  New Session
+   398→                </Button>
+   399→              </div>
+   400→            </CardHeader>
+   401→
+   402→            {/* Messages Area */}
+   403→            <CardContent className="flex-1 p-0 overflow-hidden">
+   404→              {loading ? (
+   405→                <ChatSkeleton />
+   406→              ) : (
+   407→                <div
+   408→                  ref={scrollRef}
+   409→                  className="h-full overflow-y-auto p-4 space-y-4"
+   410→                  style={{ minHeight: '400px', maxHeight: 'calc(100vh - 360px)', scrollbarWidth: 'thin' }}
+   411→                >
+   412→                  {messages.length === 0 && (
+   413→                    <motion.div
+   414→                      initial={{ opacity: 0, scale: 0.95 }}
+   415→                      animate={{ opacity: 1, scale: 1 }}
+   416→                      className="flex flex-col items-center justify-center py-16 text-center"
+   417→                    >
+   418→                      <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-100 dark:bg-emerald-950/50 mb-4">
+   419→                        <MessageSquare className="h-8 w-8 text-emerald-600 dark:text-emerald-400" />
+   420→                      </div>
+   421→                      <h3 className="text-lg font-semibold text-foreground mb-1">
+   422→                        Start a Document Chat
+   423→                      </h3>
+   424→                      <p className="text-sm text-muted-foreground max-w-sm">
+   425→                        Upload a document from the right panel or select a previous session to begin chatting with AI about your GST documents.
+   426→                      </p>
+   427→                    </motion.div>
+   428→                  )}
+   429→
+   430→                  <AnimatePresence>
+   431→                    {messages.map((msg) => (
+   432→                      <motion.div
+   433→                        key={msg.id}
+   434→                        initial={{ opacity: 0, y: 10 }}
+   435→                        animate={{ opacity: 1, y: 0 }}
+   436→                        transition={{ duration: 0.3 }}
+   437→                        className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+   438→                      >
+   439→                        <div
+   440→                          className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm ${
+   441→                            msg.role === 'user'
+   442→                              ? 'bg-emerald-600 text-white rounded-br-md'
+   443→                              : 'bg-muted text-foreground rounded-bl-md'
+   444→                          }`}
+   445→                        >
+   446→                          {msg.role === 'assistant' && (
+   447→                            <div className="flex items-center gap-1.5 mb-2">
+   448→                              <Sparkles className="h-3.5 w-3.5 text-emerald-500" />
+   449→                              <Badge className="h-4 px-1.5 text-[8px] font-bold bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-900 dark:text-emerald-300 dark:border-emerald-800">
+   450→                                AI
+   451→                              </Badge>
+   452→                            </div>
+   453→                          )}
+   454→                          <div className="leading-relaxed">{formatMessage(msg.content)}</div>
+   455→
+   456→                          {/* Citations */}
+   457→                          {msg.citations && msg.citations.length > 0 && (
+   458→                            <div className="mt-3 pt-2 border-t border-border/20">
+   459→                              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
+   460→                                References
+   461→                              </p>
+   462→                              <div className="flex flex-wrap gap-1.5">
+   463→                                {msg.citations.map((citation, idx) => (
+   464→                                  <Badge
+   465→                                    key={idx}
+   466→                                    variant="outline"
+   467→                                    className="text-[10px] px-2 py-0.5 border-emerald-200 text-emerald-700 bg-emerald-50/50 dark:border-emerald-800 dark:text-emerald-400 dark:bg-emerald-950/30"
+   468→                                  >
+   469→                                    <FileText className="h-2.5 w-2.5 mr-1" />
+   470→                                    {citation}
+   471→                                  </Badge>
+   472→                                ))}
+   473→                              </div>
+   474→                            </div>
+   475→                          )}
+   476→                        </div>
+   477→                      </motion.div>
+   478→                    ))}
+   479→                  </AnimatePresence>
+   480→
+   481→                  {/* Typing Indicator */}
+   482→                  {isTyping && (
+   483→                    <motion.div
+   484→                      initial={{ opacity: 0, y: 10 }}
+   485→                      animate={{ opacity: 1, y: 0 }}
+   486→                      className="flex justify-start"
+   487→                    >
+   488→                      <div className="bg-muted rounded-2xl rounded-bl-md px-4 py-3 flex items-center gap-1.5">
+   489→                        <div className="h-2 w-2 rounded-full bg-emerald-500 animate-bounce" style={{ animationDelay: '0ms' }} />
+   490→                        <div className="h-2 w-2 rounded-full bg-emerald-500 animate-bounce" style={{ animationDelay: '150ms' }} />
+   491→                        <div className="h-2 w-2 rounded-full bg-emerald-500 animate-bounce" style={{ animationDelay: '300ms' }} />
+   492→                      </div>
+   493→                    </motion.div>
+   494→                  )}
+   495→                </div>
+   496→              )}
+   497→            </CardContent>
+   498→
+   499→            {/* Input Bar */}
+   500→            <div className="border-t border-border/30 p-3">
+   501→              <div className="flex items-center gap-2">
+   502→                <Input
+   503→                  ref={inputRef}
+   504→                  value={input}
+   505→                  onChange={(e) => setInput(e.target.value)}
+   506→                  onKeyDown={handleKeyDown}
+   507→                  placeholder={uploadedDoc ? `Ask about ${uploadedDoc.name}...` : 'Upload a document to start chatting...'}
+   508→                  className="flex-1 h-10 text-sm border-emerald-200 focus:border-emerald-500 focus:ring-emerald-500/20 dark:border-emerald-800"
+   509→                  disabled={isTyping || !uploadedDoc}
+   510→                />
+   511→                <Button
+   512→                  onClick={() => handleSend()}
+   513→                  disabled={!input.trim() || isTyping || !uploadedDoc}
+   514→                  size="sm"
+   515→                  className="h-10 w-10 p-0 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white shrink-0"
+   516→                >
+   517→                  {sending ? (
+   518→                    <Loader2 className="h-4 w-4 animate-spin" />
+   519→                  ) : (
+   520→                    <Send className="h-4 w-4" />
+   521→                  )}
+   522→                </Button>
+   523→              </div>
+   524→            </div>
+   525→          </AnimatedCard>
+   526→        </div>
+   527→
+   528→        {/* ─── RIGHT PANEL: Document Preview & Upload (1/3) ─── */}
+   529→        <div className="flex flex-col gap-4">
+   530→
+   531→          {/* Upload Zone */}
+   532→          <AnimatedCard delay={0.1}>
+   533→            <CardHeader className="pb-3">
+   534→              <CardTitle className="flex items-center gap-2 text-base">
+   535→                <Upload className="h-4 w-4 text-emerald-500" />
+   536→                Upload Document
+   537→              </CardTitle>
+   538→            </CardHeader>
+   539→            <CardContent>
+   540→              <div
+   541→                onDragOver={handleDragOver}
+   542→                onDragLeave={handleDragLeave}
+   543→                onDrop={handleDrop}
+   544→                onClick={() => fileInputRef.current?.click()}
+   545→                className={`relative flex flex-col items-center justify-center p-8 border-2 border-dashed rounded-xl cursor-pointer transition-all duration-200 ${
+   546→                  isDragging
+   547→                    ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/30 scale-[1.02]'
+   548→                    : uploadedDoc
+   549→                    ? 'border-emerald-300 bg-emerald-50/50 dark:border-emerald-800 dark:bg-emerald-950/20'
+   550→                    : 'border-border hover:border-emerald-300 hover:bg-emerald-50/30 dark:hover:border-emerald-800 dark:hover:bg-emerald-950/10'
+   551→                }`}
+   552→              >
+   553→                <input
+   554→                  ref={fileInputRef}
+   555→                  type="file"
+   556→                  className="hidden"
+   557→                  accept=".pdf,.xlsx,.xls,.csv"
+   558→                  onChange={(e) => {
+   559→                    const file = e.target.files?.[0];
+   560→                    if (file) handleFileUpload(file);
+   561→                  }}
+   562→                />
+   563→
+   564→                {uploadedDoc ? (
+   565→                  <motion.div
+   566→                    initial={{ scale: 0.9, opacity: 0 }}
+   567→                    animate={{ scale: 1, opacity: 1 }}
+   568→                    className="flex flex-col items-center text-center"
+   569→                  >
+   570→                    <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-100 dark:bg-emerald-900/50 mb-3">
+   571→                      <CheckCircle2 className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
+   572→                    </div>
+   573→                    <p className="text-sm font-medium text-foreground">{uploadedDoc.name}</p>
+   574→                    <p className="text-xs text-muted-foreground mt-0.5">
+   575→                      {uploadedDoc.type} {uploadedDoc.size && `• ${uploadedDoc.size}`}
+   576→                    </p>
+   577→                    <Button
+   578→                      size="sm"
+   579→                      variant="ghost"
+   580→                      className="mt-2 h-7 text-xs text-muted-foreground hover:text-red-500"
+   581→                      onClick={(e) => {
+   582→                        e.stopPropagation();
+   583→                        setUploadedDoc(null);
+   584→                      }}
+   585→                    >
+   586→                      <X className="h-3 w-3 mr-1" />
+   587→                      Remove
+   588→                    </Button>
+   589→                  </motion.div>
+   590→                ) : (
+   591→                  <div className="flex flex-col items-center text-center">
+   592→                    <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-muted/50 mb-3">
+   593→                      <Upload className="h-6 w-6 text-muted-foreground" />
+   594→                    </div>
+   595→                    <p className="text-sm font-medium text-foreground">
+   596→                      {isDragging ? 'Drop file here' : 'Drag & drop or click'}
+   597→                    </p>
+   598→                    <p className="text-xs text-muted-foreground mt-1">
+   599→                      PDF, Excel, CSV supported
+   600→                    </p>
+   601→                  </div>
+   602→                )}
+   603→              </div>
+   604→            </CardContent>
+   605→          </AnimatedCard>
+   606→
+   607→          {/* Document Info Card */}
+   608→          {uploadedDoc && (
+   609→            <AnimatedCard delay={0.15}>
+   610→              <CardHeader className="pb-3">
+   611→                <CardTitle className="flex items-center gap-2 text-base">
+   612→                  <File className="h-4 w-4 text-emerald-500" />
+   613→                  Document Info
+   614→                </CardTitle>
+   615→              </CardHeader>
+   616→              <CardContent>
+   617→                <div className="space-y-3">
+   618→                  <div className="flex items-center justify-between">
+   619→                    <span className="text-xs text-muted-foreground">Name</span>
+   620→                    <span className="text-xs font-medium text-foreground truncate max-w-[160px]">
+   621→                      {uploadedDoc.name}
+   622→                    </span>
+   623→                  </div>
+   624→                  <div className="flex items-center justify-between">
+   625→                    <span className="text-xs text-muted-foreground">Type</span>
+   626→                    <Badge
+   627→                      variant="outline"
+   628→                      className="text-[10px] px-2 py-0.5 border-emerald-200 text-emerald-700 bg-emerald-50/50 dark:border-emerald-800 dark:text-emerald-400 dark:bg-emerald-950/30"
+   629→                    >
+   630→                      {uploadedDoc.type}
+   631→                    </Badge>
+   632→                  </div>
+   633→                  <div className="flex items-center justify-between">
+   634→                    <span className="text-xs text-muted-foreground">Date</span>
+   635→                    <span className="text-xs font-medium text-foreground">
+   636→                      {new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+   637→                    </span>
+   638→                  </div>
+   639→                  {uploadedDoc.size && (
+   640→                    <div className="flex items-center justify-between">
+   641→                      <span className="text-xs text-muted-foreground">Size</span>
+   642→                      <span className="text-xs font-medium text-foreground">{uploadedDoc.size}</span>
+   643→                    </div>
+   644→                  )}
+   645→                </div>
+   646→              </CardContent>
+   647→            </AnimatedCard>
+   648→          )}
+   649→
+   650→          {/* Previous Sessions */}
+   651→          <AnimatedCard delay={0.2} className="flex-1">
+   652→            <CardHeader className="pb-3">
+   653→              <CardTitle className="flex items-center gap-2 text-base">
+   654→                <Clock className="h-4 w-4 text-emerald-500" />
+   655→                Previous Sessions
+   656→              </CardTitle>
+   657→              <CardDescription>Click to resume a session</CardDescription>
+   658→            </CardHeader>
+   659→            <CardContent>
+   660→              {loading ? (
+   661→                <SessionSkeleton />
+   662→              ) : sessions.length === 0 ? (
+   663→                <EmptyState
+   664→                  icon={Inbox}
+   665→                  title="No chat sessions yet"
+   666→                  description="Start a new conversation to see sessions here."
+   667→                  compact
+   668→                />
+   669→              ) : (
+   670→                <ScrollArea className="max-h-64">
+   671→                  <div className="space-y-2 pr-1">
+   672→                    <AnimatePresence>
+   673→                      {sessions.map((session, index) => (
+   674→                        <motion.button
+   675→                          key={session.id}
+   676→                          initial={{ opacity: 0, x: -10 }}
+   677→                          animate={{ opacity: 1, x: 0 }}
+   678→                          transition={{ delay: 0.1 + index * 0.05, duration: 0.3 }}
+   679→                          whileHover={{ x: 4, backgroundColor: 'rgba(16, 185, 129, 0.05)' }}
+   680→                          onClick={() => handleLoadSession(session)}
+   681→                          className={`w-full flex items-center gap-3 p-3 rounded-xl border transition-all text-left ${
+   682→                            activeSession === session.id
+   683→                              ? 'border-emerald-300 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-950/30'
+   684→                              : 'border-border/30 hover:border-emerald-200/50 dark:hover:border-emerald-800/50'
+   685→                          }`}
+   686→                        >
+   687→                          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-50 dark:bg-emerald-950/40 shrink-0">
+   688→                            <FileText className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+   689→                          </div>
+   690→                          <div className="flex-1 min-w-0">
+   691→                            <p className="text-sm font-medium text-foreground truncate">
+   692→                              {session.documentName}
+   693→                            </p>
+   694→                            <div className="flex items-center gap-2 mt-0.5">
+   695→                              <span className="text-[10px] text-muted-foreground">
+   696→                                {session.documentType}
+   697→                              </span>
+   698→                              <span className="text-[10px] text-muted-foreground">•</span>
+   699→                              <span className="text-[10px] text-muted-foreground">
+   700→                                {formatRelativeDate(session.createdAt)}
+   701→                              </span>
+   702→                            </div>
+   703→                          </div>
+   704→                          <Badge
+   705→                            variant="outline"
+   706→                            className="text-[9px] px-1.5 py-0 border-emerald-200 text-emerald-600 bg-emerald-50/50 dark:border-emerald-800 dark:text-emerald-400 dark:bg-emerald-950/30 shrink-0"
+   707→                          >
+   708→                            {session.messageCount}
+   709→                          </Badge>
+   710→                        </motion.button>
+   711→                      ))}
+   712→                    </AnimatePresence>
+   713→                  </div>
+   714→                </ScrollArea>
+   715→              )}
+   716→            </CardContent>
+   717→          </AnimatedCard>
+   718→        </div>
+   719→      </div>
+   720→    </div>
+   721→  );
+   722→}
+   723→

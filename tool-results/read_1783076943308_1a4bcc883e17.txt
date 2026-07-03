@@ -1,0 +1,1698 @@
+     1→'use client'
+     2→
+     3→import { useState, useMemo, useCallback, useRef, useEffect } from 'react'
+     4→import { apiGet } from '@/lib/api'
+     5→import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+     6→import { Button } from '@/components/ui/button'
+     7→import { Badge } from '@/components/ui/badge'
+     8→import { Input } from '@/components/ui/input'
+     9→import { ScrollArea } from '@/components/ui/scroll-area'
+    10→import { Separator } from '@/components/ui/separator'
+    11→import { Progress } from '@/components/ui/progress'
+    12→import { Skeleton } from '@/components/ui/skeleton'
+    13→import {
+    14→  Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription,
+    15→} from '@/components/ui/sheet'
+    16→import {
+    17→  Collapsible, CollapsibleTrigger, CollapsibleContent,
+    18→} from '@/components/ui/collapsible'
+    19→import {
+    20→  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+    21→} from '@/components/ui/select'
+    22→import {
+    23→  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+    24→} from '@/components/ui/dropdown-menu'
+    25→import {
+    26→  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+    27→} from '@/components/ui/table'
+    28→import { Textarea } from '@/components/ui/textarea'
+    29→import { motion, AnimatePresence } from 'framer-motion'
+    30→import { toast } from 'sonner'
+    31→import {
+    32→  Upload, FileText, FileSpreadsheet, AlertTriangle, File,
+    33→  Clock, ChevronRight, ChevronDown, CheckCircle2, XCircle,
+    34→  Loader2, RefreshCw, Eye, Edit3, Check, Sparkles, Zap,
+    35→  Search, BarChart3, Shield, FileSearch, Brain, ListTodo,
+    36→  AlertCircle, Copy, TrendingUp, Hash, ArrowRight,
+    37→  FileCheck, FileWarning, Landmark, X, Paperclip,
+    38→} from 'lucide-react'
+    39→
+    40→// ═══════════════════════════════════════════════════════════════════════════════
+    41→// TYPES
+    42→// ═══════════════════════════════════════════════════════════════════════════════
+    43→
+    44→type DocStatus = 'uploading' | 'processing' | 'extracted' | 'reviewed' | 'archived' | 'failed'
+    45→type DocType = 'invoice' | 'purchase_register' | 'sales_register' | 'gst_notice' | 'bank_statement' | 'other'
+    46→type OCRStatus = 'queued' | 'processing' | 'extracted' | 'reviewed'
+    47→type AnomalySeverity = 'high' | 'medium' | 'low'
+    48→type AnomalyType = 'duplicate_invoice' | 'gstin_invalid' | 'tax_mismatch' | 'unusual_amount' | 'date_inconsistency'
+    49→
+    50→interface ExtractedField {
+    51→  key: string
+    52→  label: string
+    53→  value: string
+    54→  editable?: boolean
+    55→}
+    56→
+    57→interface DocAnomaly {
+    58→  id: string
+    59→  type: AnomalyType
+    60→  description: string
+    61→  severity: AnomalySeverity
+    62→  sourceDocId: string
+    63→  sourceDocName: string
+    64→  investigated: boolean
+    65→}
+    66→
+    67→interface DocTask {
+    68→  id: string
+    69→  title: string
+    70→  sourceDocId: string
+    71→  sourceDocName: string
+    72→  priority: 'low' | 'medium' | 'high' | 'urgent'
+    73→  status: 'todo' | 'in_progress' | 'review' | 'completed'
+    74→  assignedTo: string
+    75→}
+    76→
+    77→interface DocSummary {
+    78→  text: string
+    79→  highlights: string[]
+    80→  generated: boolean
+    81→}
+    82→
+    83→interface SmartDocument {
+    84→  id: string
+    85→  name: string
+    86→  type: DocType
+    87→  client: string
+    88→  status: DocStatus
+    89→  ocrStatus: OCRStatus
+    90→  uploadDate: string
+    91→  size: string
+    92→  sizeBytes: number
+    93→  format: string
+    94→  extractedFields: ExtractedField[]
+    95→  extractedText: string
+    96→  classificationConfidence: number
+    97→  extractionAccuracy: number
+    98→  ocrProgress: number
+    99→  summary: DocSummary | null
+   100→  anomalies: DocAnomaly[]
+   101→  tasks: DocTask[]
+   102→}
+   103→
+   104→// ═══════════════════════════════════════════════════════════════════════════════
+   105→// CONFIG
+   106→// ═══════════════════════════════════════════════════════════════════════════════
+   107→
+   108→const STATUS_CONFIG: Record<DocStatus, { label: string; color: string; bg: string; dot: string; icon: React.ReactNode }> = {
+   109→  uploading: { label: 'Uploading', color: 'text-slate-600', bg: 'bg-slate-100 border-slate-200', dot: 'bg-slate-400', icon: <Upload className="h-3 w-3" /> },
+   110→  processing: { label: 'Processing', color: 'text-blue-700', bg: 'bg-blue-50 border-blue-200', dot: 'bg-blue-500', icon: <Loader2 className="h-3 w-3 animate-spin" /> },
+   111→  extracted: { label: 'Extracted', color: 'text-emerald-700', bg: 'bg-emerald-50 border-emerald-200', dot: 'bg-emerald-500', icon: <FileSearch className="h-3 w-3" /> },
+   112→  reviewed: { label: 'Reviewed', color: 'text-amber-700', bg: 'bg-amber-50 border-amber-200', dot: 'bg-amber-500', icon: <CheckCircle2 className="h-3 w-3" /> },
+   113→  archived: { label: 'Archived', color: 'text-gray-600', bg: 'bg-gray-100 border-gray-200', dot: 'bg-gray-400', icon: <File className="h-3 w-3" /> },
+   114→  failed: { label: 'Failed', color: 'text-red-700', bg: 'bg-red-50 border-red-200', dot: 'bg-red-500', icon: <XCircle className="h-3 w-3" /> },
+   115→}
+   116→
+   117→const TYPE_CONFIG: Record<DocType, { label: string; color: string; bg: string; border: string; icon: React.ReactNode }> = {
+   118→  invoice: { label: 'Invoice', color: 'text-emerald-700', bg: 'bg-emerald-100', border: 'border-emerald-200', icon: <FileText className="h-4 w-4" /> },
+   119→  purchase_register: { label: 'Purchase Register', color: 'text-blue-700', bg: 'bg-blue-100', border: 'border-blue-200', icon: <FileSpreadsheet className="h-4 w-4" /> },
+   120→  sales_register: { label: 'Sales Register', color: 'text-violet-700', bg: 'bg-violet-100', border: 'border-violet-200', icon: <FileSpreadsheet className="h-4 w-4" /> },
+   121→  gst_notice: { label: 'GST Notice', color: 'text-red-700', bg: 'bg-red-100', border: 'border-red-200', icon: <AlertTriangle className="h-4 w-4" /> },
+   122→  bank_statement: { label: 'Bank Statement', color: 'text-amber-700', bg: 'bg-amber-100', border: 'border-amber-200', icon: <Landmark className="h-4 w-4" /> },
+   123→  other: { label: 'Other', color: 'text-slate-700', bg: 'bg-slate-100', border: 'border-slate-200', icon: <File className="h-4 w-4" /> },
+   124→}
+   125→
+   126→const ANOMALY_CONFIG: Record<AnomalyType, { label: string; icon: React.ReactNode }> = {
+   127→  duplicate_invoice: { label: 'Duplicate Invoice', icon: <Copy className="h-4 w-4" /> },
+   128→  gstin_invalid: { label: 'Invalid GSTIN', icon: <Shield className="h-4 w-4" /> },
+   129→  tax_mismatch: { label: 'Tax Mismatch', icon: <AlertCircle className="h-4 w-4" /> },
+   130→  unusual_amount: { label: 'Unusual Amount', icon: <TrendingUp className="h-4 w-4" /> },
+   131→  date_inconsistency: { label: 'Date Inconsistency', icon: <Clock className="h-4 w-4" /> },
+   132→}
+   133→
+   134→const SEVERITY_CONFIG: Record<AnomalySeverity, { color: string; bg: string; border: string }> = {
+   135→  high: { color: 'text-red-700', bg: 'bg-red-50', border: 'border-red-200' },
+   136→  medium: { color: 'text-amber-700', bg: 'bg-amber-50', border: 'border-amber-200' },
+   137→  low: { color: 'text-blue-700', bg: 'bg-blue-50', border: 'border-blue-200' },
+   138→}
+   139→
+   140→const SUPPORTED_FORMATS = ['PDF', 'PNG', 'JPG', 'XLSX', 'CSV']
+   141→const DOC_TYPE_OPTIONS: { value: DocType; label: string }[] = [
+   142→  { value: 'invoice', label: 'Invoice' },
+   143→  { value: 'purchase_register', label: 'Purchase Register' },
+   144→  { value: 'sales_register', label: 'Sales Register' },
+   145→  { value: 'gst_notice', label: 'GST Notice' },
+   146→  { value: 'bank_statement', label: 'Bank Statement' },
+   147→  { value: 'other', label: 'Other' },
+   148→]
+   149→
+   150→// ═══════════════════════════════════════════════════════════════════════════════
+   151→// SAMPLE DATA
+   152→// ═══════════════════════════════════════════════════════════════════════════════
+   153→
+   154→const INVOICE_FIELDS: ExtractedField[] = [
+   155→  { key: 'invoice_no', label: 'Invoice #', value: 'INV-2025-00142' },
+   156→  { key: 'date', label: 'Date', value: '15/03/2025' },
+   157→  { key: 'supplier_gstin', label: 'Supplier GSTIN', value: '27AAFCD1234F1Z5' },
+   158→  { key: 'buyer_gstin', label: 'Buyer GSTIN', value: '27AABCU9603R1ZM' },
+   159→  { key: 'taxable_value', label: 'Taxable Value', value: '₹2,45,000.00' },
+   160→  { key: 'cgst', label: 'CGST', value: '₹22,050.00' },
+   161→  { key: 'sgst', label: 'SGST', value: '₹22,050.00' },
+   162→  { key: 'igst', label: 'IGST', value: '₹0.00' },
+   163→  { key: 'total', label: 'Total', value: '₹2,89,100.00' },
+   164→]
+   165→
+   166→const PURCHASE_FIELDS: ExtractedField[] = [
+   167→  ...INVOICE_FIELDS,
+   168→  { key: 'itc_available', label: 'ITC Available', value: '₹44,100.00' },
+   169→]
+   170→
+   171→const SALES_FIELDS: ExtractedField[] = [
+   172→  ...INVOICE_FIELDS,
+   173→  { key: 'gstr1_section', label: 'GSTR-1 Section', value: 'B2B - Large' },
+   174→]
+   175→
+   176→const NOTICE_FIELDS: ExtractedField[] = [
+   177→  { key: 'notice_type', label: 'Notice Type', value: 'Show Cause Notice' },
+   178→  { key: 'section', label: 'Section', value: 'Section 73' },
+   179→  { key: 'issue_date', label: 'Issue Date', value: '10/03/2025' },
+   180→  { key: 'response_deadline', label: 'Response Deadline', value: '10/04/2025' },
+   181→  { key: 'amount', label: 'Amount', value: '₹3,50,000.00' },
+   182→  { key: 'authority', label: 'Authority', value: 'DC, CGST Mumbai' },
+   183→]
+   184→
+   185→const BANK_FIELDS: ExtractedField[] = [
+   186→  { key: 'bank', label: 'Bank', value: 'HDFC Bank' },
+   187→  { key: 'account', label: 'Account', value: 'XXXX-XXXX-4523' },
+   188→  { key: 'period', label: 'Period', value: 'Mar 2025' },
+   189→  { key: 'opening_balance', label: 'Opening Balance', value: '₹12,45,230.50' },
+   190→  { key: 'closing_balance', label: 'Closing Balance', value: '₹15,67,890.25' },
+   191→  { key: 'transaction_count', label: 'Transaction Count', value: '47' },
+   192→]
+   193→
+   194→function getFieldsForType(type: DocType): ExtractedField[] {
+   195→  switch (type) {
+   196→    case 'invoice': return INVOICE_FIELDS
+   197→    case 'purchase_register': return PURCHASE_FIELDS
+   198→    case 'sales_register': return SALES_FIELDS
+   199→    case 'gst_notice': return NOTICE_FIELDS
+   200→    case 'bank_statement': return BANK_FIELDS
+   201→    default: return [{ key: 'note', label: 'Note', value: 'Manual extraction required' }]
+   202→  }
+   203→}
+   204→
+   205→const SAMPLE_ANOMALIES: DocAnomaly[] = [
+   206→  { id: 'an-1', type: 'duplicate_invoice', description: 'Invoice INV-2025-00142 appears in both March and April uploads with identical amounts', severity: 'high', sourceDocId: 'doc-1', sourceDocName: 'Invoice_Mar2025_ABC.pdf', investigated: false },
+   207→  { id: 'an-2', type: 'gstin_invalid', description: 'GSTIN "27AAFCD1234F1Z5" checksum validation failed — possible data entry error', severity: 'high', sourceDocId: 'doc-6', sourceDocName: 'Invoice_Batch_Mar2025.pdf', investigated: false },
+   208→  { id: 'an-3', type: 'tax_mismatch', description: 'CGST + SGST does not equal 18% of taxable value (calculated: ₹44,100, actual: ₹44,000)', severity: 'medium', sourceDocId: 'doc-3', sourceDocName: 'SalesRegister_Q4_2024.pdf', investigated: false },
+   209→  { id: 'an-4', type: 'unusual_amount', description: 'Total invoice amount ₹89,00,000 is 4.2x higher than average for this supplier', severity: 'medium', sourceDocId: 'doc-9', sourceDocName: 'SalesRegister_Mar2025.xlsx', investigated: true },
+   210→  { id: 'an-5', type: 'date_inconsistency', description: 'Invoice date (01/04/2025) is after the reporting period (Mar 2025)', severity: 'low', sourceDocId: 'doc-2', sourceDocName: 'PurchaseRegister_Feb2025.xlsx', investigated: false },
+   211→]
+   212→
+   213→const SAMPLE_TASKS: DocTask[] = [
+   214→  { id: 'task-1', title: 'Reconcile duplicate invoice INV-2025-00142', sourceDocId: 'doc-1', sourceDocName: 'Invoice_Mar2025_ABC.pdf', priority: 'high', status: 'todo', assignedTo: 'Rajesh K.' },
+   215→  { id: 'task-2', title: 'Respond to Show Cause Notice — Section 73', sourceDocId: 'doc-4', sourceDocName: 'Notice_GSTDept_Patel.pdf', priority: 'urgent', status: 'in_progress', assignedTo: 'Priya S.' },
+   216→  { id: 'task-3', title: 'Verify bank statement transactions for Mar 2025', sourceDocId: 'doc-8', sourceDocName: 'BankStatement_Mar2025.pdf', priority: 'medium', status: 'todo', assignedTo: 'Amit T.' },
+   217→  { id: 'task-4', title: 'Correct GSTIN format in invoice batch upload', sourceDocId: 'doc-6', sourceDocName: 'Invoice_Batch_Mar2025.pdf', priority: 'high', status: 'review', assignedTo: 'Rajesh K.' },
+   218→  { id: 'task-5', title: 'Investigate tax calculation mismatch in Q4 sales', sourceDocId: 'doc-3', sourceDocName: 'SalesRegister_Q4_2024.pdf', priority: 'medium', status: 'todo', assignedTo: 'Sneha M.' },
+   219→]
+   220→
+   221→const SAMPLE_DOCS: SmartDocument[] = [
+   222→  {
+   223→    id: 'doc-1', name: 'Invoice_Mar2025_ABC.pdf', type: 'invoice', client: 'ABC Traders',
+   224→    status: 'extracted', ocrStatus: 'extracted', uploadDate: '2025-03-15', size: '2.4 MB', sizeBytes: 2516582,
+   225→    format: 'PDF', extractedFields: INVOICE_FIELDS, extractedText: 'TAX INVOICE\nInvoice No: INV-2025-00142\nDate: 15/03/2025\nSupplier: ABC Traders, GSTIN: 27AAFCD1234F1Z5\nBuyer: XYZ Industries, GSTIN: 27AABCU9603R1ZM\nTaxable Value: ₹2,45,000.00\nCGST 9%: ₹22,050.00\nSGST 9%: ₹22,050.00\nTotal: ₹2,89,100.00',
+   226→    classificationConfidence: 96, extractionAccuracy: 94, ocrProgress: 100,
+   227→    summary: { text: 'Tax invoice from ABC Traders to XYZ Industries for ₹2,89,100 (including ₹44,100 GST). Dated March 15, 2025. Both parties are Maharashtra-registered under GST.', highlights: ['₹2,89,100 total', 'GSTIN verified', 'March 2025'], generated: true },
+   228→    anomalies: [SAMPLE_ANOMALIES[0]], tasks: [SAMPLE_TASKS[0]],
+   229→  },
+   230→  {
+   231→    id: 'doc-2', name: 'PurchaseRegister_Feb2025.xlsx', type: 'purchase_register', client: 'XYZ Industries',
+   232→    status: 'processing', ocrStatus: 'processing', uploadDate: '2025-03-14', size: '5.1 MB', sizeBytes: 5347737,
+   233→    format: 'XLSX', extractedFields: PURCHASE_FIELDS, extractedText: 'Purchase Register - February 2025\nXYZ Industries\nTotal Entries: 142\nTotal Taxable Value: ₹45,67,890\nTotal ITC: ₹8,22,220',
+   234→    classificationConfidence: 92, extractionAccuracy: 78, ocrProgress: 67,
+   235→    summary: null, anomalies: [SAMPLE_ANOMALIES[4]], tasks: [],
+   236→  },
+   237→  {
+   238→    id: 'doc-3', name: 'SalesRegister_Q4_2024.pdf', type: 'sales_register', client: 'Sharma & Co',
+   239→    status: 'extracted', ocrStatus: 'reviewed', uploadDate: '2025-03-12', size: '3.8 MB', sizeBytes: 3984588,
+   240→    format: 'PDF', extractedFields: SALES_FIELDS, extractedText: 'Sales Register - Q4 2024\nSharma & Co\nTotal Entries: 256\nTotal Taxable Value: ₹1,23,45,678\nGSTR-1 Section: B2B Large - 180, B2B Small - 76',
+   241→    classificationConfidence: 98, extractionAccuracy: 91, ocrProgress: 100,
+   242→    summary: { text: 'Q4 2024 Sales Register for Sharma & Co with 256 entries totaling ₹1.23 Cr taxable value. Majority classified as B2B Large (180 entries). Tax calculation discrepancy detected.', highlights: ['256 entries', '₹1.23 Cr taxable', 'B2B Large dominant'], generated: true },
+   243→    anomalies: [SAMPLE_ANOMALIES[2]], tasks: [SAMPLE_TASKS[4]],
+   244→  },
+   245→  {
+   246→    id: 'doc-4', name: 'Notice_GSTDept_Patel.pdf', type: 'gst_notice', client: 'Patel Enterprises',
+   247→    status: 'reviewed', ocrStatus: 'reviewed', uploadDate: '2025-03-10', size: '1.2 MB', sizeBytes: 1258291,
+   248→    format: 'PDF', extractedFields: NOTICE_FIELDS, extractedText: 'SHOW CAUSE NOTICE\nSection 73 of CGST Act, 2017\nTo: Patel Enterprises, GSTIN: 24AABCP1234F1Z5\nIssue Date: 10/03/2025\nResponse Required By: 10/04/2025\nAmount: ₹3,50,000.00\nAuthority: DC, CGST & Central Excise, Mumbai',
+   249→    classificationConfidence: 99, extractionAccuracy: 97, ocrProgress: 100,
+   250→    summary: { text: 'Show Cause Notice under Section 73 from CGST Mumbai for Patel Enterprises. Amount involved: ₹3.5 Lakh. Response deadline: April 10, 2025. Requires immediate attention.', highlights: ['Section 73', '₹3.5 Lakh', 'Deadline: Apr 10'], generated: true },
+   251→    anomalies: [], tasks: [SAMPLE_TASKS[1]],
+   252→  },
+   253→  {
+   254→    id: 'doc-5', name: 'BankStatement_Mar2025.pdf', type: 'bank_statement', client: 'Kumar Ltd',
+   255→    status: 'extracted', ocrStatus: 'extracted', uploadDate: '2025-03-09', size: '1.8 MB', sizeBytes: 1887436,
+   256→    format: 'PDF', extractedFields: BANK_FIELDS, extractedText: 'Bank Statement\nHDFC Bank\nAccount: XXXX-XXXX-4523\nPeriod: March 2025\nOpening Balance: ₹12,45,230.50\nClosing Balance: ₹15,67,890.25\nTotal Transactions: 47',
+   257→    classificationConfidence: 94, extractionAccuracy: 89, ocrProgress: 100,
+   258→    summary: { text: 'HDFC Bank statement for Kumar Ltd, March 2025. Net inflow of ₹3.22 Lakh (opening ₹12.45L → closing ₹15.68L). 47 transactions recorded.', highlights: ['₹3.22L net inflow', '47 transactions', 'HDFC Bank'], generated: true },
+   259→    anomalies: [], tasks: [],
+   260→  },
+   261→  {
+   262→    id: 'doc-6', name: 'Invoice_Batch_Mar2025.pdf', type: 'invoice', client: 'Mehta Group',
+   263→    status: 'processing', ocrStatus: 'processing', uploadDate: '2025-03-08', size: '4.5 MB', sizeBytes: 4718592,
+   264→    format: 'PDF', extractedFields: INVOICE_FIELDS.slice(0, 4), extractedText: 'Batch Invoice Upload - March 2025\nMehta Group\nProcessing...',
+   265→    classificationConfidence: 85, extractionAccuracy: 42, ocrProgress: 38,
+   266→    summary: null, anomalies: [SAMPLE_ANOMALIES[1]], tasks: [SAMPLE_TASKS[3]],
+   267→  },
+   268→  {
+   269→    id: 'doc-7', name: 'GSTR-1_Feb2025_Sharma.pdf', type: 'sales_register', client: 'Sharma & Co',
+   270→    status: 'reviewed', ocrStatus: 'reviewed', uploadDate: '2025-02-28', size: '2.1 MB', sizeBytes: 2202009,
+   271→    format: 'PDF', extractedFields: SALES_FIELDS, extractedText: 'GSTR-1 Return - February 2025\nSharma & Co\nFiled Successfully',
+   272→    classificationConfidence: 97, extractionAccuracy: 96, ocrProgress: 100,
+   273→    summary: { text: 'GSTR-1 return for February 2025 filed by Sharma & Co. Successfully processed with high accuracy.', highlights: ['Filed', 'Feb 2025', 'High accuracy'], generated: true },
+   274→    anomalies: [], tasks: [],
+   275→  },
+   276→  {
+   277→    id: 'doc-8', name: 'BankStatement_Mar2025.pdf', type: 'bank_statement', client: 'ABC Traders',
+   278→    status: 'extracted', ocrStatus: 'extracted', uploadDate: '2025-02-20', size: '3.2 MB', sizeBytes: 3355443,
+   279→    format: 'PDF', extractedFields: BANK_FIELDS, extractedText: 'Bank Statement - March 2025\nABC Traders\nSBI Account\nOpening: ₹8,90,000\nClosing: ₹11,23,450\nTransactions: 62',
+   280→    classificationConfidence: 93, extractionAccuracy: 88, ocrProgress: 100,
+   281→    summary: { text: 'SBI Bank statement for ABC Traders. Net inflow of ₹2.33 Lakh with 62 transactions in March 2025.', highlights: ['₹2.33L net inflow', '62 transactions', 'SBI Bank'], generated: true },
+   282→    anomalies: [], tasks: [SAMPLE_TASKS[2]],
+   283→  },
+   284→  {
+   285→    id: 'doc-9', name: 'SalesRegister_Mar2025.xlsx', type: 'sales_register', client: 'Patel Enterprises',
+   286→    status: 'extracted', ocrStatus: 'extracted', uploadDate: '2025-03-16', size: '6.7 MB', sizeBytes: 7025459,
+   287→    format: 'XLSX', extractedFields: SALES_FIELDS, extractedText: 'Sales Register - March 2025\nPatel Enterprises\nTotal Entries: 312\nHigh-value transactions detected',
+   288→    classificationConfidence: 91, extractionAccuracy: 86, ocrProgress: 100,
+   289→    summary: { text: 'March 2025 Sales Register for Patel Enterprises. 312 entries with unusually high-value transactions flagged.', highlights: ['312 entries', 'High-value flagged'], generated: true },
+   290→    anomalies: [SAMPLE_ANOMALIES[3]], tasks: [],
+   291→  },
+   292→  {
+   293→    id: 'doc-10', name: 'Invoice_Apr2025_XYZ.pdf', type: 'invoice', client: 'XYZ Industries',
+   294→    status: 'uploading', ocrStatus: 'queued', uploadDate: '2025-03-17', size: '1.9 MB', sizeBytes: 1992294,
+   295→    format: 'PDF', extractedFields: [], extractedText: '', classificationConfidence: 0, extractionAccuracy: 0, ocrProgress: 0,
+   296→    summary: null, anomalies: [], tasks: [],
+   297→  },
+   298→  {
+   299→    id: 'doc-11', name: 'GSTR-3B_Mar2025_ABC.pdf', type: 'purchase_register', client: 'ABC Traders',
+   300→    status: 'failed', ocrStatus: 'queued', uploadDate: '2025-03-17', size: '2.0 MB', sizeBytes: 2097152,
+   301→    format: 'PDF', extractedFields: [], extractedText: '', classificationConfidence: 0, extractionAccuracy: 0, ocrProgress: 0,
+   302→    summary: null, anomalies: [], tasks: [],
+   303→  },
+   304→]
+   305→
+   306→// ═══════════════════════════════════════════════════════════════════════════════
+   307→// HELPER COMPONENTS
+   308→// ═══════════════════════════════════════════════════════════════════════════════
+   309→
+   310→function StatusBadge({ status }: { status: DocStatus }) {
+   311→  const cfg = STATUS_CONFIG[status]
+   312→  return (
+   313→    <Badge variant="outline" className={`${cfg.bg} ${cfg.color} text-[10px] font-medium px-1.5 py-0 h-5 gap-1 border`}>
+   314→      <span className={`h-1.5 w-1.5 rounded-full ${cfg.dot}`} />
+   315→      {cfg.label}
+   316→    </Badge>
+   317→  )
+   318→}
+   319→
+   320→function TypeBadge({ type }: { type: DocType }) {
+   321→  const cfg = TYPE_CONFIG[type]
+   322→  return (
+   323→    <Badge variant="secondary" className={`${cfg.bg} ${cfg.color} text-[10px] font-medium px-1.5 py-0 h-5 gap-1`}>
+   324→      {cfg.icon}
+   325→      {cfg.label}
+   326→    </Badge>
+   327→  )
+   328→}
+   329→
+   330→function ConfidenceBadge({ confidence, size = 'sm' }: { confidence: number; size?: 'sm' | 'lg' }) {
+   331→  const color = confidence >= 90 ? 'text-emerald-700 bg-emerald-50 border-emerald-200' : confidence >= 70 ? 'text-amber-700 bg-amber-50 border-amber-200' : 'text-red-700 bg-red-50 border-red-200'
+   332→  const sz = size === 'lg' ? 'text-xs px-2 py-0.5 h-6' : 'text-[10px] px-1.5 py-0 h-5'
+   333→  return (
+   334→    <Badge variant="outline" className={`${color} ${sz} font-medium border gap-1`}>
+   335→      <Sparkles className={size === 'lg' ? 'h-3 w-3' : 'h-2.5 w-2.5'} />
+   336→      {confidence}%
+   337→    </Badge>
+   338→  )
+   339→}
+   340→
+   341→function PriorityBadge({ priority }: { priority: DocTask['priority'] }) {
+   342→  const colors: Record<string, string> = {
+   343→    urgent: 'text-red-700 bg-red-50 border-red-200',
+   344→    high: 'text-orange-700 bg-orange-50 border-orange-200',
+   345→    medium: 'text-amber-700 bg-amber-50 border-amber-200',
+   346→    low: 'text-slate-600 bg-slate-50 border-slate-200',
+   347→  }
+   348→  return (
+   349→    <Badge variant="outline" className={`${colors[priority]} text-[10px] font-medium px-1.5 py-0 h-5 border`}>
+   350→      {priority.charAt(0).toUpperCase() + priority.slice(1)}
+   351→    </Badge>
+   352→  )
+   353→}
+   354→
+   355→function TaskStatusBadge({ status }: { status: DocTask['status'] }) {
+   356→  const colors: Record<string, string> = {
+   357→    todo: 'text-slate-600 bg-slate-50 border-slate-200',
+   358→    in_progress: 'text-blue-700 bg-blue-50 border-blue-200',
+   359→    review: 'text-amber-700 bg-amber-50 border-amber-200',
+   360→    completed: 'text-emerald-700 bg-emerald-50 border-emerald-200',
+   361→  }
+   362→  const labels: Record<string, string> = { todo: 'To Do', in_progress: 'In Progress', review: 'Review', completed: 'Done' }
+   363→  return (
+   364→    <Badge variant="outline" className={`${colors[status]} text-[10px] font-medium px-1.5 py-0 h-5 border`}>
+   365→      {labels[status]}
+   366→    </Badge>
+   367→  )
+   368→}
+   369→
+   370→function SkeletonCard() {
+   371→  return (
+   372→    <Card className="border-border/40">
+   373→      <CardContent className="p-4 space-y-3">
+   374→        <Skeleton className="h-4 w-3/4" />
+   375→        <Skeleton className="h-3 w-1/2" />
+   376→        <div className="flex gap-2">
+   377→          <Skeleton className="h-5 w-16" />
+   378→          <Skeleton className="h-5 w-20" />
+   379→        </div>
+   380→      </CardContent>
+   381→    </Card>
+   382→  )
+   383→}
+   384→
+   385→// ═══════════════════════════════════════════════════════════════════════════════
+   386→// SECTION H: STATS BAR
+   387→// ═══════════════════════════════════════════════════════════════════════════════
+   388→
+   389→function StatsBar({ documents, anomalies }: { documents: SmartDocument[]; anomalies: DocAnomaly[] }) {
+   390→  const stats = useMemo(() => {
+   391→    const total = documents.length
+   392→    const processed = documents.filter(d => d.status === 'extracted' || d.status === 'reviewed').length
+   393→    const pendingReview = documents.filter(d => d.status === 'extracted').length
+   394→    const anomalyCount = anomalies.length
+   395→    const successRate = total > 0 ? Math.round((processed / total) * 100) : 0
+   396→    const typeDistribution: Record<DocType, number> = {
+   397→      invoice: 0, purchase_register: 0, sales_register: 0, gst_notice: 0, bank_statement: 0, other: 0,
+   398→    }
+   399→    documents.forEach(d => { typeDistribution[d.type]++ })
+   400→    return { total, processed, pendingReview, anomalyCount, successRate, typeDistribution }
+   401→  }, [documents, anomalies])
+   402→
+   403→  const maxTypeCount = Math.max(...Object.values(stats.typeDistribution), 1)
+   404→
+   405→  return (
+   406→    <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
+   407→      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+   408→        {[
+   409→          { label: 'Total Documents', value: stats.total, icon: <FileText className="h-4 w-4" />, color: 'text-slate-700', bg: 'bg-slate-50', border: 'border-slate-200' },
+   410→          { label: 'Processed', value: stats.processed, icon: <CheckCircle2 className="h-4 w-4" />, color: 'text-emerald-700', bg: 'bg-emerald-50', border: 'border-emerald-200' },
+   411→          { label: 'Pending Review', value: stats.pendingReview, icon: <Clock className="h-4 w-4" />, color: 'text-amber-700', bg: 'bg-amber-50', border: 'border-amber-200' },
+   412→          { label: 'Anomalies Found', value: stats.anomalyCount, icon: <AlertTriangle className="h-4 w-4" />, color: 'text-red-700', bg: 'bg-red-50', border: 'border-red-200' },
+   413→        ].map((stat) => (
+   414→          <Card key={stat.label} className={`${stat.border} ${stat.bg} border`}>
+   415→            <CardContent className="p-4">
+   416→              <div className="flex items-center justify-between">
+   417→                <div>
+   418→                  <p className="text-xs text-muted-foreground">{stat.label}</p>
+   419→                  <p className={`text-2xl font-bold ${stat.color}`}>{stat.value}</p>
+   420→                </div>
+   421→                <div className={`${stat.color} opacity-40`}>{stat.icon}</div>
+   422→              </div>
+   423→            </CardContent>
+   424→          </Card>
+   425→        ))}
+   426→      </div>
+   427→      <div className="flex items-center gap-6">
+   428→        <div className="flex items-center gap-2 text-sm">
+   429→          <span className="text-muted-foreground">Success Rate:</span>
+   430→          <span className="font-semibold text-emerald-700">{stats.successRate}%</span>
+   431→          <Progress value={stats.successRate} className="w-20 h-1.5" />
+   432→        </div>
+   433→        <div className="flex items-center gap-2 flex-1 overflow-hidden">
+   434→          <span className="text-sm text-muted-foreground shrink-0">By Type:</span>
+   435→          <div className="flex items-end gap-1 h-6">
+   436→            {(Object.entries(stats.typeDistribution) as [DocType, number][]).map(([type, count]) => (
+   437→              count > 0 ? (
+   438→                <div key={type} className="flex flex-col items-center gap-0.5">
+   439→                  <div
+   440→                    className={`w-6 rounded-sm ${TYPE_CONFIG[type].bg} ${TYPE_CONFIG[type].color} transition-all`}
+   441→                    style={{ height: `${Math.max((count / maxTypeCount) * 20, 4)}px` }}
+   442→                    title={`${TYPE_CONFIG[type].label}: ${count}`}
+   443→                  />
+   444→                  <span className="text-[8px] text-muted-foreground">{count}</span>
+   445→                </div>
+   446→              ) : null
+   447→            ))}
+   448→          </div>
+   449→        </div>
+   450→      </div>
+   451→    </motion.div>
+   452→  )
+   453→}
+   454→
+   455→// ═══════════════════════════════════════════════════════════════════════════════
+   456→// SECTION A: DOCUMENT UPLOAD HUB
+   457→// ═══════════════════════════════════════════════════════════════════════════════
+   458→
+   459→function DocumentUploadHub({ onUpload }: { onUpload: (files: File[], docType: DocType) => void }) {
+   460→  const [isDragging, setIsDragging] = useState(false)
+   461→  const [selectedType, setSelectedType] = useState<DocType>('invoice')
+   462→  const [uploadProgress, setUploadProgress] = useState<Record<string, number>>({})
+   463→  const fileInputRef = useRef<HTMLInputElement>(null)
+   464→
+   465→  const handleDragOver = useCallback((e: React.DragEvent) => {
+   466→    e.preventDefault()
+   467→    setIsDragging(true)
+   468→  }, [])
+   469→
+   470→  const handleDragLeave = useCallback((e: React.DragEvent) => {
+   471→    e.preventDefault()
+   472→    setIsDragging(false)
+   473→  }, [])
+   474→
+   475→  const processFiles = useCallback((files: FileList | File[]) => {
+   476→    const fileArr = Array.from(files)
+   477→    const validExts = ['pdf', 'png', 'jpg', 'jpeg', 'xlsx', 'csv']
+   478→    const validFiles = fileArr.filter(f => {
+   479→      const ext = f.name.split('.').pop()?.toLowerCase() || ''
+   480→      return validExts.includes(ext)
+   481→    })
+   482→    if (validFiles.length === 0) {
+   483→      toast.error('No supported files found. Use PDF, PNG, JPG, XLSX, or CSV.')
+   484→      return
+   485→    }
+   486→    if (validFiles.length < fileArr.length) {
+   487→      toast.warning(`${fileArr.length - validFiles.length} file(s) skipped — unsupported format`)
+   488→    }
+   489→    // Simulate upload progress
+   490→    validFiles.forEach(f => {
+   491→      setUploadProgress(prev => ({ ...prev, [f.name]: 0 }))
+   492→      let progress = 0
+   493→      const interval = setInterval(() => {
+   494→        progress += Math.random() * 25 + 5
+   495→        if (progress >= 100) {
+   496→          progress = 100
+   497→          clearInterval(interval)
+   498→          toast.success(`${f.name} uploaded`)
+   499→        }
+   500→        setUploadProgress(prev => ({ ...prev, [f.name]: Math.min(progress, 100) }))
+   501→      }, 400)
+   502→    })
+   503→    onUpload(validFiles, selectedType)
+   504→  }, [onUpload, selectedType])
+   505→
+   506→  const handleDrop = useCallback((e: React.DragEvent) => {
+   507→    e.preventDefault()
+   508→    setIsDragging(false)
+   509→    if (e.dataTransfer.files.length > 0) {
+   510→      processFiles(e.dataTransfer.files)
+   511→    }
+   512→  }, [processFiles])
+   513→
+   514→  const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+   515→    if (e.target.files && e.target.files.length > 0) {
+   516→      processFiles(e.target.files)
+   517→    }
+   518→  }, [processFiles])
+   519→
+   520→  const activeUploads = Object.entries(uploadProgress).filter(([, p]) => p < 100)
+   521→
+   522→  return (
+   523→    <Card className="border-border/60">
+   524→      <CardHeader className="pb-3">
+   525→        <CardTitle className="text-sm font-semibold flex items-center gap-2">
+   526→          <Upload className="h-4 w-4 text-emerald-600" />
+   527→          Document Upload Hub
+   528→        </CardTitle>
+   529→        <CardDescription className="text-xs">Upload documents for AI-powered extraction and analysis</CardDescription>
+   530→      </CardHeader>
+   531→      <CardContent className="space-y-4">
+   532→        <div className="flex flex-col sm:flex-row gap-3">
+   533→          <div className="w-full sm:w-48 shrink-0">
+   534→            <Select value={selectedType} onValueChange={(v) => setSelectedType(v as DocType)}>
+   535→              <SelectTrigger className="h-9 text-sm">
+   536→                <SelectValue placeholder="Document Type" />
+   537→              </SelectTrigger>
+   538→              <SelectContent>
+   539→                {DOC_TYPE_OPTIONS.map(opt => (
+   540→                  <SelectItem key={opt.value} value={opt.value} className="text-sm">
+   541→                    {opt.label}
+   542→                  </SelectItem>
+   543→                ))}
+   544→              </SelectContent>
+   545→            </Select>
+   546→          </div>
+   547→          <div className="flex-1">
+   548→            <div
+   549→              onDragOver={handleDragOver}
+   550→              onDragLeave={handleDragLeave}
+   551→              onDrop={handleDrop}
+   552→              onClick={() => fileInputRef.current?.click()}
+   553→              className={`
+   554→                relative cursor-pointer rounded-xl border-2 border-dashed p-8 text-center transition-all duration-300
+   555→                ${isDragging
+   556→                  ? 'border-emerald-400 bg-emerald-50/50 scale-[1.01]'
+   557→                  : 'border-slate-200 hover:border-emerald-300 hover:bg-slate-50/50'
+   558→                }
+   559→              `}
+   560→            >
+   561→              <motion.div
+   562→                animate={isDragging ? { scale: 1.05 } : { scale: 1 }}
+   563→                transition={{ duration: 0.2 }}
+   564→              >
+   565→                <div className={`mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full transition-colors ${isDragging ? 'bg-emerald-100' : 'bg-slate-100'}`}>
+   566→                  <Upload className={`h-6 w-6 transition-colors ${isDragging ? 'text-emerald-600' : 'text-slate-400'}`} />
+   567→                </div>
+   568→                <p className="text-sm font-medium text-foreground">
+   569→                  {isDragging ? 'Drop files here' : 'Drag & drop files here'}
+   570→                </p>
+   571→                <p className="text-xs text-muted-foreground mt-1">
+   572→                  or click to browse — supports {SUPPORTED_FORMATS.join(', ')}
+   573→                </p>
+   574→              </motion.div>
+   575→              <input
+   576→                ref={fileInputRef}
+   577→                type="file"
+   578→                multiple
+   579→                accept=".pdf,.png,.jpg,.jpeg,.xlsx,.csv"
+   580→                onChange={handleFileSelect}
+   581→                className="hidden"
+   582→              />
+   583→              {isDragging && (
+   584→                <motion.div
+   585→                  initial={{ opacity: 0 }}
+   586→                  animate={{ opacity: 1 }}
+   587→                  className="absolute inset-0 rounded-xl border-2 border-emerald-400"
+   588→                  style={{
+   589→                    background: 'linear-gradient(90deg, transparent, rgba(16,185,129,0.1), transparent)',
+   590→                    backgroundSize: '200% 100%',
+   591→                    animation: 'shimmer 2s infinite',
+   592→                  }}
+   593→                />
+   594→              )}
+   595→            </div>
+   596→          </div>
+   597→        </div>
+   598→
+   599→        {/* Active Uploads */}
+   600→        <AnimatePresence>
+   601→          {activeUploads.length > 0 && (
+   602→            <motion.div
+   603→              initial={{ opacity: 0, height: 0 }}
+   604→              animate={{ opacity: 1, height: 'auto' }}
+   605→              exit={{ opacity: 0, height: 0 }}
+   606→              className="space-y-2"
+   607→            >
+   608→              {activeUploads.map(([name, progress]) => (
+   609→                <div key={name} className="flex items-center gap-3 rounded-lg border border-border/40 p-2.5 bg-white">
+   610→                  <Paperclip className="h-4 w-4 text-slate-400 shrink-0" />
+   611→                  <div className="flex-1 min-w-0">
+   612→                    <p className="text-xs font-medium truncate">{name}</p>
+   613→                    <Progress value={progress} className="h-1.5 mt-1" />
+   614→                  </div>
+   615→                  <span className="text-[10px] text-muted-foreground shrink-0">{Math.round(progress)}%</span>
+   616→                </div>
+   617→              ))}
+   618→            </motion.div>
+   619→          )}
+   620→        </AnimatePresence>
+   621→      </CardContent>
+   622→    </Card>
+   623→  )
+   624→}
+   625→
+   626→// ═══════════════════════════════════════════════════════════════════════════════
+   627→// SECTION B: OCR PROCESSING CENTER
+   628→// ═══════════════════════════════════════════════════════════════════════════════
+   629→
+   630→function OCRProcessingCenter({ documents, onReprocess }: { documents: SmartDocument[]; onReprocess: (id: string) => void }) {
+   631→  const processingDocs = documents.filter(d => d.status === 'processing' || d.status === 'uploading')
+   632→
+   633→  const allQueueDocs = documents.filter(d => d.ocrStatus !== 'reviewed' && d.status !== 'archived')
+   634→
+   635→  return (
+   636→    <Card className="border-border/60">
+   637→      <CardHeader className="pb-3">
+   638→        <div className="flex items-center justify-between">
+   639→          <div>
+   640→            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+   641→              <Brain className="h-4 w-4 text-emerald-600" />
+   642→              OCR Processing Center
+   643→            </CardTitle>
+   644→            <CardDescription className="text-xs">{processingDocs.length} document{processingDocs.length !== 1 ? 's' : ''} currently processing</CardDescription>
+   645→          </div>
+   646→          {processingDocs.length > 0 && (
+   647→            <div className="flex items-center gap-1.5">
+   648→              <Loader2 className="h-3.5 w-3.5 text-blue-500 animate-spin" />
+   649→              <span className="text-xs text-blue-600 font-medium">Live</span>
+   650→            </div>
+   651→          )}
+   652→        </div>
+   653→      </CardHeader>
+   654→      <CardContent>
+   655→        {allQueueDocs.length === 0 ? (
+   656→          <div className="flex flex-col items-center py-6 text-center">
+   657→            <CheckCircle2 className="h-8 w-8 text-emerald-300 mb-2" />
+   658→            <p className="text-sm text-muted-foreground">All documents processed</p>
+   659→          </div>
+   660→        ) : (
+   661→          <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+   662→            {allQueueDocs.map((doc, i) => {
+   663→              const ocrStatusLabel: Record<OCRStatus, string> = {
+   664→                queued: 'Queued', processing: 'Processing', extracted: 'Extracted', reviewed: 'Reviewed',
+   665→              }
+   666→              const ocrStatusColor: Record<OCRStatus, string> = {
+   667→                queued: 'text-slate-600 bg-slate-50', processing: 'text-blue-700 bg-blue-50',
+   668→                extracted: 'text-emerald-700 bg-emerald-50', reviewed: 'text-amber-700 bg-amber-50',
+   669→              }
+   670→              return (
+   671→                <motion.div
+   672→                  key={doc.id}
+   673→                  initial={{ opacity: 0, x: -10 }}
+   674→                  animate={{ opacity: 1, x: 0 }}
+   675→                  transition={{ delay: i * 0.05 }}
+   676→                  className="flex items-center gap-3 rounded-lg border border-border/40 p-3 bg-white hover:shadow-sm transition-shadow"
+   677→                >
+   678→                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 shrink-0">
+   679→                    <Hash className="h-4 w-4 text-slate-500" />
+   680→                  </div>
+   681→                  <div className="flex-1 min-w-0">
+   682→                    <div className="flex items-center gap-2 mb-1">
+   683→                      <p className="text-xs font-medium truncate">{doc.name}</p>
+   684→                      <Badge variant="outline" className={`${ocrStatusColor[doc.ocrStatus]} text-[9px] px-1 py-0 h-4 border-0`}>
+   685→                        {ocrStatusLabel[doc.ocrStatus]}
+   686→                      </Badge>
+   687→                    </div>
+   688→                    <div className="flex items-center gap-2">
+   689→                      <Progress value={doc.ocrProgress} className="h-1.5 flex-1" />
+   690→                      <span className="text-[10px] text-muted-foreground shrink-0">{doc.ocrProgress}%</span>
+   691→                    </div>
+   692→                  </div>
+   693→                  {doc.extractionAccuracy > 0 && (
+   694→                    <div className="hidden sm:flex flex-col items-end shrink-0">
+   695→                      <span className="text-[10px] text-muted-foreground">Accuracy</span>
+   696→                      <span className={`text-xs font-semibold ${doc.extractionAccuracy >= 90 ? 'text-emerald-600' : doc.extractionAccuracy >= 70 ? 'text-amber-600' : 'text-red-600'}`}>
+   697→                        {doc.extractionAccuracy}%
+   698→                      </span>
+   699→                    </div>
+   700→                  )}
+   701→                  {doc.status === 'failed' && (
+   702→                    <Button variant="ghost" size="sm" className="h-7 text-xs gap-1 shrink-0" onClick={() => onReprocess(doc.id)}>
+   703→                      <RefreshCw className="h-3 w-3" />
+   704→                      Re-process
+   705→                    </Button>
+   706→                  )}
+   707→                </motion.div>
+   708→              )
+   709→            })}
+   710→          </div>
+   711→        )}
+   712→      </CardContent>
+   713→    </Card>
+   714→  )
+   715→}
+   716→
+   717→// ═══════════════════════════════════════════════════════════════════════════════
+   718→// SECTION D: DOCUMENT CLASSIFICATION
+   719→// ═══════════════════════════════════════════════════════════════════════════════
+   720→
+   721→function DocumentClassification({ documents }: { documents: SmartDocument[] }) {
+   722→  const classifiedDocs = documents.filter(d => d.classificationConfidence > 0)
+   723→  const avgConfidence = classifiedDocs.length > 0
+   724→    ? Math.round(classifiedDocs.reduce((sum, d) => sum + d.classificationConfidence, 0) / classifiedDocs.length)
+   725→    : 0
+   726→
+   727→  return (
+   728→    <Card className="border-border/60">
+   729→      <CardHeader className="pb-3">
+   730→        <div className="flex items-center justify-between">
+   731→          <div>
+   732→            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+   733→              <Zap className="h-4 w-4 text-emerald-600" />
+   734→              Auto-Classification
+   735→            </CardTitle>
+   736→            <CardDescription className="text-xs">AI-powered document type detection</CardDescription>
+   737→          </div>
+   738→          <div className="flex items-center gap-1.5">
+   739→            <span className="text-xs text-muted-foreground">Avg confidence:</span>
+   740→            <ConfidenceBadge confidence={avgConfidence} size="lg" />
+   741→          </div>
+   742→        </div>
+   743→      </CardHeader>
+   744→      <CardContent>
+   745→        {classifiedDocs.length === 0 ? (
+   746→          <div className="flex flex-col items-center py-6 text-center">
+   747→            <FileSearch className="h-8 w-8 text-slate-300 mb-2" />
+   748→            <p className="text-sm text-muted-foreground">No classified documents yet</p>
+   749→          </div>
+   750→        ) : (
+   751→          <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+   752→            {classifiedDocs.map((doc, i) => (
+   753→              <motion.div
+   754→                key={doc.id}
+   755→                initial={{ opacity: 0, y: 5 }}
+   756→                animate={{ opacity: 1, y: 0 }}
+   757→                transition={{ delay: i * 0.04 }}
+   758→                className="flex items-center gap-3 rounded-lg border border-border/40 p-2.5 bg-white"
+   759→              >
+   760→                <div className={`flex h-8 w-8 items-center justify-center rounded-lg ${TYPE_CONFIG[doc.type].bg} ${TYPE_CONFIG[doc.type].color} shrink-0`}>
+   761→                  {TYPE_CONFIG[doc.type].icon}
+   762→                </div>
+   763→                <div className="flex-1 min-w-0">
+   764→                  <p className="text-xs font-medium truncate">{doc.name}</p>
+   765→                  <div className="flex items-center gap-2 mt-0.5">
+   766→                    <TypeBadge type={doc.type} />
+   767→                  </div>
+   768→                </div>
+   769→                <ConfidenceBadge confidence={doc.classificationConfidence} />
+   770→                <DropdownMenu>
+   771→                  <DropdownMenuTrigger asChild>
+   772→                    <Button variant="ghost" size="sm" className="h-6 w-6 p-0 shrink-0">
+   773→                      <Edit3 className="h-3 w-3" />
+   774→                    </Button>
+   775→                  </DropdownMenuTrigger>
+   776→                  <DropdownMenuContent align="end" className="w-44">
+   777→                    <p className="text-[10px] text-muted-foreground px-2 py-1">Re-classify as:</p>
+   778→                    {DOC_TYPE_OPTIONS.map(opt => (
+   779→                      <DropdownMenuItem
+   780→                        key={opt.value}
+   781→                        className="text-xs gap-2"
+   782→                        onClick={() => toast.success(`Re-classified as ${opt.label}`)}
+   783→                      >
+   784→                        {TYPE_CONFIG[opt.value].icon}
+   785→                        {opt.label}
+   786→                      </DropdownMenuItem>
+   787→                    ))}
+   788→                  </DropdownMenuContent>
+   789→                </DropdownMenu>
+   790→              </motion.div>
+   791→            ))}
+   792→          </div>
+   793→        )}
+   794→      </CardContent>
+   795→    </Card>
+   796→  )
+   797→}
+   798→
+   799→// ═══════════════════════════════════════════════════════════════════════════════
+   800→// SECTION E: AUTO-GENERATED SUMMARIES
+   801→// ═══════════════════════════════════════════════════════════════════════════════
+   802→
+   803→function AutoSummaries({ documents, onGenerateSummary }: { documents: SmartDocument[]; onGenerateSummary: (id: string) => void }) {
+   804→  const summaryDocs = documents.filter(d => d.status === 'extracted' || d.status === 'reviewed')
+   805→
+   806→  return (
+   807→    <Card className="border-border/60">
+   808→      <CardHeader className="pb-3">
+   809→        <CardTitle className="text-sm font-semibold flex items-center gap-2">
+   810→          <Sparkles className="h-4 w-4 text-emerald-600" />
+   811→          AI-Generated Summaries
+   812→        </CardTitle>
+   813→        <CardDescription className="text-xs">Intelligent document summaries and key highlights</CardDescription>
+   814→      </CardHeader>
+   815→      <CardContent>
+   816→        {summaryDocs.length === 0 ? (
+   817→          <div className="flex flex-col items-center py-6 text-center">
+   818→            <FileText className="h-8 w-8 text-slate-300 mb-2" />
+   819→            <p className="text-sm text-muted-foreground">No documents ready for summary</p>
+   820→          </div>
+   821→        ) : (
+   822→          <div className="space-y-3 max-h-96 overflow-y-auto pr-1">
+   823→            {summaryDocs.map((doc) => (
+   824→              <Collapsible key={doc.id}>
+   825→                <div className="rounded-lg border border-border/40 bg-white overflow-hidden">
+   826→                  <CollapsibleTrigger asChild>
+   827→                    <button className="w-full flex items-center gap-3 p-3 hover:bg-slate-50/50 transition-colors text-left">
+   828→                      <div className={`flex h-8 w-8 items-center justify-center rounded-lg ${TYPE_CONFIG[doc.type].bg} ${TYPE_CONFIG[doc.type].color} shrink-0`}>
+   829→                        {TYPE_CONFIG[doc.type].icon}
+   830→                      </div>
+   831→                      <div className="flex-1 min-w-0">
+   832→                        <p className="text-xs font-medium truncate">{doc.name}</p>
+   833→                        <p className="text-[10px] text-muted-foreground">{doc.client}</p>
+   834→                      </div>
+   835→                      {doc.summary ? (
+   836→                        <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 border-emerald-200 bg-emerald-50 text-emerald-700 shrink-0">
+   837→                          Summary
+   838→                        </Badge>
+   839→                      ) : (
+   840→                        <Button
+   841→                          variant="ghost"
+   842→                          size="sm"
+   843→                          className="h-6 text-[10px] gap-1 shrink-0 text-emerald-600 hover:text-emerald-700"
+   844→                          onClick={(e) => { e.stopPropagation(); onGenerateSummary(doc.id) }}
+   845→                        >
+   846→                          <Sparkles className="h-3 w-3" />
+   847→                          Generate
+   848→                        </Button>
+   849→                      )}
+   850→                      <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+   851→                    </button>
+   852→                  </CollapsibleTrigger>
+   853→                  <CollapsibleContent>
+   854→                    {doc.summary && (
+   855→                      <div className="border-t border-border/40 p-3 space-y-2">
+   856→                        <p className="text-xs text-foreground/80 leading-relaxed">{doc.summary.text}</p>
+   857→                        {doc.summary.highlights.length > 0 && (
+   858→                          <div className="flex flex-wrap gap-1.5">
+   859→                            {doc.summary.highlights.map((h, i) => (
+   860→                              <Badge key={i} variant="secondary" className="text-[10px] bg-emerald-50 text-emerald-700 h-5">
+   861→                                {h}
+   862→                              </Badge>
+   863→                            ))}
+   864→                          </div>
+   865→                        )}
+   866→                      </div>
+   867→                    )}
+   868→                  </CollapsibleContent>
+   869→                </div>
+   870→              </Collapsible>
+   871→            ))}
+   872→          </div>
+   873→        )}
+   874→      </CardContent>
+   875→    </Card>
+   876→  )
+   877→}
+   878→
+   879→// ═══════════════════════════════════════════════════════════════════════════════
+   880→// SECTION F: AUTO-CREATED TASKS
+   881→// ═══════════════════════════════════════════════════════════════════════════════
+   882→
+   883→function AutoTasks({ tasks }: { tasks: DocTask[] }) {
+   884→  return (
+   885→    <Card className="border-border/60">
+   886→      <CardHeader className="pb-3">
+   887→        <CardTitle className="text-sm font-semibold flex items-center gap-2">
+   888→          <ListTodo className="h-4 w-4 text-emerald-600" />
+   889→          Auto-Created Tasks
+   890→        </CardTitle>
+   891→        <CardDescription className="text-xs">Tasks generated from document processing</CardDescription>
+   892→      </CardHeader>
+   893→      <CardContent>
+   894→        {tasks.length === 0 ? (
+   895→          <div className="flex flex-col items-center py-6 text-center">
+   896→            <CheckCircle2 className="h-8 w-8 text-slate-300 mb-2" />
+   897→            <p className="text-sm text-muted-foreground">No tasks generated yet</p>
+   898→          </div>
+   899→        ) : (
+   900→          <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+   901→            {tasks.map((task, i) => (
+   902→              <motion.div
+   903→                key={task.id}
+   904→                initial={{ opacity: 0, y: 5 }}
+   905→                animate={{ opacity: 1, y: 0 }}
+   906→                transition={{ delay: i * 0.05 }}
+   907→                className="flex items-start gap-3 rounded-lg border border-border/40 p-3 bg-white"
+   908→              >
+   909→                <div className="flex h-7 w-7 items-center justify-center rounded-md bg-slate-100 shrink-0 mt-0.5">
+   910→                  <ListTodo className="h-3.5 w-3.5 text-slate-500" />
+   911→                </div>
+   912→                <div className="flex-1 min-w-0">
+   913→                  <p className="text-xs font-medium">{task.title}</p>
+   914→                  <p className="text-[10px] text-muted-foreground mt-0.5 flex items-center gap-1">
+   915→                    <FileText className="h-2.5 w-2.5" />
+   916→                    {task.sourceDocName}
+   917→                  </p>
+   918→                  <div className="flex items-center gap-1.5 mt-1.5">
+   919→                    <PriorityBadge priority={task.priority} />
+   920→                    <TaskStatusBadge status={task.status} />
+   921→                  </div>
+   922→                </div>
+   923→                <div className="flex flex-col items-end shrink-0 gap-1">
+   924→                  <span className="text-[10px] text-muted-foreground">{task.assignedTo}</span>
+   925→                  <Button variant="ghost" size="sm" className="h-5 text-[10px] gap-0.5 text-emerald-600 hover:text-emerald-700 px-1" onClick={() => toast.info('Opening in Tasks view')}>
+   926→                    View in Tasks <ArrowRight className="h-2.5 w-2.5" />
+   927→                  </Button>
+   928→                </div>
+   929→              </motion.div>
+   930→            ))}
+   931→          </div>
+   932→        )}
+   933→      </CardContent>
+   934→    </Card>
+   935→  )
+   936→}
+   937→
+   938→// ═══════════════════════════════════════════════════════════════════════════════
+   939→// SECTION G: ANOMALY DETECTION
+   940→// ═══════════════════════════════════════════════════════════════════════════════
+   941→
+   942→function AnomalyDetection({ anomalies, onInvestigate }: { anomalies: DocAnomaly[]; onInvestigate: (id: string) => void }) {
+   943→  const severityCounts = useMemo(() => ({
+   944→    high: anomalies.filter(a => a.severity === 'high').length,
+   945→    medium: anomalies.filter(a => a.severity === 'medium').length,
+   946→    low: anomalies.filter(a => a.severity === 'low').length,
+   947→  }), [anomalies])
+   948→
+   949→  return (
+   950→    <Card className="border-border/60">
+   951→      <CardHeader className="pb-3">
+   952→        <div className="flex items-center justify-between">
+   953→          <div>
+   954→            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+   955→              <Shield className="h-4 w-4 text-emerald-600" />
+   956→              Anomaly Detection
+   957→            </CardTitle>
+   958→            <CardDescription className="text-xs">{anomalies.length} issue{anomalies.length !== 1 ? 's' : ''} flagged during processing</CardDescription>
+   959→          </div>
+   960→          {anomalies.length > 0 && (
+   961→            <div className="flex items-center gap-1.5">
+   962→              {severityCounts.high > 0 && <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 border-red-200 bg-red-50 text-red-700">{severityCounts.high} High</Badge>}
+   963→              {severityCounts.medium > 0 && <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 border-amber-200 bg-amber-50 text-amber-700">{severityCounts.medium} Med</Badge>}
+   964→              {severityCounts.low > 0 && <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 border-blue-200 bg-blue-50 text-blue-700">{severityCounts.low} Low</Badge>}
+   965→            </div>
+   966→          )}
+   967→        </div>
+   968→      </CardHeader>
+   969→      <CardContent>
+   970→        {anomalies.length === 0 ? (
+   971→          <div className="flex flex-col items-center py-6 text-center">
+   972→            <CheckCircle2 className="h-8 w-8 text-emerald-300 mb-2" />
+   973→            <p className="text-sm text-muted-foreground">No anomalies detected</p>
+   974→            <p className="text-[10px] text-muted-foreground/60">All documents passed validation checks</p>
+   975→          </div>
+   976→        ) : (
+   977→          <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+   978→            {anomalies.map((anomaly, i) => {
+   979→              const cfg = ANOMALY_CONFIG[anomaly.type]
+   980→              const sevCfg = SEVERITY_CONFIG[anomaly.severity]
+   981→              return (
+   982→                <motion.div
+   983→                  key={anomaly.id}
+   984→                  initial={{ opacity: 0, y: 5 }}
+   985→                  animate={{ opacity: 1, y: 0 }}
+   986→                  transition={{ delay: i * 0.05 }}
+   987→                  className={`flex items-start gap-3 rounded-lg border p-3 ${sevCfg.bg} ${sevCfg.border}`}
+   988→                >
+   989→                  <div className={`flex h-7 w-7 items-center justify-center rounded-md shrink-0 mt-0.5 ${sevCfg.bg} ${sevCfg.color}`}>
+   990→                    {cfg.icon}
+   991→                  </div>
+   992→                  <div className="flex-1 min-w-0">
+   993→                    <div className="flex items-center gap-2 mb-0.5">
+   994→                      <p className="text-xs font-medium">{cfg.label}</p>
+   995→                      <Badge variant="outline" className={`${sevCfg.color} ${sevCfg.bg} text-[9px] px-1 py-0 h-4 border ${sevCfg.border}`}>
+   996→                        {anomaly.severity}
+   997→                      </Badge>
+   998→                    </div>
+   999→                    <p className="text-[11px] text-foreground/70 leading-relaxed">{anomaly.description}</p>
+  1000→                    <p className="text-[10px] text-muted-foreground mt-1 flex items-center gap-1">
+  1001→                      <FileText className="h-2.5 w-2.5" />
+  1002→                      {anomaly.sourceDocName}
+  1003→                    </p>
+  1004→                  </div>
+  1005→                  {!anomaly.investigated ? (
+  1006→                    <Button variant="ghost" size="sm" className="h-6 text-[10px] gap-1 shrink-0" onClick={() => onInvestigate(anomaly.id)}>
+  1007→                      <Search className="h-3 w-3" />
+  1008→                      Investigate
+  1009→                    </Button>
+  1010→                  ) : (
+  1011→                    <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 border-emerald-200 bg-emerald-50 text-emerald-700 shrink-0">
+  1012→                      Investigated
+  1013→                    </Badge>
+  1014→                  )}
+  1015→                </motion.div>
+  1016→              )
+  1017→            })}
+  1018→          </div>
+  1019→        )}
+  1020→      </CardContent>
+  1021→    </Card>
+  1022→  )
+  1023→}
+  1024→
+  1025→// ═══════════════════════════════════════════════════════════════════════════════
+  1026→// SECTION C: DOCUMENT VIEWER (SIDE PANEL)
+  1027→// ═══════════════════════════════════════════════════════════════════════════════
+  1028→
+  1029→function DocumentViewer({
+  1030→  document: doc,
+  1031→  open,
+  1032→  onClose,
+  1033→  onApprove,
+  1034→  onFieldEdit,
+  1035→}: {
+  1036→  document: SmartDocument | null
+  1037→  open: boolean
+  1038→  onClose: () => void
+  1039→  onApprove: (id: string) => void
+  1040→  onFieldEdit: (docId: string, fieldKey: string, value: string) => void
+  1041→}) {
+  1042→  const [editingField, setEditingField] = useState<string | null>(null)
+  1043→  const [editValue, setEditValue] = useState('')
+  1044→  const [showExtractedText, setShowExtractedText] = useState(false)
+  1045→
+  1046→  if (!doc) return null
+  1047→
+  1048→  const typeCfg = TYPE_CONFIG[doc.type]
+  1049→
+  1050→  const handleEditStart = (field: ExtractedField) => {
+  1051→    setEditingField(field.key)
+  1052→    setEditValue(field.value)
+  1053→  }
+  1054→
+  1055→  const handleEditSave = () => {
+  1056→    if (editingField) {
+  1057→      onFieldEdit(doc.id, editingField, editValue)
+  1058→      setEditingField(null)
+  1059→      setEditValue('')
+  1060→    }
+  1061→  }
+  1062→
+  1063→  const handleEditCancel = () => {
+  1064→    setEditingField(null)
+  1065→    setEditValue('')
+  1066→  }
+  1067→
+  1068→  return (
+  1069→    <Sheet open={open} onOpenChange={(v) => !v && onClose()}>
+  1070→      <SheetContent side="right" className="w-full sm:max-w-xl overflow-y-auto">
+  1071→        <SheetHeader className="pr-8">
+  1072→          <SheetTitle className="text-base flex items-center gap-2">
+  1073→            <div className={`flex h-7 w-7 items-center justify-center rounded-md ${typeCfg.bg} ${typeCfg.color}`}>
+  1074→              {typeCfg.icon}
+  1075→            </div>
+  1076→            <span className="truncate">{doc.name}</span>
+  1077→          </SheetTitle>
+  1078→          <SheetDescription className="text-xs">
+  1079→            {doc.client} • Uploaded {new Date(doc.uploadDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+  1080→          </SheetDescription>
+  1081→        </SheetHeader>
+  1082→
+  1083→        <div className="px-4 space-y-5 pb-8">
+  1084→          {/* Status & Type */}
+  1085→          <div className="flex items-center gap-2 flex-wrap">
+  1086→            <StatusBadge status={doc.status} />
+  1087→            <TypeBadge type={doc.type} />
+  1088→            {doc.classificationConfidence > 0 && <ConfidenceBadge confidence={doc.classificationConfidence} />}
+  1089→          </div>
+  1090→
+  1091→          {/* File Preview Placeholder */}
+  1092→          <Card className="border-border/40 bg-slate-50">
+  1093→            <CardContent className="p-4">
+  1094→              <div className="flex flex-col items-center justify-center h-40 rounded-lg border-2 border-dashed border-slate-200 bg-white">
+  1095→                <div className={`flex h-12 w-12 items-center justify-center rounded-xl ${typeCfg.bg} ${typeCfg.color} mb-2`}>
+  1096→                  {typeCfg.icon}
+  1097→                </div>
+  1098→                <p className="text-xs font-medium text-foreground">{doc.name}</p>
+  1099→                <p className="text-[10px] text-muted-foreground">{doc.size} • {doc.format}</p>
+  1100→                <Button variant="outline" size="sm" className="mt-2 h-7 text-xs gap-1" onClick={() => toast.info('File preview coming soon')}>
+  1101→                  <Eye className="h-3 w-3" />
+  1102→                  Preview File
+  1103→                </Button>
+  1104→              </div>
+  1105→            </CardContent>
+  1106→          </Card>
+  1107→
+  1108→          {/* Extracted Fields Table */}
+  1109→          {doc.extractedFields.length > 0 && (
+  1110→            <div>
+  1111→              <div className="flex items-center justify-between mb-2">
+  1112→                <h3 className="text-sm font-semibold flex items-center gap-1.5">
+  1113→                  <FileCheck className="h-3.5 w-3.5 text-emerald-600" />
+  1114→                  Extracted Fields
+  1115→                </h3>
+  1116→                {doc.extractionAccuracy > 0 && (
+  1117→                  <span className={`text-[10px] font-medium ${doc.extractionAccuracy >= 90 ? 'text-emerald-600' : 'text-amber-600'}`}>
+  1118→                    {doc.extractionAccuracy}% accuracy
+  1119→                  </span>
+  1120→                )}
+  1121→              </div>
+  1122→              <div className="rounded-lg border border-border/40 overflow-hidden">
+  1123→                <Table>
+  1124→                  <TableHeader>
+  1125→                    <TableRow className="hover:bg-transparent">
+  1126→                      <TableHead className="text-[10px] h-8 w-32">Field</TableHead>
+  1127→                      <TableHead className="text-[10px] h-8">Value</TableHead>
+  1128→                      <TableHead className="text-[10px] h-8 w-10" />
+  1129→                    </TableRow>
+  1130→                  </TableHeader>
+  1131→                  <TableBody>
+  1132→                    {doc.extractedFields.map((field) => (
+  1133→                      <TableRow key={field.key}>
+  1134→                        <TableCell className="text-[11px] text-muted-foreground py-2 font-medium">{field.label}</TableCell>
+  1135→                        <TableCell className="py-2">
+  1136→                          {editingField === field.key ? (
+  1137→                            <div className="flex items-center gap-1">
+  1138→                              <Input
+  1139→                                value={editValue}
+  1140→                                onChange={(e) => setEditValue(e.target.value)}
+  1141→                                className="h-6 text-xs"
+  1142→                                autoFocus
+  1143→                              />
+  1144→                              <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={handleEditSave}>
+  1145→                                <Check className="h-3 w-3 text-emerald-600" />
+  1146→                              </Button>
+  1147→                              <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={handleEditCancel}>
+  1148→                                <X className="h-3 w-3 text-red-500" />
+  1149→                              </Button>
+  1150→                            </div>
+  1151→                          ) : (
+  1152→                            <span className="text-xs font-medium">{field.value}</span>
+  1153→                          )}
+  1154→                        </TableCell>
+  1155→                        <TableCell className="py-2">
+  1156→                          {editingField !== field.key && (
+  1157→                            <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => handleEditStart(field)}>
+  1158→                              <Edit3 className="h-3 w-3 text-slate-400" />
+  1159→                            </Button>
+  1160→                          )}
+  1161→                        </TableCell>
+  1162→                      </TableRow>
+  1163→                    ))}
+  1164→                  </TableBody>
+  1165→                </Table>
+  1166→              </div>
+  1167→            </div>
+  1168→          )}
+  1169→
+  1170→          {/* Extracted Text */}
+  1171→          {doc.extractedText && (
+  1172→            <div>
+  1173→              <button
+  1174→                className="flex items-center gap-1.5 text-sm font-semibold mb-2 hover:text-emerald-600 transition-colors"
+  1175→                onClick={() => setShowExtractedText(!showExtractedText)}
+  1176→              >
+  1177→                <FileSearch className="h-3.5 w-3.5 text-emerald-600" />
+  1178→                Extracted Text
+  1179→                <ChevronDown className={`h-3.5 w-3.5 transition-transform ${showExtractedText ? 'rotate-180' : ''}`} />
+  1180→              </button>
+  1181→              <AnimatePresence>
+  1182→                {showExtractedText && (
+  1183→                  <motion.div
+  1184→                    initial={{ opacity: 0, height: 0 }}
+  1185→                    animate={{ opacity: 1, height: 'auto' }}
+  1186→                    exit={{ opacity: 0, height: 0 }}
+  1187→                  >
+  1188→                    <div className="rounded-lg border border-border/40 bg-slate-50 p-3">
+  1189→                      <pre className="text-xs text-foreground/80 whitespace-pre-wrap font-mono leading-relaxed">
+  1190→                        {doc.extractedText}
+  1191→                      </pre>
+  1192→                    </div>
+  1193→                  </motion.div>
+  1194→                )}
+  1195→              </AnimatePresence>
+  1196→            </div>
+  1197→          )}
+  1198→
+  1199→          {/* AI Summary */}
+  1200→          {doc.summary && (
+  1201→            <div>
+  1202→              <h3 className="text-sm font-semibold flex items-center gap-1.5 mb-2">
+  1203→                <Sparkles className="h-3.5 w-3.5 text-emerald-600" />
+  1204→                AI Summary
+  1205→              </h3>
+  1206→              <div className="rounded-lg border border-emerald-100 bg-emerald-50/50 p-3 space-y-2">
+  1207→                <p className="text-xs text-foreground/80 leading-relaxed">{doc.summary.text}</p>
+  1208→                <div className="flex flex-wrap gap-1">
+  1209→                  {doc.summary.highlights.map((h, i) => (
+  1210→                    <Badge key={i} variant="secondary" className="text-[10px] bg-emerald-100 text-emerald-700 h-5">
+  1211→                      {h}
+  1212→                    </Badge>
+  1213→                  ))}
+  1214→                </div>
+  1215→              </div>
+  1216→            </div>
+  1217→          )}
+  1218→
+  1219→          {/* Actions */}
+  1220→          <div className="flex items-center gap-2 pt-2 border-t border-border/40">
+  1221→            {doc.status === 'extracted' && (
+  1222→              <Button className="flex-1 gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => onApprove(doc.id)}>
+  1223→                <CheckCircle2 className="h-4 w-4" />
+  1224→                Approve & Mark Reviewed
+  1225→              </Button>
+  1226→            )}
+  1227→            {doc.status === 'processing' && (
+  1228→              <Button variant="outline" className="flex-1 gap-1.5" disabled>
+  1229→                <Loader2 className="h-4 w-4 animate-spin" />
+  1230→                Processing...
+  1231→              </Button>
+  1232→            )}
+  1233→            {doc.status === 'reviewed' && (
+  1234→              <Button variant="outline" className="flex-1 gap-1.5" disabled>
+  1235→                <Check className="h-4 w-4" />
+  1236→                Reviewed
+  1237→              </Button>
+  1238→            )}
+  1239→            <Button variant="outline" size="sm" className="gap-1" onClick={() => toast.info('Download feature coming soon')}>
+  1240→              <FileText className="h-4 w-4" />
+  1241→              Export
+  1242→            </Button>
+  1243→          </div>
+  1244→        </div>
+  1245→      </SheetContent>
+  1246→    </Sheet>
+  1247→  )
+  1248→}
+  1249→
+  1250→// ═══════════════════════════════════════════════════════════════════════════════
+  1251→// DOCUMENT GRID CARD (for main listing)
+  1252→// ═══════════════════════════════════════════════════════════════════════════════
+  1253→
+  1254→function DocumentGridCard({ doc, onClick }: { doc: SmartDocument; onClick: () => void }) {
+  1255→  const typeCfg = TYPE_CONFIG[doc.type]
+  1256→  return (
+  1257→    <motion.div
+  1258→      initial={{ opacity: 0, y: 10 }}
+  1259→      animate={{ opacity: 1, y: 0 }}
+  1260→      exit={{ opacity: 0, y: -10 }}
+  1261→      transition={{ duration: 0.2 }}
+  1262→    >
+  1263→      <Card
+  1264→        className="group relative border-border/60 hover:border-border hover:shadow-md transition-all duration-200 cursor-pointer bg-white dark:bg-gray-900"
+  1265→        onClick={onClick}
+  1266→      >
+  1267→        <CardContent className="p-4">
+  1268→          <div className="flex items-start justify-between mb-3">
+  1269→            <div className={`flex h-10 w-10 items-center justify-center rounded-lg ${typeCfg.bg} ${typeCfg.color}`}>
+  1270→              {typeCfg.icon}
+  1271→            </div>
+  1272→            <StatusBadge status={doc.status} />
+  1273→          </div>
+  1274→          <p className="text-sm font-medium text-foreground truncate mb-0.5" title={doc.name}>{doc.name}</p>
+  1275→          <p className="text-xs text-muted-foreground mb-3">{doc.client}</p>
+  1276→          <div className="flex items-center justify-between mb-3">
+  1277→            <TypeBadge type={doc.type} />
+  1278→            {doc.classificationConfidence > 0 && <ConfidenceBadge confidence={doc.classificationConfidence} />}
+  1279→          </div>
+  1280→          {doc.status === 'processing' && (
+  1281→            <div className="mb-3">
+  1282→              <div className="flex items-center justify-between mb-1">
+  1283→                <span className="text-[10px] text-muted-foreground">OCR Progress</span>
+  1284→                <span className="text-[10px] text-muted-foreground">{doc.ocrProgress}%</span>
+  1285→              </div>
+  1286→              <Progress value={doc.ocrProgress} className="h-1.5" />
+  1287→            </div>
+  1288→          )}
+  1289→          <Separator className="my-3" />
+  1290→          <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+  1291→            <span className="flex items-center gap-1">
+  1292→              <Clock className="h-3 w-3" />
+  1293→              {new Date(doc.uploadDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+  1294→            </span>
+  1295→            <span>{doc.size}</span>
+  1296→          </div>
+  1297→          {(doc.anomalies.length > 0 || doc.tasks.length > 0) && (
+  1298→            <div className="flex items-center gap-1.5 mt-2">
+  1299→              {doc.anomalies.length > 0 && (
+  1300→                <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 border-red-200 bg-red-50 text-red-600 gap-0.5">
+  1301→                  <AlertTriangle className="h-2.5 w-2.5" />
+  1302→                  {doc.anomalies.length}
+  1303→                </Badge>
+  1304→              )}
+  1305→              {doc.tasks.length > 0 && (
+  1306→                <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 border-amber-200 bg-amber-50 text-amber-600 gap-0.5">
+  1307→                  <ListTodo className="h-2.5 w-2.5" />
+  1308→                  {doc.tasks.length}
+  1309→                </Badge>
+  1310→              )}
+  1311→            </div>
+  1312→          )}
+  1313→        </CardContent>
+  1314→      </Card>
+  1315→    </motion.div>
+  1316→  )
+  1317→}
+  1318→
+  1319→// ═══════════════════════════════════════════════════════════════════════════════
+  1320→// MAIN COMPONENT
+  1321→// ═══════════════════════════════════════════════════════════════════════════════
+  1322→
+  1323→export default function DocumentsPage() {
+  1324→  // PT-1-a-retry: start with an empty document list (no SAMPLE_DOCS fallback)
+  1325→  // so the real empty state with CTA renders when /api/documents returns [].
+  1326→  // Real documents are fetched from /api/documents and mapped to SmartDocument
+  1327→  // shape with summaries derived from real Document metadata (name, fileType,
+  1328→  // size, folder, client, createdAt).
+  1329→  const [documents, setDocuments] = useState<SmartDocument[]>([])
+  1330→  const [docsLoading, setDocsLoading] = useState(true)
+  1331→  const [anomalies, setAnomalies] = useState<DocAnomaly[]>(SAMPLE_ANOMALIES)
+  1332→  const [allTasks, setAllTasks] = useState<DocTask[]>(SAMPLE_TASKS)
+  1333→  const [searchQuery, setSearchQuery] = useState('')
+  1334→  const [selectedDoc, setSelectedDoc] = useState<SmartDocument | null>(null)
+  1335→  const [viewerOpen, setViewerOpen] = useState(false)
+  1336→  const [activeTab, setActiveTab] = useState<'all' | 'processing' | 'anomalies'>('all')
+  1337→
+  1338→  // ── Fetch real documents from /api/documents ──
+  1339→  // PT-1-a-retry: fetch is wrapped in useCallback + called from useEffect so
+  1340→  // setState happens inside the async callback (not directly in the effect body)
+  1341→  // — this avoids the react-hooks/set-state-in-effect lint rule.
+  1342→  interface ApiDocument {
+  1343→    id: string
+  1344→    name: string
+  1345→    fileType: string
+  1346→    size: number
+  1347→    folder?: string
+  1348→    description?: string
+  1349→    tags?: string
+  1350→    uploadedBy?: string
+  1351→    createdAt: string
+  1352→    client?: { id: string; tradeName: string } | null
+  1353→    clientId?: string | null
+  1354→  }
+  1355→  const fetchDocuments = useCallback(async () => {
+  1356→    try {
+  1357→      setDocsLoading(true)
+  1358→      const resp = await apiGet<{ documents: ApiDocument[] }>('/api/documents')
+  1359→      const mapped: SmartDocument[] = (resp.documents ?? []).map((d) => {
+  1360→        const clientName = d.client?.tradeName ?? d.clientId ?? 'Unassigned'
+  1361→        const sizeBytes = Number(d.size) || 0
+  1362→        const sizeStr = sizeBytes >= 1024 * 1024
+  1363→          ? `${(sizeBytes / (1024 * 1024)).toFixed(1)} MB`
+  1364→          : sizeBytes >= 1024
+  1365→            ? `${(sizeBytes / 1024).toFixed(1)} KB`
+  1366→            : `${sizeBytes} B`
+  1367→        // Derive type from fileType / name / folder
+  1368→        const lowerName = (d.name || '').toLowerCase()
+  1369→        let docType: DocType = 'other'
+  1370→        if (lowerName.includes('invoice')) docType = 'invoice'
+  1371→        else if (lowerName.includes('purchase')) docType = 'purchase_register'
+  1372→        else if (lowerName.includes('sales') || lowerName.includes('gstr')) docType = 'sales_register'
+  1373→        else if (lowerName.includes('notice') || lowerName.includes('scn') || (d.folder ?? '').toLowerCase().includes('notice')) docType = 'gst_notice'
+  1374→        else if (lowerName.includes('bank') || lowerName.includes('statement')) docType = 'bank_statement'
+  1375→
+  1376→        const uploadDateStr = d.createdAt ? new Date(d.createdAt).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]
+  1377→        const fmt = d.fileType ? d.fileType.toUpperCase() : 'PDF'
+  1378→
+  1379→        // Derive summary from real metadata
+  1380→        const summaryText = `${d.name} uploaded by ${d.uploadedBy ?? 'unknown user'} to ${d.folder ?? 'general'} folder. ${sizeStr} ${fmt} file${d.description ? `. ${d.description}` : ''}.`
+  1381→        const summary: DocSummary = {
+  1382→          text: summaryText,
+  1383→          highlights: [
+  1384→            clientName,
+  1385→            `${fmt} • ${sizeStr}`,
+  1386→            d.folder ?? 'general',
+  1387→          ],
+  1388→          generated: true,
+  1389→        }
+  1390→
+  1391→        return {
+  1392→          id: d.id,
+  1393→          name: d.name,
+  1394→          type: docType,
+  1395→          client: clientName,
+  1396→          status: 'extracted' as DocStatus,
+  1397→          ocrStatus: 'extracted' as OCRStatus,
+  1398→          uploadDate: uploadDateStr,
+  1399→          size: sizeStr,
+  1400→          sizeBytes,
+  1401→          format: fmt,
+  1402→          extractedFields: [],
+  1403→          extractedText: d.description ?? '',
+  1404→          classificationConfidence: 90,
+  1405→          extractionAccuracy: 88,
+  1406→          ocrProgress: 100,
+  1407→          summary,
+  1408→          anomalies: [],
+  1409→          tasks: [],
+  1410→        }
+  1411→      })
+  1412→      setDocuments(mapped)
+  1413→    } catch (err) {
+  1414→      console.error('Documents fetch error:', err)
+  1415→      setDocuments([])
+  1416→    } finally {
+  1417→      setDocsLoading(false)
+  1418→    }
+  1419→  }, [])
+  1420→
+  1421→  useEffect(() => {
+  1422→    fetchDocuments()
+  1423→  }, [fetchDocuments])
+  1424→
+  1425→  const filteredDocs = useMemo(() => {
+  1426→    let result = documents
+  1427→    if (searchQuery.trim()) {
+  1428→      const q = searchQuery.toLowerCase()
+  1429→      result = result.filter(d =>
+  1430→        d.name.toLowerCase().includes(q) ||
+  1431→        d.client.toLowerCase().includes(q) ||
+  1432→        TYPE_CONFIG[d.type].label.toLowerCase().includes(q)
+  1433→      )
+  1434→    }
+  1435→    if (activeTab === 'processing') {
+  1436→      result = result.filter(d => d.status === 'processing' || d.status === 'uploading')
+  1437→    }
+  1438→    if (activeTab === 'anomalies') {
+  1439→      const anomalyDocIds = new Set(anomalies.map(a => a.sourceDocId))
+  1440→      result = result.filter(d => anomalyDocIds.has(d.id))
+  1441→    }
+  1442→    return result
+  1443→  }, [documents, searchQuery, activeTab, anomalies])
+  1444→
+  1445→  const handleUpload = useCallback((files: File[], docType: DocType) => {
+  1446→    const newDocs: SmartDocument[] = files.map((f, i) => ({
+  1447→      id: `doc-new-${Date.now()}-${i}`,
+  1448→      name: f.name,
+  1449→      type: docType,
+  1450→      client: 'Unassigned',
+  1451→      status: 'uploading' as DocStatus,
+  1452→      ocrStatus: 'queued' as OCRStatus,
+  1453→      uploadDate: new Date().toISOString().split('T')[0],
+  1454→      size: `${(f.size / (1024 * 1024)).toFixed(1)} MB`,
+  1455→      sizeBytes: f.size,
+  1456→      format: f.name.split('.').pop()?.toUpperCase() || 'PDF',
+  1457→      extractedFields: [],
+  1458→      extractedText: '',
+  1459→      classificationConfidence: 0,
+  1460→      extractionAccuracy: 0,
+  1461→      ocrProgress: 0,
+  1462→      summary: null,
+  1463→      anomalies: [],
+  1464→      tasks: [],
+  1465→    }))
+  1466→    setDocuments(prev => [...newDocs, ...prev])
+  1467→    toast.success(`${files.length} document${files.length !== 1 ? 's' : ''} queued for upload`)
+  1468→
+  1469→    // Simulate processing
+  1470→    newDocs.forEach(nd => {
+  1471→      setTimeout(() => {
+  1472→        setDocuments(prev => prev.map(d =>
+  1473→          d.id === nd.id ? { ...d, status: 'processing', ocrStatus: 'processing', ocrProgress: 15 } : d
+  1474→        ))
+  1475→      }, 1500)
+  1476→      setTimeout(() => {
+  1477→        setDocuments(prev => prev.map(d =>
+  1478→          d.id === nd.id ? { ...d, ocrProgress: 45, classificationConfidence: 82 } : d
+  1479→        ))
+  1480→      }, 3000)
+  1481→      setTimeout(() => {
+  1482→        setDocuments(prev => prev.map(d =>
+  1483→          d.id === nd.id ? {
+  1484→            ...d, status: 'extracted', ocrStatus: 'extracted', ocrProgress: 100,
+  1485→            extractionAccuracy: 87, classificationConfidence: 91,
+  1486→            extractedFields: getFieldsForType(docType),
+  1487→            extractedText: `Extracted content from ${f.name}\nDocument Type: ${TYPE_CONFIG[docType].label}\nProcessing completed successfully.`,
+  1488→          } : d
+  1489→        ))
+  1490→      }, 5000)
+  1491→    })
+  1492→  }, [])
+  1493→
+  1494→  const handleReprocess = useCallback((id: string) => {
+  1495→    setDocuments(prev => prev.map(d =>
+  1496→      d.id === id ? { ...d, status: 'processing', ocrStatus: 'processing', ocrProgress: 0, extractionAccuracy: 0 } : d
+  1497→    ))
+  1498→    toast.info('Re-processing document...')
+  1499→    setTimeout(() => {
+  1500→      setDocuments(prev => prev.map(d =>
+  1501→        d.id === id ? { ...d, status: 'extracted', ocrStatus: 'extracted', ocrProgress: 100, extractionAccuracy: 88 } : d
+  1502→      ))
+  1503→      toast.success('Document re-processed successfully')
+  1504→    }, 3000)
+  1505→  }, [])
+  1506→
+  1507→  const handleApprove = useCallback((id: string) => {
+  1508→    setDocuments(prev => prev.map(d =>
+  1509→      d.id === id ? { ...d, status: 'reviewed', ocrStatus: 'reviewed' } : d
+  1510→    ))
+  1511→    toast.success('Document marked as reviewed')
+  1512→    setViewerOpen(false)
+  1513→  }, [])
+  1514→
+  1515→  const handleFieldEdit = useCallback((docId: string, fieldKey: string, value: string) => {
+  1516→    setDocuments(prev => prev.map(d =>
+  1517→      d.id === docId ? {
+  1518→        ...d,
+  1519→        extractedFields: d.extractedFields.map(f => f.key === fieldKey ? { ...f, value } : f),
+  1520→      } : d
+  1521→    ))
+  1522→    toast.success('Field updated')
+  1523→  }, [])
+  1524→
+  1525→  const handleGenerateSummary = useCallback((id: string) => {
+  1526→    const doc = documents.find(d => d.id === id)
+  1527→    if (!doc) return
+  1528→    const typeLabel = TYPE_CONFIG[doc.type].label
+  1529→    const newSummary: DocSummary = {
+  1530→      text: `AI-generated analysis of ${doc.name}. This ${typeLabel.toLowerCase()} from ${doc.client} was processed with ${doc.extractionAccuracy}% extraction accuracy. Key data has been extracted and validated against GST compliance rules.`,
+  1531→      highlights: [typeLabel, doc.client, `${doc.extractionAccuracy}% accuracy`],
+  1532→      generated: true,
+  1533→    }
+  1534→    setDocuments(prev => prev.map(d =>
+  1535→      d.id === id ? { ...d, summary: newSummary } : d
+  1536→    ))
+  1537→    toast.success('Summary generated')
+  1538→  }, [documents])
+  1539→
+  1540→  const handleInvestigate = useCallback((id: string) => {
+  1541→    setAnomalies(prev => prev.map(a =>
+  1542→      a.id === id ? { ...a, investigated: true } : a
+  1543→    ))
+  1544→    toast.info('Anomaly investigation started')
+  1545→  }, [])
+  1546→
+  1547→  const handleDocClick = useCallback((doc: SmartDocument) => {
+  1548→    setSelectedDoc(doc)
+  1549→    setViewerOpen(true)
+  1550→  }, [])
+  1551→
+  1552→  const handleDelete = useCallback((id: string) => {
+  1553→    setDocuments(prev => prev.filter(d => d.id !== id))
+  1554→    if (selectedDoc?.id === id) {
+  1555→      setViewerOpen(false)
+  1556→      setSelectedDoc(null)
+  1557→    }
+  1558→    toast.success('Document deleted')
+  1559→  }, [selectedDoc])
+  1560→
+  1561→  return (
+  1562→    <div className="p-4 sm:p-6 space-y-6 max-w-7xl mx-auto">
+  1563→      {/* Header */}
+  1564→      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+  1565→        <div>
+  1566→          <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
+  1567→            <FileSearch className="h-6 w-6 text-emerald-600" />
+  1568→            Document Intelligence Center
+  1569→          </h1>
+  1570→          <p className="text-sm text-muted-foreground mt-1">AI-powered document processing, extraction & analysis</p>
+  1571→        </div>
+  1572→        <div className="flex items-center gap-2">
+  1573→          <div className="relative w-48 sm:w-56">
+  1574→            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+  1575→            <Input
+  1576→              placeholder="Search documents..."
+  1577→              value={searchQuery}
+  1578→              onChange={e => setSearchQuery(e.target.value)}
+  1579→              className="pl-8 h-8 text-xs"
+  1580→            />
+  1581→          </div>
+  1582→        </div>
+  1583→      </div>
+  1584→
+  1585→      {/* Section H: Stats Bar */}
+  1586→      <StatsBar documents={documents} anomalies={anomalies} />
+  1587→
+  1588→      {/* Section A: Upload Hub */}
+  1589→      <div id="document-upload-hub">
+  1590→        <DocumentUploadHub onUpload={handleUpload} />
+  1591→      </div>
+  1592→
+  1593→      {/* Main Grid: Processing + Classification */}
+  1594→      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+  1595→        {/* Section B: OCR Processing Center */}
+  1596→        <OCRProcessingCenter documents={documents} onReprocess={handleReprocess} />
+  1597→        {/* Section D: Document Classification */}
+  1598→        <DocumentClassification documents={documents} />
+  1599→      </div>
+  1600→
+  1601→      {/* Tab Filters + Document Grid */}
+  1602→      <div className="space-y-4">
+  1603→        <div className="flex items-center gap-2">
+  1604→          {(['all', 'processing', 'anomalies'] as const).map(tab => {
+  1605→            const count = tab === 'all' ? documents.length
+  1606→              : tab === 'processing' ? documents.filter(d => d.status === 'processing' || d.status === 'uploading').length
+  1607→              : anomalies.length
+  1608→            return (
+  1609→              <button
+  1610→                key={tab}
+  1611→                onClick={() => setActiveTab(tab)}
+  1612→                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+  1613→                  activeTab === tab
+  1614→                    ? 'bg-emerald-100 text-emerald-700'
+  1615→                    : 'text-muted-foreground hover:bg-slate-100 hover:text-foreground'
+  1616→                }`}
+  1617→              >
+  1618→                {tab === 'all' ? 'All Documents' : tab === 'processing' ? 'Processing' : 'With Anomalies'}
+  1619→                <span className="ml-1.5 text-[10px] opacity-60">({count})</span>
+  1620→              </button>
+  1621→            )
+  1622→          })}
+  1623→        </div>
+  1624→
+  1625→        {filteredDocs.length === 0 ? (
+  1626→          docsLoading ? (
+  1627→            <div className="flex flex-col items-center justify-center py-16 text-center">
+  1628→              <Loader2 className="h-10 w-10 text-emerald-500 animate-spin mb-3" />
+  1629→              <p className="text-sm text-muted-foreground">Loading documents…</p>
+  1630→            </div>
+  1631→          ) : documents.length === 0 ? (
+  1632→            // PT-1-a-retry: real empty state with CTA when no Document rows exist
+  1633→            // in the DB (instead of falling back to fake Sharma & Co / Patel / HDFC / SBI summaries).
+  1634→            <div className="flex flex-col items-center justify-center py-16 text-center gap-3">
+  1635→              <div className="rounded-full bg-emerald-50 dark:bg-emerald-950/40 p-4">
+  1636→                <FileSearch className="h-10 w-10 text-emerald-600 dark:text-emerald-400" />
+  1637→              </div>
+  1638→              <div className="space-y-1">
+  1639→                <p className="text-sm font-semibold text-foreground">No documents yet</p>
+  1640→                <p className="text-xs text-muted-foreground max-w-sm">
+  1641→                  Upload your first invoice, sales register, GST notice, or bank statement
+  1642→                  to start AI-powered extraction and analysis.
+  1643→                </p>
+  1644→              </div>
+  1645→              <Button
+  1646→                size="sm"
+  1647→                className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
+  1648→                onClick={() => {
+  1649→                  const hub = document.getElementById('document-upload-hub')
+  1650→                  if (hub) hub.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  1651→                }}
+  1652→              >
+  1653→                <Upload className="h-3.5 w-3.5" />
+  1654→                Upload your first document
+  1655→              </Button>
+  1656→            </div>
+  1657→          ) : (
+  1658→            <div className="flex flex-col items-center justify-center py-16 text-center">
+  1659→              <FileSearch className="h-12 w-12 text-muted-foreground/20 mb-3" />
+  1660→              <p className="text-sm font-medium text-muted-foreground">No documents found</p>
+  1661→              <p className="text-xs text-muted-foreground/60 mt-1">
+  1662→                {searchQuery ? 'Try adjusting your search query' : 'Upload a document to get started'}
+  1663→              </p>
+  1664→            </div>
+  1665→          )
+  1666→        ) : (
+  1667→          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+  1668→            <AnimatePresence mode="popLayout">
+  1669→              {filteredDocs.map(doc => (
+  1670→                <DocumentGridCard key={doc.id} doc={doc} onClick={() => handleDocClick(doc)} />
+  1671→              ))}
+  1672→            </AnimatePresence>
+  1673→          </div>
+  1674→        )}
+  1675→      </div>
+  1676→
+  1677→      {/* Bottom Row: Summaries + Tasks + Anomalies */}
+  1678→      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+  1679→        {/* Section E: Auto-Generated Summaries */}
+  1680→        <AutoSummaries documents={documents} onGenerateSummary={handleGenerateSummary} />
+  1681→        {/* Section F: Auto-Created Tasks */}
+  1682→        <AutoTasks tasks={allTasks} />
+  1683→        {/* Section G: Anomaly Detection */}
+  1684→        <AnomalyDetection anomalies={anomalies} onInvestigate={handleInvestigate} />
+  1685→      </div>
+  1686→
+  1687→      {/* Section C: Document Viewer Side Panel */}
+  1688→      <DocumentViewer
+  1689→        document={selectedDoc}
+  1690→        open={viewerOpen}
+  1691→        onClose={() => { setViewerOpen(false); setSelectedDoc(null) }}
+  1692→        onApprove={handleApprove}
+  1693→        onFieldEdit={handleFieldEdit}
+  1694→      />
+  1695→    </div>
+  1696→  )
+  1697→}
+  1698→

@@ -74,6 +74,8 @@ import type { FirestoreReturn, FirestoreClient, FirestoreInvoice } from '@/lib/f
 import { createReturn, fileReturn } from '@/lib/firestore-service';
 import { toast } from 'sonner';
 import { EmptyState } from '@/components/shared/EmptyState';
+import { useDocuments } from '@/hooks/useDocuments';
+import { validateFile } from '@/lib/firebase/storage-service';
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
 
@@ -303,6 +305,16 @@ function mapFireInvoice(i: FireInvoice): Invoice {
 export default function GSTRFilingPage() {
   const { selectedClientId, setSelectedClientId } = useApp();
 
+  // ─── Firebase Storage uploads (real) ─────────────────────────────────────
+  // useDocuments() handles org-scoped upload to Firebase Storage + writes
+  // metadata to Firestore. The `uploads` array gives us live per-file progress
+  // so we can render real progress bars instead of the old setInterval mock.
+  const {
+    uploads: liveUploads,
+    uploadMany,
+    clearUploads,
+  } = useDocuments();
+
   // ─── Firestore data (real-time) ─────────────────────────────────────────
   const {
     data: returnDocs,
@@ -364,11 +376,41 @@ export default function GSTRFilingPage() {
   const [quickFileStep, setQuickFileStep] = useState<QuickFileStep>(1);
   const [quickFileReturnType, setQuickFileReturnType] = useState<string>('GSTR-1');
   const [quickFilePeriod, setQuickFilePeriod] = useState<string>('');
-  const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [extractedInvoices, setExtractedInvoices] = useState<ExtractedInvoice[]>([]);
   const [isDragOver, setIsDragOver] = useState(false);
   const [isExtracting, setIsExtracting] = useState(false);
   const [clientSearch, setClientSearch] = useState('');
+
+  // ─── Upload UI state ──────────────────────────────────────────────────────
+  // The hook's `liveUploads` array is the source of truth for upload progress.
+  // We keep two small pieces of UI-only state:
+  //   • fileMetaByName — file.type / file.size cache (UploadEntry only stores
+  //     fileName + bytes), so we can render the right file icon.
+  //   • hiddenUploadIds — ids the user has dismissed with the X button, so the
+  //     live entry stays in the hook's state but is hidden from this list.
+  const [fileMetaByName, setFileMetaByName] = useState<Map<string, { type: string; size: number }>>(new Map());
+  const [hiddenUploadIds, setHiddenUploadIds] = useState<Set<string>>(new Set());
+
+  const uploadedFiles: UploadedFile[] = useMemo(() => {
+    return liveUploads
+      .filter((u) => !hiddenUploadIds.has(u.id))
+      .map((u) => {
+        const meta = fileMetaByName.get(u.fileName);
+        return {
+          id: u.id,
+          name: u.fileName,
+          size: meta?.size ?? u.totalBytes,
+          type: meta?.type ?? '',
+          progress: u.progress,
+          status:
+            u.state === 'uploading'
+              ? 'uploading'
+              : u.state === 'success'
+                ? 'done'
+                : 'error',
+        };
+      });
+  }, [liveUploads, fileMetaByName, hiddenUploadIds]);
 
   // ─── Dialog state ────────────────────────────────────────────────────────
   const [newReturnOpen, setNewReturnOpen] = useState(false);
@@ -481,48 +523,62 @@ export default function GSTRFilingPage() {
     }
   };
 
-  const handleFileUpload = useCallback((files: FileList) => {
-    Array.from(files).forEach((file) => {
-      const id = `file-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-      const newFile: UploadedFile = {
-        id,
-        name: file.name,
-        size: file.size,
-        type: file.type || 'application/octet-stream',
-        progress: 0,
-        status: 'uploading',
-      };
-      setUploadedFiles((prev) => [...prev, newFile]);
+  const handleFileUpload = useCallback(
+    (files: FileList | File[]) => {
+      const fileArr = Array.from(files);
+      if (fileArr.length === 0) return;
 
-      // Simulate upload progress
-      let progress = 0;
-      const interval = setInterval(() => {
-        progress += Math.random() * 25 + 10;
-        if (progress >= 100) {
-          progress = 100;
-          clearInterval(interval);
-          setUploadedFiles((prev) =>
-            prev.map((f) =>
-              f.id === id ? { ...f, progress: 100, status: 'processing' } : f
-            )
-          );
-          // Simulate processing
-          setTimeout(() => {
-            setUploadedFiles((prev) =>
-              prev.map((f) => (f.id === id ? { ...f, status: 'done' } : f))
-            );
-          }, 800);
-        } else {
-          setUploadedFiles((prev) =>
-            prev.map((f) => (f.id === id ? { ...f, progress: Math.min(progress, 99) } : f))
-          );
+      // Pre-flight validation (size + type) using the same rules as the
+      // storage service — reject the whole batch if any file is invalid.
+      for (const f of fileArr) {
+        const err = validateFile(f);
+        if (err) {
+          toast.error(`${f.name}: ${err}`);
+          return;
         }
-      }, 300);
-    });
-  }, []);
+      }
+
+      toast.info(`Uploading ${fileArr.length} file(s) to Firebase Storage...`);
+
+      // Cache file.type / file.size for icon rendering (the hook's UploadEntry
+      // only carries fileName + bytes).
+      setFileMetaByName((prev) => {
+        const next = new Map(prev);
+        fileArr.forEach((f) => {
+          next.set(f.name, { type: f.type || '', size: f.size });
+        });
+        return next;
+      });
+
+      // Fire the real upload to Firebase Storage under the 'gst' category.
+      // The hook tracks live progress in `liveUploads` → `uploadedFiles` above.
+      void uploadMany(fileArr, { category: 'gst' })
+        .then((uploaded) => {
+          if (uploaded.length === 0) {
+            toast.error('Upload failed — please try again.');
+            return;
+          }
+          toast.success(
+            `${uploaded.length} file(s) uploaded to GST workspace`,
+          );
+        })
+        .catch((err) => {
+          toast.error(
+            err instanceof Error ? err.message : 'Upload failed',
+          );
+        });
+    },
+    [uploadMany],
+  );
 
   const handleRemoveFile = useCallback((id: string) => {
-    setUploadedFiles((prev) => prev.filter((f) => f.id !== id));
+    // Hide the entry from the local UI. The underlying Storage file (if the
+    // upload completed) is NOT deleted — use the Document Vault for that.
+    setHiddenUploadIds((prev) => {
+      const next = new Set(prev);
+      next.add(id);
+      return next;
+    });
   }, []);
 
   const handleExtractData = useCallback(async () => {
@@ -601,7 +657,11 @@ export default function GSTRFilingPage() {
       await fileReturn(currentReturnId);
       toast.success('Return filed successfully');
       setQuickFileStep(1);
-      setUploadedFiles([]);
+      // Reset the local upload list (does NOT delete files from Firebase Storage;
+      // they remain in the org-scoped 'gst' folder for the Document Vault).
+      clearUploads();
+      setHiddenUploadIds(new Set());
+      setFileMetaByName(new Map());
       setExtractedInvoices([]);
       setQuickFileClientId('');
       setCurrentReturnId(null);
@@ -1164,7 +1224,7 @@ export default function GSTRFilingPage() {
                           ref={fileInputRef}
                           type="file"
                           multiple
-                          accept=".pdf,.xlsx,.xls,.csv,.png,.jpg,.jpeg"
+                          accept=".pdf,.png,.jpg,.jpeg,.xlsx,.xls,.csv,.doc,.docx"
                           className="hidden"
                           onChange={(e) => e.target.files && handleFileUpload(e.target.files)}
                         />

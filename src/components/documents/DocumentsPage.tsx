@@ -2,6 +2,9 @@
 
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react'
 import { apiGet } from '@/lib/api'
+import { useDocuments, type UploadEntry } from '@/hooks/useDocuments'
+import type { StorageCategory } from '@/lib/firebase/storage-service'
+import type { DocumentMetadata } from '@/lib/firebase/documents-service'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -35,6 +38,7 @@ import {
   Search, BarChart3, Shield, FileSearch, Brain, ListTodo,
   AlertCircle, Copy, TrendingUp, Hash, ArrowRight,
   FileCheck, FileWarning, Landmark, X, Paperclip,
+  Download, Trash2, ExternalLink,
 } from 'lucide-react'
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -137,7 +141,7 @@ const SEVERITY_CONFIG: Record<AnomalySeverity, { color: string; bg: string; bord
   low: { color: 'text-blue-700', bg: 'bg-blue-50', border: 'border-blue-200' },
 }
 
-const SUPPORTED_FORMATS = ['PDF', 'PNG', 'JPG', 'XLSX', 'CSV']
+const SUPPORTED_FORMATS = ['PDF', 'PNG', 'JPG', 'JPEG', 'XLSX', 'XLS', 'CSV', 'DOC', 'DOCX']
 const DOC_TYPE_OPTIONS: { value: DocType; label: string }[] = [
   { value: 'invoice', label: 'Invoice' },
   { value: 'purchase_register', label: 'Purchase Register' },
@@ -146,6 +150,85 @@ const DOC_TYPE_OPTIONS: { value: DocType; label: string }[] = [
   { value: 'bank_statement', label: 'Bank Statement' },
   { value: 'other', label: 'Other' },
 ]
+
+// ── Firebase Storage category mapping ──
+// Maps the UI's DocType to the org-isolated Storage folder.
+const DOC_TYPE_TO_CATEGORY: Record<DocType, StorageCategory> = {
+  invoice: 'invoices',
+  purchase_register: 'invoices',
+  sales_register: 'invoices',
+  gst_notice: 'notices',
+  bank_statement: 'bank',
+  other: 'documents',
+}
+
+// Reverse map: Storage category → UI DocType (for displaying real uploads).
+const CATEGORY_TO_DOC_TYPE: Record<StorageCategory, DocType> = {
+  invoices: 'invoice',
+  gst: 'sales_register',
+  bank: 'bank_statement',
+  documents: 'other',
+  reports: 'other',
+  notices: 'gst_notice',
+  ai: 'other',
+}
+
+// MIME type → format label for display.
+function mimeTypeToFormat(mimeType: string): string {
+  if (!mimeType) return 'FILE'
+  if (mimeType.includes('pdf')) return 'PDF'
+  if (mimeType.includes('jpeg') || mimeType.includes('jpg')) return 'JPG'
+  if (mimeType.includes('png')) return 'PNG'
+  if (mimeType.includes('spreadsheet')) return 'XLSX'
+  if (mimeType.includes('excel')) return 'XLS'
+  if (mimeType.includes('csv')) return 'CSV'
+  if (mimeType.includes('wordprocessing')) return 'DOCX'
+  if (mimeType.includes('msword')) return 'DOC'
+  return mimeType.split('/').pop()?.toUpperCase() ?? 'FILE'
+}
+
+// Human-readable file size.
+function formatFileSize(bytes: number): string {
+  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+  if (bytes >= 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${bytes} B`
+}
+
+// Convert a real Firestore DocumentMetadata into the SmartDocument shape the
+// existing UI expects. Real uploads have no OCR/AI data (we don't build OCR),
+// so extractedFields/anomalies/tasks are empty — the file is available for
+// preview / download / delete.
+function metadataToSmartDoc(meta: DocumentMetadata): SmartDocument {
+  const fmt = mimeTypeToFormat(meta.mimeType)
+  return {
+    id: meta.id,
+    name: meta.originalName,
+    type: CATEGORY_TO_DOC_TYPE[meta.category] ?? 'other',
+    client: meta.linkedTo?.label ?? 'Unassigned',
+    status: 'extracted',
+    ocrStatus: 'extracted',
+    uploadDate: meta.createdAt ? new Date(meta.createdAt).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+    size: formatFileSize(meta.fileSize),
+    sizeBytes: meta.fileSize,
+    format: fmt,
+    extractedFields: [],
+    extractedText: '',
+    classificationConfidence: 0,
+    extractionAccuracy: 0,
+    ocrProgress: 100,
+    summary: {
+      text: `Uploaded by ${meta.uploadedBy.name} on ${new Date(meta.createdAt).toLocaleDateString()}. ${fmt} file, ${formatFileSize(meta.fileSize)}.`,
+      highlights: [meta.category, fmt, formatFileSize(meta.fileSize)],
+      generated: true,
+    },
+    anomalies: [],
+    tasks: [],
+    // Non-typed extra fields for the download/preview handlers:
+    _storagePath: meta.storagePath,
+    _downloadURL: meta.downloadURL,
+    _isReal: true,
+  } as SmartDocument & { _storagePath?: string; _downloadURL?: string; _isReal?: boolean }
+}
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // SAMPLE DATA
@@ -456,10 +539,15 @@ function StatsBar({ documents, anomalies }: { documents: SmartDocument[]; anomal
 // SECTION A: DOCUMENT UPLOAD HUB
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function DocumentUploadHub({ onUpload }: { onUpload: (files: File[], docType: DocType) => void }) {
+function DocumentUploadHub({
+  onUpload,
+  uploads = [],
+}: {
+  onUpload: (files: File[], docType: DocType) => void
+  uploads?: UploadEntry[]
+}) {
   const [isDragging, setIsDragging] = useState(false)
   const [selectedType, setSelectedType] = useState<DocType>('invoice')
-  const [uploadProgress, setUploadProgress] = useState<Record<string, number>>({})
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -474,33 +562,27 @@ function DocumentUploadHub({ onUpload }: { onUpload: (files: File[], docType: Do
 
   const processFiles = useCallback((files: FileList | File[]) => {
     const fileArr = Array.from(files)
-    const validExts = ['pdf', 'png', 'jpg', 'jpeg', 'xlsx', 'csv']
+    const validExts = ['pdf', 'png', 'jpg', 'jpeg', 'xlsx', 'xls', 'csv', 'doc', 'docx']
     const validFiles = fileArr.filter(f => {
       const ext = f.name.split('.').pop()?.toLowerCase() || ''
       return validExts.includes(ext)
     })
     if (validFiles.length === 0) {
-      toast.error('No supported files found. Use PDF, PNG, JPG, XLSX, or CSV.')
+      toast.error('No supported files found. Use PDF, PNG, JPG, JPEG, XLS, XLSX, CSV, DOC, or DOCX.')
       return
     }
     if (validFiles.length < fileArr.length) {
       toast.warning(`${fileArr.length - validFiles.length} file(s) skipped — unsupported format`)
     }
-    // Simulate upload progress
-    validFiles.forEach(f => {
-      setUploadProgress(prev => ({ ...prev, [f.name]: 0 }))
-      let progress = 0
-      const interval = setInterval(() => {
-        progress += Math.random() * 25 + 5
-        if (progress >= 100) {
-          progress = 100
-          clearInterval(interval)
-          toast.success(`${f.name} uploaded`)
-        }
-        setUploadProgress(prev => ({ ...prev, [f.name]: Math.min(progress, 100) }))
-      }, 400)
-    })
-    onUpload(validFiles, selectedType)
+    // 100 MB hard limit per file (matches Storage rules).
+    const oversized = validFiles.filter(f => f.size > 100 * 1024 * 1024)
+    if (oversized.length > 0) {
+      toast.error(`${oversized.length} file(s) exceed 100 MB and were skipped.`)
+    }
+    const withinSize = validFiles.filter(f => f.size <= 100 * 1024 * 1024)
+    if (withinSize.length === 0) return
+    // Delegate to the parent — which calls useDocuments().uploadMany().
+    onUpload(withinSize, selectedType)
   }, [onUpload, selectedType])
 
   const handleDrop = useCallback((e: React.DragEvent) => {
@@ -517,7 +599,7 @@ function DocumentUploadHub({ onUpload }: { onUpload: (files: File[], docType: Do
     }
   }, [processFiles])
 
-  const activeUploads = Object.entries(uploadProgress).filter(([, p]) => p < 100)
+  const activeUploads = uploads.filter(u => u.state === 'uploading' || u.state === 'error')
 
   return (
     <Card className="border-border/60">
@@ -576,7 +658,7 @@ function DocumentUploadHub({ onUpload }: { onUpload: (files: File[], docType: Do
                 ref={fileInputRef}
                 type="file"
                 multiple
-                accept=".pdf,.png,.jpg,.jpeg,.xlsx,.csv"
+                accept=".pdf,.png,.jpg,.jpeg,.xlsx,.xls,.csv,.doc,.docx"
                 onChange={handleFileSelect}
                 className="hidden"
               />
@@ -605,14 +687,20 @@ function DocumentUploadHub({ onUpload }: { onUpload: (files: File[], docType: Do
               exit={{ opacity: 0, height: 0 }}
               className="space-y-2"
             >
-              {activeUploads.map(([name, progress]) => (
-                <div key={name} className="flex items-center gap-3 rounded-lg border border-border/40 p-2.5 bg-white">
-                  <Paperclip className="h-4 w-4 text-slate-400 shrink-0" />
+              {activeUploads.map((entry) => (
+                <div key={entry.id} className="flex items-center gap-3 rounded-lg border border-border/40 p-2.5 bg-white">
+                  <Paperclip className={`h-4 w-4 shrink-0 ${entry.state === 'error' ? 'text-red-400' : 'text-slate-400'}`} />
                   <div className="flex-1 min-w-0">
-                    <p className="text-xs font-medium truncate">{name}</p>
-                    <Progress value={progress} className="h-1.5 mt-1" />
+                    <p className="text-xs font-medium truncate">{entry.fileName}</p>
+                    {entry.state === 'error' ? (
+                      <p className="text-[10px] text-red-500 mt-0.5 truncate">{entry.error ?? 'Upload failed'}</p>
+                    ) : (
+                      <Progress value={entry.progress} className="h-1.5 mt-1" />
+                    )}
                   </div>
-                  <span className="text-[10px] text-muted-foreground shrink-0">{Math.round(progress)}%</span>
+                  <span className={`text-[10px] shrink-0 ${entry.state === 'error' ? 'text-red-500' : 'text-muted-foreground'}`}>
+                    {entry.state === 'error' ? 'Failed' : `${Math.round(entry.progress)}%`}
+                  </span>
                 </div>
               ))}
             </motion.div>
@@ -1032,12 +1120,16 @@ function DocumentViewer({
   onClose,
   onApprove,
   onFieldEdit,
+  onDelete,
+  onDownload,
 }: {
   document: SmartDocument | null
   open: boolean
   onClose: () => void
   onApprove: (id: string) => void
   onFieldEdit: (docId: string, fieldKey: string, value: string) => void
+  onDelete: (id: string) => void
+  onDownload: (doc: SmartDocument) => void
 }) {
   const [editingField, setEditingField] = useState<string | null>(null)
   const [editValue, setEditValue] = useState('')
@@ -1236,10 +1328,41 @@ function DocumentViewer({
                 Reviewed
               </Button>
             )}
-            <Button variant="outline" size="sm" className="gap-1" onClick={() => toast.info('Download feature coming soon')}>
-              <FileText className="h-4 w-4" />
-              Export
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1"
+              onClick={() => onDownload(doc)}
+              title="Download / Preview from Firebase Storage"
+            >
+              <Download className="h-4 w-4" />
+              Download
             </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1 text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
+              onClick={() => {
+                if (window.confirm('Delete this file? This removes it from Firebase Storage permanently.')) {
+                  onDelete(doc.id)
+                }
+              }}
+              title="Delete from Firebase Storage"
+            >
+              <Trash2 className="h-4 w-4" />
+              Delete
+            </Button>
+            {(doc as SmartDocument & { _isReal?: boolean })._isReal && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="gap-1 text-muted-foreground"
+                onClick={() => onDownload(doc)}
+                title="Open in new tab"
+              >
+                <ExternalLink className="h-3.5 w-3.5" />
+              </Button>
+            )}
           </div>
         </div>
       </SheetContent>
@@ -1321,6 +1444,18 @@ function DocumentGridCard({ doc, onClick }: { doc: SmartDocument; onClick: () =>
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export default function DocumentsPage() {
+  // ── Firebase Storage + Firestore documents (real uploads) ──
+  // useDocuments() gives us a real-time, org-scoped list of every file uploaded
+  // to Firebase Storage, plus upload / delete / download helpers and live
+  // upload-progress tracking. This is the single source of truth for real files.
+  const {
+    documents: firestoreDocs,
+    uploads,
+    uploadMany,
+    remove,
+    getDownloadUrl,
+  } = useDocuments()
+
   // PT-1-a-retry: start with an empty document list (no SAMPLE_DOCS fallback)
   // so the real empty state with CTA renders when /api/documents returns [].
   // Real documents are fetched from /api/documents and mapped to SmartDocument
@@ -1334,6 +1469,20 @@ export default function DocumentsPage() {
   const [selectedDoc, setSelectedDoc] = useState<SmartDocument | null>(null)
   const [viewerOpen, setViewerOpen] = useState(false)
   const [activeTab, setActiveTab] = useState<'all' | 'processing' | 'anomalies'>('all')
+
+  // ── Merge real Firestore uploads into the documents list ──
+  // Real Firebase Storage uploads (firestoreDocs) take precedence by id — they
+  // are the files the user just uploaded and can be previewed / downloaded /
+  // deleted for real. Legacy Prisma documents (fetched below) fill in the rest.
+  const realDocs = useMemo(
+    () => firestoreDocs.map(metadataToSmartDoc),
+    [firestoreDocs],
+  )
+  const realDocIds = useMemo(() => new Set(realDocs.map(d => d.id)), [realDocs])
+  const mergedDocuments = useMemo(
+    () => [...realDocs, ...documents.filter(d => !realDocIds.has(d.id))],
+    [realDocs, documents, realDocIds],
+  )
 
   // ── Fetch real documents from /api/documents ──
   // PT-1-a-retry: fetch is wrapped in useCallback + called from useEffect so
@@ -1423,7 +1572,7 @@ export default function DocumentsPage() {
   }, [fetchDocuments])
 
   const filteredDocs = useMemo(() => {
-    let result = documents
+    let result = mergedDocuments
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase()
       result = result.filter(d =>
@@ -1440,56 +1589,51 @@ export default function DocumentsPage() {
       result = result.filter(d => anomalyDocIds.has(d.id))
     }
     return result
-  }, [documents, searchQuery, activeTab, anomalies])
+  }, [mergedDocuments, searchQuery, activeTab, anomalies])
 
-  const handleUpload = useCallback((files: File[], docType: DocType) => {
-    const newDocs: SmartDocument[] = files.map((f, i) => ({
-      id: `doc-new-${Date.now()}-${i}`,
-      name: f.name,
-      type: docType,
-      client: 'Unassigned',
-      status: 'uploading' as DocStatus,
-      ocrStatus: 'queued' as OCRStatus,
-      uploadDate: new Date().toISOString().split('T')[0],
-      size: `${(f.size / (1024 * 1024)).toFixed(1)} MB`,
-      sizeBytes: f.size,
-      format: f.name.split('.').pop()?.toUpperCase() || 'PDF',
-      extractedFields: [],
-      extractedText: '',
-      classificationConfidence: 0,
-      extractionAccuracy: 0,
-      ocrProgress: 0,
-      summary: null,
-      anomalies: [],
-      tasks: [],
-    }))
-    setDocuments(prev => [...newDocs, ...prev])
-    toast.success(`${files.length} document${files.length !== 1 ? 's' : ''} queued for upload`)
+  // ── REAL upload to Firebase Storage ──
+  // Replaces the previous mock (setTimeout-based) processing. Files are now
+  // uploaded to org-isolated Firebase Storage paths, metadata is written to
+  // the Firestore `documents` collection, and the real-time subscription in
+  // useDocuments() surfaces them in the UI automatically. Upload progress is
+  // tracked in the `uploads` array and rendered by DocumentUploadHub.
+  const handleUpload = useCallback(async (files: File[], docType: DocType) => {
+    const category = DOC_TYPE_TO_CATEGORY[docType] ?? 'documents'
+    toast.info(`Uploading ${files.length} file${files.length !== 1 ? 's' : ''} to Firebase Storage…`)
+    try {
+      const uploaded = await uploadMany(files, { category })
+      const failed = files.length - uploaded.length
+      if (uploaded.length > 0) {
+        toast.success(`${uploaded.length} file${uploaded.length !== 1 ? 's' : ''} uploaded successfully`)
+      }
+      if (failed > 0) {
+        toast.error(`${failed} file${failed !== 1 ? 's' : ''} failed to upload`)
+      }
+    } catch {
+      toast.error('Upload failed. Please try again.')
+    }
+  }, [uploadMany])
 
-    // Simulate processing
-    newDocs.forEach(nd => {
-      setTimeout(() => {
-        setDocuments(prev => prev.map(d =>
-          d.id === nd.id ? { ...d, status: 'processing', ocrStatus: 'processing', ocrProgress: 15 } : d
-        ))
-      }, 1500)
-      setTimeout(() => {
-        setDocuments(prev => prev.map(d =>
-          d.id === nd.id ? { ...d, ocrProgress: 45, classificationConfidence: 82 } : d
-        ))
-      }, 3000)
-      setTimeout(() => {
-        setDocuments(prev => prev.map(d =>
-          d.id === nd.id ? {
-            ...d, status: 'extracted', ocrStatus: 'extracted', ocrProgress: 100,
-            extractionAccuracy: 87, classificationConfidence: 91,
-            extractedFields: getFieldsForType(docType),
-            extractedText: `Extracted content from ${f.name}\nDocument Type: ${TYPE_CONFIG[docType].label}\nProcessing completed successfully.`,
-          } : d
-        ))
-      }, 5000)
-    })
-  }, [])
+  // ── Download / Preview a real file from Firebase Storage ──
+  // Fetches a fresh download URL and opens it in a new tab (preview) or
+  // triggers a download. Only works for real Firestore-backed documents.
+  const handleDownload = useCallback(async (doc: SmartDocument) => {
+    const real = doc as SmartDocument & { _downloadURL?: string; _isReal?: boolean }
+    if (!real._isReal) {
+      toast.info('This demo document is not backed by a real file.')
+      return
+    }
+    try {
+      const url = await getDownloadUrl(doc.id)
+      if (url) {
+        window.open(url, '_blank', 'noopener,noreferrer')
+      } else {
+        toast.error('Could not generate a download link for this file.')
+      }
+    } catch {
+      toast.error('Download failed. Please try again.')
+    }
+  }, [getDownloadUrl])
 
   const handleReprocess = useCallback((id: string) => {
     setDocuments(prev => prev.map(d =>
@@ -1549,14 +1693,30 @@ export default function DocumentsPage() {
     setViewerOpen(true)
   }, [])
 
-  const handleDelete = useCallback((id: string) => {
-    setDocuments(prev => prev.filter(d => d.id !== id))
+  // ── Delete a document ──
+  // For real Firebase Storage files, this deletes BOTH the Storage object and
+  // the Firestore metadata (via useDocuments().remove). For legacy demo docs,
+  // it just removes them from local state.
+  const handleDelete = useCallback(async (id: string) => {
+    const doc = mergedDocuments.find(d => d.id === id)
+    const real = doc as (SmartDocument & { _isReal?: boolean }) | undefined
+    if (real?._isReal) {
+      try {
+        await remove(id)
+        toast.success('File deleted from Firebase Storage')
+      } catch {
+        toast.error('Could not delete the file. Please try again.')
+        return
+      }
+    } else {
+      setDocuments(prev => prev.filter(d => d.id !== id))
+      toast.success('Document deleted')
+    }
     if (selectedDoc?.id === id) {
       setViewerOpen(false)
       setSelectedDoc(null)
     }
-    toast.success('Document deleted')
-  }, [selectedDoc])
+  }, [mergedDocuments, remove, selectedDoc])
 
   return (
     <div className="p-4 sm:p-6 space-y-6 max-w-7xl mx-auto">
@@ -1583,19 +1743,19 @@ export default function DocumentsPage() {
       </div>
 
       {/* Section H: Stats Bar */}
-      <StatsBar documents={documents} anomalies={anomalies} />
+      <StatsBar documents={mergedDocuments} anomalies={anomalies} />
 
       {/* Section A: Upload Hub */}
       <div id="document-upload-hub">
-        <DocumentUploadHub onUpload={handleUpload} />
+        <DocumentUploadHub onUpload={handleUpload} uploads={uploads} />
       </div>
 
       {/* Main Grid: Processing + Classification */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Section B: OCR Processing Center */}
-        <OCRProcessingCenter documents={documents} onReprocess={handleReprocess} />
+        <OCRProcessingCenter documents={mergedDocuments} onReprocess={handleReprocess} />
         {/* Section D: Document Classification */}
-        <DocumentClassification documents={documents} />
+        <DocumentClassification documents={mergedDocuments} />
       </div>
 
       {/* Tab Filters + Document Grid */}
@@ -1628,7 +1788,7 @@ export default function DocumentsPage() {
               <Loader2 className="h-10 w-10 text-emerald-500 animate-spin mb-3" />
               <p className="text-sm text-muted-foreground">Loading documents…</p>
             </div>
-          ) : documents.length === 0 ? (
+          ) : mergedDocuments.length === 0 ? (
             // PT-1-a-retry: real empty state with CTA when no Document rows exist
             // in the DB (instead of falling back to fake Sharma & Co / Patel / HDFC / SBI summaries).
             <div className="flex flex-col items-center justify-center py-16 text-center gap-3">
@@ -1677,7 +1837,7 @@ export default function DocumentsPage() {
       {/* Bottom Row: Summaries + Tasks + Anomalies */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Section E: Auto-Generated Summaries */}
-        <AutoSummaries documents={documents} onGenerateSummary={handleGenerateSummary} />
+        <AutoSummaries documents={mergedDocuments} onGenerateSummary={handleGenerateSummary} />
         {/* Section F: Auto-Created Tasks */}
         <AutoTasks tasks={allTasks} />
         {/* Section G: Anomaly Detection */}
@@ -1691,6 +1851,8 @@ export default function DocumentsPage() {
         onClose={() => { setViewerOpen(false); setSelectedDoc(null) }}
         onApprove={handleApprove}
         onFieldEdit={handleFieldEdit}
+        onDelete={handleDelete}
+        onDownload={handleDownload}
       />
     </div>
   )

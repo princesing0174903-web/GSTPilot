@@ -28,6 +28,12 @@ import {
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
+import {
+  uploadFile,
+  validateFile,
+  friendlyStorageError,
+} from '@/lib/firebase/storage-service';
+import { useOrg } from '@/contexts/OrgContext';
 
 // ─── Color Palette (Emerald/Teal — NO blue/indigo) ────────────────────────
 const COLORS = {
@@ -258,7 +264,11 @@ export default function WhiteLabelPage() {
   const [settings, setSettings] = useState<FirmSettingsData>(DEFAULT_SETTINGS);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const [domainStatus, setDomainStatus] = useState<DomainStatus>('not_configured');
+  const [logoUploading, setLogoUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // ── Organization (required for org-scoped Firebase Storage uploads) ──
+  const { organization } = useOrg();
 
   // ── Data Fetching ────────────────────────────────────────────────────────
   const fetchSettings = useCallback(async () => {
@@ -345,31 +355,64 @@ export default function WhiteLabelPage() {
     }
   };
 
+  // ── Real Firebase Storage upload for the firm logo ──
+  // Logos are branding assets (not "documents"), so we use the lower-level
+  // uploadFile() from storage-service directly — no `documents` collection
+  // entry is created. The upload is org-scoped via organization.id.
+  const uploadLogoFile = async (file: File) => {
+    if (logoUploading) return; // Prevent double-upload
+    if (!organization?.id) {
+      toast.error('No organization', {
+        description: 'Please sign in to an organization to upload a logo.',
+      });
+      return;
+    }
+
+    // Pre-flight validation: 100MB max + PNG/JPG/JPEG only (matches Storage rules)
+    const validationError = validateFile(file);
+    if (validationError) {
+      toast.error('Invalid file', {
+        description: validationError,
+      });
+      return;
+    }
+
+    setLogoUploading(true);
+    const toastId = toast.loading('Uploading logo...', {
+      description: 'Your logo is being uploaded to secure storage.',
+    });
+
+    try {
+      const result = await uploadFile(file, {
+        organizationId: organization.id,
+        category: 'documents',
+        customMetadata: { purpose: 'logo' },
+      });
+
+      setLogoPreview(result.downloadURL);
+      setSettings((prev) => ({ ...prev, logoUrl: result.downloadURL }));
+      toast.success('Logo uploaded', {
+        id: toastId,
+        description: 'Save changes to apply your new branding.',
+        icon: <CheckCircle2 className="h-4 w-4 text-emerald-500" />,
+      });
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : friendlyStorageError(err);
+      toast.error('Upload failed', {
+        id: toastId,
+        description: message,
+        icon: <AlertCircle className="h-4 w-4 text-red-500" />,
+      });
+    } finally {
+      setLogoUploading(false);
+    }
+  };
+
   const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
-    if (!file.type.startsWith('image/')) {
-      toast.error('Invalid file type', {
-        description: 'Please upload an image file (PNG, JPG, SVG).',
-      });
-      return;
-    }
-
-    if (file.size > 2 * 1024 * 1024) {
-      toast.error('File too large', {
-        description: 'Logo must be under 2MB.',
-      });
-      return;
-    }
-
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const dataUrl = reader.result as string;
-      setLogoPreview(dataUrl);
-      setSettings((prev) => ({ ...prev, logoUrl: dataUrl }));
-    };
-    reader.readAsDataURL(file);
+    void uploadLogoFile(file);
   };
 
   const handleRemoveLogo = () => {
@@ -389,14 +432,8 @@ export default function WhiteLabelPage() {
     e.preventDefault();
     e.stopPropagation();
     const file = e.dataTransfer.files?.[0];
-    if (file && file.type.startsWith('image/')) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const dataUrl = reader.result as string;
-        setLogoPreview(dataUrl);
-        setSettings((prev) => ({ ...prev, logoUrl: dataUrl }));
-      };
-      reader.readAsDataURL(file);
+    if (file) {
+      void uploadLogoFile(file);
     }
   };
 
@@ -533,7 +570,7 @@ export default function WhiteLabelPage() {
                           Logo uploaded
                         </p>
                         <p className="text-xs text-muted-foreground">
-                          PNG, JPG, or SVG — Max 2MB
+                          PNG, JPG, or JPEG — Max 100MB
                         </p>
                       </div>
                       <Button
@@ -557,7 +594,7 @@ export default function WhiteLabelPage() {
                         Drag &amp; drop or click to upload
                       </span>
                       <span className="text-xs text-muted-foreground/60 mt-0.5">
-                        PNG, JPG, or SVG — Max 2MB
+                        PNG, JPG, or JPEG — Max 100MB
                       </span>
                     </label>
                   )}
@@ -565,7 +602,7 @@ export default function WhiteLabelPage() {
                     ref={fileInputRef}
                     id="logo-upload"
                     type="file"
-                    accept="image/*"
+                    accept=".png,.jpg,.jpeg"
                     onChange={handleLogoUpload}
                     className="hidden"
                   />

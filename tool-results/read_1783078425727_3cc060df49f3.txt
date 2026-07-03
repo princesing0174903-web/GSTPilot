@@ -1,0 +1,953 @@
+     1→'use client';
+     2→
+     3→import React, { useState, useEffect, useRef, useCallback } from 'react';
+     4→import {
+     5→  Card,
+     6→  CardContent,
+     7→  CardHeader,
+     8→  CardTitle,
+     9→  CardDescription,
+    10→} from '@/components/ui/card';
+    11→import { Badge } from '@/components/ui/badge';
+    12→import { Button } from '@/components/ui/button';
+    13→import { Input } from '@/components/ui/input';
+    14→import { Label } from '@/components/ui/label';
+    15→import { Progress } from '@/components/ui/progress';
+    16→import { Skeleton } from '@/components/ui/skeleton';
+    17→import { ScrollArea } from '@/components/ui/scroll-area';
+    18→import {
+    19→  Select,
+    20→  SelectContent,
+    21→  SelectItem,
+    22→  SelectTrigger,
+    23→  SelectValue,
+    24→} from '@/components/ui/select';
+    25→import {
+    26→  FolderLock,
+    27→  Upload,
+    28→  Search,
+    29→  FileText,
+    30→  FileSpreadsheet,
+    31→  File,
+    32→  ImageIcon,
+    33→  Download,
+    34→  Plus,
+    35→  HardDrive,
+    36→  CalendarDays,
+    37→  Tag,
+    38→  X,
+    39→  CheckCircle2,
+    40→  Loader2,
+    41→  Inbox,
+    42→  AlertCircle,
+    43→  Trash2,
+    44→  CloudUpload,
+    45→  FileCheck2,
+    46→  FileWarning,
+    47→  Clock,
+    48→} from 'lucide-react';
+    49→import { motion, AnimatePresence } from 'framer-motion';
+    50→import { formatNumber } from '@/lib/gst-utils';
+    51→import {
+    52→  useUploadedFiles,
+    53→  useClients,
+    54→  useUploadFile,
+    55→} from '@/hooks/api';
+    56→import { toast } from 'sonner';
+    57→import { useMutation, useQueryClient } from '@tanstack/react-query';
+    58→
+    59→// ─── Types ─────────────────────────────────────────────────────────────────
+    60→interface UploadedFileItem {
+    61→  id: string;
+    62→  clientId: string | null;
+    63→  originalName: string;
+    64→  storedName: string;
+    65→  fileType: string;
+    66→  fileSize: number;
+    67→  mimeType: string | null;
+    68→  filePath: string | null;
+    69→  status: string;
+    70→  processingStep: string;
+    71→  progress: number;
+    72→  extractedData: string | null;
+    73→  errorMessage: string | null;
+    74→  invoicesCreated: number;
+    75→  errorsCount: number;
+    76→  warningsCount: number;
+    77→  period: string | null;
+    78→  tags: string | null;
+    79→  uploadedBy: string | null;
+    80→  createdAt: string;
+    81→  updatedAt: string;
+    82→  client?: { id: string; tradeName: string } | null;
+    83→}
+    84→
+    85→interface ClientOption {
+    86→  id: string;
+    87→  tradeName: string;
+    88→  gstin: string;
+    89→}
+    90→
+    91→// ─── Status Configuration ──────────────────────────────────────────────────
+    92→const STATUS_CONFIG: Record<string, {
+    93→  label: string;
+    94→  badgeClass: string;
+    95→  icon: React.ComponentType<{ className?: string }>;
+    96→  spinIcon?: boolean;
+    97→}> = {
+    98→  uploading: {
+    99→    label: 'Uploading...',
+   100→    badgeClass: 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-400 dark:border-blue-800',
+   101→    icon: Loader2,
+   102→    spinIcon: true,
+   103→  },
+   104→  uploaded: {
+   105→    label: 'Uploaded',
+   106→    badgeClass: 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-400 dark:border-blue-800',
+   107→    icon: Loader2,
+   108→    spinIcon: true,
+   109→  },
+   110→  extracting: {
+   111→    label: 'Extracting...',
+   112→    badgeClass: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-800',
+   113→    icon: Loader2,
+   114→    spinIcon: true,
+   115→  },
+   116→  validating: {
+   117→    label: 'Validating...',
+   118→    badgeClass: 'bg-cyan-50 text-cyan-700 border-cyan-200 dark:bg-cyan-950/40 dark:text-cyan-400 dark:border-cyan-800',
+   119→    icon: Loader2,
+   120→    spinIcon: true,
+   121→  },
+   122→  completed: {
+   123→    label: 'Completed',
+   124→    badgeClass: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800',
+   125→    icon: CheckCircle2,
+   126→  },
+   127→  failed: {
+   128→    label: 'Failed',
+   129→    badgeClass: 'bg-red-50 text-red-700 border-red-200 dark:bg-red-950/40 dark:text-red-400 dark:border-red-800',
+   130→    icon: AlertCircle,
+   131→  },
+   132→};
+   133→
+   134→function getStatusConfig(status: string, processingStep: string) {
+   135→  // Map processingStep to the status for display
+   136→  if (processingStep === 'uploading') return STATUS_CONFIG.uploading;
+   137→  if (processingStep === 'extracting') return STATUS_CONFIG.extracting;
+   138→  if (processingStep === 'validating') return STATUS_CONFIG.validating;
+   139→  if (processingStep === 'completed' || status === 'completed') return STATUS_CONFIG.completed;
+   140→  if (processingStep === 'failed' || status === 'failed') return STATUS_CONFIG.failed;
+   141→  // Fallback based on status
+   142→  if (STATUS_CONFIG[status]) return STATUS_CONFIG[status];
+   143→  return STATUS_CONFIG.uploaded;
+   144→}
+   145→
+   146→// ─── Helpers ───────────────────────────────────────────────────────────────
+   147→function formatFileSize(bytes: number): string {
+   148→  if (bytes === 0) return '0 B';
+   149→  const k = 1024;
+   150→  const sizes = ['B', 'KB', 'MB', 'GB'];
+   151→  const i = Math.floor(Math.log(bytes) / Math.log(k));
+   152→  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+   153→}
+   154→
+   155→function getFileTypeIcon(type: string) {
+   156→  const t = type.toLowerCase();
+   157→  if (t === 'pdf') return <FileText className="h-5 w-5 text-red-500" />;
+   158→  if (['xlsx', 'xls', 'excel'].includes(t)) return <FileSpreadsheet className="h-5 w-5 text-emerald-500" />;
+   159→  if (t === 'csv') return <FileSpreadsheet className="h-5 w-5 text-teal-500" />;
+   160→  if (t === 'json') return <File className="h-5 w-5 text-amber-500" />;
+   161→  if (['jpg', 'jpeg', 'png', 'image'].includes(t)) return <ImageIcon className="h-5 w-5 text-purple-500" />;
+   162→  return <File className="h-5 w-5 text-slate-500" />;
+   163→}
+   164→
+   165→function getFileTypeBadgeColor(type: string): string {
+   166→  const t = type.toLowerCase();
+   167→  if (t === 'pdf') return 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400';
+   168→  if (['xlsx', 'xls', 'excel'].includes(t)) return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400';
+   169→  if (t === 'csv') return 'bg-teal-100 text-teal-700 dark:bg-teal-950/40 dark:text-teal-400';
+   170→  if (t === 'json') return 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400';
+   171→  if (['jpg', 'jpeg', 'png', 'image'].includes(t)) return 'bg-purple-100 text-purple-700 dark:bg-purple-950/40 dark:text-purple-400';
+   172→  return 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-400';
+   173→}
+   174→
+   175→function getFileTypeDisplay(type: string): string {
+   176→  const t = type.toLowerCase();
+   177→  if (t === 'excel') return 'XLSX';
+   178→  return t.toUpperCase();
+   179→}
+   180→
+   181→function formatDate(dateStr: string): string {
+   182→  try {
+   183→    return new Date(dateStr).toLocaleDateString('en-IN', {
+   184→      day: '2-digit',
+   185→      month: 'short',
+   186→      year: 'numeric',
+   187→    });
+   188→  } catch {
+   189→    return dateStr;
+   190→  }
+   191→}
+   192→
+   193→function formatTime(dateStr: string): string {
+   194→  try {
+   195→    return new Date(dateStr).toLocaleTimeString('en-IN', {
+   196→      hour: '2-digit',
+   197→      minute: '2-digit',
+   198→    });
+   199→  } catch {
+   200→    return '';
+   201→  }
+   202→}
+   203→
+   204→// Period helper — generates last 12 months
+   205→function getPeriodOptions(): string[] {
+   206→  const options: string[] = [];
+   207→  const now = new Date();
+   208→  for (let i = 0; i < 12; i++) {
+   209→    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+   210→    const month = d.toLocaleString('en-IN', { month: 'short' });
+   211→    options.push(`${month} ${d.getFullYear()}`);
+   212→  }
+   213→  return options;
+   214→}
+   215→
+   216→// ─── Animated Number Hook ──────────────────────────────────────────────────
+   217→function useAnimatedNumber(target: number, duration: number = 1200) {
+   218→  const [current, setCurrent] = useState(0);
+   219→  const ref = useRef<number | null>(null);
+   220→  const startTime = useRef<number | null>(null);
+   221→
+   222→  useEffect(() => {
+   223→    startTime.current = null;
+   224→    const startValue = current;
+   225→
+   226→    function step(timestamp: number) {
+   227→      if (!startTime.current) startTime.current = timestamp;
+   228→      const elapsed = timestamp - startTime.current;
+   229→      const progress = Math.min(elapsed / duration, 1);
+   230→      const eased = 1 - Math.pow(1 - progress, 3);
+   231→      setCurrent(Math.round(startValue + (target - startValue) * eased));
+   232→      if (progress < 1) {
+   233→        ref.current = requestAnimationFrame(step);
+   234→      }
+   235→    }
+   236→
+   237→    ref.current = requestAnimationFrame(step);
+   238→    return () => {
+   239→      if (ref.current) cancelAnimationFrame(ref.current);
+   240→    };
+   241→  }, [target, duration]);
+   242→
+   243→  return current;
+   244→}
+   245→
+   246→// ─── Skeleton Loaders ─────────────────────────────────────────────────────
+   247→function StatCardSkeleton() {
+   248→  return (
+   249→    <div className="p-4 rounded-xl border border-border/30">
+   250→      <div className="flex items-center gap-3 mb-2">
+   251→        <Skeleton className="h-9 w-9 rounded-lg" />
+   252→        <div className="flex-1 space-y-1.5">
+   253→          <Skeleton className="h-3 w-20" />
+   254→          <Skeleton className="h-6 w-16" />
+   255→        </div>
+   256→      </div>
+   257→    </div>
+   258→  );
+   259→}
+   260→
+   261→function FileRowSkeleton() {
+   262→  return (
+   263→    <div className="flex items-center gap-4 p-4 rounded-xl border border-border/30">
+   264→      <Skeleton className="h-10 w-10 rounded-lg shrink-0" />
+   265→      <div className="flex-1 min-w-0 space-y-2">
+   266→        <Skeleton className="h-4 w-48" />
+   267→        <Skeleton className="h-3 w-32" />
+   268→      </div>
+   269→      <Skeleton className="h-6 w-20 rounded-full" />
+   270→      <Skeleton className="h-8 w-8 rounded" />
+   271→    </div>
+   272→  );
+   273→}
+   274→
+   275→// ═══════════════════════════════════════════════════════════════════════════
+   276→// MAIN COMPONENT
+   277→// ═══════════════════════════════════════════════════════════════════════════
+   278→export default function DocumentVaultPage() {
+   279→  const queryClient = useQueryClient();
+   280→
+   281→  // ── React Query data hooks ──
+   282→  const { data: filesData, isLoading: filesLoading, error: filesError } = useUploadedFiles(undefined, {
+   283→    refetchInterval: (query) => {
+   284→      const files = (query.state.data as { files: UploadedFileItem[] } | undefined)?.files ?? [];
+   285→      const hasProcessing = files.some(
+   286→        f => f.status === 'uploaded' ||
+   287→             f.status === 'processing' ||
+   288→             f.processingStep === 'uploading' ||
+   289→             f.processingStep === 'extracting' ||
+   290→             f.processingStep === 'validating'
+   291→      );
+   292→      return hasProcessing ? 3000 : false;
+   293→    },
+   294→  });
+   295→  const { data: clientsData, isLoading: clientsLoading } = useClients();
+   296→
+   297→  // ── Derived data ──
+   298→  const files: UploadedFileItem[] = (filesData?.files ?? []) as UploadedFileItem[];
+   299→  const clients: ClientOption[] = (clientsData?.clients ?? []).map((c: any) => ({
+   300→    id: c.id,
+   301→    tradeName: c.tradeName,
+   302→    gstin: c.gstin,
+   303→  }));
+   304→  const loading = filesLoading || clientsLoading;
+   305→  const error = filesError ? (filesError instanceof Error ? filesError.message : 'Failed to fetch files') : null;
+   306→
+   307→  // ── State ────────────────────────────────────────────────────────────────
+   308→  const [searchQuery, setSearchQuery] = useState('');
+   309→  const [selectedClientId, setSelectedClientId] = useState('');
+   310→  const [selectedPeriod, setSelectedPeriod] = useState('');
+   311→  const [isDragging, setIsDragging] = useState(false);
+   312→  const fileInputRef = useRef<HTMLInputElement>(null);
+   313→  const [uploadingFiles, setUploadingFiles] = useState<Set<string>>(new Set());
+   314→
+   315→  // ── File upload mutation ──
+   316→  const uploadMutation = useUploadFile();
+   317→
+   318→  // ── Delete mutation ──
+   319→  const deleteMutation = useMutation({
+   320→    mutationFn: async (fileId: string) => {
+   321→      const res = await fetch(`/api/upload?id=${fileId}`, { method: 'DELETE' });
+   322→      if (!res.ok) {
+   323→        const err = await res.json().catch(() => ({ error: 'Delete failed' }));
+   324→        throw new Error(err.error || `HTTP ${res.status}`);
+   325→      }
+   326→      return res.json();
+   327→    },
+   328→    onSuccess: () => {
+   329→      queryClient.invalidateQueries({ queryKey: ['documents'] });
+   330→      toast.success('File deleted successfully');
+   331→    },
+   332→    onError: (err) => {
+   333→      toast.error(err instanceof Error ? err.message : 'Failed to delete file');
+   334→    },
+   335→  });
+   336→
+   337→  // ── Stats ────────────────────────────────────────────────────────────────
+   338→  const totalFiles = files.length;
+   339→  const totalStorage = files.reduce((sum, f) => sum + f.fileSize, 0);
+   340→  const completedCount = files.filter(f => f.status === 'completed').length;
+   341→  const processingCount = files.filter(
+   342→    f => f.status !== 'completed' && f.status !== 'failed'
+   343→  ).length;
+   344→  const invoicesExtracted = files.reduce((sum, f) => sum + (f.invoicesCreated || 0), 0);
+   345→  const now = new Date();
+   346→  const filesThisMonth = files.filter((f) => {
+   347→    const created = new Date(f.createdAt);
+   348→    return created.getMonth() === now.getMonth() && created.getFullYear() === now.getFullYear();
+   349→  }).length;
+   350→
+   351→  const animTotalFiles = useAnimatedNumber(totalFiles);
+   352→  const animFilesThisMonth = useAnimatedNumber(filesThisMonth);
+   353→
+   354→  // ── Filtered files ──
+   355→  const filteredFiles = files.filter((file) => {
+   356→    if (!searchQuery.trim()) return true;
+   357→    const q = searchQuery.toLowerCase();
+   358→    return (
+   359→      file.originalName.toLowerCase().includes(q) ||
+   360→      (file.tags && file.tags.toLowerCase().includes(q)) ||
+   361→      (file.client?.tradeName && file.client.tradeName.toLowerCase().includes(q))
+   362→    );
+   363→  });
+   364→
+   365→  // ── Upload handlers ──────────────────────────────────────────────────────
+   366→  const handleFileUpload = useCallback(async (fileList: FileList | File[]) => {
+   367→    const filesToUpload = Array.from(fileList);
+   368→    const acceptedTypes = [
+   369→      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+   370→      'application/vnd.ms-excel',
+   371→      'text/csv',
+   372→      'application/pdf',
+   373→      'application/json',
+   374→      'image/jpeg',
+   375→      'image/png',
+   376→    ];
+   377→    const acceptedExtensions = ['.xlsx', '.xls', '.csv', '.pdf', '.json', '.jpg', '.jpeg', '.png'];
+   378→
+   379→    for (const file of filesToUpload) {
+   380→      const ext = '.' + (file.name.split('.').pop()?.toLowerCase() ?? '');
+   381→      const isAccepted =
+   382→        acceptedTypes.includes(file.type) ||
+   383→        acceptedExtensions.includes(ext);
+   384→
+   385→      if (!isAccepted) {
+   386→        toast.error(`Unsupported file type: ${file.name}`);
+   387→        continue;
+   388→      }
+   389→
+   390→      const formData = new FormData();
+   391→      formData.append('file', file);
+   392→      if (selectedClientId) formData.append('clientId', selectedClientId);
+   393→      if (selectedPeriod) formData.append('period', selectedPeriod);
+   394→
+   395→      setUploadingFiles(prev => new Set(prev).add(file.name));
+   396→
+   397→      uploadMutation.mutate(formData, {
+   398→        onSuccess: () => {
+   399→          toast.success(`${file.name} uploaded successfully`);
+   400→        },
+   401→        onError: (err) => {
+   402→          toast.error(`Failed to upload ${file.name}: ${err.message}`);
+   403→        },
+   404→        onSettled: () => {
+   405→          setUploadingFiles(prev => {
+   406→            const next = new Set(prev);
+   407→            next.delete(file.name);
+   408→            return next;
+   409→          });
+   410→        },
+   411→      });
+   412→    }
+   413→  }, [selectedClientId, selectedPeriod, uploadMutation]);
+   414→
+   415→  const handleDragOver = (e: React.DragEvent) => {
+   416→    e.preventDefault();
+   417→    e.stopPropagation();
+   418→    setIsDragging(true);
+   419→  };
+   420→
+   421→  const handleDragLeave = (e: React.DragEvent) => {
+   422→    e.preventDefault();
+   423→    e.stopPropagation();
+   424→    setIsDragging(false);
+   425→  };
+   426→
+   427→  const handleDrop = (e: React.DragEvent) => {
+   428→    e.preventDefault();
+   429→    e.stopPropagation();
+   430→    setIsDragging(false);
+   431→    const droppedFiles = Array.from(e.dataTransfer.files);
+   432→    if (droppedFiles.length > 0) {
+   433→      handleFileUpload(droppedFiles);
+   434→    }
+   435→  };
+   436→
+   437→  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+   438→    const selectedFiles = Array.from(e.target.files || []);
+   439→    if (selectedFiles.length > 0) {
+   440→      handleFileUpload(selectedFiles);
+   441→    }
+   442→    e.target.value = '';
+   443→  };
+   444→
+   445→  const handleDelete = (fileId: string, fileName: string) => {
+   446→    deleteMutation.mutate(fileId);
+   447→  };
+   448→
+   449→  const handleRetry = () => {
+   450→    queryClient.invalidateQueries({ queryKey: ['documents'] });
+   451→  };
+   452→
+   453→  // ── Render ───────────────────────────────────────────────────────────────
+   454→  return (
+   455→    <div className="p-4 md:p-6 space-y-4">
+   456→      {/* ═══ HEADER ═══ */}
+   457→      <motion.div
+   458→        initial={{ opacity: 0, y: -10 }}
+   459→        animate={{ opacity: 1, y: 0 }}
+   460→        transition={{ duration: 0.4 }}
+   461→        className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
+   462→      >
+   463→        <div className="flex items-center gap-3">
+   464→          <div className="flex items-center justify-center h-10 w-10 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-600 shadow-lg shadow-emerald-600/20">
+   465→            <FolderLock className="h-5 w-5 text-white" />
+   466→          </div>
+   467→          <div>
+   468→            <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground">
+   469→              Document Vault
+   470→            </h1>
+   471→            <p className="text-sm text-muted-foreground mt-0.5">
+   472→              Upload &amp; process GST documents, invoices, and returns
+   473→            </p>
+   474→          </div>
+   475→        </div>
+   476→        <div className="flex items-center gap-2">
+   477→          {processingCount > 0 && (
+   478→            <Badge className="gap-1.5 bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-800">
+   479→              <Loader2 className="h-3 w-3 animate-spin" />
+   480→              {processingCount} processing
+   481→            </Badge>
+   482→          )}
+   483→          <Button
+   484→            onClick={() => fileInputRef.current?.click()}
+   485→            className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg shadow-emerald-600/20"
+   486→          >
+   487→            <Upload className="h-4 w-4" />
+   488→            Upload Files
+   489→          </Button>
+   490→        </div>
+   491→      </motion.div>
+   492→
+   493→      {/* ═══ UPLOAD ZONE ═══ */}
+   494→      <motion.div
+   495→        initial={{ opacity: 0, y: 10 }}
+   496→        animate={{ opacity: 1, y: 0 }}
+   497→        transition={{ delay: 0.1, duration: 0.4 }}
+   498→      >
+   499→        <Card className="border-border/50 bg-card/80 backdrop-blur-sm overflow-hidden">
+   500→          <CardContent className="p-4 md:p-6">
+   501→            {/* Client & Period selectors */}
+   502→            <div className="flex flex-col sm:flex-row gap-3 mb-4">
+   503→              <div className="flex-1 min-w-0">
+   504→                <Label className="text-xs text-muted-foreground mb-1.5 block">Assign to Client (optional)</Label>
+   505→                <Select
+   506→                  value={selectedClientId}
+   507→                  onValueChange={setSelectedClientId}
+   508→                >
+   509→                  <SelectTrigger className="w-full border-border/50 focus:border-emerald-300 dark:focus:border-emerald-700">
+   510→                    <SelectValue placeholder="All clients" />
+   511→                  </SelectTrigger>
+   512→                  <SelectContent>
+   513→                    <SelectItem value="all">All clients</SelectItem>
+   514→                    {clients.map((c) => (
+   515→                      <SelectItem key={c.id} value={c.id}>
+   516→                        {c.tradeName}
+   517→                      </SelectItem>
+   518→                    ))}
+   519→                  </SelectContent>
+   520→                </Select>
+   521→              </div>
+   522→              <div className="flex-1 min-w-0">
+   523→                <Label className="text-xs text-muted-foreground mb-1.5 block">Period (optional)</Label>
+   524→                <Select
+   525→                  value={selectedPeriod}
+   526→                  onValueChange={setSelectedPeriod}
+   527→                >
+   528→                  <SelectTrigger className="w-full border-border/50 focus:border-emerald-300 dark:focus:border-emerald-700">
+   529→                    <SelectValue placeholder="Select period" />
+   530→                  </SelectTrigger>
+   531→                  <SelectContent>
+   532→                    {getPeriodOptions().map((p) => (
+   533→                      <SelectItem key={p} value={p}>
+   534→                        {p}
+   535→                      </SelectItem>
+   536→                    ))}
+   537→                  </SelectContent>
+   538→                </Select>
+   539→              </div>
+   540→            </div>
+   541→
+   542→            {/* Drag & Drop Zone */}
+   543→            <motion.div
+   544→              animate={isDragging ? { scale: 1.005 } : { scale: 1 }}
+   545→              onDragOver={handleDragOver}
+   546→              onDragLeave={handleDragLeave}
+   547→              onDrop={handleDrop}
+   548→              onClick={() => fileInputRef.current?.click()}
+   549→              className={`
+   550→                relative overflow-hidden rounded-xl border-2 border-dashed transition-all duration-300 cursor-pointer
+   551→                ${isDragging
+   552→                  ? 'border-emerald-400 bg-emerald-50/60 dark:bg-emerald-950/20'
+   553→                  : 'border-border/50 bg-gradient-to-br from-slate-50/80 via-white to-emerald-50/20 dark:from-slate-900/50 dark:via-card dark:to-emerald-950/10 hover:border-emerald-300 dark:hover:border-emerald-700'
+   554→                }
+   555→              `}
+   556→            >
+   557→              <div className="py-8 md:py-10 px-4 flex flex-col items-center text-center">
+   558→                <div className={`
+   559→                  h-14 w-14 rounded-2xl flex items-center justify-center mb-3 transition-colors
+   560→                  ${isDragging
+   561→                    ? 'bg-emerald-100 dark:bg-emerald-900/40'
+   562→                    : 'bg-muted/50'
+   563→                  }
+   564→                `}>
+   565→                  <CloudUpload className={`h-7 w-7 transition-colors ${isDragging ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground'}`} />
+   566→                </div>
+   567→                <p className="text-sm font-medium text-foreground mb-1">
+   568→                  {isDragging ? 'Drop files here to upload' : 'Drag & drop files here, or click to browse'}
+   569→                </p>
+   570→                <p className="text-xs text-muted-foreground">
+   571→                  Supports Excel (.xlsx), CSV, PDF, JSON, and Images (.jpg, .png)
+   572→                </p>
+   573→                {uploadingFiles.size > 0 && (
+   574→                  <div className="mt-3 flex items-center gap-2">
+   575→                    <Loader2 className="h-4 w-4 animate-spin text-emerald-600" />
+   576→                    <span className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">
+   577→                      Uploading {uploadingFiles.size} file{uploadingFiles.size > 1 ? 's' : ''}...
+   578→                    </span>
+   579→                  </div>
+   580→                )}
+   581→              </div>
+   582→              <input
+   583→                ref={fileInputRef}
+   584→                type="file"
+   585→                accept=".xlsx,.xls,.csv,.pdf,.json,.jpg,.jpeg,.png"
+   586→                multiple
+   587→                className="hidden"
+   588→                onChange={handleFileSelect}
+   589→              />
+   590→            </motion.div>
+   591→          </CardContent>
+   592→        </Card>
+   593→      </motion.div>
+   594→
+   595→      {/* ═══ STATS ROW ═══ */}
+   596→      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 md:gap-4">
+   597→        <motion.div
+   598→          initial={{ opacity: 0, y: 15 }}
+   599→          animate={{ opacity: 1, y: 0 }}
+   600→          transition={{ delay: 0.15, duration: 0.4 }}
+   601→        >
+   602→          <Card className="border-border/50 bg-card/80 backdrop-blur-sm hover:shadow-lg hover:shadow-emerald-500/5 transition-all duration-300">
+   603→            <CardContent className="p-4">
+   604→              {loading ? (
+   605→                <StatCardSkeleton />
+   606→              ) : (
+   607→                <div className="flex items-center gap-3">
+   608→                  <div className="flex items-center justify-center h-10 w-10 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-100 dark:border-emerald-900/50">
+   609→                    <FileText className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+   610→                  </div>
+   611→                  <div>
+   612→                    <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+   613→                      Total Files
+   614→                    </p>
+   615→                    <p className="text-xl font-bold text-foreground">{formatNumber(animTotalFiles)}</p>
+   616→                  </div>
+   617→                </div>
+   618→              )}
+   619→            </CardContent>
+   620→          </Card>
+   621→        </motion.div>
+   622→
+   623→        <motion.div
+   624→          initial={{ opacity: 0, y: 15 }}
+   625→          animate={{ opacity: 1, y: 0 }}
+   626→          transition={{ delay: 0.2, duration: 0.4 }}
+   627→        >
+   628→          <Card className="border-border/50 bg-card/80 backdrop-blur-sm hover:shadow-lg hover:shadow-emerald-500/5 transition-all duration-300">
+   629→            <CardContent className="p-4">
+   630→              {loading ? (
+   631→                <StatCardSkeleton />
+   632→              ) : (
+   633→                <div className="flex items-center gap-3">
+   634→                  <div className="flex items-center justify-center h-10 w-10 rounded-xl bg-teal-50 dark:bg-teal-950/40 border border-teal-100 dark:border-teal-900/50">
+   635→                    <HardDrive className="h-5 w-5 text-teal-600 dark:text-teal-400" />
+   636→                  </div>
+   637→                  <div>
+   638→                    <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+   639→                      Storage
+   640→                    </p>
+   641→                    <p className="text-xl font-bold text-foreground">{formatFileSize(totalStorage)}</p>
+   642→                  </div>
+   643→                </div>
+   644→              )}
+   645→            </CardContent>
+   646→          </Card>
+   647→        </motion.div>
+   648→
+   649→        <motion.div
+   650→          initial={{ opacity: 0, y: 15 }}
+   651→          animate={{ opacity: 1, y: 0 }}
+   652→          transition={{ delay: 0.25, duration: 0.4 }}
+   653→        >
+   654→          <Card className="border-border/50 bg-card/80 backdrop-blur-sm hover:shadow-lg hover:shadow-emerald-500/5 transition-all duration-300">
+   655→            <CardContent className="p-4">
+   656→              {loading ? (
+   657→                <StatCardSkeleton />
+   658→              ) : (
+   659→                <div className="flex items-center gap-3">
+   660→                  <div className="flex items-center justify-center h-10 w-10 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-100 dark:border-emerald-900/50">
+   661→                    <FileCheck2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+   662→                  </div>
+   663→                  <div>
+   664→                    <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+   665→                      Processed
+   666→                    </p>
+   667→                    <p className="text-xl font-bold text-foreground">{completedCount}</p>
+   668→                  </div>
+   669→                </div>
+   670→              )}
+   671→            </CardContent>
+   672→          </Card>
+   673→        </motion.div>
+   674→
+   675→        <motion.div
+   676→          initial={{ opacity: 0, y: 15 }}
+   677→          animate={{ opacity: 1, y: 0 }}
+   678→          transition={{ delay: 0.3, duration: 0.4 }}
+   679→        >
+   680→          <Card className="border-border/50 bg-card/80 backdrop-blur-sm hover:shadow-lg hover:shadow-emerald-500/5 transition-all duration-300">
+   681→            <CardContent className="p-4">
+   682→              {loading ? (
+   683→                <StatCardSkeleton />
+   684→              ) : (
+   685→                <div className="flex items-center gap-3">
+   686→                  <div className="flex items-center justify-center h-10 w-10 rounded-xl bg-purple-50 dark:bg-purple-950/40 border border-purple-100 dark:border-purple-900/50">
+   687→                    <CalendarDays className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+   688→                  </div>
+   689→                  <div>
+   690→                    <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+   691→                      This Month
+   692→                    </p>
+   693→                    <p className="text-xl font-bold text-foreground">{formatNumber(animFilesThisMonth)}</p>
+   694→                  </div>
+   695→                </div>
+   696→              )}
+   697→            </CardContent>
+   698→          </Card>
+   699→        </motion.div>
+   700→      </div>
+   701→
+   702→      {/* ═══ FILE LIST ═══ */}
+   703→      <motion.div
+   704→        initial={{ opacity: 0, y: 15 }}
+   705→        animate={{ opacity: 1, y: 0 }}
+   706→        transition={{ delay: 0.35, duration: 0.4 }}
+   707→      >
+   708→        <Card className="border-border/50 bg-card/80 backdrop-blur-sm">
+   709→          <CardHeader className="pb-3">
+   710→            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+   711→              <div>
+   712→                <CardTitle className="text-lg">Uploaded Files</CardTitle>
+   713→                <CardDescription className="text-sm mt-1">
+   714→                  {invoicesExtracted > 0
+   715→                    ? `${invoicesExtracted} invoice${invoicesExtracted !== 1 ? 's' : ''} extracted across all files`
+   716→                    : 'Upload files to extract and process invoices'
+   717→                  }
+   718→                </CardDescription>
+   719→              </div>
+   720→              <div className="relative w-full sm:w-64">
+   721→                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+   722→                <Input
+   723→                  placeholder="Search files..."
+   724→                  value={searchQuery}
+   725→                  onChange={(e) => setSearchQuery(e.target.value)}
+   726→                  className="pl-9 border-border/50 focus:border-emerald-300 dark:focus:border-emerald-700"
+   727→                />
+   728→                {searchQuery && (
+   729→                  <button
+   730→                    onClick={() => setSearchQuery('')}
+   731→                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+   732→                  >
+   733→                    <X className="h-4 w-4" />
+   734→                  </button>
+   735→                )}
+   736→              </div>
+   737→            </div>
+   738→          </CardHeader>
+   739→          <CardContent className="pt-0">
+   740→            {error && (
+   741→              <div className="flex items-center gap-2 p-3 rounded-xl bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900/50 mb-4">
+   742→                <AlertCircle className="h-4 w-4 text-red-500 shrink-0" />
+   743→                <p className="text-sm text-red-700 dark:text-red-400">{error}</p>
+   744→                <Button
+   745→                  variant="ghost"
+   746→                  size="sm"
+   747→                  onClick={handleRetry}
+   748→                  className="ml-auto text-xs text-red-600 hover:text-red-700"
+   749→                >
+   750→                  Retry
+   751→                </Button>
+   752→              </div>
+   753→            )}
+   754→
+   755→            {loading ? (
+   756→              <div className="space-y-3">
+   757→                {Array.from({ length: 4 }).map((_, i) => (
+   758→                  <FileRowSkeleton key={i} />
+   759→                ))}
+   760→              </div>
+   761→            ) : files.length === 0 ? (
+   762→              /* ═══ EMPTY STATE ═══ */
+   763→              <motion.div
+   764→                initial={{ opacity: 0 }}
+   765→                animate={{ opacity: 1 }}
+   766→                className="flex flex-col items-center justify-center py-12 text-center"
+   767→              >
+   768→                <div className="h-16 w-16 rounded-2xl bg-emerald-50 dark:bg-emerald-950/30 flex items-center justify-center mb-4">
+   769→                  <Inbox className="h-8 w-8 text-emerald-400" />
+   770→                </div>
+   771→                <h3 className="text-lg font-semibold text-foreground mb-1">
+   772→                  No documents uploaded
+   773→                </h3>
+   774→                <p className="text-sm text-muted-foreground mb-4 max-w-sm">
+   775→                  Upload GST documents, invoices, or returns to start processing.
+   776→                </p>
+   777→                <Button
+   778→                  onClick={() => fileInputRef.current?.click()}
+   779→                  className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg shadow-emerald-600/20"
+   780→                >
+   781→                  <Upload className="h-4 w-4" />
+   782→                  Upload Documents
+   783→                </Button>
+   784→              </motion.div>
+   785→            ) : filteredFiles.length === 0 ? (
+   786→              <motion.div
+   787→                initial={{ opacity: 0 }}
+   788→                animate={{ opacity: 1 }}
+   789→                className="flex flex-col items-center justify-center py-12 text-center"
+   790→              >
+   791→                <div className="h-16 w-16 rounded-2xl bg-muted/50 flex items-center justify-center mb-4">
+   792→                  <Search className="h-8 w-8 text-muted-foreground" />
+   793→                </div>
+   794→                <h3 className="text-lg font-semibold text-foreground mb-1">
+   795→                  No files found
+   796→                </h3>
+   797→                <p className="text-sm text-muted-foreground">
+   798→                  {searchQuery ? `No files match "${searchQuery}"` : 'No files to display'}
+   799→                </p>
+   800→              </motion.div>
+   801→            ) : (
+   802→              <ScrollArea className="max-h-[600px]">
+   803→                <div className="space-y-2 pr-1">
+   804→                  <AnimatePresence>
+   805→                    {filteredFiles.map((file, index) => {
+   806→                      const statusCfg = getStatusConfig(file.status, file.processingStep);
+   807→                      const StatusIcon = statusCfg.icon;
+   808→                      const isProcessing = file.status !== 'completed' && file.status !== 'failed';
+   809→                      const progressValue = file.progress ?? 0;
+   810→
+   811→                      return (
+   812→                        <motion.div
+   813→                          key={file.id}
+   814→                          initial={{ opacity: 0, x: -10 }}
+   815→                          animate={{ opacity: 1, x: 0 }}
+   816→                          exit={{ opacity: 0, scale: 0.95 }}
+   817→                          transition={{ delay: index * 0.03, duration: 0.3 }}
+   818→                          className={`
+   819→                            group flex flex-col sm:flex-row sm:items-center gap-3 p-4 rounded-xl border transition-all
+   820→                            ${isProcessing
+   821→                              ? 'border-amber-200/50 bg-amber-50/30 dark:border-amber-800/30 dark:bg-amber-950/10'
+   822→                              : file.status === 'failed'
+   823→                                ? 'border-red-200/50 bg-red-50/20 dark:border-red-800/30 dark:bg-red-950/10'
+   824→                                : 'border-border/30 hover:border-emerald-200/60 dark:hover:border-emerald-800/50 hover:shadow-md hover:shadow-emerald-500/5 bg-card/50'
+   825→                            }
+   826→                          `}
+   827→                        >
+   828→                          {/* File icon */}
+   829→                          <div className="flex items-center justify-center h-10 w-10 rounded-lg bg-muted/50 shrink-0">
+   830→                            {getFileTypeIcon(file.fileType)}
+   831→                          </div>
+   832→
+   833→                          {/* File info */}
+   834→                          <div className="flex-1 min-w-0">
+   835→                            <div className="flex items-center gap-2 mb-0.5">
+   836→                              <p className="text-sm font-semibold text-foreground truncate" title={file.originalName}>
+   837→                                {file.originalName}
+   838→                              </p>
+   839→                              {file.invoicesCreated > 0 && (
+   840→                                <Badge className="text-[9px] px-1.5 py-0 bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 border-0 shrink-0">
+   841→                                  {file.invoicesCreated} invoice{file.invoicesCreated !== 1 ? 's' : ''}
+   842→                                </Badge>
+   843→                              )}
+   844→                            </div>
+   845→                            <div className="flex items-center gap-2 flex-wrap">
+   846→                              <Badge
+   847→                                variant="outline"
+   848→                                className={`text-[10px] px-2 py-0 border-0 font-semibold ${getFileTypeBadgeColor(file.fileType)}`}
+   849→                              >
+   850→                                {getFileTypeDisplay(file.fileType)}
+   851→                              </Badge>
+   852→                              {file.client && (
+   853→                                <span className="text-[10px] text-muted-foreground">
+   854→                                  {file.client.tradeName}
+   855→                                </span>
+   856→                              )}
+   857→                              {file.period && (
+   858→                                <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
+   859→                                  <Clock className="h-2.5 w-2.5" />
+   860→                                  {file.period}
+   861→                                </span>
+   862→                              )}
+   863→                              <span className="text-[10px] text-muted-foreground">
+   864→                                {formatFileSize(file.fileSize)}
+   865→                              </span>
+   866→                              <span className="text-[10px] text-muted-foreground">
+   867→                                {formatDate(file.createdAt)} {formatTime(file.createdAt)}
+   868→                              </span>
+   869→                            </div>
+   870→
+   871→                            {/* Processing progress bar */}
+   872→                            {isProcessing && (
+   873→                              <div className="mt-2">
+   874→                                <Progress value={progressValue} className="h-1.5" />
+   875→                                <p className="text-[10px] text-muted-foreground mt-1">
+   876→                                  {statusCfg.label} {progressValue}%
+   877→                                </p>
+   878→                              </div>
+   879→                            )}
+   880→
+   881→                            {/* Error message */}
+   882→                            {file.status === 'failed' && file.errorMessage && (
+   883→                              <p className="text-[10px] text-red-600 dark:text-red-400 mt-1 flex items-start gap-1">
+   884→                                <AlertCircle className="h-3 w-3 shrink-0 mt-0.5" />
+   885→                                {file.errorMessage}
+   886→                              </p>
+   887→                            )}
+   888→
+   889→                            {/* Tags */}
+   890→                            {file.tags && (
+   891→                              <div className="flex flex-wrap gap-1 mt-1.5">
+   892→                                {file.tags.split(',').slice(0, 4).map((tag, i) => (
+   893→                                  <Badge
+   894→                                    key={i}
+   895→                                    variant="outline"
+   896→                                    className="text-[9px] px-1.5 py-0 border-emerald-200/50 text-emerald-600 dark:border-emerald-800/50 dark:text-emerald-400 bg-emerald-50/50 dark:bg-emerald-950/20"
+   897→                                  >
+   898→                                    <Tag className="h-2 w-2 mr-0.5" />
+   899→                                    {tag.trim()}
+   900→                                  </Badge>
+   901→                                ))}
+   902→                                {file.tags.split(',').length > 4 && (
+   903→                                  <span className="text-[9px] text-muted-foreground self-center">
+   904→                                    +{file.tags.split(',').length - 4}
+   905→                                  </span>
+   906→                                )}
+   907→                              </div>
+   908→                            )}
+   909→                          </div>
+   910→
+   911→                          {/* Status badge + actions */}
+   912→                          <div className="flex items-center gap-2 shrink-0 sm:ml-auto">
+   913→                            <Badge className={`text-[10px] px-2.5 py-0.5 border font-medium ${statusCfg.badgeClass}`}>
+   914→                              <StatusIcon className={`h-3 w-3 mr-1 ${statusCfg.spinIcon ? 'animate-spin' : ''}`} />
+   915→                              {statusCfg.label}
+   916→                            </Badge>
+   917→                            <Button
+   918→                              variant="ghost"
+   919→                              size="sm"
+   920→                              onClick={(e) => {
+   921→                                e.stopPropagation();
+   922→                                handleDelete(file.id, file.originalName);
+   923→                              }}
+   924→                              disabled={deleteMutation.isPending}
+   925→                              className="h-8 w-8 p-0 text-muted-foreground hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity"
+   926→                              title="Delete file"
+   927→                            >
+   928→                              <Trash2 className="h-3.5 w-3.5" />
+   929→                            </Button>
+   930→                          </div>
+   931→                        </motion.div>
+   932→                      );
+   933→                    })}
+   934→                  </AnimatePresence>
+   935→                </div>
+   936→              </ScrollArea>
+   937→            )}
+   938→
+   939→            {/* Results count */}
+   940→            {!loading && filteredFiles.length > 0 && (
+   941→              <div className="mt-3 text-center">
+   942→                <p className="text-xs text-muted-foreground">
+   943→                  Showing {filteredFiles.length} of {files.length} file{files.length !== 1 ? 's' : ''}
+   944→                </p>
+   945→              </div>
+   946→            )}
+   947→          </CardContent>
+   948→        </Card>
+   949→      </motion.div>
+   950→    </div>
+   951→  );
+   952→}
+   953→

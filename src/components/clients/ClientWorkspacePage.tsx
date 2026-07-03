@@ -55,6 +55,8 @@ import type {
   FirestoreInvoice,
   FirestoreDocument,
 } from '@/lib/firestore-schema';
+import { useDocuments } from '@/hooks/useDocuments';
+import { validateFile } from '@/lib/firebase/storage-service';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // HELPERS
@@ -194,6 +196,13 @@ export default function ClientWorkspacePage() {
   const { data: documents, loading: docsLoading } = useFireDocuments(selectedClientId);
   const { data: activities, loading: activitiesLoading } = useFireActivities(selectedClientId);
 
+  // ─── Firebase Storage uploads (real) ──────────────────────────────────
+  // useDocuments().upload() pushes files to org-isolated Firebase Storage
+  // under `documents/{clientId}/...` and writes Firestore metadata linked
+  // to the selected client. The Document Vault page reads the same metadata
+  // collection, so uploads from here appear there in real time.
+  const { upload: uploadToStorage } = useDocuments();
+
   const isLoading = clientLoading || returnsLoading;
 
   // ─── Derived data ────────────────────────────────────────────────────
@@ -244,15 +253,66 @@ export default function ClientWorkspacePage() {
   }, []);
 
   const handleUploadDocument = useCallback(() => {
+    // No client selected (or still loading) — bail out. The button is only
+    // visible once a client is loaded, but the guard keeps TS happy.
+    if (!selectedClientId || !client) {
+      toast.error('Select a client before uploading documents');
+      return;
+    }
+
+    // Build a transient <input type="file"> and trigger a real upload to
+    // Firebase Storage on selection. We don't redirect to another page —
+    // the upload runs in place and the file appears in the Document Vault.
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = '.xlsx,.xls,.csv,.pdf,.json';
-    input.onchange = () => {
-      toast.info('Document upload', { description: 'Upload via Firestore is handled by the Document Vault page' });
-      setCurrentView('invoices');
+    input.multiple = true;
+    input.accept = '.pdf,.png,.jpg,.jpeg,.xlsx,.xls,.csv,.doc,.docx';
+    input.onchange = async () => {
+      const files = input.files;
+      if (!files || files.length === 0) return;
+
+      const fileArr = Array.from(files);
+
+      // Pre-flight validation (100 MB limit + supported file types).
+      for (const f of fileArr) {
+        const err = validateFile(f);
+        if (err) {
+          toast.error(`${f.name}: ${err}`);
+          return;
+        }
+      }
+
+      toast.info(`Uploading ${fileArr.length} document(s) to Firebase Storage...`);
+
+      const linkedTo = {
+        type: 'client' as const,
+        id: selectedClientId,
+        label: client.tradeName,
+      };
+
+      try {
+        const results = await Promise.all(
+          fileArr.map((f) =>
+            uploadToStorage({
+              file: f,
+              category: 'documents',
+              subPath: selectedClientId,
+              linkedTo,
+            }),
+          ),
+        );
+        const successCount = results.filter(Boolean).length;
+        if (successCount > 0) {
+          toast.success(`${successCount} document(s) uploaded`);
+        } else {
+          toast.error('Upload failed — please try again.');
+        }
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : 'Upload failed');
+      }
     };
     input.click();
-  }, [setCurrentView]);
+  }, [selectedClientId, client, uploadToStorage]);
 
   const handleRunReconciliation = useCallback(async () => {
     if (!selectedClientId) return;

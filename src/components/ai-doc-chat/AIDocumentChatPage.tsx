@@ -30,6 +30,9 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { Inbox } from 'lucide-react';
+import { useDocuments } from '@/hooks/useDocuments';
+import { validateFile } from '@/lib/firebase/storage-service';
+import { toast } from 'sonner';
 
 // ─── Color Palette (Emerald) ──────────────────────────────────────────────
 const COLORS = {
@@ -163,6 +166,13 @@ export default function AIDocumentChatPage() {
   const inputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // ── Firebase Storage uploads (real) ──
+  // useDocuments() uploads files to org-isolated Firebase Storage paths
+  // (organizations/{orgId}/documents/...) and writes Firestore metadata.
+  // The returned DocumentMetadata carries a real `downloadURL` that we forward
+  // to the chat API so future chat turns can reference the file.
+  const { upload } = useDocuments('documents');
+
   // ── Fetch sessions ───────────────────────────────────────────────────────
   const fetchSessions = useCallback(async () => {
     try {
@@ -193,23 +203,63 @@ export default function AIDocumentChatPage() {
   }, [messages, isTyping]);
 
   // ── Handle file upload ───────────────────────────────────────────────────
+  // Real upload flow:
+  //   1. Pre-flight the file with the shared `validateFile` helper
+  //      (100 MB cap, supported extensions).
+  //   2. Surface the uploaded file in the right-hand panel immediately so the
+  //      user gets the same instant feedback the original UI provided.
+  //   3. Upload to Firebase Storage via useDocuments().upload() — this returns
+  //      DocumentMetadata with a real `downloadURL`. If the upload fails we
+  //      roll back the UI and toast the error.
+  //   4. Create the chat session via the existing /api/ai-doc-chat endpoint,
+  //      forwarding the downloadURL so the backend can reference the file.
+  //   5. Post the system intro message.
   const handleFileUpload = useCallback(async (file: File) => {
+    const validationError = validateFile(file);
+    if (validationError) {
+      toast.error(`${file.name}: ${validationError}`);
+      return;
+    }
+
     const docType = file.name.endsWith('.pdf') ? 'PDF'
       : file.name.endsWith('.xlsx') || file.name.endsWith('.xls') ? 'Excel'
       : file.name.endsWith('.csv') ? 'CSV'
+      : file.name.endsWith('.doc') || file.name.endsWith('.docx') ? 'Word'
+      : file.name.match(/\.(png|jpe?g)$/i) ? 'Image'
       : 'Document';
 
     const sizeStr = file.size < 1024 * 1024
       ? `${(file.size / 1024).toFixed(1)} KB`
       : `${(file.size / (1024 * 1024)).toFixed(1)} MB`;
 
+    // Instant UI feedback — same UX the user had before.
     setUploadedDoc({ name: file.name, type: docType, size: sizeStr });
+
+    // Real upload to Firebase Storage (org-isolated, category='documents').
+    let downloadURL: string | null = null;
+    try {
+      const metadata = await upload({ file, category: 'documents' });
+      downloadURL = metadata?.downloadURL ?? null;
+    } catch (err) {
+      toast.error(`Upload failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      setUploadedDoc(null);
+      return;
+    }
+    if (!downloadURL) {
+      toast.error('Upload failed — please try again.');
+      setUploadedDoc(null);
+      return;
+    }
 
     try {
       const res = await fetch('/api/ai-doc-chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ documentName: file.name, documentType: docType }),
+        body: JSON.stringify({
+          documentName: file.name,
+          documentType: docType,
+          downloadURL,
+        }),
       });
 
       if (res.ok) {
@@ -230,7 +280,7 @@ export default function AIDocumentChatPage() {
       timestamp: new Date().toISOString(),
       citations: [],
     }]);
-  }, []);
+  }, [upload]);
 
   // ── Drag & Drop ──────────────────────────────────────────────────────────
   const handleDragOver = (e: React.DragEvent) => {
@@ -554,7 +604,7 @@ export default function AIDocumentChatPage() {
                   ref={fileInputRef}
                   type="file"
                   className="hidden"
-                  accept=".pdf,.xlsx,.xls,.csv"
+                  accept=".pdf,.png,.jpg,.jpeg,.xlsx,.xls,.csv,.doc,.docx"
                   onChange={(e) => {
                     const file = e.target.files?.[0];
                     if (file) handleFileUpload(file);

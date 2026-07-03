@@ -1,0 +1,1030 @@
+     1→'use client';
+     2→
+     3→import React, { useState, useRef, useCallback } from 'react';
+     4→import { motion, AnimatePresence } from 'framer-motion';
+     5→import {
+     6→  Card,
+     7→  CardContent,
+     8→  CardHeader,
+     9→  CardTitle,
+    10→  CardDescription,
+    11→} from '@/components/ui/card';
+    12→import { Badge } from '@/components/ui/badge';
+    13→import { Button } from '@/components/ui/button';
+    14→import { Input } from '@/components/ui/input';
+    15→import { Label } from '@/components/ui/label';
+    16→import { Switch } from '@/components/ui/switch';
+    17→import { Separator } from '@/components/ui/separator';
+    18→import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+    19→import {
+    20→  Select,
+    21→  SelectContent,
+    22→  SelectItem,
+    23→  SelectTrigger,
+    24→  SelectValue,
+    25→} from '@/components/ui/select';
+    26→import {
+    27→  AlertDialog,
+    28→  AlertDialogAction,
+    29→  AlertDialogCancel,
+    30→  AlertDialogContent,
+    31→  AlertDialogDescription,
+    32→  AlertDialogFooter,
+    33→  AlertDialogHeader,
+    34→  AlertDialogTitle,
+    35→  AlertDialogTrigger,
+    36→} from '@/components/ui/alert-dialog';
+    37→import {
+    38→  Settings,
+    39→  User,
+    40→  Database,
+    41→  Info,
+    42→  Save,
+    43→  Check,
+    44→  Building2,
+    45→  Hash,
+    46→  MapPin,
+    47→  Calendar,
+    48→  Mail,
+    49→  Shield,
+    50→  Bell,
+    51→  Clock,
+    52→  AlertTriangle,
+    53→  Download,
+    54→  Upload,
+    55→  Trash2,
+    56→  HardDrive,
+    57→  ExternalLink,
+    58→  MessageSquare,
+    59→  FileJson,
+    60→  Lock,
+    61→  Eye,
+    62→  EyeOff,
+    63→} from 'lucide-react';
+    64→import { useApp } from '@/contexts/AppContext';
+    65→import { useAuth } from '@/contexts/AuthContext';
+    66→
+    67→// ── Animation variants ──
+    68→const containerVariants = {
+    69→  hidden: { opacity: 0 },
+    70→  visible: {
+    71→    opacity: 1,
+    72→    transition: { staggerChildren: 0.06 },
+    73→  },
+    74→};
+    75→
+    76→const itemVariants = {
+    77→  hidden: { opacity: 0, y: 12 },
+    78→  visible: { opacity: 1, y: 0, transition: { duration: 0.35, ease: 'easeOut' } },
+    79→};
+    80→
+    81→// ── Indian States list ──
+    82→const INDIAN_STATES = [
+    83→  'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh',
+    84→  'Goa', 'Gujarat', 'Haryana', 'Himachal Pradesh', 'Jharkhand',
+    85→  'Karnataka', 'Kerala', 'Madhya Pradesh', 'Maharashtra', 'Manipur',
+    86→  'Meghalaya', 'Mizoram', 'Nagaland', 'Odisha', 'Punjab',
+    87→  'Rajasthan', 'Sikkim', 'Tamil Nadu', 'Telangana', 'Tripura',
+    88→  'Uttar Pradesh', 'Uttarakhand', 'West Bengal',
+    89→  'Andaman and Nicobar Islands', 'Chandigarh',
+    90→  'Dadra and Nagar Haveli and Daman and Diu', 'Delhi',
+    91→  'Jammu and Kashmir', 'Ladakh', 'Lakshadweep', 'Puducherry',
+    92→];
+    93→
+    94→// ── GSTIN validation regex ──
+    95→const GSTIN_REGEX = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
+    96→
+    97→// ── Save button states ──
+    98→type SaveState = 'idle' | 'saving' | 'saved';
+    99→
+   100→// ========================== MAIN COMPONENT ==========================
+   101→export default function TeamManagementPage() {
+   102→  const { } = useApp();
+   103→  const { user } = useAuth();
+   104→
+   105→  // ── General tab state ──
+   106→  const [firmName, setFirmName] = useState('GSTPilot Firm');
+   107→  const [gstin, setGstin] = useState('');
+   108→  const [state, setState] = useState('');
+   109→  const [returnPeriod, setReturnPeriod] = useState('monthly');
+   110→  const [fyStart, setFyStart] = useState('april');
+   111→  const [saveState, setSaveState] = useState<SaveState>('idle');
+   112→
+   113→  // ── Profile tab state ──
+   114→  const [profileName, setProfileName] = useState(user?.name || '');
+   115→  const [emailNotifications, setEmailNotifications] = useState(true);
+   116→  const [filingReminders, setFilingReminders] = useState(true);
+   117→  const [mismatchAlerts, setMismatchAlerts] = useState(true);
+   118→  const [showPassword, setShowPassword] = useState(false);
+   119→  const [currentPassword, setCurrentPassword] = useState('');
+   120→  const [newPassword, setNewPassword] = useState('');
+   121→  const [confirmPassword, setConfirmPassword] = useState('');
+   122→  const [passwordSaveState, setPasswordSaveState] = useState<SaveState>('idle');
+   123→
+   124→  // ── Data tab state ──
+   125→  const [clearDialogOpen, setClearDialogOpen] = useState(false);
+   126→  const fileInputRef = useRef<HTMLInputElement>(null);
+   127→
+   128→  // ── GSTIN validation ──
+   129→  const gstinValid = gstin === '' || GSTIN_REGEX.test(gstin.toUpperCase());
+   130→  const gstinFormatted = gstin.toUpperCase();
+   131→
+   132→  // ── Save handler ──
+   133→  const handleSaveGeneral = useCallback(async () => {
+   134→    setSaveState('saving');
+   135→    try {
+   136→      const res = await fetch('/api/firm-settings', {
+   137→        method: 'PUT',
+   138→        headers: { 'Content-Type': 'application/json' },
+   139→        body: JSON.stringify({
+   140→          firmName,
+   141→          primaryColor: '#059669',
+   142→        }),
+   143→      });
+   144→      if (!res.ok) throw new Error('Save failed');
+   145→      setSaveState('saved');
+   146→      setTimeout(() => setSaveState('idle'), 2000);
+   147→    } catch {
+   148→      setSaveState('idle');
+   149→    }
+   150→  }, [firmName]);
+   151→
+   152→  // ── Password change handler ──
+   153→  const handlePasswordChange = useCallback(() => {
+   154→    if (newPassword && newPassword === confirmPassword) {
+   155→      setPasswordSaveState('saving');
+   156→      setTimeout(() => {
+   157→        setPasswordSaveState('saved');
+   158→        setCurrentPassword('');
+   159→        setNewPassword('');
+   160→        setConfirmPassword('');
+   161→        setTimeout(() => setPasswordSaveState('idle'), 2000);
+   162→      }, 800);
+   163→    }
+   164→  }, [newPassword, confirmPassword]);
+   165→
+   166→  // ── Export data ──
+   167→  const handleExport = useCallback(async () => {
+   168→    try {
+   169→      const res = await fetch('/api/export');
+   170→      if (!res.ok) throw new Error('Export failed');
+   171→      const data = await res.json();
+   172→      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+   173→      const url = URL.createObjectURL(blob);
+   174→      const a = document.createElement('a');
+   175→      a.href = url;
+   176→      a.download = `gstpilot-export-${new Date().toISOString().slice(0, 10)}.json`;
+   177→      a.click();
+   178→      URL.revokeObjectURL(url);
+   179→    } catch {
+   180→      // Silent fail for settings page
+   181→    }
+   182→  }, []);
+   183→
+   184→  // ── Import data ──
+   185→  const handleImport = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+   186→    const file = e.target.files?.[0];
+   187→    if (!file) return;
+   188→    const reader = new FileReader();
+   189→    reader.onload = () => {
+   190→      try {
+   191→        JSON.parse(reader.result as string);
+   192→        // Import logic would go here
+   193→      } catch {
+   194→        // Invalid JSON
+   195→      }
+   196→    };
+   197→    reader.readAsText(file);
+   198→    e.target.value = '';
+   199→  }, []);
+   200→
+   201→  // ── Clear all data ──
+   202→  const handleClearAll = useCallback(() => {
+   203→    setClearDialogOpen(false);
+   204→  }, []);
+   205→
+   206→  // ── Save button renderer ──
+   207→  const renderSaveButton = (
+   208→    state: SaveState,
+   209→    onClick: () => void,
+   210→    label = 'Save Changes',
+   211→  ) => (
+   212→    <Button
+   213→      onClick={onClick}
+   214→      disabled={state === 'saving'}
+   215→      className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white min-w-[140px]"
+   216→    >
+   217→      <AnimatePresence mode="wait">
+   218→        {state === 'idle' && (
+   219→          <motion.span
+   220→            key="idle"
+   221→            initial={{ opacity: 0, scale: 0.8 }}
+   222→            animate={{ opacity: 1, scale: 1 }}
+   223→            exit={{ opacity: 0, scale: 0.8 }}
+   224→            className="flex items-center gap-2"
+   225→          >
+   226→            <Save className="h-4 w-4" />
+   227→            {label}
+   228→          </motion.span>
+   229→        )}
+   230→        {state === 'saving' && (
+   231→          <motion.span
+   232→            key="saving"
+   233→            initial={{ opacity: 0, scale: 0.8 }}
+   234→            animate={{ opacity: 1, scale: 1 }}
+   235→            exit={{ opacity: 0, scale: 0.8 }}
+   236→            className="flex items-center gap-2"
+   237→          >
+   238→            <motion.div
+   239→              animate={{ rotate: 360 }}
+   240→              transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+   241→            >
+   242→              <Save className="h-4 w-4" />
+   243→            </motion.div>
+   244→            Saving...
+   245→          </motion.span>
+   246→        )}
+   247→        {state === 'saved' && (
+   248→          <motion.span
+   249→            key="saved"
+   250→            initial={{ opacity: 0, scale: 0.8 }}
+   251→            animate={{ opacity: 1, scale: 1 }}
+   252→            exit={{ opacity: 0, scale: 0.8 }}
+   253→            className="flex items-center gap-2"
+   254→          >
+   255→            <Check className="h-4 w-4" />
+   256→            Saved!
+   257→          </motion.span>
+   258→        )}
+   259→      </AnimatePresence>
+   260→    </Button>
+   261→  );
+   262→
+   263→  // ==================== RENDER ====================
+   264→  return (
+   265→    <motion.div
+   266→      className="space-y-6 p-4 md:p-6"
+   267→      variants={containerVariants}
+   268→      initial="hidden"
+   269→      animate="visible"
+   270→    >
+   271→      {/* ── Header ── */}
+   272→      <motion.div variants={itemVariants}>
+   273→        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+   274→          <div>
+   275→            <h1 className="text-2xl md:text-3xl font-bold tracking-tight flex items-center gap-2">
+   276→              <Settings className="h-7 w-7 text-emerald-600" />
+   277→              Settings
+   278→            </h1>
+   279→            <p className="text-muted-foreground text-sm mt-1">
+   280→              Configure your workspace
+   281→            </p>
+   282→          </div>
+   283→          <Badge variant="outline" className="gap-1.5 px-3 py-1.5 w-fit border-emerald-200 text-emerald-700">
+   284→            <Shield className="h-3.5 w-3.5 text-emerald-500" />
+   285→            Admin Access
+   286→          </Badge>
+   287→        </div>
+   288→      </motion.div>
+   289→
+   290→      {/* ── Tabs ── */}
+   291→      <motion.div variants={itemVariants}>
+   292→        <Tabs defaultValue="general" className="space-y-6">
+   293→          <TabsList className="w-full sm:w-auto flex h-auto p-1 bg-muted/60">
+   294→            <TabsTrigger value="general" className="gap-1.5 flex-1 sm:flex-none text-xs sm:text-sm">
+   295→              <Building2 className="h-4 w-4" />
+   296→              General
+   297→            </TabsTrigger>
+   298→            <TabsTrigger value="profile" className="gap-1.5 flex-1 sm:flex-none text-xs sm:text-sm">
+   299→              <User className="h-4 w-4" />
+   300→              Profile
+   301→            </TabsTrigger>
+   302→            <TabsTrigger value="data" className="gap-1.5 flex-1 sm:flex-none text-xs sm:text-sm">
+   303→              <Database className="h-4 w-4" />
+   304→              Data
+   305→            </TabsTrigger>
+   306→            <TabsTrigger value="about" className="gap-1.5 flex-1 sm:flex-none text-xs sm:text-sm">
+   307→              <Info className="h-4 w-4" />
+   308→              About
+   309→            </TabsTrigger>
+   310→          </TabsList>
+   311→
+   312→          {/* ═══════════════ GENERAL TAB ═══════════════ */}
+   313→          <TabsContent value="general">
+   314→            <motion.div
+   315→              className="space-y-6"
+   316→              variants={containerVariants}
+   317→              initial="hidden"
+   318→              animate="visible"
+   319→            >
+   320→              <motion.div variants={itemVariants}>
+   321→                <Card>
+   322→                  <CardHeader>
+   323→                    <CardTitle className="flex items-center gap-2 text-base">
+   324→                      <Building2 className="h-5 w-5 text-emerald-600" />
+   325→                      Firm Details
+   326→                    </CardTitle>
+   327→                    <CardDescription>
+   328→                      Basic information about your practice or business
+   329→                    </CardDescription>
+   330→                  </CardHeader>
+   331→                  <CardContent className="space-y-6">
+   332→                    {/* Firm Name */}
+   333→                    <div className="space-y-2">
+   334→                      <Label htmlFor="firm-name" className="flex items-center gap-1.5">
+   335→                        <Building2 className="h-3.5 w-3.5 text-emerald-600" />
+   336→                        Firm Name
+   337→                      </Label>
+   338→                      <Input
+   339→                        id="firm-name"
+   340→                        value={firmName}
+   341→                        onChange={(e) => setFirmName(e.target.value)}
+   342→                        placeholder="Enter firm name"
+   343→                      />
+   344→                    </div>
+   345→
+   346→                    <Separator />
+   347→
+   348→                    {/* GSTIN */}
+   349→                    <div className="space-y-2">
+   350→                      <Label htmlFor="gstin" className="flex items-center gap-1.5">
+   351→                        <Hash className="h-3.5 w-3.5 text-emerald-600" />
+   352→                        GSTIN
+   353→                      </Label>
+   354→                      <Input
+   355→                        id="gstin"
+   356→                        value={gstinFormatted}
+   357→                        onChange={(e) => setGstin(e.target.value.toUpperCase())}
+   358→                        placeholder="22AAAAA0000A1Z5"
+   359→                        maxLength={15}
+   360→                        className={!gstinValid ? 'border-red-400 focus-visible:border-red-500' : ''}
+   361→                      />
+   362→                      {!gstinValid && (
+   363→                        <motion.p
+   364→                          initial={{ opacity: 0, y: -4 }}
+   365→                          animate={{ opacity: 1, y: 0 }}
+   366→                          className="text-xs text-red-500 flex items-center gap-1"
+   367→                        >
+   368→                          <AlertTriangle className="h-3 w-3" />
+   369→                          Invalid GSTIN format. Expected: 22AAAAA0000A1Z5
+   370→                        </motion.p>
+   371→                      )}
+   372→                      {gstinValid && gstin.length > 0 && (
+   373→                        <p className="text-xs text-emerald-600 flex items-center gap-1">
+   374→                          <Check className="h-3 w-3" />
+   375→                          Valid GSTIN format
+   376→                        </p>
+   377→                      )}
+   378→                    </div>
+   379→
+   380→                    <Separator />
+   381→
+   382→                    {/* State */}
+   383→                    <div className="space-y-2">
+   384→                      <Label htmlFor="state" className="flex items-center gap-1.5">
+   385→                        <MapPin className="h-3.5 w-3.5 text-emerald-600" />
+   386→                        State
+   387→                      </Label>
+   388→                      <Select value={state} onValueChange={setState}>
+   389→                        <SelectTrigger className="w-full" id="state">
+   390→                          <SelectValue placeholder="Select your state" />
+   391→                        </SelectTrigger>
+   392→                        <SelectContent>
+   393→                          {INDIAN_STATES.map((s) => (
+   394→                            <SelectItem key={s} value={s}>
+   395→                              {s}
+   396→                            </SelectItem>
+   397→                          ))}
+   398→                        </SelectContent>
+   399→                      </Select>
+   400→                    </div>
+   401→
+   402→                    <Separator />
+   403→
+   404→                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+   405→                      {/* Default Return Period */}
+   406→                      <div className="space-y-2">
+   407→                        <Label htmlFor="return-period" className="flex items-center gap-1.5">
+   408→                          <Calendar className="h-3.5 w-3.5 text-emerald-600" />
+   409→                          Default Return Period
+   410→                        </Label>
+   411→                        <Select value={returnPeriod} onValueChange={setReturnPeriod}>
+   412→                          <SelectTrigger className="w-full" id="return-period">
+   413→                            <SelectValue placeholder="Select period" />
+   414→                          </SelectTrigger>
+   415→                          <SelectContent>
+   416→                            <SelectItem value="monthly">Monthly</SelectItem>
+   417→                            <SelectItem value="quarterly">Quarterly</SelectItem>
+   418→                          </SelectContent>
+   419→                        </Select>
+   420→                        <p className="text-xs text-muted-foreground">
+   421→                          Default filing frequency for new clients
+   422→                        </p>
+   423→                      </div>
+   424→
+   425→                      {/* Financial Year Start */}
+   426→                      <div className="space-y-2">
+   427→                        <Label htmlFor="fy-start" className="flex items-center gap-1.5">
+   428→                          <Calendar className="h-3.5 w-3.5 text-emerald-600" />
+   429→                          Financial Year Start
+   430→                        </Label>
+   431→                        <Select value={fyStart} onValueChange={setFyStart}>
+   432→                          <SelectTrigger className="w-full" id="fy-start">
+   433→                            <SelectValue placeholder="Select month" />
+   434→                          </SelectTrigger>
+   435→                          <SelectContent>
+   436→                            <SelectItem value="april">April (India Standard)</SelectItem>
+   437→                            <SelectItem value="january">January</SelectItem>
+   438→                          </SelectContent>
+   439→                        </Select>
+   440→                        <p className="text-xs text-muted-foreground">
+   441→                          FY runs April to March by default
+   442→                        </p>
+   443→                      </div>
+   444→                    </div>
+   445→
+   446→                    <Separator />
+   447→
+   448→                    {/* Save Button */}
+   449→                    <div className="flex items-center gap-3">
+   450→                      {renderSaveButton(saveState, handleSaveGeneral)}
+   451→                      {saveState === 'saved' && (
+   452→                        <motion.span
+   453→                          initial={{ opacity: 0, x: -8 }}
+   454→                          animate={{ opacity: 1, x: 0 }}
+   455→                          exit={{ opacity: 0 }}
+   456→                          className="text-sm text-emerald-600"
+   457→                        >
+   458→                          Settings updated
+   459→                        </motion.span>
+   460→                      )}
+   461→                    </div>
+   462→                  </CardContent>
+   463→                </Card>
+   464→              </motion.div>
+   465→            </motion.div>
+   466→          </TabsContent>
+   467→
+   468→          {/* ═══════════════ PROFILE TAB ═══════════════ */}
+   469→          <TabsContent value="profile">
+   470→            <motion.div
+   471→              className="space-y-6"
+   472→              variants={containerVariants}
+   473→              initial="hidden"
+   474→              animate="visible"
+   475→            >
+   476→              {/* Profile Info */}
+   477→              <motion.div variants={itemVariants}>
+   478→                <Card>
+   479→                  <CardHeader>
+   480→                    <CardTitle className="flex items-center gap-2 text-base">
+   481→                      <User className="h-5 w-5 text-emerald-600" />
+   482→                      Profile Information
+   483→                    </CardTitle>
+   484→                    <CardDescription>
+   485→                      Your personal account details
+   486→                    </CardDescription>
+   487→                  </CardHeader>
+   488→                  <CardContent className="space-y-6">
+   489→                    {/* Name */}
+   490→                    <div className="space-y-2">
+   491→                      <Label htmlFor="profile-name">Your Name</Label>
+   492→                      <Input
+   493→                        id="profile-name"
+   494→                        value={profileName}
+   495→                        onChange={(e) => setProfileName(e.target.value)}
+   496→                        placeholder="Enter your name"
+   497→                      />
+   498→                    </div>
+   499→
+   500→                    <Separator />
+   501→
+   502→                    {/* Email (disabled) */}
+   503→                    <div className="space-y-2">
+   504→                      <Label htmlFor="profile-email" className="flex items-center gap-1.5">
+   505→                        <Mail className="h-3.5 w-3.5 text-emerald-600" />
+   506→                        Email
+   507→                      </Label>
+   508→                      <Input
+   509→                        id="profile-email"
+   510→                        value={user?.email || 'user@gstpilot.ai'}
+   511→                        disabled
+   512→                        className="bg-muted/50"
+   513→                      />
+   514→                      <p className="text-xs text-muted-foreground">
+   515→                        Email is managed by your authentication provider
+   516→                      </p>
+   517→                    </div>
+   518→
+   519→                    <Separator />
+   520→
+   521→                    {/* Role (display only) */}
+   522→                    <div className="space-y-2">
+   523→                      <Label className="flex items-center gap-1.5">
+   524→                        <Shield className="h-3.5 w-3.5 text-emerald-600" />
+   525→                        Role
+   526→                      </Label>
+   527→                      <div>
+   528→                        <Badge className="bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border-emerald-200 gap-1 capitalize">
+   529→                          <Shield className="h-3 w-3" />
+   530→                          {user?.role || 'Admin'}
+   531→                        </Badge>
+   532→                      </div>
+   533→                    </div>
+   534→
+   535→                    <Separator />
+   536→
+   537→                    <div className="flex items-center gap-3">
+   538→                      {renderSaveButton(saveState, () => {
+   539→                        setSaveState('saving');
+   540→                        setTimeout(() => {
+   541→                          setSaveState('saved');
+   542→                          setTimeout(() => setSaveState('idle'), 2000);
+   543→                        }, 600);
+   544→                      })}
+   545→                    </div>
+   546→                  </CardContent>
+   547→                </Card>
+   548→              </motion.div>
+   549→
+   550→              {/* Change Password */}
+   551→              {user?.provider === 'email' && (
+   552→                <motion.div variants={itemVariants}>
+   553→                  <Card>
+   554→                    <CardHeader>
+   555→                      <CardTitle className="flex items-center gap-2 text-base">
+   556→                        <Lock className="h-5 w-5 text-emerald-600" />
+   557→                        Change Password
+   558→                      </CardTitle>
+   559→                      <CardDescription>
+   560→                        Update your account password
+   561→                      </CardDescription>
+   562→                    </CardHeader>
+   563→                    <CardContent className="space-y-4">
+   564→                      <div className="space-y-2">
+   565→                        <Label htmlFor="current-password">Current Password</Label>
+   566→                        <div className="relative">
+   567→                          <Input
+   568→                            id="current-password"
+   569→                            type={showPassword ? 'text' : 'password'}
+   570→                            value={currentPassword}
+   571→                            onChange={(e) => setCurrentPassword(e.target.value)}
+   572→                            placeholder="Enter current password"
+   573→                            className="pr-10"
+   574→                          />
+   575→                          <Button
+   576→                            type="button"
+   577→                            variant="ghost"
+   578→                            size="sm"
+   579→                            className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
+   580→                            onClick={() => setShowPassword(!showPassword)}
+   581→                          >
+   582→                            {showPassword ? (
+   583→                              <EyeOff className="h-4 w-4 text-muted-foreground" />
+   584→                            ) : (
+   585→                              <Eye className="h-4 w-4 text-muted-foreground" />
+   586→                            )}
+   587→                          </Button>
+   588→                        </div>
+   589→                      </div>
+   590→                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+   591→                        <div className="space-y-2">
+   592→                          <Label htmlFor="new-password">New Password</Label>
+   593→                          <Input
+   594→                            id="new-password"
+   595→                            type="password"
+   596→                            value={newPassword}
+   597→                            onChange={(e) => setNewPassword(e.target.value)}
+   598→                            placeholder="Enter new password"
+   599→                          />
+   600→                        </div>
+   601→                        <div className="space-y-2">
+   602→                          <Label htmlFor="confirm-password">Confirm Password</Label>
+   603→                          <Input
+   604→                            id="confirm-password"
+   605→                            type="password"
+   606→                            value={confirmPassword}
+   607→                            onChange={(e) => setConfirmPassword(e.target.value)}
+   608→                            placeholder="Confirm new password"
+   609→                          />
+   610→                        </div>
+   611→                      </div>
+   612→                      {newPassword && confirmPassword && newPassword !== confirmPassword && (
+   613→                        <motion.p
+   614→                          initial={{ opacity: 0, y: -4 }}
+   615→                          animate={{ opacity: 1, y: 0 }}
+   616→                          className="text-xs text-red-500 flex items-center gap-1"
+   617→                        >
+   618→                          <AlertTriangle className="h-3 w-3" />
+   619→                          Passwords do not match
+   620→                        </motion.p>
+   621→                      )}
+   622→                      <div className="flex items-center gap-3">
+   623→                        {renderSaveButton(
+   624→                          passwordSaveState,
+   625→                          handlePasswordChange,
+   626→                          'Update Password',
+   627→                        )}
+   628→                      </div>
+   629→                    </CardContent>
+   630→                  </Card>
+   631→                </motion.div>
+   632→              )}
+   633→
+   634→              {/* Notification Preferences */}
+   635→              <motion.div variants={itemVariants}>
+   636→                <Card>
+   637→                  <CardHeader>
+   638→                    <CardTitle className="flex items-center gap-2 text-base">
+   639→                      <Bell className="h-5 w-5 text-emerald-600" />
+   640→                      Notification Preferences
+   641→                    </CardTitle>
+   642→                    <CardDescription>
+   643→                      Control how and when you receive alerts
+   644→                    </CardDescription>
+   645→                  </CardHeader>
+   646→                  <CardContent className="space-y-6">
+   647→                    {/* Email notifications */}
+   648→                    <div className="flex items-center justify-between gap-4">
+   649→                      <div className="space-y-0.5">
+   650→                        <Label className="flex items-center gap-2">
+   651→                          <Mail className="h-4 w-4 text-emerald-600" />
+   652→                          Email notifications
+   653→                        </Label>
+   654→                        <p className="text-xs text-muted-foreground">
+   655→                          Receive important updates via email
+   656→                        </p>
+   657→                      </div>
+   658→                      <Switch
+   659→                        checked={emailNotifications}
+   660→                        onCheckedChange={setEmailNotifications}
+   661→                      />
+   662→                    </div>
+   663→
+   664→                    <Separator />
+   665→
+   666→                    {/* Filing deadline reminders */}
+   667→                    <div className="flex items-center justify-between gap-4">
+   668→                      <div className="space-y-0.5">
+   669→                        <Label className="flex items-center gap-2">
+   670→                          <Clock className="h-4 w-4 text-emerald-600" />
+   671→                          Filing deadline reminders
+   672→                        </Label>
+   673→                        <p className="text-xs text-muted-foreground">
+   674→                          Get notified before GST return due dates
+   675→                        </p>
+   676→                      </div>
+   677→                      <Switch
+   678→                        checked={filingReminders}
+   679→                        onCheckedChange={setFilingReminders}
+   680→                      />
+   681→                    </div>
+   682→
+   683→                    <Separator />
+   684→
+   685→                    {/* Mismatch alerts */}
+   686→                    <div className="flex items-center justify-between gap-4">
+   687→                      <div className="space-y-0.5">
+   688→                        <Label className="flex items-center gap-2">
+   689→                          <AlertTriangle className="h-4 w-4 text-amber-600" />
+   690→                          Mismatch alerts
+   691→                        </Label>
+   692→                        <p className="text-xs text-muted-foreground">
+   693→                          Alert when GSTR-2A data doesn&apos;t match your books
+   694→                        </p>
+   695→                      </div>
+   696→                      <Switch
+   697→                        checked={mismatchAlerts}
+   698→                        onCheckedChange={setMismatchAlerts}
+   699→                      />
+   700→                    </div>
+   701→                  </CardContent>
+   702→                </Card>
+   703→              </motion.div>
+   704→            </motion.div>
+   705→          </TabsContent>
+   706→
+   707→          {/* ═══════════════ DATA TAB ═══════════════ */}
+   708→          <TabsContent value="data">
+   709→            <motion.div
+   710→              className="space-y-6"
+   711→              variants={containerVariants}
+   712→              initial="hidden"
+   713→              animate="visible"
+   714→            >
+   715→              {/* Export */}
+   716→              <motion.div variants={itemVariants}>
+   717→                <Card>
+   718→                  <CardHeader>
+   719→                    <CardTitle className="flex items-center gap-2 text-base">
+   720→                      <Download className="h-5 w-5 text-emerald-600" />
+   721→                      Export Data
+   722→                    </CardTitle>
+   723→                    <CardDescription>
+   724→                      Download all your data as a JSON file
+   725→                    </CardDescription>
+   726→                  </CardHeader>
+   727→                  <CardContent>
+   728→                    <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 rounded-lg border border-emerald-200 bg-emerald-50/50 dark:bg-emerald-950/20 dark:border-emerald-800">
+   729→                      <div className="flex items-center gap-3">
+   730→                        <div className="flex items-center justify-center h-10 w-10 rounded-lg bg-emerald-100 dark:bg-emerald-900 shrink-0">
+   731→                          <FileJson className="h-5 w-5 text-emerald-700 dark:text-emerald-400" />
+   732→                        </div>
+   733→                        <div>
+   734→                          <p className="text-sm font-medium">Full Data Export</p>
+   735→                          <p className="text-xs text-muted-foreground">
+   736→                            Exports clients, invoices, returns, and reconciliation data
+   737→                          </p>
+   738→                        </div>
+   739→                      </div>
+   740→                      <Button
+   741→                        onClick={handleExport}
+   742→                        className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white sm:ml-auto"
+   743→                      >
+   744→                        <Download className="h-4 w-4" />
+   745→                        Export JSON
+   746→                      </Button>
+   747→                    </div>
+   748→                  </CardContent>
+   749→                </Card>
+   750→              </motion.div>
+   751→
+   752→              {/* Import */}
+   753→              <motion.div variants={itemVariants}>
+   754→                <Card>
+   755→                  <CardHeader>
+   756→                    <CardTitle className="flex items-center gap-2 text-base">
+   757→                      <Upload className="h-5 w-5 text-emerald-600" />
+   758→                      Import Data
+   759→                    </CardTitle>
+   760→                    <CardDescription>
+   761→                      Restore data from a previously exported JSON file
+   762→                    </CardDescription>
+   763→                  </CardHeader>
+   764→                  <CardContent>
+   765→                    <div
+   766→                      onClick={() => fileInputRef.current?.click()}
+   767→                      className="flex flex-col items-center justify-center gap-3 p-8 border-2 border-dashed border-muted-foreground/25 rounded-lg cursor-pointer hover:border-emerald-400 hover:bg-emerald-50/30 dark:hover:bg-emerald-950/10 transition-colors"
+   768→                    >
+   769→                      <div className="flex items-center justify-center h-12 w-12 rounded-full bg-emerald-100 dark:bg-emerald-900">
+   770→                        <Upload className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
+   771→                      </div>
+   772→                      <div className="text-center">
+   773→                        <p className="text-sm font-medium">
+   774→                          Click to upload or drag and drop
+   775→                        </p>
+   776→                        <p className="text-xs text-muted-foreground mt-1">
+   777→                          JSON files only (max 10MB)
+   778→                        </p>
+   779→                      </div>
+   780→                    </div>
+   781→                    <input
+   782→                      ref={fileInputRef}
+   783→                      type="file"
+   784→                      accept=".json"
+   785→                      className="hidden"
+   786→                      onChange={handleImport}
+   787→                    />
+   788→                  </CardContent>
+   789→                </Card>
+   790→              </motion.div>
+   791→
+   792→              {/* Clear all data */}
+   793→              <motion.div variants={itemVariants}>
+   794→                <Card className="border-red-200 dark:border-red-900/40">
+   795→                  <CardHeader>
+   796→                    <CardTitle className="flex items-center gap-2 text-base text-red-600">
+   797→                      <Trash2 className="h-5 w-5" />
+   798→                      Danger Zone
+   799→                    </CardTitle>
+   800→                    <CardDescription>
+   801→                      Irreversible actions that affect all your data
+   802→                    </CardDescription>
+   803→                  </CardHeader>
+   804→                  <CardContent>
+   805→                    <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 rounded-lg border border-red-200 bg-red-50/50 dark:bg-red-950/20 dark:border-red-800">
+   806→                      <div className="flex items-center gap-3">
+   807→                        <div className="flex items-center justify-center h-10 w-10 rounded-lg bg-red-100 dark:bg-red-900 shrink-0">
+   808→                          <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400" />
+   809→                        </div>
+   810→                        <div>
+   811→                          <p className="text-sm font-medium text-red-700 dark:text-red-400">
+   812→                            Clear All Data
+   813→                          </p>
+   814→                          <p className="text-xs text-muted-foreground">
+   815→                            Permanently delete all clients, invoices, and returns
+   816→                          </p>
+   817→                        </div>
+   818→                      </div>
+   819→                      <AlertDialog open={clearDialogOpen} onOpenChange={setClearDialogOpen}>
+   820→                        <AlertDialogTrigger asChild>
+   821→                          <Button
+   822→                            variant="destructive"
+   823→                            className="gap-2 sm:ml-auto"
+   824→                          >
+   825→                            <Trash2 className="h-4 w-4" />
+   826→                            Clear All Data
+   827→                          </Button>
+   828→                        </AlertDialogTrigger>
+   829→                        <AlertDialogContent>
+   830→                          <AlertDialogHeader>
+   831→                            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+   832→                            <AlertDialogDescription>
+   833→                              This action cannot be undone. This will permanently delete
+   834→                              all your clients, invoices, returns, and reconciliation
+   835→                              data from the database.
+   836→                            </AlertDialogDescription>
+   837→                          </AlertDialogHeader>
+   838→                          <AlertDialogFooter>
+   839→                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+   840→                            <AlertDialogAction
+   841→                              onClick={handleClearAll}
+   842→                              className="bg-red-600 hover:bg-red-700 text-white"
+   843→                            >
+   844→                              Yes, clear all data
+   845→                            </AlertDialogAction>
+   846→                          </AlertDialogFooter>
+   847→                        </AlertDialogContent>
+   848→                      </AlertDialog>
+   849→                    </div>
+   850→                  </CardContent>
+   851→                </Card>
+   852→              </motion.div>
+   853→
+   854→              {/* Database Info */}
+   855→              <motion.div variants={itemVariants}>
+   856→                <Card>
+   857→                  <CardHeader>
+   858→                    <CardTitle className="flex items-center gap-2 text-base">
+   859→                      <HardDrive className="h-5 w-5 text-emerald-600" />
+   860→                      Database Information
+   861→                    </CardTitle>
+   862→                    <CardDescription>
+   863→                      Local SQLite database details
+   864→                    </CardDescription>
+   865→                  </CardHeader>
+   866→                  <CardContent>
+   867→                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+   868→                      <div className="p-4 rounded-lg border bg-muted/30">
+   869→                        <p className="text-xs text-muted-foreground mb-1">Database Path</p>
+   870→                        <p className="text-sm font-mono font-medium truncate">
+   871→                          ./db/custom.db
+   872→                        </p>
+   873→                      </div>
+   874→                      <div className="p-4 rounded-lg border bg-muted/30">
+   875→                        <p className="text-xs text-muted-foreground mb-1">Engine</p>
+   876→                        <p className="text-sm font-medium">SQLite (Local)</p>
+   877→                      </div>
+   878→                      <div className="p-4 rounded-lg border bg-muted/30">
+   879→                        <p className="text-xs text-muted-foreground mb-1">Last Backup</p>
+   880→                        <p className="text-sm font-medium">
+   881→                          {new Date().toLocaleDateString('en-IN', {
+   882→                            day: 'numeric',
+   883→                            month: 'short',
+   884→                            year: 'numeric',
+   885→                          })}
+   886→                        </p>
+   887→                      </div>
+   888→                    </div>
+   889→                  </CardContent>
+   890→                </Card>
+   891→              </motion.div>
+   892→            </motion.div>
+   893→          </TabsContent>
+   894→
+   895→          {/* ═══════════════ ABOUT TAB ═══════════════ */}
+   896→          <TabsContent value="about">
+   897→            <motion.div
+   898→              className="space-y-6"
+   899→              variants={containerVariants}
+   900→              initial="hidden"
+   901→              animate="visible"
+   902→            >
+   903→              {/* Version & Build */}
+   904→              <motion.div variants={itemVariants}>
+   905→                <Card>
+   906→                  <CardHeader>
+   907→                    <CardTitle className="flex items-center gap-2 text-base">
+   908→                      <Info className="h-5 w-5 text-emerald-600" />
+   909→                      About GSTPilot
+   910→                    </CardTitle>
+   911→                    <CardDescription>
+   912→                      Application version and build information
+   913→                    </CardDescription>
+   914→                  </CardHeader>
+   915→                  <CardContent className="space-y-4">
+   916→                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+   917→                      <div className="p-4 rounded-lg border bg-muted/30">
+   918→                        <p className="text-xs text-muted-foreground mb-1">Version</p>
+   919→                        <p className="text-sm font-semibold text-emerald-700 dark:text-emerald-400">
+   920→                          v1.0.0
+   921→                        </p>
+   922→                      </div>
+   923→                      <div className="p-4 rounded-lg border bg-muted/30">
+   924→                        <p className="text-xs text-muted-foreground mb-1">Build</p>
+   925→                        <p className="text-sm font-medium font-mono">
+   926→                          2026.03.04
+   927→                        </p>
+   928→                      </div>
+   929→                      <div className="p-4 rounded-lg border bg-muted/30">
+   930→                        <p className="text-xs text-muted-foreground mb-1">Framework</p>
+   931→                        <p className="text-sm font-medium">
+   932→                          Next.js 16 + TypeScript
+   933→                        </p>
+   934→                      </div>
+   935→                      <div className="p-4 rounded-lg border bg-muted/30">
+   936→                        <p className="text-xs text-muted-foreground mb-1">License</p>
+   937→                        <p className="text-sm font-medium">Commercial</p>
+   938→                      </div>
+   939→                    </div>
+   940→
+   941→                    <Separator />
+   942→
+   943→                    {/* Logo / Branding */}
+   944→                    <div className="flex items-center gap-4 p-4 rounded-lg border border-emerald-200 bg-emerald-50/50 dark:bg-emerald-950/20 dark:border-emerald-800">
+   945→                      <div className="flex items-center justify-center h-12 w-12 rounded-xl bg-emerald-600 shrink-0">
+   946→                        <span className="text-white font-bold text-lg">G</span>
+   947→                      </div>
+   948→                      <div>
+   949→                        <p className="text-sm font-semibold">GSTPilot</p>
+   950→                        <p className="text-xs text-muted-foreground">
+   951→                          Smart GST compliance management for Indian businesses
+   952→                        </p>
+   953→                      </div>
+   954→                    </div>
+   955→                  </CardContent>
+   956→                </Card>
+   957→              </motion.div>
+   958→
+   959→              {/* Support & Links */}
+   960→              <motion.div variants={itemVariants}>
+   961→                <Card>
+   962→                  <CardHeader>
+   963→                    <CardTitle className="flex items-center gap-2 text-base">
+   964→                      <MessageSquare className="h-5 w-5 text-emerald-600" />
+   965→                      Support & Feedback
+   966→                    </CardTitle>
+   967→                    <CardDescription>
+   968→                      Get help or share your thoughts
+   969→                    </CardDescription>
+   970→                  </CardHeader>
+   971→                  <CardContent className="space-y-3">
+   972→                    <Button
+   973→                      variant="outline"
+   974→                      className="w-full justify-start gap-3 h-12 hover:bg-emerald-50 hover:border-emerald-300 dark:hover:bg-emerald-950/30 dark:hover:border-emerald-800"
+   975→                      asChild
+   976→                    >
+   977→                      <a href="mailto:support@gstpilot.ai">
+   978→                        <div className="flex items-center justify-center h-8 w-8 rounded-md bg-emerald-100 dark:bg-emerald-900 shrink-0">
+   979→                          <Mail className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+   980→                        </div>
+   981→                        <div className="text-left">
+   982→                          <p className="text-sm font-medium">Contact Support</p>
+   983→                          <p className="text-xs text-muted-foreground">support@gstpilot.ai</p>
+   984→                        </div>
+   985→                        <ExternalLink className="h-4 w-4 ml-auto text-muted-foreground" />
+   986→                      </a>
+   987→                    </Button>
+   988→                    <Button
+   989→                      variant="outline"
+   990→                      className="w-full justify-start gap-3 h-12 hover:bg-emerald-50 hover:border-emerald-300 dark:hover:bg-emerald-950/30 dark:hover:border-emerald-800"
+   991→                      asChild
+   992→                    >
+   993→                      <a href="https://gstpilot.ai/feedback" target="_blank" rel="noopener noreferrer">
+   994→                        <div className="flex items-center justify-center h-8 w-8 rounded-md bg-amber-100 dark:bg-amber-900 shrink-0">
+   995→                          <MessageSquare className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+   996→                        </div>
+   997→                        <div className="text-left">
+   998→                          <p className="text-sm font-medium">Share Feedback</p>
+   999→                          <p className="text-xs text-muted-foreground">Help us improve GSTPilot</p>
+  1000→                        </div>
+  1001→                        <ExternalLink className="h-4 w-4 ml-auto text-muted-foreground" />
+  1002→                      </a>
+  1003→                    </Button>
+  1004→                    <Button
+  1005→                      variant="outline"
+  1006→                      className="w-full justify-start gap-3 h-12 hover:bg-emerald-50 hover:border-emerald-300 dark:hover:bg-emerald-950/30 dark:hover:border-emerald-800"
+  1007→                      asChild
+  1008→                    >
+  1009→                      <a href="https://gstpilot.ai/docs" target="_blank" rel="noopener noreferrer">
+  1010→                        <div className="flex items-center justify-center h-8 w-8 rounded-md bg-teal-100 dark:bg-teal-900 shrink-0">
+  1011→                          <Info className="h-4 w-4 text-teal-600 dark:text-teal-400" />
+  1012→                        </div>
+  1013→                        <div className="text-left">
+  1014→                          <p className="text-sm font-medium">Documentation</p>
+  1015→                          <p className="text-xs text-muted-foreground">Guides, API reference, and more</p>
+  1016→                        </div>
+  1017→                        <ExternalLink className="h-4 w-4 ml-auto text-muted-foreground" />
+  1018→                      </a>
+  1019→                    </Button>
+  1020→                  </CardContent>
+  1021→                </Card>
+  1022→              </motion.div>
+  1023→            </motion.div>
+  1024→          </TabsContent>
+  1025→        </Tabs>
+  1026→      </motion.div>
+  1027→    </motion.div>
+  1028→  );
+  1029→}
+  1030→

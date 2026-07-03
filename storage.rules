@@ -1,0 +1,74 @@
+rules_version = '2';
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// GSTPilot — Firebase Storage Security Rules (Multi-Tenant)
+//
+// Every file lives under:  organizations/{organizationId}/{category}/...
+//
+// A user may read / write a file ONLY if they are an ACTIVE member of the
+// organization that owns the file. Membership is resolved the SAME way as in
+// firestore.rules — by reading `organization_members/{orgId}_{uid}` and
+// checking `status == 'active'`.
+//
+// Supported categories: invoices, gst, bank, documents, reports, notices, ai
+// Supported file types: PDF, JPG, JPEG, PNG, XLS, XLSX, CSV, DOC, DOCX
+// Max file size: 100 MB
+// ═══════════════════════════════════════════════════════════════════════════════
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // ─── Helper: is the caller an ACTIVE member of this organization? ───────
+    //
+    // Reads the Firestore `organization_members/{orgId}_{uid}` doc.
+    // This mirrors the `isOrgMember()` helper in firestore.rules so the two
+    // rule sets stay perfectly in sync.
+    function isOrgMember(orgId) {
+      return request.auth != null
+        && exists(/databases/(default)/documents/organization_members/$(orgId)_$(request.auth.uid))
+        && get(/databases/(default)/documents/organization_members/$(orgId)_$(request.auth.uid)).data.status == 'active';
+    }
+
+    // ─── Helper: validate the uploaded file ─────────────────────────────────
+    function isValidUpload() {
+      return request.resource.size > 0
+        && request.resource.size <= 100 * 1024 * 1024  // 100 MB
+        && (
+          // PDF
+          request.resource.contentType.matches('application/pdf')
+          // Images
+          || request.resource.contentType.matches('image/jpeg')
+          || request.resource.contentType.matches('image/png')
+          // Excel / CSV
+          || request.resource.contentType.matches('application/vnd.ms-excel')
+          || request.resource.contentType.matches('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+          || request.resource.contentType.matches('text/csv')
+          // Word
+          || request.resource.contentType.matches('application/msword')
+          || request.resource.contentType.matches('application/vnd.openxmlformats-officedocument.wordprocessingml.document')
+          // Some browsers send a generic type; accept by extension as a fallback.
+          || request.resource.name.matches('.*\\.(pdf|jpe?g|png|xlsx?|csv|docx?)$')
+        );
+    }
+
+    // ─── Org-isolated document tree ────────────────────────────────────────
+    //
+    // organizations/{organizationId}/{category}/{...}
+    match /organizations/{organizationId}/{category}/{allPaths=**} {
+
+      // Read (download / list) — any active org member.
+      allow read: if isOrgMember(organizationId);
+
+      // Write (upload / overwrite) — active org member + valid file.
+      allow write: if isOrgMember(organizationId) && isValidUpload();
+
+      // Delete — active org member.
+      allow delete: if isOrgMember(organizationId);
+    }
+
+    // Catch-all: deny everything that is not explicitly under an organization.
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

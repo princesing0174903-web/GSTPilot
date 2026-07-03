@@ -11,8 +11,14 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { Skeleton } from '@/components/ui/skeleton'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plus, List, LayoutGrid, Calendar, User, Tag, Filter, CheckCircle2, Clock, AlertTriangle, Circle } from 'lucide-react'
+import { Plus, List, LayoutGrid, Calendar, User, Tag, Filter, CheckCircle2, Clock, AlertTriangle, Circle, Loader2, RefreshCw } from 'lucide-react'
+import { toast } from 'sonner'
+import { useFireTasks } from '@/hooks/use-firestore'
+import { createTask, updateTask } from '@/lib/firestore-service'
+import { EmptyState } from '@/components/shared'
+import { CheckSquare } from 'lucide-react'
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // TYPES
@@ -32,7 +38,6 @@ export interface Task {
   status: TaskStatus
   dueDate: string | null
   tags: string[]
-  createdBy: string
   createdAt: string
   updatedAt: string
 }
@@ -89,158 +94,7 @@ const STATUS_CONFIG: Record<TaskStatus, { label: string; color: string; bg: stri
   },
 }
 
-const INITIAL_TASKS: Task[] = [
-  {
-    taskId: 'task-1',
-    firmId: 'firm-1',
-    clientId: 'client-1',
-    assignedTo: 'Rajesh Kumar',
-    title: 'Review GSTR-1 for ABC Traders — March 2025',
-    description: 'Verify all outward supplies are correctly reported in GSTR-1. Cross-check with sales register and e-invoice data. Ensure all B2B invoices are captured with correct GSTINs.',
-    priority: 'high',
-    status: 'in_progress',
-    dueDate: '2025-03-20',
-    tags: ['GSTR-1', 'Filing', 'Monthly'],
-    createdBy: 'admin',
-    createdAt: '2025-03-01T10:00:00Z',
-    updatedAt: '2025-03-05T14:30:00Z',
-  },
-  {
-    taskId: 'task-2',
-    firmId: 'firm-1',
-    clientId: 'client-2',
-    assignedTo: 'Priya Sharma',
-    title: 'Resolve ITC mismatch for XYZ Industries',
-    description: 'ITC claimed in GSTR-3B does not match with GSTR-2A. Identify the mismatch amounts and communicate with the supplier for corrections. Prepare reconciliation report.',
-    priority: 'urgent',
-    status: 'todo',
-    dueDate: '2025-03-15',
-    tags: ['ITC', 'Reconciliation', 'GSTR-2A'],
-    createdBy: 'admin',
-    createdAt: '2025-03-02T09:00:00Z',
-    updatedAt: '2025-03-02T09:00:00Z',
-  },
-  {
-    taskId: 'task-3',
-    firmId: 'firm-1',
-    clientId: 'client-3',
-    assignedTo: 'Rajesh Kumar',
-    title: 'File GSTR-3B for Sharma & Co.',
-    description: 'Prepare and file GSTR-3B for the month of February 2025. Ensure all input tax credits are correctly claimed and tax liability is computed accurately.',
-    priority: 'high',
-    status: 'todo',
-    dueDate: '2025-03-18',
-    tags: ['GSTR-3B', 'Filing', 'Monthly'],
-    createdBy: 'admin',
-    createdAt: '2025-03-03T11:00:00Z',
-    updatedAt: '2025-03-03T11:00:00Z',
-  },
-  {
-    taskId: 'task-4',
-    firmId: 'firm-1',
-    clientId: 'client-4',
-    assignedTo: 'Anita Desai',
-    title: 'Upload purchase register for Patel Enterprises',
-    description: 'Upload the purchase register for February 2025 in the required format. Validate all GSTINs and invoice numbers before upload.',
-    priority: 'medium',
-    status: 'in_progress',
-    dueDate: '2025-03-12',
-    tags: ['Purchase Register', 'Upload'],
-    createdBy: 'admin',
-    createdAt: '2025-03-04T08:30:00Z',
-    updatedAt: '2025-03-06T16:00:00Z',
-  },
-  {
-    taskId: 'task-5',
-    firmId: 'firm-1',
-    clientId: null,
-    assignedTo: 'Priya Sharma',
-    title: 'Verify GSTIN validity for new client',
-    description: 'Verify the GSTIN of the prospective new client (Mehta Group) using the GST portal. Check registration status, constitution, and compliance rating.',
-    priority: 'medium',
-    status: 'review',
-    dueDate: '2025-03-10',
-    tags: ['GSTIN', 'Verification', 'Onboarding'],
-    createdBy: 'admin',
-    createdAt: '2025-03-05T10:00:00Z',
-    updatedAt: '2025-03-07T12:00:00Z',
-  },
-  {
-    taskId: 'task-6',
-    firmId: 'firm-1',
-    clientId: null,
-    assignedTo: 'Rajesh Kumar',
-    title: 'Prepare filing summary for Q4 2024',
-    description: 'Compile the quarterly filing summary for all clients covering October-December 2024. Include filing status, tax paid, and pending returns for each client.',
-    priority: 'low',
-    status: 'completed',
-    dueDate: '2025-03-08',
-    tags: ['Quarterly', 'Summary', 'Report'],
-    createdBy: 'admin',
-    createdAt: '2025-02-25T09:00:00Z',
-    updatedAt: '2025-03-07T18:00:00Z',
-  },
-  {
-    taskId: 'task-7',
-    firmId: 'firm-1',
-    clientId: 'client-5',
-    assignedTo: 'Anita Desai',
-    title: 'Follow up on pending documents from Kumar Ltd',
-    description: 'Follow up with Kumar Ltd for the pending purchase invoices and credit notes for January 2025. These are required for GSTR-3B reconciliation.',
-    priority: 'high',
-    status: 'todo',
-    dueDate: '2025-03-14',
-    tags: ['Documents', 'Follow-up', 'Client'],
-    createdBy: 'admin',
-    createdAt: '2025-03-01T14:00:00Z',
-    updatedAt: '2025-03-01T14:00:00Z',
-  },
-  {
-    taskId: 'task-8',
-    firmId: 'firm-1',
-    clientId: 'client-6',
-    assignedTo: 'Priya Sharma',
-    title: 'Run reconciliation for Mehta Group — Feb 2025',
-    description: 'Run auto-reconciliation for Mehta Group for February 2025. Compare GSTR-2A data with purchase register. Flag any mismatches exceeding ₹10,000.',
-    priority: 'medium',
-    status: 'in_progress',
-    dueDate: '2025-03-22',
-    tags: ['Reconciliation', 'GSTR-2A', 'Monthly'],
-    createdBy: 'admin',
-    createdAt: '2025-03-06T10:00:00Z',
-    updatedAt: '2025-03-08T11:30:00Z',
-  },
-  {
-    taskId: 'task-9',
-    firmId: 'firm-1',
-    clientId: 'client-7',
-    assignedTo: null,
-    title: 'Review annual return GSTR-9 for Agarwal & Sons',
-    description: 'Review the draft GSTR-9 annual return for FY 2023-24. Verify all monthly figures match with GSTR-3B filings. Check for any amendments or corrections needed.',
-    priority: 'low',
-    status: 'todo',
-    dueDate: '2025-04-30',
-    tags: ['GSTR-9', 'Annual Return', 'FY2023-24'],
-    createdBy: 'admin',
-    createdAt: '2025-03-07T09:00:00Z',
-    updatedAt: '2025-03-07T09:00:00Z',
-  },
-  {
-    taskId: 'task-10',
-    firmId: 'firm-1',
-    clientId: 'client-2',
-    assignedTo: 'Rajesh Kumar',
-    title: 'Respond to GST notice for XYZ Industries',
-    description: 'Draft and submit a response to the show-cause notice received from the GST department regarding excess ITC claimed in Q2 2024. Include supporting documents and computation sheets.',
-    priority: 'urgent',
-    status: 'review',
-    dueDate: '2025-03-11',
-    tags: ['Notice', 'Response', 'Legal'],
-    createdBy: 'admin',
-    createdAt: '2025-03-03T16:00:00Z',
-    updatedAt: '2025-03-08T10:00:00Z',
-  },
-]
+// (INITIAL_TASKS removed in P1-M2 — tasks now come from Firestore via useFireTasks.)
 
 const EMPTY_FORM: NewTaskForm = {
   title: '',
@@ -341,11 +195,40 @@ function AssigneeAvatar({ name }: { name: string | null }) {
 
 export default function TasksPage() {
   const { currentView } = useApp()
-  const [tasks, setTasks] = useState<Task[]>(INITIAL_TASKS)
+
+  // ── Firestore data ──────────────────────────────────────────────
+  const fireTasksQ = useFireTasks()
+  const tasks: Task[] = useMemo(() => {
+    return (fireTasksQ.data ?? []).map(t => {
+      // FirestoreTask.status may include 'cancelled'; collapse to 'completed' for
+      // the local 4-status board (todo / in_progress / review / completed).
+      const rawStatus = t.status as Task['status'] | 'cancelled'
+      const status: Task['status'] =
+        rawStatus === 'cancelled' ? 'completed' : rawStatus
+      return {
+        taskId: t.taskId,
+        firmId: t.firmId,
+        clientId: t.clientId,
+        assignedTo: t.assignedTo,
+        title: t.title,
+        description: t.description ?? '',
+        priority: t.priority,
+        status,
+        dueDate: t.dueDate,
+        tags: t.tags ?? [],
+        createdAt: typeof t.createdAt === 'string' ? t.createdAt : new Date().toISOString(),
+        updatedAt: typeof t.updatedAt === 'string' ? t.updatedAt : new Date().toISOString(),
+      }
+    })
+  }, [fireTasksQ.data])
+  const loading = fireTasksQ.loading
+  const error = fireTasksQ.error
+
   const [view, setView] = useState<'list' | 'board'>('list')
   const [dialogOpen, setDialogOpen] = useState(false)
   const [expandedTask, setExpandedTask] = useState<string | null>(null)
   const [form, setForm] = useState<NewTaskForm>(EMPTY_FORM)
+  const [creating, setCreating] = useState(false)
 
   // Filters
   const [filterPriority, setFilterPriority] = useState<string>('all')
@@ -389,32 +272,39 @@ export default function TasksPage() {
   // HANDLERS
   // ═════════════════════════════════════════════════════════════════════════════
 
-  const handleCreateTask = () => {
+  const handleCreateTask = async () => {
     if (!form.title.trim()) return
-    const newTask: Task = {
-      taskId: `task-${Date.now()}`,
-      firmId: 'firm-1',
-      clientId: null,
-      assignedTo: form.assignedTo.trim() || null,
-      title: form.title.trim(),
-      description: form.description.trim(),
-      priority: form.priority,
-      status: form.status,
-      dueDate: form.dueDate || null,
-      tags: form.tags.split(',').map(t => t.trim()).filter(Boolean),
-      createdBy: 'admin',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+    try {
+      setCreating(true)
+      await createTask({
+        title: form.title.trim(),
+        description: form.description.trim(),
+        status: form.status,
+        priority: form.priority,
+        assignedTo: form.assignedTo.trim() || null,
+        clientId: null,
+        dueDate: form.dueDate || null,
+        tags: form.tags.split(',').map(t => t.trim()).filter(Boolean),
+      })
+      toast.success('Task created')
+      setForm(EMPTY_FORM)
+      setDialogOpen(false)
+    } catch (err) {
+      console.error('Failed to create task:', err)
+      toast.error('Failed to create task')
+    } finally {
+      setCreating(false)
     }
-    setTasks(prev => [newTask, ...prev])
-    setForm(EMPTY_FORM)
-    setDialogOpen(false)
   }
 
-  const handleStatusChange = (taskId: string, newStatus: TaskStatus) => {
-    setTasks(prev => prev.map(t =>
-      t.taskId === taskId ? { ...t, status: newStatus, updatedAt: new Date().toISOString() } : t
-    ))
+  const handleStatusChange = async (taskId: string, newStatus: TaskStatus) => {
+    try {
+      await updateTask(taskId, { status: newStatus })
+      toast.success('Task status updated')
+    } catch (err) {
+      console.error('Failed to update task status:', err)
+      toast.error('Failed to update task status')
+    }
   }
 
   const toggleExpand = (taskId: string) => {
@@ -425,7 +315,40 @@ export default function TasksPage() {
   // RENDER: LIST VIEW
   // ═════════════════════════════════════════════════════════════════════════════
 
-  const renderListView = () => (
+  const renderListView = () => {
+    if (loading) {
+      return (
+        <div className="space-y-2">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <Card key={i}>
+              <CardContent className="p-4">
+                <div className="flex items-center gap-3">
+                  <Skeleton className="h-5 w-16 rounded-full" />
+                  <Skeleton className="h-4 flex-1" />
+                  <Skeleton className="h-5 w-24 rounded-full" />
+                </div>
+                <div className="mt-3 flex items-center gap-3">
+                  <Skeleton className="h-4 w-32" />
+                  <Skeleton className="h-4 w-24" />
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )
+    }
+
+    if (tasks.length === 0 && !error) {
+      return (
+        <EmptyState
+          icon={CheckSquare}
+          title="No tasks yet"
+          description="Create your first task to start tracking work."
+        />
+      )
+    }
+
+    return (
     <div className="space-y-2">
       {/* Table Header */}
       <div className="hidden md:grid grid-cols-[100px_1fr_130px_120px_110px_160px] gap-3 px-4 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider border-b">
@@ -544,10 +467,6 @@ export default function TasksPage() {
                               <span>{task.tags.length > 0 ? task.tags.join(', ') : 'No tags'}</span>
                             </div>
                             <div className="flex items-center gap-1.5">
-                              <User className="h-3.5 w-3.5" />
-                              <span>Created by: {task.createdBy}</span>
-                            </div>
-                            <div className="flex items-center gap-1.5">
                               <Calendar className="h-3.5 w-3.5" />
                               <span>Created: {formatDate(task.createdAt)}</span>
                             </div>
@@ -588,13 +507,47 @@ export default function TasksPage() {
         </div>
       )}
     </div>
-  )
+    )
+  }
 
   // ═════════════════════════════════════════════════════════════════════════════
   // RENDER: BOARD VIEW
   // ═════════════════════════════════════════════════════════════════════════════
 
-  const renderBoardView = () => (
+  const renderBoardView = () => {
+    if (loading) {
+      return (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {(['todo', 'in_progress', 'review', 'completed'] as TaskStatus[]).map(s => (
+            <div key={s} className="rounded-xl bg-slate-50/80 border p-3 min-h-[300px]">
+              <Skeleton className="h-5 w-24 mb-3" />
+              <div className="space-y-2.5">
+                {Array.from({ length: 2 }).map((_, i) => (
+                  <Card key={i}>
+                    <CardContent className="p-3 space-y-2">
+                      <Skeleton className="h-3 w-3/4" />
+                      <Skeleton className="h-3 w-1/2" />
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )
+    }
+
+    if (tasks.length === 0 && !error) {
+      return (
+        <EmptyState
+          icon={CheckSquare}
+          title="No tasks yet"
+          description="Create your first task to start tracking work."
+        />
+      )
+    }
+
+    return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
       {boardColumns.map(({ status, tasks: columnTasks }) => {
         const cfg = STATUS_CONFIG[status]
@@ -706,7 +659,8 @@ export default function TasksPage() {
         )
       })}
     </div>
-  )
+    )
+  }
 
   // ═════════════════════════════════════════════════════════════════════════════
   // RENDER: NEW TASK DIALOG
@@ -801,7 +755,10 @@ export default function TasksPage() {
           </div>
           <div className="flex justify-end gap-3 pt-2">
             <Button variant="outline" onClick={() => { setForm(EMPTY_FORM); setDialogOpen(false) }}>Cancel</Button>
-            <Button className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={handleCreateTask} disabled={!form.title.trim()}>Create Task</Button>
+            <Button className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={handleCreateTask} disabled={!form.title.trim() || creating}>
+              {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              {creating ? 'Creating...' : 'Create Task'}
+            </Button>
           </div>
         </div>
       </DialogContent>
@@ -924,6 +881,27 @@ export default function TasksPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Error Banner */}
+      {error && (
+        <Card className="border-red-200 bg-red-50/50">
+          <CardContent className="p-4 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2 text-sm text-red-700">
+              <AlertTriangle className="h-4 w-4" />
+              <span>Failed to load tasks: {error}</span>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs gap-1.5 border-red-300 text-red-700 hover:bg-red-100"
+              onClick={() => window.location.reload()}
+            >
+              <RefreshCw className="h-3 w-3" />
+              Retry
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
       {/* View Content */}
       <Tabs value={view} onValueChange={(v) => setView(v as 'list' | 'board')}>

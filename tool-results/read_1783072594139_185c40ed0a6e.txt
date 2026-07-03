@@ -1,0 +1,1734 @@
+     1→'use client';
+     2→
+     3→import React, { useState, useEffect, useCallback, useRef } from 'react';
+     4→import { motion, AnimatePresence } from 'framer-motion';
+     5→import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+     6→import { Badge } from '@/components/ui/badge';
+     7→import { Button } from '@/components/ui/button';
+     8→import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+     9→import {
+    10→  Select,
+    11→  SelectContent,
+    12→  SelectItem,
+    13→  SelectTrigger,
+    14→  SelectValue,
+    15→} from '@/components/ui/select';
+    16→import {
+    17→  Table,
+    18→  TableBody,
+    19→  TableCell,
+    20→  TableHead,
+    21→  TableHeader,
+    22→  TableRow,
+    23→} from '@/components/ui/table';
+    24→import {
+    25→  Dialog,
+    26→  DialogContent,
+    27→  DialogHeader,
+    28→  DialogTitle,
+    29→  DialogFooter,
+    30→  DialogDescription,
+    31→} from '@/components/ui/dialog';
+    32→import { Input } from '@/components/ui/input';
+    33→import { Progress } from '@/components/ui/progress';
+    34→import { Separator } from '@/components/ui/separator';
+    35→import { Skeleton } from '@/components/ui/skeleton';
+    36→import { ScrollArea } from '@/components/ui/scroll-area';
+    37→import {
+    38→  FileText,
+    39→  Upload,
+    40→  Download,
+    41→  Search,
+    42→  Eye,
+    43→  CheckCircle2,
+    44→  AlertTriangle,
+    45→  Clock,
+    46→  Plus,
+    47→  ChevronRight,
+    48→  X,
+    49→  FileSpreadsheet,
+    50→  FileImage,
+    51→  File,
+    52→  Zap,
+    53→  Shield,
+    54→  ArrowRight,
+    55→  ArrowLeft,
+    56→  Loader2,
+    57→  CheckCheck,
+    58→  AlertCircle,
+    59→} from 'lucide-react';
+    60→import { useApp } from '@/contexts/AppContext';
+    61→import { formatCurrency, periodToLabel, validateGSTIN } from '@/lib/gst-utils';
+    62→import {
+    63→  GSTRFiling,
+    64→  Invoice,
+    65→  Client,
+    66→  FILING_STATUS_CONFIG,
+    67→  GSTR1Section,
+    68→  GSTR1_SECTION_LABELS,
+    69→  FilingStatus,
+    70→} from '@/types/gst';
+    71→
+    72→// ─── Constants ─────────────────────────────────────────────────────────────────
+    73→
+    74→const FINANCIAL_YEARS = [
+    75→  '2024-25',
+    76→  '2023-24',
+    77→  '2022-23',
+    78→];
+    79→
+    80→const MONTHS = [
+    81→  { value: '01', label: 'January' },
+    82→  { value: '02', label: 'February' },
+    83→  { value: '03', label: 'March' },
+    84→  { value: '04', label: 'April' },
+    85→  { value: '05', label: 'May' },
+    86→  { value: '06', label: 'June' },
+    87→  { value: '07', label: 'July' },
+    88→  { value: '08', label: 'August' },
+    89→  { value: '09', label: 'September' },
+    90→  { value: '10', label: 'October' },
+    91→  { value: '11', label: 'November' },
+    92→  { value: '12', label: 'December' },
+    93→];
+    94→
+    95→const QUARTERS = [
+    96→  { value: 'Q1', label: 'Q1 (Apr-Jun)' },
+    97→  { value: 'Q2', label: 'Q2 (Jul-Sep)' },
+    98→  { value: 'Q3', label: 'Q3 (Oct-Dec)' },
+    99→  { value: 'Q4', label: 'Q4 (Jan-Mar)' },
+   100→];
+   101→
+   102→const RETURN_TYPES = ['GSTR-1', 'GSTR-3B', 'GSTR-9', 'GSTR-9C'] as const;
+   103→
+   104→const STATUS_BADGE_MAP: Record<string, { color: string; bgColor: string; label: string }> = {
+   105→  filed: { color: 'text-emerald-700', bgColor: 'bg-emerald-50 border-emerald-200', label: 'Filed' },
+   106→  generated: { color: 'text-green-700', bgColor: 'bg-green-50 border-green-200', label: 'Ready' },
+   107→  reviewed: { color: 'text-amber-700', bgColor: 'bg-amber-50 border-amber-200', label: 'In Progress' },
+   108→  validated: { color: 'text-amber-700', bgColor: 'bg-amber-50 border-amber-200', label: 'In Progress' },
+   109→  prepared: { color: 'text-amber-700', bgColor: 'bg-amber-50 border-amber-200', label: 'In Progress' },
+   110→  draft: { color: 'text-slate-600', bgColor: 'bg-slate-100 border-slate-200', label: 'Draft' },
+   111→  reopened: { color: 'text-red-700', bgColor: 'bg-red-50 border-red-200', label: 'Reopened' },
+   112→  overdue: { color: 'text-red-700', bgColor: 'bg-red-50 border-red-200', label: 'Overdue' },
+   113→};
+   114→
+   115→const SECTION_BREAKDOWN_LABELS: Record<string, string> = {
+   116→  b2b: 'B2B Invoices',
+   117→  b2cl: 'B2C Large',
+   118→  b2cs: 'B2C Small',
+   119→  cdnr: 'CDNR',
+   120→  cdnur: 'CDNUR',
+   121→  exp: 'Exports',
+   122→};
+   123→
+   124→// ─── Types ──────────────────────────────────────────────────────────────────────
+   125→
+   126→interface UploadedFile {
+   127→  id: string;
+   128→  name: string;
+   129→  size: number;
+   130→  type: string;
+   131→  progress: number;
+   132→  status: 'uploading' | 'processing' | 'done' | 'error';
+   133→}
+   134→
+   135→interface ExtractedInvoice {
+   136→  id: string;
+   137→  invoiceNumber: string;
+   138→  invoiceDate: string;
+   139→  buyerGstin: string;
+   140→  buyerName: string;
+   141→  invoiceType: string;
+   142→  taxableValue: number;
+   143→  cgst: number;
+   144→  sgst: number;
+   145→  igst: number;
+   146→  totalAmount: number;
+   147→  hsnCode: string;
+   148→  gstr1Section: GSTR1Section;
+   149→  gstinValid: boolean;
+   150→  hsnValid: boolean;
+   151→  taxComputationValid: boolean;
+   152→}
+   153→
+   154→type QuickFileStep = 1 | 2 | 3 | 4;
+   155→
+   156→// ─── Animation variants ─────────────────────────────────────────────────────────
+   157→
+   158→const staggerContainer = {
+   159→  hidden: { opacity: 0 },
+   160→  show: {
+   161→    opacity: 1,
+   162→    transition: { staggerChildren: 0.04 },
+   163→  },
+   164→};
+   165→
+   166→const staggerItem = {
+   167→  hidden: { opacity: 0, y: 8 },
+   168→  show: { opacity: 1, y: 0, transition: { duration: 0.3 } },
+   169→};
+   170→
+   171→const fadeInUp = {
+   172→  hidden: { opacity: 0, y: 16 },
+   173→  show: { opacity: 1, y: 0, transition: { duration: 0.35 } },
+   174→};
+   175→
+   176→const tabContent = {
+   177→  hidden: { opacity: 0, x: 12 },
+   178→  show: { opacity: 1, x: 0, transition: { duration: 0.3 } },
+   179→  exit: { opacity: 0, x: -12, transition: { duration: 0.2 } },
+   180→};
+   181→
+   182→// ─── Helpers ────────────────────────────────────────────────────────────────────
+   183→
+   184→function formatFileSize(bytes: number): string {
+   185→  if (bytes < 1024) return `${bytes} B`;
+   186→  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+   187→  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+   188→}
+   189→
+   190→function getFileIcon(type: string) {
+   191→  if (type.includes('sheet') || type.includes('excel') || type.includes('csv'))
+   192→    return <FileSpreadsheet className="size-5 text-emerald-600" />;
+   193→  if (type.includes('image')) return <FileImage className="size-5 text-teal-600" />;
+   194→  if (type.includes('pdf')) return <FileText className="size-5 text-red-500" />;
+   195→  return <File className="size-5 text-slate-500" />;
+   196→}
+   197→
+   198→function getOverdueFilings(filings: GSTRFiling[]): Set<string> {
+   199→  const now = new Date();
+   200→  const overdueIds = new Set<string>();
+   201→  filings.forEach((f) => {
+   202→    if (f.status !== 'filed' && f.status !== 'reopened') {
+   203→      const [year, month] = f.period.split('-').map(Number);
+   204→      if (year && month) {
+   205→        const dueDate = new Date(year, month, 11);
+   206→        if (now > dueDate) overdueIds.add(f.id);
+   207→      }
+   208→    }
+   209→  });
+   210→  return overdueIds;
+   211→}
+   212→
+   213→// ─── Main Component ─────────────────────────────────────────────────────────────
+   214→
+   215→export default function GSTRFilingPage() {
+   216→  const { selectedClientId, setSelectedClientId } = useApp();
+   217→
+   218→  // ─── Data state ──────────────────────────────────────────────────────────
+   219→  const [filings, setFilings] = useState<GSTRFiling[]>([]);
+   220→  const [clients, setClients] = useState<Client[]>([]);
+   221→  const [clientInvoices, setClientInvoices] = useState<Invoice[]>([]);
+   222→  const [loading, setLoading] = useState(true);
+   223→  const [invoicesLoading, setInvoicesLoading] = useState(false);
+   224→
+   225→  // ─── Filter state ────────────────────────────────────────────────────────
+   226→  const [filterStatus, setFilterStatus] = useState<string>('all');
+   227→  const [filterReturnType, setFilterReturnType] = useState<string>('all');
+   228→  const [searchQuery, setSearchQuery] = useState('');
+   229→  const [selectedFY, setSelectedFY] = useState<string>('2024-25');
+   230→  const [selectedMonth, setSelectedMonth] = useState<string>('all');
+   231→
+   232→  // ─── Tab state ───────────────────────────────────────────────────────────
+   233→  const [activeTab, setActiveTab] = useState<string>('all-returns');
+   234→
+   235→  // ─── Quick File state ────────────────────────────────────────────────────
+   236→  const [quickFileStep, setQuickFileStep] = useState<QuickFileStep>(1);
+   237→  const [quickFileClientId, setQuickFileClientId] = useState<string>('');
+   238→  const [quickFileReturnType, setQuickFileReturnType] = useState<string>('GSTR-1');
+   239→  const [quickFilePeriod, setQuickFilePeriod] = useState<string>('');
+   240→  const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
+   241→  const [extractedInvoices, setExtractedInvoices] = useState<ExtractedInvoice[]>([]);
+   242→  const [isDragOver, setIsDragOver] = useState(false);
+   243→  const [isExtracting, setIsExtracting] = useState(false);
+   244→  const [isFiling, setIsFiling] = useState(false);
+   245→  const [isGeneratingJSON, setIsGeneratingJSON] = useState(false);
+   246→  const [clientSearch, setClientSearch] = useState('');
+   247→
+   248→  // ─── Dialog state ────────────────────────────────────────────────────────
+   249→  const [newReturnOpen, setNewReturnOpen] = useState(false);
+   250→  const [newReturnClientId, setNewReturnClientId] = useState<string>('');
+   251→  const [newReturnType, setNewReturnType] = useState<string>('GSTR-1');
+   252→  const [newReturnPeriod, setNewReturnPeriod] = useState<string>('');
+   253→  const [newReturnFY, setNewReturnFY] = useState<string>('2024-25');
+   254→  const [newReturnMonth, setNewReturnMonth] = useState<string>('04');
+   255→  const [isCreating, setIsCreating] = useState(false);
+   256→
+   257→  const fileInputRef = useRef<HTMLInputElement>(null);
+   258→
+   259→  // ─── Data fetching ───────────────────────────────────────────────────────
+   260→  const fetchFilings = useCallback(async () => {
+   261→    try {
+   262→      const res = await fetch('/api/gstr-filing');
+   263→      if (res.ok) {
+   264→        const data = await res.json();
+   265→        setFilings(data.filings ?? data ?? []);
+   266→      }
+   267→    } catch (err) {
+   268→      console.error('Failed to fetch filings:', err);
+   269→    }
+   270→  }, []);
+   271→
+   272→  const fetchClients = useCallback(async () => {
+   273→    try {
+   274→      const res = await fetch('/api/clients');
+   275→      if (res.ok) {
+   276→        const data = await res.json();
+   277→        setClients(data.clients ?? data ?? []);
+   278→      }
+   279→    } catch (err) {
+   280→      console.error('Failed to fetch clients:', err);
+   281→    }
+   282→  }, []);
+   283→
+   284→  const fetchClientInvoices = useCallback(async (clientId: string) => {
+   285→    setInvoicesLoading(true);
+   286→    try {
+   287→      const res = await fetch(`/api/invoices?clientId=${clientId}`);
+   288→      if (res.ok) {
+   289→        const data = await res.json();
+   290→        setClientInvoices(data.invoices ?? data ?? []);
+   291→      }
+   292→    } catch (err) {
+   293→      console.error('Failed to fetch invoices:', err);
+   294→    } finally {
+   295→      setInvoicesLoading(false);
+   296→    }
+   297→  }, []);
+   298→
+   299→  useEffect(() => {
+   300→    async function loadData() {
+   301→      setLoading(true);
+   302→      await Promise.all([fetchFilings(), fetchClients()]);
+   303→      setLoading(false);
+   304→    }
+   305→    loadData();
+   306→  }, [fetchFilings, fetchClients]);
+   307→
+   308→  // When quickFileClientId changes, fetch invoices
+   309→  useEffect(() => {
+   310→    if (quickFileClientId) {
+   311→      fetchClientInvoices(quickFileClientId);
+   312→    } else {
+   313→      setClientInvoices([]);
+   314→    }
+   315→  }, [quickFileClientId, fetchClientInvoices]);
+   316→
+   317→  // ─── Derived data ────────────────────────────────────────────────────────
+   318→  const overdueIds = getOverdueFilings(filings);
+   319→
+   320→  const filteredFilings = filings.filter((f) => {
+   321→    if (filterStatus !== 'all') {
+   322→      if (filterStatus === 'overdue') {
+   323→        if (!overdueIds.has(f.id)) return false;
+   324→      } else if (f.status !== filterStatus) return false;
+   325→    }
+   326→    if (filterReturnType !== 'all' && f.returnType !== filterReturnType) return false;
+   327→    if (selectedClientId && f.clientId !== selectedClientId) return false;
+   328→    if (searchQuery) {
+   329→      const q = searchQuery.toLowerCase();
+   330→      const clientName = f.client?.tradeName?.toLowerCase() ?? '';
+   331→      if (!clientName.includes(q) && !f.returnType.toLowerCase().includes(q)) return false;
+   332→    }
+   333→    return true;
+   334→  });
+   335→
+   336→  const filedHistory = filings.filter((f) => f.status === 'filed');
+   337→
+   338→  const filteredClients = clients.filter((c) => {
+   339→    if (!clientSearch) return true;
+   340→    const q = clientSearch.toLowerCase();
+   341→    return (
+   342→      c.tradeName.toLowerCase().includes(q) ||
+   343→      c.gstin.toLowerCase().includes(q)
+   344→    );
+   345→  });
+   346→
+   347→  // ─── Quick file: section breakdown ───────────────────────────────────────
+   348→  const sectionBreakdown = React.useMemo(() => {
+   349→    const sections: Record<string, { count: number; taxableValue: number; totalTax: number }> = {};
+   350→    extractedInvoices.forEach((inv) => {
+   351→      if (!sections[inv.gstr1Section]) {
+   352→        sections[inv.gstr1Section] = { count: 0, taxableValue: 0, totalTax: 0 };
+   353→      }
+   354→      sections[inv.gstr1Section].count += 1;
+   355→      sections[inv.gstr1Section].taxableValue += inv.taxableValue;
+   356→      sections[inv.gstr1Section].totalTax += inv.cgst + inv.sgst + inv.igst;
+   357→    });
+   358→    return sections;
+   359→  }, [extractedInvoices]);
+   360→
+   361→  const quickFileTotals = React.useMemo(() => {
+   362→    const totalInvoices = extractedInvoices.length;
+   363→    const totalTaxable = extractedInvoices.reduce((s, i) => s + i.taxableValue, 0);
+   364→    const totalTax = extractedInvoices.reduce((s, i) => s + i.cgst + i.sgst + i.igst, 0);
+   365→    const validCount = extractedInvoices.filter(
+   366→      (i) => i.gstinValid && i.hsnValid && i.taxComputationValid
+   367→    ).length;
+   368→    const warningCount = extractedInvoices.filter(
+   369→      (i) => !i.gstinValid || !i.hsnValid || !i.taxComputationValid
+   370→    ).length;
+   371→    return { totalInvoices, totalTaxable, totalTax, validCount, warningCount };
+   372→  }, [extractedInvoices]);
+   373→
+   374→  // ─── Handlers ────────────────────────────────────────────────────────────
+   375→  const handleCreateNewReturn = async () => {
+   376→    if (!newReturnClientId || !newReturnType) return;
+   377→    setIsCreating(true);
+   378→    try {
+   379→      const period = newReturnPeriod || `${newReturnFY.slice(0, 4)}-${newReturnMonth}`;
+   380→      const res = await fetch('/api/gstr-filing', {
+   381→        method: 'POST',
+   382→        headers: { 'Content-Type': 'application/json' },
+   383→        body: JSON.stringify({
+   384→          clientId: newReturnClientId,
+   385→          returnType: newReturnType,
+   386→          period,
+   387→          financialYear: newReturnFY,
+   388→        }),
+   389→      });
+   390→      if (res.ok) {
+   391→        await fetchFilings();
+   392→        setQuickFileClientId(newReturnClientId);
+   393→        setQuickFileReturnType(newReturnType);
+   394→        setQuickFilePeriod(period);
+   395→        setQuickFileStep(1);
+   396→        setNewReturnOpen(false);
+   397→        setActiveTab('quick-file');
+   398→      }
+   399→    } catch (err) {
+   400→      console.error('Failed to create return:', err);
+   401→    } finally {
+   402→      setIsCreating(false);
+   403→    }
+   404→  };
+   405→
+   406→  const handleFileUpload = useCallback((files: FileList) => {
+   407→    Array.from(files).forEach((file) => {
+   408→      const id = `file-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+   409→      const newFile: UploadedFile = {
+   410→        id,
+   411→        name: file.name,
+   412→        size: file.size,
+   413→        type: file.type || 'application/octet-stream',
+   414→        progress: 0,
+   415→        status: 'uploading',
+   416→      };
+   417→      setUploadedFiles((prev) => [...prev, newFile]);
+   418→
+   419→      // Simulate upload progress
+   420→      let progress = 0;
+   421→      const interval = setInterval(() => {
+   422→        progress += Math.random() * 25 + 10;
+   423→        if (progress >= 100) {
+   424→          progress = 100;
+   425→          clearInterval(interval);
+   426→          setUploadedFiles((prev) =>
+   427→            prev.map((f) =>
+   428→              f.id === id ? { ...f, progress: 100, status: 'processing' } : f
+   429→            )
+   430→          );
+   431→          // Simulate processing
+   432→          setTimeout(() => {
+   433→            setUploadedFiles((prev) =>
+   434→              prev.map((f) => (f.id === id ? { ...f, status: 'done' } : f))
+   435→            );
+   436→          }, 800);
+   437→        } else {
+   438→          setUploadedFiles((prev) =>
+   439→            prev.map((f) => (f.id === id ? { ...f, progress: Math.min(progress, 99) } : f))
+   440→          );
+   441→        }
+   442→      }, 300);
+   443→    });
+   444→  }, []);
+   445→
+   446→  const handleRemoveFile = useCallback((id: string) => {
+   447→    setUploadedFiles((prev) => prev.filter((f) => f.id !== id));
+   448→  }, []);
+   449→
+   450→  const handleExtractData = useCallback(async () => {
+   451→    setIsExtracting(true);
+   452→    // Simulate AI extraction using existing invoices as the "extracted" data
+   453→    await new Promise((r) => setTimeout(r, 1500));
+   454→
+   455→    const invoices: ExtractedInvoice[] = clientInvoices.slice(0, 20).map((inv) => {
+   456→      const gstinValid = inv.buyerGstin ? validateGSTIN(inv.buyerGstin) : true;
+   457→      const hsnValid = !!inv.hsnCode && inv.hsnCode.length >= 4;
+   458→      const expectedTax = inv.taxableValue * 0.18;
+   459→      const actualTax = inv.cgst + inv.sgst + inv.igst;
+   460→      const taxComputationValid = Math.abs(expectedTax - actualTax) < expectedTax * 0.05;
+   461→
+   462→      return {
+   463→        id: inv.id,
+   464→        invoiceNumber: inv.invoiceNumber,
+   465→        invoiceDate: inv.invoiceDate,
+   466→        buyerGstin: inv.buyerGstin || '',
+   467→        buyerName: inv.buyerName || '',
+   468→        invoiceType: inv.invoiceType,
+   469→        taxableValue: inv.taxableValue,
+   470→        cgst: inv.cgst,
+   471→        sgst: inv.sgst,
+   472→        igst: inv.igst,
+   473→        totalAmount: inv.totalAmount,
+   474→        hsnCode: inv.hsnCode || '',
+   475→        gstr1Section: inv.gstr1Section as GSTR1Section,
+   476→        gstinValid,
+   477→        hsnValid,
+   478→        taxComputationValid,
+   479→      };
+   480→    });
+   481→
+   482→    setExtractedInvoices(invoices);
+   483→    setIsExtracting(false);
+   484→    setQuickFileStep(3);
+   485→  }, [clientInvoices]);
+   486→
+   487→  const handleUpdateExtractedInvoice = useCallback(
+   488→    (id: string, field: string, value: number | string) => {
+   489→      setExtractedInvoices((prev) =>
+   490→        prev.map((inv) => {
+   491→          if (inv.id !== id) return inv;
+   492→          const updated = { ...inv, [field]: value };
+   493→          // Recompute validation
+   494→          if (field === 'buyerGstin') {
+   495→            updated.gstinValid = validateGSTIN(String(value));
+   496→          }
+   497→          if (field === 'taxableValue' || field === 'cgst' || field === 'sgst' || field === 'igst') {
+   498→            const expectedTax = updated.taxableValue * 0.18;
+   499→            const actualTax = updated.cgst + updated.sgst + updated.igst;
+   500→            updated.taxComputationValid = Math.abs(expectedTax - actualTax) < expectedTax * 0.05;
+   501→            updated.totalAmount = updated.taxableValue + updated.cgst + updated.sgst + updated.igst;
+   502→          }
+   503→          return updated;
+   504→        })
+   505→      );
+   506→    },
+   507→    []
+   508→  );
+   509→
+   510→  const handleGenerateJSON = useCallback(async () => {
+   511→    setIsGeneratingJSON(true);
+   512→    await new Promise((r) => setTimeout(r, 2000));
+   513→    setIsGeneratingJSON(false);
+   514→  }, []);
+   515→
+   516→  const handleFileReturn = useCallback(async () => {
+   517→    setIsFiling(true);
+   518→    await new Promise((r) => setTimeout(r, 2500));
+   519→    setIsFiling(false);
+   520→    setQuickFileStep(1);
+   521→    setUploadedFiles([]);
+   522→    setExtractedInvoices([]);
+   523→    setQuickFileClientId('');
+   524→    fetchFilings();
+   525→  }, [fetchFilings]);
+   526→
+   527→  const handleDragOver = useCallback((e: React.DragEvent) => {
+   528→    e.preventDefault();
+   529→    setIsDragOver(true);
+   530→  }, []);
+   531→
+   532→  const handleDragLeave = useCallback((e: React.DragEvent) => {
+   533→    e.preventDefault();
+   534→    setIsDragOver(false);
+   535→  }, []);
+   536→
+   537→  const handleDrop = useCallback(
+   538→    (e: React.DragEvent) => {
+   539→      e.preventDefault();
+   540→      setIsDragOver(false);
+   541→      if (e.dataTransfer.files.length) {
+   542→        handleFileUpload(e.dataTransfer.files);
+   543→      }
+   544→    },
+   545→    [handleFileUpload]
+   546→  );
+   547→
+   548→  const handleStartQuickFile = () => {
+   549→    if (selectedClientId) {
+   550→      setQuickFileClientId(selectedClientId);
+   551→    }
+   552→    setQuickFileStep(1);
+   553→    setActiveTab('quick-file');
+   554→  };
+   555→
+   556→  // ─── Loading skeleton ────────────────────────────────────────────────────
+   557→  if (loading) {
+   558→    return (
+   559→      <div className="space-y-6 p-4 md:p-6">
+   560→        <div className="flex items-center justify-between">
+   561→          <div className="flex items-center gap-3">
+   562→            <Skeleton className="size-10 rounded-lg" />
+   563→            <div className="space-y-2">
+   564→              <Skeleton className="h-6 w-48" />
+   565→              <Skeleton className="h-4 w-36" />
+   566→            </div>
+   567→          </div>
+   568→          <Skeleton className="h-9 w-32" />
+   569→        </div>
+   570→        <Skeleton className="h-10 w-full max-w-lg" />
+   571→        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+   572→          {[1, 2, 3, 4].map((i) => (
+   573→            <Skeleton key={i} className="h-24 rounded-xl" />
+   574→          ))}
+   575→        </div>
+   576→        <Skeleton className="h-96 rounded-xl" />
+   577→      </div>
+   578→    );
+   579→  }
+   580→
+   581→  // ─── Render helpers ──────────────────────────────────────────────────────
+   582→
+   583→  const renderStatusBadge = (filing: GSTRFiling) => {
+   584→    const isOverdue = overdueIds.has(filing.id);
+   585→    const key = isOverdue ? 'overdue' : filing.status;
+   586→    const config = STATUS_BADGE_MAP[key] ?? STATUS_BADGE_MAP[filing.status] ?? STATUS_BADGE_MAP.draft;
+   587→    return (
+   588→      <Badge variant="outline" className={`${config.color} ${config.bgColor} text-xs`}>
+   589→        {config.label}
+   590→      </Badge>
+   591→    );
+   592→  };
+   593→
+   594→  const renderStepIndicator = () => {
+   595→    const steps: { num: QuickFileStep; label: string }[] = [
+   596→      { num: 1, label: 'Select Client' },
+   597→      { num: 2, label: 'Upload Docs' },
+   598→      { num: 3, label: 'Review' },
+   599→      { num: 4, label: 'File' },
+   600→    ];
+   601→    return (
+   602→      <div className="flex items-center gap-1 sm:gap-2">
+   603→        {steps.map((step, i) => (
+   604→          <React.Fragment key={step.num}>
+   605→            <div className="flex items-center gap-1.5">
+   606→              <motion.div
+   607→                className={`flex size-7 items-center justify-center rounded-full text-xs font-semibold transition-colors ${
+   608→                  quickFileStep >= step.num
+   609→                    ? 'bg-emerald-600 text-white'
+   610→                    : 'bg-slate-200 text-slate-500'
+   611→                }`}
+   612→                animate={{
+   613→                  scale: quickFileStep === step.num ? 1.1 : 1,
+   614→                }}
+   615→                transition={{ duration: 0.2 }}
+   616→              >
+   617→                {quickFileStep > step.num ? (
+   618→                  <CheckCheck className="size-3.5" />
+   619→                ) : (
+   620→                  step.num
+   621→                )}
+   622→              </motion.div>
+   623→              <span
+   624→                className={`hidden text-xs font-medium sm:inline ${
+   625→                  quickFileStep >= step.num ? 'text-emerald-700' : 'text-slate-400'
+   626→                }`}
+   627→              >
+   628→                {step.label}
+   629→              </span>
+   630→            </div>
+   631→            {i < steps.length - 1 && (
+   632→              <div
+   633→                className={`h-px w-4 sm:w-8 ${
+   634→                  quickFileStep > step.num ? 'bg-emerald-400' : 'bg-slate-200'
+   635→                }`}
+   636→              />
+   637→            )}
+   638→          </React.Fragment>
+   639→        ))}
+   640→      </div>
+   641→    );
+   642→  };
+   643→
+   644→  // ═══════════════════════════════════════════════════════════════════════════
+   645→  //   RENDER
+   646→  // ═══════════════════════════════════════════════════════════════════════════
+   647→
+   648→  return (
+   649→    <div className="space-y-6 p-4 md:p-6">
+   650→      {/* ─── Header ─────────────────────────────────────────────────────── */}
+   651→      <motion.div
+   652→        className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"
+   653→        variants={fadeInUp}
+   654→        initial="hidden"
+   655→        animate="show"
+   656→      >
+   657→        <div className="flex items-center gap-3">
+   658→          <div className="flex size-10 items-center justify-center rounded-lg bg-emerald-100">
+   659→            <FileText className="size-5 text-emerald-700" />
+   660→          </div>
+   661→          <div>
+   662→            <h1 className="text-xl font-bold tracking-tight sm:text-2xl">GST Returns</h1>
+   663→            <p className="text-sm text-muted-foreground">Prepare and file returns in minutes</p>
+   664→          </div>
+   665→        </div>
+   666→        <div className="flex items-center gap-2">
+   667→          <Select value={selectedFY} onValueChange={setSelectedFY}>
+   668→            <SelectTrigger className="w-[130px]">
+   669→              <SelectValue />
+   670→            </SelectTrigger>
+   671→            <SelectContent>
+   672→              {FINANCIAL_YEARS.map((fy) => (
+   673→                <SelectItem key={fy} value={fy}>
+   674→                  FY {fy}
+   675→                </SelectItem>
+   676→              ))}
+   677→            </SelectContent>
+   678→          </Select>
+   679→          <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+   680→            <SelectTrigger className="w-[130px]">
+   681→              <SelectValue placeholder="All Months" />
+   682→            </SelectTrigger>
+   683→            <SelectContent>
+   684→              <SelectItem value="all">All Months</SelectItem>
+   685→              {MONTHS.map((m) => (
+   686→                <SelectItem key={m.value} value={m.value}>
+   687→                  {m.label}
+   688→                </SelectItem>
+   689→              ))}
+   690→            </SelectContent>
+   691→          </Select>
+   692→          <Button
+   693→            onClick={() => setNewReturnOpen(true)}
+   694→            className="gap-2 bg-emerald-600 hover:bg-emerald-700"
+   695→          >
+   696→            <Plus className="size-4" />
+   697→            <span className="hidden sm:inline">New Return</span>
+   698→            <span className="sm:hidden">New</span>
+   699→          </Button>
+   700→        </div>
+   701→      </motion.div>
+   702→
+   703→      {/* ─── Main Tabs ──────────────────────────────────────────────────── */}
+   704→      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+   705→        <TabsList className="flex-wrap sm:flex-nowrap">
+   706→          <TabsTrigger value="all-returns" className="gap-1.5">
+   707→            <FileText className="size-3.5" />
+   708→            All Returns
+   709→          </TabsTrigger>
+   710→          <TabsTrigger value="quick-file" className="gap-1.5">
+   711→            <Zap className="size-3.5" />
+   712→            Quick File
+   713→          </TabsTrigger>
+   714→          <TabsTrigger value="filed-history" className="gap-1.5">
+   715→            <CheckCircle2 className="size-3.5" />
+   716→            Filed History
+   717→          </TabsTrigger>
+   718→        </TabsList>
+   719→
+   720→        {/* ═══════════════════════════════════════════════════════════════════
+   721→            TAB 1: All Returns
+   722→        ═══════════════════════════════════════════════════════════════════════ */}
+   723→        <TabsContent value="all-returns" className="space-y-4">
+   724→          {/* Filters */}
+   725→          <Card>
+   726→            <CardContent className="pt-6">
+   727→              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+   728→                <div className="relative">
+   729→                  <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+   730→                  <Input
+   731→                    placeholder="Search client name..."
+   732→                    value={searchQuery}
+   733→                    onChange={(e) => setSearchQuery(e.target.value)}
+   734→                    className="pl-9"
+   735→                  />
+   736→                </div>
+   737→
+   738→                <Select value={filterStatus} onValueChange={setFilterStatus}>
+   739→                  <SelectTrigger>
+   740→                    <SelectValue placeholder="Status" />
+   741→                  </SelectTrigger>
+   742→                  <SelectContent>
+   743→                    <SelectItem value="all">All Statuses</SelectItem>
+   744→                    <SelectItem value="filed">Filed</SelectItem>
+   745→                    <SelectItem value="generated">Ready</SelectItem>
+   746→                    <SelectItem value="draft">Draft</SelectItem>
+   747→                    <SelectItem value="overdue">Overdue</SelectItem>
+   748→                  </SelectContent>
+   749→                </Select>
+   750→
+   751→                <Select value={filterReturnType} onValueChange={setFilterReturnType}>
+   752→                  <SelectTrigger>
+   753→                    <SelectValue placeholder="Return Type" />
+   754→                  </SelectTrigger>
+   755→                  <SelectContent>
+   756→                    <SelectItem value="all">All Types</SelectItem>
+   757→                    {RETURN_TYPES.map((rt) => (
+   758→                      <SelectItem key={rt} value={rt}>
+   759→                        {rt}
+   760→                      </SelectItem>
+   761→                    ))}
+   762→                  </SelectContent>
+   763→                </Select>
+   764→
+   765→                <Select
+   766→                  value={selectedClientId ?? 'all'}
+   767→                  onValueChange={(v) => setSelectedClientId(v === 'all' ? null : v)}
+   768→                >
+   769→                  <SelectTrigger>
+   770→                    <SelectValue placeholder="Client" />
+   771→                  </SelectTrigger>
+   772→                  <SelectContent>
+   773→                    <SelectItem value="all">All Clients</SelectItem>
+   774→                    {clients.map((c) => (
+   775→                      <SelectItem key={c.id} value={c.id}>
+   776→                        {c.tradeName}
+   777→                      </SelectItem>
+   778→                    ))}
+   779→                  </SelectContent>
+   780→                </Select>
+   781→
+   782→                <Button
+   783→                  variant="outline"
+   784→                  className="gap-2"
+   785→                  onClick={() => {
+   786→                    setFilterStatus('all');
+   787→                    setFilterReturnType('all');
+   788→                    setSearchQuery('');
+   789→                    setSelectedClientId(null);
+   790→                  }}
+   791→                >
+   792→                  <X className="size-3.5" />
+   793→                  Clear Filters
+   794→                </Button>
+   795→              </div>
+   796→            </CardContent>
+   797→          </Card>
+   798→
+   799→          {/* Filings Table */}
+   800→          <Card>
+   801→            <CardHeader>
+   802→              <CardTitle className="flex items-center gap-2 text-base">
+   803→                <FileText className="size-4 text-emerald-600" />
+   804→                All Returns
+   805→                <Badge variant="secondary" className="ml-1">
+   806→                  {filteredFilings.length}
+   807→                </Badge>
+   808→              </CardTitle>
+   809→            </CardHeader>
+   810→            <CardContent>
+   811→              <div className="overflow-x-auto rounded-lg border">
+   812→                <Table>
+   813→                  <TableHeader>
+   814→                    <TableRow className="bg-muted/50">
+   815→                      <TableHead className="whitespace-nowrap">Client</TableHead>
+   816→                      <TableHead className="whitespace-nowrap">Return Type</TableHead>
+   817→                      <TableHead className="whitespace-nowrap">Period</TableHead>
+   818→                      <TableHead className="whitespace-nowrap">Status</TableHead>
+   819→                      <TableHead className="whitespace-nowrap text-right">Invoices</TableHead>
+   820→                      <TableHead className="whitespace-nowrap text-right">Tax Amount</TableHead>
+   821→                      <TableHead className="whitespace-nowrap">Actions</TableHead>
+   822→                    </TableRow>
+   823→                  </TableHeader>
+   824→                  <TableBody>
+   825→                    {filteredFilings.length === 0 ? (
+   826→                      <TableRow>
+   827→                        <TableCell colSpan={7} className="h-32 text-center text-muted-foreground">
+   828→                          <div className="flex flex-col items-center gap-2">
+   829→                            <FileText className="size-8 text-muted-foreground/40" />
+   830→                            <p>No returns found</p>
+   831→                          </div>
+   832→                        </TableCell>
+   833→                      </TableRow>
+   834→                    ) : (
+   835→                      filteredFilings.map((filing, index) => (
+   836→                        <motion.tr
+   837→                          key={filing.id}
+   838→                          initial={{ opacity: 0, y: 8 }}
+   839→                          animate={{ opacity: 1, y: 0 }}
+   840→                          transition={{ delay: index * 0.03, duration: 0.3 }}
+   841→                          className="group border-b transition-colors hover:bg-muted/30"
+   842→                        >
+   843→                          <TableCell className="font-medium whitespace-nowrap">
+   844→                            {filing.client?.tradeName ?? '—'}
+   845→                          </TableCell>
+   846→                          <TableCell className="whitespace-nowrap">
+   847→                            <Badge variant="outline" className="text-xs border-emerald-200 bg-emerald-50 text-emerald-700">
+   848→                              {filing.returnType}
+   849→                            </Badge>
+   850→                          </TableCell>
+   851→                          <TableCell className="whitespace-nowrap text-muted-foreground">
+   852→                            {filing.period ? periodToLabel(filing.period) : '—'}
+   853→                          </TableCell>
+   854→                          <TableCell className="whitespace-nowrap">
+   855→                            {renderStatusBadge(filing)}
+   856→                          </TableCell>
+   857→                          <TableCell className="whitespace-nowrap text-right">
+   858→                            {filing.totalInvoices}
+   859→                          </TableCell>
+   860→                          <TableCell className="whitespace-nowrap text-right font-medium">
+   861→                            {formatCurrency(filing.totalTax)}
+   862→                          </TableCell>
+   863→                          <TableCell className="whitespace-nowrap">
+   864→                            <div className="flex items-center gap-1">
+   865→                              <Button variant="ghost" size="sm" className="size-8 p-0">
+   866→                                <Eye className="size-3.5" />
+   867→                              </Button>
+   868→                              {filing.status !== 'filed' && (
+   869→                                <Button
+   870→                                  variant="ghost"
+   871→                                  size="sm"
+   872→                                  className="size-8 p-0 text-emerald-600 hover:text-emerald-700"
+   873→                                  onClick={handleStartQuickFile}
+   874→                                >
+   875→                                  <Zap className="size-3.5" />
+   876→                                </Button>
+   877→                              )}
+   878→                              <Button variant="ghost" size="sm" className="size-8 p-0">
+   879→                                <Download className="size-3.5" />
+   880→                              </Button>
+   881→                            </div>
+   882→                          </TableCell>
+   883→                        </motion.tr>
+   884→                      ))
+   885→                    )}
+   886→                  </TableBody>
+   887→                </Table>
+   888→              </div>
+   889→            </CardContent>
+   890→          </Card>
+   891→        </TabsContent>
+   892→
+   893→        {/* ═══════════════════════════════════════════════════════════════════
+   894→            TAB 2: Quick File
+   895→        ═══════════════════════════════════════════════════════════════════════ */}
+   896→        <TabsContent value="quick-file" className="space-y-4">
+   897→          <AnimatePresence mode="wait">
+   898→            <motion.div key={quickFileStep} variants={tabContent} initial="hidden" animate="show" exit="exit">
+   899→              {/* Step Indicator */}
+   900→              <Card className="border-emerald-200 bg-gradient-to-r from-emerald-50/80 to-teal-50/80">
+   901→                <CardContent className="py-4">
+   902→                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+   903→                    {renderStepIndicator()}
+   904→                    <div className="text-xs text-muted-foreground">
+   905→                      {quickFileClientId && (
+   906→                        <span>
+   907→                          Client:{' '}
+   908→                          <span className="font-medium text-emerald-700">
+   909→                            {clients.find((c) => c.id === quickFileClientId)?.tradeName ?? '—'}
+   910→                          </span>
+   911→                          {quickFileReturnType && (
+   912→                            <>
+   913→                              {' '}&middot;{' '}
+   914→                              <span className="font-medium text-emerald-700">
+   915→                                {quickFileReturnType}
+   916→                              </span>
+   917→                            </>
+   918→                          )}
+   919→                        </span>
+   920→                      )}
+   921→                    </div>
+   922→                  </div>
+   923→                </CardContent>
+   924→              </Card>
+   925→
+   926→              {/* ─── Step 1: Select Client ──────────────────────────────────── */}
+   927→              {quickFileStep === 1 && (
+   928→                <motion.div variants={fadeInUp} initial="hidden" animate="show" className="space-y-4">
+   929→                  <Card>
+   930→                    <CardHeader>
+   931→                      <CardTitle className="flex items-center gap-2 text-base">
+   932→                        <div className="flex size-6 items-center justify-center rounded-full bg-emerald-100 text-xs font-bold text-emerald-700">
+   933→                          1
+   934→                        </div>
+   935→                        Select Client
+   936→                      </CardTitle>
+   937→                      <CardDescription>
+   938→                        Choose the client for whom you want to file a GST return
+   939→                      </CardDescription>
+   940→                    </CardHeader>
+   941→                    <CardContent className="space-y-4">
+   942→                      <div className="relative">
+   943→                        <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+   944→                        <Input
+   945→                          placeholder="Search by name or GSTIN..."
+   946→                          value={clientSearch}
+   947→                          onChange={(e) => setClientSearch(e.target.value)}
+   948→                          className="pl-9"
+   949→                        />
+   950→                      </div>
+   951→                      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 max-h-80 overflow-y-auto">
+   952→                        {filteredClients.map((client) => (
+   953→                          <motion.button
+   954→                            key={client.id}
+   955→                            className={`flex items-center gap-3 rounded-lg border p-3 text-left transition-all hover:shadow-sm ${
+   956→                              quickFileClientId === client.id
+   957→                                ? 'border-emerald-400 bg-emerald-50 ring-1 ring-emerald-200'
+   958→                                : 'border-slate-200 bg-white hover:border-emerald-200'
+   959→                            }`}
+   960→                            onClick={() => {
+   961→                              setQuickFileClientId(client.id);
+   962→                              setSelectedClientId(client.id);
+   963→                            }}
+   964→                            whileHover={{ scale: 1.01 }}
+   965→                            whileTap={{ scale: 0.99 }}
+   966→                          >
+   967→                            <div
+   968→                              className={`flex size-9 items-center justify-center rounded-lg text-xs font-bold ${
+   969→                                quickFileClientId === client.id
+   970→                                  ? 'bg-emerald-600 text-white'
+   971→                                  : 'bg-slate-100 text-slate-600'
+   972→                              }`}
+   973→                            >
+   974→                              {client.tradeName.slice(0, 2).toUpperCase()}
+   975→                            </div>
+   976→                            <div className="min-w-0 flex-1">
+   977→                              <p className="truncate text-sm font-medium">{client.tradeName}</p>
+   978→                              <p className="truncate text-xs text-muted-foreground font-mono">
+   979→                                {client.gstin}
+   980→                              </p>
+   981→                            </div>
+   982→                            {quickFileClientId === client.id && (
+   983→                              <CheckCircle2 className="size-5 shrink-0 text-emerald-600" />
+   984→                            )}
+   985→                          </motion.button>
+   986→                        ))}
+   987→                        {filteredClients.length === 0 && (
+   988→                          <div className="col-span-full py-8 text-center text-sm text-muted-foreground">
+   989→                            No clients found
+   990→                          </div>
+   991→                        )}
+   992→                      </div>
+   993→
+   994→                      <div className="grid gap-3 sm:grid-cols-2">
+   995→                        <Select value={quickFileReturnType} onValueChange={setQuickFileReturnType}>
+   996→                          <SelectTrigger>
+   997→                            <SelectValue placeholder="Return Type" />
+   998→                          </SelectTrigger>
+   999→                          <SelectContent>
+  1000→                            {RETURN_TYPES.map((rt) => (
+  1001→                              <SelectItem key={rt} value={rt}>
+  1002→                                {rt}
+  1003→                              </SelectItem>
+  1004→                            ))}
+  1005→                          </SelectContent>
+  1006→                        </Select>
+  1007→                        <Input
+  1008→                          type="month"
+  1009→                          value={quickFilePeriod}
+  1010→                          onChange={(e) => setQuickFilePeriod(e.target.value)}
+  1011→                          placeholder="Period (YYYY-MM)"
+  1012→                        />
+  1013→                      </div>
+  1014→
+  1015→                      <div className="flex justify-end">
+  1016→                        <Button
+  1017→                          onClick={() => setQuickFileStep(2)}
+  1018→                          disabled={!quickFileClientId}
+  1019→                          className="gap-2 bg-emerald-600 hover:bg-emerald-700"
+  1020→                        >
+  1021→                          Continue
+  1022→                          <ArrowRight className="size-4" />
+  1023→                        </Button>
+  1024→                      </div>
+  1025→                    </CardContent>
+  1026→                  </Card>
+  1027→                </motion.div>
+  1028→              )}
+  1029→
+  1030→              {/* ─── Step 2: Upload Documents ───────────────────────────────── */}
+  1031→              {quickFileStep === 2 && (
+  1032→                <motion.div variants={fadeInUp} initial="hidden" animate="show" className="space-y-4">
+  1033→                  <Card>
+  1034→                    <CardHeader>
+  1035→                      <CardTitle className="flex items-center gap-2 text-base">
+  1036→                        <div className="flex size-6 items-center justify-center rounded-full bg-emerald-100 text-xs font-bold text-emerald-700">
+  1037→                          2
+  1038→                        </div>
+  1039→                        Upload Documents
+  1040→                      </CardTitle>
+  1041→                      <CardDescription>
+  1042→                        Upload sales registers, purchase data, or invoice documents for extraction
+  1043→                      </CardDescription>
+  1044→                    </CardHeader>
+  1045→                    <CardContent className="space-y-4">
+  1046→                      {/* Drop Zone */}
+  1047→                      <motion.div
+  1048→                        className={`relative flex min-h-[200px] cursor-pointer flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed p-6 transition-colors ${
+  1049→                          isDragOver
+  1050→                            ? 'border-emerald-400 bg-emerald-50'
+  1051→                            : 'border-slate-300 bg-slate-50/50 hover:border-emerald-300 hover:bg-emerald-50/30'
+  1052→                        }`}
+  1053→                        onDragOver={handleDragOver}
+  1054→                        onDragLeave={handleDragLeave}
+  1055→                        onDrop={handleDrop}
+  1056→                        onClick={() => fileInputRef.current?.click()}
+  1057→                        whileHover={{ scale: 1.005 }}
+  1058→                        animate={isDragOver ? { scale: 1.01 } : { scale: 1 }}
+  1059→                      >
+  1060→                        <input
+  1061→                          ref={fileInputRef}
+  1062→                          type="file"
+  1063→                          multiple
+  1064→                          accept=".pdf,.xlsx,.xls,.csv,.png,.jpg,.jpeg"
+  1065→                          className="hidden"
+  1066→                          onChange={(e) => e.target.files && handleFileUpload(e.target.files)}
+  1067→                        />
+  1068→                        <motion.div
+  1069→                          animate={isDragOver ? { y: -4 } : { y: 0 }}
+  1070→                          transition={{ duration: 0.2 }}
+  1071→                        >
+  1072→                          <Upload className="size-10 text-emerald-400" />
+  1073→                        </motion.div>
+  1074→                        <div className="text-center">
+  1075→                          <p className="text-sm font-medium text-slate-700">
+  1076→                            {isDragOver ? 'Drop files here' : 'Drag & drop files here'}
+  1077→                          </p>
+  1078→                          <p className="mt-1 text-xs text-muted-foreground">
+  1079→                            or click to browse &middot; PDF, Excel, CSV, Images
+  1080→                          </p>
+  1081→                        </div>
+  1082→                        <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700 text-xs">
+  1083→                          <Shield className="mr-1 size-3" />
+  1084→                          Files processed securely
+  1085→                        </Badge>
+  1086→                      </motion.div>
+  1087→
+  1088→                      {/* Uploaded Files List */}
+  1089→                      {uploadedFiles.length > 0 && (
+  1090→                        <div className="space-y-2">
+  1091→                          <p className="text-sm font-medium text-slate-700">
+  1092→                            Uploaded Files ({uploadedFiles.length})
+  1093→                          </p>
+  1094→                          <div className="space-y-2">
+  1095→                            {uploadedFiles.map((file) => (
+  1096→                              <motion.div
+  1097→                                key={file.id}
+  1098→                                initial={{ opacity: 0, y: 8 }}
+  1099→                                animate={{ opacity: 1, y: 0 }}
+  1100→                                className="flex items-center gap-3 rounded-lg border bg-white p-3"
+  1101→                              >
+  1102→                                {getFileIcon(file.type)}
+  1103→                                <div className="min-w-0 flex-1">
+  1104→                                  <p className="truncate text-sm font-medium">{file.name}</p>
+  1105→                                  <div className="flex items-center gap-2">
+  1106→                                    <p className="text-xs text-muted-foreground">
+  1107→                                      {formatFileSize(file.size)}
+  1108→                                    </p>
+  1109→                                    {file.status === 'uploading' && (
+  1110→                                      <span className="text-xs text-emerald-600">
+  1111→                                        {Math.round(file.progress)}%
+  1112→                                      </span>
+  1113→                                    )}
+  1114→                                    {file.status === 'processing' && (
+  1115→                                      <span className="flex items-center gap-1 text-xs text-amber-600">
+  1116→                                        <Loader2 className="size-3 animate-spin" />
+  1117→                                        Processing
+  1118→                                      </span>
+  1119→                                    )}
+  1120→                                    {file.status === 'done' && (
+  1121→                                      <span className="flex items-center gap-1 text-xs text-emerald-600">
+  1122→                                        <CheckCircle2 className="size-3" />
+  1123→                                        Ready
+  1124→                                      </span>
+  1125→                                    )}
+  1126→                                    {file.status === 'error' && (
+  1127→                                      <span className="text-xs text-red-600">Error</span>
+  1128→                                    )}
+  1129→                                  </div>
+  1130→                                  {file.status === 'uploading' && (
+  1131→                                    <Progress value={file.progress} className="mt-1.5 h-1" />
+  1132→                                  )}
+  1133→                                </div>
+  1134→                                <Button
+  1135→                                  variant="ghost"
+  1136→                                  size="sm"
+  1137→                                  className="size-8 p-0 text-slate-400 hover:text-red-500"
+  1138→                                  onClick={(e) => {
+  1139→                                    e.stopPropagation();
+  1140→                                    handleRemoveFile(file.id);
+  1141→                                  }}
+  1142→                                >
+  1143→                                  <X className="size-4" />
+  1144→                                </Button>
+  1145→                              </motion.div>
+  1146→                            ))}
+  1147→                          </div>
+  1148→                        </div>
+  1149→                      )}
+  1150→
+  1151→                      <div className="flex items-center justify-between">
+  1152→                        <Button
+  1153→                          variant="outline"
+  1154→                          onClick={() => setQuickFileStep(1)}
+  1155→                          className="gap-2"
+  1156→                        >
+  1157→                          <ArrowLeft className="size-4" />
+  1158→                          Back
+  1159→                        </Button>
+  1160→                        <Button
+  1161→                          onClick={handleExtractData}
+  1162→                          disabled={
+  1163→                            uploadedFiles.length === 0 ||
+  1164→                            uploadedFiles.some((f) => f.status !== 'done') ||
+  1165→                            isExtracting
+  1166→                          }
+  1167→                          className="gap-2 bg-emerald-600 hover:bg-emerald-700"
+  1168→                        >
+  1169→                          {isExtracting ? (
+  1170→                            <>
+  1171→                              <Loader2 className="size-4 animate-spin" />
+  1172→                              Extracting Data...
+  1173→                            </>
+  1174→                          ) : (
+  1175→                            <>
+  1176→                              <Zap className="size-4" />
+  1177→                              Extract Invoice Data
+  1178→                            </>
+  1179→                          )}
+  1180→                        </Button>
+  1181→                      </div>
+  1182→                    </CardContent>
+  1183→                  </Card>
+  1184→                </motion.div>
+  1185→              )}
+  1186→
+  1187→              {/* ─── Step 3: Review Extracted Data ──────────────────────────── */}
+  1188→              {quickFileStep === 3 && (
+  1189→                <motion.div variants={fadeInUp} initial="hidden" animate="show" className="space-y-4">
+  1190→                  <Card>
+  1191→                    <CardHeader>
+  1192→                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+  1193→                        <CardTitle className="flex items-center gap-2 text-base">
+  1194→                          <div className="flex size-6 items-center justify-center rounded-full bg-emerald-100 text-xs font-bold text-emerald-700">
+  1195→                            3
+  1196→                          </div>
+  1197→                          Review Extracted Data
+  1198→                          <Badge variant="secondary" className="ml-1">
+  1199→                            {extractedInvoices.length} invoices
+  1200→                          </Badge>
+  1201→                        </CardTitle>
+  1202→                        <div className="flex items-center gap-3 text-xs">
+  1203→                          <span className="flex items-center gap-1 text-emerald-600">
+  1204→                            <CheckCircle2 className="size-3.5" />
+  1205→                            {quickFileTotals.validCount} Valid
+  1206→                          </span>
+  1207→                          <span className="flex items-center gap-1 text-amber-600">
+  1208→                            <AlertTriangle className="size-3.5" />
+  1209→                            {quickFileTotals.warningCount} Warnings
+  1210→                          </span>
+  1211→                        </div>
+  1212→                      </div>
+  1213→                      <CardDescription>
+  1214→                        Review and correct extracted invoice data before filing
+  1215→                      </CardDescription>
+  1216→                    </CardHeader>
+  1217→                    <CardContent>
+  1218→                      <ScrollArea className="max-h-[500px]">
+  1219→                        <div className="overflow-x-auto rounded-lg border">
+  1220→                          <Table>
+  1221→                            <TableHeader>
+  1222→                              <TableRow className="bg-muted/50">
+  1223→                                <TableHead className="text-xs whitespace-nowrap">Invoice #</TableHead>
+  1224→                                <TableHead className="text-xs whitespace-nowrap">Date</TableHead>
+  1225→                                <TableHead className="text-xs whitespace-nowrap">Buyer GSTIN</TableHead>
+  1226→                                <TableHead className="text-xs whitespace-nowrap">Buyer Name</TableHead>
+  1227→                                <TableHead className="text-xs whitespace-nowrap text-right">Taxable</TableHead>
+  1228→                                <TableHead className="text-xs whitespace-nowrap text-right">CGST</TableHead>
+  1229→                                <TableHead className="text-xs whitespace-nowrap text-right">SGST</TableHead>
+  1230→                                <TableHead className="text-xs whitespace-nowrap text-right">IGST</TableHead>
+  1231→                                <TableHead className="text-xs whitespace-nowrap text-right">Total</TableHead>
+  1232→                                <TableHead className="text-xs whitespace-nowrap">Section</TableHead>
+  1233→                                <TableHead className="text-xs whitespace-nowrap">Validation</TableHead>
+  1234→                              </TableRow>
+  1235→                            </TableHeader>
+  1236→                            <TableBody>
+  1237→                              {extractedInvoices.map((inv) => (
+  1238→                                <TableRow key={inv.id} className="group">
+  1239→                                  <TableCell className="font-medium text-xs whitespace-nowrap">
+  1240→                                    {inv.invoiceNumber}
+  1241→                                  </TableCell>
+  1242→                                  <TableCell className="text-xs whitespace-nowrap text-muted-foreground">
+  1243→                                    {inv.invoiceDate}
+  1244→                                  </TableCell>
+  1245→                                  <TableCell className="whitespace-nowrap">
+  1246→                                    <Input
+  1247→                                      value={inv.buyerGstin}
+  1248→                                      onChange={(e) =>
+  1249→                                        handleUpdateExtractedInvoice(inv.id, 'buyerGstin', e.target.value)
+  1250→                                      }
+  1251→                                      className={`h-7 text-xs font-mono w-[140px] ${
+  1252→                                        !inv.gstinValid && inv.buyerGstin
+  1253→                                          ? 'border-amber-300 bg-amber-50'
+  1254→                                          : ''
+  1255→                                      }`}
+  1256→                                    />
+  1257→                                  </TableCell>
+  1258→                                  <TableCell className="text-xs whitespace-nowrap max-w-[120px] truncate">
+  1259→                                    {inv.buyerName}
+  1260→                                  </TableCell>
+  1261→                                  <TableCell className="whitespace-nowrap">
+  1262→                                    <Input
+  1263→                                      type="number"
+  1264→                                      value={inv.taxableValue}
+  1265→                                      onChange={(e) =>
+  1266→                                        handleUpdateExtractedInvoice(
+  1267→                                          inv.id,
+  1268→                                          'taxableValue',
+  1269→                                          parseFloat(e.target.value) || 0
+  1270→                                        )
+  1271→                                      }
+  1272→                                      className="h-7 text-xs w-[90px] text-right"
+  1273→                                    />
+  1274→                                  </TableCell>
+  1275→                                  <TableCell className="whitespace-nowrap">
+  1276→                                    <Input
+  1277→                                      type="number"
+  1278→                                      value={inv.cgst}
+  1279→                                      onChange={(e) =>
+  1280→                                        handleUpdateExtractedInvoice(
+  1281→                                          inv.id,
+  1282→                                          'cgst',
+  1283→                                          parseFloat(e.target.value) || 0
+  1284→                                        )
+  1285→                                      }
+  1286→                                      className="h-7 text-xs w-[70px] text-right"
+  1287→                                    />
+  1288→                                  </TableCell>
+  1289→                                  <TableCell className="whitespace-nowrap">
+  1290→                                    <Input
+  1291→                                      type="number"
+  1292→                                      value={inv.sgst}
+  1293→                                      onChange={(e) =>
+  1294→                                        handleUpdateExtractedInvoice(
+  1295→                                          inv.id,
+  1296→                                          'sgst',
+  1297→                                          parseFloat(e.target.value) || 0
+  1298→                                        )
+  1299→                                      }
+  1300→                                      className="h-7 text-xs w-[70px] text-right"
+  1301→                                    />
+  1302→                                  </TableCell>
+  1303→                                  <TableCell className="whitespace-nowrap">
+  1304→                                    <Input
+  1305→                                      type="number"
+  1306→                                      value={inv.igst}
+  1307→                                      onChange={(e) =>
+  1308→                                        handleUpdateExtractedInvoice(
+  1309→                                          inv.id,
+  1310→                                          'igst',
+  1311→                                          parseFloat(e.target.value) || 0
+  1312→                                        )
+  1313→                                      }
+  1314→                                      className="h-7 text-xs w-[70px] text-right"
+  1315→                                    />
+  1316→                                  </TableCell>
+  1317→                                  <TableCell className="text-xs whitespace-nowrap text-right font-medium">
+  1318→                                    {formatCurrency(inv.totalAmount)}
+  1319→                                  </TableCell>
+  1320→                                  <TableCell className="whitespace-nowrap">
+  1321→                                    <Badge
+  1322→                                      variant="outline"
+  1323→                                      className="text-[10px] border-slate-200 bg-slate-50 text-slate-600"
+  1324→                                    >
+  1325→                                      {SECTION_BREAKDOWN_LABELS[inv.gstr1Section] ?? inv.gstr1Section}
+  1326→                                    </Badge>
+  1327→                                  </TableCell>
+  1328→                                  <TableCell className="whitespace-nowrap">
+  1329→                                    <div className="flex items-center gap-1">
+  1330→                                      {inv.gstinValid ? (
+  1331→                                        <CheckCircle2 className="size-3.5 text-emerald-500" />
+  1332→                                      ) : (
+  1333→                                        <AlertTriangle className="size-3.5 text-amber-500" />
+  1334→                                      )}
+  1335→                                      {inv.hsnValid ? (
+  1336→                                        <CheckCircle2 className="size-3.5 text-emerald-500" />
+  1337→                                      ) : (
+  1338→                                        <AlertTriangle className="size-3.5 text-amber-500" />
+  1339→                                      )}
+  1340→                                      {inv.taxComputationValid ? (
+  1341→                                        <CheckCircle2 className="size-3.5 text-emerald-500" />
+  1342→                                      ) : (
+  1343→                                        <AlertTriangle className="size-3.5 text-amber-500" />
+  1344→                                      )}
+  1345→                                    </div>
+  1346→                                  </TableCell>
+  1347→                                </TableRow>
+  1348→                              ))}
+  1349→                            </TableBody>
+  1350→                          </Table>
+  1351→                        </div>
+  1352→                      </ScrollArea>
+  1353→
+  1354→                      {/* Validation Legend */}
+  1355→                      <div className="mt-3 flex flex-wrap gap-4 text-xs text-muted-foreground">
+  1356→                        <span className="flex items-center gap-1">
+  1357→                          <CheckCircle2 className="size-3 text-emerald-500" /> GSTIN Valid
+  1358→                        </span>
+  1359→                        <span className="flex items-center gap-1">
+  1360→                          <CheckCircle2 className="size-3 text-emerald-500" /> HSN Valid
+  1361→                        </span>
+  1362→                        <span className="flex items-center gap-1">
+  1363→                          <CheckCircle2 className="size-3 text-emerald-500" /> Tax Correct
+  1364→                        </span>
+  1365→                        <span className="flex items-center gap-1">
+  1366→                          <AlertTriangle className="size-3 text-amber-500" /> Needs Attention
+  1367→                        </span>
+  1368→                      </div>
+  1369→
+  1370→                      <div className="mt-4 flex items-center justify-between">
+  1371→                        <Button
+  1372→                          variant="outline"
+  1373→                          onClick={() => setQuickFileStep(2)}
+  1374→                          className="gap-2"
+  1375→                        >
+  1376→                          <ArrowLeft className="size-4" />
+  1377→                          Back
+  1378→                        </Button>
+  1379→                        <Button
+  1380→                          onClick={() => setQuickFileStep(4)}
+  1381→                          className="gap-2 bg-emerald-600 hover:bg-emerald-700"
+  1382→                        >
+  1383→                          Proceed to File
+  1384→                          <ArrowRight className="size-4" />
+  1385→                        </Button>
+  1386→                      </div>
+  1387→                    </CardContent>
+  1388→                  </Card>
+  1389→                </motion.div>
+  1390→              )}
+  1391→
+  1392→              {/* ─── Step 4: File Return ────────────────────────────────────── */}
+  1393→              {quickFileStep === 4 && (
+  1394→                <motion.div variants={fadeInUp} initial="hidden" animate="show" className="space-y-4">
+  1395→                  {/* Summary Card */}
+  1396→                  <Card className="border-emerald-200 bg-gradient-to-br from-emerald-50/80 to-teal-50/80">
+  1397→                    <CardHeader>
+  1398→                      <CardTitle className="flex items-center gap-2 text-base text-emerald-800">
+  1399→                        <div className="flex size-6 items-center justify-center rounded-full bg-emerald-600 text-xs font-bold text-white">
+  1400→                          4
+  1401→                        </div>
+  1402→                        Filing Summary
+  1403→                      </CardTitle>
+  1404→                      <CardDescription className="text-emerald-600">
+  1405→                        Review the summary before filing your return
+  1406→                      </CardDescription>
+  1407→                    </CardHeader>
+  1408→                    <CardContent className="space-y-6">
+  1409→                      {/* Key Metrics */}
+  1410→                      <div className="grid gap-4 sm:grid-cols-3">
+  1411→                        <div className="rounded-lg bg-white/80 p-4 border border-emerald-100">
+  1412→                          <p className="text-xs font-medium text-emerald-600">Total Invoices</p>
+  1413→                          <p className="mt-1 text-2xl font-bold text-emerald-900">
+  1414→                            {quickFileTotals.totalInvoices}
+  1415→                          </p>
+  1416→                        </div>
+  1417→                        <div className="rounded-lg bg-white/80 p-4 border border-emerald-100">
+  1418→                          <p className="text-xs font-medium text-emerald-600">Total Taxable Value</p>
+  1419→                          <p className="mt-1 text-2xl font-bold text-emerald-900">
+  1420→                            {formatCurrency(quickFileTotals.totalTaxable)}
+  1421→                          </p>
+  1422→                        </div>
+  1423→                        <div className="rounded-lg bg-white/80 p-4 border border-emerald-100">
+  1424→                          <p className="text-xs font-medium text-emerald-600">Total GST</p>
+  1425→                          <p className="mt-1 text-2xl font-bold text-emerald-900">
+  1426→                            {formatCurrency(quickFileTotals.totalTax)}
+  1427→                          </p>
+  1428→                        </div>
+  1429→                      </div>
+  1430→
+  1431→                      <Separator className="bg-emerald-200" />
+  1432→
+  1433→                      {/* Section Breakdown */}
+  1434→                      <div>
+  1435→                        <p className="text-sm font-semibold text-emerald-800 mb-3">
+  1436→                          Section-wise Breakdown
+  1437→                        </p>
+  1438→                        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+  1439→                          {Object.entries(sectionBreakdown).map(([section, data]) => (
+  1440→                            <div
+  1441→                              key={section}
+  1442→                              className="flex items-center justify-between rounded-lg bg-white/80 border border-emerald-100 p-3"
+  1443→                            >
+  1444→                              <div>
+  1445→                                <p className="text-xs font-medium text-emerald-700">
+  1446→                                  {SECTION_BREAKDOWN_LABELS[section] ?? section.toUpperCase()}
+  1447→                                </p>
+  1448→                                <p className="text-[10px] text-muted-foreground">
+  1449→                                  {data.count} invoice{data.count !== 1 ? 's' : ''}
+  1450→                                </p>
+  1451→                              </div>
+  1452→                              <div className="text-right">
+  1453→                                <p className="text-xs font-semibold text-emerald-900">
+  1454→                                  {formatCurrency(data.taxableValue)}
+  1455→                                </p>
+  1456→                                <p className="text-[10px] text-emerald-600">
+  1457→                                  Tax: {formatCurrency(data.totalTax)}
+  1458→                                </p>
+  1459→                              </div>
+  1460→                            </div>
+  1461→                          ))}
+  1462→                          {Object.keys(sectionBreakdown).length === 0 && (
+  1463→                            <div className="col-span-full py-4 text-center text-sm text-muted-foreground">
+  1464→                              No data to display
+  1465→                            </div>
+  1466→                          )}
+  1467→                        </div>
+  1468→                      </div>
+  1469→
+  1470→                      {/* Validation Summary */}
+  1471→                      <div className="flex items-center gap-4 text-sm">
+  1472→                        <span className="flex items-center gap-1.5 text-emerald-700">
+  1473→                          <CheckCircle2 className="size-4" />
+  1474→                          {quickFileTotals.validCount} valid invoices
+  1475→                        </span>
+  1476→                        {quickFileTotals.warningCount > 0 && (
+  1477→                          <span className="flex items-center gap-1.5 text-amber-700">
+  1478→                            <AlertTriangle className="size-4" />
+  1479→                            {quickFileTotals.warningCount} with warnings
+  1480→                          </span>
+  1481→                        )}
+  1482→                      </div>
+  1483→
+  1484→                      <Separator className="bg-emerald-200" />
+  1485→
+  1486→                      {/* Action Buttons */}
+  1487→                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+  1488→                        <Button
+  1489→                          variant="outline"
+  1490→                          onClick={() => setQuickFileStep(3)}
+  1491→                          className="gap-2"
+  1492→                        >
+  1493→                          <ArrowLeft className="size-4" />
+  1494→                          Back to Review
+  1495→                        </Button>
+  1496→                        <div className="flex gap-2">
+  1497→                          <Button
+  1498→                            variant="outline"
+  1499→                            onClick={handleGenerateJSON}
+  1500→                            disabled={isGeneratingJSON}
+  1501→                            className="gap-2 border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+  1502→                          >
+  1503→                            {isGeneratingJSON ? (
+  1504→                              <Loader2 className="size-4 animate-spin" />
+  1505→                            ) : (
+  1506→                              <Download className="size-4" />
+  1507→                            )}
+  1508→                            {isGeneratingJSON ? 'Generating...' : 'Generate JSON'}
+  1509→                          </Button>
+  1510→                          <Button
+  1511→                            onClick={handleFileReturn}
+  1512→                            disabled={isFiling || quickFileTotals.totalInvoices === 0}
+  1513→                            className="gap-2 bg-emerald-600 hover:bg-emerald-700"
+  1514→                          >
+  1515→                            {isFiling ? (
+  1516→                              <Loader2 className="size-4 animate-spin" />
+  1517→                            ) : (
+  1518→                              <CheckCircle2 className="size-4" />
+  1519→                            )}
+  1520→                            {isFiling ? 'Filing Return...' : 'File Return'}
+  1521→                          </Button>
+  1522→                        </div>
+  1523→                      </div>
+  1524→                    </CardContent>
+  1525→                  </Card>
+  1526→                </motion.div>
+  1527→              )}
+  1528→            </motion.div>
+  1529→          </AnimatePresence>
+  1530→        </TabsContent>
+  1531→
+  1532→        {/* ═══════════════════════════════════════════════════════════════════
+  1533→            TAB 3: Filed History
+  1534→        ═══════════════════════════════════════════════════════════════════════ */}
+  1535→        <TabsContent value="filed-history" className="space-y-4">
+  1536→          <Card>
+  1537→            <CardHeader>
+  1538→              <CardTitle className="flex items-center gap-2 text-base">
+  1539→                <CheckCircle2 className="size-4 text-emerald-600" />
+  1540→                Filed History
+  1541→                <Badge variant="secondary" className="ml-1">
+  1542→                  {filedHistory.length}
+  1543→                </Badge>
+  1544→              </CardTitle>
+  1545→              <CardDescription>
+  1546→                Previously filed returns with acknowledgments
+  1547→              </CardDescription>
+  1548→            </CardHeader>
+  1549→            <CardContent>
+  1550→              {filedHistory.length === 0 ? (
+  1551→                <div className="flex flex-col items-center gap-3 py-12 text-center">
+  1552→                  <Clock className="size-10 text-muted-foreground/40" />
+  1553→                  <p className="text-sm text-muted-foreground">
+  1554→                    No filed returns yet. File your first return using Quick File.
+  1555→                  </p>
+  1556→                  <Button
+  1557→                    onClick={() => setActiveTab('quick-file')}
+  1558→                    variant="outline"
+  1559→                    className="gap-2 border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+  1560→                  >
+  1561→                    <Zap className="size-4" />
+  1562→                    Start Quick File
+  1563→                  </Button>
+  1564→                </div>
+  1565→              ) : (
+  1566→                <div className="space-y-3">
+  1567→                  <AnimatePresence>
+  1568→                    <motion.div
+  1569→                      variants={staggerContainer}
+  1570→                      initial="hidden"
+  1571→                      animate="show"
+  1572→                      className="space-y-3"
+  1573→                    >
+  1574→                      {filedHistory.map((filing) => (
+  1575→                        <motion.div
+  1576→                          key={filing.id}
+  1577→                          variants={staggerItem}
+  1578→                          className="flex flex-col gap-3 rounded-lg border bg-white p-4 sm:flex-row sm:items-center sm:justify-between"
+  1579→                        >
+  1580→                          <div className="flex items-start gap-3">
+  1581→                            <div className="flex size-9 items-center justify-center rounded-lg bg-emerald-100">
+  1582→                              <CheckCircle2 className="size-4 text-emerald-600" />
+  1583→                            </div>
+  1584→                            <div>
+  1585→                              <div className="flex items-center gap-2">
+  1586→                                <p className="text-sm font-medium">
+  1587→                                  {filing.client?.tradeName ?? '—'}
+  1588→                                </p>
+  1589→                                <Badge
+  1590→                                  variant="outline"
+  1591→                                  className="text-[10px] border-emerald-200 bg-emerald-50 text-emerald-700"
+  1592→                                >
+  1593→                                  {filing.returnType}
+  1594→                                </Badge>
+  1595→                              </div>
+  1596→                              <p className="text-xs text-muted-foreground">
+  1597→                                {filing.period ? periodToLabel(filing.period) : '—'} &middot; Filed{' '}
+  1598→                                {filing.filedDate ?? '—'}
+  1599→                              </p>
+  1600→                              {filing.acknowledgmentNumber && (
+  1601→                                <p className="mt-0.5 text-xs font-mono text-slate-500">
+  1602→                                  ARN: {filing.acknowledgmentNumber}
+  1603→                                </p>
+  1604→                              )}
+  1605→                            </div>
+  1606→                          </div>
+  1607→                          <div className="flex items-center gap-2 pl-12 sm:pl-0">
+  1608→                            <p className="text-sm font-semibold text-emerald-700 mr-2">
+  1609→                              {formatCurrency(filing.totalTax)}
+  1610→                            </p>
+  1611→                            <Button variant="outline" size="sm" className="gap-1.5 h-7 text-xs">
+  1612→                              <Download className="size-3" />
+  1613→                              JSON
+  1614→                            </Button>
+  1615→                            <Button variant="outline" size="sm" className="gap-1.5 h-7 text-xs">
+  1616→                              <Download className="size-3" />
+  1617→                              ACK
+  1618→                            </Button>
+  1619→                          </div>
+  1620→                        </motion.div>
+  1621→                      ))}
+  1622→                    </motion.div>
+  1623→                  </AnimatePresence>
+  1624→                </div>
+  1625→              )}
+  1626→            </CardContent>
+  1627→          </Card>
+  1628→        </TabsContent>
+  1629→      </Tabs>
+  1630→
+  1631→      {/* ─── New Return Dialog ──────────────────────────────────────────── */}
+  1632→      <Dialog open={newReturnOpen} onOpenChange={setNewReturnOpen}>
+  1633→        <DialogContent className="sm:max-w-md">
+  1634→          <DialogHeader>
+  1635→            <DialogTitle className="flex items-center gap-2">
+  1636→              <Plus className="size-5 text-emerald-600" />
+  1637→              New Return
+  1638→            </DialogTitle>
+  1639→            <DialogDescription>
+  1640→              Create a new GST return filing record to get started
+  1641→            </DialogDescription>
+  1642→          </DialogHeader>
+  1643→          <div className="space-y-4 py-2">
+  1644→            {/* Client Select */}
+  1645→            <div className="space-y-2">
+  1646→              <label className="text-sm font-medium">Client</label>
+  1647→              <Select value={newReturnClientId} onValueChange={setNewReturnClientId}>
+  1648→                <SelectTrigger>
+  1649→                  <SelectValue placeholder="Select a client" />
+  1650→                </SelectTrigger>
+  1651→                <SelectContent>
+  1652→                  {clients.map((c) => (
+  1653→                    <SelectItem key={c.id} value={c.id}>
+  1654→                      {c.tradeName} ({c.gstin})
+  1655→                    </SelectItem>
+  1656→                  ))}
+  1657→                </SelectContent>
+  1658→              </Select>
+  1659→            </div>
+  1660→
+  1661→            {/* Return Type */}
+  1662→            <div className="space-y-2">
+  1663→              <label className="text-sm font-medium">Return Type</label>
+  1664→              <Select value={newReturnType} onValueChange={setNewReturnType}>
+  1665→                <SelectTrigger>
+  1666→                  <SelectValue placeholder="Select return type" />
+  1667→                </SelectTrigger>
+  1668→                <SelectContent>
+  1669→                  {RETURN_TYPES.map((rt) => (
+  1670→                    <SelectItem key={rt} value={rt}>
+  1671→                      {rt}
+  1672→                    </SelectItem>
+  1673→                  ))}
+  1674→                </SelectContent>
+  1675→              </Select>
+  1676→            </div>
+  1677→
+  1678→            {/* Period */}
+  1679→            <div className="space-y-2">
+  1680→              <label className="text-sm font-medium">Period</label>
+  1681→              <div className="grid grid-cols-2 gap-2">
+  1682→                <Select value={newReturnFY} onValueChange={setNewReturnFY}>
+  1683→                  <SelectTrigger>
+  1684→                    <SelectValue />
+  1685→                  </SelectTrigger>
+  1686→                  <SelectContent>
+  1687→                    {FINANCIAL_YEARS.map((fy) => (
+  1688→                      <SelectItem key={fy} value={fy}>
+  1689→                        FY {fy}
+  1690→                      </SelectItem>
+  1691→                    ))}
+  1692→                  </SelectContent>
+  1693→                </Select>
+  1694→                <Select value={newReturnMonth} onValueChange={setNewReturnMonth}>
+  1695→                  <SelectTrigger>
+  1696→                    <SelectValue placeholder="Month" />
+  1697→                  </SelectTrigger>
+  1698→                  <SelectContent>
+  1699→                    {MONTHS.map((m) => (
+  1700→                      <SelectItem key={m.value} value={m.value}>
+  1701→                        {m.label}
+  1702→                      </SelectItem>
+  1703→                    ))}
+  1704→                  </SelectContent>
+  1705→                </Select>
+  1706→              </div>
+  1707→            </div>
+  1708→          </div>
+  1709→          <DialogFooter>
+  1710→            <Button
+  1711→              variant="outline"
+  1712→              onClick={() => setNewReturnOpen(false)}
+  1713→            >
+  1714→              Cancel
+  1715→            </Button>
+  1716→            <Button
+  1717→              onClick={handleCreateNewReturn}
+  1718→              disabled={!newReturnClientId || !newReturnType || isCreating}
+  1719→              className="gap-2 bg-emerald-600 hover:bg-emerald-700"
+  1720→            >
+  1721→              {isCreating ? (
+  1722→                <Loader2 className="size-4 animate-spin" />
+  1723→              ) : (
+  1724→                <Zap className="size-4" />
+  1725→              )}
+  1726→              {isCreating ? 'Creating...' : 'Create & Start'}
+  1727→            </Button>
+  1728→          </DialogFooter>
+  1729→        </DialogContent>
+  1730→      </Dialog>
+  1731→    </div>
+  1732→  );
+  1733→}
+  1734→

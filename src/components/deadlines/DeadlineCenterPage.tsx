@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import {
   Card,
   CardContent,
@@ -45,12 +45,19 @@ import {
   Timer,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { format, addDays, differenceInDays, startOfMonth, endOfMonth, getDay, eachDayOfInterval, isSameDay, isToday, isPast, isBefore, parseISO, isValid } from 'date-fns';
+import { format, addDays, differenceInDays, startOfMonth, endOfMonth, getDay, eachDayOfInterval, isSameDay, isToday, isPast, isBefore, isAfter, parseISO, isValid } from 'date-fns';
 import { useApp } from '@/contexts/AppContext';
 import type { FilingCalendarItem, GSTRFiling } from '@/types/gst';
-import { periodToLabel, getFilingDueDate } from '@/lib/gst-utils';
+import { periodToLabel, getFilingDueDate, isOverdue } from '@/lib/gst-utils';
+import { useFireReturns, useFireClients } from '@/hooks/use-firestore';
+import type { FirestoreReturn, FirestoreClient } from '@/lib/firestore-schema';
+import { AlertCircle, RefreshCw } from 'lucide-react';
+import { EmptyState } from '@/components/shared/EmptyState';
 
 // ── Types ────────────────────────────────────────────────────────────────────
+
+type FireReturn = FirestoreReturn & { id: string };
+type FireClient = FirestoreClient & { id: string };
 
 interface DeadlineEntry {
   id: string;
@@ -216,6 +223,30 @@ function TimelineSkeleton() {
 
 // ── Helper Functions ─────────────────────────────────────────────────────────
 
+// Maps a Firestore return row to a GSTRFiling for the local UI.
+function mapReturnToFiling(r: FireReturn, clientName: string): GSTRFiling {
+  return {
+    id: r.returnId,
+    clientId: r.clientId,
+    returnType: r.returnType,
+    period: r.period,
+    financialYear: r.financialYear,
+    status: r.status,
+    filedDate: r.filedDate ?? undefined,
+    acknowledgmentNumber: r.acknowledgmentNumber ?? undefined,
+    totalInvoices: r.totalInvoices,
+    readyForFiling: r.readyForFiling,
+    issuesFound: r.issuesFound,
+    criticalErrors: r.criticalErrors,
+    warnings: r.warnings,
+    totalTaxableValue: r.totalTaxableValue,
+    totalTax: r.totalTax,
+    jsonPayload: r.jsonPayload ?? undefined,
+    createdAt: (r.createdAt as string) ?? new Date().toISOString(),
+    updatedAt: (r.updatedAt as string) ?? new Date().toISOString(),
+  };
+}
+
 function getGstr1DueDate(year: number, month: number): Date {
   // 11th of following month
   const nextMonth = month === 12 ? 1 : month + 1;
@@ -349,46 +380,79 @@ function CalendarDayCell({ day, isCurrentMonth, isTodayDate, deadlines, isSelect
 export default function DeadlineCenterPage() {
   const { setCurrentView } = useApp();
 
+  // ─── Firestore data (real-time) ─────────────────────────────────────────
+  const {
+    data: returnDocs,
+    loading: returnsLoading,
+    error: returnsError,
+  } = useFireReturns();
+  const {
+    data: clientDocs,
+    loading: clientsLoading,
+    error: clientsError,
+  } = useFireClients();
+
   // State
-  const [calendarItems, setCalendarItems] = useState<FilingCalendarItem[]>([]);
-  const [filings, setFilings] = useState<GSTRFiling[]>([]);
-  const [loading, setLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+
+  // Build client lookup map
+  const clientMap = useMemo(() => {
+    const m = new Map<string, string>();
+    (clientDocs as unknown as FireClient[]).forEach((c) => {
+      m.set(c.clientId, c.tradeName);
+    });
+    return m;
+  }, [clientDocs]);
+
+  // Map Firestore returns → GSTRFiling[] + FilingCalendarItem[]
+  const filings = useMemo<GSTRFiling[]>(
+    () =>
+      (returnDocs as unknown as FireReturn[]).map((r) =>
+        mapReturnToFiling(r, clientMap.get(r.clientId) ?? 'Unknown'),
+      ),
+    [returnDocs, clientMap],
+  );
+
+  const calendarItems = useMemo<FilingCalendarItem[]>(() => {
+    return filings.map((f) => {
+      const dueDate = getFilingDueDate(f.returnType, f.period);
+      const overdue = isOverdue(f.period);
+      let status: FilingCalendarItem['status'];
+      if (f.status === 'filed') {
+        status = 'filed';
+      } else if (overdue) {
+        status = 'overdue';
+      } else {
+        const dueDateObj = new Date(dueDate);
+        const today = new Date();
+        const sevenDaysFromNow = addDays(today, 7);
+        if (isBefore(dueDateObj, sevenDaysFromNow) && isAfter(dueDateObj, today)) {
+          status = 'upcoming';
+        } else {
+          status = 'pending';
+        }
+      }
+      return {
+        id: f.id,
+        returnType: f.returnType,
+        period: f.period,
+        dueDate,
+        status,
+        clientId: f.clientId,
+        clientName: clientMap.get(f.clientId) ?? 'Unknown',
+      };
+    });
+  }, [filings, clientMap]);
+
+  const loading = returnsLoading || clientsLoading;
+  const error = returnsError || clientsError;
 
   // Period state
   const now = new Date();
   const [selectedYear, setSelectedYear] = useState(now.getFullYear());
   const [selectedMonth, setSelectedMonth] = useState(now.getMonth() + 1); // 1-12
 
-  // ── Data Fetching ────────────────────────────────────────────────────────
-
-  useEffect(() => {
-    async function fetchData() {
-      try {
-        setLoading(true);
-        const [dashRes, filingRes] = await Promise.all([
-          fetch('/api/dashboard'),
-          fetch('/api/gstr-filing'),
-        ]);
-
-        if (dashRes.ok) {
-          const dashData = await dashRes.json();
-          setCalendarItems(dashData.filingCalendar || []);
-        }
-
-        if (filingRes.ok) {
-          const filingData = await filingRes.json();
-          setFilings(filingData.filings || []);
-        }
-      } catch (err) {
-        console.error('Error fetching deadline data:', err);
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    fetchData();
-  }, []);
+  // ── Data Fetching (no-op — Firestore hooks provide real-time data) ──────
 
   // ── Derived Data ─────────────────────────────────────────────────────────
 
@@ -656,6 +720,36 @@ export default function DeadlineCenterPage() {
 
   return (
     <div className="space-y-6 p-4 md:p-6 max-w-[1600px] mx-auto">
+      {/* ─── Error banner ────────────────────────────────────────────────── */}
+      {error && (
+        <div className="flex items-center justify-between gap-3 rounded-lg border border-rose-200 bg-rose-50 px-4 py-2.5 text-sm dark:border-rose-900/50 dark:bg-rose-950/30">
+          <div className="flex items-center gap-2 text-rose-700 dark:text-rose-400">
+            <AlertCircle className="h-4 w-4 shrink-0" />
+            <span>Failed to load deadlines: {error}</span>
+          </div>
+          <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs" onClick={() => window.location.reload()}>
+            <RefreshCw className="h-3 w-3" /> Retry
+          </Button>
+        </div>
+      )}
+      {/* ─── Empty state (no returns yet) ───────────────────────────────── */}
+      {!loading && !error && filings.length === 0 && (
+        <Card className="border-emerald-200/60 dark:border-emerald-900/40">
+          <CardContent className="py-6">
+            <EmptyState
+              icon={CalendarDays}
+              title="No deadlines"
+              description="Filing deadlines will appear here once returns are created."
+              action={{
+                label: 'Go to Filing Center',
+                onClick: () => setCurrentView('gstr-filing'),
+                variant: 'default',
+                icon: ArrowRight,
+              }}
+            />
+          </CardContent>
+        </Card>
+      )}
       {/* ═══════════════ PAGE HEADER ═══════════════ */}
       <motion.div
         initial={{ opacity: 0, y: -12 }}

@@ -55,6 +55,11 @@ import {
   Zap,
 } from 'lucide-react';
 import { formatNumber } from '@/lib/gst-utils';
+import { toast } from 'sonner';
+import { useFireNotices, useFireClients } from '@/hooks/use-firestore';
+import { createNotice, updateNotice } from '@/lib/firestore-service';
+import { EmptyState } from '@/components/shared';
+import { Bell as BellIcon } from 'lucide-react';
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 interface TeamMember {
@@ -123,14 +128,29 @@ const kpiVariants = {
 };
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
+// P1-M2: Notice types now come from the FirestoreNotice.NoticeType enum
+// (gst_show_cause, gst_demand, gst_assessment, gst_scrutiny,
+// gst_refund_rejection, gst_cancellation, gst_3b_mismatch, roc_notice,
+// income_tax_notice, tds_notice, other). The badge/icon helpers map each
+// enum value to a human-readable label + Tailwind classes.
 function getNoticeTypeBadge(type: string): { label: string; classes: string } {
   switch (type) {
-    case 'gst_notice':
+    // GST-related — red family
+    case 'gst_show_cause':
+    case 'gst_demand':
+    case 'gst_cancellation':
       return { label: 'GST Notice', classes: 'bg-red-50 text-red-700 border-red-200 dark:bg-red-950 dark:text-red-300 dark:border-red-800' };
-    case 'department_notice':
+    case 'gst_assessment':
+    case 'gst_scrutiny':
+    case 'gst_3b_mismatch':
+      return { label: 'GST Scrutiny', classes: 'bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950 dark:text-orange-300 dark:border-orange-800' };
+    case 'gst_refund_rejection':
+      return { label: 'GST Refund', classes: 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950 dark:text-rose-300 dark:border-rose-800' };
+    // Non-GST department notices — amber family
+    case 'roc_notice':
+    case 'income_tax_notice':
+    case 'tds_notice':
       return { label: 'Dept Notice', classes: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-800' };
-    case 'tax_query':
-      return { label: 'Tax Query', classes: 'bg-teal-50 text-teal-700 border-teal-200 dark:bg-teal-950 dark:text-teal-300 dark:border-teal-800' };
     default:
       return { label: 'Notice', classes: 'bg-slate-50 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700' };
   }
@@ -138,10 +158,20 @@ function getNoticeTypeBadge(type: string): { label: string; classes: string } {
 
 function getNoticeTypeIcon(type: string) {
   switch (type) {
-    case 'gst_notice': return <AlertTriangle className="h-3.5 w-3.5" />;
-    case 'department_notice': return <FileText className="h-3.5 w-3.5" />;
-    case 'tax_query': return <MessageSquare className="h-3.5 w-3.5" />;
-    default: return <Bell className="h-3.5 w-3.5" />;
+    case 'gst_show_cause':
+    case 'gst_demand':
+    case 'gst_assessment':
+    case 'gst_scrutiny':
+    case 'gst_cancellation':
+    case 'gst_3b_mismatch':
+    case 'gst_refund_rejection':
+      return <AlertTriangle className="h-3.5 w-3.5" />;
+    case 'roc_notice':
+    case 'income_tax_notice':
+    case 'tds_notice':
+      return <FileText className="h-3.5 w-3.5" />;
+    default:
+      return <Bell className="h-3.5 w-3.5" />;
   }
 }
 
@@ -266,6 +296,9 @@ function NoticeSkeleton() {
 }
 
 // ─── Mock Data ─────────────────────────────────────────────────────────────
+// mockNotices + mockClients removed in P1-M2 — notices now come from Firestore
+// (useFireNotices) and clients come from useFireClients. Team members still
+// come from REST because memberships are not one of the 15 collections.
 const mockTeamMembers: TeamMember[] = [
   { id: 'tm1', name: 'Priya Sharma', email: 'priya@firm.com', role: 'manager', department: 'compliance', avatar: null },
   { id: 'tm2', name: 'Rahul Mehta', email: 'rahul@firm.com', role: 'senior', department: 'filing', avatar: null },
@@ -273,75 +306,55 @@ const mockTeamMembers: TeamMember[] = [
   { id: 'tm4', name: 'Vikram Singh', email: 'vikram@firm.com', role: 'senior', department: 'audit', avatar: null },
 ];
 
-const mockClients: Client[] = [
-  { id: 'c1', tradeName: 'Sunrise Industries', gstin: '27AADCS1429B1Z5' },
-  { id: 'c2', tradeName: 'Patel Enterprises', gstin: '24AABCP1234A1Z9' },
-  { id: 'c3', tradeName: 'Sharma Traders', gstin: '07AABCS5678B1Z3' },
-  { id: 'c4', tradeName: 'Krishna Exports', gstin: '27AADCK9012C1Z7' },
-  { id: 'c5', tradeName: 'Mehta & Sons', gstin: '33AABCM3456D1Z1' },
-];
-
-const mockNotices: Notice[] = [
-  {
-    id: 'n1', clientId: 'c1', clientTradeName: 'Sunrise Industries', clientGstin: '27AADCS1429B1Z5',
-    noticeType: 'gst_notice', noticeNumber: 'GST/2026/001', noticeDate: '2026-02-15',
-    subject: 'GSTR-3B Mismatch - Q3 FY2025-26', description: 'The GST department has identified a mismatch in GSTR-3B filing for quarter 3. Tax liability reported does not match with auto-populated data from GSTR-1.',
-    status: 'open', assignedTo: 'tm1', assigneeName: 'Priya Sharma', assigneeEmail: 'priya@firm.com',
-    priority: 'urgent', dueDate: '2026-03-10', responseDate: null, resolution: null,
-    createdAt: '2026-02-16T10:30:00Z', updatedAt: '2026-02-16T10:30:00Z',
-  },
-  {
-    id: 'n2', clientId: 'c2', clientTradeName: 'Patel Enterprises', clientGstin: '24AABCP1234A1Z9',
-    noticeType: 'department_notice', noticeNumber: 'DEPT/2026/045', noticeDate: '2026-02-20',
-    subject: 'Annual Return Scrutiny - FY2024-25', description: 'Department has raised queries regarding certain claims in annual return for FY 2024-25. Supporting documentation required.',
-    status: 'in_progress', assignedTo: 'tm2', assigneeName: 'Rahul Mehta', assigneeEmail: 'rahul@firm.com',
-    priority: 'high', dueDate: '2026-03-20', responseDate: null, resolution: null,
-    createdAt: '2026-02-21T09:00:00Z', updatedAt: '2026-02-25T14:20:00Z',
-  },
-  {
-    id: 'n3', clientId: 'c3', clientTradeName: 'Sharma Traders', clientGstin: '07AABCS5678B1Z3',
-    noticeType: 'tax_query', noticeNumber: null, noticeDate: '2026-03-01',
-    subject: 'ITC Claim Verification - Feb 2026', description: 'Tax query regarding ITC claims exceeding Rs.5 lakh for February 2026 period.',
-    status: 'open', assignedTo: 'tm3', assigneeName: 'Anita Desai', assigneeEmail: 'anita@firm.com',
-    priority: 'medium', dueDate: '2026-03-25', responseDate: null, resolution: null,
-    createdAt: '2026-03-01T11:15:00Z', updatedAt: '2026-03-01T11:15:00Z',
-  },
-  {
-    id: 'n4', clientId: 'c4', clientTradeName: 'Krishna Exports', clientGstin: '27AADCK9012C1Z7',
-    noticeType: 'gst_notice', noticeNumber: 'GST/2026/078', noticeDate: '2026-01-10',
-    subject: 'Export Refund Processing Delay', description: 'GST refund for export shipments in Dec 2025 is pending. Department requires additional documentation.',
-    status: 'resolved', assignedTo: 'tm4', assigneeName: 'Vikram Singh', assigneeEmail: 'vikram@firm.com',
-    priority: 'high', dueDate: '2026-02-10', responseDate: '2026-02-08', resolution: 'Provided all required documentation. Refund processed and credited.',
-    createdAt: '2026-01-11T08:45:00Z', updatedAt: '2026-02-08T16:30:00Z',
-  },
-  {
-    id: 'n5', clientId: 'c5', clientTradeName: 'Mehta & Sons', clientGstin: '33AABCM3456D1Z1',
-    noticeType: 'department_notice', noticeNumber: 'DEPT/2026/012', noticeDate: '2026-02-28',
-    subject: 'E-Way Bill Compliance Query', description: 'Department has queried multiple e-way bills generated in January 2026. Vehicle number mismatch detected.',
-    status: 'open', assignedTo: null, assigneeName: null, assigneeEmail: null,
-    priority: 'low', dueDate: '2026-04-01', responseDate: null, resolution: null,
-    createdAt: '2026-02-28T13:00:00Z', updatedAt: '2026-02-28T13:00:00Z',
-  },
-  {
-    id: 'n6', clientId: 'c1', clientTradeName: 'Sunrise Industries', clientGstin: '27AADCS1429B1Z5',
-    noticeType: 'tax_query', noticeNumber: null, noticeDate: '2026-03-02',
-    subject: 'Late Filing Penalty Waiver Request', description: 'Query regarding eligibility for late filing penalty waiver under section 128.',
-    status: 'in_progress', assignedTo: 'tm1', assigneeName: 'Priya Sharma', assigneeEmail: 'priya@firm.com',
-    priority: 'medium', dueDate: '2026-03-15', responseDate: null, resolution: null,
-    createdAt: '2026-03-02T10:00:00Z', updatedAt: '2026-03-03T09:30:00Z',
-  },
-];
-
 // ═══════════════════════════════════════════════════════════════════════════
 // MAIN COMPONENT
 // ═══════════════════════════════════════════════════════════════════════════
 export default function NoticeCenterPage() {
   // ── State ──────────────────────────────────────────────────────────────
-  const [notices, setNotices] = useState<Notice[]>([]);
+  // P1-M2: notices + clients now come from Firestore hooks (real-time).
+  // Team members still come from REST (memberships aren't one of the 15
+  // collections the user requested to migrate to Firestore).
+  const fireNoticesQ = useFireNotices();
+  const fireClientsQ = useFireClients();
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
-  const [clients, setClients] = useState<Client[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [teamMembersLoading, setTeamMembersLoading] = useState(true);
+
+  // Map Firestore notices (noticeId → id, timestamps already ISO-stringified
+  // by useFirestoreCollection's convertDoc helper).
+  const notices: Notice[] = useMemo(() => {
+    return (fireNoticesQ.data ?? []).map(n => ({
+      id: n.noticeId,
+      clientId: n.clientId ?? '',
+      clientTradeName: n.clientTradeName ?? '',
+      clientGstin: n.clientGstin ?? '',
+      noticeType: n.noticeType ?? 'other',
+      noticeNumber: n.noticeNumber ?? null,
+      noticeDate: n.noticeDate ?? null,
+      subject: n.subject ?? '',
+      description: n.description ?? null,
+      status: n.status ?? 'open',
+      assignedTo: n.assignedTo ?? null,
+      assigneeName: n.assigneeName ?? null,
+      assigneeEmail: n.assigneeEmail ?? null,
+      priority: n.priority ?? 'medium',
+      dueDate: n.dueDate ?? null,
+      responseDate: n.responseDate ?? null,
+      resolution: n.resolution ?? null,
+      createdAt: typeof n.createdAt === 'string' ? n.createdAt : new Date().toISOString(),
+      updatedAt: typeof n.updatedAt === 'string' ? n.updatedAt : new Date().toISOString(),
+    }));
+  }, [fireNoticesQ.data]);
+
+  const clients: Client[] = useMemo(() => {
+    return (fireClientsQ.data ?? []).map(c => ({
+      id: c.clientId,
+      tradeName: c.tradeName,
+      gstin: c.gstin,
+    }));
+  }, [fireClientsQ.data]);
+
+  const loading = fireNoticesQ.loading || fireClientsQ.loading;
+  const error = fireNoticesQ.error ?? fireClientsQ.error;
 
   // Filters
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -356,7 +369,7 @@ export default function NoticeCenterPage() {
 
   // Create form state
   const [formClient, setFormClient] = useState('');
-  const [formNoticeType, setFormNoticeType] = useState('gst_notice');
+  const [formNoticeType, setFormNoticeType] = useState('gst_show_cause');
   const [formNoticeNumber, setFormNoticeNumber] = useState('');
   const [formNoticeDate, setFormNoticeDate] = useState('');
   const [formSubject, setFormSubject] = useState('');
@@ -369,68 +382,30 @@ export default function NoticeCenterPage() {
   const [resolutionText, setResolutionText] = useState('');
   const [reassignTo, setReassignTo] = useState('');
 
-  // ── Fetch Data ─────────────────────────────────────────────────────────
-  const fetchData = useCallback(async () => {
+  // ── Fetch Team Members (REST — kept as-is) ─────────────────────────────
+  // Notices + clients come from Firestore; team members stay on REST because
+  // memberships aren't one of the 15 collections the user requested to migrate.
+  const fetchTeamMembers = useCallback(async () => {
     try {
-      setLoading(true);
-      setError(null);
-
-      const [noticesRes, teamRes, clientsRes] = await Promise.all([
-        fetch('/api/notices'),
-        fetch('/api/team-members'),
-        fetch('/api/clients'),
-      ]);
-
-      let noticeList: Notice[] = [];
-      if (noticesRes.ok) {
-        const data = await noticesRes.json();
-        noticeList = data.notices ?? [];
-      }
-
+      setTeamMembersLoading(true);
+      const teamRes = await fetch('/api/team-members');
       let members: TeamMember[] = [];
       if (teamRes.ok) {
         const data = await teamRes.json();
         members = data.teamMembers ?? [];
       }
-
-      let clientList: Client[] = [];
-      if (clientsRes.ok) {
-        const data = await clientsRes.json();
-        clientList = (data.clients ?? []).map((c: { id: string; tradeName: string; gstin: string }) => ({
-          id: c.id,
-          tradeName: c.tradeName,
-          gstin: c.gstin,
-        }));
-      }
-
-      // Use mock data if API returns empty
-      if (noticeList.length === 0) {
-        noticeList = mockNotices;
-      }
-      if (members.length === 0) {
-        members = mockTeamMembers;
-      }
-      if (clientList.length === 0) {
-        clientList = mockClients;
-      }
-
-      setNotices(noticeList);
       setTeamMembers(members);
-      setClients(clientList);
     } catch (err) {
-      console.error('Notices fetch error:', err);
-      setError('Failed to load notice data');
-      setNotices(mockNotices);
-      setTeamMembers(mockTeamMembers);
-      setClients(mockClients);
+      console.error('Team members fetch error:', err);
+      setTeamMembers([]);
     } finally {
-      setLoading(false);
+      setTeamMembersLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    fetchTeamMembers();
+  }, [fetchTeamMembers]);
 
   // ── Derived Stats ──────────────────────────────────────────────────────
   const stats = useMemo(() => {
@@ -466,28 +441,33 @@ export default function NoticeCenterPage() {
     if (!formClient || !formSubject) return;
     try {
       setSubmitting(true);
-      const res = await fetch('/api/notices', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          clientId: formClient,
-          noticeType: formNoticeType,
-          noticeNumber: formNoticeNumber || null,
-          noticeDate: formNoticeDate || null,
-          subject: formSubject,
-          description: formDescription || null,
-          priority: formPriority,
-          dueDate: formDueDate || null,
-          assignedTo: formAssignTo || null,
-        }),
+      const selectedClient = clients.find(c => c.id === formClient);
+      const selectedMember = teamMembers.find(m => m.id === formAssignTo);
+      await createNotice({
+        clientId: formClient,
+        clientTradeName: selectedClient?.tradeName ?? null,
+        clientGstin: selectedClient?.gstin ?? null,
+        noticeType: formNoticeType as Notice['noticeType'],
+        noticeNumber: formNoticeNumber || null,
+        noticeDate: formNoticeDate || null,
+        subject: formSubject,
+        description: formDescription || null,
+        status: 'open',
+        priority: formPriority as Notice['priority'],
+        assignedTo: formAssignTo || null,
+        assigneeName: selectedMember?.name ?? null,
+        assigneeEmail: selectedMember?.email ?? null,
+        dueDate: formDueDate || null,
+        responseDate: null,
+        resolution: null,
+        attachmentUrl: null,
       });
-      if (res.ok) {
-        setCreateDialogOpen(false);
-        resetCreateForm();
-        fetchData();
-      }
+      toast.success('Notice created');
+      setCreateDialogOpen(false);
+      resetCreateForm();
     } catch (err) {
       console.error('Failed to create notice:', err);
+      toast.error('Failed to create notice');
     } finally {
       setSubmitting(false);
     }
@@ -497,68 +477,62 @@ export default function NoticeCenterPage() {
   const handleResolve = async () => {
     if (!selectedNotice) return;
     try {
-      const res = await fetch('/api/notices', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: selectedNotice.id,
-          status: 'resolved',
-          resolution: resolutionText || 'Resolved',
-        }),
+      await updateNotice(selectedNotice.id, {
+        status: 'resolved',
+        resolution: resolutionText || 'Resolved',
+        responseDate: new Date().toISOString(),
       });
-      if (res.ok) {
-        setDetailDialogOpen(false);
-        setResolutionText('');
-        fetchData();
-      }
+      toast.success('Notice resolved');
+      setDetailDialogOpen(false);
+      setResolutionText('');
     } catch (err) {
       console.error('Failed to resolve notice:', err);
+      toast.error('Failed to resolve notice');
     }
   };
 
   const handleReassign = async () => {
     if (!selectedNotice || !reassignTo) return;
     try {
-      const res = await fetch('/api/notices', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: selectedNotice.id,
-          assignedTo: reassignTo,
-        }),
+      const member = teamMembers.find(m => m.id === reassignTo);
+      await updateNotice(selectedNotice.id, {
+        assignedTo: reassignTo,
+        assigneeName: member?.name ?? null,
+        assigneeEmail: member?.email ?? null,
       });
-      if (res.ok) {
-        setDetailDialogOpen(false);
-        setReassignTo('');
-        fetchData();
-      }
+      toast.success('Notice reassigned');
+      setDetailDialogOpen(false);
+      setReassignTo('');
     } catch (err) {
       console.error('Failed to reassign notice:', err);
+      toast.error('Failed to reassign notice');
     }
   };
 
   const handleQuickAction = async (noticeId: string, action: 'in_progress' | 'resolved', assignTo?: string) => {
     try {
-      const body: Record<string, unknown> = { id: noticeId };
-      if (action) body.status = action;
-      if (assignTo) body.assignedTo = assignTo;
-
-      const res = await fetch('/api/notices', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-      if (res.ok) {
-        fetchData();
+      const updates: Record<string, unknown> = {};
+      if (action) updates.status = action;
+      if (assignTo) {
+        const member = teamMembers.find(m => m.id === assignTo);
+        updates.assignedTo = assignTo;
+        updates.assigneeName = member?.name ?? null;
+        updates.assigneeEmail = member?.email ?? null;
       }
+      if (action === 'resolved') {
+        updates.responseDate = new Date().toISOString();
+      }
+      await updateNotice(noticeId, updates);
+      toast.success('Notice updated');
     } catch (err) {
       console.error('Failed to update notice:', err);
+      toast.error('Failed to update notice');
     }
   };
 
   const resetCreateForm = () => {
     setFormClient('');
-    setFormNoticeType('gst_notice');
+    setFormNoticeType('gst_show_cause');
     setFormNoticeNumber('');
     setFormNoticeDate('');
     setFormSubject('');
@@ -636,7 +610,7 @@ export default function NoticeCenterPage() {
           <Button
             variant="outline"
             size="sm"
-            onClick={fetchData}
+            onClick={() => { fetchTeamMembers(); }}
             className="gap-1.5 h-9 border-emerald-200 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-800 dark:text-emerald-400 dark:hover:bg-emerald-950/30"
           >
             <RefreshCw className="h-3.5 w-3.5" />
@@ -779,9 +753,17 @@ export default function NoticeCenterPage() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Types</SelectItem>
-                <SelectItem value="gst_notice">GST Notice</SelectItem>
-                <SelectItem value="department_notice">Department Notice</SelectItem>
-                <SelectItem value="tax_query">Tax Query</SelectItem>
+                <SelectItem value="gst_show_cause">GST Show Cause</SelectItem>
+                <SelectItem value="gst_demand">GST Demand</SelectItem>
+                <SelectItem value="gst_assessment">GST Assessment</SelectItem>
+                <SelectItem value="gst_scrutiny">GST Scrutiny</SelectItem>
+                <SelectItem value="gst_refund_rejection">GST Refund Rejection</SelectItem>
+                <SelectItem value="gst_cancellation">GST Cancellation</SelectItem>
+                <SelectItem value="gst_3b_mismatch">GSTR-3B Mismatch</SelectItem>
+                <SelectItem value="roc_notice">ROC Notice</SelectItem>
+                <SelectItem value="income_tax_notice">Income Tax Notice</SelectItem>
+                <SelectItem value="tds_notice">TDS Notice</SelectItem>
+                <SelectItem value="other">Other</SelectItem>
               </SelectContent>
             </Select>
 
@@ -793,6 +775,27 @@ export default function NoticeCenterPage() {
         </CardContent>
       </AnimatedCard>
 
+      {/* ═══ ERROR BANNER ═══ */}
+      {error && !loading && (
+        <AnimatedCard>
+          <CardContent className="p-4 flex items-center justify-between gap-3 border-red-200 bg-red-50/50">
+            <div className="flex items-center gap-2 text-sm text-red-700">
+              <AlertTriangle className="h-4 w-4" />
+              <span>Failed to load notices: {error}</span>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs gap-1.5 border-red-300 text-red-700 hover:bg-red-100"
+              onClick={() => window.location.reload()}
+            >
+              <RefreshCw className="h-3 w-3" />
+              Retry
+            </Button>
+          </CardContent>
+        </AnimatedCard>
+      )}
+
       {/* ═══ NOTICE LIST ═══ */}
       <div>
         {loading ? (
@@ -800,19 +803,29 @@ export default function NoticeCenterPage() {
             {Array.from({ length: 4 }).map((_, i) => <NoticeSkeleton key={i} />)}
           </div>
         ) : filteredNotices.length === 0 ? (
-          <AnimatedCard>
-            <CardContent className="p-8 flex flex-col items-center text-center">
-              <div className="flex items-center justify-center h-14 w-14 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 mb-3">
-                <CheckCircle2 className="h-7 w-7 text-emerald-500" />
-              </div>
-              <h3 className="text-base font-semibold text-foreground mb-1">No notices found</h3>
-              <p className="text-sm text-muted-foreground max-w-sm">
-                {searchQuery || statusFilter !== 'all' || typeFilter !== 'all'
-                  ? 'Try adjusting your search or filters to find notices.'
-                  : 'All clear! No GST notices at this time.'}
-              </p>
-            </CardContent>
-          </AnimatedCard>
+          searchQuery || statusFilter !== 'all' || typeFilter !== 'all' ? (
+            <AnimatedCard>
+              <CardContent className="p-8 flex flex-col items-center text-center">
+                <div className="flex items-center justify-center h-14 w-14 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 mb-3">
+                  <CheckCircle2 className="h-7 w-7 text-emerald-500" />
+                </div>
+                <h3 className="text-base font-semibold text-foreground mb-1">No notices found</h3>
+                <p className="text-sm text-muted-foreground max-w-sm">
+                  Try adjusting your search or filters to find notices.
+                </p>
+              </CardContent>
+            </AnimatedCard>
+          ) : (
+            <AnimatedCard>
+              <CardContent className="p-8">
+                <EmptyState
+                  icon={BellIcon}
+                  title="No notices yet"
+                  description="Regulatory and GST notices will appear here when received."
+                />
+              </CardContent>
+            </AnimatedCard>
+          )
         ) : (
           <motion.div
             variants={containerVariants}
@@ -1006,9 +1019,17 @@ export default function NoticeCenterPage() {
                     <SelectValue placeholder="Select type" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="gst_notice">GST Notice</SelectItem>
-                    <SelectItem value="department_notice">Department Notice</SelectItem>
-                    <SelectItem value="tax_query">Tax Query</SelectItem>
+                    <SelectItem value="gst_show_cause">GST Show Cause</SelectItem>
+                    <SelectItem value="gst_demand">GST Demand</SelectItem>
+                    <SelectItem value="gst_assessment">GST Assessment</SelectItem>
+                    <SelectItem value="gst_scrutiny">GST Scrutiny</SelectItem>
+                    <SelectItem value="gst_refund_rejection">GST Refund Rejection</SelectItem>
+                    <SelectItem value="gst_cancellation">GST Cancellation</SelectItem>
+                    <SelectItem value="gst_3b_mismatch">GSTR-3B Mismatch</SelectItem>
+                    <SelectItem value="roc_notice">ROC Notice</SelectItem>
+                    <SelectItem value="income_tax_notice">Income Tax Notice</SelectItem>
+                    <SelectItem value="tds_notice">TDS Notice</SelectItem>
+                    <SelectItem value="other">Other</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

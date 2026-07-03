@@ -20,10 +20,11 @@ import {
   type FirestoreClient, type FirestoreDocument, type FirestoreInvoice,
   type FirestoreReturn, type FirestoreReconciliation, type FirestoreNotification,
   type FirestoreActivity, type FirestoreAIRecommendation, type FirestoreFirm,
-  type FirestoreLead, type FirestoreDeal, type FirestoreMeeting,
+  type FirestoreLead, type FirestoreDeal, type FirestoreMeeting, type FirestoreTask,
   type FirestoreBankAccount, type FirestoreBankTransaction,
   type FirestoreGstProfile, type FirestoreGstReturn,
   type FirestoreExpense, type FirestorePayment, type FirestoreAiMemory,
+  type FirestoreNotice, type FirestoreReport,
   type LeadStatus, type LeadSource, type DealStage, type MeetingType, type MeetingStatus,
   type ActivityType, type NotificationType, type NotificationPriority,
   type ReconMismatch, type DocumentStatus, type DocumentType,
@@ -1177,6 +1178,64 @@ export async function deleteMeeting(meetingId: string): Promise<void> {
   await deleteDoc(meetingRef);
 }
 
+// ─── Tasks ───────────────────────────────────────────────────────────────────
+// CRUD added in P1-M2 so TasksPage can read/write the `tasks` collection.
+// listTasks accepts an optional clientId to scope to one client; omit for
+// firm-wide feed.
+
+export async function listTasks(
+  scope: { firmId?: string; clientId?: string },
+): Promise<Array<FirestoreTask & { id: string }>> {
+  const constraints: QueryConstraint[] = [orderBy('createdAt', 'desc')];
+  if (scope.clientId) {
+    constraints.unshift(where('clientId', '==', scope.clientId));
+  } else if (scope.firmId) {
+    constraints.unshift(where('firmId', '==', scope.firmId));
+  }
+  const q = query(collection(db, COLLECTIONS.TASKS), ...constraints);
+  const snap = await getDocs(q);
+  return snap.docs.map(d => docToData<FirestoreTask>(d));
+}
+
+export async function createTask(
+  data: Omit<FirestoreTask, 'taskId' | 'firmId' | 'createdAt' | 'updatedAt'>,
+): Promise<string> {
+  const firmId = currentFirmId();
+  if (!firmId) throw new Error('No firm found. Please complete onboarding first.');
+  const taskId = generateId();
+  const ref = doc(db, COLLECTIONS.TASKS, taskId);
+  const taskData: FirestoreTask = {
+    ...data,
+    taskId,
+    firmId,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  };
+  await setDoc(ref, taskData);
+  return taskId;
+}
+
+export async function updateTask(
+  taskId: string,
+  updates: Partial<FirestoreTask>,
+): Promise<void> {
+  const ref = doc(db, COLLECTIONS.TASKS, taskId);
+  await updateDoc(ref, { ...updates, updatedAt: serverTimestamp() });
+}
+
+export async function deleteTask(taskId: string): Promise<void> {
+  const ref = doc(db, COLLECTIONS.TASKS, taskId);
+  await deleteDoc(ref);
+}
+
+export async function getTask(
+  taskId: string,
+): Promise<(FirestoreTask & { id: string }) | null> {
+  const snap = await getDoc(doc(db, COLLECTIONS.TASKS, taskId));
+  if (!snap.exists()) return null;
+  return docToData<FirestoreTask>(snap);
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // BANKING, GST, FINANCE & AI MEMORY (PT-3-5)
 // Each new collection follows the same CRUD shape:
@@ -1530,4 +1589,146 @@ export async function updateAiMemory(
 export async function deleteAiMemory(memoryId: string): Promise<void> {
   const ref = doc(db, COLLECTIONS.AI_MEMORY, memoryId);
   await deleteDoc(ref);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// NOTICES & REPORTS (Phase 1 — Real Backend Foundation)
+// Each follows the same CRUD shape as the other Phase 1 collections:
+//   listXxx / createXxx / updateXxx / deleteXxx / getXxx
+// Reads use getDocs + query + where + orderBy. Writes use setDoc + generateId()
+// (matching the existing pattern) so the typed xxxId field stays consistent
+// with the Firestore doc id.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ─── Notices ─────────────────────────────────────────────────────────────────
+// listNotices accepts an optional clientId to scope to one client; omit for
+// firm-wide feed.
+
+export async function listNotices(
+  scope: { firmId?: string; clientId?: string },
+): Promise<Array<FirestoreNotice & { id: string }>> {
+  const constraints: QueryConstraint[] = [orderBy('createdAt', 'desc')];
+  if (scope.clientId) {
+    constraints.unshift(where('clientId', '==', scope.clientId));
+  } else if (scope.firmId) {
+    constraints.unshift(where('firmId', '==', scope.firmId));
+  }
+  const q = query(collection(db, COLLECTIONS.NOTICES), ...constraints);
+  const snap = await getDocs(q);
+  return snap.docs.map(d => docToData<FirestoreNotice>(d));
+}
+
+export async function createNotice(
+  data: Omit<FirestoreNotice, 'noticeId' | 'firmId' | 'createdAt' | 'updatedAt'>,
+): Promise<string> {
+  const firmId = currentFirmId();
+  if (!firmId) throw new Error('No firm found. Please complete onboarding first.');
+  const noticeId = generateId();
+  const ref = doc(db, COLLECTIONS.NOTICES, noticeId);
+  const noticeData: FirestoreNotice = {
+    ...data,
+    noticeId,
+    firmId,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  };
+  await setDoc(ref, noticeData);
+
+  // Side effects — notify the firm + log activity
+  addActivity({
+    type: 'system',
+    title: 'Notice added',
+    description: `${data.subject}${data.clientTradeName ? ` — ${data.clientTradeName}` : ''}`,
+    clientId: data.clientId || null,
+    entityType: COLLECTIONS.NOTICES,
+    entityId: noticeId,
+  });
+  addNotification({
+    type: 'issue_detected',
+    priority: data.priority === 'urgent' ? 'urgent' : 'high',
+    title: 'New notice added',
+    message: `${data.noticeType.replace(/_/g, ' ')}: ${data.subject}`,
+    entityType: COLLECTIONS.NOTICES,
+    entityId: noticeId,
+  });
+
+  return noticeId;
+}
+
+export async function updateNotice(
+  noticeId: string,
+  updates: Partial<FirestoreNotice>,
+): Promise<void> {
+  const ref = doc(db, COLLECTIONS.NOTICES, noticeId);
+  await updateDoc(ref, { ...updates, updatedAt: serverTimestamp() });
+}
+
+export async function deleteNotice(noticeId: string): Promise<void> {
+  const ref = doc(db, COLLECTIONS.NOTICES, noticeId);
+  await deleteDoc(ref);
+}
+
+export async function getNotice(
+  noticeId: string,
+): Promise<(FirestoreNotice & { id: string }) | null> {
+  const snap = await getDoc(doc(db, COLLECTIONS.NOTICES, noticeId));
+  if (!snap.exists()) return null;
+  return docToData<FirestoreNotice>(snap);
+}
+
+// ─── Reports ─────────────────────────────────────────────────────────────────
+// listReports accepts an optional clientId to scope to one client; omit for
+// firm-wide feed.
+
+export async function listReports(
+  scope: { firmId?: string; clientId?: string },
+): Promise<Array<FirestoreReport & { id: string }>> {
+  const constraints: QueryConstraint[] = [orderBy('createdAt', 'desc')];
+  if (scope.clientId) {
+    constraints.unshift(where('clientId', '==', scope.clientId));
+  } else if (scope.firmId) {
+    constraints.unshift(where('firmId', '==', scope.firmId));
+  }
+  const q = query(collection(db, COLLECTIONS.REPORTS), ...constraints);
+  const snap = await getDocs(q);
+  return snap.docs.map(d => docToData<FirestoreReport>(d));
+}
+
+export async function createReport(
+  data: Omit<FirestoreReport, 'reportId' | 'firmId' | 'createdAt' | 'updatedAt'>,
+): Promise<string> {
+  const firmId = currentFirmId();
+  if (!firmId) throw new Error('No firm found. Please complete onboarding first.');
+  const reportId = generateId();
+  const ref = doc(db, COLLECTIONS.REPORTS, reportId);
+  const reportData: FirestoreReport = {
+    ...data,
+    reportId,
+    firmId,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  };
+  await setDoc(ref, reportData);
+  return reportId;
+}
+
+export async function updateReport(
+  reportId: string,
+  updates: Partial<FirestoreReport>,
+): Promise<void> {
+  const ref = doc(db, COLLECTIONS.REPORTS, reportId);
+  await updateDoc(ref, { ...updates, updatedAt: serverTimestamp() });
+}
+
+export async function deleteReport(reportId: string): Promise<void> {
+  const ref = doc(db, COLLECTIONS.REPORTS, reportId);
+  await deleteDoc(ref);
+}
+
+export async function getReport(
+  reportId: string,
+): Promise<(FirestoreReport & { id: string }) | null> {
+  const snap = await getDoc(doc(db, COLLECTIONS.REPORTS, reportId));
+  if (!snap.exists()) return null;
+  return docToData<FirestoreReport>(snap);
 }

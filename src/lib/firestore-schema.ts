@@ -40,6 +40,9 @@ export const COLLECTIONS = {
   EXPENSES: 'expenses',
   PAYMENTS: 'payments',
   AI_MEMORY: 'ai_memory',
+  // Phase 1 — Notices & Reports (regulatory notices + generated business reports)
+  NOTICES: 'notices',
+  REPORTS: 'reports',
 } as const;
 
 export type CollectionName = typeof COLLECTIONS[keyof typeof COLLECTIONS];
@@ -457,7 +460,9 @@ export interface FirestoreMeeting {
 // ─── Task (tasks/{taskId}) ───────────────────────────────────────────────────
 
 export type TaskPriority = 'low' | 'medium' | 'high' | 'urgent';
-export type TaskStatus = 'todo' | 'in_progress' | 'completed' | 'cancelled';
+// 'review' added in P1-M2 so the TasksPage 4-column board (Todo / In Progress /
+// Review / Completed) maps 1:1 to Firestore statuses without coercion.
+export type TaskStatus = 'todo' | 'in_progress' | 'review' | 'completed' | 'cancelled';
 
 export interface FirestoreTask {
   taskId: string;
@@ -644,6 +649,75 @@ export interface FirestoreAiMemory {
   value: string;
   importance: number;             // 0-1
   lastUsedAt: unknown;            // serverTimestamp
+  createdAt: unknown;
+  updatedAt: unknown;
+}
+
+// ─── Notice (notices/{noticeId}) ──────────────────────────────────────────────
+// Regulatory / GST / ROC / Income-Tax notices received by or served on a client.
+// Each notice tracks ownership, priority, due date and resolution.
+
+export type NoticeType =
+  | 'gst_show_cause' | 'gst_demand' | 'gst_assessment' | 'gst_scrutiny'
+  | 'gst_refund_rejection' | 'gst_cancellation' | 'gst_3b_mismatch'
+  | 'roc_notice' | 'income_tax_notice' | 'tds_notice' | 'other';
+
+export type NoticeStatus = 'open' | 'acknowledged' | 'in_progress' | 'responded' | 'resolved' | 'closed';
+export type NoticePriority = 'low' | 'medium' | 'high' | 'urgent';
+
+export interface FirestoreNotice {
+  noticeId: string;
+  firmId: string;
+  clientId: string | null;
+  clientTradeName: string | null;
+  clientGstin: string | null;
+  noticeType: NoticeType;
+  noticeNumber: string | null;
+  noticeDate: string | null;        // ISO date — when the notice was issued
+  subject: string;
+  description: string | null;
+  status: NoticeStatus;
+  priority: NoticePriority;
+  assignedTo: string | null;        // Firebase UID of the assignee
+  assigneeName: string | null;
+  assigneeEmail: string | null;
+  dueDate: string | null;           // ISO date — response deadline
+  responseDate: string | null;      // ISO date — when response was filed
+  resolution: string | null;
+  attachmentUrl: string | null;
+  createdAt: unknown;
+  updatedAt: unknown;
+}
+
+// ─── Report (reports/{reportId}) ──────────────────────────────────────────────
+// Generated business / compliance / financial reports (GSTR-1 JSON, working
+// papers, compliance reports, cash-flow reports, etc.). Persisted so the user
+// can re-download or audit them later.
+
+export type ReportType =
+  | 'gstr1_json' | 'gstr1_excel' | 'gstr3b_json'
+  | 'filing_summary_pdf' | 'working_papers_pdf'
+  | 'gst_summary_pdf' | 'compliance_report_pdf'
+  | 'financial_report_pdf' | 'cash_flow_report_pdf' | 'custom';
+
+export type ReportFormat = 'json' | 'pdf' | 'excel' | 'csv';
+
+export interface FirestoreReport {
+  reportId: string;
+  firmId: string;
+  clientId: string | null;
+  clientTradeName: string | null;
+  reportType: ReportType;
+  format: ReportFormat;
+  title: string;
+  period: string | null;            // MM-YYYY or FY-YYYY
+  description: string | null;
+  status: 'generating' | 'ready' | 'failed' | 'archived';
+  fileSize: number;                 // bytes
+  storageUrl: string | null;        // Firebase Storage path or download URL
+  generatedBy: string;              // Firebase UID
+  generatedAt: unknown;             // serverTimestamp
+  metadata: Record<string, string | number | boolean>;
   createdAt: unknown;
   updatedAt: unknown;
 }

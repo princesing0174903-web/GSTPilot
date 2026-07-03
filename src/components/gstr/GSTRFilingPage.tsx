@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -56,6 +56,7 @@ import {
   Loader2,
   CheckCheck,
   AlertCircle,
+  RefreshCw,
 } from 'lucide-react';
 import { useApp } from '@/contexts/AppContext';
 import { formatCurrency, periodToLabel, validateGSTIN } from '@/lib/gst-utils';
@@ -68,6 +69,11 @@ import {
   GSTR1_SECTION_LABELS,
   FilingStatus,
 } from '@/types/gst';
+import { useFireReturns, useFireClients, useFireInvoices } from '@/hooks/use-firestore';
+import type { FirestoreReturn, FirestoreClient, FirestoreInvoice } from '@/lib/firestore-schema';
+import { createReturn, fileReturn } from '@/lib/firestore-service';
+import { toast } from 'sonner';
+import { EmptyState } from '@/components/shared/EmptyState';
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
 
@@ -210,17 +216,139 @@ function getOverdueFilings(filings: GSTRFiling[]): Set<string> {
   return overdueIds;
 }
 
+// ─── Firestore mappers (Phase 1 migration) ──────────────────────────────────
+
+type FireReturn = FirestoreReturn & { id: string };
+type FireClient = FirestoreClient & { id: string };
+type FireInvoice = FirestoreInvoice & { id: string };
+
+function mapFireClient(c: FireClient): Client {
+  return {
+    id: c.clientId,
+    gstin: c.gstin,
+    tradeName: c.tradeName,
+    legalName: c.legalName,
+    address: c.address ?? undefined,
+    state: c.state ?? undefined,
+    stateCode: c.stateCode ?? undefined,
+    contactEmail: c.contactEmail ?? undefined,
+    contactPhone: c.contactPhone ?? undefined,
+    entityType: c.entityType,
+    returnPeriod: c.returnPeriod ?? undefined,
+    lastFilingDate: c.lastFilingDate ?? undefined,
+    status: c.status,
+    healthScore: c.healthScore,
+    createdAt: (c.createdAt as string) ?? new Date().toISOString(),
+    updatedAt: (c.updatedAt as string) ?? new Date().toISOString(),
+  };
+}
+
+function mapReturnToFiling(r: FireReturn, clients: Client[]): GSTRFiling {
+  return {
+    id: r.returnId,
+    clientId: r.clientId,
+    returnType: r.returnType,
+    period: r.period,
+    financialYear: r.financialYear,
+    status: r.status,
+    filedDate: r.filedDate ?? undefined,
+    acknowledgmentNumber: r.acknowledgmentNumber ?? undefined,
+    totalInvoices: r.totalInvoices,
+    readyForFiling: r.readyForFiling,
+    issuesFound: r.issuesFound,
+    criticalErrors: r.criticalErrors,
+    warnings: r.warnings,
+    totalTaxableValue: r.totalTaxableValue,
+    totalTax: r.totalTax,
+    jsonPayload: r.jsonPayload ?? undefined,
+    createdAt: (r.createdAt as string) ?? new Date().toISOString(),
+    updatedAt: (r.updatedAt as string) ?? new Date().toISOString(),
+    client: clients.find((c) => c.id === r.clientId),
+  };
+}
+
+function mapFireInvoice(i: FireInvoice): Invoice {
+  return {
+    id: i.invoiceId,
+    clientId: i.clientId,
+    invoiceNumber: i.invoiceNumber,
+    invoiceDate: i.invoiceDate,
+    sellerGstin: i.sellerGstin,
+    buyerGstin: i.buyerGstin ?? undefined,
+    buyerName: i.buyerName ?? undefined,
+    invoiceType: i.invoiceType,
+    gstr1Section: i.gstr1Section,
+    taxableValue: i.taxableValue,
+    cgst: i.cgst,
+    sgst: i.sgst,
+    igst: i.igst,
+    cess: i.cess,
+    totalAmount: i.totalAmount,
+    hsnCode: i.hsnCode ?? undefined,
+    reverseCharge: i.reverseCharge,
+    status: i.status,
+    matchStatus: i.matchStatus,
+    riskLevel: i.riskLevel,
+    riskScore: i.riskScore,
+    aiExplanation: i.aiExplanation ?? undefined,
+    notes: i.notes ?? undefined,
+    period: i.period ?? undefined,
+    createdAt: (i.createdAt as string) ?? new Date().toISOString(),
+    updatedAt: (i.updatedAt as string) ?? new Date().toISOString(),
+  };
+}
+
 // ─── Main Component ─────────────────────────────────────────────────────────────
 
 export default function GSTRFilingPage() {
   const { selectedClientId, setSelectedClientId } = useApp();
 
+  // ─── Firestore data (real-time) ─────────────────────────────────────────
+  const {
+    data: returnDocs,
+    loading: returnsLoading,
+    error: returnsError,
+  } = useFireReturns();
+  const {
+    data: clientDocs,
+    loading: clientsLoading,
+    error: clientsError,
+  } = useFireClients();
+  // Per-client invoices used in the Quick File “Extract Data” step. When no
+  // client is selected we keep the array empty (the hook still subscribes firm-
+  // wide, but we ignore the data until a client is picked).
+  const [quickFileClientId, setQuickFileClientId] = useState<string>('');
+  const {
+    data: invoiceDocs,
+    loading: invoiceDocsLoading,
+    error: invoicesError,
+  } = useFireInvoices(quickFileClientId || null);
+
   // ─── Data state ──────────────────────────────────────────────────────────
-  const [filings, setFilings] = useState<GSTRFiling[]>([]);
-  const [clients, setClients] = useState<Client[]>([]);
-  const [clientInvoices, setClientInvoices] = useState<Invoice[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [invoicesLoading, setInvoicesLoading] = useState(false);
+  const [isFiling, setIsFiling] = useState(false);
+  const [isGeneratingJSON, setIsGeneratingJSON] = useState(false);
+  const [currentReturnId, setCurrentReturnId] = useState<string | null>(null);
+
+  // Map Firestore docs → local types
+  const clients = useMemo<Client[]>(
+    () => (clientDocs as unknown as FireClient[]).map(mapFireClient),
+    [clientDocs],
+  );
+  const filings = useMemo<GSTRFiling[]>(
+    () => (returnDocs as unknown as FireReturn[]).map((r) => mapReturnToFiling(r, clients)),
+    [returnDocs, clients],
+  );
+  const clientInvoices = useMemo<Invoice[]>(
+    () =>
+      quickFileClientId
+        ? (invoiceDocs as unknown as FireInvoice[]).map(mapFireInvoice)
+        : [],
+    [invoiceDocs, quickFileClientId],
+  );
+
+  const loading = returnsLoading || clientsLoading;
+  const invoicesLoading = quickFileClientId ? invoiceDocsLoading : false;
+  const error = returnsError || clientsError || invoicesError;
 
   // ─── Filter state ────────────────────────────────────────────────────────
   const [filterStatus, setFilterStatus] = useState<string>('all');
@@ -234,15 +362,12 @@ export default function GSTRFilingPage() {
 
   // ─── Quick File state ────────────────────────────────────────────────────
   const [quickFileStep, setQuickFileStep] = useState<QuickFileStep>(1);
-  const [quickFileClientId, setQuickFileClientId] = useState<string>('');
   const [quickFileReturnType, setQuickFileReturnType] = useState<string>('GSTR-1');
   const [quickFilePeriod, setQuickFilePeriod] = useState<string>('');
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [extractedInvoices, setExtractedInvoices] = useState<ExtractedInvoice[]>([]);
   const [isDragOver, setIsDragOver] = useState(false);
   const [isExtracting, setIsExtracting] = useState(false);
-  const [isFiling, setIsFiling] = useState(false);
-  const [isGeneratingJSON, setIsGeneratingJSON] = useState(false);
   const [clientSearch, setClientSearch] = useState('');
 
   // ─── Dialog state ────────────────────────────────────────────────────────
@@ -255,64 +380,6 @@ export default function GSTRFilingPage() {
   const [isCreating, setIsCreating] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // ─── Data fetching ───────────────────────────────────────────────────────
-  const fetchFilings = useCallback(async () => {
-    try {
-      const res = await fetch('/api/gstr-filing');
-      if (res.ok) {
-        const data = await res.json();
-        setFilings(data.filings ?? data ?? []);
-      }
-    } catch (err) {
-      console.error('Failed to fetch filings:', err);
-    }
-  }, []);
-
-  const fetchClients = useCallback(async () => {
-    try {
-      const res = await fetch('/api/clients');
-      if (res.ok) {
-        const data = await res.json();
-        setClients(data.clients ?? data ?? []);
-      }
-    } catch (err) {
-      console.error('Failed to fetch clients:', err);
-    }
-  }, []);
-
-  const fetchClientInvoices = useCallback(async (clientId: string) => {
-    setInvoicesLoading(true);
-    try {
-      const res = await fetch(`/api/invoices?clientId=${clientId}`);
-      if (res.ok) {
-        const data = await res.json();
-        setClientInvoices(data.invoices ?? data ?? []);
-      }
-    } catch (err) {
-      console.error('Failed to fetch invoices:', err);
-    } finally {
-      setInvoicesLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    async function loadData() {
-      setLoading(true);
-      await Promise.all([fetchFilings(), fetchClients()]);
-      setLoading(false);
-    }
-    loadData();
-  }, [fetchFilings, fetchClients]);
-
-  // When quickFileClientId changes, fetch invoices
-  useEffect(() => {
-    if (quickFileClientId) {
-      fetchClientInvoices(quickFileClientId);
-    } else {
-      setClientInvoices([]);
-    }
-  }, [quickFileClientId, fetchClientInvoices]);
 
   // ─── Derived data ────────────────────────────────────────────────────────
   const overdueIds = getOverdueFilings(filings);
@@ -377,27 +444,38 @@ export default function GSTRFilingPage() {
     setIsCreating(true);
     try {
       const period = newReturnPeriod || `${newReturnFY.slice(0, 4)}-${newReturnMonth}`;
-      const res = await fetch('/api/gstr-filing', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          clientId: newReturnClientId,
-          returnType: newReturnType,
-          period,
-          financialYear: newReturnFY,
-        }),
+      const returnId = await createReturn({
+        clientId: newReturnClientId,
+        returnType: (newReturnType === 'GSTR-1' || newReturnType === 'GSTR-3B'
+          ? newReturnType
+          : 'GSTR-1') as 'GSTR-1' | 'GSTR-3B',
+        period,
+        financialYear: newReturnFY,
+        status: 'draft',
+        filedDate: null,
+        acknowledgmentNumber: null,
+        totalInvoices: 0,
+        readyForFiling: 0,
+        issuesFound: 0,
+        criticalErrors: 0,
+        warnings: 0,
+        totalTaxableValue: 0,
+        totalTax: 0,
+        jsonPayload: null,
+        assignedTo: null,
+        reviewedBy: null,
       });
-      if (res.ok) {
-        await fetchFilings();
-        setQuickFileClientId(newReturnClientId);
-        setQuickFileReturnType(newReturnType);
-        setQuickFilePeriod(period);
-        setQuickFileStep(1);
-        setNewReturnOpen(false);
-        setActiveTab('quick-file');
-      }
+      setCurrentReturnId(returnId);
+      setQuickFileClientId(newReturnClientId);
+      setQuickFileReturnType(newReturnType);
+      setQuickFilePeriod(period);
+      setQuickFileStep(1);
+      setNewReturnOpen(false);
+      setActiveTab('quick-file');
+      toast.success('Return created successfully');
     } catch (err) {
       console.error('Failed to create return:', err);
+      toast.error(err instanceof Error ? err.message : 'Failed to create return');
     } finally {
       setIsCreating(false);
     }
@@ -514,15 +592,26 @@ export default function GSTRFilingPage() {
   }, []);
 
   const handleFileReturn = useCallback(async () => {
+    if (!currentReturnId) {
+      toast.error('Create a return first before filing.');
+      return;
+    }
     setIsFiling(true);
-    await new Promise((r) => setTimeout(r, 2500));
-    setIsFiling(false);
-    setQuickFileStep(1);
-    setUploadedFiles([]);
-    setExtractedInvoices([]);
-    setQuickFileClientId('');
-    fetchFilings();
-  }, [fetchFilings]);
+    try {
+      await fileReturn(currentReturnId);
+      toast.success('Return filed successfully');
+      setQuickFileStep(1);
+      setUploadedFiles([]);
+      setExtractedInvoices([]);
+      setQuickFileClientId('');
+      setCurrentReturnId(null);
+    } catch (err) {
+      console.error('Failed to file return:', err);
+      toast.error(err instanceof Error ? err.message : 'Failed to file return');
+    } finally {
+      setIsFiling(false);
+    }
+  }, [currentReturnId]);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -647,6 +736,18 @@ export default function GSTRFilingPage() {
 
   return (
     <div className="space-y-6 p-4 md:p-6">
+      {/* ─── Error banner ──────────────────────────────────────────────── */}
+      {error && (
+        <div className="flex items-center justify-between gap-3 rounded-lg border border-rose-200 bg-rose-50 px-4 py-2.5 text-sm dark:border-rose-900/50 dark:bg-rose-950/30">
+          <div className="flex items-center gap-2 text-rose-700 dark:text-rose-400">
+            <AlertCircle className="size-4 shrink-0" />
+            <span>Failed to load returns: {error}</span>
+          </div>
+          <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs" onClick={() => window.location.reload()}>
+            <RefreshCw className="size-3" /> Retry
+          </Button>
+        </div>
+      )}
       {/* ─── Header ─────────────────────────────────────────────────────── */}
       <motion.div
         className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"
@@ -824,11 +925,13 @@ export default function GSTRFilingPage() {
                   <TableBody>
                     {filteredFilings.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={7} className="h-32 text-center text-muted-foreground">
-                          <div className="flex flex-col items-center gap-2">
-                            <FileText className="size-8 text-muted-foreground/40" />
-                            <p>No returns found</p>
-                          </div>
+                        <TableCell colSpan={7} className="h-32">
+                          <EmptyState
+                            icon={FileText}
+                            title={filings.length === 0 ? 'No GST returns yet' : 'No matching returns'}
+                            description={filings.length === 0 ? 'Create your first GSTR-1 or GSTR-3B return to start filing.' : 'Try adjusting your filters.'}
+                            compact
+                          />
                         </TableCell>
                       </TableRow>
                     ) : (

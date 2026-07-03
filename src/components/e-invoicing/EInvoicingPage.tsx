@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useMemo } from 'react'
 import { motion } from 'framer-motion'
 import {
   FileOutput, ArrowUpRight, ArrowDownRight, TrendingUp,
@@ -18,6 +18,8 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import { Input } from '@/components/ui/input'
 import { EmptyState } from '@/components/shared/EmptyState'
+import { useFireInvoices } from '@/hooks/use-firestore'
+import type { FirestoreInvoice } from '@/lib/firestore-schema'
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // FORMATTERS
@@ -78,28 +80,14 @@ interface EInvoiceRow {
   status: 'valid' | 'expired' | 'cancelled'
 }
 
-interface ApiInvoice {
-  id: string
-  invoiceNumber: string
-  invoiceDate: string
-  sellerGstin: string
-  buyerGstin?: string | null
-  buyerName?: string | null
-  taxableValue: number
-  cgst: number
-  sgst: number
-  igst: number
-  cess: number
-  totalAmount: number
-  status: string
-  client?: { tradeName?: string; gstin?: string } | null
-}
+// A Firestore invoice doc (already with id and timestamps converted to ISO strings by the hook).
+type FireInvoice = FirestoreInvoice & { id: string }
 
-// Maps an Invoice row from /api/invoices to the EInvoiceRow shape used by the UI.
+// Maps a Firestore invoice row to the EInvoiceRow shape used by the UI.
 // The Invoice model has no dedicated IRN column, so we treat the invoice number
 // as the IRN identifier (e-invoices are invoices that have been pushed through
 // the IRN generation flow).
-function mapInvoiceToEInvoice(inv: ApiInvoice): EInvoiceRow {
+function mapInvoiceToEInvoice(inv: FireInvoice): EInvoiceRow {
   const tax = (inv.cgst || 0) + (inv.sgst || 0) + (inv.igst || 0) + (inv.cess || 0)
   const status: EInvoiceRow['status'] =
     inv.status === 'cancelled' ? 'cancelled' :
@@ -111,7 +99,7 @@ function mapInvoiceToEInvoice(inv: ApiInvoice): EInvoiceRow {
     irn: inv.invoiceNumber || '—',
     date: dateStr,
     gstin: inv.buyerGstin || inv.sellerGstin || '—',
-    buyer: inv.buyerName || inv.client?.tradeName || '—',
+    buyer: inv.buyerName || '—',
     amount: inv.totalAmount || 0,
     tax,
     status,
@@ -139,32 +127,18 @@ const item = { hidden: { opacity: 0, y: 16 }, show: { opacity: 1, y: 0 } }
 export default function EInvoicingPage() {
   const [activeTab, setActiveTab] = useState('overview')
   const [searchQ, setSearchQ] = useState('')
-  const [eInvoices, setEInvoices] = useState<EInvoiceRow[]>([])
-  const [isLoading, setIsLoading] = useState(true)
+  const { data: invoiceDocs, loading: isLoading, error } = useFireInvoices()
 
-  // E-Way Bills, Bulk Jobs, and Daily IRN history have no backing API yet —
+  // E-Way Bills, Bulk Jobs, and Daily IRN history have no backing collection yet —
   // keep them as empty arrays so the UI renders real empty states.
   const eWayBills: { ewbNo: string; date: string; from: string; to: string; goods: string; value: number; validTill: string; status: string }[] = []
   const bulkJobs: { id: string; date: string; totalInvoices: number; processed: number; failed: number; status: string }[] = []
   const dailyIRNData: { day: string; count: number }[] = []
 
-  useEffect(() => {
-    let cancelled = false
-    fetch('/api/invoices')
-      .then(r => r.json())
-      .then(data => {
-        if (cancelled) return
-        const invoices: ApiInvoice[] = Array.isArray(data?.invoices) ? data.invoices : []
-        setEInvoices(invoices.map(mapInvoiceToEInvoice))
-        setIsLoading(false)
-      })
-      .catch(() => {
-        if (cancelled) return
-        setEInvoices([])
-        setIsLoading(false)
-      })
-    return () => { cancelled = true }
-  }, [])
+  const eInvoices = useMemo<EInvoiceRow[]>(
+    () => (invoiceDocs as unknown as FireInvoice[]).map(mapInvoiceToEInvoice),
+    [invoiceDocs],
+  )
 
   // ── Derived stats from real invoices ──
   const totalEInvoices = eInvoices.filter(i => i.status === 'valid').length
@@ -205,6 +179,19 @@ export default function EInvoicingPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-emerald-50/30 dark:from-slate-950 dark:via-slate-900 dark:to-emerald-950/20">
+      {error && (
+        <div className="mx-auto max-w-[1400px] px-4 sm:px-6 pt-4">
+          <div className="flex items-center justify-between gap-3 rounded-lg border border-rose-200 bg-rose-50 px-4 py-2.5 text-sm dark:border-rose-900/50 dark:bg-rose-950/30">
+            <div className="flex items-center gap-2 text-rose-700 dark:text-rose-400">
+              <AlertCircle className="h-4 w-4 shrink-0" />
+              <span>Failed to load e-invoices: {error}</span>
+            </div>
+            <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs" onClick={() => window.location.reload()}>
+              <RefreshCw className="h-3 w-3" /> Retry
+            </Button>
+          </div>
+        </div>
+      )}
       {/* Sticky Header */}
       <div className="sticky top-0 z-20 bg-white/80 backdrop-blur-md border-b dark:bg-slate-900/80">
         <div className="px-4 sm:px-6 py-4 flex items-center justify-between">
@@ -365,8 +352,8 @@ export default function EInvoicingPage() {
                   {eInvoices.length === 0 ? (
                     <EmptyState
                       icon={FileText}
-                      title="No e-invoices generated"
-                      description="IRN-tagged invoices will appear here once you generate e-invoices from the E-Invoices tab."
+                      title="No e-invoices yet"
+                      description="Upload sales invoices to generate IRNs."
                       compact
                     />
                   ) : (
@@ -419,8 +406,8 @@ export default function EInvoicingPage() {
                   {filteredEInvoices.length === 0 ? (
                     <EmptyState
                       icon={Hash}
-                      title={eInvoices.length === 0 ? 'No e-invoices generated' : 'No matching e-invoices'}
-                      description={eInvoices.length === 0 ? 'Generate your first IRN to start pushing invoices through the e-invoicing flow.' : 'Try a different search term.'}
+                      title={eInvoices.length === 0 ? 'No e-invoices yet' : 'No matching e-invoices'}
+                      description={eInvoices.length === 0 ? 'Upload sales invoices to generate IRNs.' : 'Try a different search term.'}
                       compact
                     />
                   ) : (

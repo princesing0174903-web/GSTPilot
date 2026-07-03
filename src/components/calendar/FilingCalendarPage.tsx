@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   Card,
   CardContent,
@@ -56,11 +56,46 @@ import {
   formatCurrency,
 } from '@/lib/gst-utils';
 import { useApp } from '@/contexts/AppContext';
+import { useFireReturns, useFireClients } from '@/hooks/use-firestore';
+import type { FirestoreReturn, FirestoreClient } from '@/lib/firestore-schema';
+import { AlertCircle, RefreshCw } from 'lucide-react';
+import { EmptyState } from '@/components/shared/EmptyState';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface ClientOption {
   id: string;
   tradeName: string;
+}
+
+type FireReturn = FirestoreReturn & { id: string };
+type FireClient = FirestoreClient & { id: string };
+
+// Maps a Firestore return row to the GSTRFiling shape used by the calendar.
+function mapReturnToFiling(r: FireReturn, clients: ClientOption[]): GSTRFiling {
+  const client = clients.find((c) => c.id === r.clientId);
+  return {
+    id: r.returnId,
+    clientId: r.clientId,
+    returnType: r.returnType,
+    period: r.period,
+    financialYear: r.financialYear,
+    status: r.status,
+    filedDate: r.filedDate ?? undefined,
+    acknowledgmentNumber: r.acknowledgmentNumber ?? undefined,
+    totalInvoices: r.totalInvoices,
+    readyForFiling: r.readyForFiling,
+    issuesFound: r.issuesFound,
+    criticalErrors: r.criticalErrors,
+    warnings: r.warnings,
+    totalTaxableValue: r.totalTaxableValue,
+    totalTax: r.totalTax,
+    jsonPayload: r.jsonPayload ?? undefined,
+    createdAt: (r.createdAt as string) ?? new Date().toISOString(),
+    updatedAt: (r.updatedAt as string) ?? new Date().toISOString(),
+    client: client
+      ? ({ id: client.id, tradeName: client.tradeName, gstin: '', entityType: '', status: 'active', healthScore: 0, createdAt: '', updatedAt: '' } as Client)
+      : undefined,
+  };
 }
 
 // ─── Skeletons ────────────────────────────────────────────────────────────────
@@ -116,11 +151,34 @@ function ListSkeleton() {
 export default function FilingCalendarPage() {
   const { selectedClientId, setSelectedClientId, setCurrentView } = useApp();
 
+  // ─── Firestore data (real-time) ─────────────────────────────────────────
+  const {
+    data: returnDocs,
+    loading: returnsLoading,
+    error: returnsError,
+  } = useFireReturns();
+  const {
+    data: clientDocs,
+    loading: clientsLoading,
+    error: clientsError,
+  } = useFireClients();
+
   // Data state
-  const [filings, setFilings] = useState<GSTRFiling[]>([]);
-  const [calendarItems, setCalendarItems] = useState<FilingCalendarItem[]>([]);
-  const [clients, setClients] = useState<ClientOption[]>([]);
-  const [loading, setLoading] = useState(true);
+  const clients = useMemo<ClientOption[]>(
+    () =>
+      (clientDocs as unknown as FireClient[]).map((c) => ({
+        id: c.clientId,
+        tradeName: c.tradeName,
+      })),
+    [clientDocs],
+  );
+  const filings = useMemo<GSTRFiling[]>(
+    () => (returnDocs as unknown as FireReturn[]).map((r) => mapReturnToFiling(r, clients)),
+    [returnDocs, clients],
+  );
+
+  const loading = returnsLoading || clientsLoading;
+  const error = returnsError || clientsError;
 
   // Navigation state
   const [currentMonth, setCurrentMonth] = useState(new Date());
@@ -135,65 +193,19 @@ export default function FilingCalendarPage() {
   );
   const [detailOpen, setDetailOpen] = useState(false);
 
-  // ─── Fetch data ──────────────────────────────────────────────────────────
-  const fetchFilings = useCallback(async () => {
-    try {
-      setLoading(true);
-      const [filingsRes, dashboardRes] = await Promise.all([
-        fetch('/api/gstr-filing'),
-        fetch('/api/dashboard'),
-      ]);
-
-      if (filingsRes.ok) {
-        const filingsData = await filingsRes.json();
-        setFilings(filingsData.filings ?? []);
-      }
-
-      if (dashboardRes.ok) {
-        const dashData = await dashboardRes.json();
-        setCalendarItems(dashData.filingCalendar ?? []);
-      }
-    } catch {
-      // silently handle
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  const fetchClients = useCallback(async () => {
-    try {
-      const res = await fetch('/api/clients');
-      if (!res.ok) return;
-      const data = await res.json();
-      setClients(
-        (data.clients ?? []).map((c: { id: string; tradeName: string }) => ({
-          id: c.id,
-          tradeName: c.tradeName,
-        }))
-      );
-    } catch {
-      // silently ignore
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchClients();
-    fetchFilings();
-  }, [fetchClients, fetchFilings]);
-
-  // Sync with global client selection
-  useEffect(() => {
+  // Sync with global client selection — adjust local filterClient when the
+  // global selectedClientId changes (React-recommended “adjust state during
+  // render” pattern, avoids setState-in-effect cascading renders).
+  const [lastSyncedSelectedId, setLastSyncedSelectedId] = useState<string | null>(null);
+  if (selectedClientId !== lastSyncedSelectedId) {
+    setLastSyncedSelectedId(selectedClientId);
     if (selectedClientId) {
       setFilterClient(selectedClientId);
     }
-  }, [selectedClientId]);
+  }
 
-  // ─── Build calendar items from filings if API doesn't provide them ──────
+  // ─── Build calendar items from filings ──────────────────────────────────
   const allCalendarItems = useMemo<FilingCalendarItem[]>(() => {
-    if (calendarItems.length > 0) {
-      return calendarItems;
-    }
-    // Fallback: build from filings
     return filings.map((f) => {
       const dueDate = getFilingDueDate(f.returnType, f.period);
       const overdue = isOverdue(f.period);
@@ -224,7 +236,7 @@ export default function FilingCalendarPage() {
         clientName: f.client?.tradeName ?? 'Unknown',
       };
     });
-  }, [calendarItems, filings]);
+  }, [filings]);
 
   // ─── Apply filters ──────────────────────────────────────────────────────
   const filteredItems = useMemo(() => {
@@ -445,6 +457,18 @@ export default function FilingCalendarPage() {
   // ==================== RENDER ====================
   return (
     <div className="space-y-6 p-4 md:p-6">
+      {/* ─── Error banner ────────────────────────────────────────────────── */}
+      {error && (
+        <div className="flex items-center justify-between gap-3 rounded-lg border border-rose-200 bg-rose-50 px-4 py-2.5 text-sm dark:border-rose-900/50 dark:bg-rose-950/30">
+          <div className="flex items-center gap-2 text-rose-700 dark:text-rose-400">
+            <AlertCircle className="h-4 w-4 shrink-0" />
+            <span>Failed to load filings: {error}</span>
+          </div>
+          <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs" onClick={() => window.location.reload()}>
+            <RefreshCw className="h-3 w-3" /> Retry
+          </Button>
+        </div>
+      )}
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
@@ -829,16 +853,18 @@ export default function FilingCalendarPage() {
               </Card>
             )}
 
-            {filteredItems.length === 0 && (
+            {filteredItems.length === 0 ? (
               <Card className="hover:shadow-md transition-shadow">
-                <CardContent className="py-12 text-center">
-                  <Calendar className="h-12 w-12 mx-auto text-muted-foreground/30 mb-3" />
-                  <p className="text-sm text-muted-foreground">
-                    No filing schedule found for the selected filters.
-                  </p>
+                <CardContent className="py-12">
+                  <EmptyState
+                    icon={Calendar}
+                    title={filings.length === 0 ? 'No upcoming filings' : 'No filings match the selected filters'}
+                    description={filings.length === 0 ? 'Returns will appear on the calendar once created.' : 'Try a different client or return type filter.'}
+                    compact
+                  />
                 </CardContent>
               </Card>
-            )}
+            ) : null}
           </div>
         )}
       </div>

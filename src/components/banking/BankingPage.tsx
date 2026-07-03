@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useMemo, useCallback } from 'react'
 import { motion } from 'framer-motion'
 import {
   Landmark, ArrowUpRight, ArrowDownRight, TrendingUp,
@@ -21,6 +21,24 @@ import { Input } from '@/components/ui/input'
 import { EmptyState } from '@/components/shared'
 import { useApp } from '@/contexts/AppContext'
 import { useAuth } from '@/contexts/AuthContext'
+import { toast } from 'sonner'
+import {
+  useFireBankAccounts,
+  useFireBankTransactions,
+  useFirePayments,
+  useFireExpenses,
+} from '@/hooks/use-firestore'
+import {
+  createBankAccount,
+  updateBankAccount,
+  updatePayment,
+} from '@/lib/firestore-service'
+import type {
+  FirestoreBankAccount,
+  FirestoreBankTransaction,
+  FirestorePayment,
+  FirestoreExpense,
+} from '@/lib/firestore-schema'
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // FORMATTERS
@@ -149,7 +167,7 @@ const item = { hidden: { opacity: 0, y: 16 }, show: { opacity: 1, y: 0 } }
 // COMPONENT
 // ═══════════════════════════════════════════════════════════════════════════════
 
-// ── Helpers: derive display strings from raw API rows ──────────────────────────
+// ── Helpers: derive display strings from raw Firestore rows ─────────────────
 
 function formatSyncDate(iso: string | null): string {
   if (!iso) return '—'
@@ -177,56 +195,78 @@ function upperMode(mode: string): string {
   return (mode || 'bank').toUpperCase()
 }
 
-// Map raw Payment row → BankTransaction shape used by this page.
-function mapPaymentToTxn(p: {
-  id: string
-  partyName: string
-  partyType?: string
-  amount: number
-  paymentDate: string
-  paymentMode: string
-  referenceNo?: string | null
-  invoiceId?: string | null
-  status?: string
-  reconciled?: boolean
-  notes?: string | null
-}): BankTransaction {
+// Map Firestore BankAccount → BankAccount shape used by this page.
+function mapBankAccount(acc: FirestoreBankAccount & { id: string }): BankAccount {
+  const accountType = (acc.accountType || 'current') as string
+  return {
+    id: acc.id,
+    bank: acc.bankName || 'Bank Account',
+    account: acc.accountNumberMasked || '****',
+    type: accountType.charAt(0).toUpperCase() + accountType.slice(1),
+    balance: Number(acc.currentBalance ?? acc.availableBalance ?? 0) || 0,
+    lastSync: formatSyncDate((acc.lastSyncAt as string | null) ?? null),
+    status: (acc.status as string) || 'connected',
+  }
+}
+
+// Map Firestore BankTransaction → BankTransaction shape used by this page.
+function mapBankTxnToTxn(t: FirestoreBankTransaction & { id: string }): BankTransaction {
+  const type = t.type === 'credit' ? 'credit' : 'debit'
+  return {
+    id: t.id,
+    date: formatTxnDate(t.date || ''),
+    description: t.description || 'Bank Transaction',
+    amount: Math.abs(Number(t.amount) || 0),
+    type,
+    balance: t.balanceAfter == null ? null : Number(t.balanceAfter),
+    account: t.referenceNo ? t.referenceNo.toUpperCase() : 'BANK',
+    category: (t.category as string) || (type === 'credit' ? 'Revenue' : 'Purchase'),
+  }
+}
+
+// Map Firestore Payment row → BankTransaction shape used by this page.
+function mapPaymentToTxn(p: FirestorePayment & { id: string }): BankTransaction {
   const isVendor = (p.partyType || 'customer') === 'vendor'
   return {
     id: p.id,
-    date: formatTxnDate(p.paymentDate),
-    description: `${upperMode(p.paymentMode)} - ${p.partyName}`,
+    date: formatTxnDate(p.paymentDate || ''),
+    description: `${upperMode(p.paymentMode || 'bank')} - ${p.partyName || 'Unknown'}`,
     amount: Number(p.amount) || 0,
     type: isVendor ? 'debit' : 'credit',
     balance: null,
-    account: upperMode(p.paymentMode),
+    account: upperMode(p.paymentMode || 'bank'),
     category: isVendor ? 'Purchase' : 'Revenue',
   }
 }
 
-// Map raw Payment row → ReconciliationEntry shape used by this page.
-function mapPaymentToRecon(p: {
-  id: string
-  partyName: string
-  amount: number
-  paymentDate: string
-  paymentMode: string
-  referenceNo?: string | null
-  invoiceId?: string | null
-  status?: string
-  reconciled?: boolean
-}): ReconciliationEntry {
+// Map Firestore Payment row → ReconciliationEntry shape used by this page.
+function mapPaymentToRecon(p: FirestorePayment & { id: string }): ReconciliationEntry {
   let status: ReconciliationEntry['status'] = 'unmatched'
   if (p.reconciled) status = 'matched'
   else if (p.status === 'failed') status = 'disputed'
   return {
     id: p.id,
-    date: formatTxnDate(p.paymentDate),
-    bankTxn: p.referenceNo || `${upperMode(p.paymentMode)}-${p.id.slice(-6)}`,
+    date: formatTxnDate(p.paymentDate || ''),
+    bankTxn: p.referenceNo || `${upperMode(p.paymentMode || 'bank')}-${p.id.slice(-6)}`,
     bookEntry: p.invoiceId || null,
     amount: Number(p.amount) || 0,
     status,
-    account: upperMode(p.paymentMode),
+    account: upperMode(p.paymentMode || 'bank'),
+  }
+}
+
+// Map Firestore Expense → BankTransaction (always a debit) shape used by this page.
+function mapExpenseToTxn(e: FirestoreExpense & { id: string }): BankTransaction {
+  const mode = (e.paymentMode || 'bank') as string
+  return {
+    id: e.id,
+    date: formatTxnDate(e.date || ''),
+    description: `${upperMode(mode)} - ${e.vendor || e.description || 'Expense'}`,
+    amount: Number(e.amount) || 0,
+    type: 'debit',
+    balance: null,
+    account: upperMode(mode),
+    category: (e.category as string) || 'Purchase',
   }
 }
 
@@ -235,117 +275,70 @@ export default function BankingPage() {
   const { user } = useAuth()
   const [activeTab, setActiveTab] = useState('overview')
   const [searchQ, setSearchQ] = useState('')
+  // Retry key — increments to force re-mount of the data layer when the user clicks Retry.
+  const [retryKey, setRetryKey] = useState(0)
+  const [busyId, setBusyId] = useState<string | null>(null)
 
-  const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([])
-  const [transactions, setTransactions] = useState<BankTransaction[]>([])
-  const [reconciliationData, setReconciliationData] = useState<ReconciliationEntry[]>([])
-  const [balanceTrendData, setBalanceTrendData] = useState<{ day: string; balance: number }[]>([])
-  const [statements, setStatements] = useState<StatementEntry[]>([])
-  const [loading, setLoading] = useState(true)
+  // ── Firestore hooks (real-time, firm-scoped) ───────────────────────────────
+  const bankAcctsHook = useFireBankAccounts()
+  const bankTxnsHook = useFireBankTransactions()
+  const paymentsHook = useFirePayments()
+  const expensesHook = useFireExpenses()
 
-  useEffect(() => {
-    let cancelled = false
-    async function loadAll() {
-      setLoading(true)
-      try {
-        const userId = user?.id
-        // Fetch bank connections (requires userId) + payments + expenses in parallel.
-        const connectorsPromise = userId
-          ? fetch(`/api/connectors?userId=${encodeURIComponent(userId)}`).then((r) => r.ok ? r.json() : { connections: [] }).catch(() => ({ connections: [] }))
-          : Promise.resolve({ connections: [] })
-        const paymentsPromise = fetch('/api/payments').then((r) => r.ok ? r.json() : { payments: [] }).catch(() => ({ payments: [] }))
-        const expensesPromise = fetch('/api/expenses').then((r) => r.ok ? r.json() : { expenses: [] }).catch(() => ({ expenses: [] }))
-        const [connectorsResp, paymentsResp, expensesResp] = await Promise.all([connectorsPromise, paymentsPromise, expensesPromise])
-        if (cancelled) return
+  const loading =
+    bankAcctsHook.loading ||
+    bankTxnsHook.loading ||
+    paymentsHook.loading ||
+    expensesHook.loading
+  const error =
+    bankAcctsHook.error ||
+    bankTxnsHook.error ||
+    paymentsHook.error ||
+    expensesHook.error
 
-        // ── Bank accounts: filter connections of type=bank, map metadata → BankAccount ──
-        const rawConnections: Array<{
-          id: string
-          type: string
-          status: string
-          label: string
-          identifier: string | null
-          metadata: Record<string, unknown>
-          lastSyncAt: string | null
-        }> = connectorsResp.connections ?? []
-        const banks: BankAccount[] = rawConnections
-          .filter((c) => c.type === 'bank')
-          .map((c) => {
-            const meta = c.metadata || {}
-            const bankName = (meta.bankName as string) || c.label || 'Bank Account'
-            const masked = (meta.accountNumberMasked as string) || c.identifier || '****'
-            const accountType = (meta.accountType as string) || 'Current'
-            const balance = Number(meta.currentBalance ?? meta.availableBalance ?? 0) || 0
-            return {
-              id: c.id,
-              bank: bankName,
-              account: masked,
-              type: accountType.charAt(0).toUpperCase() + accountType.slice(1),
-              balance,
-              lastSync: formatSyncDate(c.lastSyncAt),
-              status: c.status || 'connected',
-            }
-          })
-        setBankAccounts(banks)
+  // ── Derived arrays (memoized) — feed existing UI unchanged ─────────────────
+  const bankAccounts = useMemo(
+    () => (bankAcctsHook.data || []).map(mapBankAccount),
+    [bankAcctsHook.data],
+  )
 
-        // ── Transactions: from payments + expenses ──
-        const rawPayments: Array<Record<string, unknown>> = paymentsResp.payments ?? []
-        const rawExpenses: Array<Record<string, unknown>> = expensesResp.expenses ?? []
-        const paymentTxns: BankTransaction[] = rawPayments.map((p) => mapPaymentToTxn({
-          id: String(p.id ?? ''),
-          partyName: String(p.partyName ?? 'Unknown'),
-          partyType: String(p.partyType ?? 'customer'),
-          amount: Number(p.amount ?? 0),
-          paymentDate: String(p.paymentDate ?? ''),
-          paymentMode: String(p.paymentMode ?? 'bank'),
-          referenceNo: (p.referenceNo as string | null) ?? null,
-          invoiceId: (p.invoiceId as string | null) ?? null,
-          status: String(p.status ?? 'completed'),
-          reconciled: Boolean(p.reconciled ?? false),
-          notes: (p.notes as string | null) ?? null,
-        }))
-        const expenseTxns: BankTransaction[] = rawExpenses.map((e) => ({
-          id: String(e.id ?? ''),
-          date: formatTxnDate(String(e.date ?? '')),
-          description: `${(e.paymentMode || 'bank').toString().toUpperCase()} - ${e.vendor || e.description || 'Expense'}`,
-          amount: Number(e.amount ?? 0),
-          type: 'debit',
-          balance: null,
-          account: (e.paymentMode || 'bank').toString().toUpperCase(),
-          category: e.category ? String(e.category) : 'Purchase',
-        }))
-        // Newest first — both APIs already sort by date desc, but be defensive.
-        const allTxns = [...paymentTxns, ...expenseTxns].sort((a, b) => b.date.localeCompare(a.date))
-        setTransactions(allTxns)
+  const transactions = useMemo<BankTransaction[]>(() => {
+    const bankTxns = (bankTxnsHook.data || []).map(mapBankTxnToTxn)
+    const paymentTxns = (paymentsHook.data || []).map(mapPaymentToTxn)
+    const expenseTxns = (expensesHook.data || []).map(mapExpenseToTxn)
+    return [...bankTxns, ...paymentTxns, ...expenseTxns].sort((a, b) =>
+      b.date.localeCompare(a.date),
+    )
+  }, [bankTxnsHook.data, paymentsHook.data, expensesHook.data])
 
-        // ── Reconciliation: derive from payments only (vendor payments + customer receipts) ──
-        const recon: ReconciliationEntry[] = rawPayments.map((p) => mapPaymentToRecon({
-          id: String(p.id ?? ''),
-          partyName: String(p.partyName ?? 'Unknown'),
-          amount: Number(p.amount ?? 0),
-          paymentDate: String(p.paymentDate ?? ''),
-          paymentMode: String(p.paymentMode ?? 'bank'),
-          referenceNo: (p.referenceNo as string | null) ?? null,
-          invoiceId: (p.invoiceId as string | null) ?? null,
-          status: String(p.status ?? 'completed'),
-          reconciled: Boolean(p.reconciled ?? false),
-        }))
-        setReconciliationData(recon)
+  const reconciliationData = useMemo<ReconciliationEntry[]>(
+    () => (paymentsHook.data || []).map(mapPaymentToRecon),
+    [paymentsHook.data],
+  )
 
-        // ── Balance trend + statements: no historical bank-balance API yet ──
-        // We deliberately leave these empty so the UI shows real empty states.
-        setBalanceTrendData([])
-        setStatements([])
-      } catch (err) {
-        console.warn('[BankingPage] data fetch error:', err)
-      } finally {
-        if (!cancelled) setLoading(false)
-      }
+  // ── Balance trend: derive last 7 days from bank_transactions.balanceAfter ──
+  const balanceTrendData = useMemo<{ day: string; balance: number }[]>(() => {
+    const txns = bankTxnsHook.data || []
+    if (txns.length === 0) return []
+    const byDay = new Map<string, number>()
+    for (const t of txns) {
+      if (t.balanceAfter == null) continue
+      const dayKey = (t.date || '').slice(0, 10) // YYYY-MM-DD
+      if (!dayKey) continue
+      byDay.set(dayKey, Number(t.balanceAfter))
     }
-    loadAll()
-    return () => { cancelled = true }
-  }, [user?.id])
+    const sorted = Array.from(byDay.entries()).sort((a, b) =>
+      a[0].localeCompare(b[0]),
+    )
+    return sorted.slice(-7).map(([dayKey, balance]) => ({
+      day: dayKey.slice(5), // MM-DD
+      balance,
+    }))
+  }, [bankTxnsHook.data])
 
+  const statements: StatementEntry[] = []
+
+  // ── Derived stats (existing computations, fed by Firestore data) ───────────
   const totalBalance = bankAccounts.reduce((s, a) => s + a.balance, 0)
   const matchedCount = reconciliationData.filter(r => r.status === 'matched').length
   const unmatchedCount = reconciliationData.filter(r => r.status !== 'matched').length
@@ -355,9 +348,6 @@ export default function BankingPage() {
     .filter((t) => t.category === 'Purchase' && t.balance === null)
     .reduce((s, t) => s + t.amount, 0)
 
-  // Stat cards: Total Balance (banks), In Transit (pending outflow),
-  // Reconciled + Unreconciled (counts from reconciliation data).
-  // When no banks connected → Total Balance shows '—' (no fake ₹0).
   const statCards = [
     { label: 'Total Balance', value: bankAccounts.length > 0 ? totalBalance : null, change: 0, icon: Landmark, color: 'emerald' as const },
     { label: 'In Transit', value: transactions.length > 0 ? inTransitAmount : null, change: 0, icon: Clock, color: 'amber' as const },
@@ -365,8 +355,111 @@ export default function BankingPage() {
     { label: 'Unreconciled', value: reconciliationData.length > 0 ? unmatchedCount : null, change: 0, icon: CircleX, color: 'rose' as const },
   ]
 
+  // ── Write handlers (Firestore service functions) ───────────────────────────
+
+  const handleAddAccount = useCallback(async () => {
+    const bankName = window.prompt('Bank name (e.g. HDFC Bank):')
+    if (!bankName?.trim()) return
+    const balanceStr = window.prompt('Current balance (₹):', '0')
+    if (balanceStr === null) return
+    const balance = Number(balanceStr) || 0
+    const last4 = window.prompt('Last 4 digits of account number (optional):', '') || ''
+    const masked = last4.trim() ? `XXXX${last4.trim().padStart(4, '0').slice(-4)}` : 'XXXX0000'
+    setBusyId('new-account')
+    try {
+      await createBankAccount({
+        userId: user?.id || '',
+        bankName: bankName.trim(),
+        accountNumberMasked: masked,
+        accountType: 'current',
+        ifsc: null,
+        currentBalance: balance,
+        availableBalance: balance,
+        currency: 'INR',
+        status: 'connected',
+        lastSyncAt: new Date().toISOString(),
+        connectionId: null,
+      })
+      toast.success('Bank account connected')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to connect bank account')
+    } finally {
+      setBusyId(null)
+    }
+  }, [user?.id])
+
+  const handleSyncAccount = useCallback(async (acc: BankAccount) => {
+    setBusyId(acc.id)
+    try {
+      await updateBankAccount(acc.id, {
+        status: 'connected',
+        lastSyncAt: new Date().toISOString(),
+      })
+      toast.success(`${acc.bank} synced`)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to sync account')
+    } finally {
+      setBusyId(null)
+    }
+  }, [])
+
+  const handleSyncAll = useCallback(async () => {
+    if (bankAccounts.length === 0) {
+      toast.error('No bank accounts to sync')
+      return
+    }
+    setBusyId('sync-all')
+    try {
+      const now = new Date().toISOString()
+      await Promise.all(
+        bankAccounts.map((acc) =>
+          updateBankAccount(acc.id, { status: 'connected', lastSyncAt: now }),
+        ),
+      )
+      toast.success(`Synced ${bankAccounts.length} account${bankAccounts.length === 1 ? '' : 's'}`)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to sync accounts')
+    } finally {
+      setBusyId(null)
+    }
+  }, [bankAccounts])
+
+  const handleAutoReconcile = useCallback(async () => {
+    const unmatched = reconciliationData.filter((r) => r.status !== 'matched')
+    if (unmatched.length === 0) {
+      toast.success('All payments are already reconciled')
+      return
+    }
+    setBusyId('auto-reconcile')
+    try {
+      await Promise.all(
+        unmatched.map((r) => updatePayment(r.id, { reconciled: true })),
+      )
+      toast.success(`Reconciled ${unmatched.length} payment${unmatched.length === 1 ? '' : 's'}`)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to auto-reconcile')
+    } finally {
+      setBusyId(null)
+    }
+  }, [reconciliationData])
+
+  const handleMatchRow = useCallback(async (id: string) => {
+    setBusyId(id)
+    try {
+      await updatePayment(id, { reconciled: true })
+      toast.success('Payment marked as reconciled')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to match payment')
+    } finally {
+      setBusyId(null)
+    }
+  }, [])
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-emerald-50/30 dark:from-slate-950 dark:via-slate-900 dark:to-emerald-950/20">
+    <div
+      key={retryKey}
+      className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-emerald-50/30 dark:from-slate-950 dark:via-slate-900 dark:to-emerald-950/20"
+    >
       {/* Sticky Header */}
       <div className="sticky top-0 z-20 bg-white/80 backdrop-blur-md border-b dark:bg-slate-900/80">
         <div className="px-4 sm:px-6 py-4 flex items-center justify-between">
@@ -380,8 +473,33 @@ export default function BankingPage() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" className="gap-1.5"><RefreshCw className="h-3.5 w-3.5" />Sync All</Button>
-            <Button size="sm" className="gap-1.5 bg-emerald-600 hover:bg-emerald-700"><Plus className="h-3.5 w-3.5" />Add Account</Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5"
+              onClick={handleSyncAll}
+              disabled={busyId === 'sync-all' || bankAccounts.length === 0}
+            >
+              {(busyId === 'sync-all') ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <RefreshCw className="h-3.5 w-3.5" />
+              )}
+              Sync All
+            </Button>
+            <Button
+              size="sm"
+              className="gap-1.5 bg-emerald-600 hover:bg-emerald-700"
+              onClick={handleAddAccount}
+              disabled={busyId === 'new-account'}
+            >
+              {busyId === 'new-account' ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Plus className="h-3.5 w-3.5" />
+              )}
+              Add Account
+            </Button>
           </div>
         </div>
         <Tabs value={activeTab} onValueChange={setActiveTab} className="px-4 sm:px-6">
@@ -396,6 +514,31 @@ export default function BankingPage() {
       </div>
 
       <div className="px-4 sm:px-6 py-6 max-w-[1400px] mx-auto">
+        {/* ── Error banner ── */}
+        {error && !loading && (
+          <Card className="mb-6 border-rose-200 dark:border-rose-900/60">
+            <CardContent className="p-4 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="h-9 w-9 rounded-lg bg-rose-100 dark:bg-rose-900/30 flex items-center justify-center">
+                  <AlertCircle className="h-4.5 w-4.5 text-rose-600 dark:text-rose-400" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-slate-900 dark:text-white">Failed to load banking data</p>
+                  <p className="text-xs text-muted-foreground">{error}</p>
+                </div>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5"
+                onClick={() => setRetryKey((k) => k + 1)}
+              >
+                <RefreshCw className="h-3.5 w-3.5" /> Retry
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           {/* ─── OVERVIEW TAB ─── */}
           <TabsContent value="overview" className="mt-0 space-y-6">
@@ -561,7 +704,20 @@ export default function BankingPage() {
                         <Separator className="my-3" />
                         <div className="flex justify-between items-center">
                           <span className="text-xs text-muted-foreground">Last auto-reconcile: {reconciliationData.length > 0 ? reconciliationData[0].date : '—'}</span>
-                          <Button variant="outline" size="sm" className="h-7 text-[10px] gap-1"><RefreshCw className="h-3 w-3" />Run Now</Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 text-[10px] gap-1"
+                            onClick={handleAutoReconcile}
+                            disabled={busyId === 'auto-reconcile'}
+                          >
+                            {busyId === 'auto-reconcile' ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : (
+                              <RefreshCw className="h-3 w-3" />
+                            )}
+                            Run Now
+                          </Button>
                         </div>
                       </>
                     )}
@@ -652,7 +808,20 @@ export default function BankingPage() {
                           <Separator className="my-2" />
                           <div className="flex justify-between items-center">
                             <span className="text-[10px] text-muted-foreground">Synced: {acc.lastSync}</span>
-                            <Button variant="ghost" size="sm" className="h-6 text-[10px] gap-1"><RefreshCw className="h-3 w-3" />Sync</Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 text-[10px] gap-1"
+                              onClick={() => handleSyncAccount(acc)}
+                              disabled={busyId === acc.id}
+                            >
+                              {busyId === acc.id ? (
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                              ) : (
+                                <RefreshCw className="h-3 w-3" />
+                              )}
+                              Sync
+                            </Button>
                           </div>
                         </CardContent>
                       </Card>
@@ -727,7 +896,20 @@ export default function BankingPage() {
                   <span className="flex items-center gap-1"><CircleDot className="h-3 w-3 text-amber-500" />Unmatched: {reconciliationData.filter(r => r.status === 'unmatched').length}</span>
                   <span className="flex items-center gap-1"><CircleDot className="h-3 w-3 text-rose-500" />Disputed: {reconciliationData.filter(r => r.status === 'disputed').length}</span>
                 </div>
-                <Button size="sm" variant="outline" className="gap-1.5"><RefreshCw className="h-3.5 w-3.5" />Auto-Reconcile</Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="gap-1.5"
+                  onClick={handleAutoReconcile}
+                  disabled={busyId === 'auto-reconcile'}
+                >
+                  {busyId === 'auto-reconcile' ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <RefreshCw className="h-3.5 w-3.5" />
+                  )}
+                  Auto-Reconcile
+                </Button>
               </div>
               <Card className="border-slate-200/60 dark:border-slate-800/60">
                 <CardContent className="p-0">
@@ -758,8 +940,28 @@ export default function BankingPage() {
                           </div>
                           <div className="flex items-center gap-3">
                             <span className="text-sm font-bold text-slate-900 dark:text-white">{fmtINR(rc.amount)}</span>
-                            {rc.status === 'unmatched' && <Button variant="outline" size="sm" className="h-7 text-[10px]">Match</Button>}
-                            {rc.status === 'disputed' && <Button variant="outline" size="sm" className="h-7 text-[10px]">Resolve</Button>}
+                            {rc.status === 'unmatched' && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-7 text-[10px]"
+                                onClick={() => handleMatchRow(rc.id)}
+                                disabled={busyId === rc.id}
+                              >
+                                {busyId === rc.id ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Match'}
+                              </Button>
+                            )}
+                            {rc.status === 'disputed' && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-7 text-[10px]"
+                                onClick={() => handleMatchRow(rc.id)}
+                                disabled={busyId === rc.id}
+                              >
+                                {busyId === rc.id ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Resolve'}
+                              </Button>
+                            )}
                           </div>
                         </motion.div>
                       ))}

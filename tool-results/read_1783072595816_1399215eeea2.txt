@@ -1,0 +1,1309 @@
+     1→'use client';
+     2→
+     3→import React, { useState, useEffect, useMemo, useCallback } from 'react';
+     4→import {
+     5→  Card,
+     6→  CardContent,
+     7→  CardHeader,
+     8→  CardTitle,
+     9→  CardDescription,
+    10→} from '@/components/ui/card';
+    11→import { Badge } from '@/components/ui/badge';
+    12→import { Button } from '@/components/ui/button';
+    13→import { Progress } from '@/components/ui/progress';
+    14→import { Skeleton } from '@/components/ui/skeleton';
+    15→import { ScrollArea } from '@/components/ui/scroll-area';
+    16→import {
+    17→  Select,
+    18→  SelectContent,
+    19→  SelectItem,
+    20→  SelectTrigger,
+    21→  SelectValue,
+    22→} from '@/components/ui/select';
+    23→import {
+    24→  Tooltip,
+    25→  TooltipContent,
+    26→  TooltipProvider,
+    27→  TooltipTrigger,
+    28→} from '@/components/ui/tooltip';
+    29→import { Separator } from '@/components/ui/separator';
+    30→import {
+    31→  Clock,
+    32→  AlertTriangle,
+    33→  CheckCircle2,
+    34→  Shield,
+    35→  CalendarDays,
+    36→  ChevronLeft,
+    37→  ChevronRight,
+    38→  FileText,
+    39→  ArrowRight,
+    40→  Zap,
+    41→  TrendingUp,
+    42→  Circle,
+    43→  FileCheck,
+    44→  AlertOctagon,
+    45→  Timer,
+    46→} from 'lucide-react';
+    47→import { motion, AnimatePresence } from 'framer-motion';
+    48→import { format, addDays, differenceInDays, startOfMonth, endOfMonth, getDay, eachDayOfInterval, isSameDay, isToday, isPast, isBefore, parseISO, isValid } from 'date-fns';
+    49→import { useApp } from '@/contexts/AppContext';
+    50→import type { FilingCalendarItem, GSTRFiling } from '@/types/gst';
+    51→import { periodToLabel, getFilingDueDate } from '@/lib/gst-utils';
+    52→
+    53→// ── Types ────────────────────────────────────────────────────────────────────
+    54→
+    55→interface DeadlineEntry {
+    56→  id: string;
+    57→  returnType: string;
+    58→  dueDate: string;
+    59→  period: string;
+    60→  status: 'filed' | 'pending' | 'overdue' | 'upcoming';
+    61→  clientName: string;
+    62→  clientId: string;
+    63→}
+    64→
+    65→interface DeadlineCardData {
+    66→  returnType: string;
+    67→  label: string;
+    68→  icon: React.ReactNode;
+    69→  dueDate: string;
+    70→  dueDay: string;
+    71→  totalClients: number;
+    72→  filedClients: number;
+    73→  color: string;
+    74→  bgColor: string;
+    75→  borderColor: string;
+    76→  dotColor: string;
+    77→  progressColor: string;
+    78→}
+    79→
+    80→// ── Constants ────────────────────────────────────────────────────────────────
+    81→
+    82→const MONTHS = [
+    83→  'January', 'February', 'March', 'April', 'May', 'June',
+    84→  'July', 'August', 'September', 'October', 'November', 'December',
+    85→];
+    86→
+    87→const MONTHS_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    88→const DAYS_OF_WEEK = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    89→
+    90→const RETURN_TYPE_CONFIG: Record<string, { label: string; color: string; bgColor: string; borderColor: string; dotColor: string; progressColor: string; icon: string }> = {
+    91→  'GSTR-1': {
+    92→    label: 'GSTR-1 (Outward Supply)',
+    93→    color: 'text-emerald-700',
+    94→    bgColor: 'bg-emerald-50',
+    95→    borderColor: 'border-emerald-200',
+    96→    dotColor: 'bg-emerald-500',
+    97→    progressColor: 'bg-emerald-500',
+    98→    icon: '📤',
+    99→  },
+   100→  'GSTR-3B': {
+   101→    label: 'GSTR-3B (Summary Return)',
+   102→    color: 'text-amber-700',
+   103→    bgColor: 'bg-amber-50',
+   104→    borderColor: 'border-amber-200',
+   105→    dotColor: 'bg-amber-500',
+   106→    progressColor: 'bg-amber-500',
+   107→    icon: '📋',
+   108→  },
+   109→  'GSTR-2B': {
+   110→    label: 'GSTR-2B (Inward Supply)',
+   111→    color: 'text-purple-700',
+   112→    bgColor: 'bg-purple-50',
+   113→    borderColor: 'border-purple-200',
+   114→    dotColor: 'bg-purple-500',
+   115→    progressColor: 'bg-purple-500',
+   116→    icon: '📥',
+   117→  },
+   118→  'GSTR-9': {
+   119→    label: 'GSTR-9 (Annual Return)',
+   120→    color: 'text-teal-700',
+   121→    bgColor: 'bg-teal-50',
+   122→    borderColor: 'border-teal-200',
+   123→    dotColor: 'bg-teal-500',
+   124→    progressColor: 'bg-teal-500',
+   125→    icon: '📊',
+   126→  },
+   127→  'TDS/TCS': {
+   128→    label: 'TDS/TCS Return',
+   129→    color: 'text-orange-700',
+   130→    bgColor: 'bg-orange-50',
+   131→    borderColor: 'border-orange-200',
+   132→    dotColor: 'bg-orange-500',
+   133→    progressColor: 'bg-orange-500',
+   134→    icon: '💰',
+   135→  },
+   136→};
+   137→
+   138→// ── Animation Variants ───────────────────────────────────────────────────────
+   139→
+   140→const fadeInUp = {
+   141→  initial: { opacity: 0, y: 16 },
+   142→  animate: { opacity: 1, y: 0 },
+   143→  transition: { duration: 0.4, ease: [0.25, 0.46, 0.45, 0.94] },
+   144→};
+   145→
+   146→const staggerContainer = {
+   147→  animate: {
+   148→    transition: { staggerChildren: 0.06 },
+   149→  },
+   150→};
+   151→
+   152→const staggerItem = {
+   153→  initial: { opacity: 0, y: 12 },
+   154→  animate: { opacity: 1, y: 0 },
+   155→};
+   156→
+   157→// ── Skeleton Loaders ─────────────────────────────────────────────────────────
+   158→
+   159→function KPISkeleton() {
+   160→  return (
+   161→    <Card className="hover:shadow-md transition-shadow">
+   162→      <CardContent className="p-4 md:p-6">
+   163→        <div className="flex items-center justify-between">
+   164→          <div className="space-y-2">
+   165→            <Skeleton className="h-4 w-28" />
+   166→            <Skeleton className="h-8 w-16" />
+   167→            <Skeleton className="h-3 w-24" />
+   168→          </div>
+   169→          <Skeleton className="h-12 w-12 rounded-xl" />
+   170→        </div>
+   171→      </CardContent>
+   172→    </Card>
+   173→  );
+   174→}
+   175→
+   176→function CalendarSkeleton() {
+   177→  return (
+   178→    <Card className="hover:shadow-md transition-shadow">
+   179→      <CardHeader>
+   180→        <Skeleton className="h-5 w-40" />
+   181→        <Skeleton className="h-4 w-56" />
+   182→      </CardHeader>
+   183→      <CardContent>
+   184→        <div className="grid grid-cols-7 gap-1">
+   185→          {Array.from({ length: 35 }).map((_, i) => (
+   186→            <Skeleton key={i} className="h-12 w-full rounded-md" />
+   187→          ))}
+   188→        </div>
+   189→      </CardContent>
+   190→    </Card>
+   191→  );
+   192→}
+   193→
+   194→function TimelineSkeleton() {
+   195→  return (
+   196→    <Card className="hover:shadow-md transition-shadow">
+   197→      <CardHeader>
+   198→        <Skeleton className="h-5 w-40" />
+   199→        <Skeleton className="h-4 w-48" />
+   200→      </CardHeader>
+   201→      <CardContent className="space-y-4">
+   202→        {Array.from({ length: 6 }).map((_, i) => (
+   203→          <div key={i} className="flex items-center gap-3">
+   204→            <Skeleton className="h-8 w-8 rounded-full" />
+   205→            <div className="flex-1 space-y-1.5">
+   206→              <Skeleton className="h-4 w-3/4" />
+   207→              <Skeleton className="h-3 w-1/2" />
+   208→            </div>
+   209→            <Skeleton className="h-5 w-16 rounded-full" />
+   210→          </div>
+   211→        ))}
+   212→      </CardContent>
+   213→    </Card>
+   214→  );
+   215→}
+   216→
+   217→// ── Helper Functions ─────────────────────────────────────────────────────────
+   218→
+   219→function getGstr1DueDate(year: number, month: number): Date {
+   220→  // 11th of following month
+   221→  const nextMonth = month === 12 ? 1 : month + 1;
+   222→  const nextYear = month === 12 ? year + 1 : year;
+   223→  return new Date(nextYear, nextMonth - 1, 11);
+   224→}
+   225→
+   226→function getGstr3BDueDate(year: number, month: number): Date {
+   227→  // 20th of following month
+   228→  const nextMonth = month === 12 ? 1 : month + 1;
+   229→  const nextYear = month === 12 ? year + 1 : year;
+   230→  return new Date(nextYear, nextMonth - 1, 20);
+   231→}
+   232→
+   233→function getGstr2BDueDate(year: number, month: number): Date {
+   234→  // 13th of following month
+   235→  const nextMonth = month === 12 ? 1 : month + 1;
+   236→  const nextYear = month === 12 ? year + 1 : year;
+   237→  return new Date(nextYear, nextMonth - 1, 13);
+   238→}
+   239→
+   240→function getAnnualReturnDueDate(year: number): Date {
+   241→  // December 31st of following year
+   242→  return new Date(year + 1, 11, 31);
+   243→}
+   244→
+   245→function getTDSTCSDueDate(year: number, month: number): Date {
+   246→  // 10th of following month
+   247→  const nextMonth = month === 12 ? 1 : month + 1;
+   248→  const nextYear = month === 12 ? year + 1 : year;
+   249→  return new Date(nextYear, nextMonth - 1, 10);
+   250→}
+   251→
+   252→function getDaysRemaining(dueDate: Date): number {
+   253→  const today = new Date();
+   254→  today.setHours(0, 0, 0, 0);
+   255→  const due = new Date(dueDate);
+   256→  due.setHours(0, 0, 0, 0);
+   257→  return differenceInDays(due, today);
+   258→}
+   259→
+   260→function getDaysOverdue(dueDate: Date): number {
+   261→  const today = new Date();
+   262→  today.setHours(0, 0, 0, 0);
+   263→  const due = new Date(dueDate);
+   264→  due.setHours(0, 0, 0, 0);
+   265→  return differenceInDays(today, due);
+   266→}
+   267→
+   268→function getStatusForDeadline(dueDate: Date, filedCount: number, totalCount: number): 'filed' | 'pending' | 'overdue' | 'upcoming' {
+   269→  if (filedCount >= totalCount && totalCount > 0) return 'filed';
+   270→  const daysRem = getDaysRemaining(dueDate);
+   271→  if (daysRem < 0) return 'overdue';
+   272→  if (daysRem <= 7) return 'pending';
+   273→  return 'upcoming';
+   274→}
+   275→
+   276→function formatDaysRemaining(days: number): string {
+   277→  if (days < 0) return `${Math.abs(days)}d overdue`;
+   278→  if (days === 0) return 'Due today';
+   279→  if (days === 1) return '1 day left';
+   280→  return `${days} days left`;
+   281→}
+   282→
+   283→// ── Calendar Day Cell Component ──────────────────────────────────────────────
+   284→
+   285→interface CalendarDayCellProps {
+   286→  day: number;
+   287→  isCurrentMonth: boolean;
+   288→  isTodayDate: boolean;
+   289→  deadlines: DeadlineEntry[];
+   290→  isSelected: boolean;
+   291→  onClick: () => void;
+   292→}
+   293→
+   294→function CalendarDayCell({ day, isCurrentMonth, isTodayDate, deadlines, isSelected, onClick }: CalendarDayCellProps) {
+   295→  const hasDeadlines = deadlines.length > 0;
+   296→
+   297→  // Group deadlines by type to show colored dots
+   298→  const deadlineTypes = useMemo(() => {
+   299→    const types = new Set<string>();
+   300→    deadlines.forEach(d => types.add(d.returnType));
+   301→    return Array.from(types);
+   302→  }, [deadlines]);
+   303→
+   304→  const hasOverdue = deadlines.some(d => d.status === 'overdue');
+   305→
+   306→  return (
+   307→    <motion.button
+   308→      whileHover={{ scale: 1.05 }}
+   309→      whileTap={{ scale: 0.95 }}
+   310→      onClick={onClick}
+   311→      className={`
+   312→        relative flex flex-col items-center justify-center h-11 md:h-12 rounded-lg text-sm font-medium
+   313→        transition-colors cursor-pointer
+   314→        ${isCurrentMonth ? 'text-foreground' : 'text-muted-foreground/40'}
+   315→        ${isTodayDate ? 'ring-2 ring-emerald-500 ring-offset-1 dark:ring-offset-card bg-emerald-50/50 dark:bg-emerald-950/30' : ''}
+   316→        ${isSelected && !isTodayDate ? 'bg-accent' : ''}
+   317→        ${!isTodayDate && !isSelected ? 'hover:bg-accent/50' : ''}
+   318→        ${hasOverdue ? 'bg-red-50/60 dark:bg-red-950/20' : ''}
+   319→      `}
+   320→    >
+   321→      <span className={`${isTodayDate ? 'text-emerald-700 dark:text-emerald-400 font-bold' : ''}`}>
+   322→        {day}
+   323→      </span>
+   324→      {hasDeadlines && (
+   325→        <div className="flex items-center gap-0.5 mt-0.5 absolute bottom-1">
+   326→          {deadlineTypes.slice(0, 3).map((type, idx) => {
+   327→            const config = RETURN_TYPE_CONFIG[type];
+   328→            const dotColor = deadlines.find(d => d.returnType === type)?.status === 'overdue'
+   329→              ? 'bg-red-500'
+   330→              : config?.dotColor || 'bg-slate-400';
+   331→            return (
+   332→              <span
+   333→                key={idx}
+   334→                className={`inline-block h-1.5 w-1.5 rounded-full ${dotColor} ${hasOverdue && deadlines.find(d => d.returnType === type)?.status === 'overdue' ? 'animate-pulse' : ''}`}
+   335→              />
+   336→            );
+   337→          })}
+   338→          {deadlineTypes.length > 3 && (
+   339→            <span className="inline-block h-1.5 w-1.5 rounded-full bg-slate-400" />
+   340→          )}
+   341→        </div>
+   342→      )}
+   343→    </motion.button>
+   344→  );
+   345→}
+   346→
+   347→// ── Main Component ───────────────────────────────────────────────────────────
+   348→
+   349→export default function DeadlineCenterPage() {
+   350→  const { setCurrentView } = useApp();
+   351→
+   352→  // State
+   353→  const [calendarItems, setCalendarItems] = useState<FilingCalendarItem[]>([]);
+   354→  const [filings, setFilings] = useState<GSTRFiling[]>([]);
+   355→  const [loading, setLoading] = useState(true);
+   356→  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+   357→
+   358→  // Period state
+   359→  const now = new Date();
+   360→  const [selectedYear, setSelectedYear] = useState(now.getFullYear());
+   361→  const [selectedMonth, setSelectedMonth] = useState(now.getMonth() + 1); // 1-12
+   362→
+   363→  // ── Data Fetching ────────────────────────────────────────────────────────
+   364→
+   365→  useEffect(() => {
+   366→    async function fetchData() {
+   367→      try {
+   368→        setLoading(true);
+   369→        const [dashRes, filingRes] = await Promise.all([
+   370→          fetch('/api/dashboard'),
+   371→          fetch('/api/gstr-filing'),
+   372→        ]);
+   373→
+   374→        if (dashRes.ok) {
+   375→          const dashData = await dashRes.json();
+   376→          setCalendarItems(dashData.filingCalendar || []);
+   377→        }
+   378→
+   379→        if (filingRes.ok) {
+   380→          const filingData = await filingRes.json();
+   381→          setFilings(filingData.filings || []);
+   382→        }
+   383→      } catch (err) {
+   384→        console.error('Error fetching deadline data:', err);
+   385→      } finally {
+   386→        setLoading(false);
+   387→      }
+   388→    }
+   389→
+   390→    fetchData();
+   391→  }, []);
+   392→
+   393→  // ── Derived Data ─────────────────────────────────────────────────────────
+   394→
+   395→  // Map calendar items to deadline entries with computed due dates
+   396→  const deadlineEntries: DeadlineEntry[] = useMemo(() => {
+   397→    return calendarItems.map(item => ({
+   398→      id: item.id,
+   399→      returnType: item.returnType,
+   400→      dueDate: item.dueDate,
+   401→      period: item.period,
+   402→      status: item.status,
+   403→      clientName: item.clientName,
+   404→      clientId: item.clientId,
+   405→    }));
+   406→  }, [calendarItems]);
+   407→
+   408→  // Generate comprehensive deadline entries for the selected month
+   409→  const monthlyDeadlines: DeadlineEntry[] = useMemo(() => {
+   410→    const entries: DeadlineEntry[] = [...deadlineEntries];
+   411→
+   412→    // Add default GST deadlines if not covered by API data
+   413→    const period = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}`;
+   414→    const defaultReturnTypes = ['GSTR-1', 'GSTR-3B', 'GSTR-2B', 'TDS/TCS'];
+   415→
+   416→    for (const rt of defaultReturnTypes) {
+   417→      const existing = entries.find(e => e.returnType === rt && e.period === period);
+   418→      if (!existing) {
+   419→        let dueDate: Date;
+   420→        switch (rt) {
+   421→          case 'GSTR-1':
+   422→            dueDate = getGstr1DueDate(selectedYear, selectedMonth);
+   423→            break;
+   424→          case 'GSTR-3B':
+   425→            dueDate = getGstr3BDueDate(selectedYear, selectedMonth);
+   426→            break;
+   427→          case 'GSTR-2B':
+   428→            dueDate = getGstr2BDueDate(selectedYear, selectedMonth);
+   429→            break;
+   430→          case 'TDS/TCS':
+   431→            dueDate = getTDSTCSDueDate(selectedYear, selectedMonth);
+   432→            break;
+   433→          default:
+   434→            dueDate = getGstr1DueDate(selectedYear, selectedMonth);
+   435→        }
+   436→
+   437→        const daysRem = getDaysRemaining(dueDate);
+   438→        let status: DeadlineEntry['status'] = 'upcoming';
+   439→        if (daysRem < 0) status = 'overdue';
+   440→        else if (daysRem <= 7) status = 'pending';
+   441→
+   442→        entries.push({
+   443→          id: `default-${rt}-${period}`,
+   444→          returnType: rt,
+   445→          dueDate: format(dueDate, 'yyyy-MM-dd'),
+   446→          period,
+   447→          status,
+   448→          clientName: 'All Clients',
+   449→          clientId: 'all',
+   450→        });
+   451→      }
+   452→    }
+   453→
+   454→    return entries;
+   455→  }, [deadlineEntries, selectedYear, selectedMonth]);
+   456→
+   457→  // KPI Calculations
+   458→  const kpis = useMemo(() => {
+   459→    const today = new Date();
+   460→    today.setHours(0, 0, 0, 0);
+   461→    const nextWeek = addDays(today, 7);
+   462→
+   463→    const upcomingCount = monthlyDeadlines.filter(d => {
+   464→      const dueDate = parseISO(d.dueDate);
+   465→      return isValid(dueDate) && !isBefore(dueDate, today) && isBefore(dueDate, nextWeek) && d.status !== 'filed';
+   466→    }).length;
+   467→
+   468→    const overdueCount = monthlyDeadlines.filter(d => d.status === 'overdue').length;
+   469→
+   470→    const filedThisMonth = filings.filter(f => {
+   471→      if (f.status !== 'filed' || !f.filedDate) return false;
+   472→      const filedDate = parseISO(f.filedDate);
+   473→      return isValid(filedDate) && filedDate.getMonth() === today.getMonth() && filedDate.getFullYear() === today.getFullYear();
+   474→    }).length;
+   475→
+   476→    const total = monthlyDeadlines.length;
+   477→    const filed = monthlyDeadlines.filter(d => d.status === 'filed').length;
+   478→    const complianceRate = total > 0 ? Math.round((filed / total) * 100) : 100;
+   479→
+   480→    return { upcomingCount, overdueCount, filedThisMonth, complianceRate };
+   481→  }, [monthlyDeadlines, filings]);
+   482→
+   483→  // Calendar grid data
+   484→  const calendarGrid = useMemo(() => {
+   485→    const firstDay = startOfMonth(new Date(selectedYear, selectedMonth - 1));
+   486→    const lastDay = endOfMonth(new Date(selectedYear, selectedMonth - 1));
+   487→    const startDayOfWeek = getDay(firstDay); // 0=Sun
+   488→
+   489→    // Previous month days to fill the grid
+   490→    const prevMonthLastDay = new Date(selectedYear, selectedMonth - 1, 0).getDate();
+   491→    const prevMonthDays: { day: number; isCurrentMonth: false; date: Date }[] = [];
+   492→    for (let i = startDayOfWeek - 1; i >= 0; i--) {
+   493→      const d = new Date(selectedYear, selectedMonth - 2, prevMonthLastDay - i);
+   494→      prevMonthDays.push({ day: prevMonthLastDay - i, isCurrentMonth: false, date: d });
+   495→    }
+   496→
+   497→    // Current month days
+   498→    const currentMonthDaysArr = eachDayOfInterval({ start: firstDay, end: lastDay });
+   499→    const currentMonthDays = currentMonthDaysArr.map(d => ({
+   500→      day: d.getDate(),
+   501→      isCurrentMonth: true as const,
+   502→      date: d,
+   503→    }));
+   504→
+   505→    // Next month days
+   506→    const totalCells = prevMonthDays.length + currentMonthDays.length;
+   507→    const remaining = totalCells % 7 === 0 ? 0 : 7 - (totalCells % 7);
+   508→    const nextMonthDays: { day: number; isCurrentMonth: false; date: Date }[] = [];
+   509→    for (let i = 1; i <= remaining; i++) {
+   510→      const d = new Date(selectedYear, selectedMonth, i);
+   511→      nextMonthDays.push({ day: i, isCurrentMonth: false, date: d });
+   512→    }
+   513→
+   514→    return [...prevMonthDays, ...currentMonthDays, ...nextMonthDays];
+   515→  }, [selectedYear, selectedMonth]);
+   516→
+   517→  // Deadlines for selected date
+   518→  const selectedDateDeadlines = useMemo(() => {
+   519→    if (!selectedDate) return [];
+   520→    return monthlyDeadlines.filter(d => {
+   521→      const dueDate = parseISO(d.dueDate);
+   522→      return isValid(dueDate) && isSameDay(dueDate, selectedDate);
+   523→    });
+   524→  }, [selectedDate, monthlyDeadlines]);
+   525→
+   526→  // Deadlines for calendar markers
+   527→  const getDeadlinesForDate = useCallback((date: Date) => {
+   528→    return monthlyDeadlines.filter(d => {
+   529→      const dueDate = parseISO(d.dueDate);
+   530→      return isValid(dueDate) && isSameDay(dueDate, date);
+   531→    });
+   532→  }, [monthlyDeadlines]);
+   533→
+   534→  // Timeline deadlines (sorted by due date, next 14 days + overdue)
+   535→  const timelineDeadlines = useMemo(() => {
+   536→    const today = new Date();
+   537→    today.setHours(0, 0, 0, 0);
+   538→
+   539→    return [...monthlyDeadlines]
+   540→      .filter(d => d.clientId !== 'all' || d.status === 'overdue')
+   541→      .sort((a, b) => {
+   542→        const dateA = parseISO(a.dueDate);
+   543→        const dateB = parseISO(b.dueDate);
+   544→        return dateA.getTime() - dateB.getTime();
+   545→      })
+   546→      .slice(0, 12);
+   547→  }, [monthlyDeadlines]);
+   548→
+   549→  // Deadline cards data (for the filing deadline cards grid)
+   550→  const deadlineCards: DeadlineCardData[] = useMemo(() => {
+   551→    const period = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}`;
+   552→    const returnTypes = ['GSTR-1', 'GSTR-3B', 'GSTR-2B'];
+   553→
+   554→    return returnTypes.map(rt => {
+   555→      const config = RETURN_TYPE_CONFIG[rt];
+   556→      let dueDate: Date;
+   557→
+   558→      switch (rt) {
+   559→        case 'GSTR-1':
+   560→          dueDate = getGstr1DueDate(selectedYear, selectedMonth);
+   561→          break;
+   562→        case 'GSTR-3B':
+   563→          dueDate = getGstr3BDueDate(selectedYear, selectedMonth);
+   564→          break;
+   565→        case 'GSTR-2B':
+   566→          dueDate = getGstr2BDueDate(selectedYear, selectedMonth);
+   567→          break;
+   568→        default:
+   569→          dueDate = getGstr1DueDate(selectedYear, selectedMonth);
+   570→      }
+   571→
+   572→      const periodFilings = filings.filter(f => f.returnType === rt && f.period === period);
+   573→      const totalClients = Math.max(periodFilings.length, 1);
+   574→      const filedClients = periodFilings.filter(f => f.status === 'filed').length;
+   575→
+   576→      return {
+   577→        returnType: rt,
+   578→        label: config.label,
+   579→        icon: <span className="text-lg">{config.icon}</span>,
+   580→        dueDate: format(dueDate, 'yyyy-MM-dd'),
+   581→        dueDay: format(dueDate, 'dd MMM yyyy'),
+   582→        totalClients,
+   583→        filedClients,
+   584→        color: config.color,
+   585→        bgColor: config.bgColor,
+   586→        borderColor: config.borderColor,
+   587→        dotColor: config.dotColor,
+   588→        progressColor: config.progressColor,
+   589→      };
+   590→    });
+   591→  }, [selectedYear, selectedMonth, filings]);
+   592→
+   593→  // ── Navigation ───────────────────────────────────────────────────────────
+   594→
+   595→  const goToPrevMonth = () => {
+   596→    if (selectedMonth === 1) {
+   597→      setSelectedMonth(12);
+   598→      setSelectedYear(y => y - 1);
+   599→    } else {
+   600→      setSelectedMonth(m => m - 1);
+   601→    }
+   602→  };
+   603→
+   604→  const goToNextMonth = () => {
+   605→    if (selectedMonth === 12) {
+   606→      setSelectedMonth(1);
+   607→      setSelectedYear(y => y + 1);
+   608→    } else {
+   609→      setSelectedMonth(m => m + 1);
+   610→    }
+   611→  };
+   612→
+   613→  const goToToday = () => {
+   614→    const n = new Date();
+   615→    setSelectedYear(n.getFullYear());
+   616→    setSelectedMonth(n.getMonth() + 1);
+   617→    setSelectedDate(n);
+   618→  };
+   619→
+   620→  // ── Status Badge ─────────────────────────────────────────────────────────
+   621→
+   622→  function getStatusBadge(status: DeadlineEntry['status']) {
+   623→    switch (status) {
+   624→      case 'filed':
+   625→        return <Badge className="bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border-emerald-200 dark:bg-emerald-950 dark:text-emerald-400 dark:border-emerald-800 text-[11px]">Filed</Badge>;
+   626→      case 'pending':
+   627→        return <Badge className="bg-amber-50 text-amber-700 hover:bg-amber-100 border-amber-200 dark:bg-amber-950 dark:text-amber-400 dark:border-amber-800 text-[11px]">Pending</Badge>;
+   628→      case 'overdue':
+   629→        return <Badge className="bg-red-50 text-red-700 hover:bg-red-100 border-red-200 dark:bg-red-950 dark:text-red-400 dark:border-red-800 text-[11px] animate-pulse">Overdue</Badge>;
+   630→      case 'upcoming':
+   631→        return <Badge className="bg-slate-50 text-slate-600 hover:bg-slate-100 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700 text-[11px]">Upcoming</Badge>;
+   632→    }
+   633→  }
+   634→
+   635→  function getCardStatusLabel(dueDate: string, filedCount: number, totalCount: number): { label: string; color: string; bgColor: string } {
+   636→    const due = parseISO(dueDate);
+   637→    if (!isValid(due)) return { label: 'Unknown', color: 'text-slate-600', bgColor: 'bg-slate-50' };
+   638→    const days = getDaysRemaining(due);
+   639→
+   640→    if (filedCount >= totalCount && totalCount > 0) {
+   641→      return { label: 'Completed', color: 'text-emerald-700', bgColor: 'bg-emerald-50' };
+   642→    }
+   643→    if (days < 0) {
+   644→      return { label: 'Overdue', color: 'text-red-700', bgColor: 'bg-red-50' };
+   645→    }
+   646→    if (days <= 3) {
+   647→      return { label: 'Critical', color: 'text-red-600', bgColor: 'bg-red-50' };
+   648→    }
+   649→    if (days <= 7) {
+   650→      return { label: 'Approaching', color: 'text-amber-700', bgColor: 'bg-amber-50' };
+   651→    }
+   652→    return { label: 'On Track', color: 'text-emerald-700', bgColor: 'bg-emerald-50' };
+   653→  }
+   654→
+   655→  // ── Render ───────────────────────────────────────────────────────────────
+   656→
+   657→  return (
+   658→    <div className="space-y-6 p-4 md:p-6 max-w-[1600px] mx-auto">
+   659→      {/* ═══════════════ PAGE HEADER ═══════════════ */}
+   660→      <motion.div
+   661→        initial={{ opacity: 0, y: -12 }}
+   662→        animate={{ opacity: 1, y: 0 }}
+   663→        transition={{ duration: 0.5 }}
+   664→        className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4"
+   665→      >
+   666→        <div className="flex items-start gap-3">
+   667→          <div className="flex items-center justify-center h-10 w-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 shadow-lg shadow-emerald-600/20 shrink-0">
+   668→            <CalendarDays className="h-5 w-5 text-white" />
+   669→          </div>
+   670→          <div>
+   671→            <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Deadline Center</h1>
+   672→            <p className="text-muted-foreground text-sm mt-0.5">
+   673→              GST Filing Calendar &amp; Deadline Tracker
+   674→            </p>
+   675→          </div>
+   676→        </div>
+   677→        <div className="flex items-center gap-2 flex-wrap">
+   678→          <Badge variant="outline" className="gap-1.5 px-3 py-1.5 border-emerald-200 text-emerald-700 bg-emerald-50 dark:border-emerald-800 dark:text-emerald-400 dark:bg-emerald-950">
+   679→            <Timer className="h-3.5 w-3.5" />
+   680→            Current Period: {MONTHS_SHORT[selectedMonth - 1]} {selectedYear}
+   681→          </Badge>
+   682→          <div className="flex items-center gap-1">
+   683→            <Select
+   684→              value={String(selectedMonth)}
+   685→              onValueChange={v => setSelectedMonth(Number(v))}
+   686→            >
+   687→              <SelectTrigger size="sm" className="w-[120px]">
+   688→                <SelectValue />
+   689→              </SelectTrigger>
+   690→              <SelectContent>
+   691→                {MONTHS.map((m, i) => (
+   692→                  <SelectItem key={i} value={String(i + 1)}>{m}</SelectItem>
+   693→                ))}
+   694→              </SelectContent>
+   695→            </Select>
+   696→            <Select
+   697→              value={String(selectedYear)}
+   698→              onValueChange={v => setSelectedYear(Number(v))}
+   699→            >
+   700→              <SelectTrigger size="sm" className="w-[90px]">
+   701→                <SelectValue />
+   702→              </SelectTrigger>
+   703→              <SelectContent>
+   704→                {[2024, 2025, 2026, 2027].map(y => (
+   705→                  <SelectItem key={y} value={String(y)}>{y}</SelectItem>
+   706→                ))}
+   707→              </SelectContent>
+   708→            </Select>
+   709→          </div>
+   710→        </div>
+   711→      </motion.div>
+   712→
+   713→      {/* ═══════════════ KPI ROW ═══════════════ */}
+   714→      {loading ? (
+   715→        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+   716→          {Array.from({ length: 4 }).map((_, i) => <KPISkeleton key={i} />)}
+   717→        </div>
+   718→      ) : (
+   719→        <motion.div
+   720→          variants={staggerContainer}
+   721→          initial="initial"
+   722→          animate="animate"
+   723→          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"
+   724→        >
+   725→          {/* KPI 1: Upcoming Deadlines */}
+   726→          <motion.div variants={staggerItem}>
+   727→            <Card className="hover:shadow-md transition-shadow relative overflow-hidden group">
+   728→              <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-bl from-amber-100/50 to-transparent dark:from-amber-900/20 rounded-bl-full" />
+   729→              <CardContent className="p-4 md:p-6">
+   730→                <div className="flex items-center justify-between">
+   731→                  <div className="space-y-1">
+   732→                    <p className="text-sm text-muted-foreground font-medium">Upcoming Deadlines</p>
+   733→                    <p className="text-3xl font-bold text-amber-600">{kpis.upcomingCount}</p>
+   734→                    <p className="text-xs text-muted-foreground">Next 7 days</p>
+   735→                  </div>
+   736→                  <div className="flex items-center justify-center h-12 w-12 rounded-xl bg-amber-50 dark:bg-amber-950 group-hover:scale-110 transition-transform">
+   737→                    <Clock className="h-6 w-6 text-amber-600" />
+   738→                  </div>
+   739→                </div>
+   740→              </CardContent>
+   741→            </Card>
+   742→          </motion.div>
+   743→
+   744→          {/* KPI 2: Overdue Filings */}
+   745→          <motion.div variants={staggerItem}>
+   746→            <Card className="hover:shadow-md transition-shadow relative overflow-hidden group">
+   747→              <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-bl from-red-100/50 to-transparent dark:from-red-900/20 rounded-bl-full" />
+   748→              <CardContent className="p-4 md:p-6">
+   749→                <div className="flex items-center justify-between">
+   750→                  <div className="space-y-1">
+   751→                    <p className="text-sm text-muted-foreground font-medium">Overdue Filings</p>
+   752→                    <p className="text-3xl font-bold text-red-600">{kpis.overdueCount}</p>
+   753→                    <p className="text-xs text-red-500 font-medium">Requires attention</p>
+   754→                  </div>
+   755→                  <div className="flex items-center justify-center h-12 w-12 rounded-xl bg-red-50 dark:bg-red-950 group-hover:scale-110 transition-transform">
+   756→                    <AlertTriangle className="h-6 w-6 text-red-600" />
+   757→                  </div>
+   758→                </div>
+   759→              </CardContent>
+   760→            </Card>
+   761→          </motion.div>
+   762→
+   763→          {/* KPI 3: Filed This Month */}
+   764→          <motion.div variants={staggerItem}>
+   765→            <Card className="hover:shadow-md transition-shadow relative overflow-hidden group">
+   766→              <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-bl from-emerald-100/50 to-transparent dark:from-emerald-900/20 rounded-bl-full" />
+   767→              <CardContent className="p-4 md:p-6">
+   768→                <div className="flex items-center justify-between">
+   769→                  <div className="space-y-1">
+   770→                    <p className="text-sm text-muted-foreground font-medium">Filed This Month</p>
+   771→                    <p className="text-3xl font-bold text-emerald-600">{kpis.filedThisMonth}</p>
+   772→                    <p className="text-xs text-emerald-600 font-medium flex items-center gap-1">
+   773→                      <TrendingUp className="h-3 w-3" /> On track
+   774→                    </p>
+   775→                  </div>
+   776→                  <div className="flex items-center justify-center h-12 w-12 rounded-xl bg-emerald-50 dark:bg-emerald-950 group-hover:scale-110 transition-transform">
+   777→                    <CheckCircle2 className="h-6 w-6 text-emerald-600" />
+   778→                  </div>
+   779→                </div>
+   780→              </CardContent>
+   781→            </Card>
+   782→          </motion.div>
+   783→
+   784→          {/* KPI 4: Compliance Rate */}
+   785→          <motion.div variants={staggerItem}>
+   786→            <Card className="hover:shadow-md transition-shadow relative overflow-hidden group">
+   787→              <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-bl from-teal-100/50 to-transparent dark:from-teal-900/20 rounded-bl-full" />
+   788→              <CardContent className="p-4 md:p-6">
+   789→                <div className="flex items-center justify-between">
+   790→                  <div className="space-y-1">
+   791→                    <p className="text-sm text-muted-foreground font-medium">Compliance Rate</p>
+   792→                    <p className="text-3xl font-bold text-teal-600">{kpis.complianceRate}%</p>
+   793→                    <Progress value={kpis.complianceRate} className="h-1.5 w-24 mt-1" />
+   794→                  </div>
+   795→                  <div className="flex items-center justify-center h-12 w-12 rounded-xl bg-teal-50 dark:bg-teal-950 group-hover:scale-110 transition-transform">
+   796→                    <Shield className="h-6 w-6 text-teal-600" />
+   797→                  </div>
+   798→                </div>
+   799→              </CardContent>
+   800→            </Card>
+   801→          </motion.div>
+   802→        </motion.div>
+   803→      )}
+   804→
+   805→      {/* ═══════════════ CALENDAR VIEW + TIMELINE ═══════════════ */}
+   806→      {loading ? (
+   807→        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+   808→          <div className="lg:col-span-2"><CalendarSkeleton /></div>
+   809→          <TimelineSkeleton />
+   810→        </div>
+   811→      ) : (
+   812→        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+   813→          {/* ── Calendar View (PRIMARY) ── */}
+   814→          <motion.div
+   815→            className="lg:col-span-2"
+   816→            {...fadeInUp}
+   817→            transition={{ duration: 0.5, delay: 0.1 }}
+   818→          >
+   819→            <Card className="hover:shadow-md transition-shadow">
+   820→              <CardHeader className="pb-3">
+   821→                <div className="flex items-center justify-between">
+   822→                  <div>
+   823→                    <CardTitle className="flex items-center gap-2 text-base">
+   824→                      <CalendarDays className="h-5 w-5 text-emerald-600" />
+   825→                      Filing Calendar
+   826→                    </CardTitle>
+   827→                    <CardDescription className="mt-0.5">
+   828→                      {MONTHS[selectedMonth - 1]} {selectedYear} — Deadline overview
+   829→                    </CardDescription>
+   830→                  </div>
+   831→                  <div className="flex items-center gap-1">
+   832→                    <Button variant="outline" size="icon" className="h-8 w-8" onClick={goToPrevMonth}>
+   833→                      <ChevronLeft className="h-4 w-4" />
+   834→                    </Button>
+   835→                    <Button variant="outline" size="sm" className="h-8 px-3 text-xs" onClick={goToToday}>
+   836→                      Today
+   837→                    </Button>
+   838→                    <Button variant="outline" size="icon" className="h-8 w-8" onClick={goToNextMonth}>
+   839→                      <ChevronRight className="h-4 w-4" />
+   840→                    </Button>
+   841→                  </div>
+   842→                </div>
+   843→
+   844→                {/* Legend */}
+   845→                <div className="flex items-center gap-4 pt-2 flex-wrap">
+   846→                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+   847→                    <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" /> GSTR-1
+   848→                  </div>
+   849→                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+   850→                    <span className="h-2.5 w-2.5 rounded-full bg-amber-500" /> GSTR-3B
+   851→                  </div>
+   852→                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+   853→                    <span className="h-2.5 w-2.5 rounded-full bg-purple-500" /> GSTR-2B
+   854→                  </div>
+   855→                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+   856→                    <span className="h-2.5 w-2.5 rounded-full bg-red-500 animate-pulse" /> Overdue
+   857→                  </div>
+   858→                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+   859→                    <span className="h-2.5 w-2.5 rounded-full bg-orange-500" /> TDS/TCS
+   860→                  </div>
+   861→                </div>
+   862→              </CardHeader>
+   863→
+   864→              <CardContent className="pb-4">
+   865→                {/* Day of week headers */}
+   866→                <div className="grid grid-cols-7 gap-1 mb-1">
+   867→                  {DAYS_OF_WEEK.map(day => (
+   868→                    <div key={day} className="flex items-center justify-center h-8 text-xs font-semibold text-muted-foreground">
+   869→                      {day}
+   870→                    </div>
+   871→                  ))}
+   872→                </div>
+   873→
+   874→                {/* Calendar grid */}
+   875→                <div className="grid grid-cols-7 gap-1">
+   876→                  {calendarGrid.map((cell, idx) => {
+   877→                    const dayDeadlines = cell.isCurrentMonth ? getDeadlinesForDate(cell.date) : [];
+   878→                    return (
+   879→                      <CalendarDayCell
+   880→                        key={idx}
+   881→                        day={cell.day}
+   882→                        isCurrentMonth={cell.isCurrentMonth}
+   883→                        isTodayDate={cell.isCurrentMonth && isToday(cell.date)}
+   884→                        deadlines={dayDeadlines}
+   885→                        isSelected={selectedDate ? isSameDay(cell.date, selectedDate) : false}
+   886→                        onClick={() => setSelectedDate(cell.date)}
+   887→                      />
+   888→                    );
+   889→                  })}
+   890→                </div>
+   891→
+   892→                {/* Selected date detail */}
+   893→                <AnimatePresence mode="wait">
+   894→                  {selectedDate && selectedDateDeadlines.length > 0 && (
+   895→                    <motion.div
+   896→                      initial={{ opacity: 0, height: 0 }}
+   897→                      animate={{ opacity: 1, height: 'auto' }}
+   898→                      exit={{ opacity: 0, height: 0 }}
+   899→                      transition={{ duration: 0.3 }}
+   900→                      className="mt-4 border-t pt-4"
+   901→                    >
+   902→                      <div className="flex items-center justify-between mb-3">
+   903→                        <h4 className="text-sm font-semibold">
+   904→                          {format(selectedDate, 'EEEE, dd MMMM yyyy')}
+   905→                        </h4>
+   906→                        <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setSelectedDate(null)}>
+   907→                          Clear
+   908→                        </Button>
+   909→                      </div>
+   910→                      <div className="space-y-2">
+   911→                        {selectedDateDeadlines.map(deadline => {
+   912→                          const config = RETURN_TYPE_CONFIG[deadline.returnType];
+   913→                          return (
+   914→                            <motion.div
+   915→                              key={deadline.id}
+   916→                              initial={{ opacity: 0, x: -8 }}
+   917→                              animate={{ opacity: 1, x: 0 }}
+   918→                              className="flex items-center gap-3 p-2.5 rounded-lg border border-border/50 hover:bg-accent/50 transition-colors"
+   919→                            >
+   920→                              <div className={`flex items-center justify-center h-8 w-8 rounded-lg ${config?.bgColor || 'bg-slate-50'} shrink-0`}>
+   921→                                <span className="text-sm">{config?.icon || '📄'}</span>
+   922→                              </div>
+   923→                              <div className="flex-1 min-w-0">
+   924→                                <div className="flex items-center gap-2">
+   925→                                  <p className="text-sm font-medium truncate">{deadline.returnType}</p>
+   926→                                  <span className="text-xs text-muted-foreground">{periodToLabel(deadline.period)}</span>
+   927→                                </div>
+   928→                                <p className="text-xs text-muted-foreground truncate">{deadline.clientName}</p>
+   929→                              </div>
+   930→                              {getStatusBadge(deadline.status)}
+   931→                            </motion.div>
+   932→                          );
+   933→                        })}
+   934→                      </div>
+   935→                    </motion.div>
+   936→                  )}
+   937→                </AnimatePresence>
+   938→              </CardContent>
+   939→            </Card>
+   940→          </motion.div>
+   941→
+   942→          {/* ── Deadline Timeline (RIGHT) ── */}
+   943→          <motion.div
+   944→            {...fadeInUp}
+   945→            transition={{ duration: 0.5, delay: 0.2 }}
+   946→          >
+   947→            <Card className="hover:shadow-md transition-shadow h-full">
+   948→              <CardHeader className="pb-3">
+   949→                <CardTitle className="flex items-center gap-2 text-base">
+   950→                  <Clock className="h-5 w-5 text-amber-500" />
+   951→                  Deadline Timeline
+   952→                </CardTitle>
+   953→                <CardDescription>Upcoming &amp; overdue deadlines</CardDescription>
+   954→              </CardHeader>
+   955→              <CardContent className="pb-4">
+   956→                <ScrollArea className="h-[420px] pr-2">
+   957→                  <div className="relative">
+   958→                    {/* Timeline line */}
+   959→                    <div className="absolute left-[15px] top-2 bottom-2 w-0.5 bg-gradient-to-b from-red-400 via-amber-400 to-emerald-400 opacity-30" />
+   960→
+   961→                    <div className="space-y-1">
+   962→                      {monthlyDeadlines
+   963→                        .filter(d => d.clientId !== 'all')
+   964→                        .sort((a, b) => {
+   965→                          const dateA = parseISO(a.dueDate);
+   966→                          const dateB = parseISO(b.dueDate);
+   967→                          return dateA.getTime() - dateB.getTime();
+   968→                        })
+   969→                        .slice(0, 15)
+   970→                        .map((deadline, idx) => {
+   971→                          const dueDate = parseISO(deadline.dueDate);
+   972→                          const isValidDate = isValid(dueDate);
+   973→                          const days = isValidDate ? getDaysRemaining(dueDate) : 0;
+   974→                          const daysOverdue = isValidDate ? getDaysOverdue(dueDate) : 0;
+   975→                          const config = RETURN_TYPE_CONFIG[deadline.returnType];
+   976→                          const isOverdueItem = deadline.status === 'overdue';
+   977→
+   978→                          return (
+   979→                            <motion.div
+   980→                              key={deadline.id}
+   981→                              initial={{ opacity: 0, x: 12 }}
+   982→                              animate={{ opacity: 1, x: 0 }}
+   983→                              transition={{ delay: idx * 0.04 }}
+   984→                              className="flex items-start gap-3 relative pl-1 py-2"
+   985→                            >
+   986→                              {/* Timeline dot */}
+   987→                              <div className={`relative z-10 mt-1 flex items-center justify-center h-[30px] w-[30px] rounded-full shrink-0 ${
+   988→                                isOverdueItem
+   989→                                  ? 'bg-red-100 dark:bg-red-950'
+   990→                                  : deadline.status === 'filed'
+   991→                                  ? 'bg-emerald-100 dark:bg-emerald-950'
+   992→                                  : deadline.status === 'pending'
+   993→                                  ? 'bg-amber-100 dark:bg-amber-950'
+   994→                                  : 'bg-slate-100 dark:bg-slate-800'
+   995→                              }`}>
+   996→                                <span className="text-xs">{config?.icon || '📄'}</span>
+   997→                              </div>
+   998→
+   999→                              {/* Content */}
+  1000→                              <div className="flex-1 min-w-0">
+  1001→                                <div className="flex items-center gap-1.5">
+  1002→                                  <p className="text-sm font-medium truncate">{deadline.returnType}</p>
+  1003→                                  {getStatusBadge(deadline.status)}
+  1004→                                </div>
+  1005→                                <p className="text-xs text-muted-foreground truncate mt-0.5">
+  1006→                                  {deadline.clientName}
+  1007→                                </p>
+  1008→                                <div className="flex items-center gap-2 mt-1">
+  1009→                                  <span className="text-xs text-muted-foreground">
+  1010→                                    {isValidDate ? format(dueDate, 'dd MMM') : '—'}
+  1011→                                  </span>
+  1012→                                  <Separator orientation="vertical" className="h-3" />
+  1013→                                  <span className={`text-xs font-medium ${
+  1014→                                    isOverdueItem
+  1015→                                      ? 'text-red-600'
+  1016→                                      : days <= 3
+  1017→                                      ? 'text-amber-600'
+  1018→                                      : 'text-emerald-600'
+  1019→                                  }`}>
+  1020→                                    {isOverdueItem
+  1021→                                      ? formatDaysRemaining(-daysOverdue)
+  1022→                                      : formatDaysRemaining(days)
+  1023→                                    }
+  1024→                                  </span>
+  1025→                                </div>
+  1026→                              </div>
+  1027→                            </motion.div>
+  1028→                          );
+  1029→                        })}
+  1030→
+  1031→                      {/* Default deadline entries for the period */}
+  1032→                      {monthlyDeadlines
+  1033→                        .filter(d => d.clientId === 'all')
+  1034→                        .sort((a, b) => {
+  1035→                          const dateA = parseISO(a.dueDate);
+  1036→                          const dateB = parseISO(b.dueDate);
+  1037→                          return dateA.getTime() - dateB.getTime();
+  1038→                        })
+  1039→                        .map((deadline, idx) => {
+  1040→                          const dueDate = parseISO(deadline.dueDate);
+  1041→                          const isValidDate = isValid(dueDate);
+  1042→                          const days = isValidDate ? getDaysRemaining(dueDate) : 0;
+  1043→                          const config = RETURN_TYPE_CONFIG[deadline.returnType];
+  1044→                          const isOverdueItem = deadline.status === 'overdue';
+  1045→
+  1046→                          return (
+  1047→                            <motion.div
+  1048→                              key={deadline.id}
+  1049→                              initial={{ opacity: 0, x: 12 }}
+  1050→                              animate={{ opacity: 1, x: 0 }}
+  1051→                              transition={{ delay: (idx + 10) * 0.04 }}
+  1052→                              className="flex items-start gap-3 relative pl-1 py-2"
+  1053→                            >
+  1054→                              <div className={`relative z-10 mt-1 flex items-center justify-center h-[30px] w-[30px] rounded-full shrink-0 ${
+  1055→                                isOverdueItem
+  1056→                                  ? 'bg-red-100 dark:bg-red-950'
+  1057→                                  : deadline.status === 'pending'
+  1058→                                  ? 'bg-amber-100 dark:bg-amber-950'
+  1059→                                  : 'bg-slate-100 dark:bg-slate-800'
+  1060→                              }`}>
+  1061→                                <span className="text-xs">{config?.icon || '📄'}</span>
+  1062→                              </div>
+  1063→
+  1064→                              <div className="flex-1 min-w-0">
+  1065→                                <div className="flex items-center gap-1.5">
+  1066→                                  <p className="text-sm font-medium truncate">{deadline.returnType}</p>
+  1067→                                  {getStatusBadge(deadline.status)}
+  1068→                                </div>
+  1069→                                <p className="text-xs text-muted-foreground truncate mt-0.5">
+  1070→                                  All Clients — {periodToLabel(deadline.period)}
+  1071→                                </p>
+  1072→                                <div className="flex items-center gap-2 mt-1">
+  1073→                                  <span className="text-xs text-muted-foreground">
+  1074→                                    {isValidDate ? format(dueDate, 'dd MMM yyyy') : '—'}
+  1075→                                  </span>
+  1076→                                  <Separator orientation="vertical" className="h-3" />
+  1077→                                  <span className={`text-xs font-medium ${
+  1078→                                    isOverdueItem
+  1079→                                      ? 'text-red-600'
+  1080→                                      : days <= 3
+  1081→                                      ? 'text-amber-600'
+  1082→                                      : 'text-emerald-600'
+  1083→                                  }`}>
+  1084→                                    {formatDaysRemaining(days)}
+  1085→                                  </span>
+  1086→                                </div>
+  1087→                              </div>
+  1088→                            </motion.div>
+  1089→                          );
+  1090→                        })}
+  1091→                    </div>
+  1092→                  </div>
+  1093→                </ScrollArea>
+  1094→              </CardContent>
+  1095→            </Card>
+  1096→          </motion.div>
+  1097→        </div>
+  1098→      )}
+  1099→
+  1100→      {/* ═══════════════ DEADLINE CARDS GRID ═══════════════ */}
+  1101→      {loading ? (
+  1102→        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+  1103→          {Array.from({ length: 3 }).map((_, i) => (
+  1104→            <Card key={i} className="hover:shadow-md transition-shadow">
+  1105→              <CardHeader>
+  1106→                <Skeleton className="h-5 w-40" />
+  1107→                <Skeleton className="h-4 w-24" />
+  1108→              </CardHeader>
+  1109→              <CardContent className="space-y-3">
+  1110→                <Skeleton className="h-6 w-32" />
+  1111→                <Skeleton className="h-2 w-full" />
+  1112→                <Skeleton className="h-4 w-20" />
+  1113→              </CardContent>
+  1114→            </Card>
+  1115→          ))}
+  1116→        </div>
+  1117→      ) : (
+  1118→        <motion.div
+  1119→          initial={{ opacity: 0, y: 16 }}
+  1120→          animate={{ opacity: 1, y: 0 }}
+  1121→          transition={{ duration: 0.5, delay: 0.3 }}
+  1122→        >
+  1123→          <div className="flex items-center justify-between mb-3">
+  1124→            <h3 className="text-base font-semibold flex items-center gap-2">
+  1125→              <FileText className="h-4 w-4 text-emerald-600" />
+  1126→              Filing Deadlines — {MONTHS_SHORT[selectedMonth - 1]} {selectedYear}
+  1127→            </h3>
+  1128→            <Button
+  1129→              variant="ghost"
+  1130→              size="sm"
+  1131→              className="text-xs text-emerald-600 hover:text-emerald-700"
+  1132→              onClick={() => setCurrentView('gstr-filing')}
+  1133→            >
+  1134→              Go to Filing Center <ArrowRight className="h-3.5 w-3.5 ml-1" />
+  1135→            </Button>
+  1136→          </div>
+  1137→
+  1138→          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+  1139→            {deadlineCards.map((card, idx) => {
+  1140→              const statusInfo = getCardStatusLabel(card.dueDate, card.filedClients, card.totalClients);
+  1141→              const progressPct = card.totalClients > 0 ? Math.round((card.filedClients / card.totalClients) * 100) : 0;
+  1142→              const days = getDaysRemaining(parseISO(card.dueDate));
+  1143→
+  1144→              return (
+  1145→                <motion.div
+  1146→                  key={card.returnType}
+  1147→                  initial={{ opacity: 0, y: 16 }}
+  1148→                  animate={{ opacity: 1, y: 0 }}
+  1149→                  transition={{ duration: 0.4, delay: 0.3 + idx * 0.1 }}
+  1150→                >
+  1151→                  <Card className={`hover:shadow-lg transition-all group border-l-4 ${card.borderColor} ${
+  1152→                    statusInfo.label === 'Overdue' ? 'ring-1 ring-red-200 dark:ring-red-800' : ''
+  1153→                  }`}>
+  1154→                    <CardContent className="p-4 md:p-5">
+  1155→                      {/* Header */}
+  1156→                      <div className="flex items-start justify-between mb-3">
+  1157→                        <div className="flex items-center gap-2.5">
+  1158→                          <div className={`flex items-center justify-center h-10 w-10 rounded-xl ${card.bgColor} dark:bg-opacity-20 group-hover:scale-110 transition-transform`}>
+  1159→                            {card.icon}
+  1160→                          </div>
+  1161→                          <div>
+  1162→                            <p className="text-sm font-semibold">{card.returnType}</p>
+  1163→                            <p className="text-xs text-muted-foreground">{card.label.split('(')[1]?.replace(')', '') || ''}</p>
+  1164→                          </div>
+  1165→                        </div>
+  1166→                        <Badge className={`${statusInfo.bgColor} ${statusInfo.color} border-0 text-[11px] font-medium`}>
+  1167→                          {statusInfo.label === 'Overdue' && <AlertOctagon className="h-3 w-3 mr-1" />}
+  1168→                          {statusInfo.label}
+  1169→                        </Badge>
+  1170→                      </div>
+  1171→
+  1172→                      {/* Due Date */}
+  1173→                      <div className="mb-3">
+  1174→                        <p className="text-xs text-muted-foreground mb-0.5">Due Date</p>
+  1175→                        <p className="text-lg font-bold tracking-tight">{card.dueDay}</p>
+  1176→                        <p className={`text-xs font-medium mt-0.5 ${
+  1177→                          days < 0 ? 'text-red-600' : days <= 3 ? 'text-amber-600' : 'text-emerald-600'
+  1178→                        }`}>
+  1179→                          {formatDaysRemaining(days)}
+  1180→                        </p>
+  1181→                      </div>
+  1182→
+  1183→                      {/* Filing Progress */}
+  1184→                      <div className="mb-2">
+  1185→                        <div className="flex items-center justify-between text-xs mb-1.5">
+  1186→                          <span className="text-muted-foreground">
+  1187→                            Filing Progress
+  1188→                          </span>
+  1189→                          <span className="font-semibold">
+  1190→                            {card.filedClients} of {card.totalClients} filed
+  1191→                          </span>
+  1192→                        </div>
+  1193→                        <div className="relative h-2 w-full rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+  1194→                          <motion.div
+  1195→                            initial={{ width: 0 }}
+  1196→                            animate={{ width: `${progressPct}%` }}
+  1197→                            transition={{ duration: 0.8, delay: 0.5 + idx * 0.1, ease: 'easeOut' }}
+  1198→                            className={`absolute top-0 left-0 h-full rounded-full ${card.progressColor}`}
+  1199→                          />
+  1200→                        </div>
+  1201→                        <p className="text-[11px] text-muted-foreground mt-1">
+  1202→                          {progressPct}% complete
+  1203→                        </p>
+  1204→                      </div>
+  1205→
+  1206→                      {/* Action */}
+  1207→                      <Button
+  1208→                        variant="outline"
+  1209→                        size="sm"
+  1210→                        className={`w-full mt-2 h-8 text-xs ${card.borderColor} ${card.color} hover:${card.bgColor}`}
+  1211→                        onClick={() => setCurrentView('gstr-filing')}
+  1212→                      >
+  1213→                        {card.filedClients >= card.totalClients ? (
+  1214→                          <>
+  1215→                            <FileCheck className="h-3.5 w-3.5 mr-1" />
+  1216→                            View Details
+  1217→                          </>
+  1218→                        ) : (
+  1219→                          <>
+  1220→                            <FileText className="h-3.5 w-3.5 mr-1" />
+  1221→                            Start Filing
+  1222→                          </>
+  1223→                        )}
+  1224→                      </Button>
+  1225→                    </CardContent>
+  1226→                  </Card>
+  1227→                </motion.div>
+  1228→              );
+  1229→            })}
+  1230→          </div>
+  1231→        </motion.div>
+  1232→      )}
+  1233→
+  1234→      {/* ═══════════════ ANNUAL & TDS/TCS DEADLINES ═══════════════ */}
+  1235→      {!loading && (
+  1236→        <motion.div
+  1237→          initial={{ opacity: 0, y: 16 }}
+  1238→          animate={{ opacity: 1, y: 0 }}
+  1239→          transition={{ duration: 0.5, delay: 0.6 }}
+  1240→        >
+  1241→          <Card className="hover:shadow-md transition-shadow">
+  1242→            <CardHeader className="pb-3">
+  1243→              <CardTitle className="flex items-center gap-2 text-base">
+  1244→                <Zap className="h-5 w-5 text-teal-600" />
+  1245→                Additional GST Deadlines
+  1246→              </CardTitle>
+  1247→              <CardDescription>Annual returns &amp; TDS/TCS for the current period</CardDescription>
+  1248→            </CardHeader>
+  1249→            <CardContent>
+  1250→              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+  1251→                {/* GSTR-9 Annual Return */}
+  1252→                <div className="flex items-center gap-3 p-3 rounded-lg border border-teal-200 dark:border-teal-800 bg-teal-50/50 dark:bg-teal-950/20">
+  1253→                  <div className="flex items-center justify-center h-10 w-10 rounded-xl bg-teal-100 dark:bg-teal-900 shrink-0">
+  1254→                    <span className="text-lg">📊</span>
+  1255→                  </div>
+  1256→                  <div className="flex-1 min-w-0">
+  1257→                    <div className="flex items-center gap-2">
+  1258→                      <p className="text-sm font-semibold">GSTR-9 (Annual Return)</p>
+  1259→                      <Badge className="bg-teal-50 text-teal-700 border-teal-200 dark:bg-teal-950 dark:text-teal-400 dark:border-teal-800 text-[10px]">
+  1260→                        FY {selectedYear - 1}-{String(selectedYear).slice(2)}
+  1261→                      </Badge>
+  1262→                    </div>
+  1263→                    <p className="text-xs text-muted-foreground mt-0.5">
+  1264→                      Due: 31 Dec {selectedYear}
+  1265→                    </p>
+  1266→                    <p className="text-xs font-medium text-teal-600 mt-0.5">
+  1267→                      {getDaysRemaining(getAnnualReturnDueDate(selectedYear - 1)) > 0
+  1268→                        ? formatDaysRemaining(getDaysRemaining(getAnnualReturnDueDate(selectedYear - 1)))
+  1269→                        : 'Overdue'
+  1270→                      }
+  1271→                    </p>
+  1272→                  </div>
+  1273→                </div>
+  1274→
+  1275→                {/* TDS/TCS */}
+  1276→                <div className="flex items-center gap-3 p-3 rounded-lg border border-orange-200 dark:border-orange-800 bg-orange-50/50 dark:bg-orange-950/20">
+  1277→                  <div className="flex items-center justify-center h-10 w-10 rounded-xl bg-orange-100 dark:bg-orange-900 shrink-0">
+  1278→                    <span className="text-lg">💰</span>
+  1279→                  </div>
+  1280→                  <div className="flex-1 min-w-0">
+  1281→                    <div className="flex items-center gap-2">
+  1282→                      <p className="text-sm font-semibold">TDS/TCS Return</p>
+  1283→                      <Badge className="bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950 dark:text-orange-400 dark:border-orange-800 text-[10px]">
+  1284→                        {MONTHS_SHORT[selectedMonth - 1]} {selectedYear}
+  1285→                      </Badge>
+  1286→                    </div>
+  1287→                    <p className="text-xs text-muted-foreground mt-0.5">
+  1288→                      Due: {format(getTDSTCSDueDate(selectedYear, selectedMonth), 'dd MMM yyyy')}
+  1289→                    </p>
+  1290→                    <p className={`text-xs font-medium mt-0.5 ${
+  1291→                      getDaysRemaining(getTDSTCSDueDate(selectedYear, selectedMonth)) < 0
+  1292→                        ? 'text-red-600'
+  1293→                        : getDaysRemaining(getTDSTCSDueDate(selectedYear, selectedMonth)) <= 3
+  1294→                        ? 'text-amber-600'
+  1295→                        : 'text-orange-600'
+  1296→                    }`}>
+  1297→                      {formatDaysRemaining(getDaysRemaining(getTDSTCSDueDate(selectedYear, selectedMonth)))}
+  1298→                    </p>
+  1299→                  </div>
+  1300→                </div>
+  1301→              </div>
+  1302→            </CardContent>
+  1303→          </Card>
+  1304→        </motion.div>
+  1305→      )}
+  1306→    </div>
+  1307→  );
+  1308→}
+  1309→

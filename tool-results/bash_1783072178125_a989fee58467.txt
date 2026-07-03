@@ -1,0 +1,500 @@
+- Dev server: healthy (zero compile errors after changes; all API endpoints returning 200; `/api/connectors` 400 is expected because it requires a userId query param when called unauthenticated)
+
+---
+Task ID: PT2-1-b
+Agent: full-stack-developer (GST Returns & Reconciliation Cleanup)
+Task: Remove all fake GST returns, reconciliation data, e-invoices, review data; replace with real API fetch + empty states.
+
+Work Log:
+- Read tail of worklog.md — confirmed PT-1-a-retry + PT2-1-a agents had already cleaned BankingPage / PaymentsPage / EmbeddedFinancePage / WorkingCapitalPage.
+- Read tail of dev.log — confirmed dev server healthy, `/api/returns` / `/api/reconciliation` / `/api/invoices` / `/api/clients` all returning 200.
+- Read `src/contexts/AppContext.tsx` — confirmed `connections` is a valid AppView (line 94).
+- Read `src/components/shared/EmptyState.tsx` — confirmed signature (`icon`, `title`, `description`, `action`, `compact`).
+- Read `prisma/schema.prisma` for `GSTRFiling`, `ReconciliationRun`, `ReconciliationResult`, `Invoice`, `Client`, `Document` field shapes.
+- Read `src/app/api/returns/route.ts`, `src/app/api/reconciliation/route.ts`, `src/app/api/invoices/route.ts`, `src/app/api/clients/route.ts`, `src/app/api/clients/[id]/route.ts`, `src/app/api/documents/route.ts` — confirmed response shapes.
+- Read `src/lib/firestore-schema.ts` for `FirestoreReturn`, `FirestoreClient`, `FirestoreInvoice`, `FirestoreReconciliation`, `FirestoreDocument`, `FirestoreAIRecommendation`, `ReconMismatch` shapes.
+- **EInvoicingPage.tsx transformation** (PRIMARY):
+  * Added imports: `useEffect`, `useMemo`, `Loader2`, `EmptyState`.
+  * Defined `EInvoiceRow` + `ApiInvoice` interfaces + `mapInvoiceToEInvoice()` mapper (invoice number → IRN, invoice total → amount, cgst+sgst+igst+cess → tax, invoice status → valid/expired/cancelled).
+  * Replaced 5 fake arrays: `statCards` (4 fake numbers: 847/124/96.4/12), `eInvoices` (10 fake rows with Sharma/Patel/Mehta/Kumar/Singh/Reddy/Agarwal/Joshi buyers and ₹45k–₹12.3L amounts), `eWayBills` (7 fake bills with Mumbai/Pune/Delhi routes), `bulkJobs` (6 fake BLK-2026-* IDs), `dailyIRNData` (7 fake day counts).
+  * `eInvoices` now state-backed and populated from `GET /api/invoices`.
+  * `eWayBills`, `bulkJobs`, `dailyIRNData` kept as empty arrays (no backing API) — UI shows real empty states.
+  * `statCards` derived from real invoices: IRNs Generated = eInvoices.length, Validation Pass % = validCount / total × 100, etc. Trend chip renders "—" instead of fake percentages.
+  * `ValidationGauge` percent: hardcoded 96.4 → computed `validationPassPct`.
+  * Hardcoded "816 Passed", "23 Warnings", "8 Failed" → computed `validCount` / `expiredCount` / `cancelledCount` or "—".
+  * Hardcoded "295 This Week", "847 This Month", "42.1 Avg/Day" → computed from `dailyIRNData` or "—".
+  * Added `isLoading` state + Loader2 spinner.
+  * Added 5 EmptyState renders: Daily IRN chart ("No IRN history yet"), Recent E-Invoices ("No e-invoices generated"), E-Invoices tab ("No e-invoices generated" / "No matching e-invoices"), E-Way Bills tab ("No e-way bills generated"), Bulk Jobs tab ("No bulk jobs yet").
+- **ReturnsPage.tsx transformation**:
+  * Added `useEffect` to imports.
+  * Removed `useFireReturns`, `useFireClients`, `useFireReadyReturns`, `useFireFiledReturns` imports (replaced with `useState` + 2 `useEffect`s).
+  * Added `ApiGSTRFiling` + `ApiClient` interfaces + `mapApiReturnToItem()` + `mapApiClientToItem()` mappers (GSTRFiling.id → ReturnItem.id/returnId, client.tradeName/gstin mapped from relation, all numeric fields preserved).
+  * Fetches `/api/returns` + `/api/clients` in parallel, keyed on `refreshKey`.
+  * Added `setRefreshKey(k => k + 1)` after `handleFileReturn` + `handleCreateReturn` so kanban re-fetches after writes.
+  * Existing loading skeleton, error state, and "No returns prepared" empty state preserved unchanged.
+- **ReturnPrepWorkspace.tsx transformation**:
+  * Added `useEffect` to imports.
+  * Removed `useFireClient`, `useFireReturns`, `useFireInvoices`, `useFireDocuments` imports (replaced with `useState` + 4 `useEffect`s keyed on `clientId` + `refreshKey`).
+  * Added `ApiGSTRFiling`, `ApiInvoice`, `ApiClient`, `ApiDocument` interfaces + 4 mappers.
+  * Fetches `/api/clients/{id}`, `/api/invoices?clientId=X`, `/api/returns?clientId=X`, `/api/documents?clientId=X` in parallel.
+  * Document API returns Prisma `Document` shape (no `extractionStatus`/`extractedInvoiceCount`/`extractionAccuracy`) — mapper defaults these to `'pending'`/`0`/`0` so existing JSX guards still render correctly.
+  * Added `setRefreshKey(k => k + 1)` after `handleRunValidation`, `handleMarkReady`, `handleFileReturn` so workspace re-fetches after each status change.
+  * All step content (Upload / Extraction / Validation / Reconciliation / Preparation / Filing), filing readiness panel, dialogs, animations unchanged.
+- **ReconciliationPage.tsx transformation**:
+  * Added `useEffect` to imports.
+  * Removed `useFireReconciliations`, `useFireClients`, `useFireAIRecommendations` imports (replaced with `useState` + 3 `useEffect`s keyed on `refreshKey`).
+  * Added `ApiReconciliationRun`, `ApiReconciliationResult`, `ApiClient` interfaces + `mapApiRunToRecon()`, `mapApiResultToMismatch()`, `mapApiClient()` mappers.
+  * `mapApiResultToMismatch()` parses the JSON `mismatches` string on `ReconciliationResult` to extract `booksAmount`/`portalAmount`/`difference` (falls back to invoice total when not parseable).
+  * Fetches `Promise.all([/api/reconciliation?action=runs, /api/reconciliation])` to get runs + results, then maps each run + its filtered results to `FirestoreReconciliation` shape with `mismatches[]` populated.
+  * Fetches `/api/clients` for client names.
+  * AI Recommendations: no backing REST API — list left as `[]` so existing "No active recommendations" empty state renders truthfully.
+  * Added `setRefreshKey(k => k + 1)` after `handleCreateReconciliation` + `handleResolveMismatch`.
+  * Updated empty-state title from "No reconciliations run yet" → "No reconciliations yet" per task spec.
+  * Existing loading skeleton, error state, summary cards, mismatch table, AI panel, runs history, animations unchanged.
+- Ran `bun run lint` — PASS (zero errors, zero warnings) after all 4 transformations.
+- Checked `tail dev.log` — dev server healthy, zero compile errors; `/api/reconciliation?action=runs` 200 returns `{ runs: [] }`; `/api/returns` 200 returns 1 real GSTRFiling; `/api/clients` 200 returns real clients; `/api/invoices` 200 returns real invoices.
+- Verified with grep: zero fake Indian surnames (Sharma/Patel/Mehta/Kumar/Singh/Reddy/Agarwal/Joshi) remain in any of the 4 files. Zero fake amounts (450000/234000/567000/89000/1230000/178000/345000/67000/890000/156000) remain. Zero fake IDs (BLK-2026-*, 361008923456) remain. Zero hardcoded ₹ amounts in JSX. Zero remaining `useFire*` imports in any of the 4 files.
+- Wrote `/home/z/my-project/agent-ctx/PT2-1-b-full-stack-developer.md` work record.
+
+Stage Summary:
+- Files modified: 4 (EInvoicingPage.tsx, ReturnsPage.tsx, ReturnPrepWorkspace.tsx, ReconciliationPage.tsx).
+- Hardcoded values removed: 30+ fake e-invoice rows (with Indian-surname buyers and ₹45k–₹12.3L amounts), 7 fake e-way bills, 6 fake bulk jobs, 7 fake daily IRN data points, 4 fake stat-card values, 3 fake validation counts (816/23/8), 3 fake weekly/monthly/avg counts (295/847/42.1), 1 fake gauge percent (96.4). Plus 11 firestore hook calls (4 in ReturnsPage, 4 in ReturnPrepWorkspace, 3 in ReconciliationPage) replaced with real REST API fetches.
+- Empty states added: 6 new (Daily IRN chart, Recent E-Invoices, E-Invoices tab, E-Way Bills tab, Bulk Jobs tab in EInvoicingPage; plus the updated "No reconciliations yet" in ReconciliationPage). Existing "No returns prepared" in ReturnsPage preserved.
+- APIs wired: `GET /api/invoices` (EInvoicingPage), `GET /api/returns` + `GET /api/clients` (ReturnsPage), `GET /api/clients/{id}` + `GET /api/invoices?clientId=X` + `GET /api/returns?clientId=X` + `GET /api/documents?clientId=X` (ReturnPrepWorkspace), `GET /api/reconciliation?action=runs` + `GET /api/reconciliation` + `GET /api/clients` (ReconciliationPage).
+- Lint: PASS (zero errors, zero warnings)
+- Dev server: healthy (zero compile errors; all API endpoints returning 200; verified `/api/reconciliation?action=runs` returns `{ runs: [] }` and `/api/returns` returns 1 real GSTRFiling from the DB).
+
+---
+Task ID: SCAN-MOCK-1
+Agent: Explore
+Task: Scan codebase for all remaining mock data
+
+Work Log:
+- Read tail of /home/z/my-project/worklog.md to understand prior cleanup work. Confirmed PT2-1-a (BankingPage, PaymentsPage, EmbeddedFinancePage partial, WorkingCapitalPage) and PT2-1-b (EInvoicingPage, ReturnsPage, ReturnPrepWorkspace, ReconciliationPage) agents already cleaned 8 user-facing dashboard files. Also confirmed PT-1-a-retry cleaned AIClientInsightsPage, AITaskGeneratorPage (partial), DocumentsPage (partial), ExecutiveWarRoomPage (partial), EmbeddedFinancePage (partial), RunMyCompanyPage (partial), WorkingCapitalPage.
+- Used Glob to find mock/sample/seed/fixture files in /home/z/my-project/src — found only `/home/z/my-project/src/data/sample-data.ts` (775 lines).
+- Verified sample-data.ts is dead code: only imported by `/home/z/my-project/src/stores/gst-store.ts`, and gst-store.ts is not imported by any component (grep for `useGstStore` returns no matches).
+- Ran Grep across /home/z/my-project/src for `mock|Mock|MOCK|dummy|fake|Fake`, `Sharma|Patel|Mehta|Kumar|Singh|Reddy|Agarwal|Joshi|Gupta|Verma`, `HDFC|ICICI|SBI|Axis Bank|Kotak|Yes Bank`, `BLK-2026|INV-2026|INV-2025|TXN-|GSTR-2026-`, `27AAAAA|27BBBBB|29ABCDE|33AAAAA|HDFC0000|ICIC0000`, and `₹4.2 Cr|₹2.5 Cr|₹1.8 Cr|₹12.3|₹3.4|₹8.6|₹7.8|₹23.4` patterns.
+- Ran targeted Grep on every component file with matches to capture exact line numbers + array names. Listed /home/z/my-project/src/lib/ to find service modules.
+- Verified which `seed*` functions in /home/z/my-project/src/lib/ are actually invoked as DB-empty fallbacks by API routes (grep `seedWhatsAppMessages|seedEmailMessages|seedReportDistributions|seedSmsMessages|seedEmployees|seedPayroll|seedExecutionTasks|seedUserBehaviours|seedApprovals|seedDecisionsForEvents` in /home/z/my-project/src/app/api).
+
+Stage Summary:
+
+## A. Dead-code mock data files (DELETE — not referenced anywhere)
+
+1. **/home/z/my-project/src/data/sample-data.ts** (775 lines)
+   - Contains: `SAMPLE_CLIENTS` (10 fake clients with Sharma/Patel/Krishna/Metro/Sunrise names + fake GSTINs), `SAMPLE_INVOICES` (40+ fake invoices per client), `SAMPLE_RETURNS`, `SAMPLE_RECONCILIATIONS`, plus `CURRENT_PERIOD = '2025-06'`, `CURRENT_DATE = '2025-07-08'` constants.
+   - Replacement: DELETE the file entirely. It is only imported by gst-store.ts which itself is dead code.
+
+2. **/home/z/my-project/src/stores/gst-store.ts**
+   - Imports sample-data.ts and exposes `useGstStore` Zustand hook.
+   - Replacement: DELETE the file. No component imports it.
+
+## B. Dashboard pages with substantial remaining DEMO_/MOCK_ arrays
+
+3. **/home/z/my-project/src/components/embedded-finance/EmbeddedFinancePage.tsx** (1584 lines)
+   - Lines 97–110: `DEMO_PAYMENTS` — 12 fake UPI/NEFT/Card payments (Rajesh Kumar Enterprises ₹23,45,678; Sharma & Associates; Patel Industries; Mehta Trading Co; Gupta Manufacturing; Singh Brothers; Agarwal Textiles; Jain Infra; Verma Chemical; Reddy Logistics; Krishna Pharma; Chopra Food Processing).
+   - Lines 112–120: `DEMO_PAYMENT_LINKS` — 7 fake payment links with PL-2026-* IDs.
+   - Lines 122–127: `DEMO_VIRTUAL_ACCOUNTS` — 4 fake VA-001..VA-004 with `3636XXXXXXXX` account numbers + GSTP0001234 IFSC.
+   - Lines 129–132: `DEMO_ESCROW` — 2 fake ESC-001/ESC-002 escrow records.
+   - Lines 134–142: `DEMO_PAYOUTS` — 7 fake payouts incl. `HDFC Ergo Insurance`, TCS, WeWork, AWS, Deloitte.
+   - Lines 144–150: `DEMO_PAYOUT_HISTORY` — 5 fake historical payouts.
+   - Lines 152–156: `DEMO_AUTO_PAYOUT_RULES` — 3 fake auto-payout rules.
+   - Lines 159–166: `COLLECTION_TREND` — 6-month fake trend (₹38.9L–₹67.8L monthly).
+   - Lines 169–183: `CASH_FLOW_FORECAST` — 13-day fake forecast.
+   - Lines 1109–1113: Inline bank recon array (HDFC Bank, ICICI Bank, SBI with fake matched/unmatched counts).
+   - Lines 1147–1154: Inline activity timeline (₹5,45,000 from Rajesh Kumar; ₹12,34,567 from Patel Industries; HDFC import).
+   - Lines 1343–1347: Inline late-collection predictions (Singh Brothers ₹5,67,890; Chopra ₹6,78,900; Mehta ₹4,56,789; Verma ₹7,65,432).
+   - Lines 1409–1414: Inline expected receipts (Rajesh Kumar ₹5,45,000; Gupta ₹18,90,000; Patel ₹12,00,000; Agarwal ₹4,30,000; Jain ₹23,45,000).
+   - Lines 1452–1457: Inline risk alerts (₹15,68,221 exposure; ₹1,50,000 gap; Chopra 2 overdue; 12% UPI failure).
+   - Lines 1483–1488: Inline smart recommendations (₹8,90,000 XYZ Industries; ₹3,45,000 ABC Traders; TCS IT Solutions).
+   - Replacement: Wire each section to existing API routes (`/api/payments`, `/api/expenses`, `/api/connectors`, `/api/invoices`) or render EmptyState when no backing endpoint exists. (Prior agent PT2-1-a already wired the primary stat card to /api/invoices — these arrays are the residual UI sections.)
+
+4. **/home/z/my-project/src/components/run-my-company/RunMyCompanyPage.tsx** (2000+ lines)
+   - Line 130–131: Inline client list — `{ id: 'patel', name: 'Patel Industries Pvt. Ltd.', gstin: '24AAACP1234M1Z3', industry: 'Manufacturing' }` + `{ id: 'sharma', name: 'Sharma Enterprises', gstin: '07AAGCS7890P1Z2', industry: 'Trading' }`.
+   - Lines 148–152: `DEMO_RUN_HISTORY` — 4 fake past runs with ₹2,50,00,000 / ₹2,15,00,000 / ₹1,98,50,000 / ₹2,40,00,000 capital.
+   - Lines 169–174: `DEMO_PRIORITY_ACTIONS` — 4 fake actions ("Approve 2 escalated AI decisions (value > ₹50,00,000)", "Bridge Day-18 cash flow gap of ₹85,00,000 via Invoice Exchange", "Accept 3 pending bids on listed invoices (₹18,75,000)").
+   - Line 367–368: Hardcoded count-up animations: `useCountUp(1250000)` (₹12,50,000 revenue) + `useCountUp(25000000)` (₹2,50,00,000 capital).
+   - Replacement: Fetch clients from `/api/clients`; show real count-up from `/api/dashboard` aggregates or remove the animation; render empty state for run history + priority actions when no DB rows exist.
+
+5. **/home/z/my-project/src/components/run-india-business/RunIndiaBusinessPage.tsx**
+   - Lines 149, 167, 1219, 1353: Same `DEMO_RUN_HISTORY` + `DEMO_PRIORITY_ACTIONS` pattern as RunMyCompanyPage.
+   - Replacement: Same as RunMyCompanyPage.
+
+6. **/home/z/my-project/src/components/executive-war-room/ExecutiveWarRoomPage.tsx**
+   - Lines 689–700: `DEMO_TICKER_ITEMS` — 13 fake ticker strings (Patel, Sharma, Mehta references).
+   - Lines 702–708: `DEMO_AI_RECS` — 8 fake AI recommendations.
+   - Lines 710–714: `DEMO_PREDICTIONS` — 5 fake predictions.
+   - Lines 722–749: `DEMO_AI_AGENTS` — 6 fake agent status entries.
+   - Note: `DEMO_ANOMALIES` already replaced with real values per prior agent.
+   - Replacement: Wire ticker to `/api/dashboard` recent activity, AI recs to `/api/oracle/recommendations`, predictions to `/api/ai-cfo/intelligence`, agents to `/api/rmb/run-agent` status; show empty states when no data.
+
+7. **/home/z/my-project/src/components/run-my-business/RunMyBusinessPage.tsx**
+   - Lines 523–528, 691–695: Inline hardcoded activity feed (`'₹3,45,000 collected from Patel Enterprises'`, `'GSTR-3B filed for Sharma & Co.'`, `'Reconciliation completed for Mehta Industries'`, `'₹12,50,000 invoice extracted from purchase register'`).
+   - Lines 703–707: Inline priority actions with fake ₹2,50,000 / ₹4,50,000 / ₹1,20,000 / ₹6,00,000 amounts.
+   - Lines 711–718: Inline forecast `₹5,12,34,500` revenue forecast.
+   - Lines 898–900: Inline client revenue table (Patel ₹45L, Sharma ₹38L, Mehta ₹32L).
+   - Lines 964–968: Inline overdue table (Patel ₹4,50,000 67d, Mehta ₹1,90,000 22d, Sharma ₹1,50,000 15d).
+   - Lines 984–986: Inline returns table (Patel GSTR-3B, Sharma GSTR-1, Mehta GSTR-3B).
+   - Replacement: Fetch from `/api/dashboard`, `/api/clients`, `/api/returns`, `/api/invoices`; render empty states when no data.
+
+8. **/home/z/my-project/src/components/review/ReviewPage.tsx**
+   - Lines 83–150: `MOCK_CLIENTS` — 4 fake clients (Sharma Enterprises, Patel & Sons, Gupta Manufacturing, + 1 more) with fake GSTINs + `27AABCS1429B1Z5` style.
+   - Lines 154–470: `MOCK_INVOICES` — 10 fake invoices with buyerName references to MOCK_CLIENTS, hardcoded ₹4,50,000 / ₹2,34,000 / ₹8,90,000 amounts.
+   - Lines 611, 627: `setInvoices(MOCK_INVOICES)` / `setClients(MOCK_CLIENTS)` used as fallbacks.
+   - Replacement: Fetch from `/api/clients` + `/api/invoices`; render empty state when no data.
+
+9. **/home/z/my-project/src/components/notices/NoticeCenterPage.tsx**
+   - Lines 269–282: `mockTeamMembers` (Priya Sharma, Rahul Mehta, Vikram Singh, Sneha Patel, Arjun Reddy) + `mockClients` + `mockNotices`.
+   - Lines 408–425: Set as fallbacks when API returns empty.
+   - Replacement: Fetch from `/api/team-members`, `/api/clients`, `/api/notices`; show empty states.
+
+10. **/home/z/my-project/src/components/team-performance/TeamPerformancePage.tsx**
+    - Line 85: `mockLeaderboard: TeamMember[]` (hardcoded team members).
+    - Line 361: Used as initial state.
+    - Replacement: Fetch from `/api/team-members` or `/api/team-performance`; render empty state.
+
+11. **/home/z/my-project/src/components/workload/WorkloadPage.tsx**
+    - Lines 305–312: `mockTeamMembers` (Priya Sharma, Rahul Mehta, Vikram Singh, Sneha Patel, Arjun Reddy, +1).
+    - Lines 314–345: `mockWorkload` — 6 fake workload groups referencing mockTeamMembers.
+    - Lines 407, 434–435: Used as fallback when API returns empty.
+    - Replacement: Fetch from `/api/workload` (or `/api/team-members`); show empty state.
+
+12. **/home/z/my-project/src/components/ai-doc-chat/AIDocumentChatPage.tsx**
+    - Lines 61–66: `mockSessions` — fake chat sessions.
+    - Lines 68–94: `mockAIResponse` — hardcoded AI responses keyed by question.
+    - Lines 212–218: Used as fallbacks.
+    - Replacement: Fetch sessions from `/api/documents/chat-sessions` (or similar); wire AI responses to real LLM API; render empty state.
+
+13. **/home/z/my-project/src/components/ai-benchmark/AIBenchmarkPage.tsx**
+    - Lines 93–205: `mockClientMetrics` — Record of fake benchmark metrics per client.
+    - Lines 207–270: `mockClients` — fake client benchmarks.
+    - Lines 374–403: Used as fallbacks.
+    - Replacement: Fetch from `/api/ai-benchmark` (or compute from real `/api/clients` + `/api/invoices`); show empty state.
+
+14. **/home/z/my-project/src/components/ai-knowledge/AIKnowledgeCenterPage.tsx**
+    - Line 98: `mockKnowledgeData: KnowledgeData` (single hardcoded object).
+    - Lines 309, 338, 341, 345: Used as initial state + fallback.
+    - Replacement: Fetch from `/api/knowledge-entries`; show empty state.
+
+15. **/home/z/my-project/src/components/ai-tasks/AITaskGeneratorPage.tsx**
+    - Lines 123–127: `mockTeamMembers: TeamMember[]`.
+    - Lines 130–138: `mockClients: ClientOption[]`.
+    - Lines 232–233: Used as initial state.
+    - Note: Prior agent removed some hardcoded values but left these team/client mocks.
+    - Replacement: Fetch from `/api/team-members` + `/api/clients`; show empty state.
+
+16. **/home/z/my-project/src/components/executive-analytics/ExecutiveAnalyticsPage.tsx**
+    - Lines 112–125: `mockRevenueData` — 12-month fake revenue.
+    - Lines 127–140: `mockClientGrowth` — 12-month fake client growth.
+    - Lines 142–155: `mockGSTData` — fake GST breakdown.
+    - Lines 157–163: `mockProductivity` — 12-month fake productivity.
+    - Lines 165–171: `mockAIInsights` — fake AI insights.
+    - Lines 363–401: All five used as fallbacks when API returns empty.
+    - Replacement: Fetch from `/api/dashboard` aggregates + `/api/analytics`; render empty states.
+
+17. **/home/z/my-project/src/components/collaboration/CollaborationPage.tsx**
+    - Lines 68–117: `SAMPLE_COMMENTS` — fake comments.
+    - Lines 119–170: `SAMPLE_MESSAGES` — fake chat messages.
+    - Lines 172–200+: `SAMPLE_APPROVALS` — fake approval requests.
+    - Lines 287, 405, 526: Used as initial state.
+    - Replacement: Fetch from `/api/collaboration/comments|messages|approvals`; show empty state.
+
+18. **/home/z/my-project/src/components/marketplace/MarketplacePage.tsx**
+    - Lines 461–474: `SAMPLE_REVIEWS` — fake product reviews.
+    - Lines 476–479: Inline payment history (`amount: 142000`, `128000`, `115000`, `156000`).
+    - Lines 483–488: Inline revenue trend (₹98K–₹156K monthly).
+    - Replacement: Fetch from `/api/marketplace/products/{id}/reviews` + `/api/marketplace/billing`; show empty state.
+
+19. **/home/z/my-project/src/components/settings/SettingsPage.tsx**
+    - Lines 133–162: `MOCK_SESSIONS` — fake active sessions.
+    - Lines 164–178: `MOCK_API_CONNECTIONS` — fake API connections.
+    - Lines 180–200+: `MOCK_AUDIT_LOGS` — fake audit log entries.
+    - Replacement: Fetch from `/api/team-members/sessions` + `/api/audit-logs` + `/api/connectors`; show empty state.
+
+20. **/home/z/my-project/src/components/documents/DocumentsPage.tsx**
+    - Lines 205–219: `SAMPLE_ANOMALIES` (5 fake anomalies) + `SAMPLE_TASKS` (5 fake tasks) — still used as `useState` initial state at lines 1331–1332.
+    - Lines 221–296: `SAMPLE_DOCS` (defined but no longer used as initial state per prior agent's PT-1-a-retry comment at line 1324).
+    - Replacement: Initialize `anomalies` + `allTasks` as `[]` instead of `SAMPLE_ANOMALIES`/`SAMPLE_TASKS`; DELETE the three SAMPLE_* constants.
+
+21. **/home/z/my-project/src/components/autopilot/AutopilotPage.tsx**
+    - Lines 36–52: `sampleLogEntries` — 15 fake execution log lines with hardcoded `₹2,34,56,789` taxable, `₹18,45,230` net tax liability, `₹1,23,000` savings.
+    - Lines 55–61: `pastRuns` — 5 fake past runs.
+    - Line 91: `sampleLogEntries` used as initial state.
+    - Replacement: Fetch from `/api/autopilot/runs` (or similar); show empty state.
+
+22. **/home/z/my-project/src/components/event-engine/EventEnginePage.tsx**
+    - Lines 220–365: Inline event-type schema examples (invoiceId `INV-2024-0891`, amount 234500, gstin `27AABCU9603R1ZM`). These are illustrative API docs — lower priority but still hardcoded.
+    - Lines 373–384: `DEMO_SUBSCRIPTIONS` — 10 fake event subscriptions (sub-001..sub-010) with fake delivered counts (12847, 4521, 3290, etc.).
+    - Lines 1128, 1134: Rendered directly in JSX.
+    - Replacement: Fetch from `/api/event-engine/subscriptions`; show empty state.
+
+23. **/home/z/my-project/src/components/invoice-exchange/InvoiceExchangePage.tsx**
+    - Lines 204–209: Inline market bids (Reliance ₹2.3Cr/HDFC Bank, Infosys ₹89L/Kotak, L&T ₹1.56Cr/ICICI, Wipro ₹56L/Axis Finance, HCL ₹78L/SBI Factors).
+    - Lines 219–225: Top buyers list (HDFC Bank ₹198.7Cr volume/187 trades, ICICI ₹176.2Cr/165, Kotak ₹154.3Cr/142, Axis ₹96.7Cr/98, SBI Factors ₹84.5Cr/87).
+    - Lines 263–275: Listed invoices (Infosys ₹89L/HDFC Bank, Agarwal Textiles ₹21L/Reliance Trends, Verma Chemical ₹45L/Tata Chemicals, Gupta Manufacturing ₹67L/Siemens India, Sun Pharmaceutical ₹89L/Dr Reddy Labs).
+    - Lines 281–282: My listings (`my-002` HDFC Bank ₹89L).
+    - Lines 290–295: `SAMPLE_BIDS: Bid[]` — fake bid entries (HDFC Bank ₹86.4L, Kotak ₹86.2L).
+    - Lines 362: Closed trade history (Infosys/HDFC Bank ₹89L).
+    - Line 1472: `"Today's Volume" value="₹1,250 Cr"` "vs ₹1,180 Cr yesterday".
+    - Replacement: Fetch from `/api/invoice-exchange/bids|listings|trades`; show empty state.
+
+24. **/home/z/my-project/src/components/accounting/AccountingPage.tsx**
+    - Lines 78–83: `statCards` — 4 fake stat cards (₹87,45,000 revenue, ₹52,34,000 expenses, ₹35,11,000 net profit, ₹28,90,000 retained earnings).
+    - Lines 85–102: `chartOfAccounts` — 16 fake COA entries (Cash ₹23,45,000, AR ₹18,90,000, Fixed Assets ₹45,00,000, etc.).
+    - Lines 104–115: `journalEntries` — 10 fake JEs with `JE-2026-0345` IDs referencing Sharma & Associates, Patel Properties, Mehta Suppliers, HDFC Bank, Kumar Enterprises, Singh Consultants, Reddy Traders, Agarwal Infra.
+    - Lines 117–119: `revenueData` + `expenseData` + `monthLabels` (12-month fake series).
+    - Line 161: Header subtitle `"Sharma & Associates Pvt Ltd · FY 2025-26"` hardcoded.
+    - Replacement: Fetch from `/api/accounting/journals|coa|reports`; show empty state. Pull firm name from `/api/firm-settings`.
+
+25. **/home/z/my-project/src/components/financing-marketplace/FinancingMarketplacePage.tsx**
+    - Lines 205–311: `LENDER_OFFERS` — 15 fake lender offers (HDFC Bank, ICICI Bank, Kotak Mahindra, Axis Bank, Bajaj Finance, Tata Capital, Aditya Birla, L&T Finance, Fullerton, Cholamandalam, U Gro, Vivriti, FlexiLoans, Indifi, IDFC First).
+    - Lines 317–400: `MY_APPLICATIONS` — 7 fake loan applications (`APP-2025-0142` HDFC Bank, `APP-2025-0173` Kotak, `APP-2025-0188` ICICI, `APP-2025-0201` Axis, + 3 more) with ₹50L/₹25L/₹18L/₹75L/₹35L/₹40L/₹9.5L amounts.
+    - Lines 412+: Top lenders list (HDFC Bank, ICICI Bank, Kotak Mahindra, Axis Bank).
+    - Replacement: Lender offers could remain as a curated catalog (legitimate product data). MY_APPLICATIONS should fetch from `/api/financing/applications`; show empty state.
+
+26. **/home/z/my-project/src/components/hrms/HRMSPage.tsx**
+    - Lines 40–49: 10 fake employees (EMP001 Rajesh Sharma, EMP002 Priya Patel, EMP003 Amit Kumar, EMP004 Sunita Reddy, EMP005 Vikram Singh, EMP006 Meera Joshi, EMP007 Arjun Gupta, EMP010 Nisha Agarwal).
+    - Lines 63–67: 5 fake leave records.
+    - Lines 72–78: 7 fake departments with `₹8,50,000`/`₹6,40,000`/`₹7,20,000`/`₹5,40,000`/`₹3,75,000`/`₹3,20,000`/`₹5,52,000` budgets.
+    - Lines 322–325: Inline recent activities.
+    - Replacement: Fetch from `/api/hrms/employees|leaves|departments`; show empty state.
+
+27. **/home/z/my-project/src/components/payroll/PayrollPage.tsx**
+    - Lines 36–40: 4 fake stat cards (₹24,56,780 total payroll, ₹2,94,814 PF, ₹73,703 ESI, ₹4,12,340 TDS).
+    - Lines 44–52: 10 fake employee payroll records (same Rajesh Sharma/Priya Patel/Amit Kumar/Sunita Reddy/Vikram Singh/Meera Joshi/Arjun Gupta/Nisha Agarwal pattern as HRMSPage).
+    - Lines 57–64: 7 fake statutory payments (PF/ESI/TDS challans).
+    - Lines 286, 294, 302: Hardcoded totals ₹24,56,780 / ₹6,21,540 / ₹18,35,240 in JSX.
+    - Replacement: Fetch from `/api/payroll` + `/api/hrms/employees`; show empty state.
+
+28. **/home/z/my-project/src/components/tds/TDSPage.tsx**
+    - Line 164: Hardcoded `"Sharma & Associates Pvt Ltd"` in client header.
+    - Replacement: Fetch firm name from `/api/firm-settings` or `/api/clients/{id}`.
+
+29. **/home/z/my-project/src/components/multi-firm/MultiFirmPage.tsx**
+    - Lines 21–37: 3 fake firms (Sharma & Associates Enterprise ₹8,45,000, Patel Tax Solutions ₹3,12,000, Kumar GST Consultancy ₹88,000).
+    - Lines 48–60: 13 fake team members (Rajesh Sharma, Priya Patel, Amit Desai, Sneha Kulkarni, Vikram Joshi, Neha Client, Dhruv Patel, Anita Shah, Rohan Mehta, Kavita Client, Suresh Kumar, Lakshmi Nair).
+    - Lines 81–90: 10 fake activity feed entries.
+    - Replacement: Fetch from `/api/firms` + `/api/team-members` + `/api/audit-logs`; show empty state.
+
+30. **/home/z/my-project/src/components/network-effects/NetworkEffectsPage.tsx**
+    - Line 74: `"Network Value" value="₹10,000+ Crore"` hardcoded stat.
+    - Lines 98–111: 14 fake invitations (Rajesh Sharma, Priya Patel, Amit Kumar, Sunita Reddy, Vikram Singh, Kiran Joshi, Arjun Mehta, Ramesh Gupta, Nisha Agarwal).
+    - Lines 123–131: 9 fake referral rewards (Sharma & Associates ₹500, Patel Trading Corp ₹200, Reddy Consulting, Kumar Enterprises, Joshi Financial, Mehta Construction, Gupta Motors).
+    - Line 1134: `"₹2,34,500 earned"` hardcoded total.
+    - Lines 839–840: ₹500/₹200 reward copy.
+    - Replacement: Fetch from `/api/network/referrals|invitations`; show empty state.
+
+31. **/home/z/my-project/src/components/tasks/TasksPage.tsx**
+    - Lines 97, 112, 127–128, 143, 157, 159, 172, 188–189, 202, 203–204, 218, 232: 12+ fake tasks with `assignedTo: 'Rajesh Kumar'`, `'Priya Sharma'`, titles like `"File GSTR-3B for Sharma & Co."`, `"Upload purchase register for Patel Enterprises"`, `"Verify the GSTIN of the prospective new client (Mehta Group)"`, `"Follow up on pending documents from Kumar Ltd"`, `"Run reconciliation for Mehta Group"`, `"Review annual return GSTR-9 for Agarwal & Sons"`, descriptions with `"₹10,000"` threshold.
+    - Replacement: Fetch from `/api/tasks`; show empty state.
+
+32. **/home/z/my-project/src/components/analytics/AnalyticsPage.tsx**
+    - Lines 773–777: 5 fake top performers (CA Sharma 92/28 returns, CA Patel 87/24, CA Gupta 78/20, CA Singh 72/18, CA Kumar 85/22).
+    - Lines 807–811: 5 fake CLV bucket ranges (`₹0-50K`, `₹50K-2L`, `₹2L-5L`, `₹5L-10L`, `₹10L+`).
+    - Replacement: Fetch from `/api/analytics/top-performers|clv-distribution`; show empty state.
+
+33. **/home/z/my-project/src/components/approvals/ApprovalsPage.tsx**
+    - Lines 596–598: 3 fake escalation rules (Priya Sharma→Rajesh Kumar, Rajesh Kumar→Priya Sharma, Amit Patel→Priya Sharma).
+    - Replacement: Fetch from `/api/approvals/escalation-rules`; show empty state.
+
+34. **/home/z/my-project/src/components/esignatures/ESignaturesPage.tsx**
+    - Lines 84–98: `generateMockSignatures` function still defined and called at line 98 as initial state.
+    - Line 513: Placeholder `"e.g., Vikram Mehta"`.
+    - Replacement: Replace `generateMockSignatures()` with `[]`; DELETE the function.
+
+35. **/home/z/my-project/src/components/ai-compliance/AICompliancePage.tsx**
+    - Lines 469–547: Catch-block fallback that sets `forecasts` to hardcoded mock with `Acme Corp`, `Beta Industries`, `Gamma Solutions` clients and `"Potential ITC loss of ₹1,25,000 for Acme Corp"`.
+    - Replacement: On API failure, set `forecasts` to `{ notice: [], filing_delay: [], reconciliation_issue: [], itc_loss: [] }` and show error/empty state.
+
+36. **/home/z/my-project/src/components/ai-deadline-engine/AIDeadlineEnginePage.tsx**
+    - Lines 58–70: 11 fake calendar entries (Sharma Enterprises GSTR-1, Singh Trading GSTR-3B, Kumar Associates TDS, Mehta Corp, Patel & Sons, Joshi Infra).
+    - Lines 76–82: Fake upcoming deadlines list.
+    - Lines 83–86: Fake overdue (Singh Trading 8d, Kumar 3d, Patel 12d, Sharma 2d).
+    - Lines 100–104: Fake predictions (Singh 85%, Patel 65%, Kumar 45%, Sharma 38%).
+    - Replacement: Fetch from `/api/ai-deadline-engine`; show empty state.
+
+37. **/home/z/my-project/src/components/roc-compliance/ROCCompliancePage.tsx**
+    - Lines 32–43: 12 fake ROC filings (FIL001–FIL012) for Sharma Enterprises, Patel Industries, Mehta Consulting, Kumar Textiles, Singh Logistics, Reddy Infra with CINs.
+    - Lines 47–52: 6 fake companies with `₹50,00,000`/`₹1,00,00,000`/`₹25,00,000`/`₹2,00,00,000` auth capital.
+    - Lines 56–66: 11 fake directors (Rajesh Sharma, Anita Sharma, Suresh Sharma, Ramesh Patel, Ketan Patel, Vikram Mehta, Sunita Mehta, Arjun Mehta, Pradeep Kumar, Manoj Singh) with DINs.
+    - Replacement: Fetch from `/api/roc/filings|companies|directors`; show empty state.
+
+38. **/home/z/my-project/src/components/data-moat/DataMoatPage.tsx**
+    - Lines 156–660: `DEMO_CLIENTS: DemoClientProfile[]` — 7+ fake client profiles (Sharma Enterprises, Patel & Associates, Gupta Infrastructure, Mehta Textiles, Reddy Pharma, Singh Agro, Joshi Metal Works) with `₹5Cr revenue milestone`, `₹100Cr revenue milestone 2024` key events.
+    - Lines 1558, 1955, 1967, 1997: Used to seed selected client + coverage list.
+    - Replacement: Fetch from `/api/clients` with profile data; show empty state.
+
+39. **/home/z/my-project/src/components/decision-engine/DecisionEnginePage.tsx**
+    - Lines 169–268: 5 fake decisions with `rationale` strings referencing Sharma Enterprises, Patel Traders, Gupta & Sons, Mehta Industries. Estimated impacts `₹8,90,000`, `₹6,000 fees`, `₹2,34,000 savings`, `₹15,00,000 gap`.
+    - Lines 296–312: 17 fake decision history entries (e1–e17) with `₹9,20,000`, `₹4,50,000`, `₹5,400`, `₹1,80,000`, `₹1,95,000`, `₹15,00,000`, `₹2,50,000`, `₹5,60,000`, `₹2,10,000`, `₹4,800`, `₹1,80,000`, `₹8,50,000`, `₹15,000`, `₹1,20,000`, `₹7,10,000`, `₹45,000` values.
+    - Replacement: Fetch from `/api/decision-engine/decisions|history`; show empty state.
+
+40. **/home/z/my-project/src/components/version-history/VersionHistoryPage.tsx**
+    - Lines 53–62: `AUTHORS = ['Rajesh Kumar', 'Priya Sharma', 'Amit Patel', 'Anita Desai']`.
+    - Lines 69–155: `generateMockVersions` function generating 10+ fake version entries referencing `Sharma & Associates`, `GST Certificate - Sharma`.
+    - Line 155: `useState<VersionEntry[]>(() => generateMockVersions())`.
+    - Replacement: Fetch from `/api/audit-logs` filtered by entity changes; show empty state.
+
+41. **/home/z/my-project/src/components/api-platform/APIPlatformPage.tsx**
+    - Lines 93–180: `generateMockAPIKeys`, `generateMockWebhooks`, `generateMockRequestLogs` functions.
+    - Lines 182–184: All three used as `useState` initial state.
+    - Replacement: Fetch from `/api/api-platform/keys|webhooks|logs`; show empty state.
+
+42. **/home/z/my-project/src/components/api-platform-v2/APIPlatformPage.tsx**
+    - Lines 220–224: 5 fake billing invoices `INV-2025-002` etc. with `₹4,999`/`₹999`/`₹0` amounts and `87420`/`92150`/`9800`/`8700`/`890` API call counts.
+    - Lines 332, 345: Hardcoded request/response examples (`"₹4,56,000"`, `"₹59,000"`).
+    - Lines 1607–1609: 3 pricing tiers (`₹0`/`₹999/mo`/`₹4,999/mo`).
+    - Replacement: Fetch billing from `/api/billing/invoices`; pricing tiers may be legitimate product config.
+
+43. **/home/z/my-project/src/components/ai-risk/AIRiskEnginePage.tsx**
+    - Line 341: `"// Fallback mock data"` comment indicates inline fallback. Needs investigation.
+
+44. **/home/z/my-project/src/components/universal-business-id/UniversalBusinessIDPage.tsx**
+    - Lines 156, 174: Hardcoded UBID registry entries `UBID-27-HDF1-0234` (HDFC Bank) and `UBID-27-SBI0-1001` (State Bank of India) with GSTINs `27AAACH2702H1Z3`/`27AAACS8577G1Z1`.
+    - Lines 281–282: Inline bank connections (ICICI Bank score 95, Axis Bank score 90).
+    - Lines 362–368: UBID leaderboard with HDFC Bank, SBI, ICICI Bank, Axis Bank (scores 97/96/93/92).
+    - Line 1388: `"HDFC Bank" role: "Common Banking Partner" score: 97`.
+    - Replacement: Fetch from `/api/ubid/registry|leaderboard`; show empty state.
+
+45. **/home/z/my-project/src/components/economic-graph/EconomicGraphPage.tsx**
+    - Lines 112–166: 10 fake industry clusters with hardcoded `companies: 84520, revenue: 1845000, growth: 12.4, health: 82, avgRevenue: 21.8`.
+    - Lines 193+: Fake company nodes (Tata Steel Ltd `27AAACT1234F1Z5` revenue 230000, Dr Reddy's Labs revenue 24500).
+    - Line 352: Fake procurement node (`Dr Reddy's Labs`).
+    - Replacement: Fetch from `/api/economic-graph/clusters|companies`; show empty state.
+
+46. **/home/z/my-project/src/components/economic-war-room/EconomicWarRoomPage.tsx**
+    - Lines 182, 193–194, 229, 253: Hardcoded macro stats (`₹1.87L Cr GST Collection`, `₹12,450Cr FII Inflow`, `₹74,200 Gold`, `₹1,87,234 Cr`, `₹3,42,500 Cr`).
+    - Lines 402, 417: Hardcoded macro insights (`₹840 Cr revenue impact`).
+    - Lines 463–484: 18+ fake market pulse events (Reliance ₹45Cr vendor payment, ₹125Cr invoice financed, HDFC Bank ₹250Cr WC loan, SBI ₹1,450Cr GST collected, Adani ₹500Cr renewable, ₹340Cr TReDS, Bajaj 12,500 MSME loans ₹450Cr, Tata Steel ₹120Cr vendor, ICICI ₹890Cr GST, Mahindra ₹95Cr GSTR-1, Coal India ₹230Cr royalty, L&T ₹2,400Cr contract, Axis Bank 4,500 invoices TReDS).
+    - Line 1351: Hardcoded `"₹2.4Cr+ Cr"` label.
+    - Replacement: Fetch from `/api/economic-war-room/pulse|macro`; show empty state.
+
+47. **/home/z/my-project/src/components/credit-scoring-engine/CreditScoringEnginePage.tsx**
+    - Lines 177, 187: Hardcoded `annualRevenue: 876543000000` (₹8,76,543 Cr) and `creditLimit: 25000000` (₹2.50 Cr).
+    - Line 276: Fake risk factor `"Two new tax disputes added ₹8.4 Cr contingent liability"`.
+    - Lines 301–313: Fake ranked companies list (HDFC Bank Ltd. score 842, Bharat Steel Works `"ITC mismatch 38%", "Pending tax ₹14L"`, Eastern Logistics `"Penalty ₹2.4L"`).
+    - Replacement: Fetch from `/api/credit-scoring/companies|factors`; show empty state.
+
+48. **/home/z/my-project/src/components/agent-os/AgentOSPage.tsx**
+    - Lines 203–204: Recent activity `Onboarded Sharma & Associates`, `Onboarded Patel Traders`.
+    - Lines 280–299: 20 fake agent run records (RUN-001–RUN-020) with Sharma & Associates, Patel Traders, Reddy Enterprises, Kumar Industries + ₹4,56,000 ITC at risk, ₹12,34,567 ITC claimed, ₹8,90,000 pending, ₹6,78,900 anomalies, ₹3,45,670 ITC, ₹9,87,654 ITC, ₹5,67,000 overdue, ₹2,34,500 duplicate.
+    - Lines 316–331: 16+ fake memory entries (MEM-001–MEM-016) referencing Sharma & Associates, Patel Traders, Reddy Enterprises, Kumar Industries with `₹3,45,670`, `₹6,78,900` amounts.
+    - Lines 350–355: 6 fake marketplace items with authors `Rajesh Kumar, CA`, `Priya Sharma & Co`, `Deepak Verma, CA`, `Mehta Associates`, `Singh & Partners`.
+    - Replacement: Fetch from `/api/agent-os/runs|memory|marketplace`; show empty state.
+
+49. **/home/z/my-project/src/components/ai-document-employee/AIDocumentEmployeePage.tsx**
+    - Lines 246–257: `pipelineDocuments` — 10 fake pipeline docs (Patel & Sons, Sharma Industries, Rajesh Kumar & Co, Mehta Enterprises, Sunrise Exports, ABC Traders).
+    - Lines 259–268: `extractionResults` — 8 fake extraction results with `27AABCT1234F1ZP`/`27AABCS5678G2ZQ`/`27AABCM9012H3ZR`/`27AABCP3456D4ZS`/`27AABCS7890J5ZT`/`27AABCR2345K6ZU` GSTINs and ₹24,50,000 / ₹87,50,000 / ₹3,25,000 / ₹4,50,000 / ₹18,90,000 / ₹1,23,40,000 / ₹56,70,000 / ₹95,00,000 amounts.
+    - Lines 270–283: `autoActions` — 12 fake auto-action log entries.
+    - Lines 285–296: `docTypeDistribution` — 10 fake doc type counts.
+    - Replacement: Fetch from `/api/documents/pipeline|extractions|actions`; show empty state.
+
+50. **/home/z/my-project/src/components/ai-firm-memory/AIFirmMemoryPage.tsx**
+    - Lines 132–146: Fake graph nodes (patel, sharma, mehta) + edges.
+    - Lines 243–252: Memory entries referencing `Rajesh Kumar & Co`, `Patel & Sons`, `Sharma Industries`, `Mehta Enterprises` with `₹45,000 ITC mismatch`, `₹12,200 reversal`, `₹5.2 Cr turnover`, `₹5 Cr`.
+    - Lines 269–298: Client-memory records per client (Patel & Sons, Sharma Industries).
+    - Lines 291–299: Timeline entries (Rajesh Kumar, Patel, Sharma, Mehta).
+    - Lines 302+: `exampleQueries` with `Show Patel & Sons compliance history` and hardcoded answer `"Patel & Sons Compliance History..."`.
+    - Lines 324–326: Hardcoded answer `"Patel & Sons Compliance History:\n\n• GSTR-1 filed on time..."`.
+    - Line 879: UI text `"Sharma Industries qualifies for QRMP scheme..."`.
+    - Replacement: Fetch from `/api/ai-firm-memory`; show empty state.
+
+51. **/home/z/my-project/src/components/app-store/AppStorePage.tsx**
+    - Lines 69–343: 10+ fake app listings, each with 5–7 fake reviews by `Rajesh Sharma`, `Amit Patel`, `Sunita Reddy`, `Vikram Joshi`, `Rohit Gupta`, `Sanjay Mehta`, `Neha Agarwal`, `Ravi Kumar`, `Pooja Singh`, `Anita Sharma`, `Satish Verma`, `Neena Gupta`, `Tarun Agarwal`. Pricing `₹499/mo`/`₹799/mo`/`₹299/mo`/`₹999/mo`/`₹399/mo`/`₹99/mo`/`₹599/mo`/`₹199/mo`/`₹349/mo`/`₹149/mo`.
+    - Replacement: Apps may be legitimate catalog data. Reviews should fetch from `/api/marketplace/apps/{id}/reviews`; show empty state.
+
+52. **/home/z/my-project/src/components/gstpilot-network/GSTPilotNetworkPage.tsx**
+    - Lines 61–78: 18 fake referral leaderboard entries (Rajesh K. from Sharma & Associates 347 referrals ₹2,34,500 earnings, Priya M. from Mehta Tax Solutions ₹1,98,700, Amit S. from Singh Consulting ₹1,76,300, Sunita P. from Patel Financial Services ₹1,54,200, Sanjay G. from Gupta Associates ₹1,15,600, Meera J. from Joshi Tax Firm ₹1,04,500, Deepak V. from Verma & Partners ₹82,100, Ritu A. from Agarwal Consulting ₹38,300).
+    - Lines 110–126: 3 fake featured firms (Sharma & Associates ₹24,50,000, ₹18,75,000, ₹45,00,000 revenue).
+    - Lines 133–135: 3 fake milestone rewards (₹5,000, ₹10,000, ₹15,000 + Gold Tier).
+    - Replacement: Fetch from `/api/network/leaderboard|featured-firms`; show empty state.
+
+53. **/home/z/my-project/src/components/copilot/AICopilot.tsx**
+    - Line 40: Hardcoded copilot response `"3 clients have critical issues: TechCorp India, Sharma Enterprises, Global Traders"`.
+    - Replacement: Generate dynamic response from `/api/oracle/chat` or `/api/ai-copilot`.
+
+54. **/home/z/my-project/src/components/client-portal/ClientPortalPage.tsx**
+    - Lines 85–86: 2 fake demo logins `accounts@sharmaent.com / demo` (Sharma Enterprises, GSTIN `27AABCS1429B1Z5`) and `gst@patelsons.com / demo` (Patel & Sons, GSTIN `24AABCP5678G1Z3`).
+    - Replacement: Remove demo logins or fetch real portal clients from `/api/clients`.
+
+55. **/home/z/my-project/src/components/landing/LandingPage.tsx** (MARKETING — lower priority)
+    - Lines 517, 740–743: Hardcoded marketing demo data (`₹1.2L ITC Gap`, HDFC ₹42.8L, ICICI ₹18.4L, SBI ₹9.1L, Axis ₹3.6L).
+    - Lines 766, 772: Hardcoded `₹2,48,000`, `₹22,320 + ₹22,320`.
+    - Lines 802, 804: Hardcoded tasks `"Reconcile HDFC feed"`, `"Review ITC gap ₹1.2L"`.
+    - Lines 915–916, 920–923, 1009: Hardcoded dashboard metrics `₹4.2Cr Revenue`, `₹12.4L GST Liability`, Nexus Traders ₹1.2L, Summit Finserv ₹2.4L, Vanta Capital ₹48K, Pioneer Assoc ₹6.8L.
+    - Lines 1089–1090: Hardcoded Oracle lines `"₹3.2 lakh pending receivables"`, `"₹18 lakh revenue this month"`.
+    - Lines 1190–1198: Hardcoded `"₹73.9 lakh across 4 accounts"`, `"₹3.2 lakh pending"`, `"₹1.8L Payables"`.
+    - Line 1325: `"Rahul Mehta"` testimonial.
+    - Line 1731: Marketing copy `"Live bank feeds across HDFC, ICICI, SBI, Axis & more"`.
+    - Replacement: Marketing pages typically use illustrative data. Consider replacing with clearly-labeled `"Sample illustration"` text or fetching from a public case-studies endpoint.
+
+## C. API routes / lib modules with hardcoded seed data used as DB fallback
+
+56. **/home/z/my-project/src/app/api/business-copilot/route.ts**
+    - Lines 44, 47, 50, 53, 59, 62, 65, 67: 8+ hardcoded fallback strings with `₹45,00,000 monthly tax volume`, `47 active clients`, `₹12,34,500 pending collections`, `₹8,90,000 expected`, `₹2,50,000 shortfall`, `Patel Enterprises ₹3,45,000`, `Sunrise Corp ₹2,10,000`, `Metro Traders ₹1,85,000`, `Sharma & Co`, `ABC Traders`, `₹38,50,000 → ₹45,00,000`, `₹18,45,000 outstanding`, `₹5,60,000 overdue`, `₹2,10,000 at risk`, `92% compliance rate`.
+    - Replacement: Return empty response or `error: "no data"` from API; let UI render empty state. Do not fabricate numbers.
+
+57. **/home/z/my-project/src/app/api/seed/route.ts**
+    - Lines 50, 78, 110, 139: Bulk-seeds DB with `Rajesh Kumar`, `Sharma Traders` (`Client Receipt — Sharma Traders` amount 56000), `INV-2025-001` party `Sharma Traders` amount 45000.
+    - Replacement: This is a `/api/seed` dev endpoint — acceptable as dev-onboarding seed, but should be clearly labeled `DEV_ONLY` and not invoked in production. Consider removing or gating behind `NODE_ENV === 'development'`.
+
+58. **/home/z/my-project/src/app/api/connectors/[id]/sync/route.ts**
+    - Line 50: Hardcoded `name: 'Rajesh Kumar'` (probably sample user data).
+    - Replacement: Use `user.name` from authenticated session.
+
+59. **/home/z/my-project/src/lib/invoices/payroll.ts**
+    - Lines 150–238: `EMPLOYEE_SEED_INPUTS` — 8 fake employees (Arjun Sharma, Meera Iyer, Rahul Verma, Priya Nair, Karthik Reddy, Anjali Desai, Vikram Singh, Sneha Patil) with HDFC/ICICI/SBI/AXIS/KOTAK IFSC codes and PAN numbers.
+    - Lines 241–271, 275–300: `seedEmployees()` + `seedPayroll()` functions return arrays from EMPLOYEE_SEED_INPUTS.
+    - Called as fallback by `/api/payroll` (line 19) and `/api/oracle/chat` (lines 375, 386).
+    - Replacement: Remove `seedEmployees`/`seedPayroll` fallbacks; return `[]` from API when no DB rows exist. Let UI render empty state.
+
+60. **/home/z/my-project/src/lib/invoices/invoices.ts**
+    - Lines 524, 561, 598: Hardcoded `invoiceNumber: 'INV-2026-001'/'INV-2026-002'/'INV-2026-003'`.
+    - Replacement: Use real invoice numbers from DB or generate sequential numbers server-side.
+
+61. **/home/z/my-project/src/lib/invoices/tds.ts**
+    - Lines 134, 160, 186, 199: Hardcoded `deducteeName: 'Sharma Civil Contractors'`, `'Mehta Consulting Group'`, `'Verma Sales Agency'`, `'Patel Logistics Services'`.
+    - Replacement: Use real deductee names from TDS records DB.
+
+62. **/home/z/my-project/src/lib/communication/reports.ts**
+    - Lines 99–230: `seedReportDistributions()` returns 10+ fake report distributions with recipientName `Priya Sharma`, `Sunita Patel`, `Vikram Singh`, `Rajesh Verma`, `Meera Joshi`, `Amit Mehta`.
+    - Called as fallback by `/api/communication`.
+    - Replacement: Remove fallback; return `[]` from API.
+
+63. **/home/z/my-project/src/lib/communication/ai-engine.ts**
+    - Lines 680–840: Hardcoded message list with recipientName `Rajesh Verma`, `Priya Sharma`, `Amit Mehta`, `Deepak Agarwal`, `Sunita Patel`, `Meera Joshi`. Includes `INV-2026-001` for `₹1,18,000`, `INV-2026-004` for `₹84,000`, `INV-2025-088` for `₹1,56,000`.
+    - Replacement: Use real messages from DB.
+
+64. **/home/z/my-project/src/lib/communication/notifications.ts**
+    - Lines 139, 152, 219, 260: Hardcoded notification messages referencing `Mehta Traders`, `Verma Industries LLP`, `Singh Logistics`, `Sharma & Sons` with `₹1,42,000`, `₹1,18,000`, `₹84,000` amounts.
+    - Replacement: Use real notification templates + DB-fetched client names.
+
+65. **/home/z/my-project/src/lib/communication/sms.ts**
+    - Lines 27, 41, 55, 69, 83, 111, 125, 153: `seedSmsMessages()` with 8+ fake SMS to `Rajesh Verma`, `Priya Sharma`, `Amit Mehta`, `Sunita Patel`, `Deepak Agarwal`, `Vikram Singh`, `Ananya Reddy`, `Meera Joshi` referencing `Verma Industries LLP`, `Mehta Traders`, `Agarwal Supplies`, `Joshi Consulting`.
+    - Called as fallback by `/api/sms` (or similar).
+    - Replacement: Remove fallback; return `[]` from API.
+
+66. **/home/z/my-project/src/lib/communication/whatsapp.ts**
+    - Lines 29+: `seedWhatsAppMessages()` with same pattern of fake recipients.
+    - Called as fallback by `/api/whatsapp` (line 92).
+    - Replacement: Remove fallback; return `[]` from API.
+
+67. **/home/z/my-project/src/lib/communication/email.ts**
+    - Lines 27+: `seedEmailMessages()` with same pattern of fake recipients.
+    - Called as fallback by `/api/email` (line 90).
+    - Replacement: Remove fallback; return `[]` from API.
+
+68. **/home/z/my-project/src/lib/execution/execute.ts**
+    - Lines 212–382: `SEED_TASK_RECIPE` — fake task recipes referencing `Sharma Enterprises LLP`, `HDFC Current — xxxx4821`, `INV-2026-0042` (₹3,20,000), `"Reconciling HDFC statement (840 transactions pending)"`.
+    - Line 384: `seedExecutionTasks(decisions)` returns seeded tasks.
+    - Called as fallback by `/api/oracle/chat` (line 501) and `/api/execution`.
+    - Replacement: Remove fallback; return `[]` from API.
+
+69. **/home/z/my-project/src/lib/execution/observe.ts**
+    - Lines 124–179+: Hardcoded business events with `businessId: 'biz_sharma_enterprises'`, `bank: 'HDFC Bank'`, `account: 'XXXX-4821'`, `counterparty: 'Sharma Enterprises LLP'`, `Verma Industries LLP ₹18.2L overdue`, `INV-2025-0172`.
+    - Replacement: Fetch real events from DB.
+
+70. **/home/z/my-project/src/lib/execution/approvals.ts**
+    - Lines 173–255: `SEED_APPROVAL_RECIPE` includes `"HDFC MSME Loan EMI ₹1,24,000 (₹98K principal + ₹26K interest)"`.
+    - Line 256: `seedApprovals(tasks)` returns seeded approvals.
+    - Called as fallback by `/api/oracle/chat` (line 504) and `/api/execution`.

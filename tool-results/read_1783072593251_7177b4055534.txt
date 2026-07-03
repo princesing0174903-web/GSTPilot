@@ -1,0 +1,604 @@
+     1→'use client'
+     2→
+     3→import React, { useState, useEffect, useMemo } from 'react'
+     4→import { motion } from 'framer-motion'
+     5→import {
+     6→  FileOutput, ArrowUpRight, ArrowDownRight, TrendingUp,
+     7→  IndianRupee, FileText, CheckCircle2, Clock,
+     8→  AlertCircle, AlertTriangle, Download, Plus,
+     9→  Search, Filter, ChevronRight, ShieldCheck,
+    10→  Zap, RefreshCw, Send, Truck, Hash,
+    11→  BarChart3, Settings2, Eye, Copy, Loader2, Inbox,
+    12→} from 'lucide-react'
+    13→import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+    14→import { Badge } from '@/components/ui/badge'
+    15→import { Button } from '@/components/ui/button'
+    16→import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
+    17→import { ScrollArea } from '@/components/ui/scroll-area'
+    18→import { Separator } from '@/components/ui/separator'
+    19→import { Input } from '@/components/ui/input'
+    20→import { EmptyState } from '@/components/shared/EmptyState'
+    21→
+    22→// ═══════════════════════════════════════════════════════════════════════════════
+    23→// FORMATTERS
+    24→// ═══════════════════════════════════════════════════════════════════════════════
+    25→
+    26→const fmtINR = (n: number) => '₹' + n.toLocaleString('en-IN')
+    27→const fmtPct = (n: number) => (n >= 0 ? '+' : '') + n.toFixed(1) + '%'
+    28→
+    29→// ═══════════════════════════════════════════════════════════════════════════════
+    30→// SVG CHARTS
+    31→// ═══════════════════════════════════════════════════════════════════════════════
+    32→
+    33→function ValidationGauge({ percent }: { percent: number }) {
+    34→  const r = 38
+    35→  const c = 2 * Math.PI * r
+    36→  const offset = c - (percent / 100) * c
+    37→  return (
+    38→    <svg width="100" height="100" className="overflow-visible">
+    39→      <circle cx="50" cy="50" r={r} fill="none" stroke="currentColor" strokeWidth="8" className="text-slate-100 dark:text-slate-800" />
+    40→      <circle cx="50" cy="50" r={r} fill="none" stroke="#10b981" strokeWidth="8" strokeLinecap="round" strokeDasharray={c} strokeDashoffset={offset} transform="rotate(-90 50 50)" />
+    41→      <text x="50" y="46" textAnchor="middle" className="text-lg font-bold fill-emerald-600 dark:fill-emerald-400">{percent}%</text>
+    42→      <text x="50" y="60" textAnchor="middle" className="text-[8px] fill-muted-foreground">Pass Rate</text>
+    43→    </svg>
+    44→  )
+    45→}
+    46→
+    47→function DailyIRNChart({ data }: { data: { day: string; count: number }[] }) {
+    48→  const max = Math.max(...data.map(d => d.count))
+    49→  const barW = 24
+    50→  const gap = 6
+    51→  const h = 70
+    52→  return (
+    53→    <svg width={data.length * (barW + gap)} height={h + 20} className="overflow-visible">
+    54→      {data.map((d, i) => {
+    55→        const barH = (d.count / max) * (h - 10)
+    56→        return (
+    57→          <g key={d.day}>
+    58→            <rect x={i * (barW + gap)} y={h - barH} width={barW} height={barH} rx={3} fill="#10b981" opacity={0.6 + (d.count / max) * 0.4} />
+    59→            <text x={i * (barW + gap) + barW / 2} y={h + 14} textAnchor="middle" className="text-[9px] fill-muted-foreground">{d.day}</text>
+    60→          </g>
+    61→        )
+    62→      })}
+    63→    </svg>
+    64→  )
+    65→}
+    66→
+    67→// ═══════════════════════════════════════════════════════════════════════════════
+    68→// TYPES
+    69→// ═══════════════════════════════════════════════════════════════════════════════
+    70→
+    71→interface EInvoiceRow {
+    72→  irn: string
+    73→  date: string
+    74→  gstin: string
+    75→  buyer: string
+    76→  amount: number
+    77→  tax: number
+    78→  status: 'valid' | 'expired' | 'cancelled'
+    79→}
+    80→
+    81→interface ApiInvoice {
+    82→  id: string
+    83→  invoiceNumber: string
+    84→  invoiceDate: string
+    85→  sellerGstin: string
+    86→  buyerGstin?: string | null
+    87→  buyerName?: string | null
+    88→  taxableValue: number
+    89→  cgst: number
+    90→  sgst: number
+    91→  igst: number
+    92→  cess: number
+    93→  totalAmount: number
+    94→  status: string
+    95→  client?: { tradeName?: string; gstin?: string } | null
+    96→}
+    97→
+    98→// Maps an Invoice row from /api/invoices to the EInvoiceRow shape used by the UI.
+    99→// The Invoice model has no dedicated IRN column, so we treat the invoice number
+   100→// as the IRN identifier (e-invoices are invoices that have been pushed through
+   101→// the IRN generation flow).
+   102→function mapInvoiceToEInvoice(inv: ApiInvoice): EInvoiceRow {
+   103→  const tax = (inv.cgst || 0) + (inv.sgst || 0) + (inv.igst || 0) + (inv.cess || 0)
+   104→  const status: EInvoiceRow['status'] =
+   105→    inv.status === 'cancelled' ? 'cancelled' :
+   106→    inv.status === 'expired' ? 'expired' : 'valid'
+   107→  const dateStr = inv.invoiceDate
+   108→    ? new Date(inv.invoiceDate).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })
+   109→    : '—'
+   110→  return {
+   111→    irn: inv.invoiceNumber || '—',
+   112→    date: dateStr,
+   113→    gstin: inv.buyerGstin || inv.sellerGstin || '—',
+   114→    buyer: inv.buyerName || inv.client?.tradeName || '—',
+   115→    amount: inv.totalAmount || 0,
+   116→    tax,
+   117→    status,
+   118→  }
+   119→}
+   120→
+   121→const statusColors: Record<string, string> = {
+   122→  valid: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
+   123→  active: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
+   124→  expired: 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400',
+   125→  cancelled: 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400',
+   126→  expiring: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
+   127→  completed: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
+   128→  processing: 'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400',
+   129→  failed: 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400',
+   130→}
+   131→
+   132→const container = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { staggerChildren: 0.06 } } }
+   133→const item = { hidden: { opacity: 0, y: 16 }, show: { opacity: 1, y: 0 } }
+   134→
+   135→// ═══════════════════════════════════════════════════════════════════════════════
+   136→// COMPONENT
+   137→// ═══════════════════════════════════════════════════════════════════════════════
+   138→
+   139→export default function EInvoicingPage() {
+   140→  const [activeTab, setActiveTab] = useState('overview')
+   141→  const [searchQ, setSearchQ] = useState('')
+   142→  const [eInvoices, setEInvoices] = useState<EInvoiceRow[]>([])
+   143→  const [isLoading, setIsLoading] = useState(true)
+   144→
+   145→  // E-Way Bills, Bulk Jobs, and Daily IRN history have no backing API yet —
+   146→  // keep them as empty arrays so the UI renders real empty states.
+   147→  const eWayBills: { ewbNo: string; date: string; from: string; to: string; goods: string; value: number; validTill: string; status: string }[] = []
+   148→  const bulkJobs: { id: string; date: string; totalInvoices: number; processed: number; failed: number; status: string }[] = []
+   149→  const dailyIRNData: { day: string; count: number }[] = []
+   150→
+   151→  useEffect(() => {
+   152→    let cancelled = false
+   153→    fetch('/api/invoices')
+   154→      .then(r => r.json())
+   155→      .then(data => {
+   156→        if (cancelled) return
+   157→        const invoices: ApiInvoice[] = Array.isArray(data?.invoices) ? data.invoices : []
+   158→        setEInvoices(invoices.map(mapInvoiceToEInvoice))
+   159→        setIsLoading(false)
+   160→      })
+   161→      .catch(() => {
+   162→        if (cancelled) return
+   163→        setEInvoices([])
+   164→        setIsLoading(false)
+   165→      })
+   166→    return () => { cancelled = true }
+   167→  }, [])
+   168→
+   169→  // ── Derived stats from real invoices ──
+   170→  const totalEInvoices = eInvoices.filter(i => i.status === 'valid').length
+   171→  const totalEWBActive = eWayBills.filter(w => w.status === 'active' || w.status === 'expiring').length
+   172→
+   173→  const validCount = eInvoices.filter(i => i.status === 'valid').length
+   174→  const expiredCount = eInvoices.filter(i => i.status === 'expired').length
+   175→  const cancelledCount = eInvoices.filter(i => i.status === 'cancelled').length
+   176→  const validationPassPct = eInvoices.length > 0 ? Math.round((validCount / eInvoices.length) * 1000) / 10 : 0
+   177→
+   178→  const filteredEInvoices = useMemo(() => {
+   179→    if (!searchQ.trim()) return eInvoices
+   180→    const q = searchQ.toLowerCase()
+   181→    return eInvoices.filter(i =>
+   182→      i.irn.toLowerCase().includes(q) ||
+   183→      i.buyer.toLowerCase().includes(q) ||
+   184→      i.gstin.toLowerCase().includes(q)
+   185→    )
+   186→  }, [eInvoices, searchQ])
+   187→
+   188→  const statCards = [
+   189→    { label: 'IRNs Generated', value: eInvoices.length, change: 0, icon: Hash, color: 'emerald' },
+   190→    { label: 'E-Way Bills Active', value: totalEWBActive, change: 0, icon: Truck, color: 'emerald' },
+   191→    { label: 'Validation Pass %', value: validationPassPct, change: 0, icon: ShieldCheck, color: 'emerald' },
+   192→    { label: 'Bulk Jobs', value: bulkJobs.length, change: 0, icon: Zap, color: 'amber' },
+   193→  ]
+   194→
+   195→  if (isLoading) {
+   196→    return (
+   197→      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-emerald-50/30 dark:from-slate-950 dark:via-slate-900 dark:to-emerald-950/20 flex items-center justify-center">
+   198→        <div className="flex items-center gap-3 text-emerald-600">
+   199→          <Loader2 className="h-6 w-6 animate-spin" />
+   200→          <span className="text-sm font-medium">Loading e-invoices…</span>
+   201→        </div>
+   202→      </div>
+   203→    )
+   204→  }
+   205→
+   206→  return (
+   207→    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-emerald-50/30 dark:from-slate-950 dark:via-slate-900 dark:to-emerald-950/20">
+   208→      {/* Sticky Header */}
+   209→      <div className="sticky top-0 z-20 bg-white/80 backdrop-blur-md border-b dark:bg-slate-900/80">
+   210→        <div className="px-4 sm:px-6 py-4 flex items-center justify-between">
+   211→          <div className="flex items-center gap-3">
+   212→            <div className="h-9 w-9 rounded-lg bg-emerald-600 flex items-center justify-center shadow-md shadow-emerald-600/20">
+   213→              <FileOutput className="h-5 w-5 text-white" />
+   214→            </div>
+   215→            <div>
+   216→              <h1 className="text-lg font-bold text-slate-900 dark:text-white">E-Invoicing</h1>
+   217→              <p className="text-xs text-muted-foreground">IRN & E-Way Bill Management &middot; FY 2025-26</p>
+   218→            </div>
+   219→          </div>
+   220→          <div className="flex items-center gap-2">
+   221→            <Button variant="outline" size="sm" className="gap-1.5"><Download className="h-3.5 w-3.5" />Export</Button>
+   222→            <Button size="sm" className="gap-1.5 bg-emerald-600 hover:bg-emerald-700"><Plus className="h-3.5 w-3.5" />Generate IRN</Button>
+   223→          </div>
+   224→        </div>
+   225→        <Tabs value={activeTab} onValueChange={setActiveTab} className="px-4 sm:px-6">
+   226→          <TabsList className="bg-transparent h-9 p-0 gap-1 border-b-0">
+   227→            {['overview', 'e-invoices', 'e-way-bills', 'bulk', 'settings'].map(t => (
+   228→              <TabsTrigger key={t} value={t} className="rounded-t-lg rounded-b-none data-[state=active]:bg-emerald-50 data-[state=active]:text-emerald-700 dark:data-[state=active]:bg-emerald-900/20 dark:data-[state=active]:text-emerald-400 text-xs px-3 h-8 capitalize">
+   229→                {t.replace(/-/g, ' ')}
+   230→              </TabsTrigger>
+   231→            ))}
+   232→          </TabsList>
+   233→        </Tabs>
+   234→      </div>
+   235→
+   236→      <div className="px-4 sm:px-6 py-6 max-w-[1400px] mx-auto">
+   237→        <Tabs value={activeTab} onValueChange={setActiveTab}>
+   238→          {/* ─── OVERVIEW TAB ─── */}
+   239→          <TabsContent value="overview" className="mt-0 space-y-6">
+   240→            {/* Stat Cards */}
+   241→            <motion.div variants={container} initial="hidden" animate="show" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+   242→              {statCards.map((s) => {
+   243→                const Icon = s.icon
+   244→                // When there is no underlying data we render "—" so users
+   245→                // never see fake numbers (₹0 / 0% would still be misleading).
+   246→                const hasData = eInvoices.length > 0 || s.label === 'Bulk Jobs' || s.label === 'E-Way Bills Active'
+   247→                const displayValue = hasData
+   248→                  ? (typeof s.value === 'number' && s.value > 1000 ? fmtINR(s.value) : s.value)
+   249→                  : '—'
+   250→                const displaySuffix = hasData && typeof s.value === 'number' && s.value < 100
+   251→                  ? (s.value % 1 !== 0 ? '%' : '')
+   252→                  : ''
+   253→                return (
+   254→                  <motion.div key={s.label} variants={item}>
+   255→                    <Card className="hover:shadow-md transition-shadow border-slate-200/60 dark:border-slate-800/60">
+   256→                      <CardContent className="p-4">
+   257→                        <div className="flex items-center justify-between mb-3">
+   258→                          <div className={`h-9 w-9 rounded-lg flex items-center justify-center ${s.color === 'emerald' ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400' : 'bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400'}`}>
+   259→                            <Icon className="h-4.5 w-4.5" />
+   260→                          </div>
+   261→                          <div className="flex items-center gap-0.5 text-xs font-medium text-muted-foreground">
+   262→                            <span>—</span>
+   263→                          </div>
+   264→                        </div>
+   265→                        <p className="text-xl font-bold text-slate-900 dark:text-white">{displayValue}{displaySuffix}</p>
+   266→                        <p className="text-xs text-muted-foreground mt-0.5">{s.label}</p>
+   267→                      </CardContent>
+   268→                    </Card>
+   269→                  </motion.div>
+   270→                )
+   271→              })}
+   272→            </motion.div>
+   273→
+   274→            {/* Validation Gauge + Daily IRN Chart */}
+   275→            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+   276→              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}>
+   277→                <Card className="border-slate-200/60 dark:border-slate-800/60">
+   278→                  <CardHeader className="pb-3">
+   279→                    <CardTitle className="text-sm font-semibold flex items-center gap-2">
+   280→                      <ShieldCheck className="h-4 w-4 text-emerald-600" /> Validation Status
+   281→                    </CardTitle>
+   282→                  </CardHeader>
+   283→                  <CardContent>
+   284→                    <div className="flex items-center justify-around">
+   285→                      <ValidationGauge percent={validationPassPct} />
+   286→                      <div className="space-y-3">
+   287→                        <div className="flex items-center gap-2">
+   288→                          <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+   289→                          <div>
+   290→                            <p className="text-xs font-semibold text-slate-900 dark:text-white">{eInvoices.length > 0 ? `${validCount} Passed` : '—'}</p>
+   291→                            <p className="text-[10px] text-muted-foreground">Valid IRN generated</p>
+   292→                          </div>
+   293→                        </div>
+   294→                        <div className="flex items-center gap-2">
+   295→                          <AlertTriangle className="h-4 w-4 text-amber-500" />
+   296→                          <div>
+   297→                            <p className="text-xs font-semibold text-slate-900 dark:text-white">{eInvoices.length > 0 ? `${expiredCount} Warnings` : '—'}</p>
+   298→                            <p className="text-[10px] text-muted-foreground">GSTIN mismatch</p>
+   299→                          </div>
+   300→                        </div>
+   301→                        <div className="flex items-center gap-2">
+   302→                          <AlertCircle className="h-4 w-4 text-rose-500" />
+   303→                          <div>
+   304→                            <p className="text-xs font-semibold text-slate-900 dark:text-white">{eInvoices.length > 0 ? `${cancelledCount} Failed` : '—'}</p>
+   305→                            <p className="text-[10px] text-muted-foreground">Invalid data</p>
+   306→                          </div>
+   307→                        </div>
+   308→                      </div>
+   309→                    </div>
+   310→                  </CardContent>
+   311→                </Card>
+   312→              </motion.div>
+   313→
+   314→              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
+   315→                <Card className="border-slate-200/60 dark:border-slate-800/60">
+   316→                  <CardHeader className="pb-3">
+   317→                    <CardTitle className="text-sm font-semibold flex items-center gap-2">
+   318→                      <BarChart3 className="h-4 w-4 text-emerald-600" /> Daily IRN Generation
+   319→                    </CardTitle>
+   320→                  </CardHeader>
+   321→                  <CardContent>
+   322→                    {dailyIRNData.length === 0 ? (
+   323→                      <EmptyState
+   324→                        icon={BarChart3}
+   325→                        title="No IRN history yet"
+   326→                        description="Daily IRN generation counts will appear here once e-invoices are generated."
+   327→                        compact
+   328→                      />
+   329→                    ) : (
+   330→                      <>
+   331→                        <div className="flex justify-center pb-2">
+   332→                          <DailyIRNChart data={dailyIRNData} />
+   333→                        </div>
+   334→                        <Separator className="my-3" />
+   335→                        <div className="grid grid-cols-3 gap-3 text-center">
+   336→                          <div>
+   337→                            <p className="text-sm font-bold text-slate-900 dark:text-white">{dailyIRNData.reduce((s, d) => s + d.count, 0)}</p>
+   338→                            <p className="text-[10px] text-muted-foreground">This Week</p>
+   339→                          </div>
+   340→                          <div>
+   341→                            <p className="text-sm font-bold text-slate-900 dark:text-white">{eInvoices.length}</p>
+   342→                            <p className="text-[10px] text-muted-foreground">This Month</p>
+   343→                          </div>
+   344→                          <div>
+   345→                            <p className="text-sm font-bold text-emerald-600 dark:text-emerald-400">{dailyIRNData.length > 0 ? (dailyIRNData.reduce((s, d) => s + d.count, 0) / dailyIRNData.length).toFixed(1) : '—'}</p>
+   346→                            <p className="text-[10px] text-muted-foreground">Avg / Day</p>
+   347→                          </div>
+   348→                        </div>
+   349→                      </>
+   350→                    )}
+   351→                  </CardContent>
+   352→                </Card>
+   353→              </motion.div>
+   354→            </div>
+   355→
+   356→            {/* Recent E-Invoices */}
+   357→            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.35 }}>
+   358→              <Card className="border-slate-200/60 dark:border-slate-800/60">
+   359→                <CardHeader className="pb-3">
+   360→                  <CardTitle className="text-sm font-semibold flex items-center gap-2">
+   361→                    <FileText className="h-4 w-4 text-emerald-600" /> Recent E-Invoices
+   362→                  </CardTitle>
+   363→                </CardHeader>
+   364→                <CardContent className="p-0">
+   365→                  {eInvoices.length === 0 ? (
+   366→                    <EmptyState
+   367→                      icon={FileText}
+   368→                      title="No e-invoices generated"
+   369→                      description="IRN-tagged invoices will appear here once you generate e-invoices from the E-Invoices tab."
+   370→                      compact
+   371→                    />
+   372→                  ) : (
+   373→                    <ScrollArea className="max-h-72">
+   374→                      <div className="divide-y dark:divide-slate-800/60">
+   375→                        {eInvoices.slice(0, 6).map((inv, i) => (
+   376→                          <motion.div key={inv.irn + i} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.04 }} className="flex items-center justify-between px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
+   377→                            <div className="flex items-center gap-3">
+   378→                              <div className={`h-8 w-8 rounded-lg flex items-center justify-center ${inv.status === 'valid' ? 'bg-emerald-100 dark:bg-emerald-900/30' : inv.status === 'expired' ? 'bg-slate-100 dark:bg-slate-800' : 'bg-rose-100 dark:bg-rose-900/30'}`}>
+   379→                                <FileText className={`h-4 w-4 ${inv.status === 'valid' ? 'text-emerald-600 dark:text-emerald-400' : inv.status === 'expired' ? 'text-slate-400' : 'text-rose-500 dark:text-rose-400'}`} />
+   380→                              </div>
+   381→                              <div>
+   382→                                <div className="flex items-center gap-2">
+   383→                                  <span className="text-[10px] font-mono text-muted-foreground">{inv.irn.slice(0, 12)}{inv.irn.length > 12 ? '…' : ''}</span>
+   384→                                  <Badge variant="secondary" className={`text-[9px] ${statusColors[inv.status]}`}>{inv.status}</Badge>
+   385→                                </div>
+   386→                                <p className="text-xs text-slate-700 dark:text-slate-300">{inv.buyer}</p>
+   387→                                <p className="text-[10px] text-muted-foreground">{inv.date} &middot; {inv.gstin}</p>
+   388→                              </div>
+   389→                            </div>
+   390→                            <div className="text-right">
+   391→                              <p className="text-xs font-semibold">{fmtINR(inv.amount)}</p>
+   392→                              <p className="text-[10px] text-muted-foreground">Tax: {fmtINR(inv.tax)}</p>
+   393→                            </div>
+   394→                          </motion.div>
+   395→                        ))}
+   396→                      </div>
+   397→                    </ScrollArea>
+   398→                  )}
+   399→                </CardContent>
+   400→              </Card>
+   401→            </motion.div>
+   402→          </TabsContent>
+   403→
+   404→          {/* ─── E-INVOICES TAB ─── */}
+   405→          <TabsContent value="e-invoices" className="mt-0 space-y-4">
+   406→            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+   407→              <div className="flex items-center justify-between mb-4">
+   408→                <div className="flex items-center gap-2">
+   409→                  <Input placeholder="Search by IRN, buyer, GSTIN..." className="w-72 h-8 text-xs" value={searchQ} onChange={e => setSearchQ(e.target.value)} />
+   410→                  <Button variant="outline" size="sm" className="gap-1.5 h-8"><Filter className="h-3 w-3" />Filter</Button>
+   411→                </div>
+   412→                <div className="flex items-center gap-2">
+   413→                  <Button variant="outline" size="sm" className="gap-1.5 h-8"><RefreshCw className="h-3 w-3" />Sync</Button>
+   414→                  <Button size="sm" className="gap-1.5 bg-emerald-600 hover:bg-emerald-700"><Plus className="h-3.5 w-3.5" />Generate IRN</Button>
+   415→                </div>
+   416→              </div>
+   417→              <Card className="border-slate-200/60 dark:border-slate-800/60">
+   418→                <CardContent className="p-0">
+   419→                  {filteredEInvoices.length === 0 ? (
+   420→                    <EmptyState
+   421→                      icon={Hash}
+   422→                      title={eInvoices.length === 0 ? 'No e-invoices generated' : 'No matching e-invoices'}
+   423→                      description={eInvoices.length === 0 ? 'Generate your first IRN to start pushing invoices through the e-invoicing flow.' : 'Try a different search term.'}
+   424→                      compact
+   425→                    />
+   426→                  ) : (
+   427→                    <ScrollArea className="max-h-[600px]">
+   428→                      <div className="divide-y dark:divide-slate-800/60">
+   429→                        {filteredEInvoices.map((inv, i) => (
+   430→                          <motion.div key={inv.irn + i} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.04 }} className="flex items-center justify-between px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
+   431→                            <div className="flex items-center gap-3">
+   432→                              <div className={`h-9 w-9 rounded-lg flex items-center justify-center ${inv.status === 'valid' ? 'bg-emerald-100 dark:bg-emerald-900/30' : inv.status === 'expired' ? 'bg-slate-100 dark:bg-slate-800' : 'bg-rose-100 dark:bg-rose-900/30'}`}>
+   433→                                <Hash className={`h-4 w-4 ${inv.status === 'valid' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400'}`} />
+   434→                              </div>
+   435→                              <div>
+   436→                                <div className="flex items-center gap-2">
+   437→                                  <span className="text-xs font-mono font-semibold text-slate-900 dark:text-white">{inv.irn.slice(0, 16)}</span>
+   438→                                  <Badge variant="secondary" className={`text-[9px] ${statusColors[inv.status]}`}>{inv.status}</Badge>
+   439→                                </div>
+   440→                                <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">{inv.buyer}</p>
+   441→                                <p className="text-[10px] text-muted-foreground">{inv.date} &middot; GSTIN: {inv.gstin}</p>
+   442→                              </div>
+   443→                            </div>
+   444→                            <div className="flex items-center gap-4">
+   445→                              <div className="text-right">
+   446→                                <p className="text-xs font-bold">{fmtINR(inv.amount)}</p>
+   447→                                <p className="text-[10px] text-muted-foreground">Tax: {fmtINR(inv.tax)}</p>
+   448→                              </div>
+   449→                              <div className="flex gap-1">
+   450→                                <Button variant="ghost" size="sm" className="h-7 w-7 p-0"><Eye className="h-3.5 w-3.5" /></Button>
+   451→                                <Button variant="ghost" size="sm" className="h-7 w-7 p-0"><Copy className="h-3.5 w-3.5" /></Button>
+   452→                              </div>
+   453→                            </div>
+   454→                          </motion.div>
+   455→                        ))}
+   456→                      </div>
+   457→                    </ScrollArea>
+   458→                  )}
+   459→                </CardContent>
+   460→              </Card>
+   461→            </motion.div>
+   462→          </TabsContent>
+   463→
+   464→          {/* ─── E-WAY BILLS TAB ─── */}
+   465→          <TabsContent value="e-way-bills" className="mt-0 space-y-4">
+   466→            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+   467→              <div className="flex items-center justify-between mb-4">
+   468→                <div className="flex items-center gap-2">
+   469→                  <Input placeholder="Search E-Way Bills..." className="w-64 h-8 text-xs" />
+   470→                  <div className="flex gap-1">
+   471→                    {['All', 'Active', 'Expiring', 'Expired'].map(f => (
+   472→                      <Button key={f} variant="outline" size="sm" className="h-7 text-[10px] px-2">{f}</Button>
+   473→                    ))}
+   474→                  </div>
+   475→                </div>
+   476→                <Button size="sm" className="gap-1.5 bg-emerald-600 hover:bg-emerald-700"><Truck className="h-3.5 w-3.5" />Create E-Way Bill</Button>
+   477→              </div>
+   478→              <Card className="border-slate-200/60 dark:border-slate-800/60">
+   479→                <CardContent className="p-0">
+   480→                  {eWayBills.length === 0 ? (
+   481→                    <EmptyState
+   482→                      icon={Truck}
+   483→                      title="No e-way bills generated"
+   484→                      description="Create your first e-way bill to track movement of goods across state lines."
+   485→                      compact
+   486→                    />
+   487→                  ) : (
+   488→                    <div className="divide-y dark:divide-slate-800/60">
+   489→                      {eWayBills.map((ewb, i) => (
+   490→                        <motion.div key={ewb.ewbNo} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.04 }} className="flex items-center justify-between px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
+   491→                          <div className="flex items-center gap-3">
+   492→                            <div className={`h-9 w-9 rounded-lg flex items-center justify-center ${ewb.status === 'active' ? 'bg-emerald-100 dark:bg-emerald-900/30' : ewb.status === 'expiring' ? 'bg-amber-100 dark:bg-amber-900/30' : ewb.status === 'expired' ? 'bg-slate-100 dark:bg-slate-800' : 'bg-rose-100 dark:bg-rose-900/30'}`}>
+   493→                              <Truck className={`h-4 w-4 ${ewb.status === 'active' ? 'text-emerald-600 dark:text-emerald-400' : ewb.status === 'expiring' ? 'text-amber-600 dark:text-amber-400' : 'text-slate-400'}`} />
+   494→                            </div>
+   495→                            <div>
+   496→                              <div className="flex items-center gap-2">
+   497→                                <span className="text-xs font-mono font-semibold text-slate-900 dark:text-white">{ewb.ewbNo}</span>
+   498→                                <Badge variant="secondary" className={`text-[9px] ${statusColors[ewb.status]}`}>{ewb.status}</Badge>
+   499→                              </div>
+   500→                              <p className="text-xs text-slate-600 dark:text-slate-400">{ewb.goods} &middot; {fmtINR(ewb.value)}</p>
+   501→                              <p className="text-[10px] text-muted-foreground">{ewb.from} → {ewb.to} &middot; Valid till: {ewb.validTill}</p>
+   502→                            </div>
+   503→                          </div>
+   504→                          <ChevronRight className="h-4 w-4 text-muted-foreground" />
+   505→                        </motion.div>
+   506→                      ))}
+   507→                    </div>
+   508→                  )}
+   509→                </CardContent>
+   510→              </Card>
+   511→            </motion.div>
+   512→          </TabsContent>
+   513→
+   514→          {/* ─── BULK TAB ─── */}
+   515→          <TabsContent value="bulk" className="mt-0 space-y-4">
+   516→            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+   517→              <div className="flex items-center justify-between mb-4">
+   518→                <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Bulk Generation Jobs</h3>
+   519→                <Button size="sm" className="gap-1.5 bg-emerald-600 hover:bg-emerald-700"><Zap className="h-3.5 w-3.5" />New Bulk Job</Button>
+   520→              </div>
+   521→              {bulkJobs.length === 0 ? (
+   522→                <Card className="border-slate-200/60 dark:border-slate-800/60">
+   523→                  <CardContent className="p-0">
+   524→                    <EmptyState
+   525→                      icon={Zap}
+   526→                      title="No bulk jobs yet"
+   527→                      description="Bulk IRN generation jobs will appear here once you queue a batch of invoices for processing."
+   528→                      compact
+   529→                    />
+   530→                  </CardContent>
+   531→                </Card>
+   532→              ) : (
+   533→                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+   534→                  {bulkJobs.map((job, i) => (
+   535→                    <motion.div key={job.id} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.06 }}>
+   536→                      <Card className="hover:shadow-md transition-shadow border-slate-200/60 dark:border-slate-800/60">
+   537→                        <CardContent className="p-4">
+   538→                          <div className="flex items-center justify-between mb-3">
+   539→                            <span className="text-xs font-mono font-semibold text-slate-900 dark:text-white">{job.id}</span>
+   540→                            <Badge variant="secondary" className={`text-[9px] ${statusColors[job.status]}`}>{job.status}</Badge>
+   541→                          </div>
+   542→                          <p className="text-[10px] text-muted-foreground mb-3">{job.date} &middot; {job.totalInvoices} invoices</p>
+   543→                          <div className="space-y-2">
+   544→                            <div>
+   545→                              <div className="flex justify-between text-[10px] mb-1">
+   546→                                <span className="text-muted-foreground">Progress</span>
+   547→                                <span className="font-medium">{job.processed}/{job.totalInvoices}</span>
+   548→                              </div>
+   549→                              <div className="h-1.5 rounded-full bg-slate-100 dark:bg-slate-800">
+   550→                                <div className="h-1.5 rounded-full bg-emerald-500" style={{ width: `${(job.processed / job.totalInvoices) * 100}%` }} />
+   551→                              </div>
+   552→                            </div>
+   553→                            {job.failed > 0 && (
+   554→                              <div className="flex items-center gap-1 text-[10px] text-rose-500">
+   555→                                <AlertCircle className="h-3 w-3" />{job.failed} failed
+   556→                              </div>
+   557→                            )}
+   558→                          </div>
+   559→                        </CardContent>
+   560→                      </Card>
+   561→                    </motion.div>
+   562→                  ))}
+   563→                </div>
+   564→              )}
+   565→            </motion.div>
+   566→          </TabsContent>
+   567→
+   568→          {/* ─── SETTINGS TAB ─── */}
+   569→          <TabsContent value="settings" className="mt-0 space-y-4">
+   570→            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+   571→              {[
+   572→                { title: 'GSTIN Configuration', desc: 'Manage your GSTIN and seller details for IRN generation', icon: Hash },
+   573→                { title: 'Auto-Generation Rules', desc: 'Configure automatic IRN generation on invoice creation', icon: Zap },
+   574→                { title: 'E-Way Bill Defaults', desc: 'Set default transporter, vehicle type, and validity period', icon: Truck },
+   575→                { title: 'Validation Rules', desc: 'Customize GSTIN validation and data quality checks', icon: ShieldCheck },
+   576→                { title: 'API Integration', desc: 'Configure NIC API credentials and webhook endpoints', icon: Settings2 },
+   577→                { title: 'Bulk Processing', desc: 'Set batch size, retry rules, and error handling for bulk jobs', icon: RefreshCw },
+   578→              ].map((s, i) => {
+   579→                const Icon = s.icon
+   580→                return (
+   581→                  <motion.div key={s.title} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.06 }}>
+   582→                    <Card className="hover:shadow-md transition-all border-slate-200/60 dark:border-slate-800/60 cursor-pointer group">
+   583→                      <CardContent className="p-4">
+   584→                        <div className="flex items-start justify-between mb-3">
+   585→                          <div className="h-9 w-9 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center">
+   586→                            <Icon className="h-4.5 w-4.5 text-emerald-600 dark:text-emerald-400" />
+   587→                          </div>
+   588→                          <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-emerald-500 transition-colors" />
+   589→                        </div>
+   590→                        <h3 className="text-sm font-semibold text-slate-900 dark:text-white mb-1">{s.title}</h3>
+   591→                        <p className="text-xs text-muted-foreground">{s.desc}</p>
+   592→                      </CardContent>
+   593→                    </Card>
+   594→                  </motion.div>
+   595→                )
+   596→              })}
+   597→            </motion.div>
+   598→          </TabsContent>
+   599→        </Tabs>
+   600→      </div>
+   601→    </div>
+   602→  )
+   603→}
+   604→

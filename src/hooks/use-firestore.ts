@@ -22,6 +22,7 @@ import {
   type FirestoreBankAccount, type FirestoreBankTransaction,
   type FirestoreGstProfile, type FirestoreGstReturn,
   type FirestoreExpense, type FirestorePayment, type FirestoreAiMemory,
+  type FirestoreNotice, type FirestoreReport,
   type LiveDashboardMetrics, type FirmExecutiveScores, type CollectionName,
 } from '@/lib/firestore-schema';
 import { computeDashboardMetrics } from '@/lib/firestore-service';
@@ -502,4 +503,39 @@ export function useFireAiMemories(agent?: string) {
     constraints.unshift(where('agent', '==', agent));
   }
   return useFirestoreCollection<FirestoreAiMemory>(COLLECTIONS.AI_MEMORY, constraints, [agent]);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// NOTICES & REPORTS (Phase 1 — Real Backend Foundation)
+// Real-time onSnapshot listeners scoped to the current firm.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ─── Notices ─────────────────────────────────────────────────────────────────
+// Pass a clientId to scope to one client; omit for firm-wide feed.
+
+export function useFireNotices(clientId?: string | null) {
+  const constraints: QueryConstraint[] = [orderBy('createdAt', 'desc')];
+  if (clientId) {
+    constraints.unshift(where('clientId', '==', clientId));
+  }
+  return useFirestoreCollection<FirestoreNotice>(COLLECTIONS.NOTICES, constraints, [clientId]);
+}
+
+export function useFireNotice(noticeId: string | null) {
+  return useFirestoreDoc<FirestoreNotice>(COLLECTIONS.NOTICES, noticeId);
+}
+
+// ─── Reports ─────────────────────────────────────────────────────────────────
+// Pass a clientId to scope to one client; omit for firm-wide feed.
+
+export function useFireReports(clientId?: string | null) {
+  const constraints: QueryConstraint[] = [orderBy('createdAt', 'desc')];
+  if (clientId) {
+    constraints.unshift(where('clientId', '==', clientId));
+  }
+  return useFirestoreCollection<FirestoreReport>(COLLECTIONS.REPORTS, constraints, [clientId]);
+}
+
+export function useFireReport(reportId: string | null) {
+  return useFirestoreDoc<FirestoreReport>(COLLECTIONS.REPORTS, reportId);
 }

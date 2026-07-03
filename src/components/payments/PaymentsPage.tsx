@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useMemo, useCallback } from 'react'
 import { motion } from 'framer-motion'
 import {
   Receipt, ArrowUpRight, ArrowDownRight, TrendingUp,
@@ -20,6 +20,10 @@ import { Separator } from '@/components/ui/separator'
 import { Input } from '@/components/ui/input'
 import { EmptyState } from '@/components/shared'
 import { useApp } from '@/contexts/AppContext'
+import { toast } from 'sonner'
+import { useFirePayments, useFireExpenses } from '@/hooks/use-firestore'
+import { createPayment, updatePayment } from '@/lib/firestore-service'
+import type { FirestorePayment, FirestoreExpense } from '@/lib/firestore-schema'
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // FORMATTERS
@@ -157,7 +161,7 @@ const item = { hidden: { opacity: 0, y: 16 }, show: { opacity: 1, y: 0 } }
 // ═══════════════════════════════════════════════════════════════════════════════
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// HELPERS — derive display strings from raw API rows
+// HELPERS — derive display strings from raw Firestore rows
 // ═══════════════════════════════════════════════════════════════════════════════
 
 function formatTxnDate(iso: string): string {
@@ -193,120 +197,107 @@ export default function PaymentsPage() {
   const { setCurrentView } = useApp()
   const [activeTab, setActiveTab] = useState('overview')
   const [searchQ, setSearchQ] = useState('')
+  // Retry key — increments to force re-mount of the data layer when the user clicks Retry.
+  const [retryKey, setRetryKey] = useState(0)
+  const [busyId, setBusyId] = useState<string | null>(null)
 
-  const [receivables, setReceivables] = useState<Receivable[]>([])
-  const [payables, setPayables] = useState<Payable[]>([])
-  const [paymentLinks, setPaymentLinks] = useState<PaymentLink[]>([])
-  const [reconciliationItems, setReconciliationItems] = useState<ReconciliationItem[]>([])
-  const [collectionByMethod, setCollectionByMethod] = useState<CollectionMethod[]>([])
-  const [weeklyTrend, setWeeklyTrend] = useState<{ week: string; collected: number; paid: number }[]>([])
-  const [loading, setLoading] = useState(true)
+  // ── Firestore hooks (real-time, firm-scoped) ───────────────────────────────
+  const paymentsHook = useFirePayments()
+  const expensesHook = useFireExpenses()
 
-  useEffect(() => {
-    let cancelled = false
-    async function loadAll() {
-      setLoading(true)
-      try {
-        const paymentsPromise = fetch('/api/payments').then((r) => r.ok ? r.json() : { payments: [] }).catch(() => ({ payments: [] }))
-        const expensesPromise = fetch('/api/expenses').then((r) => r.ok ? r.json() : { expenses: [] }).catch(() => ({ expenses: [] }))
-        const [paymentsResp, expensesResp] = await Promise.all([paymentsPromise, expensesPromise])
-        if (cancelled) return
+  const loading = paymentsHook.loading || expensesHook.loading
+  const error = paymentsHook.error || expensesHook.error
 
-        const rawPayments: Array<Record<string, unknown>> = paymentsResp.payments ?? []
-        const rawExpenses: Array<Record<string, unknown>> = expensesResp.expenses ?? []
+  // ── Derived arrays (memoized) — feed existing UI unchanged ─────────────────
 
-        // ── Receivables: customer-side payments (partyType=customer or undefined) ──
-        const recs: Receivable[] = rawPayments
-          .filter((p) => String(p.partyType ?? 'customer') !== 'vendor')
-          .map((p) => {
-            const status = String(p.status ?? 'completed')
-            const isReconciled = Boolean(p.reconciled ?? false)
-            let recStatus: Receivable['status'] = 'pending'
-            if (isReconciled || status === 'completed') recStatus = 'received'
-            if (status === 'failed') recStatus = 'overdue'
-            return {
-              id: String(p.id ?? ''),
-              client: String(p.partyName ?? 'Unknown'),
-              invoice: p.invoiceId ? String(p.invoiceId) : '—',
-              amount: Number(p.amount ?? 0),
-              dueDate: formatTxnDate(String(p.paymentDate ?? '')),
-              status: recStatus,
-              method: p.paymentMode ? titleCaseMode(String(p.paymentMode)) : null,
-            }
-          })
-        setReceivables(recs)
-
-        // ── Payables: vendor-side payments + expenses ──
-        const vendorPayables: Payable[] = rawPayments
-          .filter((p) => String(p.partyType ?? 'customer') === 'vendor')
-          .map((p) => {
-            const status = String(p.status ?? 'completed')
-            let payStatus: Payable['status'] = 'pending'
-            if (status === 'completed') payStatus = 'paid'
-            else if (status === 'pending') payStatus = 'scheduled'
-            return {
-              id: String(p.id ?? ''),
-              vendor: String(p.partyName ?? 'Unknown'),
-              category: 'Vendor Payment',
-              amount: Number(p.amount ?? 0),
-              dueDate: formatTxnDate(String(p.paymentDate ?? '')),
-              status: payStatus,
-            }
-          })
-        const expensePayables: Payable[] = rawExpenses.map((e) => ({
-          id: String(e.id ?? ''),
-          vendor: String(e.vendor ?? e.description ?? 'Vendor'),
-          category: String(e.category ?? 'Expense'),
-          amount: Number(e.amount ?? 0),
-          dueDate: formatTxnDate(String(e.date ?? '')),
-          status: 'paid',
-        }))
-        setPayables([...vendorPayables, ...expensePayables])
-
-        // ── Reconciliation: derive from payments ──
-        const recon: ReconciliationItem[] = rawPayments.map((p) => {
-          const status = String(p.status ?? 'completed')
-          const isReconciled = Boolean(p.reconciled ?? false)
-          let recStatus: ReconciliationItem['status'] = 'unmatched'
-          if (isReconciled) recStatus = 'matched'
-          else if (status === 'failed') recStatus = 'disputed'
-          return {
-            id: String(p.id ?? ''),
-            date: formatTxnDate(String(p.paymentDate ?? '')),
-            bankRef: (p.referenceNo as string) || `${String(p.paymentMode ?? 'BANK').toUpperCase()}-${String(p.id ?? '').slice(-6)}`,
-            amount: Number(p.amount ?? 0),
-            invoice: (p.invoiceId as string) || null,
-            status: recStatus,
-          }
-        })
-        setReconciliationItems(recon)
-
-        // ── Collection by method: group payments by paymentMode ──
-        const methodMap = new Map<string, number>()
-        for (const p of rawPayments) {
-          if (String(p.partyType ?? 'customer') === 'vendor') continue
-          const mode = titleCaseMode(String(p.paymentMode ?? 'bank'))
-          methodMap.set(mode, (methodMap.get(mode) ?? 0) + Number(p.amount ?? 0))
+  const receivables = useMemo<Receivable[]>(() => {
+    const rawPayments = paymentsHook.data || []
+    return rawPayments
+      .filter((p) => (p.partyType || 'customer') !== 'vendor')
+      .map((p) => {
+        const status = (p.status || 'completed') as string
+        const isReconciled = Boolean(p.reconciled ?? false)
+        let recStatus: Receivable['status'] = 'pending'
+        if (isReconciled || status === 'completed') recStatus = 'received'
+        if (status === 'failed') recStatus = 'overdue'
+        return {
+          id: p.id,
+          client: p.partyName || 'Unknown',
+          invoice: p.invoiceId ? p.invoiceId : '—',
+          amount: Number(p.amount ?? 0),
+          dueDate: formatTxnDate(p.paymentDate || ''),
+          status: recStatus,
+          method: p.paymentMode ? titleCaseMode(p.paymentMode) : null,
         }
-        const methodList: CollectionMethod[] = Array.from(methodMap.entries())
-          .map(([method, amount]) => ({ method, amount, color: METHOD_COLOR[method] ?? '#94a3b8' }))
-          .sort((a, b) => b.amount - a.amount)
-        setCollectionByMethod(methodList)
+      })
+  }, [paymentsHook.data])
 
-        // ── Payment links + weekly trend: no API endpoints exist yet ──
-        // We deliberately leave these empty so the UI shows real empty states.
-        setPaymentLinks([])
-        setWeeklyTrend([])
-      } catch (err) {
-        console.warn('[PaymentsPage] data fetch error:', err)
-      } finally {
-        if (!cancelled) setLoading(false)
+  const payables = useMemo<Payable[]>(() => {
+    const rawPayments = paymentsHook.data || []
+    const rawExpenses = expensesHook.data || []
+    const vendorPayables: Payable[] = rawPayments
+      .filter((p) => (p.partyType || 'customer') === 'vendor')
+      .map((p) => {
+        const status = (p.status || 'completed') as string
+        let payStatus: Payable['status'] = 'pending'
+        if (status === 'completed') payStatus = 'paid'
+        else if (status === 'pending') payStatus = 'scheduled'
+        return {
+          id: p.id,
+          vendor: p.partyName || 'Unknown',
+          category: 'Vendor Payment',
+          amount: Number(p.amount ?? 0),
+          dueDate: formatTxnDate(p.paymentDate || ''),
+          status: payStatus,
+        }
+      })
+    const expensePayables: Payable[] = rawExpenses.map((e) => ({
+      id: e.id,
+      vendor: (e.vendor || e.description || 'Vendor') as string,
+      category: (e.category || 'Expense') as string,
+      amount: Number(e.amount ?? 0),
+      dueDate: formatTxnDate(e.date || ''),
+      status: 'paid',
+    }))
+    return [...vendorPayables, ...expensePayables]
+  }, [paymentsHook.data, expensesHook.data])
+
+  const reconciliationItems = useMemo<ReconciliationItem[]>(() => {
+    const rawPayments = paymentsHook.data || []
+    return rawPayments.map((p) => {
+      const status = (p.status || 'completed') as string
+      const isReconciled = Boolean(p.reconciled ?? false)
+      let recStatus: ReconciliationItem['status'] = 'unmatched'
+      if (isReconciled) recStatus = 'matched'
+      else if (status === 'failed') recStatus = 'disputed'
+      return {
+        id: p.id,
+        date: formatTxnDate(p.paymentDate || ''),
+        bankRef: (p.referenceNo as string) || `${(p.paymentMode || 'BANK').toUpperCase()}-${p.id.slice(-6)}`,
+        amount: Number(p.amount ?? 0),
+        invoice: (p.invoiceId as string) || null,
+        status: recStatus,
       }
-    }
-    loadAll()
-    return () => { cancelled = true }
-  }, [])
+    })
+  }, [paymentsHook.data])
 
+  const collectionByMethod = useMemo<CollectionMethod[]>(() => {
+    const rawPayments = paymentsHook.data || []
+    const methodMap = new Map<string, number>()
+    for (const p of rawPayments) {
+      if ((p.partyType || 'customer') === 'vendor') continue
+      const mode = titleCaseMode(p.paymentMode || 'bank')
+      methodMap.set(mode, (methodMap.get(mode) ?? 0) + Number(p.amount ?? 0))
+    }
+    return Array.from(methodMap.entries())
+      .map(([method, amount]) => ({ method, amount, color: METHOD_COLOR[method] ?? '#94a3b8' }))
+      .sort((a, b) => b.amount - a.amount)
+  }, [paymentsHook.data])
+
+  const paymentLinks: PaymentLink[] = []
+  const weeklyTrend: { week: string; collected: number; paid: number }[] = []
+
+  // ── Derived stats (existing computations, fed by Firestore data) ───────────
   const totalCollected = receivables.reduce((s, r) => s + r.amount, 0)
   const totalPaid = payables.reduce((s, p) => s + p.amount, 0)
   const outstandingCount = receivables.filter((r) => r.status === 'pending').length
@@ -323,8 +314,75 @@ export default function PaymentsPage() {
   const unmatchedReconCount = reconciliationItems.filter((r) => r.status === 'unmatched').length
   const disputedReconCount = reconciliationItems.filter((r) => r.status === 'disputed').length
 
+  // ── Write handlers (Firestore service functions) ───────────────────────────
+
+  const handleRecordPayment = useCallback(async (partyType: 'customer' | 'vendor') => {
+    const partyName = window.prompt(partyType === 'vendor' ? 'Vendor name:' : 'Client / customer name:')
+    if (!partyName?.trim()) return
+    const amountStr = window.prompt('Amount (₹):', '0')
+    if (amountStr === null) return
+    const amount = Number(amountStr) || 0
+    const mode = window.prompt('Payment mode (upi / bank / card / cheque / cash):', 'upi') || 'upi'
+    setBusyId('new-payment')
+    try {
+      await createPayment({
+        clientId: null,
+        invoiceId: null,
+        purchaseBillId: null,
+        partyName: partyName.trim(),
+        partyType,
+        amount,
+        paymentDate: new Date().toISOString(),
+        paymentMode: mode.toLowerCase(),
+        referenceNo: null,
+        status: 'completed',
+        reconciled: false,
+        notes: null,
+      })
+      toast.success(partyType === 'vendor' ? 'Vendor payment recorded' : 'Receipt recorded')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to record payment')
+    } finally {
+      setBusyId(null)
+    }
+  }, [])
+
+  const handleAutoReconcile = useCallback(async () => {
+    const unmatched = reconciliationItems.filter((r) => r.status !== 'matched')
+    if (unmatched.length === 0) {
+      toast.success('All payments are already reconciled')
+      return
+    }
+    setBusyId('auto-reconcile')
+    try {
+      await Promise.all(
+        unmatched.map((r) => updatePayment(r.id, { reconciled: true })),
+      )
+      toast.success(`Reconciled ${unmatched.length} payment${unmatched.length === 1 ? '' : 's'}`)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to auto-reconcile')
+    } finally {
+      setBusyId(null)
+    }
+  }, [reconciliationItems])
+
+  const handleMatchRow = useCallback(async (id: string) => {
+    setBusyId(id)
+    try {
+      await updatePayment(id, { reconciled: true })
+      toast.success('Payment marked as reconciled')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to match payment')
+    } finally {
+      setBusyId(null)
+    }
+  }, [])
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-emerald-50/30 dark:from-slate-950 dark:via-slate-900 dark:to-emerald-950/20">
+    <div
+      key={retryKey}
+      className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-emerald-50/30 dark:from-slate-950 dark:via-slate-900 dark:to-emerald-950/20"
+    >
       {/* Sticky Header */}
       <div className="sticky top-0 z-20 bg-white/80 backdrop-blur-md border-b dark:bg-slate-900/80">
         <div className="px-4 sm:px-6 py-4 flex items-center justify-between">
@@ -339,7 +397,19 @@ export default function PaymentsPage() {
           </div>
           <div className="flex items-center gap-2">
             <Button variant="outline" size="sm" className="gap-1.5"><Download className="h-3.5 w-3.5" />Export</Button>
-            <Button size="sm" className="gap-1.5 bg-emerald-600 hover:bg-emerald-700"><Plus className="h-3.5 w-3.5" />Record Payment</Button>
+            <Button
+              size="sm"
+              className="gap-1.5 bg-emerald-600 hover:bg-emerald-700"
+              onClick={() => handleRecordPayment('customer')}
+              disabled={busyId === 'new-payment'}
+            >
+              {busyId === 'new-payment' ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Plus className="h-3.5 w-3.5" />
+              )}
+              Record Payment
+            </Button>
           </div>
         </div>
         <Tabs value={activeTab} onValueChange={setActiveTab} className="px-4 sm:px-6">
@@ -354,6 +424,31 @@ export default function PaymentsPage() {
       </div>
 
       <div className="px-4 sm:px-6 py-6 max-w-[1400px] mx-auto">
+        {/* ── Error banner ── */}
+        {error && !loading && (
+          <Card className="mb-6 border-rose-200 dark:border-rose-900/60">
+            <CardContent className="p-4 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="h-9 w-9 rounded-lg bg-rose-100 dark:bg-rose-900/30 flex items-center justify-center">
+                  <AlertCircle className="h-4.5 w-4.5 text-rose-600 dark:text-rose-400" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-slate-900 dark:text-white">Failed to load payments data</p>
+                  <p className="text-xs text-muted-foreground">{error}</p>
+                </div>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5"
+                onClick={() => setRetryKey((k) => k + 1)}
+              >
+                <RefreshCw className="h-3.5 w-3.5" /> Retry
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           {/* ─── OVERVIEW TAB ─── */}
           <TabsContent value="overview" className="mt-0 space-y-6">
@@ -523,7 +618,19 @@ export default function PaymentsPage() {
                     ))}
                   </div>
                 </div>
-                <Button size="sm" className="gap-1.5 bg-emerald-600 hover:bg-emerald-700"><Plus className="h-3.5 w-3.5" />Record Receipt</Button>
+                <Button
+                  size="sm"
+                  className="gap-1.5 bg-emerald-600 hover:bg-emerald-700"
+                  onClick={() => handleRecordPayment('customer')}
+                  disabled={busyId === 'new-payment'}
+                >
+                  {busyId === 'new-payment' ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Plus className="h-3.5 w-3.5" />
+                  )}
+                  Record Receipt
+                </Button>
               </div>
               <Card className="border-slate-200/60 dark:border-slate-800/60">
                 <CardContent className="p-0">
@@ -570,7 +677,19 @@ export default function PaymentsPage() {
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
               <div className="flex items-center justify-between mb-4">
                 <Input placeholder="Search payables..." className="w-64 h-8 text-xs" />
-                <Button size="sm" className="gap-1.5 bg-emerald-600 hover:bg-emerald-700"><Send className="h-3.5 w-3.5" />Schedule Payment</Button>
+                <Button
+                  size="sm"
+                  className="gap-1.5 bg-emerald-600 hover:bg-emerald-700"
+                  onClick={() => handleRecordPayment('vendor')}
+                  disabled={busyId === 'new-payment'}
+                >
+                  {busyId === 'new-payment' ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Send className="h-3.5 w-3.5" />
+                  )}
+                  Schedule Payment
+                </Button>
               </div>
               <Card className="border-slate-200/60 dark:border-slate-800/60">
                 <CardContent className="p-0">
@@ -671,7 +790,20 @@ export default function PaymentsPage() {
                     <span className="flex items-center gap-1"><CircleDot className="h-3 w-3 text-rose-500" />Disputed: {disputedReconCount}</span>
                   </div>
                 </div>
-                <Button size="sm" variant="outline" className="gap-1.5"><RefreshCw className="h-3.5 w-3.5" />Auto-Reconcile</Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="gap-1.5"
+                  onClick={handleAutoReconcile}
+                  disabled={busyId === 'auto-reconcile'}
+                >
+                  {busyId === 'auto-reconcile' ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <RefreshCw className="h-3.5 w-3.5" />
+                  )}
+                  Auto-Reconcile
+                </Button>
               </div>
               <Card className="border-slate-200/60 dark:border-slate-800/60">
                 <CardContent className="p-0">
@@ -700,8 +832,28 @@ export default function PaymentsPage() {
                           </div>
                           <div className="flex items-center gap-3">
                             <span className="text-sm font-bold text-slate-900 dark:text-white">{fmtINR(rc.amount)}</span>
-                            {rc.status === 'unmatched' && <Button variant="outline" size="sm" className="h-7 text-[10px] gap-1">Match</Button>}
-                            {rc.status === 'disputed' && <Button variant="outline" size="sm" className="h-7 text-[10px] gap-1">Resolve</Button>}
+                            {rc.status === 'unmatched' && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-7 text-[10px] gap-1"
+                                onClick={() => handleMatchRow(rc.id)}
+                                disabled={busyId === rc.id}
+                              >
+                                {busyId === rc.id ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Match'}
+                              </Button>
+                            )}
+                            {rc.status === 'disputed' && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-7 text-[10px] gap-1"
+                                onClick={() => handleMatchRow(rc.id)}
+                                disabled={busyId === rc.id}
+                              >
+                                {busyId === rc.id ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Resolve'}
+                              </Button>
+                            )}
                           </div>
                         </motion.div>
                       ))}

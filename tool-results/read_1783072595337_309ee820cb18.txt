@@ -1,0 +1,945 @@
+     1→'use client';
+     2→
+     3→import React, { useState, useEffect, useCallback, useMemo } from 'react';
+     4→import {
+     5→  Card,
+     6→  CardContent,
+     7→  CardHeader,
+     8→  CardTitle,
+     9→  CardDescription,
+    10→} from '@/components/ui/card';
+    11→import { Badge } from '@/components/ui/badge';
+    12→import { Button } from '@/components/ui/button';
+    13→import {
+    14→  Select,
+    15→  SelectContent,
+    16→  SelectItem,
+    17→  SelectTrigger,
+    18→  SelectValue,
+    19→} from '@/components/ui/select';
+    20→import {
+    21→  Dialog,
+    22→  DialogContent,
+    23→  DialogHeader,
+    24→  DialogTitle,
+    25→  DialogDescription,
+    26→  DialogFooter,
+    27→} from '@/components/ui/dialog';
+    28→import {
+    29→  Calendar,
+    30→  ChevronLeft,
+    31→  ChevronRight,
+    32→  Clock,
+    33→  CheckCircle2,
+    34→  AlertTriangle,
+    35→  FileText,
+    36→} from 'lucide-react';
+    37→import {
+    38→  format,
+    39→  addMonths,
+    40→  subMonths,
+    41→  startOfMonth,
+    42→  endOfMonth,
+    43→  eachDayOfInterval,
+    44→  isSameDay,
+    45→  isBefore,
+    46→  isAfter,
+    47→  addDays,
+    48→  startOfWeek,
+    49→  endOfWeek,
+    50→} from 'date-fns';
+    51→import type { GSTRFiling, FilingCalendarItem, Client } from '@/types/gst';
+    52→import {
+    53→  getFilingDueDate,
+    54→  periodToLabel,
+    55→  isOverdue,
+    56→  formatCurrency,
+    57→} from '@/lib/gst-utils';
+    58→import { useApp } from '@/contexts/AppContext';
+    59→
+    60→// ─── Types ────────────────────────────────────────────────────────────────────
+    61→interface ClientOption {
+    62→  id: string;
+    63→  tradeName: string;
+    64→}
+    65→
+    66→// ─── Skeletons ────────────────────────────────────────────────────────────────
+    67→function SummarySkeleton() {
+    68→  return (
+    69→    <Card className="hover:shadow-md transition-shadow">
+    70→      <CardContent className="p-6">
+    71→        <div className="flex items-center gap-4">
+    72→          <div className="h-12 w-12 rounded-xl bg-muted animate-pulse" />
+    73→          <div className="space-y-2 flex-1">
+    74→            <div className="h-4 w-24 bg-muted animate-pulse rounded" />
+    75→            <div className="h-8 w-12 bg-muted animate-pulse rounded" />
+    76→          </div>
+    77→        </div>
+    78→      </CardContent>
+    79→    </Card>
+    80→  );
+    81→}
+    82→
+    83→function CalendarSkeleton() {
+    84→  return (
+    85→    <Card className="hover:shadow-md transition-shadow">
+    86→      <CardContent className="p-6">
+    87→        <div className="h-80 bg-muted animate-pulse rounded-lg" />
+    88→      </CardContent>
+    89→    </Card>
+    90→  );
+    91→}
+    92→
+    93→function ListSkeleton() {
+    94→  return (
+    95→    <Card className="hover:shadow-md transition-shadow">
+    96→      <CardHeader>
+    97→        <div className="h-5 w-40 bg-muted animate-pulse rounded" />
+    98→      </CardHeader>
+    99→      <CardContent className="space-y-3">
+   100→        {Array.from({ length: 5 }).map((_, i) => (
+   101→          <div key={i} className="flex items-center gap-3">
+   102→            <div className="h-9 w-9 rounded-lg bg-muted animate-pulse" />
+   103→            <div className="flex-1 space-y-1.5">
+   104→              <div className="h-4 w-3/4 bg-muted animate-pulse rounded" />
+   105→              <div className="h-3 w-1/2 bg-muted animate-pulse rounded" />
+   106→            </div>
+   107→            <div className="h-5 w-16 bg-muted animate-pulse rounded-full" />
+   108→          </div>
+   109→        ))}
+   110→      </CardContent>
+   111→    </Card>
+   112→  );
+   113→}
+   114→
+   115→// ─── Main Component ──────────────────────────────────────────────────────────
+   116→export default function FilingCalendarPage() {
+   117→  const { selectedClientId, setSelectedClientId, setCurrentView } = useApp();
+   118→
+   119→  // Data state
+   120→  const [filings, setFilings] = useState<GSTRFiling[]>([]);
+   121→  const [calendarItems, setCalendarItems] = useState<FilingCalendarItem[]>([]);
+   122→  const [clients, setClients] = useState<ClientOption[]>([]);
+   123→  const [loading, setLoading] = useState(true);
+   124→
+   125→  // Navigation state
+   126→  const [currentMonth, setCurrentMonth] = useState(new Date());
+   127→
+   128→  // Filter state
+   129→  const [filterClient, setFilterClient] = useState<string>('all');
+   130→  const [filterReturnType, setFilterReturnType] = useState<string>('all');
+   131→
+   132→  // Detail dialog
+   133→  const [selectedItem, setSelectedItem] = useState<FilingCalendarItem | null>(
+   134→    null
+   135→  );
+   136→  const [detailOpen, setDetailOpen] = useState(false);
+   137→
+   138→  // ─── Fetch data ──────────────────────────────────────────────────────────
+   139→  const fetchFilings = useCallback(async () => {
+   140→    try {
+   141→      setLoading(true);
+   142→      const [filingsRes, dashboardRes] = await Promise.all([
+   143→        fetch('/api/gstr-filing'),
+   144→        fetch('/api/dashboard'),
+   145→      ]);
+   146→
+   147→      if (filingsRes.ok) {
+   148→        const filingsData = await filingsRes.json();
+   149→        setFilings(filingsData.filings ?? []);
+   150→      }
+   151→
+   152→      if (dashboardRes.ok) {
+   153→        const dashData = await dashboardRes.json();
+   154→        setCalendarItems(dashData.filingCalendar ?? []);
+   155→      }
+   156→    } catch {
+   157→      // silently handle
+   158→    } finally {
+   159→      setLoading(false);
+   160→    }
+   161→  }, []);
+   162→
+   163→  const fetchClients = useCallback(async () => {
+   164→    try {
+   165→      const res = await fetch('/api/clients');
+   166→      if (!res.ok) return;
+   167→      const data = await res.json();
+   168→      setClients(
+   169→        (data.clients ?? []).map((c: { id: string; tradeName: string }) => ({
+   170→          id: c.id,
+   171→          tradeName: c.tradeName,
+   172→        }))
+   173→      );
+   174→    } catch {
+   175→      // silently ignore
+   176→    }
+   177→  }, []);
+   178→
+   179→  useEffect(() => {
+   180→    fetchClients();
+   181→    fetchFilings();
+   182→  }, [fetchClients, fetchFilings]);
+   183→
+   184→  // Sync with global client selection
+   185→  useEffect(() => {
+   186→    if (selectedClientId) {
+   187→      setFilterClient(selectedClientId);
+   188→    }
+   189→  }, [selectedClientId]);
+   190→
+   191→  // ─── Build calendar items from filings if API doesn't provide them ──────
+   192→  const allCalendarItems = useMemo<FilingCalendarItem[]>(() => {
+   193→    if (calendarItems.length > 0) {
+   194→      return calendarItems;
+   195→    }
+   196→    // Fallback: build from filings
+   197→    return filings.map((f) => {
+   198→      const dueDate = getFilingDueDate(f.returnType, f.period);
+   199→      const overdue = isOverdue(f.period);
+   200→      let status: FilingCalendarItem['status'];
+   201→
+   202→      if (f.status === 'filed') {
+   203→        status = 'filed';
+   204→      } else if (overdue) {
+   205→        status = 'overdue';
+   206→      } else {
+   207→        const dueDateObj = new Date(dueDate);
+   208→        const now = new Date();
+   209→        const sevenDaysFromNow = addDays(now, 7);
+   210→        if (isBefore(dueDateObj, sevenDaysFromNow) && isAfter(dueDateObj, now)) {
+   211→          status = 'upcoming';
+   212→        } else {
+   213→          status = 'pending';
+   214→        }
+   215→      }
+   216→
+   217→      return {
+   218→        id: f.id,
+   219→        returnType: f.returnType,
+   220→        period: f.period,
+   221→        dueDate,
+   222→        status,
+   223→        clientId: f.clientId,
+   224→        clientName: f.client?.tradeName ?? 'Unknown',
+   225→      };
+   226→    });
+   227→  }, [calendarItems, filings]);
+   228→
+   229→  // ─── Apply filters ──────────────────────────────────────────────────────
+   230→  const filteredItems = useMemo(() => {
+   231→    return allCalendarItems.filter((item) => {
+   232→      if (filterClient !== 'all' && item.clientId !== filterClient)
+   233→        return false;
+   234→      if (
+   235→        filterReturnType !== 'all' &&
+   236→        item.returnType !== filterReturnType
+   237→      )
+   238→        return false;
+   239→      return true;
+   240→    });
+   241→  }, [allCalendarItems, filterClient, filterReturnType]);
+   242→
+   243→  // ─── Summary counts ─────────────────────────────────────────────────────
+   244→  const now = new Date();
+   245→  const sevenDaysFromNow = addDays(now, 7);
+   246→
+   247→  const upcomingCount = filteredItems.filter((item) => {
+   248→    const dueDate = new Date(item.dueDate);
+   249→    return (
+   250→      item.status !== 'filed' &&
+   251→      isAfter(dueDate, now) &&
+   252→      isBefore(dueDate, sevenDaysFromNow)
+   253→    );
+   254→  }).length;
+   255→
+   256→  const pendingCount = filteredItems.filter(
+   257→    (item) => item.status === 'pending'
+   258→  ).length;
+   259→
+   260→  const overdueCount = filteredItems.filter(
+   261→    (item) => item.status === 'overdue'
+   262→  ).length;
+   263→
+   264→  const filedThisMonthCount = filteredItems.filter((item) => {
+   265→    if (item.status !== 'filed') return false;
+   266→    const dueDate = new Date(item.dueDate);
+   267→    return (
+   268→      dueDate.getMonth() === now.getMonth() &&
+   269→      dueDate.getFullYear() === now.getFullYear()
+   270→    );
+   271→  }).length;
+   272→
+   273→  // ─── Calendar grid data ─────────────────────────────────────────────────
+   274→  const monthStart = startOfMonth(currentMonth);
+   275→  const monthEnd = endOfMonth(currentMonth);
+   276→  const calendarStart = startOfWeek(monthStart, { weekStartsOn: 1 });
+   277→  const calendarEnd = endOfWeek(monthEnd, { weekStartsOn: 1 });
+   278→  const days = eachDayOfInterval({ start: calendarStart, end: calendarEnd });
+   279→
+   280→  // Map due dates to items for quick lookup
+   281→  const dueDateMap = useMemo(() => {
+   282→    const map = new Map<string, FilingCalendarItem[]>();
+   283→    filteredItems.forEach((item) => {
+   284→      const key = item.dueDate;
+   285→      const existing = map.get(key) ?? [];
+   286→      existing.push(item);
+   287→      map.set(key, existing);
+   288→    });
+   289→    return map;
+   290→  }, [filteredItems]);
+   291→
+   292→  // ─── Categorized filing lists ───────────────────────────────────────────
+   293→  const upcomingFilings = filteredItems.filter((item) => {
+   294→    const dueDate = new Date(item.dueDate);
+   295→    return (
+   296→      item.status !== 'filed' &&
+   297→      isAfter(dueDate, now) &&
+   298→      isBefore(dueDate, sevenDaysFromNow)
+   299→    );
+   300→  });
+   301→
+   302→  const pendingFilings = filteredItems.filter(
+   303→    (item) => item.status === 'pending'
+   304→  );
+   305→
+   306→  const overdueFilings = filteredItems.filter(
+   307→    (item) => item.status === 'overdue'
+   308→  );
+   309→
+   310→  const filedFilings = filteredItems.filter(
+   311→    (item) => item.status === 'filed'
+   312→  );
+   313→
+   314→  // ─── Helpers ────────────────────────────────────────────────────────────
+   315→  function getStatusBadge(status: FilingCalendarItem['status']) {
+   316→    switch (status) {
+   317→      case 'upcoming':
+   318→        return (
+   319→          <Badge className="bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border-emerald-200">
+   320→            Upcoming
+   321→          </Badge>
+   322→        );
+   323→      case 'pending':
+   324→        return (
+   325→          <Badge className="bg-amber-50 text-amber-700 hover:bg-amber-100 border-amber-200">
+   326→            Pending
+   327→          </Badge>
+   328→        );
+   329→      case 'overdue':
+   330→        return (
+   331→          <Badge className="bg-red-50 text-red-700 hover:bg-red-100 border-red-200">
+   332→            Overdue
+   333→          </Badge>
+   334→        );
+   335→      case 'filed':
+   336→        return (
+   337→          <Badge className="bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border-emerald-200">
+   338→            Filed
+   339→          </Badge>
+   340→        );
+   341→    }
+   342→  }
+   343→
+   344→  function getDotColor(status: FilingCalendarItem['status']): string {
+   345→    switch (status) {
+   346→      case 'upcoming':
+   347→        return 'bg-emerald-500';
+   348→      case 'pending':
+   349→        return 'bg-amber-500';
+   350→      case 'overdue':
+   351→        return 'bg-red-500';
+   352→      case 'filed':
+   353→        return 'bg-emerald-600';
+   354→    }
+   355→  }
+   356→
+   357→  function formatDate(dateStr: string): string {
+   358→    const d = new Date(dateStr);
+   359→    return d.toLocaleDateString('en-IN', {
+   360→      day: 'numeric',
+   361→      month: 'short',
+   362→      year: 'numeric',
+   363→    });
+   364→  }
+   365→
+   366→  const weekDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+   367→
+   368→  // ─── Filing list item ───────────────────────────────────────────────────
+   369→  function FilingListItem({ item }: { item: FilingCalendarItem }) {
+   370→    return (
+   371→      <div
+   372→        className="flex items-center gap-3 p-3 rounded-lg border border-border/50 hover:bg-accent/50 transition-colors cursor-pointer"
+   373→        onClick={() => {
+   374→          setSelectedItem(item);
+   375→          setDetailOpen(true);
+   376→        }}
+   377→      >
+   378→        <div
+   379→          className={`flex items-center justify-center h-10 w-10 rounded-lg shrink-0 ${
+   380→            item.status === 'overdue'
+   381→              ? 'bg-red-50'
+   382→              : item.status === 'pending'
+   383→              ? 'bg-amber-50'
+   384→              : item.status === 'filed'
+   385→              ? 'bg-emerald-50'
+   386→              : 'bg-emerald-50'
+   387→          }`}
+   388→        >
+   389→          <FileText
+   390→            className={`h-5 w-5 ${
+   391→              item.status === 'overdue'
+   392→                ? 'text-red-600'
+   393→                : item.status === 'pending'
+   394→                ? 'text-amber-600'
+   395→                : item.status === 'filed'
+   396→                ? 'text-emerald-600'
+   397→                : 'text-emerald-500'
+   398→            }`}
+   399→          />
+   400→        </div>
+   401→        <div className="flex-1 min-w-0">
+   402→          <div className="flex items-center gap-2">
+   403→            <p className="text-sm font-medium truncate">
+   404→              {item.clientName}
+   405→            </p>
+   406→            <span className="text-xs text-muted-foreground">
+   407→              {item.returnType}
+   408→            </span>
+   409→          </div>
+   410→          <p className="text-xs text-muted-foreground">
+   411→            {periodToLabel(item.period)} &middot; Due: {formatDate(item.dueDate)}
+   412→          </p>
+   413→        </div>
+   414→        <div className="flex items-center gap-2 shrink-0">
+   415→          {getStatusBadge(item.status)}
+   416→          {item.status !== 'filed' && (
+   417→            <Button
+   418→              size="sm"
+   419→              className="h-7 px-3 bg-emerald-600 hover:bg-emerald-700 text-white text-xs"
+   420→              onClick={(e) => {
+   421→                e.stopPropagation();
+   422→                setCurrentView('gstr-filing');
+   423→              }}
+   424→            >
+   425→              File Now
+   426→            </Button>
+   427→          )}
+   428→          <Button
+   429→            variant="ghost"
+   430→            size="sm"
+   431→            className="h-7 px-2 text-xs"
+   432→            onClick={(e) => {
+   433→              e.stopPropagation();
+   434→              setSelectedItem(item);
+   435→              setDetailOpen(true);
+   436→            }}
+   437→          >
+   438→            View
+   439→          </Button>
+   440→        </div>
+   441→      </div>
+   442→    );
+   443→  }
+   444→
+   445→  // ==================== RENDER ====================
+   446→  return (
+   447→    <div className="space-y-6 p-4 md:p-6">
+   448→      {/* Page Header */}
+   449→      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+   450→        <div>
+   451→          <h1 className="text-2xl md:text-3xl font-bold tracking-tight">
+   452→            GST Filing Calendar
+   453→          </h1>
+   454→          <p className="text-muted-foreground text-sm mt-1">
+   455→            Track filing deadlines and manage your return schedule
+   456→          </p>
+   457→        </div>
+   458→        <div className="flex items-center gap-2">
+   459→          {/* Client filter */}
+   460→          <Select
+   461→            value={filterClient}
+   462→            onValueChange={(val) => {
+   463→              setFilterClient(val);
+   464→              setSelectedClientId(val === 'all' ? null : val);
+   465→            }}
+   466→          >
+   467→            <SelectTrigger className="w-[180px]">
+   468→              <SelectValue placeholder="All Clients" />
+   469→            </SelectTrigger>
+   470→            <SelectContent>
+   471→              <SelectItem value="all">All Clients</SelectItem>
+   472→              {clients.map((c) => (
+   473→                <SelectItem key={c.id} value={c.id}>
+   474→                  {c.tradeName}
+   475→                </SelectItem>
+   476→              ))}
+   477→            </SelectContent>
+   478→          </Select>
+   479→
+   480→          {/* Return type filter */}
+   481→          <Select value={filterReturnType} onValueChange={setFilterReturnType}>
+   482→            <SelectTrigger className="w-[130px]">
+   483→              <SelectValue placeholder="Return Type" />
+   484→            </SelectTrigger>
+   485→            <SelectContent>
+   486→              <SelectItem value="all">All Types</SelectItem>
+   487→              <SelectItem value="GSTR-1">GSTR-1</SelectItem>
+   488→              <SelectItem value="GSTR-3B">GSTR-3B</SelectItem>
+   489→            </SelectContent>
+   490→          </Select>
+   491→        </div>
+   492→      </div>
+   493→
+   494→      {/* ===== Summary Cards ===== */}
+   495→      {loading ? (
+   496→        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+   497→          <SummarySkeleton />
+   498→          <SummarySkeleton />
+   499→          <SummarySkeleton />
+   500→          <SummarySkeleton />
+   501→        </div>
+   502→      ) : (
+   503→        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+   504→          {/* Upcoming */}
+   505→          <Card className="hover:shadow-md transition-shadow border-emerald-200 bg-emerald-50/30">
+   506→            <CardContent className="p-6">
+   507→              <div className="flex items-center gap-4">
+   508→                <div className="flex items-center justify-center h-12 w-12 rounded-xl bg-emerald-100">
+   509→                  <Clock className="h-6 w-6 text-emerald-600" />
+   510→                </div>
+   511→                <div>
+   512→                  <p className="text-sm font-medium text-emerald-700">
+   513→                    Upcoming
+   514→                  </p>
+   515→                  <p className="text-3xl font-bold text-emerald-700">
+   516→                    {upcomingCount}
+   517→                  </p>
+   518→                  <p className="text-xs text-emerald-600/70">Next 7 days</p>
+   519→                </div>
+   520→              </div>
+   521→            </CardContent>
+   522→          </Card>
+   523→
+   524→          {/* Pending */}
+   525→          <Card className="hover:shadow-md transition-shadow border-amber-200 bg-amber-50/30">
+   526→            <CardContent className="p-6">
+   527→              <div className="flex items-center gap-4">
+   528→                <div className="flex items-center justify-center h-12 w-12 rounded-xl bg-amber-100">
+   529→                  <FileText className="h-6 w-6 text-amber-600" />
+   530→                </div>
+   531→                <div>
+   532→                  <p className="text-sm font-medium text-amber-700">
+   533→                    Pending
+   534→                  </p>
+   535→                  <p className="text-3xl font-bold text-amber-700">
+   536→                    {pendingCount}
+   537→                  </p>
+   538→                  <p className="text-xs text-amber-600/70">Awaiting filing</p>
+   539→                </div>
+   540→              </div>
+   541→            </CardContent>
+   542→          </Card>
+   543→
+   544→          {/* Overdue */}
+   545→          <Card className="hover:shadow-md transition-shadow border-red-200 bg-red-50/30">
+   546→            <CardContent className="p-6">
+   547→              <div className="flex items-center gap-4">
+   548→                <div className="flex items-center justify-center h-12 w-12 rounded-xl bg-red-100">
+   549→                  <AlertTriangle className="h-6 w-6 text-red-600" />
+   550→                </div>
+   551→                <div>
+   552→                  <p className="text-sm font-medium text-red-700">Overdue</p>
+   553→                  <p className="text-3xl font-bold text-red-700">
+   554→                    {overdueCount}
+   555→                  </p>
+   556→                  <p className="text-xs text-red-600/70">Past deadline</p>
+   557→                </div>
+   558→              </div>
+   559→            </CardContent>
+   560→          </Card>
+   561→
+   562→          {/* Filed This Month */}
+   563→          <Card className="hover:shadow-md transition-shadow border-emerald-200 bg-emerald-50/20">
+   564→            <CardContent className="p-6">
+   565→              <div className="flex items-center gap-4">
+   566→                <div className="flex items-center justify-center h-12 w-12 rounded-xl bg-emerald-100">
+   567→                  <CheckCircle2 className="h-6 w-6 text-emerald-600" />
+   568→                </div>
+   569→                <div>
+   570→                  <p className="text-sm font-medium text-emerald-700">
+   571→                    Filed This Month
+   572→                  </p>
+   573→                  <p className="text-3xl font-bold text-emerald-700">
+   574→                    {filedThisMonthCount}
+   575→                  </p>
+   576→                  <p className="text-xs text-emerald-600/70">Completed</p>
+   577→                </div>
+   578→              </div>
+   579→            </CardContent>
+   580→          </Card>
+   581→        </div>
+   582→      )}
+   583→
+   584→      {/* ===== Calendar + Filing List Layout ===== */}
+   585→      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+   586→        {/* ===== Calendar View ===== */}
+   587→        {loading ? (
+   588→          <div className="lg:col-span-3">
+   589→            <CalendarSkeleton />
+   590→          </div>
+   591→        ) : (
+   592→          <Card className="hover:shadow-md transition-shadow lg:col-span-3">
+   593→            <CardHeader>
+   594→              <div className="flex items-center justify-between">
+   595→                <CardTitle className="flex items-center gap-2 text-base">
+   596→                  <Calendar className="h-5 w-5 text-emerald-600" />
+   597→                  Monthly View
+   598→                </CardTitle>
+   599→                <div className="flex items-center gap-2">
+   600→                  <Button
+   601→                    variant="outline"
+   602→                    size="icon"
+   603→                    className="h-8 w-8"
+   604→                    onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}
+   605→                  >
+   606→                    <ChevronLeft className="h-4 w-4" />
+   607→                  </Button>
+   608→                  <span className="text-sm font-semibold min-w-[140px] text-center">
+   609→                    {format(currentMonth, 'MMMM yyyy')}
+   610→                  </span>
+   611→                  <Button
+   612→                    variant="outline"
+   613→                    size="icon"
+   614→                    className="h-8 w-8"
+   615→                    onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}
+   616→                  >
+   617→                    <ChevronRight className="h-4 w-4" />
+   618→                  </Button>
+   619→                </div>
+   620→              </div>
+   621→              <CardDescription>Filing due dates for the month</CardDescription>
+   622→            </CardHeader>
+   623→            <CardContent>
+   624→              {/* Calendar Grid */}
+   625→              <div className="border rounded-lg overflow-hidden">
+   626→                {/* Week day headers */}
+   627→                <div className="grid grid-cols-7 bg-muted/50">
+   628→                  {weekDays.map((day) => (
+   629→                    <div
+   630→                      key={day}
+   631→                      className="p-2 text-center text-xs font-medium text-muted-foreground border-b"
+   632→                    >
+   633→                      {day}
+   634→                    </div>
+   635→                  ))}
+   636→                </div>
+   637→
+   638→                {/* Day cells */}
+   639→                <div className="grid grid-cols-7">
+   640→                  {days.map((day, idx) => {
+   641→                    const dateKey = format(day, 'yyyy-MM-dd');
+   642→                    const dayItems = dueDateMap.get(dateKey) ?? [];
+   643→                    const isCurrentMonth =
+   644→                      day.getMonth() === currentMonth.getMonth() &&
+   645→                      day.getFullYear() === currentMonth.getFullYear();
+   646→                    const isToday = isSameDay(day, new Date());
+   647→
+   648→                    return (
+   649→                      <div
+   650→                        key={idx}
+   651→                        className={`min-h-[80px] p-1.5 border-b border-r border-border/50 ${
+   652→                          !isCurrentMonth ? 'bg-muted/20' : ''
+   653→                        } ${isToday ? 'bg-emerald-50/50' : ''}`}
+   654→                      >
+   655→                        <div className="flex items-center justify-between">
+   656→                          <span
+   657→                            className={`text-xs font-medium ${
+   658→                              isToday
+   659→                                ? 'bg-emerald-600 text-white rounded-full h-6 w-6 flex items-center justify-center'
+   660→                                : isCurrentMonth
+   661→                                ? 'text-foreground'
+   662→                                : 'text-muted-foreground/50'
+   663→                            }`}
+   664→                          >
+   665→                            {format(day, 'd')}
+   666→                          </span>
+   667→                          {dayItems.length > 0 && (
+   668→                            <div className="flex items-center gap-0.5">
+   669→                              {dayItems.slice(0, 3).map((item, i) => (
+   670→                                <div
+   671→                                  key={i}
+   672→                                  className={`h-2 w-2 rounded-full ${getDotColor(
+   673→                                    item.status
+   674→                                  )}`}
+   675→                                  title={`${item.returnType} - ${item.clientName}`}
+   676→                                />
+   677→                              ))}
+   678→                              {dayItems.length > 3 && (
+   679→                                <span className="text-[10px] text-muted-foreground">
+   680→                                  +{dayItems.length - 3}
+   681→                                </span>
+   682→                              )}
+   683→                            </div>
+   684→                          )}
+   685→                        </div>
+   686→                        {/* Show filing badges */}
+   687→                        <div className="mt-1 space-y-0.5">
+   688→                          {dayItems.slice(0, 2).map((item, i) => (
+   689→                            <div
+   690→                              key={i}
+   691→                              className={`text-[10px] leading-tight px-1 py-0.5 rounded truncate cursor-pointer ${
+   692→                                item.status === 'overdue'
+   693→                                  ? 'bg-red-100 text-red-700'
+   694→                                  : item.status === 'pending'
+   695→                                  ? 'bg-amber-100 text-amber-700'
+   696→                                  : item.status === 'filed'
+   697→                                  ? 'bg-emerald-100 text-emerald-700'
+   698→                                  : 'bg-emerald-50 text-emerald-600'
+   699→                              }`}
+   700→                              onClick={() => {
+   701→                                setSelectedItem(item);
+   702→                                setDetailOpen(true);
+   703→                              }}
+   704→                              title={`${item.returnType} - ${item.clientName}`}
+   705→                            >
+   706→                              {item.returnType}
+   707→                            </div>
+   708→                          ))}
+   709→                          {dayItems.length > 2 && (
+   710→                            <span className="text-[10px] text-muted-foreground px-1">
+   711→                              +{dayItems.length - 2} more
+   712→                            </span>
+   713→                          )}
+   714→                        </div>
+   715→                      </div>
+   716→                    );
+   717→                  })}
+   718→                </div>
+   719→              </div>
+   720→
+   721→              {/* Legend */}
+   722→              <div className="flex items-center gap-4 mt-3 text-xs text-muted-foreground">
+   723→                <div className="flex items-center gap-1.5">
+   724→                  <div className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
+   725→                  <span>Upcoming/Filed</span>
+   726→                </div>
+   727→                <div className="flex items-center gap-1.5">
+   728→                  <div className="h-2.5 w-2.5 rounded-full bg-amber-500" />
+   729→                  <span>Pending</span>
+   730→                </div>
+   731→                <div className="flex items-center gap-1.5">
+   732→                  <div className="h-2.5 w-2.5 rounded-full bg-red-500" />
+   733→                  <span>Overdue</span>
+   734→                </div>
+   735→              </div>
+   736→            </CardContent>
+   737→          </Card>
+   738→        )}
+   739→
+   740→        {/* ===== Filing List View ===== */}
+   741→        {loading ? (
+   742→          <div className="lg:col-span-2 space-y-4">
+   743→            <ListSkeleton />
+   744→            <ListSkeleton />
+   745→          </div>
+   746→        ) : (
+   747→          <div className="lg:col-span-2 space-y-4 max-h-[800px] overflow-y-auto">
+   748→            {/* Upcoming Returns */}
+   749→            {upcomingFilings.length > 0 && (
+   750→              <Card className="hover:shadow-md transition-shadow">
+   751→                <CardHeader className="pb-3">
+   752→                  <CardTitle className="flex items-center gap-2 text-base">
+   753→                    <Clock className="h-5 w-5 text-emerald-500" />
+   754→                    Upcoming Returns
+   755→                    <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 ml-auto">
+   756→                      {upcomingFilings.length}
+   757→                    </Badge>
+   758→                  </CardTitle>
+   759→                  <CardDescription>Due within the next 7 days</CardDescription>
+   760→                </CardHeader>
+   761→                <CardContent className="space-y-2 pt-0">
+   762→                  {upcomingFilings.map((item) => (
+   763→                    <FilingListItem key={item.id} item={item} />
+   764→                  ))}
+   765→                </CardContent>
+   766→              </Card>
+   767→            )}
+   768→
+   769→            {/* Pending Returns */}
+   770→            {pendingFilings.length > 0 && (
+   771→              <Card className="hover:shadow-md transition-shadow">
+   772→                <CardHeader className="pb-3">
+   773→                  <CardTitle className="flex items-center gap-2 text-base">
+   774→                    <FileText className="h-5 w-5 text-amber-500" />
+   775→                    Pending Returns
+   776→                    <Badge className="bg-amber-50 text-amber-700 border-amber-200 ml-auto">
+   777→                      {pendingFilings.length}
+   778→                    </Badge>
+   779→                  </CardTitle>
+   780→                  <CardDescription>Awaiting filing</CardDescription>
+   781→                </CardHeader>
+   782→                <CardContent className="space-y-2 pt-0 max-h-64 overflow-y-auto">
+   783→                  {pendingFilings.map((item) => (
+   784→                    <FilingListItem key={item.id} item={item} />
+   785→                  ))}
+   786→                </CardContent>
+   787→              </Card>
+   788→            )}
+   789→
+   790→            {/* Overdue Returns */}
+   791→            {overdueFilings.length > 0 && (
+   792→              <Card className="hover:shadow-md transition-shadow border-red-200">
+   793→                <CardHeader className="pb-3">
+   794→                  <CardTitle className="flex items-center gap-2 text-base">
+   795→                    <AlertTriangle className="h-5 w-5 text-red-500" />
+   796→                    Overdue Returns
+   797→                    <Badge className="bg-red-50 text-red-700 border-red-200 ml-auto">
+   798→                      {overdueFilings.length}
+   799→                    </Badge>
+   800→                  </CardTitle>
+   801→                  <CardDescription>Past their due date</CardDescription>
+   802→                </CardHeader>
+   803→                <CardContent className="space-y-2 pt-0 max-h-64 overflow-y-auto">
+   804→                  {overdueFilings.map((item) => (
+   805→                    <FilingListItem key={item.id} item={item} />
+   806→                  ))}
+   807→                </CardContent>
+   808→              </Card>
+   809→            )}
+   810→
+   811→            {/* Filed Returns */}
+   812→            {filedFilings.length > 0 && (
+   813→              <Card className="hover:shadow-md transition-shadow border-emerald-200">
+   814→                <CardHeader className="pb-3">
+   815→                  <CardTitle className="flex items-center gap-2 text-base">
+   816→                    <CheckCircle2 className="h-5 w-5 text-emerald-500" />
+   817→                    Filed Returns
+   818→                    <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 ml-auto">
+   819→                      {filedFilings.length}
+   820→                    </Badge>
+   821→                  </CardTitle>
+   822→                  <CardDescription>Successfully filed</CardDescription>
+   823→                </CardHeader>
+   824→                <CardContent className="space-y-2 pt-0 max-h-64 overflow-y-auto">
+   825→                  {filedFilings.map((item) => (
+   826→                    <FilingListItem key={item.id} item={item} />
+   827→                  ))}
+   828→                </CardContent>
+   829→              </Card>
+   830→            )}
+   831→
+   832→            {filteredItems.length === 0 && (
+   833→              <Card className="hover:shadow-md transition-shadow">
+   834→                <CardContent className="py-12 text-center">
+   835→                  <Calendar className="h-12 w-12 mx-auto text-muted-foreground/30 mb-3" />
+   836→                  <p className="text-sm text-muted-foreground">
+   837→                    No filing schedule found for the selected filters.
+   838→                  </p>
+   839→                </CardContent>
+   840→              </Card>
+   841→            )}
+   842→          </div>
+   843→        )}
+   844→      </div>
+   845→
+   846→      {/* ===== Filing Detail Dialog ===== */}
+   847→      <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
+   848→        <DialogContent className="max-w-md">
+   849→          {selectedItem && (
+   850→            <>
+   851→              <DialogHeader>
+   852→                <DialogTitle className="flex items-center gap-2">
+   853→                  <FileText className="h-5 w-5 text-emerald-600" />
+   854→                  {selectedItem.returnType} — {selectedItem.clientName}
+   855→                </DialogTitle>
+   856→                <DialogDescription>
+   857→                  Filing details and due date information
+   858→                </DialogDescription>
+   859→              </DialogHeader>
+   860→
+   861→              <div className="space-y-4">
+   862→                <div className="grid grid-cols-2 gap-3">
+   863→                  <div>
+   864→                    <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">
+   865→                      Return Type
+   866→                    </p>
+   867→                    <p className="text-sm font-medium mt-1">
+   868→                      {selectedItem.returnType}
+   869→                    </p>
+   870→                  </div>
+   871→                  <div>
+   872→                    <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">
+   873→                      Period
+   874→                    </p>
+   875→                    <p className="text-sm font-medium mt-1">
+   876→                      {periodToLabel(selectedItem.period)}
+   877→                    </p>
+   878→                  </div>
+   879→                  <div>
+   880→                    <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">
+   881→                      Due Date
+   882→                    </p>
+   883→                    <p className="text-sm font-medium mt-1">
+   884→                      {formatDate(selectedItem.dueDate)}
+   885→                    </p>
+   886→                  </div>
+   887→                  <div>
+   888→                    <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">
+   889→                      Status
+   890→                    </p>
+   891→                    <div className="mt-1">
+   892→                      {getStatusBadge(selectedItem.status)}
+   893→                    </div>
+   894→                  </div>
+   895→                </div>
+   896→
+   897→                {selectedItem.status === 'overdue' && (
+   898→                  <div className="flex items-center gap-2 p-3 rounded-lg bg-red-50 border border-red-200">
+   899→                    <AlertTriangle className="h-5 w-5 text-red-600 shrink-0" />
+   900→                    <p className="text-sm text-red-700">
+   901→                      This return is past its due date. Please file immediately
+   902→                      to avoid penalties.
+   903→                    </p>
+   904→                  </div>
+   905→                )}
+   906→
+   907→                {selectedItem.status === 'upcoming' && (
+   908→                  <div className="flex items-center gap-2 p-3 rounded-lg bg-emerald-50 border border-emerald-200">
+   909→                    <Clock className="h-5 w-5 text-emerald-600 shrink-0" />
+   910→                    <p className="text-sm text-emerald-700">
+   911→                      This return is due soon. Make sure to prepare and file
+   912→                      before the deadline.
+   913→                    </p>
+   914→                  </div>
+   915→                )}
+   916→              </div>
+   917→
+   918→              <DialogFooter className="gap-2">
+   919→                {selectedItem.status !== 'filed' && (
+   920→                  <Button
+   921→                    className="bg-emerald-600 hover:bg-emerald-700 text-white"
+   922→                    onClick={() => {
+   923→                      setDetailOpen(false);
+   924→                      setCurrentView('gstr-filing');
+   925→                    }}
+   926→                  >
+   927→                    <FileText className="h-4 w-4 mr-1" />
+   928→                    File Now
+   929→                  </Button>
+   930→                )}
+   931→                <Button
+   932→                  variant="outline"
+   933→                  onClick={() => setDetailOpen(false)}
+   934→                >
+   935→                  Close
+   936→                </Button>
+   937→              </DialogFooter>
+   938→            </>
+   939→          )}
+   940→        </DialogContent>
+   941→      </Dialog>
+   942→    </div>
+   943→  );
+   944→}
+   945→

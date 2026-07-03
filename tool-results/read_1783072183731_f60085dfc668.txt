@@ -1,0 +1,875 @@
+     1→'use client'
+     2→
+     3→import React, { useEffect, useState } from 'react'
+     4→import { useApp } from '@/contexts/AppContext'
+     5→import { useAuth } from '@/contexts/AuthContext'
+     6→import ReturnsPage from '@/components/returns/ReturnsPage'
+     7→import ReconciliationPage from '@/components/reconciliation/ReconciliationPage'
+     8→import InvoiceWorkspacePage from '@/components/invoices/InvoiceWorkspacePage'
+     9→import ClientRegistryPage from '@/components/clients/ClientRegistryPage'
+    10→import ClientWorkspacePage from '@/components/clients/ClientWorkspacePage'
+    11→import ReturnPrepWorkspace from '@/components/returns/ReturnPrepWorkspace'
+    12→import SettingsPage from '@/components/settings/SettingsPage'
+    13→import LandingPage from '@/components/landing/LandingPage'
+    14→import LoginPage from '@/components/auth/LoginPage'
+    15→import { OnboardingFlow } from '@/components/onboarding/OnboardingFlow'
+    16→import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+    17→import {
+    18→  DropdownMenu,
+    19→  DropdownMenuContent,
+    20→  DropdownMenuItem,
+    21→  DropdownMenuSeparator,
+    22→  DropdownMenuTrigger,
+    23→} from '@/components/ui/dropdown-menu'
+    24→import { Zap, LogOut, User, Settings, MailCheck, Search, Bell, Sun, Moon } from 'lucide-react'
+    25→import { useTheme } from 'next-themes'
+    26→import { LeftNav } from '@/components/layout/LeftNav'
+    27→import { FloatingDock } from '@/components/layout/FloatingDock'
+    28→import { OraclePanel } from '@/components/oracle/OraclePanel'
+    29→import { OracleDockSidebar, readInitialOracleState } from '@/components/oracle/OracleDockSidebar'
+    30→import { InfinitySymbol } from '@/components/layout/InfinityMark'
+    31→import { AmbientBackground } from '@/components/layout/AmbientBackground'
+    32→import FirmCommandCenterPage from '@/components/firm-command-center/FirmCommandCenterPage'
+    33→import MultiFirmPage from '@/components/multi-firm/MultiFirmPage'
+    34→import AutopilotPage from '@/components/autopilot/AutopilotPage'
+    35→import AICAManagerPage from '@/components/ai-ca-manager/AICAManagerPage'
+    36→import AIAccountManagerPage from '@/components/ai-account-manager/AIAccountManagerPage'
+    37→import AIDeadlineEnginePage from '@/components/ai-deadline-engine/AIDeadlineEnginePage'
+    38→import AIDocumentEmployeePage from '@/components/ai-document-employee/AIDocumentEmployeePage'
+    39→import AIVoiceAssistantPage from '@/components/ai-voice-assistant/AIVoiceAssistantPage'
+    40→import AIFirmMemoryPage from '@/components/ai-firm-memory/AIFirmMemoryPage'
+    41→import AIOperatingRoomPage from '@/components/ai-operating-room/AIOperatingRoomPage'
+    42→import AIPredictionsPage from '@/components/ai-predictions/AIPredictionsPage'
+    43→import AIPriorityEnginePage from '@/components/ai-priority-engine/AIPriorityEnginePage'
+    44→import BusinessGraphPage from '@/components/business-graph/BusinessGraphPage'
+    45→import DataMoatPage from '@/components/data-moat/DataMoatPage'
+    46→import EmbeddedFinancePage from '@/components/embedded-finance/EmbeddedFinancePage'
+    47→import IndustryBenchmarkPage from '@/components/industry-benchmark/IndustryBenchmarkPage'
+    48→import WorkingCapitalPage from '@/components/working-capital/WorkingCapitalPage'
+    49→import NetworkEffectsPage from '@/components/network-effects/NetworkEffectsPage'
+    50→import AIBusinessCopilotPage from '@/components/ai-business-copilot/AIBusinessCopilotPage'
+    51→import RunMyBusinessPage from '@/components/run-my-business/RunMyBusinessPage'
+    52→import ExecutiveWarRoomPage from '@/components/executive-war-room/ExecutiveWarRoomPage'
+    53→import AppStorePage from '@/components/app-store/AppStorePage'
+    54→import DigitalTwinPage from '@/components/digital-twin/DigitalTwinPage'
+    55→import APIPlatformPage from '@/components/api-platform-v2/APIPlatformPage'
+    56→import EventEnginePage from '@/components/event-engine/EventEnginePage'
+    57→import AgentOSPage from '@/components/agent-os/AgentOSPage'
+    58→import DecisionEnginePage from '@/components/decision-engine/DecisionEnginePage'
+    59→import GSTPilotNetworkPage from '@/components/gstpilot-network/GSTPilotNetworkPage'
+    60→import DataCloudPage from '@/components/data-cloud/DataCloudPage'
+    61→import RunIndiaBusinessPage from '@/components/run-india-business/RunIndiaBusinessPage'
+    62→import UniversalBusinessIDPage from '@/components/universal-business-id/UniversalBusinessIDPage'
+    63→import CreditScoringEnginePage from '@/components/credit-scoring-engine/CreditScoringEnginePage'
+    64→import InvoiceExchangePage from '@/components/invoice-exchange/InvoiceExchangePage'
+    65→import FinancingMarketplacePage from '@/components/financing-marketplace/FinancingMarketplacePage'
+    66→import EconomicGraphPage from '@/components/economic-graph/EconomicGraphPage'
+    67→import EconomicWarRoomPage from '@/components/economic-war-room/EconomicWarRoomPage'
+    68→import RunMyCompanyPage from '@/components/run-my-company/RunMyCompanyPage'
+    69→import MissionControlPage from '@/components/mission-control/MissionControlPage'
+    70→import BusinessDNApage from '@/components/business-dna/BusinessDNApage'
+    71→import AICFODashboardPage from '@/components/ai-cfo/AICFODashboardPage'
+    72→import InvoiceCloudPage from '@/components/invoice-cloud/InvoiceCloudPage'
+    73→import ExecutionEnginePage from '@/components/execution-engine/ExecutionEnginePage'
+    74→import CommandPalette from '@/components/command-palette/CommandPalette'
+    75→
+    76→// ═══ Recovered modules — previously disconnected from the router ═══
+    77→import ReportsPage from '@/components/reports/ReportsPage'
+    78→import AIExecutiveReportsPage from '@/components/ai-reports/AIExecutiveReportsPage'
+    79→import AICompliancePage from '@/components/ai-compliance/AICompliancePage'
+    80→import AIRiskEnginePage from '@/components/ai-risk/AIRiskEnginePage'
+    81→import AIClientInsightsPage from '@/components/ai-insights/AIClientInsightsPage'
+    82→import AITaskGeneratorPage from '@/components/ai-tasks/AITaskGeneratorPage'
+    83→import AIBenchmarkPage from '@/components/ai-benchmark/AIBenchmarkPage'
+    84→import AIKnowledgeCenterPage from '@/components/ai-knowledge/AIKnowledgeCenterPage'
+    85→import AIDocumentChatPage from '@/components/ai-doc-chat/AIDocumentChatPage'
+    86→import NoticeCenterPage from '@/components/notices/NoticeCenterPage'
+    87→import GSTRFilingPage from '@/components/gstr/GSTRFilingPage'
+    88→import FilingCalendarPage from '@/components/calendar/FilingCalendarPage'
+    89→import AccountingPage from '@/components/accounting/AccountingPage'
+    90→import PayrollPage from '@/components/payroll/PayrollPage'
+    91→import HRMSPage from '@/components/hrms/HRMSPage'
+    92→import InventoryPage from '@/components/inventory/InventoryPage'
+    93→import BankingPage from '@/components/banking/BankingPage'
+    94→import PaymentsPage from '@/components/payments/PaymentsPage'
+    95→import EInvoicingPage from '@/components/e-invoicing/EInvoicingPage'
+    96→import TDSPage from '@/components/tds/TDSPage'
+    97→import ROCCompliancePage from '@/components/roc-compliance/ROCCompliancePage'
+    98→import LegalNoticesPage from '@/components/legal-notices/LegalNoticesPage'
+    99→import TeamManagementPage from '@/components/team/TeamManagementPage'
+   100→import TeamPerformancePage from '@/components/team-performance/TeamPerformancePage'
+   101→import FirmOperationsPage from '@/components/firm-operations/FirmOperationsPage'
+   102→import WorkloadPage from '@/components/workload/WorkloadPage'
+   103→import ReviewPage from '@/components/review/ReviewPage'
+   104→import DeadlineCenterPage from '@/components/deadlines/DeadlineCenterPage'
+   105→import ClientHealthPage from '@/components/client-health/ClientHealthPage'
+   106→import ExecutiveAnalyticsPage from '@/components/executive-analytics/ExecutiveAnalyticsPage'
+   107→import AnalyticsPage from '@/components/analytics/AnalyticsPage'
+   108→import TimelinePage from '@/components/timeline/TimelinePage'
+   109→import TasksPage from '@/components/tasks/TasksPage'
+   110→import DocumentVaultPage from '@/components/documents/DocumentVaultPage'
+   111→import CollaborationPage from '@/components/collaboration/CollaborationPage'
+   112→import CRMPage from '@/components/crm/CRMPage'
+   113→import ApprovalsPage from '@/components/approvals/ApprovalsPage'
+   114→import AutomationsPage from '@/components/automations/AutomationsPage'
+   115→import AutomationCenterPage from '@/components/automation/AutomationCenterPage'
+   116→import ErrorResolutionPage from '@/components/audit/ErrorResolutionPage'
+   117→import AuditLogsPage from '@/components/audit-logs/AuditLogsPage'
+   118→import BillingPage from '@/components/billing/BillingPage'
+   119→import WhiteLabelPage from '@/components/white-label/WhiteLabelPage'
+   120→import VersionHistoryPage from '@/components/version-history/VersionHistoryPage'
+   121→import ESignaturesPage from '@/components/esignatures/ESignaturesPage'
+   122→import ClientPortalPage from '@/components/client-portal/ClientPortalPage'
+   123→import MarketplacePage from '@/components/marketplace/MarketplacePage'
+   124→import AgentsPage from '@/components/agents/AgentsPage'
+   125→import ConnectionsPage from '@/components/connections/ConnectionsPage'
+   126→import AISoftwareFactoryPage from '@/components/ai-software-factory/AISoftwareFactoryPage'
+   127→import AutonomousEnterprisePage from '@/components/autonomous-enterprise/AutonomousEnterprisePage'
+   128→import EnterpriseCloudPlatformPage from '@/components/enterprise-cloud-platform/EnterpriseCloudPlatformPage'
+   129→import EnterpriseAIPlatformPage from '@/components/enterprise-ai-platform/EnterpriseAIPlatformPage'
+   130→import GlobalEnterpriseNetworkPage from '@/components/global-enterprise-network/GlobalEnterpriseNetworkPage'
+   131→
+   132→const VIEW_TITLES: Record<string, string> = {
+   133→  dashboard: 'Mission Control',
+   134→  'business-dna': 'Business DNA',
+   135→  'invoice-cloud': 'Invoice Cloud',
+   136→  'execution-engine': 'Execution Engine',
+   137→  'ai-cfo': 'AI CFO',
+   138→  returns: 'Returns',
+   139→  reconcile: 'Reconcile',
+   140→  invoices: 'Invoices',
+   141→  clients: 'Clients',
+   142→  settings: 'Settings',
+   143→  'client-workspace': 'Client Workspace',
+   144→  'return-prep': 'Return Preparation',
+   145→  'firm-command-center': 'AI CEO',
+   146→  'multi-firm': 'Multi-Firm',
+   147→  autopilot: 'RUN MY FIRM',
+   148→  'ai-ca-manager': 'AI CA Manager',
+   149→  'ai-account-manager': 'AI Account Manager',
+   150→  'ai-deadline-engine': 'AI Deadline Engine',
+   151→  'ai-document-employee': 'AI Doc Employee',
+   152→  'ai-voice-assistant': 'AI Voice Assistant',
+   153→  'ai-firm-memory': 'AI Firm Memory',
+   154→  'ai-operating-room': 'AI Operating Room',
+   155→  'ai-predictions': 'AI Predictions',
+   156→  'ai-priority-engine': 'AI Priority Engine',
+   157→  'business-graph': 'Business Graph',
+   158→  'data-moat': 'Data Moat',
+   159→  'embedded-finance': 'Payments™',
+   160→  'industry-benchmark': 'Industry Benchmark',
+   161→  'working-capital': 'Working Capital',
+   162→  'ai-business-copilot': 'AI Business Copilot',
+   163→  'run-my-business': 'RUN MY BUSINESS™',
+   164→  'network-effects': 'Network Effects',
+   165→  'executive-war-room': 'EXECUTIVE WAR ROOM',
+   166→  'api-platform-v2': 'API PLATFORM™',
+   167→  'digital-twin': 'BUSINESS DIGITAL TWIN™',
+   168→  'event-engine': 'Event Engine',
+   169→  'agent-os': 'AI Agent OS',
+   170→  'decision-engine': 'AI DECISION ENGINE™',
+   171→  'app-store': 'APP STORE™',
+   172→  'gstpilot-network': 'GSTPILOT NETWORK™',
+   173→  'data-cloud': 'FINANCIAL DATA CLOUD™',
+   174→  'run-india-business': "RUN INDIA'S BUSINESS™",
+   175→  'universal-business-id': 'UNIVERSAL BUSINESS ID™',
+   176→  'credit-scoring-engine': 'CREDIT SCORING ENGINE™',
+   177→  'invoice-exchange': 'INVOICE EXCHANGE™',
+   178→  'financing-marketplace': 'FINANCING MARKETPLACE™',
+   179→  'economic-graph': 'ECONOMIC GRAPH™',
+   180→  'economic-war-room': 'ECONOMIC WAR ROOM™',
+   181→  'run-my-company': 'RUN MY COMPANY™',
+   182→  // ═══ Recovered module titles ═══
+   183→  reports: 'Reports',
+   184→  'ai-reports': 'AI Executive Reports',
+   185→  'ai-compliance': 'AI Compliance',
+   186→  'ai-risk': 'AI Risk Engine',
+   187→  'ai-insights': 'AI Client Insights',
+   188→  'ai-tasks': 'AI Task Generator',
+   189→  'ai-benchmark': 'AI Benchmark',
+   190→  'ai-knowledge': 'AI Knowledge Center',
+   191→  'ai-doc-chat': 'AI Document Chat',
+   192→  notices: 'Notice Center',
+   193→  'gstr-filing': 'GSTR Filing',
+   194→  calendar: 'Filing Calendar',
+   195→  accounting: 'Accounting',
+   196→  payroll: 'Payroll',
+   197→  hrms: 'HRMS',
+   198→  inventory: 'Inventory',
+   199→  banking: 'Banking',
+   200→  payments: 'Payments',
+   201→  'e-invoicing': 'E-Invoicing',
+   202→  tds: 'TDS',
+   203→  'roc-compliance': 'ROC Compliance',
+   204→  'legal-notices': 'Legal Notices',
+   205→  team: 'Team',
+   206→  'team-performance': 'Team Performance',
+   207→  'firm-operations': 'Firm Operations',
+   208→  workload: 'Workload',
+   209→  review: 'Review',
+   210→  deadlines: 'Deadline Center',
+   211→  'client-health': 'Client Health',
+   212→  'executive-analytics': 'Executive Analytics',
+   213→  analytics: 'Analytics',
+   214→  timeline: 'Timeline',
+   215→  tasks: 'Tasks',
+   216→  documents: 'Document Vault',
+   217→  collaboration: 'Collaboration',
+   218→  crm: 'CRM',
+   219→  approvals: 'Approvals',
+   220→  automations: 'Automations',
+   221→  'automation-center': 'Automation Center',
+   222→  'audit-resolution': 'Error Resolution',
+   223→  'audit-trail': 'Audit Logs',
+   224→  billing: 'Billing',
+   225→  'white-label': 'White Label',
+   226→  'version-history': 'Version History',
+   227→  esignatures: 'E-Signatures',
+   228→  'client-portal': 'Client Portal',
+   229→  marketplace: 'Marketplace',
+   230→  agents: 'Agents',
+   231→  connections: 'Connections',
+   232→  'ai-software-factory': 'AI Software Factory™',
+   233→  'autonomous-enterprise': 'Autonomous Enterprise™',
+   234→  'enterprise-cloud-platform': 'Enterprise Cloud Platform™',
+   235→  'enterprise-ai-platform': 'Enterprise AI Platform™',
+   236→  'global-enterprise-network': 'Global Enterprise Network™',
+   237→}
+   238→
+   239→function DashboardContent() {
+   240→  const { currentView, setCurrentView } = useApp()
+   241→  const { user, logout } = useAuth()
+   242→
+   243→  // ── Oracle docked sidebar state (persisted to localStorage) ──────────────────
+   244→  const [oracleOpen, setOracleOpen] = useState(false)
+   245→  const [notificationsOpen, setNotificationsOpen] = useState(false)
+   246→
+   247→  // Restore previous Oracle sidebar state on mount
+   248→  useEffect(() => {
+   249→    setOracleOpen(readInitialOracleState())
+   250→  }, [])
+   251→
+   252→  const renderView = () => {
+   253→    switch (currentView) {
+   254→      case 'dashboard':
+   255→        return <MissionControlPage />
+   256→      case 'returns':
+   257→        return <ReturnsPage />
+   258→      case 'reconcile':
+   259→        return <ReconciliationPage />
+   260→      case 'invoices':
+   261→        return <InvoiceWorkspacePage />
+   262→      case 'clients':
+   263→        return <ClientRegistryPage />
+   264→      case 'client-workspace':
+   265→        return <ClientWorkspacePage />
+   266→      case 'return-prep':
+   267→        return <ReturnPrepWorkspace />
+   268→      case 'settings':
+   269→        return <SettingsPage />
+   270→      case 'firm-command-center':
+   271→        return <FirmCommandCenterPage />
+   272→      case 'multi-firm':
+   273→        return <MultiFirmPage />
+   274→      case 'autopilot':
+   275→        return <AutopilotPage />
+   276→      case 'ai-ca-manager':
+   277→        return <AICAManagerPage />
+   278→      case 'ai-account-manager':
+   279→        return <AIAccountManagerPage />
+   280→      case 'ai-deadline-engine':
+   281→        return <AIDeadlineEnginePage />
+   282→      case 'ai-document-employee':
+   283→        return <AIDocumentEmployeePage />
+   284→      case 'ai-voice-assistant':
+   285→        return <AIVoiceAssistantPage />
+   286→      case 'ai-firm-memory':
+   287→        return <AIFirmMemoryPage />
+   288→      case 'ai-operating-room':
+   289→        return <AIOperatingRoomPage />
+   290→      case 'ai-predictions':
+   291→        return <AIPredictionsPage />
+   292→      case 'ai-priority-engine':
+   293→        return <AIPriorityEnginePage />
+   294→      case 'business-graph':
+   295→        return <BusinessGraphPage />
+   296→      case 'data-moat':
+   297→        return <DataMoatPage />
+   298→      case 'embedded-finance':
+   299→        return <EmbeddedFinancePage />
+   300→      case 'working-capital':
+   301→        return <WorkingCapitalPage />
+   302→      case 'industry-benchmark':
+   303→        return <IndustryBenchmarkPage />
+   304→      case 'network-effects':
+   305→        return <NetworkEffectsPage />
+   306→      case 'ai-business-copilot':
+   307→        return <AIBusinessCopilotPage />
+   308→      case 'run-my-business':
+   309→        return <RunMyBusinessPage />
+   310→      case 'executive-war-room':
+   311→        return <ExecutiveWarRoomPage />
+   312→      case 'api-platform-v2':
+   313→        return <APIPlatformPage />
+   314→      case 'digital-twin':
+   315→        return <DigitalTwinPage />
+   316→      case 'event-engine':
+   317→        return <EventEnginePage />
+   318→      case 'agent-os':
+   319→        return <AgentOSPage />
+   320→      case 'decision-engine':
+   321→        return <DecisionEnginePage />
+   322→      case 'app-store':
+   323→        return <AppStorePage />
+   324→      case 'gstpilot-network':
+   325→        return <GSTPilotNetworkPage />
+   326→      case 'data-cloud':
+   327→        return <DataCloudPage />
+   328→      case 'run-india-business':
+   329→        return <RunIndiaBusinessPage />
+   330→      case 'universal-business-id':
+   331→        return <UniversalBusinessIDPage />
+   332→      case 'credit-scoring-engine':
+   333→        return <CreditScoringEnginePage />
+   334→      case 'invoice-exchange':
+   335→        return <InvoiceExchangePage />
+   336→      case 'financing-marketplace':
+   337→        return <FinancingMarketplacePage />
+   338→      case 'economic-graph':
+   339→        return <EconomicGraphPage />
+   340→      case 'economic-war-room':
+   341→        return <EconomicWarRoomPage />
+   342→      case 'run-my-company':
+   343→        return <RunMyCompanyPage />
+   344→      case 'business-dna':
+   345→        return <BusinessDNApage />
+   346→      case 'invoice-cloud':
+   347→        return <InvoiceCloudPage />
+   348→      case 'execution-engine':
+   349→        return <ExecutionEnginePage />
+   350→      case 'ai-cfo':
+   351→        return <AICFODashboardPage />
+   352→      // ═══ Recovered modules — previously fell to default ═══
+   353→      case 'reports':
+   354→        return <ReportsPage />
+   355→      case 'ai-reports':
+   356→        return <AIExecutiveReportsPage />
+   357→      case 'ai-compliance':
+   358→        return <AICompliancePage />
+   359→      case 'ai-risk':
+   360→        return <AIRiskEnginePage />
+   361→      case 'ai-insights':
+   362→        return <AIClientInsightsPage />
+   363→      case 'ai-tasks':
+   364→        return <AITaskGeneratorPage />
+   365→      case 'ai-benchmark':
+   366→        return <AIBenchmarkPage />
+   367→      case 'ai-knowledge':
+   368→        return <AIKnowledgeCenterPage />
+   369→      case 'ai-doc-chat':
+   370→        return <AIDocumentChatPage />
+   371→      case 'notices':
+   372→        return <NoticeCenterPage />
+   373→      case 'gstr-filing':
+   374→        return <GSTRFilingPage />
+   375→      case 'calendar':
+   376→        return <FilingCalendarPage />
+   377→      case 'accounting':
+   378→        return <AccountingPage />
+   379→      case 'payroll':
+   380→        return <PayrollPage />
+   381→      case 'hrms':
+   382→        return <HRMSPage />
+   383→      case 'inventory':
+   384→        return <InventoryPage />
+   385→      case 'banking':
+   386→        return <BankingPage />
+   387→      case 'payments':
+   388→        return <PaymentsPage />
+   389→      case 'e-invoicing':
+   390→        return <EInvoicingPage />
+   391→      case 'tds':
+   392→        return <TDSPage />
+   393→      case 'roc-compliance':
+   394→        return <ROCCompliancePage />
+   395→      case 'legal-notices':
+   396→        return <LegalNoticesPage />
+   397→      case 'team':
+   398→        return <TeamManagementPage />
+   399→      case 'team-performance':
+   400→        return <TeamPerformancePage />
+   401→      case 'firm-operations':
+   402→        return <FirmOperationsPage />
+   403→      case 'workload':
+   404→        return <WorkloadPage />
+   405→      case 'review':
+   406→        return <ReviewPage />
+   407→      case 'deadlines':
+   408→        return <DeadlineCenterPage />
+   409→      case 'client-health':
+   410→        return <ClientHealthPage />
+   411→      case 'executive-analytics':
+   412→        return <ExecutiveAnalyticsPage />
+   413→      case 'analytics':
+   414→        return <AnalyticsPage />
+   415→      case 'timeline':
+   416→        return <TimelinePage />
+   417→      case 'tasks':
+   418→        return <TasksPage />
+   419→      case 'documents':
+   420→        return <DocumentVaultPage />
+   421→      case 'collaboration':
+   422→        return <CollaborationPage />
+   423→      case 'crm':
+   424→        return <CRMPage />
+   425→      case 'approvals':
+   426→        return <ApprovalsPage />
+   427→      case 'automations':
+   428→        return <AutomationsPage />
+   429→      case 'automation-center':
+   430→        return <AutomationCenterPage />
+   431→      case 'audit-resolution':
+   432→        return <ErrorResolutionPage />
+   433→      case 'audit-trail':
+   434→        return <AuditLogsPage />
+   435→      case 'billing':
+   436→        return <BillingPage />
+   437→      case 'white-label':
+   438→        return <WhiteLabelPage />
+   439→      case 'version-history':
+   440→        return <VersionHistoryPage />
+   441→      case 'esignatures':
+   442→        return <ESignaturesPage />
+   443→      case 'client-portal':
+   444→        return <ClientPortalPage />
+   445→      case 'marketplace':
+   446→        return <MarketplacePage />
+   447→      case 'agents':
+   448→        return <AgentsPage />
+   449→      case 'connections':
+   450→        return <ConnectionsPage />
+   451→      case 'ai-software-factory':
+   452→        return <AISoftwareFactoryPage />
+   453→      case 'autonomous-enterprise':
+   454→        return <AutonomousEnterprisePage />
+   455→      case 'enterprise-cloud-platform':
+   456→        return <EnterpriseCloudPlatformPage />
+   457→      case 'enterprise-ai-platform':
+   458→        return <EnterpriseAIPlatformPage />
+   459→      case 'global-enterprise-network':
+   460→        return <GlobalEnterpriseNetworkPage />
+   461→      default:
+   462→        return <MissionControlPage />
+   463→    }
+   464→  }
+   465→
+   466→  const userInitials = user?.name
+   467→    ? user.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
+   468→    : 'U'
+   469→
+   470→  return (
+   471→    <div className="relative flex h-screen flex-col overflow-hidden bg-background">
+   472→      {/* ═══ V16 Ambient Background — aurora + particles + network lines ═══ */}
+   473→      <AmbientBackground />
+   474→
+   475→      {/* ═══ TOP BAR ═══ */}
+   476→      <header className="relative z-10 flex h-14 shrink-0 items-center gap-3 border-b border-white/[0.06] bg-background/60 px-4 backdrop-blur-xl md:px-6">
+   477→        {/* Brand + subtitle — V16 InfinityMark™ */}
+   478→        <button
+   479→          onClick={() => setCurrentView('dashboard')}
+   480→          className="flex items-center gap-2.5 rounded-lg outline-none transition-opacity hover:opacity-80"
+   481→          aria-label="GSTPilot Infinity — Home"
+   482→        >
+   483→          <InfinitySymbol size={28} />
+   484→          <div className="hidden flex-col items-start leading-none sm:flex">
+   485→            <span className="text-sm font-semibold tracking-tight text-foreground">
+   486→              GSTPilot Infinity<span className="accent-text">™</span>
+   487→            </span>
+   488→            <span className="text-[10px] font-medium text-muted-foreground">
+   489→              The Financial Brain of India
+   490→            </span>
+   491→          </div>
+   492→        </button>
+   493→
+   494→        {/* Right cluster: Search · Notifications · Theme · Profile */}
+   495→        <div className="ml-auto flex items-center gap-1.5">
+   496→          <button
+   497→            onClick={() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true }))}
+   498→            className="flex h-8 items-center gap-2 rounded-lg border border-white/[0.08] bg-white/[0.03] px-2.5 text-xs text-muted-foreground transition-colors hover:bg-white/[0.07] hover:text-foreground"
+   499→            aria-label="Search"
+   500→          >
+   501→            <Search className="h-3.5 w-3.5" />
+   502→            <span className="hidden sm:inline">Search</span>
+   503→            <kbd className="hidden rounded bg-white/[0.06] px-1 py-0.5 text-[9px] font-semibold sm:inline">⌘K</kbd>
+   504→          </button>
+   505→          <button
+   506→            className="relative flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-white/[0.05] hover:text-foreground"
+   507→            aria-label="Notifications"
+   508→          >
+   509→            <Bell className="h-4 w-4" />
+   510→            <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-emerald-400" />
+   511→          </button>
+   512→          <ThemeToggle />
+   513→          <DropdownMenu>
+   514→            <DropdownMenuTrigger className="flex items-center gap-2 rounded-lg px-1.5 py-1 outline-none transition-colors hover:bg-white/[0.05]">
+   515→              <Avatar className="h-7 w-7">
+   516→                <AvatarImage src={user?.picture} alt={user?.name || 'User'} />
+   517→                <AvatarFallback className="accent-gradient-soft accent-text text-[11px] font-semibold">
+   518→                  {userInitials}
+   519→                </AvatarFallback>
+   520→              </Avatar>
+   521→              <span className="hidden text-xs font-medium text-foreground sm:inline">
+   522→                {user?.name?.split(' ')[0] || 'User'}
+   523→              </span>
+   524→            </DropdownMenuTrigger>
+   525→            <DropdownMenuContent align="end" className="w-56">
+   526→              <div className="flex items-center gap-2 p-2">
+   527→                <Avatar className="h-8 w-8">
+   528→                  <AvatarImage src={user?.picture} alt={user?.name || 'User'} />
+   529→                  <AvatarFallback className="accent-gradient-soft accent-text text-xs font-semibold">
+   530→                    {userInitials}
+   531→                  </AvatarFallback>
+   532→                </Avatar>
+   533→                <div className="flex-1 min-w-0">
+   534→                  <p className="text-sm font-medium truncate">{user?.name || 'User'}</p>
+   535→                  <p className="text-xs text-muted-foreground truncate">{user?.email || ''}</p>
+   536→                </div>
+   537→              </div>
+   538→              <DropdownMenuSeparator />
+   539→              <DropdownMenuItem className="gap-2">
+   540→                <User className="h-4 w-4" />
+   541→                Profile
+   542→              </DropdownMenuItem>
+   543→              <DropdownMenuItem className="gap-2" onClick={() => setCurrentView('settings')}>
+   544→                <Settings className="h-4 w-4" />
+   545→                Settings
+   546→              </DropdownMenuItem>
+   547→              <DropdownMenuSeparator />
+   548→              <DropdownMenuItem onClick={logout} className="gap-2 text-red-400 focus:text-red-300 focus:bg-red-500/10">
+   549→                <LogOut className="h-4 w-4" />
+   550→                Sign Out
+   551→              </DropdownMenuItem>
+   552→            </DropdownMenuContent>
+   553→          </DropdownMenu>
+   554→        </div>
+   555→      </header>
+   556→
+   557→      {/* ═══ TWO-COLUMN WORKSPACE ═══ */}
+   558→      <div className="relative z-10 flex min-h-0 flex-1 gap-3 p-3">
+   559→        {/* LEFT NAV */}
+   560→        <div className="shrink-0">
+   561→          <LeftNav />
+   562→        </div>
+   563→
+   564→        {/* MAIN WORKSPACE */}
+   565→        <main className="min-w-0 flex-1 overflow-y-auto rounded-3xl pb-24 custom-scrollbar">
+   566→          {renderView()}
+   567→        </main>
+   568→      </div>
+   569→
+   570→      {/* ═══ PREMIUM FLOATING DOCK (Oracle · Notifications · Help) ═══ */}
+   571→      <FloatingDock
+   572→        onOracleToggle={() => {
+   573→          setOracleOpen((v) => !v)
+   574→          setNotificationsOpen(false)
+   575→        }}
+   576→        oracleOpen={oracleOpen}
+   577→        onNotificationsToggle={() => {
+   578→          setNotificationsOpen((v) => !v)
+   579→          setOracleOpen(false)
+   580→        }}
+   581→        notificationsOpen={notificationsOpen}
+   582→      />
+   583→
+   584→      {/* ═══ ORACLE DOCKED SIDEBAR (slide-in right on desktop, bottom sheet on mobile) ═══ */}
+   585→      <OracleDockSidebar
+   586→        open={oracleOpen}
+   587→        onClose={() => setOracleOpen(false)}
+   588→      >
+   589→        <OraclePanel onNavigate={(view) => { setCurrentView(view); setOracleOpen(false) }} />
+   590→      </OracleDockSidebar>
+   591→
+   592→      {/* ═══ COMMAND PALETTE (⌘K) ═══ */}
+   593→      <CommandPalette />
+   594→    </div>
+   595→  )
+   596→}
+   597→
+   598→// ─── Theme Toggle (inline) ─────────────────────────────────────────────────────
+   599→function ThemeToggle() {
+   600→  const { theme, setTheme } = useTheme()
+   601→  const isDark = theme === 'dark'
+   602→  return (
+   603→    <button
+   604→      onClick={() => setTheme(isDark ? 'light' : 'dark')}
+   605→      className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-white/[0.05] hover:text-foreground"
+   606→      aria-label="Toggle theme"
+   607→    >
+   608→      {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+   609→    </button>
+   610→  )
+   611→}
+   612→
+   613→function EmailVerificationBanner() {
+   614→  const { user, logout } = useAuth()
+   615→  const [sending, setSending] = useState(false)
+   616→  const [sent, setSent] = useState(false)
+   617→
+   618→  const handleResend = async () => {
+   619→    setSending(true)
+   620→    try {
+   621→      const { sendVerificationEmail } = await import('@/lib/auth')
+   622→      const { error } = await sendVerificationEmail()
+   623→      if (!error) setSent(true)
+   624→    } catch {
+   625→      // ignore
+   626→    } finally {
+   627→      setSending(false)
+   628→    }
+   629→  }
+   630→
+   631→  return (
+   632→    <div className="bg-amber-500/10 border-b border-amber-500/25 px-4 py-3">
+   633→      <div className="flex items-center justify-between gap-3 max-w-7xl mx-auto">
+   634→        <div className="flex items-center gap-2.5">
+   635→          <MailCheck className="h-5 w-5 text-amber-300 shrink-0" />
+   636→          <p className="text-sm text-amber-200">
+   637→            {sent
+   638→              ? 'Verification email sent! Check your inbox.'
+   639→              : 'Please verify your email address to access all features.'}
+   640→          </p>
+   641→        </div>
+   642→        <div className="flex items-center gap-2">
+   643→          {!sent && (
+   644→            <button
+   645→              onClick={handleResend}
+   646→              disabled={sending}
+   647→              className="text-xs font-semibold text-amber-200 hover:text-amber-100 underline disabled:opacity-50"
+   648→            >
+   649→              {sending ? 'Sending...' : 'Resend email'}
+   650→            </button>
+   651→          )}
+   652→          <button
+   653→            onClick={logout}
+   654→            className="text-xs text-amber-300 hover:text-amber-100 font-medium"
+   655→          >
+   656→            Sign out
+   657→          </button>
+   658→        </div>
+   659→      </div>
+   660→    </div>
+   661→  )
+   662→}
+   663→
+   664→function OnboardingScreen() {
+   665→  const { user, markOnboardingComplete } = useAuth()
+   666→  const { setCurrentScreen, setCurrentView } = useApp()
+   667→  const [saveError, setSaveError] = React.useState<string | null>(null)
+   668→
+   669→  // ── Fire-and-forget: save onboarding data to Firestore in the background ──
+   670→  const saveOnboardingToFirestore = async (
+   671→    data: import('@/components/onboarding/OnboardingFlow').OnboardingData,
+   672→    firmId: string
+   673→  ) => {
+   674→    try {
+   675→      const { doc, setDoc, serverTimestamp } = await import('firebase/firestore')
+   676→      const { db } = await import('@/lib/firebase')
+   677→
+   678→      if (!user) return
+   679→
+   680→      // Update user document
+   681→      await setDoc(doc(db, 'users', user.id), {
+   682→        uid: user.id,
+   683→        fullName: data.fullName,
+   684→        email: data.email,
+   685→        phone: data.phone,
+   686→        ageGroup: data.ageGroup,
+   687→        profession: data.profession,
+   688→        experience: data.experience,
+   689→        firmId: firmId || null,
+   690→        firmName: data.firmName,
+   691→        onboardingCompleted: true,
+   692→        clientCount: data.clientCount,
+   693→        monthlyReturns: data.monthlyReturns,
+   694→        gstServices: data.gstServices,
+   695→        painPoints: data.painPoints,
+   696→        referralSource: data.referralSource,
+   697→        trialReasons: data.trialReasons,
+   698→        wantsUpdates: data.wantsUpdates,
+   699→        updatedAt: serverTimestamp(),
+   700→      }, { merge: true })
+   701→      console.log('[Onboarding] ✅ User document saved to Firestore')
+   702→
+   703→      // Save onboarding record
+   704→      await setDoc(doc(db, 'onboarding', user.id), {
+   705→        ...data,
+   706→        firmId: firmId || null,
+   707→        completedAt: serverTimestamp(),
+   708→      })
+   709→      console.log('[Onboarding] ✅ Onboarding record saved to Firestore')
+   710→    } catch (error) {
+   711→      console.warn('[Onboarding] ⚠️ Background Firestore save failed:', error)
+   712→    }
+   713→  }
+   714→
+   715→  const handleOnboardingComplete = (
+   716→    data: import('@/components/onboarding/OnboardingFlow').OnboardingData,
+   717→    destination?: import('@/components/onboarding/OnboardingFlow').OnboardingDestination
+   718→  ) => {
+   719→    setSaveError(null)
+   720→
+   721→    if (!user) {
+   722→      setSaveError('No authenticated user found. Please sign in again.')
+   723→      return
+   724→    }
+   725→
+   726→    // ── INSTANT: Mark onboarding complete locally & navigate ──
+   727→    // This happens synchronously — user sees dashboard immediately
+   728→    console.log('[Onboarding] 🚀 Navigating to', destination || 'dashboard', '(optimistic)')
+   729→    markOnboardingComplete(undefined, data.firmName)
+   730→    setCurrentView(destination || 'dashboard')
+   731→    setCurrentScreen('app')
+   732→
+   733→    // ── BACKGROUND: Create firm doc + save everything to Firestore ──
+   734→    // These happen async — user is already in the dashboard
+   735→    console.log('[Onboarding] 📝 Starting background Firestore writes...')
+   736→    ;(async () => {
+   737→      try {
+   738→        const { collection, addDoc, serverTimestamp } = await import('firebase/firestore')
+   739→        const { db } = await import('@/lib/firebase')
+   740→
+   741→        // Create firm document
+   742→        let firmId = ''
+   743→        try {
+   744→          const firmRef = await addDoc(collection(db, 'firms'), {
+   745→            ownerId: user.id,
+   746→            firmName: data.firmName,
+   747→            gstin: data.gstin || null,
+   748→            state: data.state,
+   749→            stateCode: data.stateCode,
+   750→            organizationType: data.organizationType,
+   751→            icaiMembershipNo: data.icaiMembershipNo || null,
+   752→            officeAddress: data.officeAddress || null,
+   753→            createdAt: serverTimestamp(),
+   754→          })
+   755→          firmId = firmRef.id
+   756→          console.log('[Onboarding] ✅ Firm created:', firmId)
+   757→
+   758→          // Update the local user with firmId
+   759→          markOnboardingComplete(firmId, data.firmName)
+   760→        } catch (firmError) {
+   761→          console.warn('[Onboarding] ⚠️ Firm creation failed:', firmError)
+   762→        }
+   763→
+   764→        // Save remaining data
+   765→        await saveOnboardingToFirestore(data, firmId)
+   766→      } catch (error) {
+   767→        console.warn('[Onboarding] ⚠️ Background save error:', error)
+   768→      }
+   769→    })()
+   770→  }
+   771→
+   772→  const handleSkip = () => {
+   773→    setSaveError(null)
+   774→
+   775→    if (!user) {
+   776→      setSaveError('No authenticated user found. Please sign in again.')
+   777→      return
+   778→    }
+   779→
+   780→    // ── INSTANT: Navigate immediately ──
+   781→    console.log('[Onboarding] 🚀 Skipping onboarding (optimistic)')
+   782→    markOnboardingComplete()
+   783→    setCurrentView('dashboard')
+   784→    setCurrentScreen('app')
+   785→
+   786→    // ── BACKGROUND: Mark as completed in Firestore ──
+   787→    ;(async () => {
+   788→      try {
+   789→        const { doc, setDoc, serverTimestamp } = await import('firebase/firestore')
+   790→        const { db } = await import('@/lib/firebase')
+   791→        await setDoc(doc(db, 'users', user.id), {
+   792→          onboardingCompleted: true,
+   793→          updatedAt: serverTimestamp(),
+   794→        }, { merge: true })
+   795→        console.log('[Onboarding] ✅ Skip saved to Firestore')
+   796→      } catch (error) {
+   797→        console.warn('[Onboarding] ⚠️ Background skip save failed:', error)
+   798→      }
+   799→    })()
+   800→  }
+   801→
+   802→  return (
+   803→    <OnboardingFlow
+   804→      onComplete={handleOnboardingComplete}
+   805→      onSkip={handleSkip}
+   806→      userEmail={user?.email}
+   807→      userName={user?.name}
+   808→      error={saveError}
+   809→      onDismissError={() => setSaveError(null)}
+   810→    />
+   811→  )
+   812→}
+   813→
+   814→function AppRouter() {
+   815→  const { currentScreen, setCurrentScreen } = useApp()
+   816→  const { isAuthenticated, isInitializing, needsOnboarding, needsEmailVerification } = useAuth()
+   817→
+   818→  useEffect(() => {
+   819→    if (isInitializing) return
+   820→    // Only auto-redirect to app if authenticated AND onboarding is complete
+   821→    // Don't redirect if user still needs onboarding — the OnboardingScreen handles its own navigation
+   822→    if (isAuthenticated && !needsOnboarding && currentScreen !== 'app') {
+   823→      setCurrentScreen('app')
+   824→    }
+   825→  }, [isAuthenticated, isInitializing, currentScreen, setCurrentScreen, needsOnboarding])
+   826→
+   827→  useEffect(() => {
+   828→    if (isInitializing) return
+   829→    if (!isAuthenticated && currentScreen === 'app') {
+   830→      setCurrentScreen('landing')
+   831→    }
+   832→  }, [isAuthenticated, isInitializing, currentScreen, setCurrentScreen])
+   833→
+   834→  const handleGetStarted = () => setCurrentScreen('login')
+   835→  const handleBookDemo = () => setCurrentScreen('login')
+   836→  const handleBackToLanding = () => setCurrentScreen('landing')
+   837→
+   838→  if (isInitializing && !isAuthenticated) {
+   839→    return (
+   840→      <div className="min-h-screen flex items-center justify-center bg-black">
+   841→        <div className="flex flex-col items-center gap-4">
+   842→          <div className="flex h-11 w-11 items-center justify-center rounded-2xl glass-surface motion-pulse">
+   843→            <Zap className="h-5 w-5 accent-text" />
+   844→          </div>
+   845→          <span className="text-sm text-white/55 font-medium">Loading GSTPilot…</span>
+   846→        </div>
+   847→      </div>
+   848→    )
+   849→  }
+   850→
+   851→  // Show onboarding if user hasn't completed it
+   852→  if (isAuthenticated && needsOnboarding) {
+   853→    return <OnboardingScreen />
+   854→  }
+   855→
+   856→  if (currentScreen === 'app' && isAuthenticated) {
+   857→    return (
+   858→      <div className="flex min-h-screen flex-col">
+   859→        {needsEmailVerification && <EmailVerificationBanner />}
+   860→        <DashboardContent />
+   861→      </div>
+   862→    )
+   863→  }
+   864→
+   865→  if (currentScreen === 'login') {
+   866→    return <LoginPage onBack={handleBackToLanding} onGetStarted={handleGetStarted} />
+   867→  }
+   868→
+   869→  return <LandingPage onGetStarted={handleGetStarted} onBookDemo={handleBookDemo} />
+   870→}
+   871→
+   872→export default function Home() {
+   873→  return <AppRouter />
+   874→}
+   875→

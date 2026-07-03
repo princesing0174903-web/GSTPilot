@@ -41,12 +41,20 @@ import {
   useFireReturns,
   useFireReconciliations,
   useLiveDashboardMetrics,
+  useFireReports,
 } from '@/hooks/use-firestore';
+import { createReport, deleteReport } from '@/lib/firestore-service';
 import type {
   FirestoreInvoice,
   FirestoreReturn,
   FirestoreReconciliation,
+  FirestoreReport,
+  ReportType,
+  ReportFormat,
 } from '@/lib/firestore-schema';
+import { EmptyState } from '@/components/shared';
+import { Database } from 'lucide-react';
+import { toast } from 'sonner';
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -66,6 +74,8 @@ interface RecentExport {
   fileSize: string;
   fileType: string;
   data?: unknown;
+  firestoreId?: string | null; // P1-M2: linked Firestore report id for delete-sync
+  storageUrl?: string | null;  // P1-M2: data: URL for JSON reports (re-download)
 }
 
 interface ClientOption {
@@ -93,6 +103,38 @@ const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December',
 ];
+
+// ─── Report Type Mapping (P1-M2: localStorage exportType → Firestore ReportType/ReportFormat) ────
+
+const EXPORT_TYPE_TO_REPORT_TYPE: Record<string, ReportType> = {
+  'GSTR-1 JSON': 'gstr1_json',
+  'GSTR-1 Excel': 'gstr1_excel',
+  'Filing Summary PDF': 'filing_summary_pdf',
+  'Working Papers PDF': 'working_papers_pdf',
+  'GST Summary PDF': 'gst_summary_pdf',
+  'Compliance Report PDF': 'compliance_report_pdf',
+  'Financial Report PDF': 'financial_report_pdf',
+  'Cash Flow Report PDF': 'cash_flow_report_pdf',
+};
+
+function mapFileTypeToReportFormat(fileType: string): ReportFormat {
+  if (fileType === 'json') return 'json';
+  if (fileType === 'pdf') return 'pdf';
+  if (fileType === 'csv') return 'csv';
+  return 'json';
+}
+
+function parseFileSizeBytes(fileSize: string): number {
+  // Accept formats like "12.3 KB", "1.5 MB", or "PDF" (non-numeric → 0)
+  const match = fileSize.match(/([\d.]+)\s*(KB|MB|GB)?/i);
+  if (!match) return 0;
+  const num = parseFloat(match[1]);
+  const unit = (match[2] ?? '').toUpperCase();
+  if (unit === 'KB') return Math.round(num * 1024);
+  if (unit === 'MB') return Math.round(num * 1024 * 1024);
+  if (unit === 'GB') return Math.round(num * 1024 * 1024 * 1024);
+  return Math.round(num);
+}
 
 // ─── Report History (localStorage — Oracle-style persistence) ──────────────────
 
@@ -531,9 +573,72 @@ export default function ReportsPage() {
     setIncludeSections((prev) => ({ ...prev, [section]: !prev[section] }));
   };
 
-  const addRecentExport = useCallback((exp: RecentExport) => {
-    setRecentExports((prev) => [exp, ...prev].slice(0, HISTORY_LIMIT));
+  // P1-M2: Live Firestore subscription for SAVED REPORTS (canonical source going
+  // forward). localStorage history is kept as a secondary list for back-compat.
+  const fireReportsQ = useFireReports();
+  const savedReports: Array<FirestoreReport & { id: string }> = fireReportsQ.data ?? [];
+
+  // P1-M2: persist every report generation to Firestore as a `reports` doc.
+  // Failures are logged via toast but do NOT block the export (the user's
+  // downloaded file is already on disk). The returned firestoreId is stored
+  // back onto the RecentExport so we can sync deletes later.
+  const persistReportToFirestore = useCallback(async (exp: RecentExport): Promise<string | null> => {
+    try {
+      const reportType = EXPORT_TYPE_TO_REPORT_TYPE[exp.exportType] ?? 'custom';
+      const format = mapFileTypeToReportFormat(exp.fileType);
+      // For JSON exports, store the data as a data: URL so the user can re-download
+      // the exact payload later. Skip for PDFs (HTML payload too large to persist).
+      let storageUrl: string | null = null;
+      if (exp.data && format === 'json') {
+        try {
+          const jsonStr = JSON.stringify(exp.data);
+          // Firestore docs are capped at 1MB — guard against oversized payloads.
+          if (jsonStr.length < 900_000) {
+            storageUrl = `data:application/json;base64,${btoa(unescape(encodeURIComponent(jsonStr)))}`;
+          }
+        } catch { /* ignore encoding errors */ }
+      }
+      const reportId = await createReport({
+        clientId: null,
+        clientTradeName: exp.clientName,
+        reportType,
+        format,
+        title: exp.exportType,
+        period: exp.period,
+        description: `Generated via ${exp.exportType} export`,
+        status: 'ready',
+        fileSize: parseFileSizeBytes(exp.fileSize),
+        storageUrl,
+        generatedBy: 'system',
+        generatedAt: new Date(exp.generatedAt).toISOString(),
+        metadata: {
+          exportType: exp.exportType,
+          clientName: exp.clientName,
+          period: exp.period,
+          fileType: exp.fileType,
+          fileSizeLabel: exp.fileSize,
+        },
+      });
+      return reportId;
+    } catch (err) {
+      console.error('Failed to persist report to Firestore:', err);
+      toast.error('Report saved to local history but failed to sync to Firestore');
+      return null;
+    }
   }, []);
+
+  const addRecentExport = useCallback((exp: RecentExport) => {
+    // P1-M2: persist to Firestore in the background; attach the returned id
+    // back onto the localStorage entry so deletes stay in sync.
+    void persistReportToFirestore(exp).then((firestoreId) => {
+      if (firestoreId) {
+        setRecentExports((prev) =>
+          prev.map((e) => (e.id === exp.id ? { ...e, firestoreId } : e))
+        );
+      }
+    });
+    setRecentExports((prev) => [exp, ...prev].slice(0, HISTORY_LIMIT));
+  }, [persistReportToFirestore]);
 
   const handleGenerateJSON = async () => {
     setGenerating('json');
@@ -1067,8 +1172,55 @@ export default function ReportsPage() {
     }
   };
 
-  const handleDeleteExport = (id: string) => {
+  const handleDeleteExport = async (id: string) => {
+    // P1-M2: also delete the linked Firestore report so the saved reports
+    // section stays in sync.
+    const exp = recentExports.find((e) => e.id === id);
+    if (exp?.firestoreId) {
+      try {
+        await deleteReport(exp.firestoreId);
+        toast.success('Report deleted from saved reports');
+      } catch (err) {
+        console.error('Failed to delete Firestore report:', err);
+        toast.error('Failed to delete from saved reports');
+      }
+    }
     setRecentExports((prev) => prev.filter((e) => e.id !== id));
+  };
+
+  // P1-M2: delete a saved report from Firestore (and also try to remove its
+  // localStorage mirror if one exists).
+  const handleDeleteSavedReport = async (reportId: string) => {
+    try {
+      await deleteReport(reportId);
+      // Remove the localStorage mirror entry whose firestoreId matches
+      setRecentExports((prev) => prev.filter((e) => e.firestoreId !== reportId));
+      toast.success('Saved report deleted');
+    } catch (err) {
+      console.error('Failed to delete saved report:', err);
+      toast.error('Failed to delete saved report');
+    }
+  };
+
+  // P1-M2: re-download a saved JSON report from its persisted data: URL.
+  const handleDownloadSavedReport = (report: FirestoreReport & { id: string }) => {
+    if (!report.storageUrl) {
+      toast.error('Re-download not available for this report. Please regenerate from the export tab.');
+      return;
+    }
+    try {
+      // storageUrl is a data:application/json;base64,... URL
+      const a = document.createElement('a');
+      a.href = report.storageUrl;
+      a.download = `${report.title.replace(/\s+/g, '_')}_${report.period ?? 'report'}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      toast.success('Report downloaded');
+    } catch (err) {
+      console.error('Failed to download saved report:', err);
+      toast.error('Failed to download saved report');
+    }
   };
 
   const handleViewExport = (exp: RecentExport) => {
@@ -1922,9 +2074,133 @@ export default function ReportsPage() {
         </TabsContent>
 
         {/* ══════════════════════════════════════════════════════════════════
-            TAB: Report History (RESTORED — now persisted to localStorage)
+            TAB: Report History (RESTORED — now persisted to localStorage + Firestore)
         ══════════════════════════════════════════════════════════════════ */}
         <TabsContent value="history" className="space-y-6 mt-4">
+          {/* ═══ SAVED REPORTS (Firestore — canonical source going forward) ═══ */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Database className="size-4 text-emerald-600" />
+                  <div>
+                    <CardTitle className="text-base">Saved Reports</CardTitle>
+                    <CardDescription>
+                      All reports persisted to Firestore — accessible across devices &amp; sessions
+                    </CardDescription>
+                  </div>
+                </div>
+                {savedReports.length > 0 && (
+                  <Badge variant="outline" className="text-xs">
+                    {savedReports.length} saved
+                  </Badge>
+                )}
+              </div>
+            </CardHeader>
+            <CardContent>
+              {fireReportsQ.loading ? (
+                <div className="space-y-2">
+                  {[1, 2, 3].map((i) => (
+                    <Skeleton key={i} className="h-12 rounded-lg" />
+                  ))}
+                </div>
+              ) : fireReportsQ.error ? (
+                <div className="flex items-center justify-between gap-3 rounded-lg border border-red-200 bg-red-50/50 p-3 text-sm text-red-700">
+                  <span>Failed to load saved reports: {fireReportsQ.error}</span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs gap-1.5 border-red-300 text-red-700 hover:bg-red-100"
+                    onClick={() => window.location.reload()}
+                  >
+                    <RefreshCw className="size-3" />
+                    Retry
+                  </Button>
+                </div>
+              ) : savedReports.length === 0 ? (
+                <EmptyState
+                  icon={Database}
+                  title="No saved reports yet"
+                  description="Generate your first report to see it here."
+                />
+              ) : (
+                <div className="overflow-x-auto rounded-lg border">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-muted/50">
+                        <TableHead className="whitespace-nowrap">Report Type</TableHead>
+                        <TableHead className="whitespace-nowrap">Client</TableHead>
+                        <TableHead className="whitespace-nowrap">Period</TableHead>
+                        <TableHead className="whitespace-nowrap">Generated At</TableHead>
+                        <TableHead className="whitespace-nowrap">Size</TableHead>
+                        <TableHead className="whitespace-nowrap">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {savedReports.map((report) => {
+                        const exportType = String(report.metadata?.exportType ?? report.title ?? report.reportType);
+                        const config = EXPORT_TYPE_CONFIG[exportType];
+                        const sizeLabel = String(report.metadata?.fileSizeLabel ?? (
+                          report.fileSize > 0 ? `${(report.fileSize / 1024).toFixed(1)} KB` : '—'
+                        ));
+                        return (
+                          <TableRow key={report.reportId} className="hover:bg-muted/30">
+                            <TableCell className="whitespace-nowrap">
+                              <div className="flex items-center gap-2">
+                                <div className={`flex size-7 items-center justify-center rounded ${config?.bgColor ?? 'bg-slate-50'}`}>
+                                  {config?.icon ?? <FileText className="size-3.5" />}
+                                </div>
+                                <span className="font-medium text-sm">{exportType}</span>
+                              </div>
+                            </TableCell>
+                            <TableCell className="whitespace-nowrap text-sm">
+                              {report.clientTradeName ?? 'All Clients'}
+                            </TableCell>
+                            <TableCell className="whitespace-nowrap text-sm">
+                              {report.period ?? '—'}
+                            </TableCell>
+                            <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
+                              {report.generatedAt
+                                ? new Date(report.generatedAt).toLocaleString()
+                                : '—'}
+                            </TableCell>
+                            <TableCell className="whitespace-nowrap text-sm">
+                              <Badge variant="outline" className="text-xs">{sizeLabel}</Badge>
+                            </TableCell>
+                            <TableCell className="whitespace-nowrap">
+                              <div className="flex items-center gap-1">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="size-8 p-0"
+                                  onClick={() => handleDownloadSavedReport(report)}
+                                  title="Download"
+                                  disabled={!report.storageUrl}
+                                >
+                                  <Download className="size-3.5" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="size-8 p-0 text-red-500 hover:text-red-700"
+                                  onClick={() => handleDeleteSavedReport(report.reportId)}
+                                  title="Delete"
+                                >
+                                  <Trash2 className="size-3.5" />
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* ═══ LOCAL HISTORY (localStorage — back-compat) ═══ */}
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
@@ -1933,7 +2209,7 @@ export default function ReportsPage() {
                   <div>
                     <CardTitle className="text-base">Report History</CardTitle>
                     <CardDescription>
-                      Last {HISTORY_LIMIT} generated & exported reports — persisted across sessions
+                      Last {HISTORY_LIMIT} generated & exported reports — local browser history
                     </CardDescription>
                   </div>
                 </div>

@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react'
 import { useApp } from '@/contexts/AppContext'
 import { useAuth } from '@/contexts/AuthContext'
+import { useOrg } from '@/contexts/OrgContext'
 import ReturnsPage from '@/components/returns/ReturnsPage'
 import ReconciliationPage from '@/components/reconciliation/ReconciliationPage'
 import InvoiceWorkspacePage from '@/components/invoices/InvoiceWorkspacePage'
@@ -662,141 +663,131 @@ function EmailVerificationBanner() {
 }
 
 function OnboardingScreen() {
-  const { user, markOnboardingComplete } = useAuth()
+  const { user } = useAuth()
+  const { completeOnboarding } = useOrg()
   const { setCurrentScreen, setCurrentView } = useApp()
   const [saveError, setSaveError] = React.useState<string | null>(null)
+  const [isSubmitting, setIsSubmitting] = React.useState(false)
 
-  // ── Fire-and-forget: save onboarding data to Firestore in the background ──
-  const saveOnboardingToFirestore = async (
-    data: import('@/components/onboarding/OnboardingFlow').OnboardingData,
-    firmId: string
-  ) => {
+  // ── Create the organization + owner membership via the org service ──
+  const createOrganizationForUser = async (
+    data: import('@/components/onboarding/OnboardingFlow').OnboardingData
+  ): Promise<{ orgId: string | null; error: string | null }> => {
+    if (!user) return { orgId: null, error: 'No authenticated user found.' }
+
+    const { createOrganization, updateUserProfile } = await import('@/lib/auth/organizations')
+    const { doc, setDoc, serverTimestamp } = await import('firebase/firestore')
+    const { db } = await import('@/lib/firebase')
+
+    // 1. Create the organization + owner membership + set currentOrganizationId.
+    const { organization, error: orgError } = await createOrganization({
+      name: data.firmName,
+      ownerId: user.id,
+      ownerEmail: user.email,
+      ownerDisplayName: data.fullName || user.name,
+      ownerPhotoURL: user.picture || null,
+      gstin: data.gstin || null,
+      plan: 'free',
+    })
+    if (orgError || !organization) {
+      return { orgId: null, error: orgError || 'Could not create your organization.' }
+    }
+
+    // 2. Enrich the user profile with onboarding metadata (best-effort).
     try {
-      const { doc, setDoc, serverTimestamp } = await import('firebase/firestore')
-      const { db } = await import('@/lib/firebase')
-
-      if (!user) return
-
-      // Update user document
-      await setDoc(doc(db, 'users', user.id), {
-        uid: user.id,
-        fullName: data.fullName,
-        email: data.email,
+      await updateUserProfile(user.id, {
+        displayName: data.fullName,
         phone: data.phone,
-        ageGroup: data.ageGroup,
-        profession: data.profession,
-        experience: data.experience,
-        firmId: firmId || null,
-        firmName: data.firmName,
-        onboardingCompleted: true,
-        clientCount: data.clientCount,
-        monthlyReturns: data.monthlyReturns,
-        gstServices: data.gstServices,
-        painPoints: data.painPoints,
-        referralSource: data.referralSource,
-        trialReasons: data.trialReasons,
-        wantsUpdates: data.wantsUpdates,
-        updatedAt: serverTimestamp(),
-      }, { merge: true })
-      console.log('[Onboarding] ✅ User document saved to Firestore')
-
-      // Save onboarding record
+        company: data.firmName,
+        gstin: data.gstin || null,
+      })
+      // Persist the extended onboarding questionnaire for analytics.
       await setDoc(doc(db, 'onboarding', user.id), {
         ...data,
-        firmId: firmId || null,
+        organizationId: organization.id,
         completedAt: serverTimestamp(),
-      })
-      console.log('[Onboarding] ✅ Onboarding record saved to Firestore')
-    } catch (error) {
-      console.warn('[Onboarding] ⚠️ Background Firestore save failed:', error)
+      }, { merge: true })
+    } catch (err) {
+      console.warn('[Onboarding] Profile enrichment failed:', err)
     }
+
+    return { orgId: organization.id, error: null }
   }
 
-  const handleOnboardingComplete = (
+  const handleOnboardingComplete = async (
     data: import('@/components/onboarding/OnboardingFlow').OnboardingData,
     destination?: import('@/components/onboarding/OnboardingFlow').OnboardingDestination
   ) => {
     setSaveError(null)
-
     if (!user) {
       setSaveError('No authenticated user found. Please sign in again.')
       return
     }
 
-    // ── INSTANT: Mark onboarding complete locally & navigate ──
-    // This happens synchronously — user sees dashboard immediately
-    console.log('[Onboarding] 🚀 Navigating to', destination || 'dashboard', '(optimistic)')
-    markOnboardingComplete(undefined, data.firmName)
-    setCurrentView(destination || 'dashboard')
-    setCurrentScreen('app')
-
-    // ── BACKGROUND: Create firm doc + save everything to Firestore ──
-    // These happen async — user is already in the dashboard
-    console.log('[Onboarding] 📝 Starting background Firestore writes...')
-    ;(async () => {
-      try {
-        const { collection, addDoc, serverTimestamp } = await import('firebase/firestore')
-        const { db } = await import('@/lib/firebase')
-
-        // Create firm document
-        let firmId = ''
-        try {
-          const firmRef = await addDoc(collection(db, 'firms'), {
-            ownerId: user.id,
-            firmName: data.firmName,
-            gstin: data.gstin || null,
-            state: data.state,
-            stateCode: data.stateCode,
-            organizationType: data.organizationType,
-            icaiMembershipNo: data.icaiMembershipNo || null,
-            officeAddress: data.officeAddress || null,
-            createdAt: serverTimestamp(),
-          })
-          firmId = firmRef.id
-          console.log('[Onboarding] ✅ Firm created:', firmId)
-
-          // Update the local user with firmId
-          markOnboardingComplete(firmId, data.firmName)
-        } catch (firmError) {
-          console.warn('[Onboarding] ⚠️ Firm creation failed:', firmError)
-        }
-
-        // Save remaining data
-        await saveOnboardingToFirestore(data, firmId)
-      } catch (error) {
-        console.warn('[Onboarding] ⚠️ Background save error:', error)
+    setIsSubmitting(true)
+    try {
+      const { orgId, error: createError } = await createOrganizationForUser(data)
+      if (createError || !orgId) {
+        setSaveError(createError || 'Could not create your organization. Please try again.')
+        setIsSubmitting(false)
+        return
       }
-    })()
+
+      // Reload the org context so the rest of the app sees the new org.
+      await completeOnboarding(orgId)
+
+      // Navigate to the chosen destination.
+      setCurrentView(destination || 'dashboard')
+      setCurrentScreen('app')
+    } catch (err) {
+      setSaveError(
+        err instanceof Error
+          ? err.message
+          : 'Something went wrong while setting up your workspace.'
+      )
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
-  const handleSkip = () => {
+  const handleSkip = async () => {
     setSaveError(null)
-
     if (!user) {
       setSaveError('No authenticated user found. Please sign in again.')
       return
     }
 
-    // ── INSTANT: Navigate immediately ──
-    console.log('[Onboarding] 🚀 Skipping onboarding (optimistic)')
-    markOnboardingComplete()
-    setCurrentView('dashboard')
-    setCurrentScreen('app')
-
-    // ── BACKGROUND: Mark as completed in Firestore ──
-    ;(async () => {
-      try {
-        const { doc, setDoc, serverTimestamp } = await import('firebase/firestore')
-        const { db } = await import('@/lib/firebase')
-        await setDoc(doc(db, 'users', user.id), {
-          onboardingCompleted: true,
-          updatedAt: serverTimestamp(),
-        }, { merge: true })
-        console.log('[Onboarding] ✅ Skip saved to Firestore')
-      } catch (error) {
-        console.warn('[Onboarding] ⚠️ Background skip save failed:', error)
+    setIsSubmitting(true)
+    try {
+      // Skipping still requires an organization — create a default one
+      // using the user's name so the app is fully functional.
+      const { createOrganization } = await import('@/lib/auth/organizations')
+      const { organization, error: orgError } = await createOrganization({
+        name: `${user.name}'s Workspace`,
+        ownerId: user.id,
+        ownerEmail: user.email,
+        ownerDisplayName: user.name,
+        ownerPhotoURL: user.picture || null,
+        gstin: null,
+        plan: 'free',
+      })
+      if (orgError || !organization) {
+        setSaveError(orgError || 'Could not create your workspace. Please try again.')
+        setIsSubmitting(false)
+        return
       }
-    })()
+      await completeOnboarding(organization.id)
+      setCurrentView('dashboard')
+      setCurrentScreen('app')
+    } catch (err) {
+      setSaveError(
+        err instanceof Error
+          ? err.message
+          : 'Something went wrong while setting up your workspace.'
+      )
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   return (
@@ -813,19 +804,30 @@ function OnboardingScreen() {
 
 function AppRouter() {
   const { currentScreen, setCurrentScreen } = useApp()
-  const { isAuthenticated, isInitializing, needsOnboarding, needsEmailVerification } = useAuth()
+  const { isAuthenticated, isInitializing, needsEmailVerification } = useAuth()
+  // ── PART 3 / PART 5 ── The org context is the source of truth for whether
+  // the user has an organization. `needsOrganization` becomes the new
+  // "needs onboarding" gate. `orgLoading` lets us hold the protected routes
+  // until the tenant context is fully resolved so no page ever renders with a
+  // null organizationId.
+  const { needsOrganization, loading: orgLoading, organization, error: orgError, reload: reloadOrg } = useOrg()
+
+  // Derived: a user needs onboarding when authenticated but without an org.
+  const needsOnboarding = isAuthenticated && needsOrganization
 
   useEffect(() => {
     if (isInitializing) return
-    // Only auto-redirect to app if authenticated AND onboarding is complete
-    // Don't redirect if user still needs onboarding — the OnboardingScreen handles its own navigation
-    if (isAuthenticated && !needsOnboarding && currentScreen !== 'app') {
+    // Only auto-redirect to the app when: authenticated, org context resolved,
+    // and the user actually has an organization. Otherwise the OnboardingScreen
+    // handles its own navigation.
+    if (isAuthenticated && !needsOnboarding && !orgLoading && currentScreen !== 'app') {
       setCurrentScreen('app')
     }
-  }, [isAuthenticated, isInitializing, currentScreen, setCurrentScreen, needsOnboarding])
+  }, [isAuthenticated, isInitializing, currentScreen, setCurrentScreen, needsOnboarding, orgLoading])
 
   useEffect(() => {
     if (isInitializing) return
+    // ── PART 5 ── Protected routes: kick unauthenticated users back to landing.
     if (!isAuthenticated && currentScreen === 'app') {
       setCurrentScreen('landing')
     }
@@ -835,6 +837,7 @@ function AppRouter() {
   const handleBookDemo = () => setCurrentScreen('login')
   const handleBackToLanding = () => setCurrentScreen('landing')
 
+  // ── PART 7 ── Loading state while authentication initializes.
   if (isInitializing && !isAuthenticated) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-black">
@@ -848,12 +851,55 @@ function AppRouter() {
     )
   }
 
-  // Show onboarding if user hasn't completed it
-  if (isAuthenticated && needsOnboarding) {
+  // ── PART 7 ── While the org context is resolving after auth, show a brief
+  // loader so protected pages never mount with a null organization.
+  if (isAuthenticated && orgLoading && !needsOnboarding) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-black">
+        <div className="flex flex-col items-center gap-4">
+          <div className="flex h-11 w-11 items-center justify-center rounded-2xl glass-surface motion-pulse">
+            <Zap className="h-5 w-5 accent-text" />
+          </div>
+          <span className="text-sm text-white/55 font-medium">Loading your workspace…</span>
+        </div>
+      </div>
+    )
+  }
+
+  // ── PART 2 ── Authenticated but no organization → onboarding creates one.
+  // BUT: if there was a load error (e.g. Firestore unreachable), show a retry
+  // screen instead of onboarding — onboarding would also fail to write.
+  if (needsOnboarding && !orgError) {
     return <OnboardingScreen />
   }
 
-  if (currentScreen === 'app' && isAuthenticated) {
+  // ── PART 8 ── Org context failed to load after retries. Show a friendly
+  // error with a retry button. Never crash, never expose Firebase errors.
+  if (isAuthenticated && !orgLoading && orgError && !organization) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-black p-6">
+        <div className="flex flex-col items-center gap-5 max-w-md text-center">
+          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-red-500/10 border border-red-500/20">
+            <Zap className="h-6 w-6 text-red-400" />
+          </div>
+          <h2 className="text-xl font-bold text-white">Couldn&apos;t load your workspace</h2>
+          <p className="text-sm text-white/55 leading-relaxed">
+            {orgError}
+          </p>
+          <button
+            onClick={() => reloadOrg()}
+            className="mt-2 inline-flex items-center gap-2 rounded-xl bg-white px-5 py-2.5 text-sm font-semibold text-black hover:bg-white/90 transition-colors"
+          >
+            Try again
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  // ── PART 5 ── Protected route: only render the app shell when authenticated
+  // AND the organization context is fully loaded.
+  if (currentScreen === 'app' && isAuthenticated && organization) {
     return (
       <div className="flex min-h-screen flex-col">
         {needsEmailVerification && <EmailVerificationBanner />}

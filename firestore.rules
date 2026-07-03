@@ -1,0 +1,310 @@
+rules_version = '2';
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// GSTPilot — Firestore Security Rules (Multi-Tenant Isolation)
+//
+// GOVERNANCE PRINCIPLE (PART 9):
+//   Every tenant-scoped document carries an `organizationId` field. A user
+//   may only read / write documents whose `organizationId` matches an
+//   organization they are an active member of.
+//
+//   Membership is resolved by reading `organization_members/{orgId}_{uid}`.
+//   This guarantees no user can ever see another organization's data — even
+//   if client-side code has a bug.
+//
+// COLLECTIONS:
+//   users                    — user profiles (self-owned)
+//   organizations            — tenant roots (members only)
+//   organization_members     — membership join (members only)
+//   onboarding               — onboarding questionnaires (self-owned)
+//   ── Tenant-scoped (all require matching organizationId) ──
+//   clients, invoices, payments, expenses, bank_accounts, bank_transactions,
+//   gst_profiles, gst_returns, notices, reports, tasks, ai_memory,
+//   notifications, documents, returns, reconciliations, activities,
+//   aiRecommendations, leads, deals, meetings, predictions, priorityQueue
+// ═══════════════════════════════════════════════════════════════════════════════
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ─── Helper Functions ─────────────────────────────────────────────────
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function uid() {
+      return request.auth.uid;
+    }
+
+    // The membership document id for a given org + user.
+    function memberDocId(orgId) {
+      return orgId + '_' + uid();
+    }
+
+    // True if the user is an active member of the given org.
+    function isOrgMember(orgId) {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/organization_members/$(memberDocId(orgId)))
+        && get(/databases/$(database)/documents/organization_members/$(memberDocId(orgId)))
+             .data.status == 'active';
+    }
+
+    // The user's role within the given org (or empty string).
+    function roleIn(orgId) {
+      return get(/databases/$(database)/documents/organization_members/$(memberDocId(orgId)))
+        .data.role;
+    }
+
+    function isOwnerOrAdmin(orgId) {
+      return isOrgMember(orgId)
+        && roleIn(orgId) in ['owner', 'admin'];
+    }
+
+    function canMutate(orgId) {
+      return isOrgMember(orgId)
+        && roleIn(orgId) in ['owner', 'admin', 'accountant', 'employee'];
+    }
+
+    // True if the stored resource's organizationId matches an org the user
+    // belongs to. Used for reads / updates / deletes.
+    function resourceBelongsToUserOrg() {
+      return isOrgMember(resource.data.organizationId);
+    }
+
+    // True if the incoming write's organizationId matches an org the user
+    // belongs to. Used on create / update.
+    function writeScopedToUserOrg() {
+      return isOrgMember(request.resource.data.organizationId);
+    }
+
+    // True on update if the organizationId is unchanged (prevents moving a
+    // document across tenants).
+    function orgIdUnchanged() {
+      return resource.data.organizationId == request.resource.data.organizationId;
+    }
+
+    // ─── User Profiles (self-owned) ───────────────────────────────────────
+    match /users/{userId} {
+      allow read:   if isSignedIn() && uid() == userId;
+      allow create: if isSignedIn() && uid() == userId;
+      allow update: if isSignedIn() && uid() == userId;
+      allow delete: if false; // account closure is server-side only
+    }
+
+    // ─── Organizations ────────────────────────────────────────────────────
+    match /organizations/{orgId} {
+      allow read:   if isOrgMember(orgId);
+      allow create: if isSignedIn(); // creator becomes owner via membership row
+      allow update: if isOwnerOrAdmin(orgId);
+      allow delete: if isOrgMember(orgId) && roleIn(orgId) == 'owner';
+    }
+
+    // ─── Organization Members ─────────────────────────────────────────────
+    match /organization_members/{memberId} {
+      // Self-read OR any member of the org can read the full roster.
+      allow read: if isSignedIn()
+        && (uid() == resource.data.userId
+            || isOrgMember(resource.data.organizationId));
+
+      // Owners/admins can create new member rows (invites).
+      allow create: if isSignedIn()
+        && isOwnerOrAdmin(request.resource.data.organizationId);
+
+      // Role / status changes are owner/admin only. A member may NOT change
+      // their own role (prevents privilege escalation).
+      allow update: if isSignedIn()
+        && isOwnerOrAdmin(resource.data.organizationId)
+        && uid() != resource.data.userId;
+
+      // Removal is owner/admin only. A member may remove themselves (leave).
+      allow delete: if isSignedIn()
+        && (isOwnerOrAdmin(resource.data.organizationId)
+            || uid() == resource.data.userId);
+    }
+
+    // ─── Onboarding Records (self-owned) ──────────────────────────────────
+    match /onboarding/{userId} {
+      allow read, create, update: if isSignedIn() && uid() == userId;
+      allow delete: if false;
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    // TENANT-SCOPED COLLECTIONS
+    //
+    // Every document here MUST carry `organizationId`. The rules below are
+    // identical for every tenant-scoped collection — they enforce:
+    //   read   → member of the owning org
+    //   create → member of the org in the incoming payload
+    //   update → member of the owning org + can mutate + orgId unchanged
+    //   delete → owner/admin of the owning org
+    // ══════════════════════════════════════════════════════════════════════
+
+    match /clients/{docId} {
+      allow read:   if isSignedIn() && resourceBelongsToUserOrg();
+      allow create: if isSignedIn() && writeScopedToUserOrg();
+      allow update: if isSignedIn() && resourceBelongsToUserOrg() && canMutate(resource.data.organizationId) && orgIdUnchanged();
+      allow delete: if isSignedIn() && resourceBelongsToUserOrg() && isOwnerOrAdmin(resource.data.organizationId);
+    }
+
+    match /invoices/{docId} {
+      allow read:   if isSignedIn() && resourceBelongsToUserOrg();
+      allow create: if isSignedIn() && writeScopedToUserOrg();
+      allow update: if isSignedIn() && resourceBelongsToUserOrg() && canMutate(resource.data.organizationId) && orgIdUnchanged();
+      allow delete: if isSignedIn() && resourceBelongsToUserOrg() && isOwnerOrAdmin(resource.data.organizationId);
+    }
+
+    match /payments/{docId} {
+      allow read:   if isSignedIn() && resourceBelongsToUserOrg();
+      allow create: if isSignedIn() && writeScopedToUserOrg();
+      allow update: if isSignedIn() && resourceBelongsToUserOrg() && canMutate(resource.data.organizationId) && orgIdUnchanged();
+      allow delete: if isSignedIn() && resourceBelongsToUserOrg() && isOwnerOrAdmin(resource.data.organizationId);
+    }
+
+    match /expenses/{docId} {
+      allow read:   if isSignedIn() && resourceBelongsToUserOrg();
+      allow create: if isSignedIn() && writeScopedToUserOrg();
+      allow update: if isSignedIn() && resourceBelongsToUserOrg() && canMutate(resource.data.organizationId) && orgIdUnchanged();
+      allow delete: if isSignedIn() && resourceBelongsToUserOrg() && isOwnerOrAdmin(resource.data.organizationId);
+    }
+
+    match /bank_accounts/{docId} {
+      allow read:   if isSignedIn() && resourceBelongsToUserOrg();
+      allow create: if isSignedIn() && writeScopedToUserOrg();
+      allow update: if isSignedIn() && resourceBelongsToUserOrg() && canMutate(resource.data.organizationId) && orgIdUnchanged();
+      allow delete: if isSignedIn() && resourceBelongsToUserOrg() && isOwnerOrAdmin(resource.data.organizationId);
+    }
+
+    match /bank_transactions/{docId} {
+      allow read:   if isSignedIn() && resourceBelongsToUserOrg();
+      allow create: if isSignedIn() && writeScopedToUserOrg();
+      allow update: if isSignedIn() && resourceBelongsToUserOrg() && canMutate(resource.data.organizationId) && orgIdUnchanged();
+      allow delete: if isSignedIn() && resourceBelongsToUserOrg() && isOwnerOrAdmin(resource.data.organizationId);
+    }
+
+    match /gst_profiles/{docId} {
+      allow read:   if isSignedIn() && resourceBelongsToUserOrg();
+      allow create: if isSignedIn() && writeScopedToUserOrg();
+      allow update: if isSignedIn() && resourceBelongsToUserOrg() && canMutate(resource.data.organizationId) && orgIdUnchanged();
+      allow delete: if isSignedIn() && resourceBelongsToUserOrg() && isOwnerOrAdmin(resource.data.organizationId);
+    }
+
+    match /gst_returns/{docId} {
+      allow read:   if isSignedIn() && resourceBelongsToUserOrg();
+      allow create: if isSignedIn() && writeScopedToUserOrg();
+      allow update: if isSignedIn() && resourceBelongsToUserOrg() && canMutate(resource.data.organizationId) && orgIdUnchanged();
+      allow delete: if isSignedIn() && resourceBelongsToUserOrg() && isOwnerOrAdmin(resource.data.organizationId);
+    }
+
+    match /notices/{docId} {
+      allow read:   if isSignedIn() && resourceBelongsToUserOrg();
+      allow create: if isSignedIn() && writeScopedToUserOrg();
+      allow update: if isSignedIn() && resourceBelongsToUserOrg() && canMutate(resource.data.organizationId) && orgIdUnchanged();
+      allow delete: if isSignedIn() && resourceBelongsToUserOrg() && isOwnerOrAdmin(resource.data.organizationId);
+    }
+
+    match /reports/{docId} {
+      allow read:   if isSignedIn() && resourceBelongsToUserOrg();
+      allow create: if isSignedIn() && writeScopedToUserOrg();
+      allow update: if isSignedIn() && resourceBelongsToUserOrg() && canMutate(resource.data.organizationId) && orgIdUnchanged();
+      allow delete: if isSignedIn() && resourceBelongsToUserOrg() && isOwnerOrAdmin(resource.data.organizationId);
+    }
+
+    match /tasks/{docId} {
+      allow read:   if isSignedIn() && resourceBelongsToUserOrg();
+      allow create: if isSignedIn() && writeScopedToUserOrg();
+      allow update: if isSignedIn() && resourceBelongsToUserOrg() && canMutate(resource.data.organizationId) && orgIdUnchanged();
+      allow delete: if isSignedIn() && resourceBelongsToUserOrg() && isOwnerOrAdmin(resource.data.organizationId);
+    }
+
+    match /ai_memory/{docId} {
+      allow read:   if isSignedIn() && resourceBelongsToUserOrg();
+      allow create: if isSignedIn() && writeScopedToUserOrg();
+      allow update: if isSignedIn() && resourceBelongsToUserOrg() && canMutate(resource.data.organizationId) && orgIdUnchanged();
+      allow delete: if isSignedIn() && resourceBelongsToUserOrg() && isOwnerOrAdmin(resource.data.organizationId);
+    }
+
+    match /notifications/{docId} {
+      allow read:   if isSignedIn() && resourceBelongsToUserOrg();
+      allow create: if isSignedIn() && writeScopedToUserOrg();
+      allow update: if isSignedIn() && resourceBelongsToUserOrg() && canMutate(resource.data.organizationId) && orgIdUnchanged();
+      allow delete: if isSignedIn() && resourceBelongsToUserOrg() && isOwnerOrAdmin(resource.data.organizationId);
+    }
+
+    match /documents/{docId} {
+      allow read:   if isSignedIn() && resourceBelongsToUserOrg();
+      allow create: if isSignedIn() && writeScopedToUserOrg();
+      allow update: if isSignedIn() && resourceBelongsToUserOrg() && canMutate(resource.data.organizationId) && orgIdUnchanged();
+      allow delete: if isSignedIn() && resourceBelongsToUserOrg() && isOwnerOrAdmin(resource.data.organizationId);
+    }
+
+    match /returns/{docId} {
+      allow read:   if isSignedIn() && resourceBelongsToUserOrg();
+      allow create: if isSignedIn() && writeScopedToUserOrg();
+      allow update: if isSignedIn() && resourceBelongsToUserOrg() && canMutate(resource.data.organizationId) && orgIdUnchanged();
+      allow delete: if isSignedIn() && resourceBelongsToUserOrg() && isOwnerOrAdmin(resource.data.organizationId);
+    }
+
+    match /reconciliations/{docId} {
+      allow read:   if isSignedIn() && resourceBelongsToUserOrg();
+      allow create: if isSignedIn() && writeScopedToUserOrg();
+      allow update: if isSignedIn() && resourceBelongsToUserOrg() && canMutate(resource.data.organizationId) && orgIdUnchanged();
+      allow delete: if isSignedIn() && resourceBelongsToUserOrg() && isOwnerOrAdmin(resource.data.organizationId);
+    }
+
+    match /activities/{docId} {
+      allow read:   if isSignedIn() && resourceBelongsToUserOrg();
+      allow create: if isSignedIn() && writeScopedToUserOrg();
+      allow update: if isSignedIn() && resourceBelongsToUserOrg() && canMutate(resource.data.organizationId) && orgIdUnchanged();
+      allow delete: if isSignedIn() && resourceBelongsToUserOrg() && isOwnerOrAdmin(resource.data.organizationId);
+    }
+
+    match /aiRecommendations/{docId} {
+      allow read:   if isSignedIn() && resourceBelongsToUserOrg();
+      allow create: if isSignedIn() && writeScopedToUserOrg();
+      allow update: if isSignedIn() && resourceBelongsToUserOrg() && canMutate(resource.data.organizationId) && orgIdUnchanged();
+      allow delete: if isSignedIn() && resourceBelongsToUserOrg() && isOwnerOrAdmin(resource.data.organizationId);
+    }
+
+    match /leads/{docId} {
+      allow read:   if isSignedIn() && resourceBelongsToUserOrg();
+      allow create: if isSignedIn() && writeScopedToUserOrg();
+      allow update: if isSignedIn() && resourceBelongsToUserOrg() && canMutate(resource.data.organizationId) && orgIdUnchanged();
+      allow delete: if isSignedIn() && resourceBelongsToUserOrg() && isOwnerOrAdmin(resource.data.organizationId);
+    }
+
+    match /deals/{docId} {
+      allow read:   if isSignedIn() && resourceBelongsToUserOrg();
+      allow create: if isSignedIn() && writeScopedToUserOrg();
+      allow update: if isSignedIn() && resourceBelongsToUserOrg() && canMutate(resource.data.organizationId) && orgIdUnchanged();
+      allow delete: if isSignedIn() && resourceBelongsToUserOrg() && isOwnerOrAdmin(resource.data.organizationId);
+    }
+
+    match /meetings/{docId} {
+      allow read:   if isSignedIn() && resourceBelongsToUserOrg();
+      allow create: if isSignedIn() && writeScopedToUserOrg();
+      allow update: if isSignedIn() && resourceBelongsToUserOrg() && canMutate(resource.data.organizationId) && orgIdUnchanged();
+      allow delete: if isSignedIn() && resourceBelongsToUserOrg() && isOwnerOrAdmin(resource.data.organizationId);
+    }
+
+    match /predictions/{docId} {
+      allow read:   if isSignedIn() && resourceBelongsToUserOrg();
+      allow create: if isSignedIn() && writeScopedToUserOrg();
+      allow update: if isSignedIn() && resourceBelongsToUserOrg() && canMutate(resource.data.organizationId) && orgIdUnchanged();
+      allow delete: if isSignedIn() && resourceBelongsToUserOrg() && isOwnerOrAdmin(resource.data.organizationId);
+    }
+
+    match /priorityQueue/{docId} {
+      allow read:   if isSignedIn() && resourceBelongsToUserOrg();
+      allow create: if isSignedIn() && writeScopedToUserOrg();
+      allow update: if isSignedIn() && resourceBelongsToUserOrg() && canMutate(resource.data.organizationId) && orgIdUnchanged();
+      allow delete: if isSignedIn() && resourceBelongsToUserOrg() && isOwnerOrAdmin(resource.data.organizationId);
+    }
+
+    // ─── Default Deny ─────────────────────────────────────────────────────
+    // Any collection not explicitly matched above is denied by default.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

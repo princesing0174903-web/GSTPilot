@@ -73,7 +73,7 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
 
     try {
       const { signInWithEmail } = await import('@/lib/auth');
-      const { user, error: authError } = await signInWithEmail(email, password);
+      const { user, error: authError } = await signInWithEmail(email, password, rememberMe);
       if (authError) {
         setLocalError(authError);
         return;
@@ -125,7 +125,7 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
     setLocalLoading(true);
     try {
       const { signInWithGoogle } = await import('@/lib/auth');
-      const { error: googleError } = await signInWithGoogle();
+      const { error: googleError } = await signInWithGoogle(rememberMe);
       if (googleError) {
         // Show the specific Firebase error (e.g., unauthorized-domain, popup-blocked)
         setLocalError(googleError);

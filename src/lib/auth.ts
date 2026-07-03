@@ -1,3 +1,16 @@
+// ═══════════════════════════════════════════════════════════════════════════════
+// GSTPilot — Firebase Auth Action Wrappers
+//
+// Thin wrappers around Firebase Auth methods. Each function:
+//   - Returns `{ user, error }` (never throws raw Firebase errors)
+//   - Uses {@link friendlyAuthError} so the UI never sees internal codes
+//   - Defers Firestore writes to the AuthContext `onAuthStateChanged`
+//     listener to avoid duplicate writes
+//
+// UI components import these wrappers (via dynamic import) to perform sign-in,
+// sign-up, password reset, Google sign-in, and sign-out.
+// ═══════════════════════════════════════════════════════════════════════════════
+
 import {
   signInWithPopup,
   signInWithRedirect,
@@ -8,95 +21,93 @@ import {
   sendPasswordResetEmail,
   sendEmailVerification,
   updateProfile,
+  setPersistence,
+  browserLocalPersistence,
+  browserSessionPersistence,
+  inMemoryPersistence,
   User,
-} from "firebase/auth";
-import { doc, setDoc, getDoc, serverTimestamp } from "firebase/firestore";
-import { auth, googleProvider, db } from "./firebase";
+} from 'firebase/auth';
+import { auth, googleProvider } from './firebase';
+import { friendlyAuthError } from './auth/errors';
 
-// ── Error code to human-readable message mapping ──
-const AUTH_ERROR_MESSAGES: Record<string, string> = {
-  'auth/unauthorized-domain': 'This domain is not authorized for Google Sign-In. Add it in Firebase Console → Authentication → Settings → Authorized domains.',
-  'auth/popup-blocked': 'Pop-up was blocked by your browser. Please allow pop-ups for this site and try again.',
-  'auth/popup-closed-by-user': 'Sign-in was cancelled. Please try again.',
-  'auth/cancelled-popup-request': 'Only one popup request is allowed at a time. Please try again.',
-  'auth/redirect-operation-cancelled': 'The redirect operation was cancelled. Please try again.',
-  'auth/network-request-failed': 'Network error. Please check your internet connection and try again.',
-  'auth/too-many-requests': 'Too many attempts. Please wait a moment and try again.',
-  'auth/account-exists-with-different-credential': 'An account already exists with this email using a different sign-in method.',
-};
+// ── Re-export so existing imports keep working ──
+export { friendlyAuthError as getAuthErrorMessage } from './auth/errors';
+export { onAuthStateChanged, auth };
+export type { User };
 
-export function getAuthErrorMessage(error: unknown): string {
-  if (error && typeof error === 'object' && 'code' in error) {
-    const code = (error as { code?: string }).code || '';
-    return AUTH_ERROR_MESSAGES[code] || `Authentication error (${code}). Please try again.`;
-  }
-  if (error instanceof Error) {
-    return error.message;
-  }
-  return 'An unexpected authentication error occurred. Please try again.';
-}
-
-// ── GOOGLE SIGN IN (popup primary, redirect fallback) ──
-// NOTE: We do NOT call saveUserToFirestore here. The AuthContext's
-// onAuthStateChanged listener handles Firestore doc creation automatically.
-// This avoids duplicate Firestore writes on every Google sign-in.
-export async function signInWithGoogle(): Promise<{ user: User | null; error: string | null }> {
+/**
+ * Google Sign-In. Tries a popup first, falls back to a redirect if the popup
+ * is blocked. The `rememberMe` flag controls persistence:
+ *   - `true`  → `browserLocalPersistence` (survives browser restart)
+ *   - `false` → `browserSessionPersistence` (cleared when tab closes)
+ */
+export async function signInWithGoogle(
+  rememberMe = true
+): Promise<{ user: User | null; error: string | null }> {
   try {
+    await setPersistence(
+      auth,
+      rememberMe ? browserLocalPersistence : browserSessionPersistence
+    );
     const result = await signInWithPopup(auth, googleProvider);
-    // Success — onAuthStateChanged in AuthContext will handle Firestore + state
     return { user: result.user, error: null };
   } catch (error: unknown) {
     const code = (error as { code?: string })?.code || '';
 
-    // If popup is blocked, fall back to redirect
+    // Popup blocked → fall back to redirect.
     if (code === 'auth/popup-blocked' || code === 'auth/cancelled-popup-request') {
       try {
         await signInWithRedirect(auth, googleProvider);
         return { user: null, error: null };
       } catch (redirectError: unknown) {
-        return { user: null, error: getAuthErrorMessage(redirectError) };
+        return { user: null, error: friendlyAuthError(redirectError) };
       }
     }
 
-    return { user: null, error: getAuthErrorMessage(error) };
+    return { user: null, error: friendlyAuthError(error) };
   }
 }
 
-// ── HANDLE GOOGLE REDIRECT RESULT ──
-// Called by AuthContext when the page loads after a redirect back from Google.
-// NOTE: Firestore doc creation is handled by onAuthStateChanged, not here.
-export async function handleRedirectResult(): Promise<{ user: User | null; error: string | null }> {
+/**
+ * Handle the redirect result when the page loads after a Google redirect
+ * sign-in. Firestore doc creation is handled by `onAuthStateChanged`.
+ */
+export async function handleRedirectResult(): Promise<{
+  user: User | null;
+  error: string | null;
+}> {
   try {
     const result = await getRedirectResult(auth);
-    if (result?.user) {
-      return { user: result.user, error: null };
-    }
-    return { user: null, error: null };
+    return { user: result?.user ?? null, error: null };
   } catch (error: unknown) {
-    return { user: null, error: getAuthErrorMessage(error) };
+    return { user: null, error: friendlyAuthError(error) };
   }
 }
 
-// ── EMAIL SIGN IN ──
-export async function signInWithEmail(email: string, password: string): Promise<{ user: User | null; error: string | null }> {
+/**
+ * Email + password sign-in. `rememberMe` toggles persistence.
+ */
+export async function signInWithEmail(
+  email: string,
+  password: string,
+  rememberMe = true
+): Promise<{ user: User | null; error: string | null }> {
   try {
+    await setPersistence(
+      auth,
+      rememberMe ? browserLocalPersistence : browserSessionPersistence
+    );
     const result = await signInWithEmailAndPassword(auth, email, password);
     return { user: result.user, error: null };
   } catch (error: unknown) {
-    const code = (error as { code?: string })?.code || "";
-    const messages: Record<string, string> = {
-      "auth/user-not-found": "No account found with this email.",
-      "auth/wrong-password": "Incorrect password. Try again.",
-      "auth/invalid-credential": "Invalid email or password.",
-      "auth/invalid-email": "Please enter a valid email address.",
-      "auth/too-many-requests": "Too many attempts. Try again later.",
-      "auth/user-disabled": "This account has been disabled.",
-    };
-    return { user: null, error: messages[code] || "Sign in failed. Please try again." };
+    return { user: null, error: friendlyAuthError(error) };
   }
 }
 
-// ── EMAIL SIGN UP ──
+/**
+ * Email + password sign-up. Sends a verification email and lets the
+ * `onAuthStateChanged` listener create the Firestore user profile.
+ */
 export async function signUpWithEmail(
   email: string,
   password: string,
@@ -105,69 +116,67 @@ export async function signUpWithEmail(
   try {
     const result = await createUserWithEmailAndPassword(auth, email, password);
     await updateProfile(result.user, { displayName: name });
-    await sendEmailVerification(result.user);
-    await saveUserToFirestore(result.user, name);
+    // Best-effort verification email — don't block sign-up on failure.
+    try {
+      await sendEmailVerification(result.user);
+    } catch {
+      /* non-fatal */
+    }
     return { user: result.user, error: null };
   } catch (error: unknown) {
-    const code = (error as { code?: string })?.code || "";
-    const messages: Record<string, string> = {
-      "auth/email-already-in-use": "Account already exists. Sign in instead.",
-      "auth/weak-password": "Password must be at least 6 characters.",
-      "auth/invalid-email": "Please enter a valid email address.",
-    };
-    return { user: null, error: messages[code] || "Sign up failed. Please try again." };
+    return { user: null, error: friendlyAuthError(error) };
   }
 }
 
-// ── SEND EMAIL VERIFICATION ──
+/**
+ * Resend the email verification link to the current user.
+ */
 export async function sendVerificationEmail(): Promise<{ error: string | null }> {
   try {
     if (auth.currentUser) {
       await sendEmailVerification(auth.currentUser);
     }
     return { error: null };
-  } catch {
-    return { error: "Could not send verification email." };
+  } catch (error: unknown) {
+    return { error: friendlyAuthError(error) };
   }
 }
 
-// ── PASSWORD RESET ──
+/**
+ * Send a password-reset email. Always returns a friendly message even on
+ * failure (to avoid leaking whether an account exists).
+ */
 export async function resetPassword(email: string): Promise<{ error: string | null }> {
   try {
     await sendPasswordResetEmail(auth, email);
     return { error: null };
-  } catch {
-    return { error: "Could not send reset email. Check the address." };
-  }
-}
-
-// ── SIGN OUT ──
-export async function logOut() {
-  await signOut(auth);
-}
-
-// ── SAVE USER TO FIRESTORE ──
-// Only used for email sign-up. Google sign-in uses AuthContext's fetchOrCreateFirestoreUser.
-async function saveUserToFirestore(user: User, displayName?: string) {
-  try {
-    const userRef = doc(db, "users", user.uid);
-    const exists = await getDoc(userRef);
-    if (!exists.exists()) {
-      await setDoc(userRef, {
-        uid: user.uid,
-        email: user.email,
-        displayName: displayName || user.displayName || "User",
-        photoURL: user.photoURL || null,
-        onboardingCompleted: false,
-        createdAt: serverTimestamp(),
-        plan: "free",
-      });
+  } catch (error: unknown) {
+    // For user-not-found, Firebase still errors — but we don't want to leak
+    // that the account doesn't exist. Return success.
+    const code = (error as { code?: string })?.code || '';
+    if (code === 'auth/user-not-found' || code === 'auth/invalid-email') {
+      return { error: null };
     }
-  } catch (error) {
-    console.warn("Failed to save user to Firestore:", error);
+    return { error: friendlyAuthError(error) };
   }
 }
 
-// ── AUTH STATE LISTENER ──
-export { onAuthStateChanged, auth };
-export type { User };
+/**
+ * Sign out the current user. Clears Firebase Auth state; the
+ * `onAuthStateChanged` listener clears local app state.
+ */
+export async function logOut(): Promise<void> {
+  try {
+    // Switch to in-memory persistence so any cached token is dropped.
+    await setPersistence(auth, inMemoryPersistence);
+    await signOut(auth);
+  } catch (error) {
+    console.warn('[Auth] signOut failed:', friendlyAuthError(error));
+    // Still attempt the raw signOut as a last resort.
+    try {
+      await signOut(auth);
+    } catch {
+      /* swallow — UI state is cleared by onAuthStateChanged anyway */
+    }
+  }
+}

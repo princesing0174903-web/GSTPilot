@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { seedPurchaseBills, calculatePurchaseTotals } from '@/lib/invoices/purchases'
+import { calculatePurchaseTotals } from '@/lib/invoices/purchases'
 import { graphEvents } from '@/lib/graph/live-update'
 
 // GET /api/purchases — Fetch all Purchase Bills (vendor invoices)
+// Returns an empty array when no purchase bills exist (real empty state — no mock data).
 export async function GET() {
   try {
     const purchases = await db.purchaseBill.findMany({
@@ -13,12 +14,7 @@ export async function GET() {
       },
     })
 
-    if (!purchases || purchases.length === 0) {
-      // Fall back to seed data when DB is empty (e.g. fresh install / preview mode)
-      return NextResponse.json({ purchases: seedPurchaseBills() })
-    }
-
-    return NextResponse.json({ purchases })
+    return NextResponse.json({ purchases: purchases ?? [] })
   } catch (error) {
     console.error('GET /api/purchases error:', error)
     return NextResponse.json(

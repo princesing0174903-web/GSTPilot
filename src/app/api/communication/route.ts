@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { seedInvoices } from '@/lib/invoices/invoices'
 import type { InvoiceCloudInvoice } from '@/lib/invoices/types'
 import {
   AI_ENGINE_STAGES,
@@ -8,27 +7,21 @@ import {
   detectEvents,
   runCollectionRecovery,
   getAiEngineStats,
-  seedCommunicationLogs,
 } from '@/lib/communication/ai-engine'
 import {
   REPORT_TYPES,
-  seedReportDistributions,
   getReportStats,
 } from '@/lib/communication/reports'
 import {
-  seedWhatsAppMessages,
   getWhatsAppStats,
 } from '@/lib/communication/whatsapp'
 import {
-  seedEmailMessages,
   getEmailStats,
 } from '@/lib/communication/email'
 import {
-  seedSMSMessages,
   getSMSStats,
 } from '@/lib/communication/sms'
 import {
-  seedNotifications,
   getNotificationStats,
 } from '@/lib/communication/notifications'
 import type {
@@ -172,10 +165,7 @@ export async function GET() {
     const logRows = await db.communicationLog.findMany({
       orderBy: { createdAt: 'desc' },
     })
-    const logs: CommunicationLog[] =
-      logRows && logRows.length > 0
-        ? logRows.map(mapLogRow)
-        : seedCommunicationLogs()
+    const logs: CommunicationLog[] = (logRows ?? []).map(mapLogRow)
 
     const aiStats = getAiEngineStats(logs)
     const recentLogs = logs.slice(0, 10)
@@ -184,22 +174,18 @@ export async function GET() {
     const invoiceRows = await db.invoice.findMany({
       orderBy: { createdAt: 'desc' },
     })
-    const invoices: InvoiceCloudInvoice[] =
-      invoiceRows && invoiceRows.length > 0
-        ? invoiceRows.map(mapInvoiceRow)
-        : seedInvoices()
+    const invoices: InvoiceCloudInvoice[] = (invoiceRows ?? []).map(mapInvoiceRow)
 
     const recovery = runCollectionRecovery(invoices)
 
     // ── 3. Report Distribution ───────────────────────────────────────────────
-    // (No ReportDistribution Prisma model — always seed.)
-    const distributions = seedReportDistributions()
+    // No ReportDistribution Prisma model — return real empty state (no mock data).
+    const distributions: Parameters<typeof getReportStats>[0] = []
     const reportStats = getReportStats(distributions)
 
     // ── 4. Channel summary ───────────────────────────────────────────────────
-    // Aggregate counts + delivery stats across all 4 channels. We use the
-    // engine seed functions as fallback when a DB table is empty so the
-    // dashboard always shows realistic data.
+    // Aggregate counts + delivery stats across all 4 channels. When a DB
+    // table is empty the stats reflect a real empty state (no mock data).
     const [waRows, emRows, smsRows, notifRows] = await Promise.all([
       db.whatsAppMessage.findMany({ orderBy: { createdAt: 'desc' } }),
       db.emailMessage.findMany({ orderBy: { createdAt: 'desc' } }),
@@ -211,8 +197,7 @@ export async function GET() {
     ])
 
     const whatsappStats = getWhatsAppStats(
-      waRows && waRows.length > 0
-        ? waRows.map((r) => ({
+      (waRows ?? []).map((r) => ({
             id: r.id,
             clientId: r.clientId,
             recipientName: r.recipientName,
@@ -222,8 +207,8 @@ export async function GET() {
             messageBody: r.messageBody,
             mediaUrl: r.mediaUrl,
             caption: r.caption,
-            category: r.category as ReturnType<typeof seedWhatsAppMessages>[number]['category'],
-            status: r.status as ReturnType<typeof seedWhatsAppMessages>[number]['status'],
+            category: r.category as Parameters<typeof getWhatsAppStats>[0][number]['category'],
+            status: r.status as Parameters<typeof getWhatsAppStats>[0][number]['status'],
             errorMessage: r.errorMessage,
             sentAt: r.sentAt ? r.sentAt.toISOString() : null,
             deliveredAt: r.deliveredAt ? r.deliveredAt.toISOString() : null,
@@ -231,12 +216,10 @@ export async function GET() {
             createdAt: r.createdAt.toISOString(),
             updatedAt: r.updatedAt.toISOString(),
           }))
-        : seedWhatsAppMessages()
     )
 
     const emailStats = getEmailStats(
-      emRows && emRows.length > 0
-        ? emRows.map((r) => ({
+      (emRows ?? []).map((r) => ({
             id: r.id,
             clientId: r.clientId,
             recipientName: r.recipientName,
@@ -245,9 +228,9 @@ export async function GET() {
             subject: r.subject,
             bodyHtml: r.bodyHtml,
             bodyText: r.bodyText,
-            category: r.category as ReturnType<typeof seedEmailMessages>[number]['category'],
+            category: r.category as Parameters<typeof getEmailStats>[0][number]['category'],
             attachments: r.attachments,
-            status: r.status as ReturnType<typeof seedEmailMessages>[number]['status'],
+            status: r.status as Parameters<typeof getEmailStats>[0][number]['status'],
             errorMessage: r.errorMessage,
             sentAt: r.sentAt ? r.sentAt.toISOString() : null,
             deliveredAt: r.deliveredAt ? r.deliveredAt.toISOString() : null,
@@ -255,42 +238,37 @@ export async function GET() {
             createdAt: r.createdAt.toISOString(),
             updatedAt: r.updatedAt.toISOString(),
           }))
-        : seedEmailMessages()
     )
 
     const smsStats = getSMSStats(
-      smsRows && smsRows.length > 0
-        ? smsRows.map((r) => ({
+      (smsRows ?? []).map((r) => ({
             id: r.id,
             clientId: r.clientId,
             recipientName: r.recipientName,
             recipientPhone: r.recipientPhone,
             message: r.message,
-            category: r.category as ReturnType<typeof seedSMSMessages>[number]['category'],
-            status: r.status as ReturnType<typeof seedSMSMessages>[number]['status'],
+            category: r.category as Parameters<typeof getSMSStats>[0][number]['category'],
+            status: r.status as Parameters<typeof getSMSStats>[0][number]['status'],
             errorMessage: r.errorMessage,
             sentAt: r.sentAt ? r.sentAt.toISOString() : null,
             deliveredAt: r.deliveredAt ? r.deliveredAt.toISOString() : null,
             createdAt: r.createdAt.toISOString(),
             updatedAt: r.updatedAt.toISOString(),
           }))
-        : seedSMSMessages()
     )
 
-    const notificationStats =
-      notifRows && notifRows.length > 0
-        ? getNotificationStats(
-            notifRows.map((r) => ({
+    const notificationStats = getNotificationStats(
+      (notifRows ?? []).map((r) => ({
               id: r.id,
               userId: r.userId,
               clientId: r.clientId,
-              type: r.type as ReturnType<typeof seedNotifications>[number]['type'],
+              type: r.type as Parameters<typeof getNotificationStats>[0][number]['type'],
               category: r.category,
               title: r.title,
               message: r.message,
               actionUrl: r.actionUrl,
               isRead: r.isRead,
-              priority: r.priority as ReturnType<typeof seedNotifications>[number]['priority'],
+              priority: r.priority as Parameters<typeof getNotificationStats>[0][number]['priority'],
               dismissed: r.dismissed,
               scheduledAt: r.scheduledAt ? r.scheduledAt.toISOString() : null,
               sentAt: r.sentAt ? r.sentAt.toISOString() : null,
@@ -298,8 +276,7 @@ export async function GET() {
               createdAt: r.createdAt.toISOString(),
               updatedAt: r.updatedAt.toISOString(),
             }))
-          )
-        : getNotificationStats(seedNotifications())
+    )
 
     const channelSummary = {
       whatsapp: whatsappStats,

@@ -34,23 +34,23 @@ import type { RmbState } from '@/lib/rmb/types';
 import { getGraphState, formatGraphContextBlock, executeQuery } from '@/lib/graph/engine';
 import type { GraphState } from '@/lib/graph/types';
 import { db } from '@/lib/db';
-import { getInvoiceStats, seedInvoices } from '@/lib/invoices/invoices';
-import { getPurchaseStats, seedPurchaseBills } from '@/lib/invoices/purchases';
-import { getExpenseStats, seedExpenses } from '@/lib/invoices/expenses';
+import { getInvoiceStats } from '@/lib/invoices/invoices';
+import { getPurchaseStats } from '@/lib/invoices/purchases';
+import { getExpenseStats } from '@/lib/invoices/expenses';
 import { getReceivablesSummary } from '@/lib/invoices/receivables';
 import { getPayablesSummary } from '@/lib/invoices/payables';
-import { getPaymentStats, seedPayments } from '@/lib/invoices/payments';
-import { getTDSStats, seedTDSRecords } from '@/lib/invoices/tds';
-import { getPayrollStats, seedEmployees, seedPayroll } from '@/lib/invoices/payroll';
+import { getPaymentStats } from '@/lib/invoices/payments';
+import { getTDSStats } from '@/lib/invoices/tds';
+import { getPayrollStats } from '@/lib/invoices/payroll';
 import type { InvoiceCloudInvoice, PurchaseBill, Expense, Payment, TDSRecord, Employee, Payroll } from '@/lib/invoices/types';
-import { seedBusinessEvents, getObservationSummary } from '@/lib/execution/observe';
-import { seedDecisions, getDecisionSummary } from '@/lib/execution/think';
+import { getObservationSummary } from '@/lib/execution/observe';
+import { getDecisionSummary } from '@/lib/execution/think';
 import { planAllActions } from '@/lib/execution/decide';
-import { seedExecutionTasks, getExecutionSummary } from '@/lib/execution/execute';
-import { seedApprovals, getApprovalSummary } from '@/lib/execution/approvals';
-import { seedWorkflows, getWorkflowSummary } from '@/lib/execution/workflows';
-import { seedUserBehaviours, getLearningSummary } from '@/lib/execution/learn';
-import { seedTimeline, getTimelineSummary } from '@/lib/execution/timeline';
+import { getExecutionSummary } from '@/lib/execution/execute';
+import { getApprovalSummary } from '@/lib/execution/approvals';
+import { getWorkflowSummary } from '@/lib/execution/workflows';
+import { getLearningSummary } from '@/lib/execution/learn';
+import { getTimelineSummary } from '@/lib/execution/timeline';
 import { getAgentRoster } from '@/lib/execution/agents';
 import type { WorkflowStep } from '@/lib/execution/types';
 import { buildRealDataSnapshot, formatRealDataContextBlock, formatDynamicRecommendationsBlock } from '@/lib/oracle/real-data';
@@ -287,7 +287,7 @@ Business Graph engine is not available right now. Fall back to general guidance 
 
 async function buildInvoiceEngineContextBlock(): Promise<string> {
   try {
-    // ── Fetch all eight entity sets in parallel, fall back to seed data ──
+    // ── Fetch all eight entity sets in parallel — real DB data only (no seed fallback) ──
     const [invRows, billRows, expRows, payRows, tdsRows, empRows, prRows] = await Promise.all([
       db.invoice.findMany({ orderBy: { createdAt: 'desc' } }),
       db.purchaseBill.findMany({ orderBy: { createdAt: 'desc' } }),
@@ -298,92 +298,71 @@ async function buildInvoiceEngineContextBlock(): Promise<string> {
       db.payroll.findMany({ orderBy: { createdAt: 'desc' } }),
     ]);
 
-    const invoices: InvoiceCloudInvoice[] =
-      invRows.length > 0
-        ? invRows.map((r) => ({
-            id: r.id, clientId: r.clientId, invoiceNumber: r.invoiceNumber,
-            invoiceDate: r.invoiceDate, sellerGstin: r.sellerGstin,
-            buyerGstin: r.buyerGstin ?? null, buyerName: r.buyerName ?? null,
-            invoiceType: r.invoiceType, gstr1Section: r.gstr1Section,
-            taxableValue: r.taxableValue, cgst: r.cgst, sgst: r.sgst, igst: r.igst, cess: r.cess,
-            totalAmount: r.totalAmount, hsnCode: r.hsnCode ?? null, reverseCharge: r.reverseCharge,
-            status: r.status, matchStatus: r.matchStatus, riskLevel: r.riskLevel, riskScore: r.riskScore,
-            aiExplanation: r.aiExplanation ?? null, notes: r.notes ?? null, period: r.period ?? null,
-            assignedTo: r.assignedTo ?? null, createdAt: r.createdAt.toISOString(), updatedAt: r.updatedAt.toISOString(),
-            dueDate: r.dueDate ?? null, gstAmount: r.gstAmount, paidAmount: r.paidAmount,
-            balanceAmount: r.balanceAmount, paymentStatus: r.paymentStatus, paymentMode: r.paymentMode ?? null,
-            paymentDate: r.paymentDate ?? null, recurring: r.recurring, recurringCycle: r.recurringCycle ?? null,
-            notesFinance: r.notesFinance ?? null, sentToCustomer: r.sentToCustomer,
-            sentAt: r.sentAt ? r.sentAt.toISOString() : null,
-          }))
-        : seedInvoices();
+    const invoices: InvoiceCloudInvoice[] = (invRows ?? []).map((r) => ({
+      id: r.id, clientId: r.clientId, invoiceNumber: r.invoiceNumber,
+      invoiceDate: r.invoiceDate, sellerGstin: r.sellerGstin,
+      buyerGstin: r.buyerGstin ?? null, buyerName: r.buyerName ?? null,
+      invoiceType: r.invoiceType, gstr1Section: r.gstr1Section,
+      taxableValue: r.taxableValue, cgst: r.cgst, sgst: r.sgst, igst: r.igst, cess: r.cess,
+      totalAmount: r.totalAmount, hsnCode: r.hsnCode ?? null, reverseCharge: r.reverseCharge,
+      status: r.status, matchStatus: r.matchStatus, riskLevel: r.riskLevel, riskScore: r.riskScore,
+      aiExplanation: r.aiExplanation ?? null, notes: r.notes ?? null, period: r.period ?? null,
+      assignedTo: r.assignedTo ?? null, createdAt: r.createdAt.toISOString(), updatedAt: r.updatedAt.toISOString(),
+      dueDate: r.dueDate ?? null, gstAmount: r.gstAmount, paidAmount: r.paidAmount,
+      balanceAmount: r.balanceAmount, paymentStatus: r.paymentStatus, paymentMode: r.paymentMode ?? null,
+      paymentDate: r.paymentDate ?? null, recurring: r.recurring, recurringCycle: r.recurringCycle ?? null,
+      notesFinance: r.notesFinance ?? null, sentToCustomer: r.sentToCustomer,
+      sentAt: r.sentAt ? r.sentAt.toISOString() : null,
+    }));
 
-    const bills: PurchaseBill[] =
-      billRows.length > 0
-        ? billRows.map((r) => ({
-            id: r.id, clientId: r.clientId ?? null, vendorName: r.vendorName, vendorGstin: r.vendorGstin ?? null,
-            invoiceNo: r.invoiceNo, invoiceDate: r.invoiceDate, dueDate: r.dueDate ?? null,
-            taxableValue: r.taxableValue, cgst: r.cgst, sgst: r.sgst, igst: r.igst, cess: r.cess,
-            gstAmount: r.gstAmount, totalAmount: r.totalAmount, paidAmount: r.paidAmount,
-            balanceAmount: r.balanceAmount, status: r.status, paymentStatus: r.paymentStatus,
-            category: r.category ?? null, hsnCode: r.hsnCode ?? null, notes: r.notes ?? null,
-            ocrExtracted: r.ocrExtracted, createdAt: r.createdAt.toISOString(), updatedAt: r.updatedAt.toISOString(),
-          }))
-        : seedPurchaseBills();
+    const bills: PurchaseBill[] = (billRows ?? []).map((r) => ({
+      id: r.id, clientId: r.clientId ?? null, vendorName: r.vendorName, vendorGstin: r.vendorGstin ?? null,
+      invoiceNo: r.invoiceNo, invoiceDate: r.invoiceDate, dueDate: r.dueDate ?? null,
+      taxableValue: r.taxableValue, cgst: r.cgst, sgst: r.sgst, igst: r.igst, cess: r.cess,
+      gstAmount: r.gstAmount, totalAmount: r.totalAmount, paidAmount: r.paidAmount,
+      balanceAmount: r.balanceAmount, status: r.status, paymentStatus: r.paymentStatus,
+      category: r.category ?? null, hsnCode: r.hsnCode ?? null, notes: r.notes ?? null,
+      ocrExtracted: r.ocrExtracted, createdAt: r.createdAt.toISOString(), updatedAt: r.updatedAt.toISOString(),
+    }));
 
-    const expenses: Expense[] =
-      expRows.length > 0
-        ? expRows.map((r) => ({
-            id: r.id, clientId: r.clientId ?? null, category: r.category, description: r.description ?? null,
-            vendor: r.vendor ?? null, amount: r.amount, gst: r.gst, gstClaimable: r.gstClaimable,
-            date: r.date, paymentMode: r.paymentMode ?? null, status: r.status, receiptUrl: r.receiptUrl ?? null,
-            ocrExtracted: r.ocrExtracted, notes: r.notes ?? null, createdAt: r.createdAt.toISOString(), updatedAt: r.updatedAt.toISOString(),
-          }))
-        : seedExpenses();
+    const expenses: Expense[] = (expRows ?? []).map((r) => ({
+      id: r.id, clientId: r.clientId ?? null, category: r.category, description: r.description ?? null,
+      vendor: r.vendor ?? null, amount: r.amount, gst: r.gst, gstClaimable: r.gstClaimable,
+      date: r.date, paymentMode: r.paymentMode ?? null, status: r.status, receiptUrl: r.receiptUrl ?? null,
+      ocrExtracted: r.ocrExtracted, notes: r.notes ?? null, createdAt: r.createdAt.toISOString(), updatedAt: r.updatedAt.toISOString(),
+    }));
 
-    const payments: Payment[] =
-      payRows.length > 0
-        ? payRows.map((r) => ({
-            id: r.id, clientId: r.clientId ?? null, invoiceId: r.invoiceId ?? null,
-            purchaseBillId: r.purchaseBillId ?? null, partyName: r.partyName, partyType: r.partyType,
-            amount: r.amount, paymentDate: r.paymentDate, paymentMode: r.paymentMode,
-            referenceNo: r.referenceNo ?? null, status: r.status, reconciled: r.reconciled,
-            notes: r.notes ?? null, createdAt: r.createdAt.toISOString(), updatedAt: r.updatedAt.toISOString(),
-          }))
-        : seedPayments();
+    const payments: Payment[] = (payRows ?? []).map((r) => ({
+      id: r.id, clientId: r.clientId ?? null, invoiceId: r.invoiceId ?? null,
+      purchaseBillId: r.purchaseBillId ?? null, partyName: r.partyName, partyType: r.partyType,
+      amount: r.amount, paymentDate: r.paymentDate, paymentMode: r.paymentMode,
+      referenceNo: r.referenceNo ?? null, status: r.status, reconciled: r.reconciled,
+      notes: r.notes ?? null, createdAt: r.createdAt.toISOString(), updatedAt: r.updatedAt.toISOString(),
+    }));
 
-    const tdsRecords: TDSRecord[] =
-      tdsRows.length > 0
-        ? tdsRows.map((r) => ({
-            id: r.id, clientId: r.clientId ?? null, section: r.section, deducteeName: r.deducteeName,
-            deducteePan: r.deducteePan ?? null, paymentAmount: r.paymentAmount, tdsRate: r.tdsRate,
-            tdsAmount: r.tdsAmount, date: r.date, status: r.status, quarter: r.quarter ?? null,
-            notes: r.notes ?? null, createdAt: r.createdAt.toISOString(), updatedAt: r.updatedAt.toISOString(),
-          }))
-        : seedTDSRecords();
+    const tdsRecords: TDSRecord[] = (tdsRows ?? []).map((r) => ({
+      id: r.id, clientId: r.clientId ?? null, section: r.section, deducteeName: r.deducteeName,
+      deducteePan: r.deducteePan ?? null, paymentAmount: r.paymentAmount, tdsRate: r.tdsRate,
+      tdsAmount: r.tdsAmount, date: r.date, status: r.status, quarter: r.quarter ?? null,
+      notes: r.notes ?? null, createdAt: r.createdAt.toISOString(), updatedAt: r.updatedAt.toISOString(),
+    }));
 
-    const employees: Employee[] =
-      empRows.length > 0
-        ? empRows.map((r) => ({
-            id: r.id, clientId: r.clientId ?? null, name: r.name, designation: r.designation ?? null,
-            department: r.department ?? null, employeeId: r.employeeId ?? null, pan: r.pan ?? null,
-            aadhaar: r.aadhaar ?? null, bankAccount: r.bankAccount ?? null, ifsc: r.ifsc ?? null,
-            salary: r.salary, basic: r.basic, hra: r.hra, allowances: r.allowances, pf: r.pf,
-            esi: r.esi, tds: r.tds, professionalTax: r.professionalTax, netSalary: r.netSalary,
-            status: r.status, joinedAt: r.joinedAt ?? null, createdAt: r.createdAt.toISOString(), updatedAt: r.updatedAt.toISOString(),
-          }))
-        : seedEmployees();
+    const employees: Employee[] = (empRows ?? []).map((r) => ({
+      id: r.id, clientId: r.clientId ?? null, name: r.name, designation: r.designation ?? null,
+      department: r.department ?? null, employeeId: r.employeeId ?? null, pan: r.pan ?? null,
+      aadhaar: r.aadhaar ?? null, bankAccount: r.bankAccount ?? null, ifsc: r.ifsc ?? null,
+      salary: r.salary, basic: r.basic, hra: r.hra, allowances: r.allowances, pf: r.pf,
+      esi: r.esi, tds: r.tds, professionalTax: r.professionalTax, netSalary: r.netSalary,
+      status: r.status, joinedAt: r.joinedAt ?? null, createdAt: r.createdAt.toISOString(), updatedAt: r.updatedAt.toISOString(),
+    }));
 
-    const payrolls: Payroll[] =
-      prRows.length > 0
-        ? prRows.map((r) => ({
-            id: r.id, employeeId: r.employeeId, period: r.period, grossSalary: r.grossSalary,
-            basic: r.basic, hra: r.hra, allowances: r.allowances, pf: r.pf, esi: r.esi, tds: r.tds,
-            professionalTax: r.professionalTax, netSalary: r.netSalary, status: r.status,
-            paidAt: r.paidAt ?? null, payslipUrl: r.payslipUrl ?? null,
-            createdAt: r.createdAt.toISOString(), updatedAt: r.updatedAt.toISOString(),
-          }))
-        : seedPayroll(employees);
+    const payrolls: Payroll[] = (prRows ?? []).map((r) => ({
+      id: r.id, employeeId: r.employeeId, period: r.period, grossSalary: r.grossSalary,
+      basic: r.basic, hra: r.hra, allowances: r.allowances, pf: r.pf, esi: r.esi, tds: r.tds,
+      professionalTax: r.professionalTax, netSalary: r.netSalary, status: r.status,
+      paidAt: r.paidAt ?? null, payslipUrl: r.payslipUrl ?? null,
+      createdAt: r.createdAt.toISOString(), updatedAt: r.updatedAt.toISOString(),
+    }));
 
     // ── Compute summaries via the pure-TS engine libs ──
     const invStats = getInvoiceStats(invoices);
@@ -489,28 +468,14 @@ async function buildExecutionContextBlock(): Promise<string> {
       db.executionTimeline.findMany({ orderBy: { timestamp: 'desc' }, take: 100 }).catch(() => []),
     ]);
 
-    // Resolve entities (DB → engine type, or seed fallback)
-    const events = eventRows.length > 0
-      ? eventRows.map((r) => ({ id: r.id, businessId: r.businessId, type: r.type as never, source: r.source as never, payload: r.payload ? safeJsonParse(r.payload) : null, severity: r.severity as never, status: r.status as never, createdAt: r.createdAt.toISOString() }))
-      : seedBusinessEvents();
-    const decisions = decisionRows.length > 0
-      ? decisionRows.map((r) => ({ id: r.id, eventId: r.eventId, reason: r.reason, priority: r.priority as never, action: r.action as never, status: r.status as never, createdAt: r.createdAt.toISOString(), updatedAt: r.updatedAt.toISOString() }))
-      : seedDecisions(events);
-    const tasks = taskRows.length > 0
-      ? taskRows.map((r) => ({ id: r.id, decisionId: r.decisionId, type: r.type as never, description: r.description, status: r.status as never, startedAt: r.startedAt ? r.startedAt.toISOString() : null, completedAt: r.completedAt ? r.completedAt.toISOString() : null, result: r.result ? safeJsonParse(r.result) : null, riskScore: r.riskScore, agent: r.agent as never, createdAt: r.createdAt.toISOString(), updatedAt: r.updatedAt.toISOString() }))
-      : seedExecutionTasks(decisions);
-    const approvals = approvalRows.length > 0
-      ? approvalRows.map((r) => ({ id: r.id, taskId: r.taskId, risk: r.risk, status: r.status as never, reason: r.reason, approvedBy: r.approvedBy, approvedAt: r.approvedAt ? r.approvedAt.toISOString() : null, createdAt: r.createdAt.toISOString(), updatedAt: r.updatedAt.toISOString() }))
-      : seedApprovals(tasks);
-    const workflows = workflowRows.length > 0
-      ? workflowRows.map((r) => ({ id: r.id, name: r.name, type: r.type as never, trigger: r.trigger, steps: safeJsonParseSteps(r.steps), currentStep: r.currentStep, status: r.status as never, context: r.context ? safeJsonParse(r.context) : null, startedAt: r.startedAt ? r.startedAt.toISOString() : null, completedAt: r.completedAt ? r.completedAt.toISOString() : null, createdAt: r.createdAt.toISOString(), updatedAt: r.updatedAt.toISOString() }))
-      : seedWorkflows();
-    const behaviours = behaviourRows.length > 0
-      ? behaviourRows.map((r) => ({ id: r.id, userId: r.userId, action: r.action as never, preference: r.preference, confidence: r.confidence, evidence: r.evidence, updatedAt: r.updatedAt.toISOString(), createdAt: r.createdAt.toISOString() }))
-      : seedUserBehaviours();
-    const timeline = timelineRows.length > 0
-      ? timelineRows.map((r) => ({ id: r.id, taskId: r.taskId, agent: r.agent as never, stage: r.stage as never, title: r.title, description: r.description, timestamp: r.timestamp.toISOString() }))
-      : seedTimeline(tasks);
+    // Resolve entities (DB → engine type, real empty state when DB is empty — no seed fallback)
+    const events = (eventRows ?? []).map((r) => ({ id: r.id, businessId: r.businessId, type: r.type as never, source: r.source as never, payload: r.payload ? safeJsonParse(r.payload) : null, severity: r.severity as never, status: r.status as never, createdAt: r.createdAt.toISOString() }));
+    const decisions = (decisionRows ?? []).map((r) => ({ id: r.id, eventId: r.eventId, reason: r.reason, priority: r.priority as never, action: r.action as never, status: r.status as never, createdAt: r.createdAt.toISOString(), updatedAt: r.updatedAt.toISOString() }));
+    const tasks = (taskRows ?? []).map((r) => ({ id: r.id, decisionId: r.decisionId, type: r.type as never, description: r.description, status: r.status as never, startedAt: r.startedAt ? r.startedAt.toISOString() : null, completedAt: r.completedAt ? r.completedAt.toISOString() : null, result: r.result ? safeJsonParse(r.result) : null, riskScore: r.riskScore, agent: r.agent as never, createdAt: r.createdAt.toISOString(), updatedAt: r.updatedAt.toISOString() }));
+    const approvals = (approvalRows ?? []).map((r) => ({ id: r.id, taskId: r.taskId, risk: r.risk, status: r.status as never, reason: r.reason, approvedBy: r.approvedBy, approvedAt: r.approvedAt ? r.approvedAt.toISOString() : null, createdAt: r.createdAt.toISOString(), updatedAt: r.updatedAt.toISOString() }));
+    const workflows = (workflowRows ?? []).map((r) => ({ id: r.id, name: r.name, type: r.type as never, trigger: r.trigger, steps: safeJsonParseSteps(r.steps), currentStep: r.currentStep, status: r.status as never, context: r.context ? safeJsonParse(r.context) : null, startedAt: r.startedAt ? r.startedAt.toISOString() : null, completedAt: r.completedAt ? r.completedAt.toISOString() : null, createdAt: r.createdAt.toISOString(), updatedAt: r.updatedAt.toISOString() }));
+    const behaviours = (behaviourRows ?? []).map((r) => ({ id: r.id, userId: r.userId, action: r.action as never, preference: r.preference, confidence: r.confidence, evidence: r.evidence, updatedAt: r.updatedAt.toISOString(), createdAt: r.createdAt.toISOString() }));
+    const timeline = (timelineRows ?? []).map((r) => ({ id: r.id, taskId: r.taskId, agent: r.agent as never, stage: r.stage as never, title: r.title, description: r.description, timestamp: r.timestamp.toISOString() }));
 
     const observation = getObservationSummary(events);
     const decisionsSummary = getDecisionSummary(decisions);

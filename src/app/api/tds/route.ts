@@ -1,19 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { seedTDSRecords, calculateTDS, quarterForDate } from '@/lib/invoices/tds'
+import { calculateTDS, quarterForDate } from '@/lib/invoices/tds'
 
 // GET /api/tds — Fetch all TDS records
+// Returns an empty array when no TDS records exist (real empty state — no mock data).
 export async function GET() {
   try {
     const records = await db.tDSRecord.findMany({
       orderBy: { date: 'desc' },
     })
 
-    if (!records || records.length === 0) {
-      return NextResponse.json({ records: seedTDSRecords() })
-    }
-
-    return NextResponse.json({ records })
+    return NextResponse.json({ records: records ?? [] })
   } catch (error) {
     console.error('GET /api/tds error:', error)
     return NextResponse.json(

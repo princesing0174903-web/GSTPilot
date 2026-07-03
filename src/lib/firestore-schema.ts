@@ -32,6 +32,14 @@ export const COLLECTIONS = {
   DEALS: 'deals',
   MEETINGS: 'meetings',
   TASKS: 'tasks',
+  // Banking, GST, Finance & AI Memory (PT-3-5)
+  BANK_ACCOUNTS: 'bank_accounts',
+  BANK_TRANSACTIONS: 'bank_transactions',
+  GST_PROFILES: 'gst_profiles',
+  GST_RETURNS: 'gst_returns',
+  EXPENSES: 'expenses',
+  PAYMENTS: 'payments',
+  AI_MEMORY: 'ai_memory',
 } as const;
 
 export type CollectionName = typeof COLLECTIONS[keyof typeof COLLECTIONS];
@@ -462,6 +470,180 @@ export interface FirestoreTask {
   clientId: string | null;
   dueDate: string | null;
   tags: string[];
+  createdAt: unknown;
+  updatedAt: unknown;
+}
+
+// ─── Bank Account (bank_accounts/{bankAccountId}) ──────────────────────────
+// Firm's connected bank accounts (linked via DataConnection / aggregator).
+
+export type BankAccountType = 'savings' | 'current' | 'od' | 'cc';
+export type BankAccountStatus = 'connected' | 'disconnected' | 'syncing' | 'error';
+
+export interface FirestoreBankAccount {
+  bankAccountId: string;
+  firmId: string;
+  userId: string;                 // Firebase UID of the user who linked the account
+  bankName: string;
+  accountNumberMasked: string;    // e.g. "XXXX1234"
+  accountType: BankAccountType;
+  ifsc: string | null;
+  currentBalance: number;
+  availableBalance: number;
+  currency: string;               // default 'INR'
+  status: BankAccountStatus;
+  lastSyncAt: unknown;            // serverTimestamp
+  connectionId: string | null;    // links to DataConnection
+  createdAt: unknown;
+  updatedAt: unknown;
+}
+
+// ─── Bank Transaction (bank_transactions/{bankTxnId}) ──────────────────────
+// Transactions pulled from a connected bank account.
+
+export type BankTransactionType = 'credit' | 'debit';
+
+export interface FirestoreBankTransaction {
+  bankTxnId: string;
+  firmId: string;
+  bankAccountId: string;
+  date: string;                   // ISO date string
+  description: string;
+  amount: number;                 // positive = credit, negative = debit
+  type: BankTransactionType;
+  balanceAfter: number | null;
+  category: string | null;
+  referenceNo: string | null;
+  reconciled: boolean;
+  reconciledWith: string | null;  // invoiceId / paymentId
+  metadata: Record<string, unknown>;
+  createdAt: unknown;
+}
+
+// ─── GST Profile (gst_profiles/{gstProfileId}) ─────────────────────────────
+// Firm's own GSTN profile (separate from client RETURNS collection).
+
+export type GstProfileStatus = 'active' | 'suspended' | 'cancelled';
+export type GstTaxpayerType = 'regular' | 'composition' | 'casual' | 'non_resident' | 'input_service_distributor' | 'tcs' | 'tds';
+export type GstFilingFrequency = 'monthly' | 'quarterly';
+
+export interface FirestoreGstProfile {
+  gstProfileId: string;
+  firmId: string;
+  userId: string;
+  gstin: string;
+  legalName: string;
+  tradeName: string | null;
+  constitution: string | null;
+  status: GstProfileStatus;
+  taxpayerType: GstTaxpayerType;
+  jurisdiction: {
+    state: string;
+    center: string;
+  };
+  filingFrequency: GstFilingFrequency;
+  lastReturnPeriod: string | null;     // MM-YYYY
+  complianceRating: number;            // 0-100
+  connectionId: string | null;
+  lastSyncAt: unknown;
+  createdAt: unknown;
+  updatedAt: unknown;
+}
+
+// ─── GST Return (gst_returns/{gstReturnId}) ────────────────────────────────
+// Firm's own GST returns (different from client-facing RETURNS collection).
+
+export type GstReturnType = 'GSTR-1' | 'GSTR-3B' | 'GSTR-9' | 'GSTR-2B';
+export type GstReturnStatus = 'draft' | 'prepared' | 'filed' | 'acknowledged' | 'overdue';
+
+export interface FirestoreGstReturn {
+  gstReturnId: string;
+  firmId: string;
+  gstProfileId: string;
+  returnType: GstReturnType;
+  period: string;                 // MM-YYYY
+  financialYear: string;
+  status: GstReturnStatus;
+  totalTaxableValue: number;
+  totalTax: number;
+  totalItc: number;
+  netPayable: number;
+  filingDate: string | null;
+  acknowledgmentNumber: string | null;
+  dueDate: string;
+  jsonPayload: string | null;
+  createdAt: unknown;
+  updatedAt: unknown;
+}
+
+// ─── Expense (expenses/{expenseId}) ────────────────────────────────────────
+// Operational expenses logged against a firm (optionally a client).
+
+export type ExpenseStatus = 'draft' | 'pending' | 'approved' | 'rejected' | 'paid';
+
+export interface FirestoreExpense {
+  expenseId: string;
+  firmId: string;
+  clientId: string | null;
+  category: string;
+  description: string | null;
+  vendor: string | null;
+  amount: number;
+  gst: number;
+  gstClaimable: boolean;
+  date: string;                   // ISO date string
+  paymentMode: string | null;
+  status: ExpenseStatus;
+  receiptUrl: string | null;
+  ocrExtracted: boolean;
+  notes: string | null;
+  createdAt: unknown;
+  updatedAt: unknown;
+}
+
+// ─── Payment (payments/{paymentId}) ────────────────────────────────────────
+// Customer + vendor payments (linkable to invoice / purchase bill).
+
+export type PaymentPartyType = 'customer' | 'vendor';
+export type PaymentStatus = 'pending' | 'completed' | 'failed' | 'refunded' | 'cancelled';
+
+export interface FirestorePayment {
+  paymentId: string;
+  firmId: string;
+  clientId: string | null;
+  invoiceId: string | null;
+  purchaseBillId: string | null;
+  partyName: string;
+  partyType: PaymentPartyType;
+  amount: number;
+  paymentDate: string;            // ISO date string
+  paymentMode: string;
+  referenceNo: string | null;
+  status: PaymentStatus;
+  reconciled: boolean;
+  notes: string | null;
+  createdAt: unknown;
+  updatedAt: unknown;
+}
+
+// ─── AI Memory (ai_memory/{memoryId}) ──────────────────────────────────────
+// Persistent agent memory entries (facts / preferences / patterns / outcomes).
+
+export type AiMemoryAgent =
+  | 'gst_agent' | 'cfo_agent' | 'collection_agent' | 'compliance_agent'
+  | 'oracle' | 'reporting_agent' | 'finance_agent';
+
+export type AiMemoryType = 'fact' | 'preference' | 'pattern' | 'outcome' | 'skill';
+
+export interface FirestoreAiMemory {
+  memoryId: string;
+  firmId: string;
+  agent: AiMemoryAgent;
+  memoryType: AiMemoryType;
+  key: string;
+  value: string;
+  importance: number;             // 0-1
+  lastUsedAt: unknown;            // serverTimestamp
   createdAt: unknown;
   updatedAt: unknown;
 }

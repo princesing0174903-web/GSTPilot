@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { seedInvoices } from '@/lib/invoices/invoices'
 import {
   computeAging,
   getReceivablesSummary,
@@ -13,7 +12,7 @@ import type { InvoiceCloudInvoice } from '@/lib/invoices/types'
 // GET /api/receivables — Receivables Engine™ aggregation endpoint
 // Returns: summary (outstanding, overdue, collection rate, DSO, forecast),
 // aging buckets, overdue invoices, reminder schedule, collection forecast,
-// and top defaulters. Falls back to seed invoices when the DB is empty.
+// and top defaulters. Returns real empty state when the DB is empty (no mock data).
 export async function GET() {
   try {
     const rows = await db.invoice.findMany({
@@ -24,50 +23,47 @@ export async function GET() {
     // receivables engine. The Invoice model carries the Invoice Cloud™
     // financial fields (dueDate, gstAmount, paidAmount, balanceAmount,
     // paymentStatus, recurring, etc.) so the mapping is direct.
-    const invoices: InvoiceCloudInvoice[] =
-      rows && rows.length > 0
-        ? rows.map((r) => ({
-            id: r.id,
-            clientId: r.clientId,
-            invoiceNumber: r.invoiceNumber,
-            invoiceDate: r.invoiceDate,
-            sellerGstin: r.sellerGstin,
-            buyerGstin: r.buyerGstin ?? null,
-            buyerName: r.buyerName ?? null,
-            invoiceType: r.invoiceType,
-            gstr1Section: r.gstr1Section,
-            taxableValue: r.taxableValue,
-            cgst: r.cgst,
-            sgst: r.sgst,
-            igst: r.igst,
-            cess: r.cess,
-            totalAmount: r.totalAmount,
-            hsnCode: r.hsnCode ?? null,
-            reverseCharge: r.reverseCharge,
-            status: r.status,
-            matchStatus: r.matchStatus,
-            riskLevel: r.riskLevel,
-            riskScore: r.riskScore,
-            aiExplanation: r.aiExplanation ?? null,
-            notes: r.notes ?? null,
-            period: r.period ?? null,
-            assignedTo: r.assignedTo ?? null,
-            createdAt: r.createdAt.toISOString(),
-            updatedAt: r.updatedAt.toISOString(),
-            dueDate: r.dueDate ?? null,
-            gstAmount: r.gstAmount,
-            paidAmount: r.paidAmount,
-            balanceAmount: r.balanceAmount,
-            paymentStatus: r.paymentStatus,
-            paymentMode: r.paymentMode ?? null,
-            paymentDate: r.paymentDate ?? null,
-            recurring: r.recurring,
-            recurringCycle: r.recurringCycle ?? null,
-            notesFinance: r.notesFinance ?? null,
-            sentToCustomer: r.sentToCustomer,
-            sentAt: r.sentAt ? r.sentAt.toISOString() : null,
-          }))
-        : seedInvoices()
+    const invoices: InvoiceCloudInvoice[] = (rows ?? []).map((r) => ({
+      id: r.id,
+      clientId: r.clientId,
+      invoiceNumber: r.invoiceNumber,
+      invoiceDate: r.invoiceDate,
+      sellerGstin: r.sellerGstin,
+      buyerGstin: r.buyerGstin ?? null,
+      buyerName: r.buyerName ?? null,
+      invoiceType: r.invoiceType,
+      gstr1Section: r.gstr1Section,
+      taxableValue: r.taxableValue,
+      cgst: r.cgst,
+      sgst: r.sgst,
+      igst: r.igst,
+      cess: r.cess,
+      totalAmount: r.totalAmount,
+      hsnCode: r.hsnCode ?? null,
+      reverseCharge: r.reverseCharge,
+      status: r.status,
+      matchStatus: r.matchStatus,
+      riskLevel: r.riskLevel,
+      riskScore: r.riskScore,
+      aiExplanation: r.aiExplanation ?? null,
+      notes: r.notes ?? null,
+      period: r.period ?? null,
+      assignedTo: r.assignedTo ?? null,
+      createdAt: r.createdAt.toISOString(),
+      updatedAt: r.updatedAt.toISOString(),
+      dueDate: r.dueDate ?? null,
+      gstAmount: r.gstAmount,
+      paidAmount: r.paidAmount,
+      balanceAmount: r.balanceAmount,
+      paymentStatus: r.paymentStatus,
+      paymentMode: r.paymentMode ?? null,
+      paymentDate: r.paymentDate ?? null,
+      recurring: r.recurring,
+      recurringCycle: r.recurringCycle ?? null,
+      notesFinance: r.notesFinance ?? null,
+      sentToCustomer: r.sentToCustomer,
+      sentAt: r.sentAt ? r.sentAt.toISOString() : null,
+    }))
 
     const summary = getReceivablesSummary(invoices)
     const aging = computeAging(invoices)

@@ -21,6 +21,9 @@ import {
   type FirestoreReturn, type FirestoreReconciliation, type FirestoreNotification,
   type FirestoreActivity, type FirestoreAIRecommendation, type FirestoreFirm,
   type FirestoreLead, type FirestoreDeal, type FirestoreMeeting,
+  type FirestoreBankAccount, type FirestoreBankTransaction,
+  type FirestoreGstProfile, type FirestoreGstReturn,
+  type FirestoreExpense, type FirestorePayment, type FirestoreAiMemory,
   type LeadStatus, type LeadSource, type DealStage, type MeetingType, type MeetingStatus,
   type ActivityType, type NotificationType, type NotificationPriority,
   type ReconMismatch, type DocumentStatus, type DocumentType,
@@ -54,6 +57,26 @@ function currentFirmId(): string | null {
     }
   } catch { /* ignore */ }
   return null;
+}
+
+/**
+ * Convert a Firestore snapshot ({ id, data() }) into a typed object with the
+ * document id prepended, recursively converting Firestore Timestamps to ISO
+ * strings. Mirrors the conversion logic in `withId` (firestore-schema.ts) but
+ * drops the `T extends Record<string, unknown>` constraint so it accepts
+ * strongly-typed interfaces (which do not have an implicit index signature).
+ */
+function docToData<T>(d: { id: string; data: () => Record<string, unknown> }): T & { id: string } {
+  const data = d.data();
+  const converted: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(data)) {
+    if (value && typeof value === 'object' && 'toDate' in value && typeof (value as { toDate: () => Date }).toDate === 'function') {
+      converted[key] = (value as { toDate: () => Date }).toDate().toISOString();
+    } else {
+      converted[key] = value;
+    }
+  }
+  return { id: d.id, ...converted } as T & { id: string };
 }
 
 // ─── 1. CLIENT WORKFLOW ─────────────────────────────────────────────────────
@@ -1152,4 +1175,359 @@ export async function updateMeeting(meetingId: string, updates: Partial<Firestor
 export async function deleteMeeting(meetingId: string): Promise<void> {
   const meetingRef = doc(db, COLLECTIONS.MEETINGS, meetingId);
   await deleteDoc(meetingRef);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// BANKING, GST, FINANCE & AI MEMORY (PT-3-5)
+// Each new collection follows the same CRUD shape:
+//   listXxx / createXxx / updateXxx / deleteXxx / getXxx
+// Reads use getDocs + query + where + orderBy. Writes use setDoc + generateId()
+// (matching the existing CRM pattern) so the typed xxxId field stays consistent
+// with the Firestore doc id.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ─── Bank Accounts ───────────────────────────────────────────────────────────
+
+export async function listBankAccounts(
+  firmId: string,
+): Promise<Array<FirestoreBankAccount & { id: string }>> {
+  const q = query(
+    collection(db, COLLECTIONS.BANK_ACCOUNTS),
+    where('firmId', '==', firmId),
+    orderBy('createdAt', 'desc'),
+  );
+  const snap = await getDocs(q);
+  return snap.docs.map(d => docToData<FirestoreBankAccount>(d));
+}
+
+export async function createBankAccount(
+  data: Omit<FirestoreBankAccount, 'bankAccountId' | 'firmId' | 'createdAt' | 'updatedAt'>,
+): Promise<string> {
+  const firmId = currentFirmId();
+  if (!firmId) throw new Error('No firm found. Please complete onboarding first.');
+  const bankAccountId = generateId();
+  const ref = doc(db, COLLECTIONS.BANK_ACCOUNTS, bankAccountId);
+  const bankAccountData: FirestoreBankAccount = {
+    ...data,
+    bankAccountId,
+    firmId,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  };
+  await setDoc(ref, bankAccountData);
+  return bankAccountId;
+}
+
+export async function updateBankAccount(
+  bankAccountId: string,
+  updates: Partial<FirestoreBankAccount>,
+): Promise<void> {
+  const ref = doc(db, COLLECTIONS.BANK_ACCOUNTS, bankAccountId);
+  await updateDoc(ref, { ...updates, updatedAt: serverTimestamp() });
+}
+
+export async function deleteBankAccount(bankAccountId: string): Promise<void> {
+  const ref = doc(db, COLLECTIONS.BANK_ACCOUNTS, bankAccountId);
+  await deleteDoc(ref);
+}
+
+export async function getBankAccount(
+  bankAccountId: string,
+): Promise<(FirestoreBankAccount & { id: string }) | null> {
+  const snap = await getDoc(doc(db, COLLECTIONS.BANK_ACCOUNTS, bankAccountId));
+  if (!snap.exists()) return null;
+  return docToData<FirestoreBankAccount>(snap);
+}
+
+// ─── Bank Transactions ──────────────────────────────────────────────────────
+// listBankTransactions accepts EITHER a firmId OR a bankAccountId — when
+// bankAccountId is provided it scopes to that account; otherwise falls back to
+// firm-wide query.
+
+export async function listBankTransactions(
+  scope: { firmId?: string; bankAccountId?: string },
+): Promise<Array<FirestoreBankTransaction & { id: string }>> {
+  const constraints: QueryConstraint[] = [orderBy('createdAt', 'desc')];
+  if (scope.bankAccountId) {
+    constraints.unshift(where('bankAccountId', '==', scope.bankAccountId));
+  } else if (scope.firmId) {
+    constraints.unshift(where('firmId', '==', scope.firmId));
+  }
+  const q = query(collection(db, COLLECTIONS.BANK_TRANSACTIONS), ...constraints);
+  const snap = await getDocs(q);
+  return snap.docs.map(d => docToData<FirestoreBankTransaction>(d));
+}
+
+export async function createBankTransaction(
+  data: Omit<FirestoreBankTransaction, 'bankTxnId' | 'firmId' | 'createdAt'>,
+): Promise<string> {
+  const firmId = currentFirmId();
+  if (!firmId) throw new Error('No firm found. Please complete onboarding first.');
+  const bankTxnId = generateId();
+  const ref = doc(db, COLLECTIONS.BANK_TRANSACTIONS, bankTxnId);
+  const bankTxnData: FirestoreBankTransaction = {
+    ...data,
+    bankTxnId,
+    firmId,
+    createdAt: serverTimestamp(),
+  };
+  await setDoc(ref, bankTxnData);
+  return bankTxnId;
+}
+
+export async function updateBankTransaction(
+  bankTxnId: string,
+  updates: Partial<FirestoreBankTransaction>,
+): Promise<void> {
+  const ref = doc(db, COLLECTIONS.BANK_TRANSACTIONS, bankTxnId);
+  await updateDoc(ref, updates);
+}
+
+export async function deleteBankTransaction(bankTxnId: string): Promise<void> {
+  const ref = doc(db, COLLECTIONS.BANK_TRANSACTIONS, bankTxnId);
+  await deleteDoc(ref);
+}
+
+// ─── GST Profiles ───────────────────────────────────────────────────────────
+
+export async function listGstProfiles(
+  firmId: string,
+): Promise<Array<FirestoreGstProfile & { id: string }>> {
+  const q = query(
+    collection(db, COLLECTIONS.GST_PROFILES),
+    where('firmId', '==', firmId),
+    orderBy('createdAt', 'desc'),
+  );
+  const snap = await getDocs(q);
+  return snap.docs.map(d => docToData<FirestoreGstProfile>(d));
+}
+
+export async function createGstProfile(
+  data: Omit<FirestoreGstProfile, 'gstProfileId' | 'firmId' | 'createdAt' | 'updatedAt'>,
+): Promise<string> {
+  const firmId = currentFirmId();
+  if (!firmId) throw new Error('No firm found. Please complete onboarding first.');
+  const gstProfileId = generateId();
+  const ref = doc(db, COLLECTIONS.GST_PROFILES, gstProfileId);
+  const profileData: FirestoreGstProfile = {
+    ...data,
+    gstProfileId,
+    firmId,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  };
+  await setDoc(ref, profileData);
+  return gstProfileId;
+}
+
+export async function updateGstProfile(
+  gstProfileId: string,
+  updates: Partial<FirestoreGstProfile>,
+): Promise<void> {
+  const ref = doc(db, COLLECTIONS.GST_PROFILES, gstProfileId);
+  await updateDoc(ref, { ...updates, updatedAt: serverTimestamp() });
+}
+
+export async function deleteGstProfile(gstProfileId: string): Promise<void> {
+  const ref = doc(db, COLLECTIONS.GST_PROFILES, gstProfileId);
+  await deleteDoc(ref);
+}
+
+export async function getGstProfile(
+  gstProfileId: string,
+): Promise<(FirestoreGstProfile & { id: string }) | null> {
+  const snap = await getDoc(doc(db, COLLECTIONS.GST_PROFILES, gstProfileId));
+  if (!snap.exists()) return null;
+  return docToData<FirestoreGstProfile>(snap);
+}
+
+// ─── GST Returns ────────────────────────────────────────────────────────────
+// listGstReturns accepts EITHER a firmId OR a gstProfileId — when gstProfileId
+// is provided it scopes to that GSTN profile; otherwise falls back to firm-wide.
+
+export async function listGstReturns(
+  scope: { firmId?: string; gstProfileId?: string },
+): Promise<Array<FirestoreGstReturn & { id: string }>> {
+  const constraints: QueryConstraint[] = [orderBy('createdAt', 'desc')];
+  if (scope.gstProfileId) {
+    constraints.unshift(where('gstProfileId', '==', scope.gstProfileId));
+  } else if (scope.firmId) {
+    constraints.unshift(where('firmId', '==', scope.firmId));
+  }
+  const q = query(collection(db, COLLECTIONS.GST_RETURNS), ...constraints);
+  const snap = await getDocs(q);
+  return snap.docs.map(d => docToData<FirestoreGstReturn>(d));
+}
+
+export async function createGstReturn(
+  data: Omit<FirestoreGstReturn, 'gstReturnId' | 'firmId' | 'createdAt' | 'updatedAt'>,
+): Promise<string> {
+  const firmId = currentFirmId();
+  if (!firmId) throw new Error('No firm found. Please complete onboarding first.');
+  const gstReturnId = generateId();
+  const ref = doc(db, COLLECTIONS.GST_RETURNS, gstReturnId);
+  const returnData: FirestoreGstReturn = {
+    ...data,
+    gstReturnId,
+    firmId,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  };
+  await setDoc(ref, returnData);
+  return gstReturnId;
+}
+
+export async function updateGstReturn(
+  gstReturnId: string,
+  updates: Partial<FirestoreGstReturn>,
+): Promise<void> {
+  const ref = doc(db, COLLECTIONS.GST_RETURNS, gstReturnId);
+  await updateDoc(ref, { ...updates, updatedAt: serverTimestamp() });
+}
+
+export async function deleteGstReturn(gstReturnId: string): Promise<void> {
+  const ref = doc(db, COLLECTIONS.GST_RETURNS, gstReturnId);
+  await deleteDoc(ref);
+}
+
+// ─── Expenses ───────────────────────────────────────────────────────────────
+
+export async function listExpenses(
+  firmId: string,
+): Promise<Array<FirestoreExpense & { id: string }>> {
+  const q = query(
+    collection(db, COLLECTIONS.EXPENSES),
+    where('firmId', '==', firmId),
+    orderBy('createdAt', 'desc'),
+  );
+  const snap = await getDocs(q);
+  return snap.docs.map(d => docToData<FirestoreExpense>(d));
+}
+
+export async function createExpense(
+  data: Omit<FirestoreExpense, 'expenseId' | 'firmId' | 'createdAt' | 'updatedAt'>,
+): Promise<string> {
+  const firmId = currentFirmId();
+  if (!firmId) throw new Error('No firm found. Please complete onboarding first.');
+  const expenseId = generateId();
+  const ref = doc(db, COLLECTIONS.EXPENSES, expenseId);
+  const expenseData: FirestoreExpense = {
+    ...data,
+    expenseId,
+    firmId,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  };
+  await setDoc(ref, expenseData);
+  return expenseId;
+}
+
+export async function updateExpense(
+  expenseId: string,
+  updates: Partial<FirestoreExpense>,
+): Promise<void> {
+  const ref = doc(db, COLLECTIONS.EXPENSES, expenseId);
+  await updateDoc(ref, { ...updates, updatedAt: serverTimestamp() });
+}
+
+export async function deleteExpense(expenseId: string): Promise<void> {
+  const ref = doc(db, COLLECTIONS.EXPENSES, expenseId);
+  await deleteDoc(ref);
+}
+
+// ─── Payments ───────────────────────────────────────────────────────────────
+
+export async function listPayments(
+  firmId: string,
+): Promise<Array<FirestorePayment & { id: string }>> {
+  const q = query(
+    collection(db, COLLECTIONS.PAYMENTS),
+    where('firmId', '==', firmId),
+    orderBy('createdAt', 'desc'),
+  );
+  const snap = await getDocs(q);
+  return snap.docs.map(d => docToData<FirestorePayment>(d));
+}
+
+export async function createPayment(
+  data: Omit<FirestorePayment, 'paymentId' | 'firmId' | 'createdAt' | 'updatedAt'>,
+): Promise<string> {
+  const firmId = currentFirmId();
+  if (!firmId) throw new Error('No firm found. Please complete onboarding first.');
+  const paymentId = generateId();
+  const ref = doc(db, COLLECTIONS.PAYMENTS, paymentId);
+  const paymentData: FirestorePayment = {
+    ...data,
+    paymentId,
+    firmId,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  };
+  await setDoc(ref, paymentData);
+  return paymentId;
+}
+
+export async function updatePayment(
+  paymentId: string,
+  updates: Partial<FirestorePayment>,
+): Promise<void> {
+  const ref = doc(db, COLLECTIONS.PAYMENTS, paymentId);
+  await updateDoc(ref, { ...updates, updatedAt: serverTimestamp() });
+}
+
+export async function deletePayment(paymentId: string): Promise<void> {
+  const ref = doc(db, COLLECTIONS.PAYMENTS, paymentId);
+  await deleteDoc(ref);
+}
+
+// ─── AI Memory ──────────────────────────────────────────────────────────────
+// listAiMemories accepts an optional agent filter so an AI agent can fetch
+// just its own memory.
+
+export async function listAiMemories(
+  firmId: string,
+  agent?: string,
+): Promise<Array<FirestoreAiMemory & { id: string }>> {
+  const constraints: QueryConstraint[] = [orderBy('createdAt', 'desc')];
+  if (agent) {
+    constraints.unshift(where('agent', '==', agent));
+  }
+  const q = query(
+    collection(db, COLLECTIONS.AI_MEMORY),
+    where('firmId', '==', firmId),
+    ...constraints,
+  );
+  const snap = await getDocs(q);
+  return snap.docs.map(d => docToData<FirestoreAiMemory>(d));
+}
+
+export async function createAiMemory(
+  data: Omit<FirestoreAiMemory, 'memoryId' | 'firmId' | 'createdAt' | 'updatedAt'>,
+): Promise<string> {
+  const firmId = currentFirmId();
+  if (!firmId) throw new Error('No firm found. Please complete onboarding first.');
+  const memoryId = generateId();
+  const ref = doc(db, COLLECTIONS.AI_MEMORY, memoryId);
+  const memoryData: FirestoreAiMemory = {
+    ...data,
+    memoryId,
+    firmId,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  };
+  await setDoc(ref, memoryData);
+  return memoryId;
+}
+
+export async function updateAiMemory(
+  memoryId: string,
+  updates: Partial<FirestoreAiMemory>,
+): Promise<void> {
+  const ref = doc(db, COLLECTIONS.AI_MEMORY, memoryId);
+  await updateDoc(ref, { ...updates, updatedAt: serverTimestamp() });
+}
+
+export async function deleteAiMemory(memoryId: string): Promise<void> {
+  const ref = doc(db, COLLECTIONS.AI_MEMORY, memoryId);
+  await deleteDoc(ref);
 }

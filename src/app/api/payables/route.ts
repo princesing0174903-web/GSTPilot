@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { seedPurchaseBills } from '@/lib/invoices/purchases'
 import {
   getPayablesSummary,
   dueThisWeek,
@@ -13,8 +12,8 @@ import type { PurchaseBill } from '@/lib/invoices/types'
 // GET /api/payables — Payables Engine™ aggregation endpoint
 // Returns: summary (total payable, overdue, due this/next week),
 // supplier aging, payment priorities, cash allocation plan, and
-// upcoming supplier payments. Falls back to seed purchase bills when
-// the DB is empty.
+// upcoming supplier payments. Returns real empty state when the DB is empty
+// (no mock data).
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url)
@@ -29,35 +28,32 @@ export async function GET(request: Request) {
     // Normalise DB rows into the PurchaseBill shape expected by the payables
     // engine. The PurchaseBill model carries dueDate, gstAmount, paidAmount,
     // balanceAmount, paymentStatus, etc.
-    const bills: PurchaseBill[] =
-      rows && rows.length > 0
-        ? rows.map((r) => ({
-            id: r.id,
-            clientId: r.clientId ?? null,
-            vendorName: r.vendorName,
-            vendorGstin: r.vendorGstin ?? null,
-            invoiceNo: r.invoiceNo,
-            invoiceDate: r.invoiceDate,
-            dueDate: r.dueDate ?? null,
-            taxableValue: r.taxableValue,
-            cgst: r.cgst,
-            sgst: r.sgst,
-            igst: r.igst,
-            cess: r.cess,
-            gstAmount: r.gstAmount,
-            totalAmount: r.totalAmount,
-            paidAmount: r.paidAmount,
-            balanceAmount: r.balanceAmount,
-            status: r.status,
-            paymentStatus: r.paymentStatus,
-            category: r.category ?? null,
-            hsnCode: r.hsnCode ?? null,
-            notes: r.notes ?? null,
-            ocrExtracted: r.ocrExtracted,
-            createdAt: r.createdAt.toISOString(),
-            updatedAt: r.updatedAt.toISOString(),
-          }))
-        : seedPurchaseBills()
+    const bills: PurchaseBill[] = (rows ?? []).map((r) => ({
+      id: r.id,
+      clientId: r.clientId ?? null,
+      vendorName: r.vendorName,
+      vendorGstin: r.vendorGstin ?? null,
+      invoiceNo: r.invoiceNo,
+      invoiceDate: r.invoiceDate,
+      dueDate: r.dueDate ?? null,
+      taxableValue: r.taxableValue,
+      cgst: r.cgst,
+      sgst: r.sgst,
+      igst: r.igst,
+      cess: r.cess,
+      gstAmount: r.gstAmount,
+      totalAmount: r.totalAmount,
+      paidAmount: r.paidAmount,
+      balanceAmount: r.balanceAmount,
+      status: r.status,
+      paymentStatus: r.paymentStatus,
+      category: r.category ?? null,
+      hsnCode: r.hsnCode ?? null,
+      notes: r.notes ?? null,
+      ocrExtracted: r.ocrExtracted,
+      createdAt: r.createdAt.toISOString(),
+      updatedAt: r.updatedAt.toISOString(),
+    }))
 
     const summary = getPayablesSummary(bills)
     const thisWeek = dueThisWeek(bills)

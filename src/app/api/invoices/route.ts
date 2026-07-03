@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import {
-  seedInvoices,
   calculateInvoiceTotals,
   generateInvoiceNumber,
   type InvoiceLineItem,
@@ -18,15 +17,13 @@ export async function GET(request: Request) {
 
     // ── Invoice Cloud™ branch ────────────────────────────────────────────────
     // When cloud=true and no specific filters, return invoices with the new
-    // financial fields. Falls back to seed data when the DB is empty.
+    // financial fields. Returns an empty array when the DB is empty (real
+    // empty state — no mock data).
     if (cloud && !clientId && !period) {
       const invoices = await db.invoice.findMany({
         orderBy: { createdAt: 'desc' },
       });
-      if (!invoices || invoices.length === 0) {
-        return NextResponse.json({ invoices: seedInvoices() });
-      }
-      return NextResponse.json({ invoices });
+      return NextResponse.json({ invoices: invoices ?? [] });
     }
 
     const where: Record<string, string> = {};

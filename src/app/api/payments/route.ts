@@ -1,21 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { seedPayments } from '@/lib/invoices/payments'
 import { graphEvents, invalidateGraph } from '@/lib/graph/live-update'
 import { emitCollectionNode } from '@/lib/graph/auto-emit'
 
 // GET /api/payments — Fetch all Payments (customer collections + vendor settlements)
+// Returns an empty array when no payments exist (real empty state — no mock data).
 export async function GET() {
   try {
     const payments = await db.payment.findMany({
       orderBy: { paymentDate: 'desc' },
     })
 
-    if (!payments || payments.length === 0) {
-      return NextResponse.json({ payments: seedPayments() })
-    }
-
-    return NextResponse.json({ payments })
+    return NextResponse.json({ payments: payments ?? [] })
   } catch (error) {
     console.error('GET /api/payments error:', error)
     return NextResponse.json(

@@ -1,20 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { seedExpenses, autoCategorize } from '@/lib/invoices/expenses'
+import { autoCategorize } from '@/lib/invoices/expenses'
 import { graphEvents } from '@/lib/graph/live-update'
 
 // GET /api/expenses — Fetch all Expenses
+// Returns an empty array when no expenses exist (real empty state — no mock data).
 export async function GET() {
   try {
     const expenses = await db.expense.findMany({
       orderBy: { date: 'desc' },
     })
 
-    if (!expenses || expenses.length === 0) {
-      return NextResponse.json({ expenses: seedExpenses() })
-    }
-
-    return NextResponse.json({ expenses })
+    return NextResponse.json({ expenses: expenses ?? [] })
   } catch (error) {
     console.error('GET /api/expenses error:', error)
     return NextResponse.json(

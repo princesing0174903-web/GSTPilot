@@ -24,8 +24,9 @@ import {
 import { Zap, LogOut, User, Settings, MailCheck, Search, Bell, Sun, Moon } from 'lucide-react'
 import { useTheme } from 'next-themes'
 import { LeftNav } from '@/components/layout/LeftNav'
-import { CommandBar } from '@/components/layout/CommandBar'
+import { FloatingDock } from '@/components/layout/FloatingDock'
 import { OraclePanel } from '@/components/oracle/OraclePanel'
+import { OracleDockSidebar, readInitialOracleState } from '@/components/oracle/OracleDockSidebar'
 import { InfinitySymbol } from '@/components/layout/InfinityMark'
 import { AmbientBackground } from '@/components/layout/AmbientBackground'
 import FirmCommandCenterPage from '@/components/firm-command-center/FirmCommandCenterPage'
@@ -238,6 +239,15 @@ const VIEW_TITLES: Record<string, string> = {
 function DashboardContent() {
   const { currentView, setCurrentView } = useApp()
   const { user, logout } = useAuth()
+
+  // ── Oracle docked sidebar state (persisted to localStorage) ──────────────────
+  const [oracleOpen, setOracleOpen] = useState(false)
+  const [notificationsOpen, setNotificationsOpen] = useState(false)
+
+  // Restore previous Oracle sidebar state on mount
+  useEffect(() => {
+    setOracleOpen(readInitialOracleState())
+  }, [])
 
   const renderView = () => {
     switch (currentView) {
@@ -544,7 +554,7 @@ function DashboardContent() {
         </div>
       </header>
 
-      {/* ═══ THREE-COLUMN WORKSPACE ═══ */}
+      {/* ═══ TWO-COLUMN WORKSPACE ═══ */}
       <div className="relative z-10 flex min-h-0 flex-1 gap-3 p-3">
         {/* LEFT NAV */}
         <div className="shrink-0">
@@ -555,15 +565,29 @@ function DashboardContent() {
         <main className="min-w-0 flex-1 overflow-y-auto rounded-3xl pb-24 custom-scrollbar">
           {renderView()}
         </main>
-
-        {/* RIGHT AI PANEL (Oracle) — hidden below xl */}
-        <div className="hidden w-[340px] shrink-0 xl:block">
-          <OraclePanel onNavigate={setCurrentView} />
-        </div>
       </div>
 
-      {/* ═══ COMMAND BAR (fixed, bottom center) ═══ */}
-      <CommandBar />
+      {/* ═══ PREMIUM FLOATING DOCK (Oracle · Notifications · Help) ═══ */}
+      <FloatingDock
+        onOracleToggle={() => {
+          setOracleOpen((v) => !v)
+          setNotificationsOpen(false)
+        }}
+        oracleOpen={oracleOpen}
+        onNotificationsToggle={() => {
+          setNotificationsOpen((v) => !v)
+          setOracleOpen(false)
+        }}
+        notificationsOpen={notificationsOpen}
+      />
+
+      {/* ═══ ORACLE DOCKED SIDEBAR (slide-in right on desktop, bottom sheet on mobile) ═══ */}
+      <OracleDockSidebar
+        open={oracleOpen}
+        onClose={() => setOracleOpen(false)}
+      >
+        <OraclePanel onNavigate={(view) => { setCurrentView(view); setOracleOpen(false) }} />
+      </OracleDockSidebar>
 
       {/* ═══ COMMAND PALETTE (⌘K) ═══ */}
       <CommandPalette />

@@ -19,6 +19,9 @@ import {
   type FirestoreActivity, type FirestoreAIRecommendation, type FirestoreFirm,
   type FirestorePrediction, type FirestorePriority, type FirestoreOrganization, type FirestoreMembership,
   type FirestoreLead, type FirestoreDeal, type FirestoreMeeting, type FirestoreTask,
+  type FirestoreBankAccount, type FirestoreBankTransaction,
+  type FirestoreGstProfile, type FirestoreGstReturn,
+  type FirestoreExpense, type FirestorePayment, type FirestoreAiMemory,
   type LiveDashboardMetrics, type FirmExecutiveScores, type CollectionName,
 } from '@/lib/firestore-schema';
 import { computeDashboardMetrics } from '@/lib/firestore-service';
@@ -420,4 +423,83 @@ export function useFireMeetings() {
 
 export function useFireTasks() {
   return useFirestoreCollection<FirestoreTask>(COLLECTIONS.TASKS, [orderBy('createdAt', 'desc')]);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// BANKING, GST, FINANCE & AI MEMORY (PT-3-5)
+// Each hook wires a COLLECTIONS.xxx entry to useFirestoreCollection /
+// useFirestoreDoc with the appropriate firmId / scope filter.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ─── Bank Accounts ──────────────────────────────────────────────────────────
+
+export function useFireBankAccounts() {
+  return useFirestoreCollection<FirestoreBankAccount>(COLLECTIONS.BANK_ACCOUNTS, [
+    orderBy('createdAt', 'desc'),
+  ]);
+}
+
+export function useFireBankAccount(bankAccountId: string | null) {
+  return useFirestoreDoc<FirestoreBankAccount>(COLLECTIONS.BANK_ACCOUNTS, bankAccountId);
+}
+
+// ─── Bank Transactions ──────────────────────────────────────────────────────
+// Pass a bankAccountId to scope to one account; omit for firm-wide feed.
+
+export function useFireBankTransactions(bankAccountId?: string | null) {
+  const constraints: QueryConstraint[] = [orderBy('createdAt', 'desc')];
+  if (bankAccountId) {
+    constraints.unshift(where('bankAccountId', '==', bankAccountId));
+  }
+  return useFirestoreCollection<FirestoreBankTransaction>(COLLECTIONS.BANK_TRANSACTIONS, constraints, [bankAccountId]);
+}
+
+// ─── GST Profiles ───────────────────────────────────────────────────────────
+
+export function useFireGstProfiles() {
+  return useFirestoreCollection<FirestoreGstProfile>(COLLECTIONS.GST_PROFILES, [
+    orderBy('createdAt', 'desc'),
+  ]);
+}
+
+export function useFireGstProfile(gstProfileId: string | null) {
+  return useFirestoreDoc<FirestoreGstProfile>(COLLECTIONS.GST_PROFILES, gstProfileId);
+}
+
+// ─── GST Returns ────────────────────────────────────────────────────────────
+// Pass a gstProfileId to scope to one profile; omit for firm-wide feed.
+
+export function useFireGstReturns(gstProfileId?: string | null) {
+  const constraints: QueryConstraint[] = [orderBy('createdAt', 'desc')];
+  if (gstProfileId) {
+    constraints.unshift(where('gstProfileId', '==', gstProfileId));
+  }
+  return useFirestoreCollection<FirestoreGstReturn>(COLLECTIONS.GST_RETURNS, constraints, [gstProfileId]);
+}
+
+// ─── Expenses ───────────────────────────────────────────────────────────────
+
+export function useFireExpenses() {
+  return useFirestoreCollection<FirestoreExpense>(COLLECTIONS.EXPENSES, [
+    orderBy('createdAt', 'desc'),
+  ]);
+}
+
+// ─── Payments ───────────────────────────────────────────────────────────────
+
+export function useFirePayments() {
+  return useFirestoreCollection<FirestorePayment>(COLLECTIONS.PAYMENTS, [
+    orderBy('createdAt', 'desc'),
+  ]);
+}
+
+// ─── AI Memory ──────────────────────────────────────────────────────────────
+// Pass an agent string to scope to one agent's memory; omit for firm-wide.
+
+export function useFireAiMemories(agent?: string) {
+  const constraints: QueryConstraint[] = [orderBy('createdAt', 'desc')];
+  if (agent) {
+    constraints.unshift(where('agent', '==', agent));
+  }
+  return useFirestoreCollection<FirestoreAiMemory>(COLLECTIONS.AI_MEMORY, constraints, [agent]);
 }

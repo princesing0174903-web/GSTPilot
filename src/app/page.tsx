@@ -242,13 +242,10 @@ function DashboardContent() {
   const { user, logout } = useAuth()
 
   // ── Oracle docked sidebar state (persisted to localStorage) ──────────────────
-  const [oracleOpen, setOracleOpen] = useState(false)
+  // Lazy initial state — readInitialOracleState is SSR-safe (returns false on
+  // the server) so this avoids the cascading-render effect entirely.
+  const [oracleOpen, setOracleOpen] = useState(readInitialOracleState)
   const [notificationsOpen, setNotificationsOpen] = useState(false)
-
-  // Restore previous Oracle sidebar state on mount
-  useEffect(() => {
-    setOracleOpen(readInitialOracleState())
-  }, [])
 
   const renderView = () => {
     switch (currentView) {

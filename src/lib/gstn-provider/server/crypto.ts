@@ -66,7 +66,6 @@ function getMasterKey(): Buffer {
       'GSTN_ENCRYPTION_KEY environment variable is required in production.',
     );
   }
-  // eslint-disable-next-line no-console
   console.warn(
     '[gstn-provider/crypto] WARNING: Using dev fallback encryption key. ' +
       'Set GSTN_ENCRYPTION_KEY (32-byte hex or base64) for production.',

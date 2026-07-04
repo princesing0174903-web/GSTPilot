@@ -300,7 +300,6 @@ export function startBackgroundSync(): void {
   }, TICK_INTERVAL_MS);
   // Don't keep the process alive just for the scheduler.
   if (intervalHandle.unref) intervalHandle.unref();
-  // eslint-disable-next-line no-console
   console.log('[gstn-scheduler] background sync started (60s interval)');
 }
 

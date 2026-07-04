@@ -22,7 +22,7 @@
 // visual identity, focus items, and AI activity feed remain identical.
 // ═══════════════════════════════════════════════════════════════════════════════
 
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useSyncExternalStore, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X } from 'lucide-react';
@@ -62,12 +62,14 @@ export function OracleDockSidebar({
   onClose,
   children,
 }: OracleDockSidebarProps) {
-  const [mounted, setMounted] = useState(false);
-
-  // Hydration-safe mount (portal needs window)
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+  // Hydration-safe "are we on the client?" check via useSyncExternalStore.
+  // The server snapshot is `false` (no portal), the client snapshot is `true`
+  // — React guarantees this never triggers a hydration mismatch.
+  const mounted = useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false,
+  );
 
   // ── ESC to close ────────────────────────────────────────────────────────────
   useEffect(() => {

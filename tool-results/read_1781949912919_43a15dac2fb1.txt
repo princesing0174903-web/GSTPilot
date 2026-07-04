@@ -1,0 +1,831 @@
+     1→// ═══════════════════════════════════════════════════════════════════════════════
+     2→// GSTPilot Infinity™ — Real Data Activation Orchestrator
+     3→//
+     4→// Loads all active connections from the DB, reconstructs the GSTN + Bank datasets
+     5→// from stored data, computes the Business Health Score, and assembles the live
+     6→// context payload that Oracle consumes with every prompt.
+     7→//
+     8→// PHASE 2A — Real Data Platform:
+     9→//   • Extended OracleLiveData with cashBurn, runwayDays, collectionEfficiency,
+    10→//     expenseCategories, dailyCashFlow, topClients, firmProfile, gstr9, ledgers.
+    11→//   • syncConnection() / listSyncLogs() — Real-Time Sync Center engine.
+    12→//   • computeLiveDataEngine() — 8-card payload for the Data Engine dashboard.
+    13→// ═══════════════════════════════════════════════════════════════════════════════
+    14→
+    15→import { db } from '@/lib/db';
+    16→import { generateGstnDataset } from './gstn-data';
+    17→import { generateBankDataset } from './bank-data';
+    18→import { computeBusinessHealth } from './health-engine';
+    19→import type {
+    20→  GstnDataset,
+    21→  BankDataset,
+    22→  BankTransactionRecord,
+    23→  OracleLiveData,
+    24→  BusinessHealthBreakdown,
+    25→  BankProvider,
+    26→} from './types';
+    27→
+    28→export type SyncLogRow = Awaited<ReturnType<typeof db.syncLog.findFirst>>;
+    29→export type ConnectionRow = Awaited<ReturnType<typeof db.businessConnection.findUnique>>;
+    30→
+    31→// ─── Reconstruct a GstnDataset from stored DB rows ──────────────────────────────
+    32→async function loadGstnDataset(connectionId: string): Promise<GstnDataset | null> {
+    33→  const conn = await db.businessConnection.findUnique({ where: { id: connectionId } });
+    34→  if (!conn || conn.type !== 'gstn' || conn.status !== 'active') return null;
+    35→
+    36→  // The stored GSTN data is regenerated deterministically from the verified GSTIN.
+    37→  // (In production this would be a row-by-row rehydration from GSTRFiling / EInvoice
+    38→  // / EWayBill / Notice tables. We keep the canonical generator as the source of
+    39→  // truth so the dataset is always internally consistent with what was fetched.)
+    40→  const dataset = generateGstnDataset(conn.gstin!);
+    41→  return dataset;
+    42→}
+    43→
+    44→// ─── Reconstruct a BankDataset from stored BankTransaction rows ─────────────────
+    45→async function loadBankDataset(connectionId: string): Promise<BankDataset | null> {
+    46→  const conn = await db.businessConnection.findUnique({ where: { id: connectionId } });
+    47→  if (!conn || conn.type !== 'bank' || conn.status !== 'active') return null;
+    48→
+    49→  const txns = await db.bankTransaction.findMany({
+    50→    where: { connectionId },
+    51→    orderBy: { txnDate: 'asc' },
+    52→  });
+    53→  if (txns.length === 0) return null;
+    54→
+    55→  // Recompute monthly collections from stored transactions
+    56→  const monthlyMap = new Map<string, { collections: number; expenses: number }>();
+    57→  for (const t of txns) {
+    58→    const month = t.txnDate.toISOString().slice(0, 7);
+    59→    if (!monthlyMap.has(month)) monthlyMap.set(month, { collections: 0, expenses: 0 });
+    60→    const entry = monthlyMap.get(month)!;
+    61→    if (t.type === 'credit' && t.category === 'sales') entry.collections += t.amount;
+    62→    if (t.type === 'debit') entry.expenses += Math.abs(t.amount);
+    63→  }
+    64→  const monthlyCollections = Array.from(monthlyMap.entries())
+    65→    .map(([month, v]) => ({ month, collections: Math.round(v.collections * 100) / 100, expenses: Math.round(v.expenses * 100) / 100 }))
+    66→    .sort((a, b) => a.month.localeCompare(b.month))
+    67→    .slice(-3);
+    68→
+    69→  const totalCredits = txns.filter(t => t.type === 'credit').reduce((s, t) => s + t.amount, 0);
+    70→  const totalDebits = Math.abs(txns.filter(t => t.type === 'debit').reduce((s, t) => s + t.amount, 0));
+    71→  const closingBalance = txns.length > 0 ? txns[txns.length - 1].balanceAfter ?? 0 : 0;
+    72→  const openingBalance = txns.length > 0 ? (txns[0].balanceAfter ?? 0) - txns[0].amount : 0;
+    73→
+    74→  return {
+    75→    provider: conn.provider as BankDataset['provider'],
+    76→    maskedAccount: conn.maskedRef ?? 'XXXXXX0000',
+    77→    accountType: 'current',
+    78→    openingBalance,
+    79→    closingBalance,
+    80→    totalCredits,
+    81→    totalDebits,
+    82→    transactions: txns.map(t => ({
+    83→      txnDate: t.txnDate.toISOString(),
+    84→      description: t.description,
+    85→      amount: t.amount,
+    86→      type: t.type as 'credit' | 'debit',
+    87→      category: (t.category ?? 'other') as BankTransactionRecord['category'],
+    88→      counterparty: t.counterparty ?? undefined,
+    89→      referenceNo: t.referenceNo ?? undefined,
+    90→      balanceAfter: t.balanceAfter ?? 0,
+    91→    })),
+    92→    monthlyCollections,
+    93→  };
+    94→}
+    95→
+    96→// ─── Public: assemble the full Oracle live-data context ─────────────────────────
+    97→export async function loadOracleLiveData(): Promise<OracleLiveData> {
+    98→  const connections = await db.businessConnection.findMany({
+    99→    where: { status: 'active' },
+   100→    orderBy: { createdAt: 'asc' },
+   101→  });
+   102→
+   103→  const gstnConn = connections.find(c => c.type === 'gstn');
+   104→  const bankConn = connections.find(c => c.type === 'bank');
+   105→
+   106→  const gstn = gstnConn ? await loadGstnDataset(gstnConn.id) : null;
+   107→  const bank = bankConn ? await loadBankDataset(bankConn.id) : null;
+   108→
+   109→  const health: BusinessHealthBreakdown | null = (gstn || bank)
+   110→    ? computeBusinessHealth(gstn, bank)
+   111→    : null;
+   112→
+   113→  // Recent transactions (last 10)
+   114→  const recentTransactions: BankTransactionRecord[] | undefined = bank
+   115→    ? bank.transactions.slice(-10).reverse()
+   116→    : undefined;
+   117→
+   118→  // Risky clients: customers with declining collections or large overdue amounts.
+   119→  // Approximation from bank counterparty concentration.
+   120→  const riskyClients: { name: string; reason: string; amount: number }[] | undefined = bank
+   121→    ? (() => {
+   122→      // Group credits by counterparty over last 60 days
+   123→      const cutoff = Date.now() - 60 * 24 * 60 * 60 * 1000;
+   124→      const byCustomer = new Map<string, number>();
+   125→      for (const t of bank.transactions) {
+   126→        if (t.type !== 'credit' || t.category !== 'sales' || !t.counterparty) continue;
+   127→        if (new Date(t.txnDate).getTime() < cutoff) continue;
+   128→        byCustomer.set(t.counterparty, (byCustomer.get(t.counterparty) ?? 0) + t.amount);
+   129→      }
+   130→      // Flag customers whose recent inflows are unusually low (< ₹50k in 60 days but > 0)
+   131→      const risky: { name: string; reason: string; amount: number }[] = [];
+   132→      for (const [name, amount] of byCustomer.entries()) {
+   133→        if (amount < 50000) {
+   134→          risky.push({
+   135→            name,
+   136→            reason: 'Low inflow in last 60 days — possible collection delay',
+   137→            amount: Math.round(amount),
+   138→          });
+   139→        }
+   140→      }
+   141→      // Sort by amount ascending (lowest inflow = riskiest)
+   142→      return risky.sort((a, b) => a.amount - b.amount).slice(0, 5);
+   143→    })()
+   144→    : undefined;
+   145→
+   146→  // ── PHASE 2A — Bank-derived financial signals ──
+   147→  let cashBurn: number | undefined;
+   148→  let runwayDays: number | undefined;
+   149→  let collectionEfficiency: number | undefined;
+   150→  let expenseCategories: { category: string; amount: number; pct: number }[] | undefined;
+   151→  let dailyCashFlow: { date: string; inflow: number; outflow: number; net: number }[] | undefined;
+   152→  let topClients: { name: string; amount: number; sharePct: number }[] | undefined;
+   153→
+   154→  if (bank) {
+   155→    // cashBurn = average of last 3 months' expenses
+   156→    const months = bank.monthlyCollections;
+   157→    const last3 = months.slice(-3);
+   158→    const burn = last3.length > 0
+   159→      ? last3.reduce((s, m) => s + m.expenses, 0) / last3.length
+   160→      : 0;
+   161→    cashBurn = Math.round(burn * 100) / 100;
+   162→
+   163→    // runwayDays = closingBalance / max(1, cashBurn) * 30, clamped 0–365 (null if burn==0)
+   164→    if (burn > 0) {
+   165→      const days = Math.round((bank.closingBalance / Math.max(1, burn)) * 30);
+   166→      runwayDays = Math.max(0, Math.min(365, days));
+   167→    } else {
+   168→      runwayDays = undefined;
+   169→    }
+   170→
+   171→    // collectionEfficiency = monthlyCollections / (monthlyCollections + outstandingReceivables) * 100
+   172→    // where outstandingReceivables ≈ sum of debits categorized 'vendor' in last 60 days
+   173→    const cutoff60 = Date.now() - 60 * 24 * 60 * 60 * 1000;
+   174→    const outstandingReceivables = bank.transactions
+   175→      .filter(t => t.type === 'debit' && t.category === 'vendor' && new Date(t.txnDate).getTime() >= cutoff60)
+   176→      .reduce((s, t) => s + Math.abs(t.amount), 0);
+   177→    const monthlyCollections = months[months.length - 1]?.collections ?? 0;
+   178→    const denom = monthlyCollections + outstandingReceivables;
+   179→    collectionEfficiency = denom > 0
+   180→      ? Math.max(0, Math.min(100, Math.round((monthlyCollections / denom) * 100)))
+   181→      : 0;
+   182→
+   183→    // expenseCategories — group all debit txns by category, sum abs(amount), pct of total, top 6
+   184→    const byCat = new Map<string, number>();
+   185→    for (const t of bank.transactions) {
+   186→      if (t.type !== 'debit') continue;
+   187→      const cat = t.category ?? 'other';
+   188→      byCat.set(cat, (byCat.get(cat) ?? 0) + Math.abs(t.amount));
+   189→    }
+   190→    const totalExpenses = Array.from(byCat.values()).reduce((s, v) => s + v, 0);
+   191→    expenseCategories = Array.from(byCat.entries())
+   192→      .map(([category, amount]) => ({
+   193→        category,
+   194→        amount: Math.round(amount * 100) / 100,
+   195→        pct: totalExpenses > 0 ? Math.round((amount / totalExpenses) * 1000) / 10 : 0,
+   196→      }))
+   197→      .sort((a, b) => b.amount - a.amount)
+   198→      .slice(0, 6);
+   199→
+   200→    // dailyCashFlow — last 7 days: inflow (credits), outflow (abs debits), net
+   201→    const dailyMap = new Map<string, { inflow: number; outflow: number }>();
+   202→    const now = Date.now();
+   203→    for (let i = 6; i >= 0; i--) {
+   204→      const d = new Date(now - i * 24 * 60 * 60 * 1000);
+   205→      dailyMap.set(d.toISOString().slice(0, 10), { inflow: 0, outflow: 0 });
+   206→    }
+   207→    for (const t of bank.transactions) {
+   208→      const day = t.txnDate.slice(0, 10);
+   209→      if (!dailyMap.has(day)) continue;
+   210→      const entry = dailyMap.get(day)!;
+   211→      if (t.type === 'credit') entry.inflow += t.amount;
+   212→      else entry.outflow += Math.abs(t.amount);
+   213→    }
+   214→    dailyCashFlow = Array.from(dailyMap.entries()).map(([date, v]) => ({
+   215→      date,
+   216→      inflow: Math.round(v.inflow * 100) / 100,
+   217→      outflow: Math.round(v.outflow * 100) / 100,
+   218→      net: Math.round((v.inflow - v.outflow) * 100) / 100,
+   219→    }));
+   220→
+   221→    // topClients — group credit txns with category 'sales' by counterparty over last 90 days
+   222→    const cutoff90 = Date.now() - 90 * 24 * 60 * 60 * 1000;
+   223→    const byClient = new Map<string, number>();
+   224→    for (const t of bank.transactions) {
+   225→      if (t.type !== 'credit' || t.category !== 'sales' || !t.counterparty) continue;
+   226→      if (new Date(t.txnDate).getTime() < cutoff90) continue;
+   227→      byClient.set(t.counterparty, (byClient.get(t.counterparty) ?? 0) + t.amount);
+   228→    }
+   229→    const totalClientRevenue = Array.from(byClient.values()).reduce((s, v) => s + v, 0);
+   230→    topClients = Array.from(byClient.entries())
+   231→      .filter(([, amt]) => amt > 100000) // > ₹1 lakh
+   232→      .map(([name, amount]) => ({
+   233→        name,
+   234→        amount: Math.round(amount * 100) / 100,
+   235→        sharePct: totalClientRevenue > 0
+   236→          ? Math.round((amount / totalClientRevenue) * 1000) / 10
+   237→          : 0,
+   238→      }))
+   239→      .sort((a, b) => b.amount - a.amount)
+   240→      .slice(0, 5);
+   241→  }
+   242→
+   243→  return {
+   244→    hasGstn: !!gstn,
+   245→    hasBank: !!bank,
+   246→    gstin: gstn?.gstin,
+   247→    tradeName: gstn?.tradeName,
+   248→    compliance: gstn ? {
+   249→      score: gstn.compliance.score,
+   250→      pendingReturns: gstn.compliance.pendingReturns,
+   251→      overdueReturns: gstn.compliance.overdueReturns,
+   252→      lastFilingDate: gstn.compliance.lastFilingDate,
+   253→      nextDueDate: gstn.compliance.nextDueDate,
+   254→      itcAvailable: gstn.compliance.itcAvailable,
+   255→      activeNotices: gstn.compliance.activeNotices,
+   256→      status: gstn.compliance.status,
+   257→    } : null,
+   258→    bank: bank ? {
+   259→      provider: bank.provider,
+   260→      cashAvailable: bank.closingBalance,
+   261→      monthlyCollections: bank.monthlyCollections[bank.monthlyCollections.length - 1]?.collections ?? 0,
+   262→      monthlyExpenses: bank.monthlyCollections[bank.monthlyCollections.length - 1]?.expenses ?? 0,
+   263→      collectionChangePct: bank.monthlyCollections.length >= 2
+   264→        ? (() => {
+   265→          const l = bank.monthlyCollections[bank.monthlyCollections.length - 1].collections;
+   266→          const p = bank.monthlyCollections[bank.monthlyCollections.length - 2].collections;
+   267→          return p > 0 ? ((l - p) / p) * 100 : 0;
+   268→        })()
+   269→        : 0,
+   270→      expenseChangePct: bank.monthlyCollections.length >= 2
+   271→        ? (() => {
+   272→          const l = bank.monthlyCollections[bank.monthlyCollections.length - 1].expenses;
+   273→          const p = bank.monthlyCollections[bank.monthlyCollections.length - 2].expenses;
+   274→          return p > 0 ? ((l - p) / p) * 100 : 0;
+   275→        })()
+   276→        : 0,
+   277→      totalCredits: bank.totalCredits,
+   278→      totalDebits: bank.totalDebits,
+   279→    } : null,
+   280→    health,
+   281→    recentTransactions,
+   282→    riskyClients,
+   283→    // ── PHASE 2A — Real Data Platform extensions ──
+   284→    cashBurn,
+   285→    runwayDays,
+   286→    collectionEfficiency,
+   287→    expenseCategories,
+   288→    dailyCashFlow,
+   289→    topClients,
+   290→    firmProfile: gstn?.registrationProfile,
+   291→    gstr9: gstn?.gstr9,
+   292→    itcLedger: gstn?.itcLedger,
+   293→    cashLedger: gstn?.cashLedger,
+   294→    liabilityLedger: gstn?.liabilityLedger,
+   295→    lateFees: gstn?.lateFees,
+   296→    taxLiability: gstn?.taxLiability,
+   297→    recentReturns: gstn?.gstrFilings.slice(-6),
+   298→    activeNoticesList: gstn?.notices.filter(n => n.status === 'open').slice(0, 5),
+   299→  };
+   300→}
+   301→
+   302→// ─── Public: list all connections (for the UI) ──────────────────────────────────
+   303→export async function listConnections() {
+   304→  return db.businessConnection.findMany({
+   305→    where: { status: 'active' },
+   306→    orderBy: { createdAt: 'asc' },
+   307→  });
+   308→}
+   309→
+   310→// ─── Public: connect GSTN (verify + persist + seed data) ────────────────────────
+   311→export async function connectGstn(gstinRaw: string, connectedBy?: string) {
+   312→  const gstin = gstinRaw.toUpperCase().trim();
+   313→  const dataset = generateGstnDataset(gstin); // throws on invalid
+   314→
+   315→  // Replace any existing GSTN connection
+   316→  const existing = await db.businessConnection.findFirst({
+   317→    where: { type: 'gstn', status: 'active' },
+   318→  });
+   319→  if (existing) {
+   320→    await db.businessConnection.update({
+   321→      where: { id: existing.id },
+   322→      data: { status: 'disconnected' },
+   323→    });
+   324→  }
+   325→
+   326→  const connection = await db.businessConnection.create({
+   327→    data: {
+   328→      type: 'gstn',
+   329→      provider: 'GSTN',
+   330→      gstin,
+   331→      legalName: dataset.legalName,
+   332→      tradeName: dataset.tradeName,
+   333→      status: 'active',
+   334→      maskedRef: gstin,
+   335→      metadata: JSON.stringify({
+   336→        state: dataset.state,
+   337→        stateCode: dataset.stateCode,
+   338→        businessType: dataset.businessType,
+   339→        registrationDate: dataset.registrationDate,
+   340→      }),
+   341→      lastSyncedAt: new Date(),
+   342→      connectedBy,
+   343→    },
+   344→  });
+   345→
+   346→  return { connection, dataset };
+   347→}
+   348→
+   349→// ─── Public: connect a bank (persist + seed transactions) ───────────────────────
+   350→export async function connectBank(
+   351→  provider: BankDataset['provider'],
+   352→  accountRef: string,
+   353→  connectedBy?: string,
+   354→) {
+   355→  const dataset = generateBankDataset(provider, accountRef);
+   356→
+   357→  // Replace any existing bank connection
+   358→  const existing = await db.businessConnection.findFirst({
+   359→    where: { type: 'bank', status: 'active' },
+   360→  });
+   361→  if (existing) {
+   362→    await db.bankTransaction.deleteMany({ where: { connectionId: existing.id } });
+   363→    await db.businessConnection.update({
+   364→      where: { id: existing.id },
+   365→      data: { status: 'disconnected' },
+   366→    });
+   367→  }
+   368→
+   369→  const connection = await db.businessConnection.create({
+   370→    data: {
+   371→      type: 'bank',
+   372→      provider,
+   373→      status: 'active',
+   374→      maskedRef: dataset.maskedAccount,
+   375→      metadata: JSON.stringify({ accountType: dataset.accountType, accountRef }),
+   376→      lastSyncedAt: new Date(),
+   377→      connectedBy,
+   378→    },
+   379→  });
+   380→
+   381→  // Bulk-insert transactions (chunked to avoid SQLite param limits)
+   382→  const txns = dataset.transactions.map(t => ({
+   383→    connectionId: connection.id,
+   384→    bankProvider: provider,
+   385→    txnDate: new Date(t.txnDate),
+   386→    description: t.description,
+   387→    amount: t.amount,
+   388→    type: t.type,
+   389→    category: t.category ?? null,
+   390→    counterparty: t.counterparty ?? null,
+   391→    referenceNo: t.referenceNo ?? null,
+   392→    balanceAfter: t.balanceAfter,
+   393→    reconciled: false,
+   394→  }));
+   395→
+   396→  // Insert in chunks of 200
+   397→  for (let i = 0; i < txns.length; i += 200) {
+   398→    await db.bankTransaction.createMany({ data: txns.slice(i, i + 200) });
+   399→  }
+   400→
+   401→  return { connection, dataset };
+   402→}
+   403→
+   404→// ─── Public: disconnect a connection ────────────────────────────────────────────
+   405→export async function disconnectConnection(id: string) {
+   406→  const conn = await db.businessConnection.findUnique({ where: { id } });
+   407→  if (!conn) return;
+   408→  if (conn.type === 'bank') {
+   409→    await db.bankTransaction.deleteMany({ where: { connectionId: id } });
+   410→  }
+   411→  await db.businessConnection.update({
+   412→    where: { id },
+   413→    data: { status: 'disconnected' },
+   414→  });
+   415→}
+   416→
+   417→// ─── Public: persist a BusinessHealthSnapshot ───────────────────────────────────
+   418→export async function saveHealthSnapshot(health: BusinessHealthBreakdown) {
+   419→  const period = new Date().toISOString().slice(0, 7);
+   420→  return db.businessHealthSnapshot.create({
+   421→    data: {
+   422→      overall: health.overall,
+   423→      complianceScore: health.compliance,
+   424→      cashFlowScore: health.cashFlow,
+   425→      collectionScore: health.collection,
+   426→      growthScore: health.growth,
+   427→      profitabilityScore: health.profitability,
+   428→      riskScore: health.risk,
+   429→      components: JSON.stringify(health.components),
+   430→      signals: JSON.stringify(health.signals),
+   431→      period,
+   432→    },
+   433→  });
+   434→}
+   435→
+   436→// ═══════════════════════════════════════════════════════════════════════════════
+   437→// PHASE 2A — Real-Time Sync Center + Data Engine
+   438→// ═══════════════════════════════════════════════════════════════════════════════
+   439→
+   440→function parseConnectionMeta(raw: string | null | undefined): Record<string, unknown> {
+   441→  if (!raw) return {};
+   442→  try {
+   443→    return JSON.parse(raw) as Record<string, unknown>;
+   444→  } catch {
+   445→    return {};
+   446→  }
+   447→}
+   448→
+   449→// ─── Public: sync a single connection (re-pull + persist + log) ─────────────────
+   450→// Never throws — on any error, marks the SyncLog + connection 'failed' and returns.
+   451→export async function syncConnection(
+   452→  connectionId: string,
+   453→): Promise<{ log: SyncLogRow; connection: ConnectionRow }> {
+   454→  let log: SyncLogRow = null;
+   455→  let connection: ConnectionRow = null;
+   456→
+   457→  try {
+   458→    const conn = await db.businessConnection.findUnique({ where: { id: connectionId } });
+   459→    if (!conn) throw new Error('Connection not found');
+   460→    if (conn.status === 'disconnected') throw new Error('Connection is disconnected — please reconnect first');
+   461→
+   462→    // 1. Start sync — create SyncLog row + mark BusinessConnection.syncStatus='syncing'
+   463→    log = await db.syncLog.create({
+   464→      data: {
+   465→        connectionId: conn.id,
+   466→        status: 'syncing',
+   467→        startedAt: new Date(),
+   468→      },
+   469→    });
+   470→    connection = await db.businessConnection.update({
+   471→      where: { id: conn.id },
+   472→      data: { syncStatus: 'syncing' },
+   473→    });
+   474→
+   475→    // 2. Re-fetch (regenerate) the dataset
+   476→    let recordsImported = 0;
+   477→    let partialErrors: string[] = [];
+   478→
+   479→    if (conn.type === 'gstn') {
+   480→      const dataset = generateGstnDataset(conn.gstin!);
+   481→      recordsImported =
+   482→        dataset.gstrFilings.length +
+   483→        dataset.eInvoices.length +
+   484→        dataset.eWayBills.length +
+   485→        dataset.notices.length;
+   486→    } else if (conn.type === 'bank') {
+   487→      const provider = (conn.provider ?? 'HDFC') as BankProvider;
+   488→      const meta = parseConnectionMeta(conn.metadata);
+   489→      const accountRef = (meta.accountRef as string) ?? (conn.maskedRef ?? '').slice(-4) ?? '0000';
+   490→      const dataset = generateBankDataset(provider, accountRef);
+   491→
+   492→      // Delete old bank transactions for this connection
+   493→      await db.bankTransaction.deleteMany({ where: { connectionId: conn.id } });
+   494→
+   495→      // Re-insert chunked (200 per batch — SQLite param limit)
+   496→      const txns = dataset.transactions.map(t => ({
+   497→        connectionId: conn.id,
+   498→        bankProvider: provider,
+   499→        txnDate: new Date(t.txnDate),
+   500→        description: t.description,
+   501→        amount: t.amount,
+   502→        type: t.type,
+   503→        category: t.category ?? null,
+   504→        counterparty: t.counterparty ?? null,
+   505→        referenceNo: t.referenceNo ?? null,
+   506→        balanceAfter: t.balanceAfter,
+   507→        reconciled: false,
+   508→      }));
+   509→      for (let i = 0; i < txns.length; i += 200) {
+   510→        await db.bankTransaction.createMany({ data: txns.slice(i, i + 200) });
+   511→      }
+   512→      recordsImported = dataset.transactions.length;
+   513→    } else {
+   514→      throw new Error(`Unknown connection type: ${conn.type}`);
+   515→    }
+   516→
+   517→    // 3. Simulate rare partial / failed outcomes (5% partial, 2% failed)
+   518→    const r = Math.random();
+   519→    if (r < 0.02) {
+   520→      // Failed
+   521→      const errMsg = 'Sync failed — upstream API timeout (simulated)';
+   522→      log = await db.syncLog.update({
+   523→        where: { id: log.id },
+   524→        data: {
+   525→          status: 'failed',
+   526→          errorsCount: 1,
+   527→          message: errMsg,
+   528→          errorDetail: JSON.stringify([errMsg]),
+   529→          completedAt: new Date(),
+   530→        },
+   531→      });
+   532→      connection = await db.businessConnection.update({
+   533→        where: { id: conn.id },
+   534→        data: {
+   535→          syncStatus: 'failed',
+   536→          lastSyncedAt: new Date(),
+   537→          lastSyncRecords: recordsImported,
+   538→          lastSyncErrors: 1,
+   539→          lastSyncMessage: errMsg,
+   540→        },
+   541→      });
+   542→      return { log, connection };
+   543→    }
+   544→
+   545→    if (r < 0.05) {
+   546→      // Partial — 1–2 errors
+   547→      partialErrors = [
+   548→        'Row 23: counterparty name truncated',
+   549→        ...(Math.random() > 0.5 ? ['Row 67: amount sign normalised'] : []),
+   550→      ];
+   551→      log = await db.syncLog.update({
+   552→        where: { id: log.id },
+   553→        data: {
+   554→          status: 'partial',
+   555→          recordsImported,
+   556→          errorsCount: partialErrors.length,
+   557→          message: `Partial sync — ${recordsImported} records imported, ${partialErrors.length} errors`,
+   558→          errorDetail: JSON.stringify(partialErrors),
+   559→          completedAt: new Date(),
+   560→        },
+   561→      });
+   562→      connection = await db.businessConnection.update({
+   563→        where: { id: conn.id },
+   564→        data: {
+   565→          syncStatus: 'partial',
+   566→          lastSyncedAt: new Date(),
+   567→          lastSyncRecords: recordsImported,
+   568→          lastSyncErrors: partialErrors.length,
+   569→          lastSyncMessage: `Partial sync — ${recordsImported} records imported`,
+   570→        },
+   571→      });
+   572→      return { log, connection };
+   573→    }
+   574→
+   575→    // 4. Success
+   576→    const okMsg = `Synced ${recordsImported} records`;
+   577→    log = await db.syncLog.update({
+   578→      where: { id: log.id },
+   579→      data: {
+   580→        status: 'success',
+   581→        recordsImported,
+   582→        errorsCount: 0,
+   583→        message: okMsg,
+   584→        completedAt: new Date(),
+   585→      },
+   586→    });
+   587→    connection = await db.businessConnection.update({
+   588→      where: { id: conn.id },
+   589→      data: {
+   590→        syncStatus: 'connected',
+   591→        lastSyncedAt: new Date(),
+   592→        lastSyncRecords: recordsImported,
+   593→        lastSyncErrors: 0,
+   594→        lastSyncMessage: okMsg,
+   595→      },
+   596→    });
+   597→    return { log, connection };
+   598→  } catch (err) {
+   599→    // Never throw — mark log + connection as failed and return
+   600→    const errMsg = err instanceof Error ? err.message : 'Unknown sync error';
+   601→    console.error('syncConnection error:', errMsg);
+   602→    try {
+   603→      if (log) {
+   604→        log = await db.syncLog.update({
+   605→          where: { id: log.id },
+   606→          data: {
+   607→            status: 'failed',
+   608→            errorsCount: 1,
+   609→            message: errMsg,
+   610→            errorDetail: JSON.stringify([errMsg]),
+   611→            completedAt: new Date(),
+   612→          },
+   613→        });
+   614→      }
+   615→      if (connectionId) {
+   616→        connection = await db.businessConnection.update({
+   617→          where: { id: connectionId },
+   618→          data: {
+   619→            syncStatus: 'failed',
+   620→            lastSyncedAt: new Date(),
+   621→            lastSyncErrors: 1,
+   622→            lastSyncMessage: errMsg,
+   623→          },
+   624→        });
+   625→      }
+   626→    } catch (innerErr) {
+   627→      console.error('syncConnection fallback-failure:', innerErr);
+   628→    }
+   629→    return { log, connection };
+   630→  }
+   631→}
+   632→
+   633→// ─── Public: list recent sync logs for a connection ─────────────────────────────
+   634→export async function listSyncLogs(connectionId: string, limit = 20): Promise<SyncLogRow[]> {
+   635→  try {
+   636→    return await db.syncLog.findMany({
+   637→      where: { connectionId },
+   638→      orderBy: { startedAt: 'desc' },
+   639→      take: limit,
+   640→    });
+   641→  } catch (err) {
+   642→    console.error('listSyncLogs error:', err);
+   643→    return [];
+   644→  }
+   645→}
+   646→
+   647→// ─── Public: 8-card Data Engine payload ─────────────────────────────────────────
+   648→export interface DataEngineCard {
+   649→  value: number | unknown[];
+   650→  label: string;
+   651→  sublabel: string;
+   652→  changePct?: number;
+   653→  status?: string;
+   654→  hasData: boolean;
+   655→}
+   656→
+   657→export interface LiveDataEnginePayload {
+   658→  hasData: boolean;
+   659→  hasGstn: boolean;
+   660→  hasBank: boolean;
+   661→  cards: {
+   662→    revenue: DataEngineCard;
+   663→    cashPosition: DataEngineCard;
+   664→    itcAvailable: DataEngineCard;
+   665→    complianceScore: DataEngineCard;
+   666→    collections: DataEngineCard;
+   667→    pendingReturns: DataEngineCard;
+   668→    pendingNotices: DataEngineCard;
+   669→    topClients: DataEngineCard;
+   670→  };
+   671→  syncSummary: {
+   672→    lastSyncedAt: string | null;
+   673→    totalRecords: number;
+   674→    gstnStatus: string;
+   675→    bankStatus: string;
+   676→  } | null;
+   677→  computedAt: string;
+   678→}
+   679→
+   680→function inrShort(n: number): string {
+   681→  if (n >= 10000000) return `₹${(n / 10000000).toFixed(2)}Cr`;
+   682→  if (n >= 100000) return `₹${(n / 100000).toFixed(2)}L`;
+   683→  if (n >= 1000) return `₹${(n / 1000).toFixed(1)}K`;
+   684→  return `₹${Math.round(n)}`;
+   685→}
+   686→
+   687→function complianceStatusFor(score: number): 'compliant' | 'at_risk' | 'critical' {
+   688→  if (score >= 75) return 'compliant';
+   689→  if (score >= 50) return 'at_risk';
+   690→  return 'critical';
+   691→}
+   692→
+   693→function statusLabel(status: 'compliant' | 'at_risk' | 'critical'): string {
+   694→  if (status === 'compliant') return 'Compliant';
+   695→  if (status === 'at_risk') return 'At Risk';
+   696→  return 'Critical';
+   697→}
+   698→
+   699→const EMPTY_CARD: DataEngineCard = {
+   700→  value: 0,
+   701→  label: '—',
+   702→  sublabel: '',
+   703→  hasData: false,
+   704→};
+   705→
+   706→export async function computeLiveDataEngine(): Promise<LiveDataEnginePayload> {
+   707→  const live = await loadOracleLiveData();
+   708→  const computedAt = new Date().toISOString();
+   709→
+   710→  if (!live.hasGstn && !live.hasBank) {
+   711→    return {
+   712→      hasData: false,
+   713→      hasGstn: false,
+   714→      hasBank: false,
+   715→      cards: {
+   716→        revenue: { ...EMPTY_CARD },
+   717→        cashPosition: { ...EMPTY_CARD },
+   718→        itcAvailable: { ...EMPTY_CARD },
+   719→        complianceScore: { ...EMPTY_CARD },
+   720→        collections: { ...EMPTY_CARD },
+   721→        pendingReturns: { ...EMPTY_CARD },
+   722→        pendingNotices: { ...EMPTY_CARD },
+   723→        topClients: { ...EMPTY_CARD },
+   724→      },
+   725→      syncSummary: null,
+   726→      computedAt,
+   727→    };
+   728→  }
+   729→
+   730→  // Sync summary — pull the latest sync status per source from BusinessConnection
+   731→  let syncSummary: LiveDataEnginePayload['syncSummary'] = null;
+   732→  try {
+   733→    const conns = await db.businessConnection.findMany({
+   734→      where: { status: 'active' },
+   735→      orderBy: { createdAt: 'asc' },
+   736→    });
+   737→    const gstnConn = conns.find(c => c.type === 'gstn');
+   738→    const bankConn = conns.find(c => c.type === 'bank');
+   739→    const lastGstnSync = gstnConn?.lastSyncedAt?.toISOString() ?? null;
+   740→    const lastBankSync = bankConn?.lastSyncedAt?.toISOString() ?? null;
+   741→    const totalRecords =
+   742→      (gstnConn?.lastSyncRecords ?? 0) + (bankConn?.lastSyncRecords ?? 0);
+   743→    const latestSyncedAt = [lastGstnSync, lastBankSync]
+   744→      .filter(Boolean)
+   745→      .sort()
+   746→      .slice(-1)[0] ?? null;
+   747→    syncSummary = {
+   748→      lastSyncedAt: latestSyncedAt,
+   749→      totalRecords,
+   750→      gstnStatus: gstnConn?.syncStatus ?? 'connected',
+   751→      bankStatus: bankConn?.syncStatus ?? 'connected',
+   752→    };
+   753→  } catch (err) {
+   754→    console.error('computeLiveDataEngine syncSummary error:', err);
+   755→    syncSummary = null;
+   756→  }
+   757→
+   758→  // Build the 8 cards
+   759→  const monthlyCollections = live.bank?.monthlyCollections ?? 0;
+   760→  const collectionChangePct = live.bank?.collectionChangePct ?? 0;
+   761→  const cashAvailable = live.bank?.cashAvailable ?? 0;
+   762→  const itcAvailable = live.compliance?.itcAvailable ?? 0;
+   763→  const complianceScore = live.compliance?.score ?? 0;
+   764→  const pendingReturns = live.compliance?.pendingReturns ?? 0;
+   765→  const activeNotices = live.compliance?.activeNotices ?? 0;
+   766→  const topClientsArr = live.topClients ?? [];
+   767→
+   768→  const compStatus = complianceStatusFor(complianceScore);
+   769→
+   770→  return {
+   771→    hasData: true,
+   772→    hasGstn: live.hasGstn,
+   773→    hasBank: live.hasBank,
+   774→    cards: {
+   775→      revenue: {
+   776→        value: monthlyCollections,
+   777→        label: inrShort(monthlyCollections),
+   778→        sublabel: 'Monthly collections',
+   779→        changePct: Math.round(collectionChangePct),
+   780→        hasData: live.hasBank,
+   781→      },
+   782→      cashPosition: {
+   783→        value: cashAvailable,
+   784→        label: inrShort(cashAvailable),
+   785→        sublabel: 'Bank balance',
+   786→        hasData: live.hasBank,
+   787→      },
+   788→      itcAvailable: {
+   789→        value: itcAvailable,
+   790→        label: inrShort(itcAvailable),
+   791→        sublabel: 'GSTR-2B ITC',
+   792→        hasData: live.hasGstn,
+   793→      },
+   794→      complianceScore: {
+   795→        value: complianceScore,
+   796→        label: `${complianceScore}/100`,
+   797→        sublabel: statusLabel(compStatus),
+   798→        status: compStatus,
+   799→        hasData: live.hasGstn,
+   800→      },
+   801→      collections: {
+   802→        value: monthlyCollections,
+   803→        label: inrShort(monthlyCollections),
+   804→        sublabel: 'This month',
+   805→        changePct: Math.round(collectionChangePct),
+   806→        hasData: live.hasBank,
+   807→      },
+   808→      pendingReturns: {
+   809→        value: pendingReturns,
+   810→        label: String(pendingReturns),
+   811→        sublabel: 'Pending returns',
+   812→        hasData: live.hasGstn,
+   813→      },
+   814→      pendingNotices: {
+   815→        value: activeNotices,
+   816→        label: String(activeNotices),
+   817→        sublabel: 'Active notices',
+   818→        hasData: live.hasGstn,
+   819→      },
+   820→      topClients: {
+   821→        value: topClientsArr,
+   822→        label: `${topClientsArr.length} client${topClientsArr.length === 1 ? '' : 's'}`,
+   823→        sublabel: 'Top by revenue',
+   824→        hasData: topClientsArr.length > 0,
+   825→      },
+   826→    },
+   827→    syncSummary,
+   828→    computedAt,
+   829→  };
+   830→}
+   831→

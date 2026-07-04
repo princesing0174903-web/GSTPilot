@@ -1,0 +1,715 @@
+   600→  const handleRailClick = useCallback(
+   601→    (item: RailItem) => {
+   602→      if (item.id === 'oracle') return; // already here
+   603→      if (isStreaming) return;
+   604→      onNavigate(item.id);
+   605→      onClose();
+   606→    },
+   607→    [isStreaming, onNavigate, onClose],
+   608→  );
+   609→
+   610→  // ─── Derived state ─────────────────────────────────────────────────────────
+   611→  const avatarState = useMemo(
+   612→    () => deriveAvatarState({ isStreaming, hasInput: input.trim().length > 0, lastEmotion }),
+   613→    [isStreaming, input, lastEmotion],
+   614→  );
+   615→
+   616→  const isEmpty = messages.length === 0;
+   617→  const grouped = useMemo(() => groupConversations(store.conversations), [store.conversations]);
+   618→
+   619→  if (!mounted || typeof document === 'undefined') return null;
+   620→
+   621→  return createPortal(
+   622→    <AnimatePresence>
+   623→      {open && (
+   624→        <motion.div
+   625→          initial={{ opacity: 0 }}
+   626→          animate={{ opacity: 1 }}
+   627→          exit={{ opacity: 0 }}
+   628→          transition={{ duration: 0.2 }}
+   629→          className="fixed inset-0 z-[200] flex h-screen w-screen"
+   630→          style={{ background: 'var(--background)' }}
+   631→        >
+   632→          {/* ═══════════════════════════════════════════════════════════════════ */}
+   633→          {/* COLUMN 0 — RAIL (left sidebar)                                       */}
+   634→          {/* ═══════════════════════════════════════════════════════════════════ */}
+   635→          <nav
+   636→            aria-label="Oracle workspace navigation"
+   637→            className="flex h-full w-14 shrink-0 flex-col items-center gap-1 border-r py-3 md:w-16 md:gap-1.5 lg:w-56 lg:items-stretch lg:px-2.5"
+   638→            style={{ borderColor: 'var(--border)' }}
+   639→          >
+   640→            {/* Brand */}
+   641→            <div className="mb-2 flex items-center justify-center gap-2 px-1 lg:mb-4 lg:px-2">
+   642→              <InfinitySymbol size={28} />
+   643→              <div className="hidden lg:block">
+   644→                <p className="text-[13px] font-semibold leading-tight tracking-tight text-white">
+   645→                  GSTPilot
+   646→                </p>
+   647→                <p className="text-[10px] font-bold uppercase leading-tight tracking-wider text-white/50">
+   648→                  Oracle
+   649→                </p>
+   650→              </div>
+   651→            </div>
+   652→
+   653→            {/* Rail items */}
+   654→            <div className="flex flex-1 flex-col gap-1 lg:gap-0.5">
+   655→              {RAIL_ITEMS.map((item) => {
+   656→                const isActive = item.id === 'oracle';
+   657→                const Icon = item.icon;
+   658→                return (
+   659→                  <button
+   660→                    key={item.id}
+   661→                    type="button"
+   662→                    onClick={() => handleRailClick(item)}
+   663→                    aria-current={isActive ? 'page' : undefined}
+   664→                    className={cn(
+   665→                      'group relative flex items-center justify-center gap-3 rounded-xl px-2.5 py-2.5 text-sm font-medium transition-colors lg:justify-start lg:px-3',
+   666→                      isActive
+   667→                        ? 'text-white'
+   668→                        : 'text-white/60 hover:bg-white/[0.05] hover:text-white',
+   669→                    )}
+   670→                  >
+   671→                    {isActive && (
+   672→                      <span
+   673→                        className="absolute left-0 top-1/2 hidden h-7 w-[3px] -translate-y-1/2 rounded-full lg:block"
+   674→                        style={{
+   675→                          background:
+   676→                            'linear-gradient(180deg, #10b981 0%, #059669 100%)',
+   677→                        }}
+   678→                      />
+   679→                    )}
+   680→                    <Icon
+   681→                      className={cn(
+   682→                        'h-5 w-5 shrink-0 transition-colors',
+   683→                        isActive ? 'text-emerald-400' : 'text-white/60 group-hover:text-white',
+   684→                      )}
+   685→                    />
+   686→                    <span className="hidden truncate lg:inline">{item.label}</span>
+   687→                  </button>
+   688→                );
+   689→              })}
+   690→            </div>
+   691→
+   692→            {/* Footer mini brand */}
+   693→            <div className="mt-auto hidden px-2 pb-1 lg:block">
+   694→              <p className="text-[9px] font-medium uppercase tracking-wider text-white/30">
+   695→                The Financial Brain
+   696→              </p>
+   697→              <p className="text-[9px] font-medium uppercase tracking-wider text-white/30">
+   698→                of India
+   699→              </p>
+   700→            </div>
+   701→          </nav>
+   702→
+   703→          {/* ═══════════════════════════════════════════════════════════════════ */}
+   704→          {/* COLUMN 1 — CONVERSATION HISTORY                                      */}
+   705→          {/* ═══════════════════════════════════════════════════════════════════ */}
+   706→          {/* Desktop: persistent column. Mobile: slide-over drawer. */}
+   707→          <aside
+   708→            className={cn(
+   709→              'h-full w-72 shrink-0 flex-col border-r lg:flex',
+   710→              historyOpen ? 'flex' : 'hidden',
+   711→            )}
+   712→            style={{ borderColor: 'var(--border)', background: 'var(--background)' }}
+   713→          >
+   714→            {/* New Chat */}
+   715→            <div className="shrink-0 p-3">
+   716→              <button
+   717→                type="button"
+   718→                onClick={handleNewChat}
+   719→                disabled={isStreaming}
+   720→                className="flex w-full items-center gap-2.5 rounded-xl border px-3.5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-white/[0.05] disabled:opacity-40"
+   721→                style={{ borderColor: 'var(--border)', background: 'var(--input)' }}
+   722→              >
+   723→                <Plus className="h-4 w-4 text-emerald-400" />
+   724→                New Chat
+   725→              </button>
+   726→            </div>
+   727→
+   728→            {/* History scroll */}
+   729→            <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto px-2 pb-3">
+   730→              <HistoryGroup
+   731→                label="Today"
+   732→                items={grouped.today}
+   733→                activeId={activeId}
+   734→                onSelect={handleSwitchConversation}
+   735→                onDelete={handleDeleteConversation}
+   736→              />
+   737→              <HistoryGroup
+   738→                label="Yesterday"
+   739→                items={grouped.yesterday}
+   740→                activeId={activeId}
+   741→                onSelect={handleSwitchConversation}
+   742→                onDelete={handleDeleteConversation}
+   743→              />
+   744→              <HistoryGroup
+   745→                label="Previous 7 Days"
+   746→                items={grouped.prev7}
+   747→                activeId={activeId}
+   748→                onSelect={handleSwitchConversation}
+   749→                onDelete={handleDeleteConversation}
+   750→              />
+   751→              <HistoryGroup
+   752→                label="Older"
+   753→                items={grouped.older}
+   754→                activeId={activeId}
+   755→                onSelect={handleSwitchConversation}
+   756→                onDelete={handleDeleteConversation}
+   757→              />
+   758→
+   759→              {store.conversations.length === 0 && (
+   760→                <p className="px-3 py-6 text-center text-xs text-white/40">
+   761→                  No conversations yet.
+   762→                </p>
+   763→              )}
+   764→            </div>
+   765→
+   766→            {/* Mobile close-drawer button */}
+   767→            <button
+   768→              type="button"
+   769→              onClick={() => setHistoryOpen(false)}
+   770→              className="shrink-0 border-t px-4 py-3 text-xs font-medium text-white/60 hover:text-white lg:hidden"
+   771→              style={{ borderColor: 'var(--border)' }}
+   772→            >
+   773→              Close
+   774→            </button>
+   775→          </aside>
+   776→
+   777→          {/* ═══════════════════════════════════════════════════════════════════ */}
+   778→          {/* COLUMN 2 — MAIN CHAT                                                 */}
+   779→          {/* ═══════════════════════════════════════════════════════════════════ */}
+   780→          <section className="flex min-w-0 flex-1 flex-col" style={{ background: 'var(--background)' }}>
+   781→            {/* ─── Header ─── */}
+   782→            <header
+   783→              className="flex shrink-0 items-center gap-3 border-b px-4 py-3 md:px-6"
+   784→              style={{ borderColor: 'var(--border)' }}
+   785→            >
+   786→              {/* Mobile: open history drawer */}
+   787→              <button
+   788→                type="button"
+   789→                onClick={() => setHistoryOpen(true)}
+   790→                className="flex h-9 w-9 items-center justify-center rounded-lg text-white/60 transition-colors hover:bg-white/[0.05] hover:text-white lg:hidden"
+   791→                aria-label="Open conversation history"
+   792→              >
+   793→                <MessageSquare className="h-4 w-4" />
+   794→              </button>
+   795→
+   796→              <OracleAvatar state={avatarState} />
+   797→
+   798→              <div className="min-w-0 flex-1">
+   799→                <div className="flex items-baseline gap-0.5">
+   800→                  <span className="text-sm font-semibold tracking-tight text-white md:text-base">
+   801→                    GSTPilot Oracle
+   802→                  </span>
+   803→                  <sup className="text-[9px] font-medium text-white/40">™</sup>
+   804→                </div>
+   805→                <p className="truncate text-[11px] text-white/50 md:text-xs">
+   806→                  Ask anything. Run everything.
+   807→                </p>
+   808→              </div>
+   809→
+   810→              {/* Status pill */}
+   811→              <div className="hidden items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] sm:flex" style={{ borderColor: 'var(--border)' }}>
+   812→                <span
+   813→                  className={cn(
+   814→                    'inline-flex h-1.5 w-1.5 rounded-full',
+   815→                    isStreaming ? 'bg-amber-400' : 'bg-emerald-400',
+   816→                  )}
+   817→                />
+   818→                <span className="text-white/60">
+   819→                  {isStreaming ? 'Responding' : AVATAR_STATE_LABEL[avatarState]}
+   820→                </span>
+   821→                {activeLanguage && activeLanguage !== 'english' && (
+   822→                  <span className="text-white/30">· {nativeLanguageLabel(activeLanguage)}</span>
+   823→                )}
+   824→              </div>
+   825→
+   826→              {messages.length > 0 && !isStreaming && (
+   827→                <button
+   828→                  type="button"
+   829→                  onClick={handleNewChat}
+   830→                  className="rounded-lg px-2.5 py-1.5 text-[11px] font-medium text-white/60 transition-colors hover:bg-white/[0.05] hover:text-white"
+   831→                >
+   832→                  Clear
+   833→                </button>
+   834→              )}
+   835→              <button
+   836→                type="button"
+   837→                onClick={onClose}
+   838→                disabled={isStreaming}
+   839→                className="flex h-8 w-8 items-center justify-center rounded-lg text-white/60 transition-colors hover:bg-white/[0.05] hover:text-white disabled:opacity-40"
+   840→                aria-label="Close Oracle"
+   841→              >
+   842→                <X className="h-4 w-4" />
+   843→              </button>
+   844→            </header>
+   845→
+   846→            {/* ─── Messages ─── */}
+   847→            <div
+   848→              ref={scrollRef}
+   849→              onScroll={handleScroll}
+   850→              className="custom-scrollbar min-h-0 flex-1 overflow-y-auto"
+   851→            >
+   852→              {isEmpty ? (
+   853→                <OracleEmptyState onPick={(p) => sendMessage(p)} userName={userName} />
+   854→              ) : (
+   855→                <div className="mx-auto flex max-w-3xl flex-col gap-6 px-4 py-6 md:px-6">
+   856→                  {messages.map((m) => (
+   857→                    <MessageBubble key={m.id} message={m} onPickFollowUp={sendMessage} />
+   858→                  ))}
+   859→                </div>
+   860→              )}
+   861→            </div>
+   862→
+   863→            {/* ─── Sticky input ─── */}
+   864→            <div
+   865→              className="shrink-0 border-t px-4 py-4 md:px-6"
+   866→              style={{ borderColor: 'var(--border)', background: 'var(--background)' }}
+   867→            >
+   868→              <div className="mx-auto max-w-3xl">
+   869→                {/* Suggested prompts (compact, only when input empty) */}
+   870→                <AnimatePresence>
+   871→                  {!input.trim() && !isEmpty && (
+   872→                    <motion.div
+   873→                      initial={{ opacity: 0, height: 0 }}
+   874→                      animate={{ opacity: 1, height: 'auto' }}
+   875→                      exit={{ opacity: 0, height: 0 }}
+   876→                      className="mb-2.5 flex flex-wrap gap-2"
+   877→                    >
+   878→                      {QUICK_PROMPTS.map((p) => (
+   879→                        <button
+   880→                          key={p}
+   881→                          type="button"
+   882→                          onClick={() => sendMessage(p)}
+   883→                          disabled={isStreaming}
+   884→                          className="rounded-full border px-3 py-1.5 text-xs font-medium text-white/70 transition-colors hover:bg-white/[0.05] hover:text-white disabled:opacity-40"
+   885→                          style={{ borderColor: 'var(--border)', background: 'var(--input)' }}
+   886→                        >
+   887→                          {p}
+   888→                        </button>
+   889→                      ))}
+   890→                    </motion.div>
+   891→                  )}
+   892→                </AnimatePresence>
+   893→
+   894→                {/* Input box */}
+   895→                <div
+   896→                  className="flex items-end gap-2 rounded-2xl p-2 transition-colors focus-within:border-white/[0.18]"
+   897→                  style={{
+   898→                    borderColor: 'var(--border)',
+   899→                    background: 'var(--input)',
+   900→                    borderWidth: 1,
+   901→                    borderStyle: 'solid',
+   902→                  }}
+   903→                >
+   904→                  <textarea
+   905→                    ref={inputRef}
+   906→                    value={input}
+   907→                    onChange={handleInputChange}
+   908→                    onKeyDown={handleKeyDown}
+   909→                    rows={1}
+   910→                    placeholder="Ask Oracle anything — GST, returns, cash flow, ITC…"
+   911→                    className="max-h-40 min-h-[36px] flex-1 resize-none bg-transparent px-2.5 py-1.5 text-sm leading-relaxed text-white placeholder:text-white/40 focus:outline-none custom-scrollbar"
+   912→                    disabled={isStreaming}
+   913→                  />
+   914→                  {isStreaming ? (
+   915→                    <button
+   916→                      type="button"
+   917→                      onClick={handleStop}
+   918→                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-white transition-colors hover:bg-white/[0.08]"
+   919→                      style={{ background: 'var(--secondary)' }}
+   920→                      aria-label="Stop"
+   921→                    >
+   922→                      <Square className="h-3.5 w-3.5 fill-current" />
+   923→                    </button>
+   924→                  ) : (
+   925→                    <button
+   926→                      type="button"
+   927→                      onClick={() => sendMessage(input)}
+   928→                      disabled={!input.trim()}
+   929→                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-white shadow-lg shadow-emerald-500/20 transition-all hover:opacity-90 disabled:opacity-30 disabled:shadow-none"
+   930→                      style={{
+   931→                        background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+   932→                      }}
+   933→                      aria-label="Send"
+   934→                    >
+   935→                      <ArrowUp className="h-4 w-4" />
+   936→                    </button>
+   937→                  )}
+   938→                </div>
+   939→
+   940→                {/* Hint line */}
+   941→                <div className="mt-2 flex items-center justify-between px-1 text-[10px] text-white/30">
+   942→                  <span className="flex items-center gap-1">
+   943→                    <Sparkles className="h-3 w-3" />
+   944→                    Oracle replies in your language · Enter to send · Shift+Enter for newline
+   945→                  </span>
+   946→                  <span className="hidden sm:inline">
+   947→                    GSTPilot Oracle™ · Founded by Prince Singh
+   948→                  </span>
+   949→                </div>
+   950→              </div>
+   951→            </div>
+   952→          </section>
+   953→
+   954→          {/* Mobile history backdrop */}
+   955→          <AnimatePresence>
+   956→            {historyOpen && (
+   957→              <motion.div
+   958→                initial={{ opacity: 0 }}
+   959→                animate={{ opacity: 1 }}
+   960→                exit={{ opacity: 0 }}
+   961→                onClick={() => setHistoryOpen(false)}
+   962→                className="fixed inset-0 z-[110] bg-black/60 lg:hidden"
+   963→                aria-hidden
+   964→              />
+   965→            )}
+   966→          </AnimatePresence>
+   967→        </motion.div>
+   968→      )}
+   969→    </AnimatePresence>,
+   970→    document.body,
+   971→  );
+   972→}
+   973→
+   974→// ─── History group ────────────────────────────────────────────────────────────
+   975→
+   976→interface HistoryGroupProps {
+   977→  label: string;
+   978→  items: OracleConversation[];
+   979→  activeId: string | null;
+   980→  onSelect: (id: string) => void;
+   981→  onDelete: (id: string) => void;
+   982→}
+   983→
+   984→function HistoryGroup({ label, items, activeId, onSelect, onDelete }: HistoryGroupProps) {
+   985→  if (items.length === 0) return null;
+   986→  return (
+   987→    <div className="mb-3">
+   988→      <p className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-white/30">
+   989→        {label}
+   990→      </p>
+   991→      <div className="space-y-0.5">
+   992→        {items.map((c) => {
+   993→          const isActive = c.id === activeId;
+   994→          return (
+   995→            <div
+   996→              key={c.id}
+   997→              className={cn(
+   998→                'group relative flex items-center gap-2 rounded-lg px-3 py-2 text-left transition-colors',
+   999→                isActive ? 'bg-white/[0.06] text-white' : 'text-white/60 hover:bg-white/[0.04] hover:text-white',
+  1000→              )}
+  1001→            >
+  1002→              <button
+  1003→                type="button"
+  1004→                onClick={() => onSelect(c.id)}
+  1005→                className="min-w-0 flex-1 text-left"
+  1006→              >
+  1007→                <span className="block truncate text-sm font-medium">{c.title}</span>
+  1008→              </button>
+  1009→              <button
+  1010→                type="button"
+  1011→                onClick={(e) => {
+  1012→                  e.stopPropagation();
+  1013→                  onDelete(c.id);
+  1014→                }}
+  1015→                className="shrink-0 rounded p-1 text-white/30 opacity-0 transition-opacity hover:text-white/80 group-hover:opacity-100"
+  1016→                aria-label="Delete conversation"
+  1017→              >
+  1018→                <Trash2 className="h-3.5 w-3.5" />
+  1019→              </button>
+  1020→            </div>
+  1021→          );
+  1022→        })}
+  1023→      </div>
+  1024→    </div>
+  1025→  );
+  1026→}
+  1027→
+  1028→// ─── Oracle Avatar (dynamic state) ────────────────────────────────────────────
+  1029→
+  1030→function OracleAvatar({ state }: { state: ReturnType<typeof deriveAvatarState> }) {
+  1031→  const ringColor =
+  1032→    state === 'speaking'
+  1033→      ? 'bg-amber-400'
+  1034→      : state === 'warning'
+  1035→        ? 'bg-rose-400'
+  1036→        : state === 'success'
+  1037→          ? 'bg-emerald-400'
+  1038→          : 'bg-emerald-400';
+  1039→  return (
+  1040→    <div className="relative shrink-0">
+  1041→      <div
+  1042→        className="flex h-9 w-9 items-center justify-center rounded-xl shadow-lg shadow-emerald-500/20"
+  1043→        style={{ background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)' }}
+  1044→      >
+  1045→        <InfinitySymbol size={20} />
+  1046→      </div>
+  1047→      <span className="absolute -bottom-0.5 -right-0.5 flex h-2.5 w-2.5">
+  1048→        {state === 'speaking' && (
+  1049→          <span className={cn('absolute inline-flex h-full w-full animate-ping rounded-full opacity-75', ringColor)} />
+  1050→        )}
+  1051→        <span className={cn('relative inline-flex h-2.5 w-2.5 rounded-full border-2', ringColor)} style={{ borderColor: 'var(--background)' }} />
+  1052→      </span>
+  1053→    </div>
+  1054→  );
+  1055→}
+  1056→
+  1057→// ─── Message Bubble ───────────────────────────────────────────────────────────
+  1058→
+  1059→function MessageBubble({
+  1060→  message,
+  1061→  onPickFollowUp,
+  1062→}: {
+  1063→  message: OracleMessage;
+  1064→  onPickFollowUp: (prompt: string) => void;
+  1065→}) {
+  1066→  const isUser = message.role === 'user';
+  1067→  const emotionGlyph = !isUser && message.emotion ? ORACLE_EMOTIONS[message.emotion]?.glyph : null;
+  1068→
+  1069→  if (isUser) {
+  1070→    return (
+  1071→      <motion.div
+  1072→        initial={{ opacity: 0, y: 8 }}
+  1073→        animate={{ opacity: 1, y: 0 }}
+  1074→        transition={{ duration: 0.25 }}
+  1075→        className="flex justify-end"
+  1076→      >
+  1077→        <div
+  1078→          className="max-w-[85%] rounded-2xl rounded-br-md px-4 py-2.5 text-sm leading-relaxed text-white"
+  1079→          style={{ background: 'var(--secondary)' }}
+  1080→        >
+  1081→          {message.content}
+  1082→        </div>
+  1083→      </motion.div>
+  1084→    );
+  1085→  }
+  1086→
+  1087→  const isEmptyStreaming = message.streaming && !message.content;
+  1088→
+  1089→  return (
+  1090→    <motion.div
+  1091→      initial={{ opacity: 0, y: 8 }}
+  1092→      animate={{ opacity: 1, y: 0 }}
+  1093→      transition={{ duration: 0.25 }}
+  1094→      className="flex gap-3"
+  1095→    >
+  1096→      {/* Avatar */}
+  1097→      <div className="mt-0.5 shrink-0">
+  1098→        <div
+  1099→          className="flex h-7 w-7 items-center justify-center rounded-lg shadow-md shadow-emerald-500/15"
+  1100→          style={{ background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)' }}
+  1101→        >
+  1102→          <InfinitySymbol size={15} />
+  1103→        </div>
+  1104→      </div>
+  1105→
+  1106→      {/* Bubble */}
+  1107→      <div className="min-w-0 flex-1">
+  1108→        {emotionGlyph && (
+  1109→          <div className="mb-1 text-xs" aria-hidden>
+  1110→            {emotionGlyph}
+  1111→          </div>
+  1112→        )}
+  1113→
+  1114→        {isEmptyStreaming ? (
+  1115→          <RespondingIndicator />
+  1116→        ) : (
+  1117→          <div className="oracle-prose text-sm leading-relaxed text-white/90">
+  1118→            <ReactMarkdown
+  1119→              components={{
+  1120→                a: ({ children, href }) => (
+  1121→                  <a href={href} target="_blank" rel="noopener noreferrer" className="text-emerald-400 underline underline-offset-2">
+  1122→                    {children}
+  1123→                  </a>
+  1124→                ),
+  1125→              }}
+  1126→            >
+  1127→              {message.content}
+  1128→            </ReactMarkdown>
+  1129→            {message.streaming && <PulsingCursor />}
+  1130→          </div>
+  1131→        )}
+  1132→
+  1133→        {/* Follow-up chips */}
+  1134→        {message.followUps && message.followUps.length > 0 && !message.streaming && (
+  1135→          <div className="mt-3 flex flex-wrap gap-2">
+  1136→            {message.followUps.map((f, i) => (
+  1137→              <button
+  1138→                key={i}
+  1139→                type="button"
+  1140→                onClick={() => onPickFollowUp(f)}
+  1141→                className="rounded-full border px-3 py-1.5 text-xs font-medium text-white/70 transition-all hover:text-white"
+  1142→                style={{ borderColor: 'var(--border)', background: 'var(--input)' }}
+  1143→              >
+  1144→                {f}
+  1145→              </button>
+  1146→            ))}
+  1147→          </div>
+  1148→        )}
+  1149→      </div>
+  1150→    </motion.div>
+  1151→  );
+  1152→}
+  1153→
+  1154→// ─── "Oracle is responding…" with blinking cursor ─────────────────────────────
+  1155→
+  1156→function RespondingIndicator() {
+  1157→  return (
+  1158→    <div className="flex items-center gap-2 text-sm text-white/50">
+  1159→      <span className="flex items-center gap-1.5">
+  1160→        <span className="relative flex h-2 w-2">
+  1161→          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
+  1162→          <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" />
+  1163→        </span>
+  1164→        <span className="animate-pulse">Oracle is responding</span>
+  1165→      </span>
+  1166→      <span className="text-white/30">…</span>
+  1167→      <BlinkingCursor />
+  1168→    </div>
+  1169→  );
+  1170→}
+  1171→
+  1172→function PulsingCursor() {
+  1173→  return (
+  1174→    <span
+  1175→      className="ml-0.5 inline-block h-4 w-[2px] translate-y-0.5 animate-pulse rounded-full bg-emerald-400 align-middle"
+  1176→      aria-hidden
+  1177→    />
+  1178→  );
+  1179→}
+  1180→
+  1181→function BlinkingCursor() {
+  1182→  return (
+  1183→    <span
+  1184→      className="ml-0.5 inline-block h-3.5 w-[2px] animate-pulse rounded-full bg-emerald-400 align-middle"
+  1185→      aria-hidden
+  1186→    />
+  1187→  );
+  1188→}
+  1189→
+  1190→// ─── Helpers ──────────────────────────────────────────────────────────────────
+  1191→
+  1192→const QUICK_PROMPTS = [
+  1193→  'GST kya hota hai?',
+  1194→  'Explain ITC rules',
+  1195→  'Check my compliance',
+  1196→  'GSTR-3B filing steps',
+  1197→];
+  1198→
+  1199→function cryptoId(): string {
+  1200→  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+  1201→    return crypto.randomUUID();
+  1202→  }
+  1203→  return `id-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+  1204→}
+  1205→
+  1206→function newConversation(): OracleConversation {
+  1207→  const now = new Date().toISOString();
+  1208→  return {
+  1209→    id: cryptoId(),
+  1210→    title: 'New chat',
+  1211→    messages: [],
+  1212→    createdAt: now,
+  1213→    updatedAt: now,
+  1214→  };
+  1215→}
+  1216→
+  1217→function deriveTitle(messages: OracleMessage[]): string {
+  1218→  const firstUser = messages.find((m) => m.role === 'user');
+  1219→  if (!firstUser) return 'New chat';
+  1220→  const t = firstUser.content.trim().replace(/\s+/g, ' ');
+  1221→  return t.length > 42 ? `${t.slice(0, 42)}…` : t || 'New chat';
+  1222→}
+  1223→
+  1224→function loadStore(): ConversationStore {
+  1225→  try {
+  1226→    const raw = localStorage.getItem(STORE_KEY);
+  1227→    if (!raw) return { conversations: [], activeId: null };
+  1228→    const parsed = JSON.parse(raw) as ConversationStore;
+  1229→    if (!parsed || !Array.isArray(parsed.conversations)) {
+  1230→      return { conversations: [], activeId: null };
+  1231→    }
+  1232→    return parsed;
+  1233→  } catch {
+  1234→    return { conversations: [], activeId: null };
+  1235→  }
+  1236→}
+  1237→
+  1238→function saveStore(store: ConversationStore) {
+  1239→  try {
+  1240→    localStorage.setItem(STORE_KEY, JSON.stringify(store));
+  1241→  } catch {
+  1242→    /* ignore */
+  1243→  }
+  1244→}
+  1245→
+  1246→interface ConversationGroups {
+  1247→  today: OracleConversation[];
+  1248→  yesterday: OracleConversation[];
+  1249→  prev7: OracleConversation[];
+  1250→  older: OracleConversation[];
+  1251→}
+  1252→
+  1253→function groupConversations(convos: OracleConversation[]): ConversationGroups {
+  1254→  const now = new Date();
+  1255→  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  1256→  const startOfYesterday = startOfToday - 86_400_000;
+  1257→  const startOf7Days = startOfToday - 7 * 86_400_000;
+  1258→
+  1259→  const today: OracleConversation[] = [];
+  1260→  const yesterday: OracleConversation[] = [];
+  1261→  const prev7: OracleConversation[] = [];
+  1262→  const older: OracleConversation[] = [];
+  1263→
+  1264→  const sorted = [...convos].sort(
+  1265→    (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
+  1266→  );
+  1267→
+  1268→  for (const c of sorted) {
+  1269→    const t = new Date(c.updatedAt).getTime();
+  1270→    if (isNaN(t)) {
+  1271→      older.push(c);
+  1272→    } else if (t >= startOfToday) {
+  1273→      today.push(c);
+  1274→    } else if (t >= startOfYesterday) {
+  1275→      yesterday.push(c);
+  1276→    } else if (t >= startOf7Days) {
+  1277→      prev7.push(c);
+  1278→    } else {
+  1279→      older.push(c);
+  1280→    }
+  1281→  }
+  1282→
+  1283→  return { today, yesterday, prev7, older };
+  1284→}
+  1285→
+  1286→/** Generate contextual follow-up chips from the response content. */
+  1287→function buildFollowUps(content: string): string[] | undefined {
+  1288→  if (!content || content.length < 30) return undefined;
+  1289→  const lower = content.toLowerCase();
+  1290→
+  1291→  const pool: string[] = [];
+  1292→  if (/(gstr-3b|3b)/.test(lower)) pool.push('GSTR-3B की last date क्या है?', 'Late fee कितनी लगेगी?');
+  1293→  if (/(gstr-1|gstr 1)/.test(lower)) pool.push('GSTR-1 कैसे file करें?', 'B2B और B2C में अंतर?');
+  1294→  if (/(itc|input tax credit)/.test(lower)) pool.push('ITC claim कैसे करें?', 'Blocked ITC के rules?');
+  1295→  if (/(late fee|penalty|overdue)/.test(lower)) pool.push('Late fee waiver मिल सकती है?', 'How to avoid this next time?');
+  1296→  if (/(cash flow|collections)/.test(lower)) pool.push('Receivables कैसे recover करें?', 'Working capital optimize करें');
+  1297→  if (/(reverse charge|rcm)/.test(lower)) pool.push('RCM किन पर लागू है?', 'How to report RCM in GSTR-3B?');
+  1298→  if (/(refund)/.test(lower)) pool.push('Refund process क्या है?', 'Refund timeline कितनी है?');
+  1299→
+  1300→  pool.push('GST kya hota hai?', 'Explain ITC rules', 'How can Oracle help me daily?');
+  1301→
+  1302→  const seen = new Set<string>();
+  1303→  const picks: string[] = [];
+  1304→  for (const p of pool) {
+  1305→    if (seen.has(p)) continue;
+  1306→    seen.add(p);
+  1307→    picks.push(p);
+  1308→    if (picks.length >= 3) break;
+  1309→  }
+  1310→  return picks;
+  1311→}
+  1312→
+  1313→export default OracleWorkspace;
+  1314→

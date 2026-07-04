@@ -1,0 +1,760 @@
+     1→// ═══════════════════════════════════════════════════════════════════════════════
+     2→// GSTPilot Global AI App Marketplace™ — Type System
+     3→// Ecosystem platform: apps, AI employees, SDK, webhooks, plugins, monetization.
+     4→// Catalog models are GLOBAL; installs/webhooks/plugins/sandbox/analytics are tenant-scoped.
+     5→// ═══════════════════════════════════════════════════════════════════════════════
+     6→
+     7→/** Application types supported by the platform. */
+     8→export type AppType =
+     9→  | 'native'
+    10→  | 'ai'
+    11→  | 'industry'
+    12→  | 'dashboard'
+    13→  | 'widget'
+    14→  | 'ai_employee'
+    15→  | 'report'
+    16→  | 'connector'
+    17→  | 'automation'
+    18→  | 'api'
+    19→  | 'custom_page';
+    20→
+    21→/** App Store categories — 20 domains covering every business function. */
+    22→export type AppCategory =
+    23→  | 'finance'
+    24→  | 'accounting'
+    25→  | 'crm'
+    26→  | 'sales'
+    27→  | 'marketing'
+    28→  | 'hr'
+    29→  | 'operations'
+    30→  | 'manufacturing'
+    31→  | 'retail'
+    32→  | 'healthcare'
+    33→  | 'construction'
+    34→  | 'education'
+    35→  | 'hospitality'
+    36→  | 'legal'
+    37→  | 'logistics'
+    38→  | 'ai_tools'
+    39→  | 'developer_tools'
+    40→  | 'analytics'
+    41→  | 'security'
+    42→  | 'productivity';
+    43→
+    44→/** Pricing model for an app. */
+    45→export type PricingModel = 'free' | 'paid' | 'subscription' | 'usage_based' | 'enterprise';
+    46→
+    47→/** App lifecycle status. */
+    48→export type AppStatus = 'draft' | 'in_review' | 'published' | 'suspended' | 'deprecated';
+    49→
+    50→/** Install lifecycle status. */
+    51→export type InstallStatus = 'active' | 'paused' | 'updating' | 'error' | 'uninstalled';
+    52→
+    53→/** Install scope — where the app is installed. */
+    54→export type InstallScope = 'tenant' | 'organization' | 'department' | 'workspace';
+    55→
+    56→/** Sandbox execution status. */
+    57→export type SandboxStatus = 'running' | 'completed' | 'failed' | 'shutdown' | 'killed';
+    58→
+    59→/** Sandbox shutdown reason. */
+    60→export type ShutdownReason = 'quota_exceeded' | 'timeout' | 'error' | 'manual' | null;
+    61→
+    62→/** Webhook subscription status. */
+    63→export type WebhookStatus = 'active' | 'paused' | 'disabled';
+    64→
+    65→/** Plugin status. */
+    66→export type PluginStatus = 'active' | 'disabled';
+    67→
+    68→/** Developer partner level. */
+    69→export type PartnerLevel = 'standard' | 'silver' | 'gold' | 'platinum' | 'strategic';
+    70→
+    71→/** Payout status. */
+    72→export type PayoutStatus = 'pending' | 'processing' | 'paid' | 'failed';
+    73→
+    74→/** Analytics event types tracked per app. */
+    75→export type AnalyticsEventType =
+    76→  | 'install'
+    77→  | 'uninstall'
+    78→  | 'update'
+    79→  | 'rollback'
+    80→  | 'api_call'
+    81→  | 'error'
+    82→  | 'revenue'
+    83→  | 'retention'
+    84→  | 'ai_usage'
+    85→  | 'automation_usage'
+    86→  | 'crash'
+    87→  | 'engagement';
+    88→
+    89→/** Extension points a plugin can hook into (without modifying core platform). */
+    90→export type ExtensionPoint =
+    91→  | 'navigation'
+    92→  | 'dashboard'
+    93→  | 'widget'
+    94→  | 'report'
+    95→  | 'ai_agent'
+    96→  | 'command'
+    97→  | 'automation'
+    98→  | 'notification'
+    99→  | 'menu'
+   100→  | 'page'
+   101→  | 'settings'
+   102→  | 'search';
+   103→
+   104→/** App permission scopes — declared by every app, approved by the tenant. */
+   105→export type AppPermission =
+   106→  | 'read:crm'
+   107→  | 'write:crm'
+   108→  | 'read:banking'
+   109→  | 'write:banking'
+   110→  | 'read:invoices'
+   111→  | 'write:invoices'
+   112→  | 'read:gst'
+   113→  | 'write:gst'
+   114→  | 'read:reports'
+   115→  | 'write:reports'
+   116→  | 'read:files'
+   117→  | 'write:files'
+   118→  | 'read:automation'
+   119→  | 'write:automation'
+   120→  | 'read:notifications'
+   121→  | 'write:notifications'
+   122→  | 'access:ai'
+   123→  | 'access:ai_ceo'
+   124→  | 'access:ai_workforce'
+   125→  | 'access:ai_cfo'
+   126→  | 'access:digital_twin'
+   127→  | 'access:business_graph'
+   128→  | 'access:knowledge_graph'
+   129→  | 'access:oracle'
+   130→  | 'access:enterprise_cloud'
+   131→  | 'access:marketplace'
+   132→  | 'manage:users'
+   133→  | 'manage:billing'
+   134→  | 'manage:audit'
+   135→  | 'publish:apps';
+   136→
+   137→// ─── DTOs ──────────────────────────────────────────────────────────────────────
+   138→
+   139→/** Published app in the catalog. */
+   140→export interface AppDTO {
+   141→  id: string;
+   142→  slug: string;
+   143→  name: string;
+   144→  tagline: string | null;
+   145→  description: string;
+   146→  developerId: string;
+   147→  developerName: string;
+   148→  developerVerified: boolean;
+   149→  type: AppType;
+   150→  category: AppCategory;
+   151→  version: string;
+   152→  logo: string | null;
+   153→  color: string;
+   154→  screenshots: { url: string; caption?: string }[];
+   155→  pricingModel: PricingModel;
+   156→  priceAmount: number;
+   157→  priceCurrency: string;
+   158→  billingInterval: string | null;
+   159→  rating: number;
+   160→  reviewCount: number;
+   161→  installCount: number;
+   162→  downloadCount: number;
+   163→  compatibility: string[];
+   164→  permissions: AppPermission[];
+   165→  releaseNotes: string | null;
+   166→  supportEmail: string | null;
+   167→  supportUrl: string | null;
+   168→  license: string;
+   169→  homepageUrl: string | null;
+   170→  repositoryUrl: string | null;
+   171→  status: AppStatus;
+   172→  featured: boolean;
+   173→  verified: boolean;
+   174→  signed: boolean;
+   175→  publishedAt: string | null;
+   176→  createdAt: string;
+   177→}
+   178→
+   179→/** App version history entry. */
+   180→export interface AppVersionDTO {
+   181→  id: string;
+   182→  appId: string;
+   183→  version: string;
+   184→  releaseNotes: string;
+   185→  changelog: string | null;
+   186→  downloadUrl: string | null;
+   187→  checksum: string | null;
+   188→  signature: string | null;
+   189→  status: string;
+   190→  breakingChanges: boolean;
+   191→  migrationGuide: string | null;
+   192→  fileSizeBytes: number;
+   193→  publishedAt: string;
+   194→}
+   195→
+   196→/** Installed app (tenant-scoped). */
+   197→export interface AppInstallDTO {
+   198→  id: string;
+   199→  tenantId: string;
+   200→  organizationId: string | null;
+   201→  appId: string;
+   202→  appSlug: string;
+   203→  appName: string;
+   204→  appType: AppType;
+   205→  appCategory: AppCategory;
+   206→  appLogo: string | null;
+   207→  appColor: string;
+   208→  version: string;
+   209→  status: InstallStatus;
+   210→  scope: InstallScope;
+   211→  config: Record<string, unknown>;
+   212→  grantedPermissions: AppPermission[];
+   213→  sandboxEnabled: boolean;
+   214→  memoryLimitMb: number;
+   215→  cpuLimitPct: number;
+   216→  storageQuotaMb: number;
+   217→  apiQuotaPerMin: number;
+   218→  networkRestricted: boolean;
+   219→  autoUpdate: boolean;
+   220→  installedById: string | null;
+   221→  lastUpdatedAt: string | null;
+   222→  installedAt: string;
+   223→  developerName: string;
+   224→}
+   225→
+   226→/** App review. */
+   227→export interface AppReviewDTO {
+   228→  id: string;
+   229→  appId: string;
+   230→  appName: string;
+   231→  reviewerUserId: string | null;
+   232→  reviewerName: string;
+   233→  rating: number;
+   234→  title: string | null;
+   235→  comment: string | null;
+   236→  helpfulCount: number;
+   237→  verifiedPurchase: boolean;
+   238→  developerReply: string | null;
+   239→  repliedAt: string | null;
+   240→  createdAt: string;
+   241→}
+   242→
+   243→/** Developer profile. */
+   244→export interface AppDeveloperDTO {
+   245→  id: string;
+   246→  slug: string;
+   247→  name: string;
+   248→  displayName: string;
+   249→  email: string;
+   250→  website: string | null;
+   251→  logo: string | null;
+   252→  bio: string | null;
+   253→  verified: boolean;
+   254→  partnerLevel: PartnerLevel;
+   255→  revenueSharePct: number;
+   256→  totalRevenue: number;
+   257→  totalInstalls: number;
+   258→  totalApps: number;
+   259→  avgRating: number;
+   260→  country: string | null;
+   261→  joinedAt: string;
+   262→}
+   263→
+   264→/** Developer payout. */
+   265→export interface AppPayoutDTO {
+   266→  id: string;
+   267→  developerId: string;
+   268→  developerName: string;
+   269→  period: string;
+   270→  grossRevenue: number;
+   271→  platformFee: number;
+   272→  netPayout: number;
+   273→  currency: string;
+   274→  transactionCount: number;
+   275→  status: PayoutStatus;
+   276→  paidAt: string | null;
+   277→  invoiceUrl: string | null;
+   278→  createdAt: string;
+   279→}
+   280→
+   281→/** Webhook subscription. */
+   282→export interface AppWebhookDTO {
+   283→  id: string;
+   284→  tenantId: string;
+   285→  appId: string | null;
+   286→  installId: string | null;
+   287→  name: string;
+   288→  targetUrl: string;
+   289→  eventTypes: string[];
+   290→  secret: string | null;
+   291→  status: WebhookStatus;
+   292→  deliveryCount: number;
+   293→  successCount: number;
+   294→  failureCount: number;
+   295→  lastDeliveryAt: string | null;
+   296→  lastResponseCode: number | null;
+   297→  lastError: string | null;
+   298→  createdAt: string;
+   299→}
+   300→
+   301→/** Installed plugin. */
+   302→export interface AppPluginDTO {
+   303→  id: string;
+   304→  tenantId: string;
+   305→  installId: string | null;
+   306→  pluginKey: string;
+   307→  name: string;
+   308→  extensionPoints: ExtensionPoint[];
+   309→  config: Record<string, unknown>;
+   310→  status: PluginStatus;
+   311→  enabled: boolean;
+   312→  createdAt: string;
+   313→}
+   314→
+   315→/** Sandbox execution record. */
+   316→export interface AppSandboxExecutionDTO {
+   317→  id: string;
+   318→  tenantId: string;
+   319→  installId: string | null;
+   320→  appId: string | null;
+   321→  executionType: string;
+   322→  status: SandboxStatus;
+   323→  memoryUsedMb: number;
+   324→  cpuUsedPct: number;
+   325→  storageUsedMb: number;
+   326→  apiCallsMade: number;
+   327→  durationMs: number;
+   328→  triggeredBy: string;
+   329→  shutdownReason: ShutdownReason;
+   330→  errorMessage: string | null;
+   331→  startedAt: string;
+   332→  completedAt: string | null;
+   333→}
+   334→
+   335→/** Analytics summary for the platform / a single app / a developer. */
+   336→export interface AppAnalyticsSummary {
+   337→  totalInstalls: number;
+   338→  totalUninstalls: number;
+   339→  activeInstalls: number;
+   340→  totalRevenue: number;
+   341→  totalApiCalls: number;
+   342→  totalErrors: number;
+   343→  totalCrashes: number;
+   344→  avgRating: number;
+   345→  totalReviews: number;
+   346→  retentionRate: number;
+   347→  aiUsageCalls: number;
+   348→  automationRuns: number;
+   349→  byCategory: { category: AppCategory; label: string; installs: number; revenue: number; apps: number }[];
+   350→  byType: { type: AppType; label: string; count: number }[];
+   351→  timeseries: { date: string; installs: number; revenue: number; apiCalls: number; errors: number }[];
+   352→  topApps: { appId: string; name: string; installs: number; revenue: number; rating: number }[];
+   353→}
+   354→
+   355→/** Monetization summary. */
+   356→export interface MonetizationSummary {
+   357→  grossRevenue: number;
+   358→  platformFee: number;
+   359→  developerPayouts: number;
+   360→  pendingPayouts: number;
+   361→  totalTransactions: number;
+   362→  activeSubscriptions: number;
+   363→  freeApps: number;
+   364→  paidApps: number;
+   365→  subscriptionApps: number;
+   366→  enterpriseApps: number;
+   367→  avgRevenuePerApp: number;
+   368→  topEarners: { developerId: string; name: string; revenue: number; apps: number }[];
+   369→  recentPayouts: AppPayoutDTO[];
+   370→}
+   371→
+   372→/** Developer dashboard data. */
+   373→export interface DeveloperDashboardDTO {
+   374→  developer: AppDeveloperDTO;
+   375→  publishedApps: AppDTO[];
+   376→  totalRevenue: number;
+   377→  totalDownloads: number;
+   378→  avgRating: number;
+   379→  crashReports: { appId: string; appName: string; count: number; lastAt: string }[];
+   380→  usageAnalytics: { apiCalls: number; aiUsage: number; automationRuns: number };
+   381→  webhookLogs: { id: string; event: string; status: string; deliveredAt: string }[];
+   382→  apiKeys: { id: string; name: string; scopes: string[]; lastUsedAt: string | null; status: string }[];
+   383→  sandboxTests: { id: string; appName: string; status: string; durationMs: number; at: string }[];
+   384→  releases: { id: string; app: string; version: string; status: string; publishedAt: string }[];
+   385→  ciCdPipelines: { id: string; app: string; branch: string; status: string; lastRunAt: string }[];
+   386→}
+   387→
+   388→/** Extension SDK info. */
+   389→export interface ExtensionSDKInfo {
+   390→  version: string;
+   391→  languages: { key: string; name: string; logo: string; minVersion: string }[];
+   392→  templates: { key: string; name: string; description: string; type: AppType }[];
+   393→  cliVersion: string;
+   394→  cliCommands: { command: string; description: string }[];
+   395→  emulatorEnabled: boolean;
+   396→  packagingEnabled: boolean;
+   397→  publishingEnabled: boolean;
+   398→  liveReloadEnabled: boolean;
+   399→  documentationUrl: string;
+   400→  testingFrameworks: string[];
+   401→}
+   402→
+   403→/** AI App Builder — Oracle generates app specs from natural language. */
+   404→export interface AIAppBuilderIntent {
+   405→  matched: boolean;
+   406→  appType: AppType | null;
+   407→  category: AppCategory | null;
+   408→  action: string;
+   409→  description: string;
+   410→  suggestedName: string;
+   411→  suggestedPermissions: AppPermission[];
+   412→  confidence: number;
+   413→}
+   414→
+   415→/** AI App Builder — generated app specification. */
+   416→export interface GeneratedAppSpec {
+   417→  name: string;
+   418→  slug: string;
+   419→  type: AppType;
+   420→  category: AppCategory;
+   421→  tagline: string;
+   422→  description: string;
+   423→  permissions: AppPermission[];
+   424→  extensionPoints: ExtensionPoint[];
+   425→  pricingModel: PricingModel;
+   426→  priceAmount: number;
+   427→  features: string[];
+   428→  estimatedBuildTimeMin: number;
+   429→  sdkTemplate: string;
+   430→  ready: boolean;
+   431→}
+   432→
+   433→/** Marketplace search result. */
+   434→export interface MarketplaceSearchResult {
+   435→  query: string;
+   436→  apps: AppDTO[];
+   437→  aiEmployees: AppDTO[];
+   438→  developers: AppDeveloperDTO[];
+   439→  templates: { key: string; name: string; type: AppType; category: AppCategory }[];
+   440→  plugins: AppPluginDTO[];
+   441→  totalResults: number;
+   442→  searchTimeMs: number;
+   443→}
+   444→
+   445→/** App Store browse result. */
+   446→export interface AppStoreBrowseResult {
+   447→  apps: AppDTO[];
+   448→  total: number;
+   449→  categories: { category: AppCategory; label: string; count: number; icon: string; color: string }[];
+   450→  featured: AppDTO[];
+   451→  page: number;
+   452→  pageSize: number;
+   453→}
+   454→
+   455→// ─── Catalog metadata ──────────────────────────────────────────────────────────
+   456→
+   457→/** Category metadata for the App Store UI. */
+   458→export const APP_CATEGORY_META: Record<AppCategory, { label: string; icon: string; color: string }> = {
+   459→  finance: { label: 'Finance', icon: 'Wallet', color: '#10b981' },
+   460→  accounting: { label: 'Accounting', icon: 'Calculator', color: '#06b6d4' },
+   461→  crm: { label: 'CRM', icon: 'Users', color: '#8b5cf6' },
+   462→  sales: { label: 'Sales', icon: 'TrendingUp', color: '#3b82f6' },
+   463→  marketing: { label: 'Marketing', icon: 'Megaphone', color: '#ec4899' },
+   464→  hr: { label: 'HR', icon: 'UserCog', color: '#14b8a6' },
+   465→  operations: { label: 'Operations', icon: 'Settings2', color: '#f59e0b' },
+   466→  manufacturing: { label: 'Manufacturing', icon: 'Factory', color: '#71717a' },
+   467→  retail: { label: 'Retail', icon: 'Store', color: '#db2777' },
+   468→  healthcare: { label: 'Healthcare', icon: 'HeartPulse', color: '#ef4444' },
+   469→  construction: { label: 'Construction', icon: 'HardHat', color: '#a16207' },
+   470→  education: { label: 'Education', icon: 'GraduationCap', color: '#6366f1' },
+   471→  hospitality: { label: 'Hospitality', icon: 'UtensilsCrossed', color: '#d946ef' },
+   472→  legal: { label: 'Legal', icon: 'Scale', color: '#a78bfa' },
+   473→  logistics: { label: 'Logistics', icon: 'Truck', color: '#0891b2' },
+   474→  ai_tools: { label: 'AI Tools', icon: 'BrainCircuit', color: '#9333ea' },
+   475→  developer_tools: { label: 'Developer Tools', icon: 'Code2', color: '#22c55e' },
+   476→  analytics: { label: 'Analytics', icon: 'BarChart3', color: '#0284c7' },
+   477→  security: { label: 'Security', icon: 'ShieldCheck', color: '#059669' },
+   478→  productivity: { label: 'Productivity', icon: 'Zap', color: '#f43f5e' },
+   479→};
+   480→
+   481→/** App type metadata. */
+   482→export const APP_TYPE_META: Record<AppType, { label: string; icon: string; description: string }> = {
+   483→  native: { label: 'Native App', icon: 'AppWindow', description: 'Full-featured application integrated into GSTPilot' },
+   484→  ai: { label: 'AI App', icon: 'BrainCircuit', description: 'AI-powered application with model access' },
+   485→  industry: { label: 'Industry App', icon: 'Building2', description: 'Industry-specific solution module' },
+   486→  dashboard: { label: 'Dashboard', icon: 'LayoutDashboard', description: 'Custom dashboard with widgets' },
+   487→  widget: { label: 'Widget', icon: 'LayoutGrid', description: 'Reusable UI widget' },
+   488→  ai_employee: { label: 'AI Employee', icon: 'Bot', description: 'Specialized AI worker for a domain' },
+   489→  report: { label: 'Report', icon: 'FileBarChart', description: 'Custom report template' },
+   490→  connector: { label: 'Connector', icon: 'Cable', description: 'Third-party data connector' },
+   491→  automation: { label: 'Automation', icon: 'Workflow', description: 'Automated workflow' },
+   492→  api: { label: 'API', icon: 'Webhook', description: 'Public API extension' },
+   493→  custom_page: { label: 'Custom Page', icon: 'FileCode', description: 'Custom page in the workspace' },
+   494→};
+   495→
+   496→/** Permission catalog — every permission an app can declare. */
+   497→export const APP_PERMISSION_CATALOG: { key: AppPermission; label: string; category: string; risk: 'low' | 'medium' | 'high' | 'critical'; description: string }[] = [
+   498→  { key: 'read:crm', label: 'Read CRM', category: 'crm', risk: 'low', description: 'View leads, deals, contacts, and customer data' },
+   499→  { key: 'write:crm', label: 'Write CRM', category: 'crm', risk: 'high', description: 'Create and modify CRM records' },
+   500→  { key: 'read:banking', label: 'Read Banking', category: 'banking', risk: 'medium', description: 'View bank accounts and transactions' },
+   501→  { key: 'write:banking', label: 'Write Banking', category: 'banking', risk: 'critical', description: 'Initiate payments and modify bank data' },
+   502→  { key: 'read:invoices', label: 'Read Invoices', category: 'invoices', risk: 'low', description: 'View invoices and billing records' },
+   503→  { key: 'write:invoices', label: 'Write Invoices', category: 'invoices', risk: 'high', description: 'Create and modify invoices' },
+   504→  { key: 'read:gst', label: 'Read GST', category: 'gst', risk: 'low', description: 'View GST filings and returns' },
+   505→  { key: 'write:gst', label: 'Write GST', category: 'gst', risk: 'critical', description: 'File GST returns and modify GST data' },
+   506→  { key: 'read:reports', label: 'Read Reports', category: 'reports', risk: 'low', description: 'View generated reports' },
+   507→  { key: 'write:reports', label: 'Write Reports', category: 'reports', risk: 'medium', description: 'Create and modify report templates' },
+   508→  { key: 'read:files', label: 'Access Files (Read)', category: 'files', risk: 'medium', description: 'Read uploaded documents' },
+   509→  { key: 'write:files', label: 'Access Files (Write)', category: 'files', risk: 'high', description: 'Upload and modify documents' },
+   510→  { key: 'read:automation', label: 'Read Automation', category: 'automation', risk: 'low', description: 'View automation workflows' },
+   511→  { key: 'write:automation', label: 'Write Automation', category: 'automation', risk: 'high', description: 'Create and modify automation workflows' },
+   512→  { key: 'read:notifications', label: 'Read Notifications', category: 'notifications', risk: 'low', description: 'View user notifications' },
+   513→  { key: 'write:notifications', label: 'Send Notifications', category: 'notifications', risk: 'medium', description: 'Send notifications to users' },
+   514→  { key: 'access:ai', label: 'Access AI', category: 'ai', risk: 'medium', description: 'Use AI features (general)' },
+   515→  { key: 'access:ai_ceo', label: 'Access AI CEO™', category: 'ai', risk: 'high', description: 'Interact with AI CEO decision engine' },
+   516→  { key: 'access:ai_workforce', label: 'Access AI Workforce™', category: 'ai', risk: 'high', description: 'Interact with AI employee ecosystem' },
+   517→  { key: 'access:ai_cfo', label: 'Access AI CFO™', category: 'ai', risk: 'high', description: 'Interact with financial intelligence engine' },
+   518→  { key: 'access:digital_twin', label: 'Access Digital Twin™', category: 'ai', risk: 'high', description: 'Interact with business simulator' },
+   519→  { key: 'access:business_graph', label: 'Access Business Graph™', category: 'ai', risk: 'medium', description: 'Query the business knowledge graph' },
+   520→  { key: 'access:knowledge_graph', label: 'Access Knowledge Graph™', category: 'ai', risk: 'medium', description: 'Query the knowledge graph' },
+   521→  { key: 'access:oracle', label: 'Access Oracle™', category: 'ai', risk: 'critical', description: 'Interact with Oracle conversational AI' },
+   522→  { key: 'access:enterprise_cloud', label: 'Access Enterprise Cloud™', category: 'platform', risk: 'high', description: 'Access multi-tenant cloud features' },
+   523→  { key: 'access:marketplace', label: 'Access Integration Marketplace™', category: 'platform', risk: 'medium', description: 'Access integration marketplace' },
+   524→  { key: 'manage:users', label: 'Manage Users', category: 'admin', risk: 'critical', description: 'Create and modify user accounts' },
+   525→  { key: 'manage:billing', label: 'Manage Billing', category: 'admin', risk: 'critical', description: 'Modify billing and subscriptions' },
+   526→  { key: 'manage:audit', label: 'Manage Audit', category: 'admin', risk: 'critical', description: 'Access and modify audit logs' },
+   527→  { key: 'publish:apps', label: 'Publish Apps', category: 'admin', risk: 'high', description: 'Publish apps to the marketplace' },
+   528→];
+   529→
+   530→/** Standard webhook events developers can subscribe to. */
+   531→export const STANDARD_WEBHOOK_EVENTS: { event: string; label: string; description: string; module: string }[] = [
+   532→  { event: 'lead.created', label: 'Lead Created', description: 'A new CRM lead was created', module: 'CRM' },
+   533→  { event: 'invoice.paid', label: 'Invoice Paid', description: 'An invoice was fully paid', module: 'Invoices' },
+   534→  { event: 'invoice.created', label: 'Invoice Created', description: 'A new invoice was generated', module: 'Invoices' },
+   535→  { event: 'gst.filed', label: 'GST Filed', description: 'A GST return was filed', module: 'GST' },
+   536→  { event: 'task.assigned', label: 'Task Assigned', description: 'A task was assigned to a user or AI employee', module: 'Tasks' },
+   537→  { event: 'workflow.completed', label: 'Workflow Completed', description: 'An automation workflow finished', module: 'Automation' },
+   538→  { event: 'ai.decision', label: 'AI Decision', description: 'An AI engine made a decision', module: 'AI CEO' },
+   539→  { event: 'approval.granted', label: 'Approval Granted', description: 'An approval request was approved', module: 'Approvals' },
+   540→  { event: 'organization.created', label: 'Organization Created', description: 'A new organization was created', module: 'Enterprise Cloud' },
+   541→  { event: 'employee.added', label: 'Employee Added', description: 'A new employee joined an organization', module: 'Directory' },
+   542→  { event: 'customer.created', label: 'Customer Created', description: 'A new customer was created', module: 'CRM' },
+   543→  { event: 'automation.executed', label: 'Automation Executed', description: 'An automation rule fired', module: 'Automation' },
+   544→  { event: 'payment.received', label: 'Payment Received', description: 'A payment was received', module: 'Banking' },
+   545→  { event: 'document.uploaded', label: 'Document Uploaded', description: 'A document was uploaded', module: 'Files' },
+   546→  { event: 'app.installed', label: 'App Installed', description: 'An app was installed', module: 'App Platform' },
+   547→  { event: 'app.uninstalled', label: 'App Uninstalled', description: 'An app was uninstalled', module: 'App Platform' },
+   548→];
+   549→
+   550→/** Extension points a plugin can hook into. */
+   551→export const EXTENSION_POINTS_META: { key: ExtensionPoint; label: string; description: string }[] = [
+   552→  { key: 'navigation', label: 'Navigation', description: 'Add items to the sidebar / nav' },
+   553→  { key: 'dashboard', label: 'Dashboard', description: 'Add dashboard panels' },
+   554→  { key: 'widget', label: 'Widget', description: 'Provide reusable widgets' },
+   555→  { key: 'report', label: 'Report', description: 'Add report templates' },
+   556→  { key: 'ai_agent', label: 'AI Agent', description: 'Register custom AI agents' },
+   557→  { key: 'command', label: 'Command', description: 'Add command palette commands' },
+   558→  { key: 'automation', label: 'Automation', description: 'Provide automation triggers/actions' },
+   559→  { key: 'notification', label: 'Notification', description: 'Send custom notifications' },
+   560→  { key: 'menu', label: 'Menu', description: 'Add context menu items' },
+   561→  { key: 'page', label: 'Page', description: 'Add custom pages' },
+   562→  { key: 'settings', label: 'Settings', description: 'Add settings panels' },
+   563→  { key: 'search', label: 'Search', description: 'Register search providers' },
+   564→];
+   565→
+   566→/** AI Employee Marketplace — industry-specialized AI workers. */
+   567→export interface AIEmployeeAppDef {
+   568→  slug: string;
+   569→  name: string;
+   570→  role: string;
+   571→  industry: AppCategory;
+   572→  description: string;
+   573→  capabilities: string[];
+   574→  autoConnectEngines: string[];
+   575→  permissions: AppPermission[];
+   576→  color: string;
+   577→  icon: string;
+   578→}
+   579→
+   580→/** 12 specialized AI employees installable from the marketplace. */
+   581→export const AI_EMPLOYEE_APPS: AIEmployeeAppDef[] = [
+   582→  {
+   583→    slug: 'manufacturing-ai',
+   584→    name: 'Manufacturing AI™',
+   585→    role: 'Plant Operations Manager',
+   586→    industry: 'manufacturing',
+   587→    description: 'Optimizes production schedules, tracks OEE, predicts maintenance, and manages supply chain.',
+   588→    capabilities: ['Production planning', 'OEE monitoring', 'Predictive maintenance', 'Quality control', 'Supply chain optimization'],
+   589→    autoConnectEngines: ['ai_ceo', 'ai_workforce', 'digital_twin', 'business_graph', 'automation', 'knowledge_graph'],
+   590→    permissions: ['read:reports', 'access:ai', 'access:ai_ceo', 'access:digital_twin', 'read:automation'],
+   591→    color: '#71717a',
+   592→    icon: 'Factory',
+   593→  },
+   594→  {
+   595→    slug: 'retail-ai',
+   596→    name: 'Retail AI™',
+   597→    role: 'Store Operations Manager',
+   598→    industry: 'retail',
+   599→    description: 'Manages inventory, optimizes pricing, forecasts demand, and personalizes customer experience.',
+   600→    capabilities: ['Inventory optimization', 'Dynamic pricing', 'Demand forecasting', 'Customer personalization', 'Store layout'],
+   601→    autoConnectEngines: ['ai_ceo', 'ai_workforce', 'digital_twin', 'business_graph', 'automation'],
+   602→    permissions: ['read:crm', 'read:reports', 'access:ai', 'access:ai_ceo'],
+   603→    color: '#db2777',
+   604→    icon: 'Store',
+   605→  },
+   606→  {
+   607→    slug: 'construction-ai',
+   608→    name: 'Construction AI™',
+   609→    role: 'Project Manager',
+   610→    industry: 'construction',
+   611→    description: 'Tracks project milestones, manages subcontractors, monitors safety compliance, and controls costs.',
+   612→    capabilities: ['Project tracking', 'Subcontractor management', 'Safety compliance', 'Cost control', 'Schedule optimization'],
+   613→    autoConnectEngines: ['ai_ceo', 'ai_workforce', 'automation', 'knowledge_graph'],
+   614→    permissions: ['read:reports', 'read:files', 'access:ai', 'access:ai_ceo'],
+   615→    color: '#a16207',
+   616→    icon: 'HardHat',
+   617→  },
+   618→  {
+   619→    slug: 'healthcare-ai',
+   620→    name: 'Healthcare AI™',
+   621→    role: 'Practice Manager',
+   622→    industry: 'healthcare',
+   623→    description: 'Manages patient appointments, billing, insurance claims, and compliance with healthcare regulations.',
+   624→    capabilities: ['Appointment scheduling', 'Insurance claims', 'Patient billing', 'HIPAA compliance', 'Revenue cycle'],
+   625→    autoConnectEngines: ['ai_ceo', 'ai_workforce', 'automation', 'knowledge_graph'],
+   626→    permissions: ['read:crm', 'read:invoices', 'read:reports', 'access:ai'],
+   627→    color: '#ef4444',
+   628→    icon: 'HeartPulse',
+   629→  },
+   630→  {
+   631→    slug: 'education-ai',
+   632→    name: 'Education AI™',
+   633→    role: 'Academic Administrator',
+   634→    industry: 'education',
+   635→    description: 'Manages admissions, fee collection, academic scheduling, and student performance analytics.',
+   636→    capabilities: ['Admissions management', 'Fee collection', 'Academic scheduling', 'Performance analytics', 'Parent communication'],
+   637→    autoConnectEngines: ['ai_ceo', 'ai_workforce', 'automation'],
+   638→    permissions: ['read:crm', 'read:invoices', 'read:reports', 'access:ai'],
+   639→    color: '#6366f1',
+   640→    icon: 'GraduationCap',
+   641→  },
+   642→  {
+   643→    slug: 'hotel-ai',
+   644→    name: 'Hotel AI™',
+   645→    role: 'Hospitality Manager',
+   646→    industry: 'hospitality',
+   647→    description: 'Manages reservations, room pricing, guest experience, and F&B operations.',
+   648→    capabilities: ['Reservation management', 'Dynamic room pricing', 'Guest experience', 'F&B operations', 'Review management'],
+   649→    autoConnectEngines: ['ai_ceo', 'ai_workforce', 'digital_twin', 'automation'],
+   650→    permissions: ['read:crm', 'read:invoices', 'access:ai', 'access:ai_ceo'],
+   651→    color: '#d946ef',
+   652→    icon: 'UtensilsCrossed',
+   653→  },
+   654→  {
+   655→    slug: 'restaurant-ai',
+   656→    name: 'Restaurant AI™',
+   657→    role: 'F&B Operations Manager',
+   658→    industry: 'hospitality',
+   659→    description: 'Manages orders, menu optimization, inventory, and table turnover.',
+   660→    capabilities: ['Order management', 'Menu optimization', 'Inventory tracking', 'Table turnover', 'Delivery integration'],
+   661→    autoConnectEngines: ['ai_ceo', 'ai_workforce', 'automation', 'business_graph'],
+   662→    permissions: ['read:crm', 'read:invoices', 'read:reports', 'access:ai'],
+   663→    color: '#f97316',
+   664→    icon: 'UtensilsCrossed',
+   665→  },
+   666→  {
+   667→    slug: 'law-firm-ai',
+   668→    name: 'Law Firm AI™',
+   669→    role: 'Legal Practice Manager',
+   670→    industry: 'legal',
+   671→    description: 'Manages case files, billable hours, client matters, and compliance deadlines.',
+   672→    capabilities: ['Case management', 'Billable hours tracking', 'Matter management', 'Deadline tracking', 'Document automation'],
+   673→    autoConnectEngines: ['ai_ceo', 'ai_workforce', 'automation', 'knowledge_graph'],
+   674→    permissions: ['read:crm', 'read:files', 'read:reports', 'access:ai'],
+   675→    color: '#a78bfa',
+   676→    icon: 'Scale',
+   677→  },
+   678→  {
+   679→    slug: 'ca-ai',
+   680→    name: 'CA AI™',
+   681→    role: 'Chartered Accountant',
+   682→    industry: 'accounting',
+   683→    description: 'Manages audit, tax filing, compliance, and client practice operations.',
+   684→    capabilities: ['Audit management', 'Tax filing', 'Compliance tracking', 'Client practice', 'Financial statements'],
+   685→    autoConnectEngines: ['ai_ceo', 'ai_workforce', 'ai_cfo', 'automation', 'knowledge_graph'],
+   686→    permissions: ['read:gst', 'read:invoices', 'read:reports', 'access:ai', 'access:ai_cfo'],
+   687→    color: '#06b6d4',
+   688→    icon: 'Calculator',
+   689→  },
+   690→  {
+   691→    slug: 'auditor-ai',
+   692→    name: 'Auditor AI™',
+   693→    role: 'Internal Auditor',
+   694→    industry: 'accounting',
+   695→    description: 'Conducts internal audits, risk assessments, and compliance reviews.',
+   696→    capabilities: ['Internal audit', 'Risk assessment', 'Compliance review', 'Control testing', 'Audit reporting'],
+   697→    autoConnectEngines: ['ai_ceo', 'ai_workforce', 'ai_cfo', 'knowledge_graph'],
+   698→    permissions: ['read:reports', 'manage:audit', 'read:gst', 'access:ai'],
+   699→    color: '#0891b2',
+   700→    icon: 'ShieldCheck',
+   701→  },
+   702→  {
+   703→    slug: 'export-ai',
+   704→    name: 'Export AI™',
+   705→    role: 'Export Manager',
+   706→    industry: 'logistics',
+   707→    description: 'Manages export documentation, shipping, customs, and forex compliance.',
+   708→    capabilities: ['Export documentation', 'Shipping management', 'Customs compliance', 'Forex management', 'Letter of credit'],
+   709→    autoConnectEngines: ['ai_ceo', 'ai_workforce', 'automation', 'business_graph'],
+   710→    permissions: ['read:invoices', 'read:gst', 'read:files', 'access:ai'],
+   711→    color: '#0891b2',
+   712→    icon: 'Truck',
+   713→  },
+   714→  {
+   715→    slug: 'supply-chain-ai',
+   716→    name: 'Supply Chain AI™',
+   717→    role: 'Supply Chain Manager',
+   718→    industry: 'logistics',
+   719→    description: 'Optimizes procurement, logistics, warehouse operations, and vendor management.',
+   720→    capabilities: ['Procurement optimization', 'Logistics planning', 'Warehouse management', 'Vendor management', 'Demand planning'],
+   721→    autoConnectEngines: ['ai_ceo', 'ai_workforce', 'digital_twin', 'business_graph', 'automation'],
+   722→    permissions: ['read:reports', 'read:crm', 'access:ai', 'access:digital_twin'],
+   723→    color: '#1d4ed8',
+   724→    icon: 'Truck',
+   725→  },
+   726→];
+   727→
+   728→/** Helper to safely parse a JSON string field into a typed array. */
+   729→export function parseJsonArray<T>(s: string | null | undefined, fallback: T[] = []): T[] {
+   730→  if (!s) return fallback;
+   731→  try {
+   732→    const parsed = JSON.parse(s);
+   733→    return Array.isArray(parsed) ? (parsed as T[]) : fallback;
+   734→  } catch {
+   735→    return fallback;
+   736→  }
+   737→}
+   738→
+   739→/** Helper to safely parse a JSON string field into a typed object. */
+   740→export function parseJsonObject<T>(s: string | null | undefined, fallback: T): T {
+   741→  if (!s) return fallback;
+   742→  try {
+   743→    return { ...fallback, ...(JSON.parse(s) as T) };
+   744→  } catch {
+   745→    return fallback;
+   746→  }
+   747→}
+   748→
+   749→/** Default sandbox quotas for a new install. */
+   750→export const DEFAULT_SANDBOX_QUOTAS = {
+   751→  memoryLimitMb: 256,
+   752→  cpuLimitPct: 25,
+   753→  storageQuotaMb: 512,
+   754→  apiQuotaPerMin: 100,
+   755→  networkRestricted: true,
+   756→} as const;
+   757→
+   758→/** Platform revenue share — developer gets 70%, platform keeps 30%. */
+   759→export const PLATFORM_REVENUE_SHARE_PCT = 30;
+   760→

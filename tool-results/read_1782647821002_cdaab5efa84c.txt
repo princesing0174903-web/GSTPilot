@@ -1,0 +1,1001 @@
+     1→'use client'
+     2→
+     3→import React, { useEffect, useState, useCallback } from 'react'
+     4→import { motion } from 'framer-motion'
+     5→import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+     6→import { Badge } from '@/components/ui/badge'
+     7→import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
+     8→import { ScrollArea } from '@/components/ui/scroll-area'
+     9→import { Button } from '@/components/ui/button'
+    10→import { Input } from '@/components/ui/input'
+    11→import { Progress } from '@/components/ui/progress'
+    12→import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+    13→import {
+    14→  Store, Plug, Activity, RefreshCw, BarChart3, Code2, ShieldCheck, Search,
+    15→  Zap, Star, CheckCircle, XCircle, Clock, AlertTriangle, Download, Trash2,
+    16→  Link2, Link2Off, PlayCircle, FlaskConical, Cpu, Globe, Webhook, KeyRound,
+    17→  TrendingUp, Database, Server, AlertCircle, ChevronRight, Sparkles, Boxes,
+    18→  ArrowRight, CircuitBoard, Network, FileCode, BadgeCheck, Lock, Eye,
+    19→} from 'lucide-react'
+    20→import { apiGet, apiPost } from '@/lib/api'
+    21→
+    22→// ── Types matching API responses ──────────────────────────────────────────────
+    23→interface ConnectorCatalogEntry {
+    24→  slug: string; name: string; displayName: string; category: string; provider: string
+    25→  description: string; logo: string; color: string; authType: string; pricing: string
+    26→  rating: number; reviews: number; installs: number; popularity: number
+    27→  verified: boolean; featured?: boolean; supportedFeatures: string[]
+    28→  capabilities: string[]; healthStatus: string; version: string; developer?: string; tags: string[]
+    29→}
+    30→interface MarketplaceData {
+    31→  connectors: ConnectorCatalogEntry[]; total: number
+    32→  categories: { category: string; label: string; count: number; icon: string }[]
+    33→  page: number; pageSize: number
+    34→}
+    35→interface InstalledIntegration {
+    36→  id: string; connectorSlug: string; displayName: string; status: string; health: string
+    37→  authType: string; connectedAccountId: string | null; lastSyncAt: string | null
+    38→  syncFrequency: string; lastError: string | null; installedAt: string
+    39→  connector?: ConnectorCatalogEntry
+    40→}
+    41→interface HealthData {
+    42→  overall: string; totalConnectors: number; operational: number; degraded: number; down: number
+    43→  installedCount: number; healthyInstalled: number; degradedInstalled: number; downInstalled: number
+    44→  eventsLastHour: number; syncsLastHour: number; failuresLastHour: number
+    45→  connectors: { slug: string; name: string; status: string; icon: string }[]
+    46→}
+    47→interface EventBusStats {
+    48→  total: number; lastHour: number; last24h: number; consumed: number; unconsumed: number
+    49→  byEventType: { eventType: string; count: number }[]
+    50→  byConnector: { connectorSlug: string; count: number }[]
+    51→}
+    52→interface IntegrationEvent {
+    53→  id: string; connectorSlug: string; eventType: string; source: string; severity: string
+    54→  payload: Record<string, unknown>; consumed: boolean; consumedBy: string | null; publishedAt: string
+    55→}
+    56→interface SyncJob {
+    57→  id: string; type: string; status: string; direction: string; recordsProcessed: number
+    58→  recordsCreated: number; recordsUpdated: number; recordsFailed: number; conflictCount: number
+    59→  retryCount: number; startedAt: string; completedAt: string | null; durationMs: number | null; error: string | null
+    60→}
+    61→interface SyncEngineStatus {
+    62→  jobsLastHour: number; jobsLast24h: number; successRate: number; avgDurationMs: number
+    63→  totalRecordsSynced: number; conflictsResolved: number; retriedJobs: number; queuedJobs: number; runningJobs: number
+    64→}
+    65→interface AnalyticsData {
+    66→  totalApiCalls: number; totalSyncSuccess: number; totalSyncFailed: number; totalEventsPublished: number
+    67→  totalRecordsSynced: number; avgLatencyMs: number; totalErrors: number; totalAutomationTriggered: number
+    68→  totalAiUsage: number; totalRevenueImpact: number; avgHealthScore: number; syncSuccessRate: number
+    69→  byConnector: { connectorSlug: string; displayName: string; apiCalls: number; syncSuccess: number; syncFailed: number; eventsPublished: number; avgLatencyMs: number; healthScore: number; revenueImpact: number; status: string }[]
+    70→  timeseries: { date: string; apiCalls: number; events: number; errors: number }[]
+    71→}
+    72→interface DeveloperData {
+    73→  submissions: { id: string; name: string; slug: string; category: string; status: string; developer: string; version: string; submittedAt: string; sdkVersion: string; certification: string; revenueSharePct: number }[]
+    74→  sdk: { version: string; languages: string[]; endpoints: number; publishedConnectors: number; totalRevenue: number }
+    75→  certifications: { level: string; count: number; requirements: string[] }[]
+    76→}
+    77→interface SecurityData {
+    78→  apiKeys: { id: string; name: string; keyPrefix: string; scopes: string[]; lastUsedAt: string | null }[]
+    79→  oauthProviders: { name: string; connected: boolean; authType: string }[]
+    80→  webhooks: { id: string; url: string; connectorSlug: string; verified: boolean; lastDelivery: string | null; successRate: number }[]
+    81→  rateLimits: { connectorSlug: string; limit: number; used: number; remaining: number; resetAt: string }[]
+    82→  auditEvents: { id: string; action: string; actor: string; summary: string; severity: string; timestamp: string }[]
+    83→  securityMeasures: { name: string; enabled: boolean; description: string }[]
+    84→}
+    85→
+    86→const inr = (n: number) => `₹${n.toLocaleString('en-IN')}`
+    87→const num = (n: number) => n.toLocaleString('en-IN')
+    88→
+    89→const STATUS_BADGE: Record<string, string> = {
+    90→  connected: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/20',
+    91→  healthy: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/20',
+    92→  operational: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/20',
+    93→  success: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/20',
+    94→  installed: 'bg-sky-500/15 text-sky-300 border-sky-500/20',
+    95→  published: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/20',
+    96→  approved: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/20',
+    97→  certified: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/20',
+    98→  syncing: 'bg-amber-500/15 text-amber-300 border-amber-500/20',
+    99→  running: 'bg-amber-500/15 text-amber-300 border-amber-500/20',
+   100→  queued: 'bg-sky-500/15 text-sky-300 border-sky-500/20',
+   101→  in_review: 'bg-amber-500/15 text-amber-300 border-amber-500/20',
+   102→  degraded: 'bg-amber-500/15 text-amber-300 border-amber-500/20',
+   103→  disconnected: 'bg-muted text-muted-foreground border-border',
+   104→  error: 'bg-red-500/15 text-red-300 border-red-500/20',
+   105→  failed: 'bg-red-500/15 text-red-300 border-red-500/20',
+   106→  down: 'bg-red-500/15 text-red-300 border-red-500/20',
+   107→  draft: 'bg-muted text-muted-foreground border-border',
+   108→  none: 'bg-muted text-muted-foreground border-border',
+   109→  unknown: 'bg-muted text-muted-foreground border-border',
+   110→}
+   111→
+   112→function timeAgo(iso: string | null): string {
+   113→  if (!iso) return 'never'
+   114→  const diff = Date.now() - new Date(iso).getTime()
+   115→  if (diff < 60000) return 'just now'
+   116→  if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`
+   117→  if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`
+   118→  return `${Math.floor(diff / 86400000)}d ago`
+   119→}
+   120→
+   121→// ═══════════════════════════════════════════════════════════════════════════════
+   122→// MAIN PAGE
+   123→// ═══════════════════════════════════════════════════════════════════════════════
+   124→export default function IntegrationMarketplacePage() {
+   125→  const [tab, setTab] = useState('marketplace')
+   126→  const [health, setHealth] = useState<HealthData | null>(null)
+   127→
+   128→  const refreshHealth = useCallback(() => {
+   129→    apiGet<HealthData>('/integrations/health').then(setHealth).catch(() => {})
+   130→  }, [])
+   131→
+   132→  useEffect(() => { apiGet<HealthData>('/integrations/health').then(setHealth).catch(() => {}) }, [])
+   133→
+   134→  return (
+   135→    <div className="min-h-screen bg-background text-foreground">
+   136→      <div className="mx-auto max-w-[1600px] px-4 py-6 sm:px-6 lg:px-8">
+   137→        {/* Header */}
+   138→        <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="mb-6">
+   139→          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+   140→            <div>
+   141→              <div className="flex items-center gap-3">
+   142→                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500/20 to-cyan-500/20 border border-emerald-500/20">
+   143→                  <CircuitBoard className="h-6 w-6 text-emerald-400" />
+   144→                </div>
+   145→                <div>
+   146→                  <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Global Integration Marketplace™</h1>
+   147→                  <p className="text-sm text-muted-foreground">Connect Every Business. Power Every Workflow. One AI Operating System.</p>
+   148→                </div>
+   149→              </div>
+   150→            </div>
+   151→            <div className="flex flex-wrap gap-3">
+   152→              <StatPill icon={Boxes} label="Connectors" value={health ? num(health.totalConnectors) : '—'} color="text-emerald-400" />
+   153→              <StatPill icon={Plug} label="Connected" value={health ? String(health.installedCount) : '—'} color="text-cyan-400" />
+   154→              <StatPill icon={Activity} label="Events/hr" value={health ? String(health.eventsLastHour) : '—'} color="text-amber-400" />
+   155→              <StatPill icon={CheckCircle} label="Health" value={health?.overall ?? '—'} color="text-emerald-400" />
+   156→            </div>
+   157→          </div>
+   158→        </motion.div>
+   159→
+   160→        <Tabs value={tab} onValueChange={setTab} className="space-y-4">
+   161→          <TabsList className="flex w-full flex-wrap justify-start gap-1 h-auto p-1 bg-muted/50">
+   162→            <TabsTrigger value="marketplace" className="gap-1.5"><Store className="h-4 w-4" /> Marketplace</TabsTrigger>
+   163→            <TabsTrigger value="installed" className="gap-1.5"><Plug className="h-4 w-4" /> My Integrations</TabsTrigger>
+   164→            <TabsTrigger value="events" className="gap-1.5"><Zap className="h-4 w-4" /> Event Bus</TabsTrigger>
+   165→            <TabsTrigger value="sync" className="gap-1.5"><RefreshCw className="h-4 w-4" /> Sync Engine</TabsTrigger>
+   166→            <TabsTrigger value="analytics" className="gap-1.5"><BarChart3 className="h-4 w-4" /> Analytics</TabsTrigger>
+   167→            <TabsTrigger value="developer" className="gap-1.5"><Code2 className="h-4 w-4" /> Developer</TabsTrigger>
+   168→            <TabsTrigger value="security" className="gap-1.5"><ShieldCheck className="h-4 w-4" /> Security</TabsTrigger>
+   169→          </TabsList>
+   170→
+   171→          <TabsContent value="marketplace"><MarketplaceTab onRefresh={refreshHealth} /></TabsContent>
+   172→          <TabsContent value="installed"><InstalledTab onRefresh={refreshHealth} /></TabsContent>
+   173→          <TabsContent value="events"><EventBusTab /></TabsContent>
+   174→          <TabsContent value="sync"><SyncTab /></TabsContent>
+   175→          <TabsContent value="analytics"><AnalyticsTab /></TabsContent>
+   176→          <TabsContent value="developer"><DeveloperTab /></TabsContent>
+   177→          <TabsContent value="security"><SecurityTab /></TabsContent>
+   178→        </Tabs>
+   179→
+   180→        <footer className="mt-12 border-t border-border pt-6 text-center text-xs text-muted-foreground">
+   181→          <p>GSTPilot Global Integration Marketplace™ — 2,000+ connectors · 10M+ connected accounts · Universal Data Sync™ · Event Bus™</p>
+   182→          <p className="mt-1">Founded, developed and owned by Prince Singh.</p>
+   183→        </footer>
+   184→      </div>
+   185→    </div>
+   186→  )
+   187→}
+   188→
+   189→function StatPill({ icon: Icon, label, value, color }: { icon: React.ElementType; label: string; value: string; color: string }) {
+   190→  return (
+   191→    <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/30 px-3 py-2">
+   192→      <Icon className={`h-4 w-4 ${color}`} />
+   193→      <div className="flex flex-col leading-none">
+   194→        <span className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</span>
+   195→        <span className="text-sm font-semibold">{value}</span>
+   196→      </div>
+   197→    </div>
+   198→  )
+   199→}
+   200→
+   201→// ═══════════════════════════════════════════════════════════════════════════════
+   202→// MARKETPLACE TAB — browse 2,000+ connectors
+   203→// ═══════════════════════════════════════════════════════════════════════════════
+   204→function MarketplaceTab({ onRefresh }: { onRefresh: () => void }) {
+   205→  const [data, setData] = useState<MarketplaceData | null>(null)
+   206→  const [search, setSearch] = useState('')
+   207→  const [category, setCategory] = useState('all')
+   208→  const [loading, setLoading] = useState(true)
+   209→  const [installing, setInstalling] = useState<string | null>(null)
+   210→  const [toast, setToast] = useState<string | null>(null)
+   211→
+   212→  const load = useCallback(async () => {
+   213→    setLoading(true)
+   214→    try {
+   215→      const res = await apiGet<MarketplaceData>('/integrations/marketplace', {
+   216→        search, category, pageSize: '48',
+   217→      })
+   218→      setData(res)
+   219→    } catch { /* ignore */ } finally { setLoading(false) }
+   220→  }, [search, category])
+   221→
+   222→  useEffect(() => {
+   223→    const t = setTimeout(load, 300)
+   224→    return () => clearTimeout(t)
+   225→  }, [load])
+   226→
+   227→  const install = async (slug: string, name: string) => {
+   228→    setInstalling(slug)
+   229→    try {
+   230→      await apiPost('/integrations/install', { connectorSlug: slug })
+   231→      setToast(`✅ ${name} installed. Connect it from My Integrations.`)
+   232→      onRefresh()
+   233→      setTimeout(() => setToast(null), 3500)
+   234→    } catch (e) {
+   235→      setToast(`❌ ${(e as Error).message}`)
+   236→      setTimeout(() => setToast(null), 3500)
+   237→    } finally { setInstalling(null) }
+   238→  }
+   239→
+   240→  return (
+   241→    <div className="space-y-4">
+   242→      {toast && (
+   243→        <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
+   244→          className="fixed top-20 right-4 z-50 rounded-lg border border-border bg-background/95 px-4 py-3 shadow-lg backdrop-blur">
+   245→          <p className="text-sm">{toast}</p>
+   246→        </motion.div>
+   247→      )}
+   248→
+   249→      {/* Search + filters */}
+   250→      <Card className="border-border bg-muted/20">
+   251→        <CardContent className="p-4">
+   252→          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+   253→            <div className="relative flex-1">
+   254→              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+   255→              <Input
+   256→                placeholder="Search 2,000+ integrations... (Shopify, Slack, Stripe, GSTN)"
+   257→                value={search}
+   258→                onChange={(e) => setSearch(e.target.value)}
+   259→                className="pl-9"
+   260→              />
+   261→            </div>
+   262→            <div className="flex flex-wrap gap-1.5">
+   263→              <CategoryChip label="All" active={category === 'all'} onClick={() => setCategory('all')} count={data?.total ?? 0} />
+   264→              {data?.categories.slice(0, 8).map((c) => (
+   265→                <CategoryChip key={c.category} label={c.label} active={category === c.category} onClick={() => setCategory(c.category)} count={c.count} />
+   266→              ))}
+   267→            </div>
+   268→          </div>
+   269→          <div className="mt-3 flex flex-wrap gap-1.5">
+   270→            {data?.categories.slice(8).map((c) => (
+   271→              <CategoryChip key={c.category} label={c.label} active={category === c.category} onClick={() => setCategory(c.category)} count={c.count} />
+   272→            ))}
+   273→          </div>
+   274→        </CardContent>
+   275→      </Card>
+   276→
+   277→      {/* Results count */}
+   278→      <div className="flex items-center justify-between">
+   279→        <p className="text-sm text-muted-foreground">
+   280→          {loading ? 'Loading…' : `${num(data?.total ?? 0)} connectors available`}
+   281→          {category !== 'all' && data?.categories.find((c) => c.category === category) && ` in ${data.categories.find((c) => c.category === category)!.label}`}
+   282→        </p>
+   283→      </div>
+   284→
+   285→      {/* Connector grid */}
+   286→      {loading ? (
+   287→        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+   288→          {Array.from({ length: 12 }).map((_, i) => (
+   289→            <Card key={i} className="border-border bg-muted/20 animate-pulse h-56" />
+   290→          ))}
+   291→        </div>
+   292→      ) : (
+   293→        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+   294→          {data?.connectors.map((c, i) => (
+   295→            <motion.div key={c.slug} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: Math.min(i * 0.02, 0.4) }}>
+   296→              <Card className="group flex h-full flex-col border-border bg-muted/20 transition-all hover:border-emerald-500/40 hover:bg-muted/30">
+   297→                <CardHeader className="pb-3">
+   298→                  <div className="flex items-start justify-between gap-2">
+   299→                    <div className="flex items-center gap-2.5">
+   300→                      <div className="flex h-10 w-10 items-center justify-center rounded-lg text-xl" style={{ background: `${c.color}20` }}>
+   301→                        {c.logo}
+   302→                      </div>
+   303→                      <div className="min-w-0">
+   304→                        <CardTitle className="truncate text-sm">{c.displayName}</CardTitle>
+   305→                        <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{c.category.replace('-', ' ')}</p>
+   306→                      </div>
+   307→                    </div>
+   308→                    {c.verified && <BadgeCheck className="h-4 w-4 shrink-0 text-sky-400" />}
+   309→                  </div>
+   310→                </CardHeader>
+   311→                <CardContent className="flex flex-1 flex-col gap-3">
+   312→                  <p className="line-clamp-2 text-xs text-muted-foreground">{c.description}</p>
+   313→                  <div className="flex flex-wrap gap-1">
+   314→                    {c.supportedFeatures.slice(0, 3).map((f) => (
+   315→                      <span key={f} className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">{f}</span>
+   316→                    ))}
+   317→                  </div>
+   318→                  <div className="mt-auto flex items-center justify-between pt-2">
+   319→                    <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+   320→                      <span className="flex items-center gap-0.5"><Star className="h-3 w-3 fill-amber-400 text-amber-400" />{c.rating}</span>
+   321→                      <span>·</span>
+   322→                      <span>{num(c.installs)}</span>
+   323→                    </div>
+   324→                    <Button
+   325→                      size="sm" variant="default" className="h-7 gap-1 text-xs"
+   326→                      disabled={installing === c.slug}
+   327→                      onClick={() => install(c.slug, c.displayName)}
+   328→                    >
+   329→                      {installing === c.slug ? <RefreshCw className="h-3 w-3 animate-spin" /> : <Download className="h-3 w-3" />}
+   330→                      Install
+   331→                    </Button>
+   332→                  </div>
+   333→                </CardContent>
+   334→              </Card>
+   335→            </motion.div>
+   336→          ))}
+   337→        </div>
+   338→      )}
+   339→    </div>
+   340→  )
+   341→}
+   342→
+   343→function CategoryChip({ label, active, onClick, count }: { label: string; active: boolean; onClick: () => void; count: number }) {
+   344→  return (
+   345→    <button
+   346→      onClick={onClick}
+   347→      className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+   348→        active ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'bg-muted/40 text-muted-foreground border border-transparent hover:bg-muted/60'
+   349→      }`}
+   350→    >
+   351→      {label} <span className="opacity-60">{num(count)}</span>
+   352→    </button>
+   353→  )
+   354→}
+   355→
+   356→// ═══════════════════════════════════════════════════════════════════════════════
+   357→// INSTALLED TAB — my integrations with connect/sync/test
+   358→// ═══════════════════════════════════════════════════════════════════════════════
+   359→function InstalledTab({ onRefresh }: { onRefresh: () => void }) {
+   360→  const [installed, setInstalled] = useState<InstalledIntegration[]>([])
+   361→  const [loading, setLoading] = useState(true)
+   362→  const [busy, setBusy] = useState<string | null>(null)
+   363→  const [toast, setToast] = useState<string | null>(null)
+   364→
+   365→  const load = useCallback(async () => {
+   366→    setLoading(true)
+   367→    try {
+   368→      const res = await apiGet<{ installed: InstalledIntegration[] }>('/integrations/installed')
+   369→      setInstalled(res.installed)
+   370→    } catch { /* ignore */ } finally { setLoading(false) }
+   371→  }, [])
+   372→
+   373→  useEffect(() => { load() }, [load])
+   374→
+   375→  const action = async (id: string, actionType: 'connect' | 'disconnect' | 'sync' | 'test' | 'uninstall', name: string) => {
+   376→    setBusy(`${id}-${actionType}`)
+   377→    try {
+   378→      if (actionType === 'connect') {
+   379→        await apiPost('/integrations/connect', { installationId: id, connectedAccountId: `user@${name.toLowerCase().replace(/\s+/g, '')}.com`, scopes: [] })
+   380→        setToast(`✅ ${name} connected.`)
+   381→      } else if (actionType === 'disconnect') {
+   382→        await apiPost('/integrations/disconnect', { installationId: id })
+   383→        setToast(`⚠️ ${name} disconnected.`)
+   384→      } else if (actionType === 'sync') {
+   385→        const res = await apiPost<{ job: SyncJob }>('/integrations/sync', { installationId: id })
+   386→        setToast(`🔄 ${name} sync ${res.job.status}: ${res.job.recordsProcessed} records in ${res.job.durationMs}ms.`)
+   387→      } else if (actionType === 'test') {
+   388→        const res = await apiPost<{ success: boolean; latencyMs: number; message: string }>('/integrations/test', { installationId: id })
+   389→        setToast(`${res.success ? '✅' : '❌'} ${res.message}`)
+   390→      } else if (actionType === 'uninstall') {
+   391→        await apiPost('/integrations/uninstall', { installationId: id })
+   392→        setToast(`🗑️ ${name} uninstalled.`)
+   393→      }
+   394→      onRefresh()
+   395→      await load()
+   396→      setTimeout(() => setToast(null), 4000)
+   397→    } catch (e) {
+   398→      setToast(`❌ ${(e as Error).message}`)
+   399→      setTimeout(() => setToast(null), 4000)
+   400→    } finally { setBusy(null) }
+   401→  }
+   402→
+   403→  return (
+   404→    <div className="space-y-4">
+   405→      {toast && (
+   406→        <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
+   407→          className="fixed top-20 right-4 z-50 max-w-md rounded-lg border border-border bg-background/95 px-4 py-3 shadow-lg backdrop-blur">
+   408→          <p className="text-sm">{toast}</p>
+   409→        </motion.div>
+   410→      )}
+   411→
+   412→      <div className="flex items-center justify-between">
+   413→        <div>
+   414→          <h2 className="text-lg font-semibold">My Integrations</h2>
+   415→          <p className="text-sm text-muted-foreground">{installed.length} installed · {installed.filter((i) => i.status === 'connected').length} connected</p>
+   416→        </div>
+   417→        <Button variant="outline" size="sm" onClick={load} className="gap-1.5">
+   418→          <RefreshCw className="h-4 w-4" /> Refresh
+   419→        </Button>
+   420→      </div>
+   421→
+   422→      {loading ? (
+   423→        <div className="grid gap-3">{Array.from({ length: 6 }).map((_, i) => <Card key={i} className="h-28 animate-pulse bg-muted/20" />)}</div>
+   424→      ) : installed.length === 0 ? (
+   425→        <Card className="border-dashed border-border bg-muted/10">
+   426→          <CardContent className="flex flex-col items-center justify-center py-12 text-center">
+   427→            <Plug className="mb-3 h-10 w-10 text-muted-foreground" />
+   428→            <p className="text-sm font-medium">No integrations installed yet</p>
+   429→            <p className="text-xs text-muted-foreground">Browse the Marketplace to install your first connector.</p>
+   430→          </CardContent>
+   431→        </Card>
+   432→      ) : (
+   433→        <div className="grid gap-3">
+   434→          {installed.map((inst) => (
+   435→            <Card key={inst.id} className="border-border bg-muted/20">
+   436→              <CardContent className="p-4">
+   437→                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+   438→                  <div className="flex items-center gap-3">
+   439→                    <div className="flex h-11 w-11 items-center justify-center rounded-lg text-xl" style={{ background: `${inst.connector?.color ?? '#888'}20` }}>
+   440→                      {inst.connector?.logo ?? '🔌'}
+   441→                    </div>
+   442→                    <div>
+   443→                      <div className="flex items-center gap-2">
+   444→                        <h3 className="font-semibold">{inst.displayName}</h3>
+   445→                        <Badge variant="outline" className={STATUS_BADGE[inst.status] ?? STATUS_BADGE.unknown}>{inst.status}</Badge>
+   446→                        {inst.health === 'healthy' && <CheckCircle className="h-4 w-4 text-emerald-400" />}
+   447→                        {inst.health === 'degraded' && <AlertTriangle className="h-4 w-4 text-amber-400" />}
+   448→                      </div>
+   449→                      <p className="text-xs text-muted-foreground">
+   450→                        {inst.connector?.category.replace('-', ' ')} · {inst.authType} · {inst.connectedAccountId ?? 'not connected'}
+   451→                      </p>
+   452→                      <p className="text-[11px] text-muted-foreground">Last sync: {timeAgo(inst.lastSyncAt)} · {inst.syncFrequency}</p>
+   453→                      {inst.lastError && <p className="text-[11px] text-red-400">⚠️ {inst.lastError}</p>}
+   454→                    </div>
+   455→                  </div>
+   456→                  <div className="flex flex-wrap gap-1.5">
+   457→                    {inst.status !== 'connected' && (
+   458→                      <Button size="sm" variant="default" className="h-8 gap-1 text-xs" disabled={busy === `${inst.id}-connect`} onClick={() => action(inst.id, 'connect', inst.displayName)}>
+   459→                        {busy === `${inst.id}-connect` ? <RefreshCw className="h-3 w-3 animate-spin" /> : <Link2 className="h-3 w-3" />} Connect
+   460→                      </Button>
+   461→                    )}
+   462→                    {inst.status === 'connected' && (
+   463→                      <>
+   464→                        <Button size="sm" variant="outline" className="h-8 gap-1 text-xs" disabled={busy === `${inst.id}-sync`} onClick={() => action(inst.id, 'sync', inst.displayName)}>
+   465→                          {busy === `${inst.id}-sync` ? <RefreshCw className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />} Sync
+   466→                        </Button>
+   467→                        <Button size="sm" variant="outline" className="h-8 gap-1 text-xs" disabled={busy === `${inst.id}-test`} onClick={() => action(inst.id, 'test', inst.displayName)}>
+   468→                          {busy === `${inst.id}-test` ? <RefreshCw className="h-3 w-3 animate-spin" /> : <FlaskConical className="h-3 w-3" />} Test
+   469→                        </Button>
+   470→                        <Button size="sm" variant="outline" className="h-8 gap-1 text-xs" disabled={busy === `${inst.id}-disconnect`} onClick={() => action(inst.id, 'disconnect', inst.displayName)}>
+   471→                          <Link2Off className="h-3 w-3" /> Disconnect
+   472→                        </Button>
+   473→                      </>
+   474→                    )}
+   475→                    <Button size="sm" variant="ghost" className="h-8 gap-1 text-xs text-red-400 hover:text-red-300" disabled={busy === `${inst.id}-uninstall`} onClick={() => action(inst.id, 'uninstall', inst.displayName)}>
+   476→                      <Trash2 className="h-3 w-3" />
+   477→                    </Button>
+   478→                  </div>
+   479→                </div>
+   480→              </CardContent>
+   481→            </Card>
+   482→          ))}
+   483→        </div>
+   484→      )}
+   485→    </div>
+   486→  )
+   487→}
+   488→
+   489→// ═══════════════════════════════════════════════════════════════════════════════
+   490→// EVENT BUS TAB — live event stream
+   491→// ═══════════════════════════════════════════════════════════════════════════════
+   492→function EventBusTab() {
+   493→  const [events, setEvents] = useState<IntegrationEvent[]>([])
+   494→  const [stats, setStats] = useState<EventBusStats | null>(null)
+   495→  const [loading, setLoading] = useState(true)
+   496→
+   497→  const load = useCallback(async () => {
+   498→    try {
+   499→      const res = await apiGet<{ events: IntegrationEvent[]; stats: EventBusStats }>('/integrations/events', { limit: '80' })
+   500→      setEvents(res.events); setStats(res.stats)
+   501→    } catch { /* ignore */ } finally { setLoading(false) }
+   502→  }, [])
+   503→
+   504→  useEffect(() => {
+   505→    load()
+   506→    const interval = setInterval(load, 8000)
+   507→    return () => clearInterval(interval)
+   508→  }, [load])
+   509→
+   510→  const SEVERITY_ICON: Record<string, React.ElementType> = { info: CheckCircle, warning: AlertTriangle, critical: AlertCircle }
+   511→  const SEVERITY_COLOR: Record<string, string> = { info: 'text-emerald-400', warning: 'text-amber-400', critical: 'text-red-400' }
+   512→
+   513→  return (
+   514→    <div className="space-y-4">
+   515→      {/* Stats */}
+   516→      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-6">
+   517→        <MetricCard icon={Zap} label="Total Events" value={stats ? num(stats.total) : '—'} color="text-amber-400" />
+   518→        <MetricCard icon={Activity} label="Last Hour" value={stats ? num(stats.lastHour) : '—'} color="text-cyan-400" />
+   519→        <MetricCard icon={Clock} label="Last 24h" value={stats ? num(stats.last24h) : '—'} color="text-sky-400" />
+   520→        <MetricCard icon={CheckCircle} label="Consumed" value={stats ? num(stats.consumed) : '—'} color="text-emerald-400" />
+   521→        <MetricCard icon={Cpu} label="Unconsumed" value={stats ? num(stats.unconsumed) : '—'} color="text-orange-400" />
+   522→        <MetricCard icon={Network} label="Connectors" value={stats ? String(stats.byConnector.length) : '—'} color="text-violet-400" />
+   523→      </div>
+   524→
+   525→      <div className="grid gap-4 lg:grid-cols-3">
+   526→        {/* Event stream */}
+   527→        <Card className="border-border bg-muted/20 lg:col-span-2">
+   528→          <CardHeader className="pb-3">
+   529→            <div className="flex items-center justify-between">
+   530→              <CardTitle className="flex items-center gap-2 text-base"><Zap className="h-4 w-4 text-amber-400" /> Event Bus™ Live Stream</CardTitle>
+   531→              <Badge variant="outline" className="bg-emerald-500/10 text-emerald-300 border-emerald-500/20">● live</Badge>
+   532→            </div>
+   533→          </CardHeader>
+   534→          <CardContent>
+   535→            <ScrollArea className="h-[480px] pr-3">
+   536→              <div className="space-y-1.5">
+   537→                {loading ? (
+   538→                  <p className="text-sm text-muted-foreground">Loading events…</p>
+   539→                ) : events.length === 0 ? (
+   540→                  <p className="text-sm text-muted-foreground">No events yet. Sync an integration to publish events.</p>
+   541→                ) : (
+   542→                  events.map((e) => {
+   543→                    const Icon = SEVERITY_ICON[e.severity] ?? CheckCircle
+   544→                    return (
+   545→                      <div key={e.id} className="flex items-start gap-2.5 rounded-lg border border-border/50 bg-background/30 px-3 py-2">
+   546→                        <Icon className={`mt-0.5 h-4 w-4 shrink-0 ${SEVERITY_COLOR[e.severity]}`} />
+   547→                        <div className="min-w-0 flex-1">
+   548→                          <div className="flex items-center gap-2">
+   549→                            <code className="text-xs font-semibold text-foreground">{e.eventType}</code>
+   550→                            <span className="text-[10px] text-muted-foreground">from</span>
+   551→                            <code className="text-[11px] text-cyan-400">{e.connectorSlug}</code>
+   552→                          </div>
+   553→                          <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+   554→                            <span>{timeAgo(e.publishedAt)}</span>
+   555→                            {e.consumed ? (
+   556→                              <span className="flex items-center gap-0.5 text-emerald-400">✓ {e.consumedBy}</span>
+   557→                            ) : (
+   558→                              <span className="text-amber-400">pending consumption</span>
+   559→                            )}
+   560→                          </div>
+   561→                        </div>
+   562→                      </div>
+   563→                    )
+   564→                  })
+   565→                )}
+   566→              </div>
+   567→            </ScrollArea>
+   568→          </CardContent>
+   569→        </Card>
+   570→
+   571→        {/* Top events + connectors */}
+   572→        <div className="space-y-4">
+   573→          <Card className="border-border bg-muted/20">
+   574→            <CardHeader className="pb-3"><CardTitle className="text-sm">Top Event Types</CardTitle></CardHeader>
+   575→            <CardContent className="space-y-2">
+   576→              {stats?.byEventType.slice(0, 6).map((t) => (
+   577→                <div key={t.eventType} className="flex items-center justify-between">
+   578→                  <code className="text-xs text-foreground">{t.eventType}</code>
+   579→                  <Badge variant="secondary" className="text-xs">{num(t.count)}</Badge>
+   580→                </div>
+   581→              )) ?? <p className="text-xs text-muted-foreground">No data</p>}
+   582→            </CardContent>
+   583→          </Card>
+   584→          <Card className="border-border bg-muted/20">
+   585→            <CardHeader className="pb-3"><CardTitle className="text-sm">Active Connectors</CardTitle></CardHeader>
+   586→            <CardContent className="space-y-2">
+   587→              {stats?.byConnector.slice(0, 6).map((c) => (
+   588→                <div key={c.connectorSlug} className="flex items-center justify-between">
+   589→                  <code className="text-xs text-cyan-400">{c.connectorSlug}</code>
+   590→                  <Badge variant="secondary" className="text-xs">{num(c.count)}</Badge>
+   591→                </div>
+   592→              )) ?? <p className="text-xs text-muted-foreground">No data</p>}
+   593→            </CardContent>
+   594→          </Card>
+   595→        </div>
+   596→      </div>
+   597→    </div>
+   598→  )
+   599→}
+   600→
+   601→// ═══════════════════════════════════════════════════════════════════════════════
+   602→// SYNC ENGINE TAB
+   603→// ═══════════════════════════════════════════════════════════════════════════════
+   604→function SyncTab() {
+   605→  const [jobs, setJobs] = useState<SyncJob[]>([])
+   606→  const [status, setStatus] = useState<SyncEngineStatus | null>(null)
+   607→  const [loading, setLoading] = useState(true)
+   608→
+   609→  const load = useCallback(async () => {
+   610→    try {
+   611→      const res = await apiGet<{ jobs: SyncJob[]; status: SyncEngineStatus }>('/integrations/sync-jobs', { limit: '40' })
+   612→      setJobs(res.jobs); setStatus(res.status)
+   613→    } catch { /* ignore */ } finally { setLoading(false) }
+   614→  }, [])
+   615→
+   616→  useEffect(() => {
+   617→    load()
+   618→    const interval = setInterval(load, 10000)
+   619→    return () => clearInterval(interval)
+   620→  }, [load])
+   621→
+   622→  return (
+   623→    <div className="space-y-4">
+   624→      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-5">
+   625→        <MetricCard icon={RefreshCw} label="Jobs (24h)" value={status ? num(status.jobsLast24h) : '—'} color="text-cyan-400" />
+   626→        <MetricCard icon={CheckCircle} label="Success Rate" value={status ? `${status.successRate}%` : '—'} color="text-emerald-400" />
+   627→        <MetricCard icon={Database} label="Records Synced" value={status ? num(status.totalRecordsSynced) : '—'} color="text-violet-400" />
+   628→        <MetricCard icon={AlertTriangle} label="Conflicts Resolved" value={status ? num(status.conflictsResolved) : '—'} color="text-amber-400" />
+   629→        <MetricCard icon={Clock} label="Avg Duration" value={status ? `${status.avgDurationMs}ms` : '—'} color="text-sky-400" />
+   630→      </div>
+   631→
+   632→      <Card className="border-border bg-muted/20">
+   633→        <CardHeader className="pb-3">
+   634→          <CardTitle className="flex items-center gap-2 text-base"><RefreshCw className="h-4 w-4 text-cyan-400" /> Universal Data Sync™ — Recent Jobs</CardTitle>
+   635→          <CardDescription className="text-xs">Real-time, scheduled, incremental sync · Conflict resolution · Retry engine · Offline queue</CardDescription>
+   636→        </CardHeader>
+   637→        <CardContent>
+   638→          <ScrollArea className="h-[460px] pr-3">
+   639→            <div className="space-y-1.5">
+   640→              {loading ? (
+   641→                <p className="text-sm text-muted-foreground">Loading sync jobs…</p>
+   642→              ) : jobs.length === 0 ? (
+   643→                <p className="text-sm text-muted-foreground">No sync jobs yet. Trigger a sync from My Integrations.</p>
+   644→              ) : (
+   645→                jobs.map((j) => (
+   646→                  <div key={j.id} className="flex items-center gap-3 rounded-lg border border-border/50 bg-background/30 px-3 py-2">
+   647→                    <div className="flex h-8 w-8 items-center justify-center rounded-md bg-muted">
+   648→                      {j.status === 'success' ? <CheckCircle className="h-4 w-4 text-emerald-400" /> : j.status === 'failed' ? <XCircle className="h-4 w-4 text-red-400" /> : <RefreshCw className="h-4 w-3 animate-spin text-amber-400" />}
+   649→                    </div>
+   650→                    <div className="min-w-0 flex-1">
+   651→                      <div className="flex items-center gap-2">
+   652→                        <Badge variant="outline" className={`text-[10px] ${STATUS_BADGE[j.status] ?? STATUS_BADGE.unknown}`}>{j.status}</Badge>
+   653→                        <span className="text-[11px] text-muted-foreground">{j.type} · {j.direction}</span>
+   654→                      </div>
+   655→                      <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
+   656→                        <span>{num(j.recordsProcessed)} processed</span>
+   657→                        <span className="text-emerald-400">+{j.recordsCreated}</span>
+   658→                        <span className="text-sky-400">↻{j.recordsUpdated}</span>
+   659→                        {j.recordsFailed > 0 && <span className="text-red-400">✗{j.recordsFailed}</span>}
+   660→                        {j.conflictCount > 0 && <span className="text-amber-400">⚠{j.conflictCount} conflicts</span>}
+   661→                        <span>· {j.durationMs ? `${j.durationMs}ms` : 'running'}</span>
+   662→                      </div>
+   663→                    </div>
+   664→                    <span className="text-[10px] text-muted-foreground">{timeAgo(j.startedAt)}</span>
+   665→                  </div>
+   666→                ))
+   667→              )}
+   668→            </div>
+   669→          </ScrollArea>
+   670→        </CardContent>
+   671→      </Card>
+   672→    </div>
+   673→  )
+   674→}
+   675→
+   676→// ═══════════════════════════════════════════════════════════════════════════════
+   677→// ANALYTICS TAB
+   678→// ═══════════════════════════════════════════════════════════════════════════════
+   679→function AnalyticsTab() {
+   680→  const [data, setData] = useState<AnalyticsData | null>(null)
+   681→  const [loading, setLoading] = useState(true)
+   682→
+   683→  useEffect(() => {
+   684→    apiGet<AnalyticsData>('/integrations/analytics', { days: '30' })
+   685→      .then(setData).catch(() => {}).finally(() => setLoading(false))
+   686→  }, [])
+   687→
+   688→  const maxApi = Math.max(...(data?.timeseries.map((t) => t.apiCalls) ?? [1]), 1)
+   689→
+   690→  return (
+   691→    <div className="space-y-4">
+   692→      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-6">
+   693→        <MetricCard icon={Activity} label="API Calls" value={data ? num(data.totalApiCalls) : '—'} color="text-cyan-400" />
+   694→        <MetricCard icon={CheckCircle} label="Sync Success" value={data ? `${data.syncSuccessRate}%` : '—'} color="text-emerald-400" />
+   695→        <MetricCard icon={Database} label="Records Synced" value={data ? num(data.totalRecordsSynced) : '—'} color="text-violet-400" />
+   696→        <MetricCard icon={Zap} label="Events Published" value={data ? num(data.totalEventsPublished) : '—'} color="text-amber-400" />
+   697→        <MetricCard icon={TrendingUp} label="Revenue Impact" value={data ? inr(data.totalRevenueImpact) : '—'} color="text-emerald-400" />
+   698→        <MetricCard icon={Cpu} label="Avg Latency" value={data ? `${data.avgLatencyMs}ms` : '—'} color="text-sky-400" />
+   699→      </div>
+   700→
+   701→      {/* Timeseries chart */}
+   702→      <Card className="border-border bg-muted/20">
+   703→        <CardHeader className="pb-3"><CardTitle className="text-base">API Calls (last 30 days)</CardTitle></CardHeader>
+   704→        <CardContent>
+   705→          {loading ? <p className="text-sm text-muted-foreground">Loading…</p> : (
+   706→            <div className="flex h-40 items-end gap-0.5">
+   707→              {data?.timeseries.map((t) => (
+   708→                <div key={t.date} className="group relative flex-1" title={`${t.date}: ${num(t.apiCalls)} calls`}>
+   709→                  <div className="w-full rounded-t bg-gradient-to-t from-cyan-500/40 to-emerald-500/60 transition-all hover:from-cyan-500/60 hover:to-emerald-500/80" style={{ height: `${Math.max((t.apiCalls / maxApi) * 100, 2)}%` }} />
+   710→                </div>
+   711→              ))}
+   712→            </div>
+   713→          )}
+   714→        </CardContent>
+   715→      </Card>
+   716→
+   717→      {/* By connector */}
+   718→      <Card className="border-border bg-muted/20">
+   719→        <CardHeader className="pb-3"><CardTitle className="text-base">Connector Analytics</CardTitle></CardHeader>
+   720→        <CardContent>
+   721→          <ScrollArea className="h-[340px] pr-3">
+   722→            <div className="space-y-2">
+   723→              {data?.byConnector.map((c) => (
+   724→                <div key={c.connectorSlug} className="flex items-center gap-3 rounded-lg border border-border/50 bg-background/30 px-3 py-2">
+   725→                  <div className="min-w-0 flex-1">
+   726→                    <div className="flex items-center gap-2">
+   727→                      <span className="truncate text-sm font-medium">{c.displayName}</span>
+   728→                      <Badge variant="outline" className={`text-[10px] ${STATUS_BADGE[c.status] ?? STATUS_BADGE.unknown}`}>{c.status}</Badge>
+   729→                    </div>
+   730→                    <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
+   731→                      <span>{num(c.apiCalls)} calls</span>
+   732→                      <span>{num(c.eventsPublished)} events</span>
+   733→                      <span>{c.avgLatencyMs}ms</span>
+   734→                    </div>
+   735→                  </div>
+   736→                  <div className="flex flex-col items-end gap-1">
+   737→                    <span className="text-xs font-semibold text-emerald-400">{inr(c.revenueImpact)}</span>
+   738→                    <div className="flex items-center gap-1">
+   739→                      <Progress value={c.healthScore} className="h-1.5 w-16" />
+   740→                      <span className="text-[10px] text-muted-foreground">{c.healthScore}</span>
+   741→                    </div>
+   742→                  </div>
+   743→                </div>
+   744→              )) ?? <p className="text-sm text-muted-foreground">No analytics yet.</p>}
+   745→            </div>
+   746→          </ScrollArea>
+   747→        </CardContent>
+   748→      </Card>
+   749→    </div>
+   750→  )
+   751→}
+   752→
+   753→// ═══════════════════════════════════════════════════════════════════════════════
+   754→// DEVELOPER PLATFORM TAB
+   755→// ═══════════════════════════════════════════════════════════════════════════════
+   756→function DeveloperTab() {
+   757→  const [data, setData] = useState<DeveloperData | null>(null)
+   758→  const [loading, setLoading] = useState(true)
+   759→
+   760→  useEffect(() => {
+   761→    apiGet<DeveloperData>('/integrations/developer').then(setData).catch(() => {}).finally(() => setLoading(false))
+   762→  }, [])
+   763→
+   764→  return (
+   765→    <div className="space-y-4">
+   766→      {/* SDK header */}
+   767→      <Card className="border-emerald-500/20 bg-gradient-to-br from-emerald-500/10 to-cyan-500/10">
+   768→        <CardContent className="p-5">
+   769→          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+   770→            <div>
+   771→              <div className="flex items-center gap-2">
+   772→                <Code2 className="h-5 w-5 text-emerald-400" />
+   773→                <h2 className="text-lg font-semibold">GSTPilot Connector SDK v{data?.sdk.version ?? '2.1.0'}</h2>
+   774→                <Badge variant="outline" className="bg-emerald-500/15 text-emerald-300 border-emerald-500/20">stable</Badge>
+   775→              </div>
+   776→              <p className="mt-1 text-sm text-muted-foreground">Build & publish connectors for 2,000+ platforms. SDK, REST API, Webhook SDK, OAuth templates, sandbox, certification, revenue sharing.</p>
+   777→              <div className="mt-3 flex flex-wrap gap-2">
+   778→                {data?.sdk.languages.map((l) => (
+   779→                  <span key={l} className="rounded-md bg-muted/50 px-2 py-1 text-xs font-mono text-foreground">{l}</span>
+   780→                )) ?? null}
+   781→              </div>
+   782→            </div>
+   783→            <div className="grid grid-cols-2 gap-3 sm:grid-cols-1">
+   784→              <div className="text-right">
+   785→                <p className="text-2xl font-bold text-emerald-400">{data ? num(data.sdk.publishedConnectors) : '—'}</p>
+   786→                <p className="text-[10px] uppercase text-muted-foreground">Published</p>
+   787→              </div>
+   788→              <div className="text-right">
+   789→                <p className="text-2xl font-bold text-cyan-400">{data ? inr(data.sdk.totalRevenue) : '—'}</p>
+   790→                <p className="text-[10px] uppercase text-muted-foreground">Dev Revenue</p>
+   791→              </div>
+   792→            </div>
+   793→          </div>
+   794→        </CardContent>
+   795→      </Card>
+   796→
+   797→      <div className="grid gap-4 lg:grid-cols-3">
+   798→        {/* Submissions */}
+   799→        <Card className="border-border bg-muted/20 lg:col-span-2">
+   800→          <CardHeader className="pb-3"><CardTitle className="text-base">Recent Submissions</CardTitle></CardHeader>
+   801→          <CardContent>
+   802→            <ScrollArea className="h-[360px] pr-3">
+   803→              <div className="space-y-2">
+   804→                {loading ? <p className="text-sm text-muted-foreground">Loading…</p> : data?.submissions.map((s) => (
+   805→                  <div key={s.id} className="flex items-center gap-3 rounded-lg border border-border/50 bg-background/30 px-3 py-2">
+   806→                    <FileCode className="h-4 w-4 shrink-0 text-violet-400" />
+   807→                    <div className="min-w-0 flex-1">
+   808→                      <div className="flex items-center gap-2">
+   809→                        <span className="truncate text-sm font-medium">{s.name}</span>
+   810→                        <Badge variant="outline" className={`text-[10px] ${STATUS_BADGE[s.status] ?? STATUS_BADGE.unknown}`}>{s.status}</Badge>
+   811→                        <Badge variant="outline" className={`text-[10px] ${STATUS_BADGE[s.certification] ?? STATUS_BADGE.none}`}>{s.certification}</Badge>
+   812→                      </div>
+   813→                      <p className="text-[11px] text-muted-foreground">by {s.developer} · v{s.version} · SDK {s.sdkVersion} · {s.revenueSharePct}% revenue share</p>
+   814→                    </div>
+   815→                    <span className="text-[10px] text-muted-foreground">{timeAgo(s.submittedAt)}</span>
+   816→                  </div>
+   817→                ))}
+   818→              </div>
+   819→            </ScrollArea>
+   820→          </CardContent>
+   821→        </Card>
+   822→
+   823→        {/* Certifications */}
+   824→        <Card className="border-border bg-muted/20">
+   825→          <CardHeader className="pb-3"><CardTitle className="text-base">Certification Levels</CardTitle></CardHeader>
+   826→          <CardContent className="space-y-3">
+   827→            {data?.certifications.map((cert) => (
+   828→              <div key={cert.level} className="rounded-lg border border-border/50 bg-background/30 p-3">
+   829→                <div className="flex items-center justify-between">
+   830→                  <div className="flex items-center gap-2">
+   831→                    {cert.level === 'certified' ? <BadgeCheck className="h-4 w-4 text-emerald-400" /> : cert.level === 'sandbox' ? <FlaskConical className="h-4 w-4 text-amber-400" /> : <Code2 className="h-4 w-4 text-muted-foreground" />}
+   832→                    <span className="text-sm font-medium capitalize">{cert.level}</span>
+   833→                  </div>
+   834→                  <Badge variant="secondary" className="text-xs">{cert.count}</Badge>
+   835→                </div>
+   836→                <ul className="mt-2 space-y-0.5">
+   837→                  {cert.requirements.map((r) => (
+   838→                    <li key={r} className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+   839→                      <CheckCircle className="h-2.5 w-2.5 text-emerald-400" /> {r}
+   840→                    </li>
+   841→                  ))}
+   842→                </ul>
+   843→              </div>
+   844→            )) ?? <p className="text-sm text-muted-foreground">No data</p>}
+   845→          </CardContent>
+   846→        </Card>
+   847→      </div>
+   848→    </div>
+   849→  )
+   850→}
+   851→
+   852→// ═══════════════════════════════════════════════════════════════════════════════
+   853→// SECURITY TAB
+   854→// ═══════════════════════════════════════════════════════════════════════════════
+   855→function SecurityTab() {
+   856→  const [data, setData] = useState<SecurityData | null>(null)
+   857→  const [loading, setLoading] = useState(true)
+   858→
+   859→  useEffect(() => {
+   860→    apiGet<SecurityData>('/integrations/security').then(setData).catch(() => {}).finally(() => setLoading(false))
+   861→  }, [])
+   862→
+   863→  return (
+   864→    <div className="space-y-4">
+   865→      {/* Security measures */}
+   866→      <Card className="border-border bg-muted/20">
+   867→        <CardHeader className="pb-3">
+   868→          <CardTitle className="flex items-center gap-2 text-base"><ShieldCheck className="h-4 w-4 text-emerald-400" /> Security Measures (16)</CardTitle>
+   869→          <CardDescription className="text-xs">Zero-trust architecture · OAuth2 · API Key Vault · Encrypted tokens · Webhook validation · Rate limiting</CardDescription>
+   870→        </CardHeader>
+   871→        <CardContent>
+   872→          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
+   873→            {loading ? <p className="text-sm text-muted-foreground">Loading…</p> : data?.securityMeasures.map((m) => (
+   874→              <div key={m.name} className="rounded-lg border border-border/50 bg-background/30 p-2.5">
+   875→                <div className="flex items-center justify-between">
+   876→                  <span className="text-xs font-medium">{m.name}</span>
+   877→                  {m.enabled ? <Lock className="h-3.5 w-3.5 text-emerald-400" /> : <XCircle className="h-3.5 w-3.5 text-red-400" />}
+   878→                </div>
+   879→                <p className="mt-1 text-[10px] leading-tight text-muted-foreground">{m.description}</p>
+   880→              </div>
+   881→            ))}
+   882→          </div>
+   883→        </CardContent>
+   884→      </Card>
+   885→
+   886→      <div className="grid gap-4 lg:grid-cols-2">
+   887→        {/* API Keys */}
+   888→        <Card className="border-border bg-muted/20">
+   889→          <CardHeader className="pb-3"><CardTitle className="flex items-center gap-2 text-sm"><KeyRound className="h-4 w-4 text-amber-400" /> API Keys</CardTitle></CardHeader>
+   890→          <CardContent className="space-y-2">
+   891→            {data?.apiKeys.map((k) => (
+   892→              <div key={k.id} className="flex items-center justify-between rounded-lg border border-border/50 bg-background/30 px-3 py-2">
+   893→                <div>
+   894→                  <p className="text-sm font-medium">{k.name}</p>
+   895→                  <code className="text-[11px] text-muted-foreground">{k.keyPrefix}••••••••</code>
+   896→                </div>
+   897→                <div className="flex items-center gap-1">
+   898→                  {k.scopes.slice(0, 2).map((s) => <Badge key={s} variant="secondary" className="text-[9px]">{s}</Badge>)}
+   899→                  <span className="text-[10px] text-muted-foreground">{timeAgo(k.lastUsedAt)}</span>
+   900→                </div>
+   901→              </div>
+   902→            )) ?? <p className="text-sm text-muted-foreground">No API keys</p>}
+   903→          </CardContent>
+   904→        </Card>
+   905→
+   906→        {/* OAuth providers */}
+   907→        <Card className="border-border bg-muted/20">
+   908→          <CardHeader className="pb-3"><CardTitle className="flex items-center gap-2 text-sm"><Globe className="h-4 w-4 text-cyan-400" /> OAuth Providers</CardTitle></CardHeader>
+   909→          <CardContent className="space-y-2">
+   910→            {data?.oauthProviders.map((p) => (
+   911→              <div key={p.name} className="flex items-center justify-between rounded-lg border border-border/50 bg-background/30 px-3 py-2">
+   912→                <div className="flex items-center gap-2">
+   913→                  {p.connected ? <Link2 className="h-3.5 w-3.5 text-emerald-400" /> : <Link2Off className="h-3.5 w-3.5 text-muted-foreground" />}
+   914→                  <span className="text-sm">{p.name}</span>
+   915→                </div>
+   916→                <Badge variant="outline" className={`text-[10px] ${p.connected ? STATUS_BADGE.connected : STATUS_BADGE.disconnected}`}>{p.connected ? 'connected' : 'available'}</Badge>
+   917→              </div>
+   918→            ))}
+   919→          </CardContent>
+   920→        </Card>
+   921→
+   922→        {/* Webhooks */}
+   923→        <Card className="border-border bg-muted/20">
+   924→          <CardHeader className="pb-3"><CardTitle className="flex items-center gap-2 text-sm"><Webhook className="h-4 w-4 text-violet-400" /> Webhook Endpoints</CardTitle></CardHeader>
+   925→          <CardContent className="space-y-2">
+   926→            {data?.webhooks.map((w) => (
+   927→              <div key={w.id} className="rounded-lg border border-border/50 bg-background/30 px-3 py-2">
+   928→                <div className="flex items-center justify-between">
+   929→                  <code className="truncate text-[11px] text-foreground">{w.url}</code>
+   930→                  <Badge variant="outline" className={`text-[10px] ${w.verified ? STATUS_BADGE.verified ?? STATUS_BADGE.connected : STATUS_BADGE.disconnected}`}>{w.verified ? 'verified' : 'pending'}</Badge>
+   931→                </div>
+   932→                <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+   933→                  <code className="text-cyan-400">{w.connectorSlug}</code>
+   934→                  <span>{w.successRate}% success</span>
+   935→                  <span>· {timeAgo(w.lastDelivery)}</span>
+   936→                </div>
+   937→              </div>
+   938→            ))}
+   939→          </CardContent>
+   940→        </Card>
+   941→
+   942→        {/* Rate limits */}
+   943→        <Card className="border-border bg-muted/20">
+   944→          <CardHeader className="pb-3"><CardTitle className="flex items-center gap-2 text-sm"><Gauge className="h-4 w-4 text-orange-400" /> Rate Limits</CardTitle></CardHeader>
+   945→          <CardContent className="space-y-2">
+   946→            {data?.rateLimits.map((r) => (
+   947→              <div key={r.connectorSlug} className="rounded-lg border border-border/50 bg-background/30 px-3 py-2">
+   948→                <div className="flex items-center justify-between">
+   949→                  <code className="text-xs text-cyan-400">{r.connectorSlug}</code>
+   950→                  <span className="text-[10px] text-muted-foreground">{r.used}/{r.limit}</span>
+   951→                </div>
+   952→                <Progress value={(r.used / r.limit) * 100} className="mt-1 h-1.5" />
+   953→                <p className="mt-0.5 text-[10px] text-muted-foreground">{r.remaining} remaining · resets in {Math.ceil((new Date(r.resetAt).getTime() - Date.now()) / 1000)}s</p>
+   954→              </div>
+   955→            ))}
+   956→          </CardContent>
+   957→        </Card>
+   958→      </div>
+   959→
+   960→      {/* Audit trail */}
+   961→      <Card className="border-border bg-muted/20">
+   962→        <CardHeader className="pb-3"><CardTitle className="flex items-center gap-2 text-base"><Eye className="h-4 w-4 text-sky-400" /> Audit Trail</CardTitle></CardHeader>
+   963→        <CardContent>
+   964→          <ScrollArea className="h-[260px] pr-3">
+   965→            <div className="space-y-1.5">
+   966→              {data?.auditEvents.map((e) => (
+   967→                <div key={e.id} className="flex items-center gap-2 rounded-lg border border-border/50 bg-background/30 px-3 py-2">
+   968→                  <Badge variant="outline" className={`text-[10px] ${STATUS_BADGE[e.severity] ?? STATUS_BADGE.unknown}`}>{e.severity}</Badge>
+   969→                  <div className="min-w-0 flex-1">
+   970→                    <p className="truncate text-xs"><span className="font-medium">{e.action}</span> · {e.summary}</p>
+   971→                    <p className="text-[10px] text-muted-foreground">by {e.actor}</p>
+   972→                  </div>
+   973→                  <span className="text-[10px] text-muted-foreground">{timeAgo(e.timestamp)}</span>
+   974→                </div>
+   975→              )) ?? <p className="text-sm text-muted-foreground">No audit events</p>}
+   976→            </div>
+   977→          </ScrollArea>
+   978→        </CardContent>
+   979→      </Card>
+   980→    </div>
+   981→  )
+   982→}
+   983→
+   984→function Gauge({ className }: { className?: string }) {
+   985→  return <Cpu className={className} />
+   986→}
+   987→
+   988→function MetricCard({ icon: Icon, label, value, color }: { icon: React.ElementType; label: string; value: string; color: string }) {
+   989→  return (
+   990→    <Card className="border-border bg-muted/20">
+   991→      <CardContent className="p-3">
+   992→        <div className="flex items-center gap-2">
+   993→          <Icon className={`h-4 w-4 ${color}`} />
+   994→          <span className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</span>
+   995→        </div>
+   996→        <p className="mt-1 text-lg font-bold">{value}</p>
+   997→      </CardContent>
+   998→    </Card>
+   999→  )
+  1000→}
+  1001→

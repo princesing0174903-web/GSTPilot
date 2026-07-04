@@ -1,0 +1,1543 @@
+     1→'use client';
+     2→
+     3→// ═══════════════════════════════════════════════════════════════════════════════
+     4→// GSTPilot Infinity™ — ENTERPRISE EXECUTION CLOUD™ (MISSION CONTROL)
+     5→// The world's first Enterprise Execution Cloud. One pipeline for every module.
+     6→// Think. Plan. Execute. Observe. Improve. Founder & Owner: Prince Singh.
+     7→// ═══════════════════════════════════════════════════════════════════════════════
+     8→
+     9→import React, { useState, useEffect, useCallback } from 'react';
+    10→import { motion } from 'framer-motion';
+    11→import {
+    12→  Card, CardContent, CardHeader, CardTitle,
+    13→} from '@/components/ui/card';
+    14→import { Badge } from '@/components/ui/badge';
+    15→import { Button } from '@/components/ui/button';
+    16→import { Progress } from '@/components/ui/progress';
+    17→import {
+    18→  Tabs, TabsList, TabsTrigger, TabsContent,
+    19→} from '@/components/ui/tabs';
+    20→import {
+    21→  Collapsible, CollapsibleTrigger, CollapsibleContent,
+    22→} from '@/components/ui/collapsible';
+    23→import {
+    24→  Activity, AlertTriangle, BarChart3, Clock, Cpu, Globe, GitBranch,
+    25→  Network, Play, RotateCcw, Settings, Shield, Zap, Sparkles, RefreshCw,
+    26→  Loader2, AlertCircle, CheckCircle2, ChevronRight, ChevronDown,
+    27→  MapPin, Server, Layers, Gauge, TrendingUp, TrendingDown, Hash,
+    28→  CalendarClock, Workflow, Users, Boxes, CircleDot, Building2,
+    29→  type LucideIcon,
+    30→} from 'lucide-react';
+    31→import { cn } from '@/lib/utils';
+    32→import type {
+    33→  ExecutionDashboard, TimelineEntry, ExecutionModule, ExecutionStatus,
+    34→  ExecutionPriority, WorkerType, WorkerStatus, QueueSummary,
+    35→  AlertType, AlertSeverity, TaskEdgeRelation,
+    36→} from '@/lib/execution-cloud/types';
+    37→import { MODULE_META } from '@/lib/execution-cloud/types';
+    38→
+    39→// ─── Constants ───────────────────────────────────────────────────────────────
+    40→
+    41→const FOUNDER = 'Prince Singh';
+    42→const TITLE = 'Enterprise Execution Cloud™';
+    43→const SUBTITLE = 'MISSION CONTROL — Think. Plan. Execute. Observe. Improve.';
+    44→
+    45→// ─── Helpers ─────────────────────────────────────────────────────────────────
+    46→
+    47→const inr = (n: number): string => {
+    48→  if (!Number.isFinite(n)) return '₹0';
+    49→  const abs = Math.abs(n);
+    50→  if (abs >= 1_00_00_000) return `₹${(n / 1_00_00_000).toFixed(2)}Cr`;
+    51→  if (abs >= 1_00_000) return `₹${(n / 1_00_000).toFixed(2)}L`;
+    52→  if (abs >= 1_000) return `₹${(n / 1_000).toFixed(1)}K`;
+    53→  return `₹${n.toFixed(0)}`;
+    54→};
+    55→
+    56→const fmtMs = (ms: number): string => {
+    57→  if (!Number.isFinite(ms) || ms <= 0) return '0ms';
+    58→  if (ms < 1_000) return `${Math.round(ms)}ms`;
+    59→  if (ms < 60_000) return `${(ms / 1_000).toFixed(1)}s`;
+    60→  return `${(ms / 60_000).toFixed(1)}m`;
+    61→};
+    62→
+    63→const fmtPct = (n: number, decimals = 1): string => `${n.toFixed(decimals)}%`;
+    64→
+    65→const timeAgo = (iso: string | null): string => {
+    66→  if (!iso) return '—';
+    67→  const t = Date.parse(iso);
+    68→  if (!Number.isFinite(t)) return '—';
+    69→  const diff = Date.now() - t;
+    70→  if (diff < 0) return 'just now';
+    71→  const s = Math.floor(diff / 1_000);
+    72→  if (s < 60) return `${s}s ago`;
+    73→  const m = Math.floor(s / 60);
+    74→  if (m < 60) return `${m}m ago`;
+    75→  const h = Math.floor(m / 60);
+    76→  if (h < 24) return `${h}h ago`;
+    77→  const d = Math.floor(h / 24);
+    78→  return `${d}d ago`;
+    79→};
+    80→
+    81→const fmtTime = (iso: string | null): string => {
+    82→  if (!iso) return '—';
+    83→  const t = Date.parse(iso);
+    84→  if (!Number.isFinite(t)) return '—';
+    85→  return new Date(t).toLocaleString('en-IN', {
+    86→    day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', second: '2-digit',
+    87→  });
+    88→};
+    89→
+    90→// ─── Status badge colours ────────────────────────────────────────────────────
+    91→
+    92→const STATUS_STYLES: Record<ExecutionStatus, string> = {
+    93→  completed: 'bg-emerald-100 text-emerald-700 border-emerald-200',
+    94→  running: 'bg-cyan-100 text-cyan-700 border-cyan-200 animate-pulse',
+    95→  queued: 'bg-slate-100 text-slate-700 border-slate-200',
+    96→  failed: 'bg-rose-100 text-rose-700 border-rose-200',
+    97→  awaiting_approval: 'bg-amber-100 text-amber-700 border-amber-200',
+    98→  cancelled: 'bg-zinc-100 text-zinc-700 border-zinc-200',
+    99→};
+   100→
+   101→function StatusBadge({ status }: { status: ExecutionStatus }) {
+   102→  return (
+   103→    <Badge variant="outline" className={cn('text-[10px] font-medium border', STATUS_STYLES[status])}>
+   104→      {status.replace('_', ' ')}
+   105→    </Badge>
+   106→  );
+   107→}
+   108→
+   109→function ModuleBadge({ module }: { module: ExecutionModule }) {
+   110→  const meta = MODULE_META[module];
+   111→  if (!meta) return <Badge variant="outline" className="text-[10px]">{module}</Badge>;
+   112→  return (
+   113→    <Badge variant="outline" className={cn('text-[10px] font-medium', meta.color, 'border-current/20 bg-current/5')}>
+   114→      <span className="mr-1">{meta.icon}</span>{meta.label}
+   115→    </Badge>
+   116→  );
+   117→}
+   118→
+   119→const PRIORITY_STYLES: Record<ExecutionPriority, string> = {
+   120→  critical: 'text-rose-700 bg-rose-50 border-rose-200',
+   121→  high: 'text-amber-700 bg-amber-50 border-amber-200',
+   122→  normal: 'text-slate-700 bg-slate-50 border-slate-200',
+   123→  low: 'text-zinc-600 bg-zinc-50 border-zinc-200',
+   124→  deferred: 'text-violet-700 bg-violet-50 border-violet-200',
+   125→};
+   126→
+   127→function PriorityBadge({ priority }: { priority: ExecutionPriority }) {
+   128→  return (
+   129→    <Badge variant="outline" className={cn('text-[9px] uppercase tracking-wide', PRIORITY_STYLES[priority])}>
+   130→      {priority}
+   131→    </Badge>
+   132→  );
+   133→}
+   134→
+   135→const SEVERITY_STYLES: Record<AlertSeverity, string> = {
+   136→  critical: 'bg-rose-600 text-white',
+   137→  high: 'bg-orange-500 text-white',
+   138→  medium: 'bg-amber-500 text-white',
+   139→  low: 'bg-slate-400 text-white',
+   140→};
+   141→
+   142→const WORKER_STATUS_STYLES: Record<WorkerStatus, string> = {
+   143→  idle: 'bg-emerald-100 text-emerald-700 border-emerald-200',
+   144→  busy: 'bg-cyan-100 text-cyan-700 border-cyan-200 animate-pulse',
+   145→  offline: 'bg-zinc-100 text-zinc-600 border-zinc-200',
+   146→  draining: 'bg-amber-100 text-amber-700 border-amber-200',
+   147→};
+   148→
+   149→const HEALTH_STYLES: Record<string, { label: string; classes: string }> = {
+   150→  healthy: { label: 'Healthy', classes: 'bg-emerald-100 text-emerald-700 border-emerald-200' },
+   151→  degraded: { label: 'Degraded', classes: 'bg-amber-100 text-amber-700 border-amber-200' },
+   152→  critical: { label: 'Critical', classes: 'bg-rose-100 text-rose-700 border-rose-200 animate-pulse' },
+   153→};
+   154→
+   155→// ─── KPI Card (matches GlobalEnterpriseDashboard aesthetic) ──────────────────
+   156→
+   157→type KpiColor = 'violet' | 'fuchsia' | 'emerald' | 'amber' | 'orange' | 'cyan' | 'rose' | 'slate' | 'purple' | 'teal';
+   158→
+   159→const KPI_COLORS: Record<KpiColor, string> = {
+   160→  violet: 'from-violet-500 to-violet-600',
+   161→  fuchsia: 'from-fuchsia-500 to-fuchsia-600',
+   162→  emerald: 'from-emerald-500 to-emerald-600',
+   163→  amber: 'from-amber-500 to-amber-600',
+   164→  orange: 'from-orange-500 to-orange-600',
+   165→  cyan: 'from-cyan-500 to-cyan-600',
+   166→  rose: 'from-rose-500 to-rose-600',
+   167→  slate: 'from-slate-500 to-slate-600',
+   168→  purple: 'from-purple-500 to-purple-600',
+   169→  teal: 'from-teal-500 to-teal-600',
+   170→};
+   171→
+   172→function KPICard({
+   173→  icon: Icon, label, value, sub, color = 'violet',
+   174→}: {
+   175→  icon: LucideIcon;
+   176→  label: string;
+   177→  value: string | number;
+   178→  sub?: string;
+   179→  color?: KpiColor;
+   180→}) {
+   181→  return (
+   182→    <Card className="overflow-hidden">
+   183→      <CardContent className="p-4">
+   184→        <div className="flex items-center justify-between mb-2">
+   185→          <div className={cn('h-9 w-9 rounded-lg bg-gradient-to-br flex items-center justify-center', KPI_COLORS[color])}>
+   186→            <Icon className="h-4 w-4 text-white" />
+   187→          </div>
+   188→          {sub && <span className="text-[10px] text-muted-foreground truncate max-w-[60%] text-right">{sub}</span>}
+   189→        </div>
+   190→        <div className="text-xl font-bold tracking-tight">{value}</div>
+   191→        <div className="text-[11px] text-muted-foreground mt-0.5 truncate">{label}</div>
+   192→      </CardContent>
+   193→    </Card>
+   194→  );
+   195→}
+   196→
+   197→function LoadingState({ label }: { label: string }) {
+   198→  return (
+   199→    <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
+   200→      <Loader2 className="h-8 w-8 animate-spin mb-3 text-violet-500" />
+   201→      <p className="text-sm">{label}…</p>
+   202→    </div>
+   203→  );
+   204→}
+   205→
+   206→function ErrorState({ message, onRetry }: { message: string; onRetry?: () => void }) {
+   207→  return (
+   208→    <div className="flex flex-col items-center justify-center py-16">
+   209→      <AlertCircle className="h-8 w-8 mb-3 text-rose-500" />
+   210→      <p className="text-sm text-rose-600 mb-3 max-w-md text-center">{message}</p>
+   211→      {onRetry && (
+   212→        <Button size="sm" variant="outline" onClick={onRetry}>
+   213→          <RotateCcw className="h-3.5 w-3.5 mr-1.5" /> Retry
+   214→        </Button>
+   215→      )}
+   216→    </div>
+   217→  );
+   218→}
+   219→
+   220→function EmptyState({ icon: Icon, title, description }: { icon: LucideIcon; title: string; description: string }) {
+   221→  return (
+   222→    <Card className="border-dashed">
+   223→      <CardContent className="py-12 flex flex-col items-center text-center">
+   224→        <div className="h-12 w-12 rounded-full bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center mb-3">
+   225→          <Icon className="h-6 w-6 text-violet-600" />
+   226→        </div>
+   227→        <h3 className="text-sm font-semibold mb-1">{title}</h3>
+   228→        <p className="text-xs text-muted-foreground max-w-md">{description}</p>
+   229→      </CardContent>
+   230→    </Card>
+   231→  );
+   232→}
+   233→
+   234→function ScrollContainer({ children, className }: { children: React.ReactNode; className?: string }) {
+   235→  return (
+   236→    <div className={cn('max-h-96 overflow-y-auto pr-1 -mr-1', className)}>
+   237→      {children}
+   238→    </div>
+   239→  );
+   240→}
+   241→
+   242→// ═══════════════════════════════════════════════════════════════════════════════
+   243→// MAIN PAGE COMPONENT
+   244→// ═══════════════════════════════════════════════════════════════════════════════
+   245→
+   246→export default function EnterpriseExecutionCloudPage() {
+   247→  const [data, setData] = useState<ExecutionDashboard | null>(null);
+   248→  const [loading, setLoading] = useState(true);
+   249→  const [refreshing, setRefreshing] = useState(false);
+   250→  const [error, setError] = useState<string | null>(null);
+   251→  const [activeTab, setActiveTab] = useState('overview');
+   252→
+   253→  const load = useCallback(async () => {
+   254→    setRefreshing(true);
+   255→    setLoading(true);
+   256→    setError(null);
+   257→    try {
+   258→      const res = await fetch('/api/execution/dashboard');
+   259→      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+   260→      const json = await res.json();
+   261→      if (!json.ok) throw new Error(json.error ?? 'Failed to load');
+   262→      setData(json.data as ExecutionDashboard);
+   263→    } catch (e) {
+   264→      setError(e instanceof Error ? e.message : 'Unknown error');
+   265→    } finally {
+   266→      setLoading(false);
+   267→      setRefreshing(false);
+   268→    }
+   269→  }, []);
+   270→
+   271→  useEffect(() => { load(); }, [load]);
+   272→
+   273→  // Auto-refresh every 15s
+   274→  useEffect(() => {
+   275→    const t = setInterval(load, 15_000);
+   276→    return () => clearInterval(t);
+   277→  }, [load]);
+   278→
+   279→  // ─── Render helpers ──────────────────────────────────────────────────────
+   280→
+   281→  const systemHealth = data?.liveMap?.systemHealth ?? 'healthy';
+   282→  const healthMeta = HEALTH_STYLES[systemHealth] ?? HEALTH_STYLES.healthy;
+   283→  const totalJobs = data?.totals?.totalJobs ?? 0;
+   284→
+   285→  return (
+   286→    <div className="min-h-screen bg-gradient-to-b from-background to-muted/20 flex flex-col">
+   287→      {/* ═══════ Header (sticky) ═══════ */}
+   288→      <header className="border-b bg-background/80 backdrop-blur-sm sticky top-0 z-30">
+   289→        <div className="container mx-auto px-4 py-4">
+   290→          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+   291→            <div className="flex items-center gap-3">
+   292→              <div className="relative">
+   293→                <div className="absolute inset-0 bg-gradient-to-br from-violet-500 via-fuchsia-500 to-amber-500 rounded-xl blur-md opacity-60" />
+   294→                <div className="relative h-12 w-12 rounded-xl bg-gradient-to-br from-violet-500 via-fuchsia-500 to-amber-500 flex items-center justify-center">
+   295→                  <Network className="h-7 w-7 text-white" />
+   296→                </div>
+   297→              </div>
+   298→              <div>
+   299→                <h1 className="text-xl sm:text-2xl font-bold tracking-tight flex items-center gap-2 flex-wrap">
+   300→                  {TITLE}
+   301→                  <Badge variant="secondary" className="text-[10px]">Phase 10</Badge>
+   302→                </h1>
+   303→                <p className="text-xs text-muted-foreground">{SUBTITLE}</p>
+   304→              </div>
+   305→            </div>
+   306→            <div className="flex items-center gap-2">
+   307→              <Badge
+   308→                variant="outline"
+   309→                className={cn('text-[10px] font-semibold border', healthMeta.classes)}
+   310→              >
+   311→                <CircleDot className="h-3 w-3 mr-1" />
+   312→                {healthMeta.label}
+   313→              </Badge>
+   314→              <Button size="sm" variant="outline" onClick={load} disabled={refreshing}>
+   315→                <RefreshCw className={cn('h-3.5 w-3.5 mr-1', refreshing && 'animate-spin')} />
+   316→                Refresh
+   317→              </Button>
+   318→            </div>
+   319→          </div>
+   320→          <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+   321→            <Shield className="h-3 w-3 text-violet-500" />
+   322→            <span>RBAC · Audit logging · Approval workflows · Rate limiting · SHA-256 actor signing</span>
+   323→            <span className="text-muted-foreground/60">·</span>
+   324→            <span>22 modules · 14 subsystems · 1 unified pipeline</span>
+   325→            <span className="text-muted-foreground/60">·</span>
+   326→            <span>Founded, developed & owned by <strong className="text-foreground">{FOUNDER}</strong></span>
+   327→          </div>
+   328→        </div>
+   329→      </header>
+   330→
+   331→      {/* ═══════ Main Content ═══════ */}
+   332→      <main className="container mx-auto px-4 py-6 flex-1">
+   333→        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+   334→          <TabsList className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-1 h-auto p-1">
+   335→            <TabsTrigger value="overview" className="text-xs"><Gauge className="h-3.5 w-3.5 mr-1" />Overview</TabsTrigger>
+   336→            <TabsTrigger value="timeline" className="text-xs"><Clock className="h-3.5 w-3.5 mr-1" />Timeline</TabsTrigger>
+   337→            <TabsTrigger value="taskgraph" className="text-xs"><GitBranch className="h-3.5 w-3.5 mr-1" />Task Graph</TabsTrigger>
+   338→            <TabsTrigger value="queues" className="text-xs"><Server className="h-3.5 w-3.5 mr-1" />Queues & Workers</TabsTrigger>
+   339→            <TabsTrigger value="observe" className="text-xs"><Activity className="h-3.5 w-3.5 mr-1" />Observability</TabsTrigger>
+   340→            <TabsTrigger value="map" className="text-xs"><Globe className="h-3.5 w-3.5 mr-1" />Map & Analytics</TabsTrigger>
+   341→          </TabsList>
+   342→
+   343→          {/* ═══════ 1. OVERVIEW ═══════ */}
+   344→          <TabsContent value="overview" className="space-y-6">
+   345→            {loading && !data ? <LoadingState label="Loading Mission Control dashboard" />
+   346→              : error ? <ErrorState message={error} onRetry={load} />
+   347→              : !data ? <ErrorState message="No dashboard payload returned" onRetry={load} />
+   348→              : totalJobs === 0 ? (
+   349→                <EmptyState
+   350→                  icon={Sparkles}
+   351→                  title="Enterprise Execution Cloud is in setup phase"
+   352→                  description="The unified pipeline has no jobs yet. As your 22 modules emit actions — AI Executive briefs, autonomous runs, GSTR filings, dev builds, automations, payments — they will materialise here as ExecutionJobs. The Oracle narrative will then read the real stream."
+   353→                />
+   354→              ) : (
+   355→                <motion.div
+   356→                  className="space-y-6"
+   357→                  initial={{ opacity: 0, y: 8 }}
+   358→                  animate={{ opacity: 1, y: 0 }}
+   359→                  transition={{ duration: 0.25 }}
+   360→                >
+   361→                  {/* Oracle narrative banner */}
+   362→                  <Card className="overflow-hidden border-violet-500/30 bg-gradient-to-br from-violet-500/5 via-fuchsia-500/5 to-amber-500/5">
+   363→                    <CardContent className="p-6">
+   364→                      <div className="flex items-start gap-4">
+   365→                        <div className="h-12 w-12 rounded-full bg-gradient-to-br from-violet-500 via-fuchsia-500 to-amber-500 flex items-center justify-center flex-shrink-0">
+   366→                          <Sparkles className="h-6 w-6 text-white" />
+   367→                        </div>
+   368→                        <div className="flex-1 min-w-0">
+   369→                          <div className="flex items-center gap-2 mb-1">
+   370→                            <span className="text-sm font-semibold">Execution Oracle™</span>
+   371→                            <Badge variant="outline" className="text-[10px]">
+   372→                              <Clock className="h-2.5 w-2.5 mr-1" />
+   373→                              {timeAgo(data.updatedAt)}
+   374→                            </Badge>
+   375→                            <Badge variant="outline" className="text-[10px]">{data.totals.totalJobs.toLocaleString('en-IN')} jobs</Badge>
+   376→                          </div>
+   377→                          <p className="text-sm text-muted-foreground leading-relaxed">{data.oracleNarrative}</p>
+   378→                        </div>
+   379→                      </div>
+   380→                    </CardContent>
+   381→                  </Card>
+   382→
+   383→                  {/* KPI Row 1 — Pipeline health */}
+   384→                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+   385→                    <KPICard icon={Boxes} label="Total Jobs" value={data.totals.totalJobs.toLocaleString('en-IN')} color="violet" />
+   386→                    <KPICard icon={Play} label="Running" value={data.totals.running} sub="live" color="cyan" />
+   387→                    <KPICard icon={CheckCircle2} label="Completed" value={data.totals.completed.toLocaleString('en-IN')} color="emerald" />
+   388→                    <KPICard icon={AlertTriangle} label="Failed" value={data.totals.failed} color="rose" />
+   389→                    <KPICard icon={TrendingUp} label="Success Rate" value={fmtPct(data.analytics.successRate)} color="teal" />
+   390→                    <KPICard icon={Clock} label="Avg Duration" value={fmtMs(data.analytics.avgDurationMs)} color="amber" />
+   391→                  </div>
+   392→
+   393→                  {/* KPI Row 2 — Scale & cost */}
+   394→                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+   395→                    <KPICard icon={Layers} label="Queue Size" value={data.observability.queueSize} sub="queued" color="slate" />
+   396→                    <KPICard icon={Server} label="Workers Online" value={`${data.workers.active}/${data.workers.total}`} sub={`${fmtPct(data.workers.avgUtilizationPct, 0)} util`} color="purple" />
+   397→                    <KPICard icon={AlertCircle} label="Open Alerts" value={data.alerts.open} sub={`${data.alerts.critical} critical`} color="orange" />
+   398→                    <KPICard icon={Zap} label="Throughput/min" value={data.analytics.throughput.perMin.toFixed(1)} color="fuchsia" />
+   399→                    <KPICard icon={Cpu} label="AI Cost" value={inr(data.analytics.aiCost)} sub="period" color="amber" />
+   400→                    <KPICard icon={TrendingUp} label="ROI" value={fmtPct(data.analytics.roi)} color="emerald" />
+   401→                  </div>
+   402→
+   403→                  {/* byModule + byPriority + byStatus */}
+   404→                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+   405→                    {/* byModule bar list */}
+   406→                    <Card className="lg:col-span-2">
+   407→                      <CardHeader>
+   408→                        <CardTitle className="text-sm flex items-center gap-2"><Boxes className="h-4 w-4" />Jobs by Module</CardTitle>
+   409→                      </CardHeader>
+   410→                      <CardContent>
+   411→                        {data.byModule.length === 0 ? (
+   412→                          <p className="text-xs text-muted-foreground py-8 text-center">No module activity yet.</p>
+   413→                        ) : (
+   414→                          <ScrollContainer>
+   415→                            <div className="space-y-2">
+   416→                              {(() => {
+   417→                                const max = Math.max(...data.byModule.map((m) => m.jobs), 1);
+   418→                                return data.byModule
+   419→                                  .slice()
+   420→                                  .sort((a, b) => b.jobs - a.jobs)
+   421→                                  .map((m) => {
+   422→                                    const meta = MODULE_META[m.module];
+   423→                                    const pct = (m.jobs / max) * 100;
+   424→                                    return (
+   425→                                      <div key={m.module} className="space-y-1">
+   426→                                        <div className="flex items-center justify-between text-xs">
+   427→                                          <div className="flex items-center gap-2 min-w-0">
+   428→                                            <span>{meta?.icon}</span>
+   429→                                            <span className="font-medium truncate">{m.label}</span>
+   430→                                            <Badge variant="outline" className={cn('text-[9px]', meta?.color)}>{fmtPct(m.successRate, 0)}</Badge>
+   431→                                          </div>
+   432→                                          <span className="text-muted-foreground tabular-nums">{m.jobs.toLocaleString('en-IN')} · {fmtMs(m.avgDurationMs)}</span>
+   433→                                        </div>
+   434→                                        <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+   435→                                          <motion.div
+   436→                                            className={cn('h-full rounded-full', meta?.accent ?? 'bg-violet-500')}
+   437→                                            initial={{ width: 0 }}
+   438→                                            animate={{ width: `${pct}%` }}
+   439→                                            transition={{ duration: 0.4 }}
+   440→                                          />
+   441→                                        </div>
+   442→                                      </div>
+   443→                                    );
+   444→                                  });
+   445→                              })()}
+   446→                            </div>
+   447→                          </ScrollContainer>
+   448→                        )}
+   449→                      </CardContent>
+   450→                    </Card>
+   451→
+   452→                    {/* byPriority */}
+   453→                    <Card>
+   454→                      <CardHeader>
+   455→                        <CardTitle className="text-sm flex items-center gap-2"><Hash className="h-4 w-4" />Priority Distribution</CardTitle>
+   456→                      </CardHeader>
+   457→                      <CardContent>
+   458→                        <div className="space-y-2">
+   459→                          {(Object.entries(data.byPriority) as [ExecutionPriority, number][])
+   460→                            .sort((a, b) => ['critical', 'high', 'normal', 'low', 'deferred'].indexOf(a[0]) - ['critical', 'high', 'normal', 'low', 'deferred'].indexOf(b[0]))
+   461→                            .map(([p, n]) => (
+   462→                              <div key={p} className="flex items-center justify-between text-xs">
+   463→                                <PriorityBadge priority={p} />
+   464→                                <span className="tabular-nums font-medium">{n.toLocaleString('en-IN')}</span>
+   465→                              </div>
+   466→                            ))}
+   467→                        </div>
+   468→                      </CardContent>
+   469→                    </Card>
+   470→                  </div>
+   471→
+   472→                  {/* byStatus donut-ish breakdown */}
+   473→                  <Card>
+   474→                    <CardHeader>
+   475→                      <CardTitle className="text-sm flex items-center gap-2"><Activity className="h-4 w-4" />Status Breakdown</CardTitle>
+   476→                    </CardHeader>
+   477→                    <CardContent>
+   478→                      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+   479→                        {(Object.entries(data.byStatus) as [ExecutionStatus, number][]).map(([s, n]) => {
+   480→                          const total = data.totals.totalJobs || 1;
+   481→                          const pct = (n / total) * 100;
+   482→                          return (
+   483→                            <div key={s} className="p-3 rounded-lg border bg-card space-y-2">
+   484→                              <div className="flex items-center justify-between">
+   485→                                <StatusBadge status={s} />
+   486→                                <span className="text-xs font-bold tabular-nums">{n.toLocaleString('en-IN')}</span>
+   487→                              </div>
+   488→                              <Progress value={pct} className="h-1.5" />
+   489→                              <div className="text-[10px] text-muted-foreground">{fmtPct(pct, 1)} of pipeline</div>
+   490→                            </div>
+   491→                          );
+   492→                        })}
+   493→                      </div>
+   494→                    </CardContent>
+   495→                  </Card>
+   496→                </motion.div>
+   497→              )}
+   498→          </TabsContent>
+   499→
+   500→          {/* ═══════ 2. TIMELINE ═══════ */}
+   501→          <TabsContent value="timeline" className="space-y-6">
+   502→            {loading && !data ? <LoadingState label="Loading execution timeline" />
+   503→              : error ? <ErrorState message={error} onRetry={load} />
+   504→              : !data ? <ErrorState message="No timeline data" onRetry={load} />
+   505→              : data.timeline.entries.length === 0 ? (
+   506→                <EmptyState
+   507→                  icon={Clock}
+   508→                  title="No timeline events yet"
+   509→                  description="The Execution Timeline™ materialises every job state change across all 22 modules. Once jobs start flowing through the pipeline, you will see a live, filterable chronological feed here."
+   510→                />
+   511→              ) : (
+   512→                <TimelinePanel data={data} />
+   513→              )}
+   514→          </TabsContent>
+   515→
+   516→          {/* ═══════ 3. TASK GRAPH ═══════ */}
+   517→          <TabsContent value="taskgraph" className="space-y-6">
+   518→            {loading && !data ? <LoadingState label="Loading task graph" />
+   519→              : error ? <ErrorState message={error} onRetry={load} />
+   520→              : !data ? <ErrorState message="No task graph data" onRetry={load} />
+   521→              : data.taskGraph.nodes === 0 ? (
+   522→                <EmptyState
+   523→                  icon={GitBranch}
+   524→                  title="Task graph has no edges yet"
+   525→                  description="The Enterprise Task Graph™ links jobs via relations like lead_to, proposal_to, payment_to, oracle_to. As modules chain actions — a lead converting through proposal → invoice → payment → GST → accounting — edges will materialise here."
+   526→                />
+   527→              ) : (
+   528→                <TaskGraphPanel data={data} />
+   529→              )}
+   530→          </TabsContent>
+   531→
+   532→          {/* ═══════ 4. QUEUES & WORKERS ═══════ */}
+   533→          <TabsContent value="queues" className="space-y-6">
+   534→            {loading && !data ? <LoadingState label="Loading queues & workers" />
+   535→              : error ? <ErrorState message={error} onRetry={load} />
+   536→              : !data ? <ErrorState message="No queue data" onRetry={load} />
+   537→              : data.queues.length === 0 && data.workers.roster.length === 0 && data.schedules.length === 0 ? (
+   538→                <EmptyState
+   539→                  icon={Server}
+   540→                  title="No workers, queues or schedules registered"
+   541→                  description="The Smart Execution Queue™, Enterprise Workers™ and Enterprise Job Engine™ become live once ExecutionJob rows start flowing. Workers will be assigned, queues will populate, and schedules will trigger jobs on cron."
+   542→                />
+   543→              ) : (
+   544→                <QueuesPanel data={data} />
+   545→              )}
+   546→          </TabsContent>
+   547→
+   548→          {/* ═══════ 5. OBSERVABILITY & ALERTS ═══════ */}
+   549→          <TabsContent value="observe" className="space-y-6">
+   550→            {loading && !data ? <LoadingState label="Loading observability & alerts" />
+   551→              : error ? <ErrorState message={error} onRetry={load} />
+   552→              : !data ? <ErrorState message="No observability data" onRetry={load} />
+   553→              : <ObservabilityPanel data={data} />
+   554→            }
+   555→          </TabsContent>
+   556→
+   557→          {/* ═══════ 6. LIVE MAP & ANALYTICS ═══════ */}
+   558→          <TabsContent value="map" className="space-y-6">
+   559→            {loading && !data ? <LoadingState label="Loading live map & analytics" />
+   560→              : error ? <ErrorState message={error} onRetry={load} />
+   561→              : !data ? <ErrorState message="No map data" onRetry={load} />
+   562→              : <MapAnalyticsPanel data={data} />
+   563→            }
+   564→          </TabsContent>
+   565→        </Tabs>
+   566→      </main>
+   567→
+   568→      {/* ═══════ Sticky Footer ═══════ */}
+   569→      <footer className="mt-auto border-t bg-background/95 backdrop-blur-sm">
+   570→        <div className="container mx-auto px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-[11px] text-muted-foreground">
+   571→          <div className="flex items-center gap-2 flex-wrap">
+   572→            <Shield className="h-3 w-3 text-violet-500" />
+   573→            <span>14 subsystems · 7 Prisma models · 22 modules · unified pipeline · audit-grade traceability</span>
+   574→          </div>
+   575→          <div className="flex items-center gap-2">
+   576→            <span>Think. Plan. Execute. Observe. Improve. · Founded & owned by <strong className="text-foreground">{FOUNDER}</strong></span>
+   577→          </div>
+   578→        </div>
+   579→      </footer>
+   580→    </div>
+   581→  );
+   582→}
+   583→
+   584→// ═══════════════════════════════════════════════════════════════════════════════
+   585→// TAB PANELS
+   586→// ═══════════════════════════════════════════════════════════════════════════════
+   587→
+   588→// ─── 2. TIMELINE PANEL ───────────────────────────────────────────────────────
+   589→
+   590→function categoriseEvent(entry: TimelineEntry): { label: string; icon: LucideIcon; color: string } {
+   591→  const cat = entry.type;
+   592→  if (/fail|error|cancel/i.test(cat)) return { label: 'Failure', icon: AlertTriangle, color: 'text-rose-600' };
+   593→  if (/complet|success/i.test(cat)) return { label: 'Completion', icon: CheckCircle2, color: 'text-emerald-600' };
+   594→  if (/start|run|execut/i.test(cat)) return { label: 'Execution', icon: Play, color: 'text-cyan-600' };
+   595→  if (/queue|schedul/i.test(cat)) return { label: 'Queue', icon: Layers, color: 'text-slate-600' };
+   596→  if (/approv/i.test(cat)) return { label: 'Approval', icon: Shield, color: 'text-amber-600' };
+   597→  if (/retry/i.test(cat)) return { label: 'Retry', icon: RotateCcw, color: 'text-orange-600' };
+   598→  if (/oracle|ai_/i.test(cat)) return { label: 'AI Reasoning', icon: Sparkles, color: 'text-violet-600' };
+   599→  return { label: 'Event', icon: Activity, color: 'text-muted-foreground' };
+   600→}
+   601→
+   602→function TimelinePanel({ data }: { data: ExecutionDashboard }) {
+   603→  const [moduleFilter, setModuleFilter] = useState<ExecutionModule | 'all'>('all');
+   604→  const activeModules = Object.keys(data.timeline.byModule) as ExecutionModule[];
+   605→
+   606→  const filtered = moduleFilter === 'all'
+   607→    ? data.timeline.entries
+   608→    : data.timeline.entries.filter((e) => e.module === moduleFilter);
+   609→
+   610→  return (
+   611→    <motion.div
+   612→      className="space-y-4"
+   613→      initial={{ opacity: 0, y: 8 }}
+   614→      animate={{ opacity: 1, y: 0 }}
+   615→      transition={{ duration: 0.25 }}
+   616→    >
+   617→      {/* Timeline summary KPIs */}
+   618→      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+   619→        <KPICard icon={Activity} label="Total Events" value={data.timeline.total.toLocaleString('en-IN')} color="violet" />
+   620→        <KPICard icon={CalendarClock} label="Today" value={data.timeline.todayCount} color="cyan" />
+   621→        <KPICard icon={Clock} label="Last 24h" value={data.timeline.last24hCount} color="amber" />
+   622→        <KPICard icon={Boxes} label="Active Modules" value={activeModules.length} color="fuchsia" />
+   623→      </div>
+   624→
+   625→      {/* Module filter chips */}
+   626→      <Card>
+   627→        <CardContent className="p-3">
+   628→          <div className="flex flex-wrap items-center gap-2">
+   629→            <span className="text-[11px] text-muted-foreground mr-1">Filter:</span>
+   630→            <button
+   631→              type="button"
+   632→              onClick={() => setModuleFilter('all')}
+   633→              className={cn(
+   634→                'px-2.5 py-1 rounded-full text-[11px] border transition-colors',
+   635→                moduleFilter === 'all' ? 'bg-violet-500 text-white border-violet-500' : 'bg-card hover:bg-muted',
+   636→              )}
+   637→            >
+   638→              All ({data.timeline.total})
+   639→            </button>
+   640→            {activeModules.map((m) => {
+   641→              const meta = MODULE_META[m];
+   642→              const count = data.timeline.byModule[m] ?? 0;
+   643→              return (
+   644→                <button
+   645→                  key={m}
+   646→                  type="button"
+   647→                  onClick={() => setModuleFilter(m)}
+   648→                  className={cn(
+   649→                    'px-2.5 py-1 rounded-full text-[11px] border transition-colors flex items-center gap-1',
+   650→                    moduleFilter === m ? 'bg-violet-500 text-white border-violet-500' : 'bg-card hover:bg-muted',
+   651→                  )}
+   652→                >
+   653→                  <span>{meta?.icon}</span>
+   654→                  <span className={cn(moduleFilter === m ? '' : meta?.color)}>{meta?.label ?? m}</span>
+   655→                  <span className="opacity-70">({count})</span>
+   656→                </button>
+   657→              );
+   658→            })}
+   659→          </div>
+   660→        </CardContent>
+   661→      </Card>
+   662→
+   663→      {/* Timeline list */}
+   664→      <Card>
+   665→        <CardHeader>
+   666→          <CardTitle className="text-sm flex items-center gap-2"><Clock className="h-4 w-4" />Execution Timeline™</CardTitle>
+   667→        </CardHeader>
+   668→        <CardContent>
+   669→          {filtered.length === 0 ? (
+   670→            <p className="text-xs text-muted-foreground py-8 text-center">No events for this filter.</p>
+   671→          ) : (
+   672→            <ScrollContainer>
+   673→              <div className="relative space-y-3 pl-6">
+   674→                {/* vertical line */}
+   675→                <div className="absolute left-2 top-2 bottom-2 w-px bg-border" />
+   676→                {filtered.map((e) => {
+   677→                  const cat = categoriseEvent(e);
+   678→                  const meta = MODULE_META[e.module];
+   679→                  return (
+   680→                    <div key={e.id} className="relative">
+   681→                      <div className={cn('absolute -left-5 top-1.5 h-3 w-3 rounded-full ring-2 ring-background', meta?.accent ?? 'bg-violet-500')} />
+   682→                      <div className="flex items-start gap-3 p-3 rounded-lg border bg-card hover:bg-muted/30 transition-colors">
+   683→                        <cat.icon className={cn('h-4 w-4 flex-shrink-0 mt-0.5', cat.color)} />
+   684→                        <div className="flex-1 min-w-0">
+   685→                          <div className="flex items-center gap-2 flex-wrap mb-1">
+   686→                            <ModuleBadge module={e.module} />
+   687→                            <StatusBadge status={e.status} />
+   688→                            <Badge variant="outline" className="text-[9px]">{cat.label}</Badge>
+   689→                            <span className="text-[10px] text-muted-foreground ml-auto tabular-nums">{fmtTime(e.timestamp)}</span>
+   690→                          </div>
+   691→                          <p className="text-xs leading-relaxed">{e.description}</p>
+   692→                          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-muted-foreground">
+   693→                            <span className="flex items-center gap-1"><Hash className="h-2.5 w-2.5" />{e.type}</span>
+   694→                            <span className="flex items-center gap-1"><Clock className="h-2.5 w-2.5" />{fmtMs(e.durationMs)}</span>
+   695→                            <span className="flex items-center gap-1"><Users className="h-2.5 w-2.5" />{e.actor ?? 'system'}</span>
+   696→                            {e.countryIso && <span className="flex items-center gap-1"><MapPin className="h-2.5 w-2.5" />{e.countryIso}</span>}
+   697→                          </div>
+   698→                        </div>
+   699→                      </div>
+   700→                    </div>
+   701→                  );
+   702→                })}
+   703→              </div>
+   704→            </ScrollContainer>
+   705→          )}
+   706→        </CardContent>
+   707→      </Card>
+   708→    </motion.div>
+   709→  );
+   710→}
+   711→
+   712→// ─── 3. TASK GRAPH PANEL ─────────────────────────────────────────────────────
+   713→
+   714→const RELATION_LABELS: Partial<Record<TaskEdgeRelation, string>> = {
+   715→  lead_to: 'Lead →',
+   716→  proposal_to: 'Proposal →',
+   717→  negotiation_to: 'Negotiation →',
+   718→  invoice_to: 'Invoice →',
+   719→  payment_to: 'Payment →',
+   720→  gst_to: 'GST →',
+   721→  accounting_to: 'Accounting →',
+   722→  forecast_to: 'Forecast →',
+   723→  knowledge_to: 'Knowledge →',
+   724→  graph_to: 'Graph →',
+   725→  oracle_to: 'Oracle →',
+   726→  depends_on: 'Depends on',
+   727→  triggers: 'Triggers',
+   728→  rollback_of: 'Rollback of',
+   729→};
+   730→
+   731→function TaskGraphPanel({ data }: { data: ExecutionDashboard }) {
+   732→  const tg = data.taskGraph;
+   733→  return (
+   734→    <motion.div
+   735→      className="space-y-4"
+   736→      initial={{ opacity: 0, y: 8 }}
+   737→      animate={{ opacity: 1, y: 0 }}
+   738→      transition={{ duration: 0.25 }}
+   739→    >
+   740→      {/* KPIs */}
+   741→      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+   742→        <KPICard icon={Boxes} label="Nodes" value={tg.nodes} color="violet" />
+   743→        <KPICard icon={GitBranch} label="Edges" value={tg.edges} color="fuchsia" />
+   744→        <KPICard icon={Network} label="Top Hubs" value={tg.topHubs.length} color="cyan" />
+   745→        <KPICard icon={Workflow} label="Sample Paths" value={tg.samplePaths.length} color="amber" />
+   746→      </div>
+   747→
+   748→      {/* Longest path stepper */}
+   749→      <Card>
+   750→        <CardHeader>
+   751→          <CardTitle className="text-sm flex items-center gap-2"><GitBranch className="h-4 w-4" />Longest Path (critical chain)</CardTitle>
+   752→        </CardHeader>
+   753→        <CardContent>
+   754→          {!tg.longestPath ? (
+   755→            <p className="text-xs text-muted-foreground py-6 text-center">No multi-step path detected yet.</p>
+   756→          ) : (
+   757→            <div className="overflow-x-auto pb-2">
+   758→              <div className="flex items-center gap-1 min-w-fit">
+   759→                {tg.longestPath.steps.map((step, i) => {
+   760→                  const meta = MODULE_META[step.module];
+   761→                  const rel = tg.longestPath?.edgeRelations[i - 1];
+   762→                  return (
+   763→                    <React.Fragment key={i}>
+   764→                      {i > 0 && (
+   765→                        <div className="flex flex-col items-center px-1 flex-shrink-0">
+   766→                          <ChevronRight className="h-4 w-4 text-muted-foreground" />
+   767→                          {rel && (
+   768→                            <Badge variant="outline" className="text-[9px] mt-0.5 text-muted-foreground">
+   769→                              {RELATION_LABELS[rel] ?? rel}
+   770→                            </Badge>
+   771→                          )}
+   772→                        </div>
+   773→                      )}
+   774→                      <div className="flex-shrink-0 w-44 p-3 rounded-lg border bg-card">
+   775→                        <div className="flex items-center gap-2 mb-1">
+   776→                          <span className="text-base">{meta?.icon}</span>
+   777→                          <ModuleBadge module={step.module} />
+   778→                        </div>
+   779→                        <p className="text-[11px] leading-tight line-clamp-2">{step.description}</p>
+   780→                        <div className="mt-2">
+   781→                          <StatusBadge status={step.status} />
+   782→                        </div>
+   783→                      </div>
+   784→                    </React.Fragment>
+   785→                  );
+   786→                })}
+   787→              </div>
+   788→              <div className="mt-3 text-[11px] text-muted-foreground flex items-center gap-3">
+   789→                <span className="flex items-center gap-1"><Clock className="h-3 w-3" />Total: {fmtMs(tg.longestPath.totalDurationMs)}</span>
+   790→                <span className="flex items-center gap-1"><Hash className="h-3 w-3" />{tg.longestPath.steps.length} steps</span>
+   791→              </div>
+   792→            </div>
+   793→          )}
+   794→        </CardContent>
+   795→      </Card>
+   796→
+   797→      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+   798→        {/* Top hubs */}
+   799→        <Card>
+   800→          <CardHeader>
+   801→            <CardTitle className="text-sm flex items-center gap-2"><Network className="h-4 w-4" />Top Hubs (highest degree)</CardTitle>
+   802→          </CardHeader>
+   803→          <CardContent>
+   804→            {tg.topHubs.length === 0 ? (
+   805→              <p className="text-xs text-muted-foreground py-6 text-center">No hub nodes yet.</p>
+   806→            ) : (
+   807→              <ScrollContainer>
+   808→                <div className="space-y-2">
+   809→                  {tg.topHubs.map((h, i) => {
+   810→                    const meta = MODULE_META[h.module];
+   811→                    return (
+   812→                      <div key={h.jobId} className="flex items-center gap-3 p-2.5 rounded-lg border bg-card">
+   813→                        <div className={cn('h-8 w-8 rounded-full flex items-center justify-center text-[10px] font-bold text-white', meta?.accent ?? 'bg-violet-500')}>
+   814→                          #{i + 1}
+   815→                        </div>
+   816→                        <div className="flex-1 min-w-0">
+   817→                          <div className="flex items-center gap-2">
+   818→                            <ModuleBadge module={h.module} />
+   819→                            <Badge variant="outline" className="text-[10px]">{h.degree} edges</Badge>
+   820→                          </div>
+   821→                          <p className="text-[11px] text-muted-foreground mt-0.5 truncate">{h.description}</p>
+   822→                        </div>
+   823→                        <StatusBadge status={h.status} />
+   824→                      </div>
+   825→                    );
+   826→                  })}
+   827→                </div>
+   828→              </ScrollContainer>
+   829→            )}
+   830→          </CardContent>
+   831→        </Card>
+   832→
+   833→        {/* byRelation */}
+   834→        <Card>
+   835→          <CardHeader>
+   836→            <CardTitle className="text-sm flex items-center gap-2"><Hash className="h-4 w-4" />Edges by Relation</CardTitle>
+   837→          </CardHeader>
+   838→          <CardContent>
+   839→            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+   840→              {(Object.entries(tg.byRelation) as [TaskEdgeRelation, number][])
+   841→                .filter(([, n]) => n > 0)
+   842→                .sort((a, b) => b[1] - a[1])
+   843→                .map(([r, n]) => (
+   844→                  <div key={r} className="p-2.5 rounded-lg border bg-card">
+   845→                    <div className="text-[10px] text-muted-foreground">{RELATION_LABELS[r] ?? r}</div>
+   846→                    <div className="text-base font-bold tabular-nums">{n}</div>
+   847→                  </div>
+   848→                ))}
+   849→              {(Object.entries(tg.byRelation) as [TaskEdgeRelation, number][])
+   850→                .filter(([, n]) => n > 0).length === 0 && (
+   851→                <p className="col-span-full text-xs text-muted-foreground text-center py-6">No edges yet.</p>
+   852→              )}
+   853→            </div>
+   854→          </CardContent>
+   855→        </Card>
+   856→      </div>
+   857→
+   858→      {/* Sample paths */}
+   859→      {tg.samplePaths.length > 0 && (
+   860→        <Card>
+   861→          <CardHeader>
+   862→            <CardTitle className="text-sm flex items-center gap-2"><Workflow className="h-4 w-4" />Sample Paths</CardTitle>
+   863→          </CardHeader>
+   864→          <CardContent>
+   865→            <div className="space-y-2">
+   866→              {tg.samplePaths.slice(0, 8).map((p, i) => (
+   867→                <SamplePathCollapsible key={i} path={p} index={i} />
+   868→              ))}
+   869→            </div>
+   870→          </CardContent>
+   871→        </Card>
+   872→      )}
+   873→    </motion.div>
+   874→  );
+   875→}
+   876→
+   877→function SamplePathCollapsible({
+   878→  path, index,
+   879→}: {
+   880→  path: ExecutionDashboard['taskGraph']['samplePaths'][number];
+   881→  index: number;
+   882→}) {
+   883→  const [open, setOpen] = useState(index === 0);
+   884→  return (
+   885→    <Collapsible open={open} onOpenChange={setOpen}>
+   886→      <Card>
+   887→        <CollapsibleTrigger asChild>
+   888→          <button type="button" className="w-full text-left p-3 flex items-center gap-2 hover:bg-muted/30 transition-colors">
+   889→            <ChevronDown className={cn('h-4 w-4 transition-transform', open && 'rotate-180')} />
+   890→            <span className="text-xs font-medium">Path #{index + 1}</span>
+   891→            <Badge variant="outline" className="text-[10px]">{path.steps.length} steps</Badge>
+   892→            <Badge variant="outline" className="text-[10px]">{fmtMs(path.totalDurationMs)}</Badge>
+   893→            <span className="ml-auto text-[10px] text-muted-foreground truncate max-w-[40%]">
+   894→              {path.steps[0]?.description} → … → {path.steps[path.steps.length - 1]?.description}
+   895→            </span>
+   896→          </button>
+   897→        </CollapsibleTrigger>
+   898→        <CollapsibleContent>
+   899→          <CardContent className="pt-0">
+   900→            <div className="flex flex-wrap items-center gap-1 pt-2 border-t">
+   901→              {path.steps.map((s, i) => {
+   902→                const meta = MODULE_META[s.module];
+   903→                return (
+   904→                  <React.Fragment key={i}>
+   905→                    {i > 0 && <ChevronRight className="h-3 w-3 text-muted-foreground" />}
+   906→                    <div className="p-2 rounded border bg-card flex flex-col gap-1 min-w-[140px] max-w-[180px]">
+   907→                      <div className="flex items-center gap-1">
+   908→                        <span>{meta?.icon}</span>
+   909→                        <span className={cn('text-[10px] font-medium', meta?.color)}>{meta?.label}</span>
+   910→                      </div>
+   911→                      <p className="text-[10px] text-muted-foreground line-clamp-2">{s.description}</p>
+   912→                      <StatusBadge status={s.status} />
+   913→                    </div>
+   914→                  </React.Fragment>
+   915→                );
+   916→              })}
+   917→            </div>
+   918→          </CardContent>
+   919→        </CollapsibleContent>
+   920→      </Card>
+   921→    </Collapsible>
+   922→  );
+   923→}
+   924→
+   925→// ─── 4. QUEUES & WORKERS PANEL ───────────────────────────────────────────────
+   926→
+   927→function QueuesPanel({ data }: { data: ExecutionDashboard }) {
+   928→  return (
+   929→    <motion.div
+   930→      className="space-y-4"
+   931→      initial={{ opacity: 0, y: 8 }}
+   932→      animate={{ opacity: 1, y: 0 }}
+   933→      transition={{ duration: 0.25 }}
+   934→    >
+   935→      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+   936→        <KPICard icon={Layers} label="Queues" value={data.queues.length} color="violet" />
+   937→        <KPICard icon={Server} label="Workers" value={`${data.workers.active}/${data.workers.total}`} color="cyan" />
+   938→        <KPICard icon={Gauge} label="Avg Utilisation" value={fmtPct(data.workers.avgUtilizationPct, 0)} color="amber" />
+   939→        <KPICard icon={CalendarClock} label="Schedules" value={data.schedules.length} color="fuchsia" />
+   940→      </div>
+   941→
+   942→      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+   943→        {/* Queue summaries */}
+   944→        <Card>
+   945→          <CardHeader>
+   946→            <CardTitle className="text-sm flex items-center gap-2"><Layers className="h-4 w-4" />Smart Execution Queue™</CardTitle>
+   947→          </CardHeader>
+   948→          <CardContent>
+   949→            {data.queues.length === 0 ? (
+   950→              <p className="text-xs text-muted-foreground py-6 text-center">No queues registered.</p>
+   951→            ) : (
+   952→              <ScrollContainer>
+   953→                <div className="space-y-2">
+   954→                  {data.queues.map((q) => <QueueCard key={q.queueName} queue={q} />)}
+   955→                </div>
+   956→              </ScrollContainer>
+   957→            )}
+   958→          </CardContent>
+   959→        </Card>
+   960→
+   961→        {/* Worker roster */}
+   962→        <Card>
+   963→          <CardHeader>
+   964→            <CardTitle className="text-sm flex items-center gap-2"><Server className="h-4 w-4" />Enterprise Workers™</CardTitle>
+   965→          </CardHeader>
+   966→          <CardContent>
+   967→            {data.workers.roster.length === 0 ? (
+   968→              <p className="text-xs text-muted-foreground py-6 text-center">No workers registered.</p>
+   969→            ) : (
+   970→              <ScrollContainer>
+   971→                <div className="space-y-2">
+   972→                  {data.workers.roster.map((w) => (
+   973→                    <div key={w.id} className="p-3 rounded-lg border bg-card">
+   974→                      <div className="flex items-center justify-between gap-2 mb-2">
+   975→                        <div className="flex items-center gap-2 min-w-0">
+   976→                          <Cpu className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+   977→                          <span className="text-xs font-mono truncate">{w.workerId}</span>
+   978→                        </div>
+   979→                        <Badge variant="outline" className={cn('text-[9px] border', WORKER_STATUS_STYLES[w.status])}>
+   980→                          {w.status}
+   981→                        </Badge>
+   982→                      </div>
+   983→                      <div className="flex items-center gap-2 flex-wrap mb-2">
+   984→                        <Badge variant="outline" className="text-[9px]">{w.type}</Badge>
+   985→                        {w.region && <Badge variant="outline" className="text-[9px]"><MapPin className="h-2.5 w-2.5 mr-1" />{w.region}</Badge>}
+   986→                        {w.countryIso && <Badge variant="outline" className="text-[9px]">{w.countryIso}</Badge>}
+   987→                        <Badge variant="outline" className="text-[9px]">{w.jobsCompleted} done</Badge>
+   988→                        {w.jobsFailed > 0 && <Badge variant="outline" className="text-[9px] text-rose-600">{w.jobsFailed} failed</Badge>}
+   989→                      </div>
+   990→                      <div className="flex items-center gap-2">
+   991→                        <Progress value={w.utilizationPct} className="h-1.5 flex-1" />
+   992→                        <span className="text-[10px] tabular-nums text-muted-foreground w-12 text-right">{fmtPct(w.utilizationPct, 0)}</span>
+   993→                      </div>
+   994→                      <div className="mt-1 flex items-center justify-between text-[10px] text-muted-foreground">
+   995→                        <span>cap {w.capacity} · avg {fmtMs(w.avgLatencyMs)}</span>
+   996→                        <span>hb {timeAgo(w.lastHeartbeatAt)}</span>
+   997→                      </div>
+   998→                    </div>
+   999→                  ))}
+  1000→                </div>
+  1001→              </ScrollContainer>
+  1002→            )}
+  1003→          </CardContent>
+  1004→        </Card>
+  1005→      </div>
+  1006→
+  1007→      {/* Scheduled jobs table */}
+  1008→      <Card>
+  1009→        <CardHeader>
+  1010→          <CardTitle className="text-sm flex items-center gap-2"><CalendarClock className="h-4 w-4" />Enterprise Job Engine™ — Schedules</CardTitle>
+  1011→        </CardHeader>
+  1012→        <CardContent>
+  1013→          {data.schedules.length === 0 ? (
+  1014→            <p className="text-xs text-muted-foreground py-6 text-center">No scheduled jobs yet. Schedules fire ExecutionJobs on cron.</p>
+  1015→          ) : (
+  1016→            <ScrollContainer className="max-h-[28rem]">
+  1017→              <div className="overflow-x-auto">
+  1018→                <table className="w-full text-xs">
+  1019→                  <thead>
+  1020→                    <tr className="text-left border-b text-muted-foreground">
+  1021→                      <th className="py-2 pr-3">Name</th>
+  1022→                      <th className="py-2 pr-3">Module</th>
+  1023→                      <th className="py-2 pr-3">Cron</th>
+  1024→                      <th className="py-2 pr-3">Next Run</th>
+  1025→                      <th className="py-2 pr-3">Last Status</th>
+  1026→                      <th className="py-2 pr-3 text-center">Enabled</th>
+  1027→                      <th className="py-2 pr-3 text-right">Runs</th>
+  1028→                    </tr>
+  1029→                  </thead>
+  1030→                  <tbody>
+  1031→                    {data.schedules.map((s) => {
+  1032→                      const meta = MODULE_META[s.module];
+  1033→                      return (
+  1034→                        <tr key={s.id} className="border-b hover:bg-muted/30">
+  1035→                          <td className="py-2 pr-3 font-medium">
+  1036→                            <div className="truncate max-w-[200px]">{s.name}</div>
+  1037→                            <div className="text-[10px] text-muted-foreground">{s.type}</div>
+  1038→                          </td>
+  1039→                          <td className="py-2 pr-3"><ModuleBadge module={s.module} /></td>
+  1040→                          <td className="py-2 pr-3 font-mono text-[10px]">{s.cron ?? '—'}</td>
+  1041→                          <td className="py-2 pr-3 text-[10px] tabular-nums">
+  1042→                            <div>{fmtTime(s.nextRunAt)}</div>
+  1043→                            <div className="text-muted-foreground">{timeAgo(s.nextRunAt)}</div>
+  1044→                          </td>
+  1045→                          <td className="py-2 pr-3">
+  1046→                            {s.lastStatus ? (
+  1047→                              <Badge variant="outline" className={cn(
+  1048→                                'text-[9px]',
+  1049→                                s.lastStatus === 'completed' && 'text-emerald-700 bg-emerald-50',
+  1050→                                s.lastStatus === 'failed' && 'text-rose-700 bg-rose-50',
+  1051→                                s.lastStatus === 'running' && 'text-cyan-700 bg-cyan-50',
+  1052→                              )}>
+  1053→                                {s.lastStatus}
+  1054→                              </Badge>
+  1055→                            ) : <span className="text-[10px] text-muted-foreground">—</span>}
+  1056→                          </td>
+  1057→                          <td className="py-2 pr-3 text-center">
+  1058→                            {s.enabled ? (
+  1059→                              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 inline" />
+  1060→                            ) : (
+  1061→                              <span className="text-[10px] text-muted-foreground">off</span>
+  1062→                            )}
+  1063→                          </td>
+  1064→                          <td className="py-2 pr-3 text-right tabular-nums">{s.runsCount}</td>
+  1065→                        </tr>
+  1066→                      );
+  1067→                    })}
+  1068→                  </tbody>
+  1069→                </table>
+  1070→              </div>
+  1071→            </ScrollContainer>
+  1072→          )}
+  1073→        </CardContent>
+  1074→      </Card>
+  1075→    </motion.div>
+  1076→  );
+  1077→}
+  1078→
+  1079→function QueueCard({ queue }: { queue: QueueSummary }) {
+  1080→  return (
+  1081→    <div className="p-3 rounded-lg border bg-card">
+  1082→      <div className="flex items-center justify-between gap-2 mb-2">
+  1083→        <span className="text-xs font-mono truncate">{queue.queueName}</span>
+  1084→        <Badge variant="outline" className="text-[10px]">{queue.total} total</Badge>
+  1085→      </div>
+  1086→      <div className="grid grid-cols-4 gap-1 text-center mb-2">
+  1087→        <div className="p-1.5 rounded bg-slate-50 dark:bg-slate-900/30">
+  1088→          <div className="text-[9px] text-muted-foreground uppercase">queued</div>
+  1089→          <div className="text-sm font-bold tabular-nums">{queue.queued}</div>
+  1090→        </div>
+  1091→        <div className="p-1.5 rounded bg-cyan-50 dark:bg-cyan-900/30">
+  1092→          <div className="text-[9px] text-muted-foreground uppercase">running</div>
+  1093→          <div className="text-sm font-bold tabular-nums">{queue.running}</div>
+  1094→        </div>
+  1095→        <div className="p-1.5 rounded bg-emerald-50 dark:bg-emerald-900/30">
+  1096→          <div className="text-[9px] text-muted-foreground uppercase">done</div>
+  1097→          <div className="text-sm font-bold tabular-nums">{queue.completed}</div>
+  1098→        </div>
+  1099→        <div className="p-1.5 rounded bg-rose-50 dark:bg-rose-900/30">
+  1100→          <div className="text-[9px] text-muted-foreground uppercase">failed</div>
+  1101→          <div className="text-sm font-bold tabular-nums">{queue.failed}</div>
+  1102→        </div>
+  1103→      </div>
+  1104→      <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+  1105→        <span>avg wait {fmtMs(queue.avgWaitMs)}</span>
+  1106→        <span>oldest {timeAgo(queue.oldestQueuedAt)}</span>
+  1107→      </div>
+  1108→    </div>
+  1109→  );
+  1110→}
+  1111→
+  1112→// ─── 5. OBSERVABILITY & ALERTS PANEL ─────────────────────────────────────────
+  1113→
+  1114→const OBSERVABILITY_METRICS: { key: keyof ExecutionDashboard['observability']; label: string; icon: LucideIcon; color: KpiColor; format?: (n: number) => string }[] = [
+  1115→  { key: 'queueSize', label: 'Queue Size', icon: Layers, color: 'slate' },
+  1116→  { key: 'runningJobs', label: 'Running Jobs', icon: Play, color: 'cyan' },
+  1117→  { key: 'failedJobs', label: 'Failed Jobs', icon: AlertTriangle, color: 'rose' },
+  1118→  { key: 'retryCount', label: 'Retries', icon: RotateCcw, color: 'orange' },
+  1119→  { key: 'successRate', label: 'Success Rate', icon: CheckCircle2, color: 'emerald', format: (n) => fmtPct(n) },
+  1120→  { key: 'avgAiLatencyMs', label: 'AI Latency', icon: Cpu, color: 'violet', format: fmtMs },
+  1121→  { key: 'avgApiLatencyMs', label: 'API Latency', icon: Network, color: 'fuchsia', format: fmtMs },
+  1122→  { key: 'avgConnectorLatencyMs', label: 'Connector Latency', icon: Boxes, color: 'amber', format: fmtMs },
+  1123→  { key: 'cacheHitRatio', label: 'Cache Hit Ratio', icon: Zap, color: 'teal', format: (n) => fmtPct(n) },
+  1124→  { key: 'workerUtilizationPct', label: 'Worker Utilisation', icon: Gauge, color: 'purple', format: (n) => fmtPct(n) },
+  1125→  { key: 'throughputPerMin', label: 'Throughput/min', icon: TrendingUp, color: 'emerald', format: (n) => n.toFixed(1) },
+  1126→  { key: 'p95DurationMs', label: 'p95 Duration', icon: Clock, color: 'rose', format: fmtMs },
+  1127→];
+  1128→
+  1129→const ALERT_TYPE_LABELS: Record<AlertType, string> = {
+  1130→  workflow_failed: 'Workflow Failed',
+  1131→  connector_slow: 'Connector Slow',
+  1132→  ai_failure: 'AI Failure',
+  1133→  job_failed: 'Job Failed',
+  1134→  queue_congested: 'Queue Congested',
+  1135→  missing_approval: 'Missing Approval',
+  1136→  deployment_failed: 'Deployment Failed',
+  1137→  payment_failed: 'Payment Failed',
+  1138→  compliance_failed: 'Compliance Failed',
+  1139→};
+  1140→
+  1141→function ObservabilityPanel({ data }: { data: ExecutionDashboard }) {
+  1142→  const obs = data.observability;
+  1143→  const alerts = data.alerts;
+  1144→
+  1145→  return (
+  1146→    <motion.div
+  1147→      className="space-y-4"
+  1148→      initial={{ opacity: 0, y: 8 }}
+  1149→      animate={{ opacity: 1, y: 0 }}
+  1150→      transition={{ duration: 0.25 }}
+  1151→    >
+  1152→      {/* Alert summary KPIs */}
+  1153→      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+  1154→        <KPICard icon={AlertCircle} label="Open Alerts" value={alerts.open} sub={`${alerts.critical} critical`} color="rose" />
+  1155→        <KPICard icon={CheckCircle2} label="Resolved" value={alerts.total - alerts.open} color="emerald" />
+  1156→        <KPICard icon={Activity} label="Queue Size" value={obs.queueSize} color="slate" />
+  1157→        <KPICard icon={Gauge} label="Worker Util" value={fmtPct(obs.workerUtilizationPct, 0)} color="amber" />
+  1158→      </div>
+  1159→
+  1160→      {/* Observability metric grid (12) */}
+  1161→      <Card>
+  1162→        <CardHeader>
+  1163→          <CardTitle className="text-sm flex items-center gap-2"><Activity className="h-4 w-4" />Execution Observability™ — 12 Core Metrics</CardTitle>
+  1164→        </CardHeader>
+  1165→        <CardContent>
+  1166→          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+  1167→            {OBSERVABILITY_METRICS.map((m) => {
+  1168→              const val = obs[m.key];
+  1169→              const formatted = m.format ? m.format(val) : val.toLocaleString('en-IN');
+  1170→              return (
+  1171→                <div key={m.key} className="p-3 rounded-lg border bg-card">
+  1172→                  <div className="flex items-center justify-between mb-2">
+  1173→                    <div className={cn('h-7 w-7 rounded-md bg-gradient-to-br flex items-center justify-center', KPI_COLORS[m.color])}>
+  1174→                      <m.icon className="h-3.5 w-3.5 text-white" />
+  1175→                    </div>
+  1176→                  </div>
+  1177→                  <div className="text-lg font-bold tabular-nums">{formatted}</div>
+  1178→                  <div className="text-[10px] text-muted-foreground">{m.label}</div>
+  1179→                </div>
+  1180→              );
+  1181→            })}
+  1182→          </div>
+  1183→        </CardContent>
+  1184→      </Card>
+  1185→
+  1186→      {/* Alerts list */}
+  1187→      <Card>
+  1188→        <CardHeader>
+  1189→          <CardTitle className="text-sm flex items-center gap-2">
+  1190→            <AlertTriangle className="h-4 w-4 text-amber-500" />
+  1191→            Global Alert Center™
+  1192→            <Badge variant="outline" className="text-[10px] ml-1">{alerts.recent.length} recent</Badge>
+  1193→          </CardTitle>
+  1194→        </CardHeader>
+  1195→        <CardContent>
+  1196→          {alerts.recent.length === 0 ? (
+  1197→            <div className="py-8 flex flex-col items-center text-center">
+  1198→              <CheckCircle2 className="h-8 w-8 text-emerald-500 mb-2" />
+  1199→              <p className="text-sm font-medium">No active alerts — system is operating normally</p>
+  1200→              <p className="text-[11px] text-muted-foreground mt-1">Auto-detected from job failures, queue congestion, connector slowdowns, AI failures, missing approvals.</p>
+  1201→            </div>
+  1202→          ) : (
+  1203→            <ScrollContainer>
+  1204→              <div className="space-y-2">
+  1205→                {alerts.recent.map((a) => (
+  1206→                  <div key={a.id} className="p-3 rounded-lg border bg-card">
+  1207→                    <div className="flex items-start gap-3">
+  1208→                      <div className={cn('h-7 w-7 rounded-full flex items-center justify-center flex-shrink-0', SEVERITY_STYLES[a.severity])}>
+  1209→                        <AlertTriangle className="h-3.5 w-3.5" />
+  1210→                      </div>
+  1211→                      <div className="flex-1 min-w-0">
+  1212→                        <div className="flex items-center gap-2 flex-wrap mb-1">
+  1213→                          <Badge className={cn('text-[9px] uppercase', SEVERITY_STYLES[a.severity])}>{a.severity}</Badge>
+  1214→                          <Badge variant="outline" className="text-[9px]">{ALERT_TYPE_LABELS[a.type] ?? a.type}</Badge>
+  1215→                          {a.moduleId && <ModuleBadge module={a.moduleId} />}
+  1216→                          <Badge variant="outline" className={cn(
+  1217→                            'text-[9px]',
+  1218→                            a.status === 'open' && 'text-rose-600',
+  1219→                            a.status === 'acknowledged' && 'text-amber-600',
+  1220→                            a.status === 'resolved' && 'text-emerald-600',
+  1221→                          )}>
+  1222→                            {a.status}
+  1223→                          </Badge>
+  1224→                          <span className="text-[10px] text-muted-foreground ml-auto">{timeAgo(a.detectedAt)}</span>
+  1225→                        </div>
+  1226→                        <div className="text-xs font-medium mb-0.5">{a.title}</div>
+  1227→                        <p className="text-[11px] text-muted-foreground leading-relaxed">{a.description}</p>
+  1228→                        {a.proposedFix && (
+  1229→                          <div className="mt-2 p-2 rounded bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800">
+  1230→                            <div className="flex items-center gap-1 mb-0.5">
+  1231→                              <Sparkles className="h-3 w-3 text-emerald-600" />
+  1232→                              <span className="text-[10px] font-semibold text-emerald-700 dark:text-emerald-400">Oracle Proposed Fix</span>
+  1233→                            </div>
+  1234→                            <p className="text-[11px] text-emerald-800 dark:text-emerald-300">{a.proposedFix}</p>
+  1235→                          </div>
+  1236→                        )}
+  1237→                      </div>
+  1238→                    </div>
+  1239→                  </div>
+  1240→                ))}
+  1241→              </div>
+  1242→            </ScrollContainer>
+  1243→          )}
+  1244→        </CardContent>
+  1245→      </Card>
+  1246→    </motion.div>
+  1247→  );
+  1248→}
+  1249→
+  1250→// ─── 6. LIVE MAP & ANALYTICS PANEL ───────────────────────────────────────────
+  1251→
+  1252→function MapAnalyticsPanel({ data }: { data: ExecutionDashboard }) {
+  1253→  const map = data.liveMap;
+  1254→  const analytics = data.analytics;
+  1255→  const maxHourly = Math.max(...analytics.byHour.map((h) => h.executions), 1);
+  1256→
+  1257→  return (
+  1258→    <motion.div
+  1259→      className="space-y-4"
+  1260→      initial={{ opacity: 0, y: 8 }}
+  1261→      animate={{ opacity: 1, y: 0 }}
+  1262→      transition={{ duration: 0.25 }}
+  1263→    >
+  1264→      {/* System health banner */}
+  1265→      <Card className={cn(
+  1266→        'overflow-hidden border',
+  1267→        map.systemHealth === 'healthy' && 'border-emerald-500/30 bg-gradient-to-br from-emerald-500/5 to-cyan-500/5',
+  1268→        map.systemHealth === 'degraded' && 'border-amber-500/30 bg-gradient-to-br from-amber-500/5 to-orange-500/5',
+  1269→        map.systemHealth === 'critical' && 'border-rose-500/30 bg-gradient-to-br from-rose-500/5 to-fuchsia-500/5',
+  1270→      )}>
+  1271→        <CardContent className="p-5">
+  1272→          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+  1273→            <div className="flex items-center gap-3">
+  1274→              <div className={cn(
+  1275→                'h-11 w-11 rounded-full flex items-center justify-center',
+  1276→                map.systemHealth === 'healthy' && 'bg-emerald-500',
+  1277→                map.systemHealth === 'degraded' && 'bg-amber-500',
+  1278→                map.systemHealth === 'critical' && 'bg-rose-500',
+  1279→              )}>
+  1280→                <Globe className="h-5 w-5 text-white" />
+  1281→              </div>
+  1282→              <div>
+  1283→                <div className="text-sm font-semibold">Live Execution Map™ — System {healthLabel(map.systemHealth)}</div>
+  1284→                <div className="text-[11px] text-muted-foreground">
+  1285→                  {map.totalActiveJobs} active jobs · {map.totalHealthyWorkers}/{map.totalWorkers} workers healthy · {map.regions.length} regions · updated {timeAgo(map.updatedAt)}
+  1286→                </div>
+  1287→              </div>
+  1288→            </div>
+  1289→            <div className="flex items-center gap-2">
+  1290→              {(['healthy', 'degraded', 'critical'] as const).map((h) => (
+  1291→                <Badge key={h} variant="outline" className={cn(
+  1292→                  'text-[10px]',
+  1293→                  map.systemHealth === h ? HEALTH_STYLES[h].classes : 'text-muted-foreground opacity-50',
+  1294→                )}>
+  1295→                  {HEALTH_STYLES[h].label}
+  1296→                </Badge>
+  1297→              ))}
+  1298→            </div>
+  1299→          </div>
+  1300→        </CardContent>
+  1301→      </Card>
+  1302→
+  1303→      {/* KPIs */}
+  1304→      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+  1305→        <KPICard icon={Activity} label="Total Executions" value={analytics.throughput.totalExecutions.toLocaleString('en-IN')} color="violet" />
+  1306→        <KPICard icon={Zap} label="Per Hour" value={analytics.throughput.perHour.toFixed(1)} color="cyan" />
+  1307→        <KPICard icon={CheckCircle2} label="Success Rate" value={fmtPct(analytics.successRate)} color="emerald" />
+  1308→        <KPICard icon={Clock} label="Avg Duration" value={fmtMs(analytics.avgDurationMs)} color="amber" />
+  1309→        <KPICard icon={Cpu} label="AI Cost" value={inr(analytics.aiCost)} color="fuchsia" />
+  1310→        <KPICard icon={TrendingUp} label="ROI" value={fmtPct(analytics.roi)} sub={analytics.trend} color="teal" />
+  1311→      </div>
+  1312→
+  1313→      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+  1314→        {/* Region cards */}
+  1315→        <Card>
+  1316→          <CardHeader>
+  1317→            <CardTitle className="text-sm flex items-center gap-2"><Globe className="h-4 w-4" />Regions</CardTitle>
+  1318→          </CardHeader>
+  1319→          <CardContent>
+  1320→            {map.regions.length === 0 ? (
+  1321→              <p className="text-xs text-muted-foreground py-6 text-center">No regions reporting yet.</p>
+  1322→            ) : (
+  1323→              <ScrollContainer>
+  1324→                <div className="space-y-2">
+  1325→                  {map.regions.map((r) => (
+  1326→                    <div key={r.region} className="p-3 rounded-lg border bg-card">
+  1327→                      <div className="flex items-center justify-between mb-2">
+  1328→                        <div className="flex items-center gap-2">
+  1329→                          <MapPin className="h-3.5 w-3.5 text-violet-500" />
+  1330→                          <span className="text-xs font-semibold">{r.region}</span>
+  1331→                          <Badge variant="outline" className="text-[9px]">{r.countries.length} countries</Badge>
+  1332→                        </div>
+  1333→                        <Badge variant="outline" className="text-[9px]">{r.activeJobs} active</Badge>
+  1334→                      </div>
+  1335→                      <div className="flex items-center gap-2 mb-1">
+  1336→                        <Progress value={r.utilizationPct} className="h-1.5 flex-1" />
+  1337→                        <span className="text-[10px] tabular-nums text-muted-foreground w-12 text-right">{fmtPct(r.utilizationPct, 0)}</span>
+  1338→                      </div>
+  1339→                      <div className="text-[10px] text-muted-foreground">
+  1340→                        Workers: <span className="text-emerald-600 font-medium">{r.healthyWorkers}</span> / {r.totalWorkers} healthy
+  1341→                      </div>
+  1342→                    </div>
+  1343→                  ))}
+  1344→                </div>
+  1345→              </ScrollContainer>
+  1346→            )}
+  1347→          </CardContent>
+  1348→        </Card>
+  1349→
+  1350→        {/* Module node grid */}
+  1351→        <Card>
+  1352→          <CardHeader>
+  1353→            <CardTitle className="text-sm flex items-center gap-2"><Boxes className="h-4 w-4" />Module Nodes ({map.modules.length})</CardTitle>
+  1354→          </CardHeader>
+  1355→          <CardContent>
+  1356→            {map.modules.length === 0 ? (
+  1357→              <p className="text-xs text-muted-foreground py-6 text-center">No module nodes registered.</p>
+  1358→            ) : (
+  1359→              <ScrollContainer>
+  1360→                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+  1361→                  {map.modules.map((n) => {
+  1362→                    const meta = n.label ? Object.values(MODULE_META).find((m) => m.label === n.label || m.id === n.label) : null;
+  1363→                    return (
+  1364→                      <div key={n.id} className="p-2.5 rounded-lg border bg-card">
+  1365→                        <div className="flex items-center gap-1.5 mb-1">
+  1366→                          <span className={cn(
+  1367→                            'h-2 w-2 rounded-full',
+  1368→                            n.status === 'healthy' && 'bg-emerald-500',
+  1369→                            n.status === 'busy' && 'bg-cyan-500 animate-pulse',
+  1370→                            n.status === 'degraded' && 'bg-amber-500',
+  1371→                            n.status === 'down' && 'bg-rose-500',
+  1372→                          )} />
+  1373→                          <span className="text-[11px] font-medium truncate">{meta?.icon} {n.label}</span>
+  1374→                        </div>
+  1375→                        <div className="text-[10px] text-muted-foreground">
+  1376→                          <span className="tabular-nums font-semibold text-foreground">{n.activeJobs}</span> active jobs
+  1377→                        </div>
+  1378→                        <Badge variant="outline" className="text-[9px] mt-1">{n.status}</Badge>
+  1379→                      </div>
+  1380→                    );
+  1381→                  })}
+  1382→                </div>
+  1383→              </ScrollContainer>
+  1384→            )}
+  1385→          </CardContent>
+  1386→        </Card>
+  1387→      </div>
+  1388→
+  1389→      {/* Failure causes + Cost breakdown */}
+  1390→      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+  1391→        {/* Failure causes */}
+  1392→        <Card>
+  1393→          <CardHeader>
+  1394→            <CardTitle className="text-sm flex items-center gap-2"><AlertTriangle className="h-4 w-4 text-amber-500" />Failure Causes</CardTitle>
+  1395→          </CardHeader>
+  1396→          <CardContent>
+  1397→            {analytics.failureCauses.length === 0 ? (
+  1398→              <div className="py-6 flex flex-col items-center text-center">
+  1399→                <CheckCircle2 className="h-6 w-6 text-emerald-500 mb-2" />
+  1400→                <p className="text-xs text-muted-foreground">No failure causes recorded — pipeline is healthy.</p>
+  1401→              </div>
+  1402→            ) : (
+  1403→              <div className="space-y-2">
+  1404→                {analytics.failureCauses.slice(0, 8).map((c, i) => (
+  1405→                  <div key={i} className="space-y-1">
+  1406→                    <div className="flex items-center justify-between text-xs">
+  1407→                      <span className="truncate font-medium">{c.cause}</span>
+  1408→                      <span className="text-muted-foreground tabular-nums">{c.count} · {fmtPct(c.pct, 0)}</span>
+  1409→                    </div>
+  1410→                    <Progress value={c.pct} className="h-1.5" />
+  1411→                  </div>
+  1412→                ))}
+  1413→              </div>
+  1414→            )}
+  1415→          </CardContent>
+  1416→        </Card>
+  1417→
+  1418→        {/* Cost breakdown */}
+  1419→        <Card>
+  1420→          <CardHeader>
+  1421→            <CardTitle className="text-sm flex items-center gap-2"><BarChart3 className="h-4 w-4" />Cost & Savings (₹)</CardTitle>
+  1422→          </CardHeader>
+  1423→          <CardContent>
+  1424→            <div className="grid grid-cols-2 gap-2">
+  1425→              <CostTile label="AI Cost" value={inr(analytics.aiCost)} icon={Cpu} color="violet" />
+  1426→              <CostTile label="Connector Cost" value={inr(analytics.connectorCost)} icon={Boxes} color="amber" />
+  1427→              <CostTile label="Cost / Execution" value={inr(analytics.costPerExecution)} icon={Hash} color="slate" />
+  1428→              <CostTile label="Productivity Gains" value={inr(analytics.productivityGains)} icon={TrendingUp} color="emerald" />
+  1429→              <CostTile label="Automation Savings" value={inr(analytics.automationSavings)} icon={Zap} color="teal" />
+  1430→              <CostTile label="ROI" value={fmtPct(analytics.roi)} icon={Sparkles} color="fuchsia" />
+  1431→            </div>
+  1432→          </CardContent>
+  1433→        </Card>
+  1434→      </div>
+  1435→
+  1436→      {/* byModule table */}
+  1437→      <Card>
+  1438→        <CardHeader>
+  1439→          <CardTitle className="text-sm flex items-center gap-2"><Boxes className="h-4 w-4" />Analytics by Module</CardTitle>
+  1440→        </CardHeader>
+  1441→        <CardContent>
+  1442→          {analytics.byModule.length === 0 ? (
+  1443→            <p className="text-xs text-muted-foreground py-6 text-center">No per-module analytics yet.</p>
+  1444→          ) : (
+  1445→            <ScrollContainer className="max-h-[24rem]">
+  1446→              <div className="overflow-x-auto">
+  1447→                <table className="w-full text-xs">
+  1448→                  <thead>
+  1449→                    <tr className="text-left border-b text-muted-foreground">
+  1450→                      <th className="py-2 pr-3">Module</th>
+  1451→                      <th className="py-2 pr-3 text-right">Executions</th>
+  1452→                      <th className="py-2 pr-3 text-right">Success</th>
+  1453→                      <th className="py-2 pr-3 text-right">Avg Dur</th>
+  1454→                      <th className="py-2 pr-3 text-right">Cost</th>
+  1455→                      <th className="py-2 pr-3 text-right">Savings</th>
+  1456→                    </tr>
+  1457→                  </thead>
+  1458→                  <tbody>
+  1459→                    {analytics.byModule
+  1460→                      .slice()
+  1461→                      .sort((a, b) => b.executions - a.executions)
+  1462→                      .map((m) => {
+  1463→                        const meta = MODULE_META[m.module];
+  1464→                        return (
+  1465→                          <tr key={m.module} className="border-b hover:bg-muted/30">
+  1466→                            <td className="py-2 pr-3">
+  1467→                              <span className={cn('text-xs font-medium', meta?.color)}>{meta?.icon} {meta?.label ?? m.module}</span>
+  1468→                            </td>
+  1469→                            <td className="py-2 pr-3 text-right tabular-nums">{m.executions.toLocaleString('en-IN')}</td>
+  1470→                            <td className="py-2 pr-3 text-right tabular-nums">
+  1471→                              <span className={cn(
+  1472→                                'font-medium',
+  1473→                                m.successRate >= 90 ? 'text-emerald-600' : m.successRate >= 70 ? 'text-amber-600' : 'text-rose-600',
+  1474→                              )}>
+  1475→                                {fmtPct(m.successRate, 0)}
+  1476→                              </span>
+  1477→                            </td>
+  1478→                            <td className="py-2 pr-3 text-right tabular-nums">{fmtMs(m.avgDurationMs)}</td>
+  1479→                            <td className="py-2 pr-3 text-right tabular-nums">{inr(m.cost)}</td>
+  1480→                            <td className="py-2 pr-3 text-right tabular-nums text-emerald-600">{inr(m.savings)}</td>
+  1481→                          </tr>
+  1482→                        );
+  1483→                      })}
+  1484→                  </tbody>
+  1485→                </table>
+  1486→              </div>
+  1487→            </ScrollContainer>
+  1488→          )}
+  1489→        </CardContent>
+  1490→      </Card>
+  1491→
+  1492→      {/* byHour mini bar chart */}
+  1493→      <Card>
+  1494→        <CardHeader>
+  1495→          <CardTitle className="text-sm flex items-center gap-2"><BarChart3 className="h-4 w-4" />Executions per Hour (last 24h)</CardTitle>
+  1496→        </CardHeader>
+  1497→        <CardContent>
+  1498→          {analytics.byHour.length === 0 ? (
+  1499→            <p className="text-xs text-muted-foreground py-6 text-center">No hourly data yet.</p>
+  1500→          ) : (
+  1501→            <div className="flex items-end gap-1 h-32">
+  1502→              {analytics.byHour.map((h, i) => {
+  1503→                const height = (h.executions / maxHourly) * 100;
+  1504→                return (
+  1505→                  <div key={i} className="flex-1 flex flex-col items-center gap-1 group">
+  1506→                    <div className="text-[9px] text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity tabular-nums">
+  1507→                      {h.executions}
+  1508→                    </div>
+  1509→                    <div
+  1510→                      className="w-full rounded-t bg-gradient-to-t from-violet-500 to-fuchsia-500 hover:from-violet-600 hover:to-fuchsia-600 transition-colors min-h-[2px]"
+  1511→                      style={{ height: `${height}%` }}
+  1512→                      title={`${h.hour}: ${h.executions} executions, ${fmtPct(h.successRate, 0)} success`}
+  1513→                    />
+  1514→                    <div className="text-[8px] text-muted-foreground tabular-nums">{h.hour.split(':')[0] ?? h.hour}</div>
+  1515→                  </div>
+  1516→                );
+  1517→              })}
+  1518→            </div>
+  1519→          )}
+  1520→        </CardContent>
+  1521→      </Card>
+  1522→    </motion.div>
+  1523→  );
+  1524→}
+  1525→
+  1526→function healthLabel(s: string): string {
+  1527→  return HEALTH_STYLES[s]?.label ?? s;
+  1528→}
+  1529→
+  1530→function CostTile({ label, value, icon: Icon, color }: { label: string; value: string; icon: LucideIcon; color: KpiColor }) {
+  1531→  return (
+  1532→    <div className="p-3 rounded-lg border bg-card">
+  1533→      <div className="flex items-center justify-between mb-2">
+  1534→        <div className={cn('h-7 w-7 rounded-md bg-gradient-to-br flex items-center justify-center', KPI_COLORS[color])}>
+  1535→          <Icon className="h-3.5 w-3.5 text-white" />
+  1536→        </div>
+  1537→      </div>
+  1538→      <div className="text-base font-bold tabular-nums">{value}</div>
+  1539→      <div className="text-[10px] text-muted-foreground">{label}</div>
+  1540→    </div>
+  1541→  );
+  1542→}
+  1543→

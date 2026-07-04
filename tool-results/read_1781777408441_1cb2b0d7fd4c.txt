@@ -1,0 +1,761 @@
+     1→// ═══════════════════════════════════════════════════════════════════════════════
+     2→// sync.ts — Sync orchestrator
+     3→//
+     4→// Wires adapters to DB writes. The single entry point is `runSync()`:
+     5→//   1. Loads the Connection from DB.
+     6→//   2. Validates status === "connected".
+     7→//   3. Creates a SyncJob row with status="running".
+     8→//   4. Switches on `connection.provider` and calls the right adapter.
+     9→//   5. Upserts adapter output into the right domain tables (Invoice,
+    10→//      GSTRFiling, Notice, Payment, BankTransaction, GmailMessage, DriveFile).
+    11→//   6. Updates the SyncJob with counts + status + completedAt + durationMs.
+    12→//   7. Always updates Connection.lastSyncAt + lastSyncStatus + lastSyncSummary.
+    13→//
+    14→// CRITICAL: When an adapter throws IntegrationNotConfiguredError the SyncJob
+    15→// ends with status="error" and the error message. NO fake data is written.
+    16→//
+    17→// For webhook/file/CRUD-driven providers (whatsapp, excel, clients) the
+    18→// function returns immediately with a "no batch sync" message + the SyncJob
+    19→// is marked status="success" with recordsPulled=0 and a log entry explaining
+    20→// that the provider is event-driven.
+    21→// ═══════════════════════════════════════════════════════════════════════════════
+    22→
+    23→import { db } from '@/lib/db'
+    24→import { getProviderMeta } from './registry'
+    25→import {
+    26→  IntegrationNotConfiguredError,
+    27→  type SyncLogEntry,
+    28→  type SyncResult,
+    29→} from './types'
+    30→
+    31→// ─── Types ──────────────────────────────────────────────────────────────────────
+    32→
+    33→export interface ListSyncJobsFilter {
+    34→  connectionId?: string
+    35→  provider?: string
+    36→  status?: string
+    37→  limit?: number
+    38→  offset?: number
+    39→}
+    40→
+    41→// ─── Helpers ────────────────────────────────────────────────────────────────────
+    42→
+    43→function now(): number {
+    44→  return Date.now()
+    45→}
+    46→
+    47→function appendLog(log: SyncLogEntry[] | undefined, entry: SyncLogEntry): string {
+    48→  const next = [...(log ?? []), entry]
+    49→  return JSON.stringify(next)
+    50→}
+    51→
+    52→function summarize(result: SyncResult): string {
+    53→  return (
+    54→    `Pulled ${result.recordsPulled}, created ${result.recordsCreated}, ` +
+    55→    `updated ${result.recordsUpdated}, skipped ${result.recordsSkipped}.`
+    56→  )
+    57→}
+    58→
+    59→/**
+    60→ * Upsert a single invoice by (clientId + invoiceNumber + sellerGstin).
+    61→ * Returns 'created' | 'updated' | 'skipped'.
+    62→ */
+    63→async function upsertInvoice(
+    64→  clientId: string,
+    65→  inv: {
+    66→    invoiceNumber: string
+    67→    invoiceDate?: string
+    68→    sellerGstin: string
+    69→    buyerGstin?: string
+    70→    buyerName?: string
+    71→    taxableValue?: number
+    72→    cgst?: number
+    73→    sgst?: number
+    74→    igst?: number
+    75→    cess?: number
+    76→    totalAmount?: number
+    77→    hsnCode?: string
+    78→    source?: string
+    79→    sourceRef?: string
+    80→  },
+    81→): Promise<'created' | 'updated' | 'skipped'> {
+    82→  if (!inv.invoiceNumber || !inv.sellerGstin) return 'skipped'
+    83→  // Invoice has no composite unique constraint on (clientId, invoiceNumber,
+    84→  // sellerGstin) — we use findFirst + update/create instead of upsert.
+    85→  const existing = await db.invoice.findFirst({
+    86→    where: {
+    87→      clientId,
+    88→      invoiceNumber: inv.invoiceNumber,
+    89→      sellerGstin: inv.sellerGstin,
+    90→    },
+    91→  })
+    92→  const data = {
+    93→    clientId,
+    94→    invoiceNumber: inv.invoiceNumber,
+    95→    invoiceDate: inv.invoiceDate ?? '',
+    96→    sellerGstin: inv.sellerGstin,
+    97→    buyerGstin: inv.buyerGstin ?? null,
+    98→    buyerName: inv.buyerName ?? null,
+    99→    taxableValue: inv.taxableValue ?? 0,
+   100→    cgst: inv.cgst ?? 0,
+   101→    sgst: inv.sgst ?? 0,
+   102→    igst: inv.igst ?? 0,
+   103→    cess: inv.cess ?? 0,
+   104→    totalAmount: inv.totalAmount ?? 0,
+   105→    hsnCode: inv.hsnCode ?? null,
+   106→    source: inv.source ?? 'manual',
+   107→    sourceRef: inv.sourceRef ?? null,
+   108→  }
+   109→  if (existing) {
+   110→    await db.invoice.update({ where: { id: existing.id }, data })
+   111→    return 'updated'
+   112→  }
+   113→  await db.invoice.create({ data })
+   114→  return 'created'
+   115→}
+   116→
+   117→// ─── Per-provider sync handlers ─────────────────────────────────────────────────
+   118→// Each handler returns a SyncResult. The orchestrator wraps in try/catch and
+   119→// translates IntegrationNotConfiguredError into a no-data outcome (with the
+   120→// error surfaced in the SyncJob log).
+   121→
+   122→async function syncGstn(connectionId: string): Promise<SyncResult> {
+   123→  const conn = await db.connection.findUnique({ where: { id: connectionId } })
+   124→  if (!conn) throw new Error('Connection not found.')
+   125→  const meta = getProviderMeta('gstn')
+   126→  const adapter = await import('./gstn')
+   127→  const log: SyncLogEntry[] = []
+   128→
+   129→  // The GSTN adapter needs a target GSTIN to pull returns for. The
+   130→  // connection's metadata JSON may carry it; otherwise we look up the first
+   131→  // active client with a GSTIN.
+   132→  const metadata = conn.metadata ? (JSON.parse(conn.metadata) as { gstin?: string }) : {}
+   133→  let targetGstin = metadata.gstin
+   134→  if (!targetGstin) {
+   135→    const client = await db.client.findFirst({ where: { status: 'active' }, orderBy: { createdAt: 'desc' } })
+   136→    targetGstin = client?.gstin ?? undefined
+   137→  }
+   138→  if (!targetGstin) {
+   139→    log.push({ step: 'gstn:select-target', status: 'skipped', message: 'No GSTIN configured (set in connection metadata) and no active client found.' })
+   140→    return { recordsPulled: 0, recordsCreated: 0, recordsUpdated: 0, recordsSkipped: 0, log, summary: 'No GSTIN target available.' }
+   141→  }
+   142→
+   143→  const fy = new Date().getFullYear().toString()
+   144→  log.push({ step: 'gstn:select-target', status: 'success', message: `Target GSTIN: ${targetGstin}, FY: ${fy}` })
+   145→
+   146→  // ── Pull returns ──
+   147→  let returnsCreated = 0
+   148→  let returnsUpdated = 0
+   149→  let returnsSkipped = 0
+   150→  try {
+   151→    const returns = await adapter.pullReturns(conn as unknown as Parameters<typeof adapter.pullReturns>[0], targetGstin, fy)
+   152→    log.push({ step: 'gstn:pull-returns', status: 'success', count: returns.length })
+   153→    for (const r of returns) {
+   154→      // Find client by GSTIN — if none, skip (don't fabricate)
+   155→      const client = await db.client.findUnique({ where: { gstin: targetGstin } })
+   156→      if (!client) {
+   157→        returnsSkipped++
+   158→        continue
+   159→      }
+   160→      const existing = await db.gSTRFiling.findFirst({
+   161→        where: { clientId: client.id, returnType: r.returnType, period: r.period },
+   162→      })
+   163→      const data = {
+   164→        clientId: client.id,
+   165→        returnType: r.returnType,
+   166→        period: r.period,
+   167→        financialYear: r.financialYear ?? null,
+   168→        status: r.status ?? 'draft',
+   169→        filedDate: r.filedDate ?? null,
+   170→        acknowledgmentNumber: r.ackNo ?? null,
+   171→        source: 'gstn',
+   172→        sourceRef: r.sourceRef ?? null,
+   173→      }
+   174→      if (existing) {
+   175→        await db.gSTRFiling.update({ where: { id: existing.id }, data })
+   176→        returnsUpdated++
+   177→      } else {
+   178→        await db.gSTRFiling.create({ data })
+   179→        returnsCreated++
+   180→      }
+   181→    }
+   182→    log.push({ step: 'gstn:upsert-returns', status: 'success', count: returnsCreated + returnsUpdated, message: `created ${returnsCreated}, updated ${returnsUpdated}, skipped ${returnsSkipped}` })
+   183→  } catch (err) {
+   184→    const msg = err instanceof Error ? err.message : String(err)
+   185→    log.push({ step: 'gstn:pull-returns', status: 'error', message: msg })
+   186→    if (err instanceof IntegrationNotConfiguredError) throw err
+   187→  }
+   188→
+   189→  // ── Pull notices ──
+   190→  let noticesCreated = 0
+   191→  let noticesUpdated = 0
+   192→  try {
+   193→    const notices = await adapter.getNotices(conn as unknown as Parameters<typeof adapter.getNotices>[0], targetGstin)
+   194→    log.push({ step: 'gstn:pull-notices', status: 'success', count: notices.length })
+   195→    const client = await db.client.findUnique({ where: { gstin: targetGstin } })
+   196→    if (client) {
+   197→      for (const n of notices) {
+   198→        const existing = n.noticeNumber
+   199→          ? await db.notice.findFirst({ where: { clientId: client.id, noticeNumber: n.noticeNumber } })
+   200→          : null
+   201→        const data = {
+   202→          clientId: client.id,
+   203→          noticeType: n.noticeType ?? 'gst_notice',
+   204→          noticeNumber: n.noticeNumber ?? null,
+   205→          noticeDate: n.noticeDate ?? null,
+   206→          subject: n.subject,
+   207→          description: n.description ?? null,
+   208→          priority: n.priority ?? 'medium',
+   209→          source: 'gstn',
+   210→          sourceRef: n.sourceRef ?? null,
+   211→        }
+   212→        if (existing) {
+   213→          await db.notice.update({ where: { id: existing.id }, data })
+   214→          noticesUpdated++
+   215→        } else {
+   216→          await db.notice.create({ data })
+   217→          noticesCreated++
+   218→        }
+   219→      }
+   220→    }
+   221→    log.push({ step: 'gstn:upsert-notices', status: 'success', count: noticesCreated + noticesUpdated })
+   222→  } catch (err) {
+   223→    const msg = err instanceof Error ? err.message : String(err)
+   224→    log.push({ step: 'gstn:pull-notices', status: 'error', message: msg })
+   225→    if (err instanceof IntegrationNotConfiguredError) throw err
+   226→  }
+   227→
+   228→  void meta
+   229→  const recordsPulled = (log.find((l) => l.step === 'gstn:pull-returns')?.count ?? 0) +
+   230→    (log.find((l) => l.step === 'gstn:pull-notices')?.count ?? 0)
+   231→  const recordsCreated = returnsCreated + noticesCreated
+   232→  const recordsUpdated = returnsUpdated + noticesUpdated
+   233→  const result: SyncResult = {
+   234→    recordsPulled,
+   235→    recordsCreated,
+   236→    recordsUpdated,
+   237→    recordsSkipped: returnsSkipped,
+   238→    log,
+   239→    summary: `Pulled ${recordsPulled} GSTN records (${returnsCreated + returnsUpdated} returns, ${noticesCreated + noticesUpdated} notices).`,
+   240→  }
+   241→  return result
+   242→}
+   243→
+   244→async function syncGmail(connectionId: string): Promise<SyncResult> {
+   245→  const conn = await db.connection.findUnique({ where: { id: connectionId } })
+   246→  if (!conn) throw new Error('Connection not found.')
+   247→  const adapter = await import('./gmail')
+   248→  const log: SyncLogEntry[] = []
+   249→
+   250→  let msgCreated = 0
+   251→  let msgUpdated = 0
+   252→  let invoicesCreated = 0
+   253→  let invoicesUpdated = 0
+   254→  let invoicesSkipped = 0
+   255→
+   256→  try {
+   257→    const messages = await adapter.pullMessages(conn as unknown as Parameters<typeof adapter.pullMessages>[0], { maxResults: 50 })
+   258→    log.push({ step: 'gmail:pull-messages', status: 'success', count: messages.length })
+   259→    for (const m of messages) {
+   260→      // Upsert into GmailMessage
+   261→      const existing = await db.gmailMessage.findUnique({ where: { messageId: m.messageId } }).catch(() => null)
+   262→      const data = {
+   263→        connectionId,
+   264→        messageId: m.messageId,
+   265→        threadId: m.threadId ?? null,
+   266→        fromAddress: m.fromAddress ?? null,
+   267→        toAddress: m.toAddress ?? null,
+   268→        subject: m.subject ?? null,
+   269→        snippet: m.snippet ?? null,
+   270→        bodyPlain: m.bodyPlain ?? null,
+   271→        bodyHtml: m.bodyHtml ?? null,
+   272→        hasAttachment: m.hasAttachment ?? false,
+   273→        attachmentNames: m.attachmentNames ? JSON.stringify(m.attachmentNames) : null,
+   274→        labels: m.labels ? JSON.stringify(m.labels) : null,
+   275→        receivedAt: m.receivedAt ? new Date(m.receivedAt) : null,
+   276→        rawPayload: m.rawPayload ? JSON.stringify(m.rawPayload) : null,
+   277→      }
+   278→      if (existing) {
+   279→        await db.gmailMessage.update({ where: { id: existing.id }, data })
+   280→        msgUpdated++
+   281→      } else {
+   282→        await db.gmailMessage.create({ data })
+   283→        msgCreated++
+   284→      }
+   285→
+   286→      // Try to parse an invoice from the email body
+   287→      // (uses the local heuristic — does NOT call Gmail API again)
+   288→      const detail: Parameters<typeof adapter.parseInvoiceFromEmail>[0] = {
+   289→        id: m.messageId,
+   290→        threadId: m.threadId ?? '',
+   291→        labelIds: m.labels ?? [],
+   292→        from: m.fromAddress ?? '',
+   293→        to: m.toAddress ?? '',
+   294→        subject: m.subject ?? '',
+   295→        snippet: m.snippet ?? '',
+   296→        bodyPlain: m.bodyPlain ?? '',
+   297→        bodyHtml: m.bodyHtml ?? '',
+   298→        receivedAt: m.receivedAt ? new Date(m.receivedAt) : new Date(),
+   299→        attachments: [],
+   300→        raw: m.rawPayload as Record<string, unknown>,
+   301→      }
+   302→      const parsed = adapter.parseInvoiceFromEmail(detail)
+   303→      if (parsed) {
+   304→        // Try to find a client by sellerGstin
+   305→        const client = await db.client.findUnique({ where: { gstin: parsed.sellerGstin.toUpperCase() } })
+   306→        if (client) {
+   307→          const outcome = await upsertInvoice(client.id, parsed)
+   308→          if (outcome === 'created') invoicesCreated++
+   309→          else if (outcome === 'updated') invoicesUpdated++
+   310→          else invoicesSkipped++
+   311→        } else {
+   312→          invoicesSkipped++
+   313→        }
+   314→      }
+   315→    }
+   316→    log.push({
+   317→      step: 'gmail:upsert',
+   318→      status: 'success',
+   319→      count: msgCreated + msgUpdated,
+   320→      message: `messages: created ${msgCreated}, updated ${msgUpdated}. invoices: created ${invoicesCreated}, updated ${invoicesUpdated}, skipped ${invoicesSkipped}.`,
+   321→    })
+   322→  } catch (err) {
+   323→    const msg = err instanceof Error ? err.message : String(err)
+   324→    log.push({ step: 'gmail:pull-messages', status: 'error', message: msg })
+   325→    if (err instanceof IntegrationNotConfiguredError) throw err
+   326→  }
+   327→
+   328→  return {
+   329→    recordsPulled: log.find((l) => l.step === 'gmail:pull-messages')?.count ?? 0,
+   330→    recordsCreated: msgCreated + invoicesCreated,
+   331→    recordsUpdated: msgUpdated + invoicesUpdated,
+   332→    recordsSkipped: invoicesSkipped,
+   333→    log,
+   334→    summary: `Gmail: ${msgCreated + msgUpdated} messages, ${invoicesCreated + invoicesUpdated} invoices parsed.`,
+   335→  }
+   336→}
+   337→
+   338→async function syncDrive(connectionId: string): Promise<SyncResult> {
+   339→  const conn = await db.connection.findUnique({ where: { id: connectionId } })
+   340→  if (!conn) throw new Error('Connection not found.')
+   341→  const adapter = await import('./drive')
+   342→  const log: SyncLogEntry[] = []
+   343→
+   344→  let created = 0
+   345→  let updated = 0
+   346→  try {
+   347→    const files = await adapter.pullFiles(conn as unknown as Parameters<typeof adapter.pullFiles>[0], { pageSize: 100 })
+   348→    log.push({ step: 'drive:pull-files', status: 'success', count: files.length })
+   349→    for (const f of files) {
+   350→      const existing = await db.driveFile.findFirst({ where: { driveFileId: f.driveFileId } })
+   351→      const data = {
+   352→        connectionId,
+   353→        driveFileId: f.driveFileId,
+   354→        name: f.name,
+   355→        mimeType: f.mimeType ?? null,
+   356→        size: f.size ?? 0,
+   357→        webViewLink: f.webViewLink ?? null,
+   358→        thumbnailLink: f.thumbnailLink ?? null,
+   359→        md5Checksum: f.md5Checksum ?? null,
+   360→        parents: f.parents ? JSON.stringify(f.parents) : null,
+   361→        rawPayload: f.rawPayload ? JSON.stringify(f.rawPayload) : null,
+   362→      }
+   363→      if (existing) {
+   364→        await db.driveFile.update({ where: { id: existing.id }, data })
+   365→        updated++
+   366→      } else {
+   367→        await db.driveFile.create({ data })
+   368→        created++
+   369→      }
+   370→    }
+   371→    log.push({ step: 'drive:upsert', status: 'success', count: created + updated })
+   372→  } catch (err) {
+   373→    const msg = err instanceof Error ? err.message : String(err)
+   374→    log.push({ step: 'drive:pull-files', status: 'error', message: msg })
+   375→    if (err instanceof IntegrationNotConfiguredError) throw err
+   376→  }
+   377→
+   378→  return {
+   379→    recordsPulled: log.find((l) => l.step === 'drive:pull-files')?.count ?? 0,
+   380→    recordsCreated: created,
+   381→    recordsUpdated: updated,
+   382→    recordsSkipped: 0,
+   383→    log,
+   384→    summary: `Drive: ${created + updated} files synced.`,
+   385→  }
+   386→}
+   387→
+   388→async function syncBanks(connectionId: string): Promise<SyncResult> {
+   389→  const conn = await db.connection.findUnique({ where: { id: connectionId } })
+   390→  if (!conn) throw new Error('Connection not found.')
+   391→  const adapter = await import('./banks')
+   392→  const log: SyncLogEntry[] = []
+   393→
+   394→  let accountsCreated = 0
+   395→  let txnsCreated = 0
+   396→  try {
+   397→    const from = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) // last 30 days
+   398→    const to = new Date()
+   399→    const { accounts, transactions } = await adapter.pullAccountsAndTransactions(
+   400→      conn as unknown as Parameters<typeof adapter.pullAccountsAndTransactions>[0],
+   401→      from,
+   402→      to,
+   403→    )
+   404→    log.push({
+   405→      step: 'banks:pull',
+   406→      status: 'success',
+   407→      count: transactions.length,
+   408→      message: `${accounts.length} accounts, ${transactions.length} transactions`,
+   409→    })
+   410→
+   411→    for (const a of accounts) {
+   412→      const existing = await db.bankAccount.findFirst({
+   413→        where: { accountNumber: a.accountNumber, bankName: a.bankName },
+   414→      })
+   415→      const data = {
+   416→        connectionId,
+   417→        bankName: a.bankName,
+   418→        accountNumber: a.accountNumber,
+   419→        accountNumberMasked: a.accountNumberMasked ?? null,
+   420→        ifsc: a.ifsc ?? null,
+   421→        accountType: a.accountType ?? null,
+   422→        accountHolder: a.accountHolder ?? null,
+   423→        currentBalance: a.currentBalance ?? 0,
+   424→        availableBalance: a.availableBalance ?? 0,
+   425→        currency: a.currency ?? 'INR',
+   426→        lastSyncedAt: new Date(),
+   427→        isActive: true,
+   428→      }
+   429→      if (existing) {
+   430→        await db.bankAccount.update({ where: { id: existing.id }, data })
+   431→      } else {
+   432→        await db.bankAccount.create({ data })
+   433→        accountsCreated++
+   434→      }
+   435→    }
+   436→
+   437→    for (const t of transactions) {
+   438→      // Find the BankAccount we just upserted to link the txn.
+   439→      // (If we couldn't match, store with bankAccountId=null.)
+   440→      await db.bankTransaction.create({
+   441→        data: {
+   442→          connectionId,
+   443→          date: t.date ? new Date(t.date) : new Date(),
+   444→          description: t.description ?? null,
+   445→          amount: t.amount,
+   446→          direction: t.direction ?? (t.amount >= 0 ? 'in' : 'out'),
+   447→          balanceAfter: t.balanceAfter ?? null,
+   448→          referenceNo: t.referenceNo ?? null,
+   449→          counterparty: t.counterparty ?? null,
+   450→          counterpartyAccount: t.counterpartyAccount ?? null,
+   451→          counterpartyIfsc: t.counterpartyIfsc ?? null,
+   452→          rawPayload: t.rawPayload ? JSON.stringify(t.rawPayload) : null,
+   453→        },
+   454→      })
+   455→      txnsCreated++
+   456→    }
+   457→    log.push({ step: 'banks:upsert', status: 'success', count: txnsCreated, message: `accounts: ${accountsCreated}, txns: ${txnsCreated}` })
+   458→  } catch (err) {
+   459→    const msg = err instanceof Error ? err.message : String(err)
+   460→    log.push({ step: 'banks:pull', status: 'error', message: msg })
+   461→    if (err instanceof IntegrationNotConfiguredError) throw err
+   462→  }
+   463→
+   464→  return {
+   465→    recordsPulled: log.find((l) => l.step === 'banks:pull')?.count ?? 0,
+   466→    recordsCreated: txnsCreated + accountsCreated,
+   467→    recordsUpdated: 0,
+   468→    recordsSkipped: 0,
+   469→    log,
+   470→    summary: `Banks: ${accountsCreated} accounts, ${txnsCreated} transactions.`,
+   471→  }
+   472→}
+   473→
+   474→async function syncRazorpay(connectionId: string): Promise<SyncResult> {
+   475→  const conn = await db.connection.findUnique({ where: { id: connectionId } })
+   476→  if (!conn) throw new Error('Connection not found.')
+   477→  const adapter = await import('./razorpay')
+   478→  const log: SyncLogEntry[] = []
+   479→
+   480→  let created = 0
+   481→  let updated = 0
+   482→  let skipped = 0
+   483→  try {
+   484→    const payments = await adapter.pullPayments(
+   485→      conn as unknown as Parameters<typeof adapter.pullPayments>[0],
+   486→      { count: 100 },
+   487→    )
+   488→    log.push({ step: 'razorpay:pull', status: 'success', count: payments.length })
+   489→    for (const p of payments) {
+   490→      if (!p.sourceRef) {
+   491→        skipped++
+   492→        continue
+   493→      }
+   494→      const existing = await db.payment.findFirst({
+   495→        where: { source: 'razorpay', sourceRef: p.sourceRef },
+   496→      })
+   497→      const data = {
+   498→        connectionId,
+   499→        source: p.source ?? 'razorpay',
+   500→        sourceRef: p.sourceRef,
+   501→        direction: p.direction ?? 'in',
+   502→        amount: p.amount,
+   503→        currency: p.currency ?? 'INR',
+   504→        method: p.method ?? null,
+   505→        status: p.status ?? 'pending',
+   506→        referenceNo: p.referenceNo ?? null,
+   507→        description: p.description ?? null,
+   508→        paidAt: p.paidAt ? new Date(p.paidAt) : null,
+   509→        rawPayload: null,
+   510→      }
+   511→      if (existing) {
+   512→        await db.payment.update({ where: { id: existing.id }, data })
+   513→        updated++
+   514→      } else {
+   515→        await db.payment.create({ data })
+   516→        created++
+   517→      }
+   518→    }
+   519→    log.push({ step: 'razorpay:upsert', status: 'success', count: created + updated, message: `created ${created}, updated ${updated}, skipped ${skipped}` })
+   520→  } catch (err) {
+   521→    const msg = err instanceof Error ? err.message : String(err)
+   522→    log.push({ step: 'razorpay:pull', status: 'error', message: msg })
+   523→    if (err instanceof IntegrationNotConfiguredError) throw err
+   524→  }
+   525→
+   526→  return {
+   527→    recordsPulled: log.find((l) => l.step === 'razorpay:pull')?.count ?? 0,
+   528→    recordsCreated: created,
+   529→    recordsUpdated: updated,
+   530→    recordsSkipped: skipped,
+   531→    log,
+   532→    summary: `Razorpay: ${created + updated} payments synced.`,
+   533→  }
+   534→}
+   535→
+   536→// ─── Orchestrator ───────────────────────────────────────────────────────────────
+   537→
+   538→/**
+   539→ * Run a sync for a Connection. Creates a SyncJob row, calls the adapter,
+   540→ * upserts results, then finalises the SyncJob + Connection state.
+   541→ *
+   542→ * Throws IntegrationNotConfiguredError if the connection has no creds. The
+   543→ * caller (API route) catches this and returns a 400 with `requiresConfiguration: true`.
+   544→ */
+   545→export async function runSync(
+   546→  connectionId: string,
+   547→  triggeredBy: string = 'system',
+   548→): Promise<{
+   549→  id: string
+   550→  status: string
+   551→  recordsPulled: number
+   552→  recordsCreated: number
+   553→  recordsUpdated: number
+   554→  recordsSkipped: number
+   555→  errorMessage: string | null
+   556→  durationMs: number | null
+   557→  startedAt: Date
+   558→  completedAt: Date | null
+   559→  log: SyncLogEntry[] | null
+   560→  summary: string | null
+   561→}> {
+   562→  const conn = await db.connection.findUnique({ where: { id: connectionId } })
+   563→  if (!conn) {
+   564→    throw new Error(`Connection ${connectionId} not found.`)
+   565→  }
+   566→
+   567→  const meta = getProviderMeta(conn.provider as 'gstn' | 'gmail' | 'drive' | 'whatsapp' | 'banks' | 'razorpay' | 'excel' | 'clients')
+   568→  const start = now()
+   569→
+   570→  // Create the SyncJob row
+   571→  const job = await db.syncJob.create({
+   572→    data: {
+   573→      connectionId,
+   574→      provider: conn.provider,
+   575→      status: 'running',
+   576→      triggeredBy,
+   577→      startedAt: new Date(start),
+   578→    },
+   579→  })
+   580→
+   581→  // Helper to finalize the job + update Connection
+   582→  const finalize = async (
+   583→    status: 'success' | 'error' | 'partial',
+   584→    result: SyncResult | { error: string; log: SyncLogEntry[] },
+   585→  ) => {
+   586→    const completedAt = new Date()
+   587→    const durationMs = completedAt.getTime() - start
+   588→
+   589→    const isErr = status === 'error'
+   590→    const summary = !isErr && 'summary' in result ? result.summary : null
+   591→    const errorMessage = isErr && 'error' in result ? result.error : null
+   592→    const logJson = JSON.stringify(result.log)
+   593→
+   594→    const updated = await db.syncJob.update({
+   595→      where: { id: job.id },
+   596→      data: {
+   597→        status,
+   598→        completedAt,
+   599→        durationMs,
+   600→        recordsPulled: !isErr && 'recordsPulled' in result ? result.recordsPulled : 0,
+   601→        recordsCreated: !isErr && 'recordsCreated' in result ? result.recordsCreated : 0,
+   602→        recordsUpdated: !isErr && 'recordsUpdated' in result ? result.recordsUpdated : 0,
+   603→        recordsSkipped: !isErr && 'recordsSkipped' in result ? result.recordsSkipped : 0,
+   604→        errorMessage,
+   605→        log: logJson,
+   606→      },
+   607→    })
+   608→
+   609→    await db.connection.update({
+   610→      where: { id: connectionId },
+   611→      data: {
+   612→        lastSyncAt: completedAt,
+   613→        lastSyncStatus: status,
+   614→        lastSyncError: errorMessage,
+   615→        lastSyncSummary: summary,
+   616→      },
+   617→    })
+   618→
+   619→    return {
+   620→      id: updated.id,
+   621→      status: updated.status,
+   622→      recordsPulled: updated.recordsPulled,
+   623→      recordsCreated: updated.recordsCreated,
+   624→      recordsUpdated: updated.recordsUpdated,
+   625→      recordsSkipped: updated.recordsSkipped,
+   626→      errorMessage: updated.errorMessage,
+   627→      durationMs: updated.durationMs,
+   628→      startedAt: updated.startedAt,
+   629→      completedAt: updated.completedAt,
+   630→      log: result.log,
+   631→      summary,
+   632→    }
+   633→  }
+   634→
+   635→  // ── Webhook/file/CRUD-driven providers — no batch sync ──
+   636→  if (!meta.supportsBatchSync) {
+   637→    const log: SyncLogEntry[] = [
+   638→      {
+   639→        step: `${conn.provider}:skip`,
+   640→        status: 'skipped',
+   641→        message: `${meta.displayName} is ${conn.provider === 'whatsapp' ? 'webhook-driven' : conn.provider === 'excel' ? 'file-driven' : 'CRUD-driven'} — no batch sync required.`,
+   642→      },
+   643→    ]
+   644→    return finalize('success', {
+   645→      recordsPulled: 0,
+   646→      recordsCreated: 0,
+   647→      recordsUpdated: 0,
+   648→      recordsSkipped: 0,
+   649→      log,
+   650→      summary: `${meta.displayName} is event-driven — no batch sync performed.`,
+   651→    })
+   652→  }
+   653→
+   654→  // ── Batch sync ──
+   655→  try {
+   656→    let result: SyncResult
+   657→    switch (conn.provider) {
+   658→      case 'gstn':
+   659→        result = await syncGstn(connectionId)
+   660→        break
+   661→      case 'gmail':
+   662→        result = await syncGmail(connectionId)
+   663→        break
+   664→      case 'drive':
+   665→        result = await syncDrive(connectionId)
+   666→        break
+   667→      case 'banks':
+   668→        result = await syncBanks(connectionId)
+   669→        break
+   670→      case 'razorpay':
+   671→        result = await syncRazorpay(connectionId)
+   672→        break
+   673→      default: {
+   674→        const log: SyncLogEntry[] = [
+   675→          { step: `${conn.provider}:skip`, status: 'skipped', message: `No sync handler for provider "${conn.provider}".` },
+   676→        ]
+   677→        return finalize('success', {
+   678→          recordsPulled: 0,
+   679→          recordsCreated: 0,
+   680→          recordsUpdated: 0,
+   681→          recordsSkipped: 0,
+   682→          log,
+   683→          summary: `No sync handler for provider "${conn.provider}".`,
+   684→        })
+   685→      }
+   686→    }
+   687→    const status: 'success' | 'partial' =
+   688→      result.log.some((l) => l.status === 'error') ? 'partial' : 'success'
+   689→    return finalize(status, result)
+   690→  } catch (err) {
+   691→    const msg = err instanceof Error ? err.message : String(err)
+   692→    const log: SyncLogEntry[] = [
+   693→      { step: `${conn.provider}:error`, status: 'error', message: msg },
+   694→    ]
+   695→    return finalize('error', { error: msg, log })
+   696→  }
+   697→}
+   698→
+   699→// ─── Read helpers ───────────────────────────────────────────────────────────────
+   700→
+   701→export async function getSyncJob(id: string) {
+   702→  const job = await db.syncJob.findUnique({ where: { id } })
+   703→  if (!job) return null
+   704→  return {
+   705→    ...job,
+   706→    log: job.log ? (JSON.parse(job.log) as SyncLogEntry[]) : [],
+   707→  }
+   708→}
+   709→
+   710→export async function listSyncJobs(filter: ListSyncJobsFilter = {}): Promise<{
+   711→  syncJobs: Array<{
+   712→    id: string
+   713→    connectionId: string
+   714→    provider: string
+   715→    status: string
+   716→    startedAt: Date
+   717→    completedAt: Date | null
+   718→    durationMs: number | null
+   719→    recordsPulled: number
+   720→    recordsCreated: number
+   721→    recordsUpdated: number
+   722→    recordsSkipped: number
+   723→    errorMessage: string | null
+   724→    triggeredBy: string | null
+   725→    log: SyncLogEntry[]
+   726→  }>
+   727→  total: number
+   728→}> {
+   729→  const limit = Math.min(filter.limit ?? 20, 100)
+   730→  const offset = filter.offset ?? 0
+   731→  const where: {
+   732→    connectionId?: string
+   733→    provider?: string
+   734→    status?: string
+   735→  } = {}
+   736→  if (filter.connectionId) where.connectionId = filter.connectionId
+   737→  if (filter.provider) where.provider = filter.provider
+   738→  if (filter.status) where.status = filter.status
+   739→
+   740→  const [rows, total] = await Promise.all([
+   741→    db.syncJob.findMany({
+   742→      where,
+   743→      orderBy: { startedAt: 'desc' },
+   744→      take: limit,
+   745→      skip: offset,
+   746→    }),
+   747→    db.syncJob.count({ where }),
+   748→  ])
+   749→
+   750→  return {
+   751→    syncJobs: rows.map((r) => ({
+   752→      ...r,
+   753→      log: r.log ? (JSON.parse(r.log) as SyncLogEntry[]) : [],
+   754→    })),
+   755→    total,
+   756→  }
+   757→}
+   758→
+   759→// re-export summarize for callers that want it
+   760→export { summarize }
+   761→

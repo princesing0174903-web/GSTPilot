@@ -1,0 +1,935 @@
+     1→'use client';
+     2→
+     3→// ═══════════════════════════════════════════════════════════════════════════════
+     4→// GSTPilot Oracle™ Workspace — V13 Perplexity-style full-screen AI workspace
+     5→//
+     6→// Opens when a user asks the Oracle a question. Replaces the dashboard in the
+     7→// main content area. 3-column layout:
+     8→//   LEFT  240px  — conversation history + follow-up input
+     9→//   CENTER flex  — AI answer (thinking steps → answer → insights → actions)
+    10→//   RIGHT 360px  — sources + live business data + actions mirror
+    11→//
+    12→// The Oracle store is UI-only — the actual LLM call happens here via
+    13→// POST /api/intelligence, which returns the structured Perplexity-style
+    14→// response { answer, insights[], sources[], actions[], suggestedPrompts[],
+    15→// intent, thinkingSteps[] }.
+    16→// ═══════════════════════════════════════════════════════════════════════════════
+    17→
+    18→import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+    19→import { motion, AnimatePresence } from 'framer-motion';
+    20→import {
+    21→  ArrowLeft,
+    22→  ArrowRight,
+    23→  Plus,
+    24→  Play,
+    25→  CheckSquare,
+    26→  FileText,
+    27→  Bell,
+    28→  Zap,
+    29→  Sparkles,
+    30→  ChevronRight,
+    31→  Database,
+    32→  Activity,
+    33→  ShieldCheck,
+    34→  Check,
+    35→  AlertCircle,
+    36→  type LucideIcon,
+    37→} from 'lucide-react';
+    38→import {
+    39→  useOracleStore,
+    40→  type OracleMessage,
+    41→  type OracleAction,
+    42→  type OracleInsight,
+    43→  type OracleSource,
+    44→} from '@/lib/oracle-store';
+    45→import {
+    46→  useLiveDashboardMetrics,
+    47→  useFireRecentActivities,
+    48→  useFireInvoices,
+    49→} from '@/hooks/use-firestore';
+    50→import type { LiveDashboardMetrics } from '@/lib/firestore-schema';
+    51→import { InfinitySymbol } from '@/components/layout/InfinityMark';
+    52→import { useToast } from '@/hooks/use-toast';
+    53→import { cn } from '@/lib/utils';
+    54→
+    55→// ─── Props ────────────────────────────────────────────────────────────────────
+    56→
+    57→interface OracleWorkspaceProps {
+    58→  /** Called when an action button of type 'navigate' is clicked. */
+    59→  onNavigate: (view: string) => void;
+    60→}
+    61→
+    62→// ─── Generic loading steps (shown while the API call is in-flight) ────────────
+    63→// We don't have the API's thinkingSteps yet, so we show these generic steps
+    64→// that fade in one-by-one. Once finalized, the structured answer replaces them.
+    65→
+    66→const LOADING_STEPS: Array<{ label: string; duration: number }> = [
+    67→  { label: 'Thinking…', duration: 500 },
+    68→  { label: 'Reading invoices…', duration: 600 },
+    69→  { label: 'Checking GST data…', duration: 550 },
+    70→  { label: 'Analyzing payments…', duration: 600 },
+    71→  { label: 'Generating answer…', duration: 500 },
+    72→];
+    73→
+    74→// ─── Helpers ──────────────────────────────────────────────────────────────────
+    75→
+    76→function formatINR(n: number): string {
+    77→  if (!n || isNaN(n)) return '0';
+    78→  return n.toLocaleString('en-IN');
+    79→}
+    80→
+    81→function timeAgo(createdAt: string): string {
+    82→  if (!createdAt) return 'just now';
+    83→  const date = new Date(createdAt);
+    84→  if (isNaN(date.getTime())) return 'just now';
+    85→  const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
+    86→  if (seconds < 60) return 'just now';
+    87→  const minutes = Math.floor(seconds / 60);
+    88→  if (minutes < 60) return `${minutes}m ago`;
+    89→  const hours = Math.floor(minutes / 60);
+    90→  if (hours < 24) return `${hours}h ago`;
+    91→  const days = Math.floor(hours / 24);
+    92→  if (days < 7) return `${days}d ago`;
+    93→  return `${Math.floor(days / 7)}w ago`;
+    94→}
+    95→
+    96→interface ActivityLike {
+    97→  title?: unknown;
+    98→  type?: unknown;
+    99→  description?: unknown;
+   100→  createdAt?: unknown;
+   101→}
+   102→
+   103→/** Build the live-data context string for the Oracle API. Empty string = no data. */
+   104→function buildContext(
+   105→  metrics: LiveDashboardMetrics | null | undefined,
+   106→  activities: readonly ActivityLike[],
+   107→  invoices: ReadonlyArray<unknown>,
+   108→): string {
+   109→  if (!metrics) return '';
+   110→  const hasData =
+   111→    metrics.totalClients > 0 ||
+   112→    metrics.totalInvoices > 0 ||
+   113→    metrics.totalTaxVolume > 0 ||
+   114→    metrics.pendingReturns > 0 ||
+   115→    metrics.filedReturns > 0 ||
+   116→    (Array.isArray(invoices) && invoices.length > 0);
+   117→  if (!hasData) return '';
+   118→
+   119→  const lines: string[] = ['LIVE DATA SNAPSHOT'];
+   120→  lines.push(`- Total Clients: ${metrics.totalClients}`);
+   121→  lines.push(`- Active Clients: ${metrics.activeClients}`);
+   122→  lines.push(`- Total Invoices: ${metrics.totalInvoices}`);
+   123→  lines.push(`- Tax Volume: ₹${formatINR(metrics.totalTaxVolume)}`);
+   124→  lines.push(`- Filed Returns: ${metrics.filedReturns}`);
+   125→  lines.push(`- Pending Returns: ${metrics.pendingReturns}`);
+   126→  lines.push(`- Overdue Returns: ${metrics.overdueReturns}`);
+   127→  lines.push(`- Reconciliation Match: ${metrics.matchPercentage}%`);
+   128→  lines.push(`- Critical Issues: ${metrics.criticalIssues}`);
+   129→
+   130→  if (activities && activities.length > 0) {
+   131→    lines.push('RECENT ACTIVITIES');
+   132→    activities.slice(0, 6).forEach((a) => {
+   133→      const title = typeof a.title === 'string' && a.title ? a.title : 'Activity';
+   134→      const type = typeof a.type === 'string' && a.type ? a.type : 'event';
+   135→      lines.push(`- ${title} (${type})`);
+   136→    });
+   137→  }
+   138→  return lines.join('\n');
+   139→}
+   140→
+   141→// ─── Action icon mapping ──────────────────────────────────────────────────────
+   142→// We compute a string key (function call is fine for primitives), then look up
+   143→// the icon component via a property access on a stable map. This avoids the
+   144→// react-hooks/static-components rule that flags function-returned components.
+   145→
+   146→const ACTION_ICONS: Record<string, LucideIcon> = {
+   147→  execute: Zap,
+   148→  task: CheckSquare,
+   149→  report: FileText,
+   150→  remind: Bell,
+   151→  navigate: ChevronRight,
+   152→  default: Play,
+   153→};
+   154→
+   155→function actionIconKey(type: OracleAction['type'], title: string): string {
+   156→  const t = (title || '').toLowerCase();
+   157→  if (t.includes('execute') || type === 'execute_workflow') return 'execute';
+   158→  if (t.includes('task')) return 'task';
+   159→  if (t.includes('report')) return 'report';
+   160→  if (t.includes('remind') || type === 'send_reminder') return 'remind';
+   161→  if (type === 'navigate') return 'navigate';
+   162→  return 'default';
+   163→}
+   164→
+   165→// ─── Thinking steps animation (the "wow" moment) ──────────────────────────────
+   166→// Steps appear one-by-one with a fade+slide. Active step = pulsing mint dot +
+   167→// bright text. Completed steps = dimmed dot + check icon.
+   168→
+   169→function ThinkingSteps() {
+   170→  const [visibleCount, setVisibleCount] = useState(1);
+   171→
+   172→  useEffect(() => {
+   173→    let mounted = true;
+   174→    const timeouts: ReturnType<typeof setTimeout>[] = [];
+   175→    let cumulative = 0;
+   176→    for (let i = 1; i < LOADING_STEPS.length; i++) {
+   177→      cumulative += LOADING_STEPS[i - 1].duration;
+   178→      const t = setTimeout(() => {
+   179→        if (mounted) setVisibleCount(i + 1);
+   180→      }, cumulative);
+   181→      timeouts.push(t);
+   182→    }
+   183→    return () => {
+   184→      mounted = false;
+   185→      timeouts.forEach(clearTimeout);
+   186→    };
+   187→  }, []);
+   188→
+   189→  return (
+   190→    <div className="space-y-3">
+   191→      {LOADING_STEPS.map((step, i) => {
+   192→        const isVisible = i < visibleCount;
+   193→        const isActive = i === visibleCount - 1;
+   194→        const isDone = i < visibleCount - 1;
+   195→        return (
+   196→          <AnimatePresence key={step.label}>
+   197→            {isVisible && (
+   198→              <motion.div
+   199→                initial={{ opacity: 0, x: -10 }}
+   200→                animate={{ opacity: 1, x: 0 }}
+   201→                transition={{ duration: 0.4, ease: [0.4, 0, 0.2, 1] }}
+   202→                className="flex items-center gap-3"
+   203→              >
+   204→                <span className="relative flex h-2 w-2 shrink-0">
+   205→                  {isActive && (
+   206→                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#00F5D4] opacity-60" />
+   207→                  )}
+   208→                  <span
+   209→                    className={cn(
+   210→                      'relative inline-flex h-2 w-2 rounded-full transition-colors',
+   211→                      isActive && 'bg-[#00F5D4]',
+   212→                      isDone && 'bg-[#00F5D4]/40',
+   213→                    )}
+   214→                  />
+   215→                </span>
+   216→                <span
+   217→                  className={cn(
+   218→                    'text-sm transition-colors',
+   219→                    isActive && 'font-medium text-foreground',
+   220→                    isDone && 'text-muted-foreground',
+   221→                  )}
+   222→                >
+   223→                  {step.label}
+   224→                </span>
+   225→                {isDone && <Check className="h-3 w-3 text-[#00F5D4]/60" />}
+   226→              </motion.div>
+   227→            )}
+   228→          </AnimatePresence>
+   229→        );
+   230→      })}
+   231→    </div>
+   232→  );
+   233→}
+   234→
+   235→// ─── Answer renderer (splits on newlines, renders • / - as bullets) ───────────
+   236→
+   237→function AnswerRenderer({ text }: { text: string }) {
+   238→  const lines = (text || '').split('\n');
+   239→  const blocks: Array<{ key: string; type: 'p' | 'li'; content: string }> = [];
+   240→  let key = 0;
+   241→  for (const raw of lines) {
+   242→    const trimmed = raw.trim();
+   243→    if (!trimmed) continue;
+   244→    if (trimmed.startsWith('• ') || trimmed.startsWith('- ')) {
+   245→      blocks.push({ key: `b${key++}`, type: 'li', content: trimmed.slice(2) });
+   246→    } else {
+   247→      blocks.push({ key: `b${key++}`, type: 'p', content: trimmed });
+   248→    }
+   249→  }
+   250→  if (blocks.length === 0) return null;
+   251→  return (
+   252→    <div className="space-y-2.5 text-[15px] leading-relaxed text-foreground/90">
+   253→      {blocks.map((b) =>
+   254→        b.type === 'li' ? (
+   255→          <div key={b.key} className="flex items-start gap-2.5">
+   256→            <span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-[#00F5D4]" />
+   257→            <span className="flex-1">{b.content}</span>
+   258→          </div>
+   259→        ) : (
+   260→          <p key={b.key}>{b.content}</p>
+   261→        ),
+   262→      )}
+   263→    </div>
+   264→  );
+   265→}
+   266→
+   267→// ─── Insight chip ─────────────────────────────────────────────────────────────
+   268→
+   269→function InsightChip({ insight }: { insight: OracleInsight }) {
+   270→  const tone = insight.tone || 'neutral';
+   271→  const dotClass =
+   272→    tone === 'positive' ? 'bg-[#00F5D4]' : tone === 'warning' ? 'bg-amber-400' : 'bg-muted-foreground/60';
+   273→  const textClass =
+   274→    tone === 'positive'
+   275→      ? 'text-[#00F5D4]'
+   276→      : tone === 'warning'
+   277→      ? 'text-amber-400'
+   278→      : 'text-muted-foreground';
+   279→  return (
+   280→    <div className="flex items-start gap-2.5 rounded-2xl border border-white/[0.06] bg-white/[0.02] px-3.5 py-2.5">
+   281→      <span className={cn('mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full', dotClass)} />
+   282→      <span className={cn('flex-1 text-sm leading-relaxed', textClass)}>{insight.text}</span>
+   283→    </div>
+   284→  );
+   285→}
+   286→
+   287→// ─── Source badge ─────────────────────────────────────────────────────────────
+   288→
+   289→function SourceBadge({ source }: { source: OracleSource }) {
+   290→  return (
+   291→    <div className="flex items-center gap-2 rounded-xl border border-white/[0.06] bg-white/[0.02] px-3 py-2">
+   292→      <Database className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+   293→      <span className="min-w-0 flex-1 truncate text-xs text-foreground/80">{source.name}</span>
+   294→      <span className="shrink-0 rounded-full bg-white/[0.06] px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+   295→        {source.count}
+   296→      </span>
+   297→    </div>
+   298→  );
+   299→}
+   300→
+   301→// ─── Section label ────────────────────────────────────────────────────────────
+   302→
+   303→function SectionLabel({ icon: Icon, label }: { icon: LucideIcon; label: string }) {
+   304→  return (
+   305→    <div className="flex items-center gap-1.5">
+   306→      <Icon className="h-3 w-3 text-muted-foreground" />
+   307→      <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+   308→        {label}
+   309→      </span>
+   310→    </div>
+   311→  );
+   312→}
+   313→
+   314→// ─── Action button (center column) ────────────────────────────────────────────
+   315→
+   316→function ActionButton({
+   317→  action,
+   318→  onNavigate,
+   319→  onComingSoon,
+   320→  primary,
+   321→}: {
+   322→  action: OracleAction;
+   323→  onNavigate: (view: string) => void;
+   324→  onComingSoon: (title: string) => void;
+   325→  primary?: boolean;
+   326→}) {
+   327→  const Icon = ACTION_ICONS[actionIconKey(action.type, action.title)];
+   328→  const handleClick = () => {
+   329→    if (action.type === 'navigate' && action.view) {
+   330→      onNavigate(action.view);
+   331→    } else {
+   332→      onComingSoon(action.title);
+   333→    }
+   334→  };
+   335→  return (
+   336→    <button
+   337→      type="button"
+   338→      onClick={handleClick}
+   339→      className={cn(
+   340→        'group flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left transition-all duration-200 hover:scale-[1.02]',
+   341→        primary
+   342→          ? 'accent-gradient text-white shadow-lg shadow-[#00F5D4]/10'
+   343→          : 'glass-surface text-foreground hover:bg-white/[0.06]',
+   344→      )}
+   345→    >
+   346→      <Icon className={cn('h-4 w-4 shrink-0', primary ? 'text-white' : 'accent-text')} />
+   347→      <div className="min-w-0 flex-1">
+   348→        <div className={cn('text-sm font-medium', primary && 'text-white')}>{action.title}</div>
+   349→        {action.description && (
+   350→          <div
+   351→            className={cn(
+   352→              'truncate text-xs',
+   353→              primary ? 'text-white/70' : 'text-muted-foreground',
+   354→            )}
+   355→          >
+   356→            {action.description}
+   357→          </div>
+   358→        )}
+   359→      </div>
+   360→      <ChevronRight className="h-4 w-4 shrink-0 opacity-50 transition-transform group-hover:translate-x-0.5" />
+   361→    </button>
+   362→  );
+   363→}
+   364→
+   365→// ─── Suggestion chips ─────────────────────────────────────────────────────────
+   366→
+   367→function SuggestionChips({
+   368→  prompts,
+   369→  onSubmit,
+   370→  loading,
+   371→}: {
+   372→  prompts: string[];
+   373→  onSubmit: (s: string) => void;
+   374→  loading: boolean;
+   375→}) {
+   376→  return (
+   377→    <div className="flex flex-wrap gap-2 pt-1">
+   378→      {prompts.map((p, i) => (
+   379→        <button
+   380→          key={i}
+   381→          type="button"
+   382→          disabled={loading}
+   383→          onClick={() => onSubmit(p)}
+   384→          className="rounded-full border border-white/[0.08] bg-white/[0.02] px-3.5 py-1.5 text-xs text-foreground/80 transition-colors hover:border-[#00F5D4]/30 hover:bg-white/[0.05] hover:text-foreground disabled:opacity-40"
+   385→        >
+   386→          {p}
+   387→        </button>
+   388→      ))}
+   389→    </div>
+   390→  );
+   391→}
+   392→
+   393→// ─── Message block (user Q OR oracle A) ───────────────────────────────────────
+   394→
+   395→function MessageBlock({
+   396→  message,
+   397→  onNavigate,
+   398→  onComingSoon,
+   399→  onSubmitSuggestion,
+   400→  loading,
+   401→}: {
+   402→  message: OracleMessage;
+   403→  onNavigate: (view: string) => void;
+   404→  onComingSoon: (title: string) => void;
+   405→  onSubmitSuggestion: (s: string) => void;
+   406→  loading: boolean;
+   407→}) {
+   408→  // ── User message ──
+   409→  if (message.role === 'user') {
+   410→    return (
+   411→      <motion.div
+   412→        id={`q-${message.id}`}
+   413→        initial={{ opacity: 0, y: 12 }}
+   414→        animate={{ opacity: 1, y: 0 }}
+   415→        transition={{ duration: 0.35, ease: [0.4, 0, 0.2, 1] }}
+   416→        className="space-y-2 scroll-mt-6"
+   417→      >
+   418→        <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+   419→          You asked
+   420→        </div>
+   421→        <h2 className="text-xl font-semibold leading-snug text-foreground md:text-2xl">
+   422→          {message.content}
+   423→        </h2>
+   424→      </motion.div>
+   425→    );
+   426→  }
+   427→
+   428→  // ── Oracle loading (thinking steps) ──
+   429→  if (message.isLoading) {
+   430→    return (
+   431→      <motion.div
+   432→        initial={{ opacity: 0, y: 12 }}
+   433→        animate={{ opacity: 1, y: 0 }}
+   434→        transition={{ duration: 0.35, ease: [0.4, 0, 0.2, 1] }}
+   435→        className="space-y-4"
+   436→      >
+   437→        <div className="flex items-center gap-2">
+   438→          <div className="accent-gradient-soft flex h-7 w-7 items-center justify-center rounded-lg">
+   439→            <Sparkles className="h-3.5 w-3.5 accent-text" />
+   440→          </div>
+   441→          <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+   442→            Oracle is thinking
+   443→          </span>
+   444→        </div>
+   445→        <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-5">
+   446→          <ThinkingSteps />
+   447→        </div>
+   448→      </motion.div>
+   449→    );
+   450→  }
+   451→
+   452→  // ── Oracle error ──
+   453→  if (message.error) {
+   454→    return (
+   455→      <motion.div
+   456→        initial={{ opacity: 0, y: 12 }}
+   457→        animate={{ opacity: 1, y: 0 }}
+   458→        transition={{ duration: 0.35, ease: [0.4, 0, 0.2, 1] }}
+   459→        className="space-y-3"
+   460→      >
+   461→        <div className="flex items-center gap-2">
+   462→          <AlertCircle className="h-4 w-4 text-amber-400" />
+   463→          <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+   464→            Oracle error
+   465→          </span>
+   466→        </div>
+   467→        <p className="text-[15px] leading-relaxed text-foreground/80">{message.content}</p>
+   468→        {message.suggestedPrompts && message.suggestedPrompts.length > 0 && (
+   469→          <SuggestionChips
+   470→            prompts={message.suggestedPrompts}
+   471→            onSubmit={onSubmitSuggestion}
+   472→            loading={loading}
+   473→          />
+   474→        )}
+   475→      </motion.div>
+   476→    );
+   477→  }
+   478→
+   479→  // ── Oracle finalized structured response ──
+   480→  return (
+   481→    <motion.div
+   482→      initial={{ opacity: 0, y: 12 }}
+   483→      animate={{ opacity: 1, y: 0 }}
+   484→      transition={{ duration: 0.35, ease: [0.4, 0, 0.2, 1] }}
+   485→      className="space-y-6"
+   486→    >
+   487→      {/* Answer */}
+   488→      <section className="space-y-3">
+   489→        <SectionLabel icon={Sparkles} label="Answer" />
+   490→        <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-5">
+   491→          <AnswerRenderer text={message.content} />
+   492→        </div>
+   493→      </section>
+   494→
+   495→      {/* Insights */}
+   496→      {message.insights && message.insights.length > 0 && (
+   497→        <section className="space-y-3">
+   498→          <SectionLabel icon={Activity} label="Insights" />
+   499→          <div className="grid gap-2 sm:grid-cols-2">
+   500→            {message.insights.map((ins, i) => (
+   501→              <InsightChip key={i} insight={ins} />
+   502→            ))}
+   503→          </div>
+   504→        </section>
+   505→      )}
+   506→
+   507→      {/* Sources (inline row) */}
+   508→      {message.sources && message.sources.length > 0 && (
+   509→        <section className="space-y-3">
+   510→          <SectionLabel icon={Database} label="Sources" />
+   511→          <div className="flex flex-wrap gap-2">
+   512→            {message.sources.map((s, i) => (
+   513→              <SourceBadge key={i} source={s} />
+   514→            ))}
+   515→          </div>
+   516→        </section>
+   517→      )}
+   518→
+   519→      {/* Actions */}
+   520→      {message.actions && message.actions.length > 0 && (
+   521→        <section className="space-y-3">
+   522→          <SectionLabel icon={Zap} label="Recommended Actions" />
+   523→          <div className="grid gap-2 sm:grid-cols-2">
+   524→            {message.actions.map((a, i) => (
+   525→              <ActionButton
+   526→                key={i}
+   527→                action={a}
+   528→                onNavigate={onNavigate}
+   529→                onComingSoon={onComingSoon}
+   530→                primary={i === 0}
+   531→              />
+   532→            ))}
+   533→          </div>
+   534→        </section>
+   535→      )}
+   536→
+   537→      {/* Suggested follow-ups */}
+   538→      {message.suggestedPrompts && message.suggestedPrompts.length > 0 && (
+   539→        <section className="space-y-3">
+   540→          <SectionLabel icon={Sparkles} label="Follow-ups" />
+   541→          <SuggestionChips
+   542→            prompts={message.suggestedPrompts}
+   543→            onSubmit={onSubmitSuggestion}
+   544→            loading={loading}
+   545→          />
+   546→        </section>
+   547→      )}
+   548→    </motion.div>
+   549→  );
+   550→}
+   551→
+   552→// ─── Right panel ──────────────────────────────────────────────────────────────
+   553→
+   554→interface RightPanelProps {
+   555→  sources: OracleSource[];
+   556→  actions: OracleAction[];
+   557→  metrics: LiveDashboardMetrics | null | undefined;
+   558→  onNavigate: (view: string) => void;
+   559→  onComingSoon: (title: string) => void;
+   560→}
+   561→
+   562→function RightPanel({ sources, actions, metrics, onNavigate, onComingSoon }: RightPanelProps) {
+   563→  const statRows = useMemo(() => {
+   564→    if (!metrics) return [];
+   565→    return [
+   566→      { label: 'Total Clients', value: String(metrics.totalClients ?? 0) },
+   567→      { label: 'Active Clients', value: String(metrics.activeClients ?? 0) },
+   568→      { label: 'Pending Returns', value: String(metrics.pendingReturns ?? 0) },
+   569→      { label: 'Overdue Returns', value: String(metrics.overdueReturns ?? 0) },
+   570→      { label: 'Tax Volume', value: `₹${formatINR(metrics.totalTaxVolume ?? 0)}` },
+   571→      { label: 'Match %', value: `${(metrics.matchPercentage ?? 0).toFixed(0)}%` },
+   572→      { label: 'Critical Issues', value: String(metrics.criticalIssues ?? 0) },
+   573→      { label: 'Filed Returns', value: String(metrics.filedReturns ?? 0) },
+   574→    ];
+   575→  }, [metrics]);
+   576→
+   577→  return (
+   578→    <div className="space-y-6 p-4">
+   579→      {/* Sources */}
+   580→      <section className="space-y-2.5">
+   581→        <SectionLabel icon={Database} label="Sources" />
+   582→        {sources.length === 0 ? (
+   583→          <div className="rounded-2xl border border-white/[0.06] bg-white/[0.015] px-3 py-3 text-center text-[11px] text-muted-foreground">
+   584→            No sources cited
+   585→          </div>
+   586→        ) : (
+   587→          <div className="space-y-1.5">
+   588→            {sources.map((s, i) => (
+   589→              <SourceBadge key={i} source={s} />
+   590→            ))}
+   591→          </div>
+   592→        )}
+   593→      </section>
+   594→
+   595→      {/* Business Data — live snapshot */}
+   596→      <section className="space-y-2.5">
+   597→        <SectionLabel icon={ShieldCheck} label="Business Data" />
+   598→        <div className="space-y-1.5">
+   599→          {statRows.length === 0 ? (
+   600→            <div className="rounded-2xl border border-white/[0.06] bg-white/[0.015] px-3 py-3 text-center text-[11px] text-muted-foreground">
+   601→              Loading live data…
+   602→            </div>
+   603→          ) : (
+   604→            statRows.map((row) => (
+   605→              <div
+   606→                key={row.label}
+   607→                className="flex items-center justify-between rounded-xl border border-white/[0.04] bg-white/[0.015] px-3 py-2"
+   608→              >
+   609→                <span className="text-xs text-muted-foreground">{row.label}</span>
+   610→                <span className="text-xs font-medium text-foreground">{row.value}</span>
+   611→              </div>
+   612→            ))
+   613→          )}
+   614→        </div>
+   615→      </section>
+   616→
+   617→      {/* Actions — mirror of center column, always visible */}
+   618→      <section className="space-y-2.5">
+   619→        <SectionLabel icon={Zap} label="Actions" />
+   620→        {actions.length === 0 ? (
+   621→          <div className="rounded-2xl border border-white/[0.06] bg-white/[0.015] px-3 py-3 text-center text-[11px] text-muted-foreground">
+   622→            No actions yet
+   623→          </div>
+   624→        ) : (
+   625→          <div className="space-y-1.5">
+   626→            {actions.map((a, i) => {
+   627→              const Icon = ACTION_ICONS[actionIconKey(a.type, a.title)];
+   628→              return (
+   629→                <button
+   630→                  key={i}
+   631→                  type="button"
+   632→                  onClick={() =>
+   633→                    a.type === 'navigate' && a.view
+   634→                      ? onNavigate(a.view)
+   635→                      : onComingSoon(a.title)
+   636→                  }
+   637→                  className="group flex w-full items-center gap-2.5 rounded-xl border border-white/[0.06] bg-white/[0.02] px-3 py-2.5 text-left transition-colors hover:bg-white/[0.05]"
+   638→                >
+   639→                  <Icon className="h-3.5 w-3.5 shrink-0 accent-text" />
+   640→                  <span className="min-w-0 flex-1 truncate text-xs text-foreground/80">
+   641→                    {a.title}
+   642→                  </span>
+   643→                  <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground/40 transition-transform group-hover:translate-x-0.5" />
+   644→                </button>
+   645→              );
+   646→            })}
+   647→          </div>
+   648→        )}
+   649→      </section>
+   650→    </div>
+   651→  );
+   652→}
+   653→
+   654→// ─── Main component ───────────────────────────────────────────────────────────
+   655→
+   656→export function OracleWorkspace({ onNavigate }: OracleWorkspaceProps) {
+   657→  const {
+   658→    messages,
+   659→    loading,
+   660→    submitQuery,
+   661→    pushOraclePlaceholder,
+   662→    finalizeOracleMessage,
+   663→    errorOracleMessage,
+   664→    closeWorkspace,
+   665→    newConversation,
+   666→  } = useOracleStore();
+   667→
+   668→  const { metrics } = useLiveDashboardMetrics();
+   669→  const { data: activities } = useFireRecentActivities(10);
+   670→  const { data: invoices } = useFireInvoices();
+   671→  const { toast } = useToast();
+   672→
+   673→  const scrollRef = useRef<HTMLDivElement>(null);
+   674→  const followUpRef = useRef<HTMLTextAreaElement>(null);
+   675→  const processedRef = useRef<Set<string>>(new Set());
+   676→
+   677→  const [followUp, setFollowUp] = useState('');
+   678→  const [activeQuestionId, setActiveQuestionId] = useState<string | null>(null);
+   679→
+   680→  // ── Process a single user question via the Oracle API ──
+   681→  const processQuery = useCallback(
+   682→    async (question: string, userMsgId: string) => {
+   683→      const oracleId = pushOraclePlaceholder();
+   684→      const context = buildContext(metrics, activities, invoices);
+   685→      // History = all prior messages (exclude the current question + loading/error)
+   686→      const conversationHistory = messages
+   687→        .filter((m) => m.id !== userMsgId && !m.isLoading && !m.error && m.content)
+   688→        .map((m) => ({ role: m.role, content: m.content }));
+   689→
+   690→      try {
+   691→        const res = await fetch('/api/intelligence', {
+   692→          method: 'POST',
+   693→          headers: { 'Content-Type': 'application/json' },
+   694→          body: JSON.stringify({ question, context, conversationHistory }),
+   695→        });
+   696→        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+   697→        const data = await res.json();
+   698→        finalizeOracleMessage(oracleId, data);
+   699→      } catch {
+   700→        errorOracleMessage(oracleId);
+   701→      }
+   702→    },
+   703→    [messages, metrics, activities, invoices, pushOraclePlaceholder, finalizeOracleMessage, errorOracleMessage],
+   704→  );
+   705→
+   706→  // ── Process any new (unprocessed) user message ──
+   707→  useEffect(() => {
+   708→    const unprocessed = messages.find(
+   709→      (m) => m.role === 'user' && !processedRef.current.has(m.id),
+   710→    );
+   711→    if (unprocessed) {
+   712→      processedRef.current.add(unprocessed.id);
+   713→      setActiveQuestionId(unprocessed.id);
+   714→      void processQuery(unprocessed.content, unprocessed.id);
+   715→    }
+   716→  }, [messages, processQuery]);
+   717→
+   718→  // ── Auto-scroll center column to bottom on new messages ──
+   719→  useEffect(() => {
+   720→    const el = scrollRef.current;
+   721→    if (el) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+   722→  }, [messages]);
+   723→
+   724→  // ── Auto-grow the follow-up textarea (up to ~3 lines) ──
+   725→  useEffect(() => {
+   726→    const el = followUpRef.current;
+   727→    if (!el) return;
+   728→    el.style.height = 'auto';
+   729→    el.style.height = `${Math.min(el.scrollHeight, 72)}px`;
+   730→  }, [followUp]);
+   731→
+   732→  // ── The most recent finalized oracle message — drives the right panel ──
+   733→  const currentOracle = useMemo(() => {
+   734→    for (let i = messages.length - 1; i >= 0; i--) {
+   735→      const m = messages[i];
+   736→      if (m.role === 'oracle' && !m.isLoading) return m;
+   737→    }
+   738→    return null;
+   739→  }, [messages]);
+   740→
+   741→  const userMessages = useMemo(
+   742→    () => messages.filter((m) => m.role === 'user'),
+   743→    [messages],
+   744→  );
+   745→
+   746→  // ── Handlers ──
+   747→  const handleFollowUp = () => {
+   748→    const q = followUp.trim();
+   749→    if (!q || loading) return;
+   750→    setFollowUp('');
+   751→    submitQuery(q);
+   752→  };
+   753→
+   754→  const handleNewConversation = () => {
+   755→    newConversation();
+   756→    closeWorkspace();
+   757→  };
+   758→
+   759→  const handleComingSoon = (title: string) => {
+   760→    toast({
+   761→      title: 'Coming soon',
+   762→      description: `${title} is on the roadmap.`,
+   763→    });
+   764→  };
+   765→
+   766→  const handleScrollToQuestion = (id: string) => {
+   767→    setActiveQuestionId(id);
+   768→    const el = document.getElementById(`q-${id}`);
+   769→    el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+   770→  };
+   771→
+   772→  // ─── Render ────────────────────────────────────────────────────────────────
+   773→
+   774→  return (
+   775→    <motion.div
+   776→      initial={{ opacity: 0 }}
+   777→      animate={{ opacity: 1 }}
+   778→      transition={{ duration: 0.35, ease: [0.4, 0, 0.2, 1] }}
+   779→      className="flex h-full w-full gap-3 p-3 md:gap-4 md:p-4"
+   780→    >
+   781→      {/* ═══ LEFT COLUMN — conversation history + follow-up (240px) ═══ */}
+   782→      <aside className="hidden w-[240px] shrink-0 lg:flex">
+   783→        <div className="glass-surface flex min-h-0 w-full flex-col rounded-[28px]">
+   784→          {/* Header */}
+   785→          <div className="flex items-center justify-between px-4 py-4">
+   786→            <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+   787→              Conversation
+   788→            </span>
+   789→            <button
+   790→              type="button"
+   791→              onClick={handleNewConversation}
+   792→              className="flex items-center gap-1 rounded-lg border border-white/[0.08] bg-white/[0.03] px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-white/[0.06] hover:text-foreground"
+   793→              title="Start a new conversation"
+   794→            >
+   795→              <Plus className="h-3 w-3" />
+   796→              New
+   797→            </button>
+   798→          </div>
+   799→          <div className="border-t border-white/[0.06]" />
+   800→
+   801→          {/* Conversation list */}
+   802→          <div className="custom-scrollbar min-h-0 flex-1 space-y-1.5 overflow-y-auto p-3">
+   803→            {userMessages.length === 0 && (
+   804→              <div className="px-2 py-6 text-center text-[11px] text-muted-foreground">
+   805→                No questions yet.
+   806→              </div>
+   807→            )}
+   808→            <AnimatePresence initial={false}>
+   809→              {userMessages.map((m, i) => (
+   810→                <motion.button
+   811→                  key={m.id}
+   812→                  type="button"
+   813→                  initial={{ opacity: 0, y: 8 }}
+   814→                  animate={{ opacity: 1, y: 0 }}
+   815→                  transition={{ duration: 0.25, delay: i * 0.04, ease: [0.4, 0, 0.2, 1] }}
+   816→                  onClick={() => handleScrollToQuestion(m.id)}
+   817→                  className={cn(
+   818→                    'group w-full rounded-2xl border px-3 py-2.5 text-left transition-colors',
+   819→                    activeQuestionId === m.id
+   820→                      ? 'border-[#00F5D4]/30 bg-white/[0.04]'
+   821→                      : 'border-white/[0.04] bg-white/[0.01] hover:bg-white/[0.03]',
+   822→                  )}
+   823→                >
+   824→                  <div className="line-clamp-2 text-xs text-foreground/80">{m.content}</div>
+   825→                  <div className="mt-1 text-[10px] text-muted-foreground">{timeAgo(m.createdAt)}</div>
+   826→                </motion.button>
+   827→              ))}
+   828→            </AnimatePresence>
+   829→          </div>
+   830→
+   831→          <div className="border-t border-white/[0.06]" />
+   832→
+   833→          {/* Follow-up input */}
+   834→          <div className="p-3">
+   835→            <div className="search-glow rounded-2xl border border-white/[0.08] bg-white/[0.02] p-2">
+   836→              <textarea
+   837→                ref={followUpRef}
+   838→                value={followUp}
+   839→                onChange={(e) => setFollowUp(e.target.value)}
+   840→                onKeyDown={(e) => {
+   841→                  if (e.key === 'Enter' && !e.shiftKey) {
+   842→                    e.preventDefault();
+   843→                    handleFollowUp();
+   844→                  }
+   845→                }}
+   846→                rows={1}
+   847→                placeholder="Ask a follow-up…"
+   848→                className="max-h-[72px] w-full resize-none bg-transparent px-1.5 py-1 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none"
+   849→              />
+   850→              <div className="flex items-center justify-between pt-1">
+   851→                <span className="text-[10px] text-muted-foreground">Enter to send</span>
+   852→                <button
+   853→                  type="button"
+   854→                  onClick={handleFollowUp}
+   855→                  disabled={!followUp.trim() || loading}
+   856→                  className="accent-gradient flex h-7 w-7 items-center justify-center rounded-lg text-white transition-transform hover:scale-105 disabled:cursor-not-allowed disabled:opacity-40"
+   857→                  aria-label="Send follow-up"
+   858→                >
+   859→                  <ArrowRight className="h-3.5 w-3.5" />
+   860→                </button>
+   861→              </div>
+   862→            </div>
+   863→          </div>
+   864→        </div>
+   865→      </aside>
+   866→
+   867→      {/* ═══ CENTER COLUMN — AI answer (flex-1) ═══ */}
+   868→      <main className="glass-surface flex min-w-0 flex-1 flex-col rounded-[28px]">
+   869→        {/* Top bar */}
+   870→        <header className="flex items-center gap-3 border-b border-white/[0.06] px-4 py-3.5 md:px-6">
+   871→          <button
+   872→            type="button"
+   873→            onClick={closeWorkspace}
+   874→            className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/[0.08] bg-white/[0.02] text-muted-foreground transition-colors hover:bg-white/[0.06] hover:text-foreground"
+   875→            aria-label="Back to dashboard"
+   876→          >
+   877→            <ArrowLeft className="h-4 w-4" />
+   878→          </button>
+   879→          <div className="accent-gradient flex h-8 w-8 items-center justify-center rounded-lg shadow-lg shadow-[#00F5D4]/10">
+   880→            <InfinitySymbol size={18} />
+   881→          </div>
+   882→          <div className="flex min-w-0 flex-1 flex-col">
+   883→            <div className="flex items-baseline gap-1">
+   884→              <span className="text-sm font-semibold text-foreground">GSTPilot Oracle</span>
+   885→              <sup className="text-[9px] font-medium text-muted-foreground">™</sup>
+   886→            </div>
+   887→            <div className="flex items-center gap-1.5">
+   888→              <span className="relative flex h-1.5 w-1.5">
+   889→                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#00F5D4] opacity-75" />
+   890→                <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-[#00F5D4]" />
+   891→              </span>
+   892→              <span className="text-[10px] text-muted-foreground">Live</span>
+   893→            </div>
+   894→          </div>
+   895→        </header>
+   896→
+   897→        {/* Scroll area */}
+   898→        <div
+   899→          ref={scrollRef}
+   900→          className="custom-scrollbar min-h-0 flex-1 overflow-y-auto px-4 py-6 md:px-8"
+   901→        >
+   902→          <div className="mx-auto max-w-3xl space-y-8">
+   903→            {messages.map((m) => (
+   904→              <MessageBlock
+   905→                key={m.id}
+   906→                message={m}
+   907→                onNavigate={onNavigate}
+   908→                onComingSoon={handleComingSoon}
+   909→                onSubmitSuggestion={(s) => submitQuery(s)}
+   910→                loading={loading}
+   911→              />
+   912→            ))}
+   913→            <div className="h-4" />
+   914→          </div>
+   915→        </div>
+   916→      </main>
+   917→
+   918→      {/* ═══ RIGHT COLUMN — sources / business data / actions (360px) ═══ */}
+   919→      <aside className="hidden w-[360px] shrink-0 xl:flex">
+   920→        <div className="glass-surface custom-scrollbar flex min-h-0 w-full flex-col overflow-y-auto rounded-[28px]">
+   921→          <RightPanel
+   922→            sources={currentOracle?.sources ?? []}
+   923→            actions={currentOracle?.actions ?? []}
+   924→            metrics={metrics}
+   925→            onNavigate={onNavigate}
+   926→            onComingSoon={handleComingSoon}
+   927→          />
+   928→        </div>
+   929→      </aside>
+   930→    </motion.div>
+   931→  );
+   932→}
+   933→
+   934→export default OracleWorkspace;
+   935→

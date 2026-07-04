@@ -1,0 +1,930 @@
+     1→'use client';
+     2→
+     3→// ═══════════════════════════════════════════════════════════════════════════════
+     4→// GSTPilot Oracle™ — Business Memory™ Panel
+     5→//
+     6→// Slide-in panel from the right with 8 tabs:
+     7→//   Profile · Firm · Goals · Preferences · Clients · Financial · Conversations · Insights
+     8→//
+     9→// User can view, edit, delete, and pin memories. Changes save instantly to
+    10→// /api/memory/* endpoints. Oracle automatically uses this memory in every response.
+    11→// ═══════════════════════════════════════════════════════════════════════════════
+    12→
+    13→import { useEffect, useState, useCallback } from 'react';
+    14→import { motion, AnimatePresence } from 'framer-motion';
+    15→import {
+    16→  Brain, X, Plus, Trash2, Pin, PinOff, Save, User, Building2,
+    17→  Target, Settings, Users, TrendingUp, MessageSquare, Lightbulb,
+    18→  Loader2, CheckCircle2, AlertCircle,
+    19→} from 'lucide-react';
+    20→import { Button } from '@/components/ui/button';
+    21→import { Input } from '@/components/ui/input';
+    22→import { Textarea } from '@/components/ui/textarea';
+    23→import { Label } from '@/components/ui/label';
+    24→import { Badge } from '@/components/ui/badge';
+    25→import { Switch } from '@/components/ui/switch';
+    26→import {
+    27→  Select,
+    28→  SelectContent,
+    29→  SelectItem,
+    30→  SelectTrigger,
+    31→  SelectValue,
+    32→} from '@/components/ui/select';
+    33→import { ScrollArea } from '@/components/ui/scroll-area';
+    34→import { Separator } from '@/components/ui/separator';
+    35→import { toast } from 'sonner';
+    36→
+    37→// ─── Types ────────────────────────────────────────────────────────────────────
+    38→
+    39→interface MemoryPanelProps {
+    40→  open: boolean;
+    41→  onClose: () => void;
+    42→  userEmail: string | undefined;
+    43→}
+    44→
+    45→type TabId = 'profile' | 'firm' | 'goals' | 'preferences' | 'clients' | 'financial' | 'conversations' | 'insights';
+    46→
+    47→interface FullMemory {
+    48→  profile: {
+    49→    name: string | null;
+    50→    role: string | null;
+    51→    designation: string | null;
+    52→    firmName: string | null;
+    53→    industry: string | null;
+    54→    city: string | null;
+    55→    timezone: string | null;
+    56→    preferredLanguage: string | null;
+    57→  } | null;
+    58→  firm: {
+    59→    caFirmName: string | null;
+    60→    employeeCount: number;
+    61→    clientCount: number;
+    62→    industriesServed: string[];
+    63→    gstRegistrations: string[];
+    64→    branches: string[];
+    65→    servicesOffered: string[];
+    66→  } | null;
+    67→  goals: Array<{ id: string; type: string; target: string; period: string | null; notes: string | null; pinned: boolean }>;
+    68→  preferences: {
+    69→    theme: string | null;
+    70→    notifications: { email: boolean; whatsapp: boolean; push: boolean };
+    71→    reportFormat: string | null;
+    72→    reminderFrequency: string | null;
+    73→    communicationMethod: string | null;
+    74→  } | null;
+    75→  clientMemories: Array<{ id: string; clientId: string; clientName: string; clientGstin: string; paymentBehaviour: string | null; riskNotes: string | null; customNotes: string | null; pinned: boolean }>;
+    76→  financialMetrics: Array<{ id: string; metricType: string; period: string | null; value: number; trend: string | null; annotation: string | null; pinned: boolean }>;
+    77→  conversations: Array<{ id: string; userMessage: string; oracleResponse: string; role: string | null; fn: string | null; summary: string | null; createdAt: string }>;
+    78→  insights: Array<{ id: string; category: string; content: string; source: string; pinned: boolean; createdAt: string }>;
+    79→}
+    80→
+    81→// ─── Tab config ───────────────────────────────────────────────────────────────
+    82→
+    83→const TABS: Array<{ id: TabId; label: string; icon: typeof Brain }> = [
+    84→  { id: 'profile', label: 'Profile', icon: User },
+    85→  { id: 'firm', label: 'Firm', icon: Building2 },
+    86→  { id: 'goals', label: 'Goals', icon: Target },
+    87→  { id: 'preferences', label: 'Preferences', icon: Settings },
+    88→  { id: 'clients', label: 'Clients', icon: Users },
+    89→  { id: 'financial', label: 'Financial', icon: TrendingUp },
+    90→  { id: 'conversations', label: 'Conversations', icon: MessageSquare },
+    91→  { id: 'insights', label: 'Insights', icon: Lightbulb },
+    92→];
+    93→
+    94→// ─── Component ────────────────────────────────────────────────────────────────
+    95→
+    96→export function MemoryPanel({ open, onClose, userEmail }: MemoryPanelProps) {
+    97→  const [activeTab, setActiveTab] = useState<TabId>('profile');
+    98→  const [memory, setMemory] = useState<FullMemory | null>(null);
+    99→  const [loading, setLoading] = useState(false);
+   100→  const [saving, setSaving] = useState(false);
+   101→
+   102→  const fetchMemory = useCallback(async () => {
+   103→    if (!userEmail) return;
+   104→    setLoading(true);
+   105→    try {
+   106→      const res = await fetch(`/api/memory?email=${encodeURIComponent(userEmail)}`);
+   107→      if (!res.ok) throw new Error('Failed to load memory');
+   108→      const data = await res.json();
+   109→      setMemory(data.memory);
+   110→    } catch (err) {
+   111→      toast.error('Failed to load memory');
+   112→      console.error(err);
+   113→    } finally {
+   114→      setLoading(false);
+   115→    }
+   116→  }, [userEmail]);
+   117→
+   118→  useEffect(() => {
+   119→    if (open && userEmail) {
+   120→      fetchMemory();
+   121→    }
+   122→  }, [open, userEmail, fetchMemory]);
+   123→
+   124→  // ── Generic save helper for profile/firm/preferences ──
+   125→  const saveCategory = async (category: 'profile' | 'firm' | 'preferences', data: Record<string, unknown>) => {
+   126→    if (!userEmail) return;
+   127→    setSaving(true);
+   128→    try {
+   129→      const res = await fetch('/api/memory', {
+   130→        method: 'PATCH',
+   131→        headers: { 'Content-Type': 'application/json' },
+   132→        body: JSON.stringify({ email: userEmail, category, data }),
+   133→      });
+   134→      if (!res.ok) throw new Error('Save failed');
+   135→      toast.success('Memory saved', { duration: 1500 });
+   136→      await fetchMemory();
+   137→    } catch (err) {
+   138→      toast.error('Failed to save');
+   139→      console.error(err);
+   140→    } finally {
+   141→      setSaving(false);
+   142→    }
+   143→  };
+   144→
+   145→  return (
+   146→    <AnimatePresence>
+   147→      {open && (
+   148→        <>
+   149→          {/* Backdrop */}
+   150→          <motion.div
+   151→            initial={{ opacity: 0 }}
+   152→            animate={{ opacity: 1 }}
+   153→            exit={{ opacity: 0 }}
+   154→            className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm"
+   155→            onClick={onClose}
+   156→          />
+   157→
+   158→          {/* Panel */}
+   159→          <motion.div
+   160→            initial={{ x: '100%' }}
+   161→            animate={{ x: 0 }}
+   162→            exit={{ x: '100%' }}
+   163→            transition={{ type: 'spring', damping: 30, stiffness: 300 }}
+   164→            className="fixed right-0 top-0 bottom-0 z-50 flex w-full max-w-[520px] flex-col border-l border-white/[0.08] bg-background shadow-2xl"
+   165→          >
+   166→            {/* Header */}
+   167→            <div className="flex h-14 shrink-0 items-center gap-3 border-b border-white/[0.06] px-4">
+   168→              <div className="flex h-8 w-8 items-center justify-center rounded-lg accent-gradient-soft">
+   169→                <Brain className="h-4 w-4 accent-text" />
+   170→              </div>
+   171→              <div className="flex-1 min-w-0">
+   172→                <h2 className="text-sm font-semibold text-foreground">Business Memory™</h2>
+   173→                <p className="text-[11px] text-muted-foreground truncate">
+   174→                  {userEmail ? userEmail : 'Sign in to save memory'}
+   175→                </p>
+   176→              </div>
+   177→              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onClose}>
+   178→                <X className="h-4 w-4" />
+   179→              </Button>
+   180→            </div>
+   181→
+   182→            {!userEmail ? (
+   183→              <div className="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center">
+   184→                <AlertCircle className="h-10 w-10 text-muted-foreground" />
+   185→                <p className="text-sm text-muted-foreground">
+   186→                  Sign in to start building your Business Memory™. Oracle will remember your profile, firm, goals, and preferences across sessions.
+   187→                </p>
+   188→              </div>
+   189→            ) : loading || !memory ? (
+   190→              <div className="flex flex-1 items-center justify-center">
+   191→                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+   192→              </div>
+   193→            ) : (
+   194→              <>
+   195→                {/* Tab bar */}
+   196→                <div className="flex shrink-0 items-center gap-1 overflow-x-auto border-b border-white/[0.06] px-2 py-2">
+   197→                  {TABS.map((tab) => {
+   198→                    const Icon = tab.icon;
+   199→                    const isActive = activeTab === tab.id;
+   200→                    return (
+   201→                      <button
+   202→                        key={tab.id}
+   203→                        onClick={() => setActiveTab(tab.id)}
+   204→                        className={`flex items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+   205→                          isActive
+   206→                            ? 'accent-gradient-soft accent-text'
+   207→                            : 'text-muted-foreground hover:bg-white/[0.05] hover:text-foreground'
+   208→                        }`}
+   209→                      >
+   210→                        <Icon className="h-3.5 w-3.5" />
+   211→                        {tab.label}
+   212→                      </button>
+   213→                    );
+   214→                  })}
+   215→                </div>
+   216→
+   217→                {/* Tab content */}
+   218→                <ScrollArea className="flex-1">
+   219→                  <div className="p-4">
+   220→                    {activeTab === 'profile' && (
+   221→                      <ProfileTab key={JSON.stringify(memory.profile)} memory={memory} saving={saving} onSave={(d) => saveCategory('profile', d)} />
+   222→                    )}
+   223→                    {activeTab === 'firm' && (
+   224→                      <FirmTab key={JSON.stringify(memory.firm)} memory={memory} saving={saving} onSave={(d) => saveCategory('firm', d)} />
+   225→                    )}
+   226→                    {activeTab === 'goals' && (
+   227→                      <GoalsTab memory={memory} userEmail={userEmail} onChanged={fetchMemory} />
+   228→                    )}
+   229→                    {activeTab === 'preferences' && (
+   230→                      <PreferencesTab key={JSON.stringify(memory.preferences)} memory={memory} saving={saving} onSave={(d) => saveCategory('preferences', d)} />
+   231→                    )}
+   232→                    {activeTab === 'clients' && (
+   233→                      <ClientsTab memory={memory} userEmail={userEmail} onChanged={fetchMemory} />
+   234→                    )}
+   235→                    {activeTab === 'financial' && (
+   236→                      <FinancialTab memory={memory} userEmail={userEmail} onChanged={fetchMemory} />
+   237→                    )}
+   238→                    {activeTab === 'conversations' && (
+   239→                      <ConversationsTab memory={memory} />
+   240→                    )}
+   241→                    {activeTab === 'insights' && (
+   242→                      <InsightsTab memory={memory} userEmail={userEmail} onChanged={fetchMemory} />
+   243→                    )}
+   244→                  </div>
+   245→                </ScrollArea>
+   246→
+   247→                {/* Footer — clear all */}
+   248→                <div className="shrink-0 border-t border-white/[0.06] p-3">
+   249→                  <Button
+   250→                    variant="ghost"
+   251→                    size="sm"
+   252→                    className="w-full text-xs text-red-500 hover:bg-red-500/10 hover:text-red-400"
+   253→                    onClick={async () => {
+   254→                      if (!confirm('Clear ALL memory? This cannot be undone.')) return;
+   255→                      try {
+   256→                        await fetch(`/api/memory?email=${encodeURIComponent(userEmail)}`, { method: 'DELETE' });
+   257→                        toast.success('All memory cleared');
+   258→                        await fetchMemory();
+   259→                      } catch {
+   260→                        toast.error('Failed to clear memory');
+   261→                      }
+   262→                    }}
+   263→                  >
+   264→                    <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+   265→                    Clear All Memory
+   266→                  </Button>
+   267→                </div>
+   268→              </>
+   269→            )}
+   270→          </motion.div>
+   271→        </>
+   272→      )}
+   273→    </AnimatePresence>
+   274→  );
+   275→}
+   276→
+   277→// ═══════════════════════════════════════════════════════════════════════════════
+   278→// Tab: Profile
+   279→// ═══════════════════════════════════════════════════════════════════════════════
+   280→
+   281→function ProfileTab({ memory, saving, onSave }: { memory: FullMemory; saving: boolean; onSave: (d: Record<string, unknown>) => void }) {
+   282→  const [form, setForm] = useState({
+   283→    name: memory.profile?.name || '',
+   284→    role: memory.profile?.role || '',
+   285→    designation: memory.profile?.designation || '',
+   286→    firmName: memory.profile?.firmName || '',
+   287→    industry: memory.profile?.industry || '',
+   288→    city: memory.profile?.city || '',
+   289→    timezone: memory.profile?.timezone || 'Asia/Calcutta',
+   290→    preferredLanguage: memory.profile?.preferredLanguage || 'English',
+   291→  });
+   292→
+   293→  // No useEffect sync needed — parent uses key={JSON.stringify(memory.profile)}
+   294→  // to remount this component when memory changes, so useState picks up new values.
+   295→
+   296→  return (
+   297→    <div className="space-y-4">
+   298→      <p className="text-xs text-muted-foreground">
+   299→        Oracle uses this to greet you by name and tailor responses to your role and industry.
+   300→      </p>
+   301→      <Field label="Name">
+   302→        <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Prince Singh" />
+   303→      </Field>
+   304→      <Field label="Role">
+   305→        <Select value={form.role} onValueChange={(v) => setForm({ ...form, role: v })}>
+   306→          <SelectTrigger><SelectValue placeholder="Select role" /></SelectTrigger>
+   307→          <SelectContent>
+   308→            <SelectItem value="founder">Founder</SelectItem>
+   309→            <SelectItem value="ca">Chartered Accountant</SelectItem>
+   310→            <SelectItem value="partner">Partner</SelectItem>
+   311→            <SelectItem value="manager">Manager</SelectItem>
+   312→            <SelectItem value="staff">Staff</SelectItem>
+   313→          </SelectContent>
+   314→        </Select>
+   315→      </Field>
+   316→      <Field label="Designation">
+   317→        <Input value={form.designation} onChange={(e) => setForm({ ...form, designation: e.target.value })} placeholder="e.g. Managing Partner" />
+   318→      </Field>
+   319→      <Field label="Firm / Company Name">
+   320→        <Input value={form.firmName} onChange={(e) => setForm({ ...form, firmName: e.target.value })} placeholder="e.g. GSTPilot Infinity" />
+   321→      </Field>
+   322→      <Field label="Industry">
+   323→        <Input value={form.industry} onChange={(e) => setForm({ ...form, industry: e.target.value })} placeholder="e.g. Manufacturing, Retail, CA Firm" />
+   324→      </Field>
+   325→      <Field label="City">
+   326→        <Input value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} placeholder="e.g. Mumbai" />
+   327→      </Field>
+   328→      <div className="grid grid-cols-2 gap-3">
+   329→        <Field label="Timezone">
+   330→          <Input value={form.timezone} onChange={(e) => setForm({ ...form, timezone: e.target.value })} />
+   331→        </Field>
+   332→        <Field label="Preferred Language">
+   333→          <Input value={form.preferredLanguage} onChange={(e) => setForm({ ...form, preferredLanguage: e.target.value })} />
+   334→        </Field>
+   335→      </div>
+   336→      <SaveButton saving={saving} onClick={() => onSave(form)} />
+   337→    </div>
+   338→  );
+   339→}
+   340→
+   341→// ═══════════════════════════════════════════════════════════════════════════════
+   342→// Tab: Firm
+   343→// ═══════════════════════════════════════════════════════════════════════════════
+   344→
+   345→function FirmTab({ memory, saving, onSave }: { memory: FullMemory; saving: boolean; onSave: (d: Record<string, unknown>) => void }) {
+   346→  const [form, setForm] = useState({
+   347→    caFirmName: memory.firm?.caFirmName || '',
+   348→    employeeCount: memory.firm?.employeeCount || 0,
+   349→    clientCount: memory.firm?.clientCount || 0,
+   350→    industriesServed: (memory.firm?.industriesServed || []).join(', '),
+   351→    gstRegistrations: (memory.firm?.gstRegistrations || []).join(', '),
+   352→    branches: (memory.firm?.branches || []).join(', '),
+   353→    servicesOffered: (memory.firm?.servicesOffered || []).join(', '),
+   354→  });
+   355→
+   356→  // No useEffect sync needed — parent uses key={JSON.stringify(memory.firm)}
+   357→
+   358→  const buildPayload = () => ({
+   359→    caFirmName: form.caFirmName,
+   360→    employeeCount: Number(form.employeeCount) || 0,
+   361→    clientCount: Number(form.clientCount) || 0,
+   362→    industriesServed: form.industriesServed.split(',').map((s) => s.trim()).filter(Boolean),
+   363→    gstRegistrations: form.gstRegistrations.split(',').map((s) => s.trim()).filter(Boolean),
+   364→    branches: form.branches.split(',').map((s) => s.trim()).filter(Boolean),
+   365→    servicesOffered: form.servicesOffered.split(',').map((s) => s.trim()).filter(Boolean),
+   366→  });
+   367→
+   368→  return (
+   369→    <div className="space-y-4">
+   370→      <p className="text-xs text-muted-foreground">
+   371→        Oracle uses firm context to scale advice — a 127-client CA firm gets different recommendations than a 5-client boutique.
+   372→      </p>
+   373→      <Field label="CA Firm / Company Name">
+   374→        <Input value={form.caFirmName} onChange={(e) => setForm({ ...form, caFirmName: e.target.value })} placeholder="e.g. Prince & Associates" />
+   375→      </Field>
+   376→      <div className="grid grid-cols-2 gap-3">
+   377→        <Field label="Employees">
+   378→          <Input type="number" value={form.employeeCount} onChange={(e) => setForm({ ...form, employeeCount: Number(e.target.value) })} />
+   379→        </Field>
+   380→        <Field label="Clients">
+   381→          <Input type="number" value={form.clientCount} onChange={(e) => setForm({ ...form, clientCount: Number(e.target.value) })} />
+   382→        </Field>
+   383→      </div>
+   384→      <Field label="Industries Served (comma-separated)">
+   385→        <Input value={form.industriesServed} onChange={(e) => setForm({ ...form, industriesServed: e.target.value })} placeholder="Manufacturing, Retail, Healthcare" />
+   386→      </Field>
+   387→      <Field label="GST Registrations (comma-separated)">
+   388→        <Input value={form.gstRegistrations} onChange={(e) => setForm({ ...form, gstRegistrations: e.target.value })} placeholder="27AABCS1429B1Z5, 29AAACL1234M1Z3" />
+   389→      </Field>
+   390→      <Field label="Branches (comma-separated)">
+   391→        <Input value={form.branches} onChange={(e) => setForm({ ...form, branches: e.target.value })} placeholder="Mumbai, Delhi, Bangalore" />
+   392→      </Field>
+   393→      <Field label="Services Offered (comma-separated)">
+   394→        <Input value={form.servicesOffered} onChange={(e) => setForm({ ...form, servicesOffered: e.target.value })} placeholder="GST Filing, ITR, Audit, ROC Compliance" />
+   395→      </Field>
+   396→      <SaveButton saving={saving} onClick={() => onSave(buildPayload())} />
+   397→    </div>
+   398→  );
+   399→}
+   400→
+   401→// ═══════════════════════════════════════════════════════════════════════════════
+   402→// Tab: Goals
+   403→// ═══════════════════════════════════════════════════════════════════════════════
+   404→
+   405→function GoalsTab({ memory, userEmail, onChanged }: { memory: FullMemory; userEmail: string; onChanged: () => void }) {
+   406→  const [showForm, setShowForm] = useState(false);
+   407→  const [form, setForm] = useState({ type: 'revenue', target: '', period: '', notes: '' });
+   408→
+   409→  const addGoal = async () => {
+   410→    if (!form.target.trim()) return;
+   411→    try {
+   412→      await fetch('/api/memory/goal', {
+   413→        method: 'POST',
+   414→        headers: { 'Content-Type': 'application/json' },
+   415→        body: JSON.stringify({ email: userEmail, ...form, period: form.period || undefined, notes: form.notes || undefined }),
+   416→      });
+   417→      setForm({ type: 'revenue', target: '', period: '', notes: '' });
+   418→      setShowForm(false);
+   419→      onChanged();
+   420→      toast.success('Goal added');
+   421→    } catch {
+   422→      toast.error('Failed to add goal');
+   423→    }
+   424→  };
+   425→
+   426→  return (
+   427→    <div className="space-y-3">
+   428→      <div className="flex items-center justify-between">
+   429→        <p className="text-xs text-muted-foreground">Revenue, collection, growth targets Oracle tracks.</p>
+   430→        <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setShowForm(!showForm)}>
+   431→          <Plus className="mr-1 h-3 w-3" /> Add
+   432→        </Button>
+   433→      </div>
+   434→
+   435→      {showForm && (
+   436→        <div className="space-y-3 rounded-lg border border-white/[0.08] p-3">
+   437→          <Field label="Type">
+   438→            <Select value={form.type} onValueChange={(v) => setForm({ ...form, type: v })}>
+   439→              <SelectTrigger><SelectValue /></SelectTrigger>
+   440→              <SelectContent>
+   441→                <SelectItem value="revenue">Revenue</SelectItem>
+   442→                <SelectItem value="collection">Collection</SelectItem>
+   443→                <SelectItem value="growth">Growth</SelectItem>
+   444→                <SelectItem value="profit">Profit</SelectItem>
+   445→                <SelectItem value="expansion">Expansion</SelectItem>
+   446→              </SelectContent>
+   447→            </Select>
+   448→          </Field>
+   449→          <Field label="Target">
+   450→            <Input value={form.target} onChange={(e) => setForm({ ...form, target: e.target.value })} placeholder="e.g. ₹5 Crore" />
+   451→          </Field>
+   452→          <Field label="Period (optional)">
+   453→            <Input value={form.period} onChange={(e) => setForm({ ...form, period: e.target.value })} placeholder="e.g. FY2025, Q3" />
+   454→          </Field>
+   455→          <Field label="Notes (optional)">
+   456→            <Textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} rows={2} />
+   457→          </Field>
+   458→          <Button size="sm" className="w-full" onClick={addGoal}>Save Goal</Button>
+   459→        </div>
+   460→      )}
+   461→
+   462→      {memory.goals.length === 0 ? (
+   463→        <EmptyState text="No goals set yet. Add your first goal to give Oracle a target to track." />
+   464→      ) : (
+   465→        <div className="space-y-2">
+   466→          {memory.goals.map((g) => (
+   467→            <div key={g.id} className="flex items-start gap-2 rounded-lg border border-white/[0.06] p-3">
+   468→              <button
+   469→                onClick={async () => {
+   470→                  await fetch('/api/memory/goal', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: g.id, email: userEmail }) });
+   471→                  onChanged();
+   472→                }}
+   473→                className="mt-0.5"
+   474→              >
+   475→                {g.pinned ? <Pin className="h-3.5 w-3.5 accent-text" /> : <PinOff className="h-3.5 w-3.5 text-muted-foreground" />}
+   476→              </button>
+   477→              <div className="flex-1 min-w-0">
+   478→                <p className="text-sm font-medium text-foreground">
+   479→                  {g.type.charAt(0).toUpperCase() + g.type.slice(1)}: {g.target}
+   480→                </p>
+   481→                {g.period && <Badge variant="secondary" className="mt-1 text-[10px]">{g.period}</Badge>}
+   482→                {g.notes && <p className="mt-1 text-xs text-muted-foreground">{g.notes}</p>}
+   483→              </div>
+   484→              <button
+   485→                onClick={async () => {
+   486→                  await fetch(`/api/memory/goal?id=${g.id}&email=${encodeURIComponent(userEmail)}`, { method: 'DELETE' });
+   487→                  onChanged();
+   488→                }}
+   489→                className="text-muted-foreground hover:text-red-500"
+   490→              >
+   491→                <Trash2 className="h-3.5 w-3.5" />
+   492→              </button>
+   493→            </div>
+   494→          ))}
+   495→        </div>
+   496→      )}
+   497→    </div>
+   498→  );
+   499→}
+   500→
+   501→// ═══════════════════════════════════════════════════════════════════════════════
+   502→// Tab: Preferences
+   503→// ═══════════════════════════════════════════════════════════════════════════════
+   504→
+   505→function PreferencesTab({ memory, saving, onSave }: { memory: FullMemory; saving: boolean; onSave: (d: Record<string, unknown>) => void }) {
+   506→  const [form, setForm] = useState({
+   507→    reportFormat: memory.preferences?.reportFormat || 'summary',
+   508→    reminderFrequency: memory.preferences?.reminderFrequency || 'daily',
+   509→    communicationMethod: memory.preferences?.communicationMethod || 'whatsapp',
+   510→    notifications: memory.preferences?.notifications || { email: true, whatsapp: true, push: false },
+   511→  });
+   512→
+   513→  // No useEffect sync needed — parent uses key={JSON.stringify(memory.preferences)}
+   514→
+   515→  return (
+   516→    <div className="space-y-4">
+   517→      <p className="text-xs text-muted-foreground">
+   518→        Oracle tailors report detail, reminder timing, and follow-up channel to your preferences.
+   519→      </p>
+   520→      <Field label="Report Format">
+   521→        <Select value={form.reportFormat} onValueChange={(v) => setForm({ ...form, reportFormat: v })}>
+   522→          <SelectTrigger><SelectValue /></SelectTrigger>
+   523→          <SelectContent>
+   524→            <SelectItem value="summary">Summary (concise)</SelectItem>
+   525→            <SelectItem value="detailed">Detailed (full breakdown)</SelectItem>
+   526→            <SelectItem value="executive">Executive (bullet points)</SelectItem>
+   527→          </SelectContent>
+   528→        </Select>
+   529→      </Field>
+   530→      <Field label="Reminder Frequency">
+   531→        <Select value={form.reminderFrequency} onValueChange={(v) => setForm({ ...form, reminderFrequency: v })}>
+   532→          <SelectTrigger><SelectValue /></SelectTrigger>
+   533→          <SelectContent>
+   534→            <SelectItem value="daily">Daily</SelectItem>
+   535→            <SelectItem value="weekly">Weekly</SelectItem>
+   536→            <SelectItem value="monthly">Monthly</SelectItem>
+   537→          </SelectContent>
+   538→        </Select>
+   539→      </Field>
+   540→      <Field label="Preferred Communication">
+   541→        <Select value={form.communicationMethod} onValueChange={(v) => setForm({ ...form, communicationMethod: v })}>
+   542→          <SelectTrigger><SelectValue /></SelectTrigger>
+   543→          <SelectContent>
+   544→            <SelectItem value="whatsapp">WhatsApp</SelectItem>
+   545→            <SelectItem value="email">Email</SelectItem>
+   546→            <SelectItem value="sms">SMS</SelectItem>
+   547→          </SelectContent>
+   548→        </Select>
+   549→      </Field>
+   550→      <Separator />
+   551→      <div className="space-y-3">
+   552→        <Label className="text-xs font-medium text-muted-foreground">Notifications</Label>
+   553→        <ToggleRow
+   554→          label="Email"
+   555→          checked={form.notifications.email}
+   556→          onChange={(v) => setForm({ ...form, notifications: { ...form.notifications, email: v } })}
+   557→        />
+   558→        <ToggleRow
+   559→          label="WhatsApp"
+   560→          checked={form.notifications.whatsapp}
+   561→          onChange={(v) => setForm({ ...form, notifications: { ...form.notifications, whatsapp: v } })}
+   562→        />
+   563→        <ToggleRow
+   564→          label="Push"
+   565→          checked={form.notifications.push}
+   566→          onChange={(v) => setForm({ ...form, notifications: { ...form.notifications, push: v } })}
+   567→        />
+   568→      </div>
+   569→      <SaveButton saving={saving} onClick={() => onSave(form)} />
+   570→    </div>
+   571→  );
+   572→}
+   573→
+   574→// ═══════════════════════════════════════════════════════════════════════════════
+   575→// Tab: Clients
+   576→// ═══════════════════════════════════════════════════════════════════════════════
+   577→
+   578→function ClientsTab({ memory, userEmail, onChanged }: { memory: FullMemory; userEmail: string; onChanged: () => void }) {
+   579→  const [editing, setEditing] = useState<string | null>(null);
+   580→  const [form, setForm] = useState({ paymentBehaviour: '', riskNotes: '', customNotes: '' });
+   581→
+   582→  return (
+   583→    <div className="space-y-3">
+   584→      <p className="text-xs text-muted-foreground">
+   585→        Observations about each client — payment behaviour, risk notes. Oracle uses this for &quot;who is risky?&quot; questions.
+   586→      </p>
+   587→      {memory.clientMemories.length === 0 ? (
+   588→        <EmptyState text="No client notes yet. Add observations like 'Always pays late' or 'High compliance risk' for each client." />
+   589→      ) : (
+   590→        <div className="space-y-2">
+   591→          {memory.clientMemories.map((cm) => (
+   592→            <div key={cm.id} className="rounded-lg border border-white/[0.06] p-3">
+   593→              <div className="flex items-start justify-between gap-2">
+   594→                <div className="flex-1 min-w-0">
+   595→                  <p className="text-sm font-medium text-foreground">{cm.clientName}</p>
+   596→                  <p className="text-[11px] text-muted-foreground">{cm.clientGstin}</p>
+   597→                </div>
+   598→                <button
+   599→                  onClick={async () => {
+   600→                    await fetch('/api/memory/client', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clientId: cm.clientId, email: userEmail }) });
+   601→                    onChanged();
+   602→                  }}
+   603→                >
+   604→                  {cm.pinned ? <Pin className="h-3.5 w-3.5 accent-text" /> : <PinOff className="h-3.5 w-3.5 text-muted-foreground" />}
+   605→                </button>
+   606→              </div>
+   607→              {editing === cm.id ? (
+   608→                <div className="mt-2 space-y-2">
+   609→                  <Input value={form.paymentBehaviour} onChange={(e) => setForm({ ...form, paymentBehaviour: e.target.value })} placeholder="Payment behaviour" className="text-xs" />
+   610→                  <Input value={form.riskNotes} onChange={(e) => setForm({ ...form, riskNotes: e.target.value })} placeholder="Risk notes" className="text-xs" />
+   611→                  <Textarea value={form.customNotes} onChange={(e) => setForm({ ...form, customNotes: e.target.value })} placeholder="Custom notes" rows={2} className="text-xs" />
+   612→                  <div className="flex gap-2">
+   613→                    <Button size="sm" className="h-7 text-xs" onClick={async () => {
+   614→                      await fetch('/api/memory/client', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: userEmail, clientId: cm.clientId, ...form }) });
+   615→                      setEditing(null);
+   616→                      onChanged();
+   617→                    }}>Save</Button>
+   618→                    <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setEditing(null)}>Cancel</Button>
+   619→                  </div>
+   620→                </div>
+   621→              ) : (
+   622→                <>
+   623→                  {cm.paymentBehaviour && <p className="mt-1 text-xs text-muted-foreground">Payment: {cm.paymentBehaviour}</p>}
+   624→                  {cm.riskNotes && <p className="text-xs text-muted-foreground">Risk: {cm.riskNotes}</p>}
+   625→                  {cm.customNotes && <p className="text-xs text-muted-foreground">{cm.customNotes}</p>}
+   626→                  <div className="mt-2 flex gap-2">
+   627→                    <Button size="sm" variant="ghost" className="h-6 text-[11px]" onClick={() => {
+   628→                      setEditing(cm.id);
+   629→                      setForm({ paymentBehaviour: cm.paymentBehaviour || '', riskNotes: cm.riskNotes || '', customNotes: cm.customNotes || '' });
+   630→                    }}>Edit</Button>
+   631→                    <Button size="sm" variant="ghost" className="h-6 text-[11px] text-red-500" onClick={async () => {
+   632→                      await fetch(`/api/memory/client?clientId=${cm.clientId}&email=${encodeURIComponent(userEmail)}`, { method: 'DELETE' });
+   633→                      onChanged();
+   634→                    }}>Delete</Button>
+   635→                  </div>
+   636→                </>
+   637→              )}
+   638→            </div>
+   639→          ))}
+   640→        </div>
+   641→      )}
+   642→    </div>
+   643→  );
+   644→}
+   645→
+   646→// ═══════════════════════════════════════════════════════════════════════════════
+   647→// Tab: Financial Memory
+   648→// ═══════════════════════════════════════════════════════════════════════════════
+   649→
+   650→function FinancialTab({ memory, userEmail, onChanged }: { memory: FullMemory; userEmail: string; onChanged: () => void }) {
+   651→  const [showForm, setShowForm] = useState(false);
+   652→  const [form, setForm] = useState({ metricType: 'revenue', period: '', value: '', trend: 'stable', annotation: '' });
+   653→
+   654→  const add = async () => {
+   655→    if (!form.value) return;
+   656→    try {
+   657→      await fetch('/api/memory/financial', {
+   658→        method: 'POST',
+   659→        headers: { 'Content-Type': 'application/json' },
+   660→        body: JSON.stringify({
+   661→          email: userEmail,
+   662→          metricType: form.metricType,
+   663→          period: form.period || undefined,
+   664→          value: Number(form.value),
+   665→          trend: form.trend,
+   666→          annotation: form.annotation || undefined,
+   667→        }),
+   668→      });
+   669→      setForm({ metricType: 'revenue', period: '', value: '', trend: 'stable', annotation: '' });
+   670→      setShowForm(false);
+   671→      onChanged();
+   672→      toast.success('Metric added');
+   673→    } catch {
+   674→      toast.error('Failed to add metric');
+   675→    }
+   676→  };
+   677→
+   678→  return (
+   679→    <div className="space-y-3">
+   680→      <div className="flex items-center justify-between">
+   681→        <p className="text-xs text-muted-foreground">Revenue trends, cash flow patterns, user-annotated observations.</p>
+   682→        <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setShowForm(!showForm)}>
+   683→          <Plus className="mr-1 h-3 w-3" /> Add
+   684→        </Button>
+   685→      </div>
+   686→
+   687→      {showForm && (
+   688→        <div className="space-y-3 rounded-lg border border-white/[0.08] p-3">
+   689→          <Field label="Metric Type">
+   690→            <Select value={form.metricType} onValueChange={(v) => setForm({ ...form, metricType: v })}>
+   691→              <SelectTrigger><SelectValue /></SelectTrigger>
+   692→              <SelectContent>
+   693→                <SelectItem value="revenue">Revenue</SelectItem>
+   694→                <SelectItem value="expense">Expense</SelectItem>
+   695→                <SelectItem value="cashflow">Cash Flow</SelectItem>
+   696→                <SelectItem value="loan">Loan</SelectItem>
+   697→                <SelectItem value="tax">Tax Payment</SelectItem>
+   698→                <SelectItem value="collection">Collection</SelectItem>
+   699→              </SelectContent>
+   700→            </Select>
+   701→          </Field>
+   702→          <div className="grid grid-cols-2 gap-3">
+   703→            <Field label="Period">
+   704→              <Input value={form.period} onChange={(e) => setForm({ ...form, period: e.target.value })} placeholder="2025-06" />
+   705→            </Field>
+   706→            <Field label="Value (₹)">
+   707→              <Input type="number" value={form.value} onChange={(e) => setForm({ ...form, value: e.target.value })} placeholder="1250000" />
+   708→            </Field>
+   709→          </div>
+   710→          <Field label="Trend">
+   711→            <Select value={form.trend} onValueChange={(v) => setForm({ ...form, trend: v })}>
+   712→              <SelectTrigger><SelectValue /></SelectTrigger>
+   713→              <SelectContent>
+   714→                <SelectItem value="up">↑ Up</SelectItem>
+   715→                <SelectItem value="down">↓ Down</SelectItem>
+   716→                <SelectItem value="stable">→ Stable</SelectItem>
+   717→              </SelectContent>
+   718→            </Select>
+   719→          </Field>
+   720→          <Field label="Annotation (optional)">
+   721→            <Textarea value={form.annotation} onChange={(e) => setForm({ ...form, annotation: e.target.value })} rows={2} placeholder="e.g. Cash flow weak in Q4" />
+   722→          </Field>
+   723→          <Button size="sm" className="w-full" onClick={add}>Save Metric</Button>
+   724→        </div>
+   725→      )}
+   726→
+   727→      {memory.financialMetrics.length === 0 ? (
+   728→        <EmptyState text="No financial memory yet. Record patterns like 'Cash flow weak in Q4' so Oracle can factor them into forecasts." />
+   729→      ) : (
+   730→        <div className="space-y-2">
+   731→          {memory.financialMetrics.map((m) => (
+   732→            <div key={m.id} className="flex items-start gap-2 rounded-lg border border-white/[0.06] p-3">
+   733→              <button
+   734→                onClick={async () => {
+   735→                  await fetch('/api/memory/financial', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: m.id, email: userEmail }) });
+   736→                  onChanged();
+   737→                }}
+   738→              >
+   739→                {m.pinned ? <Pin className="h-3.5 w-3.5 accent-text" /> : <PinOff className="h-3.5 w-3.5 text-muted-foreground" />}
+   740→              </button>
+   741→              <div className="flex-1 min-w-0">
+   742→                <p className="text-sm font-medium text-foreground capitalize">
+   743→                  {m.metricType} — ₹{m.value.toLocaleString('en-IN')}
+   744→                  {m.period && <span className="ml-1 text-xs text-muted-foreground">({m.period})</span>}
+   745→                </p>
+   746→                {m.trend && <Badge variant="secondary" className="mt-1 text-[10px]">trend: {m.trend}</Badge>}
+   747→                {m.annotation && <p className="mt-1 text-xs text-muted-foreground italic">&quot;{m.annotation}&quot;</p>}
+   748→              </div>
+   749→              <button
+   750→                onClick={async () => {
+   751→                  await fetch(`/api/memory/financial?id=${m.id}&email=${encodeURIComponent(userEmail)}`, { method: 'DELETE' });
+   752→                  onChanged();
+   753→                }}
+   754→                className="text-muted-foreground hover:text-red-500"
+   755→              >
+   756→                <Trash2 className="h-3.5 w-3.5" />
+   757→              </button>
+   758→            </div>
+   759→          ))}
+   760→        </div>
+   761→      )}
+   762→    </div>
+   763→  );
+   764→}
+   765→
+   766→// ═══════════════════════════════════════════════════════════════════════════════
+   767→// Tab: Conversations (read-only)
+   768→// ═══════════════════════════════════════════════════════════════════════════════
+   769→
+   770→function ConversationsTab({ memory }: { memory: FullMemory }) {
+   771→  return (
+   772→    <div className="space-y-3">
+   773→      <p className="text-xs text-muted-foreground">
+   774→        Oracle remembers your last 20 conversations to provide continuity across sessions.
+   775→      </p>
+   776→      {memory.conversations.length === 0 ? (
+   777→        <EmptyState text="No conversations recorded yet. Start chatting with Oracle and your history will appear here." />
+   778→      ) : (
+   779→        <div className="space-y-2">
+   780→          {memory.conversations.map((c) => (
+   781→            <div key={c.id} className="rounded-lg border border-white/[0.06] p-3">
+   782→              <div className="flex items-center gap-2">
+   783→                {c.role && <Badge variant="secondary" className="text-[10px] uppercase">{c.role}</Badge>}
+   784→                {c.fn && <Badge variant="outline" className="text-[10px]">{c.fn}</Badge>}
+   785→                <span className="text-[10px] text-muted-foreground">
+   786→                  {new Date(c.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+   787→                </span>
+   788→              </div>
+   789→              <p className="mt-1.5 text-sm font-medium text-foreground">{c.userMessage}</p>
+   790→              <p className="mt-1 text-xs text-muted-foreground line-clamp-2">
+   791→                {c.oracleResponse.slice(0, 200)}
+   792→                {c.oracleResponse.length > 200 ? '…' : ''}
+   793→              </p>
+   794→            </div>
+   795→          ))}
+   796→        </div>
+   797→      )}
+   798→    </div>
+   799→  );
+   800→}
+   801→
+   802→// ═══════════════════════════════════════════════════════════════════════════════
+   803→// Tab: Insights
+   804→// ═══════════════════════════════════════════════════════════════════════════════
+   805→
+   806→function InsightsTab({ memory, userEmail, onChanged }: { memory: FullMemory; userEmail: string; onChanged: () => void }) {
+   807→  const [showForm, setShowForm] = useState(false);
+   808→  const [form, setForm] = useState({ category: 'pattern', content: '' });
+   809→
+   810→  const add = async () => {
+   811→    if (!form.content.trim()) return;
+   812→    try {
+   813→      await fetch('/api/memory/insight', {
+   814→        method: 'POST',
+   815→        headers: { 'Content-Type': 'application/json' },
+   816→        body: JSON.stringify({ email: userEmail, ...form }),
+   817→      });
+   818→      setForm({ category: 'pattern', content: '' });
+   819→      setShowForm(false);
+   820→      onChanged();
+   821→      toast.success('Insight added');
+   822→    } catch {
+   823→      toast.error('Failed to add insight');
+   824→    }
+   825→  };
+   826→
+   827→  return (
+   828→    <div className="space-y-3">
+   829→      <div className="flex items-center justify-between">
+   830→        <p className="text-xs text-muted-foreground">Patterns, risks, opportunities Oracle has observed or you&apos;ve pinned.</p>
+   831→        <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setShowForm(!showForm)}>
+   832→          <Plus className="mr-1 h-3 w-3" /> Add
+   833→        </Button>
+   834→      </div>
+   835→
+   836→      {showForm && (
+   837→        <div className="space-y-3 rounded-lg border border-white/[0.08] p-3">
+   838→          <Field label="Category">
+   839→            <Select value={form.category} onValueChange={(v) => setForm({ ...form, category: v })}>
+   840→              <SelectTrigger><SelectValue /></SelectTrigger>
+   841→              <SelectContent>
+   842→                <SelectItem value="pattern">Pattern</SelectItem>
+   843→                <SelectItem value="risk">Risk</SelectItem>
+   844→                <SelectItem value="opportunity">Opportunity</SelectItem>
+   845→                <SelectItem value="observation">Observation</SelectItem>
+   846→              </SelectContent>
+   847→            </Select>
+   848→          </Field>
+   849→          <Field label="Insight">
+   850→            <Textarea value={form.content} onChange={(e) => setForm({ ...form, content: e.target.value })} rows={3} placeholder="e.g. Collections usually slow during month end" />
+   851→          </Field>
+   852→          <Button size="sm" className="w-full" onClick={add}>Save Insight</Button>
+   853→        </div>
+   854→      )}
+   855→
+   856→      {memory.insights.length === 0 ? (
+   857→        <EmptyState text="No insights yet. Pin patterns like 'Collections slow during month end' so Oracle factors them into advice." />
+   858→      ) : (
+   859→        <div className="space-y-2">
+   860→          {memory.insights.map((i) => (
+   861→            <div key={i.id} className="flex items-start gap-2 rounded-lg border border-white/[0.06] p-3">
+   862→              <button
+   863→                onClick={async () => {
+   864→                  await fetch('/api/memory/insight', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: i.id, email: userEmail }) });
+   865→                  onChanged();
+   866→                }}
+   867→              >
+   868→                {i.pinned ? <Pin className="h-3.5 w-3.5 accent-text" /> : <PinOff className="h-3.5 w-3.5 text-muted-foreground" />}
+   869→              </button>
+   870→              <div className="flex-1 min-w-0">
+   871→                <Badge variant="secondary" className="text-[10px]">{i.category}</Badge>
+   872→                <p className="mt-1 text-sm text-foreground">{i.content}</p>
+   873→              </div>
+   874→              <button
+   875→                onClick={async () => {
+   876→                  await fetch(`/api/memory/insight?id=${i.id}&email=${encodeURIComponent(userEmail)}`, { method: 'DELETE' });
+   877→                  onChanged();
+   878→                }}
+   879→                className="text-muted-foreground hover:text-red-500"
+   880→              >
+   881→                <Trash2 className="h-3.5 w-3.5" />
+   882→              </button>
+   883→            </div>
+   884→          ))}
+   885→        </div>
+   886→      )}
+   887→    </div>
+   888→  );
+   889→}
+   890→
+   891→// ═══════════════════════════════════════════════════════════════════════════════
+   892→// Shared sub-components
+   893→// ═══════════════════════════════════════════════════════════════════════════════
+   894→
+   895→function Field({ label, children }: { label: string; children: React.ReactNode }) {
+   896→  return (
+   897→    <div className="space-y-1.5">
+   898→      <Label className="text-xs font-medium text-muted-foreground">{label}</Label>
+   899→      {children}
+   900→    </div>
+   901→  );
+   902→}
+   903→
+   904→function SaveButton({ saving, onClick }: { saving: boolean; onClick: () => void }) {
+   905→  return (
+   906→    <Button className="w-full" disabled={saving} onClick={onClick}>
+   907→      {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+   908→      {saving ? 'Saving…' : 'Save'}
+   909→    </Button>
+   910→  );
+   911→}
+   912→
+   913→function ToggleRow({ label, checked, onChange }: { label: string; checked: boolean; onChange: (v: boolean) => void }) {
+   914→  return (
+   915→    <div className="flex items-center justify-between">
+   916→      <span className="text-sm text-foreground">{label}</span>
+   917→      <Switch checked={checked} onCheckedChange={onChange} />
+   918→    </div>
+   919→  );
+   920→}
+   921→
+   922→function EmptyState({ text }: { text: string }) {
+   923→  return (
+   924→    <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-white/[0.08] p-6 text-center">
+   925→      <CheckCircle2 className="h-6 w-6 text-muted-foreground/40" />
+   926→      <p className="text-xs text-muted-foreground">{text}</p>
+   927→    </div>
+   928→  );
+   929→}
+   930→

@@ -1,0 +1,222 @@
+   275→export const TAX_RULES_REGISTRY: TaxRuleRecord[] = [
+   276→  // India — GST 18% standard, 5% reduced, 28% luxury; corporate 25.17%; TDS 10%
+   277→  { countryIso: 'IN', taxType: 'gst', taxName: 'GST (India)', ratePct: 18, reducedRatePct: 5, thresholdAmount: 4000000, filingFrequency: 'monthly', notes: 'GST 5/12/18/28 slabs', isActive: true },
+   278→  { countryIso: 'IN', taxType: 'corporate', taxName: 'Corporate Tax (India)', ratePct: 25.17, reducedRatePct: 15, thresholdAmount: 400000000, filingFrequency: 'annually', notes: '15% for new manufacturing', isActive: true },
+   279→  { countryIso: 'IN', taxType: 'withholding', taxName: 'TDS (India)', ratePct: 10, reducedRatePct: 1, thresholdAmount: 30000, filingFrequency: 'monthly', notes: 'Section 194 etc.', isActive: true },
+   280→  { countryIso: 'IN', taxType: 'payroll', taxName: 'Payroll Taxes (India)', ratePct: 12, reducedRatePct: 0, thresholdAmount: 0, filingFrequency: 'monthly', notes: 'EPF 12% employer + 12% employee', isActive: true },
+   281→  { countryIso: 'IN', taxType: 'customs', taxName: 'Basic Customs Duty (India)', ratePct: 15, reducedRatePct: 0, thresholdAmount: 0, filingFrequency: 'monthly', notes: 'Average BCD', isActive: true },
+   282→  { countryIso: 'IN', taxType: 'digital_service', taxName: 'Equalisation Levy (India)', ratePct: 2, reducedRatePct: 0, thresholdAmount: 2000000, filingFrequency: 'quarterly', isActive: true },
+   283→
+   284→  // UAE — VAT 5%, Corporate 9% (since 2023)
+   285→  { countryIso: 'AE', taxType: 'vat', taxName: 'VAT (UAE)', ratePct: 5, reducedRatePct: 0, thresholdAmount: 375000, filingFrequency: 'quarterly', notes: 'Standard 5%', isActive: true },
+   286→  { countryIso: 'AE', taxType: 'corporate', taxName: 'Corporate Tax (UAE)', ratePct: 9, reducedRatePct: 0, thresholdAmount: 375000, filingFrequency: 'annually', notes: 'Effective FY2024', isActive: true },
+   287→
+   288→  // Saudi — VAT 15%, Zakat 2.5%
+   289→  { countryIso: 'SA', taxType: 'vat', taxName: 'VAT (KSA)', ratePct: 15, reducedRatePct: 0, thresholdAmount: 375000, filingFrequency: 'monthly', notes: '15% since Jul 2020', isActive: true },
+   290→  { countryIso: 'SA', taxType: 'corporate', taxName: 'Zakat / Corporate (KSA)', ratePct: 20, reducedRatePct: 2.5, thresholdAmount: 0, filingFrequency: 'annually', notes: '20% for non-Saudi GCC, 2.5% Zakat', isActive: true },
+   291→
+   292→  // Singapore — GST 9%, Corp 17%
+   293→  { countryIso: 'SG', taxType: 'gst', taxName: 'GST (Singapore)', ratePct: 9, reducedRatePct: 0, thresholdAmount: 1000000, filingFrequency: 'quarterly', notes: '9% since Jan 2024', isActive: true },
+   294→  { countryIso: 'SG', taxType: 'corporate', taxName: 'Corporate Tax (Singapore)', ratePct: 17, reducedRatePct: 8.5, thresholdAmount: 10000, filingFrequency: 'annually', notes: 'Partial exemption for first S$300k', isActive: true },
+   295→
+   296→  // UK — VAT 20%, Corp 25%
+   297→  { countryIso: 'GB', taxType: 'vat', taxName: 'VAT (UK)', ratePct: 20, reducedRatePct: 5, thresholdAmount: 90000, filingFrequency: 'quarterly', notes: '5% reduced, 0% zero-rated', isActive: true },
+   298→  { countryIso: 'GB', taxType: 'corporate', taxName: 'Corporation Tax (UK)', ratePct: 25, reducedRatePct: 19, thresholdAmount: 50000, filingFrequency: 'annually', notes: '19% for profits under £50k', isActive: true },
+   299→  { countryIso: 'GB', taxType: 'payroll', taxName: 'NIC (UK)', ratePct: 13.8, reducedRatePct: 0, thresholdAmount: 0, filingFrequency: 'monthly', notes: 'Employer NICs 13.8%', isActive: true },
+   300→
+   301→  // Germany — VAT 19%, Corp ~30%
+   302→  { countryIso: 'DE', taxType: 'vat', taxName: 'USt (Germany)', ratePct: 19, reducedRatePct: 7, thresholdAmount: 22000, filingFrequency: 'monthly', notes: '7% reduced (food, books)', isActive: true },
+   303→  { countryIso: 'DE', taxType: 'corporate', taxName: 'KSt (Germany)', ratePct: 30, reducedRatePct: 15, thresholdAmount: 0, filingFrequency: 'annually', notes: '~15% KSt + ~15% GewSt', isActive: true },
+   304→
+   305→  // France — VAT 20%, Corp 25%
+   306→  { countryIso: 'FR', taxType: 'vat', taxName: 'TVA (France)', ratePct: 20, reducedRatePct: 5.5, thresholdAmount: 85800, filingFrequency: 'monthly', notes: '5.5% food, 10% intermediate', isActive: true },
+   307→  { countryIso: 'FR', taxType: 'corporate', taxName: 'IS (France)', ratePct: 25, reducedRatePct: 15, thresholdAmount: 42500, filingFrequency: 'annually', notes: '15% for SMEs under €42.5k', isActive: true },
+   308→
+   309→  // USA — Sales tax varies 0-10%, Corp 21% federal
+   310→  { countryIso: 'US', taxType: 'sales_tax', taxName: 'Sales Tax (US avg)', ratePct: 7, reducedRatePct: 0, thresholdAmount: 100000, filingFrequency: 'quarterly', notes: 'State-level, 0% in OR/MT/NH', isActive: true },
+   311→  { countryIso: 'US', taxType: 'corporate', taxName: 'Federal Corporate Tax (US)', ratePct: 21, reducedRatePct: 21, thresholdAmount: 0, filingFrequency: 'annually', notes: '21% flat TCJA', isActive: true },
+   312→  { countryIso: 'US', taxType: 'payroll', taxName: 'FICA (US)', ratePct: 7.65, reducedRatePct: 0, thresholdAmount: 0, filingFrequency: 'bi_weekly', notes: '6.2% SS + 1.45% Medicare', isActive: true },
+   313→  { countryIso: 'US', taxType: 'withholding', taxName: 'Backup Withholding (US)', ratePct: 24, reducedRatePct: 0, thresholdAmount: 0, filingFrequency: 'quarterly', isActive: true },
+   314→
+   315→  // Canada — GST 5% + provincial VAT
+   316→  { countryIso: 'CA', taxType: 'gst', taxName: 'GST/HST (Canada)', ratePct: 5, reducedRatePct: 0, thresholdAmount: 30000, filingFrequency: 'annually', notes: 'HST 13-15% in ON/NS/NB/NL/PE', isActive: true },
+   317→  { countryIso: 'CA', taxType: 'corporate', taxName: 'Corporate Tax (Canada)', ratePct: 26.5, reducedRatePct: 12.2, thresholdAmount: 500000, filingFrequency: 'annually', notes: 'Combined fed+prov, 12.2% small biz', isActive: true },
+   318→  { countryIso: 'CA', taxType: 'payroll', taxName: 'CPP/EI (Canada)', ratePct: 11.9, reducedRatePct: 0, thresholdAmount: 0, filingFrequency: 'monthly', notes: 'CPP 5.95% + EI 5.2% (employer)', isActive: true },
+   319→
+   320→  // Australia — GST 10%, Corp 30% (25% SME)
+   321→  { countryIso: 'AU', taxType: 'gst', taxName: 'GST (Australia)', ratePct: 10, reducedRatePct: 0, thresholdAmount: 75000, filingFrequency: 'quarterly', notes: 'GST-free on food/health/edu', isActive: true },
+   322→  { countryIso: 'AU', taxType: 'corporate', taxName: 'Corporate Tax (Australia)', ratePct: 30, reducedRatePct: 25, thresholdAmount: 50000000, filingFrequency: 'annually', notes: '25% for base-rate entities', isActive: true },
+   323→  { countryIso: 'AU', taxType: 'payroll', taxName: 'Super Guarantee (Australia)', ratePct: 11, reducedRatePct: 0, thresholdAmount: 0, filingFrequency: 'quarterly', notes: '11% since Jul 2023', isActive: true },
+   324→
+   325→  // China — VAT 13%, Corp 25%
+   326→  { countryIso: 'CN', taxType: 'vat', taxName: 'VAT (China)', ratePct: 13, reducedRatePct: 9, thresholdAmount: 500000, filingFrequency: 'monthly', notes: '13/9/6/3% slabs', isActive: true },
+   327→  { countryIso: 'CN', taxType: 'corporate', taxName: 'EIT (China)', ratePct: 25, reducedRatePct: 15, thresholdAmount: 1000000, filingFrequency: 'quarterly', notes: '15% HNTE, 20% small biz', isActive: true },
+   328→
+   329→  // Japan — Consumption Tax 10%, Corp ~30%
+   330→  { countryIso: 'JP', taxType: 'vat', taxName: 'Consumption Tax (Japan)', ratePct: 10, reducedRatePct: 8, thresholdAmount: 10000000, filingFrequency: 'annually', notes: '8% on food/periodicals', isActive: true },
+   331→  { countryIso: 'JP', taxType: 'corporate', taxName: 'Corporate Tax (Japan)', ratePct: 30.6, reducedRatePct: 19, thresholdAmount: 0, filingFrequency: 'annually', notes: 'National + local combined', isActive: true },
+   332→
+   333→  // South Africa — VAT 15%, Corp 27%
+   334→  { countryIso: 'ZA', taxType: 'vat', taxName: 'VAT (South Africa)', ratePct: 15, reducedRatePct: 0, thresholdAmount: 1000000, filingFrequency: 'monthly', notes: 'Zero-rated exports', isActive: true },
+   335→  { countryIso: 'ZA', taxType: 'corporate', taxName: 'Corporate Tax (South Africa)', ratePct: 27, reducedRatePct: 0, thresholdAmount: 0, filingFrequency: 'annually', isActive: true },
+   336→
+   337→  // Brazil — ICMS + IPI + PIS/COFINS, Corp 34%
+   338→  { countryIso: 'BR', taxType: 'vat', taxName: 'ICMS+IPI+PIS/COFINS (Brazil)', ratePct: 25, reducedRatePct: 12, thresholdAmount: 0, filingFrequency: 'monthly', notes: 'Layered indirect tax', isActive: true },
+   339→  { countryIso: 'BR', taxType: 'corporate', taxName: 'IRPJ+CSLL (Brazil)', ratePct: 34, reducedRatePct: 15, thresholdAmount: 240000, filingFrequency: 'annually', isActive: true },
+   340→
+   341→  // Hong Kong — no GST/VAT, Corp 16.5%
+   342→  { countryIso: 'HK', taxType: 'corporate', taxName: 'Profits Tax (Hong Kong)', ratePct: 16.5, reducedRatePct: 8.25, thresholdAmount: 2000000, filingFrequency: 'annually', notes: '8.25% first HKD 2M', isActive: true },
+   343→
+   344→  // Netherlands — VAT 21%, Corp 25.8%
+   345→  { countryIso: 'NL', taxType: 'vat', taxName: 'BTW (Netherlands)', ratePct: 21, reducedRatePct: 9, thresholdAmount: 20000, filingFrequency: 'quarterly', notes: '9% on food/books', isActive: true },
+   346→  { countryIso: 'NL', taxType: 'corporate', taxName: 'Vennootschapsbelasting (NL)', ratePct: 25.8, reducedRatePct: 19, thresholdAmount: 200000, filingFrequency: 'annually', isActive: true },
+   347→
+   348→  // Switzerland — VAT 8.1%, Corp ~14-22%
+   349→  { countryIso: 'CH', taxType: 'vat', taxName: 'MWST (Switzerland)', ratePct: 8.1, reducedRatePct: 2.6, thresholdAmount: 0, filingFrequency: 'quarterly', notes: '2.6% on essentials', isActive: true },
+   350→  { countryIso: 'CH', taxType: 'corporate', taxName: 'Corporate Tax (Switzerland)', ratePct: 14.6, reducedRatePct: 12, thresholdAmount: 0, filingFrequency: 'annually', notes: 'Federal+cantonal avg', isActive: true },
+   351→];
+   352→
+   353→export function getTaxRulesForCountry(countryIso: string): TaxRuleRecord[] {
+   354→  return TAX_RULES_REGISTRY.filter((r) => r.countryIso === countryIso.toUpperCase() && r.isActive);
+   355→}
+   356→
+   357→export function getPrimaryTaxRule(countryIso: string, taxType: 'gst' | 'vat' | 'sales_tax'): TaxRuleRecord | undefined {
+   358→  return TAX_RULES_REGISTRY.find(
+   359→    (r) => r.countryIso === countryIso.toUpperCase() && r.taxType === taxType && r.isActive
+   360→  );
+   361→}
+   362→
+   363→// ─── Compliance Deadlines Registry (canonical jurisdictional deadlines) ───────
+   364→
+   365→export const COMPLIANCE_DEADLINES_REGISTRY: ComplianceDeadlineRecord[] = [
+   366→  // India — GSTR-1 (11th), GSTR-3B (20th), GSTR-9 (annually), TDS (7th), ROC MGT-7
+   367→  { countryIso: 'IN', regulationType: 'gst_return', title: 'GSTR-1 (Outward Supplies)', description: 'Monthly outward supplies return', frequency: 'monthly', dueDateRule: '11th of next month', penaltyLate: '₹200/day', authority: 'GSTN', riskLevel: 'high', isActive: true },
+   368→  { countryIso: 'IN', regulationType: 'gst_return', title: 'GSTR-3B (Summary Return)', description: 'Monthly summary return + tax payment', frequency: 'monthly', dueDateRule: '20th of next month', penaltyLate: '₹200/day + 18% interest', authority: 'GSTN', riskLevel: 'critical', isActive: true },
+   369→  { countryIso: 'IN', regulationType: 'gst_return', title: 'GSTR-9 (Annual Return)', description: 'Annual consolidated GST return', frequency: 'annually', dueDateRule: '31st December of next FY', penaltyLate: '₹200/day (max 0.25% turnover)', authority: 'GSTN', riskLevel: 'high', isActive: true },
+   370→  { countryIso: 'IN', regulationType: 'tax_filing', title: 'TDS Return (24Q/26Q)', description: 'Quarterly TDS return', frequency: 'quarterly', dueDateRule: 'Last day of next month after quarter', penaltyLate: '₹200/day + ₹10,000-1,00,000', authority: 'TRACES', riskLevel: 'high', isActive: true },
+   371→  { countryIso: 'IN', regulationType: 'corporate', title: 'ROC Annual Filing (AOC-4 + MGT-7)', description: 'MCA annual financial + board returns', frequency: 'annually', dueDateRule: '30 days from AGM (AOC-4), 60 days (MGT-7)', penaltyLate: '₹100/day', authority: 'MCA', riskLevel: 'high', isActive: true },
+   372→  { countryIso: 'IN', regulationType: 'audit', title: 'Tax Audit u/s 44AB', description: 'Statutory tax audit', frequency: 'annually', dueDateRule: '30th September', penaltyLate: '0.5% of turnover (max ₹1.5L)', authority: 'CBDT', riskLevel: 'critical', isActive: true },
+   373→  { countryIso: 'IN', regulationType: 'privacy', title: 'DPDP Act Compliance', description: 'Digital Personal Data Protection Act obligations', frequency: 'annually', dueDateRule: 'Continuous', penaltyLate: 'Up to ₹250 crore', authority: 'Data Protection Board', riskLevel: 'high', isActive: true },
+   374→
+   375→  // UAE — VAT Return quarterly, ESR, Corporate Tax
+   376→  { countryIso: 'AE', regulationType: 'vat_return', title: 'VAT Return', description: 'Quarterly VAT return', frequency: 'quarterly', dueDateRule: '28th of next month after quarter', penaltyLate: 'AED 1,000 first + AED 200/day', authority: 'FTA', riskLevel: 'high', isActive: true },
+   377→  { countryIso: 'AE', regulationType: 'corporate', title: 'Economic Substance Regulations (ESR)', description: 'ESR notification + report', frequency: 'annually', dueDateRule: '12 months from FY end', penaltyLate: 'AED 10,000-50,000', authority: 'UAE MoF', riskLevel: 'medium', isActive: true },
+   378→  { countryIso: 'AE', regulationType: 'corporate', title: 'Corporate Tax Return', description: 'Annual CT return', frequency: 'annually', dueDateRule: '9 months after FY end', penaltyLate: 'AED 500-10,000/month', authority: 'FTA', riskLevel: 'critical', isActive: true },
+   379→
+   380→  // Saudi — VAT monthly, Zakat annual, e-invoicing
+   381→  { countryIso: 'SA', regulationType: 'vat_return', title: 'VAT Return', description: 'Monthly VAT return', frequency: 'monthly', dueDateRule: 'Last day of next month', penaltyLate: '5-25% of tax due', authority: 'ZATCA', riskLevel: 'high', isActive: true },
+   382→  { countryIso: 'SA', regulationType: 'corporate', title: 'Zakat / Corporate Tax Return', description: 'Annual Zakat/CIT return', frequency: 'annually', dueDateRule: '120 days after FY end', penaltyLate: '1% per month', authority: 'ZATCA', riskLevel: 'critical', isActive: true },
+   383→
+   384→  // Singapore — GST quarterly, ECI, Form C-S
+   385→  { countryIso: 'SG', regulationType: 'gst_return', title: 'GST Return', description: 'Quarterly GST F5 return', frequency: 'quarterly', dueDateRule: 'Last day of next month after quarter', penaltyLate: 'S$200', authority: 'IRAS', riskLevel: 'high', isActive: true },
+   386→  { countryIso: 'SG', regulationType: 'tax_filing', title: 'Estimated Chargeable Income (ECI)', description: 'ECI within 3 months of FY end', frequency: 'annually', dueDateRule: '3 months after FY end', penaltyLate: 'S$1,000-5,000', authority: 'IRAS', riskLevel: 'medium', isActive: true },
+   387→  { countryIso: 'SG', regulationType: 'corporate', title: 'Form C-S/C Annual Return', description: 'Annual corporate income tax return', frequency: 'annually', dueDateRule: '30 Nov (paper), 15 Dec (e-filing)', penaltyLate: 'S$1,000-5,000', authority: 'IRAS', riskLevel: 'high', isActive: true },
+   388→  { countryIso: 'SG', regulationType: 'corporate', title: 'ACRA Annual Return', description: 'ACRA company annual return', frequency: 'annually', dueDateRule: '7 months after FY end', penaltyLate: 'S$300-600', authority: 'ACRA', riskLevel: 'medium', isActive: true },
+   389→
+   390→  // UK — VAT quarterly, CTSA, PAYE
+   391→  { countryIso: 'GB', regulationType: 'vat_return', title: 'VAT Return', description: 'Quarterly VAT return', frequency: 'quarterly', dueDateRule: '1 month + 7 days after quarter end', penaltyLate: 'Points-based + £200', authority: 'HMRC', riskLevel: 'high', isActive: true },
+   392→  { countryIso: 'GB', regulationType: 'tax_filing', title: 'Corporation Tax Return (CT600)', description: 'Annual CT return', frequency: 'annually', dueDateRule: '12 months after FY end', penaltyLate: '£100, then 10% tax due', authority: 'HMRC', riskLevel: 'critical', isActive: true },
+   393→  { countryIso: 'GB', regulationType: 'payroll', title: 'PAYE/RTI Submission', description: 'Real-time payroll reporting', frequency: 'monthly', dueDateRule: 'On/before payday', penaltyLate: '£100-400/month', authority: 'HMRC', riskLevel: 'high', isActive: true },
+   394→  { countryIso: 'GB', regulationType: 'corporate', title: 'Companies House Annual Return (CS01)', description: 'Annual confirmation statement', frequency: 'annually', dueDateRule: 'Anniversary of incorporation', penaltyLate: '£100-1,000 + strike-off', authority: 'Companies House', riskLevel: 'medium', isActive: true },
+   395→  { countryIso: 'GB', regulationType: 'privacy', title: 'GDPR / UK Data Protection', description: 'GDPR + UK DPA compliance', frequency: 'annually', dueDateRule: 'Continuous', penaltyLate: 'Up to £17.5M / 4% turnover', authority: 'ICO', riskLevel: 'high', isActive: true },
+   396→
+   397→  // Germany — VAT monthly, KSt annual, LSt monthly
+   398→  { countryIso: 'DE', regulationType: 'vat_return', title: 'Umsatzsteuer-Voranmeldung', description: 'Monthly/quarterly VAT advance return', frequency: 'monthly', dueDateRule: '10th of next month', penaltyLate: '0.25% per month', authority: 'Finanzamt', riskLevel: 'high', isActive: true },
+   399→  { countryIso: 'DE', regulationType: 'corporate', title: 'Körperschaftsteuer (KSt)', description: 'Annual corporate income tax', frequency: 'annually', dueDateRule: '15 months after FY end', penaltyLate: '0.25% per month', authority: 'Finanzamt', riskLevel: 'critical', isActive: true },
+   400→  { countryIso: 'DE', regulationType: 'payroll', title: 'Lohnsteuer (LSt)', description: 'Monthly payroll tax', frequency: 'monthly', dueDateRule: '10th of next month', penaltyLate: '0.25% per month', authority: 'Finanzamt', riskLevel: 'high', isActive: true },
+   401→  { countryIso: 'DE', regulationType: 'privacy', title: 'DSGVO (GDPR)', description: 'EU GDPR compliance', frequency: 'annually', dueDateRule: 'Continuous', penaltyLate: 'Up to €20M / 4% turnover', authority: 'BfDI', riskLevel: 'high', isActive: true },
+   402→
+   403→  // France — TVA monthly, IS annual
+   404→  { countryIso: 'FR', regulationType: 'vat_return', title: 'Déclaration TVA (CA3)', description: 'Monthly/quarterly VAT', frequency: 'monthly', dueDateRule: '19th/24th of next month', penaltyLate: '5-80% of tax', authority: 'DGFiP', riskLevel: 'high', isActive: true },
+   405→  { countryIso: 'FR', regulationType: 'corporate', title: 'Impôt sur les Sociétés (IS)', description: 'Annual corporate tax', frequency: 'annually', dueDateRule: '15th of 3rd month after FY end', penaltyLate: '10% + interest', authority: 'DGFiP', riskLevel: 'critical', isActive: true },
+   406→  { countryIso: 'FR', regulationType: 'privacy', title: 'RGPD', description: 'EU GDPR (France)', frequency: 'annually', dueDateRule: 'Continuous', penaltyLate: 'Up to €20M', authority: 'CNIL', riskLevel: 'high', isActive: true },
+   407→
+   408→  // USA — Sales tax (state), Federal Corp 1120, 941 payroll, 1099
+   409→  { countryIso: 'US', regulationType: 'tax_filing', title: 'Form 1120 (Federal Corp)', description: 'Federal corporate income tax', frequency: 'annually', dueDateRule: '15th of 4th month after FY end', penaltyLate: '5%/month max 25%', authority: 'IRS', riskLevel: 'critical', isActive: true },
+   410→  { countryIso: 'US', regulationType: 'payroll', title: 'Form 941 (Quarterly Payroll)', description: 'Federal quarterly payroll tax', frequency: 'quarterly', dueDateRule: 'Last day of month after quarter', penaltyLate: '5%/month', authority: 'IRS', riskLevel: 'high', isActive: true },
+   411→  { countryIso: 'US', regulationType: 'tax_filing', title: 'Sales Tax Return (state)', description: 'State sales/use tax', frequency: 'quarterly', dueDateRule: '20th-30th of next month', penaltyLate: 'Varies (5-25%)', authority: 'State DOR', riskLevel: 'high', isActive: true },
+   412→  { countryIso: 'US', regulationType: 'corporate', title: 'Form 1099-MISC/NEC', description: 'Independent contractor reporting', frequency: 'annually', dueDateRule: '31st January', penaltyLate: '$50-310 per form', authority: 'IRS', riskLevel: 'medium', isActive: true },
+   413→  { countryIso: 'US', regulationType: 'privacy', title: 'State Privacy Laws (CCPA/CPRA)', description: 'California + state privacy laws', frequency: 'annually', dueDateRule: 'Continuous', penaltyLate: 'Up to $7,500/violation', authority: 'CPPA / State AGs', riskLevel: 'high', isActive: true },
+   414→
+   415→  // Canada — GST/HST quarterly, T2 annual, T4 payroll
+   416→  { countryIso: 'CA', regulationType: 'gst_return', title: 'GST/HST Return', description: 'Annual/quarterly GST/HST', frequency: 'quarterly', dueDateRule: '1 month after FY end', penaltyLate: '1% + interest', authority: 'CRA', riskLevel: 'high', isActive: true },
+   417→  { countryIso: 'CA', regulationType: 'corporate', title: 'T2 Corporate Return', description: 'Federal+provincial corp tax', frequency: 'annually', dueDateRule: '6 months after FY end', penaltyLate: '5%/month', authority: 'CRA', riskLevel: 'critical', isActive: true },
+   418→  { countryIso: 'CA', regulationType: 'payroll', title: 'T4 Summary (Payroll)', description: 'Annual payroll summary', frequency: 'annually', dueDateRule: 'Last day of February', penaltyLate: '$100-7,500', authority: 'CRA', riskLevel: 'high', isActive: true },
+   419→  { countryIso: 'CA', regulationType: 'privacy', title: 'PIPEDA', description: 'Personal Information Protection', frequency: 'annually', dueDateRule: 'Continuous', penaltyLate: 'Up to CAD 100k', authority: 'OPC', riskLevel: 'medium', isActive: true },
+   420→
+   421→  // Australia — BAS quarterly, ITR annual, STP payroll
+   422→  { countryIso: 'AU', regulationType: 'gst_return', title: 'Business Activity Statement (BAS)', description: 'GST+PAYG quarterly', frequency: 'quarterly', dueDateRule: '28th of month after quarter', penaltyLate: 'AUD 210-1,050', authority: 'ATO', riskLevel: 'high', isActive: true },
+   423→  { countryIso: 'AU', regulationType: 'corporate', title: 'Company Tax Return', description: 'Annual income tax return', frequency: 'annually', dueDateRule: '15th Jan (lodged) / 21st Feb (paid)', penaltyLate: 'AUD 1,050 + interest', authority: 'ATO', riskLevel: 'critical', isActive: true },
+   424→  { countryIso: 'AU', regulationType: 'payroll', title: 'Single Touch Payroll (STP)', description: 'Real-time payroll reporting', frequency: 'monthly', dueDateRule: 'On payday', penaltyLate: 'AUD 210-1,050', authority: 'ATO', riskLevel: 'high', isActive: true },
+   425→  { countryIso: 'AU', regulationType: 'corporate', title: 'ASIC Annual Review', description: 'ASIC annual company review', frequency: 'annually', dueDateRule: 'Anniversary of registration', penaltyLate: 'AUD 79 + late fees', authority: 'ASIC', riskLevel: 'medium', isActive: true },
+   426→  { countryIso: 'AU', regulationType: 'privacy', title: 'Privacy Act 1988', description: 'Australian Privacy Principles', frequency: 'annually', dueDateRule: 'Continuous', penaltyLate: 'Up to AUD 50M', authority: 'OAIC', riskLevel: 'high', isActive: true },
+   427→
+   428→  // South Africa — VAT bi-monthly, ITR14 annual, EMP201 payroll
+   429→  { countryIso: 'ZA', regulationType: 'vat_return', title: 'VAT201 Return', description: 'Bi-monthly VAT return', frequency: 'monthly', dueDateRule: '25th of next month (e-filing)', penaltyLate: '10% + interest', authority: 'SARS', riskLevel: 'high', isActive: true },
+   430→  { countryIso: 'ZA', regulationType: 'corporate', title: 'ITR14 (Corporate Return)', description: 'Annual corporate income tax', frequency: 'annually', dueDateRule: '12 months after FY end', penaltyLate: '10-200% of tax', authority: 'SARS', riskLevel: 'critical', isActive: true },
+   431→  { countryIso: 'ZA', regulationType: 'payroll', title: 'EMP201 (PAYE/UIF/SDL)', description: 'Monthly payroll taxes', frequency: 'monthly', dueDateRule: '7th of next month', penaltyLate: '10% + interest', authority: 'SARS', riskLevel: 'high', isActive: true },
+   432→  { countryIso: 'ZA', regulationType: 'privacy', title: 'POPIA', description: 'Protection of Personal Information Act', frequency: 'annually', dueDateRule: 'Continuous', penaltyLate: 'Up to ZAR 10M / imprisonment', authority: 'Information Regulator', riskLevel: 'high', isActive: true },
+   433→
+   434→  // Brazil — DCTF, EFD, SPED
+   435→  { countryIso: 'BR', regulationType: 'tax_filing', title: 'DCTF Monthly', description: 'Federal tax statement', frequency: 'monthly', dueDateRule: '15th of next month', penaltyLate: 'BRL 5,000-50,000', authority: 'RFB', riskLevel: 'high', isActive: true },
+   436→  { countryIso: 'BR', regulationType: 'corporate', title: 'ECF (Corporate Tax Return)', description: 'Annual corporate tax', frequency: 'annually', dueDateRule: 'Last business day of July', penaltyLate: 'BRL 5,000-50,000', authority: 'RFB', riskLevel: 'critical', isActive: true },
+   437→  { countryIso: 'BR', regulationType: 'corporate', title: 'SPED ECD (Digital Bookkeeping)', description: 'Digital accounting bookkeeping', frequency: 'annually', dueDateRule: 'Last business day of May', penaltyLate: 'BRL 5,000-50,000', authority: 'RFB', riskLevel: 'high', isActive: true },
+   438→  { countryIso: 'BR', regulationType: 'privacy', title: 'LGPD', description: 'Brazilian General Data Protection Law', frequency: 'annually', dueDateRule: 'Continuous', penaltyLate: 'Up to BRL 50M / 2% revenue', authority: 'ANPD', riskLevel: 'high', isActive: true },
+   439→
+   440→  // Singapore already covered; UAE privacy
+   441→  { countryIso: 'AE', regulationType: 'privacy', title: 'UAE PDPL', description: 'Personal Data Protection Law', frequency: 'annually', dueDateRule: 'Continuous', penaltyLate: 'Up to AED 5M', authority: 'UAE Data Office', riskLevel: 'medium', isActive: true },
+   442→
+   443→  // China — VAT monthly, EIT quarterly
+   444→  { countryIso: 'CN', regulationType: 'vat_return', title: 'VAT Return', description: 'Monthly VAT return', frequency: 'monthly', dueDateRule: '15th of next month', penaltyLate: '0.05%/day', authority: 'STA', riskLevel: 'high', isActive: true },
+   445→  { countryIso: 'CN', regulationType: 'corporate', title: 'EIT Quarterly Prepayment', description: 'Quarterly EIT', frequency: 'quarterly', dueDateRule: '15th of month after quarter', penaltyLate: '0.05%/day', authority: 'STA', riskLevel: 'high', isActive: true },
+   446→  { countryIso: 'CN', regulationType: 'privacy', title: 'PIPL', description: 'Personal Information Protection Law', frequency: 'annually', dueDateRule: 'Continuous', penaltyLate: 'Up to CNY 50M / 5% revenue', authority: 'CAC', riskLevel: 'critical', isActive: true },
+   447→
+   448→  // Japan — Consumption Tax annual, Corporation Tax
+   449→  { countryIso: 'JP', regulationType: 'vat_return', title: 'Consumption Tax Return', description: 'Annual consumption tax', frequency: 'annually', dueDateRule: '2 months after FY end', penaltyLate: 'No extension penalty', authority: 'NTA', riskLevel: 'high', isActive: true },
+   450→  { countryIso: 'JP', regulationType: 'corporate', title: 'Corporation Tax Return', description: 'Annual corporate tax', frequency: 'annually', dueDateRule: '2 months after FY end', penaltyLate: 'No extension penalty', authority: 'NTA', riskLevel: 'critical', isActive: true },
+   451→  { countryIso: 'JP', regulationType: 'privacy', title: 'APPI', description: 'Act on Protection of Personal Information', frequency: 'annually', dueDateRule: 'Continuous', penaltyLate: 'Up to JPY 100M', authority: 'PPC', riskLevel: 'high', isActive: true },
+   452→
+   453→  // Hong Kong — Profits Tax annual
+   454→  { countryIso: 'HK', regulationType: 'corporate', title: 'Profits Tax Return', description: 'Annual profits tax', frequency: 'annually', dueDateRule: '1st week of April (normal)', penaltyLate: 'HKD 10,000 + 5x tax', authority: 'IRD', riskLevel: 'critical', isActive: true },
+   455→  { countryIso: 'HK', regulationType: 'corporate', title: 'Annual Return (NAR1)', description: 'Companies Registry annual return', frequency: 'annually', dueDateRule: 'Anniversary of incorporation', penaltyLate: 'HKD 870-3,480', authority: 'Companies Registry', riskLevel: 'medium', isActive: true },
+   456→  { countryIso: 'HK', regulationType: 'privacy', title: 'PDPO', description: 'Personal Data (Privacy) Ordinance', frequency: 'annually', dueDateRule: 'Continuous', penaltyLate: 'Up to HKD 1M / 5 years', authority: 'PCPD', riskLevel: 'medium', isActive: true },
+   457→];
+   458→
+   459→export function getComplianceDeadlinesForCountry(countryIso: string): ComplianceDeadlineRecord[] {
+   460→  return COMPLIANCE_DEADLINES_REGISTRY.filter((d) => d.countryIso === countryIso.toUpperCase() && d.isActive);
+   461→}
+   462→
+   463→// ─── Payroll Structures Registry (canonical country payroll rules) ───────────
+   464→
+   465→export const PAYROLL_STRUCTURES_REGISTRY: PayrollStructureRecord[] = [
+   466→  {
+   467→    countryIso: 'IN', structureName: 'India Standard Payroll', currencyCode: 'INR', payCycle: 'monthly',
+   468→    minWageMonthly: 15000,
+   469→    socialSecurityEmployerPct: 12, socialSecurityEmployeePct: 12,  // EPF
+   470→    medicareEmployerPct: 3.25, medicareEmployeePct: 0,              // ESI (<₹21k salary)
+   471→    retirementEmployerPct: 8.33, retirementEmployeePct: 0,         // EPS (out of EPF 12%)
+   472→    annualLeaveDays: 21, sickLeaveDays: 12, maternityLeaveDays: 182,
+   473→    incomeTaxBrackets: [
+   474→      { from: 0, to: 300000, rate: 0 },
+   475→      { from: 300000, to: 600000, rate: 5 },
+   476→      { from: 600000, to: 900000, rate: 10 },
+   477→      { from: 900000, to: 1200000, rate: 15 },
+   478→      { from: 1200000, to: 1500000, rate: 20 },
+   479→      { from: 1500000, to: null, rate: 30 },
+   480→    ] as TaxBracket[],
+   481→    notes: 'New tax regime FY2024-25; EPF 12% + EPS 8.33% of basic',
+   482→  },
+   483→  {
+   484→    countryIso: 'US', structureName: 'US Standard Payroll', currencyCode: 'USD', payCycle: 'bi_weekly',
+   485→    minWageMonthly: 1458,  // $7.25/hr federal
+   486→    socialSecurityEmployerPct: 6.2, socialSecurityEmployeePct: 6.2,  // FICA-SS (cap $168,600)
+   487→    medicareEmployerPct: 1.45, medicareEmployeePct: 1.45,             // FICA-Medicare
+   488→    retirementEmployerPct: 3, retirementEmployeePct: 5,               // 401k typical match
+   489→    annualLeaveDays: 15, sickLeaveDays: 10, maternityLeaveDays: 84,   // FMLA 12 weeks unpaid
+   490→    incomeTaxBrackets: [
+   491→      { from: 0, to: 11600, rate: 10 },
+   492→      { from: 11600, to: 47150, rate: 12 },
+   493→      { from: 47150, to: 100525, rate: 22 },
+   494→      { from: 100525, to: 191950, rate: 24 },
+
+[showing lines 275-494 of 689; use offset=495 with limit to continue reading]

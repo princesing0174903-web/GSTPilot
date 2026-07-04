@@ -1,0 +1,1336 @@
+     1→'use client'
+     2→
+     3→import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+     4→import { motion, AnimatePresence, useAnimation } from 'framer-motion'
+     5→import { useApp } from '@/contexts/AppContext'
+     6→import {
+     7→  Sparkles,
+     8→  X,
+     9→  Minus,
+    10→  Maximize2,
+    11→  Minimize2,
+    12→  Mic,
+    13→  MicOff,
+    14→  Volume2,
+    15→  VolumeX,
+    16→  Send,
+    17→  Brain,
+    18→  Zap,
+    19→  FileText,
+    20→  AlertTriangle,
+    21→  CreditCard,
+    22→  Bell,
+    23→  Activity,
+    24→  Rocket,
+    25→  TrendingUp,
+    26→  Users,
+    27→  Briefcase,
+    28→  Wallet,
+    29→  BookOpen,
+    30→  Banknote,
+    31→  Package,
+    32→  ShieldCheck,
+    33→  Network,
+    34→  Settings,
+    35→  Trash2,
+    36→  Square,
+    37→} from 'lucide-react'
+    38→
+    39→// ═════════════════════════════════════════════════════════════════════════════
+    40→// GSTPilot Intelligence™ — Global Floating AI Assistant
+    41→// "The AI Brain of Your Business."
+    42→// Jarvis + ChatGPT + Palantir + Cursor for Indian CAs and Businesses
+    43→// ═════════════════════════════════════════════════════════════════════════════
+    44→
+    45→interface Message {
+    46→  id: string
+    47→  role: 'user' | 'assistant' | 'system'
+    48→  content: string
+    49→  timestamp: number
+    50→  actions?: ActionSuggestion[]
+    51→  isTyping?: boolean
+    52→  // V16 structured response fields
+    53→  insights?: Array<{ text: string; tone: 'positive' | 'neutral' | 'warning' }>
+    54→  sources?: Array<{ name: string; count: number; icon?: string }>
+    55→  thinkingSteps?: Array<{ label: string; duration: number }>
+    56→}
+    57→
+    58→interface ActionSuggestion {
+    59→  type: 'navigate' | 'task' | 'reminder' | 'report' | 'create_task' | 'send_reminder' | 'generate_report' | 'execute_workflow'
+    60→  label: string
+    61→  title?: string
+    62→  description?: string
+    63→  view?: string
+    64→  icon?: string
+    65→  payload?: Record<string, unknown>
+    66→}
+    67→
+    68→interface LiveStats {
+    69→  totalClients: number
+    70→  pendingReturns: number
+    71→  pendingCollections: number
+    72→  complianceScore: number
+    73→  atRiskClients: number
+    74→  unreadNotifications: number
+    75→}
+    76→
+    77→// --- Helpers ---------------------------------------------------------------
+    78→
+    79→const formatINR = (n: number) => `₹${n.toLocaleString('en-IN')}`
+    80→
+    81→const SUGGESTED_QUESTIONS = [
+    82→  { label: 'Show pending returns', icon: FileText, color: 'text-amber-600' },
+    83→  { label: 'Which clients are risky?', icon: AlertTriangle, color: 'text-red-600' },
+    84→  { label: 'What revenue will I make next month?', icon: TrendingUp, color: 'text-emerald-600' },
+    85→  { label: 'Run my firm', icon: Rocket, color: 'text-violet-600' },
+    86→  { label: 'Run my business', icon: Zap, color: 'text-cyan-600' },
+    87→  { label: 'Who is overloaded?', icon: Users, color: 'text-orange-600' },
+    88→  { label: 'Why did collections drop?', icon: Wallet, color: 'text-rose-600' },
+    89→  { label: 'Open War Room', icon: Activity, color: 'text-emerald-700' },
+    90→]
+    91→
+    92→const MODULE_SHORTCUTS = [
+    93→  { label: 'GST', view: 'returns', icon: FileText },
+    94→  { label: 'Accounting', view: 'accounting', icon: BookOpen },
+    95→  { label: 'Payroll', view: 'payroll', icon: Wallet },
+    96→  { label: 'CRM', view: 'crm', icon: Briefcase },
+    97→  { label: 'Banking', view: 'banking', icon: Banknote },
+    98→  { label: 'Payments', view: 'payments', icon: CreditCard },
+    99→  { label: 'Inventory', view: 'inventory', icon: Package },
+   100→  { label: 'Compliance', view: 'roc-compliance', icon: ShieldCheck },
+   101→  { label: 'Business Graph', view: 'business-graph', icon: Network },
+   102→  { label: 'Predictions', view: 'ai-predictions', icon: TrendingUp },
+   103→]
+   104→
+   105→const ICON_MAP: Record<string, React.ElementType> = {
+   106→  FileText,
+   107→  AlertTriangle,
+   108→  CreditCard,
+   109→  Bell,
+   110→  Activity,
+   111→  Rocket,
+   112→  Brain,
+   113→  Zap,
+   114→  TrendingUp,
+   115→  Users,
+   116→  Wallet,
+   117→}
+   118→
+   119→// --- Animated Particles (around the orb) -----------------------------------
+   120→
+   121→function OrbParticles({ active }: { active: boolean }) {
+   122→  const particles = useMemo(
+   123→    () =>
+   124→      Array.from({ length: 12 }).map((_, i) => ({
+   125→        id: i,
+   126→        angle: (i / 12) * Math.PI * 2,
+   127→        radius: 38 + Math.random() * 18,
+   128→        size: 2 + Math.random() * 3,
+   129→        duration: 3 + Math.random() * 2,
+   130→        delay: Math.random() * 2,
+   131→      })),
+   132→    []
+   133→  )
+   134→
+   135→  return (
+   136→    <div className="absolute inset-0 pointer-events-none">
+   137→      {particles.map((p) => (
+   138→        <motion.div
+   139→          key={p.id}
+   140→          className="absolute rounded-full"
+   141→          style={{
+   142→            width: p.size,
+   143→            height: p.size,
+   144→            background: 'linear-gradient(135deg, #10b981, #06b6d4)',
+   145→            boxShadow: '0 0 8px rgba(16, 185, 129, 0.8)',
+   146→            left: '50%',
+   147→            top: '50%',
+   148→          }}
+   149→          animate={
+   150→            active
+   151→              ? {
+   152→                  x: [
+   153→                    Math.cos(p.angle) * 20,
+   154→                    Math.cos(p.angle) * p.radius,
+   155→                    Math.cos(p.angle + 0.3) * 20,
+   156→                  ],
+   157→                  y: [
+   158→                    Math.sin(p.angle) * 20,
+   159→                    Math.sin(p.angle) * p.radius,
+   160→                    Math.sin(p.angle + 0.3) * 20,
+   161→                  ],
+   162→                  opacity: [0, 1, 0],
+   163→                  scale: [0.5, 1, 0.5],
+   164→                }
+   165→              : { opacity: 0 }
+   166→          }
+   167→          transition={{
+   168→            duration: p.duration,
+   169→            delay: p.delay,
+   170→            repeat: Infinity,
+   171→            ease: 'easeInOut',
+   172→          }}
+   173→        />
+   174→      ))}
+   175→    </div>
+   176→  )
+   177→}
+   178→
+   179→// --- Floating Orb Button (draggable) ---------------------------------------
+   180→
+   181→interface OrbProps {
+   182→  onClick: () => void
+   183→  isOpen: boolean
+   184→  isListening: boolean
+   185→  isThinking: boolean
+   186→}
+   187→
+   188→function FloatingOrb({ onClick, isOpen, isListening, isThinking }: OrbProps) {
+   189→  const [position, setPosition] = useState({ x: 0, y: 0 })
+   190→  const [isDragging, setIsDragging] = useState(false)
+   191→  const [hasMoved, setHasMoved] = useState(false)
+   192→  const dragStart = useRef({ x: 0, y: 0, posX: 0, posY: 0 })
+   193→  const orbRef = useRef<HTMLDivElement>(null)
+   194→
+   195→  const handlePointerDown = (e: React.PointerEvent) => {
+   196→    setIsDragging(true)
+   197→    setHasMoved(false)
+   198→    dragStart.current = {
+   199→      x: e.clientX,
+   200→      y: e.clientY,
+   201→      posX: position.x,
+   202→      posY: position.y,
+   203→    }
+   204→    ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
+   205→  }
+   206→
+   207→  const handlePointerMove = (e: React.PointerEvent) => {
+   208→    if (!isDragging) return
+   209→    const dx = e.clientX - dragStart.current.x
+   210→    const dy = e.clientY - dragStart.current.y
+   211→    if (Math.abs(dx) > 4 || Math.abs(dy) > 4) setHasMoved(true)
+   212→    setPosition({
+   213→      x: dragStart.current.posX + dx,
+   214→      y: dragStart.current.posY + dy,
+   215→    })
+   216→  }
+   217→
+   218→  const handlePointerUp = (e: React.PointerEvent) => {
+   219→    setIsDragging(false)
+   220→    ;(e.target as HTMLElement).releasePointerCapture(e.pointerId)
+   221→    if (!hasMoved) onClick()
+   222→  }
+   223→
+   224→  return (
+   225→    <motion.div
+   226→      ref={orbRef}
+   227→      className="fixed z-[9998] cursor-grab active:cursor-grabbing"
+   228→      style={{
+   229→        right: '24px',
+   230→        bottom: '24px',
+   231→        x: position.x,
+   232→        y: position.y,
+   233→        touchAction: 'none',
+   234→      }}
+   235→      onPointerDown={handlePointerDown}
+   236→      onPointerMove={handlePointerMove}
+   237→      onPointerUp={handlePointerUp}
+   238→      whileHover={{ scale: 1.08 }}
+   239→      whileTap={{ scale: 0.95 }}
+   240→      title="GSTPilot Intelligence™ — Ctrl+K"
+   241→    >
+   242→      <div className="relative h-16 w-16">
+   243→        {/* Outer pulsing glow ring */}
+   244→        <motion.div
+   245→          className="absolute inset-0 rounded-full"
+   246→          style={{
+   247→            background:
+   248→              'radial-gradient(circle, rgba(16,185,129,0.4) 0%, rgba(6,182,212,0.2) 50%, transparent 70%)',
+   249→          }}
+   250→          animate={{
+   251→            scale: [1, 1.4, 1],
+   252→            opacity: [0.6, 0.2, 0.6],
+   253→          }}
+   254→          transition={{
+   255→            duration: 4,
+   256→            repeat: Infinity,
+   257→            ease: 'easeInOut',
+   258→          }}
+   259→        />
+   260→
+   261→        {/* Breathing aura */}
+   262→        <motion.div
+   263→          className="absolute -inset-2 rounded-full blur-md"
+   264→          style={{
+   265→            background: 'linear-gradient(135deg, #10b981, #06b6d4, #3b82f6)',
+   266→            opacity: 0.5,
+   267→          }}
+   268→          animate={{
+   269→            scale: [1, 1.15, 1],
+   270→            opacity: [0.3, 0.6, 0.3],
+   271→          }}
+   272→          transition={{
+   273→            duration: 3,
+   274→            repeat: Infinity,
+   275→            ease: 'easeInOut',
+   276→          }}
+   277→        />
+   278→
+   279→        {/* Animated particles */}
+   280→        <OrbParticles active={!isOpen || isListening || isThinking} />
+   281→
+   282→        {/* Main orb with gradient */}
+   283→        <motion.div
+   284→          className="relative h-16 w-16 rounded-full overflow-hidden"
+   285→          style={{
+   286→            background:
+   287→              'conic-gradient(from 0deg, #10b981, #06b6d4, #3b82f6, #06b6d4, #10b981)',
+   288→            boxShadow:
+   289→              '0 8px 32px rgba(16, 185, 129, 0.5), 0 0 0 2px rgba(255,255,255,0.2) inset, 0 0 20px rgba(6, 182, 212, 0.4) inset',
+   290→          }}
+   291→          animate={{
+   292→            rotate: isOpen ? 0 : 360,
+   293→          }}
+   294→          transition={{
+   295→            duration: 8,
+   296→            repeat: isOpen ? 0 : Infinity,
+   297→            ease: 'linear',
+   298→          }}
+   299→        >
+   300→          {/* Inner glossy sphere */}
+   301→          <div
+   302→            className="absolute inset-1.5 rounded-full"
+   303→            style={{
+   304→              background:
+   305→                'radial-gradient(circle at 30% 25%, rgba(255,255,255,0.7) 0%, rgba(255,255,255,0.1) 30%, transparent 60%)',
+   306→            }}
+   307→          />
+   308→
+   309→          {/* Center icon */}
+   310→          <div className="absolute inset-0 flex items-center justify-center">
+   311→            <AnimatePresence mode="wait">
+   312→              {isThinking ? (
+   313→                <motion.div
+   314→                  key="thinking"
+   315→                  initial={{ scale: 0, rotate: -90 }}
+   316→                  animate={{ scale: 1, rotate: 0 }}
+   317→                  exit={{ scale: 0, rotate: 90 }}
+   318→                >
+   319→                  <Brain className="h-6 w-6 text-foreground drop-shadow-lg" />
+   320→                </motion.div>
+   321→              ) : isListening ? (
+   322→                <motion.div
+   323→                  key="listening"
+   324→                  initial={{ scale: 0 }}
+   325→                  animate={{ scale: 1 }}
+   326→                  exit={{ scale: 0 }}
+   327→                >
+   328→                  <Mic className="h-6 w-6 text-foreground drop-shadow-lg" />
+   329→                </motion.div>
+   330→              ) : isOpen ? (
+   331→                <motion.div
+   332→                  key="open"
+   333→                  initial={{ scale: 0, rotate: 90 }}
+   334→                  animate={{ scale: 1, rotate: 0 }}
+   335→                  exit={{ scale: 0, rotate: -90 }}
+   336→                >
+   337→                  <Sparkles className="h-6 w-6 text-foreground drop-shadow-lg" />
+   338→                </motion.div>
+   339→              ) : (
+   340→                <motion.div
+   341→                  key="closed"
+   342→                  initial={{ scale: 0, rotate: -90 }}
+   343→                  animate={{ scale: 1, rotate: 0 }}
+   344→                  exit={{ scale: 0, rotate: 90 }}
+   345→                >
+   346→                  <Sparkles className="h-6 w-6 text-foreground drop-shadow-lg" />
+   347→                </motion.div>
+   348→              )}
+   349→            </AnimatePresence>
+   350→          </div>
+   351→
+   352→          {/* Listening pulse rings */}
+   353→          {isListening && (
+   354→            <>
+   355→              <motion.div
+   356→                className="absolute inset-0 rounded-full border-2 border-border"
+   357→                animate={{ scale: [1, 1.6], opacity: [0.8, 0] }}
+   358→                transition={{ duration: 1.2, repeat: Infinity, ease: 'easeOut' }}
+   359→              />
+   360→              <motion.div
+   361→                className="absolute inset-0 rounded-full border-2 border-border"
+   362→                animate={{ scale: [1, 1.6], opacity: [0.6, 0] }}
+   363→                transition={{ duration: 1.2, repeat: Infinity, ease: 'easeOut', delay: 0.4 }}
+   364→              />
+   365→            </>
+   366→          )}
+   367→        </motion.div>
+   368→
+   369→        {/* Tooltip label */}
+   370→        <motion.div
+   371→          className="absolute right-full top-1/2 -translate-y-1/2 mr-3 pointer-events-none whitespace-nowrap"
+   372→          initial={{ opacity: 0, x: 10 }}
+   373→          whileHover={{ opacity: 1, x: 0 }}
+   374→        >
+   375→          <div className="bg-surface/90 backdrop-blur-md text-foreground text-xs font-medium px-3 py-1.5 rounded-lg shadow-xl border border-border">
+   376→            GSTPilot Oracle™
+   377→            <span className="block text-[10px] text-emerald-400 font-normal">Ctrl + K</span>
+   378→          </div>
+   379→        </motion.div>
+   380→      </div>
+   381→    </motion.div>
+   382→  )
+   383→}
+   384→
+   385→// --- AI Thinking Indicator (V16 — Perplexity-style multi-step) ----------------
+   386→
+   387→function ThinkingIndicator({ steps }: { steps?: Array<{ label: string; duration: number }> }) {
+   388→  const [currentStep, setCurrentStep] = useState(0)
+   389→  const stepLabels = steps && steps.length > 0
+   390→    ? steps.map(s => s.label)
+   391→    : ['Thinking...', 'Generating answer...']
+   392→
+   393→  useEffect(() => {
+   394→    if (!steps || steps.length === 0) return
+   395→    let stepIdx = 0
+   396→    const runStep = () => {
+   397→      if (stepIdx >= steps.length - 1) return
+   398→      setTimeout(() => {
+   399→        stepIdx++
+   400→        setCurrentStep(stepIdx)
+   401→        runStep()
+   402→      }, steps[stepIdx]?.duration || 500)
+   403→    }
+   404→    runStep()
+   405→    return () => setCurrentStep(0)
+   406→  }, [steps])
+   407→
+   408→  return (
+   409→    <motion.div
+   410→      initial={{ opacity: 0, y: 8 }}
+   411→      animate={{ opacity: 1, y: 0 }}
+   412→      className="flex gap-2.5"
+   413→    >
+   414→      <div className="shrink-0 h-8 w-8 rounded-full bg-gradient-to-br from-emerald-500 via-cyan-500 to-blue-500 flex items-center justify-center shadow-md">
+   415→        <Brain className="h-4 w-4 text-foreground animate-pulse" />
+   416→      </div>
+   417→      <div className="flex-1">
+   418→        <div className="rounded-2xl rounded-tl-sm glass-surface px-4 py-3">
+   419→          <div className="flex items-center gap-2">
+   420→            <div className="flex gap-1">
+   421→              {[0, 1, 2].map((i) => (
+   422→                <motion.div
+   423→                  key={i}
+   424→                  className="h-1.5 w-1.5 rounded-full bg-emerald-400"
+   425→                  animate={{
+   426→                    scale: [1, 1.4, 1],
+   427→                    opacity: [0.4, 1, 0.4],
+   428→                  }}
+   429→                  transition={{
+   430→                    duration: 1,
+   431→                    repeat: Infinity,
+   432→                    delay: i * 0.2,
+   433→                    ease: 'easeInOut',
+   434→                  }}
+   435→                />
+   436→              ))}
+   437→            </div>
+   438→            <motion.span
+   439→              key={currentStep}
+   440→              initial={{ opacity: 0, x: -4 }}
+   441→              animate={{ opacity: 1, x: 0 }}
+   442→              transition={{ duration: 0.3 }}
+   443→              className="text-xs font-medium accent-text"
+   444→            >
+   445→              {stepLabels[currentStep] || stepLabels[0]}
+   446→            </motion.span>
+   447→          </div>
+   448→          {/* Step progress dots */}
+   449→          {stepLabels.length > 1 && (
+   450→            <div className="mt-2 flex gap-1">
+   451→              {stepLabels.map((_, i) => (
+   452→                <div
+   453→                  key={i}
+   454→                  className={`h-0.5 flex-1 rounded-full transition-all duration-300 ${
+   455→                    i <= currentStep ? 'accent-gradient' : 'bg-card/[0.08]'
+   456→                  }`}
+   457→                />
+   458→              ))}
+   459→            </div>
+   460→          )}
+   461→        </div>
+   462→      </div>
+   463→    </motion.div>
+   464→  )
+   465→}
+   466→
+   467→// --- Typing Animation Hook -------------------------------------------------
+   468→
+   469→function useTypewriter(text: string, enabled: boolean, speed = 12) {
+   470→  const [displayed, setDisplayed] = useState('')
+   471→  const [done, setDone] = useState(false)
+   472→
+   473→  useEffect(() => {
+   474→    if (!enabled) {
+   475→      setDisplayed(text)
+   476→      setDone(true)
+   477→      return
+   478→    }
+   479→    setDisplayed('')
+   480→    setDone(false)
+   481→    let i = 0
+   482→    const interval = setInterval(() => {
+   483→      i++
+   484→      setDisplayed(text.slice(0, i))
+   485→      if (i >= text.length) {
+   486→        clearInterval(interval)
+   487→        setDone(true)
+   488→      }
+   489→    }, speed)
+   490→    return () => clearInterval(interval)
+   491→  }, [text, enabled, speed])
+   492→
+   493→  return { displayed, done }
+   494→}
+   495→
+   496→// --- Markdown-ish renderer (lightweight) -----------------------------------
+   497→
+   498→function renderMarkdown(text: string) {
+   499→  // Split by lines, render basic formatting
+   500→  const lines = text.split('\n')
+   501→  const elements: React.ReactNode[] = []
+   502→  lines.forEach((line, idx) => {
+   503→    if (!line.trim()) {
+   504→      elements.push(<div key={idx} className="h-2" />)
+   505→      return
+   506→    }
+   507→    // Headings (## or #)
+   508→    if (line.startsWith('## ')) {
+   509→      elements.push(
+   510→        <div key={idx} className="font-bold text-sm mt-2 mb-1 text-foreground dark:text-secondary">
+   511→          {line.replace(/^##\s+/, '')}
+   512→        </div>
+   513→      )
+   514→      return
+   515→    }
+   516→    if (line.startsWith('# ')) {
+   517→      elements.push(
+   518→        <div key={idx} className="font-bold text-base mt-2 mb-1 text-foreground dark:text-secondary">
+   519→          {line.replace(/^#\s+/, '')}
+   520→        </div>
+   521→      )
+   522→      return
+   523→    }
+   524→    // Bullet points
+   525→    if (line.startsWith('• ') || line.startsWith('- ')) {
+   526→      const content = line.replace(/^[•-]\s+/, '')
+   527→      elements.push(
+   528→        <div key={idx} className="flex gap-2 text-sm leading-relaxed">
+   529→          <span className="text-emerald-500 mt-0.5">•</span>
+   530→          <span className="flex-1">{renderInline(content)}</span>
+   531→        </div>
+   532→      )
+   533→      return
+   534→    }
+   535→    // Numbered list
+   536→    const numMatch = line.match(/^(\d+)\.\s+(.*)/)
+   537→    if (numMatch) {
+   538→      elements.push(
+   539→        <div key={idx} className="flex gap-2 text-sm leading-relaxed">
+   540→          <span className="font-bold text-emerald-600 dark:text-emerald-400 min-w-[1.2rem]">{numMatch[1]}.</span>
+   541→          <span className="flex-1">{renderInline(numMatch[2])}</span>
+   542→        </div>
+   543→      )
+   544→      return
+   545→    }
+   546→    // Regular paragraph
+   547→    elements.push(
+   548→      <div key={idx} className="text-sm leading-relaxed">
+   549→        {renderInline(line)}
+   550→      </div>
+   551→    )
+   552→  })
+   553→  return elements
+   554→}
+   555→
+   556→function renderInline(text: string): React.ReactNode {
+   557→  // Handle **bold** and `code`
+   558→  const parts: React.ReactNode[] = []
+   559→  const regex = /(\*\*[^*]+\*\*|`[^`]+`)/g
+   560→  let lastIndex = 0
+   561→  let match
+   562→  let key = 0
+   563→  while ((match = regex.exec(text)) !== null) {
+   564→    if (match.index > lastIndex) {
+   565→      parts.push(text.slice(lastIndex, match.index))
+   566→    }
+   567→    const token = match[0]
+   568→    if (token.startsWith('**')) {
+   569→      parts.push(
+   570→        <strong key={key++} className="font-bold text-foreground dark:text-secondary">
+   571→          {token.slice(2, -2)}
+   572→        </strong>
+   573→      )
+   574→    } else if (token.startsWith('`')) {
+   575→      parts.push(
+   576→        <code key={key++} className="px-1 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 text-xs font-mono">
+   577→          {token.slice(1, -1)}
+   578→        </code>
+   579→      )
+   580→    }
+   581→    lastIndex = match.index + token.length
+   582→  }
+   583→  if (lastIndex < text.length) {
+   584→    parts.push(text.slice(lastIndex))
+   585→  }
+   586→  return parts.length > 0 ? parts : text
+   587→}
+   588→
+   589→// --- Message Bubble --------------------------------------------------------
+   590→
+   591→interface MessageBubbleProps {
+   592→  message: Message
+   593→  onAction: (action: ActionSuggestion) => void
+   594→  voiceEnabled: boolean
+   595→}
+   596→
+   597→function MessageBubble({ message, onAction, voiceEnabled }: MessageBubbleProps) {
+   598→  const isUser = message.role === 'user'
+   599→  const { displayed, done } = useTypewriter(
+   600→    message.content,
+   601→    !isUser && message.isTyping ? true : false,
+   602→    8
+   603→  )
+   604→
+   605→  // Speak the response when voice is enabled and message arrives
+   606→  useEffect(() => {
+   607→    if (!isUser && voiceEnabled && message.content && !message.isTyping) {
+   608→      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+   609→        const utter = new SpeechSynthesisUtterance(message.content.replace(/[*#`•]/g, ''))
+   610→        utter.rate = 1
+   611→        utter.pitch = 1
+   612→        utter.lang = 'en-IN'
+   613→        try {
+   614→          window.speechSynthesis.cancel()
+   615→          window.speechSynthesis.speak(utter)
+   616→        } catch {
+   617→          // ignore
+   618→        }
+   619→      }
+   620→    }
+   621→    return () => {
+   622→      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+   623→        window.speechSynthesis.cancel()
+   624→      }
+   625→    }
+   626→  }, [message.id])
+   627→
+   628→  if (isUser) {
+   629→    return (
+   630→      <motion.div
+   631→        initial={{ opacity: 0, x: 20 }}
+   632→        animate={{ opacity: 1, x: 0 }}
+   633→        className="flex justify-end"
+   634→      >
+   635→        <div className="max-w-[85%] rounded-2xl rounded-tr-sm bg-gradient-to-br from-emerald-500 to-cyan-600 text-foreground px-4 py-2.5 shadow-lg">
+   636→          <p className="text-sm leading-relaxed whitespace-pre-wrap">{message.content}</p>
+   637→        </div>
+   638→      </motion.div>
+   639→    )
+   640→  }
+   641→
+   642→  return (
+   643→    <motion.div
+   644→      initial={{ opacity: 0, x: -20 }}
+   645→      animate={{ opacity: 1, x: 0 }}
+   646→      className="flex gap-2.5"
+   647→    >
+   648→      <div className="shrink-0 h-8 w-8 rounded-full bg-gradient-to-br from-emerald-500 via-cyan-500 to-blue-500 flex items-center justify-center shadow-md">
+   649→        <Brain className="h-4 w-4 text-foreground" />
+   650→      </div>
+   651→      <div className="flex-1 max-w-[88%]">
+   652→        {/* V16 Answer card — Obsidian Black 2.0 glass */}
+   653→        <div className="rounded-2xl rounded-tl-sm glass-surface px-4 py-3">
+   654→          {/* Answer section */}
+   655→          <div className="text-muted space-y-0.5">
+   656→            {renderMarkdown(displayed)}
+   657→            {!done && <span className="inline-block w-1.5 h-3.5 bg-emerald-500 ml-0.5 animate-pulse" />}
+   658→          </div>
+   659→        </div>
+   660→
+   661→        {/* V16 Insights section */}
+   662→        {done && message.insights && message.insights.length > 0 && (
+   663→          <motion.div
+   664→            initial={{ opacity: 0, y: 8 }}
+   665→            animate={{ opacity: 1, y: 0 }}
+   666→            transition={{ delay: 0.3 }}
+   667→            className="mt-2 rounded-2xl glass-surface px-4 py-2.5"
+   668→          >
+   669→            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">Insights</p>
+   670→            <div className="space-y-1">
+   671→              {message.insights.map((insight, i) => (
+   672→                <div key={i} className="flex items-start gap-2">
+   673→                  <span className={`mt-1 h-1.5 w-1.5 shrink-0 rounded-full ${
+   674→                    insight.tone === 'warning' ? 'bg-amber-400' :
+   675→                    insight.tone === 'positive' ? 'bg-emerald-400' : 'bg-cyan-400'
+   676→                  }`} />
+   677→                  <span className="text-xs text-muted leading-relaxed">{insight.text}</span>
+   678→                </div>
+   679→              ))}
+   680→            </div>
+   681→          </motion.div>
+   682→        )}
+   683→
+   684→        {/* V16 Sources section */}
+   685→        {done && message.sources && message.sources.length > 0 && (
+   686→          <motion.div
+   687→            initial={{ opacity: 0, y: 8 }}
+   688→            animate={{ opacity: 1, y: 0 }}
+   689→            transition={{ delay: 0.4 }}
+   690→            className="mt-2 flex flex-wrap items-center gap-1.5"
+   691→          >
+   692→            <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Sources:</span>
+   693→            {message.sources.map((src, i) => (
+   694→              <span
+   695→                key={i}
+   696→                className="inline-flex items-center gap-1 rounded-full border border-border bg-card/[0.03] px-2 py-0.5 text-[10px] font-medium text-muted-foreground"
+   697→              >
+   698→                {src.name}
+   699→                {src.count > 0 && <span className="accent-text">{src.count}</span>}
+   700→              </span>
+   701→            ))}
+   702→          </motion.div>
+   703→        )}
+   704→
+   705→        {/* V16 Actions section */}
+   706→        {done && message.actions && message.actions.length > 0 && (
+   707→          <motion.div
+   708→            initial={{ opacity: 0, y: 8 }}
+   709→            animate={{ opacity: 1, y: 0 }}
+   710→            transition={{ delay: 0.5 }}
+   711→            className="mt-2 flex flex-wrap gap-1.5"
+   712→          >
+   713→            {message.actions.map((action, idx) => {
+   714→              const Icon = ICON_MAP[action.icon || ''] || Zap
+   715→              const label = action.label || action.title || 'Action'
+   716→              return (
+   717→                <button
+   718→                  key={idx}
+   719→                  onClick={() => onAction(action)}
+   720→                  className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg accent-gradient-soft accent-text border border-border hover:bg-card/[0.06] transition-colors hover-lift"
+   721→                >
+   722→                  <Icon className="h-3 w-3" />
+   723→                  {label}
+   724→                </button>
+   725→              )
+   726→            })}
+   727→          </motion.div>
+   728→        )}
+   729→      </div>
+   730→    </motion.div>
+   731→  )
+   732→}
+   733→
+   734→// --- Live Stats Bar --------------------------------------------------------
+   735→
+   736→function LiveStatsBar({ stats }: { stats: LiveStats | null }) {
+   737→  if (!stats) return null
+   738→  const items = [
+   739→    { label: 'Clients', value: stats.totalClients, icon: Users, color: 'text-emerald-600' },
+   740→    { label: 'Pending', value: stats.pendingReturns, icon: FileText, color: 'text-amber-600' },
+   741→    { label: 'Collections', value: formatINR(stats.pendingCollections), icon: CreditCard, color: 'text-cyan-600' },
+   742→    { label: 'Compliance', value: `${stats.complianceScore}%`, icon: ShieldCheck, color: 'text-violet-600' },
+   743→    { label: 'At Risk', value: stats.atRiskClients, icon: AlertTriangle, color: 'text-red-600' },
+   744→    { label: 'Alerts', value: stats.unreadNotifications, icon: Bell, color: 'text-orange-600' },
+   745→  ]
+   746→  return (
+   747→    <div className="flex gap-2 overflow-x-auto px-3 py-2 border-b border-border/50 dark:border-border/50 bg-card/40 dark:bg-surface/40 backdrop-blur-sm">
+   748→      {items.map((item) => (
+   749→        <div
+   750→          key={item.label}
+   751→          className="flex items-center gap-1.5 shrink-0 px-2.5 py-1 rounded-md bg-card/60 dark:bg-card/60 border border-border/50 dark:border-border/50"
+   752→        >
+   753→          <item.icon className={`h-3 w-3 ${item.color}`} />
+   754→          <span className="text-[11px] font-semibold text-secondary dark:text-muted">{item.value}</span>
+   755→          <span className="text-[10px] text-muted-foreground">{item.label}</span>
+   756→        </div>
+   757→      ))}
+   758→    </div>
+   759→  )
+   760→}
+   761→
+   762→// --- Command Center Panel --------------------------------------------------
+   763→
+   764→interface CommandCenterProps {
+   765→  isOpen: boolean
+   766→  isFullscreen: boolean
+   767→  isListening: boolean
+   768→  setIsListening: (v: boolean) => void
+   769→  isThinking: boolean
+   770→  setIsThinking: (v: boolean) => void
+   771→  onClose: () => void
+   772→  onToggleFullscreen: () => void
+   773→  onMinimize: () => void
+   774→}
+   775→
+   776→function CommandCenter({
+   777→  isOpen,
+   778→  isFullscreen,
+   779→  isListening,
+   780→  setIsListening,
+   781→  isThinking,
+   782→  setIsThinking,
+   783→  onClose,
+   784→  onToggleFullscreen,
+   785→  onMinimize,
+   786→}: CommandCenterProps) {
+   787→  const { setCurrentView } = useApp()
+   788→  const [messages, setMessages] = useState<Message[]>([
+   789→    {
+   790→      id: 'welcome',
+   791→      role: 'assistant',
+   792→      content:
+   793→        "**GSTPilot Oracle™**\n\nThe Financial Brain of Your Business.\n\nI'm connected to your live data — clients, invoices, returns, payments, predictions, and priorities across every module.\n\nAsk me anything, or tap a suggestion below.",
+   794→      timestamp: Date.now(),
+   795→    },
+   796→  ])
+   797→  const [input, setInput] = useState('')
+   798→  const [voiceEnabled, setVoiceEnabled] = useState(false)
+   799→  const [liveStats, setLiveStats] = useState<LiveStats | null>(null)
+   800→  const [showSettings, setShowSettings] = useState(false)
+   801→  const messagesEndRef = useRef<HTMLDivElement>(null)
+   802→  const inputRef = useRef<HTMLInputElement>(null)
+   803→  const recognitionRef = useRef<any>(null)
+   804→  const historyRef = useRef<Array<{ role: string; content: string }>>([])
+   805→
+   806→  // Auto-scroll to bottom on new message
+   807→  useEffect(() => {
+   808→    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+   809→  }, [messages, isThinking])
+   810→
+   811→  // Focus input when opened
+   812→  useEffect(() => {
+   813→    if (isOpen) {
+   814→      setTimeout(() => inputRef.current?.focus(), 200)
+   815→    }
+   816→  }, [isOpen, isFullscreen])
+   817→
+   818→  // Initialize speech recognition
+   819→  useEffect(() => {
+   820→    if (typeof window === 'undefined') return
+   821→    const SpeechRecognition =
+   822→      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+   823→    if (SpeechRecognition) {
+   824→      const recognition = new SpeechRecognition()
+   825→      recognition.continuous = false
+   826→      recognition.interimResults = false
+   827→      recognition.lang = 'en-IN'
+   828→      recognition.onresult = (event: any) => {
+   829→        const transcript = event.results[0][0].transcript
+   830→        setInput(transcript)
+   831→        setIsListening(false)
+   832→        // Auto-send after voice input
+   833→        setTimeout(() => handleSend(transcript), 200)
+   834→      }
+   835→      recognition.onerror = () => setIsListening(false)
+   836→      recognition.onend = () => setIsListening(false)
+   837→      recognitionRef.current = recognition
+   838→    }
+   839→  }, [])
+   840→
+   841→  const toggleListening = () => {
+   842→    if (!recognitionRef.current) return
+   843→    if (isListening) {
+   844→      recognitionRef.current.stop()
+   845→      setIsListening(false)
+   846→    } else {
+   847→      try {
+   848→        recognitionRef.current.start()
+   849→        setIsListening(true)
+   850→      } catch {
+   851→        // already started
+   852→      }
+   853→    }
+   854→  }
+   855→
+   856→  const [thinkingSteps, setThinkingSteps] = useState<Array<{ label: string; duration: number }>>([])
+   857→
+   858→  const handleSend = async (overrideText?: string) => {
+   859→    const text = (overrideText ?? input).trim()
+   860→    if (!text || isThinking) return
+   861→
+   862→    const userMsg: Message = {
+   863→      id: `u-${Date.now()}`,
+   864→      role: 'user',
+   865→      content: text,
+   866→      timestamp: Date.now(),
+   867→    }
+   868→    setMessages((prev) => [...prev, userMsg])
+   869→    setInput('')
+   870→    setIsThinking(true)
+   871→    // Start with default thinking steps; will update when API responds
+   872→    setThinkingSteps([
+   873→      { label: 'Thinking...', duration: 400 },
+   874→      { label: 'Generating answer...', duration: 500 },
+   875→    ])
+   876→    historyRef.current.push({ role: 'user', content: text })
+   877→
+   878→    try {
+   879→      const res = await fetch('/api/intelligence', {
+   880→        method: 'POST',
+   881→        headers: { 'Content-Type': 'application/json' },
+   882→        body: JSON.stringify({
+   883→          question: text,
+   884→          context: '', // Live context is gathered server-side
+   885→          conversationHistory: historyRef.current.slice(-6),
+   886→        }),
+   887→      })
+   888→      const data = await res.json()
+   889→
+   890→      // Update thinking steps from API response (V16)
+   891→      if (data.thinkingSteps && data.thinkingSteps.length > 0) {
+   892→        setThinkingSteps(data.thinkingSteps)
+   893→      }
+   894→
+   895→      // Mark previous assistant message as fully typed
+   896→      setMessages((prev) =>
+   897→        prev.map((m) => (m.isTyping ? { ...m, isTyping: false, content: m.content } : m))
+   898→      )
+   899→
+   900→      // Build V16 actions from API response — map new action types to ActionSuggestion
+   901→      const apiActions = (data.actions || []).map((a: any) => ({
+   902→        type: a.type || 'navigate',
+   903→        label: a.title || a.label || 'Action',
+   904→        title: a.title,
+   905→        description: a.description,
+   906→        view: a.payload?.view || a.view,
+   907→        icon: a.type === 'send_reminder' ? 'Bell' :
+   908→              a.type === 'generate_report' ? 'FileText' :
+   909→              a.type === 'execute_workflow' ? 'Rocket' :
+   910→              a.type === 'create_task' ? 'Activity' : 'Zap',
+   911→        payload: a.payload,
+   912→      }))
+   913→
+   914→      const assistantMsg: Message = {
+   915→        id: `a-${Date.now()}`,
+   916→        role: 'assistant',
+   917→        content: data.answer || 'I could not process that request.',
+   918→        timestamp: Date.now(),
+   919→        actions: apiActions,
+   920→        insights: data.insights || [],
+   921→        sources: data.sources || [],
+   922→        thinkingSteps: data.thinkingSteps || [],
+   923→        isTyping: true,
+   924→      }
+   925→      setMessages((prev) => [...prev, assistantMsg])
+   926→      historyRef.current.push({ role: 'assistant', content: data.answer })
+   927→
+   928→      // Update live stats
+   929→      if (data.stats) {
+   930→        setLiveStats(data.stats)
+   931→      }
+   932→
+   933→      // After typing completes, mark as done
+   934→      setTimeout(() => {
+   935→        setMessages((prev) =>
+   936→          prev.map((m) => (m.id === assistantMsg.id ? { ...m, isTyping: false } : m))
+   937→        )
+   938→      }, Math.min(8000, (data.answer?.length || 100) * 8))
+   939→    } catch (err) {
+   940→      setMessages((prev) => [
+   941→        ...prev,
+   942→        {
+   943→          id: `e-${Date.now()}`,
+   944→          role: 'assistant',
+   945→          content: 'I had trouble connecting to your live data. Please try again in a moment.',
+   946→          timestamp: Date.now(),
+   947→        },
+   948→      ])
+   949→    } finally {
+   950→      setIsThinking(false)
+   951→    }
+   952→  }
+   953→
+   954→  const handleAction = (action: ActionSuggestion) => {
+   955→    // V16: support all action types
+   956→    if ((action.type === 'navigate' || action.type === 'execute_workflow') && action.view) {
+   957→      setCurrentView(action.view as any)
+   958→      onMinimize()
+   959→    }
+   960→    // For other action types (send_reminder, generate_report, create_task),
+   961→    // we could trigger workflows here in the future. For now, navigate if view exists.
+   962→    if (action.view && action.type !== 'navigate' && action.type !== 'execute_workflow') {
+   963→      setCurrentView(action.view as any)
+   964→      onMinimize()
+   965→    }
+   966→  }
+   967→
+   968→  const handleModuleShortcut = (view: string) => {
+   969→    setCurrentView(view as any)
+   970→    onMinimize()
+   971→  }
+   972→
+   973→  const handleSuggested = (q: string) => {
+   974→    handleSend(q)
+   975→  }
+   976→
+   977→  const clearConversation = () => {
+   978→    setMessages([
+   979→      {
+   980→        id: 'welcome-reset',
+   981→        role: 'assistant',
+   982→        content: "**Conversation cleared.** How can I help you now?",
+   983→        timestamp: Date.now(),
+   984→      },
+   985→    ])
+   986→    historyRef.current = []
+   987→  }
+   988→
+   989→  const toggleVoice = () => {
+   990→    if (voiceEnabled && typeof window !== 'undefined' && 'speechSynthesis' in window) {
+   991→      window.speechSynthesis.cancel()
+   992→    }
+   993→    setVoiceEnabled(!voiceEnabled)
+   994→  }
+   995→
+   996→  // Panel sizing
+   997→  const panelSize = isFullscreen
+   998→    ? { width: '100vw', height: '100vh', maxWidth: '100vw', maxHeight: '100vh', borderRadius: '0' }
+   999→    : {
+  1000→        width: 'min(440px, calc(100vw - 32px))',
+  1001→        height: 'min(640px, calc(100vh - 120px))',
+  1002→        maxWidth: '440px',
+  1003→        maxHeight: '640px',
+  1004→        borderRadius: '1.25rem',
+  1005→      }
+  1006→
+  1007→  return (
+  1008→    <AnimatePresence>
+  1009→      {isOpen && (
+  1010→        <motion.div
+  1011→          initial={{ opacity: 0, scale: 0.85, y: 30 }}
+  1012→          animate={{ opacity: 1, scale: 1, y: 0 }}
+  1013→          exit={{ opacity: 0, scale: 0.85, y: 30 }}
+  1014→          transition={{ type: 'spring', stiffness: 350, damping: 30 }}
+  1015→          className="fixed z-[9999] right-4 bottom-4 md:right-6 md:bottom-6"
+  1016→          style={{
+  1017→            width: panelSize.width,
+  1018→            height: panelSize.height,
+  1019→            maxWidth: panelSize.maxWidth,
+  1020→            maxHeight: panelSize.maxHeight,
+  1021→          }}
+  1022→        >
+  1023→          <div
+  1024→            className="relative w-full h-full flex flex-col overflow-hidden shadow-2xl"
+  1025→            style={{
+  1026→              borderRadius: panelSize.borderRadius,
+  1027→              background:
+  1028→                'linear-gradient(180deg, rgba(255,255,255,0.95) 0%, rgba(248,250,252,0.95) 100%)',
+  1029→              backdropFilter: 'blur(20px) saturate(180%)',
+  1030→              WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+  1031→              border: '1px solid rgba(255,255,255,0.4)',
+  1032→              boxShadow:
+  1033→                '0 24px 64px -12px rgba(16, 185, 129, 0.25), 0 0 0 1px rgba(16, 185, 129, 0.08)',
+  1034→            }}
+  1035→          >
+  1036→            {/* Decorative gradient header bar */}
+  1037→            <div
+  1038→              className="absolute top-0 left-0 right-0 h-1"
+  1039→              style={{
+  1040→                background: 'linear-gradient(90deg, #10b981, #06b6d4, #3b82f6)',
+  1041→              }}
+  1042→            />
+  1043→
+  1044→            {/* Header */}
+  1045→            <div className="flex items-center justify-between px-4 pt-3 pb-2 border-b border-border/50 dark:border-border/50 bg-card/60 dark:bg-surface/60 backdrop-blur-sm">
+  1046→              <div className="flex items-center gap-2.5">
+  1047→                <div className="relative h-9 w-9">
+  1048→                  <motion.div
+  1049→                    className="absolute inset-0 rounded-full"
+  1050→                    style={{
+  1051→                      background: 'conic-gradient(from 0deg, #10b981, #06b6d4, #3b82f6, #10b981)',
+  1052→                      boxShadow: '0 4px 12px rgba(16,185,129,0.4)',
+  1053→                    }}
+  1054→                    animate={{ rotate: 360 }}
+  1055→                    transition={{ duration: 6, repeat: Infinity, ease: 'linear' }}
+  1056→                  />
+  1057→                  <div className="absolute inset-0.5 rounded-full bg-card dark:bg-surface flex items-center justify-center">
+  1058→                    <Brain className="h-4 w-4 text-emerald-600" />
+  1059→                  </div>
+  1060→                </div>
+  1061→                <div>
+  1062→                  <h2 className="text-sm font-bold text-foreground dark:text-secondary leading-tight">
+  1063→                    GSTPilot Oracle™
+  1064→                  </h2>
+  1065→                  <p className="text-[10px] text-muted-foreground leading-tight">
+  1066→                    Ask anything. Run everything.
+  1067→                  </p>
+  1068→                </div>
+  1069→              </div>
+  1070→              <div className="flex items-center gap-1">
+  1071→                <button
+  1072→                  onClick={toggleVoice}
+  1073→                  className={`p-1.5 rounded-lg transition-colors ${
+  1074→                    voiceEnabled
+  1075→                      ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600'
+  1076→                      : 'text-muted-foreground hover:bg-card dark:hover:bg-card'
+  1077→                  }`}
+  1078→                  title={voiceEnabled ? 'Voice output on' : 'Voice output off'}
+  1079→                >
+  1080→                  {voiceEnabled ? <Volume2 className="h-3.5 w-3.5" /> : <VolumeX className="h-3.5 w-3.5" />}
+  1081→                </button>
+  1082→                <button
+  1083→                  onClick={clearConversation}
+  1084→                  className="p-1.5 rounded-lg text-muted-foreground hover:bg-card dark:hover:bg-card transition-colors"
+  1085→                  title="Clear conversation"
+  1086→                >
+  1087→                  <Trash2 className="h-3.5 w-3.5" />
+  1088→                </button>
+  1089→                <button
+  1090→                  onClick={() => setShowSettings(!showSettings)}
+  1091→                  className={`p-1.5 rounded-lg transition-colors ${
+  1092→                    showSettings
+  1093→                      ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600'
+  1094→                      : 'text-muted-foreground hover:bg-card dark:hover:bg-card'
+  1095→                  }`}
+  1096→                  title="Settings"
+  1097→                >
+  1098→                  <Settings className="h-3.5 w-3.5" />
+  1099→                </button>
+  1100→                <button
+  1101→                  onClick={onToggleFullscreen}
+  1102→                  className="p-1.5 rounded-lg text-muted-foreground hover:bg-card dark:hover:bg-card transition-colors"
+  1103→                  title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+  1104→                >
+  1105→                  {isFullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
+  1106→                </button>
+  1107→                <button
+  1108→                  onClick={onMinimize}
+  1109→                  className="p-1.5 rounded-lg text-muted-foreground hover:bg-card dark:hover:bg-card transition-colors"
+  1110→                  title="Minimize"
+  1111→                >
+  1112→                  <Minus className="h-3.5 w-3.5" />
+  1113→                </button>
+  1114→                <button
+  1115→                  onClick={onClose}
+  1116→                  className="p-1.5 rounded-lg text-muted-foreground hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-900/30 transition-colors"
+  1117→                  title="Close"
+  1118→                >
+  1119→                  <X className="h-3.5 w-3.5" />
+  1120→                </button>
+  1121→              </div>
+  1122→            </div>
+  1123→
+  1124→            {/* Live Stats Bar */}
+  1125→            <LiveStatsBar stats={liveStats} />
+  1126→
+  1127→            {/* Module Shortcuts */}
+  1128→            <div className="flex gap-1.5 overflow-x-auto px-3 py-2 border-b border-border/50 dark:border-border/50 bg-card/30 dark:bg-surface/30">
+  1129→              {MODULE_SHORTCUTS.map((m) => (
+  1130→                <button
+  1131→                  key={m.view}
+  1132→                  onClick={() => handleModuleShortcut(m.view)}
+  1133→                  className="flex items-center gap-1 shrink-0 px-2 py-1 rounded-md bg-card/60 dark:bg-card/60 border border-border/50 dark:border-border/50 hover:border-emerald-300 dark:hover:border-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 transition-colors"
+  1134→                  title={m.label}
+  1135→                >
+  1136→                  <m.icon className="h-3 w-3 text-emerald-600" />
+  1137→                  <span className="text-[10px] font-medium text-secondary dark:text-muted">{m.label}</span>
+  1138→                </button>
+  1139→              ))}
+  1140→            </div>
+  1141→
+  1142→            {/* Settings panel (collapsible) */}
+  1143→            <AnimatePresence>
+  1144→              {showSettings && (
+  1145→                <motion.div
+  1146→                  initial={{ height: 0, opacity: 0 }}
+  1147→                  animate={{ height: 'auto', opacity: 1 }}
+  1148→                  exit={{ height: 0, opacity: 0 }}
+  1149→                  className="overflow-hidden border-b border-border/50 dark:border-border/50 bg-surface/80 dark:bg-surface/80 backdrop-blur-sm"
+  1150→                >
+  1151→                  <div className="px-4 py-3 space-y-2">
+  1152→                    <div className="flex items-center justify-between">
+  1153→                      <div>
+  1154→                        <p className="text-xs font-semibold text-secondary dark:text-muted">Voice Output</p>
+  1155→                        <p className="text-[10px] text-muted-foreground">Speak AI responses aloud</p>
+  1156→                      </div>
+  1157→                      <button
+  1158→                        onClick={toggleVoice}
+  1159→                        className={`relative h-5 w-9 rounded-full transition-colors ${
+  1160→                          voiceEnabled ? 'bg-emerald-500' : 'bg-border dark:bg-card'
+  1161→                        }`}
+  1162→                      >
+  1163→                        <motion.div
+  1164→                          className="absolute top-0.5 h-4 w-4 rounded-full bg-card shadow"
+  1165→                          animate={{ left: voiceEnabled ? '18px' : '2px' }}
+  1166→                          transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+  1167→                        />
+  1168→                      </button>
+  1169→                    </div>
+  1170→                    <div className="text-[10px] text-muted-foreground pt-1 border-t border-border/50 dark:border-border/50">
+  1171→                      <span className="font-semibold text-secondary dark:text-muted">Keyboard:</span> Ctrl+K to toggle ·
+  1172→                      <span className="font-semibold text-secondary dark:text-muted"> Voice:</span> Mic button for speech input
+  1173→                    </div>
+  1174→                  </div>
+  1175→                </motion.div>
+  1176→              )}
+  1177→            </AnimatePresence>
+  1178→
+  1179→            {/* Messages area */}
+  1180→            <div className="flex-1 overflow-y-auto px-3 py-3 space-y-3 custom-scrollbar">
+  1181→              {messages.map((msg) => (
+  1182→                <MessageBubble
+  1183→                  key={msg.id}
+  1184→                  message={msg}
+  1185→                  onAction={handleAction}
+  1186→                  voiceEnabled={voiceEnabled}
+  1187→                />
+  1188→              ))}
+  1189→              {isThinking && <ThinkingIndicator steps={thinkingSteps} />}
+  1190→              <div ref={messagesEndRef} />
+  1191→            </div>
+  1192→
+  1193→            {/* Suggested questions (only when few messages) */}
+  1194→            {messages.length <= 2 && !isThinking && (
+  1195→              <div className="px-3 py-2 border-t border-border/50 dark:border-border/50 bg-card/40 dark:bg-surface/40">
+  1196→                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
+  1197→                  Try asking
+  1198→                </p>
+  1199→                <div className="flex flex-wrap gap-1.5">
+  1200→                  {SUGGESTED_QUESTIONS.map((q) => (
+  1201→                    <button
+  1202→                      key={q.label}
+  1203→                      onClick={() => handleSuggested(q.label)}
+  1204→                      className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1.5 rounded-lg bg-card/70 dark:bg-card/70 border border-border/60 dark:border-border/60 hover:border-emerald-300 dark:hover:border-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 transition-colors"
+  1205→                    >
+  1206→                      <q.icon className={`h-3 w-3 ${q.color}`} />
+  1207→                      <span className="text-secondary dark:text-muted">{q.label}</span>
+  1208→                    </button>
+  1209→                  ))}
+  1210→                </div>
+  1211→              </div>
+  1212→            )}
+  1213→
+  1214→            {/* Input area */}
+  1215→            <div className="px-3 py-3 border-t border-border/50 dark:border-border/50 bg-card/70 dark:bg-surface/70 backdrop-blur-sm">
+  1216→              <div className="flex items-end gap-2">
+  1217→                <button
+  1218→                  onClick={toggleListening}
+  1219→                  className={`shrink-0 p-2.5 rounded-xl transition-all ${
+  1220→                    isListening
+  1221→                      ? 'bg-red-500 text-foreground shadow-lg shadow-red-500/40'
+  1222→                      : 'bg-card text-muted-foreground hover:bg-card dark:hover:bg-card'
+  1223→                  }`}
+  1224→                  title={isListening ? 'Stop listening' : 'Voice input'}
+  1225→                >
+  1226→                  {isListening ? <Square className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+  1227→                </button>
+  1228→                <div className="flex-1 relative">
+  1229→                  <input
+  1230→                    ref={inputRef}
+  1231→                    type="text"
+  1232→                    value={input}
+  1233→                    onChange={(e) => setInput(e.target.value)}
+  1234→                    onKeyDown={(e) => {
+  1235→                      if (e.key === 'Enter' && !e.shiftKey) {
+  1236→                        e.preventDefault()
+  1237→                        handleSend()
+  1238→                      }
+  1239→                    }}
+  1240→                    placeholder={isListening ? 'Listening…' : 'Ask GSTPilot Oracle anything…'}
+  1241→                    className="w-full px-3.5 py-2.5 rounded-xl bg-card border border-border text-sm text-foreground dark:text-secondary placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-400 transition-all"
+  1242→                    disabled={isThinking}
+  1243→                  />
+  1244→                  {isListening && (
+  1245→                    <motion.div
+  1246→                      className="absolute right-3 top-1/2 -translate-y-1/2 flex gap-0.5"
+  1247→                      animate={{ opacity: [0.4, 1, 0.4] }}
+  1248→                      transition={{ duration: 0.8, repeat: Infinity }}
+  1249→                    >
+  1250→                      {[0, 1, 2, 3].map((i) => (
+  1251→                        <motion.div
+  1252→                          key={i}
+  1253→                          className="w-0.5 bg-red-500 rounded-full"
+  1254→                          animate={{ height: [4, 12, 4] }}
+  1255→                          transition={{ duration: 0.5, repeat: Infinity, delay: i * 0.1 }}
+  1256→                        />
+  1257→                      ))}
+  1258→                    </motion.div>
+  1259→                  )}
+  1260→                </div>
+  1261→                <button
+  1262→                  onClick={() => handleSend()}
+  1263→                  disabled={!input.trim() || isThinking}
+  1264→                  className="shrink-0 p-2.5 rounded-xl bg-gradient-to-br from-emerald-500 to-cyan-600 text-foreground shadow-lg shadow-emerald-500/30 hover:shadow-emerald-500/50 disabled:opacity-40 disabled:shadow-none transition-all hover:scale-105 active:scale-95"
+  1265→                  title="Send"
+  1266→                >
+  1267→                  <Send className="h-4 w-4" />
+  1268→                </button>
+  1269→              </div>
+  1270→              <p className="text-[9px] text-muted-foreground mt-1.5 text-center">
+  1271→                GSTPilot Oracle™ reads live data · Ctrl+K to toggle · Voice + Speech enabled
+  1272→              </p>
+  1273→            </div>
+  1274→          </div>
+  1275→        </motion.div>
+  1276→      )}
+  1277→    </AnimatePresence>
+  1278→  )
+  1279→}
+  1280→
+  1281→// --- Main Component --------------------------------------------------------
+  1282→
+  1283→export function GSTPilotIntelligence() {
+  1284→  const [isOpen, setIsOpen] = useState(false)
+  1285→  const [isFullscreen, setIsFullscreen] = useState(false)
+  1286→  const [isListening, setIsListening] = useState(false)
+  1287→  const [isThinking, setIsThinking] = useState(false)
+  1288→
+  1289→  // Ctrl+K shortcut
+  1290→  useEffect(() => {
+  1291→    const handler = (e: KeyboardEvent) => {
+  1292→      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+  1293→        e.preventDefault()
+  1294→        setIsOpen((prev) => !prev)
+  1295→      }
+  1296→      if (e.key === 'Escape' && isOpen) {
+  1297→        setIsOpen(false)
+  1298→      }
+  1299→    }
+  1300→    window.addEventListener('keydown', handler)
+  1301→    return () => window.removeEventListener('keydown', handler)
+  1302→  }, [isOpen])
+  1303→
+  1304→  const handleMinimize = () => {
+  1305→    setIsOpen(false)
+  1306→    setIsFullscreen(false)
+  1307→  }
+  1308→
+  1309→  return (
+  1310→    <>
+  1311→      <FloatingOrb
+  1312→        onClick={() => setIsOpen((prev) => !prev)}
+  1313→        isOpen={isOpen}
+  1314→        isListening={isListening}
+  1315→        isThinking={isThinking}
+  1316→      />
+  1317→      <CommandCenter
+  1318→        isOpen={isOpen}
+  1319→        isFullscreen={isFullscreen}
+  1320→        isListening={isListening}
+  1321→        setIsListening={setIsListening}
+  1322→        isThinking={isThinking}
+  1323→        setIsThinking={setIsThinking}
+  1324→        onClose={() => {
+  1325→          setIsOpen(false)
+  1326→          setIsFullscreen(false)
+  1327→        }}
+  1328→        onToggleFullscreen={() => setIsFullscreen((prev) => !prev)}
+  1329→        onMinimize={handleMinimize}
+  1330→      />
+  1331→    </>
+  1332→  )
+  1333→}
+  1334→
+  1335→export default GSTPilotIntelligence
+  1336→

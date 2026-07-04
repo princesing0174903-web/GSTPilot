@@ -1,0 +1,834 @@
+     1→// ═══════════════════════════════════════════════════════════════════════════════
+     2→// GSTPILOT AI WORKFORCE™ — AI EMPLOYEE ENGINE™
+     3→//
+     4→// Each AI Employee continuously monitors ONLY its department. The engine reads
+     5→// the WorkforceDataView (merged CFO + Twin + raw) and computes department-
+     6→// specific KPIs, status, health score, recommendations, and task/alert counts
+     7→// for every one of the 17 roles. No mock values — every number traces back to
+     8→// REAL connected business data.
+     9→//
+    10→// Tagline: "GSTPilot AI Workforce™ — Don't just use AI. Build an AI Company."
+    11→// ═══════════════════════════════════════════════════════════════════════════════
+    12→
+    13→import { ORGANIZATION, getRoleDefinition } from './organization';
+    14→import type { RoleDefinition } from './organization';
+    15→import type {
+    16→  AIEmployee,
+    17→  EmployeeRole,
+    18→  EmployeeStatus,
+    19→  EmployeeKPI,
+    20→  EmployeeRecommendation,
+    21→  EmployeePerformance,
+    22→  EmployeeMemoryEntry,
+    23→  EmployeeSkill,
+    24→} from './types';
+    25→import type { WorkforceDataView } from './data';
+    26→import { computeEmployeePerformance } from './performance';
+    27→import { computeEmployeeMemory } from './memory';
+    28→import { computeEmployeeSkills } from './skills';
+    29→
+    30→// ─── Status detector — derives an employee's live status from data ───────────
+    31→
+    32→function detectStatus(
+    33→  role: EmployeeRole,
+    34→  data: WorkforceDataView,
+    35→  alertCount: number,
+    36→  pendingDecisions: number,
+    37→  hasLiveData: boolean,
+    38→): EmployeeStatus {
+    39→  if (!hasLiveData) return 'idle';
+    40→  if (pendingDecisions > 0) return 'deciding';
+    41→  if (alertCount > 0) return 'reviewing';
+    42→  // Check if this employee is involved in an active collaboration chain
+    43→  const collaborationActive = data.twin.timeline.todayCount > 0;
+    44→  if (collaborationActive && (role === 'coo' || role === 'operations_manager' || role === 'ceo')) {
+    45→    return 'collaborating';
+    46→  }
+    47→  return 'active';
+    48→}
+    49→
+    50→// ─── Health score calculator — department-specific ───────────────────────────
+    51→
+    52→function clamp(n: number, lo = 0, hi = 100): number {
+    53→  return Math.max(lo, Math.min(hi, n));
+    54→}
+    55→
+    56→function financeHealth(data: WorkforceDataView): number {
+    57→  const f = data.finance;
+    58→  const cashScore = f.runwayDays > 180 ? 100 : f.runwayDays > 90 ? 70 : f.runwayDays > 30 ? 40 : 10;
+    59→  const marginScore = f.marginPct > 20 ? 100 : f.marginPct > 10 ? 70 : f.marginPct > 0 ? 40 : 10;
+    60→  const collectionScore = f.overdueAmount === 0 ? 100
+    61→    : f.receivables > 0 ? clamp(100 - (f.overdueAmount / f.receivables) * 100) : 50;
+    62→  const gstScore = f.gst === 0 ? 100 : 70;
+    63→  return Math.round((cashScore + marginScore + collectionScore + gstScore) / 4);
+    64→}
+    65→
+    66→function operationsHealth(data: WorkforceDataView): number {
+    67→  const o = data.operations;
+    68→  const taskScore = o.openTasks === 0 ? 100 : clamp(100 - o.openTasks * 5);
+    69→  const efficiencyScore = o.efficiencyPct;
+    70→  const deliveryScore = o.deliveryPending === 0 ? 100 : clamp(100 - o.deliveryPending * 10);
+    71→  return Math.round((taskScore + efficiencyScore + deliveryScore) / 3);
+    72→}
+    73→
+    74→function salesHealth(data: WorkforceDataView): number {
+    75→  const s = data.sales;
+    76→  const clientScore = s.clientCount > 10 ? 100 : s.clientCount > 5 ? 70 : s.clientCount > 0 ? 40 : 10;
+    77→  const pipelineScore = s.pipelineValue > 500000 ? 100 : s.pipelineValue > 100000 ? 70 : s.pipelineValue > 0 ? 40 : 10;
+    78→  const conversionScore = s.conversionRate > 50 ? 100 : s.conversionRate > 20 ? 70 : 40;
+    79→  return Math.round((clientScore + pipelineScore + conversionScore) / 3);
+    80→}
+    81→
+    82→function marketingHealth(data: WorkforceDataView): number {
+    83→  const m = data.marketing;
+    84→  const growthScore = m.revenueGrowthPct > 10 ? 100 : m.revenueGrowthPct > 0 ? 70 : m.revenueGrowthPct > -10 ? 40 : 10;
+    85→  const roiScore = m.campaignROI > 100 ? 100 : m.campaignROI > 0 ? 70 : 40;
+    86→  const engagementScore = m.brandEngagement;
+    87→  return Math.round((growthScore + roiScore + engagementScore) / 3);
+    88→}
+    89→
+    90→function complianceHealth(data: WorkforceDataView): number {
+    91→  const c = data.compliance;
+    92→  const filingScore = c.overdueFilings === 0 ? 100 : c.overdueFilings > 2 ? 10 : 40;
+    93→  const noticeScore = c.notices === 0 ? 100 : c.notices > 3 ? 20 : 50;
+    94→  const score = c.complianceScore;
+    95→  return Math.round((filingScore + noticeScore + score) / 3);
+    96→}
+    97→
+    98→function riskHealth(data: WorkforceDataView): number {
+    99→  const r = data.risk;
+   100→  // Invert risk score → health (high risk = low health)
+   101→  return clamp(100 - r.overallRiskScore);
+   102→}
+   103→
+   104→function legalHealth(data: WorkforceDataView): number {
+   105→  const l = data.legal;
+   106→  const noticeScore = l.activeNotices === 0 ? 100 : l.activeNotices > 3 ? 20 : 50;
+   107→  const disputeScore = l.disputeCount === 0 ? 100 : l.disputeCount > 2 ? 30 : 60;
+   108→  return Math.round((noticeScore + disputeScore) / 2);
+   109→}
+   110→
+   111→function hrHealth(data: WorkforceDataView): number {
+   112→  const h = data.hr;
+   113→  const headcountScore = h.headcount > 0 ? 100 : 20;
+   114→  const payrollScore = h.payrollAmount > 0 ? 80 : 50;
+   115→  return Math.round((headcountScore + payrollScore) / 2);
+   116→}
+   117→
+   118→function supportHealth(data: WorkforceDataView): number {
+   119→  const s = data.support;
+   120→  const ticketScore = s.openTickets === 0 ? 100 : clamp(100 - s.openTickets * 10);
+   121→  const satisfactionScore = s.satisfactionPct;
+   122→  const escalationScore = s.escalationCount === 0 ? 100 : clamp(100 - s.escalationCount * 15);
+   123→  return Math.round((ticketScore + satisfactionScore + escalationScore) / 3);
+   124→}
+   125→
+   126→function procurementHealth(data: WorkforceDataView): number {
+   127→  const p = data.procurement;
+   128→  const vendorScore = p.vendorCount > 5 ? 100 : p.vendorCount > 0 ? 70 : 20;
+   129→  const billScore = p.pendingBills === 0 ? 100 : clamp(100 - p.pendingBills * 10);
+   130→  return Math.round((vendorScore + billScore) / 2);
+   131→}
+   132→
+   133→function technologyHealth(data: WorkforceDataView): number {
+   134→  const t = data.technology;
+   135→  const connectionScore = t.activeIntegrations > 0 ? 100 : 20;
+   136→  const errorScore = t.syncErrors === 0 ? 100 : clamp(100 - t.syncErrors * 20);
+   137→  const qualityScore = t.dataQualityScore;
+   138→  return Math.round((connectionScore + errorScore + qualityScore) / 3);
+   139→}
+   140→
+   141→function dataHealth(data: WorkforceDataView): number {
+   142→  const d = data.data;
+   143→  const recordScore = d.totalRecords > 100 ? 100 : d.totalRecords > 10 ? 70 : d.totalRecords > 0 ? 40 : 10;
+   144→  const sourceScore = d.dataSources > 3 ? 100 : d.dataSources > 0 ? 60 : 10;
+   145→  const confidenceScore = d.forecastConfidence;
+   146→  return Math.round((recordScore + sourceScore + confidenceScore) / 3);
+   147→}
+   148→
+   149→function executiveHealth(data: WorkforceDataView): number {
+   150→  return data.executive.healthScore || Math.round(
+   151→    (financeHealth(data) + operationsHealth(data) + salesHealth(data) +
+   152→     complianceHealth(data) + riskHealth(data)) / 5,
+   153→  );
+   154→}
+   155→
+   156→function departmentHealth(role: EmployeeRole, data: WorkforceDataView): number {
+   157→  const dept = getRoleDefinition(role).department;
+   158→  switch (dept) {
+   159→    case 'executive': return executiveHealth(data);
+   160→    case 'finance': return financeHealth(data);
+   161→    case 'operations': return operationsHealth(data);
+   162→    case 'sales': return salesHealth(data);
+   163→    case 'marketing': return marketingHealth(data);
+   164→    case 'compliance': return complianceHealth(data);
+   165→    case 'risk': return riskHealth(data);
+   166→    case 'legal': return legalHealth(data);
+   167→    case 'hr': return hrHealth(data);
+   168→    case 'support': return supportHealth(data);
+   169→    case 'procurement': return procurementHealth(data);
+   170→    case 'technology': return technologyHealth(data);
+   171→    case 'data': return dataHealth(data);
+   172→    default: return 0;
+   173→  }
+   174→}
+   175→
+   176→// ─── KPI builders — one per department ───────────────────────────────────────
+   177→
+   178→function financeKPIs(data: WorkforceDataView): EmployeeKPI[] {
+   179→  const f = data.finance;
+   180→  return [
+   181→    { name: 'Revenue (MTD)', value: f.revenue, unit: 'inr', status: f.revenue > 0 ? 'green' : 'red', source: 'AI CFO™' },
+   182→    { name: 'Cash Position', value: f.cash, unit: 'inr', status: f.cash > 100000 ? 'green' : f.cash > 0 ? 'amber' : 'red', source: 'Banking' },
+   183→    { name: 'Net Profit', value: f.profit, unit: 'inr', status: f.profit > 0 ? 'green' : 'red', source: 'AI CFO™' },
+   184→    { name: 'GST Payable', value: f.gst, unit: 'inr', status: f.gst === 0 ? 'green' : 'amber', source: 'GST' },
+   185→    { name: 'Runway', value: f.runwayDays, unit: 'days', target: 180, status: f.runwayDays > 90 ? 'green' : f.runwayDays > 30 ? 'amber' : 'red', source: 'AI CFO™' },
+   186→    { name: 'Overdue A/R', value: f.overdueAmount, unit: 'inr', status: f.overdueAmount === 0 ? 'green' : 'red', source: 'Invoices' },
+   187→    { name: 'Margin', value: f.marginPct, unit: 'pct', target: 20, status: f.marginPct > 15 ? 'green' : f.marginPct > 0 ? 'amber' : 'red', source: 'AI CFO™' },
+   188→  ];
+   189→}
+   190→
+   191→function operationsKPIs(data: WorkforceDataView): EmployeeKPI[] {
+   192→  const o = data.operations;
+   193→  return [
+   194→    { name: 'Open Tasks', value: o.openTasks, unit: 'count', status: o.openTasks < 5 ? 'green' : 'amber', source: 'Tasks' },
+   195→    { name: 'Employees', value: o.employeeCount, unit: 'count', source: 'Payroll' },
+   196→    { name: 'Delivery Pending', value: o.deliveryPending, unit: 'count', status: o.deliveryPending === 0 ? 'green' : 'amber', source: 'Invoices' },
+   197→    { name: 'Automation Rules', value: o.automationCount, unit: 'count', source: 'Automation Engine™' },
+   198→    { name: 'Efficiency', value: o.efficiencyPct, unit: 'pct', target: 80, status: o.efficiencyPct > 70 ? 'green' : 'amber', source: 'Digital Twin™' },
+   199→  ];
+   200→}
+   201→
+   202→function salesKPIs(data: WorkforceDataView): EmployeeKPI[] {
+   203→  const s = data.sales;
+   204→  return [
+   205→    { name: 'Total Clients', value: s.clientCount, unit: 'count', status: s.clientCount > 5 ? 'green' : 'amber', source: 'CRM' },
+   206→    { name: 'Active Clients', value: s.activeClients, unit: 'count', source: 'CRM' },
+   207→    { name: 'Pipeline Value', value: s.pipelineValue, unit: 'inr', status: s.pipelineValue > 100000 ? 'green' : 'amber', source: 'Invoices' },
+   208→    { name: 'Conversion Rate', value: s.conversionRate, unit: 'pct', target: 50, status: s.conversionRate > 30 ? 'green' : 'amber', source: 'CRM' },
+   209→    { name: 'New This Month', value: s.newClientsThisMonth, unit: 'count', source: 'Invoices' },
+   210→    { name: 'Avg Deal Size', value: s.avgDealSize, unit: 'inr', source: 'Revenue Data' },
+   211→  ];
+   212→}
+   213→
+   214→function marketingKPIs(data: WorkforceDataView): EmployeeKPI[] {
+   215→  const m = data.marketing;
+   216→  return [
+   217→    { name: 'Revenue Growth', value: m.revenueGrowthPct, unit: 'pct', target: 10, status: m.revenueGrowthPct > 5 ? 'green' : m.revenueGrowthPct > 0 ? 'amber' : 'red', source: 'AI CFO™' },
+   218→    { name: 'Campaign ROI', value: m.campaignROI, unit: 'ratio', status: m.campaignROI > 100 ? 'green' : 'amber', source: 'Revenue Data' },
+   219→    { name: 'Leads', value: m.leadCount, unit: 'count', source: 'CRM' },
+   220→    { name: 'Brand Engagement', value: m.brandEngagement, unit: 'pct', target: 70, source: 'Growth Metrics' },
+   221→  ];
+   222→}
+   223→
+   224→function complianceKPIs(data: WorkforceDataView): EmployeeKPI[] {
+   225→  const c = data.compliance;
+   226→  return [
+   227→    { name: 'Pending Filings', value: c.pendingFilings, unit: 'count', status: c.pendingFilings === 0 ? 'green' : 'amber', source: 'GST' },
+   228→    { name: 'Overdue Filings', value: c.overdueFilings, unit: 'count', status: c.overdueFilings === 0 ? 'green' : 'red', source: 'GST' },
+   229→    { name: 'Upcoming Deadlines', value: c.upcomingDeadlines, unit: 'count', source: 'GST' },
+   230→    { name: 'Active Notices', value: c.notices, unit: 'count', status: c.notices === 0 ? 'green' : 'red', source: 'Notices' },
+   231→    { name: 'Compliance Score', value: c.complianceScore, unit: 'pct', target: 90, status: c.complianceScore > 80 ? 'green' : 'amber', source: 'Digital Twin™' },
+   232→    { name: 'ITC At Risk', value: c.itcAtRisk, unit: 'inr', status: c.itcAtRisk === 0 ? 'green' : 'red', source: 'GST' },
+   233→  ];
+   234→}
+   235→
+   236→function riskKPIs(data: WorkforceDataView): EmployeeKPI[] {
+   237→  const r = data.risk;
+   238→  return [
+   239→    { name: 'Overall Risk', value: r.overallRiskScore, unit: 'pct', status: r.overallRiskScore < 30 ? 'green' : r.overallRiskScore < 60 ? 'amber' : 'red', source: 'AI CFO™ Risk Engine' },
+   240→    { name: 'Critical Risks', value: r.criticalRisks, unit: 'count', status: r.criticalRisks === 0 ? 'green' : 'red', source: 'AI CFO™' },
+   241→    { name: 'High Risks', value: r.highRisks, unit: 'count', status: r.highRisks === 0 ? 'green' : 'amber', source: 'AI CFO™' },
+   242→    { name: 'Cash Risk', value: r.cashRisk === 'low' ? 0 : r.cashRisk === 'medium' ? 1 : r.cashRisk === 'high' ? 2 : 3, unit: 'count', status: r.cashRisk === 'low' ? 'green' : r.cashRisk === 'critical' ? 'red' : 'amber', source: 'AI CFO™' },
+   243→    { name: 'Concentration', value: r.concentrationRisk, unit: 'pct', target: 30, status: r.concentrationRisk < 30 ? 'green' : 'red', source: 'Revenue Data' },
+   244→    { name: 'Anomalies', value: r.anomalies, unit: 'count', status: r.anomalies === 0 ? 'green' : 'amber', source: 'Digital Twin™' },
+   245→  ];
+   246→}
+   247→
+   248→function legalKPIs(data: WorkforceDataView): EmployeeKPI[] {
+   249→  const l = data.legal;
+   250→  return [
+   251→    { name: 'Active Notices', value: l.activeNotices, unit: 'count', status: l.activeNotices === 0 ? 'green' : 'red', source: 'Notices' },
+   252→    { name: 'Disputes', value: l.disputeCount, unit: 'count', status: l.disputeCount === 0 ? 'green' : 'amber', source: 'Notices' },
+   253→    { name: 'Legal Risks', value: l.legalRisks, unit: 'count', status: l.legalRisks === 0 ? 'green' : 'amber', source: 'Notices' },
+   254→  ];
+   255→}
+   256→
+   257→function hrKPIs(data: WorkforceDataView): EmployeeKPI[] {
+   258→  const h = data.hr;
+   259→  return [
+   260→    { name: 'Headcount', value: h.headcount, unit: 'count', source: 'Payroll' },
+   261→    { name: 'Monthly Payroll', value: h.payrollAmount, unit: 'inr', source: 'Payroll' },
+   262→  ];
+   263→}
+   264→
+   265→function supportKPIs(data: WorkforceDataView): EmployeeKPI[] {
+   266→  const s = data.support;
+   267→  return [
+   268→    { name: 'Open Tickets', value: s.openTickets, unit: 'count', status: s.openTickets === 0 ? 'green' : 'amber', source: 'Communications' },
+   269→    { name: 'Satisfaction', value: s.satisfactionPct, unit: 'pct', target: 90, status: s.satisfactionPct > 80 ? 'green' : 'amber', source: 'Communications' },
+   270→    { name: 'Escalations', value: s.escalationCount, unit: 'count', status: s.escalationCount === 0 ? 'green' : 'red', source: 'Notices' },
+   271→    { name: 'Onboarding', value: s.onboardingCount, unit: 'count', source: 'Invoices' },
+   272→  ];
+   273→}
+   274→
+   275→function procurementKPIs(data: WorkforceDataView): EmployeeKPI[] {
+   276→  const p = data.procurement;
+   277→  return [
+   278→    { name: 'Vendors', value: p.vendorCount, unit: 'count', source: 'Purchase Bills' },
+   279→    { name: 'Pending Bills', value: p.pendingBills, unit: 'count', status: p.pendingBills === 0 ? 'green' : 'amber', source: 'Purchase Bills' },
+   280→    { name: 'Total Payables', value: p.totalPayables, unit: 'inr', status: p.totalPayables === 0 ? 'green' : 'amber', source: 'Digital Twin™' },
+   281→  ];
+   282→}
+   283→
+   284→function technologyKPIs(data: WorkforceDataView): EmployeeKPI[] {
+   285→  const t = data.technology;
+   286→  return [
+   287→    { name: 'Data Connections', value: t.dataConnections, unit: 'count', source: 'Data Connections' },
+   288→    { name: 'Active Integrations', value: t.activeIntegrations, unit: 'count', status: t.activeIntegrations > 0 ? 'green' : 'red', source: 'Data Connections' },
+   289→    { name: 'Sync Errors', value: t.syncErrors, unit: 'count', status: t.syncErrors === 0 ? 'green' : 'red', source: 'Data Connections' },
+   290→    { name: 'Data Quality', value: t.dataQualityScore, unit: 'pct', target: 90, status: t.dataQualityScore > 80 ? 'green' : 'amber', source: 'Data Connections' },
+   291→  ];
+   292→}
+   293→
+   294→function dataKPIs(data: WorkforceDataView): EmployeeKPI[] {
+   295→  const d = data.data;
+   296→  return [
+   297→    { name: 'Total Records', value: d.totalRecords, unit: 'count', source: 'All Sources' },
+   298→    { name: 'Data Sources', value: d.dataSources, unit: 'count', source: 'All Sources' },
+   299→    { name: 'Forecast Confidence', value: d.forecastConfidence, unit: 'pct', target: 70, status: d.forecastConfidence > 60 ? 'green' : 'amber', source: 'AI CFO™' },
+   300→  ];
+   301→}
+   302→
+   303→function executiveKPIs(data: WorkforceDataView): EmployeeKPI[] {
+   304→  const e = data.executive;
+   305→  return [
+   306→    { name: 'Health Score', value: e.healthScore, unit: 'pct', target: 75, status: e.healthScore > 70 ? 'green' : e.healthScore > 40 ? 'amber' : 'red', source: 'AI CFO™' },
+   307→    { name: 'Risk Score', value: e.riskScore, unit: 'pct', status: e.riskScore < 30 ? 'green' : e.riskScore < 60 ? 'amber' : 'red', source: 'AI CFO™' },
+   308→    { name: 'Cash', value: e.cash, unit: 'inr', source: 'Banking' },
+   309→    { name: 'Revenue (MTD)', value: e.revenue, unit: 'inr', source: 'AI CFO™' },
+   310→    { name: 'Runway', value: e.runwayDays, unit: 'days', target: 180, source: 'AI CFO™' },
+   311→    { name: 'Clients', value: e.clients, unit: 'count', source: 'CRM' },
+   312→  ];
+   313→}
+   314→
+   315→function departmentKPIs(role: EmployeeRole, data: WorkforceDataView): EmployeeKPI[] {
+   316→  const dept = getRoleDefinition(role).department;
+   317→  switch (dept) {
+   318→    case 'executive': return executiveKPIs(data);
+   319→    case 'finance': return financeKPIs(data);
+   320→    case 'operations': return operationsKPIs(data);
+   321→    case 'sales': return salesKPIs(data);
+   322→    case 'marketing': return marketingKPIs(data);
+   323→    case 'compliance': return complianceKPIs(data);
+   324→    case 'risk': return riskKPIs(data);
+   325→    case 'legal': return legalKPIs(data);
+   326→    case 'hr': return hrKPIs(data);
+   327→    case 'support': return supportKPIs(data);
+   328→    case 'procurement': return procurementKPIs(data);
+   329→    case 'technology': return technologyKPIs(data);
+   330→    case 'data': return dataKPIs(data);
+   331→    default: return [];
+   332→  }
+   333→}
+   334→
+   335→// ─── Recommendation builders — real, data-driven ─────────────────────────────
+   336→
+   337→function financeRecs(data: WorkforceDataView): EmployeeRecommendation[] {
+   338→  const f = data.finance;
+   339→  const recs: EmployeeRecommendation[] = [];
+   340→  if (f.overdueAmount > 0) {
+   341→    recs.push({
+   342→      title: `Recover ${formatINRShort(f.overdueAmount)} in overdue receivables`,
+   343→      rationale: `${f.outstandingInvoices} invoices are overdue, tying up working capital.`,
+   344→      impact: 'Improves cash position and reduces bad debt risk',
+   345→      priority: f.overdueAmount > 100000 ? 'critical' : 'high',
+   346→      estimatedValue: f.overdueAmount,
+   347→      suggestedAction: 'Send automated payment reminders via Sales AI',
+   348→    });
+   349→  }
+   350→  if (f.runwayDays < 90 && f.runwayDays > 0) {
+   351→    recs.push({
+   352→      title: `Cash runway is ${f.runwayDays} days — accelerate collections or arrange credit`,
+   353→      rationale: 'At current burn rate, cash will be exhausted within 3 months.',
+   354→      impact: 'Prevents liquidity crisis',
+   355→      priority: f.runwayDays < 30 ? 'critical' : 'high',
+   356→      estimatedValue: f.burnRate * 3,
+   357→      suggestedAction: 'Coordinate with CFO AI on credit line or expense reduction',
+   358→    });
+   359→  }
+   360→  if (f.gst > 0) {
+   361→    recs.push({
+   362→      title: `File GST return — ${formatINRShort(f.gst)} payable`,
+   363→      rationale: 'GST liability is pending. Late filing attracts penalties.',
+   364→      impact: 'Avoids penalties and compliance risk',
+   365→      priority: 'high',
+   366→      estimatedValue: f.gst * 0.18, // penalty estimate
+   367→      suggestedAction: 'Hand off to Compliance Manager AI',
+   368→    });
+   369→  }
+   370→  if (f.marginPct < 10 && f.revenue > 0) {
+   371→    recs.push({
+   372→      title: 'Margin below 10% — review pricing and expenses',
+   373→      rationale: `Current net margin is ${f.marginPct.toFixed(1)}%.`,
+   374→      impact: 'Improves profitability',
+   375→      priority: 'medium',
+   376→      suggestedAction: 'Coordinate with COO AI on cost optimization',
+   377→    });
+   378→  }
+   379→  return recs;
+   380→}
+   381→
+   382→function operationsRecs(data: WorkforceDataView): EmployeeRecommendation[] {
+   383→  const o = data.operations;
+   384→  const recs: EmployeeRecommendation[] = [];
+   385→  if (o.openTasks > 5) {
+   386→    recs.push({
+   387→      title: `${o.openTasks} open tasks — prioritize or delegate`,
+   388→      rationale: 'Task backlog is building up, risking delivery delays.',
+   389→      impact: 'Improves delivery speed and client satisfaction',
+   390→      priority: 'medium',
+   391→      suggestedAction: 'Delegate to Operations Manager AI for triage',
+   392→    });
+   393→  }
+   394→  if (o.deliveryPending > 0) {
+   395→    recs.push({
+   396→      title: `${o.deliveryPending} deliveries pending`,
+   397→      rationale: 'Outstanding deliveries need tracking.',
+   398→      impact: 'Prevents SLA breaches',
+   399→      priority: 'medium',
+   400→    });
+   401→  }
+   402→  if (o.efficiencyPct < 60) {
+   403→    recs.push({
+   404→      title: 'Operational efficiency below 60% — automate repetitive tasks',
+   405→      rationale: `Current efficiency: ${o.efficiencyPct}%.`,
+   406→      impact: 'Reduces manual effort by up to 40%',
+   407→      priority: 'medium',
+   408→      suggestedAction: 'Work with CTO AI to identify automation opportunities',
+   409→    });
+   410→  }
+   411→  return recs;
+   412→}
+   413→
+   414→function salesRecs(data: WorkforceDataView): EmployeeRecommendation[] {
+   415→  const s = data.sales;
+   416→  const recs: EmployeeRecommendation[] = [];
+   417→  if (s.pipelineValue > 0) {
+   418→    recs.push({
+   419→      title: `Follow up on ${formatINRShort(s.pipelineValue)} pipeline`,
+   420→      rationale: `${s.clientCount} clients with outstanding invoices represent active pipeline.`,
+   421→      impact: 'Accelerates revenue recognition',
+   422→      priority: 'high',
+   423→      estimatedValue: s.pipelineValue,
+   424→      suggestedAction: 'Hand off to Finance AI for invoicing',
+   425→    });
+   426→  }
+   427→  if (s.newClientsThisMonth === 0 && s.clientCount > 0) {
+   428→    recs.push({
+   429→      title: 'No new clients this month — coordinate with Marketing AI',
+   430→      rationale: 'Lead pipeline may be thin. Marketing AI can generate new leads.',
+   431→      impact: 'Drives revenue growth',
+   432→      priority: 'medium',
+   433→      suggestedAction: 'Request lead generation from Marketing Manager AI',
+   434→    });
+   435→  }
+   436→  if (s.topClients[0] && s.topClients[0].revenue > 0) {
+   437→    const topShare = s.topClients[0].revenue;
+   438→    recs.push({
+   439→      title: `Top client: ${s.topClients[0].name} (${formatINRShort(topShare)})`,
+   440→      rationale: 'Monitor concentration risk — coordinate with Risk Manager AI.',
+   441→      impact: 'Reduces revenue concentration',
+   442→      priority: 'low',
+   443→    });
+   444→  }
+   445→  return recs;
+   446→}
+   447→
+   448→function marketingRecs(data: WorkforceDataView): EmployeeRecommendation[] {
+   449→  const m = data.marketing;
+   450→  const recs: EmployeeRecommendation[] = [];
+   451→  if (m.revenueGrowthPct < 0) {
+   452→    recs.push({
+   453→      title: 'Revenue declining — launch growth campaign',
+   454→      rationale: `Revenue is down ${Math.abs(m.revenueGrowthPct).toFixed(1)}% vs last month.`,
+   455→      impact: 'Reverses revenue decline',
+   456→      priority: 'high',
+   457→      suggestedAction: 'Propose campaign budget to CEO AI',
+   458→    });
+   459→  }
+   460→  if (m.leadCount === 0) {
+   461→    recs.push({
+   462→      title: 'No leads in pipeline — coordinate with Sales AI',
+   463→      rationale: 'Lead generation needs attention.',
+   464→      impact: 'Fills sales pipeline',
+   465→      priority: 'medium',
+   466→    });
+   467→  }
+   468→  if (m.campaignROI > 0) {
+   469→    recs.push({
+   470→      title: `Campaign ROI at ${m.campaignROI.toFixed(0)}% — scale winners`,
+   471→      rationale: 'Current campaigns are generating positive returns.',
+   472→      impact: 'Multiplies revenue growth',
+   473→      priority: 'medium',
+   474→    });
+   475→  }
+   476→  return recs;
+   477→}
+   478→
+   479→function complianceRecs(data: WorkforceDataView): EmployeeRecommendation[] {
+   480→  const c = data.compliance;
+   481→  const recs: EmployeeRecommendation[] = [];
+   482→  if (c.overdueFilings > 0) {
+   483→    recs.push({
+   484→      title: `${c.overdueFilings} overdue GST filing(s) — file immediately`,
+   485→      rationale: 'Overdue filings attract daily penalties.',
+   486→      impact: 'Avoids penalties and legal action',
+   487→      priority: 'critical',
+   488→      estimatedValue: c.overdueFilings * 5000,
+   489→      suggestedAction: 'Escalate to CFO AI and Legal Advisor AI',
+   490→    });
+   491→  }
+   492→  if (c.notices > 0) {
+   493→    recs.push({
+   494→      title: `${c.notices} active notice(s) — respond within deadline`,
+   495→      rationale: 'Government notices require timely response.',
+   496→      impact: 'Prevents escalation and penalties',
+   497→      priority: 'high',
+   498→      suggestedAction: 'Coordinate with Legal Advisor AI for response drafting',
+   499→    });
+   500→  }
+   501→  if (c.itcAtRisk > 0) {
+   502→    recs.push({
+   503→      title: `${formatINRShort(c.itcAtRisk)} ITC at risk — reconcile vendor bills`,
+   504→      rationale: 'Input Tax Credit may be reversed if not reconciled.',
+   505→      impact: 'Preserves tax credit',
+   506→      priority: 'high',
+   507→      estimatedValue: c.itcAtRisk,
+   508→    });
+   509→  }
+   510→  return recs;
+   511→}
+   512→
+   513→function riskRecs(data: WorkforceDataView): EmployeeRecommendation[] {
+   514→  const r = data.risk;
+   515→  const recs: EmployeeRecommendation[] = [];
+   516→  if (r.cashRisk === 'critical' || r.cashRisk === 'high') {
+   517→    recs.push({
+   518→      title: `Cash risk is ${r.cashRisk} — immediate action needed`,
+   519→      rationale: 'Runway is critically short.',
+   520→      impact: 'Prevents business insolvency',
+   521→      priority: 'critical',
+   522→      suggestedAction: 'Escalate to CEO AI and CFO AI immediately',
+   523→    });
+   524→  }
+   525→  if (r.concentrationRisk > 30) {
+   526→    recs.push({
+   527→      title: `Client concentration at ${r.concentrationRisk.toFixed(0)}% — diversify`,
+   528→      rationale: 'Top client represents too much revenue share.',
+   529→      impact: 'Reduces single-point-of-failure risk',
+   530→      priority: 'high',
+   531→      suggestedAction: 'Coordinate with Sales AI and Marketing AI on diversification',
+   532→    });
+   533→  }
+   534→  if (r.anomalies > 0) {
+   535→    recs.push({
+   536→      title: `${r.anomalies} anomaly/anomalies detected — investigate`,
+   537→      rationale: 'Digital Twin™ detected unusual patterns.',
+   538→      impact: 'Prevents fraud and operational issues',
+   539→      priority: 'high',
+   540→      suggestedAction: 'Coordinate with Data Analyst AI',
+   541→    });
+   542→  }
+   543→  return recs;
+   544→}
+   545→
+   546→function legalRecs(data: WorkforceDataView): EmployeeRecommendation[] {
+   547→  const l = data.legal;
+   548→  const recs: EmployeeRecommendation[] = [];
+   549→  if (l.activeNotices > 0) {
+   550→    recs.push({
+   551→      title: `${l.activeNotices} active legal notice(s) — draft response`,
+   552→      rationale: 'Notices require formal legal response within deadlines.',
+   553→      impact: 'Prevents legal escalation',
+   554→      priority: 'high',
+   555→      suggestedAction: 'Coordinate with Compliance Manager AI',
+   556→    });
+   557→  }
+   558→  if (l.disputeCount > 0) {
+   559→    recs.push({
+   560→      title: `${l.disputeCount} dispute(s) — assess resolution options`,
+   561→      rationale: 'Disputes may require negotiation or legal action.',
+   562→      impact: 'Reduces legal exposure',
+   563→      priority: 'medium',
+   564→    });
+   565→  }
+   566→  return recs;
+   567→}
+   568→
+   569→function hrRecs(data: WorkforceDataView): EmployeeRecommendation[] {
+   570→  const h = data.hr;
+   571→  const recs: EmployeeRecommendation[] = [];
+   572→  if (h.headcount === 0) {
+   573→    recs.push({
+   574→      title: 'No employees connected — sync HR/payroll system',
+   575→      rationale: 'HR data is not connected. Headcount and payroll unavailable.',
+   576→      impact: 'Enables workforce planning',
+   577→      priority: 'medium',
+   578→      suggestedAction: 'Request integration from CTO AI',
+   579→    });
+   580→  }
+   581→  if (h.payrollAmount > 0 && data.finance.cash < h.payrollAmount) {
+   582→    recs.push({
+   583→      title: 'Cash below monthly payroll — arrange funding',
+   584→      rationale: 'Next payroll may not be fully covered by current cash.',
+   585→      impact: 'Prevents payroll default',
+   586→      priority: 'critical',
+   587→      suggestedAction: 'Escalate to CFO AI',
+   588→    });
+   589→  }
+   590→  return recs;
+   591→}
+   592→
+   593→function supportRecs(data: WorkforceDataView): EmployeeRecommendation[] {
+   594→  const s = data.support;
+   595→  const recs: EmployeeRecommendation[] = [];
+   596→  if (s.openTickets > 0) {
+   597→    recs.push({
+   598→      title: `${s.openTickets} open ticket(s) — prioritize resolution`,
+   599→      rationale: 'Open tickets impact customer satisfaction.',
+   600→      impact: 'Improves retention',
+   601→      priority: s.escalationCount > 0 ? 'high' : 'medium',
+   602→    });
+   603→  }
+   604→  if (s.escalationCount > 0) {
+   605→    recs.push({
+   606→      title: `${s.escalationCount} escalation(s) — CEO review needed`,
+   607→      rationale: 'Escalated tickets need executive attention.',
+   608→      impact: 'Prevents churn',
+   609→      priority: 'high',
+   610→      suggestedAction: 'Escalate to CEO AI',
+   611→    });
+   612→  }
+   613→  return recs;
+   614→}
+   615→
+   616→function procurementRecs(data: WorkforceDataView): EmployeeRecommendation[] {
+   617→  const p = data.procurement;
+   618→  const recs: EmployeeRecommendation[] = [];
+   619→  if (p.pendingBills > 0) {
+   620→    recs.push({
+   621→      title: `${p.pendingBills} unpaid vendor bill(s) — schedule payment`,
+   622→      rationale: 'Vendor relationships depend on timely payment.',
+   623→      impact: 'Maintains supplier reliability',
+   624→      priority: 'medium',
+   625→      suggestedAction: 'Coordinate with Finance Manager AI',
+   626→    });
+   627→  }
+   628→  if (p.vendorCount === 1) {
+   629→    recs.push({
+   630→      title: 'Single vendor dependency — diversify suppliers',
+   631→      rationale: 'Over-reliance on one vendor creates supply chain risk.',
+   632→      impact: 'Reduces procurement risk',
+   633→      priority: 'medium',
+   634→      suggestedAction: 'Coordinate with Risk Manager AI',
+   635→    });
+   636→  }
+   637→  return recs;
+   638→}
+   639→
+   640→function technologyRecs(data: WorkforceDataView): EmployeeRecommendation[] {
+   641→  const t = data.technology;
+   642→  const recs: EmployeeRecommendation[] = [];
+   643→  if (t.syncErrors > 0) {
+   644→    recs.push({
+   645→      title: `${t.syncErrors} integration error(s) — fix connections`,
+   646→      rationale: 'Data sync failures cause stale insights.',
+   647→      impact: 'Restores data freshness',
+   648→      priority: 'high',
+   649→    });
+   650→  }
+   651→  if (t.activeIntegrations === 0) {
+   652→    recs.push({
+   653→      title: 'No active data integrations — connect business sources',
+   654→      rationale: 'AI Workforce needs connected data to function.',
+   655→      impact: 'Activates all AI employees',
+   656→      priority: 'critical',
+   657→      suggestedAction: 'Guide user to Connections page',
+   658→    });
+   659→  }
+   660→  return recs;
+   661→}
+   662→
+   663→function dataRecs(data: WorkforceDataView): EmployeeRecommendation[] {
+   664→  const d = data.data;
+   665→  const recs: EmployeeRecommendation[] = [];
+   666→  if (d.forecastConfidence < 50) {
+   667→    recs.push({
+   668→      title: 'Forecast confidence low — increase data history',
+   669→      rationale: `Current confidence: ${d.forecastConfidence}%. More historical data improves accuracy.`,
+   670→      impact: 'Better predictions across all departments',
+   671→      priority: 'medium',
+   672→    });
+   673→  }
+   674→  if (d.totalRecords < 50) {
+   675→    recs.push({
+   676→      title: 'Limited data records — connect more sources',
+   677→      rationale: `Only ${d.totalRecords} records available.`,
+   678→      impact: 'Enables deeper AI analysis',
+   679→      priority: 'medium',
+   680→    });
+   681→  }
+   682→  return recs;
+   683→}
+   684→
+   685→function executiveRecs(data: WorkforceDataView): EmployeeRecommendation[] {
+   686→  const e = data.executive;
+   687→  const recs: EmployeeRecommendation[] = [];
+   688→  if (e.healthScore < 50) {
+   689→    recs.push({
+   690→      title: 'Business health below 50 — review department scorecards',
+   691→      rationale: `Overall health: ${e.healthScore}/100.`,
+   692→      impact: 'Reverses declining trajectory',
+   693→      priority: 'high',
+   694→      suggestedAction: 'Convene emergency leadership meeting',
+   695→    });
+   696→  }
+   697→  if (e.riskScore > 60) {
+   698→    recs.push({
+   699→      title: 'Risk score elevated — activate risk mitigation',
+   700→      rationale: `Risk: ${e.riskScore}/100.`,
+   701→      impact: 'Reduces business exposure',
+   702→      priority: 'high',
+   703→      suggestedAction: 'Direct Risk Manager AI to prepare mitigation plan',
+   704→    });
+   705→  }
+   706→  if (e.runwayDays < 90 && e.runwayDays > 0) {
+   707→    recs.push({
+   708→      title: `Runway ${e.runwayDays} days — prioritize cash generation`,
+   709→      rationale: 'Cash runway is short.',
+   710→      impact: 'Extends business survival',
+   711→      priority: 'critical',
+   712→      suggestedAction: 'Direct CFO AI to arrange credit line',
+   713→    });
+   714→  }
+   715→  return recs;
+   716→}
+   717→
+   718→function departmentRecs(role: EmployeeRole, data: WorkforceDataView): EmployeeRecommendation[] {
+   719→  const dept = getRoleDefinition(role).department;
+   720→  switch (dept) {
+   721→    case 'executive': return executiveRecs(data);
+   722→    case 'finance': return financeRecs(data);
+   723→    case 'operations': return operationsRecs(data);
+   724→    case 'sales': return salesRecs(data);
+   725→    case 'marketing': return marketingRecs(data);
+   726→    case 'compliance': return complianceRecs(data);
+   727→    case 'risk': return riskRecs(data);
+   728→    case 'legal': return legalRecs(data);
+   729→    case 'hr': return hrRecs(data);
+   730→    case 'support': return supportRecs(data);
+   731→    case 'procurement': return procurementRecs(data) as EmployeeRecommendation[];
+   732→    case 'technology': return technologyRecs(data);
+   733→    case 'data': return dataRecs(data);
+   734→    default: return [];
+   735→  }
+   736→}
+   737→
+   738→// ─── Alert / task / decision counts per department (from real data) ──────────
+   739→
+   740→function departmentAlertCount(role: EmployeeRole, data: WorkforceDataView): number {
+   741→  return departmentRecs(role, data).filter((r) => r.priority === 'critical' || r.priority === 'high').length;
+   742→}
+   743→
+   744→function departmentTaskCount(role: EmployeeRole, data: WorkforceDataView): number {
+   745→  const recs = departmentRecs(role, data);
+   746→  const ops = data.operations;
+   747→  // Each recommendation generates a task; plus department-specific baseline
+   748→  const dept = getRoleDefinition(role).department;
+   749→  let baseline = 0;
+   750→  if (dept === 'operations') baseline = ops.openTasks;
+   751→  if (dept === 'compliance') baseline = data.compliance.pendingFilings + data.compliance.notices;
+   752→  if (dept === 'support') baseline = data.support.openTickets;
+   753→  if (dept === 'finance') baseline = data.finance.outstandingInvoices;
+   754→  if (dept === 'procurement') baseline = data.procurement.pendingBills;
+   755→  return recs.length + baseline;
+   756→}
+   757→
+   758→function departmentDecisionCount(role: EmployeeRole, data: WorkforceDataView): number {
+   759→  return departmentRecs(role, data).filter((r) => r.suggestedAction).length;
+   760→}
+   761→
+   762→// ─── Formatter helper (avoid circular import — inline minimal version) ───────
+   763→
+   764→function formatINRShort(n: number): string {
+   765→  if (!isFinite(n) || isNaN(n)) return '₹0';
+   766→  const abs = Math.abs(n);
+   767→  if (abs >= 10000000) return `₹${(n / 10000000).toFixed(2)} Cr`;
+   768→  if (abs >= 100000) return `₹${(n / 100000).toFixed(2)} L`;
+   769→  if (abs >= 1000) return `₹${(n / 1000).toFixed(1)}K`;
+   770→  return '₹' + Math.round(n).toLocaleString('en-IN');
+   771→}
+   772→
+   773→// ─── Build a single AI employee ───────────────────────────────────────────────
+   774→
+   775→function buildEmployee(
+   776→  def: RoleDefinition,
+   777→  data: WorkforceDataView,
+   778→): AIEmployee {
+   779→  const kpis = departmentKPIs(def.role, data);
+   780→  const recommendations = departmentRecs(def.role, data).slice(0, 5);
+   781→  const alertCount = departmentAlertCount(def.role, data);
+   782→  const taskCount = departmentTaskCount(def.role, data);
+   783→  const decisionCount = departmentDecisionCount(def.role, data);
+   784→  const healthScore = departmentHealth(def.role, data);
+   785→  const hasLiveData = data.hasLiveData;
+   786→
+   787→  // Performance, memory, skills computed by their respective engines
+   788→  const performance = computeEmployeePerformance(def.role, data, healthScore, taskCount);
+   789→  const recentMemory = computeEmployeeMemory(def.role, data).slice(0, 5);
+   790→  const skills = computeEmployeeSkills(def.role, data).slice(0, 4);
+   791→
+   792→  const status = detectStatus(def.role, data, alertCount, decisionCount, hasLiveData);
+   793→
+   794→  return {
+   795→    role: def.role,
+   796→    name: def.name,
+   797→    title: def.title,
+   798→    department: def.department,
+   799→    tier: def.tier,
+   800→    reportsTo: def.reportsTo,
+   801→    directReports: def.directReports,
+   802→    status,
+   803→    healthScore,
+   804→    avatarColor: def.avatarColor,
+   805→    icon: def.icon,
+   806→    responsibilities: def.responsibilities,
+   807→    monitors: def.monitors,
+   808→    kpis,
+   809→    openTaskCount: taskCount,
+   810→    activeAlertCount: alertCount,
+   811→    pendingDecisionCount: decisionCount,
+   812→    recommendations,
+   813→    performance,
+   814→    recentMemory,
+   815→    skills,
+   816→    lastActiveAt: new Date().toISOString(),
+   817→    dataSources: def.dataSources,
+   818→    hasLiveData,
+   819→  };
+   820→}
+   821→
+   822→// ─── Main: build the entire AI organization ──────────────────────────────────
+   823→
+   824→export function computeOrganization(data: WorkforceDataView): AIEmployee[] {
+   825→  return ORGANIZATION.map((def) => buildEmployee(def, data));
+   826→}
+   827→
+   828→// ─── Build a single employee by role (for detail views) ──────────────────────
+   829→
+   830→export function computeEmployee(role: EmployeeRole, data: WorkforceDataView): AIEmployee {
+   831→  const def = getRoleDefinition(role);
+   832→  return buildEmployee(def, data);
+   833→}
+   834→

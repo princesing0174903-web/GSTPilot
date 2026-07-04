@@ -1,0 +1,1314 @@
+     1→'use client';
+     2→
+     3→// ═══════════════════════════════════════════════════════════════════════════════
+     4→// GSTPilot Oracle™ — Professional UI Rebuild
+     5→// A FULL-SCREEN, SOLID workspace. No popup. No overlay. No transparency.
+     6→//
+     7→// Layout (Claude 70% · ChatGPT 20% · Perplexity 10%):
+     8→//   ┌──────────┬────────────────┬───────────────────────────────┐
+     9→//   │  Rail    │  History       │  Chat                         │
+    10→//   │  (icons) │  New Chat      │  GSTPilot Oracle™             │
+    11→//   │  Home    │  Today         │  Ask anything. Run everything.│
+    12→//   │  Intel   │  Yesterday     │  ───────────────────────────  │
+    13→//   │  Auto    │  Prev 7 days   │  Messages (scroll)            │
+    14→//   │  Finance │                │  ───────────────────────────  │
+    15→//   │  Network │                │  Sticky input + suggestions   │
+    16→//   │  Settings│                │                               │
+    17→//   │  Oracle  │                │                               │
+    18→//   └──────────┴────────────────┴───────────────────────────────┘
+    19→//
+    20→// Tokens:
+    21→//   bg #050505 · cards #111111 · border rgba(255,255,255,0.08)
+    22→//   text primary #fff · text secondary rgba(255,255,255,0.7)
+    23→//
+    24→// All existing logic preserved: streaming, brand short-circuit, memory,
+    25→// auto-scroll, stop, follow-ups, emotion + language detection.
+    26→// ═══════════════════════════════════════════════════════════════════════════════
+    27→
+    28→import {
+    29→  useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent,
+    30→} from 'react';
+    31→import { createPortal } from 'react-dom';
+    32→import { motion, AnimatePresence } from 'framer-motion';
+    33→import {
+    34→  ArrowUp, X, Square, Sparkles, Plus, MessageSquare, Trash2,
+    35→  Home, Brain, Zap, Wallet, Network, Settings, type LucideIcon,
+    36→} from 'lucide-react';
+    37→import ReactMarkdown from 'react-markdown';
+    38→import { InfinitySymbol } from '@/components/layout/InfinityMark';
+    39→import { cn } from '@/lib/utils';
+    40→import type { AppView } from '@/contexts/AppContext';
+    41→import {
+    42→  detectLanguage, detectEmotion, deriveAvatarState, AVATAR_STATE_LABEL,
+    43→  ORACLE_EMOTIONS, nativeLanguageLabel,
+    44→} from './oracle-human';
+    45→import { detectBrandQuestion } from './oracle-brand';
+    46→import { OracleEmptyState } from './OracleEmptyState';
+    47→import type { OracleMessage, OracleChatRequest, OracleStreamChunk } from './oracle-types';
+    48→import type { OracleLiveData } from '@/lib/connections/types';
+    49→
+    50→// ─── Props ────────────────────────────────────────────────────────────────────
+    51→
+    52→interface OracleWorkspaceProps {
+    53→  open: boolean;
+    54→  onClose: () => void;
+    55→  onNavigate: (view: AppView) => void;
+    56→  userName?: string;
+    57→  firmName?: string;
+    58→  gstin?: string;
+    59→  /** Optional prefilled question (e.g. from the CommandBar `oracle-ask` event).
+    60→   *  When provided, the workspace auto-sends it once after opening. */
+    61→  initialPrompt?: string;
+    62→}
+    63→
+    64→// ─── Constants ────────────────────────────────────────────────────────────────
+    65→
+    66→const STORE_KEY = 'gstpilot-oracle-conversations-v2';
+    67→const LEGACY_KEY = 'gstpilot-oracle-conversation-v1';
+    68→
+    69→// ─── Conversation store types ─────────────────────────────────────────────────
+    70→
+    71→interface OracleConversation {
+    72→  id: string;
+    73→  title: string;
+    74→  messages: OracleMessage[];
+    75→  createdAt: string;
+    76→  updatedAt: string;
+    77→}
+    78→
+    79→interface ConversationStore {
+    80→  conversations: OracleConversation[];
+    81→  activeId: string | null;
+    82→}
+    83→
+    84→// ─── Rail nav definition ──────────────────────────────────────────────────────
+    85→
+    86→interface RailItem {
+    87→  id: AppView | 'oracle';
+    88→  label: string;
+    89→  icon: LucideIcon;
+    90→}
+    91→
+    92→const RAIL_ITEMS: RailItem[] = [
+    93→  { id: 'dashboard', label: 'Home', icon: Home },
+    94→  { id: 'business-dna', label: 'Intelligence', icon: Brain },
+    95→  { id: 'run-my-business', label: 'Autopilot', icon: Zap },
+    96→  { id: 'reconcile', label: 'Finance', icon: Wallet },
+    97→  { id: 'business-graph', label: 'Network', icon: Network },
+    98→  { id: 'settings', label: 'Settings', icon: Settings },
+    99→  { id: 'oracle', label: 'Oracle', icon: Sparkles },
+   100→];
+   101→
+   102→// ─── Component ────────────────────────────────────────────────────────────────
+   103→
+   104→export function OracleWorkspace({
+   105→  open, onClose, onNavigate, userName, firmName, gstin, initialPrompt,
+   106→}: OracleWorkspaceProps) {
+   107→  const [store, setStore] = useState<ConversationStore>({ conversations: [], activeId: null });
+   108→  // Portal guard: only render into document.body after mount to avoid SSR
+   109→  // hydration mismatch (server has no document.body).
+   110→  const [mounted, setMounted] = useState(false);
+   111→  useEffect(() => setMounted(true), []);
+   112→  const [messages, setMessages] = useState<OracleMessage[]>([]);
+   113→  const [activeId, setActiveId] = useState<string | null>(null);
+   114→  const [input, setInput] = useState('');
+   115→  const [isStreaming, setIsStreaming] = useState(false);
+   116→  const [lastEmotion, setLastEmotion] = useState<OracleMessage['emotion']>('helpful');
+   117→  const [activeLanguage, setActiveLanguage] = useState<OracleMessage['language']>('english');
+   118→  // Mobile: history drawer open state
+   119→  const [historyOpen, setHistoryOpen] = useState(false);
+   120→
+   121→  const scrollRef = useRef<HTMLDivElement>(null);
+   122→  const inputRef = useRef<HTMLTextAreaElement>(null);
+   123→  const abortRef = useRef<AbortController | null>(null);
+   124→  const userPinnedUpRef = useRef(false);
+   125→  const streamingIdRef = useRef<string | null>(null);
+   126→  // Tracks the last initialPrompt we auto-sent, so we never fire it twice.
+   127→  const initialPromptSentRef = useRef<string | null>(null);
+   128→
+   129→  // ─── Live business data cache (30s TTL) ────────────────────────────────────
+   130→  // Fetches /api/oracle/context once per 30s window so we don't hit it on every
+   131→  // single message. Invalidated immediately on `connections-updated` events so a
+   132→  // freshly connected GSTN/Bank shows up in the very next prompt.
+   133→  const liveDataCacheRef = useRef<{ data: OracleLiveData | undefined; ts: number } | null>(null);
+   134→  const fetchLiveData = useCallback(async (): Promise<OracleLiveData | undefined> => {
+   135→    const now = Date.now();
+   136→    if (liveDataCacheRef.current && now - liveDataCacheRef.current.ts < 30000) {
+   137→      return liveDataCacheRef.current.data;
+   138→    }
+   139→    try {
+   140→      const res = await fetch('/api/oracle/context');
+   141→      if (res.ok) {
+   142→        const data = (await res.json()) as OracleLiveData;
+   143→        liveDataCacheRef.current = { data, ts: now };
+   144→        return data;
+   145→      }
+   146→    } catch {
+   147→      /* ignore — chat still works without context */
+   148→    }
+   149→    return undefined;
+   150→  }, []);
+   151→
+   152→  useEffect(() => {
+   153→    const handler = () => {
+   154→      liveDataCacheRef.current = null;
+   155→    };
+   156→    window.addEventListener('connections-updated', handler);
+   157→    return () => window.removeEventListener('connections-updated', handler);
+   158→  }, []);
+   159→
+   160→  // ─── Load + migrate store on open ──────────────────────────────────────────
+   161→  useEffect(() => {
+   162→    if (!open) return;
+   163→    const loaded = loadStore();
+   164→    if (loaded.conversations.length === 0) {
+   165→      // Migrate legacy single-conversation store if present.
+   166→      try {
+   167→        const raw = localStorage.getItem(LEGACY_KEY);
+   168→        if (raw) {
+   169→          const parsed = JSON.parse(raw) as OracleMessage[];
+   170→          if (Array.isArray(parsed) && parsed.length > 0) {
+   171→            const now = new Date().toISOString();
+   172→            const conv: OracleConversation = {
+   173→              id: cryptoId(),
+   174→              title: deriveTitle(parsed),
+   175→              messages: parsed.map((m) => (m.streaming ? { ...m, streaming: false } : m)),
+   176→              createdAt: parsed[0]?.createdAt ?? now,
+   177→              updatedAt: now,
+   178→            };
+   179→            const next: ConversationStore = { conversations: [conv], activeId: conv.id };
+   180→            setStore(next);
+   181→            setActiveId(conv.id);
+   182→            setMessages(conv.messages);
+   183→            saveStore(next);
+   184→            return;
+   185→          }
+   186→        }
+   187→      } catch {
+   188→        /* ignore */
+   189→      }
+   190→      // Nothing to migrate — start fresh with one empty conversation.
+   191→      const conv = newConversation();
+   192→      const next: ConversationStore = { conversations: [conv], activeId: conv.id };
+   193→      setStore(next);
+   194→      setActiveId(conv.id);
+   195→      setMessages([]);
+   196→      saveStore(next);
+   197→      return;
+   198→    }
+   199→    setStore(loaded);
+   200→    const active = loaded.conversations.find((c) => c.id === loaded.activeId) ?? loaded.conversations[0];
+   201→    if (active) {
+   202→      setActiveId(active.id);
+   203→      setMessages(active.messages);
+   204→    }
+   205→  }, [open]);
+   206→
+   207→  // ─── Persist active conversation whenever messages change ───────────────────
+   208→  useEffect(() => {
+   209→    if (!open || !activeId) return;
+   210→    setStore((prev) => {
+   211→      if (!prev.conversations.length) return prev;
+   212→      const exists = prev.conversations.some((c) => c.id === activeId);
+   213→      let conversations: OracleConversation[];
+   214→      let nextActiveId = prev.activeId;
+   215→      if (exists) {
+   216→        conversations = prev.conversations.map((c) =>
+   217→          c.id === activeId
+   218→            ? {
+   219→                ...c,
+   220→                messages,
+   221→                title: deriveTitle(messages) || c.title,
+   222→                updatedAt: new Date().toISOString(),
+   223→              }
+   224→            : c,
+   225→        );
+   226→      } else {
+   227→        // Active conversation doesn't exist yet — create it on the fly.
+   228→        const conv: OracleConversation = {
+   229→          id: activeId,
+   230→          title: deriveTitle(messages) || 'New chat',
+   231→          messages,
+   232→          createdAt: new Date().toISOString(),
+   233→          updatedAt: new Date().toISOString(),
+   234→        };
+   235→        conversations = [conv, ...prev.conversations];
+   236→        nextActiveId = activeId;
+   237→      }
+   238→      const next = { conversations, activeId: nextActiveId };
+   239→      saveStore(next);
+   240→      return next;
+   241→    });
+   242→  }, [messages, open, activeId]);
+   243→
+   244→  // ─── Body scroll lock while open ───────────────────────────────────────────
+   245→  useEffect(() => {
+   246→    if (!open) return;
+   247→    const prev = document.body.style.overflow;
+   248→    document.body.style.overflow = 'hidden';
+   249→    return () => {
+   250→      document.body.style.overflow = prev;
+   251→    };
+   252→  }, [open]);
+   253→
+   254→  // ─── Escape to close ───────────────────────────────────────────────────────
+   255→  useEffect(() => {
+   256→    if (!open) return;
+   257→    const onKey = (e: globalThis.KeyboardEvent) => {
+   258→      if (e.key === 'Escape' && !isStreaming) onClose();
+   259→    };
+   260→    window.addEventListener('keydown', onKey);
+   261→    return () => window.removeEventListener('keydown', onKey);
+   262→  }, [open, isStreaming, onClose]);
+   263→
+   264→  // ─── Smart auto-scroll ─────────────────────────────────────────────────────
+   265→  const handleScroll = useCallback(() => {
+   266→    const el = scrollRef.current;
+   267→    if (!el) return;
+   268→    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+   269→    userPinnedUpRef.current = distanceFromBottom > 120;
+   270→  }, []);
+   271→
+   272→  const scrollToBottom = useCallback((smooth = false) => {
+   273→    const el = scrollRef.current;
+   274→    if (!el) return;
+   275→    el.scrollTo({ top: el.scrollHeight, behavior: smooth ? 'smooth' : 'auto' });
+   276→  }, []);
+   277→
+   278→  useEffect(() => {
+   279→    if (!userPinnedUpRef.current) {
+   280→      requestAnimationFrame(() => scrollToBottom(false));
+   281→    }
+   282→  }, [messages, scrollToBottom]);
+   283→
+   284→  // ─── Conversation actions ──────────────────────────────────────────────────
+   285→  const handleNewChat = useCallback(() => {
+   286→    if (isStreaming) return;
+   287→    const conv = newConversation();
+   288→    setStore((prev) => {
+   289→      const next = { conversations: [conv, ...prev.conversations], activeId: conv.id };
+   290→      saveStore(next);
+   291→      return next;
+   292→    });
+   293→    setActiveId(conv.id);
+   294→    setMessages([]);
+   295→    setInput('');
+   296→    userPinnedUpRef.current = false;
+   297→    setHistoryOpen(false);
+   298→    requestAnimationFrame(() => inputRef.current?.focus());
+   299→  }, [isStreaming]);
+   300→
+   301→  const handleSwitchConversation = useCallback(
+   302→    (id: string) => {
+   303→      if (isStreaming) return;
+   304→      const conv = store.conversations.find((c) => c.id === id);
+   305→      if (!conv) return;
+   306→      setActiveId(id);
+   307→      setMessages(conv.messages);
+   308→      setStore((prev) => {
+   309→        const next = { ...prev, activeId: id };
+   310→        saveStore(next);
+   311→        return next;
+   312→      });
+   313→      setHistoryOpen(false);
+   314→      userPinnedUpRef.current = false;
+   315→      requestAnimationFrame(() => scrollToBottom(false));
+   316→    },
+   317→    [isStreaming, store.conversations, scrollToBottom],
+   318→  );
+   319→
+   320→  const handleDeleteConversation = useCallback(
+   321→    (id: string) => {
+   322→      if (isStreaming) return;
+   323→      setStore((prev) => {
+   324→        const filtered = prev.conversations.filter((c) => c.id !== id);
+   325→        let nextActive = prev.activeId;
+   326→        let nextMessages = messages;
+   327→        if (prev.activeId === id) {
+   328→          if (filtered.length > 0) {
+   329→            nextActive = filtered[0].id;
+   330→            nextMessages = filtered[0].messages;
+   331→          } else {
+   332→            const conv = newConversation();
+   333→            filtered.unshift(conv);
+   334→            nextActive = conv.id;
+   335→            nextMessages = [];
+   336→          }
+   337→          setActiveId(nextActive);
+   338→          setMessages(nextMessages);
+   339→        }
+   340→        const next = { conversations: filtered, activeId: nextActive };
+   341→        saveStore(next);
+   342→        return next;
+   343→      });
+   344→    },
+   345→    [isStreaming, messages],
+   346→  );
+   347→
+   348→  // ─── Send flow (preserved from previous implementation) ─────────────────────
+   349→  const sendMessage = useCallback(
+   350→    async (raw: string) => {
+   351→      const text = raw.trim();
+   352→      if (!text || isStreaming) return;
+   353→
+   354→      // ── Brand-question short-circuit ───────────────────────────────────────
+   355→      const brand = detectBrandQuestion(text);
+   356→      if (brand.matched && brand.answer) {
+   357→        const userMsg: OracleMessage = {
+   358→          id: cryptoId(),
+   359→          role: 'user',
+   360→          content: text,
+   361→          language: detectLanguage(text),
+   362→          createdAt: new Date().toISOString(),
+   363→        };
+   364→        const oracleMsg: OracleMessage = {
+   365→          id: cryptoId(),
+   366→          role: 'oracle',
+   367→          content: brand.answer,
+   368→          language: detectLanguage(text),
+   369→          emotion: 'success',
+   370→          createdAt: new Date().toISOString(),
+   371→          streaming: false,
+   372→          followUps: ['Who founded GSTPilot?', 'What can Oracle do?', 'GST kya hota hai?'],
+   373→        };
+   374→        setMessages((prev) => [...prev, userMsg, oracleMsg]);
+   375→        setLastEmotion('success');
+   376→        setActiveLanguage(detectLanguage(text));
+   377→        setInput('');
+   378→        if (inputRef.current) inputRef.current.style.height = 'auto';
+   379→        userPinnedUpRef.current = false;
+   380→        requestAnimationFrame(() => scrollToBottom(true));
+   381→        return;
+   382→      }
+   383→
+   384→      const userMsg: OracleMessage = {
+   385→        id: cryptoId(),
+   386→        role: 'user',
+   387→        content: text,
+   388→        language: detectLanguage(text),
+   389→        createdAt: new Date().toISOString(),
+   390→      };
+   391→      const oracleId = cryptoId();
+   392→      const oraclePlaceholder: OracleMessage = {
+   393→        id: oracleId,
+   394→        role: 'oracle',
+   395→        content: '',
+   396→        language: userMsg.language,
+   397→        createdAt: new Date().toISOString(),
+   398→        streaming: true,
+   399→      };
+   400→      setMessages((prev) => [...prev, userMsg, oraclePlaceholder]);
+   401→      streamingIdRef.current = oracleId;
+   402→      setIsStreaming(true);
+   403→      setActiveLanguage(userMsg.language);
+   404→      setInput('');
+   405→      userPinnedUpRef.current = false;
+   406→      if (inputRef.current) inputRef.current.style.height = 'auto';
+   407→
+   408→      const history: OracleChatRequest['messages'] = [
+   409→        ...messages
+   410→          .filter((m) => m.content.trim().length > 0)
+   411→          .map((m) => ({ role: m.role, content: m.content })),
+   412→        { role: 'user', content: text },
+   413→      ];
+   414→
+   415→      // ── Fetch live business data (cached 30s, invalidated on connect) ──────
+   416→      const liveData = await fetchLiveData();
+   417→
+   418→      const payload: OracleChatRequest = {
+   419→        messages: history,
+   420→        memory: {
+   421→          userName,
+   422→          firmName,
+   423→          gstin,
+   424→          preferredLanguage: activeLanguage,
+   425→          recentTopics: messages
+   426→            .filter((m) => m.role === 'user')
+   427→            .slice(-4)
+   428→            .map((m) => m.content.slice(0, 60)),
+   429→        },
+   430→        context: { liveData },
+   431→      };
+   432→
+   433→      const controller = new AbortController();
+   434→      abortRef.current = controller;
+   435→
+   436→      try {
+   437→        const res = await fetch('/api/oracle/chat', {
+   438→          method: 'POST',
+   439→          headers: { 'Content-Type': 'application/json' },
+   440→          body: JSON.stringify(payload),
+   441→          signal: controller.signal,
+   442→        });
+   443→        if (!res.ok || !res.body) {
+   444→          throw new Error(`Request failed (${res.status})`);
+   445→        }
+   446→
+   447→        const reader = res.body.getReader();
+   448→        const decoder = new TextDecoder();
+   449→        let buffer = '';
+   450→        let acc = '';
+   451→
+   452→        while (true) {
+   453→          const { done, value } = await reader.read();
+   454→          if (done) break;
+   455→          buffer += decoder.decode(value, { stream: true });
+   456→
+   457→          const lines = buffer.split('\n');
+   458→          buffer = lines.pop() ?? '';
+   459→
+   460→          for (const rawLine of lines) {
+   461→            const line = rawLine.trim();
+   462→            if (!line || !line.startsWith('data:')) continue;
+   463→            const data = line.slice(5).trim();
+   464→            if (!data || data === '[DONE]') continue;
+   465→            let chunk: OracleStreamChunk;
+   466→            try {
+   467→              chunk = JSON.parse(data) as OracleStreamChunk;
+   468→            } catch {
+   469→              continue;
+   470→            }
+   471→            if (chunk.language) setActiveLanguage(chunk.language);
+   472→            if (chunk.token) {
+   473→              acc += chunk.token;
+   474→              setMessages((prev) =>
+   475→                prev.map((m) => (m.id === oracleId ? { ...m, content: acc } : m)),
+   476→              );
+   477→            }
+   478→            if (chunk.done) {
+   479→              setMessages((prev) =>
+   480→                prev.map((m) =>
+   481→                  m.id === oracleId
+   482→                    ? {
+   483→                        ...m,
+   484→                        content: acc,
+   485→                        streaming: false,
+   486→                        emotion: detectEmotion(acc),
+   487→                        followUps: buildFollowUps(acc),
+   488→                      }
+   489→                    : m,
+   490→                ),
+   491→              );
+   492→              setLastEmotion(detectEmotion(acc));
+   493→            }
+   494→            if (chunk.error) {
+   495→              setMessages((prev) =>
+   496→                prev.map((m) =>
+   497→                  m.id === oracleId
+   498→                    ? {
+   499→                        ...m,
+   500→                        content:
+   501→                          acc ||
+   502→                          "I ran into a temporary issue reaching my reasoning service. Please try that again — your conversation is safe.",
+   503→                        streaming: false,
+   504→                        emotion: 'warning',
+   505→                      }
+   506→                    : m,
+   507→                ),
+   508→              );
+   509→              setLastEmotion('warning');
+   510→            }
+   511→          }
+   512→        }
+   513→
+   514→        setMessages((prev) =>
+   515→          prev.map((m) =>
+   516→            m.id === oracleId && m.streaming
+   517→              ? {
+   518→                  ...m,
+   519→                  streaming: false,
+   520→                  emotion: detectEmotion(m.content),
+   521→                  followUps: buildFollowUps(m.content),
+   522→                }
+   523→              : m,
+   524→          ),
+   525→        );
+   526→      } catch (err) {
+   527→        const aborted = err instanceof DOMException && err.name === 'AbortError';
+   528→        setMessages((prev) =>
+   529→          prev.map((m) =>
+   530→            m.id === oracleId
+   531→              ? {
+   532→                  ...m,
+   533→                  streaming: false,
+   534→                  content:
+   535→                    m.content ||
+   536→                    (aborted
+   537→                      ? 'Stopped.'
+   538→                      : "I had trouble reaching my reasoning service. Please try again in a moment."),
+   539→                  emotion: aborted ? m.emotion : 'warning',
+   540→                }
+   541→              : m,
+   542→          ),
+   543→        );
+   544→        if (!aborted) setLastEmotion('warning');
+   545→      } finally {
+   546→        setIsStreaming(false);
+   547→        streamingIdRef.current = null;
+   548→        abortRef.current = null;
+   549→        requestAnimationFrame(() => inputRef.current?.focus());
+   550→      }
+   551→    },
+   552→    [isStreaming, messages, userName, firmName, gstin, activeLanguage, scrollToBottom],
+   553→  );
+   554→
+   555→  // ─── Stop streaming ────────────────────────────────────────────────────────
+   556→  const handleStop = useCallback(() => {
+   557→    abortRef.current?.abort();
+   558→  }, []);
+   559→
+   560→  // ─── Input handling ────────────────────────────────────────────────────────
+   561→  const handleInputChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
+   562→    setInput(e.target.value);
+   563→    const el = e.target;
+   564→    el.style.height = 'auto';
+   565→    el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
+   566→  }, []);
+   567→
+   568→  const handleKeyDown = useCallback(
+   569→    (e: KeyboardEvent<HTMLTextAreaElement>) => {
+   570→      if (e.key === 'Enter' && !e.shiftKey) {
+   571→        e.preventDefault();
+   572→        sendMessage(input);
+   573→      }
+   574→    },
+   575→    [input, sendMessage],
+   576→  );
+   577→
+   578→  // ─── Focus input on open ───────────────────────────────────────────────────
+   579→  useEffect(() => {
+   580→    if (open) {
+   581→      requestAnimationFrame(() => inputRef.current?.focus());
+   582→    }
+   583→  }, [open]);
+   584→
+   585→  // ─── Auto-send a prefilled prompt (from the CommandBar / other launchers) ───
+   586→  // Waits one tick so the conversation-load effect (also keyed on `open`) has
+   587→  // settled messages/activeId before we send. Guarded by a ref so a given
+   588→  // prompt is never sent twice.
+   589→  useEffect(() => {
+   590→    if (!open || !initialPrompt) return;
+   591→    if (initialPromptSentRef.current === initialPrompt) return;
+   592→    const t = setTimeout(() => {
+   593→      initialPromptSentRef.current = initialPrompt;
+   594→      sendMessage(initialPrompt);
+   595→    }, 60);
+   596→    return () => clearTimeout(t);
+   597→  }, [open, initialPrompt, sendMessage]);
+   598→
+   599→  // ─── Rail navigation ───────────────────────────────────────────────────────
+   600→  const handleRailClick = useCallback(
+   601→    (item: RailItem) => {
+   602→      if (item.id === 'oracle') return; // already here
+   603→      if (isStreaming) return;
+   604→      onNavigate(item.id);
+   605→      onClose();
+   606→    },
+   607→    [isStreaming, onNavigate, onClose],
+   608→  );
+   609→
+   610→  // ─── Derived state ─────────────────────────────────────────────────────────
+   611→  const avatarState = useMemo(
+   612→    () => deriveAvatarState({ isStreaming, hasInput: input.trim().length > 0, lastEmotion }),
+   613→    [isStreaming, input, lastEmotion],
+   614→  );
+   615→
+   616→  const isEmpty = messages.length === 0;
+   617→  const grouped = useMemo(() => groupConversations(store.conversations), [store.conversations]);
+   618→
+   619→  if (!mounted || typeof document === 'undefined') return null;
+   620→
+   621→  return createPortal(
+   622→    <AnimatePresence>
+   623→      {open && (
+   624→        <motion.div
+   625→          initial={{ opacity: 0 }}
+   626→          animate={{ opacity: 1 }}
+   627→          exit={{ opacity: 0 }}
+   628→          transition={{ duration: 0.2 }}
+   629→          className="fixed inset-0 z-[200] flex h-screen w-screen"
+   630→          style={{ background: 'var(--background)' }}
+   631→        >
+   632→          {/* ═══════════════════════════════════════════════════════════════════ */}
+   633→          {/* COLUMN 0 — RAIL (left sidebar)                                       */}
+   634→          {/* ═══════════════════════════════════════════════════════════════════ */}
+   635→          <nav
+   636→            aria-label="Oracle workspace navigation"
+   637→            className="flex h-full w-14 shrink-0 flex-col items-center gap-1 border-r py-3 md:w-16 md:gap-1.5 lg:w-56 lg:items-stretch lg:px-2.5"
+   638→            style={{ borderColor: 'var(--border)' }}
+   639→          >
+   640→            {/* Brand */}
+   641→            <div className="mb-2 flex items-center justify-center gap-2 px-1 lg:mb-4 lg:px-2">
+   642→              <InfinitySymbol size={28} />
+   643→              <div className="hidden lg:block">
+   644→                <p className="text-[13px] font-semibold leading-tight tracking-tight text-white">
+   645→                  GSTPilot
+   646→                </p>
+   647→                <p className="text-[10px] font-bold uppercase leading-tight tracking-wider text-white/50">
+   648→                  Oracle
+   649→                </p>
+   650→              </div>
+   651→            </div>
+   652→
+   653→            {/* Rail items */}
+   654→            <div className="flex flex-1 flex-col gap-1 lg:gap-0.5">
+   655→              {RAIL_ITEMS.map((item) => {
+   656→                const isActive = item.id === 'oracle';
+   657→                const Icon = item.icon;
+   658→                return (
+   659→                  <button
+   660→                    key={item.id}
+   661→                    type="button"
+   662→                    onClick={() => handleRailClick(item)}
+   663→                    aria-current={isActive ? 'page' : undefined}
+   664→                    className={cn(
+   665→                      'group relative flex items-center justify-center gap-3 rounded-xl px-2.5 py-2.5 text-sm font-medium transition-colors lg:justify-start lg:px-3',
+   666→                      isActive
+   667→                        ? 'text-white'
+   668→                        : 'text-white/60 hover:bg-white/[0.05] hover:text-white',
+   669→                    )}
+   670→                  >
+   671→                    {isActive && (
+   672→                      <span
+   673→                        className="absolute left-0 top-1/2 hidden h-7 w-[3px] -translate-y-1/2 rounded-full lg:block"
+   674→                        style={{
+   675→                          background:
+   676→                            'linear-gradient(180deg, #10b981 0%, #059669 100%)',
+   677→                        }}
+   678→                      />
+   679→                    )}
+   680→                    <Icon
+   681→                      className={cn(
+   682→                        'h-5 w-5 shrink-0 transition-colors',
+   683→                        isActive ? 'text-emerald-400' : 'text-white/60 group-hover:text-white',
+   684→                      )}
+   685→                    />
+   686→                    <span className="hidden truncate lg:inline">{item.label}</span>
+   687→                  </button>
+   688→                );
+   689→              })}
+   690→            </div>
+   691→
+   692→            {/* Footer mini brand */}
+   693→            <div className="mt-auto hidden px-2 pb-1 lg:block">
+   694→              <p className="text-[9px] font-medium uppercase tracking-wider text-white/30">
+   695→                The Financial Brain
+   696→              </p>
+   697→              <p className="text-[9px] font-medium uppercase tracking-wider text-white/30">
+   698→                of India
+   699→              </p>
+   700→            </div>
+   701→          </nav>
+   702→
+   703→          {/* ═══════════════════════════════════════════════════════════════════ */}
+   704→          {/* COLUMN 1 — CONVERSATION HISTORY                                      */}
+   705→          {/* ═══════════════════════════════════════════════════════════════════ */}
+   706→          {/* Desktop: persistent column. Mobile: slide-over drawer. */}
+   707→          <aside
+   708→            className={cn(
+   709→              'h-full w-72 shrink-0 flex-col border-r lg:flex',
+   710→              historyOpen ? 'flex' : 'hidden',
+   711→            )}
+   712→            style={{ borderColor: 'var(--border)', background: 'var(--background)' }}
+   713→          >
+   714→            {/* New Chat */}
+   715→            <div className="shrink-0 p-3">
+   716→              <button
+   717→                type="button"
+   718→                onClick={handleNewChat}
+   719→                disabled={isStreaming}
+   720→                className="flex w-full items-center gap-2.5 rounded-xl border px-3.5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-white/[0.05] disabled:opacity-40"
+   721→                style={{ borderColor: 'var(--border)', background: 'var(--input)' }}
+   722→              >
+   723→                <Plus className="h-4 w-4 text-emerald-400" />
+   724→                New Chat
+   725→              </button>
+   726→            </div>
+   727→
+   728→            {/* History scroll */}
+   729→            <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto px-2 pb-3">
+   730→              <HistoryGroup
+   731→                label="Today"
+   732→                items={grouped.today}
+   733→                activeId={activeId}
+   734→                onSelect={handleSwitchConversation}
+   735→                onDelete={handleDeleteConversation}
+   736→              />
+   737→              <HistoryGroup
+   738→                label="Yesterday"
+   739→                items={grouped.yesterday}
+   740→                activeId={activeId}
+   741→                onSelect={handleSwitchConversation}
+   742→                onDelete={handleDeleteConversation}
+   743→              />
+   744→              <HistoryGroup
+   745→                label="Previous 7 Days"
+   746→                items={grouped.prev7}
+   747→                activeId={activeId}
+   748→                onSelect={handleSwitchConversation}
+   749→                onDelete={handleDeleteConversation}
+   750→              />
+   751→              <HistoryGroup
+   752→                label="Older"
+   753→                items={grouped.older}
+   754→                activeId={activeId}
+   755→                onSelect={handleSwitchConversation}
+   756→                onDelete={handleDeleteConversation}
+   757→              />
+   758→
+   759→              {store.conversations.length === 0 && (
+   760→                <p className="px-3 py-6 text-center text-xs text-white/40">
+   761→                  No conversations yet.
+   762→                </p>
+   763→              )}
+   764→            </div>
+   765→
+   766→            {/* Mobile close-drawer button */}
+   767→            <button
+   768→              type="button"
+   769→              onClick={() => setHistoryOpen(false)}
+   770→              className="shrink-0 border-t px-4 py-3 text-xs font-medium text-white/60 hover:text-white lg:hidden"
+   771→              style={{ borderColor: 'var(--border)' }}
+   772→            >
+   773→              Close
+   774→            </button>
+   775→          </aside>
+   776→
+   777→          {/* ═══════════════════════════════════════════════════════════════════ */}
+   778→          {/* COLUMN 2 — MAIN CHAT                                                 */}
+   779→          {/* ═══════════════════════════════════════════════════════════════════ */}
+   780→          <section className="flex min-w-0 flex-1 flex-col" style={{ background: 'var(--background)' }}>
+   781→            {/* ─── Header ─── */}
+   782→            <header
+   783→              className="flex shrink-0 items-center gap-3 border-b px-4 py-3 md:px-6"
+   784→              style={{ borderColor: 'var(--border)' }}
+   785→            >
+   786→              {/* Mobile: open history drawer */}
+   787→              <button
+   788→                type="button"
+   789→                onClick={() => setHistoryOpen(true)}
+   790→                className="flex h-9 w-9 items-center justify-center rounded-lg text-white/60 transition-colors hover:bg-white/[0.05] hover:text-white lg:hidden"
+   791→                aria-label="Open conversation history"
+   792→              >
+   793→                <MessageSquare className="h-4 w-4" />
+   794→              </button>
+   795→
+   796→              <OracleAvatar state={avatarState} />
+   797→
+   798→              <div className="min-w-0 flex-1">
+   799→                <div className="flex items-baseline gap-0.5">
+   800→                  <span className="text-sm font-semibold tracking-tight text-white md:text-base">
+   801→                    GSTPilot Oracle
+   802→                  </span>
+   803→                  <sup className="text-[9px] font-medium text-white/40">™</sup>
+   804→                </div>
+   805→                <p className="truncate text-[11px] text-white/50 md:text-xs">
+   806→                  Ask anything. Run everything.
+   807→                </p>
+   808→              </div>
+   809→
+   810→              {/* Status pill */}
+   811→              <div className="hidden items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] sm:flex" style={{ borderColor: 'var(--border)' }}>
+   812→                <span
+   813→                  className={cn(
+   814→                    'inline-flex h-1.5 w-1.5 rounded-full',
+   815→                    isStreaming ? 'bg-amber-400' : 'bg-emerald-400',
+   816→                  )}
+   817→                />
+   818→                <span className="text-white/60">
+   819→                  {isStreaming ? 'Responding' : AVATAR_STATE_LABEL[avatarState]}
+   820→                </span>
+   821→                {activeLanguage && activeLanguage !== 'english' && (
+   822→                  <span className="text-white/30">· {nativeLanguageLabel(activeLanguage)}</span>
+   823→                )}
+   824→              </div>
+   825→
+   826→              {messages.length > 0 && !isStreaming && (
+   827→                <button
+   828→                  type="button"
+   829→                  onClick={handleNewChat}
+   830→                  className="rounded-lg px-2.5 py-1.5 text-[11px] font-medium text-white/60 transition-colors hover:bg-white/[0.05] hover:text-white"
+   831→                >
+   832→                  Clear
+   833→                </button>
+   834→              )}
+   835→              <button
+   836→                type="button"
+   837→                onClick={onClose}
+   838→                disabled={isStreaming}
+   839→                className="flex h-8 w-8 items-center justify-center rounded-lg text-white/60 transition-colors hover:bg-white/[0.05] hover:text-white disabled:opacity-40"
+   840→                aria-label="Close Oracle"
+   841→              >
+   842→                <X className="h-4 w-4" />
+   843→              </button>
+   844→            </header>
+   845→
+   846→            {/* ─── Messages ─── */}
+   847→            <div
+   848→              ref={scrollRef}
+   849→              onScroll={handleScroll}
+   850→              className="custom-scrollbar min-h-0 flex-1 overflow-y-auto"
+   851→            >
+   852→              {isEmpty ? (
+   853→                <OracleEmptyState onPick={(p) => sendMessage(p)} userName={userName} />
+   854→              ) : (
+   855→                <div className="mx-auto flex max-w-3xl flex-col gap-6 px-4 py-6 md:px-6">
+   856→                  {messages.map((m) => (
+   857→                    <MessageBubble key={m.id} message={m} onPickFollowUp={sendMessage} />
+   858→                  ))}
+   859→                </div>
+   860→              )}
+   861→            </div>
+   862→
+   863→            {/* ─── Sticky input ─── */}
+   864→            <div
+   865→              className="shrink-0 border-t px-4 py-4 md:px-6"
+   866→              style={{ borderColor: 'var(--border)', background: 'var(--background)' }}
+   867→            >
+   868→              <div className="mx-auto max-w-3xl">
+   869→                {/* Suggested prompts (compact, only when input empty) */}
+   870→                <AnimatePresence>
+   871→                  {!input.trim() && !isEmpty && (
+   872→                    <motion.div
+   873→                      initial={{ opacity: 0, height: 0 }}
+   874→                      animate={{ opacity: 1, height: 'auto' }}
+   875→                      exit={{ opacity: 0, height: 0 }}
+   876→                      className="mb-2.5 flex flex-wrap gap-2"
+   877→                    >
+   878→                      {QUICK_PROMPTS.map((p) => (
+   879→                        <button
+   880→                          key={p}
+   881→                          type="button"
+   882→                          onClick={() => sendMessage(p)}
+   883→                          disabled={isStreaming}
+   884→                          className="rounded-full border px-3 py-1.5 text-xs font-medium text-white/70 transition-colors hover:bg-white/[0.05] hover:text-white disabled:opacity-40"
+   885→                          style={{ borderColor: 'var(--border)', background: 'var(--input)' }}
+   886→                        >
+   887→                          {p}
+   888→                        </button>
+   889→                      ))}
+   890→                    </motion.div>
+   891→                  )}
+   892→                </AnimatePresence>
+   893→
+   894→                {/* Input box */}
+   895→                <div
+   896→                  className="flex items-end gap-2 rounded-2xl p-2 transition-colors focus-within:border-white/[0.18]"
+   897→                  style={{
+   898→                    borderColor: 'var(--border)',
+   899→                    background: 'var(--input)',
+   900→                    borderWidth: 1,
+   901→                    borderStyle: 'solid',
+   902→                  }}
+   903→                >
+   904→                  <textarea
+   905→                    ref={inputRef}
+   906→                    value={input}
+   907→                    onChange={handleInputChange}
+   908→                    onKeyDown={handleKeyDown}
+   909→                    rows={1}
+   910→                    placeholder="Ask Oracle anything — GST, returns, cash flow, ITC…"
+   911→                    className="max-h-40 min-h-[36px] flex-1 resize-none bg-transparent px-2.5 py-1.5 text-sm leading-relaxed text-white placeholder:text-white/40 focus:outline-none custom-scrollbar"
+   912→                    disabled={isStreaming}
+   913→                  />
+   914→                  {isStreaming ? (
+   915→                    <button
+   916→                      type="button"
+   917→                      onClick={handleStop}
+   918→                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-white transition-colors hover:bg-white/[0.08]"
+   919→                      style={{ background: 'var(--secondary)' }}
+   920→                      aria-label="Stop"
+   921→                    >
+   922→                      <Square className="h-3.5 w-3.5 fill-current" />
+   923→                    </button>
+   924→                  ) : (
+   925→                    <button
+   926→                      type="button"
+   927→                      onClick={() => sendMessage(input)}
+   928→                      disabled={!input.trim()}
+   929→                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-white shadow-lg shadow-emerald-500/20 transition-all hover:opacity-90 disabled:opacity-30 disabled:shadow-none"
+   930→                      style={{
+   931→                        background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+   932→                      }}
+   933→                      aria-label="Send"
+   934→                    >
+   935→                      <ArrowUp className="h-4 w-4" />
+   936→                    </button>
+   937→                  )}
+   938→                </div>
+   939→
+   940→                {/* Hint line */}
+   941→                <div className="mt-2 flex items-center justify-between px-1 text-[10px] text-white/30">
+   942→                  <span className="flex items-center gap-1">
+   943→                    <Sparkles className="h-3 w-3" />
+   944→                    Oracle replies in your language · Enter to send · Shift+Enter for newline
+   945→                  </span>
+   946→                  <span className="hidden sm:inline">
+   947→                    GSTPilot Oracle™ · Founded by Prince Singh
+   948→                  </span>
+   949→                </div>
+   950→              </div>
+   951→            </div>
+   952→          </section>
+   953→
+   954→          {/* Mobile history backdrop */}
+   955→          <AnimatePresence>
+   956→            {historyOpen && (
+   957→              <motion.div
+   958→                initial={{ opacity: 0 }}
+   959→                animate={{ opacity: 1 }}
+   960→                exit={{ opacity: 0 }}
+   961→                onClick={() => setHistoryOpen(false)}
+   962→                className="fixed inset-0 z-[110] bg-black/60 lg:hidden"
+   963→                aria-hidden
+   964→              />
+   965→            )}
+   966→          </AnimatePresence>
+   967→        </motion.div>
+   968→      )}
+   969→    </AnimatePresence>,
+   970→    document.body,
+   971→  );
+   972→}
+   973→
+   974→// ─── History group ────────────────────────────────────────────────────────────
+   975→
+   976→interface HistoryGroupProps {
+   977→  label: string;
+   978→  items: OracleConversation[];
+   979→  activeId: string | null;
+   980→  onSelect: (id: string) => void;
+   981→  onDelete: (id: string) => void;
+   982→}
+   983→
+   984→function HistoryGroup({ label, items, activeId, onSelect, onDelete }: HistoryGroupProps) {
+   985→  if (items.length === 0) return null;
+   986→  return (
+   987→    <div className="mb-3">
+   988→      <p className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-white/30">
+   989→        {label}
+   990→      </p>
+   991→      <div className="space-y-0.5">
+   992→        {items.map((c) => {
+   993→          const isActive = c.id === activeId;
+   994→          return (
+   995→            <div
+   996→              key={c.id}
+   997→              className={cn(
+   998→                'group relative flex items-center gap-2 rounded-lg px-3 py-2 text-left transition-colors',
+   999→                isActive ? 'bg-white/[0.06] text-white' : 'text-white/60 hover:bg-white/[0.04] hover:text-white',
+  1000→              )}
+  1001→            >
+  1002→              <button
+  1003→                type="button"
+  1004→                onClick={() => onSelect(c.id)}
+  1005→                className="min-w-0 flex-1 text-left"
+  1006→              >
+  1007→                <span className="block truncate text-sm font-medium">{c.title}</span>
+  1008→              </button>
+  1009→              <button
+  1010→                type="button"
+  1011→                onClick={(e) => {
+  1012→                  e.stopPropagation();
+  1013→                  onDelete(c.id);
+  1014→                }}
+  1015→                className="shrink-0 rounded p-1 text-white/30 opacity-0 transition-opacity hover:text-white/80 group-hover:opacity-100"
+  1016→                aria-label="Delete conversation"
+  1017→              >
+  1018→                <Trash2 className="h-3.5 w-3.5" />
+  1019→              </button>
+  1020→            </div>
+  1021→          );
+  1022→        })}
+  1023→      </div>
+  1024→    </div>
+  1025→  );
+  1026→}
+  1027→
+  1028→// ─── Oracle Avatar (dynamic state) ────────────────────────────────────────────
+  1029→
+  1030→function OracleAvatar({ state }: { state: ReturnType<typeof deriveAvatarState> }) {
+  1031→  const ringColor =
+  1032→    state === 'speaking'
+  1033→      ? 'bg-amber-400'
+  1034→      : state === 'warning'
+  1035→        ? 'bg-rose-400'
+  1036→        : state === 'success'
+  1037→          ? 'bg-emerald-400'
+  1038→          : 'bg-emerald-400';
+  1039→  return (
+  1040→    <div className="relative shrink-0">
+  1041→      <div
+  1042→        className="flex h-9 w-9 items-center justify-center rounded-xl shadow-lg shadow-emerald-500/20"
+  1043→        style={{ background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)' }}
+  1044→      >
+  1045→        <InfinitySymbol size={20} />
+  1046→      </div>
+  1047→      <span className="absolute -bottom-0.5 -right-0.5 flex h-2.5 w-2.5">
+  1048→        {state === 'speaking' && (
+  1049→          <span className={cn('absolute inline-flex h-full w-full animate-ping rounded-full opacity-75', ringColor)} />
+  1050→        )}
+  1051→        <span className={cn('relative inline-flex h-2.5 w-2.5 rounded-full border-2', ringColor)} style={{ borderColor: 'var(--background)' }} />
+  1052→      </span>
+  1053→    </div>
+  1054→  );
+  1055→}
+  1056→
+  1057→// ─── Message Bubble ───────────────────────────────────────────────────────────
+  1058→
+  1059→function MessageBubble({
+  1060→  message,
+  1061→  onPickFollowUp,
+  1062→}: {
+  1063→  message: OracleMessage;
+  1064→  onPickFollowUp: (prompt: string) => void;
+  1065→}) {
+  1066→  const isUser = message.role === 'user';
+  1067→  const emotionGlyph = !isUser && message.emotion ? ORACLE_EMOTIONS[message.emotion]?.glyph : null;
+  1068→
+  1069→  if (isUser) {
+  1070→    return (
+  1071→      <motion.div
+  1072→        initial={{ opacity: 0, y: 8 }}
+  1073→        animate={{ opacity: 1, y: 0 }}
+  1074→        transition={{ duration: 0.25 }}
+  1075→        className="flex justify-end"
+  1076→      >
+  1077→        <div
+  1078→          className="max-w-[85%] rounded-2xl rounded-br-md px-4 py-2.5 text-sm leading-relaxed text-white"
+  1079→          style={{ background: 'var(--secondary)' }}
+  1080→        >
+  1081→          {message.content}
+  1082→        </div>
+  1083→      </motion.div>
+  1084→    );
+  1085→  }
+  1086→
+  1087→  const isEmptyStreaming = message.streaming && !message.content;
+  1088→
+  1089→  return (
+  1090→    <motion.div
+  1091→      initial={{ opacity: 0, y: 8 }}
+  1092→      animate={{ opacity: 1, y: 0 }}
+  1093→      transition={{ duration: 0.25 }}
+  1094→      className="flex gap-3"
+  1095→    >
+  1096→      {/* Avatar */}
+  1097→      <div className="mt-0.5 shrink-0">
+  1098→        <div
+  1099→          className="flex h-7 w-7 items-center justify-center rounded-lg shadow-md shadow-emerald-500/15"
+  1100→          style={{ background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)' }}
+  1101→        >
+  1102→          <InfinitySymbol size={15} />
+  1103→        </div>
+  1104→      </div>
+  1105→
+  1106→      {/* Bubble */}
+  1107→      <div className="min-w-0 flex-1">
+  1108→        {emotionGlyph && (
+  1109→          <div className="mb-1 text-xs" aria-hidden>
+  1110→            {emotionGlyph}
+  1111→          </div>
+  1112→        )}
+  1113→
+  1114→        {isEmptyStreaming ? (
+  1115→          <RespondingIndicator />
+  1116→        ) : (
+  1117→          <div className="oracle-prose text-sm leading-relaxed text-white/90">
+  1118→            <ReactMarkdown
+  1119→              components={{
+  1120→                a: ({ children, href }) => (
+  1121→                  <a href={href} target="_blank" rel="noopener noreferrer" className="text-emerald-400 underline underline-offset-2">
+  1122→                    {children}
+  1123→                  </a>
+  1124→                ),
+  1125→              }}
+  1126→            >
+  1127→              {message.content}
+  1128→            </ReactMarkdown>
+  1129→            {message.streaming && <PulsingCursor />}
+  1130→          </div>
+  1131→        )}
+  1132→
+  1133→        {/* Follow-up chips */}
+  1134→        {message.followUps && message.followUps.length > 0 && !message.streaming && (
+  1135→          <div className="mt-3 flex flex-wrap gap-2">
+  1136→            {message.followUps.map((f, i) => (
+  1137→              <button
+  1138→                key={i}
+  1139→                type="button"
+  1140→                onClick={() => onPickFollowUp(f)}
+  1141→                className="rounded-full border px-3 py-1.5 text-xs font-medium text-white/70 transition-all hover:text-white"
+  1142→                style={{ borderColor: 'var(--border)', background: 'var(--input)' }}
+  1143→              >
+  1144→                {f}
+  1145→              </button>
+  1146→            ))}
+  1147→          </div>
+  1148→        )}
+  1149→      </div>
+  1150→    </motion.div>
+  1151→  );
+  1152→}
+  1153→
+  1154→// ─── "Oracle is responding…" with blinking cursor ─────────────────────────────
+  1155→
+  1156→function RespondingIndicator() {
+  1157→  return (
+  1158→    <div className="flex items-center gap-2 text-sm text-white/50">
+  1159→      <span className="flex items-center gap-1.5">
+  1160→        <span className="relative flex h-2 w-2">
+  1161→          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
+  1162→          <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" />
+  1163→        </span>
+  1164→        <span className="animate-pulse">Oracle is responding</span>
+  1165→      </span>
+  1166→      <span className="text-white/30">…</span>
+  1167→      <BlinkingCursor />
+  1168→    </div>
+  1169→  );
+  1170→}
+  1171→
+  1172→function PulsingCursor() {
+  1173→  return (
+  1174→    <span
+  1175→      className="ml-0.5 inline-block h-4 w-[2px] translate-y-0.5 animate-pulse rounded-full bg-emerald-400 align-middle"
+  1176→      aria-hidden
+  1177→    />
+  1178→  );
+  1179→}
+  1180→
+  1181→function BlinkingCursor() {
+  1182→  return (
+  1183→    <span
+  1184→      className="ml-0.5 inline-block h-3.5 w-[2px] animate-pulse rounded-full bg-emerald-400 align-middle"
+  1185→      aria-hidden
+  1186→    />
+  1187→  );
+  1188→}
+  1189→
+  1190→// ─── Helpers ──────────────────────────────────────────────────────────────────
+  1191→
+  1192→const QUICK_PROMPTS = [
+  1193→  'GST kya hota hai?',
+  1194→  'Explain ITC rules',
+  1195→  'Check my compliance',
+  1196→  'GSTR-3B filing steps',
+  1197→];
+  1198→
+  1199→function cryptoId(): string {
+  1200→  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+  1201→    return crypto.randomUUID();
+  1202→  }
+  1203→  return `id-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+  1204→}
+  1205→
+  1206→function newConversation(): OracleConversation {
+  1207→  const now = new Date().toISOString();
+  1208→  return {
+  1209→    id: cryptoId(),
+  1210→    title: 'New chat',
+  1211→    messages: [],
+  1212→    createdAt: now,
+  1213→    updatedAt: now,
+  1214→  };
+  1215→}
+  1216→
+  1217→function deriveTitle(messages: OracleMessage[]): string {
+  1218→  const firstUser = messages.find((m) => m.role === 'user');
+  1219→  if (!firstUser) return 'New chat';
+  1220→  const t = firstUser.content.trim().replace(/\s+/g, ' ');
+  1221→  return t.length > 42 ? `${t.slice(0, 42)}…` : t || 'New chat';
+  1222→}
+  1223→
+  1224→function loadStore(): ConversationStore {
+  1225→  try {
+  1226→    const raw = localStorage.getItem(STORE_KEY);
+  1227→    if (!raw) return { conversations: [], activeId: null };
+  1228→    const parsed = JSON.parse(raw) as ConversationStore;
+  1229→    if (!parsed || !Array.isArray(parsed.conversations)) {
+  1230→      return { conversations: [], activeId: null };
+  1231→    }
+  1232→    return parsed;
+  1233→  } catch {
+  1234→    return { conversations: [], activeId: null };
+  1235→  }
+  1236→}
+  1237→
+  1238→function saveStore(store: ConversationStore) {
+  1239→  try {
+  1240→    localStorage.setItem(STORE_KEY, JSON.stringify(store));
+  1241→  } catch {
+  1242→    /* ignore */
+  1243→  }
+  1244→}
+  1245→
+  1246→interface ConversationGroups {
+  1247→  today: OracleConversation[];
+  1248→  yesterday: OracleConversation[];
+  1249→  prev7: OracleConversation[];
+  1250→  older: OracleConversation[];
+  1251→}
+  1252→
+  1253→function groupConversations(convos: OracleConversation[]): ConversationGroups {
+  1254→  const now = new Date();
+  1255→  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  1256→  const startOfYesterday = startOfToday - 86_400_000;
+  1257→  const startOf7Days = startOfToday - 7 * 86_400_000;
+  1258→
+  1259→  const today: OracleConversation[] = [];
+  1260→  const yesterday: OracleConversation[] = [];
+  1261→  const prev7: OracleConversation[] = [];
+  1262→  const older: OracleConversation[] = [];
+  1263→
+  1264→  const sorted = [...convos].sort(
+  1265→    (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
+  1266→  );
+  1267→
+  1268→  for (const c of sorted) {
+  1269→    const t = new Date(c.updatedAt).getTime();
+  1270→    if (isNaN(t)) {
+  1271→      older.push(c);
+  1272→    } else if (t >= startOfToday) {
+  1273→      today.push(c);
+  1274→    } else if (t >= startOfYesterday) {
+  1275→      yesterday.push(c);
+  1276→    } else if (t >= startOf7Days) {
+  1277→      prev7.push(c);
+  1278→    } else {
+  1279→      older.push(c);
+  1280→    }
+  1281→  }
+  1282→
+  1283→  return { today, yesterday, prev7, older };
+  1284→}
+  1285→
+  1286→/** Generate contextual follow-up chips from the response content. */
+  1287→function buildFollowUps(content: string): string[] | undefined {
+  1288→  if (!content || content.length < 30) return undefined;
+  1289→  const lower = content.toLowerCase();
+  1290→
+  1291→  const pool: string[] = [];
+  1292→  if (/(gstr-3b|3b)/.test(lower)) pool.push('GSTR-3B की last date क्या है?', 'Late fee कितनी लगेगी?');
+  1293→  if (/(gstr-1|gstr 1)/.test(lower)) pool.push('GSTR-1 कैसे file करें?', 'B2B और B2C में अंतर?');
+  1294→  if (/(itc|input tax credit)/.test(lower)) pool.push('ITC claim कैसे करें?', 'Blocked ITC के rules?');
+  1295→  if (/(late fee|penalty|overdue)/.test(lower)) pool.push('Late fee waiver मिल सकती है?', 'How to avoid this next time?');
+  1296→  if (/(cash flow|collections)/.test(lower)) pool.push('Receivables कैसे recover करें?', 'Working capital optimize करें');
+  1297→  if (/(reverse charge|rcm)/.test(lower)) pool.push('RCM किन पर लागू है?', 'How to report RCM in GSTR-3B?');
+  1298→  if (/(refund)/.test(lower)) pool.push('Refund process क्या है?', 'Refund timeline कितनी है?');
+  1299→
+  1300→  pool.push('GST kya hota hai?', 'Explain ITC rules', 'How can Oracle help me daily?');
+  1301→
+  1302→  const seen = new Set<string>();
+  1303→  const picks: string[] = [];
+  1304→  for (const p of pool) {
+  1305→    if (seen.has(p)) continue;
+  1306→    seen.add(p);
+  1307→    picks.push(p);
+  1308→    if (picks.length >= 3) break;
+  1309→  }
+  1310→  return picks;
+  1311→}
+  1312→
+  1313→export default OracleWorkspace;
+  1314→

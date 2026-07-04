@@ -1,0 +1,993 @@
+'use client';
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// GSTPilot Oracle™ — Full-Screen AI Workspace (Phase 3 — Agent Engine™)
+//
+// Three-section layout:
+//   ┌──────────────────────────────────────────────────────────────────────────┐
+//   │ HEADER  · Infinity · GSTPilot Oracle™ · Live · Active Mode · Status Bar  │
+//   ├──────────┬───────────────────────────────────────────┬───────────────────┤
+//   │ SIDEBAR  │ CONVERSATION AREA (scrollable)             │ AGENT PANEL       │
+//   │ Memory + │   Empty state OR message list with          │ Oracle Tasks      │
+//   │ History  │   streaming + Action Cards                  │ Running / Done /  │
+//   │          │                                              │ Failed / Sched.   │
+//   │          ├───────────────────────────────────────────┤                   │
+//   │          │ INPUT BAR (sticky bottom, glass)           │                   │
+//   └──────────┴───────────────────────────────────────────┴───────────────────┘
+//                                          ↑
+//                          OracleNotifications (top-right overlay)
+//
+// Phase 3 additions:
+//   • Status Bar — Thinking / Working / Waiting / Completed (like Claude Code)
+//   • Agent Execution Panel — Oracle Tasks grouped by status (like Cursor Agent)
+//   • Action Cards — 3 large glass buttons per response (single-click execution)
+//   • Proactive Oracle — intelligent push notifications from business memory
+//   • Action Engine — spawns Oracle Tasks on click, runs simulated execution
+//
+// Tagline: GSTPilot Oracle™ — Understands. Acts. Executes.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { ArrowLeft, PanelRightClose, PanelRightOpen, Sparkles, X } from 'lucide-react';
+import type { AppView } from '@/contexts/AppContext';
+import { useApp } from '@/contexts/AppContext';
+import { useAuth } from '@/contexts/AuthContext';
+import {
+  useLiveDashboardMetrics,
+  useFireClients,
+  useFireFirm,
+} from '@/hooks/use-firestore';
+import { InfinitySymbol } from '@/components/layout/InfinityMark';
+import { cn } from '@/lib/utils';
+
+import { OracleSidebar } from './OracleSidebar';
+import { OracleInputBar } from './OracleInputBar';
+import { OracleEmptyState } from './OracleEmptyState';
+import { OracleMessageView } from './OracleMessage';
+import { OracleStatusBar } from './OracleStatusBar';
+import { OracleAgentPanel } from './OracleAgentPanel';
+import {
+  OracleNotifications,
+  ProactiveBell,
+  ProactiveStrip,
+} from './OracleNotifications';
+import {
+  detectOracleMode,
+  buildUserMemory,
+  buildBusinessMemory,
+  buildWorkingMemory,
+  buildInsights,
+  detectInvestigation,
+} from './oracle-memory';
+import { OracleInsightsPanel } from './OracleInsightsPanel';
+import {
+  createConversation,
+  loadConversation,
+  listConversations,
+  saveConversation,
+  updateLastOracleMessage,
+  appendMessage,
+  loadPinnedInsights,
+  newMessageId,
+} from './oracle-storage';
+import {
+  listTasks,
+  createTask,
+  updateTask,
+  deleteTask,
+  clearCompleted,
+  statusCounts,
+} from './oracle-tasks';
+import {
+  buildProactiveNotifications,
+  pickNextProactive,
+  dismissProactive,
+} from './oracle-proactive';
+import { ACTION_LIBRARY, formatActionResult } from './oracle-actions';
+import {
+  ORACLE_MODES,
+  type OracleActionCard,
+  type OracleActionKind,
+  type OracleAgentStatus,
+  type OracleConversation,
+  type OracleInsights,
+  type OracleMessage,
+  type OracleModeId,
+  type OraclePhase,
+  type OracleResponseParts,
+  type OracleTask,
+  type ProactiveNotification,
+  type UserMemory,
+  type BusinessMemory,
+  type WorkingMemory,
+} from './oracle-types';
+
+// ─── Constants ───────────────────────────────────────────────────────────────
+
+const EMPTY_PARTS: OracleResponseParts = {
+  keyInsight: '',
+  analysis: '',
+  recommendedActions: [],
+  potentialRisks: [],
+  nextBestStep: '',
+  sources: [],
+  followUps: [],
+  investigation: undefined,
+  actionCards: [],
+};
+
+// ─── Component ───────────────────────────────────────────────────────────────
+
+export interface OracleWorkspaceProps {
+  onExit?: () => void;
+}
+
+export function OracleWorkspace({ onExit }: OracleWorkspaceProps) {
+  const { setCurrentView } = useApp();
+  const { user } = useAuth();
+
+  // Live Firestore data — used to build the Working Memory context.
+  const { metrics } = useLiveDashboardMetrics();
+  const { data: clients } = useFireClients();
+  const { data: firm } = useFireFirm();
+
+  // ─── Memory Layers ──────────────────────────────────────────────────────
+  const userMemory: UserMemory = useMemo(
+    () =>
+      buildUserMemory({
+        firmName: firm?.firmName ?? user?.name ?? null,
+        gstin: firm?.gstin ?? null,
+        industry: firm?.organizationType ? 'Chartered Accountancy / Tax Practice' : null,
+        organizationType: firm?.organizationType ?? null,
+        clientCount: metrics.totalClients,
+      }),
+    [firm, user, metrics.totalClients],
+  );
+
+  const businessMemory: BusinessMemory = useMemo(() => {
+    const atRisk = clients
+      .filter((c) => (c.healthScore ?? 100) < 60)
+      .slice(0, 5)
+      .map((c) => c.tradeName || c.legalName || c.clientId);
+    const top = clients
+      .slice()
+      .sort((a, b) => (b.healthScore ?? 0) - (a.healthScore ?? 0))
+      .slice(0, 5)
+      .map((c) => c.tradeName || c.legalName || c.clientId);
+    return buildBusinessMemory({
+      totalClients: metrics.totalClients,
+      activeClients: metrics.activeClients,
+      pendingReturns: metrics.pendingReturns,
+      overdueReturns: metrics.overdueReturns,
+      filedReturns: metrics.filedReturns,
+      totalInvoices: metrics.totalInvoices,
+      totalTaxVolume: metrics.totalTaxVolume,
+      averageHealthScore: metrics.averageHealthScore,
+      matchPercentage: metrics.matchPercentage,
+      criticalIssues: metrics.criticalIssues,
+      atRiskClientNames: atRisk,
+      topClientNames: top,
+    });
+  }, etrics, clients]);
+
+  const [pinnedInsights, setPinnedInsights] = useState<string[]>([]);
+  useEffect(() => {
+    setPinnedInsights(loadPinnedInsights());
+  }, []);
+
+  // ─── Conversations ──────────────────────────────────────────────────────
+  const [conversations, setConversations] = useState<OracleConversation[]>([]);
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [activeConv, setActiveConv] = useState<OracleConversation | null>(null);
+
+  useEffect(() => {
+    const all = listConversations();
+    setConversations(all);
+    if (all.length > 0) {
+      setActiveId(all[0].id);
+      setActiveConv(all[0]);
+    } else {
+      const fresh = createConversation();
+      setConversations([fresh]);
+      setActiveId(fresh.id);
+      setActiveConv(fresh);
+    }
+  }, []);
+
+  const refreshConversationList = useCallback(() => {
+    setConversations(listConversations());
+  }, []);
+
+  const handleNewChat = useCallback(() => {
+    const fresh = createConversation();
+    setConversations((prev) => [fresh, ...prev]);
+    setActiveId(fresh.id);
+    setActiveConv(fresh);
+  }, []);
+
+  const handleSelect = useCallback((id: string) => {
+    const c = loadConversation(id);
+    if (!c) return;
+    setActiveId(id);
+    setActiveConv(c);
+  }, []);
+
+  const handleDelete = useCallback(
+    (id: string) => {
+      if (id === activeId) {
+        const remaining = listConversations().filter((c) => c.id !== id);
+        if (remaining.length > 0) {
+          setActiveId(remaining[0].id);
+          setActiveConv(remaining[0]);
+        } else {
+          const fresh = createConversation();
+          setActiveId(fresh.id);
+          setActiveConv(fresh);
+        }
+      }
+      refreshConversationList();
+    },
+    [activeId, refreshConversationList],
+  );
+
+  // ─── Live Insights (Phase 2) ────────────────────────────────────────────
+  const insights: OracleInsights = useMemo(() => buildInsights(businessMemory), [businessMemory]);
+
+  // ─── Phase 3 — Agent State ──────────────────────────────────────────────
+  const [tasks, setTasks] = useState<OracleTask[]>([]);
+  const [agentStatus, setAgentStatus] = useState<OracleAgentStatus>('idle');
+  const [workingTitle, setWorkingTitle] = useState<string | undefined>(undefined);
+  const [agentPanelOpen, setAgentPanelOpen] = useState(true);
+  const [proactive, setProactive] = useState<ProactiveNotification | null>(null);
+  const [proactiveQueue, setProactiveQueue] = useState<ProactiveNotification[]>([]);
+
+  // Load tasks on mount.
+  useEffect(() => {
+    setTasks(listTasks());
+  }, []);
+
+  // Refresh task counts whenever tasks change (cheap — re-reads localStorage).
+  const taskCounts = useMemo(() => {
+    return {
+      running: tasks.filter((t) => t.status === 'running').length,
+      scheduled: tasks.filter((t) => t.status === 'scheduled').length,
+      completed: tasks.filter((t) => t.status === 'completed').length,
+    };
+  }, [tasks]);
+
+  // ─── Phase 3 — Proactive Oracle ─────────────────────────────────────────
+  // Build the proactive queue from business memory. Whenever business memory
+  // changes, refresh the queue and pick the next undismissed notification.
+  useEffect(() => {
+    const queue = buildProactiveNotifications(businessMemory);
+    setProactiveQueue(queue);
+  }, [businessMemory]);
+
+  // Pick the next proactive notification to surface (on mount + when queue changes).
+  useEffect(() => {
+    if (proactive) return; // Don't override an active notification.
+    const next = pickNextProactive(businessMemory);
+    if (next) {
+      // Delay slightly so it doesn't feel jarring on workspace open.
+      const timer = setTimeout(() => setProactive(next), 1500);
+      return () => clearTimeout(timer);
+    }
+  }, [businessMemory, proactive]);
+
+  const handleDismissProactive = useCallback((n: ProactiveNotification) => {
+    // Dismiss by the notification title (stable key derived in the proactive engine).
+    dismissProactive(n.title);
+    setProactive(null);
+    // Pick the next one after a short delay.
+    setTimeout(() => {
+      const next = pickNextProactive(businessMemory);
+      if (next) setProactive(next);
+    }, 800);
+  }, [businessMemory]);
+
+  // ─── Streaming state ────────────────────────────────────────────────────
+  const [isStreaming, setIsStreaming] = useState(false);
+  const abortRef = useRef<AbortController | null>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+  }, [activeConv?.messages]);
+
+  // Sync agent status with streaming state.
+  useEffect(() => {
+    if (isStreaming) {
+      setAgentStatus('thinking');
+    } else if (agentStatus === 'thinking') {
+      // After streaming ends, briefly show 'completed' then return to 'idle'.
+      setAgentStatus('completed');
+      const timer = setTimeout(() => setAgentStatus('idle'), 2500);
+      return () => clearTimeout(timer);
+    }
+  }, [isStreaming, agentStatus]);
+
+  // ─── Send Message (orchestrates the full Oracle flow) ───────────────────
+  const sendMessage = useCallback(
+    async (text: string, forcedMode?: OracleModeId) => {
+      if (!activeConv || isStreaming) return;
+
+      const mode = forcedMode ?? detectOracleMode(text).id;
+
+      const priorMessages = activeConv.messages.map((m) => ({
+        role: (m.role === 'user' ? 'user' : 'oracle') as 'user' | 'oracle',
+        content: m.content,
+        createdAt: m.createdAt,
+      }));
+      const wm: WorkingMemory = buildWorkingMemory({
+        user: userMemory,
+        business: businessMemory,
+        priorMessages,
+        pinnedInsights,
+      });
+
+      const investigationHints = detectInvestigation(text, businessMemory);
+
+      const userMsg: OracleMessage = {
+        id: newMessageId(),
+        role: 'user',
+        content: text,
+        createdAt: new Date().toISOString(),
+        mode,
+      };
+      const oracleMsg: OracleMessage = {
+        id: newMessageId(),
+        role: 'oracle',
+        content: '',
+        createdAt: new Date().toISOString(),
+        mode,
+        parts: { ...EMPTY_PARTS },
+        phase: 'thinking',
+      };
+
+      const convWithUser = appendMessage(activeConv, userMsg);
+      const convWithOracle = appendMessage(convWithUser, oracleMsg);
+      setActiveConv(convWithOracle);
+      refreshConversationList();
+      setIsStreaming(true);
+
+      const controller = new AbortController();
+      abortRef.current = controller;
+
+      try {
+        const res = await fetch('/api/oracle/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            question: text,
+            mode,
+            workingMemory: wm,
+            history: priorMessages,
+            investigationHints: investigationHints.length > 0 ? investigationHints : undefined,
+          }),
+          signal: controller.signal,
+        });
+
+        if (!res.ok || !res.body) {
+          throw new Error(`Oracle request failed: ${res.status}`);
+        }
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let currentParts: OracleResponseParts = { ...EMPTY_PARTS };
+        let finalMode: OracleModeId = mode;
+
+        const patch = (p: Partial<OracleMessage>) => {
+          setActiveConv((prev) => {
+            if (!prev) return prev;
+            return updateLastOracleMessage(prev, p);
+          });
+        };
+
+        const flushBuffer = () => {
+          const events = buffer.split('\n\n');
+          buffer = events.pop() ?? '';
+          for (const evt of events) {
+            const lines = evt.split('\n');
+            let eventName = '';
+            let dataStr = '';
+            for (const line of lines) {
+              if (line.startsWith('event: ')) eventName = line.slice(7).trim();
+              else if (line.startsWith('data: ')) dataStr = line.slice(6);
+            }
+            if (!eventName || !dataStr) continue;
+            try {
+              const data = JSON.parse(dataStr);
+              handleEvent(eventName, data);
+            } catch {
+              // Skip malformed event.
+            }
+          }
+        };
+
+        const handleEvent = (eventName: string, data: unknown) => {
+          const d = data as Record<string, unknown>;
+          if (eventName === 'phase') {
+            const phase = d.phase as OraclePhase;
+            patch({ phase });
+          } else if (eventName === 'part') {
+            const part = d.part as string;
+            const textChunk = (d.text as string) ?? '';
+            const isItem = d.item === true;
+            const source = d.source as { kind: string; title: string; snippet: string } | undefined;
+            const card = d.card as { kind: string; title: string; description: string; impact?: string } | undefined;
+
+            if (part === 'keyInsight') {
+              currentParts.keyInsight += textChunk;
+            } else if (part === 'analysis') {
+              currentParts.analysis += textChunk;
+            } else if (part === 'recommendedActions') {
+              if (isItem) currentParts.recommendedActions.push(textChunk);
+              else {
+                const last = currentParts.recommendedActions.length - 1;
+                if (last >= 0) currentParts.recommendedActions[last] += textChunk;
+                else currentParts.recommendedActions.push(textChunk);
+              }
+            } else if (part === 'potentialRisks') {
+              if (isItem) currentParts.potentialRisks.push(textChunk);
+              else {
+                const last = currentParts.potentialRisks.length - 1;
+                if (last >= 0) currentParts.potentialRisks[last] += textChunk;
+                else currentParts.potentialRisks.push(textChunk);
+              }
+            } else if (part === 'nextBestStep') {
+              currentParts.nextBestStep += textChunk;
+            } else if (part === 'investigation') {
+              if (!currentParts.investigation) currentParts.investigation = [];
+              if (isItem) currentParts.investigation.push(textChunk);
+              else {
+                const last = currentParts.investigation.length - 1;
+                if (last >= 0) currentParts.investigation[last] += textChunk;
+                else currentParts.investigation.push(textChunk);
+              }
+            } else if (part === 'sources') {
+              if (source) {
+                currentParts.sources.push({
+                  kind: (source.kind as OracleResponseParts['sources'][number]['kind']) ?? 'business-data',
+                  title: source.title,
+                  snippet: source.snippet,
+                });
+              }
+            } else if (part === 'followUps') {
+              if (isItem) currentParts.followUps.push(textChunk);
+              else {
+                const last = currentParts.followUps.length - 1;
+                if (last >= 0) currentParts.followUps[last] += textChunk;
+                else currentParts.followUps.push(textChunk);
+              }
+            } else if (part === 'actionCards') {
+              if (card) {
+                const kind = (card.kind as OracleActionKind) ?? 'create-report';
+                currentParts.actionCards.push({
+                  kind,
+                  title: card.title,
+                  description: card.description,
+                  impact: card.impact,
+                });
+              }
+            }
+
+            patch({ parts: { ...currentParts }, phase: 'streaming' });
+          } else if (eventName === 'done') {
+            finalMode = (d.mode as OracleModeId) ?? mode;
+            // If the LLM didn't propose any action cards, fall back to defaults
+            // so the "always 3 cards" contract holds.
+            if (currentParts.actionCards.length === 0) {
+              currentParts.actionCards = DEFAULT_FALLBACK_CARDS;
+            }
+            patch({
+              parts: { ...currentParts },
+              phase: 'done',
+              mode: finalMode,
+              actions: currentParts.recommendedActions.map((s) => mapActionKind(s)),
+            });
+          } else if (eventName === 'error') {
+            patch({
+              phase: 'error',
+              error: (d.message as string) ?? 'Unknown error',
+            });
+          }
+        };
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          flushBuffer();
+        }
+        flushBuffer();
+      } catch (err) {
+        if ((err as Error).name === 'AbortError') {
+          setActiveConv((prev) =>
+            prev ? updateLastOracleMessage(prev, { phase: 'done' }) : prev,
+          );
+        } else {
+          setActiveConv((prev) =>
+            prev
+              ? updateLastOracleMessage(prev, {
+                  phase: 'error',
+                  error: err instanceof Error ? err.message : 'Unknown error',
+                })
+              : prev,
+          );
+        }
+      } finally {
+        setIsStreaming(false);
+        abortRef.current = null;
+        refreshConversationList();
+      }
+    },
+    [activeConv, isStreaming, userMemory, businessMemory, pinnedInsights, refreshConversationList],
+  );
+
+  const handleStop = useCallback(() => {
+    abortRef.current?.abort();
+  }, []);
+
+  const handleExit = useCallback(() => {
+    if (onExit) onExit();
+    else setCurrentView('dashboard' as AppView);
+  }, [onExit, setCurrentView]);
+
+  // ─── Phase 3 — Action Engine (spawns + executes Oracle Tasks) ───────────
+  const handleRunAction = useCallback(
+    (card: OracleActionCard) => {
+      const meta = ACTION_LIBRARY[card.kind];
+      if (!meta) return;
+
+      // Don't allow spawning a second concurrent task (keeps the UX clean).
+      if (tasks.some((t) => t.status === 'running')) {
+        // Queue it as scheduled instead.
+        const scheduledFor = new Date(Date.now() + 5 * 60 * 1000).toISOString();
+        const task = createTask(card.kind, card.title, card.description, {
+          scheduledFor,
+          resultView: meta.resultView,
+        });
+        setTasks((prev) => [task, ...prev]);
+        return;
+      }
+
+      // Spawn the task (status: 'running').
+      const task = createTask(card.kind, card.title, card.description, {
+        resultView: meta.resultView,
+      });
+      setTasks((prev) => [task, ...prev]);
+      setAgentStatus('working');
+      setWorkingTitle(card.title);
+
+      // Simulate execution: step through the steps, increment progress.
+      const totalSteps = task.steps.length;
+      const stepDuration = Math.max(400, Math.round(meta.durationMs / Math.max(totalSteps, 1)));
+      let currentStepIdx = 0;
+      let progress = 0;
+
+      const tick = () => {
+        // Advance progress within the current step.
+        const stepIncrement = Math.round(100 / Math.max(totalSteps, 1));
+        progress = Math.min(100, progress + Math.max(8, Math.round(stepIncrement / 3)));
+
+        // If we've crossed into the next step boundary, advance the step.
+        const expectedStep = Math.min(totalSteps - 1, Math.floor((progress / 100) * totalSteps));
+        if (expectedStep > currentStepIdx) {
+          // Mark previous steps as done, new one as active.
+          const newSteps = task.steps.map((s, i) => ({
+            ...s,
+            state: (i < expectedStep ? 'done' : i === expectedStep ? 'active' : 'pending') as
+              | 'done'
+              | 'active'
+              | 'pending',
+          }));
+          currentStepIdx = expectedStep;
+          updateTask(task.id, { steps: newSteps, progress });
+          setTasks((prev) =>
+            prev.map((t) => (t.id === task.id ? { ...t, steps: newSteps, progress } : t)),
+          );
+        } else {
+          updateTask(task.id, { progress });
+          setTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, progress } : t)));
+        }
+
+        if (progress >= 100) {
+          // Complete the task.
+          const result = formatActionResult(card.kind, {
+            count: Math.floor(Math.random() * 5) + 2,
+            amount: Math.floor(Math.random() * 50 + 10) * 10000,
+          });
+          const finalSteps = task.steps.map((s) => ({ ...s, state: 'done' as const }));
+          updateTask(task.id, {
+            status: 'completed',
+            progress: 100,
+            steps: finalSteps,
+            result,
+          });
+          setTasks((prev) =>
+            prev.map((t) =>
+              t.id === task.id
+                ? { ...t, status: 'completed', progress: 100, steps: finalSteps, result }
+                : t,
+            ),
+          );
+          setAgentStatus('completed');
+          setWorkingTitle(undefined);
+          // Return to idle after a brief celebration.
+          setTimeout(() => setAgentStatus('idle'), 3000);
+          return;
+        }
+
+        // Schedule the next tick.
+        setTimeout(tick, stepDuration / 3);
+      };
+
+      // Kick off the execution loop.
+      setTimeout(tick, stepDuration / 3);
+    },
+    [tasks],
+  );
+
+  // Stable ref to handleRunAction so handleActProactive doesn't need to re-bind.
+  const runActionRef = useRef(handleRunAction);
+  useEffect(() => {
+    runActionRef.current = handleRunAction;
+  }, andleRunAction]);
+
+  // Re-bind handleActProactive to always use the latest ref.
+  const handleActProactiveBound = useCallback(
+    (card: OracleActionCard, n: ProactiveNotification) => {
+      handleDismissProactive(n);
+      runActionRef.current(card);
+    },
+    andleDismissProactive],
+  );
+
+  // ─── Task panel handlers ────────────────────────────────────────────────
+  const handleClearTasks = useCallback(() => {
+    clearCompleted();
+    setTasks(listTasks());
+  }, []);
+
+  const handleTaskClick = useCallback(
+    (task: OracleTask) => {
+      if (task.resultView && (task.status === 'completed' || task.status === 'running')) {
+        setCurrentView(task.resultView as AppView);
+      }
+    },
+    [setCurrentView],
+  );
+
+  // ─── Legacy Action Engine (Next Best Step / inline action buttons) ──────
+  const handleAction = useCallback(
+    (kind: string, label: string) => {
+      // Try to map to an Action Card execution first (Phase 3 behavior).
+      const actionKind = kind as OracleActionKind;
+      if (ACTION_LIBRARY[actionKind]) {
+        const meta = ACTION_LIBRARY[actionKind];
+        handleRunAction({
+          kind: actionKind,
+          title: label || meta.label,
+          description: meta.description,
+        });
+        return;
+      }
+      // Fallback: navigate to the relevant module (legacy behavior).
+      const viewMap: Record<string, AppView> = {
+        'create-report': 'business-dna',
+        'generate-gst-return': 'returns',
+        'recover-collections': 'reconcile',
+        'open-reconcile': 'reconcile',
+        'open-returns': 'returns',
+        'open-invoices': 'invoices',
+        'open-clients': 'clients',
+        'create-reminder': 'autopilot',
+        'open-analytics': 'business-dna',
+        'generate-forecast': 'ai-predictions',
+        'export-pdf': 'business-dna',
+        'create-checklist': 'autopilot',
+      };
+      const view = viewMap[kind] ?? 'dashboard';
+      void label;
+      setCurrentView(view);
+    },
+    [setCurrentView, handleRunAction],
+  );
+
+  const handleNextBestStep = useCallback(
+    (step: string) => {
+      handleAction(mapActionKind(step), step);
+    },
+    andleAction],
+  );
+
+  const handleInsightClick = useCallback(
+    (_key: string, insight: { label: string; detail: string }) => {
+      const prompt = `Tell me more about "${insight.label}" — ${insight.detail}`;
+      sendMessage(prompt);
+    },
+    [sendMessage],
+  );
+
+  const activeMode = activeConv?.messages
+    .slice()
+    .reverse()
+    .find((m) => m.role === 'oracle' && m.mode)?.mode;
+
+  const modeMeta = activeMode ? ORACLE_MODES[activeMode] : null;
+
+  // ─── Render ─────────────────────────────────────────────────────────────
+  const hasMessages = (activeConv?.messages.length ?? 0) > 0;
+  const hasRunningTask = tasks.some((t) => t.status === 'running');
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.4 }}
+      className="flex h-full w-full gap-3 p-3"
+    >
+      {/* ─── LEFT SIDEBAR (Memory + History) ──────────────────────────────── */}
+      <div className="hidden w-[280px] shrink-0 lg:block">
+        <OracleSidebar
+          conversations={conversations}
+          activeConversationId={activeId}
+          userMemory={userMemory}
+          businessMemory={businessMemory}
+          pinnedInsights={pinnedInsights}
+          onSelect={handleSelect}
+          onNew={handleNewChat}
+          onDelete={handleDelete}
+          onChanged={refreshConversationList}
+        />
+      </div>
+
+      {/* ─── MAIN WORKSPACE ──────────────────────────────────────────────── */}
+      <div className="glass-surface relative flex min-w-0 flex-1 flex-col rounded-3xl">
+        {/* ─── Header ─────────────────────────────────────────────────────── */}
+        <header className="flex h-14 shrink-0 items-center gap-3 border-b border-border px-4">
+          <button
+            onClick={handleExit}
+            aria-label="Back to dashboard"
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-card/[0.5] hover:text-foreground"
+          >
+            <ArrowLeft className="h-4 w-4" />
+          </button>
+
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg accent-gradient shadow-lg shadow-emerald-500/20">
+            <InfinitySymbol size={18} />
+          </div>
+
+          <div className="flex min-w-0 flex-1 flex-col">
+            <div className="flex items-baseline gap-1">
+              <span className="text-sm font-semibold text-foreground">GSTPilot Oracle</span>
+              <sup className="text-[9px] font-medium text-muted-foreground">™</sup>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="relative flex h-1.5 w-1.5">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-400" />
+              </span>
+              <span className="text-[10px] text-muted-foreground">
+                Live · Understands. Acts. Executes.
+              </span>
+            </div>
+          </div>
+
+          {/* Active Mode Indicator */}
+          {modeMeta && (
+            <div
+              className="hidden items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-semibold sm:flex"
+              style={{ backgroundColor: modeMeta.tint, color: modeMeta.color }}
+            >
+              <span
+                className="h-1.5 w-1.5 rounded-full"
+                style={{ backgroundColor: modeMeta.color }}
+              />
+              {modeMeta.name}
+            </div>
+          )}
+
+          {/* Proactive Bell — shows when there are undismissed proactive signals */}
+          {proactiveQueue.length > 0 && (
+            <ProactiveBell
+              count={proactiveQueue.length}
+              onClick={() => {
+                const next = pickNextProactive(businessMemory);
+                if (next) setProactive(next);
+              }}
+            />
+          )}
+
+          {/* Agent Panel toggle */}
+          <button
+            onClick={() => setAgentPanelOpen((v) => !v)}
+            aria-label={agentPanelOpen ? 'Hide Oracle Tasks' : 'Show Oracle Tasks'}
+            title={agentPanelOpen ? 'Hide Oracle Tasks' : 'Show Oracle Tasks'}
+            className={cn(
+              'flex h-8 w-8 items-center justify-center rounded-lg transition-colors',
+              agentPanelOpen
+                ? 'accent-text bg-card/[0.5]'
+                : 'text-muted-foreground hover:bg-card/[0.5] hover:text-foreground',
+            )}
+          >
+            {agentPanelOpen ? (
+              <PanelRightClose className="h-4 w-4" />
+            ) : (
+              <PanelRightOpen className="h-4 w-4" />
+            )}
+          </button>
+
+          {/* Quick "New chat" button (visible on mobile when sidebar is hidden) */}
+          <button
+            onClick={handleNewChat}
+            aria-label="New chat"
+            className="flex h-8 items-center gap-1.5 rounded-lg border border-border bg-card/[0.4] px-2.5 text-xs text-muted-foreground transition-colors hover:bg-card/[0.6] hover:text-foreground lg:hidden"
+          >
+            <Sparkles className="h-3.5 w-3.5" />
+            New
+          </button>
+        </header>
+
+        {/* ─── Status Bar (Phase 3) ──────────────────────────────────────── */}
+        <div className="shrink-0 border-b border-border bg-background/30 px-3 py-1.5 backdrop-blur-xl">
+          <OracleStatusBar
+            status={agentStatus}
+            workingTitle={workingTitle}
+            counts={taskCounts}
+            onOpenAgent={() => setAgentPanelOpen(true)}
+          />
+        </div>
+
+        {/* ─── Conversation Area ──────────────────────────────────────────── */}
+        <div ref={scrollRef} className="custom-scrollbar min-h-0 flex-1 overflow-y-auto">
+          {!hasMessages ? (
+            <OracleEmptyState
+              insights={insights}
+              onPick={(prompt, mode) => {
+                sendMessage(prompt, mode);
+              }}
+              onInsightClick={(key, insight) => handleInsightClick(key, insight)}
+              proactiveStrip={
+                proactiveQueue.length > 0 ? (
+                  <div className="mt-6 flex justify-center">
+                    <ProactiveStrip
+                      notifications={proactiveQueue}
+                      onAct={handleActProactiveBound}
+                    />
+                  </div>
+                ) : null
+              }
+            />
+          ) : (
+            <div className="mx-auto w-full max-w-3xl space-y-6 px-4 py-6">
+              <AnimatePresence initial={false}>
+                {activeConv!.messages.map((m) => (
+                  <motion.div
+                    key={m.id}
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.3 }}
+                  >
+                    <OracleMessageView
+                      message={m}
+                      onFollowUp={(q) => sendMessage(q)}
+                      onAction={handleAction}
+                      onNextBestStep={handleNextBestStep}
+                      onRunAction={handleRunAction}
+                      actionsDisabled={hasRunningTask}
+                    />
+                  </motion.div>
+                ))}
+              </AnimatePresence>
+            </div>
+          )}
+        </div>
+
+        {/* ─── Insights Strip (live, always visible above input) ──────────── */}
+        <div className="shrink-0 border-t border-border bg-background/30 px-4 py-2 backdrop-blur-xl">
+          <div className="mx-auto w-full max-w-3xl">
+            <div className="mb-1.5 flex items-center gap-1.5">
+              <Sparkles className="h-2.5 w-2.5 accent-text" />
+              <span className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">
+                Live Insights · Updated from your business memory
+              </span>
+            </div>
+            <OracleInsightsPanel
+              insights={insights}
+              variant="strip"
+              onInsightClick={(key, insight) => handleInsightClick(key, insight)}
+            />
+          </div>
+        </div>
+
+        {/* ─── Input Bar (sticky bottom) ──────────────────────────────────── */}
+        <div className="shrink-0 border-t border-border bg-background/40 p-4 backdrop-blur-xl">
+          <OracleInputBar
+            onSubmit={(text) => sendMessage(text)}
+            disabled={isStreaming}
+            isStreaming={isStreaming}
+            onStop={handleStop}
+          />
+        </div>
+
+        {/* ─── Phase 3 — Proactive Notifications (overlay, top-right) ─────── */}
+        <OracleNotifications
+          notification={proactive}
+          onDismiss={handleDismissProactive}
+          onAct={handleActProactiveBound}
+        />
+      </div>
+
+      {/* ─── RIGHT AGENT PANEL (Phase 3 — Oracle Tasks) ──────────────────── */}
+      <AnimatePresence mode="wait">
+        {agentPanelOpen && (
+          <motion.div
+            key="agent-panel"
+            initial={{ opacity: 0, width: 0, x: 20 }}
+            animate={{ opacity: 1, width: 300, x: 0 }}
+            exit={{ opacity: 0, width: 0, x: 20 }}
+            transition={{ duration: 0.25, ease: 'easeOut' }}
+            className="hidden shrink-0 overflow-hidden xl:block"
+          >
+            <OracleAgentPanel
+              tasks={tasks}
+              onClear={handleClearTasks}
+              onTaskClick={handleTaskClick}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
+  );
+}
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+function mapActionKind(label: string): OracleActionKind {
+  const l = label.toLowerCase();
+  if (l.includes('file') || l.includes('return')) return 'generate-gst-return';
+  if (l.includes('recover') || l.includes('collection')) return 'recover-collections';
+  if (l.includes('reconcil') || l.includes('2b')) return 'prepare-reconciliation';
+  if (l.includes('cash') && l.includes('flow')) return 'cash-flow-forecast';
+  if (l.includes('forecast') || l.includes('predict')) return 'generate-forecast';
+  if (l.includes('notice') || l.includes('scn')) return 'create-notice';
+  if (l.includes('report')) return 'create-report';
+  if (l.includes('reminder') || l.includes('checklist')) return 'create-checklist';
+  if (l.includes('export') || l.includes('pdf')) return 'export-pdf';
+  return 'create-report';
+}
+
+// Fallback action cards shown when the LLM doesn't propose any.
+const DEFAULT_FALLBACK_CARDS: OracleActionCard[] = [
+  {
+    kind: 'create-report',
+    title: 'Generate Business Report',
+    description: 'Compile a CFO-grade brief from your live business memory.',
+    impact: 'Surfaces top 3 risks + opportunities',
+  },
+  {
+    kind: 'recover-collections',
+    title: 'Recover Overdue Collections',
+    description: 'Identify overdue clients and draft recovery outreach.',
+    impact: 'Unblocks cash within 7 days',
+  },
+  {
+    kind: 'prepare-reconciliation',
+    title: 'Prepare 2B Reconciliation',
+    description: 'Match GSTR-2B vs books and flag ITC at risk.',
+    impact: 'Prevents ITC reversal',
+  },
+];
+
+// Suppress unused-import warning for X / saveConversation (reserved for future toolbar actions).
+void X;
+void saveConversation;
+void statusCounts;
+void deleteTask;
+
+export default OracleWorkspace;

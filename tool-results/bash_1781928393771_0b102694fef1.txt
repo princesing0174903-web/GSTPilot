@@ -1,0 +1,301 @@
+2273 /home/z/my-project/worklog.md
+  - Hard-coded empty-context behavior: when contextHasLiveData=false, SKIPS the LLM call entirely (zero fabrication risk) and returns answer = "I don't have enough live data right now. Connect your business data to unlock insights." with sources = [{name: 'Business Data', count: 0, icon: 'database'}] and insights = [{text: 'Connect your business data to unlock AI insights.', tone: 'neutral'}]
+  - Upgraded generateContextualFallback() to also use real parsed counts from the context (clients/invoices/overdue/filed/gstr1Pending/riskLine) — no hardcoded ₹ numbers
+  - Top-level try/catch returns full OracleResponse shape on fatal error (so frontend never has to guard missing fields)
+- Verified GSTR-3B regex parsing by smoke-testing in /tmp/oracle_test2.mjs: input "- Pending returns: 3 GSTR-1, 2 GSTR-3B" → gstr1Pending=3, gstr3bPending=2, total GST Returns source = 3+2+18(filed) = 23 ✓
+- Verified extractInsights() bullet parsing with a sample LLM answer: extracted 3 bullets, tones correctly detected as warning/warning/neutral for "4 overdue invoices worth ₹6,80,000...", "Patel Enterprises is your largest overdue at ₹2,40,000 (42 days)", "Reminder cadence dropped to 2 sends..." ✓
+- Ran `bun run lint` → exit 0, 0 errors, 0 warnings
+- Ran `bunx tsc --noEmit` → ZERO errors in src/app/api/intelligence/route.ts (pre-existing errors in unrelated files only: examples/, skills/, Prisma routes, AgentOSPage, portal/chat)
+
+Stage Summary:
+- /home/z/my-project/src/app/api/intelligence/route.ts rewritten 354 → 834 lines, fully V16-compliant OracleResponse shape
+- Returns {answer, insights[], sources[], actions[], suggestedPrompts[], intent, thinkingSteps[]} — superset of old {answer, actions, suggestedPrompts, intent} so existing frontend continues to work unchanged
+- Zero fake data: sources counts are regex-parsed from the actual LIVE DATA SNAPSHOT context string (only emitted when count > 0); insights are parsed from LLM bullets or derived from real parsed context numbers; fallback uses real parsed counts not hardcoded ₹ amounts
+- Empty-context path short-circuits LLM call entirely and returns "Connect your business data..." message with a single Business Data source (count 0) — guarantees no fabricated insights
+- Thinking steps: 15 intent-aware sequences for the Perplexity-style UI animation, all start with "Thinking..." (400ms) and end with "Generating answer..." (500ms)
+- Tone detection on insights: keyword-driven positive/warning/neutral
+- Actions: preserved all 5 types (navigate/create_task/send_reminder/generate_report/execute_workflow), now emit top-level `view` for navigation + duplicate in payload for backward compat, capped at 3 per spec
+- Lint: 0 errors, 0 warnings; TypeScript: 0 errors in route file
+- Did NOT start dev server or browser per instructions
+
+---
+Task ID: 4-a
+Agent: frontend-styling-expert (MissionControl V16)
+Task: Rewrite MissionControlPage.tsx for V16 — Getting Started hero + premium empty states
+
+Work Log:
+- Read worklog.md (tail ~400 lines) to internalize the V10/Infinity™/V15 history and the new V16 design tokens: #050505 Obsidian Black 2.0 canvas, .glass-surface rgba(255,255,255,0.04) + blur(28px) + border rgba(255,255,255,0.08), .radius-premium 28px (rounded-3xl acceptable), single Emerald→Cyan→Blue accent gradient (.accent-gradient / .accent-gradient-soft / .accent-text / .accent-ring), .hover-lift (1.02 scale on hover), space-y-12 (32-48px rhythm), framer-motion fade-up (opacity 0 + y 12 → 1 + 0, duration 0.5, staggered), NO red/orange/purple anywhere.
+- Read existing /src/components/mission-control/MissionControlPage.tsx (833 lines, V15) to inventory the helpers I must keep: formatINR, greeting, firstName, timeAgo, computeBusinessScore, scoreTier, buildInsights, ScoreGauge, MissionControlSkeleton — all retained verbatim (with two small V16-compliant color tweaks: scoreTier now uses only emerald/cyan/blue, no amber/red).
+- Verified V16 utility classes in globals.css (lines 162-264): .glass-surface, .glass-surface-strong, .radius-premium, .accent-gradient, .accent-gradient-soft, .accent-text, .accent-ring, .hover-lift — all present and ready to use.
+- Verified AppContext.setCurrentView API (line 105) and the AppView union (lines 5-88) — confirmed 'settings', 'team', 'banking', 'returns', 'invoices', 'reconcile', 'ai-operating-room', 'run-my-business', 'clients' all exist as valid navigation targets.
+- Verified hook signatures in use-firestore.ts: useLiveDashboardMetrics() returns { metrics, loading, error } with all required fields; useFireActivities() returns { data, loading }.
+- Wrote the V16 file end-to-end (~1039 lines, 'use client') with the MANDATORY structure:
+
+  • Hero Section (motion.section, delay 0):
+    - Eyebrow "Business Status" + animated status pill (cyan "Getting Started" with pulsing dot when not all 4 checked; emerald "Operational" when all checked)
+    - h1 greeting "Good Morning/Afternoon/Evening, [FirstName] 👋" (text-3xl md:text-4xl font-bold tracking-tight)
+    - p "You are [X] step[s] away from activating your Financial Brain." with the step count wrapped in .accent-text
+    - 4 clickable ChecklistCard components in a grid-cols-2 md:grid-cols-4 gap-3:
+      □ Connect GSTN — checked when totalClients > 0 (proxy per spec); click → setCurrentView('returns')
+      □ Connect Bank — never checked (we don't have bank data); click → setCurrentView('banking')
+      □ Invite Team — never checked; click → setCurrentView('team')
+      □ Activate Oracle — never checked; click → setCurrentView('ai-operating-room')
+    - Each ChecklistCard has a 6x6 checkbox swatch (.accent-gradient when checked, border-white/15 when unchecked), label, status text ("Connected" emerald when checked, else muted description), and a chevron-right that lights up emerald on hover. hover-lift transition.
+
+  • Business Health Score (motion.section, delay 0.08):
+    - Wrapped in glass-surface rounded-3xl p-6 md:p-8 min-h-[260px] flex items-center justify-center
+    - If businessScore === null OR === 0: PremiumEmptyState with Brain icon, title "Activate your Financial Brain", description "Connect your business data to unlock AI insights and your real-time business health score.", CTA "[ Connect Data ]" → settings
+    - Else: ScoreGauge (220px SVG, emerald→cyan→blue gradient arc, animated) + tier label (Excellent/Healthy/At Risk/Critical) + "Business Health Score" eyebrow
+
+  • KPI Section (exactly 3 KpiCard components, grid-cols-1 sm:grid-cols-3 gap-4, delays 0.16 / 0.24 / 0.32):
+    - Revenue (IndianRupee icon) — premium empty state when totalTaxVolume === 0: "Revenue awaits your data" / "Connect GSTN and Banking to unlock live financial insights." / "[ Connect Data ]"
+    - Cash Position (Wallet icon) — premium empty when !hasData || score === null: "Cash position awaits" / "Connect your bank account to monitor cash position." / "[ Connect Bank ]"
+    - Compliance (ShieldAlert icon) — premium empty when !hasData: "Compliance awaits GSTN" / "Connect GSTN to track compliance score." / "[ Connect GSTN ]"
+    - All 3 CTAs navigate to setCurrentView('settings') per spec
+    - KpiCard: glass-surface rounded-3xl p-5 min-h-[160px] flex flex-col; header row (9x9 accent-gradient-soft icon swatch + uppercase label); body shows 2xl bold value + hint when hasData, else a centered PremiumEmptyState
+    - All CTA buttons use the exact spec pattern: .accent-gradient rounded-2xl px-4 py-2 text-xs font-semibold text-white .hover-lift
+
+  • Widgets Section (exactly 5, grid-cols-1 lg:grid-cols-2 gap-5, 5th spans lg:col-span-2):
+    1. Today's Priorities (ListTodo, delay 0.40) — checklist derived live from metrics (Recover Collections / File GST Returns / Review Expenses). Local toggle state via useState. Three states: hasData+priorities → interactive checklist rows with circle checkbox; hasData+empty → PremiumEmptyState "You're all caught up"; !hasData → PremiumEmptyState "GSTPilot Oracle is ready" / "Connect your business data to receive priorities." / "[ Connect Services ]" → settings
+    2. Business Timeline (Clock, delay 0.48) — up to 5 activities from useFireActivities() as vertical dot+line timeline with timeAgo(). Empty: PremiumEmptyState "No activity yet" / "Connect your services to see live business timeline." (no CTA, per spec)
+    3. Connected Services (Plug, delay 0.56) — 6 chips in grid-cols-2 sm:grid-cols-3 (Google/Gmail/Outlook/GSTN/WhatsApp/Bank APIs). Each chip is honestly shown "Not connected" with muted dot + "[ Connect ]" link (text-cyan-300 hover:text-cyan-200, navigates to settings). Footer note "Connect services to sync automatically."
+    4. Team Status (Users, delay 0.64) — honest PremiumEmptyState "No team members yet" / "Invite your team to collaborate on clients, returns, and reconciliations." / "[ Invite your team ]" → setCurrentView('team')
+    5. AI Recommendations (Lightbulb, delay 0.72, lg:col-span-2) — up to 4 insights from buildInsights() (insights.slice(0,4) since the hero is now the Getting Started checklist, not insight[0]). 2-col grid of cards with tone-colored icon (risk→blue-400, info→cyan-400, success→emerald-400 — V16 palette only, no amber), what/why text, and emerald action chip → setCurrentView(actionView). Empty: PremiumEmptyState "GSTPilot Oracle is ready" / "Connect your business data to receive AI recommendations." / "[ Connect Services ]" → settings
+
+  • PremiumEmptyState component (V16 differentiator): flex flex-col items-center justify-center gap-3 py-8 px-4 text-center; 12x12 glass-surface rounded-2xl icon square with h-5 w-5 text-muted-foreground icon; title (text-sm font-medium text-foreground) + description (text-xs text-muted-foreground max-w-[240px] leading-relaxed); optional accent-gradient CTA button (rounded-2xl px-4 py-2 text-xs font-semibold text-white hover-lift). Used in: score section, all 3 KPI cards, all 5 widgets (10+ instances total).
+
+  • Error state: glass-surface rounded-3xl p-8 with 12x12 glass-surface icon square + AlertTriangle (text-blue-300, V16 palette) + heading + message + Retry button. No red/amber.
+
+  • Loading: 3.5s graceful timeout (showLoading = loading && !loadingTimedOut). MissionControlSkeleton updated for V16 layout: hero (greeting + intro + 4 checklist cards) + centered score circle + 3 KPI cards + 5 widgets (5th full-width).
+
+  • Removed: V15 AI Insight hero card (Brain icon + AI Insight eyebrow + heroInsight). Removed: heroInsight variable, recommendations slice(1,5) — now slice(0,4). Removed: unused useFireClients import + FirestoreClient cast (replaced with [] empty array since we no longer have a hero insight that needs riskyClients — keeping buildInsights shape intact for the recommendations widget, but clients array is empty to avoid fabricating churn-risk data; the recommendations widget still surfaces overdue/pending/compliance/collections/all-clear insights correctly from metrics alone).
+
+  • Wrap: outer <div className="relative max-w-6xl mx-auto px-4 md:px-8 py-8 md:py-12 space-y-12"> (per spec — space-y-12 not space-y-10, removed V15's radial-glow absolute wrapper to match the spec's exact wrapper). No footer. No "RUN MY BUSINESS" button. No "How can I help today?" input.
+
+- Verification:
+  * `bun run lint` → 0 errors, 0 warnings (clean "$ eslint ." output)
+  * `bunx tsc --noEmit` → 0 errors in MissionControlPage.tsx (grep "missioncontrol" returns nothing; the ~2800 pre-existing tsc errors are all in unrelated files: examples/websocket, skills/*, src/app/api/* Prisma routes)
+
+Stage Summary:
+- Delivered: /home/z/my-project/src/components/mission-control/MissionControlPage.tsx rewritten to V16 spec (~1039 lines, lint-clean, tsc-clean for this file).
+- 4 mandatory sections shipped: (1) Hero with greeting + Business Status pill + "X steps away" line + 4 clickable ChecklistCards (Connect GSTN/Bank/Invite Team/Activate Oracle); (2) Business Health Score with ScoreGauge OR premium empty state "[ Connect Data ]"; (3) exactly 3 KpiCards (Revenue/Cash Position/Compliance) with premium empty states + accent-gradient CTAs; (4) exactly 5 widgets in 2-col grid (Today's Priorities/Business Timeline/Connected Services/Team Status/AI Recommendations — 5th spans lg:col-span-2).
+- PremiumEmptyState component is the V16 differentiator: 12x12 glass-surface icon square + title + description + accent-gradient rounded-2xl CTA button. Used in 10+ places. Every empty state is helpful, premium, intentional.
+- Strict palette discipline: only Emerald / Cyan / Blue. scoreTier colors updated (was amber/red → now blue-400/blue-300). AI recommendation tones updated (was amber for risk → now blue-400). Error icon was amber-400 → now blue-300. Zero red, orange, purple, or amber anywhere.
+- Honest-data principle upheld: no fake connected services, no fake team members, no fabricated GSTN/bank state. Checklist derived from real data (totalClients > 0 → "Connect GSTN" checked as proxy per spec).
+- Calm motion: framer-motion fade-up (opacity 0, y 12 → 1, 0), duration 0.5, staggered delays 0 / 0.05-0.20 (checklist) / 0.08 / 0.16-0.32 (KPI) / 0.40-0.72 (widgets).
+- 3.5s graceful loading timeout preserved. Error state with Retry preserved. All kept helpers (formatINR, greeting, firstName, timeAgo, computeBusinessScore, scoreTier, buildInsights, ScoreGauge, MissionControlSkeleton) intact.
+- The emotional goal met: after 3 seconds the user thinks "This looks expensive." — calm dark canvas, soft glass, single restrained accent gradient, premium empty states that guide forward instead of saying "no data".
+
+---
+Task ID: V16-ORCHESTRATOR
+Agent: GSTPilot Architect (Infinity™ V16 Billion Dollar Series)
+Task: GSTPilot Infinity™ V16 — Premium Experience Overhaul (Obsidian Black 2.0 + InfinityMark + Perplexity Oracle + ambient background)
+
+Work Log:
+- Read V15 state: globals.css (#09090B), GSTPilotIntelligence orb (1192 lines), OraclePanel, MissionControlPage, /api/intelligence route, layout.tsx
+- Foundation work (done directly):
+  * Updated globals.css → Obsidian Black 2.0: bg #050505, glass rgba(0.04), blur 28px, radius 28px (.radius-premium), soft shadows (.shadow-premium, .shadow-glow-accent)
+  * Added V16 micro-animation utilities: .hover-lift (1.02 scale), .search-glow (focus glow), .typing-cursor, .aurora-blob, .breathe-glow, .network-line
+  * Built InfinityMark.tsx — GSTPilot Infinity Mark™ brand symbol: 3 connected nodes (Business·AI·Finance) forming infinite triangle, Emerald→Cyan→Blue flat SVG, works as favicon/icon/logo
+  * Built AmbientBackground.tsx — 4-layer ambient: aurora blobs (slow drift) + financial network lines (SVG, 12 nodes, 20 edges, pulsing) + drifting particles (24, accent/white mix) + vignette
+  * Created src/app/icon.svg (InfinityMark on #050505 rounded square) as Next.js favicon
+- Dispatched 4 parallel subagents (all completed, lint-clean):
+  * 4-a: MissionControlPage V16 — Getting Started hero (greeting + status pill + "X steps away" + 4 checklist cards: Connect GSTN/Bank/Team/Oracle) + premium empty states ([Connect Data]/[Connect Bank]/[Connect GSTN]/[Connect Services]/[Invite your team] CTAs) + 3 KPI + 5 widgets
+  * 4-b: /api/intelligence V16 — structured OracleResponse {answer, insights[], sources[], actions[], suggestedPrompts, intent, thinkingSteps[]} + NO FAKE DATA (sources from real context parse, fallback says "I don't have enough live data" when empty) + 15 intent→thinking-step mappings
+  * 4-c: OraclePanel V16 — 2 sections (Today's Focus: Recover Collections/File Returns/Review Expenses + AI Activity: live rotation of "Oracle analyzing invoices…" / "Oracle reading GST data…" etc. every 4s with AnimatePresence)
+  * 4-d: CommandBar V16 — Perplexity-style with InfinitySymbol + search-glow + 5 example chips (Run my business / Why did collections drop? / Generate GST report / Show risky clients / Predict next month revenue)
+- Integration work (done directly):
+  * Updated LeftNav.tsx — replaced Zap icon with InfinitySymbol size=32
+  * Updated page.tsx shell — added AmbientBackground (z-0), top bar uses InfinitySymbol, all content z-10, bg-background/60 for top bar transparency over ambient
+  * Upgraded GSTPilotIntelligence orb for V16:
+    - Message interface extended: insights[], sources[], thinkingSteps[]
+    - ActionSuggestion extended: title, description, payload, new action types (create_task, send_reminder, generate_report, execute_workflow)
+    - ThinkingIndicator rebuilt: Perplexity-style multi-step (Thinking...→Searching invoices...→Reading GST data...→Generating answer...), progress bar, step labels with accent-text
+    - MessageBubble rebuilt: V16 structured sections (Answer card → Insights section → Sources chips → Actions buttons), all glass-surface, staggered fade-in
+    - handleSend upgraded: passes thinkingSteps to indicator, maps API actions to ActionSuggestion with icon mapping, stores insights/sources/thinkingSteps on message
+    - handleAction upgraded: supports all V16 action types (navigate + execute_workflow + others)
+    - Rebranded ALL display strings: "GSTPilot Intelligence" → "GSTPilot Oracle" (welcome message, tooltip, header, subtitle "Ask anything. Run everything.", placeholder, footer)
+- Agent Browser end-to-end verification (logged in as prince.v15verify@gstpilot.dev, skipped onboarding):
+  * Desktop 1440×900: V16 home renders with Getting Started checklist (4 cards: Connect GSTN/Bank/Team/Oracle), "Good Afternoon, Prince 👋", premium empty states everywhere ([Connect Data]/[Connect Bank]/[Connect GSTN]/[Connect Services]/[Invite your team]), 3 KPI cards, 5 widgets, right Oracle panel (Today's Focus: Recover Collections/File Returns/Review Expenses + AI Activity), bottom command bar with 5 example chips ✅
+  * Oracle AI flow tested: typed "Why did collections drop?" → Oracle palette opened → API returned thinkingSteps [Thinking, Searching invoices, Checking bank transactions, Reading GST data, Generating answer], sources [{Business Data, count:0}], insights ["Connect your business data..."], actions [Send Payment Reminders, Open Invoices], answer "I don't have enough live data right now..." ✅
+  * "Show pending returns" → Oracle responded with real data-aware answer (Pending GSTR-1 returns: 0) + action button "Open GST Returns" ✅
+  * API verified directly: curl POST /api/intelligence returns full V16 structured response with 5 thinking steps, honest sources, real insights, actionable next steps ✅
+  * Mobile 390×844: left nav collapses to 6 icons, Oracle panel hidden, command bar visible, all V16 content present, profile shows "PK" ✅
+  * Console errors: ZERO ✅ · Page errors: ZERO ✅
+  * Title: "GSTPilot Oracle™ — The Financial Brain of India" ✅
+  * Screenshots: v16-home-desktop.png, v16-oracle-response.png, v16-oracle-full.png, v16-run-business.png, v16-oracle-thinking.png, v16-oracle-answer.png, v16-home-mobile.png
+
+Stage Summary:
+- GSTPilot Infinity™ V16 SHIPPED + browser-verified.
+- Design system: Obsidian Black 2.0 (#050505, glass 0.04, blur 28px, radius 28px, soft shadows) + ambient background (aurora blobs + financial network lines + drifting particles + vignette)
+- Brand: GSTPilot Infinity Mark™ — 3 connected nodes (Business·AI·Finance), Emerald→Cyan→Blue flat SVG, used in top bar, left nav, command bar, favicon
+- Home (Mission Control V16): Getting Started hero (greeting + status + "X steps away from activating your Financial Brain" + 4 checklist cards) + Business Health Score (premium empty) + 3 KPI (Revenue/Cash/Compliance with [Connect Data] CTAs) + 5 widgets (Today's Priorities/Business Timeline/Connected Services/Team Status/AI Recommendations — all premium empty states)
+- Oracle AI (V16 Perplexity-style): multi-step thinking (Thinking→Searching invoices→Reading GST data→Checking bank→Generating answer) + structured response (Answer/Insights/Sources/Actions) + NO FAKE DATA (honest "I don't have enough live data" when context empty)
+- Right Oracle Panel V16: Today's Focus (3 cards: Recover Collections/File Returns/Review Expenses) + AI Activity (live rotation: "Oracle analyzing invoices…" every 4s — "the AI is alive")
+- Command Bar V16: Perplexity-style with InfinitySymbol + search-glow focus border + 5 example chips
+- Rebranded: "GSTPilot Intelligence" → "GSTPilot Oracle" throughout (orb tooltip, palette header, welcome message, input placeholder, footer, subtitle "Ask anything. Run everything.")
+- Micro-animations: .hover-lift (1.02 scale), card fade-in, typing cursor, search glow, aurora drift, breathing glow, network pulse — all 200-300ms, calm
+- "I am using the future." — V16 delivered.
+
+---
+Task ID: Oracle-Human-Experience
+Agent: GSTPilot Architect
+Task: Implement GSTPilot Oracle Human Experience — multilingual, emotional, premium AI Financial Officer (Claude/ChatGPT/Perplexity feel) with streaming, brand identity (Prince Singh), adaptive answers, and the Ultra Response Engine (no fake phases, <800ms first token, pulsing cursor, sticky input, smart auto-scroll).
+
+Work Log:
+- Discovered only OraclePanel.tsx (simple right-side launcher) existed; no Oracle chat workspace, no API route, no human-intelligence modules. Built the full Human Experience from scratch.
+- Created oracle-types.ts — OracleMessage, OracleLanguageId (10 langs), OracleEmotionId (6), OracleAvatarState, OracleChatRequest, OracleStreamChunk.
+- Created oracle-human.ts — 10-language auto-detection via Unicode script ranges (Devanagari/Arabic/Gurmukhi/Gujarati/Tamil/Telugu/Bengali) + Hinglish romanised keyword detection (2-marker threshold); 6-emotion detection (helpful/thinking/warning/success/opportunity/risk); avatar state derivation (idle/listening/thinking/speaking/success/warning); 6 multilingual suggestion starters.
+- Created oracle-brand.ts — Prince Singh founder identity with Levenshtein typo-tolerant detection (prince/singh/gstpilot variants + role keywords + self-identity questions in EN/Hindi); canonical instant answers (CANONICAL_FOUNDER_ANSWER, CANONICAL_IDENTITY_ANSWER); BRAND_IDENTITY_PROMPT_BLOCK injected permanently at top of system prompt.
+- Created /api/oracle/chat/route.ts — streaming SSE route. SDK called with stream:true returns ReadableStream; parsed upstream SSE chunks (data: {choices[0].delta.content}) and re-emitted as our SSE format (data: {token}). Emits language hint nudge first (so UI shows pulsing cursor within first frame), then tokens, then done. System prompt encodes: brand identity block, multilingual auto-match, natural executive personality, FORBIDDEN phrases (no "As an AI..."), adaptive answer shapes (simple→2-5 lines, procedural→steps, complex→light structure, status→number-first), sparing micro-expressions, GST reliability (cite CBIC/sections, honest uncertainty "Based on current GST rules..."), Indian number formatting (₹/lakhs).
+- Created OracleEmptyState.tsx — premium empty state: "Welcome back, {firstName}." headline (uses user memory), 6 multilingual suggestion cards, capability strip (10 languages / GST law / remembers everything / thinks like CFO), brand footer (Prince Singh).
+- Created OracleWorkspace.tsx — full-screen overlay chat. Key UX: fixed inset-0 z-50 overlay (rendered as sibling of OraclePanel to escape glass-surface backdrop-filter containing block); dynamic avatar (6 states); premium message bubbles with ReactMarkdown rendering + oracle-prose CSS; "Oracle is responding…" indicator with pulsing dot BEFORE first token; PulsingCursor (blinking emerald bar) DURING streaming; NO fake phases (thinking/reading/analyzing removed); sticky input bar (auto-grow textarea, Enter to send, Shift+Enter newline); smart auto-scroll (userPinnedUpRef — pauses when user scrolls >120px from bottom, resumes when near bottom); brand-question client-side short-circuit (instant canonical answer, no API); conversation persistence in localStorage; follow-up chips generated from response content; stop button during streaming; clear conversation; Escape to close.
+- Updated OraclePanel.tsx — made header clickable to open workspace; added "Ask Oracle Anything" CTA card; added brand footer; rendered OracleWorkspace as sibling (outside glass-surface) to avoid backdrop-filter containing-block trap.
+- Added CSS utilities to globals.css — .motion-pulse (breathing keyframe for avatar halo), .oracle-prose (markdown styling: headings, lists, bold, code, blockquote, tables — Claude/Perplexity readability).
+- Fixed bug: brand short-circuit branch wasn't clearing input (setInput('')) or resetting textarea height — now clears both and scrolls to bottom.
+- Fixed TS error: toModelMessages role typed as 'assistant'|'user' union (was inferred as string).
+- Verification (Agent Browser, authenticated via Firebase signup prince.oracle.test@gstpilot.dev):
+  * Dashboard renders with Oracle panel (header clickable + Ask Oracle CTA + brand footer "Founded & developed by Prince Singh").
+  * Empty state: "Welcome back, Prince." + 6 multilingual suggestion cards + capability strip + brand footer.
+  * Suggestion click "GST kya hota hai?" → streamed natural Hinglish answer, "Responding" header state (no fake phases), follow-up chips appeared.
+  * Brand question "who created you and who is prince singh?" → INSTANT canonical answer (client-side short-circuit): "GSTPilot Infinity™ was founded, developed, and is owned by **Prince Singh** — the visionary... Founder, Owner, Developer, and Visionary".
+  * Hindi (Devanagari) "मेरी GSTR-3B लेट हो गई" → "Responding" state + "हिन्दी" language indicator → streamed accurate Hindi answer (₹50/day penalty, 18% interest, ITC impact) with action steps + follow-up chip.
+  * Simple "What is GST?" → short 2-3 sentence answer (adaptive). Complex "Explain ITC rules for manufacturers" → structured with headers/bullets + single ⚠️ micro-expression (adaptive contrast confirmed).
+  * API: all POST /api/oracle/chat returned 200, 1.4-4.1s total stream time, first token <800ms. No errors in dev.log.
+- Lint: clean. TSC: clean (no oracle/* errors).
+
+Stage Summary:
+- GSTPilot Oracle™ Human Experience is LIVE and end-to-end verified.
+- 10-language auto-detection + reply (English, Hindi, Hinglish, Urdu, Punjabi, Gujarati, Marathi, Tamil, Telugu, Bengali).
+- Natural executive personality (CFO/CA tone, no robotic disclaimers).
+- 6 micro-expression emotions (used sparingly, one glyph per response max).
+- Adaptive answers (simple→short, complex→structured, no rigid templates).
+- Human memory (userName in empty state + sent to API for personalisation).
+- Premium empty states ("Welcome back, Prince" / "Your Financial Brain is ready").
+- Ultra Response Engine: no fake phases, "Oracle is responding…" + pulsing cursor, <800ms first token, sticky input, smart auto-scroll, smooth no-jump layout.
+- Brand identity: Prince Singh credited as Founder/Owner/Developer/Visionary across (a) instant client-side short-circuit, (b) permanent server-side system-prompt block, (c) UI footers in panel + empty state + input hint.
+- GST reliability: CBIC/GSTN-grounded, honest uncertainty, ₹/lakhs formatting.
+- Files: oracle-types.ts, oracle-human.ts, oracle-brand.ts, OracleEmptyState.tsx, OracleWorkspace.tsx, /api/oracle/chat/route.ts, updated OraclePanel.tsx, globals.css additions.
+
+---
+Task ID: Oracle-UI-Rebuild
+Agent: GSTPilot Frontend Architect
+Task: Rebuild GSTPilot Oracle UI as a full-screen, solid Obsidian Black workspace (Claude 70% / ChatGPT 20% / Perplexity 10%) — replacing the messy transparent overlay/popup.
+
+Work Log:
+- Read existing OracleWorkspace.tsx (706 lines, transparent fixed overlay with bg-background/80 + backdrop-blur), OraclePanel.tsx, oracle-types.ts, OracleEmptyState.tsx, AppContext.tsx, page.tsx, LeftNav.tsx, and globals.css to understand the architecture and existing logic.
+- Identified root cause of "background visible / text overlap": the Oracle workspace was rendered inside the dashboard's `div.relative.z-10` stacking context, so its `z-[100]` was trapped below the dashboard's CommandBar (`fixed z-40` sibling). Plus the overlay used `bg-background/80 backdrop-blur-xl` (transparency).
+- Rebuilt OracleWorkspace.tsx as a TRUE full-screen solid workspace:
+  • Renders via `createPortal(..., document.body)` with `mounted` guard to escape ALL ancestor stacking contexts (fixes CommandBar bleed + avoids SSR hydration mismatch).
+  • `fixed inset-0 z-[200]` with solid `style={{ background: '#050505' }}` — zero transparency, zero blur, zero dashboard bleed.
+  • 3-column flex layout filling the viewport:
+      - Column 0 (Rail): Home, Intelligence, Autopilot, Finance, Network, Settings, Oracle. Slim icon rail on mobile (w-14/16), expands to w-56 with labels on lg. Oracle item shows active state. Clicking any non-Oracle item calls onNavigate(view) + onClose().
+      - Column 1 (History): New Chat button + conversation list grouped by Today / Yesterday / Previous 7 Days / Older. Persistent on lg+, slide-over drawer on mobile (toggled via header MessageSquare button + dark backdrop).
+      - Column 2 (Chat): Header (avatar + "GSTPilot Oracle™" + "Ask anything. Run everything." subtitle + status pill + clear/close), messages scroll area, sticky input with suggested prompt chips.
+  • Implemented a multi-conversation localStorage store (`gstpilot-oracle-conversations-v2`) with auto-title from first user message, conversation switching, delete, and one-time migration from the legacy single-conversation key (`gstpilot-oracle-conversation-v1`).
+  • Applied exact Obsidian tokens via inline style: bg #050505, cards #111111, borders rgba(255,255,255,0.08), text primary white, text secondary white/70.
+  • Preserved ALL existing logic: streaming SSE parse, brand-question short-circuit, 4-layer memory payload, smart auto-scroll with pause-on-scroll-up, stop/abort, follow-up chip generation, emotion + language detection, dynamic avatar states, "Oracle is responding…" + blinking/pulsing cursor.
+- Updated OraclePanel.tsx to pass `onNavigate` prop through to OracleWorkspace.
+- Restyled OracleEmptyState.tsx for the Obsidian theme (#111111 cards, emerald accents, white/white-70 text).
+
+Validation:
+- `bunx tsc --noEmit` → no Oracle-related errors (only pre-existing errors in unrelated files).
+- `bun run lint` → clean (no errors).
+- Agent Browser end-to-end testing (signed up a test account, reached dashboard, opened Oracle):
+  • VLM confirmed: solid black background, ZERO dashboard bleed, NO transparency.
+  • VLM confirmed: NO CommandBar/search-bar chips overlapping the chat (portal fix worked).
+  • VLM confirmed: 3 columns present (rail + history + chat), premium feel.
+  • Sent "What is GST?" → real streamed AI response rendered, follow-up chips appeared, conversation auto-titled "What is GST?" and saved to Today group.
+  • New Chat → created fresh conversation, preserved previous one in history, showed empty state.
+  • Switched back to "What is GST?" conversation → full message content + follow-ups restored.
+  • Clicked Home in the rail → Oracle closed, returned to dashboard (navigation works).
+  • Mobile (390×844): slim icon rail, history as slide-over drawer (verified with VLM), no horizontal overflow, no broken layout.
+  • Console + page errors: clean after the mounted-guard fix (the initial "Target container is not a DOM element" hydration error was eliminated).
+- dev.log: clean, POST /api/oracle/chat 200, all compiles succeeded.
+
+Stage Summary:
+- Oracle is now a dedicated full-screen AI product workspace, not a chatbot widget/popup.
+- No overlay, no popup, no transparency, no background bleed, no text overlap.
+- Solid Obsidian Black (#050505) with #111111 cards and rgba(255,255,255,0.08) borders.
+- 3-column layout: left rail (7 items) + conversation history (New Chat / Today / Yesterday / Previous 7 Days / Older, with real multi-conversation persistence) + main chat (header / messages / sticky input / suggested prompts).
+- Portal-to-body + mounted guard is the key architectural fix that guarantees Oracle sits above every dashboard layer (including the CommandBar).
+- Fully mobile responsive (icon rail + drawer-based history).
+- All existing conversational logic preserved (streaming, memory, brand short-circuit, auto-scroll, follow-ups, emotion/language detection).
+- Files changed: src/components/oracle/OracleWorkspace.tsx (full rewrite), src/components/oracle/OraclePanel.tsx (onNavigate prop), src/components/oracle/OracleEmptyState.tsx (Obsidian theme).
+
+---
+Task ID: Oracle-Audit-Recovery
+Agent: GSTPilot Recovery Engineer
+Task: EMERGENCY RECOVERY — Forensic audit of why GSTPilot Oracle™ features "disappeared", then RESTORE all missing features WITHOUT redesign or rebuild.
+
+Work Log:
+- Read all Oracle files: OracleWorkspace.tsx (1259 lines), OraclePanel.tsx (455 lines), OracleEmptyState.tsx (138 lines), oracle-types.ts, oracle-human.ts, oracle-brand.ts, /api/oracle/chat/route.ts.
+- Read page.tsx (mounts OraclePanel inside `hidden w-[340px] xl:block` wrapper), AppContext.tsx (AppView union — NO 'oracle' view), LeftNav.tsx (6 items: Home/Intelligence/Autopilot/Finance/Network/Settings — NO Oracle entry), CommandBar.tsx (dispatches `gstpilot-ask`), providers.tsx (mounts OLD GSTPilotIntelligence globally), /intelligence/GSTPilotIntelligence.tsx (listens for `gstpilot-ask` → opens OLD palette → /api/intelligence).
+- Checked git: `git status` clean (no deletions), `git log -- oracle-memory.ts` empty (never tracked), `git ls-files --others` shows no untracked oracle files.
+- Searched for oracle-memory / MemoryPanel / OracleSidebar / OracleMemory references across src → ZERO matches.
+- Read dev.log: POST /api/oracle/chat returns 200 (streaming works), GET / 200, no errors.
+
+Forensic Findings (ROOT CAUSE):
+- NO files were deleted, renamed, or overwritten. git working tree is clean.
+- `oracle-memory.ts` was NEVER created (not in git, not referenced, not mentioned in the Oracle-Human-Experience worklog which lists exactly 7 files created). The "4-layer memory system" is INLINE: (a) memory payload built in OracleWorkspace.sendMessage() {userName, firmName, gstin, preferredLanguage, recentTopics}, (b) personalisation block in /api/oracle/chat buildSystemPrompt(). It is FULLY FUNCTIONAL — just not a separate file.
+- "Memory Panel" as a standalone UI component NEVER existed. The memory SYSTEM exists and persists (localStorage conversations + memory payload + system-prompt personalisation).
+- The actual regression is a ROUTING DISCONNECTION, not lost code:
+  * TWO competing "Oracle" systems exist:
+    1. NEW Oracle Workspace (src/components/oracle/) — full-screen 3-column, /api/oracle/chat, conversation history, localStorage, founder identity, 10 languages. ONLY reachable via right OraclePanel which is `hidden xl:block` → INVISIBLE on screens < 1280px.
+    2. OLD Intelligence Palette (src/components/intelligence/GSTPilotIntelligence.tsx) — floating palette, /api/intelligence, mounted GLOBALLY in providers.tsx, listens for `gstpilot-ask`.
+  * CommandBar placeholder says "Ask GSTPilot Oracle…" but dispatches `gstpilot-ask` → caught by the OLD palette, NOT the NEW Oracle workspace.
+  * Result: user types in CommandBar → OLD palette opens → user thinks the new Oracle (history, streaming, founder answers) "disappeared".
+  * LeftNav has NO Oracle entry. No always-visible launcher for the NEW Oracle on screens < xl.
+
+Feature-by-feature status (all 16):
+1.  Full-screen Oracle Workspace — EXISTS & intact (portal-to-body, z-[200], #050505)
+2.  Oracle launcher button — EXISTS but only on xl+ screens; CommandBar misroutes to old palette
+3.  Conversation History sidebar — EXISTS & intact (Today/Yesterday/Prev7/Older grouping)
+4.  Memory Panel — no standalone UI ever existed; 4-layer memory SYSTEM is inline & functional
+5.  Oracle routing and navigation — BROKEN (CommandBar→old palette; no always-visible launcher < xl)
+6.  LocalStorage chat persistence — EXISTS & intact (gstpilot-oracle-conversations-v2 + v1 migration)
+7.  Streaming response engine — EXISTS & intact (SSE)
+8.  "Oracle is responding…" indicator — EXISTS (RespondingIndicator)
+9.  Smart auto-scroll — EXISTS (userPinnedUpRef, pause-on-scroll-up)
+10. Sticky input bar — EXISTS
+11. Dynamic response length — EXISTS (system prompt ADAPTIVE ANSWERS section)
+12. Action chips — EXISTS (followUps + QUICK_PROMPTS)
+13. Oracle context engine — EXISTS (memory payload + personalisation in system prompt)
+14. 4-layer memory system — EXISTS inline (userName/firmName/gstin/preferredLanguage/recentTopics)
+15. Multilingual support — EXISTS (10 languages in oracle-human.ts)
+16. Founder identity — EXISTS (oracle-brand.ts + footers + system prompt block)
+
+Recovery Plan (minimal, non-redesign):
+- Wire CommandBar → NEW Oracle Workspace via a dedicated `oracle-ask` event (CommandBar is visible on ALL screens → restores launcher + routing everywhere).
+- OraclePanel listens for `oracle-ask` → opens workspace + passes initialPrompt.
+- OracleWorkspace accepts initialPrompt prop → auto-sends on open.
+- Do NOT touch: chat UI design, old intelligence palette module, LeftNav item count, any business module.
+- Verify all 16 features via Agent Browser.
+
+Stage Summary:
+- Root cause = routing disconnection (CommandBar→old palette), NOT lost/deleted code.
+- All 16 Oracle features still exist in src/components/oracle/ + /api/oracle/chat.
+- Recovery = 3 surgical edits (CommandBar event name, OraclePanel listener+initialPrompt, OracleWorkspace initialPrompt prop). No redesign.
+
+Recovery Implementation (3 surgical edits, zero redesign):
+- src/components/layout/CommandBar.tsx: Changed dispatched event from `gstpilot-ask` → `oracle-ask` so the CommandBar (visible on ALL screen sizes) opens the NEW full-screen Oracle workspace instead of the legacy intelligence palette. Updated comment. (1 logic line + 2 comment lines.)
+- src/components/oracle/OraclePanel.tsx: Added a `useEffect` that listens for `oracle-ask` custom events → sets pendingPrompt + opens the workspace. Added `pendingPrompt` state. Passed `initialPrompt={pendingPrompt}` to OracleWorkspace. Cleared pendingPrompt on close. OraclePanel mounts on ALL screens (its wrapper is `hidden xl:block` but the component still renders + listens), so the launcher now works below xl too.
+- src/components/oracle/OracleWorkspace.tsx: Added optional `initialPrompt?: string` prop + an auto-send effect (guarded by `initialPromptSentRef` so a given prompt fires exactly once, deferred 60ms so the conversation-load effect settles first). No chat UI touched.
+
+Verification (Agent Browser, authenticated, viewport 1024×768 = sub-xl to prove the fix):
+- Dashboard renders at 1024×768 with right OraclePanel correctly hidden (xl: 1280px gate) — confirms the regression: previously NO Oracle launcher existed below xl.
+- Typed "What is GST?" in the CommandBar ("Ask GSTPilot Oracle…") → NEW full-screen Oracle workspace opened via portal (document.body child: `fixed inset-0 z-[200]` bg `rgb(5,5,5)`). Solid #050505, zero dashboard bleed, 3 columns present.
+- Auto-send worked: "What is GST?" sent immediately, Oracle replied with streamed answer "Good question, Oracle. GST, or Goods and Services Tax, is a comprehensive indirect tax system..." — memory personalisation confirmed (addressed user "Oracle" by first name from userName "Oracle Test").
+- 3-column layout verified via DOM: Rail (Home/Intelligence/Autopilot/Finance/Network/Settings/Oracle + "The Financial Brain of India" footer) + History (New Chat / TODAY / "What is GST?") + Chat (GSTPilot Oracle™ header / "Ask anything. Run everything." / Ready status / streamed message with 🙂 emotion / multilingual follow-up chips "ITC claim कैसे करें?" / sticky input with QUICK_PROMPTS / "Founded by Prince Singh" hint).
+- Refreshed the page → localStorage `gstpilot-oracle-conversations-v2` still holds the full conversation (title "What is GST?", streamed content, followUps, activeId). Reopened Oracle → history sidebar shows "What is GST?" under TODAY → conversation restored with full content. PERSISTENCE CONFIRMED.
+- Founder-identity short-circuit: typed "who is prince singh" in CommandBar → Oracle opened + INSTANT canonical answer (client-side, no API round-trip): "GSTPilot Infinity™ was founded, developed, and is owned by Prince Singh — the visionary behind the platform. Prince Singh is the Founder, Owner, Developer, and Visionary of GSTPilot Oracle™..." with ✅ emotion + follow-ups.
+- Rail navigation: clicked "Home" in the workspace rail → workspace closed → dashboard visible. ROUTING CONFIRMED.
+- Console errors: ZERO (only the expected Firestore-offline warning, which is an environment limitation, not an Oracle issue).
+- Lint: clean (`bun run lint` → no errors). Dev.log: clean compiles, POST /api/oracle/chat 200.
+
+Stage Summary:
+- ROOT CAUSE was a ROUTING DISCONNECTION, not lost/deleted code. No files were deleted, renamed, or overwritten (git working tree clean).
+- All 16 Oracle features were ALREADY present in src/components/oracle/ + /api/oracle/chat — they were simply unreachable on screens < 1280px because the only launcher (right OraclePanel) was `hidden xl:block`, and the CommandBar misrouted to the legacy intelligence palette via `gstpilot-ask`.
+- Recovery = 3 surgical edits reconnecting the CommandBar → OraclePanel → OracleWorkspace (new `oracle-ask` event + initialPrompt auto-send). Zero UI redesign, zero business modules removed, zero file overwrites.
+- Oracle is now reachable and fully functional on EVERY screen size via the CommandBar. The legacy intelligence palette module is untouched (keeps its own floating launcher + `gstpilot-ask` listener for the Mission Control home).
+- Screenshots: /tmp/oracle-recovered-1.png (What is GST? streamed answer), /tmp/oracle-recovered-2.png (Explain ITC rules).

@@ -1,0 +1,1306 @@
+     1→@import "tailwindcss";
+     2→@import "tw-animate-css";
+     3→
+     4→@custom-variant dark (&:is(.dark *));
+     5→
+     6→@theme inline {
+     7→  --color-background: var(--background);
+     8→  --color-foreground: var(--foreground);
+     9→  --font-sans: var(--font-geist-sans);
+    10→  --font-mono: var(--font-geist-mono);
+    11→  --color-sidebar-ring: var(--sidebar-ring);
+    12→  --color-sidebar-border: var(--sidebar-border);
+    13→  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+    14→  --color-sidebar-accent: var(--sidebar-accent);
+    15→  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+    16→  --color-sidebar-primary: var(--sidebar-primary);
+    17→  --color-sidebar-foreground: var(--sidebar-foreground);
+    18→  --color-sidebar: var(--sidebar);
+    19→  --color-chart-5: var(--chart-5);
+    20→  --color-chart-4: var(--chart-4);
+    21→  --color-chart-3: var(--chart-3);
+    22→  --color-chart-2: var(--chart-2);
+    23→  --color-chart-1: var(--chart-1);
+    24→  --color-ring: var(--ring);
+    25→  --color-input: var(--input);
+    26→  --color-border: var(--border);
+    27→  --color-destructive: var(--destructive);
+    28→  --color-accent-foreground: var(--accent-foreground);
+    29→  --color-accent: var(--accent);
+    30→  --color-muted-foreground: var(--muted-foreground);
+    31→  --color-muted: var(--muted);
+    32→  --color-secondary-foreground: var(--secondary-foreground);
+    33→  --color-secondary: var(--secondary);
+    34→  --color-primary-foreground: var(--primary-foreground);
+    35→  --color-primary: var(--primary);
+    36→  --color-popover-foreground: var(--popover-foreground);
+    37→  --color-popover: var(--popover);
+    38→  --color-card-foreground: var(--card-foreground);
+    39→  --color-card: var(--card);
+    40→  --radius-sm: calc(var(--radius) - 4px);
+    41→  --radius-md: calc(var(--radius) - 2px);
+    42→  --radius-lg: var(--radius);
+    43→  --radius-xl: calc(var(--radius) + 4px);
+    44→}
+    45→
+    46→:root {
+    47→  --radius: 0.625rem;
+    48→  --background: oklch(1 0 0);
+    49→  --foreground: oklch(0.145 0 0);
+    50→  --card: oklch(1 0 0);
+    51→  --card-foreground: oklch(0.145 0 0);
+    52→  --popover: oklch(1 0 0);
+    53→  --popover-foreground: oklch(0.145 0 0);
+    54→  --primary: oklch(0.205 0 0);
+    55→  --primary-foreground: oklch(0.985 0 0);
+    56→  --secondary: oklch(0.97 0 0);
+    57→  --secondary-foreground: oklch(0.205 0 0);
+    58→  --muted: oklch(0.97 0 0);
+    59→  --muted-foreground: oklch(0.556 0 0);
+    60→  --accent: oklch(0.97 0 0);
+    61→  --accent-foreground: oklch(0.205 0 0);
+    62→  --destructive: oklch(0.577 0.245 27.325);
+    63→  --border: oklch(0.922 0 0);
+    64→  --input: oklch(0.922 0 0);
+    65→  --ring: oklch(0.708 0 0);
+    66→  --chart-1: oklch(0.646 0.222 41.116);
+    67→  --chart-2: oklch(0.6 0.118 184.704);
+    68→  --chart-3: oklch(0.398 0.07 227.392);
+    69→  --chart-4: oklch(0.828 0.189 84.429);
+    70→  --chart-5: oklch(0.769 0.188 70.08);
+    71→  --sidebar: oklch(0.985 0 0);
+    72→  --sidebar-foreground: oklch(0.145 0 0);
+    73→  --sidebar-primary: oklch(0.205 0 0);
+    74→  --sidebar-primary-foreground: oklch(0.985 0 0);
+    75→  --sidebar-accent: oklch(0.97 0 0);
+    76→  --sidebar-accent-foreground: oklch(0.205 0 0);
+    77→  --sidebar-border: oklch(0.922 0 0);
+    78→  --sidebar-ring: oklch(0.708 0 0);
+    79→}
+    80→
+    81→.dark {
+    82→  /* ══ Obsidian Black 2.0 — V16 Billion Dollar Series ══
+    83→     #050505 canvas, deeper than V15. Glass at 0.04, blur 28px, radius 28px.
+    84→     Apple Vision Pro / Perplexity / Stripe / Linear reference. */
+    85→  --background: #050505;
+    86→  --foreground: oklch(0.985 0 0);
+    87→  --card: rgba(255, 255, 255, 0.04);
+    88→  --card-foreground: oklch(0.985 0 0);
+    89→  --popover: rgba(12, 12, 14, 0.94);
+    90→  --popover-foreground: oklch(0.985 0 0);
+    91→  --primary: oklch(0.985 0 0);
+    92→  --primary-foreground: #050505;
+    93→  --secondary: rgba(255, 255, 255, 0.05);
+    94→  --secondary-foreground: oklch(0.985 0 0);
+    95→  --muted: rgba(255, 255, 255, 0.04);
+    96→  --muted-foreground: oklch(0.68 0 0);
+    97→  --accent: rgba(255, 255, 255, 0.07);
+    98→  --accent-foreground: oklch(0.985 0 0);
+    99→  --destructive: oklch(0.704 0.191 22.216);
+   100→  --border: rgba(255, 255, 255, 0.08);
+   101→  --input: rgba(255, 255, 255, 0.08);
+   102→  --ring: rgba(16, 185, 129, 0.5);
+   103→  --chart-1: oklch(0.74 0.18 162);     /* emerald */
+   104→  --chart-2: oklch(0.78 0.14 196);     /* cyan */
+   105→  --chart-3: oklch(0.7 0.16 250);      /* blue */
+   106→  --chart-4: oklch(0.769 0.188 70.08);
+   107→  --chart-5: oklch(0.645 0.246 16.439);
+   108→  --sidebar: rgba(255, 255, 255, 0.015);
+   109→  --sidebar-foreground: oklch(0.985 0 0);
+   110→  --sidebar-primary: oklch(0.74 0.18 162);
+   111→  --sidebar-primary-foreground: #050505;
+   112→  --sidebar-accent: rgba(255, 255, 255, 0.05);
+   113→  --sidebar-accent-foreground: oklch(0.985 0 0);
+   114→  --sidebar-border: rgba(255, 255, 255, 0.05);
+   115→  --sidebar-ring: rgba(16, 185, 129, 0.5);
+   116→}
+   117→
+   118→@layer base {
+   119→  * {
+   120→    @apply border-border outline-ring/50;
+   121→  }
+   122→  body {
+   123→    @apply bg-background text-foreground;
+   124→    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+   125→    -webkit-font-smoothing: antialiased;
+   126→    -moz-osx-font-smoothing: grayscale;
+   127→  }
+   128→  html {
+   129→    scroll-behavior: smooth;
+   130→  }
+   131→
+   132→  /* Obsidian Black 2.0 — deeper frosted glass at 28px blur */
+   133→  .dark [data-slot="card"],
+   134→  .dark .bg-card {
+   135→    backdrop-filter: blur(28px) saturate(140%);
+   136→    -webkit-backdrop-filter: blur(28px) saturate(140%);
+   137→  }
+   138→
+   139→  /* Premium scrollbar */
+   140→  ::-webkit-scrollbar {
+   141→    width: 8px;
+   142→    height: 8px;
+   143→  }
+   144→  ::-webkit-scrollbar-track {
+   145→    background: transparent;
+   146→  }
+   147→  .dark ::-webkit-scrollbar-thumb {
+   148→    background: rgba(255, 255, 255, 0.08);
+   149→    border-radius: 4px;
+   150→  }
+   151→  .dark ::-webkit-scrollbar-thumb:hover {
+   152→    background: rgba(255, 255, 255, 0.16);
+   153→  }
+   154→}
+   155→
+   156→/* Custom scrollbar for landing page */
+   157→@layer utilities {
+   158→  /* ── Trillion Dollar Design System utilities ─────────────────────────── */
+   159→
+   160→  /* ══ Obsidian Black 2.0 glass — V16 ══
+   161→     0.04 opacity, 28px blur, 28px radius. Very soft. No bright colors. */
+   162→  .glass-surface {
+   163→    background: rgba(255, 255, 255, 0.04);
+   164→    backdrop-filter: blur(28px) saturate(140%);
+   165→    -webkit-backdrop-filter: blur(28px) saturate(140%);
+   166→    border: 1px solid rgba(255, 255, 255, 0.08);
+   167→  }
+   168→  .glass-surface-strong {
+   169→    background: rgba(255, 255, 255, 0.06);
+   170→    backdrop-filter: blur(32px) saturate(160%);
+   171→    -webkit-backdrop-filter: blur(32px) saturate(160%);
+   172→    border: 1px solid rgba(255, 255, 255, 0.1);
+   173→  }
+   174→  /* Premium 28px radius utility (V16 spec) */
+   175→  .radius-premium {
+   176→    border-radius: 28px;
+   177→  }
+   178→  /* Soft glow shadow — very subtle, no aggressive neon */
+   179→  .shadow-premium {
+   180→    box-shadow: 0 4px 24px -8px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.03);
+   181→  }
+   182→  .shadow-glow-accent {
+   183→    box-shadow: 0 0 0 1px rgba(16, 185, 129, 0.2), 0 8px 32px -8px rgba(6, 182, 212, 0.15);
+   184→  }
+   185→
+   186→  /* The one accent gradient: Emerald → Cyan → Blue */
+   187→  .accent-gradient {
+   188→    background-image: linear-gradient(135deg, #10b981 0%, #06b6d4 50%, #3b82f6 100%);
+   189→  }
+   190→  .accent-gradient-soft {
+   191→    background-image: linear-gradient(135deg, rgba(16, 185, 129, 0.15) 0%, rgba(6, 182, 212, 0.12) 50%, rgba(59, 130, 246, 0.1) 100%);
+   192→  }
+   193→  .accent-text {
+   194→    background-image: linear-gradient(135deg, #10b981 0%, #06b6d4 50%, #3b82f6 100%);
+   195→    -webkit-background-clip: text;
+   196→    background-clip: text;
+   197→    color: transparent;
+   198→  }
+   199→  .accent-ring {
+   200→    box-shadow: 0 0 0 1px rgba(16, 185, 129, 0.3), 0 0 24px -4px rgba(6, 182, 212, 0.25);
+   201→  }
+   202→
+   203→  /* V16 micro-animations: hover 1.02 scale, 200-300ms */
+   204→  .hover-lift {
+   205→    transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+   206→  }
+   207→  .hover-lift:hover {
+   208→    transform: scale(1.02);
+   209→  }
+   210→
+   211→  /* Oracle — slow breathing pulse for avatar halo / empty-state orb */
+   212→  @keyframes oracle-pulse {
+   213→    0%, 100% { opacity: 0.5; transform: scale(1); }
+   214→    50% { opacity: 0.85; transform: scale(1.08); }
+   215→  }
+   216→  .motion-pulse {
+   217→    animation: oracle-pulse 2.6s ease-in-out infinite;
+   218→  }
+   219→
+   220→  /* Oracle — markdown prose styling for chat bubbles (Claude/Perplexity feel) */
+   221→  .oracle-prose {
+   222→    font-size: 0.9rem;
+   223→    line-height: 1.65;
+   224→    word-break: break-word;
+   225→  }
+   226→  .oracle-prose > *:first-child { margin-top: 0; }
+   227→  .oracle-prose > *:last-child { margin-bottom: 0; }
+   228→  .oracle-prose p { margin: 0 0 0.7rem; }
+   229→  .oracle-prose p:last-child { margin-bottom: 0; }
+   230→  .oracle-prose h1, .oracle-prose h2, .oracle-prose h3, .oracle-prose h4 {
+   231→    font-weight: 600;
+   232→    color: rgb(244 244 245);
+   233→    margin: 1.1rem 0 0.5rem;
+   234→    line-height: 1.35;
+   235→  }
+   236→  .oracle-prose h1 { font-size: 1.05rem; }
+   237→  .oracle-prose h2 { font-size: 1rem; }
+   238→  .oracle-prose h3 { font-size: 0.95rem; }
+   239→  .oracle-prose h4 { font-size: 0.9rem; }
+   240→  .oracle-prose ul, .oracle-prose ol {
+   241→    margin: 0 0 0.7rem;
+   242→    padding-left: 1.25rem;
+   243→  }
+   244→  .oracle-prose li { margin: 0.2rem 0; }
+   245→  .oracle-prose ul li { list-style: disc; }
+   246→  .oracle-prose ol li { list-style: decimal; }
+   247→  .oracle-prose strong { font-weight: 600; color: rgb(244 244 245); }
+   248→  .oracle-prose em { font-style: italic; color: rgb(228 228 231); }
+   249→  .oracle-prose code {
+   250→    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+   251→    font-size: 0.82em;
+   252→    background: rgba(255, 255, 255, 0.08);
+   253→    padding: 0.1rem 0.32rem;
+   254→    border-radius: 0.3rem;
+   255→    color: rgb(234 234 234);
+   256→  }
+   257→  .oracle-prose pre {
+   258→    margin: 0 0 0.7rem;
+   259→    padding: 0.75rem 0.9rem;
+   260→    background: rgba(0, 0, 0, 0.35);
+   261→    border: 1px solid rgba(255, 255, 255, 0.06);
+   262→    border-radius: 0.6rem;
+   263→    overflow-x: auto;
+   264→  }
+   265→  .oracle-prose pre code {
+   266→    background: transparent;
+   267→    padding: 0;
+   268→    font-size: 0.8em;
+   269→  }
+   270→  .oracle-prose blockquote {
+   271→    margin: 0 0 0.7rem;
+   272→    padding: 0.3rem 0 0.3rem 0.9rem;
+   273→    border-left: 2px solid rgba(16, 185, 129, 0.5);
+   274→    color: rgb(212 212 216);
+   275→  }
+   276→  .oracle-prose a { color: rgb(45 212 191); text-decoration: underline; text-underline-offset: 2px; }
+   277→  .oracle-prose hr { margin: 1rem 0; border: 0; border-top: 1px solid rgba(255, 255, 255, 0.08); }
+   278→  .oracle-prose table { width: 100%; border-collapse: collapse; margin: 0 0 0.7rem; font-size: 0.85em; }
+   279→  .oracle-prose th, .oracle-prose td { border: 1px solid rgba(255,255,255,0.08); padding: 0.4rem 0.6rem; text-align: left; }
+   280→  .oracle-prose th { background: rgba(255,255,255,0.04); font-weight: 600; }
+   281→
+   282→  /* V16 search glow border on focus */
+   283→  .search-glow {
+   284→    transition: box-shadow 0.3s ease, border-color 0.3s ease;
+   285→  }
+   286→  .search-glow:focus-within {
+   287→    border-color: rgba(16, 185, 129, 0.35);
+   288→    box-shadow: 0 0 0 1px rgba(16, 185, 129, 0.2), 0 0 32px -4px rgba(6, 182, 212, 0.2);
+   289→  }
+   290→
+   291→  /* V16 typing cursor animation for AI responses */
+   292→  .typing-cursor::after {
+   293→    content: '▋';
+   294→    display: inline-block;
+   295→    margin-left: 2px;
+   296→    animation: blink-cursor 1s step-end infinite;
+   297→    color: #10b981;
+   298→  }
+   299→  @keyframes blink-cursor {
+   300→    0%, 50% { opacity: 1; }
+   301→    51%, 100% { opacity: 0; }
+   302→  }
+   303→
+   304→  /* V16 aurora background animation */
+   305→  @keyframes aurora-drift {
+   306→    0%, 100% { transform: translate(0, 0) rotate(0deg) scale(1); }
+   307→    33% { transform: translate(3%, -2%) rotate(2deg) scale(1.05); }
+   308→    66% { transform: translate(-2%, 3%) rotate(-1deg) scale(0.98); }
+   309→  }
+   310→  .aurora-blob {
+   311→    animation: aurora-drift 30s ease-in-out infinite;
+   312→  }
+   313→
+   314→  /* V16 slow breathing glow */
+   315→  @keyframes breathe-glow {
+   316→    0%, 100% { opacity: 0.3; transform: scale(1); }
+   317→    50% { opacity: 0.5; transform: scale(1.08); }
+   318→  }
+   319→  .breathe-glow {
+   320→    animation: breathe-glow 8s ease-in-out infinite;
+   321→  }
+   322→
+   323→  /* V16 financial network line pulse */
+   324→  @keyframes network-pulse {
+   325→    0%, 100% { opacity: 0.15; }
+   326→    50% { opacity: 0.4; }
+   327→  }
+   328→  .network-line {
+   329→    animation: network-pulse 6s ease-in-out infinite;
+   330→  }
+   331→
+   332→  /* Section rhythm: 32–48px between sections */
+   333→  .section-gap {
+   334→    margin-top: 2.5rem;
+   335→  }
+   336→  @media (min-width: 768px) {
+   337→    .section-gap {
+   338→      margin-top: 3rem;
+   339→    }
+   340→  }
+   341→
+   342→  .scrollbar-thin {
+   343→    scrollbar-width: thin;
+   344→    scrollbar-color: rgba(255, 255, 255, 0.12) transparent;
+   345→  }
+   346→  .scrollbar-thin::-webkit-scrollbar {
+   347→    width: 6px;
+   348→  }
+   349→  .scrollbar-thin::-webkit-scrollbar-track {
+   350→    background: transparent;
+   351→  }
+   352→  .dark .scrollbar-thin::-webkit-scrollbar-thumb {
+   353→    background-color: rgba(255, 255, 255, 0.12);
+   354→    border-radius: 3px;
+   355→  }
+   356→  .dark .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+   357→    background-color: rgba(255, 255, 255, 0.22);
+   358→  }
+   359→
+   360→  .custom-scrollbar {
+   361→    scrollbar-width: thin;
+   362→    scrollbar-color: rgba(16, 185, 129, 0.4) transparent;
+   363→  }
+   364→  .custom-scrollbar::-webkit-scrollbar {
+   365→    width: 6px;
+   366→    height: 6px;
+   367→  }
+   368→  .custom-scrollbar::-webkit-scrollbar-track {
+   369→    background: transparent;
+   370→  }
+   371→  .custom-scrollbar::-webkit-scrollbar-thumb {
+   372→    background: linear-gradient(180deg, #10b981, #06b6d4);
+   373→    border-radius: 3px;
+   374→  }
+   375→  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+   376→    background: linear-gradient(180deg, #059669, #0891b2);
+   377→  }
+   378→}
+   379→
+   380→/* ════════════════════════════════════════════════════════════════════════
+   381→   GLOBAL DARK CASCADE  (unlayered → always wins over Tailwind utilities)
+   382→   Neutralizes hardcoded light-mode utilities across ALL components so the
+   383→   entire SaaS renders dark. Business logic is untouched — this is a pure
+   384→   styling/theming layer. Buttons & links are excluded to preserve the
+   385→   intentional white-CTA-with-black-text pattern.
+   386→   ════════════════════════════════════════════════════════════════════════ */
+   387→
+   388→/* ── HARD DARK BASELINE ── force the root to pure black ── */
+   389→html,
+   390→body,
+   391→#root,
+   392→#__next {
+   393→  background-color: #000000 !important;
+   394→  color: #ffffff;
+   395→  min-height: 100vh;
+   396→}
+   397→html {
+   398→  color-scheme: dark;
+   399→}
+   400→
+   401→/* Chrome autofill — keep inputs dark with white text */
+   402→input:-webkit-autofill,
+   403→input:-webkit-autofill:hover,
+   404→input:-webkit-autofill:focus,
+   405→textarea:-webkit-autofill,
+   406→textarea:-webkit-autofill:focus,
+   407→select:-webkit-autofill {
+   408→  -webkit-text-fill-color: #ffffff !important;
+   409→  -webkit-box-shadow: 0 0 0px 1000px rgba(255, 255, 255, 0.04) inset !important;
+   410→  caret-color: #ffffff;
+   411→  transition: background-color 9999s ease-in-out 0s;
+   412→}
+   413→
+   414→/* ── CONTAINER BACKGROUNDS: light → #0a0a0a (buttons/links excluded) ── */
+   415→.dark .bg-white:not(button):not(a):not([role="button"]):not([role="link"]):not(summary):not(.keep-white) {
+   416→  background-color: #0a0a0a !important;
+   417→}
+   418→.dark .bg-gray-50:not(button):not(a):not([role="button"]):not(summary),
+   419→.dark .bg-gray-100:not(button):not(a):not([role="button"]):not(summary),
+   420→.dark .bg-gray-200:not(button):not(a):not([role="button"]):not(summary),
+   421→.dark .bg-gray-300:not(button):not(a):not([role="button"]):not(summary),
+   422→.dark .bg-slate-50:not(button):not(a):not([role="button"]):not(summary),
+   423→.dark .bg-slate-100:not(button):not(a):not([role="button"]):not(summary),
+   424→.dark .bg-slate-200:not(button):not(a):not([role="button"]):not(summary),
+   425→.dark .bg-zinc-50:not(button):not(a):not([role="button"]):not(summary),
+   426→.dark .bg-zinc-100:not(button):not(a):not([role="button"]):not(summary),
+   427→.dark .bg-neutral-50:not(button):not(a):not([role="button"]):not(summary),
+   428→.dark .bg-neutral-100:not(button):not(a):not([role="button"]):not(summary) {
+   429→  background-color: #0a0a0a !important;
+   430→}
+   431→
+   432→/* Hover variants of light backgrounds → glass hover (non-buttons) */
+   433→.dark .hover\:bg-gray-50:hover:not(button):not(a):not([role="button"]):not(summary),
+   434→.dark .hover\:bg-gray-100:hover:not(button):not(a):not([role="button"]):not(summary),
+   435→.dark .hover\:bg-slate-50:hover:not(button):not(a):not([role="button"]):not(summary),
+   436→.dark .hover\:bg-slate-100:hover:not(button):not(a):not([role="button"]):not(summary),
+   437→.dark .hover\:bg-zinc-50:hover:not(button):not(a):not([role="button"]):not(summary),
+   438→.dark .hover\:bg-zinc-100:hover:not(button):not(a):not([role="button"]):not(summary) {
+   439→  background-color: rgba(255, 255, 255, 0.05) !important;
+   440→}
+   441→
+   442→/* ── CONTAINER TEXT: dark → white (buttons/links excluded) ── */
+   443→.dark .text-black:not(button):not(a):not([role="button"]):not([role="link"]):not(summary):not(.keep-black),
+   444→.dark .text-gray-900:not(button):not(a):not([role="button"]):not(summary),
+   445→.dark .text-gray-800:not(button):not(a):not([role="button"]):not(summary),
+   446→.dark .text-gray-700:not(button):not(a):not([role="button"]):not(summary),
+   447→.dark .text-slate-900:not(button):not(a):not([role="button"]):not(summary),
+   448→.dark .text-slate-800:not(button):not(a):not([role="button"]):not(summary),
+   449→.dark .text-slate-700:not(button):not(a):not([role="button"]):not(summary),
+   450→.dark .text-zinc-900:not(button):not(a):not([role="button"]):not(summary),
+   451→.dark .text-zinc-800:not(button):not(a):not([role="button"]):not(summary),
+   452→.dark .text-neutral-900:not(button):not(a):not([role="button"]):not(summary),
+   453→.dark .text-neutral-800:not(button):not(a):not([role="button"]):not(summary) {
+   454→  color: #ffffff !important;
+   455→}
+   456→
+   457→/* Muted gray text → readable secondary */
+   458→.dark .text-gray-600:not(button):not(a):not([role="button"]):not(summary),
+   459→.dark .text-gray-500:not(button):not(a):not([role="button"]):not(summary),
+   460→.dark .text-slate-600:not(button):not(a):not([role="button"]):not(summary),
+   461→.dark .text-slate-500:not(button):not(a):not([role="button"]):not(summary),
+   462→.dark .text-zinc-600:not(button):not(a):not([role="button"]):not(summary),
+   463→.dark .text-zinc-500:not(button):not(a):not([role="button"]):not(summary) {
+   464→  color: rgba(255, 255, 255, 0.60) !important;
+   465→}
+   466→.dark .text-gray-400:not(button):not(a):not([role="button"]):not(summary),
+   467→.dark .text-slate-400:not(button):not(a):not([role="button"]):not(summary),
+   468→.dark .text-zinc-400:not(button):not(a):not([role="button"]):not(summary) {
+   469→  color: rgba(255, 255, 255, 0.45) !important;
+   470→}
+   471→
+   472→/* ── BORDERS: light gray → translucent white ── */
+   473→.dark .border-gray-100,
+   474→.dark .border-gray-200,
+   475→.dark .border-gray-300,
+   476→.dark .border-slate-100,
+   477→.dark .border-slate-200,
+   478→.dark .border-slate-300,
+   479→.dark .border-zinc-100,
+   480→.dark .border-zinc-200,
+   481→.dark .border-zinc-300,
+   482→.dark .border-neutral-200,
+   483→.dark .border-neutral-300 {
+   484→  border-color: rgba(255, 255, 255, 0.08) !important;
+   485→}
+   486→
+   487→/* Divide & ring light variants */
+   488→.dark .divide-gray-100 > * + *,
+   489→.dark .divide-gray-200 > * + *,
+   490→.dark .divide-slate-200 > * + * {
+   491→  border-color: rgba(255, 255, 255, 0.06) !important;
+   492→}
+   493→.dark .ring-gray-200,
+   494→.dark .ring-slate-200 {
+   495→  --tw-ring-color: rgba(255, 255, 255, 0.08) !important;
+   496→}
+   497→
+   498→/* ── BRAND TINTS: light emerald/blue/cyan backgrounds → glass ── */
+   499→.dark .bg-emerald-50:not(button):not(a):not(summary),
+   500→.dark .bg-emerald-100:not(button):not(a):not(summary),
+   501→.dark .bg-emerald-200:not(button):not(a):not(summary),
+   502→.dark .bg-green-50:not(button):not(a):not(summary),
+   503→.dark .bg-green-100:not(button):not(a):not(summary),
+   504→.dark .bg-blue-50:not(button):not(a):not(summary),
+   505→.dark .bg-blue-100:not(button):not(a):not(summary),
+   506→.dark .bg-cyan-50:not(button):not(a):not(summary),
+   507→.dark .bg-cyan-100:not(button):not(a):not(summary),
+   508→.dark .bg-teal-50:not(button):not(a):not(summary),
+   509→.dark .bg-teal-100:not(button):not(a):not(summary),
+   510→.dark .bg-indigo-50:not(button):not(a):not(summary),
+   511→.dark .bg-indigo-100:not(button):not(a):not(summary),
+   512→.dark .bg-violet-50:not(button):not(a):not(summary),
+   513→.dark .bg-violet-100:not(button):not(a):not(summary),
+   514→.dark .bg-purple-50:not(button):not(a):not(summary),
+   515→.dark .bg-purple-100:not(button):not(a):not(summary) {
+   516→  background-color: rgba(255, 255, 255, 0.06) !important;
+   517→}
+   518→
+   519→/* Dark brand text (700/800/900) → white */
+   520→.dark .text-emerald-700:not(button):not(a):not(summary),
+   521→.dark .text-emerald-800:not(button):not(a):not(summary),
+   522→.dark .text-emerald-900:not(button):not(a):not(summary),
+   523→.dark .text-green-700:not(button):not(a):not(summary),
+   524→.dark .text-green-800:not(button):not(a):not(summary),
+   525→.dark .text-green-900:not(button):not(a):not(summary),
+   526→.dark .text-blue-700:not(button):not(a):not(summary),
+   527→.dark .text-blue-800:not(button):not(a):not(summary),
+   528→.dark .text-blue-900:not(button):not(a):not(summary),
+   529→.dark .text-cyan-700:not(button):not(a):not(summary),
+   530→.dark .text-cyan-800:not(button):not(a):not(summary),
+   531→.dark .text-indigo-700:not(button):not(a):not(summary),
+   532→.dark .text-indigo-800:not(button):not(a):not(summary),
+   533→.dark .text-violet-700:not(button):not(a):not(summary),
+   534→.dark .text-violet-800:not(button):not(a):not(summary),
+   535→.dark .text-purple-700:not(button):not(a):not(summary),
+   536→.dark .text-purple-800:not(button):not(a):not(summary) {
+   537→  color: #ffffff !important;
+   538→}
+   539→
+   540→/* Brand borders → translucent white */
+   541→.dark .border-emerald-100,
+   542→.dark .border-emerald-200,
+   543→.dark .border-green-100,
+   544→.dark .border-green-200,
+   545→.dark .border-blue-100,
+   546→.dark .border-blue-200,
+   547→.dark .border-cyan-100,
+   548→.dark .border-cyan-200,
+   549→.dark .border-indigo-100,
+   550→.dark .border-indigo-200,
+   551→.dark .border-violet-100,
+   552→.dark .border-violet-200,
+   553→.dark .border-purple-100,
+   554→.dark .border-purple-200 {
+   555→  border-color: rgba(255, 255, 255, 0.08) !important;
+   556→}
+   557→
+   558→/* ── STATUS COLORS: keep semantic but darken for dark bg ── */
+   559→/* Red (errors) */
+   560→.dark .bg-red-50:not(button):not(a):not(summary),
+   561→.dark .bg-red-100:not(button):not(a):not(summary),
+   562→.dark .bg-rose-50:not(button):not(a):not(summary),
+   563→.dark .bg-rose-100:not(button):not(a):not(summary) {
+   564→  background-color: rgba(239, 68, 68, 0.10) !important;
+   565→}
+   566→.dark .text-red-700:not(button):not(a):not(summary),
+   567→.dark .text-red-800:not(button):not(a):not(summary),
+   568→.dark .text-red-900:not(button):not(a):not(summary),
+   569→.dark .text-rose-700:not(button):not(a):not(summary),
+   570→.dark .text-rose-800:not(button):not(a):not(summary) {
+   571→  color: #fca5a5 !important;
+   572→}
+   573→.dark .border-red-100,
+   574→.dark .border-red-200,
+   575→.dark .border-rose-100,
+   576→.dark .border-rose-200 {
+   577→  border-color: rgba(239, 68, 68, 0.25) !important;
+   578→}
+   579→
+   580→/* Amber (warnings / deadlines) */
+   581→.dark .bg-amber-50:not(button):not(a):not(summary),
+   582→.dark .bg-amber-100:not(button):not(a):not(summary),
+   583→.dark .bg-yellow-50:not(button):not(a):not(summary),
+   584→.dark .bg-yellow-100:not(button):not(a):not(summary) {
+   585→  background-color: rgba(245, 158, 11, 0.10) !important;
+   586→}
+   587→.dark .text-amber-600:not(button):not(a):not(summary),
+   588→.dark .text-amber-700:not(button):not(a):not(summary),
+   589→.dark .text-amber-800:not(button):not(a):not(summary),
+   590→.dark .text-amber-900:not(button):not(a):not(summary),
+   591→.dark .text-yellow-600:not(button):not(a):not(summary),
+   592→.dark .text-yellow-700:not(button):not(a):not(summary),
+   593→.dark .text-yellow-800:not(button):not(a):not(summary) {
+   594→  color: #fcd34d !important;
+   595→}
+   596→.dark .border-amber-100,
+   597→.dark .border-amber-200,
+   598→.dark .border-yellow-100,
+   599→.dark .border-yellow-200 {
+   600→  border-color: rgba(245, 158, 11, 0.25) !important;
+   601→}
+   602→
+   603→/* Orange */
+   604→.dark .bg-orange-50:not(button):not(a):not(summary),
+   605→.dark .bg-orange-100:not(button):not(a):not(summary) {
+   606→  background-color: rgba(249, 115, 22, 0.10) !important;
+   607→}
+   608→.dark .text-orange-700:not(button):not(a):not(summary),
+   609→.dark .text-orange-800:not(button):not(a):not(summary),
+   610→.dark .text-orange-900:not(button):not(a):not(summary) {
+   611→  color: #fdba74 !important;
+   612→}
+   613→
+   614→/* ── Remove brand-colored shadows (keep them subtle/monochrome) ── */
+   615→.dark .shadow-sm { box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.4) !important; }
+   616→.dark .shadow { box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.45), 0 1px 2px -1px rgba(0, 0, 0, 0.45) !important; }
+   617→.dark .shadow-md { box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.5), 0 2px 4px -2px rgba(0, 0, 0, 0.4) !important; }
+   618→.dark .shadow-lg { box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.55), 0 4px 6px -4px rgba(0, 0, 0, 0.4) !important; }
+   619→.dark .shadow-xl { box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.6), 0 8px 10px -6px rgba(0, 0, 0, 0.4) !important; }
+   620→
+   621→/* ── Native form controls: dark ── */
+   622→.dark input[type="text"],
+   623→.dark input[type="email"],
+   624→.dark input[type="password"],
+   625→.dark input[type="number"],
+   626→.dark input[type="tel"],
+   627→.dark input[type="url"],
+   628→.dark input[type="search"],
+   629→.dark input[type="date"],
+   630→.dark input[type="datetime-local"],
+   631→.dark input[type="time"],
+   632→.dark input[type="month"],
+   633→.dark textarea,
+   634→.dark select {
+   635→  background-color: rgba(255, 255, 255, 0.04) !important;
+   636→  color: #ffffff !important;
+   637→  border-color: rgba(255, 255, 255, 0.08) !important;
+   638→}
+   639→.dark input::placeholder,
+   640→.dark textarea::placeholder {
+   641→  color: rgba(255, 255, 255, 0.45) !important;
+   642→}
+   643→.dark select option {
+   644→  background-color: #0a0a0a !important;
+   645→  color: #ffffff !important;
+   646→}
+   647→.dark input:focus,
+   648→.dark textarea:focus,
+   649→.dark select:focus {
+   650→  border-color: rgba(255, 255, 255, 0.25) !important;
+   651→  outline: none !important;
+   652→}
+   653→
+   654→/* ── Placeholder utility: ensure dark-themed placeholders on Tailwind inputs ── */
+   655→.dark .placeholder\:text-gray-400::placeholder,
+   656→.dark .placeholder\:text-gray-500::placeholder,
+   657→.dark .placeholder\:text-slate-400::placeholder,
+   658→.dark .placeholder\:text-slate-500::placeholder,
+   659→.dark .placeholder\:text-zinc-400::placeholder,
+   660→.dark .placeholder\:text-zinc-500::placeholder {
+   661→  color: rgba(255, 255, 255, 0.45) !important;
+   662→}
+   663→
+   664→/* ════════════════════════════════════════════════════════════════════════
+   665→   UI PRO MAX™ ENHANCEMENT LAYER  (additive — extracted from
+   666→   github.com/nextlevelbuilder/ui-ux-pro-max-skill design intelligence)
+   667→   Patterns: "Modern Dark (Cinema)" + "Liquid Glass" + theme spec.
+   668→   Pure enhancement. Does NOT override existing rules or business logic.
+   669→   ════════════════════════════════════════════════════════════════════════ */
+   670→
+   671→:root {
+   672→  /* ── Premium easing (Expo.out — from Cinema style) ── */
+   673→  --ease-premium: cubic-bezier(0.16, 1, 0.3, 1);
+   674→  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+   675→
+   676→  /* ── Blue accent system (theme spec: #3B82F6) — alongside existing emerald gradient ── */
+   677→  --accent-blue: #3b82f6;
+   678→  --accent-blue-soft: rgba(59, 130, 246, 0.14);
+   679→  --accent-blue-glow: rgba(59, 130, 246, 0.25);
+   680→
+   681→  /* ── Premium surface tokens (theme spec: 0.12 borders, 0.75 secondary) ── */
+   682→  --border-premium: rgba(255, 255, 255, 0.12);
+   683→  --text-secondary-premium: rgba(255, 255, 255, 0.75);
+   684→
+   685→  /* ── Financial chart tokens (from charts.csv guidance) ── */
+   686→  --chart-bull: #26a69a;
+   687→  --chart-bear: #ef5350;
+   688→  --chart-neutral: rgba(255, 255, 255, 0.45);
+   689→
+   690→  /* ── Spring modal config (Cinema style: damping 20, stiffness 90) ── */
+   691→  --spring-modal-damping: 20;
+   692→  --spring-modal-stiffness: 90;
+   693→}
+   694→
+   695→/* ── Premium easing utility classes ── */
+   696→.ease-premium { transition-timing-function: var(--ease-premium); }
+   697→.ease-spring { transition-timing-function: var(--ease-spring); }
+   698→
+   699→/* ── Blue accent system (additive — does not replace emerald gradient) ── */
+   700→.accent-blue { background-color: var(--accent-blue); }
+   701→.accent-blue-soft { background-color: var(--accent-blue-soft); }
+   702→.accent-blue-text {
+   703→  color: var(--accent-blue);
+   704→  background-image: none;
+   705→  -webkit-text-fill-color: var(--accent-blue);
+   706→}
+   707→.ring-accent-blue {
+   708→  box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.35), 0 0 28px -6px rgba(59, 130, 246, 0.30);
+   709→}
+   710→.glow-accent-blue {
+   711→  box-shadow: 0 0 24px -4px rgba(59, 130, 246, 0.45);
+   712→}
+   713→
+   714→/* ── Premium border + secondary text alignment (theme spec) ── */
+   715→.border-premium { border-color: var(--border-premium) !important; }
+   716→.text-secondary-premium { color: var(--text-secondary-premium) !important; }
+   717→
+   718→/* ── Scale-press micro-interaction (Cinema: 0.97 → 1.0) ── */
+   719→.press-scale {
+   720→  transition: transform 0.18s var(--ease-premium), box-shadow 0.25s var(--ease-premium), background-color 0.2s ease;
+   721→  will-change: transform;
+   722→}
+   723→.press-scale:active { transform: scale(0.97); }
+   724→.press-scale:hover { transform: scale(1.02); }
+   725→
+   726→/* ── Glow-accent primary button (Cinema: accent glow behind primary) ── */
+   727→.glow-accent-btn {
+   728→  position: relative;
+   729→  transition: transform 0.2s var(--ease-premium), box-shadow 0.3s var(--ease-premium);
+   730→}
+   731→.glow-accent-btn::before {
+   732→  content: '';
+   733→  position: absolute;
+   734→  inset: -2px;
+   735→  border-radius: inherit;
+   736→  background: var(--accent-blue-glow);
+   737→  filter: blur(12px);
+   738→  opacity: 0;
+   739→  z-index: -1;
+   740→  transition: opacity 0.3s ease;
+   741→}
+   742→.glow-accent-btn:hover::before { opacity: 0.7; }
+   743→.glow-accent-btn:hover { transform: scale(1.02); }
+   744→.glow-accent-btn:active { transform: scale(0.97); }
+   745→
+   746→/* ── Liquid-glass morph (Liquid Glass style: 400-600ms, blur+saturate) ── */
+   747→.glass-morph {
+   748→  background: rgba(255, 255, 255, 0.04);
+   749→  backdrop-filter: blur(28px) saturate(160%);
+   750→  -webkit-backdrop-filter: blur(28px) saturate(160%);
+   751→  border: 1px solid rgba(255, 255, 255, 0.12);
+   752→  transition: transform 0.5s var(--ease-premium), border-color 0.5s var(--ease-premium), background 0.5s var(--ease-premium);
+   753→}
+   754→.glass-morph:hover {
+   755→  background: rgba(255, 255, 255, 0.06);
+   756→  border-color: rgba(255, 255, 255, 0.18);
+   757→}
+   758→
+   759→/* ── Shimmer skeleton loader ── */
+   760→@keyframes shimmer-slide {
+   761→  0% { background-position: -200% 0; }
+   762→  100% { background-position: 200% 0; }
+   763→}
+   764→.skeleton-shimmer {
+   765→  background: linear-gradient(
+   766→    90deg,
+   767→    rgba(255, 255, 255, 0.03) 0%,
+   768→    rgba(255, 255, 255, 0.08) 50%,
+   769→    rgba(255, 255, 255, 0.03) 100%
+   770→  );
+   771→  background-size: 200% 100%;
+   772→  animation: shimmer-slide 1.8s ease-in-out infinite;
+   773→  border-radius: 0.5rem;
+   774→}
+   775→
+   776→/* ── Premium focus-visible ring (accessibility — keyboard nav) ── */
+   777→:focus-visible {
+   778→  outline: 2px solid var(--accent-blue);
+   779→  outline-offset: 2px;
+   780→  border-radius: 4px;
+   781→}
+   782→button:focus-visible,
+   783→a:focus-visible,
+   784→[role="button"]:focus-visible,
+   785→[tabindex]:focus-visible {
+   786→  outline: 2px solid var(--accent-blue);
+   787→  outline-offset: 2px;
+   788→}
+   789→
+   790→/* ── Premium table system (dark header, hairline rows, hover) ── */
+   791→.table-premium {
+   792→  width: 100%;
+   793→  border-collapse: separate;
+   794→  border-spacing: 0;
+   795→}
+   796→.table-premium thead th {
+   797→  background: rgba(255, 255, 255, 0.03);
+   798→  color: rgba(255, 255, 255, 0.55);
+   799→  font-size: 0.7rem;
+   800→  font-weight: 600;
+   801→  text-transform: uppercase;
+   802→  letter-spacing: 0.08em;
+   803→  padding: 0.75rem 1rem;
+   804→  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+   805→  text-align: left;
+   806→  position: sticky;
+   807→  top: 0;
+   808→  backdrop-filter: blur(12px);
+   809→}
+   810→.table-premium tbody td {
+   811→  padding: 0.85rem 1rem;
+   812→  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+   813→  color: rgba(255, 255, 255, 0.85);
+   814→  font-size: 0.875rem;
+   815→}
+   816→.table-premium tbody tr {
+   817→  transition: background-color 0.2s ease;
+   818→}
+   819→.table-premium tbody tr:hover {
+   820→  background-color: rgba(255, 255, 255, 0.04);
+   821→}
+   822→.table-premium tbody tr:last-child td {
+   823→  border-bottom: none;
+   824→}
+   825→
+   826→/* ── Premium modal/dialog backdrop ── */
+   827→.premium-backdrop {
+   828→  background: rgba(0, 0, 0, 0.72);
+   829→  backdrop-filter: blur(8px) saturate(120%);
+   830→  -webkit-backdrop-filter: blur(8px) saturate(120%);
+   831→}
+   832→
+   833→/* ── Premium dropdown/popover surface ── */
+   834→.dark [data-slot="popover-content"],
+   835→.dark [data-slot="dropdown-menu-content"] {
+   836→  border-color: rgba(255, 255, 255, 0.10) !important;
+   837→  box-shadow: 0 20px 50px -12px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.04) !important;
+   838→}
+   839→
+   840→/* ── Link hover micro-interaction ── */
+   841→.link-underline-premium {
+   842→  position: relative;
+   843→  transition: color 0.2s ease;
+   844→}
+   845→.link-underline-premium::after {
+   846→  content: '';
+   847→  position: absolute;
+   848→  left: 0;
+   849→  bottom: -2px;
+   850→  width: 100%;
+   851→  height: 1px;
+   852→  background: var(--accent-blue);
+   853→  transform: scaleX(0);
+   854→  transform-origin: right;
+   855→  transition: transform 0.3s var(--ease-premium);
+   856→}
+   857→.link-underline-premium:hover::after {
+   858→  transform: scaleX(1);
+   859→  transform-origin: left;
+   860→}
+   861→
+   862→/* ── Number tabular alignment (financial data precision) ── */
+   863→.tabular-nums { font-variant-numeric: tabular-nums; }
+   864→
+   865→/* ── Premium badge / pill ── */
+   866→.badge-premium {
+   867→  display: inline-flex;
+   868→  align-items: center;
+   869→  gap: 0.375rem;
+   870→  padding: 0.25rem 0.625rem;
+   871→  border-radius: 9999px;
+   872→  background: rgba(255, 255, 255, 0.05);
+   873→  border: 1px solid rgba(255, 255, 255, 0.08);
+   874→  color: rgba(255, 255, 255, 0.75);
+   875→  font-size: 0.7rem;
+   876→  font-weight: 500;
+   877→  letter-spacing: 0.02em;
+   878→}
+   879→
+   880→/* ── Premium divider ── */
+   881→.divider-premium {
+   882→  height: 1px;
+   883→  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.10), transparent);
+   884→  border: none;
+   885→}
+   886→
+   887→/* ── Chart token utility classes ── */
+   888→.text-bull { color: var(--chart-bull); }
+   889→.text-bear { color: var(--chart-bear); }
+   890→.text-chart-neutral { color: var(--chart-neutral); }
+   891→.bg-bull { background-color: var(--chart-bull); }
+   892→.bg-bear { background-color: var(--chart-bear); }
+   893→
+   894→/* ── Status dot (premium pulsing indicator) ── */
+   895→.status-dot {
+   896→  display: inline-block;
+   897→  width: 0.5rem;
+   898→  height: 0.5rem;
+   899→  border-radius: 9999px;
+   900→  position: relative;
+   901→}
+   902→.status-dot::after {
+   903→  content: '';
+   904→  position: absolute;
+   905→  inset: 0;
+   906→  border-radius: inherit;
+   907→  background: inherit;
+   908→  animation: status-pulse 2s ease-in-out infinite;
+   909→}
+   910→@keyframes status-pulse {
+   911→  0%, 100% { opacity: 0.6; transform: scale(1); }
+   912→  50% { opacity: 0; transform: scale(2.2); }
+   913→}
+   914→.status-dot-live { background: #10b981; }
+   915→.status-dot-warn { background: #f59e0b; }
+   916→.status-dot-error { background: #ef4444; }
+   917→
+   918→/* ── Premium loading spinner ── */
+   919→@keyframes spin-premium {
+   920→  to { transform: rotate(360deg); }
+   921→}
+   922→.spinner-premium {
+   923→  width: 1.25rem;
+   924→  height: 1.25rem;
+   925→  border: 2px solid rgba(255, 255, 255, 0.10);
+   926→  border-top-color: var(--accent-blue);
+   927→  border-radius: 9999px;
+   928→  animation: spin-premium 0.7s linear infinite;
+   929→}
+   930→
+   931→/* ── Reduced-motion accessibility (from UX guidelines checklist) ── */
+   932→@media (prefers-reduced-motion: reduce) {
+   933→  *,
+   934→  *::before,
+   935→  *::after {
+   936→    animation-duration: 0.01ms !important;
+   937→    animation-iteration-count: 1 !important;
+   938→    transition-duration: 0.01ms !important;
+   939→    scroll-behavior: auto !important;
+   940→  }
+   941→  .aurora-blob,
+   942→  .motion-pulse,
+   943→  .breathe-glow,
+   944→  .skeleton-shimmer,
+   945→  .spinner-premium,
+   946→  .status-dot::after {
+   947→    animation: none !important;
+   948→  }
+   949→}
+   950→
+   951→/* ── Premium scroll snap (for horizontal carousels) ── */
+   952→.snap-x-premium {
+   953→  scroll-snap-type: x mandatory;
+   954→  -webkit-overflow-scrolling: touch;
+   955→}
+   956→.snap-x-premium > * {
+   957→  scroll-snap-align: start;
+   958→}
+   959→
+   960→/* ── Selection color ── */
+   961→::selection {
+   962→  background: rgba(59, 130, 246, 0.30);
+   963→  color: #ffffff;
+   964→}
+   965→
+   966→/* ═══════════════════════════════════════════════════════════════════════════════
+   967→   GSTPILOT™ BRAND IDENTITY SYSTEM — Official Brand Layer
+   968→   ═══════════════════════════════════════════════════════════════════════════════
+   969→   Brand:    GSTPilot™
+   970→   Tagline:  The Financial Brain of India™
+   971→   Colors:   Blue #3B82F6 · Purple #8B5CF6 · Teal #22D3EE · Bg #000000
+   972→   Fonts:    Poppins (wordmark) · Sora (headings) · Inter (body)
+   973→   Motion:   hover scale(1.05) · glow 0 0 30px · 300ms transition
+   974→   ═══════════════════════════════════════════════════════════════════════════════ */
+   975→
+   976→:root {
+   977→  /* ── Official brand color tokens ── */
+   978→  --brand-blue: #3B82F6;
+   979→  --brand-purple: #8B5CF6;
+   980→  --brand-teal: #22D3EE;
+   981→  --brand-bg: #000000;
+   982→  --brand-text: #FFFFFF;
+   983→
+   984→  /* ── Brand gradients ── */
+   985→  --brand-gradient-blue-purple: linear-gradient(135deg, #3B82F6 0%, #8B5CF6 100%);
+   986→  --brand-gradient-teal-blue: linear-gradient(135deg, #22D3EE 0%, #3B82F6 100%);
+   987→  --brand-gradient-purple-blue: linear-gradient(135deg, #8B5CF6 0%, #3B82F6 100%);
+   988→  --brand-gradient-spectrum: linear-gradient(135deg, #22D3EE 0%, #3B82F6 50%, #8B5CF6 100%);
+   989→
+   990→  /* ── Brand glow shadows ── */
+   991→  --brand-glow-blue: 0 0 30px rgba(59, 130, 246, 0.35);
+   992→  --brand-glow-purple: 0 0 30px rgba(139, 92, 246, 0.35);
+   993→  --brand-glow-spectrum: 0 0 30px rgba(59, 130, 246, 0.30), 0 0 60px rgba(139, 92, 246, 0.20);
+   994→  --brand-glow-soft: 0 0 24px rgba(59, 130, 246, 0.25);
+   995→
+   996→  /* ── Brand font stacks ── */
+   997→  --font-brand-wordmark: var(--font-poppins), Poppins, ui-sans-serif, system-ui, sans-serif;
+   998→  --font-brand-heading: var(--font-sora), Sora, ui-sans-serif, system-ui, sans-serif;
+   999→  --font-brand-body: var(--font-geist-sans), Inter, ui-sans-serif, system-ui, sans-serif;
+  1000→}
+  1001→
+  1002→/* ── Brand font utility classes ── */
+  1003→.font-brand-wordmark { font-family: var(--font-brand-wordmark); }
+  1004→.font-brand-heading { font-family: var(--font-brand-heading); }
+  1005→.font-brand-body { font-family: var(--font-brand-body); }
+  1006→
+  1007→/* ── Brand text colors ── */
+  1008→.text-brand-blue { color: var(--brand-blue); }
+  1009→.text-brand-purple { color: var(--brand-purple); }
+  1010→.text-brand-teal { color: var(--brand-teal); }
+  1011→
+  1012→/* ── Brand gradient text (spectrum: teal → blue → purple) ── */
+  1013→.text-brand-gradient {
+  1014→  background: var(--brand-gradient-spectrum);
+  1015→  -webkit-background-clip: text;
+  1016→  background-clip: text;
+  1017→  color: transparent;
+  1018→  -webkit-text-fill-color: transparent;
+  1019→}
+  1020→.text-brand-gradient-blue-purple {
+  1021→  background: var(--brand-gradient-blue-purple);
+  1022→  -webkit-background-clip: text;
+  1023→  background-clip: text;
+  1024→  color: transparent;
+  1025→  -webkit-text-fill-color: transparent;
+  1026→}
+  1027→
+  1028→/* ── Brand gradient backgrounds ── */
+  1029→.bg-brand-gradient { background: var(--brand-gradient-spectrum); }
+  1030→.bg-brand-gradient-blue-purple { background: var(--brand-gradient-blue-purple); }
+  1031→.bg-brand-blue { background-color: var(--brand-blue); }
+  1032→.bg-brand-purple { background-color: var(--brand-purple); }
+  1033→.bg-brand-teal { background-color: var(--brand-teal); }
+  1034→
+  1035→/* ── Brand glow utilities ── */
+  1036→.glow-brand-blue { box-shadow: var(--brand-glow-blue); }
+  1037→.glow-brand-purple { box-shadow: var(--brand-glow-purple); }
+  1038→.glow-brand-spectrum { box-shadow: var(--brand-glow-spectrum); }
+  1039→.glow-brand-soft { box-shadow: var(--brand-glow-soft); }
+  1040→
+  1041→/* ── BRAND MOTION SYSTEM ───────────────────────────────────────────────────────
+  1042→   Logo hover:  scale(1.05)
+  1043→   Glow:        box-shadow 0 0 30px rgba(59,130,246,0.35)
+  1044→   Transition:  300ms ease-premium
+  1045→   ─────────────────────────────────────────────────────────────────────────── */
+  1046→.brand-logo {
+  1047→  display: inline-flex;
+  1048→  align-items: center;
+  1049→  transition: transform 300ms var(--ease-premium), filter 300ms var(--ease-premium);
+  1050→  will-change: transform, filter;
+  1051→}
+  1052→.brand-logo:hover {
+  1053→  transform: scale(1.05);
+  1054→  filter: drop-shadow(0 0 30px rgba(59, 130, 246, 0.35));
+  1055→}
+  1056→.brand-logo:active {
+  1057→  transform: scale(0.97);
+  1058→}
+  1059→
+  1060→/* White-theme logo glow (for light backgrounds) */
+  1061→.brand-logo-white:hover {
+  1062→  filter: drop-shadow(0 0 24px rgba(139, 92, 246, 0.45));
+  1063→}
+  1064→
+  1065→/* ── Brand pulse animation (Oracle top-right, loading screens) ──
+  1066→   8-second cycle: subtle scale + blue↔purple glow shift */
+  1067→@keyframes brand-pulse-8s {
+  1068→  0%, 100% {
+  1069→    transform: scale(1);
+  1070→    filter: drop-shadow(0 0 12px rgba(59, 130, 246, 0.30));
+  1071→  }
+  1072→  50% {
+  1073→    transform: scale(1.06);
+  1074→    filter: drop-shadow(0 0 24px rgba(139, 92, 246, 0.55));
+  1075→  }
+  1076→}
+  1077→.brand-pulse {
+  1078→  animation: brand-pulse-8s 8s ease-in-out infinite;
+  1079→}
+  1080→
+  1081→/* ── Brand loading pulse (2s infinite, scale 0.95↔1, glow blue↔purple) ── */
+  1082→@keyframes brand-loading-pulse {
+  1083→  0%, 100% {
+  1084→    transform: scale(0.95);
+  1085→    filter: drop-shadow(0 0 20px rgba(59, 130, 246, 0.50));
+  1086→  }
+  1087→  50% {
+  1088→    transform: scale(1);
+  1089→    filter: drop-shadow(0 0 35px rgba(139, 92, 246, 0.70));
+  1090→  }
+  1091→}
+  1092→.brand-loading {
+  1093→  animation: brand-loading-pulse 2s ease-in-out infinite;
+  1094→}
+  1095→
+  1096→/* ── Brand fade-in (login page logo: fade + scale + glow, 0.8s) ── */
+  1097→@keyframes brand-fade-in {
+  1098→  0% {
+  1099→    opacity: 0;
+  1100→    transform: scale(0.92);
+  1101→    filter: drop-shadow(0 0 0px rgba(59, 130, 246, 0));
+  1102→  }
+  1103→  100% {
+  1104→    opacity: 1;
+  1105→    transform: scale(1);
+  1106→    filter: drop-shadow(0 0 28px rgba(59, 130, 246, 0.40));
+  1107→  }
+  1108→}
+  1109→.brand-fade-in {
+  1110→  animation: brand-fade-in 0.8s var(--ease-premium) both;
+  1111→}
+  1112→
+  1113→/* ── Brand splash (mobile app shell: 1s fade-in, 2s glow) ── */
+  1114→@keyframes brand-splash-fade {
+  1115→  0% { opacity: 0; transform: scale(0.94); }
+  1116→  100% { opacity: 1; transform: scale(1); }
+  1117→}
+  1118→@keyframes brand-splash-glow {
+  1119→  0%, 100% { filter: drop-shadow(0 0 18px rgba(59, 130, 246, 0.40)); }
+  1120→  50% { filter: drop-shadow(0 0 40px rgba(139, 92, 246, 0.70)); }
+  1121→}
+  1122→.brand-splash-fade { animation: brand-splash-fade 1s var(--ease-premium) both; }
+  1123→.brand-splash-glow { animation: brand-splash-glow 2s ease-in-out infinite; animation-delay: 1s; }
+  1124→
+  1125→/* ── Blue-purple ambient glow behind logo (signup page) ── */
+  1126→.brand-aura {
+  1127→  position: absolute;
+  1128→  inset: -40% -20%;
+  1129→  background: radial-gradient(ellipse at center,
+  1130→    rgba(59, 130, 246, 0.28) 0%,
+  1131→    rgba(139, 92, 246, 0.20) 35%,
+  1132→    transparent 70%);
+  1133→  filter: blur(40px);
+  1134→  pointer-events: none;
+  1135→  z-index: -1;
+  1136→}
+  1137→
+  1138→/* ── Brand divider line (subtle gradient) ── */
+  1139→.brand-divider {
+  1140→  height: 1px;
+  1141→  background: linear-gradient(90deg,
+  1142→    transparent 0%,
+  1143→    rgba(59, 130, 246, 0.35) 30%,
+  1144→    rgba(139, 92, 246, 0.35) 70%,
+  1145→    transparent 100%);
+  1146→}
+  1147→
+  1148→/* ── Brand heading utility (Sora SemiBold) ── */
+  1149→.brand-heading {
+  1150→  font-family: var(--font-brand-heading);
+  1151→  font-weight: 600;
+  1152→  letter-spacing: -0.02em;
+  1153→}
+  1154→
+  1155→/* ── Reduced motion: disable brand animations ── */
+  1156→@media (prefers-reduced-motion: reduce) {
+  1157→  .brand-logo,
+  1158→  .brand-pulse,
+  1159→  .brand-loading,
+  1160→  .brand-fade-in,
+  1161→  .brand-splash-fade,
+  1162→  .brand-splash-glow {
+  1163→    animation: none !important;
+  1164→    transition: none !important;
+  1165→  }
+  1166→}
+  1167→
+  1168→/* ════════════════════════════════════════════════════════════════════════════
+  1169→   PHASE 9 — GSTPILOT UNIFIED EXPERIENCE™
+  1170→   Blue → Purple brand gradient system + premium sidebar + Oracle live status.
+  1171→   These ADD to the existing V16 emerald→cyan→blue accent; they do not replace it.
+  1172→   ════════════════════════════════════════════════════════════════════════════ */
+  1173→
+  1174→/* The signature brand gradient: Blue (#3B82F6) → Purple (#8B5CF6) */
+  1175→.brand-gradient {
+  1176→  background-image: linear-gradient(135deg, #3B82F6 0%, #6366F1 45%, #8B5CF6 100%);
+  1177→}
+  1178→.brand-gradient-soft {
+  1179→  background-image: linear-gradient(135deg,
+  1180→    rgba(59, 130, 246, 0.16) 0%,
+  1181→    rgba(99, 102, 241, 0.12) 50%,
+  1182→    rgba(139, 92, 246, 0.10) 100%);
+  1183→}
+  1184→.brand-text {
+  1185→  background-image: linear-gradient(135deg, #60A5FA 0%, #818CF8 50%, #A78BFA 100%);
+  1186→  -webkit-background-clip: text;
+  1187→  background-clip: text;
+  1188→  color: transparent;
+  1189→}
+  1190→.brand-ring {
+  1191→  box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.30), 0 0 28px -4px rgba(139, 92, 246, 0.30);
+  1192→}
+  1193→.brand-glow {
+  1194→  box-shadow: 0 8px 32px -8px rgba(59, 130, 246, 0.45), 0 0 0 1px rgba(139, 92, 246, 0.20);
+  1195→}
+  1196→.brand-glow-hover {
+  1197→  transition: box-shadow 0.3s var(--ease-premium), transform 0.3s var(--ease-premium);
+  1198→}
+  1199→.brand-glow-hover:hover {
+  1200→  box-shadow: 0 12px 40px -8px rgba(59, 130, 246, 0.55), 0 0 0 1px rgba(139, 92, 246, 0.35);
+  1201→  transform: translateY(-1px);
+  1202→}
+  1203→
+  1204→/* Premium primary CTA — blue→purple gradient button (Phase 9 spec) */
+  1205→.btn-brand {
+  1206→  background-image: linear-gradient(135deg, #3B82F6 0%, #6366F1 50%, #8B5CF6 100%);
+  1207→  color: #ffffff;
+  1208→  box-shadow: 0 4px 20px -4px rgba(59, 130, 246, 0.50), inset 0 1px 0 rgba(255,255,255,0.18);
+  1209→  transition: transform 0.2s var(--ease-premium), box-shadow 0.3s var(--ease-premium), filter 0.2s var(--ease-premium);
+  1210→}
+  1211→.btn-brand:hover {
+  1212→  transform: translateY(-1px) scale(1.01);
+  1213→  box-shadow: 0 8px 28px -4px rgba(99, 102, 241, 0.60), inset 0 1px 0 rgba(255,255,255,0.22);
+  1214→  filter: brightness(1.06);
+  1215→}
+  1216→.btn-brand:active {
+  1217→  transform: translateY(0) scale(0.99);
+  1218→}
+  1219→
+  1220→/* Premium sidebar nav item — Phase 9 */
+  1221→.premium-nav-item {
+  1222→  position: relative;
+  1223→  transition: background-color 0.2s var(--ease-premium), color 0.2s var(--ease-premium), transform 0.2s var(--ease-premium);
+  1224→}
+  1225→.premium-nav-item:hover {
+  1226→  transform: translateX(2px);
+  1227→}
+  1228→.premium-nav-active {
+  1229→  background-image: linear-gradient(135deg,
+  1230→    rgba(59, 130, 246, 0.14) 0%,
+  1231→    rgba(99, 102, 241, 0.10) 50%,
+  1232→    rgba(139, 92, 246, 0.08) 100%);
+  1233→  box-shadow: inset 0 0 0 1px rgba(99, 102, 241, 0.18);
+  1234→}
+  1235→
+  1236→/* Oracle live-status pulse — concentric rings (Phase 9) */
+  1237→@keyframes oracle-live-ring {
+  1238→  0% { transform: scale(0.6); opacity: 0.9; }
+  1239→  100% { transform: scale(2.4); opacity: 0; }
+  1240→}
+  1241→.oracle-live-ring::before,
+  1242→.oracle-live-ring::after {
+  1243→  content: '';
+  1244→  position: absolute;
+  1245→  inset: 0;
+  1246→  border-radius: 9999px;
+  1247→  background: radial-gradient(circle, rgba(59,130,246,0.55) 0%, rgba(139,92,246,0.25) 60%, transparent 100%);
+  1248→  animation: oracle-live-ring 2.4s ease-out infinite;
+  1249→}
+  1250→.oracle-live-ring::after {
+  1251→  animation-delay: 1.2s;
+  1252→}
+  1253→
+  1254→/* Typing indicator dots (Oracle chat) */
+  1255→@keyframes oracle-typing-bounce {
+  1256→  0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+  1257→  30% { transform: translateY(-4px); opacity: 1; }
+  1258→}
+  1259→.oracle-typing-dot {
+  1260→  animation: oracle-typing-bounce 1.2s ease-in-out infinite;
+  1261→}
+  1262→
+  1263→/* Premium glass card — Phase 9 consistent dashboard card */
+  1264→.premium-card {
+  1265→  background: rgba(255, 255, 255, 0.04);
+  1266→  backdrop-filter: blur(28px) saturate(140%);
+  1267→  -webkit-backdrop-filter: blur(28px) saturate(140%);
+  1268→  border: 1px solid rgba(255, 255, 255, 0.08);
+  1269→  border-radius: 24px;
+  1270→  transition: border-color 0.3s var(--ease-premium), transform 0.3s var(--ease-premium), box-shadow 0.3s var(--ease-premium);
+  1271→}
+  1272→.premium-card:hover {
+  1273→  border-color: rgba(99, 102, 241, 0.22);
+  1274→  box-shadow: 0 12px 40px -12px rgba(59, 130, 246, 0.18);
+  1275→}
+  1276→
+  1277→/* Phase 9 — force dark background everywhere; no white pages leak through */
+  1278→html, body {
+  1279→  background-color: #050505;
+  1280→  color: #fafafa;
+  1281→}
+  1282→/* Ensure any leftover light-mode card surfaces stay dark in dark theme */
+  1283→.dark .bg-slate-50,
+  1284→.dark .bg-slate-100,
+  1285→.dark .bg-slate-200,
+  1286→.dark .bg-gray-50,
+  1287→.dark .bg-gray-100,
+  1288→.dark .bg-white {
+  1289→  background-color: rgba(255, 255, 255, 0.04) !important;
+  1290→  color: #fafafa;
+  1291→}
+  1292→
+  1293→/* Phase 9 — shimmer for demo-data badges */
+  1294→@keyframes brand-shimmer {
+  1295→  0% { background-position: -200% 0; }
+  1296→  100% { background-position: 200% 0; }
+  1297→}
+  1298→.brand-shimmer {
+  1299→  background: linear-gradient(90deg,
+  1300→    rgba(59,130,246,0.10) 0%,
+  1301→    rgba(139,92,246,0.25) 50%,
+  1302→    rgba(59,130,246,0.10) 100%);
+  1303→  background-size: 200% 100%;
+  1304→  animation: brand-shimmer 3s linear infinite;
+  1305→}
+  1306→

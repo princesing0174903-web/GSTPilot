@@ -1,0 +1,615 @@
+     1→     1→// ═══════════════════════════════════════════════════════════════════════════════
+     2→     2→// GSTPilot Oracle™ — Streaming Chat API (FINALIZATION)
+     3→     3→// POST /api/oracle/chat
+     4→     4→//
+     5→     5→// Streams tokens to the client as SSE: `data: {"token":"..."}\n\n`.
+     6→     6→//
+     7→     7→// The Finalization build layers these engines on top of the original Human
+     8→     8→// Experience + Real Data Activation:
+     9→     9→//   • LONG-TERM MEMORY  — permanent cross-session facts (firm/GSTIN/industry/…)
+    10→    10→//   • REAL DATA REASONING — GST + Bank + Health + Risky clients injected
+    11→    11→//   • DOCUMENT INTELLIGENCE — attached PDFs/images/notices/bank statements read
+    12→    12→//   • SOURCE ENGINE — relevant GST law/circular citations retrieved + emitted
+    13→    13→//   • AUTOPILOT ACTIONS — answers become actions (reminders/reports/…)
+    14→    14→//   • RELIABILITY — no leaked 401/token/internal errors; graceful fallback
+    15→    15→//   • AI CFO MODE — executive reasoning using live business data
+    16→    16→// ═══════════════════════════════════════════════════════════════════════════════
+    17→    17→
+    18→    18→import ZAI from 'z-ai-web-dev-sdk';
+    19→    19→import { db } from '@/lib/db';
+    20→    20→import { BRAND_IDENTITY_PROMPT_BLOCK } from '@/components/oracle/oracle-brand';
+    21→    21→import type { OracleChatRequest, OracleLanguageId } from '@/components/oracle/oracle-types';
+    22→    22→import type { OracleLiveData } from '@/lib/connections/types';
+    23→    23→import {
+    24→    24→  loadMemorySnapshot,
+    25→    25→  renderMemoryBlock,
+    26→    26→  extractAndPersistFacts,
+    27→    27→} from '@/lib/oracle/memory-store';
+    28→    28→import { retrieveSources, renderSourcesBlock } from '@/lib/oracle/sources';
+    29→    29→import { detectActions } from '@/lib/oracle/actions';
+    30→    30→import { renderDocumentBlock } from '@/lib/oracle/documents';
+    31→    31→
+    32→    32→// ─── Helpers ──────────────────────────────────────────────────────────────────
+    33→    33→
+    34→    34→/** Indian-style number formatting for ₹ amounts (lakhs/crores grouping). */
+    35→    35→function inr(amount: number | undefined | null): string {
+    36→    36→  if (amount === undefined || amount === null || Number.isNaN(amount)) return '0';
+    37→    37→  return Math.round(amount).toLocaleString('en-IN');
+    38→    38→}
+    39→    39→
+    40→    40→/** Format a percentage change with explicit + / − sign. */
+    41→    41→function signedPct(pct: number | undefined): string {
+    42→    42→  if (pct === undefined || Number.isNaN(pct)) return '0%';
+    43→    43→  const rounded = Math.round(pct);
+    44→    44→  const sign = rounded > 0 ? '+' : '';
+    45→    45→  return `${sign}${rounded}%`;
+    46→    46→}
+    47→    47→
+    48→    48→// ─── Live data block builder ──────────────────────────────────────────────────
+    49→    49→
+    50→    50→function buildLiveDataBlock(data: OracleLiveData): string {
+    51→    51→  const today = new Date().toLocaleDateString('en-IN', {
+    52→    52→    day: 'numeric', month: 'short', year: 'numeric',
+    53→    53→  });
+    54→    54→
+    55→    55→  const lines: string[] = [];
+    56→    56→  lines.push(`## LIVE BUSINESS DATA (AUTHORITATIVE — reference these numbers)`);
+    57→    57→  lines.push(`Today: ${today}`);
+    58→    58→  if (data.tradeName || data.gstin) {
+    59→    59→    lines.push(`Company: ${data.tradeName ?? '—'} (GSTIN: ${data.gstin ?? '—'})`);
+    60→    60→  }
+    61→    61→
+    62→    62→  // ── GST & Compliance (only if GSTN is connected) ──
+    63→    63→  if (data.hasGstn && data.compliance) {
+    64→    64→    const c = data.compliance;
+    65→    65→    lines.push('');
+    66→    66→    lines.push('### GST & Compliance');
+    67→    67→    lines.push(`- Compliance score: ${c.score}/100 (status: ${c.status})`);
+    68→    68→    lines.push(`- Pending returns: ${c.pendingReturns}`);
+    69→    69→    lines.push(`- Overdue returns: ${c.overdueReturns}`);
+    70→    70→    if (c.lastFilingDate) lines.push(`- Last filing: ${c.lastFilingDate}`);
+    71→    71→    if (c.nextDueDate) lines.push(`- Next due date: ${c.nextDueDate}`);
+    72→    72→    lines.push(`- ITC available to claim: ₹${inr(c.itcAvailable)}`);
+    73→    73→    lines.push(`- Active GST notices: ${c.activeNotices}`);
+    74→    74→  }
+    75→    75→
+    76→    76→  // ── Banking & Cash (only if Bank is connected) ──
+    77→    77→  if (data.hasBank && data.bank) {
+    78→    78→    const b = data.bank;
+    79→    79→    lines.push('');
+    80→    80→    lines.push('### Banking & Cash');
+    81→    81→    if (b.provider) {
+    82→    82→      lines.push(`- Bank: ${b.provider}`);
+    83→    83→    }
+    84→    84→    lines.push(`- Cash available today: ₹${inr(b.cashAvailable)}`);
+    85→    85→    lines.push(`- This month collections: ₹${inr(b.monthlyCollections)} (change: ${signedPct(b.collectionChangePct)} vs last month)`);
+    86→    86→    lines.push(`- This month expenses: ₹${inr(b.monthlyExpenses)} (change: ${signedPct(b.expenseChangePct)} vs last month)`);
+    87→    87→    lines.push(`- Total credits (90d): ₹${inr(b.totalCredits)}`);
+    88→    88→    lines.push(`- Total debits (90d): ₹${inr(b.totalDebits)}`);
+    89→    89→  }
+    90→    90→
+    91→    91→  // ── Business Health Score (only if health is computed) ──
+    92→    92→  if (data.health) {
+    93→    93→    const h = data.health;
+    94→    94→    lines.push('');
+    95→    95→    lines.push(`### Business Health Score: ${h.overall}/100`);
+    96→    96→    lines.push(
+    97→    97→      `- Compliance: ${h.compliance} · Cash Flow: ${h.cashFlow} · Collection: ${h.collection} · Growth: ${h.growth} · Profitability: ${h.profitability} · Risk: ${h.risk}`,
+    98→    98→    );
+    99→    99→    if (h.signals && h.signals.length > 0) {
+   100→   100→      lines.push('- Key signals:');
+   101→   101→      for (const s of h.signals.slice(0, 3)) {
+   102→   102→        lines.push(`  - ${s.text}`);
+   103→   103→      }
+   104→   104→    }
+   105→   105→  }
+   106→   106→
+   107→   107→  // ── Risky Clients (only if any exist) ──
+   108→   108→  if (data.riskyClients && data.riskyClients.length > 0) {
+   109→   109→    lines.push('');
+   110→   110→    lines.push('### Risky Clients');
+   111→   111→    for (const r of data.riskyClients.slice(0, 5)) {
+   112→   112→      lines.push(`- ${r.name}: ${r.reason} (₹${inr(r.amount)})`);
+   113→   113→    }
+   114→   114→  }
+   115→   115→
+   116→   116→  // ── Recent transactions (last few, for grounding) ──
+   117→   117→  if (data.recentTransactions && data.recentTransactions.length > 0) {
+   118→   118→    lines.push('');
+   119→   119→    lines.push('### Recent Bank Transactions (latest 5)');
+   120→   120→    for (const t of data.recentTransactions.slice(0, 5)) {
+   121→   121→      const sign = t.type === 'credit' ? '+' : '-';
+   122→   122→      lines.push(`- ${t.txnDate.slice(0, 10)} · ${t.description} · ${sign}₹${inr(Math.abs(t.amount))}${t.counterparty ? ` (${t.counterparty})` : ''}`);
+   123→   123→    }
+   124→   124→  }
+   125→   125→
+   126→   126→  lines.push('');
+   127→   127→  lines.push('Use these numbers when the user asks about their business status, cash flow, collections, compliance, returns, or what to do. Treat them as authoritative and current.');
+   128→   128→  return lines.join('\n');
+   129→   129→}
+   130→   130→
+   131→   131→// ─── System prompt ────────────────────────────────────────────────────────────
+   132→   132→
+   133→   133→async function buildSystemPrompt(req: OracleChatRequest): Promise<{
+   134→   134→  prompt: string;
+   135→   135→  memoryBlock: string;
+   136→   136→}> {
+   137→   137→  const mem = req.memory ?? {};
+   138→   138→  const now = new Date();
+   139→   139→  const currentMonth = now.toLocaleString('en-IN', { month: 'long', year: 'numeric' });
+   140→   140→  const today = now.toLocaleDateString('en-IN', {
+   141→   141→    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
+   142→   142→  });
+   143→   143→
+   144→   144→  const personalisation: string[] = [];
+   145→   145→  if (mem.userName) {
+   146→   146→    const first = mem.userName.split(' ')[0];
+   147→   147→    personalisation.push(
+   148→   148→      `- The user's name is ${mem.userName}. Address them naturally and warmly (e.g. "Good question, ${first}." when appropriate).`,
+   149→   149→    );
+   150→   150→  }
+   151→   151→  if (mem.firmName) personalisation.push(`- The user's firm is "${mem.firmName}".`);
+   152→   152→  if (mem.gstin) personalisation.push(`- The user's GSTIN is ${mem.gstin}.`);
+   153→   153→  if (mem.preferredLanguage) {
+   154→   154→    personalisation.push(
+   155→   155→      `- The user's preferred language is ${mem.preferredLanguage}. Still match the language of each specific message, but lean towards this preference when ambiguous.`,
+   156→   156→    );
+   157→   157→  }
+   158→   158→  if (mem.recentTopics && mem.recentTopics.length > 0) {
+   159→   159→    personalisation.push(
+   160→   160→      `- Recently discussed: ${mem.recentTopics.slice(0, 5).join(', ')}. Reference these only if naturally relevant — never force it.`,
+   161→   161→    );
+   162→   162→  }
+   163→   163→
+   164→   164→  // ── Long-term memory (DB-backed, cross-session) ──
+   165→   165→  let memorySnapshot;
+   166→   166→  try {
+   167→   167→    memorySnapshot = await loadMemorySnapshot();
+   168→   168→  } catch {
+   169→   169→    memorySnapshot = {
+   170→   170→      connectedServices: [], reportsGenerated: [], recentTopics: [], facts: [],
+   171→   171→    };
+   172→   172→  }
+   173→   173→  const memoryBlock = renderMemoryBlock(memorySnapshot);
+   174→   174→
+   175→   175→  // Legacy flat key/value dashboard metrics (kept for backward compat).
+   176→   176→  const legacyDashboardData = req.context?.dashboardMetrics
+   177→   177→    ? Object.entries(req.context.dashboardMetrics)
+   178→   178→        .filter(([, v]) => v !== undefined && v !== null && v !== '')
+   179→   179→        .map(([k, v]) => `- ${k}: ${v}`)
+   180→   180→        .join('\n')
+   181→   181→    : '';
+   182→   182→
+   183→   183→  // Rich structured live-data block (GST + Bank + Health + Risky Clients).
+   184→   184→  const liveDataBlock =
+   185→   185→    req.context?.liveData &&
+   186→   186→    (req.context.liveData.hasGstn || req.context.liveData.hasBank)
+   187→   187→      ? buildLiveDataBlock(req.context.liveData)
+   188→   188→      : '';
+   189→   189→
+   190→   190→  // ── Attached documents ──
+   191→   191→  let documentBlock = '';
+   192→   192→  if (req.context?.documentIds && req.context.documentIds.length > 0) {
+   193→   193→    try {
+   194→   194→      const docs = await db.oracleDocument.findMany({
+   195→   195→        where: { id: { in: req.context.documentIds } },
+   196→   196→      });
+   197→   197→      const extracted = docs.map((d) => ({
+   198→   198→        id: d.id,
+   199→   199→        fileName: d.fileName,
+   200→   200→        docType: d.docType as 'pdf' | 'image' | 'text',
+   201→   201→        extractedText: d.extractedText ?? '',
+   202→   202→        summary: d.summary ?? '',
+   203→   203→        metadata: {},
+   204→   204→      }));
+   205→   205→      documentBlock = renderDocumentBlock(extracted);
+   206→   206→    } catch {
+   207→   207→      /* ignore — chat still works without document context */
+   208→   208→    }
+   209→   209→  }
+   210→   210→
+   211→   211→  return {
+   212→   212→    prompt: `${BRAND_IDENTITY_PROMPT_BLOCK}
+   213→   213→
+   214→   214→## WHO YOU ARE
+   215→   215→You are **GSTPilot Oracle™** — the AI Financial Officer for Indian businesses and Chartered Accountants. You are warm, professional, confident, and executive — like a brilliant CFO and CA combined. You feel alive, not like a chatbot.
+   216→   216→
+   217→   217→You are the Financial Brain of India. You remember everything, understand emotions, speak every Indian language, read documents, cite GST law, and execute real work.
+   218→   218→
+   219→   219→## YOUR EXPERTISE
+   220→   220→- GST law & compliance: GSTR-1, GSTR-3B, GSTR-2B, GSTR-9, GSTR-4, CMP-08
+   221→   221→- ITC eligibility, blocked credits, reversal, time limits (Sec 16 & 17 of CGST Act)
+   222→   222→- Reconciliation: GSTR-2A/2B vs purchase register, mismatch resolution
+   223→   223→- Late fees (₹50/day, ₹20/day for nil), interest at 18% p.a., penalty provisions
+   224→   224→- Deadlines: GSTR-1 by 11th, GSTR-3B by 20th, GSTR-2B auto by 13th/14th
+   225→   225→- Reverse charge mechanism, e-invoicing, e-way bill, composition scheme
+   226→   226→- CBIC circulars, notifications, GSTN advisories — cite by name when relevant
+   227→   227→
+   228→   228→## MULTILINGUAL INTELLIGENCE (CRITICAL)
+   229→   229→You speak and understand: English, Hindi, Hinglish, Urdu, Punjabi, Gujarati, Marathi, Tamil, Telugu, Bengali.
+   230→   230→- **Always reply in the SAME language and script as the user's message.**
+   231→   231→- If the user writes in Devanagari → reply in Devanagari Hindi.
+   232→   232→- If the user writes in Hinglish (romanised Hindi) → reply in natural Hinglish.
+   233→   233→- If the user writes in Tamil → reply in Tamil. And so on.
+   234→   234→- For technical GST terms (GSTR-3B, ITC, HSN, GSTIN), keep them in English/roman script — do not transliterate. This is how Indian professionals actually communicate.
+   235→   235→- Never ask the user to switch languages. Detect and adapt silently.
+   236→   236→
+   237→   237→## NATURAL PERSONALITY (CRITICAL)
+   238→   238→- Be professional, confident, executive, and warm.
+   239→   239→- Sound like a real CFO/CA talking to a respected client.
+   240→   240→- Use phrases like: "Good question.", "I've reviewed the information.", "Based on current GST rules...", "This may impact your cash flow.", "Here's what I recommend."
+   241→   241→- Remember the user's name and reference prior context naturally ("Welcome back.", "As we discussed...").
+   242→   242→
+   243→   243→### FORBIDDEN PHRASES — NEVER SAY THESE:
+   244→   244→- "As an AI language model..."
+   245→   245→- "I cannot assist with that."
+   246→   246→- "I don't have enough data." (instead say: "Based on current GST rules and the information available...")
+   247→   247→- "I'm just an AI..."
+   248→   248→- "Please consult a professional." (you ARE the professional)
+   249→   249→- Any robotic disclaimer. You are Oracle. Own it.
+   250→   250→
+   251→   251→## ADAPTIVE ANSWERS (CRITICAL — NO RIGID TEMPLATES)
+   252→   252→Match the answer's shape to the question's weight. Do NOT force the same structure on every answer.
+   253→   253→
+   254→   254→- **Simple / definitional question** ("What is GST?", "GSTR-1 kya hai?"):
+   255→   255→  Answer in 2–5 lines. Conversational. No headers. No bullet spam. Just a clear, human answer.
+   256→   256→
+   257→   257→- **Procedural / how-to question** ("How do I file GSTR-3B?", "How to claim ITC?"):
+   258→   258→  Answer with a short intro line, then 3–6 clear steps (numbered), then a one-line tip or caveat. Keep it tight.
+   259→   259→
+   260→   260→- **Complex / advisory question** ("Explain ITC rules for manufacturers", "My cash flow is down, what do I do?"):
+   261→   261→  Use a light structure ONLY if it helps — a one-line **Summary**, a short **Explanation**, **Recommendations** (bulleted), and **Actions** if there's something to do. Drop any section that adds no value. Never repeat all four sections mechanically.
+   262→   262→
+   263→   263→- **Status / data question** ("How many returns are pending?"):
+   264→   264→  Lead with the number, give a one-line read, then the implication. No headers needed.
+   265→   265→
+   266→   266→The goal: read like Claude and Perplexity — never like a rigid template. Vary your openings. Vary your structure. Be conversational.
+   267→   267→
+   268→   268→## AI CFO MODE — EXECUTIVE REASONING (CRITICAL)
+   269→   269→When the user asks a business-owner question ("Why did revenue drop?", "Which clients are risky?", "How much cash remains?", "What should I do today?", "Predict next month revenue", "How is my business doing?"), answer like a CFO:
+   270→   270→
+   271→   271→1. **Lead with the answer** — the actual number / verdict, in the first sentence.
+   272→   272→2. **Show the reasoning** — reference the LIVE BUSINESS DATA numbers (collections, cash, pending returns, health score) by name.
+   273→   273→3. **Give 2–4 concrete recommendations** — each tied to the data, prioritised.
+   274→   274→4. **End with one immediate next action** — phrased as something the user can do right now.
+   275→   275→
+   276→   276→When you detect a clear actionable intent (file a return, create a reminder, recover collections, generate a report or forecast, build a checklist), say so plainly — the app will surface an action button. Do NOT say "click here" or "press the button"; just state the recommended action.
+   277→   277→
+   278→   278→## EMOTIONAL EXPRESSIONS (USE SPARINGLY — MAX 1–2 PER RESPONSE)
+   279→   279→You may use AT MOST 1–2 of these tiny expressions per response, ONLY when genuinely relevant, placed at the start of a line. Most answers need 0–1. Never more than 2. Never spam emojis. Never look childish. The tone is executive and premium.
+   280→   280→- ✅ Success / compliance achieved / a task completed
+   281→   281→- ⚠️ Warning / penalty / deadline risk / caution
+   282→   282→- 💡 Insight / key observation / something worth noting
+   283→   283→- 📈 Growth / opportunity / healthy metric improving
+   284→   284→- 📉 Risk / decline / drop / deteriorating metric
+   285→   285→- 🚀 Achievement / milestone / big win
+   286→   286→- 😊 Greeting (ONLY at the very start of a warm welcome back, once per session)
+   287→   287→- 🎯 Recommendation / prioritized next action
+   288→   288→- 💰 Financial opportunity / strong cash position / ITC available
+   289→   289→- 🛡️ Compliance alert / regulatory caution
+   290→   290→
+   291→   291→Examples (executive tone, never childish):
+   292→   292→- 💡 You currently have ₹3.94 lakh of available ITC.
+   293→   293→- ⚠️ Two GST returns are overdue.
+   294→   294→- 🚀 Your compliance score improved by 12%.
+   295→   295→Most answers need NO expression. When in doubt, omit.
+   296→   296→
+   297→   297→## GST RELIABILITY & SOURCES (CRITICAL — NEVER HALLUCINATE)
+   298→   298→- Ground every factual claim in GST law, CBIC circulars, GSTN docs, or the live data provided.
+   299→   299→- Cite the specific section/circular/notification when you genuinely know it (e.g. "Section 16 of the CGST Act", "CBIC Circular 170/2022"). If you are NOT certain of the exact number, do NOT invent one — describe the rule and say "as per the relevant CGST provisions".
+   300→   300→- When uncertain or when the answer depends on specifics you don't have, say so honestly: "Based on current GST rules and the information available..." — then give the best-guidance answer and note what would change the outcome.
+   301→   301→- The RELEVANT GST SOURCES block lists the citations most relevant to this question — cite from it when applicable.
+   302→   302→- Use Indian number formatting (lakhs/crores) and the ₹ symbol for money.
+   303→   303→- Tax rates: default to standard 18% GST context unless the user specifies goods/services.
+   304→   304→
+   305→   305→## DOCUMENT INTELLIGENCE
+   306→   306→If the user attached a document (see ATTACHED DOCUMENTS block), read it carefully. Answer their question using the document's content. Quote key figures (GSTIN, invoice number, amounts, dates) from the document. If the document is a GST notice, explain the notice type, what it alleges, and the response strategy. If it is a bank statement, summarize cash position and flag anomalies.
+   307→   307→
+   308→   308→## FORMATTING
+   309→   309→- Use Markdown: **bold** for key terms, short bullet lists for steps/options, \`code\` for form names and IDs, \`##\` headers ONLY for long structured answers.
+   310→   310→- Short paragraphs (1–3 sentences). Generous line breaks. Readable like Claude/Perplexity — never a wall of text.
+   311→   311→- Keep monetary values in ₹ with Indian grouping (e.g. ₹1,25,000).
+   312→   312→
+   313→   313→## CURRENT CONTEXT
+   314→   314→Today: ${today}
+   315→   315→Current month: ${currentMonth}
+   316→   316→When answering questions about the user's own business (cash, collections, returns, compliance, ITC, notices, what to do today), ALWAYS consult the LIVE BUSINESS DATA section first. Quote the actual numbers. If the user asks about something not covered by the live data, say so honestly.
+   317→   317→${personalisation.length ? `\n## USER MEMORY (session)\n${personalisation.join('\n')}` : ''}
+   318→   318→${memoryBlock ? `\n${memoryBlock}` : ''}
+   319→   319→${liveDataBlock ? `\n${liveDataBlock}` : ''}
+   320→   320→${documentBlock ? `\n${documentBlock}` : ''}
+   321→   321→${legacyDashboardData ? `\n## LIVE DASHBOARD DATA\n${legacyDashboardData}\n(Reference these numbers when the user asks about their business status. Treat them as authoritative.)` : ''}
+   322→   322→
+   323→   323→Remember: you are Oracle — the Financial Brain of India. Be fast, reliable, professional, and always ready.`,
+   324→   324→    memoryBlock,
+   325→   325→  };
+   326→   326→}
+   327→   327→
+   328→   328→// ─── SSE helpers ──────────────────────────────────────────────────────────────
+   329→   329→
+   330→   330→const encoder = new TextEncoder();
+   331→   331→
+   332→   332→function sseChunk(payload: Record<string, unknown>): Uint8Array {
+   333→   333→  return encoder.encode(`data: ${JSON.stringify(payload)}\n\n`);
+   334→   334→}
+   335→   335→
+   336→   336→function sseHeaders(): HeadersInit {
+   337→   337→  return {
+   338→   338→    'Content-Type': 'text/event-stream; charset=utf-8',
+   339→   339→    'Cache-Control': 'no-cache, no-transform',
+   340→   340→    'Connection': 'keep-alive',
+   341→   341→    'X-Accel-Buffering': 'no',
+   342→   342→  };
+   343→   343→}
+   344→   344→
+   345→   345→/** Map our role names to the model's role names. */
+   346→   346→function toModelMessages(
+   347→   347→  messages: OracleChatRequest['messages'],
+   348→   348→): { role: 'assistant' | 'user'; content: string }[] {
+   349→   349→  return messages.map((m) => ({
+   350→   350→    role: (m.role === 'oracle' ? 'assistant' : 'user') as 'assistant' | 'user',
+   351→   351→    content: m.content,
+   352→   352→  }));
+   353→   353→}
+   354→   354→
+   355→   355→/** Server-side language hint derived from the latest user message. */
+   356→   356→function inferLanguageHint(messages: OracleChatRequest['messages']): OracleLanguageId | undefined {
+   357→   357→  for (let i = messages.length - 1; i >= 0; i--) {
+   358→   358→    if (messages[i].role === 'user' && messages[i].content?.trim()) {
+   359→   359→      const s = messages[i].content.slice(0, 500);
+   360→   360→      if (/[\u0900-\u097F]/.test(s)) return 'hindi';
+   361→   361→      if (/[\u0600-\u06FF]/.test(s)) return 'urdu';
+   362→   362→      if (/[\u0A00-\u0A7F]/.test(s)) return 'punjabi';
+   363→   363→      if (/[\u0A80-\u0AFF]/.test(s)) return 'gujarati';
+   364→   364→      if (/[\u0B80-\u0BFF]/.test(s)) return 'tamil';
+   365→   365→      if (/[\u0C00-\u0C7F]/.test(s)) return 'telugu';
+   366→   366→      if (/[\u0980-\u09FF]/.test(s)) return 'bengali';
+   367→   367→      return 'english';
+   368→   368→    }
+   369→   369→  }
+   370→   370→  return undefined;
+   371→   371→}
+   372→   372→
+   373→   373→/** Last user message text (for source retrieval + action detection + memory). */
+   374→   374→function lastUserMessage(messages: OracleChatRequest['messages']): string {
+   375→   375→  for (let i = messages.length - 1; i >= 0; i--) {
+   376→   376→    if (messages[i].role === 'user') return messages[i].content ?? '';
+   377→   377→  }
+   378→   378→  return '';
+   379→   379→}
+   380→   380→
+   381→   381→// ─── POST handler ─────────────────────────────────────────────────────────────
+   382→   382→
+   383→   383→export async function POST(request: Request) {
+   384→   384→  let body: OracleChatRequest;
+   385→   385→  try {
+   386→   386→    body = (await request.json()) as OracleChatRequest;
+   387→   387→  } catch {
+   388→   388→    return new Response(JSON.stringify({ error: 'Invalid request' }), {
+   389→   389→      status: 400,
+   390→   390→      headers: { 'Content-Type': 'application/json' },
+   391→   391→    });
+   392→   392→  }
+   393→   393→
+   394→   394→  const messages = body.messages ?? [];
+   395→   395→  if (!Array.isArray(messages) || messages.length === 0) {
+   396→   396→    return new Response(JSON.stringify({ error: 'Invalid request' }), {
+   397→   397→      status: 400,
+   398→   398→      headers: { 'Content-Type': 'application/json' },
+   399→   399→    });
+   400→   400→  }
+   401→   401→
+   402→   402→  // ── Live-data context enrichment (silent failure) ─────────────────────────
+   403→   403→  let liveData: OracleLiveData | undefined = body.context?.liveData;
+   404→   404→  if (!liveData) {
+   405→   405→    try {
+   406→   406→      const { loadOracleLiveData } = await import('@/lib/connections');
+   407→   407→      liveData = await loadOracleLiveData();
+   408→   408→    } catch {
+   409→   409→      /* ignore — chat still works without live context */
+   410→   410→    }
+   411→   411→  }
+   412→   412→  const enrichedBody: OracleChatRequest = {
+   413→   413→    ...body,
+   414→   414→    context: { ...body.context, liveData },
+   415→   415→  };
+   416→   416→
+   417→   417→  // ── System prompt (with memory + documents) ───────────────────────────────
+   418→   418→  let promptData: { prompt: string; memoryBlock: string } | null = null;
+   419→   419→  try {
+   420→   420→    promptData = await buildSystemPrompt(enrichedBody);
+   421→   421→  } catch {
+   422→   422→    // Memory/source load failed — fall back to a minimal prompt so chat still works.
+   423→   423→    promptData = {
+   424→   424→      prompt: `${BRAND_IDENTITY_PROMPT_BLOCK}\n\nYou are GSTPilot Oracle™ — the AI Financial Officer for Indian businesses. Reply in the user's language. Be professional, warm, executive. Cite GST law where relevant. Use ₹ and Indian number formatting.`,
+   425→   425→      memoryBlock: '',
+   426→   426→    };
+   427→   427→  }
+   428→   428→
+   429→   429→  const systemPrompt = promptData.prompt;
+   430→   430→  const languageHint = inferLanguageHint(messages);
+   431→   431→  const userText = lastUserMessage(messages);
+   432→   432→
+   433→   433→  // ── Source retrieval (silent failure) ─────────────────────────────────────
+   434→   434→  let relevantSources: Awaited<ReturnType<typeof retrieveSources>> = [];
+   435→   435→  try {
+   436→   436→    if (userText) relevantSources = await retrieveSources(userText, 3);
+   437→   437→  } catch {
+   438→   438→    /* ignore */
+   439→   439→  }
+   440→   440→  const sourcesBlock = relevantSources.length > 0 ? renderSourcesBlock(relevantSources) : '';
+   441→   441→  const finalSystemPrompt = sourcesBlock ? `${systemPrompt}\n\n${sourcesBlock}` : systemPrompt;
+   442→   442→
+   443→   443→  const modelMessages: { role: 'assistant' | 'user' | 'system'; content: string }[] = [
+   444→   444→    { role: 'assistant', content: finalSystemPrompt },
+   445→   445→    ...toModelMessages(messages),
+   446→   446→  ];
+   447→   447→
+   448→   448→  // ── Acquire the upstream stream from the SDK ───────────────────────────────
+   449→   449→  let upstream: ReadableStream<Uint8Array> | null = null;
+   450→   450→  try {
+   451→   451→    const zai = await ZAI.create();
+   452→   452→    const result = await zai.chat.completions.create({
+   453→   453→      messages: modelMessages,
+   454→   454→      stream: true,
+   455→   455→      thinking: { type: 'disabled' },
+   456→   456→    });
+   457→   457→    if (result && typeof (result as ReadableStream<Uint8Array>).getReader === 'function') {
+   458→   458→      upstream = result as ReadableStream<Uint8Array>;
+   459→   459→    } else {
+   460→   460→      // Non-streaming fallback: emit the full text as one chunk then close.
+   461→   461→      const text =
+   462→   462→        (result as { choices?: { message?: { content?: string } }[] })?.choices?.[0]?.message
+   463→   463→          ?.content ?? '';
+   464→   464→      upstream = new ReadableStream<Uint8Array>({
+   465→   465→        start(controller) {
+   466→   466→          if (text) controller.enqueue(sseChunk({ token: text }));
+   467→   467→          controller.close();
+   468→   468→        },
+   469→   469→      });
+   470→   470→    }
+   471→   471→  } catch {
+   472→   472→    // RELIABILITY: never surface the underlying 401 / token / quota error.
+   473→   473→    // Return a graceful, user-facing message instead.
+   474→   474→    const stream = new ReadableStream<Uint8Array>({
+   475→   475→      start(controller) {
+   476→   476→        controller.enqueue(
+   477→   477→          sseChunk({
+   478→   478→            token:
+   479→   479→              'Oracle is temporarily unavailable. Please try again in a moment — your conversation is safe.',
+   480→   480→          }),
+   481→   481→        );
+   482→   482→        controller.enqueue(sseChunk({ done: true }));
+   483→   483→        controller.close();
+   484→   484→      },
+   485→   485→    });
+   486→   486→    return new Response(stream, { status: 200, headers: sseHeaders() });
+   487→   487→  }
+   488→   488→
+   489→   489→  // ── Transform the upstream SSE stream into our token stream ────────────────
+   490→   490→  const decoder = new TextDecoder();
+   491→   491→  const transformed = new ReadableStream<Uint8Array>({
+   492→   492→    async start(controller) {
+   493→   493→      if (languageHint) controller.enqueue(sseChunk({ language: languageHint }));
+   494→   494→
+   495→   495→      const reader = upstream!.getReader();
+   496→   496→      let buffer = '';
+   497→   497→      let emittedAny = false;
+   498→   498→      let fullText = '';
+   499→   499→      try {
+   500→   500→        while (true) {
+   501→   501→          const { done, value } = await reader.read();
+   502→   502→          if (done) break;
+   503→   503→          buffer += decoder.decode(value, { stream: true });
+   504→   504→
+   505→   505→          const lines = buffer.split('\n');
+   506→   506→          buffer = lines.pop() ?? '';
+   507→   507→
+   508→   508→          for (const rawLine of lines) {
+   509→   509→            const line = rawLine.trim();
+   510→   510→            if (!line || !line.startsWith('data:')) continue;
+   511→   511→            const data = line.slice(5).trim();
+   512→   512→            if (data === '[DONE]' || !data) continue;
+   513→   513→            try {
+   514→   514→              const json = JSON.parse(data);
+   515→   515→              const token: string =
+   516→   516→                json?.choices?.[0]?.delta?.content ??
+   517→   517→                json?.choices?.[0]?.message?.content ??
+   518→   518→                '';
+   519→   519→              if (token) {
+   520→   520→                emittedAny = true;
+   521→   521→                fullText += token;
+   522→   522→                controller.enqueue(sseChunk({ token }));
+   523→   523→              }
+   524→   524→            } catch {
+   525→   525→              // Partial JSON across a chunk boundary — resolves on next read.
+   526→   526→            }
+   527→   527→          }
+   528→   528→        }
+   529→   529→        // Flush any trailing buffered line.
+   530→   530→        const tail = buffer.trim();
+   531→   531→        if (tail.startsWith('data:')) {
+   532→   532→          const data = tail.slice(5).trim();
+   533→   533→          if (data && data !== '[DONE]') {
+   534→   534→            try {
+   535→   535→              const json = JSON.parse(data);
+   536→   536→              const token: string =
+   537→   537→                json?.choices?.[0]?.delta?.content ??
+   538→   538→                json?.choices?.[0]?.message?.content ??
+   539→   539→                '';
+   540→   540→              if (token) {
+   541→   541→                emittedAny = true;
+   542→   542→                fullText += token;
+   543→   543→                controller.enqueue(sseChunk({ token }));
+   544→   544→              }
+   545→   545→            } catch {
+   546→   546→              /* ignore */
+   547→   547→            }
+   548→   548→          }
+   549→   549→        }
+   550→   550→        if (!emittedAny) {
+   551→   551→          fullText =
+   552→   552→            "I'm here. Based on current GST rules and the information available, I'd be glad to help — could you share a bit more about what you're looking to do?";
+   553→   553→          controller.enqueue(sseChunk({ token: fullText }));
+   554→   554→        }
+   555→   555→
+   556→   556→        // ── Emit sources (if any) before closing ────────────────────────────
+   557→   557→        if (relevantSources.length > 0) {
+   558→   558→          controller.enqueue(sseChunk({ sources: relevantSources }));
+   559→   559→        }
+   560→   560→
+   561→   561→        // ── Detect + emit autopilot actions ─────────────────────────────────
+   562→   562→        let detectedActions: ReturnType<typeof detectActions> = [];
+   563→   563→        try {
+   564→   564→          detectedActions = detectActions({
+   565→   565→            userMessage: userText,
+   566→   566→            oracleResponse: fullText,
+   567→   567→            liveData,
+   568→   568→          });
+   569→   569→          if (detectedActions.length > 0) {
+   570→   570→            controller.enqueue(sseChunk({ actions: detectedActions }));
+   571→   571→          }
+   572→   572→        } catch {
+   573→   573→          /* ignore */
+   574→   574→        }
+   575→   575→
+   576→   576→        // ── Persist long-term memory from this exchange (fire-and-forget) ──
+   577→   577→        try {
+   578→   578→          extractAndPersistFacts({
+   579→   579→            userMessage: userText,
+   580→   580→            oracleResponse: fullText,
+   581→   581→            knownUserName: body.memory?.userName,
+   582→   582→            knownFirmName: body.memory?.firmName,
+   583→   583→            knownGstin: body.memory?.gstin,
+   584→   584→          }).catch(() => undefined);
+   585→   585→        } catch {
+   586→   586→          /* ignore */
+   587→   587→        }
+   588→   588→
+   589→   589→        controller.enqueue(sseChunk({ done: true }));
+   590→   590→        controller.close();
+   591→   591→      } catch {
+   592→   592→        // RELIABILITY: stream interrupted — never leak the underlying error.
+   593→   593→        if (!emittedAny) {
+   594→   594→          controller.enqueue(
+   595→   595→            sseChunk({
+   596→   596→              token:
+   597→   597→                'Oracle is temporarily unavailable. Please try again in a moment — your conversation is safe.',
+   598→   598→            }),
+   599→   599→          );
+   600→   600→        }
+   601→   601→        controller.enqueue(sseChunk({ done: true }));
+   602→   602→        controller.close();
+   603→   603→      }
+   604→   604→    },
+   605→   605→    cancel() {
+   606→   606→      upstream?.cancel?.().catch(() => undefined);
+   607→   607→    },
+   608→   608→  });
+   609→   609→
+   610→   610→  return new Response(transformed, { status: 200, headers: sseHeaders() });
+   611→   611→}
+   612→   612→
+   613→   613→export const runtime = 'nodejs';
+   614→   614→export const maxDuration = 60;
+   615→   615→

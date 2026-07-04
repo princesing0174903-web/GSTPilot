@@ -1,0 +1,1390 @@
+     1→// ═══════════════════════════════════════════════════════════════════════════════
+     2→// GSTPilot Oracle Intelligence Core™ — Knowledge Synthesis
+     3→// Every day Oracle publishes eight executive briefings, automatically:
+     4→//   1. business_insight    2. risk_summary       3. growth_opportunity
+     5→//   4. cost_saving          5. compliance_warning 6. revenue_forecast
+     6→//   7. cash_forecast        8. executive_summary
+     7→// Every value is derived from REAL connected business data — never mocked.
+     8→// ═══════════════════════════════════════════════════════════════════════════════
+     9→
+    10→import { db } from '@/lib/db';
+    11→import type {
+    12→  AIModuleId,
+    13→  BusinessContext,
+    14→  InsightCategory,
+    15→  InsightRecord,
+    16→} from './types';
+    17→
+    18→const FIRM_ID = process.env.NEXT_PUBLIC_FIRM_ID || 'gstpilot-default-firm';
+    19→
+    20→const ALL_CATEGORIES: InsightCategory[] = [
+    21→  'business_insight',
+    22→  'risk_summary',
+    23→  'growth_opportunity',
+    24→  'cost_saving',
+    25→  'compliance_warning',
+    26→  'revenue_forecast',
+    27→  'cash_forecast',
+    28→  'executive_summary',
+    29→];
+    30→
+    31→// ─── Helpers ────────────────────────────────────────────────────────────────
+    32→
+    33→function safeParseJSON<T>(raw: string | null | undefined, fallback: T): T {
+    34→  if (!raw) return fallback;
+    35→  try {
+    36→    return JSON.parse(raw) as T;
+    37→  } catch {
+    38→    return fallback;
+    39→  }
+    40→}
+    41→
+    42→function fmtINR(amount: number): string {
+    43→  if (!Number.isFinite(amount)) return '₹0';
+    44→  const abs = Math.abs(amount);
+    45→  if (abs >= 1_00_00_000) {
+    46→    return `₹${(amount / 1_00_00_000).toFixed(2)} Cr`;
+    47→  }
+    48→  if (abs >= 1_00_000) {
+    49→    return `₹${(amount / 1_00_000).toFixed(2)} L`;
+    50→  }
+    51→  if (abs >= 1_000) {
+    52→    return `₹${(amount / 1_000).toFixed(1)}K`;
+    53→  }
+    54→  return `₹${Math.round(amount)}`;
+    55→}
+    56→
+    57→function dateKey(d: Date): string {
+    58→  return d.toISOString().slice(0, 10);
+    59→}
+    60→
+    61→function clamp(value: number, min: number, max: number): number {
+    62→  return Math.max(min, Math.min(max, value));
+    63→}
+    64→
+    65→/**
+    66→ * Compute a 0-100 impact score from a ₹ amount.
+    67→ *   ₹10L+ → 90+
+    68→ *   ₹1L+  → 70+
+    69→ *   ₹10K+ → 50+
+    70→ *   ₹1K+  → 30+
+    71→ *   else  → 10
+    72→ */
+    73→function impactFromAmount(amount: number): number {
+    74→  const abs = Math.abs(amount);
+    75→  if (abs >= 10_00_000) return clamp(90 + Math.floor(abs / 50_00_000) * 2, 90, 100);
+    76→  if (abs >= 1_00_000) return clamp(70 + Math.floor((abs - 1_00_000) / 50_000), 70, 89);
+    77→  if (abs >= 10_000) return clamp(50 + Math.floor((abs - 10_000) / 5_000), 50, 69);
+    78→  if (abs >= 1_000) return clamp(30 + Math.floor((abs - 1_000) / 500), 30, 49);
+    79→  return 10;
+    80→}
+    81→
+    82→/** Compute a confidence score (60-95) from how many non-empty sources contributed. */
+    83→function confidenceFromSources(sourceCount: number, maxValue = 95): number {
+    84→  const base = 60;
+    85→  const bonus = Math.min(maxValue - base, sourceCount * 8);
+    86→  return clamp(base + bonus, 60, maxValue);
+    87→}
+    88→
+    89→// ─── Dynamic Sibling Imports ────────────────────────────────────────────────
+    90→// Sibling modules may be mid-build in parallel. Always wrap in try/catch so a
+    91→// missing or broken sibling never crashes Knowledge Synthesis.
+    92→
+    93→interface MemoryModule {
+    94→  writeMemory: (input: Record<string, unknown>) => Promise<unknown>;
+    95→  searchMemory: (input: Record<string, unknown>) => Promise<{
+    96→    total: number;
+    97→    records: Array<Record<string, unknown>>;
+    98→  }>;
+    99→  getMemoryStats: () => Promise<Record<string, unknown>>;
+   100→  writeMemoryBatch: (inputs: Record<string, unknown>[]) => Promise<number>;
+   101→}
+   102→
+   103→interface ContextModule {
+   104→  gatherBusinessContext: (opts?: Record<string, unknown>) => Promise<BusinessContext>;
+   105→  formatContextForPrompt: (ctx: BusinessContext) => string;
+   106→}
+   107→
+   108→async function loadMemory(): Promise<MemoryModule | null> {
+   109→  try {
+   110→    return (await import('./memory')) as unknown as MemoryModule;
+   111→  } catch (e) {
+   112→    console.warn('[Oracle Insights] memory module unavailable:', e);
+   113→    return null;
+   114→  }
+   115→}
+   116→
+   117→async function loadContext(): Promise<ContextModule | null> {
+   118→  try {
+   119→    return (await import('./context')) as ContextModule;
+   120→  } catch (e) {
+   121→    console.warn('[Oracle Insights] context module unavailable:', e);
+   122→    return null;
+   123→  }
+   124→}
+   125→
+   126→// ─── 17 AI Module Orchestrators (best-effort, never crash) ──────────────────
+   127→
+   128→interface CFOData {
+   129→  dashboard?: {
+   130→    cash?: { currentBalance?: number; runwayDays?: number; burnRatePerDay?: number };
+   131→    receivables?: { pendingCollections?: number; overdueCollections?: number };
+   132→    payables?: { vendorDues?: number; upcomingPayments?: number };
+   133→    gst?: { liability?: number; itcAvailable?: number; upcomingDueDates?: Array<{ returnType: string; period: string; dueDate: string; daysLeft: number }> };
+   134→    revenue?: { thisMonth?: number; lastMonth?: number; growthPct?: number };
+   135→    expenses?: number;
+   136→    bankBalance?: number;
+   137→  };
+   138→  risks?: Array<{ title?: string; severity?: string; level?: string; impact?: string }>;
+   139→  predictions?: { revenueForecast?: { ninetyDay?: number }; cashForecast?: { ninetyDay?: number } };
+   140→  recommendations?: Array<{ title?: string; rationale?: string; priority?: string }>;
+   141→}
+   142→
+   143→interface CEOData {
+   144→  generatedAt?: string;
+   145→  liveState?: Record<string, unknown>;
+   146→  alerts?: Array<{ title?: string; severity?: string; message?: string }>;
+   147→  pendingApprovals?: Array<{ id?: string; title?: string; type?: string }>;
+   148→  decisions?: Array<{ title?: string; status?: string }>;
+   149→  metrics?: Record<string, unknown>;
+   150→}
+   151→
+   152→interface AutonomousData {
+   153→  observation?: Record<string, unknown>;
+   154→  executives?: Array<Record<string, unknown>>;
+   155→  alerts?: Array<{ title?: string; severity?: string; category?: string }>;
+   156→  selfHealing?: { failing?: number; checks?: Array<{ name?: string; status?: string; healthy?: boolean }> };
+   157→  decisions?: Array<Record<string, unknown>>;
+   158→  metrics?: Record<string, unknown>;
+   159→}
+   160→
+   161→interface ConnectivityData {
+   162→  summary?: { total?: number; healthy?: number; failing?: number; avgReliability?: number };
+   163→  connectors?: Array<{ displayName?: string; provider?: string; category?: string; status?: string; reliabilityPct?: number }>;
+   164→  failingConnectors?: Array<{ displayName?: string; provider?: string; reason?: string }>;
+   165→}
+   166→
+   167→interface FactoryData {
+   168→  metrics?: { totalProjects?: number; totalBuilds?: number; successRate?: number; totalReleases?: number };
+   169→  projects?: Array<Record<string, unknown>>;
+   170→}
+   171→
+   172→async function loadCFO(): Promise<CFOData | null> {
+   173→  try {
+   174→    const mod = await import('@/lib/cfo/engine');
+   175→    if (!mod || typeof (mod as { generateCFOInsights?: unknown }).generateCFOInsights !== 'function') {
+   176→      return null;
+   177→    }
+   178→    const result = await (mod as unknown as { generateCFOInsights: (user?: unknown) => Promise<CFOData> }).generateCFOInsights(null);
+   179→    return result ?? null;
+   180→  } catch (e) {
+   181→    console.warn('[Oracle Insights] CFO orchestrator unavailable:', e);
+   182→    return null;
+   183→  }
+   184→}
+   185→
+   186→async function loadCEO(): Promise<CEOData | null> {
+   187→  try {
+   188→    const mod = await import('@/lib/ceo/orchestrator');
+   189→    if (!mod || typeof (mod as { getCachedCEODashboard?: unknown }).getCachedCEODashboard !== 'function') {
+   190→      return null;
+   191→    }
+   192→    const result = await (mod as unknown as { getCachedCEODashboard: () => Promise<CEOData> }).getCachedCEODashboard();
+   193→    return result ?? null;
+   194→  } catch (e) {
+   195→    console.warn('[Oracle Insights] CEO orchestrator unavailable:', e);
+   196→    return null;
+   197→  }
+   198→}
+   199→
+   200→async function loadAutonomous(): Promise<AutonomousData | null> {
+   201→  try {
+   202→    const mod = await import('@/lib/autonomous/orchestrator');
+   203→    if (!mod || typeof (mod as { getAutonomousDashboard?: unknown }).getAutonomousDashboard !== 'function') {
+   204→      return null;
+   205→    }
+   206→    const result = await (mod as unknown as { getAutonomousDashboard: () => Promise<AutonomousData> }).getAutonomousDashboard();
+   207→    return result ?? null;
+   208→  } catch (e) {
+   209→    console.warn('[Oracle Insights] Autonomous orchestrator unavailable:', e);
+   210→    return null;
+   211→  }
+   212→}
+   213→
+   214→async function loadConnectivity(): Promise<ConnectivityData | null> {
+   215→  try {
+   216→    const mod = await import('@/lib/connectivity/orchestrator');
+   217→    if (!mod || typeof (mod as { getConnectivityDashboard?: unknown }).getConnectivityDashboard !== 'function') {
+   218→      return null;
+   219→    }
+   220→    const result = await (mod as unknown as { getConnectivityDashboard: () => Promise<ConnectivityData> }).getConnectivityDashboard();
+   221→    return result ?? null;
+   222→  } catch (e) {
+   223→    console.warn('[Oracle Insights] Connectivity orchestrator unavailable:', e);
+   224→    return null;
+   225→  }
+   226→}
+   227→
+   228→async function loadFactory(): Promise<FactoryData | null> {
+   229→  try {
+   230→    const mod = await import('@/lib/software-factory/engine');
+   231→    if (!mod || typeof (mod as { getFactoryDashboard?: unknown }).getFactoryDashboard !== 'function') {
+   232→      return null;
+   233→    }
+   234→    const result = await (mod as { getFactoryDashboard: () => Promise<FactoryData> }).getFactoryDashboard();
+   235→    return result ?? null;
+   236→  } catch (e) {
+   237→    console.warn('[Oracle Insights] Factory orchestrator unavailable:', e);
+   238→    return null;
+   239→  }
+   240→}
+   241→
+   242→// ─── Empty Business Context Fallback ────────────────────────────────────────
+   243→
+   244→function emptyContext(firmId: string): BusinessContext {
+   245→  return {
+   246→    gatheredAt: new Date().toISOString(),
+   247→    firmId,
+   248→    graph: { nodeCount: 0, edgeCount: 0, topRisks: [], recentChanges: [] },
+   249→    twin: { healthScore: 0, cashRunwayDays: 0, anomalies: 0, forecastDirection: 'stable' },
+   250→    knowledge: { entityCount: 0, recentUpdates: 0 },
+   251→    recentEvents: [],
+   252→    connectedSystems: { total: 0, healthy: 0, failing: 0, avgReliability: 0 },
+   253→    finance: {
+   254→      cashBalance: 0,
+   255→      monthlyRevenue: 0,
+   256→      monthlyExpenses: 0,
+   257→      gstCollected: 0,
+   258→      gstPaid: 0,
+   259→      receivables: 0,
+   260→      payables: 0,
+   261→    },
+   262→    recentInvoices: [],
+   263→    recentReports: [],
+   264→    previousConversations: [],
+   265→    goals: [],
+   266→    strategies: [],
+   267→    pendingApprovals: [],
+   268→    estimatedTokens: 0,
+   269→  };
+   270→}
+   271→
+   272→// ─── Raw Prisma Collectors ──────────────────────────────────────────────────
+   273→
+   274→interface RawCollectedData {
+   275→  recentReasoning: Array<{
+   276→    id: string;
+   277→    request: string;
+   278→    businessReasoning: string;
+   279→    confidence: number;
+   280→    finalAnswer: string;
+   281→  }>;
+   282→  recentInvoices: Array<{ totalAmount: number; status: string; invoiceDate: string; buyerName: string | null }>;
+   283→  overdueFilings: Array<{ returnType: string; period: string; status: string; clientId: string; totalTax: number }>;
+   284→  openNotices: Array<{ noticeType: string; subject: string; status: string; priority: string; clientId: string }>;
+   285→  expenses: Array<{ vendor: string | null; category: string; amount: number; date: string }>;
+   286→  failingConnectors: Array<{ displayName: string; provider: string; status: string; connectorKey: string }>;
+   287→  activeClients: number;
+   288→  totalClients: number;
+   289→  clientsByStatus: Record<string, number>;
+   290→}
+   291→
+   292→async function collectRawData(): Promise<RawCollectedData> {
+   293→  const [
+   294→    recentReasoningRows,
+   295→    recentInvoiceRows,
+   296→    overdueFilingRows,
+   297→    openNoticeRows,
+   298→    expenseRows,
+   299→    failingConnectorRows,
+   300→    totalClients,
+   301→    clientStatusRows,
+   302→  ] = await Promise.all([
+   303→    (async () => {
+   304→      try {
+   305→        return (await db.oracleReasoning.findMany({
+   306→          orderBy: [{ confidence: 'desc' }, { createdAt: 'desc' }],
+   307→          take: 5,
+   308→          select: {
+   309→            id: true,
+   310→            request: true,
+   311→            businessReasoning: true,
+   312→            confidence: true,
+   313→            finalAnswer: true,
+   314→          },
+   315→        })) as Array<{
+   316→          id: string;
+   317→          request: string;
+   318→          businessReasoning: string;
+   319→          confidence: number;
+   320→          finalAnswer: string;
+   321→        }>;
+   322→      } catch (e) {
+   323→        console.warn('[Oracle Insights] reasoning query failed:', e);
+   324→        return [];
+   325→      }
+   326→    })(),
+   327→    (async () => {
+   328→      try {
+   329→        return (await db.invoice.findMany({
+   330→          orderBy: { invoiceDate: 'desc' },
+   331→          take: 200,
+   332→          select: {
+   333→            totalAmount: true,
+   334→            status: true,
+   335→            invoiceDate: true,
+   336→            buyerName: true,
+   337→          },
+   338→        })) as Array<{
+   339→          totalAmount: number;
+   340→          status: string;
+   341→          invoiceDate: string;
+   342→          buyerName: string | null;
+   343→        }>;
+   344→      } catch (e) {
+   345→        console.warn('[Oracle Insights] invoice query failed:', e);
+   346→        return [];
+   347→      }
+   348→    })(),
+   349→    (async () => {
+   350→      try {
+   351→        return (await db.gSTRFiling.findMany({
+   352→          where: {
+   353→            status: { in: ['draft', 'pending', 'overdue', 'in_progress'] },
+   354→          },
+   355→          orderBy: { period: 'desc' },
+   356→          take: 50,
+   357→          select: {
+   358→            returnType: true,
+   359→            period: true,
+   360→            status: true,
+   361→            clientId: true,
+   362→            totalTax: true,
+   363→          },
+   364→        })) as Array<{
+   365→          returnType: string;
+   366→          period: string;
+   367→          status: string;
+   368→          clientId: string;
+   369→          totalTax: number;
+   370→        }>;
+   371→      } catch (e) {
+   372→        console.warn('[Oracle Insights] GSTRFiling query failed:', e);
+   373→        return [];
+   374→      }
+   375→    })(),
+   376→    (async () => {
+   377→      try {
+   378→        return (await db.notice.findMany({
+   379→          where: { status: { in: ['open', 'pending', 'in_progress'] } },
+   380→          orderBy: { createdAt: 'desc' },
+   381→          take: 50,
+   382→          select: {
+   383→            noticeType: true,
+   384→            subject: true,
+   385→            status: true,
+   386→            priority: true,
+   387→            clientId: true,
+   388→          },
+   389→        })) as Array<{
+   390→          noticeType: string;
+   391→          subject: string;
+   392→          status: string;
+   393→          priority: string;
+   394→          clientId: string;
+   395→        }>;
+   396→      } catch (e) {
+   397→        console.warn('[Oracle Insights] notice query failed:', e);
+   398→        return [];
+   399→      }
+   400→    })(),
+   401→    (async () => {
+   402→      try {
+   403→        return (await db.expense.findMany({
+   404→          orderBy: { amount: 'desc' },
+   405→          take: 100,
+   406→          select: {
+   407→            vendor: true,
+   408→            category: true,
+   409→            amount: true,
+   410→            date: true,
+   411→          },
+   412→        })) as Array<{
+   413→          vendor: string | null;
+   414→          category: string;
+   415→          amount: number;
+   416→          date: string;
+   417→        }>;
+   418→      } catch (e) {
+   419→        console.warn('[Oracle Insights] expense query failed:', e);
+   420→        return [];
+   421→      }
+   422→    })(),
+   423→    (async () => {
+   424→      try {
+   425→        return (await db.connectorInstance.findMany({
+   426→          where: { status: { in: ['error', 'expired', 'revoked'] } },
+   427→          take: 50,
+   428→          select: {
+   429→            displayName: true,
+   430→            provider: true,
+   431→            status: true,
+   432→            connectorKey: true,
+   433→          },
+   434→        })) as Array<{
+   435→          displayName: string;
+   436→          provider: string;
+   437→          status: string;
+   438→          connectorKey: string;
+   439→        }>;
+   440→      } catch (e) {
+   441→        console.warn('[Oracle Insights] connector query failed:', e);
+   442→        return [];
+   443→      }
+   444→    })(),
+   445→    (async () => {
+   446→      try {
+   447→        return await db.client.count();
+   448→      } catch (e) {
+   449→        console.warn('[Oracle Insights] client count failed:', e);
+   450→        return 0;
+   451→      }
+   452→    })(),
+   453→    (async () => {
+   454→      try {
+   455→        const rows = await db.client.groupBy({
+   456→          by: ['status'],
+   457→          _count: { _all: true },
+   458→        });
+   459→        const result: Record<string, number> = {};
+   460→        for (const r of rows) result[r.status] = r._count._all;
+   461→        return result;
+   462→      } catch (e) {
+   463→        console.warn('[Oracle Insights] client groupBy failed:', e);
+   464→        return {} as Record<string, number>;
+   465→      }
+   466→    })(),
+   467→  ]);
+   468→
+   469→  return {
+   470→    recentReasoning: recentReasoningRows,
+   471→    recentInvoices: recentInvoiceRows,
+   472→    overdueFilings: overdueFilingRows,
+   473→    openNotices: openNoticeRows,
+   474→    expenses: expenseRows,
+   475→    failingConnectors: failingConnectorRows,
+   476→    activeClients: clientStatusRows['active'] ?? 0,
+   477→    totalClients,
+   478→    clientsByStatus: clientStatusRows,
+   479→  };
+   480→}
+   481→
+   482→// ─── Per-Category Builders ──────────────────────────────────────────────────
+   483→// Each builder returns a partial InsightRecord (title, body, confidence,
+   484→// impactScore, actionItems, dataSources). The caller adds ids, dates, flags.
+   485→
+   486→interface InsightDraft {
+   487→  title: string;
+   488→  body: string;
+   489→  confidence: number;
+   490→  impactScore: number;
+   491→  actionItems: string[];
+   492→  dataSources: AIModuleId[];
+   493→}
+   494→
+   495→function buildBusinessInsight(
+   496→  date: string,
+   497→  raw: RawCollectedData,
+   498→  ctx: BusinessContext,
+   499→  cfo: CFOData | null,
+   500→  ceo: CEOData | null,
+   501→): InsightDraft {
+   502→  const dataSources: AIModuleId[] = ['oracle'];
+   503→  if (cfo) dataSources.push('cfo');
+   504→  if (ceo) dataSources.push('ceo');
+   505→
+   506→  const reasoningBullets = (raw.recentReasoning ?? [])
+   507→    .slice(0, 3)
+   508→    .map((r, i) => `${i + 1}. ${r.request.slice(0, 120)} (confidence ${r.confidence}%)`)
+   509→    .join('\n');
+   510→
+   511→  const topRisks = ctx.graph.topRisks
+   512→    .slice(0, 2)
+   513→    .map((r) => `• ${r.label} (score ${r.score})`)
+   514→    .join('\n');
+   515→
+   516→  const body = [
+   517→    `Date: ${date}`,
+   518→    '',
+   519→    'Top recent Oracle reasonings (by confidence):',
+   520→    reasoningBullets || '• No recent reasoning records found.',
+   521→    '',
+   522→    topRisks ? `Top business-graph risks:\n${topRisks}` : null,
+   523→    ctx.twin.healthScore > 0
+   524→      ? `Digital Twin health: ${ctx.twin.healthScore}/100 — forecast ${ctx.twin.forecastDirection}.`
+   525→      : null,
+   526→    ceo?.alerts && ceo.alerts.length > 0
+   527→      ? `CEO alerts active: ${ceo.alerts.length}`
+   528→      : null,
+   529→  ]
+   530→    .filter(Boolean)
+   531→    .join('\n');
+   532→
+   533→  const actionItems: string[] = [];
+   534→  for (const r of (raw.recentReasoning ?? []).slice(0, 2)) {
+   535→    actionItems.push(`Review reasoning "${r.request.slice(0, 60)}…" — act on its recommendation`);
+   536→  }
+   537→  if (ctx.twin.healthScore > 0 && ctx.twin.healthScore < 60) {
+   538→    actionItems.push('Investigate Digital Twin health degradation');
+   539→  }
+   540→  if (ceo?.alerts && ceo.alerts.length > 0) {
+   541→    actionItems.push(`Address ${ceo.alerts.length} open CEO alert(s)`);
+   542→  }
+   543→  if (actionItems.length < 2) {
+   544→    actionItems.push('Schedule weekly Oracle review with executive team');
+   545→  }
+   546→  while (actionItems.length > 4) actionItems.pop();
+   547→
+   548→  return {
+   549→    title: `Top 3 business insights for ${date}`,
+   550→    body,
+   551→    confidence: confidenceFromSources(dataSources.length),
+   552→    impactScore: clamp(
+   553→      Math.max(60, ctx.twin.healthScore || 60, (raw.recentReasoning ?? [])[0]?.confidence ?? 60),
+   554→      0,
+   555→      100,
+   556→    ),
+   557→    actionItems: actionItems.slice(0, 4),
+   558→    dataSources,
+   559→  };
+   560→}
+   561→
+   562→function buildRiskSummary(
+   563→  date: string,
+   564→  raw: RawCollectedData,
+   565→  connectivity: ConnectivityData | null,
+   566→  autonomous: AutonomousData | null,
+   567→  cfo: CFOData | null,
+   568→): InsightDraft {
+   569→  const dataSources: AIModuleId[] = ['oracle'];
+   570→  if (connectivity) dataSources.push('connectivity');
+   571→  if (autonomous) dataSources.push('autonomous');
+   572→  if (cfo) dataSources.push('cfo');
+   573→
+   574→  const failingConnectors = [
+   575→    ...((raw.failingConnectors ?? []).map((c) => `• ${c.displayName} (${c.provider}) — ${c.status}`)),
+   576→    ...(Array.isArray(connectivity?.failingConnectors)
+   577→      ? (connectivity?.failingConnectors ?? []).map((c: { displayName?: string; provider?: string; reason?: string }) => `• ${c.displayName ?? 'Unknown'} (${c.provider ?? '?'}) — ${c.reason ?? 'failing'}`)
+   578→      : typeof connectivity?.failingConnectors === 'number' && connectivity.failingConnectors > 0
+   579→        ? [`• ${connectivity.failingConnectors} failing connector(s) (see Connectivity Fabric™)`]
+   580→        : []),
+   581→  ].slice(0, 5);
+   582→
+   583→  const cfoRisks =
+   584→    cfo?.risks
+   585→      ?.slice(0, 3)
+   586→      .map((r) => `• ${r.title ?? 'Untitled risk'} (${r.severity ?? r.level ?? '?'})`)
+   587→      .join('\n') ?? null;
+   588→
+   589→  const autoAlerts =
+   590→    autonomous?.alerts
+   591→      ?.slice(0, 3)
+   592→      .map((a) => `• ${a.title ?? 'Alert'} [${a.severity ?? '?'}]`)
+   593→      .join('\n') ?? null;
+   594→
+   595→  const selfHealingFailures =
+   596→    autonomous?.selfHealing?.checks
+   597→      ?.filter((c) => c.healthy === false || c.status === 'failing' || c.status === 'unhealthy')
+   598→      .map((c) => `• ${c.name ?? 'Check'} unhealthy`)
+   599→      .join('\n') ?? null;
+   600→
+   601→  const body = [
+   602→    `Date: ${date}`,
+   603→    '',
+   604→    failingConnectors.length > 0
+   605→      ? `Failing connectors (${failingConnectors.length}):\n${failingConnectors.join('\n')}`
+   606→      : 'No failing connectors detected.',
+   607→    cfoRisks ? `\nCFO risks:\n${cfoRisks}` : null,
+   608→    autoAlerts ? `\nAutonomous alerts:\n${autoAlerts}` : null,
+   609→    selfHealingFailures ? `\nSelf-healing issues:\n${selfHealingFailures}` : null,
+   610→  ]
+   611→    .filter(Boolean)
+   612→    .join('\n');
+   613→
+   614→  const actionItems: string[] = [];
+   615→  if (failingConnectors.length > 0) {
+   616→    actionItems.push(`Repair ${failingConnectors.length} failing connector(s) immediately`);
+   617→  }
+   618→  if (cfo?.risks && cfo.risks.length > 0) {
+   619→    actionItems.push(`Mitigate top CFO risk: "${cfo.risks[0]?.title ?? 'priority risk'}"`);
+   620→  }
+   621→  if (autonomous?.alerts && autonomous.alerts.length > 0) {
+   622→    actionItems.push(`Triage ${autonomous.alerts.length} autonomous alert(s)`);
+   623→  }
+   624→  if (selfHealingFailures) {
+   625→    actionItems.push('Run self-healing diagnostics on failing checks');
+   626→  }
+   627→  if (actionItems.length === 0) {
+   628→    actionItems.push('Maintain current risk posture — no critical risks detected');
+   629→  }
+   630→  while (actionItems.length > 4) actionItems.pop();
+   631→
+   632→  const riskCount =
+   633→    failingConnectors.length +
+   634→    (cfo?.risks?.length ?? 0) +
+   635→    (autonomous?.alerts?.length ?? 0);
+   636→
+   637→  return {
+   638→    title: `Risk summary for ${date}`,
+   639→    body,
+   640→    confidence: confidenceFromSources(dataSources.length),
+   641→    impactScore: clamp(50 + riskCount * 8, 0, 100),
+   642→    actionItems: actionItems.slice(0, 4),
+   643→    dataSources,
+   644→  };
+   645→}
+   646→
+   647→function buildGrowthOpportunity(
+   648→  date: string,
+   649→  raw: RawCollectedData,
+   650→  ctx: BusinessContext,
+   651→  cfo: CFOData | null,
+   652→): InsightDraft {
+   653→  const dataSources: AIModuleId[] = ['oracle'];
+   654→  if (cfo) dataSources.push('cfo');
+   655→  dataSources.push('marketing');
+   656→  dataSources.push('hr');
+   657→
+   658→  const activeClients = raw.activeClients ?? 0;
+   659→  const totalClients = raw.totalClients ?? 0;
+   660→  const newClients = (raw.clientsByStatus ?? {})['new'] ?? 0;
+   661→  const inactiveClients = (raw.clientsByStatus ?? {})['inactive'] ?? 0;
+   662→
+   663→  const monthlyRevenue = ctx.finance.monthlyRevenue || cfo?.dashboard?.revenue?.thisMonth || 0;
+   664→  const lastMonthRevenue = ctx.finance.monthlyRevenue || cfo?.dashboard?.revenue?.lastMonth || 0;
+   665→  const revenueGrowth = cfo?.dashboard?.revenue?.growthPct ?? 0;
+   666→
+   667→  const topBuyersMap = new Map<string, number>();
+   668→  for (const inv of (raw.recentInvoices ?? []).slice(0, 100)) {
+   669→    const name = inv.buyerName || 'Unknown';
+   670→    topBuyersMap.set(name, (topBuyersMap.get(name) ?? 0) + inv.totalAmount);
+   671→  }
+   672→  const topBuyers = Array.from(topBuyersMap.entries())
+   673→    .sort((a, b) => b[1] - a[1])
+   674→    .slice(0, 3);
+   675→
+   676→  const body = [
+   677→    `Date: ${date}`,
+   678→    '',
+   679→    `Active clients: ${activeClients} / ${totalClients} total (${newClients} new, ${inactiveClients} inactive)`,
+   680→    `Monthly revenue: ${fmtINR(monthlyRevenue)} (${revenueGrowth >= 0 ? '+' : ''}${revenueGrowth.toFixed(1)}% MoM)`,
+   681→    '',
+   682→    'Top buyers by recent invoice volume:',
+   683→    topBuyers.length > 0
+   684→      ? topBuyers.map(([n, v]) => `• ${n}: ${fmtINR(v)}`).join('\n')
+   685→      : '• No buyer data available',
+   686→    ctx.goals.length > 0
+   687→      ? `\nActive goals tracked: ${ctx.goals.length}`
+   688→      : null,
+   689→  ]
+   690→    .filter(Boolean)
+   691→    .join('\n');
+   692→
+   693→  const actionItems: string[] = [
+   694→    `Upsell to top ${Math.min(3, topBuyers.length)} buyers — they have proven spend capacity`,
+   695→    `Re-engage ${inactiveClients} inactive clients with win-back campaign`,
+   696→  ];
+   697→  if (revenueGrowth > 10) {
+   698→    actionItems.push('Sustain revenue momentum — consider expanding into adjacent markets');
+   699→  } else if (revenueGrowth < 0) {
+   700→    actionItems.push('Reverse revenue decline — review pricing and sales pipeline');
+   701→  }
+   702→  if (newClients > 0) {
+   703→    actionItems.push(`Onboard ${newClients} new client(s) for full revenue recognition`);
+   704→  }
+   705→  while (actionItems.length > 4) actionItems.pop();
+   706→
+   707→  return {
+   708→    title: `Growth opportunities for ${date}`,
+   709→    body,
+   710→    confidence: confidenceFromSources(dataSources.length, 90),
+   711→    impactScore: impactFromAmount(monthlyRevenue * 0.1),
+   712→    actionItems: actionItems.slice(0, 4),
+   713→    dataSources,
+   714→  };
+   715→}
+   716→
+   717→function buildCostSaving(
+   718→  date: string,
+   719→  raw: RawCollectedData,
+   720→  ctx: BusinessContext,
+   721→  cfo: CFOData | null,
+   722→): InsightDraft {
+   723→  const dataSources: AIModuleId[] = ['oracle'];
+   724→  if (cfo) dataSources.push('cfo');
+   725→
+   726→  // Top vendors by spend (last 100 expenses).
+   727→  const vendorSpendMap = new Map<string, number>();
+   728→  for (const exp of (raw.expenses ?? [])) {
+   729→    const vendor = exp.vendor || exp.category || 'Unknown';
+   730→    vendorSpendMap.set(vendor, (vendorSpendMap.get(vendor) ?? 0) + exp.amount);
+   731→  }
+   732→  const topVendors = Array.from(vendorSpendMap.entries())
+   733→    .sort((a, b) => b[1] - a[1])
+   734→    .slice(0, 5);
+   735→
+   736→  const totalExpenses = (raw.expenses ?? []).reduce((sum, e) => sum + e.amount, 0);
+   737→  const monthlyExpenses = ctx.finance.monthlyExpenses || cfo?.dashboard?.expenses || totalExpenses;
+   738→
+   739→  // Identify non-GST-claimable expenses (potential savings).
+   740→  const gstClaimableCount = (raw.expenses ?? []).filter((e) => e.category !== 'Salary' && e.category !== 'Rent').length;
+   741→
+   742→  const body = [
+   743→    `Date: ${date}`,
+   744→    '',
+   745→    `Total expenses analysed: ${fmtINR(totalExpenses)} (monthly run-rate: ${fmtINR(monthlyExpenses)})`,
+   746→    '',
+   747→    'Top vendors / categories by spend:',
+   748→    topVendors.length > 0
+   749→      ? topVendors.map(([n, v]) => `• ${n}: ${fmtINR(v)}`).join('\n')
+   750→      : '• No expense data available',
+   751→    '',
+   752→    `GST-claimable expense lines: ${gstClaimableCount} of ${raw.expenses.length}`,
+   753→    cfo?.dashboard?.payables?.vendorDues
+   754→      ? `Outstanding vendor dues: ${fmtINR(cfo.dashboard.payables.vendorDues)}`
+   755→      : null,
+   756→  ]
+   757→    .filter(Boolean)
+   758→    .join('\n');
+   759→
+   760→  const actionItems: string[] = [];
+   761→  if (topVendors.length > 0) {
+   762→    actionItems.push(`Renegotiate contract with top vendor "${topVendors[0][0]}" — ${fmtINR(topVendors[0][1])} spend`);
+   763→  }
+   764→  actionItems.push('Audit all expense categories for GST claimability gaps');
+   765→  if (gstClaimableCount < raw.expenses.length && raw.expenses.length > 0) {
+   766→    actionItems.push(`Recover ITC on ${raw.expenses.length - gstClaimableCount} non-claimable lines`);
+   767→  }
+   768→  if (cfo?.dashboard?.payables?.vendorDues && cfo.dashboard.payables.vendorDues > 100000) {
+   769→    actionItems.push('Negotiate extended payment terms with vendors to free working capital');
+   770→  }
+   771→  if (actionItems.length < 2) {
+   772→    actionItems.push('Implement monthly expense review with department heads');
+   773→  }
+   774→  while (actionItems.length > 4) actionItems.pop();
+   775→
+   776→  return {
+   777→    title: `Cost savings opportunities for ${date}`,
+   778→    body,
+   779→    confidence: confidenceFromSources(dataSources.length, 90),
+   780→    impactScore: impactFromAmount(totalExpenses * 0.1),
+   781→    actionItems: actionItems.slice(0, 4),
+   782→    dataSources,
+   783→  };
+   784→}
+   785→
+   786→function buildComplianceWarning(
+   787→  date: string,
+   788→  raw: RawCollectedData,
+   789→  cfo: CFOData | null,
+   790→): InsightDraft {
+   791→  const dataSources: AIModuleId[] = ['oracle', 'legal'];
+   792→  if (cfo) dataSources.push('cfo');
+   793→
+   794→  const overdueFilings = raw.overdueFilings ?? [];
+   795→  const openNotices = raw.openNotices ?? [];
+   796→
+   797→  const upcomingDueDates =
+   798→    cfo?.dashboard?.gst?.upcomingDueDates?.slice(0, 5) ?? [];
+   799→
+   800→  const body = [
+   801→    `Date: ${date}`,
+   802→    '',
+   803→    `Pending / overdue GST filings: ${overdueFilings.length}`,
+   804→    overdueFilings.length > 0
+   805→      ? overdueFilings
+   806→          .slice(0, 5)
+   807→          .map((f) => `• ${f.returnType} — ${f.period} [${f.status}] (tax: ${fmtINR(f.totalTax)})`)
+   808→          .join('\n')
+   809→      : '• All filings up to date.',
+   810→    '',
+   811→    `Open notices: ${openNotices.length}`,
+   812→    openNotices.length > 0
+   813→      ? openNotices
+   814→          .slice(0, 5)
+   815→          .map((n) => `• [${n.priority}] ${n.subject} (${n.noticeType}) — ${n.status}`)
+   816→          .join('\n')
+   817→      : '• No open notices.',
+   818→    upcomingDueDates.length > 0
+   819→      ? `\nUpcoming GST due dates:\n${upcomingDueDates.map((d) => `• ${d.returnType} ${d.period} — due ${d.dueDate} (${d.daysLeft}d left)`).join('\n')}`
+   820→      : null,
+   821→  ]
+   822→    .filter(Boolean)
+   823→    .join('\n');
+   824→
+   825→  const actionItems: string[] = [];
+   826→  if (overdueFilings.length > 0) {
+   827→    actionItems.push(`File ${overdueFilings.length} overdue GSTR return(s) immediately to avoid penalty`);
+   828→  }
+   829→  if (openNotices.length > 0) {
+   830→    actionItems.push(`Respond to ${openNotices.length} open notice(s) before due date`);
+   831→  }
+   832→  if (upcomingDueDates.length > 0) {
+   833→    actionItems.push(`Prepare for next GST filing: ${upcomingDueDates[0].returnType} ${upcomingDueDates[0].period}`);
+   834→  }
+   835→  if (actionItems.length < 2) {
+   836→    actionItems.push('Continue compliance cadence — no urgent warnings detected');
+   837→  }
+   838→  while (actionItems.length > 4) actionItems.pop();
+   839→
+   840→  const totalTaxAtRisk = overdueFilings.reduce((sum, f) => sum + f.totalTax, 0);
+   841→
+   842→  return {
+   843→    title: `Compliance warnings for ${date}`,
+   844→    body,
+   845→    confidence: confidenceFromSources(dataSources.length),
+   846→    impactScore: clamp(impactFromAmount(totalTaxAtRisk) + 10, 0, 100),
+   847→    actionItems: actionItems.slice(0, 4),
+   848→    dataSources,
+   849→  };
+   850→}
+   851→
+   852→function buildRevenueForecast(
+   853→  date: string,
+   854→  raw: RawCollectedData,
+   855→  ctx: BusinessContext,
+   856→  cfo: CFOData | null,
+   857→): InsightDraft {
+   858→  const dataSources: AIModuleId[] = ['oracle'];
+   859→  if (cfo) dataSources.push('cfo');
+   860→  dataSources.push('marketing');
+   861→
+   862→  // Sum last 3 months of invoices (best-effort from invoiceDate strings).
+   863→  const now = new Date(date);
+   864→  const threeMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 3, 1);
+   865→  const last3MonthsInvoices = (raw.recentInvoices ?? []).filter((inv) => {
+   866→    try {
+   867→      const d = new Date(inv.invoiceDate);
+   868→      return d >= threeMonthsAgo && d <= now;
+   869→    } catch {
+   870→      return false;
+   871→    }
+   872→  });
+   873→  const last3MonthsRevenue = last3MonthsInvoices.reduce((s, i) => s + i.totalAmount, 0);
+   874→  const monthlyAvg = last3MonthsRevenue / 3;
+   875→  const ninetyDayForecast = Math.round(monthlyAvg * 3);
+   876→
+   877→  const cfoForecast = cfo?.predictions?.revenueForecast?.ninetyDay;
+   878→  const blendedForecast = cfoForecast
+   879→    ? Math.round((ninetyDayForecast + cfoForecast) / 2)
+   880→    : ninetyDayForecast;
+   881→
+   882→  const body = [
+   883→    `Date: ${date} (90-day horizon)`,
+   884→    '',
+   885→    `Last 3 months invoice revenue: ${fmtINR(last3MonthsRevenue)} (${last3MonthsInvoices.length} invoices)`,
+   886→    `Monthly average: ${fmtINR(monthlyAvg)}`,
+   887→    `Projected next 90 days (trend): ${fmtINR(ninetyDayForecast)}`,
+   888→    cfoForecast ? `CFO model 90-day forecast: ${fmtINR(cfoForecast)}` : null,
+   889→    `Blended forecast: ${fmtINR(blendedForecast)}`,
+   890→    ctx.finance.monthlyRevenue > 0
+   891→      ? `Context engine monthly revenue: ${fmtINR(ctx.finance.monthlyRevenue)}`
+   892→      : null,
+   893→  ]
+   894→    .filter(Boolean)
+   895→    .join('\n');
+   896→
+   897→  const actionItems: string[] = [
+   898→    `Plan capacity for projected ${fmtINR(monthlyAvg)} monthly revenue`,
+   899→    'Accelerate collection on receivables to realise forecasted revenue',
+   900→  ];
+   901→  if (blendedForecast > last3MonthsRevenue) {
+   902→    actionItems.push('Prepare for growth — pre-position inventory and staffing');
+   903→  } else if (blendedForecast < last3MonthsRevenue) {
+   904→    actionItems.push('Hedge against revenue decline — review pricing and pipeline');
+   905→  }
+   906→  if (cfoForecast) {
+   907→    actionItems.push('Reconcile trend projection against CFO model assumptions');
+   908→  }
+   909→  while (actionItems.length > 4) actionItems.pop();
+   910→
+   911→  return {
+   912→    title: 'Revenue forecast for next 90 days',
+   913→    body,
+   914→    confidence: confidenceFromSources(dataSources.length, 90),
+   915→    impactScore: impactFromAmount(blendedForecast),
+   916→    actionItems: actionItems.slice(0, 4),
+   917→    dataSources,
+   918→  };
+   919→}
+   920→
+   921→function buildCashForecast(
+   922→  date: string,
+   923→  ctx: BusinessContext,
+   924→  cfo: CFOData | null,
+   925→): InsightDraft {
+   926→  const dataSources: AIModuleId[] = ['oracle'];
+   927→  if (cfo) dataSources.push('cfo');
+   928→
+   929→  const bankBalance =
+   930→    cfo?.dashboard?.bankBalance ??
+   931→    ctx.finance.cashBalance ??
+   932→    cfo?.dashboard?.cash?.currentBalance ??
+   933→    0;
+   934→  const receivables =
+   935→    ctx.finance.receivables || cfo?.dashboard?.receivables?.pendingCollections || 0;
+   936→  const payables =
+   937→    ctx.finance.payables || cfo?.dashboard?.payables?.vendorDues || 0;
+   938→  const monthlyBurn =
+   939→    ctx.finance.monthlyExpenses ||
+   940→    cfo?.dashboard?.expenses ||
+   941→    (cfo?.dashboard?.cash?.burnRatePerDay ? cfo.dashboard.cash.burnRatePerDay * 30 : 0);
+   942→  const threeMonthBurn = monthlyBurn * 3;
+   943→  const ninetyDayCash = bankBalance + receivables - payables - threeMonthBurn;
+   944→  const runwayDays =
+   945→    cfo?.dashboard?.cash?.runwayDays ??
+   946→    (monthlyBurn > 0 ? Math.floor(bankBalance / (monthlyBurn / 30)) : 0);
+   947→
+   948→  const cfoCashForecast = cfo?.predictions?.cashForecast?.ninetyDay;
+   949→  const blendedCashForecast = cfoCashForecast
+   950→    ? Math.round((ninetyDayCash + cfoCashForecast) / 2)
+   951→    : ninetyDayCash;
+   952→
+   953→  const body = [
+   954→    `Date: ${date} (90-day horizon)`,
+   955→    '',
+   956→    `Bank balance: ${fmtINR(bankBalance)}`,
+   957→    `Receivables (incoming): ${fmtINR(receivables)}`,
+   958→    `Payables (outgoing): ${fmtINR(payables)}`,
+   959→    `Projected 3-month burn: ${fmtINR(threeMonthBurn)}`,
+   960→    `Projected cash in 90 days: ${fmtINR(ninetyDayCash)}`,
+   961→    cfoCashForecast ? `CFO model 90-day cash forecast: ${fmtINR(cfoCashForecast)}` : null,
+   962→    `Blended forecast: ${fmtINR(blendedCashForecast)}`,
+   963→    runwayDays > 0 ? `Runway: ~${runwayDays} days at current burn` : null,
+   964→  ]
+   965→    .filter(Boolean)
+   966→    .join('\n');
+   967→
+   968→  const actionItems: string[] = [
+   969→    'Prioritise collection of overdue receivables to strengthen cash position',
+   970→  ];
+   971→  if (ninetyDayCash < 0) {
+   972→    actionItems.push('URGENT: 90-day cash deficit projected — arrange credit line or defer discretionary spend');
+   973→  } else if (runwayDays > 0 && runwayDays < 60) {
+   974→    actionItems.push(`Runway below 60 days (${runwayDays}d) — accelerate collection and freeze hiring`);
+   975→  } else {
+   976→    actionItems.push('Maintain cash discipline — schedule monthly cash review');
+   977→  }
+   978→  if (payables > receivables) {
+   979→    actionItems.push('Negotiate extended vendor terms — payables exceed receivables');
+   980→  }
+   981→  if (cfoCashForecast) {
+   982→    actionItems.push('Reconcile trend projection against CFO cash model');
+   983→  }
+   984→  while (actionItems.length > 4) actionItems.pop();
+   985→
+   986→  return {
+   987→    title: 'Cash forecast for next 90 days',
+   988→    body,
+   989→    confidence: confidenceFromSources(dataSources.length, 90),
+   990→    impactScore: impactFromAmount(Math.abs(ninetyDayCash)),
+   991→    actionItems: actionItems.slice(0, 4),
+   992→    dataSources,
+   993→  };
+   994→}
+   995→
+   996→function buildExecutiveSummary(
+   997→  date: string,
+   998→  drafts: Record<InsightCategory, InsightDraft>,
+   999→): InsightDraft {
+  1000→  const sources = Array.from(
+  1001→    new Set<AIModuleId>(
+  1002→      Object.values(drafts).flatMap((d) => d.dataSources),
+  1003→    ),
+  1004→  );
+  1005→
+  1006→  const business = drafts.business_insight;
+  1007→  const risk = drafts.risk_summary;
+  1008→  const growth = drafts.growth_opportunity;
+  1009→  const cost = drafts.cost_saving;
+  1010→  const compliance = drafts.compliance_warning;
+  1011→  const revenue = drafts.revenue_forecast;
+  1012→  const cash = drafts.cash_forecast;
+  1013→
+  1014→  const paragraph = [
+  1015→    `On ${date}, Oracle synthesised briefings across ${sources.length} intelligence modules.`,
+  1016→    business.actionItems[0] ? `Top business priority: ${business.actionItems[0]}.` : null,
+  1017→    risk.actionItems[0] ? `Risk posture: ${risk.actionItems[0]}.` : null,
+  1018→    growth.actionItems[0] ? `Growth: ${growth.actionItems[0]}.` : null,
+  1019→    cost.actionItems[0] ? `Cost: ${cost.actionItems[0]}.` : null,
+  1020→    compliance.actionItems[0] ? `Compliance: ${compliance.actionItems[0]}.` : null,
+  1021→    revenue.actionItems[0] ? `Revenue: ${revenue.actionItems[0]}.` : null,
+  1022→    cash.actionItems[0] ? `Cash: ${cash.actionItems[0]}.` : null,
+  1023→  ]
+  1024→    .filter(Boolean)
+  1025→    .join(' ');
+  1026→
+  1027→  const actionItems: string[] = [];
+  1028→  // Pick the single highest-priority action from each insight.
+  1029→  for (const cat of [
+  1030→    'business_insight',
+  1031→    'risk_summary',
+  1032→    'compliance_warning',
+  1033→    'cash_forecast',
+  1034→  ] as InsightCategory[]) {
+  1035→    const a = drafts[cat]?.actionItems?.[0];
+  1036→    if (a) actionItems.push(a);
+  1037→  }
+  1038→  while (actionItems.length > 4) actionItems.pop();
+  1039→
+  1040→  const avgConfidence = Math.round(
+  1041→    Object.values(drafts).reduce((s, d) => s + d.confidence, 0) /
+  1042→      Object.keys(drafts).length,
+  1043→  );
+  1044→  const maxImpact = Math.max(...Object.values(drafts).map((d) => d.impactScore));
+  1045→
+  1046→  return {
+  1047→    title: `Executive summary for ${date}`,
+  1048→    body: paragraph,
+  1049→    confidence: clamp(avgConfidence, 60, 95),
+  1050→    impactScore: maxImpact,
+  1051→    actionItems: actionItems.slice(0, 4),
+  1052→    dataSources: sources.length > 0 ? sources : (['oracle'] as AIModuleId[]),
+  1053→  };
+  1054→}
+  1055→
+  1056→// ─── Persistence ────────────────────────────────────────────────────────────
+  1057→
+  1058→function serializeInsight(r: {
+  1059→  id: string;
+  1060→  firmId: string;
+  1061→  synthesisDate: Date;
+  1062→  category: string;
+  1063→  title: string;
+  1064→  body: string;
+  1065→  confidence: number;
+  1066→  impactScore: number;
+  1067→  actionItems: string;
+  1068→  dataSources: string;
+  1069→  acknowledged: boolean;
+  1070→  actedOn: boolean;
+  1071→  createdAt: Date;
+  1072→}): InsightRecord {
+  1073→  return {
+  1074→    id: r.id,
+  1075→    firmId: r.firmId,
+  1076→    synthesisDate: r.synthesisDate.toISOString(),
+  1077→    category: r.category as InsightCategory,
+  1078→    title: r.title,
+  1079→    body: r.body,
+  1080→    confidence: r.confidence,
+  1081→    impactScore: r.impactScore,
+  1082→    actionItems: safeParseJSON<string[]>(r.actionItems, []),
+  1083→    dataSources: safeParseJSON<AIModuleId[]>(r.dataSources, []),
+  1084→    acknowledged: r.acknowledged,
+  1085→    actedOn: r.actedOn,
+  1086→    createdAt: r.createdAt.toISOString(),
+  1087→  };
+  1088→}
+  1089→
+  1090→async function persistInsight(
+  1091→  firmId: string,
+  1092→  synthesisDate: Date,
+  1093→  category: InsightCategory,
+  1094→  draft: InsightDraft,
+  1095→): Promise<InsightRecord> {
+  1096→  const created = await db.oracleInsight.create({
+  1097→    data: {
+  1098→      firmId,
+  1099→      synthesisDate,
+  1100→      category,
+  1101→      title: draft.title,
+  1102→      body: draft.body,
+  1103→      confidence: draft.confidence,
+  1104→      impactScore: draft.impactScore,
+  1105→      actionItems: JSON.stringify(draft.actionItems),
+  1106→      dataSources: JSON.stringify(draft.dataSources),
+  1107→      acknowledged: false,
+  1108→      actedOn: false,
+  1109→    },
+  1110→  });
+  1111→  return serializeInsight(created);
+  1112→}
+  1113→
+  1114→// ─── Main: synthesizeInsights ───────────────────────────────────────────────
+  1115→
+  1116→export interface SynthesizeOptions {
+  1117→  firmId?: string;
+  1118→  date?: Date;
+  1119→}
+  1120→
+  1121→/** Generate the 8 daily insight records, persist them, and write memory entries. */
+  1122→export async function synthesizeInsights(
+  1123→  options?: SynthesizeOptions,
+  1124→): Promise<InsightRecord[]> {
+  1125→  const firmId = options?.firmId || FIRM_ID;
+  1126→  const synthesisDate = options?.date ?? new Date();
+  1127→  const dateStr = dateKey(synthesisDate);
+  1128→
+  1129→  // 1. Gather business context (try/catch — empty defaults on failure).
+  1130→  let ctx: BusinessContext = emptyContext(firmId);
+  1131→  const contextMod = await loadContext();
+  1132→  if (contextMod) {
+  1133→    try {
+  1134→      ctx = await contextMod.gatherBusinessContext({ firmId });
+  1135→    } catch (e) {
+  1136→      console.warn('[Oracle Insights] gatherBusinessContext failed; using empty context:', e);
+  1137→    }
+  1138→  }
+  1139→
+  1140→  // 2. Gather real Prisma data.
+  1141→  const raw = await collectRawData();
+  1142→
+  1143→  // 3. Call sibling AI orchestrators (best-effort, parallel).
+  1144→  const [cfo, ceo, autonomous, connectivity] = await Promise.all([
+  1145→    loadCFO(),
+  1146→    loadCEO(),
+  1147→    loadAutonomous(),
+  1148→    loadConnectivity(),
+  1149→  ]);
+  1150→  // Factory data is used for completeness — currently not feeding into a
+  1151→  // dedicated insight category but kept available for future expansion.
+  1152→  void loadFactory();
+  1153→
+  1154→  // 4. Build all 8 drafts (each wrapped to surface which builder fails).
+  1155→  const drafts: Partial<Record<InsightCategory, InsightDraft>> = {};
+  1156→  const builders: Array<[InsightCategory, () => InsightDraft]> = [
+  1157→    ['business_insight', () => buildBusinessInsight(dateStr, raw, ctx, cfo, ceo)],
+  1158→    ['risk_summary', () => buildRiskSummary(dateStr, raw, connectivity, autonomous, cfo)],
+  1159→    ['growth_opportunity', () => buildGrowthOpportunity(dateStr, raw, ctx, cfo)],
+  1160→    ['cost_saving', () => buildCostSaving(dateStr, raw, ctx, cfo)],
+  1161→    ['compliance_warning', () => buildComplianceWarning(dateStr, raw, cfo)],
+  1162→    ['revenue_forecast', () => buildRevenueForecast(dateStr, raw, ctx, cfo)],
+  1163→    ['cash_forecast', () => buildCashForecast(dateStr, ctx, cfo)],
+  1164→  ];
+  1165→  for (const [cat, fn] of builders) {
+  1166→    try {
+  1167→      drafts[cat] = fn();
+  1168→    } catch (e) {
+  1169→      console.warn(`[Oracle Insights] builder ${cat} failed:`, e);
+  1170→      drafts[cat] = {
+  1171→        title: `${cat} for ${dateStr}`,
+  1172→        body: `Insight synthesis for ${cat} encountered an error: ${e instanceof Error ? e.message : 'unknown'}. Partial data used.`,
+  1173→        confidence: 50,
+  1174→        impactScore: 30,
+  1175→        actionItems: ['Review data inputs for this insight category'],
+  1176→        dataSources: ['oracle'],
+  1177→      };
+  1178→    }
+  1179→  }
+  1180→  try {
+  1181→    drafts.executive_summary = buildExecutiveSummary(
+  1182→      dateStr,
+  1183→      drafts as Record<InsightCategory, InsightDraft>,
+  1184→    );
+  1185→  } catch (e) {
+  1186→    console.warn('[Oracle Insights] executive summary builder failed:', e);
+  1187→    drafts.executive_summary = {
+  1188→      title: `Executive summary for ${dateStr}`,
+  1189→      body: `Oracle synthesised briefings across ${Object.keys(drafts).length} categories. Executive summary encountered an error: ${e instanceof Error ? e.message : 'unknown'}.`,
+  1190→      confidence: 60,
+  1191→      impactScore: 50,
+  1192→      actionItems: ['Review individual insight categories'],
+  1193→      dataSources: ['oracle'],
+  1194→    };
+  1195→  }
+  1196→
+  1197→  // 5. Persist + write memory entries.
+  1198→  const memoryMod = await loadMemory();
+  1199→  const results: InsightRecord[] = [];
+  1200→  for (const category of ALL_CATEGORIES) {
+  1201→    const draft = drafts[category];
+  1202→    if (!draft) continue;
+  1203→    try {
+  1204→      const record = await persistInsight(firmId, synthesisDate, category, draft);
+  1205→      results.push(record);
+  1206→
+  1207→      if (memoryMod) {
+  1208→        try {
+  1209→          await memoryMod.writeMemory({
+  1210→            firmId,
+  1211→            category: 'insight',
+  1212→            source: 'oracle',
+  1213→            entityType: 'insight',
+  1214→            entityId: record.id,
+  1215→            title: draft.title,
+  1216→            summary: draft.body.slice(0, 280),
+  1217→            payload: {
+  1218→              insightId: record.id,
+  1219→              category,
+  1220→              confidence: draft.confidence,
+  1221→              impactScore: draft.impactScore,
+  1222→              actionItems: draft.actionItems,
+  1223→              dataSources: draft.dataSources,
+  1224→            },
+  1225→            tags: ['insight', category, `impact:${draft.impactScore}`],
+  1226→            importance: Math.max(50, draft.impactScore),
+  1227→          });
+  1228→        } catch (e) {
+  1229→          console.warn(
+  1230→            `[Oracle Insights] memory write failed for ${category}:`,
+  1231→            e,
+  1232→          );
+  1233→        }
+  1234→      }
+  1235→    } catch (e) {
+  1236→      console.warn(
+  1237→        `[Oracle Insights] persist failed for ${category}:`,
+  1238→        e,
+  1239→      );
+  1240→    }
+  1241→  }
+  1242→
+  1243→  return results;
+  1244→}
+  1245→
+  1246→// ─── Stats ──────────────────────────────────────────────────────────────────
+  1247→
+  1248→export interface InsightStats {
+  1249→  total: number;
+  1250→  byCategory: Record<string, number>;
+  1251→  acknowledged: number;
+  1252→  actedOn: number;
+  1253→  topImpact: InsightRecord | null;
+  1254→}
+  1255→
+  1256→/** Aggregate stats for today's insights. */
+  1257→export async function getInsightStats(): Promise<InsightStats> {
+  1258→  const start = new Date();
+  1259→  start.setHours(0, 0, 0, 0);
+  1260→  const end = new Date();
+  1261→  end.setHours(23, 59, 59, 999);
+  1262→
+  1263→  try {
+  1264→    const where = {
+  1265→      synthesisDate: { gte: start, lte: end },
+  1266→    };
+  1267→    const [total, acknowledged, actedOn, byCategoryRows, topRow] = await Promise.all([
+  1268→      db.oracleInsight.count({ where }),
+  1269→      db.oracleInsight.count({ where: { ...where, acknowledged: true } }),
+  1270→      db.oracleInsight.count({ where: { ...where, actedOn: true } }),
+  1271→      db.oracleInsight.groupBy({
+  1272→        by: ['category'],
+  1273→        where,
+  1274→        _count: { _all: true },
+  1275→      }),
+  1276→      db.oracleInsight.findFirst({
+  1277→        where,
+  1278→        orderBy: { impactScore: 'desc' },
+  1279→      }),
+  1280→    ]);
+  1281→
+  1282→    const byCategory: Record<string, number> = {};
+  1283→    for (const r of byCategoryRows) byCategory[r.category] = r._count._all;
+  1284→
+  1285→    return {
+  1286→      total,
+  1287→      byCategory,
+  1288→      acknowledged,
+  1289→      actedOn,
+  1290→      topImpact: topRow ? serializeInsight(topRow as never) : null,
+  1291→    };
+  1292→  } catch (e) {
+  1293→    console.warn('[Oracle Insights] getInsightStats failed:', e);
+  1294→    return { total: 0, byCategory: {}, acknowledged: 0, actedOn: 0, topImpact: null };
+  1295→  }
+  1296→}
+  1297→
+  1298→// ─── List ───────────────────────────────────────────────────────────────────
+  1299→
+  1300→/** List insights, optionally filtered by date + category. Defaults to today. */
+  1301→export async function listInsights(
+  1302→  date?: Date,
+  1303→  category?: InsightCategory,
+  1304→  limit = 50,
+  1305→): Promise<InsightRecord[]> {
+  1306→  const targetDate = date ?? new Date();
+  1307→  const start = new Date(targetDate);
+  1308→  start.setHours(0, 0, 0, 0);
+  1309→  const end = new Date(targetDate);
+  1310→  end.setHours(23, 59, 59, 999);
+  1311→
+  1312→  const where: Record<string, unknown> = {
+  1313→    synthesisDate: { gte: start, lte: end },
+  1314→  };
+  1315→  if (category) where.category = category;
+  1316→
+  1317→  try {
+  1318→    const rows = await db.oracleInsight.findMany({
+  1319→      where,
+  1320→      orderBy: [{ impactScore: 'desc' }, { createdAt: 'desc' }],
+  1321→      take: Math.min(limit, 500),
+  1322→    });
+  1323→    return rows.map((r) => serializeInsight(r as never));
+  1324→  } catch (e) {
+  1325→    console.warn('[Oracle Insights] listInsights failed:', e);
+  1326→    return [];
+  1327→  }
+  1328→}
+  1329→
+  1330→// ─── Mutations ──────────────────────────────────────────────────────────────
+  1331→
+  1332→/** Mark an insight as acknowledged. */
+  1333→export async function acknowledgeInsight(id: string): Promise<void> {
+  1334→  try {
+  1335→    await db.oracleInsight.update({
+  1336→      where: { id },
+  1337→      data: { acknowledged: true },
+  1338→    });
+  1339→  } catch (e) {
+  1340→    console.warn('[Oracle Insights] acknowledgeInsight failed:', e);
+  1341→  }
+  1342→}
+  1343→
+  1344→/** Mark an insight as acted on (also acknowledges). */
+  1345→export async function actOnInsight(id: string): Promise<void> {
+  1346→  try {
+  1347→    await db.oracleInsight.update({
+  1348→      where: { id },
+  1349→      data: { actedOn: true, acknowledged: true },
+  1350→    });
+  1351→  } catch (e) {
+  1352→    console.warn('[Oracle Insights] actOnInsight failed:', e);
+  1353→  }
+  1354→}
+  1355→
+  1356→// ─── Daily Brief ────────────────────────────────────────────────────────────
+  1357→
+  1358→export interface DailyBrief {
+  1359→  date: string;
+  1360→  executiveSummary: InsightRecord | null;
+  1361→  top3: InsightRecord[];
+  1362→  pendingActions: number;
+  1363→}
+  1364→
+  1365→/** Convenience accessor for dashboard hero panels. */
+  1366→export async function getDailyBrief(): Promise<DailyBrief> {
+  1367→  const today = new Date();
+  1368→  const dateStr = dateKey(today);
+  1369→
+  1370→  try {
+  1371→    const insights = await listInsights(today, undefined, 50);
+  1372→    const executiveSummary =
+  1373→      insights.find((i) => i.category === 'executive_summary') ?? null;
+  1374→    const top3 = insights
+  1375→      .filter((i) => i.category !== 'executive_summary')
+  1376→      .slice(0, 3);
+  1377→    const pendingActions = insights.filter((i) => !i.actedOn).length;
+  1378→
+  1379→    return {
+  1380→      date: dateStr,
+  1381→      executiveSummary,
+  1382→      top3,
+  1383→      pendingActions,
+  1384→    };
+  1385→  } catch (e) {
+  1386→    console.warn('[Oracle Insights] getDailyBrief failed:', e);
+  1387→    return { date: dateStr, executiveSummary: null, top3: [], pendingActions: 0 };
+  1388→  }
+  1389→}
+  1390→

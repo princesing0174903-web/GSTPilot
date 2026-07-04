@@ -311,6 +311,41 @@ service cloud.firestore {
       allow delete: if isSignedIn() && resourceBelongsToUserOrg() && isOwnerOrAdmin(resource.data.organizationId);
     }
 
+    // ─── GST Connections (Phase 5 — Real GSTN Integration) ─────────────────
+    // One per org per GSTIN. Carries the AES-256-GCM encrypted session blob.
+    // Org members can read (the encrypted blob is useless without the server key);
+    // only owner/admin/accountant can create/update/disconnect.
+    match /gst_connections/{docId} {
+      allow read:   if isSignedIn() && resourceBelongsToUserOrg();
+      allow create: if isSignedIn() && writeScopedToUserOrg() && canMutate(request.resource.data.organizationId);
+      allow update: if isSignedIn() && resourceBelongsToUserOrg() && canMutate(resource.data.organizationId) && orgIdUnchanged();
+      allow delete: if isSignedIn() && resourceBelongsToUserOrg() && isOwnerOrAdmin(resource.data.organizationId);
+    }
+
+    // ─── GST Notices (GSTN-sourced, separate from the general notices) ─────
+    match /gst_notices/{docId} {
+      allow read:   if isSignedIn() && resourceBelongsToUserOrg();
+      allow create: if isSignedIn() && writeScopedToUserOrg();
+      allow update: if isSignedIn() && resourceBelongsToUserOrg() && canMutate(resource.data.organizationId) && orgIdUnchanged();
+      allow delete: if isSignedIn() && resourceBelongsToUserOrg() && isOwnerOrAdmin(resource.data.organizationId);
+    }
+
+    // ─── GST Ledgers (Electronic Cash / Credit / Liability) ────────────────
+    match /gst_ledgers/{docId} {
+      allow read:   if isSignedIn() && resourceBelongsToUserOrg();
+      allow create: if isSignedIn() && writeScopedToUserOrg();
+      allow update: if isSignedIn() && resourceBelongsToUserOrg() && canMutate(resource.data.organizationId) && orgIdUnchanged();
+      allow delete: if isSignedIn() && resourceBelongsToUserOrg() && isOwnerOrAdmin(resource.data.organizationId);
+    }
+
+    // ─── GST Sync Jobs (sync scheduler observability) ──────────────────────
+    match /gst_sync_jobs/{docId} {
+      allow read:   if isSignedIn() && resourceBelongsToUserOrg();
+      allow create: if isSignedIn() && writeScopedToUserOrg();
+      allow update: if isSignedIn() && resourceBelongsToUserOrg() && canMutate(resource.data.organizationId) && orgIdUnchanged();
+      allow delete: if isSignedIn() && resourceBelongsToUserOrg() && isOwnerOrAdmin(resource.data.organizationId);
+    }
+
     // ─── Default Deny ─────────────────────────────────────────────────────
     // Any collection not explicitly matched above is denied by default.
     match /{document=**} {

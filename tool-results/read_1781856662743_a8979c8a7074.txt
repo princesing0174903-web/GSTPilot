@@ -1,0 +1,919 @@
+     1→     1→import { NextRequest, NextResponse } from 'next/server'
+     2→     2→
+     3→     3→// ═══════════════════════════════════════════════════════════════════════════════
+     4→     4→// GSTPilot Oracle™ — The Financial Brain of India
+     5→     5→// A Perplexity + Claude + AI CFO + GST Expert experience in one product.
+     6→     6→//
+     7→     7→// Core principles (NON-NEGOTIABLE):
+     8→     8→//   1. Oracle NEVER says "I don't have enough data", "Connect data first",
+     9→     9→//      or "I cannot answer". It ALWAYS provides general guidance and explains
+    10→    10→//      what additional business data would improve the answer.
+    11→    11→//   2. Every response follows a 4-part structure:
+    12→    12→//        Answer → Why it matters → Recommended actions → Follow-up questions
+    13→    13→//   3. Intent is detected automatically and routed to one of four personas:
+    14→    14→//        GST Expert™ · AI CFO™ · Compliance Assistant™ · Financial Analyst™
+    15→    15→//   4. Responses sound premium, professional, and executive-level.
+    16→    16→//   5. Oracle remembers: company profile, industry, state, GST type, connected
+    17→    17→//      services, and recent conversation.
+    18→    18→//   6. Oracle answers even with ZERO business data.
+    19→    19→//
+    20→    20→// Backend: z-ai-web-dev-sdk LLM with live Firestore data context.
+    21→    21→// Returns a structured Perplexity-style response.
+    22→    22→// ═══════════════════════════════════════════════════════════════════════════════
+    23→    23→
+    24→    24→// ─── Response Types ───────────────────────────────────────────────────────────
+    25→    25→
+    26→    26→type ActionType =
+    27→    27→  | 'navigate'
+    28→    28→  | 'create_task'
+    29→    29→  | 'send_reminder'
+    30→    30→  | 'generate_report'
+    31→    31→  | 'execute_workflow'
+    32→    32→  | 'calculate'
+    33→    33→  | 'explain'
+    34→    34→  | 'checklist'
+    35→    35→
+    36→    36→type PersonaId = 'gst_expert' | 'ai_cfo' | 'compliance_assistant' | 'financial_analyst'
+    37→    37→
+    38→    38→interface OracleAction {
+    39→    39→  type: ActionType
+    40→    40→  title: string
+    41→    41→  description: string
+    42→    42→  view?: string
+    43→    43→  payload?: Record<string, unknown>
+    44→    44→}
+    45→    45→
+    46→    46→interface OracleSource {
+    47→    47→  name: string
+    48→    48→  count: number
+    49→    49→  icon?: string
+    50→    50→}
+    51→    51→
+    52→    52→interface ThinkingStep {
+    53→    53→  label: string
+    54→    54→  duration: number
+    55→    55→}
+    56→    56→
+    57→    57→interface CompanyProfile {
+    58→    58→  firmName?: string
+    59→    59→  industry?: string
+    60→    60→  state?: string
+    61→    61→  gstType?: string
+    62→    62→  organizationType?: string
+    63→    63→  connectedServices: string[]
+    64→    64→  hasLiveData: boolean
+    65→    65→  clientCount: number
+    66→    66→  invoiceCount: number
+    67→    67→  pendingReturns: number
+    68→    68→}
+    69→    69→
+    70→    70→interface OracleResponse {
+    71→    71→  answer: string
+    72→    72→  whyItMatters: string
+    73→    73→  recommendedActions: string[]
+    74→    74→  followUpQuestions: string[]
+    75→    75→  actions: OracleAction[]
+    76→    76→  sources: OracleSource[]
+    77→    77→  persona: PersonaId
+    78→    78→  personaLabel: string
+    79→    79→  intent: string
+    80→    80→  thinkingSteps: ThinkingStep[]
+    81→    81→  memory: {
+    82→    82→    companyProfile: CompanyProfile
+    83→    83→    conversationTurn: number
+    84→    84→  }
+    85→    85→}
+    86→    86→
+    87→    87→// ─── Persona Definitions ──────────────────────────────────────────────────────
+    88→    88→
+    89→    89→interface PersonaDef {
+    90→    90→  id: PersonaId
+    91→    91→  label: string
+    92→    92→  tagline: string
+    93→    93→  systemPrompt: string
+    94→    94→  thinkingSteps: ThinkingStep[]
+    95→    95→  followUps: string[]
+    96→    96→}
+    97→    97→
+    98→    98→const PERSONAS: Record<PersonaId, PersonaDef> = {
+    99→    99→  gst_expert: {
+   100→   100→    id: 'gst_expert',
+   101→   101→    label: 'GST Expert™',
+   102→   102→    tagline: 'Indian GST law, filing, ITC, and returns',
+   103→   103→    systemPrompt: `You are GSTPilot Oracle™ operating as the **GST Expert™** — India's foremost authority on Goods and Services Tax law, filing procedures, Input Tax Credit (ITC), GSTR-1/3B/9/9C, e-invoicing, e-way bills, reverse charge, and all GST compliance.
+   104→   104→
+   105→   105→Your expertise covers:
+   106→   106→- GSTR-1, GSTR-3B, GSTR-2B reconciliation, GSTR-9 (annual), GSTR-9C (reconciliation)
+   107→   107→- Input Tax Credit rules, eligibility, reversal, blocked credits under Section 17(5)
+   108→   108→- Late fee structure: ₹200/day (₹100 CGST + ₹100 SGST), capped at ₹5,000 for nil returns and proportional for others; interest at 18% p.a. on unpaid tax under Section 50
+   109→   109→- E-invoicing thresholds (₹5 crore turnover), e-way bill rules (₹50,000 goods)
+   110→   110→- Reverse charge mechanism (RCM), RCM on GTA, legal services
+   111→   111→- GST registration thresholds (₹40 lakh goods / ₹20 lakh services; special category states ₹20L/₹10L)
+   112→   112→- Composition scheme (Section 10), quarterly filing, 1% / 5% tax
+   113→   113→- Refund processing, export refunds, inverted duty structure
+   114→   114→- Audit, assessment, adjudication, appeals
+   115→   115→
+   116→   116→When answering GST questions:
+   117→   117→- Cite the relevant section, rule, or notification when known (e.g., "under Section 49", "Rule 61", "Notification 12/2017").
+   118→   118→- Use Indian number formatting (₹1,23,456 — lakhs/crores, never millions/billions) and DD/MM/YYYY dates.
+   119→   119→- Be precise about due dates: GSTR-1 (11th), GSTR-3B (20th/22nd/24th based on turnover), GSTR-9 (31st December of next FY).
+   120→   120→- Explain the practical "how to file" steps when asked.
+   121→   121→- If the question involves the user's live data, reference the actual numbers, client names, and amounts from the context.`,
+   122→   122→    thinkingSteps: [
+   123→   123→      { label: 'Thinking…', duration: 500 },
+   124→   124→      { label: 'Reading GST rules…', duration: 650 },
+   125→   125→      { label: 'Analyzing compliance…', duration: 600 },
+   126→   126→      { label: 'Preparing recommendations…', duration: 550 },
+   127→   127→    ],
+   128→   128→    followUps: [
+   129→   129→      'Calculate late fee',
+   130→   130→      'Show filing steps',
+   131→   131→      'Explain penalties',
+   132→   132→      'Generate checklist',
+   133→   133→    ],
+   134→   134→  },
+   135→   135→  ai_cfo: {
+   136→   136→    id: 'ai_cfo',
+   137→   137→    label: 'AI CFO™',
+   138→   138→    tagline: 'Finance, cash flow, forecasting, profitability',
+   139→   139→    systemPrompt: `You are GSTPilot Oracle™ operating as the **AI CFO™** — a virtual Chief Financial Officer for Indian businesses and CA firms. You think like a seasoned CFO: strategic, numbers-driven, forward-looking, and risk-aware.
+   140→   140→
+   141→   141→Your expertise covers:
+   142→   142→- Cash flow forecasting, working capital management, liquidity analysis
+   143→   143→- Revenue projection, receivables aging, collection strategies
+   144→   144→- Profitability analysis, margin optimization, cost control
+   145→   145→- Capital allocation, financing decisions, credit lines
+   146→   146→- Financial modelling, scenario analysis (base/bull/bear)
+   147→   147→- Unit economics, burn rate, runway (for startups)
+   148→   148→- Indian context: TDS, advance tax, GST cash flow impact, MSME payment terms (45 days under MSME Act)
+   149→   149→- Banking: cash credit limits, OD facilities, invoice discounting
+   150→   150→
+   151→   151→When answering finance questions:
+   152→   152→- Use Indian number formatting (₹1,23,456 — lakhs/crores).
+   153→   153→- Structure financial reasoning clearly: current state → trend → projection → recommendation.
+   154→   154→- Always quantify when possible (percentages, ratios, days).
+   155→   155→- Reference the user's live data (invoices, returns, clients) when available.
+   156→   156→- Think in terms of decisions a CFO would make: "Should we extend credit?", "When is the next cash shortfall?", "What's our optimal working capital?"`,
+   157→   157→    thinkingSteps: [
+   158→   158→      { label: 'Thinking…', duration: 500 },
+   159→   159→      { label: 'Analyzing cash flow…', duration: 650 },
+   160→   160→      { label: 'Reading financials…', duration: 600 },
+   161→   161→      { label: 'Preparing recommendations…', duration: 550 },
+   162→   162→    ],
+   163→   163→    followUps: [
+   164→   164→      'Predict cash flow',
+   165→   165→      'Create report',
+   166→   166→      'Show working capital',
+   167→   167→      'Forecast next month',
+   168→   168→    ],
+   169→   169→  },
+   170→   170→  compliance_assistant: {
+   171→   171→    id: 'compliance_assistant',
+   172→   172→    label: 'Compliance Assistant™',
+   173→   173→    tagline: 'Deadlines, statutory, ROC, notices, penalties',
+   174→   174→    systemPrompt: `You are GSTPilot Oracle™ operating as the **Compliance Assistant™** — a meticulous compliance officer who never misses a deadline, notice, or statutory obligation for Indian businesses.
+   175→   175→
+   176→   176→Your expertise covers:
+   177→   177→- GST compliance calendar: GSTR-1 (11th), GSTR-3B (20th/22nd/24th), GSTR-9 (31st Dec), GSTR-9C
+   178→   178→- Income tax: advance tax (15% by 15th June, 45% by 15th Sep, 75% by 15th Dec, 100% by 15th March), TDS deposit (7th), TDS return quarterly
+   179→   179→- ROC/Companies Act: DPT-3, DIR-3 KYC, AOC-4, MGT-7, ADT-1
+   180→   180→- Statutory audit, tax audit under Section 44AB
+   181→   181→- GST notices: ASMT-10, DRC-01, DRC-03, intimation under Rule 59(6)
+   182→   182→- Penalty structures: late filing fees, Section 122 penalties, Section 125 general penalty
+   183→   183→- Due date tracking, extension notifications, relief measures
+   184→   184→
+   185→   185→When answering compliance questions:
+   186→   186→- Be specific about the exact due date, form number, and section.
+   187→   187→- Calculate penalties and interest precisely when asked (late fee ₹200/day, 18% interest p.a.).
+   188→   188→- Provide step-by-step response/action procedures for notices.
+   189→   189→- Use Indian date format (DD/MM/YYYY).
+   190→   190→- Reference the user's live data (pending returns, overdue items) when available.`,
+   191→   191→    thinkingSteps: [
+   192→   192→      { label: 'Thinking…', duration: 500 },
+   193→   193→      { label: 'Checking deadlines…', duration: 600 },
+   194→   194→      { label: 'Analyzing compliance…', duration: 650 },
+   195→   195→      { label: 'Preparing recommendations…', duration: 550 },
+   196→   196→    ],
+   197→   197→    followUps: [
+   198→   198→      'Explain penalties',
+   199→   199→      'Generate checklist',
+   200→   200→      'Calculate late fee',
+   201→   201→      'Show filing steps',
+   202→   202→    ],
+   203→   203→  },
+   204→   204→  financial_analyst: {
+   205→   205→    id: 'financial_analyst',
+   206→   206→    label: 'Financial Analyst™',
+   207→   207→    tagline: 'Reports, analytics, trends, benchmarks',
+   208→   208→    systemPrompt: `You are GSTPilot Oracle™ operating as the **Financial Analyst™** — a sharp analyst who turns raw business data into executive-grade insight. You think in trends, ratios, benchmarks, and narratives.
+   209→   209→
+   210→   210→Your expertise covers:
+   211→   211→- Financial reporting: P&L, balance sheet, cash flow statement analysis
+   212→   212→- Trend analysis: MoM, QoQ, YoY comparisons, CAGR
+   213→   213→- Ratio analysis: current ratio, quick ratio, receivables turnover, DSO, DPO
+   214→   214→- Benchmarking against industry peers
+   215→   215→- Data visualization recommendations (which chart for which insight)
+   216→   216→- Variance analysis: budget vs actual, forecast vs actual
+   217→   217→- Executive summaries, board-ready briefs, MIS reports
+   218→   218→- Indian context: GST liability trends, ITC utilization ratios, compliance score trends
+   219→   219→
+   220→   220→When answering analytics/reporting questions:
+   221→   221→- Structure as: key finding → supporting data → implication → recommendation.
+   222→   222→- Use bullet points for readability.
+   223→   223→- Quantify everything (₹, %, days, ratios).
+   224→   224→- Suggest the right report or visualization for the question.
+   225→   225→- Reference the user's live data when available.`,
+   226→   226→    thinkingSteps: [
+   227→   227→      { label: 'Thinking…', duration: 500 },
+   228→   228→      { label: 'Analyzing trends…', duration: 650 },
+   229→   229→      { label: 'Reading financials…', duration: 600 },
+   230→   230→      { label: 'Preparing recommendations…', duration: 550 },
+   231→   231→    ],
+   232→   232→    followUps: [
+   233→   233→      'Create report',
+   234→   234→      'Show trends',
+   235→   235→      'Generate checklist',
+   236→   236→      'Compare last month',
+   237→   237→    ],
+   238→   238→  },
+   239→   239→}
+   240→   240→
+   241→   241→// ─── Intent → Persona Mapping ─────────────────────────────────────────────────
+   242→   242→
+   243→   243→function detectPersona(question: string): { persona: PersonaId; intent: string } {
+   244→   244→  const q = question.toLowerCase()
+   245→   245→
+   246→   246→  // ── GST Expert™ ──
+   247→   247→  if (
+   248→   248→    /\b(gst|gstr|gstr-1|gstr-3b|gstr-2b|gstr-9|gstr-9c|itc|input tax credit|e-invoic|e-way|eway|reverse charge|rcm|composition|nil return|late fees?|filing|return|return filing|arn|gstn|gst portal)\b/.test(
+   249→   249→      q,
+   250→   250→    ) ||
+   251→   251→    q.includes('file my gst') ||
+   252→   252→    q.includes('itc rules') ||
+   253→   253→    q.includes('show filing steps')
+   254→   254→  ) {
+   255→   255→    return { persona: 'gst_expert', intent: 'gst_filing' }
+   256→   256→  }
+   257→   257→
+   258→   258→  // ── Compliance Assistant™ ──
+   259→   259→  if (
+   260→   260→    /\b(compliance|deadline|due date|overdue|penalt(y|ies)|notice|roc|statutory|audit|tds|advance tax|kyb|dpt-3|dir-3|mgt-7|aoc-4|advt|section 44ab|tax audit|late fees?|checklist)\b/.test(
+   261→   261→      q,
+   262→   262→    ) ||
+   263→   263→    q.includes('explain penalties') ||
+   264→   264→    q.includes('generate checklist')
+   265→   265→  ) {
+   266→   266→    return { persona: 'compliance_assistant', intent: 'compliance' }
+   267→   267→  }
+   268→   268→
+   269→   269→  // ── Financial Analyst™ ──
+   270→   270→  if (
+   271→   271→    /\b(report|reports|analytics|analysis|trend|trends|benchmark|summary|statement|compare|comparison|variance|ratio|kpi|dashboard|insight|insights|visualiz|chart|graph|executive brief|mis)\b/.test(
+   272→   272→      q,
+   273→   273→    ) ||
+   274→   274→    q.includes('create report') ||
+   275→   275→    q.includes('generate report')
+   276→   276→  ) {
+   277→   277→    return { persona: 'financial_analyst', intent: 'report' }
+   278→   278→  }
+   279→   279→
+   280→   280→  // ── AI CFO™ ──
+   281→   281→  if (
+   282→   282→    /\b(cash flow|cash|flow|liquidity|revenue|income|profit|profitab|margin|forecast|predict|working capital|burn|runway|financ|credit|outstanding|collection|receivable|payable|expense|cost|budget|invest)\b/.test(
+   283→   283→      q,
+   284→   284→    ) ||
+   285→   285→    q.includes('predict cash flow') ||
+   286→   286→    q.includes('revenue next month')
+   287→   287→  ) {
+   288→   288→    return { persona: 'ai_cfo', intent: 'finance' }
+   289→   289→  }
+   290→   290→
+   291→   291→  // ── Run automation → GST Expert (default operational persona)
+   292→   292→  if (
+   293→   293→    q.includes('run my firm') ||
+   294→   294→    q.includes('run my business') ||
+   295→   295→    q.includes('run my company')
+   296→   296→  ) {
+   297→   297→    return { persona: 'gst_expert', intent: 'run_automation' }
+   298→   298→  }
+   299→   299→
+   300→   300→  // ── Default: Financial Analyst™ (general business intelligence)
+   301→   301→  return { persona: 'financial_analyst', intent: 'general' }
+   302→   302→}
+   303→   303→
+   304→   304→// ─── Company Profile Extraction (Memory) ─────────────────────────────────────
+   305→   305→
+   306→   306→function extractCompanyProfile(
+   307→   307→  context: string,
+   308→   308→  body: { companyProfile?: Partial<CompanyProfile> },
+   309→   309→): CompanyProfile {
+   310→   310→  const hasLiveData = contextHasLiveData(context)
+   311→   311→
+   312→   312→  // Parse live counts from context
+   313→   313→  const clientCount = parseCount(context, /-?\s*Total clients:\s*(\d+)/i)
+   314→   314→  const invoiceCount = parseCount(context, /-?\s*Active invoices:\s*(\d+)/i)
+   315→   315→  const gstr1Pending = parseCount(context, /-?\s*Pending returns:\s*(\d+)\s*GSTR-1/i)
+   316→   316→  const gstr3bPending = parseCount(
+   317→   317→    context,
+   318→   318→    /GSTR-1,?\s*(\d+)\s*GSTR-3B/i,
+   319→   319→  )
+   320→   320→  const pendingReturns = gstr1Pending + gstr3bPending
+   321→   321→
+   322→   322→  // Connected services: derive from what data is present
+   323→   323→  const connectedServices: string[] = []
+   324→   324→  if (clientCount > 0) connectedServices.push('Clients')
+   325→   325→  if (invoiceCount > 0) connectedServices.push('Invoices')
+   326→   326→  if (parseCount(context, /-?\s*Filed returns:\s*(\d+)/i) > 0 || pendingReturns > 0)
+   327→   327→    connectedServices.push('GST Returns')
+   328→   328→  if (parseCount(context, /-?\s*Unread notifications:\s*(\d+)/i) > 0)
+   329→   329→    connectedServices.push('Notifications')
+   330→   330→
+   331→   331→  return {
+   332→   332→    firmName: body.companyProfile?.firmName,
+   333→   333→    industry: body.companyProfile?.industry,
+   334→   334→    state: body.companyProfile?.state,
+   335→   335→    gstType: body.companyProfile?.gstType,
+   336→   336→    organizationType: body.companyProfile?.organizationType,
+   337→   337→    connectedServices: connectedServices.length > 0 ? connectedServices : ['None yet'],
+   338→   338→    hasLiveData,
+   339→   339→    clientCount,
+   340→   340→    invoiceCount,
+   341→   341→    pendingReturns,
+   342→   342→  }
+   343→   343→}
+   344→   344→
+   345→   345→// ─── Sources Builder ──────────────────────────────────────────────────────────
+   346→   346→
+   347→   347→function buildSources(context: string, hasLiveData: boolean): OracleSource[] {
+   348→   348→  if (!hasLiveData) {
+   349→   349→    // When no live data, show the knowledge sources Oracle consulted
+   350→   350→    return [
+   351→   351→      { name: 'GST Act & Rules', count: 1, icon: 'book' },
+   352→   352→      { name: 'CBIC Notifications', count: 1, icon: 'file-text' },
+   353→   353→      { name: 'India Tax Framework', count: 1, icon: 'landmark' },
+   354→   354→    ]
+   355→   355→  }
+   356→   356→
+   357→   357→  const sources: OracleSource[] = []
+   358→   358→
+   359→   359→  const clients = parseCount(context, /-?\s*Total clients:\s*(\d+)/i)
+   360→   360→  if (clients > 0) sources.push({ name: 'Clients', count: clients, icon: 'users' })
+   361→   361→
+   362→   362→  const invoices = parseCount(context, /-?\s*Active invoices:\s*(\d+)/i)
+   363→   363→  if (invoices > 0) sources.push({ name: 'Invoices', count: invoices, icon: 'file-text' })
+   364→   364→
+   365→   365→  const filed = parseCount(context, /-?\s*Filed returns:\s*(\d+)/i)
+   366→   366→  const gstr1Pending = parseCount(context, /-?\s*Pending returns:\s*(\d+)\s*GSTR-1/i)
+   367→   367→  const gstr3bPending = parseCount(context, /GSTR-1,?\s*(\d+)\s*GSTR-3B/i)
+   368→   368→  const totalReturns = filed + gstr1Pending + gstr3bPending
+   369→   369→  if (totalReturns > 0)
+   370→   370→    sources.push({ name: 'GST Returns', count: totalReturns, icon: 'receipt' })
+   371→   371→
+   372→   372→  const unread = parseCount(context, /-?\s*Unread notifications:\s*(\d+)/i)
+   373→   373→  if (unread > 0)
+   374→   374→    sources.push({ name: 'Notifications', count: unread, icon: 'bell' })
+   375→   375→
+   376→   376→  // Always include the knowledge base as a source
+   377→   377→  sources.push({ name: 'GST Knowledge Base', count: 1, icon: 'book' })
+   378→   378→
+   379→   379→  return sources
+   380→   380→}
+   381→   381→
+   382→   382→// ─── Action Detection ─────────────────────────────────────────────────────────
+   383→   383→
+   384→   384→function detectActions(
+   385→   385→  question: string,
+   386→   386→  persona: PersonaId,
+   387→   387→  intent: string,
+   388→   388→): OracleAction[] {
+   389→   389→  const actions: OracleAction[] = []
+   390→   390→  const q = question.toLowerCase()
+   391→   391→
+   392→   392→  if (intent === 'run_automation') {
+   393→   393→    actions.push({
+   394→   394→      type: 'execute_workflow',
+   395→   395→      title: 'Run Autonomous Pipeline',
+   396→   396→      description:
+   397→   397→        'Execute the full autonomous pipeline: read data → reconcile → predict cash flow → file returns → notify teams → generate reports.',
+   398→   398→      payload: {
+   399→   399→        workflow: q.includes('company')
+   400→   400→          ? 'run_my_company'
+   401→   401→          : q.includes('india')
+   402→   402→            ? 'run_india_business'
+   403→   403→            : 'run_my_firm',
+   404→   404→      },
+   405→   405→    })
+   406→   406→  }
+   407→   407→
+   408→   408→  if (
+   409→   409→    persona === 'gst_expert' &&
+   410→   410→    (q.includes('file') || q.includes('filing') || q.includes('return') || intent === 'gst_filing')
+   411→   411→  ) {
+   412→   412→    actions.push({
+   413→   413→      type: 'navigate',
+   414→   414→      title: 'Open GST Returns',
+   415→   415→      description: 'Navigate to the GST Returns workspace to file pending returns.',
+   416→   416→      view: 'returns',
+   417→   417→      payload: { view: 'returns' },
+   418→   418→    })
+   419→   419→  }
+   420→   420→
+   421→   421→  if (q.includes('late fee') || q.includes('penalty') || q.includes('overdue')) {
+   422→   422→    actions.push({
+   423→   423→      type: 'calculate',
+   424→   424→      title: 'Calculate Late Fee',
+   425→   425→      description: 'Compute the exact late fee and interest based on delay and tax amount.',
+   426→   426→      payload: { calculation: 'late_fee' },
+   427→   427→    })
+   428→   428→  }
+   429→   429→
+   430→   430→  if (q.includes('checklist') || q.includes('steps') || q.includes('how to')) {
+   431→   431→    actions.push({
+   432→   432→      type: 'checklist',
+   433→   433→      title: 'Generate Checklist',
+   434→   434→      description: 'Create a step-by-step actionable checklist for this task.',
+   435→   435→      payload: { source: 'oracle' },
+   436→   436→    })
+   437→   437→  }
+   438→   438→
+   439→   439→  if (q.includes('report') || q.includes('summary') || persona === 'financial_analyst') {
+   440→   440→    actions.push({
+   441→   441→      type: 'generate_report',
+   442→   442→      title: 'Create Report',
+   443→   443→      description: 'Compile an executive report with the key metrics discussed.',
+   444→   444→      payload: { format: 'pdf' },
+   445→   445→    })
+   446→   446→  }
+   447→   447→
+   448→   448→  if (q.includes('remind') || q.includes('collection')) {
+   449→   449→    actions.push({
+   450→   450→      type: 'send_reminder',
+   451→   451→      title: 'Send Payment Reminders',
+   452→   452→      description: 'Send automated payment reminders to clients with overdue invoices.',
+   453→   453→      payload: { channel: 'all' },
+   454→   454→    })
+   455→   455→  }
+   456→   456→
+   457→   457→  if (persona === 'ai_cfo' && (q.includes('cash') || q.includes('flow'))) {
+   458→   458→    actions.push({
+   459→   459→      type: 'navigate',
+   460→   460→      title: 'Open Cash Flow',
+   461→   461→      description: 'Open the cash flow workspace to see inflow/outflow projections.',
+   462→   462→      view: 'working-capital',
+   463→   463→      payload: { view: 'working-capital' },
+   464→   464→    })
+   465→   465→  }
+   466→   466→
+   467→   467→  if (persona === 'financial_analyst') {
+   468→   468→    actions.push({
+   469→   469→      type: 'navigate',
+   470→   470→      title: 'Open Analytics',
+   471→   471→      description: 'Open the executive analytics dashboard for detailed insights.',
+   472→   472→      view: 'ai-predictions',
+   473→   473→      payload: { view: 'ai-predictions' },
+   474→   474→    })
+   475→   475→  }
+   476→   476→
+   477→   477→  // Cap at 3 actions
+   478→   478→  return actions.slice(0, 3)
+   479→   479→}
+   480→   480→
+   481→   481→// ─── Structured LLM Call ──────────────────────────────────────────────────────
+   482→   482→//
+   483→   483→// The LLM is instructed to return a marker-delimited structured response so we
+   484→   484→// can parse it reliably without JSON parsing fragility:
+   485→   485→//
+   486→   486→//   ##ANSWER##
+   487→   487→//   <answer text>
+   488→   488→//
+   489→   489→//   ##WHY_IT_MATTERS##
+   490→   490→//   <why it matters>
+   491→   491→//
+   492→   492→//   ##RECOMMENDED_ACTIONS##
+   493→   493→//   - action 1
+   494→   494→//   - action 2
+   495→   495→//
+   496→   496→//   ##FOLLOW_UP_QUESTIONS##
+   497→   497→//   - question 1
+   498→   498→//   - question 2
+   499→   499→
+   500→   500→const MARKER_ANSWER = '##ANSWER##'
+   501→   501→const MARKER_WHY = '##WHY_IT_MATTERS##'
+   502→   502→const MARKER_ACTIONS = '##RECOMMENDED_ACTIONS##'
+   503→   503→const MARKER_FOLLOWUPS = '##FOLLOW_UP_QUESTIONS##'
+   504→   504→
+   505→   505→function buildSystemPrompt(
+   506→   506→  persona: PersonaDef,
+   507→   507→  context: string,
+   508→   508→  profile: CompanyProfile,
+   509→   509→  conversationHistory: Array<{ role: string; content: string }>,
+   510→   510→): string {
+   511→   511→  const personaPrompt = persona.systemPrompt
+   512→   512→
+   513→   513→  const profileSummary = [
+   514→   514→    `Company: ${profile.firmName || 'Not yet configured'}`,
+   515→   515→    `Industry: ${profile.industry || 'General (configure for tailored advice)'}`,
+   516→   516→    `State: ${profile.state || 'Not specified (GST rates may vary by state)'}`,
+   517→   517→    `GST Type: ${profile.gstType || 'Regular (configure if Composition)'}`,
+   518→   518→    `Organization: ${profile.organizationType || 'Not specified'}`,
+   519→   519→    `Connected services: ${profile.connectedServices.join(', ')}`,
+   520→   520→    `Live data: ${profile.hasLiveData ? `Yes — ${profile.clientCount} clients, ${profile.invoiceCount} invoices, ${profile.pendingReturns} pending returns` : 'Not yet connected (provide general guidance)'}`,
+   521→   521→  ].join('\n')
+   522→   522→
+   523→   523→  return `${personaPrompt}
+   524→   524→
+   525→   525→## IDENTITY & TONE
+   526→   526→You are GSTPilot Oracle™ — a world-class AI assistant for Indian Chartered Accountants and business owners. You combine the precision of a GST Expert, the strategic vision of a CFO, the diligence of a Compliance Officer, and the analytical depth of a Financial Analyst. Your tone is premium, professional, and executive-level — like a senior partner at a Big Four firm.
+   527→   527→
+   528→   528→## THE GOLDEN RULE (NON-NEGOTIABLE)
+   529→   529→You NEVER say:
+   530→   530→- "I don't have enough data"
+   531→   531→- "Connect data first"
+   532→   532→- "I cannot answer"
+   533→   533→- "Please connect your data"
+   534→   534→
+   535→   535→Instead, you ALWAYS provide general guidance based on your deep knowledge of Indian GST, finance, and compliance. When the user's live data would make the answer more precise, you note what additional data would help — but you still give a complete, useful answer NOW.
+   536→   536→
+   537→   537→For example, instead of "I don't have data to calculate late fees", say:
+   538→   538→"Late fee for GSTR-3B is ₹200/day (₹100 CGST + ₹100 SGST) capped at the tax amount or ₹5,000 (whichever is lower for nil returns). If you tell me the return type, delay period, and tax liability, I can compute the exact figure."
+   539→   539→
+   540→   540→## RESPONSE FORMAT (STRICT)
+   541→   541→You MUST respond using these exact markers. Do not add any text before the first marker or after the last marker.
+   542→   542→
+   543→   543→${MARKER_ANSWER}
+   544→   544→<Your direct, substantive answer. 3-6 sentences. Lead with the key insight. Use Indian number formatting (₹1,23,456). Reference the user's live data numbers when available. If the user has no live data connected, give the general answer and mention what data would sharpen it.>
+   545→   545→
+   546→   546→${MARKER_WHY}
+   547→   547→<1-3 sentences explaining the business impact. Why does this matter to a CA or business owner? What's at stake — money, compliance, risk, opportunity?>
+   548→   548→
+   549→   549→${MARKER_ACTIONS}
+   550→   550→<- Action 1 (concrete, imperative verb)
+   551→   551→- Action 2 (specific, time-bound)
+   552→   552→- Action 3 (optional, strategic)>
+   553→   553→Provide 2-3 concrete, actionable next steps. Each must start with a verb.
+   554→   554→
+   555→   555→${MARKER_FOLLOWUPS}
+   556→   556→<- Follow-up question 1
+   557→   557→- Follow-up question 2
+   558→   558→- Follow-up question 3>
+   559→   559→Provide 3 intelligent follow-up questions the user would naturally ask next.
+   560→   560→
+   561→   561→## CONTEXT
+   562→   562→
+   563→   563→Company Profile (remember this across the conversation):
+   564→   564→${profileSummary}
+   565→   565→
+   566→   566→Live Business Data:
+   567→   567→${context || '[No live business data connected yet — provide general guidance and note what data would improve the answer]'}
+   568→   568→
+   569→   569→Conversation history (most recent last):
+   570→   570→${conversationHistory.slice(-6).map((m) => `${m.role}: ${m.content}`).join('\n') || '[No prior conversation]'}
+   571→   571→
+   572→   572→## CONSTRAINTS
+   573→   573→- Use Indian number formatting (₹1,23,456 — lakhs/crores). Never use millions/billions.
+   574→   574→- Use DD/MM/YYYY date format.
+   575→   575→- Do NOT use markdown headers (#) inside any section. Use plain text and bullet points (- ).
+   576→   576→- Do NOT use emojis.
+   577→   577→- Be concise but complete. Total response under 350 words across all sections.
+   578→   578→- If asked about late fees: cite ₹200/day, 18% interest p.a. under Section 50, and caps.
+   579→   579→- If asked about ITC: explain eligibility, blocked credits (Section 17(5)), and reconciliation with GSTR-2B.
+   580→   580→- Always sound like a trusted senior advisor — calm, confident, precise.`
+   581→   581→}
+   582→   582→
+   583→   583→interface ParsedLLMResponse {
+   584→   584→  answer: string
+   585→   585→  whyItMatters: string
+   586→   586→  recommendedActions: string[]
+   587→   587→  followUpQuestions: string[]
+   588→   588→}
+   589→   589→
+   590→   590→function parseStructuredResponse(raw: string): ParsedLLMResponse {
+   591→   591→  // Find marker positions
+   592→   592→  const answerStart = raw.indexOf(MARKER_ANSWER)
+   593→   593→  const whyStart = raw.indexOf(MARKER_WHY)
+   594→   594→  const actionsStart = raw.indexOf(MARKER_ACTIONS)
+   595→   595→  const followupsStart = raw.indexOf(MARKER_FOLLOWUPS)
+   596→   596→
+   597→   597→  // If no markers found, treat the whole thing as the answer
+   598→   598→  if (answerStart === -1) {
+   599→   599→    return {
+   600→   600→      answer: raw.trim(),
+   601→   601→      whyItMatters: '',
+   602→   602→      recommendedActions: [],
+   603→   603→      followUpQuestions: [],
+   604→   604→    }
+   605→   605→  }
+   606→   606→
+   607→   607→  const extractSection = (start: number, end: number): string => {
+   608→   608→    if (start === -1) return ''
+   609→   609→    const headerEnd = start + raw.slice(start).indexOf('\n') + 1
+   610→   610→    const sectionEnd = end === -1 ? raw.length : end
+   611→   611→    return raw.slice(headerEnd, sectionEnd).trim()
+   612→   612→  }
+   613→   613→
+   614→   614→  const answer = extractSection(
+   615→   615→    answerStart,
+   616→   616→    [whyStart, actionsStart, followupsStart].filter((p) => p > answerStart).sort()[0] ?? -1,
+   617→   617→  )
+   618→   618→  const whyItMatters = extractSection(
+   619→   619→    whyStart,
+   620→   620→    [actionsStart, followupsStart].filter((p) => p > whyStart).sort()[0] ?? -1,
+   621→   621→  )
+   622→   622→  const actionsText = extractSection(whyStart > -1 ? whyStart : actionsStart, followupsStart > actionsStart ? followupsStart : -1)
+   623→   623→  const followupsText = extractSection(followupsStart, -1)
+   624→   624→
+   625→   625→  // Parse bullet lists
+   626→   626→  const parseBullets = (text: string): string[] => {
+   627→   627→    if (!text) return []
+   628→   628→    return text
+   629→   629→      .split('\n')
+   630→   630→      .map((l) => l.trim())
+   631→   631→      .filter((l) => l.startsWith('- ') || l.startsWith('• '))
+   632→   632→      .map((l) => l.replace(/^[-•]\s*/, '').trim())
+   633→   633→      .filter(Boolean)
+   634→   634→  }
+   635→   635→
+   636→   636→  return {
+   637→   637→    answer: answer || raw.trim(),
+   638→   638→    whyItMatters: whyItMatters || 'This directly impacts your compliance posture and financial health.',
+   639→   639→    recommendedActions: parseBullets(actionsText),
+   640→   640→    followUpQuestions: parseBullets(followupsText),
+   641→   641→  }
+   642→   642→}
+   643→   643→
+   644→   644→async function generateStructuredAnswer(
+   645→   645→  question: string,
+   646→   646→  persona: PersonaDef,
+   647→   647→  context: string,
+   648→   648→  profile: CompanyProfile,
+   649→   649→  conversationHistory: Array<{ role: string; content: string }>,
+   650→   650→): Promise<ParsedLLMResponse> {
+   651→   651→  const ZAI = (await import('z-ai-web-dev-sdk')).default
+   652→   652→  const zai = await ZAI.create()
+   653→   653→
+   654→   654→  const systemPrompt = buildSystemPrompt(persona, context, profile, conversationHistory)
+   655→   655→
+   656→   656→  const response = await zai.chat.completions.create({
+   657→   657→    messages: [
+   658→   658→      { role: 'system', content: systemPrompt },
+   659→   659→      { role: 'user', content: question },
+   660→   660→    ],
+   661→   661→  })
+   662→   662→
+   663→   663→  const raw = response.choices[0]?.message?.content || ''
+   664→   664→  return parseStructuredResponse(raw)
+   665→   665→}
+   666→   666→
+   667→   667→// ─── Fallbacks (used ONLY when the LLM itself errors — still never refuses) ────
+   668→   668→
+   669→   669→function generateGuidanceFallback(
+   670→   670→  question: string,
+   671→   671→  persona: PersonaDef,
+   672→   672→  profile: CompanyProfile,
+   673→   673→): ParsedLLMResponse {
+   674→   674→  const q = question.toLowerCase()
+   675→   675→
+   676→   676→  // GST late fee / penalty questions
+   677→   677→  if (q.includes('late fee') || q.includes('penalty')) {
+   678→   678→    return {
+   679→   679→      answer: `Under GST law, late filing of returns attracts a fee of ₹200 per day (₹100 CGST + ₹100 SGST) under Section 47. For nil returns, the cap is ₹5,000; for returns with tax liability, the cap equals the outstanding tax amount. Additionally, 18% p.a. interest is charged on unpaid tax under Section 50. ${profile.hasLiveData ? `Based on your ${profile.pendingReturns} pending return(s), the daily exposure is ₹${200 * Math.max(profile.pendingReturns, 1)} per day of delay.` : 'If you share the return type, delay period, and tax amount, I can compute the exact figure.'}`,
+   680→   680→      whyItMatters: `Every day of delay compounds your liability — both the flat late fee and the 18% interest on unpaid tax. For a firm managing multiple clients, this can quietly erode margins and trigger compliance flags on the GST portal.`,
+   681→   681→      recommendedActions: [
+   682→   682→        `File the pending return(s) immediately to stop the daily fee accrual`,
+   683→   683→        `Calculate the exact interest liability using 18% p.a. on the unpaid tax`,
+   684→   684→        `Set up automated due-date reminders for the 11th (GSTR-1) and 20th (GSTR-3B)`,
+   685→   685→      ],
+   686→   686→      followUpQuestions: persona.followUps,
+   687→   687→    }
+   688→   688→  }
+   689→   689→
+   690→   690→  // ITC questions
+   691→   691→  if (q.includes('itc') || q.includes('input tax credit')) {
+   692→   692→    return {
+   693→   693→      answer: `Input Tax Credit (ITC) allows a registered taxpayer to claim credit for GST paid on business purchases. Eligibility requires: (1) a valid tax invoice, (2) receipt of goods/services, (3) supplier has filed GSTR-1 and it reflects in your GSTR-2B, (4) tax paid to the government, and (5) return filed within the due date. Blocked credits under Section 17(5) include motor vehicles (except for transport businesses), club memberships, employee insurance, and works contract for immovable property. ${profile.hasLiveData ? `Your ${profile.invoiceCount} active invoices should be reconciled against GSTR-2B monthly to ensure maximum ITC claim.` : 'Connecting your purchase invoices lets me reconcile them against GSTR-2B and flag any blocked or mismatched credits.'}`,
+   694→   694→      whyItMatters: `ITC is the single largest cash-flow lever under GST. A 1% improvement in ITC utilization on ₹1 crore of purchases equals ₹10,000 saved — and missed claims are permanent after the September deadline of the following FY.`,
+   695→   695→      recommendedActions: [
+   696→   696→        `Reconcile purchase registers against GSTR-2B before the 20th`,
+   697→   697→        `Flag and reverse any blocked credits under Section 17(5)`,
+   698→   698→        `Follow up with suppliers whose invoices are missing from GSTR-2B`,
+   699→   699→      ],
+   700→   700→      followUpQuestions: persona.followUps,
+   701→   701→    }
+   702→   702→  }
+   703→   703→
+   704→   704→  // Filing / return questions
+   705→   705→  if (q.includes('file') || q.includes('filing') || q.includes('return')) {
+   706→   706→    return {
+   707→   707→      answer: `GST return filing follows a monthly cycle for regular taxpayers: GSTR-1 (outward supplies) by the 11th and GSTR-3B (summary return + tax payment) by the 20th (or 22nd/24th for QRMP scheme taxpayers with turnover up to ₹5 crore). The process: (1) upload GSTR-1 on the portal, (2) auto-populate GSTR-2B from suppliers' filings, (3) reconcile ITC, (4) file GSTR-3B with tax payment via challan, (5) download the ARN acknowledgment. ${profile.hasLiveData ? `You currently have ${profile.pendingReturns} pending return(s) to file.` : 'Once your sales and purchase data is connected, I can pre-fill and file these for you directly.'}`,
+   708→   708→      whyItMatters: `Timely filing avoids late fees (₹200/day), prevents ITC loss for your buyers, and maintains a clean compliance rating — which is increasingly scrutinized by banks, vendors, and government agencies.`,
+   709→   709→      recommendedActions: [
+   710→   710→        `File GSTR-1 by the 11th to ensure your buyers can claim ITC`,
+   711→   711→        `Reconcile GSTR-2B before filing GSTR-3B on the 20th`,
+   712→   712→        `Pay any shortfall via challan (PMT-06) before filing`,
+   713→   713→      ],
+   714→   714→      followUpQuestions: persona.followUps,
+   715→   715→    }
+   716→   716→  }
+   717→   717→
+   718→   718→  // Cash flow / finance questions
+   719→   719→  if (q.includes('cash') || q.includes('flow') || q.includes('revenue') || q.includes('forecast')) {
+   720→   720→    return {
+   721→   721→      answer: `Cash flow forecasting projects your inflows (receivables, advances) against outflows (payables, GST liability, payroll, overheads) over a rolling 13-week horizon. The key metrics to track: Days Sales Outstanding (DSO, target < 45 days), Days Payable Outstanding (DPO, target 30-60 days), and the current ratio (target > 1.5). ${profile.hasLiveData ? `Your ${profile.invoiceCount} active invoices and ${profile.clientCount} clients give us a baseline — I can build a 90-day projection with collection probability scoring.` : 'Connecting your invoices and bank statements lets me build a precise 13-week forecast with scenario modelling.'}`,
+   722→   722→      whyItMatters: `Cash flow is the #1 reason Indian SMEs fail — not profitability. A 2-week cash shortfall can force expensive bridge financing at 24%+ interest, while a 30-day early warning lets you arrange a clean credit line at 11-13%.`,
+   723→   723→      recommendedActions: [
+   724→   724→        `Build a 13-week rolling cash flow forecast`,
+   725→   725→        `Age your receivables and prioritize collection on > 60-day balances`,
+   726→   726→        `Maintain a 1.5x current ratio and arrange an OD facility for buffer`,
+   727→   727→      ],
+   728→   728→      followUpQuestions: persona.followUps,
+   729→   729→    }
+   730→   730→  }
+   731→   731→
+   732→   732→  // Run automation
+   733→   733→  if (q.includes('run my firm') || q.includes('run my business') || q.includes('run my company')) {
+   734→   734→    return {
+   735→   735→      answer: `I can run the full autonomous pipeline for your firm right now. Here's the sequence: (1) Read all live data — clients, invoices, returns, bank. (2) Reconcile GSTR-2B against purchase registers. (3) Predict 30/60/90-day cash flow. (4) File all pending returns with auto-calculated tax. (5) Send payment reminders to overdue clients via WhatsApp + Email. (6) Notify your team of exceptions. (7) Generate an executive report. ${profile.hasLiveData ? `You have ${profile.clientCount} clients and ${profile.pendingReturns} pending returns — I can process these now.` : 'Connect GSTN and banking to activate the full pipeline, or I can walk you through each step manually.'}`,
+   736→   736→      whyItMatters: `Automation compresses 8-10 hours of monthly compliance work into minutes, eliminates human error on calculations, and ensures no deadline or receivable slips through the cracks — directly improving partner profitability.`,
+   737→   737→      recommendedActions: [
+   738→   738→        `Launch the autonomous pipeline now`,
+   739→   739→        `Review exceptions flagged during processing`,
+   740→   740→        `Approve filings before final submission`,
+   741→   741→      ],
+   742→   742→      followUpQuestions: persona.followUps,
+   743→   743→    }
+   744→   744→  }
+   745→   745→
+   746→   746→  // Compliance / deadline questions
+   747→   747→  if (q.includes('compliance') || q.includes('deadline') || q.includes('due date')) {
+   748→   748→    return {
+   749→   749→      answer: `Your monthly compliance calendar: GSTR-1 by the 11th, GSTR-3B by the 20th (22nd/24th for QRMP), TDS deposit by the 7th, and advance tax instalments on the 15th of June (15%), September (45%), December (75%), and March (100%). Quarterly: TDS returns (Q1 by 31st July, Q2 by 31st Oct, Q3 by 31st Jan, Q4 by 31st May). Annually: GSTR-9 by 31st December, GSTR-9C for turnover > ₹5 crore, tax audit under Section 44AB by 30th September. ${profile.hasLiveData ? `You have ${profile.pendingReturns} pending return(s) — let me flag which are approaching their due date.` : 'Connecting your returns data lets me auto-track every deadline and send proactive alerts.'}`,
+   750→   750→      whyItMatters: `Missing a statutory deadline cascades into penalties, interest, and scrutiny notices. A missed tax audit deadline alone can cost ₹1.5 lakh in penalty under Section 271B, plus disallowance of expenses.`,
+   751→   751→      recommendedActions: [
+   752→   752→        `Set up a master compliance calendar with all 20+ due dates`,
+   753→   753→        `Enable automated alerts 7 days and 1 day before each deadline`,
+   754→   754→        `Assign owners to each compliance item with weekly status review`,
+   755→   755→      ],
+   756→   756→      followUpQuestions: persona.followUps,
+   757→   757→    }
+   758→   758→  }
+   759→   759→
+   760→   760→  // Generic fallback — still gives a substantive answer
+   761→   761→  return {
+   762→   762→    answer: `I can help you with that. Based on my knowledge of Indian GST, finance, and compliance practices, here's my guidance: ${profile.hasLiveData ? `I can see your connected business data (${profile.clientCount} clients, ${profile.invoiceCount} invoices, ${profile.pendingReturns} pending returns), which I'll reference where relevant. ` : ''}This falls within my scope as your ${persona.label}. Share more specifics — the return type, the client name, the time period — and I'll give you a precise, actionable answer.`,
+   763→   763→    whyItMatters: `As a CA or business owner, having a single advisor who understands both the regulatory framework and your specific numbers means faster, better-informed decisions — and fewer surprises from the tax department.`,
+   764→   764→    recommendedActions: [
+   765→   765→      `Share the specific details (return type, client, period) for a precise answer`,
+   766→   766→      `Ask one of the follow-up questions below to go deeper`,
+   767→   767→      `Connect GSTN and banking for fully personalized insights`,
+   768→   768→    ],
+   769→   769→    followUpQuestions: persona.followUps,
+   770→   770→  }
+   771→   771→}
+   772→   772→
+   773→   773→// ─── Helpers ──────────────────────────────────────────────────────────────────
+   774→   774→
+   775→   775→function parseCount(context: string, pattern: RegExp): number {
+   776→   776→  const match = context.match(pattern)
+   777→   777→  if (!match || !match[1]) return 0
+   778→   778→  const n = parseInt(match[1], 10)
+   779→   779→  return Number.isFinite(n) ? n : 0
+   780→   780→}
+   781→   781→
+   782→   782→function contextHasLiveData(context: string): boolean {
+   783→   783→  if (!context || context.length < 60) return false
+   784→   784→  if (!/LIVE DATA SNAPSHOT/i.test(context)) return false
+   785→   785→  if (/Data currently unavailable/i.test(context)) return false
+   786→   786→  const dataLines = context.split('\n').filter((l) => /^\s*-\s+\w/.test(l))
+   787→   787→  return dataLines.length >= 2
+   788→   788→}
+   789→   789→
+   790→   790→// ─── POST Handler ─────────────────────────────────────────────────────────────
+   791→   791→
+   792→   792→export async function POST(req: NextRequest) {
+   793→   793→  try {
+   794→   794→    const body = await req.json()
+   795→   795→    const question: string = (body.question || '').trim()
+   796→   796→    const context: string = (body.context || '').trim()
+   797→   797→    const conversationHistory: Array<{ role: string; content: string }> =
+   798→   798→      body.conversationHistory || []
+   799→   799→
+   800→   800→    if (!question) {
+   801→   801→      return NextResponse.json({ error: 'Question is required' }, { status: 400 })
+   802→   802→    }
+   803→   803→
+   804→   804→    // 1) Detect persona + intent
+   805→   805→    const { persona: personaId, intent } = detectPersona(question)
+   806→   806→    const persona = PERSONAS[personaId]
+   807→   807→
+   808→   808→    // 2) Build company profile (memory)
+   809→   809→    const profile = extractCompanyProfile(context, body)
+   810→   810→
+   811→   811→    // 3) Build sources (from live data OR knowledge base)
+   812→   812→    const sources = buildSources(context, profile.hasLiveData)
+   813→   813→
+   814→   814→    // 4) Thinking steps (from persona — spec-exact phases)
+   815→   815→    const thinkingSteps = persona.thinkingSteps
+   816→   816→
+   817→   817→    // 5) Detect actions
+   818→   818→    const actions = detectActions(question, personaId, intent)
+   819→   819→
+   820→   820→    // 6) Generate the structured answer via LLM (or fallback)
+   821→   821→    let parsed: ParsedLLMResponse
+   822→   822→    try {
+   823→   823→      parsed = await generateStructuredAnswer(
+   824→   824→        question,
+   825→   825→        persona,
+   826→   826→        context,
+   827→   827→        profile,
+   828→   828→        conversationHistory,
+   829→   829→      )
+   830→   830→    } catch (llmError) {
+   831→   831→      console.error(
+   832→   832→        '[Oracle] LLM error — using guidance fallback:',
+   833→   833→        llmError instanceof Error ? llmError.message : llmError,
+   834→   834→      )
+   835→   835→      parsed = generateGuidanceFallback(question, persona, profile)
+   836→   836→    }
+   837→   837→
+   838→   838→    // Validate + fill any empty sections
+   839→   839→    if (!parsed.answer || !parsed.answer.trim()) {
+   840→   840→      parsed = generateGuidanceFallback(question, persona, profile)
+   841→   841→    }
+   842→   842→    if (!parsed.whyItMatters.trim()) {
+   843→   843→      parsed.whyItMatters =
+   844→   844→        'This directly impacts your compliance posture, cash flow, and risk exposure.'
+   845→   845→    }
+   846→   846→    if (parsed.recommendedActions.length === 0) {
+   847→   847→      parsed.recommendedActions = [
+   848→   848→        'Review the answer above and identify the immediate next step',
+   849→   849→        'Ask a follow-up question below for deeper guidance',
+   850→   850→      ]
+   851→   851→    }
+   852→   852→    if (parsed.followUpQuestions.length === 0) {
+   853→   853→      parsed.followUpQuestions = persona.followUps
+   854→   854→    }
+   855→   855→
+   856→   856→    // Cap follow-ups at 4
+   857→   857→    const followUpQuestions = parsed.followUpQuestions.slice(0, 4)
+   858→   858→
+   859→   859→    const responseBody: OracleResponse = {
+   860→   860→      answer: parsed.answer,
+   861→   861→      whyItMatters: parsed.whyItMatters,
+   862→   862→      recommendedActions: parsed.recommendedActions.slice(0, 4),
+   863→   863→      followUpQuestions,
+   864→   864→      actions,
+   865→   865→      sources,
+   866→   866→      persona: personaId,
+   867→   867→      personaLabel: persona.label,
+   868→   868→      intent,
+   869→   869→      thinkingSteps,
+   870→   870→      memory: {
+   871→   871→        companyProfile: profile,
+   872→   872→        conversationTurn: conversationHistory.length + 1,
+   873→   873→      },
+   874→   874→    }
+   875→   875→
+   876→   876→    return NextResponse.json(responseBody)
+   877→   877→  } catch (error: unknown) {
+   878→   878→    console.error(
+   879→   879→      '[Oracle] Fatal:',
+   880→   880→      error instanceof Error ? error.message : error,
+   881→   881→    )
+   882→   882→    // Even on fatal error — never refuse. Return guidance.
+   883→   883→    const fallbackPersona = PERSONAS.financial_analyst
+   884→   884→    const fallbackResponse: OracleResponse = {
+   885→   885→      answer:
+   886→   886→        "I'm here to help. I encountered a brief issue with my reasoning engine, but I can still guide you. GST return filing is due on the 11th (GSTR-1) and 20th (GSTR-3B) each month, with late fees of ₹200/day if delayed. Cash flow forecasting and compliance checklists are my core strengths — ask me anything about GST, finance, or compliance and I'll give you a precise, actionable answer.",
+   887→   887→      whyItMatters:
+   888→   888→        'Having a reliable advisor available 24/7 means you never stall on a decision — whether it is a filing deadline, a cash flow question, or a compliance query.',
+   889→   889→      recommendedActions: [
+   890→   890→        'Retry your question — I will have my reasoning engine back momentarily',
+   891→   891→        'Ask about GST filing, ITC, cash flow, or compliance deadlines',
+   892→   892→      ],
+   893→   893→      followUpQuestions: fallbackPersona.followUps,
+   894→   894→      actions: [],
+   895→   895→      sources: [
+   896→   896→        { name: 'GST Knowledge Base', count: 1, icon: 'book' },
+   897→   897→      ],
+   898→   898→      persona: 'financial_analyst',
+   899→   899→      personaLabel: 'Financial Analyst™',
+   900→   900→      intent: 'fallback',
+   901→   901→      thinkingSteps: [
+   902→   902→        { label: 'Thinking…', duration: 400 },
+   903→   903→        { label: 'Preparing recommendations…', duration: 500 },
+   904→   904→      ],
+   905→   905→      memory: {
+   906→   906→        companyProfile: {
+   907→   907→          connectedServices: ['None yet'],
+   908→   908→          hasLiveData: false,
+   909→   909→          clientCount: 0,
+   910→   910→          invoiceCount: 0,
+   911→   911→          pendingReturns: 0,
+   912→   912→        },
+   913→   913→        conversationTurn: 1,
+   914→   914→      },
+   915→   915→    }
+   916→   916→    return NextResponse.json(fallbackResponse)
+   917→   917→  }
+   918→   918→}
+   919→   919→

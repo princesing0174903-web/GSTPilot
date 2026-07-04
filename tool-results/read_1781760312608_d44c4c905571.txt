@@ -1,0 +1,853 @@
+     1→'use client';
+     2→
+     3→import React, { useState, useMemo } from 'react';
+     4→import { Badge } from '@/components/ui/badge';
+     5→import { Button } from '@/components/ui/button';
+     6→import { Skeleton } from '@/components/ui/skeleton';
+     7→import { ScrollArea } from '@/components/ui/scroll-area';
+     8→import { Card, CardContent } from '@/components/ui/card';
+     9→import {
+    10→  Upload,
+    11→  CheckCircle2,
+    12→  AlertTriangle,
+    13→  Clock,
+    14→  Sparkles,
+    15→  FileText,
+    16→  ShieldCheck,
+    17→  ClipboardCheck,
+    18→  Users,
+    19→  IndianRupee,
+    20→  Plus,
+    21→  ArrowRight,
+    22→  Loader2,
+    23→  Rocket,
+    24→  Activity,
+    25→  CheckSquare,
+    26→} from 'lucide-react';
+    27→import { motion } from 'framer-motion';
+    28→import { useApp } from '@/contexts/AppContext';
+    29→import { useAuth } from '@/contexts/AuthContext';
+    30→import {
+    31→  useLiveDashboardMetrics,
+    32→  useFireClients,
+    33→  useFireReturns,
+    34→  useFireRecentActivities,
+    35→  useFireInvoices,
+    36→} from '@/hooks/use-firestore';
+    37→import type {
+    38→  FirestoreClient,
+    39→  LiveDashboardMetrics,
+    40→} from '@/lib/firestore-schema';
+    41→import { fileReturn } from '@/lib/firestore-service';
+    42→import { periodToLabel, isOverdue, getFilingDueDate } from '@/lib/gst-utils';
+    43→import { toast } from 'sonner';
+    44→
+    45→// ═══════════════════════════════════════════════════════════════════════════════
+    46→// HELPERS
+    47→// ═══════════════════════════════════════════════════════════════════════════════
+    48→
+    49→function getDaysRemaining(dueDateStr: string): number {
+    50→  const dueDate = new Date(dueDateStr);
+    51→  const today = new Date();
+    52→  today.setHours(0, 0, 0, 0);
+    53→  dueDate.setHours(0, 0, 0, 0);
+    54→  return Math.ceil((dueDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+    55→}
+    56→
+    57→function formatDaysRemaining(days: number): string {
+    58→  if (days < 0) return `${Math.abs(days)}d overdue`;
+    59→  if (days === 0) return 'Due today';
+    60→  if (days === 1) return 'Tomorrow';
+    61→  return `${days}d left`;
+    62→}
+    63→
+    64→function formatINR(amount: number): string {
+    65→  return amount.toLocaleString('en-IN');
+    66→}
+    67→
+    68→function formatDateIN(dateStr: string): string {
+    69→  const d = new Date(dateStr);
+    70→  if (Number.isNaN(d.getTime())) return '—';
+    71→  const dd = String(d.getDate()).padStart(2, '0');
+    72→  const mm = String(d.getMonth() + 1).padStart(2, '0');
+    73→  const yyyy = d.getFullYear();
+    74→  return `${dd}/${mm}/${yyyy}`;
+    75→}
+    76→
+    77→function timeAgo(dateStr: string): string {
+    78→  const now = new Date();
+    79→  const date = new Date(dateStr);
+    80→  const seconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+    81→  if (seconds < 60) return 'just now';
+    82→  const minutes = Math.floor(seconds / 60);
+    83→  if (minutes < 60) return `${minutes}m ago`;
+    84→  const hours = Math.floor(minutes / 60);
+    85→  if (hours < 24) return `${hours}h ago`;
+    86→  const days = Math.floor(hours / 24);
+    87→  if (days < 7) return `${days}d ago`;
+    88→  return date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+    89→}
+    90→
+    91→function getGreeting(): string {
+    92→  const h = new Date().getHours();
+    93→  if (h < 12) return 'Good Morning';
+    94→  if (h < 17) return 'Good Afternoon';
+    95→  return 'Good Evening';
+    96→}
+    97→
+    98→function getFirstName(name: string | undefined | null): string {
+    99→  if (!name) return 'Prince';
+   100→  const first = name.trim().split(/\s+/)[0];
+   101→  return first || 'Prince';
+   102→}
+   103→
+   104→// One-sentence AI insight derived from live metrics.
+   105→function buildInsightSentence(
+   106→  metrics: LiveDashboardMetrics,
+   107→  pendingCollection: number,
+   108→): string {
+   109→  const parts: string[] = [];
+   110→  if (metrics.overdueReturns > 0) {
+   111→    parts.push(
+   112→      `${metrics.overdueReturns} overdue return${metrics.overdueReturns > 1 ? 's' : ''}`,
+   113→    );
+   114→  } else if (metrics.pendingReturns > 0) {
+   115→    parts.push(
+   116→      `${metrics.pendingReturns} return${metrics.pendingReturns > 1 ? 's' : ''} to file`,
+   117→    );
+   118→  }
+   119→  if (pendingCollection > 0) {
+   120→    parts.push(`₹${formatINR(pendingCollection)} pending collection`);
+   121→  }
+   122→  if (metrics.criticalIssues > 0) {
+   123→    parts.push(
+   124→      `${metrics.criticalIssues} critical issue${metrics.criticalIssues > 1 ? 's' : ''}`,
+   125→    );
+   126→  }
+   127→  if (parts.length === 0) {
+   128→    return `All clear — ${metrics.filedReturns} returns filed and ${metrics.totalClients} clients in good standing.`;
+   129→  }
+   130→  if (parts.length === 1) return `${parts[0]}.`;
+   131→  const last = parts.pop();
+   132→  return `${parts.join(', ')} and ${last}.`;
+   133→}
+   134→
+   135→// ═══════════════════════════════════════════════════════════════════════════════
+   136→// ACTIVITY ICON — returns just the icon shape; color is applied via accent-text
+   137→// ═══════════════════════════════════════════════════════════════════════════════
+   138→
+   139→function activityIcon(type: string): React.ReactNode {
+   140→  if (type.includes('filed')) return <CheckCircle2 className="h-3.5 w-3.5 accent-text" />;
+   141→  if (type.includes('upload') || type.includes('document'))
+   142→    return <Upload className="h-3.5 w-3.5 accent-text" />;
+   143→  if (type.includes('review')) return <ClipboardCheck className="h-3.5 w-3.5 accent-text" />;
+   144→  if (type.includes('client')) return <Users className="h-3.5 w-3.5 accent-text" />;
+   145→  if (type.includes('reconcil') || type.includes('mismatch'))
+   146→    return <AlertTriangle className="h-3.5 w-3.5 accent-text" />;
+   147→  if (type.includes('invoice') || type.includes('extract'))
+   148→    return <FileText className="h-3.5 w-3.5 accent-text" />;
+   149→  return <Activity className="h-3.5 w-3.5 accent-text" />;
+   150→}
+   151→
+   152→// ═══════════════════════════════════════════════════════════════════════════════
+   153→// KPI CARD
+   154→// ═══════════════════════════════════════════════════════════════════════════════
+   155→
+   156→interface KpiCardProps {
+   157→  label: string;
+   158→  value: string;
+   159→  subtitle: string;
+   160→  icon: React.ReactNode;
+   161→  index: number;
+   162→}
+   163→
+   164→function KpiCard({ label, value, subtitle, icon, index }: KpiCardProps) {
+   165→  return (
+   166→    <motion.div
+   167→      initial={{ opacity: 0, y: 16 }}
+   168→      animate={{ opacity: 1, y: 0 }}
+   169→      transition={{ duration: 0.5, delay: index * 0.08, ease: 'easeOut' }}
+   170→      className="h-full"
+   171→    >
+   172→      <div className="glass-surface rounded-2xl p-6 h-full transition-shadow hover:shadow-[0_0_32px_-8px_rgba(6,182,212,0.18)]">
+   173→        <div className="flex items-start justify-between gap-4">
+   174→          <div className="space-y-1.5 min-w-0">
+   175→            <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
+   176→              {label}
+   177→            </p>
+   178→            <p className="text-3xl font-bold text-foreground tracking-tight truncate">
+   179→              {value}
+   180→            </p>
+   181→            <p className="text-xs text-muted-foreground">{subtitle}</p>
+   182→          </div>
+   183→          <div className="flex items-center justify-center h-10 w-10 rounded-xl accent-gradient-soft shrink-0">
+   184→            {icon}
+   185→          </div>
+   186→        </div>
+   187→      </div>
+   188→    </motion.div>
+   189→  );
+   190→}
+   191→
+   192→// ═══════════════════════════════════════════════════════════════════════════════
+   193→// SECTION CARD — glass wrapper with header (icon chip + title + optional action)
+   194→// ═══════════════════════════════════════════════════════════════════════════════
+   195→
+   196→interface SectionCardProps {
+   197→  title: string;
+   198→  icon: React.ReactNode;
+   199→  index: number;
+   200→  actionLabel?: string;
+   201→  onAction?: () => void;
+   202→  children: React.ReactNode;
+   203→}
+   204→
+   205→function SectionCard({
+   206→  title,
+   207→  icon,
+   208→  index,
+   209→  actionLabel,
+   210→  onAction,
+   211→  children,
+   212→}: SectionCardProps) {
+   213→  return (
+   214→    <motion.div
+   215→      initial={{ opacity: 0, y: 16 }}
+   216→      animate={{ opacity: 1, y: 0 }}
+   217→      transition={{ duration: 0.5, delay: 0.24 + index * 0.08, ease: 'easeOut' }}
+   218→      className="h-full"
+   219→    >
+   220→      <div className="glass-surface rounded-2xl h-full flex flex-col">
+   221→        <div className="flex items-center justify-between gap-3 p-6 pb-3">
+   222→          <div className="flex items-center gap-2.5 min-w-0">
+   223→            <div className="flex items-center justify-center h-8 w-8 rounded-lg accent-gradient-soft shrink-0">
+   224→              {icon}
+   225→            </div>
+   226→            <h3 className="text-sm font-semibold text-foreground tracking-tight truncate">
+   227→              {title}
+   228→            </h3>
+   229→          </div>
+   230→          {actionLabel && onAction && (
+   231→            <Button
+   232→              variant="ghost"
+   233→              size="sm"
+   234→              onClick={onAction}
+   235→              className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+   236→            >
+   237→              {actionLabel}
+   238→              <ArrowRight className="h-3 w-3 ml-1" />
+   239→            </Button>
+   240→          )}
+   241→        </div>
+   242→        <div className="px-6 pb-6 flex-1 min-h-0">{children}</div>
+   243→      </div>
+   244→    </motion.div>
+   245→  );
+   246→}
+   247→
+   248→// ═══════════════════════════════════════════════════════════════════════════════
+   249→// LOADING SKELETON — matches new layout (3 KPI + 3 sections)
+   250→// ═══════════════════════════════════════════════════════════════════════════════
+   251→
+   252→function DashboardSkeleton() {
+   253→  return (
+   254→    <div className="max-w-6xl mx-auto px-4 md:px-6 py-8 md:py-10 space-y-8">
+   255→      <div className="space-y-3">
+   256→        <Skeleton className="h-9 w-64" />
+   257→        <Skeleton className="h-4 w-80" />
+   258→      </div>
+   259→      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+   260→        {Array.from({ length: 3 }).map((_, i) => (
+   261→          <Skeleton key={i} className="h-32 rounded-2xl" />
+   262→        ))}
+   263→      </div>
+   264→      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+   265→        {Array.from({ length: 3 }).map((_, i) => (
+   266→          <Skeleton key={i} className="h-72 rounded-2xl" />
+   267→        ))}
+   268→      </div>
+   269→    </div>
+   270→  );
+   271→}
+   272→
+   273→// ═══════════════════════════════════════════════════════════════════════════════
+   274→// EMPTY STATE — Fresh onboarding (re-styled with accent gradient logo)
+   275→// ═══════════════════════════════════════════════════════════════════════════════
+   276→
+   277→function WelcomeEmptyState({
+   278→  onAddClient,
+   279→  onUploadDoc,
+   280→}: {
+   281→  onAddClient: () => void;
+   282→  onUploadDoc: () => void;
+   283→}) {
+   284→  return (
+   285→    <motion.div
+   286→      initial={{ opacity: 0, y: 24 }}
+   287→      animate={{ opacity: 1, y: 0 }}
+   288→      transition={{ duration: 0.5, ease: 'easeOut' }}
+   289→      className="flex flex-col items-center justify-center text-center py-20 px-4"
+   290→    >
+   291→      <div className="relative mb-6">
+   292→        <div className="flex items-center justify-center h-20 w-20 rounded-2xl accent-gradient accent-ring">
+   293→          <Rocket className="h-10 w-10 text-white" />
+   294→        </div>
+   295→        <div className="absolute -top-1 -right-1 h-5 w-5 rounded-full accent-gradient flex items-center justify-center">
+   296→          <Sparkles className="h-3 w-3 text-white" />
+   297→        </div>
+   298→      </div>
+   299→      <h2 className="text-2xl font-bold text-foreground tracking-tight">
+   300→        Welcome to GSTPilot
+   301→      </h2>
+   302→      <p className="text-sm text-muted-foreground mt-2 max-w-md">
+   303→        Start by adding your first client to unlock the full workflow —
+   304→        from document upload to automated GST filing.
+   305→      </p>
+   306→      <div className="flex items-center gap-3 mt-6">
+   307→        <Button
+   308→          onClick={onAddClient}
+   309→          className="accent-gradient text-white hover:opacity-90 gap-1.5"
+   310→        >
+   311→          <Plus className="h-4 w-4" />
+   312→          Add Client
+   313→        </Button>
+   314→        <Button
+   315→          variant="outline"
+   316→          onClick={onUploadDoc}
+   317→          className="gap-1.5 border-border"
+   318→        >
+   319→          <Upload className="h-4 w-4" />
+   320→          Upload Document
+   321→        </Button>
+   322→      </div>
+   323→      <div className="grid grid-cols-3 gap-6 mt-10 text-center max-w-sm">
+   324→        {[
+   325→          { icon: <Users className="h-5 w-5 accent-text" />, label: 'Add Clients' },
+   326→          { icon: <FileText className="h-5 w-5 accent-text" />, label: 'Upload Docs' },
+   327→          { icon: <CheckCircle2 className="h-5 w-5 accent-text" />, label: 'File Returns' },
+   328→        ].map((step, i) => (
+   329→          <div key={i} className="flex flex-col items-center gap-1.5">
+   330→            <div className="flex items-center justify-center h-10 w-10 rounded-lg accent-gradient-soft">
+   331→              {step.icon}
+   332→            </div>
+   333→            <span className="text-[11px] text-muted-foreground">{step.label}</span>
+   334→          </div>
+   335→        ))}
+   336→      </div>
+   337→    </motion.div>
+   338→  );
+   339→}
+   340→
+   341→// ═══════════════════════════════════════════════════════════════════════════════
+   342→// MAIN COMPONENT
+   343→// ═══════════════════════════════════════════════════════════════════════════════
+   344→
+   345→interface Recommendation {
+   346→  id: string;
+   347→  icon: React.ReactNode;
+   348→  title: string;
+   349→  actionLabel: string;
+   350→  onAction: () => void;
+   351→}
+   352→
+   353→export default function DashboardPage() {
+   354→  const { setCurrentView, setSelectedClientId, setReturnPrepCtx } = useApp();
+   355→  const { user } = useAuth();
+   356→
+   357→  // ── Firebase Firestore hooks ──────────────────────────────────────────
+   358→  const { metrics, loading, error } = useLiveDashboardMetrics();
+   359→  const { data: clients } = useFireClients();
+   360→  const { data: returns } = useFireReturns();
+   361→  const { data: invoices } = useFireInvoices();
+   362→  const { data: recentActivities } = useFireRecentActivities(10);
+   363→
+   364→  // ── Filing state ──────────────────────────────────────────────────────
+   365→  const [filingInProgress, setFilingInProgress] = useState<Set<string>>(new Set());
+   366→
+   367→  // ── Client lookup map ─────────────────────────────────────────────────
+   368→  const clientMap = useMemo(() => {
+   369→    const map = new Map<string, FirestoreClient & { id: string }>();
+   370→    for (const c of clients) map.set(c.clientId, c);
+   371→    return map;
+   372→  }, [clients]);
+   373→
+   374→  // ── KPI derivations ───────────────────────────────────────────────────
+   375→  const pendingComplianceCount = useMemo(
+   376→    () => returns.filter((r) => r.status !== 'filed').length,
+   377→    [returns],
+   378→  );
+   379→
+   380→  const pendingInvoices = useMemo(
+   381→    () => invoices.filter((i) => i.status === 'draft' || i.status === 'approved'),
+   382→    [invoices],
+   383→  );
+   384→
+   385→  const pendingCollection = useMemo(
+   386→    () => pendingInvoices.reduce((sum, i) => sum + (i.totalAmount || 0), 0),
+   387→    [pendingInvoices],
+   388→  );
+   389→
+   390→  const insight = useMemo(
+   391→    () => buildInsightSentence(metrics, pendingCollection),
+   392→    [metrics, pendingCollection],
+   393→  );
+   394→
+   395→  // ── Upcoming filings (non-filed, sorted by urgency) ───────────────────
+   396→  const upcomingFilings = useMemo(() => {
+   397→    return returns
+   398→      .filter((r) => r.status !== 'filed')
+   399→      .sort((a, b) => {
+   400→        const aOverdue = isOverdue(a.period) ? 0 : 1;
+   401→        const bOverdue = isOverdue(b.period) ? 0 : 1;
+   402→        if (aOverdue !== bOverdue) return aOverdue - bOverdue;
+   403→        return a.period.localeCompare(b.period);
+   404→      })
+   405→      .slice(0, 5);
+   406→  }, [returns]);
+   407→
+   408→  // ── AI Recommendations ────────────────────────────────────────────────
+   409→  const recommendations = useMemo<Recommendation[]>(() => {
+   410→    const recs: Recommendation[] = [];
+   411→
+   412→    // Overdue returns → file now
+   413→    for (const r of returns) {
+   414→      if (recs.length >= 5) break;
+   415→      if (r.status === 'filed' || !isOverdue(r.period)) continue;
+   416→      const client = clientMap.get(r.clientId);
+   417→      const name = client?.tradeName ?? 'Unknown client';
+   418→      recs.push({
+   419→        id: `rec-overdue-${r.id}`,
+   420→        icon: <AlertTriangle className="h-3.5 w-3.5 accent-text" />,
+   421→        title: `File ${r.returnType} for ${name} — overdue`,
+   422→        actionLabel: 'File now',
+   423→        onAction: () => handleFileReturn(r.clientId, r.returnType, r.period),
+   424→      });
+   425→    }
+   426→
+   427→    // Returns due soon (≤ 7 days)
+   428→    for (const r of returns) {
+   429→      if (recs.length >= 5) break;
+   430→      if (r.status === 'filed' || isOverdue(r.period)) continue;
+   431→      const dueDate = getFilingDueDate(r.returnType, r.period);
+   432→      const days = getDaysRemaining(dueDate);
+   433→      if (days > 7) continue;
+   434→      const client = clientMap.get(r.clientId);
+   435→      const name = client?.tradeName ?? 'Unknown client';
+   436→      recs.push({
+   437→        id: `rec-soon-${r.id}`,
+   438→        icon: <Clock className="h-3.5 w-3.5 accent-text" />,
+   439→        title: `File ${r.returnType} for ${name} — due in ${days} day${days === 1 ? '' : 's'}`,
+   440→        actionLabel: 'Prepare',
+   441→        onAction: () => handleFileReturn(r.clientId, r.returnType, r.period),
+   442→      });
+   443→    }
+   444→
+   445→    // Low health score clients
+   446→    for (const c of clients) {
+   447→      if (recs.length >= 5) break;
+   448→      if (c.healthScore >= 60) continue;
+   449→      recs.push({
+   450→        id: `rec-health-${c.clientId}`,
+   451→        icon: <ShieldCheck className="h-3.5 w-3.5 accent-text" />,
+   452→        title: `${c.tradeName} — health score ${Math.round(c.healthScore)}% needs attention`,
+   453→        actionLabel: 'Open',
+   454→        onAction: () => handleOpenClient(c.clientId),
+   455→      });
+   456→    }
+   457→
+   458→    // Pending collection
+   459→    if (recs.length < 5 && pendingCollection > 0) {
+   460→      recs.push({
+   461→        id: 'rec-collection',
+   462→        icon: <IndianRupee className="h-3.5 w-3.5 accent-text" />,
+   463→        title: `₹${formatINR(pendingCollection)} pending collection across ${pendingInvoices.length} invoice${pendingInvoices.length === 1 ? '' : 's'}`,
+   464→        actionLabel: 'Review',
+   465→        onAction: () => setCurrentView('invoices'),
+   466→      });
+   467→    }
+   468→
+   469→    // Critical issues
+   470→    if (recs.length < 5 && metrics.criticalIssues > 0) {
+   471→      recs.push({
+   472→        id: 'rec-critical',
+   473→        icon: <AlertTriangle className="h-3.5 w-3.5 accent-text" />,
+   474→        title: `${metrics.criticalIssues} critical compliance issue${metrics.criticalIssues === 1 ? '' : 's'} need${metrics.criticalIssues === 1 ? 's' : ''} review`,
+   475→        actionLabel: 'Review',
+   476→        onAction: () => setCurrentView('reconcile'),
+   477→      });
+   478→    }
+   479→
+   480→    return recs;
+   481→  }, [returns, clients, clientMap, pendingCollection, pendingInvoices.length, metrics.criticalIssues]);
+   482→
+   483→  // ── Handlers ──────────────────────────────────────────────────────────
+   484→  const handleOpenClient = (clientId: string) => {
+   485→    setSelectedClientId(clientId);
+   486→    setCurrentView('client-workspace');
+   487→  };
+   488→
+   489→  const handleFileReturn = (clientId: string, returnType: string, period: string) => {
+   490→    setSelectedClientId(clientId);
+   491→    setReturnPrepCtx({
+   492→      clientId,
+   493→      returnType: (returnType === 'GSTR-3B' ? 'GSTR-3B' : 'GSTR-1') as 'GSTR-1' | 'GSTR-3B',
+   494→      period,
+   495→    });
+   496→    setCurrentView('return-prep');
+   497→  };
+   498→
+   499→  const handleQuickFile = async (returnId: string, clientName: string, returnType: string) => {
+   500→    if (filingInProgress.has(returnId)) return;
+   501→    setFilingInProgress((prev) => new Set(prev).add(returnId));
+   502→    try {
+   503→      const arn = await fileReturn(returnId);
+   504→      toast.success(`${returnType} Filed Successfully`, {
+   505→        description: `${clientName} — ARN: ${arn}`,
+   506→      });
+   507→    } catch (err) {
+   508→      toast.error('Filing Failed', {
+   509→        description: err instanceof Error ? err.message : 'Unknown error',
+   510→      });
+   511→    } finally {
+   512→      setFilingInProgress((prev) => {
+   513→        const next = new Set(prev);
+   514→        next.delete(returnId);
+   515→        return next;
+   516→      });
+   517→    }
+   518→  };
+   519→
+   520→  // ═══════════════════════════════════════════════════════════════════════════
+   521→  // RENDER
+   522→  // ═══════════════════════════════════════════════════════════════════════════
+   523→
+   524→  // ── Loading ───────────────────────────────────────────────────────────
+   525→  if (loading) return <DashboardSkeleton />;
+   526→
+   527→  // ── Error ─────────────────────────────────────────────────────────────
+   528→  if (error) {
+   529→    return (
+   530→      <div className="relative max-w-6xl mx-auto px-4 md:px-6 py-8 md:py-10">
+   531→        <Card className="glass-surface border-red-500/20">
+   532→          <CardContent className="p-6 text-center">
+   533→            <AlertTriangle className="h-8 w-8 text-red-500 mx-auto mb-2" />
+   534→            <h3 className="font-semibold text-foreground">Failed to load dashboard</h3>
+   535→            <p className="text-sm text-muted-foreground mt-1">{error}</p>
+   536→            <Button
+   537→              variant="outline"
+   538→              className="mt-4 border-border"
+   539→              onClick={() => window.location.reload()}
+   540→            >
+   541→              Retry
+   542→            </Button>
+   543→          </CardContent>
+   544→        </Card>
+   545→      </div>
+   546→    );
+   547→  }
+   548→
+   549→  // ── Empty state — no clients at all ───────────────────────────────────
+   550→  if (metrics.totalClients === 0) {
+   551→    return (
+   552→      <div className="relative max-w-6xl mx-auto px-4 md:px-6 py-8 md:py-10">
+   553→        <WelcomeEmptyState
+   554→          onAddClient={() => setCurrentView('clients')}
+   555→          onUploadDoc={() => setCurrentView('invoices')}
+   556→        />
+   557→      </div>
+   558→    );
+   559→  }
+   560→
+   561→  // ── KPI values ────────────────────────────────────────────────────────
+   562→  const revenueValue =
+   563→    metrics.totalTaxVolume > 0 ? `₹${formatINR(metrics.totalTaxVolume)}` : '—';
+   564→  const complianceValue = String(pendingComplianceCount);
+   565→  const cashValue = pendingCollection > 0 ? `₹${formatINR(pendingCollection)}` : '—';
+   566→
+   567→  const firstName = getFirstName(user?.name);
+   568→
+   569→  return (
+   570→    <div className="relative max-w-6xl mx-auto px-4 md:px-6 py-8 md:py-10">
+   571→      {/* ── Ambient radial glow at top ── */}
+   572→      <div
+   573→        aria-hidden
+   574→        className="pointer-events-none absolute inset-x-0 top-0 h-[420px] bg-[radial-gradient(ellipse_at_top,_rgba(16,185,129,0.08),_transparent_60%)]"
+   575→      />
+   576→
+   577→      {/* ── Content ── */}
+   578→      <div className="relative space-y-8">
+   579→        {/* ═══ GREETING + AI INSIGHT ═══ */}
+   580→        <motion.div
+   581→          initial={{ opacity: 0, y: -8 }}
+   582→          animate={{ opacity: 1, y: 0 }}
+   583→          transition={{ duration: 0.5, ease: 'easeOut' }}
+   584→          className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4"
+   585→        >
+   586→          <div className="space-y-2 min-w-0">
+   587→            <h1 className="text-3xl md:text-4xl font-bold text-foreground tracking-tight">
+   588→              {getGreeting()}, {firstName} <span className="inline-block">👋</span>
+   589→            </h1>
+   590→            <div className="flex items-start gap-2 text-sm text-muted-foreground">
+   591→              <Sparkles className="h-4 w-4 mt-0.5 shrink-0 accent-text" />
+   592→              <span className="leading-relaxed">{insight}</span>
+   593→            </div>
+   594→          </div>
+   595→          <Button
+   596→            variant="ghost"
+   597→            size="sm"
+   598→            onClick={() => setCurrentView('clients')}
+   599→            className="shrink-0 gap-1.5 text-muted-foreground hover:text-foreground"
+   600→          >
+   601→            <Plus className="h-3.5 w-3.5" />
+   602→            Add Client
+   603→          </Button>
+   604→        </motion.div>
+   605→
+   606→        {/* ═══ KPI CARDS — exactly 3 ═══ */}
+   607→        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+   608→          <KpiCard
+   609→            index={0}
+   610→            label="Revenue"
+   611→            value={revenueValue}
+   612→            subtitle={`Total tax volume · ${metrics.totalInvoices} invoices`}
+   613→            icon={<IndianRupee className="h-4 w-4 accent-text" />}
+   614→          />
+   615→          <KpiCard
+   616→            index={1}
+   617→            label="Pending Compliance"
+   618→            value={complianceValue}
+   619→            subtitle={
+   620→              pendingComplianceCount === 1
+   621→                ? 'Return to file'
+   622→                : 'Returns to file'
+   623→            }
+   624→            icon={<ShieldCheck className="h-4 w-4 accent-text" />}
+   625→          />
+   626→          <KpiCard
+   627→            index={2}
+   628→            label="Cash Position"
+   629→            value={cashValue}
+   630→            subtitle={
+   631→              pendingInvoices.length > 0
+   632→                ? `${pendingInvoices.length} invoice${pendingInvoices.length === 1 ? '' : 's'} · Pending collection`
+   633→                : 'Pending collection'
+   634→            }
+   635→            icon={<IndianRupee className="h-4 w-4 accent-text" />}
+   636→          />
+   637→        </div>
+   638→
+   639→        {/* ═══ BOTTOM SECTIONS — 3 in a row ═══ */}
+   640→        <div className="section-gap grid grid-cols-1 lg:grid-cols-3 gap-6">
+   641→          {/* ── AI Recommendations ─────────────────────────────────────── */}
+   642→          <SectionCard
+   643→            index={0}
+   644→            title="AI Recommendations"
+   645→            icon={<Sparkles className="h-4 w-4 accent-text" />}
+   646→          >
+   647→            {recommendations.length === 0 ? (
+   648→              <div className="flex flex-col items-center justify-center py-8 text-center">
+   649→                <CheckCircle2 className="h-7 w-7 text-emerald-500/70 mb-2" />
+   650→                <p className="text-xs text-muted-foreground max-w-[220px]">
+   651→                  You&apos;re all caught up. Nothing needs your attention right now.
+   652→                </p>
+   653→              </div>
+   654→            ) : (
+   655→              <ul className="space-y-1">
+   656→                {recommendations.map((rec) => (
+   657→                  <li key={rec.id}>
+   658→                    <div className="group flex items-start gap-3 py-2.5">
+   659→                      <div className="flex items-center justify-center h-6 w-6 rounded-md accent-gradient-soft shrink-0 mt-0.5">
+   660→                        {rec.icon}
+   661→                      </div>
+   662→                      <div className="min-w-0 flex-1">
+   663→                        <p className="text-[13px] text-foreground leading-snug">
+   664→                          {rec.title}
+   665→                        </p>
+   666→                        <button
+   667→                          type="button"
+   668→                          onClick={rec.onAction}
+   669→                          className="mt-1 inline-flex items-center gap-1 text-[11px] font-medium accent-text hover:opacity-80 transition-opacity"
+   670→                        >
+   671→                          {rec.actionLabel}
+   672→                          <ArrowRight className="h-3 w-3" />
+   673→                        </button>
+   674→                      </div>
+   675→                    </div>
+   676→                  </li>
+   677→                ))}
+   678→              </ul>
+   679→            )}
+   680→          </SectionCard>
+   681→
+   682→          {/* ── Tasks ─────────────────────────────────────────────────── */}
+   683→          <SectionCard
+   684→            index={1}
+   685→            title="Tasks"
+   686→            icon={<CheckSquare className="h-4 w-4 accent-text" />}
+   687→            actionLabel="View all"
+   688→            onAction={() => setCurrentView('returns')}
+   689→          >
+   690→            {upcomingFilings.length === 0 ? (
+   691→              <div className="flex flex-col items-center justify-center py-8 text-center">
+   692→                <CheckCircle2 className="h-7 w-7 text-emerald-500/70 mb-2" />
+   693→                <p className="text-xs text-muted-foreground max-w-[220px]">
+   694→                  All returns filed — you&apos;re all caught up!
+   695→                </p>
+   696→              </div>
+   697→            ) : (
+   698→              <ScrollArea className="max-h-[280px] -mx-1 px-1">
+   699→                <ul className="space-y-1">
+   700→                  {upcomingFilings.map((r) => {
+   701→                    const client = clientMap.get(r.clientId);
+   702→                    const name = client?.tradeName ?? 'Unknown client';
+   703→                    const dueDateStr = getFilingDueDate(r.returnType, r.period);
+   704→                    const days = getDaysRemaining(dueDateStr);
+   705→                    const overdue = days < 0;
+   706→                    const dueSoon = days >= 0 && days <= 5;
+   707→                    return (
+   708→                      <li key={r.id}>
+   709→                        <button
+   710→                          type="button"
+   711→                          onClick={() =>
+   712→                            handleFileReturn(r.clientId, r.returnType, r.period)
+   713→                          }
+   714→                          className="w-full text-left p-2.5 rounded-lg hover:bg-white/5 transition-colors group"
+   715→                        >
+   716→                          <div className="flex items-center justify-between gap-2">
+   717→                            <div className="min-w-0 flex-1">
+   718→                              <p className="text-[13px] font-medium text-foreground truncate">
+   719→                                {name}
+   720→                              </p>
+   721→                              <p className="text-[11px] text-muted-foreground mt-0.5">
+   722→                                {r.returnType} · {periodToLabel(r.period)} ·{' '}
+   723→                                {formatDateIN(dueDateStr)}
+   724→                              </p>
+   725→                            </div>
+   726→                            <div className="flex items-center gap-2 shrink-0">
+   727→                              <span
+   728→                                className={`text-[11px] font-medium ${
+   729→                                  overdue
+   730→                                    ? 'text-red-400'
+   731→                                    : dueSoon
+   732→                                      ? 'text-amber-400'
+   733→                                      : 'text-muted-foreground'
+   734→                                }`}
+   735→                              >
+   736→                                {formatDaysRemaining(days)}
+   737→                              </span>
+   738→                              <Badge
+   739→                                variant="outline"
+   740→                                className={`text-[10px] px-1.5 py-0 h-5 ${
+   741→                                  overdue
+   742→                                    ? 'border-red-500/30 text-red-400'
+   743→                                    : dueSoon
+   744→                                      ? 'border-amber-500/30 text-amber-400'
+   745→                                      : 'border-border text-muted-foreground'
+   746→                                }`}
+   747→                              >
+   748→                                {r.status}
+   749→                              </Badge>
+   750→                            </div>
+   751→                          </div>
+   752→                        </button>
+   753→                      </li>
+   754→                    );
+   755→                  })}
+   756→                </ul>
+   757→              </ScrollArea>
+   758→            )}
+   759→          </SectionCard>
+   760→
+   761→          {/* ── Recent Activity ───────────────────────────────────────── */}
+   762→          <SectionCard
+   763→            index={2}
+   764→            title="Recent Activity"
+   765→            icon={<Activity className="h-4 w-4 accent-text" />}
+   766→          >
+   767→            {recentActivities.length === 0 ? (
+   768→              <div className="flex flex-col items-center justify-center py-8 text-center">
+   769→                <Activity className="h-7 w-7 text-muted-foreground/60 mb-2" />
+   770→                <p className="text-xs text-muted-foreground max-w-[220px]">
+   771→                  No activity yet — actions you take will appear here.
+   772→                </p>
+   773→              </div>
+   774→            ) : (
+   775→              <ScrollArea className="max-h-[280px] -mx-1 px-1">
+   776→                <ul className="space-y-3">
+   777→                  {recentActivities.slice(0, 6).map((a) => (
+   778→                    <li key={a.id} className="flex items-start gap-2.5">
+   779→                      <div className="flex items-center justify-center h-7 w-7 rounded-full accent-gradient-soft shrink-0 mt-0.5">
+   780→                        {activityIcon(a.type)}
+   781→                      </div>
+   782→                      <div className="min-w-0 flex-1">
+   783→                        <p className="text-[13px] font-medium text-foreground leading-snug">
+   784→                          {a.title}
+   785→                        </p>
+   786→                        {a.description && (
+   787→                          <p className="text-[11px] text-muted-foreground mt-0.5 line-clamp-2">
+   788→                            {a.description}
+   789→                          </p>
+   790→                        )}
+   791→                        <p className="text-[10px] text-muted-foreground/60 mt-0.5">
+   792→                          {a.createdAt ? timeAgo(a.createdAt as string) : ''}
+   793→                        </p>
+   794→                      </div>
+   795→                    </li>
+   796→                  ))}
+   797→                </ul>
+   798→              </ScrollArea>
+   799→            )}
+   800→          </SectionCard>
+   801→        </div>
+   802→
+   803→        {/* ── Ready-to-file quick action footer (subtle, optional) ── */}
+   804→        {(() => {
+   805→          const ready = returns.filter((r) =>
+   806→            ['validated', 'reviewed', 'generated'].includes(r.status),
+   807→          );
+   808→          if (ready.length === 0) return null;
+   809→          const first = ready[0];
+   810→          const client = clientMap.get(first.clientId);
+   811→          const name = client?.tradeName ?? 'Unknown client';
+   812→          return (
+   813→            <motion.div
+   814→              initial={{ opacity: 0, y: 12 }}
+   815→              animate={{ opacity: 1, y: 0 }}
+   816→              transition={{ duration: 0.5, delay: 0.56, ease: 'easeOut' }}
+   817→            >
+   818→              <div className="glass-surface rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+   819→                <div className="flex items-center gap-3 min-w-0">
+   820→                  <div className="flex items-center justify-center h-9 w-9 rounded-lg accent-gradient-soft shrink-0">
+   821→                    <CheckCircle2 className="h-4 w-4 accent-text" />
+   822→                  </div>
+   823→                  <div className="min-w-0">
+   824→                    <p className="text-sm font-medium text-foreground truncate">
+   825→                      {ready.length} return{ready.length === 1 ? '' : 's'} ready to file
+   826→                    </p>
+   827→                    <p className="text-[11px] text-muted-foreground truncate">
+   828→                      Next up: {first.returnType} · {name} · {periodToLabel(first.period)}
+   829→                    </p>
+   830→                  </div>
+   831→                </div>
+   832→                <Button
+   833→                  size="sm"
+   834→                  className="accent-gradient text-white hover:opacity-90 gap-1.5 shrink-0"
+   835→                  onClick={() => handleQuickFile(first.id, name, first.returnType)}
+   836→                  disabled={filingInProgress.has(first.id)}
+   837→                >
+   838→                  {filingInProgress.has(first.id) ? (
+   839→                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+   840→                  ) : (
+   841→                    <CheckCircle2 className="h-3.5 w-3.5" />
+   842→                  )}
+   843→                  Quick File
+   844→                </Button>
+   845→              </div>
+   846→            </motion.div>
+   847→          );
+   848→        })()}
+   849→      </div>
+   850→    </div>
+   851→  );
+   852→}
+   853→

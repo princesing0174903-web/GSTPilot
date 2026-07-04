@@ -1,0 +1,1859 @@
+     1→'use client'
+     2→
+     3→import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react'
+     4→import { motion, AnimatePresence } from 'framer-motion'
+     5→import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+     6→import { Badge } from '@/components/ui/badge'
+     7→import { Button } from '@/components/ui/button'
+     8→import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
+     9→import { ScrollArea } from '@/components/ui/scroll-area'
+    10→import { Separator } from '@/components/ui/separator'
+    11→import { Progress } from '@/components/ui/progress'
+    12→import { Input } from '@/components/ui/input'
+    13→import {
+    14→  Network, Search, ZoomIn, ZoomOut, Maximize2, Layers,
+    15→  Users, FileText, FileScan, ArrowRightLeft, Building2,
+    16→  CircleDot, ChevronRight, AlertTriangle, Sparkles,
+    17→  Link2, Unlink, Eye, Database, IndianRupee, Clock,
+    18→  TrendingUp, Shield, Bot, Activity, Radio, Target,
+    19→  X, Info, CheckCircle, AlertOctagon, Lightbulb,
+    20→  Share2, GitBranch,
+    21→} from 'lucide-react'
+    22→import {
+    23→  useFireClients, useFireInvoices, useFireReturns,
+    24→  useFireDocuments, useFireReconciliations, useFireActivities,
+    25→} from '@/hooks/use-firestore'
+    26→
+    27→// ═══════════════════════════════════════════════════════════════════════════════
+    28→// HELPERS
+    29→// ═══════════════════════════════════════════════════════════════════════════════
+    30→
+    31→function formatINR(n: number): string {
+    32→  const s = Math.abs(Math.round(n)).toString()
+    33→  let result = ''
+    34→  let count = 0
+    35→  for (let i = s.length - 1; i >= 0; i--) {
+    36→    result = s[i] + result
+    37→    count++
+    38→    if (count === 3 && i > 0) { result = ',' + result; count = 0 }
+    39→    else if (count > 3 && count % 2 === 1 && i > 0) { result = ',' + result }
+    40→  }
+    41→  return '₹' + (n < 0 ? '-' : '') + result
+    42→}
+    43→
+    44→function formatDate(iso: string | null | unknown): string {
+    45→  if (!iso) return '—'
+    46→  try {
+    47→    const d = new Date(iso as string)
+    48→    return d.toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })
+    49→  } catch { return '—' }
+    50→}
+    51→
+    52→// ═══════════════════════════════════════════════════════════════════════════════
+    53→// ENTITY TYPES & COLORS
+    54→// ═══════════════════════════════════════════════════════════════════════════════
+    55→
+    56→type EntityType =
+    57→  | 'organization' | 'firm' | 'client' | 'vendor' | 'employee'
+    58→  | 'invoice' | 'payment' | 'bank_account' | 'gst_return' | 'document'
+    59→  | 'task' | 'notice' | 'approval'
+    60→
+    61→interface EntityColor {
+    62→  bg: string
+    63→  text: string
+    64→  border: string
+    65→  hex: string
+    66→  dot: string
+    67→}
+    68→
+    69→const ENTITY_COLORS: Record<EntityType, EntityColor> = {
+    70→  organization: { bg: 'bg-emerald-100', text: 'text-emerald-700', border: 'border-emerald-300', hex: '#10b981', dot: 'bg-emerald-500' },
+    71→  firm: { bg: 'bg-slate-100', text: 'text-slate-700', border: 'border-slate-300', hex: '#64748b', dot: 'bg-slate-500' },
+    72→  client: { bg: 'bg-amber-100', text: 'text-amber-700', border: 'border-amber-300', hex: '#f59e0b', dot: 'bg-amber-500' },
+    73→  vendor: { bg: 'bg-purple-100', text: 'text-purple-700', border: 'border-purple-300', hex: '#8b5cf6', dot: 'bg-purple-500' },
+    74→  employee: { bg: 'bg-cyan-100', text: 'text-cyan-700', border: 'border-cyan-300', hex: '#06b6d4', dot: 'bg-cyan-500' },
+    75→  invoice: { bg: 'bg-rose-100', text: 'text-rose-700', border: 'border-rose-300', hex: '#f43f5e', dot: 'bg-rose-500' },
+    76→  payment: { bg: 'bg-green-100', text: 'text-green-700', border: 'border-green-300', hex: '#22c55e', dot: 'bg-green-500' },
+    77→  bank_account: { bg: 'bg-blue-gray-100', text: 'text-slate-600', border: 'border-slate-400', hex: '#78909c', dot: 'bg-slate-400' },
+    78→  gst_return: { bg: 'bg-orange-100', text: 'text-orange-700', border: 'border-orange-300', hex: '#f97316', dot: 'bg-orange-500' },
+    79→  document: { bg: 'bg-teal-100', text: 'text-teal-700', border: 'border-teal-300', hex: '#14b8a6', dot: 'bg-teal-500' },
+    80→  task: { bg: 'bg-yellow-100', text: 'text-yellow-700', border: 'border-yellow-300', hex: '#eab308', dot: 'bg-yellow-500' },
+    81→  notice: { bg: 'bg-red-100', text: 'text-red-700', border: 'border-red-300', hex: '#ef4444', dot: 'bg-red-500' },
+    82→  approval: { bg: 'bg-gray-800', text: 'text-gray-100', border: 'border-gray-600', hex: '#1f2937', dot: 'bg-gray-700' },
+    83→}
+    84→
+    85→const ENTITY_LABELS: Record<EntityType, string> = {
+    86→  organization: 'Organizations',
+    87→  firm: 'Firms',
+    88→  client: 'Clients',
+    89→  vendor: 'Vendors',
+    90→  employee: 'Employees',
+    91→  invoice: 'Invoices',
+    92→  payment: 'Payments',
+    93→  bank_account: 'Bank Accounts',
+    94→  gst_return: 'GST Returns',
+    95→  document: 'Documents',
+    96→  task: 'Tasks',
+    97→  notice: 'Notices',
+    98→  approval: 'Approvals',
+    99→}
+   100→
+   101→const ENTITY_ICONS: Record<EntityType, React.ElementType> = {
+   102→  organization: Building2,
+   103→  firm: Building2,
+   104→  client: Users,
+   105→  vendor: Share2,
+   106→  employee: Users,
+   107→  invoice: FileScan,
+   108→  payment: IndianRupee,
+   109→  bank_account: Database,
+   110→  gst_return: FileText,
+   111→  document: FileText,
+   112→  task: CheckCircle,
+   113→  notice: AlertTriangle,
+   114→  approval: Shield,
+   115→}
+   116→
+   117→// ═══════════════════════════════════════════════════════════════════════════════
+   118→// GRAPH DATA TYPES
+   119→// ═══════════════════════════════════════════════════════════════════════════════
+   120→
+   121→interface GraphNode {
+   122→  id: string
+   123→  type: EntityType
+   124→  label: string
+   125→  subtitle: string
+   126→  x: number
+   127→  y: number
+   128→  connections: number
+   129→  status: string
+   130→  lastUpdated: string
+   131→  metadata: Record<string, string | number>
+   132→}
+   133→
+   134→interface GraphEdge {
+   135→  id: string
+   136→  source: string
+   137→  target: string
+   138→  label: string
+   139→  type: 'belongs_to' | 'has_invoice' | 'has_return' | 'has_document' | 'has_payment' | 'references' | 'notifies' | 'assigned_to'
+   140→}
+   141→
+   142→// ═══════════════════════════════════════════════════════════════════════════════
+   143→// DEMO DATA GENERATOR
+   144→// ═══════════════════════════════════════════════════════════════════════════════
+   145→
+   146→function generateDemoData(): { nodes: GraphNode[]; edges: GraphEdge[] } {
+   147→  const clients = [
+   148→    { id: 'c1', name: 'ABC Traders', gstin: '27AABCT1234F1ZH', status: 'active' },
+   149→    { id: 'c2', name: 'XYZ Industries', gstin: '27AABCX5678G2ZK', status: 'active' },
+   150→    { id: 'c3', name: 'PQR Exports Pvt Ltd', gstin: '06AABCP9012H3ZM', status: 'active' },
+   151→    { id: 'c4', name: 'LMN Enterprises', gstin: '09AABCL3456I4ZN', status: 'inactive' },
+   152→    { id: 'c5', name: 'DEF Constructions', gstin: '33AABCD7890J5ZO', status: 'active' },
+   153→    { id: 'c6', name: 'GHI Logistics', gstin: '27AABCG2345K6ZP', status: 'active' },
+   154→    { id: 'c7', name: 'JKL Pharma Ltd', gstin: '27AABCJ6789L7ZQ', status: 'active' },
+   155→    { id: 'c8', name: 'MNO Textiles', gstin: '24AABCM0123M8ZR', status: 'active' },
+   156→    { id: 'c9', name: 'STU Chemicals', gstin: '27AABCS4567N9ZS', status: 'active' },
+   157→    { id: 'c10', name: 'VWX Foods Pvt Ltd', gstin: '27AABCV8901O0ZT', status: 'active' },
+   158→    { id: 'c11', name: 'Rajesh Kumar & Co', gstin: '27AABCR2345P1ZU', status: 'active' },
+   159→    { id: 'c12', name: 'Patel Brothers', gstin: '24AABCP6789Q2ZV', status: 'active' },
+   160→    { id: 'c13', name: 'Sharma Associates', gstin: '09AABCS0123R3ZW', status: 'active' },
+   161→    { id: 'c14', name: 'Maharashtra Traders', gstin: '27AABCM4567S4ZX', status: 'active' },
+   162→    { id: 'c15', name: 'Singh & Sons', gstin: '06AABCS8901T5ZY', status: 'active' },
+   163→  ]
+   164→
+   165→  const nodes: GraphNode[] = []
+   166→  const edges: GraphEdge[] = []
+   167→
+   168→  // Organization node
+   169→  nodes.push({
+   170→    id: 'org1', type: 'organization', label: 'GSTPilot Corp',
+   171→    subtitle: 'Enterprise Plan', x: 500, y: 60, connections: 3,
+   172→    status: 'active', lastUpdated: '2026-03-03T10:00:00Z',
+   173→    metadata: { firms: 3, plan: 'enterprise' },
+   174→  })
+   175→
+   176→  // Firm node
+   177→  nodes.push({
+   178→    id: 'firm1', type: 'firm', label: 'Sharma & Associates',
+   179→    subtitle: 'CA Firm — Mumbai', x: 500, y: 160, connections: 22,
+   180→    status: 'active', lastUpdated: '2026-03-03T10:00:00Z',
+   181→    metadata: { clients: 15, gstin: '27AABCS1234F1ZH' },
+   182→  })
+   183→
+   184→  edges.push({ id: 'e-org-firm', source: 'org1', target: 'firm1', label: 'owns', type: 'belongs_to' })
+   185→
+   186→  // Client nodes
+   187→  const angleStep = (2 * Math.PI) / clients.length
+   188→  const radius = 220
+   189→  clients.forEach((c, i) => {
+   190→    const angle = angleStep * i - Math.PI / 2
+   191→    const x = 500 + radius * Math.cos(angle)
+   192→    const y = 380 + radius * Math.sin(angle)
+   193→    nodes.push({
+   194→      id: c.id, type: 'client', label: c.name,
+   195→      subtitle: c.gstin, x, y,
+   196→      connections: Math.floor(Math.random() * 5) + 2,
+   197→      status: c.status, lastUpdated: '2026-03-02T14:30:00Z',
+   198→      metadata: { gstin: c.gstin, invoices: Math.floor(Math.random() * 10) + 1 },
+   199→    })
+   200→    edges.push({ id: `e-firm-${c.id}`, source: 'firm1', target: c.id, label: 'manages', type: 'belongs_to' })
+   201→  })
+   202→
+   203→  // Invoice nodes
+   204→  const invoices = [
+   205→    { id: 'inv1', num: 'INV-2026-001', clientId: 'c1', amt: 2450000, status: 'filed' },
+   206→    { id: 'inv2', num: 'INV-2026-002', clientId: 'c2', amt: 1870000, status: 'pending' },
+   207→    { id: 'inv3', num: 'INV-2026-003', clientId: 'c3', amt: 3210000, status: 'filed' },
+   208→    { id: 'inv4', num: 'INV-2026-004', clientId: 'c1', amt: 890000, status: 'reviewed' },
+   209→    { id: 'inv5', num: 'INV-2026-005', clientId: 'c5', amt: 1560000, status: 'filed' },
+   210→    { id: 'inv6', num: 'INV-2026-006', clientId: 'c6', amt: 4230000, status: 'draft' },
+   211→    { id: 'inv7', num: 'INV-2026-007', clientId: 'c7', amt: 670000, status: 'filed' },
+   212→    { id: 'inv8', num: 'INV-2026-008', clientId: 'c8', amt: 2100000, status: 'pending' },
+   213→    { id: 'inv9', num: 'INV-2026-009', clientId: 'c9', amt: 945000, status: 'filed' },
+   214→    { id: 'inv10', num: 'INV-2026-010', clientId: 'c10', amt: 1780000, status: 'reviewed' },
+   215→    { id: 'inv11', num: 'INV-2026-011', clientId: 'c2', amt: 3250000, status: 'filed' },
+   216→    { id: 'inv12', num: 'INV-2026-012', clientId: 'c11', amt: 1100000, status: 'pending' },
+   217→    { id: 'inv13', num: 'INV-2026-013', clientId: 'c12', amt: 560000, status: 'filed' },
+   218→    { id: 'inv14', num: 'INV-2026-014', clientId: 'c13', amt: 2900000, status: 'draft' },
+   219→    { id: 'inv15', num: 'INV-2026-015', clientId: 'c14', amt: 1450000, status: 'filed' },
+   220→    { id: 'inv16', num: 'INV-2026-016', clientId: 'c15', amt: 780000, status: 'reviewed' },
+   221→    { id: 'inv17', num: 'INV-2026-017', clientId: 'c4', amt: 1890000, status: 'pending' },
+   222→    { id: 'inv18', num: 'INV-2026-018', clientId: 'c5', amt: 3100000, status: 'filed' },
+   223→    { id: 'inv19', num: 'INV-2026-019', clientId: 'c6', amt: 430000, status: 'filed' },
+   224→    { id: 'inv20', num: 'INV-2026-020', clientId: 'c3', amt: 2750000, status: 'pending' },
+   225→    { id: 'inv21', num: 'INV-2026-021', clientId: 'c7', amt: 1620000, status: 'filed' },
+   226→    { id: 'inv22', num: 'INV-2026-022', clientId: 'c8', amt: 980000, status: 'reviewed' },
+   227→    { id: 'inv23', num: 'INV-2026-023', clientId: 'c9', amt: 4500000, status: 'filed' },
+   228→    { id: 'inv24', num: 'INV-2026-024', clientId: 'c10', amt: 1340000, status: 'draft' },
+   229→    { id: 'inv25', num: 'INV-2026-025', clientId: 'c1', amt: 890000, status: 'filed' },
+   230→  ]
+   231→
+   232→  const invAngleStep = (2 * Math.PI) / invoices.length
+   233→  const invRadius = 160
+   234→  invoices.forEach((inv, i) => {
+   235→    const angle = invAngleStep * i - Math.PI / 2
+   236→    const parentNode = nodes.find(n => n.id === inv.clientId)
+   237→    const cx = parentNode ? parentNode.x : 500
+   238→    const cy = parentNode ? parentNode.y : 380
+   239→    nodes.push({
+   240→      id: inv.id, type: 'invoice', label: inv.num,
+   241→      subtitle: formatINR(inv.amt), x: cx + invRadius * 0.4 * Math.cos(angle), y: cy + invRadius * 0.4 * Math.sin(angle),
+   242→      connections: 2, status: inv.status, lastUpdated: '2026-03-01T09:15:00Z',
+   243→      metadata: { amount: inv.amt, client: inv.clientId },
+   244→    })
+   245→    edges.push({ id: `e-${inv.clientId}-${inv.id}`, source: inv.clientId, target: inv.id, label: 'has invoice', type: 'has_invoice' })
+   246→  })
+   247→
+   248→  // Return nodes
+   249→  const returns = [
+   250→    { id: 'ret1', type: 'GSTR-1' as const, period: '02/2026', clientId: 'c1', status: 'filed' },
+   251→    { id: 'ret2', type: 'GSTR-3B' as const, period: '02/2026', clientId: 'c1', status: 'filed' },
+   252→    { id: 'ret3', type: 'GSTR-1' as const, period: '02/2026', clientId: 'c2', status: 'pending' },
+   253→    { id: 'ret4', type: 'GSTR-3B' as const, period: '02/2026', clientId: 'c3', status: 'filed' },
+   254→    { id: 'ret5', type: 'GSTR-1' as const, period: '02/2026', clientId: 'c5', status: 'draft' },
+   255→    { id: 'ret6', type: 'GSTR-3B' as const, period: '02/2026', clientId: 'c6', status: 'validated' },
+   256→    { id: 'ret7', type: 'GSTR-1' as const, period: '02/2026', clientId: 'c7', status: 'filed' },
+   257→    { id: 'ret8', type: 'GSTR-3B' as const, period: '02/2026', clientId: 'c8', status: 'reviewed' },
+   258→    { id: 'ret9', type: 'GSTR-1' as const, period: '01/2026', clientId: 'c9', status: 'filed' },
+   259→    { id: 'ret10', type: 'GSTR-1' as const, period: '02/2026', clientId: 'c10', status: 'pending' },
+   260→  ]
+   261→
+   262→  returns.forEach((ret, i) => {
+   263→    const parentNode = nodes.find(n => n.id === ret.clientId)
+   264→    const cx = parentNode ? parentNode.x : 500
+   265→    const cy = parentNode ? parentNode.y : 380
+   266→    nodes.push({
+   267→      id: ret.id, type: 'gst_return', label: `${ret.type} — ${ret.period}`,
+   268→      subtitle: ret.status, x: cx + 60 + i * 8, y: cy - 80 - i * 5,
+   269→      connections: 1, status: ret.status, lastUpdated: '2026-02-28T16:00:00Z',
+   270→      metadata: { returnType: ret.type, period: ret.period },
+   271→    })
+   272→    edges.push({ id: `e-${ret.clientId}-${ret.id}`, source: ret.clientId, target: ret.id, label: 'has return', type: 'has_return' })
+   273→  })
+   274→
+   275→  // Vendor nodes
+   276→  const vendors = [
+   277→    { id: 'v1', name: 'Krishna Suppliers', gstin: '27AABCK1111A1ZA' },
+   278→    { id: 'v2', name: 'Mehta Distributors', gstin: '06AABCM2222B2ZB' },
+   279→    { id: 'v3', name: 'Shah & Co Traders', gstin: '24AABCS3333C3ZC' },
+   280→    { id: 'v4', name: 'Patel Wholesale Mart', gstin: '09AABCP4444D4ZD' },
+   281→    { id: 'v5', name: 'Gupta Raw Materials', gstin: '33AABCG5555E5ZE' },
+   282→  ]
+   283→
+   284→  vendors.forEach((v) => {
+   285→    nodes.push({
+   286→      id: v.id, type: 'vendor', label: v.name,
+   287→      subtitle: v.gstin, x: 100 + Math.random() * 200, y: 500 + Math.random() * 150,
+   288→      connections: Math.floor(Math.random() * 4) + 1,
+   289→      status: 'active', lastUpdated: '2026-03-01T11:00:00Z',
+   290→      metadata: { gstin: v.gstin },
+   291→    })
+   292→  })
+   293→
+   294→  // Connect vendors to invoices
+   295→  edges.push({ id: 'e-v1-inv3', source: 'v1', target: 'inv3', label: 'supplied', type: 'references' })
+   296→  edges.push({ id: 'e-v2-inv6', source: 'v2', target: 'inv6', label: 'supplied', type: 'references' })
+   297→  edges.push({ id: 'e-v3-inv9', source: 'v3', target: 'inv9', label: 'supplied', type: 'references' })
+   298→  edges.push({ id: 'e-v4-inv14', source: 'v4', target: 'inv14', label: 'supplied', type: 'references' })
+   299→  edges.push({ id: 'e-v5-inv20', source: 'v5', target: 'inv20', label: 'supplied', type: 'references' })
+   300→
+   301→  // Payment nodes
+   302→  const payments = [
+   303→    { id: 'pay1', label: 'PAY-2026-001', amt: 1200000, invoiceId: 'inv1' },
+   304→    { id: 'pay2', label: 'PAY-2026-002', amt: 890000, invoiceId: 'inv3' },
+   305→    { id: 'pay3', label: 'PAY-2026-003', amt: 2340000, invoiceId: 'inv5' },
+   306→  ]
+   307→
+   308→  payments.forEach((p) => {
+   309→    nodes.push({
+   310→      id: p.id, type: 'payment', label: p.label,
+   311→      subtitle: formatINR(p.amt), x: 750 + Math.random() * 100, y: 450 + Math.random() * 100,
+   312→      connections: 1, status: 'completed', lastUpdated: '2026-02-28T12:00:00Z',
+   313→      metadata: { amount: p.amt },
+   314→    })
+   315→    edges.push({ id: `e-${p.invoiceId}-${p.id}`, source: p.invoiceId, target: p.id, label: 'paid by', type: 'has_payment' })
+   316→  })
+   317→
+   318→  // Bank account nodes
+   319→  const banks = [
+   320→    { id: 'bank1', label: 'HDFC Current A/C', bank: 'HDFC' },
+   321→    { id: 'bank2', label: 'SBI Business A/C', bank: 'SBI' },
+   322→    { id: 'bank3', label: 'ICICI Corporate A/C', bank: 'ICICI' },
+   323→  ]
+   324→
+   325→  banks.forEach((b) => {
+   326→    nodes.push({
+   327→      id: b.id, type: 'bank_account', label: b.label,
+   328→      subtitle: b.bank, x: 850, y: 200 + Math.random() * 200,
+   329→      connections: 2, status: 'active', lastUpdated: '2026-03-03T08:00:00Z',
+   330→      metadata: { bank: b.bank },
+   331→    })
+   332→  })
+   333→
+   334→  edges.push({ id: 'e-pay1-bank1', source: 'pay1', target: 'bank1', label: 'deposited in', type: 'references' })
+   335→  edges.push({ id: 'e-pay2-bank2', source: 'pay2', target: 'bank2', label: 'deposited in', type: 'references' })
+   336→  edges.push({ id: 'e-pay3-bank3', source: 'pay3', target: 'bank3', label: 'deposited in', type: 'references' })
+   337→
+   338→  // Document nodes
+   339→  const docs = [
+   340→    { id: 'doc1', label: 'Purchase Register Feb 2026', clientId: 'c1' },
+   341→    { id: 'doc2', label: 'Sales Register Feb 2026', clientId: 'c2' },
+   342→    { id: 'doc3', label: 'GSTR-2B Download Feb 2026', clientId: 'c3' },
+   343→  ]
+   344→
+   345→  docs.forEach((d) => {
+   346→    nodes.push({
+   347→      id: d.id, type: 'document', label: d.label,
+   348→      subtitle: 'Extracted', x: 150, y: 250 + Math.random() * 100,
+   349→      connections: 1, status: 'extracted', lastUpdated: '2026-03-02T10:00:00Z',
+   350→      metadata: { clientId: d.clientId },
+   351→    })
+   352→    edges.push({ id: `e-${d.clientId}-${d.id}`, source: d.clientId, target: d.id, label: 'uploaded', type: 'has_document' })
+   353→  })
+   354→
+   355→  // Task, Notice, Approval nodes
+   356→  nodes.push({
+   357→    id: 'task1', type: 'task', label: 'File GSTR-1 for ABC Traders',
+   358→    subtitle: 'Due: 11/03/2026', x: 300, y: 620, connections: 1,
+   359→    status: 'pending', lastUpdated: '2026-03-03T07:00:00Z',
+   360→    metadata: { priority: 'high' },
+   361→  })
+   362→  edges.push({ id: 'e-c1-task1', source: 'c1', target: 'task1', label: 'assigned', type: 'assigned_to' })
+   363→
+   364→  nodes.push({
+   365→    id: 'notice1', type: 'notice', label: 'ASN-2026-045',
+   366→    subtitle: 'ITC Mismatch — ₹2,34,500', x: 700, y: 620, connections: 1,
+   367→    status: 'open', lastUpdated: '2026-02-27T15:00:00Z',
+   368→    metadata: { severity: 'high' },
+   369→  })
+   370→  edges.push({ id: 'e-c2-notice1', source: 'c2', target: 'notice1', label: 'received', type: 'notifies' })
+   371→
+   372→  nodes.push({
+   373→    id: 'app1', type: 'approval', label: 'GSTR-3B Filing Approval',
+   374→    subtitle: 'Awaiting CA Sign-off', x: 500, y: 680, connections: 1,
+   375→    status: 'pending', lastUpdated: '2026-03-03T06:00:00Z',
+   376→    metadata: { requestedBy: 'Staff' },
+   377→  })
+   378→  edges.push({ id: 'e-ret2-app1', source: 'ret2', target: 'app1', label: 'requires approval', type: 'assigned_to' })
+   379→
+   380→  // Recalculate connections count
+   381→  const connectionCounts: Record<string, number> = {}
+   382→  edges.forEach(e => {
+   383→    connectionCounts[e.source] = (connectionCounts[e.source] || 0) + 1
+   384→    connectionCounts[e.target] = (connectionCounts[e.target] || 0) + 1
+   385→  })
+   386→  nodes.forEach(n => {
+   387→    n.connections = connectionCounts[n.id] || 0
+   388→  })
+   389→
+   390→  return { nodes, edges }
+   391→}
+   392→
+   393→// ═══════════════════════════════════════════════════════════════════════════════
+   394→// SIMPLE FORCE-DIRECTED LAYOUT (no external libs)
+   395→// ═══════════════════════════════════════════════════════════════════════════════
+   396→
+   397→function applyForceLayout(nodes: GraphNode[], edges: GraphEdge[], iterations: number = 60): GraphNode[] {
+   398→  const positioned = nodes.map(n => ({ ...n }))
+   399→  const width = 1000
+   400→  const height = 700
+   401→
+   402→  // Initialize positions if they're clustered
+   403→  positioned.forEach((n, i) => {
+   404→    if (n.x === 0 && n.y === 0) {
+   405→      n.x = width / 2 + (Math.random() - 0.5) * 400
+   406→      n.y = height / 2 + (Math.random() - 0.5) * 300
+   407→    }
+   408→  })
+   409→
+   410→  for (let iter = 0; iter < iterations; iter++) {
+   411→    const temperature = 1 - (iter / iterations)
+   412→    const k = Math.sqrt((width * height) / positioned.length) * 0.8
+   413→
+   414→    // Repulsive forces between all nodes
+   415→    const dx: Record<string, number> = {}
+   416→    const dy: Record<string, number> = {}
+   417→    positioned.forEach(n => { dx[n.id] = 0; dy[n.id] = 0 })
+   418→
+   419→    for (let i = 0; i < positioned.length; i++) {
+   420→      for (let j = i + 1; j < positioned.length; j++) {
+   421→        const ni = positioned[i]
+   422→        const nj = positioned[j]
+   423→        let diffX = ni.x - nj.x
+   424→        let diffY = ni.y - nj.y
+   425→        const dist = Math.max(1, Math.sqrt(diffX * diffX + diffY * diffY))
+   426→        const force = (k * k) / dist
+   427→        diffX = (diffX / dist) * force * temperature
+   428→        diffY = (diffY / dist) * force * temperature
+   429→        dx[ni.id] += diffX
+   430→        dy[ni.id] += diffY
+   431→        dx[nj.id] -= diffX
+   432→        dy[nj.id] -= diffY
+   433→      }
+   434→    }
+   435→
+   436→    // Attractive forces for connected nodes
+   437→    edges.forEach(e => {
+   438→      const source = positioned.find(n => n.id === e.source)
+   439→      const target = positioned.find(n => n.id === e.target)
+   440→      if (!source || !target) return
+   441→      let diffX = source.x - target.x
+   442→      let diffY = source.y - target.y
+   443→      const dist = Math.max(1, Math.sqrt(diffX * diffX + diffY * diffY))
+   444→      const force = (dist * dist) / k
+   445→      diffX = (diffX / dist) * force * temperature * 0.3
+   446→      diffY = (diffY / dist) * force * temperature * 0.3
+   447→      dx[source.id] -= diffX
+   448→      dy[source.id] -= diffY
+   449→      dx[target.id] += diffX
+   450→      dy[target.id] += diffY
+   451→    })
+   452→
+   453→    // Apply forces
+   454→    positioned.forEach(n => {
+   455→      const disp = Math.sqrt(dx[n.id] * dx[n.id] + dy[n.id] * dy[n.id])
+   456→      if (disp > 0) {
+   457→        n.x += (dx[n.id] / disp) * Math.min(disp, 10 * temperature)
+   458→        n.y += (dy[n.id] / disp) * Math.min(disp, 10 * temperature)
+   459→      }
+   460→      // Keep in bounds
+   461→      n.x = Math.max(40, Math.min(width - 40, n.x))
+   462→      n.y = Math.max(40, Math.min(height - 40, n.y))
+   463→    })
+   464→  }
+   465→
+   466→  return positioned
+   467→}
+   468→
+   469→// ═══════════════════════════════════════════════════════════════════════════════
+   470→// BUILD GRAPH FROM FIRESTORE DATA
+   471→// ═══════════════════════════════════════════════════════════════════════════════
+   472→
+   473→function buildGraphFromFirestore(
+   474→  clients: Array<{ id: string; tradeName?: string; gstin?: string; status?: string; healthScore?: number; invoiceCount?: number; updatedAt?: unknown }>,
+   475→  invoices: Array<{ id: string; invoiceNumber?: string; clientId?: string; totalAmount?: number; status?: string; updatedAt?: unknown }>,
+   476→  returns: Array<{ id: string; returnType?: string; period?: string; clientId?: string; status?: string; updatedAt?: unknown }>,
+   477→  documents: Array<{ id: string; fileName?: string; clientId?: string; status?: string; updatedAt?: unknown }>,
+   478→  reconciliations: Array<{ id: string; sources?: string; clientId?: string; status?: string; updatedAt?: unknown }>,
+   479→  activities: Array<{ id: string; type?: string; title?: string; clientId?: string; createdAt?: unknown }>,
+   480→): { nodes: GraphNode[]; edges: GraphEdge[] } {
+   481→  if (clients.length === 0 && invoices.length === 0) {
+   482→    return generateDemoData()
+   483→  }
+   484→
+   485→  const nodes: GraphNode[] = []
+   486→  const edges: GraphEdge[] = []
+   487→  let nodeIdx = 0
+   488→
+   489→  // Firm node
+   490→  nodes.push({
+   491→    id: 'firm1', type: 'firm', label: 'Your Firm',
+   492→    subtitle: 'CA Practice', x: 500, y: 80, connections: 0,
+   493→    status: 'active', lastUpdated: new Date().toISOString(),
+   494→    metadata: {},
+   495→  })
+   496→
+   497→  // Client nodes
+   498→  clients.forEach((c, i) => {
+   499→    const angle = (2 * Math.PI * i) / Math.max(clients.length, 1) - Math.PI / 2
+   500→    const r = 200
+   501→    nodes.push({
+   502→      id: `client-${c.id}`, type: 'client', label: c.tradeName || 'Unknown Client',
+   503→      subtitle: c.gstin || '—', x: 500 + r * Math.cos(angle), y: 300 + r * Math.sin(angle),
+   504→      connections: 0, status: c.status || 'active', lastUpdated: c.updatedAt ? String(c.updatedAt) : new Date().toISOString(),
+   505→      metadata: { healthScore: c.healthScore || 0, invoiceCount: c.invoiceCount || 0 },
+   506→    })
+   507→    edges.push({ id: `e-firm-c${c.id}`, source: 'firm1', target: `client-${c.id}`, label: 'manages', type: 'belongs_to' })
+   508→  })
+   509→
+   510→  // Invoice nodes
+   511→  invoices.forEach((inv, i) => {
+   512→    const clientId = inv.clientId ? `client-${inv.clientId}` : null
+   513→    const parentNode = clientId ? nodes.find(n => n.id === clientId) : null
+   514→    const cx = parentNode ? parentNode.x : 500
+   515→    const cy = parentNode ? parentNode.y : 400
+   516→    const angle = (2 * Math.PI * i) / Math.max(invoices.length, 1)
+   517→    const r = 80
+   518→
+   519→    nodes.push({
+   520→      id: `inv-${inv.id}`, type: 'invoice', label: inv.invoiceNumber || `INV-${i + 1}`,
+   521→      subtitle: formatINR(inv.totalAmount || 0), x: cx + r * Math.cos(angle), y: cy + r * Math.sin(angle),
+   522→      connections: 0, status: inv.status || 'draft', lastUpdated: inv.updatedAt ? String(inv.updatedAt) : new Date().toISOString(),
+   523→      metadata: { amount: inv.totalAmount || 0 },
+   524→    })
+   525→    if (clientId) {
+   526→      edges.push({ id: `e-c${inv.clientId}-i${inv.id}`, source: clientId, target: `inv-${inv.id}`, label: 'has invoice', type: 'has_invoice' })
+   527→    }
+   528→  })
+   529→
+   530→  // Return nodes
+   531→  returns.forEach((ret, i) => {
+   532→    const clientId = ret.clientId ? `client-${ret.clientId}` : null
+   533→    const parentNode = clientId ? nodes.find(n => n.id === clientId) : null
+   534→    const cx = parentNode ? parentNode.x : 500
+   535→    const cy = parentNode ? parentNode.y : 400
+   536→
+   537→    nodes.push({
+   538→      id: `ret-${ret.id}`, type: 'gst_return', label: `${ret.returnType || 'GSTR-1'} — ${ret.period || '—'}`,
+   539→      subtitle: ret.status || 'draft', x: cx + 60 + (i % 3) * 40, y: cy - 90 - (i % 2) * 50,
+   540→      connections: 0, status: ret.status || 'draft', lastUpdated: ret.updatedAt ? String(ret.updatedAt) : new Date().toISOString(),
+   541→      metadata: { returnType: ret.returnType, period: ret.period },
+   542→    })
+   543→    if (clientId) {
+   544→      edges.push({ id: `e-c${ret.clientId}-r${ret.id}`, source: clientId, target: `ret-${ret.id}`, label: 'has return', type: 'has_return' })
+   545→    }
+   546→  })
+   547→
+   548→  // Document nodes
+   549→  documents.forEach((doc, i) => {
+   550→    const clientId = doc.clientId ? `client-${doc.clientId}` : null
+   551→    nodes.push({
+   552→      id: `doc-${doc.id}`, type: 'document', label: doc.fileName || `Document ${i + 1}`,
+   553→      subtitle: doc.status || 'uploaded', x: 80 + (i % 4) * 100, y: 550 + Math.floor(i / 4) * 60,
+   554→      connections: 0, status: doc.status || 'uploaded', lastUpdated: doc.updatedAt ? String(doc.updatedAt) : new Date().toISOString(),
+   555→      metadata: {},
+   556→    })
+   557→    if (clientId) {
+   558→      edges.push({ id: `e-c${doc.clientId}-d${doc.id}`, source: clientId, target: `doc-${doc.id}`, label: 'uploaded', type: 'has_document' })
+   559→    }
+   560→  })
+   561→
+   562→  // Recalculate connections
+   563→  const connectionCounts: Record<string, number> = {}
+   564→  edges.forEach(e => {
+   565→    connectionCounts[e.source] = (connectionCounts[e.source] || 0) + 1
+   566→    connectionCounts[e.target] = (connectionCounts[e.target] || 0) + 1
+   567→  })
+   568→  nodes.forEach(n => {
+   569→    n.connections = connectionCounts[n.id] || 0
+   570→  })
+   571→
+   572→  return { nodes, edges }
+   573→}
+   574→
+   575→// ═══════════════════════════════════════════════════════════════════════════════
+   576→// ANIMATION VARIANTS
+   577→// ═══════════════════════════════════════════════════════════════════════════════
+   578→
+   579→const fadeUp = {
+   580→  initial: { opacity: 0, y: 16 },
+   581→  animate: { opacity: 1, y: 0 },
+   582→  transition: { duration: 0.35 },
+   583→}
+   584→
+   585→const staggerContainer = {
+   586→  hidden: { opacity: 0 },
+   587→  show: { opacity: 1, transition: { staggerChildren: 0.05 } },
+   588→}
+   589→
+   590→const staggerItem = {
+   591→  hidden: { opacity: 0, y: 8 },
+   592→  show: { opacity: 1, y: 0, transition: { duration: 0.3 } },
+   593→}
+   594→
+   595→// ═══════════════════════════════════════════════════════════════════════════════
+   596→// MAIN COMPONENT
+   597→// ═══════════════════════════════════════════════════════════════════════════════
+   598→
+   599→export default function BusinessGraphPage() {
+   600→  const [activeTab, setActiveTab] = useState('graph')
+   601→  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
+   602→  const [searchQuery, setSearchQuery] = useState('')
+   603→  const [filterType, setFilterType] = useState<EntityType | 'all'>('all')
+   604→  const [zoom, setZoom] = useState(1)
+   605→  const [pan, setPan] = useState({ x: 0, y: 0 })
+   606→  const svgRef = useRef<SVGSVGElement>(null)
+   607→  const [isDragging, setIsDragging] = useState(false)
+   608→  const [dragStart, setDragStart] = useState({ x: 0, y: 0 })
+   609→
+   610→  // Firestore hooks
+   611→  const { data: fireClients } = useFireClients()
+   612→  const { data: fireInvoices } = useFireInvoices()
+   613→  const { data: fireReturns } = useFireReturns()
+   614→  const { data: fireDocuments } = useFireDocuments()
+   615→  const { data: fireReconciliations } = useFireReconciliations()
+   616→  const { data: fireActivities } = useFireActivities()
+   617→
+   618→  // Build graph data
+   619→  const graphData = useMemo(() => {
+   620→    const hasData = fireClients.length > 0 || fireInvoices.length > 0
+   621→    if (!hasData) {
+   622→      const demo = generateDemoData()
+   623→      return { ...demo, nodes: applyForceLayout(demo.nodes, demo.edges, 40) }
+   624→    }
+   625→    const built = buildGraphFromFirestore(
+   626→      fireClients as any[],
+   627→      fireInvoices as any[],
+   628→      fireReturns as any[],
+   629→      fireDocuments as any[],
+   630→      fireReconciliations as any[],
+   631→      fireActivities as any[],
+   632→    )
+   633→    return { ...built, nodes: applyForceLayout(built.nodes, built.edges, 40) }
+   634→  }, [fireClients, fireInvoices, fireReturns, fireDocuments, fireReconciliations, fireActivities])
+   635→
+   636→  const { nodes, edges } = graphData
+   637→
+   638→  // Selected node detail
+   639→  const selectedNode = useMemo(() => nodes.find(n => n.id === selectedNodeId) || null, [nodes, selectedNodeId])
+   640→  const selectedNodeEdges = useMemo(() => {
+   641→    if (!selectedNodeId) return []
+   642→    return edges.filter(e => e.source === selectedNodeId || e.target === selectedNodeId)
+   643→  }, [edges, selectedNodeId])
+   644→  const connectedNodeIds = useMemo(() => {
+   645→    const ids = new Set<string>()
+   646→    selectedNodeEdges.forEach(e => {
+   647→      ids.add(e.source)
+   648→      ids.add(e.target)
+   649→    })
+   650→    ids.delete(selectedNodeId || '')
+   651→    return ids
+   652→  }, [selectedNodeEdges, selectedNodeId])
+   653→
+   654→  // Stats
+   655→  const stats = useMemo(() => {
+   656→    const typeCounts: Record<string, number> = {}
+   657→    nodes.forEach(n => {
+   658→      typeCounts[n.type] = (typeCounts[n.type] || 0) + 1
+   659→    })
+   660→    const totalEntities = nodes.length
+   661→    const totalConnections = edges.length
+   662→    const connectedEntities = new Set<string>()
+   663→    edges.forEach(e => { connectedEntities.add(e.source); connectedEntities.add(e.target) })
+   664→    const coverage = totalEntities > 0 ? Math.round((connectedEntities.size / totalEntities) * 100) : 0
+   665→    const orphanCount = nodes.filter(n => n.connections === 0).length
+   666→    const mostConnected = nodes.reduce((max, n) => n.connections > max.connections ? n : max, nodes[0])
+   667→    const qualityScore = totalEntities > 0 ? Math.round(((totalEntities - orphanCount) / totalEntities) * 100) : 0
+   668→
+   669→    return { totalEntities, totalConnections, coverage, qualityScore, typeCounts, orphanCount, mostConnected }
+   670→  }, [nodes, edges])
+   671→
+   672→  // Filtered entities for explorer
+   673→  const filteredEntities = useMemo(() => {
+   674→    let filtered = nodes
+   675→    if (filterType !== 'all') {
+   676→      filtered = filtered.filter(n => n.type === filterType)
+   677→    }
+   678→    if (searchQuery) {
+   679→      const q = searchQuery.toLowerCase()
+   680→      filtered = filtered.filter(n =>
+   681→        n.label.toLowerCase().includes(q) ||
+   682→        n.subtitle.toLowerCase().includes(q) ||
+   683→        n.type.toLowerCase().includes(q)
+   684→      )
+   685→    }
+   686→    return filtered.sort((a, b) => b.connections - a.connections)
+   687→  }, [nodes, filterType, searchQuery])
+   688→
+   689→  // Graph Intelligence computations
+   690→  const intelligence = useMemo(() => {
+   691→    // Clusters: group clients by connection patterns
+   692→    const clientNodes = nodes.filter(n => n.type === 'client')
+   693→    const clusters: Array<{ name: string; entities: GraphNode[]; color: string }> = []
+   694→
+   695→    // Active clients cluster
+   696→    const activeClients = clientNodes.filter(c => c.status === 'active')
+   697→    if (activeClients.length > 0) {
+   698→      clusters.push({ name: 'Active Client Network', entities: activeClients, color: '#10b981' })
+   699→    }
+   700→
+   701→    // Vendor network
+   702→    const vendorNodes = nodes.filter(n => n.type === 'vendor')
+   703→    if (vendorNodes.length > 0) {
+   704→      clusters.push({ name: 'Vendor Supply Chain', entities: vendorNodes, color: '#8b5cf6' })
+   705→    }
+   706→
+   707→    // Invoice cluster
+   708→    const invoiceNodes = nodes.filter(n => n.type === 'invoice')
+   709→    if (invoiceNodes.length > 3) {
+   710→      clusters.push({ name: 'Invoice Processing Hub', entities: invoiceNodes.slice(0, 8), color: '#f43f5e' })
+   711→    }
+   712→
+   713→    // Anomalies
+   714→    const anomalies: Array<{ type: 'warning' | 'error' | 'info'; title: string; description: string; entityId?: string }> = []
+   715→
+   716→    const orphans = nodes.filter(n => n.connections === 0)
+   717→    orphans.forEach(n => {
+   718→      anomalies.push({
+   719→        type: 'warning',
+   720→        title: `Orphan Entity: ${n.label}`,
+   721→        description: `${ENTITY_LABELS[n.type]} "${n.label}" has no connections in the graph. Consider linking it to related entities.`,
+   722→        entityId: n.id,
+   723→      })
+   724→    })
+   725→
+   726→    // Check for clients without returns
+   727→    clientNodes.forEach(c => {
+   728→      const hasReturns = edges.some(e => e.source === c.id && e.type === 'has_return')
+   729→      if (!hasReturns && c.status === 'active') {
+   730→        anomalies.push({
+   731→          type: 'error',
+   732→          title: `Missing Returns: ${c.label}`,
+   733→          description: `Active client "${c.label}" has no GST returns linked. Filing compliance at risk.`,
+   734→          entityId: c.id,
+   735→        })
+   736→      }
+   737→    })
+   738→
+   739→    // Check for invoices without payments
+   740→    invoiceNodes.forEach(inv => {
+   741→      const hasPayment = edges.some(e => e.source === inv.id && e.type === 'has_payment')
+   742→      if (!hasPayment && inv.status === 'filed') {
+   743→        anomalies.push({
+   744→          type: 'info',
+   745→          title: `Unpaid Invoice: ${inv.label}`,
+   746→          description: `Invoice "${inv.label}" is filed but no payment is recorded. Verify payment status.`,
+   747→          entityId: inv.id,
+   748→        })
+   749→      }
+   750→    })
+   751→
+   752→    // Recommendations
+   753→    const recommendations: Array<{ title: string; description: string; confidence: number; action: string }> = []
+   754→
+   755→    orphans.forEach(n => {
+   756→      recommendations.push({
+   757→        title: `Connect ${n.label}`,
+   758→        description: `Link ${ENTITY_LABELS[n.type].toLowerCase()} "${n.label}" to its parent entity to improve graph coverage.`,
+   759→        confidence: 85 + Math.floor(Math.random() * 10),
+   760→        action: 'Create Link',
+   761→      })
+   762→    })
+   763→
+   764→    if (vendorNodes.length > 0) {
+   765→      recommendations.push({
+   766→        title: 'Map Vendor → Purchase Register',
+   767→        description: `${vendorNodes.length} vendors are not connected to the purchase register. Auto-link for better ITC tracking.`,
+   768→        confidence: 92,
+   769→        action: 'Auto-Link Vendors',
+   770→      })
+   771→    }
+   772→
+   773→    const pendingNotices = nodes.filter(n => n.type === 'notice' && n.status === 'open')
+   774→    if (pendingNotices.length > 0) {
+   775→      recommendations.push({
+   776→        title: 'Link Notices to Clients',
+   777→        description: `${pendingNotices.length} open notices need client association for timely resolution.`,
+   778→        confidence: 88,
+   779→        action: 'Link Notices',
+   780→      })
+   781→    }
+   782→
+   783→    const draftReturns = nodes.filter(n => n.type === 'gst_return' && (n.status === 'draft' || n.status === 'pending'))
+   784→    if (draftReturns.length > 0) {
+   785→      recommendations.push({
+   786→        title: 'Accelerate Return Filing',
+   787→        description: `${draftReturns.length} returns are in draft/pending status. Prioritize filing to avoid penalties.`,
+   788→        confidence: 95,
+   789→        action: 'View Returns',
+   790→      })
+   791→    }
+   792→
+   793→    return { clusters, anomalies, recommendations }
+   794→  }, [nodes, edges])
+   795→
+   796→  // SVG drag for panning
+   797→  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+   798→    setIsDragging(true)
+   799→    setDragStart({ x: e.clientX - pan.x, y: e.clientY - pan.y })
+   800→  }, [pan])
+   801→
+   802→  const handleMouseMove = useCallback((e: React.MouseEvent) => {
+   803→    if (!isDragging) return
+   804→    setPan({ x: e.clientX - dragStart.x, y: e.clientY - dragStart.y })
+   805→  }, [isDragging, dragStart])
+   806→
+   807→  const handleMouseUp = useCallback(() => {
+   808→    setIsDragging(false)
+   809→  }, [])
+   810→
+   811→  const handleZoomIn = () => setZoom(z => Math.min(2.5, z + 0.2))
+   812→  const handleZoomOut = () => setZoom(z => Math.max(0.3, z - 0.2))
+   813→  const handleResetView = () => { setZoom(1); setPan({ x: 0, y: 0 }) }
+   814→
+   815→  // ─── RENDER ─────────────────────────────────────────────────────────────
+   816→
+   817→  return (
+   818→    <div className="min-h-screen bg-gray-50/50">
+   819→      <motion.div {...fadeUp} className="p-4 md:p-6 space-y-6 max-w-[1600px] mx-auto">
+   820→
+   821→        {/* ── Header ── */}
+   822→        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+   823→          <div className="flex items-center gap-3">
+   824→            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-600 shadow-lg shadow-emerald-600/20">
+   825→              <Network className="h-5 w-5 text-white" />
+   826→            </div>
+   827→            <div>
+   828→              <h1 className="text-xl font-bold text-slate-800">Business Graph Engine</h1>
+   829→              <p className="text-xs text-slate-500">Visualize how every business entity connects</p>
+   830→            </div>
+   831→          </div>
+   832→          <Badge variant="outline" className="gap-1.5 text-emerald-600 border-emerald-200 bg-emerald-50">
+   833→            <Radio className="h-3 w-3 animate-pulse" />
+   834→            Live Graph · {stats.totalEntities} entities
+   835→          </Badge>
+   836→        </div>
+   837→
+   838→        {/* ── Stats Bar ── */}
+   839→        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+   840→          {[
+   841→            { label: 'Total Entities', value: stats.totalEntities, icon: Database, color: '#10b981' },
+   842→            { label: 'Total Connections', value: stats.totalConnections, icon: Link2, color: '#f59e0b' },
+   843→            { label: 'Graph Coverage', value: stats.coverage + '%', icon: Eye, color: '#06b6d4' },
+   844→            { label: 'Data Quality', value: stats.qualityScore + '%', icon: Shield, color: '#8b5cf6' },
+   845→          ].map((s, i) => (
+   846→            <motion.div
+   847→              key={s.label}
+   848→              initial={{ opacity: 0, y: 12 }}
+   849→              animate={{ opacity: 1, y: 0 }}
+   850→              transition={{ delay: i * 0.06 }}
+   851→            >
+   852→              <Card className="border-0 shadow-sm hover:shadow-md transition-shadow">
+   853→                <CardContent className="p-4 flex items-center gap-3">
+   854→                  <div className="h-9 w-9 rounded-lg flex items-center justify-center" style={{ backgroundColor: s.color + '15' }}>
+   855→                    <s.icon className="h-4.5 w-4.5" style={{ color: s.color }} />
+   856→                  </div>
+   857→                  <div>
+   858→                    <p className="text-[11px] text-slate-500 font-medium">{s.label}</p>
+   859→                    <p className="text-lg font-bold text-slate-800">{s.value}</p>
+   860→                  </div>
+   861→                </CardContent>
+   862→              </Card>
+   863→            </motion.div>
+   864→          ))}
+   865→        </div>
+   866→
+   867→        {/* ── Tabs ── */}
+   868→        <Tabs value={activeTab} onValueChange={setActiveTab}>
+   869→          <TabsList className="bg-white border shadow-sm h-10 p-1">
+   870→            <TabsTrigger value="graph" className="text-xs gap-1.5 data-[state=active]:bg-emerald-50 data-[state=active]:text-emerald-700">
+   871→              <Network className="h-3.5 w-3.5" /> Graph Visualization
+   872→            </TabsTrigger>
+   873→            <TabsTrigger value="explorer" className="text-xs gap-1.5 data-[state=active]:bg-emerald-50 data-[state=active]:text-emerald-700">
+   874→              <Search className="h-3.5 w-3.5" /> Entity Explorer
+   875→            </TabsTrigger>
+   876→            <TabsTrigger value="relations" className="text-xs gap-1.5 data-[state=active]:bg-emerald-50 data-[state=active]:text-emerald-700">
+   877→              <GitBranch className="h-3.5 w-3.5" /> Relationship Map
+   878→            </TabsTrigger>
+   879→            <TabsTrigger value="intelligence" className="text-xs gap-1.5 data-[state=active]:bg-emerald-50 data-[state=active]:text-emerald-700">
+   880→              <Sparkles className="h-3.5 w-3.5" /> Intelligence
+   881→            </TabsTrigger>
+   882→          </TabsList>
+   883→
+   884→          {/* ════════════════════════════════════════════════════════════════════
+   885→              TAB 1: GRAPH VISUALIZATION
+   886→              ════════════════════════════════════════════════════════════════════ */}
+   887→          <TabsContent value="graph" className="mt-4">
+   888→            <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-4">
+   889→              {/* SVG Graph */}
+   890→              <Card className="border-0 shadow-sm overflow-hidden">
+   891→                <CardHeader className="pb-2 flex-row items-center justify-between space-y-0">
+   892→                  <CardTitle className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+   893→                    <Activity className="h-4 w-4 text-emerald-500" />
+   894→                    Interactive Entity Graph
+   895→                  </CardTitle>
+   896→                  <div className="flex items-center gap-1">
+   897→                    <Button variant="outline" size="icon" className="h-7 w-7" onClick={handleZoomOut}>
+   898→                      <ZoomOut className="h-3.5 w-3.5" />
+   899→                    </Button>
+   900→                    <span className="text-[10px] text-slate-400 w-10 text-center">{Math.round(zoom * 100)}%</span>
+   901→                    <Button variant="outline" size="icon" className="h-7 w-7" onClick={handleZoomIn}>
+   902→                      <ZoomIn className="h-3.5 w-3.5" />
+   903→                    </Button>
+   904→                    <Button variant="outline" size="icon" className="h-7 w-7" onClick={handleResetView}>
+   905→                      <Maximize2 className="h-3.5 w-3.5" />
+   906→                    </Button>
+   907→                  </div>
+   908→                </CardHeader>
+   909→                <CardContent className="p-0">
+   910→                  <div
+   911→                    className="relative w-full bg-slate-50/50 border-t cursor-grab active:cursor-grabbing select-none"
+   912→                    style={{ minHeight: 650 }}
+   913→                    onMouseDown={handleMouseDown}
+   914→                    onMouseMove={handleMouseMove}
+   915→                    onMouseUp={handleMouseUp}
+   916→                    onMouseLeave={handleMouseUp}
+   917→                  >
+   918→                    <svg
+   919→                      ref={svgRef}
+   920→                      width="100%"
+   921→                      height="650"
+   922→                      viewBox="0 0 1000 700"
+   923→                      className="w-full"
+   924→                    >
+   925→                      <defs>
+   926→                        {/* Arrow marker */}
+   927→                        <marker id="arrowhead" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+   928→                          <polygon points="0 0, 8 3, 0 6" fill="#94a3b8" />
+   929→                        </marker>
+   930→                        {/* Glow filter */}
+   931→                        <filter id="glow">
+   932→                          <feGaussianBlur stdDeviation="3" result="coloredBlur" />
+   933→                          <feMerge>
+   934→                            <feMergeNode in="coloredBlur" />
+   935→                            <feMergeNode in="SourceGraphic" />
+   936→                          </feMerge>
+   937→                        </filter>
+   938→                        {/* Pulse animation */}
+   939→                        <radialGradient id="pulseGrad">
+   940→                          <stop offset="0%" stopColor="#10b981" stopOpacity="0.4" />
+   941→                          <stop offset="100%" stopColor="#10b981" stopOpacity="0" />
+   942→                        </radialGradient>
+   943→                      </defs>
+   944→
+   945→                      <g transform={`translate(${pan.x}, ${pan.y}) scale(${zoom})`}>
+   946→                        {/* Edges */}
+   947→                        {edges.map(e => {
+   948→                          const source = nodes.find(n => n.id === e.source)
+   949→                          const target = nodes.find(n => n.id === e.target)
+   950→                          if (!source || !target) return null
+   951→                          const isHighlighted = selectedNodeId && (e.source === selectedNodeId || e.target === selectedNodeId)
+   952→                          return (
+   953→                            <g key={e.id}>
+   954→                              <motion.line
+   955→                                x1={source.x} y1={source.y}
+   956→                                x2={target.x} y2={target.y}
+   957→                                stroke={isHighlighted ? '#10b981' : '#cbd5e1'}
+   958→                                strokeWidth={isHighlighted ? 2 : 1}
+   959→                                strokeDasharray={isHighlighted ? 'none' : '4,4'}
+   960→                                markerEnd={isHighlighted ? 'url(#arrowhead)' : undefined}
+   961→                                initial={{ pathLength: 0, opacity: 0 }}
+   962→                                animate={{ pathLength: 1, opacity: isHighlighted ? 1 : 0.5 }}
+   963→                                transition={{ duration: 1, delay: 0.1 }}
+   964→                              />
+   965→                              {/* Edge label */}
+   966→                              {isHighlighted && (
+   967→                                <text
+   968→                                  x={(source.x + target.x) / 2}
+   969→                                  y={(source.y + target.y) / 2 - 5}
+   970→                                  textAnchor="middle"
+   971→                                  className="text-[8px] fill-emerald-600 font-medium"
+   972→                                >
+   973→                                  {e.label}
+   974→                                </text>
+   975→                              )}
+   976→                            </g>
+   977→                          )
+   978→                        })}
+   979→
+   980→                        {/* Animated particles along edges */}
+   981→                        {selectedNodeId && selectedNodeEdges.slice(0, 10).map(e => {
+   982→                          const source = nodes.find(n => n.id === e.source)
+   983→                          const target = nodes.find(n => n.id === e.target)
+   984→                          if (!source || !target) return null
+   985→                          return (
+   986→                            <motion.circle
+   987→                              key={`particle-${e.id}`}
+   988→                              r={2.5}
+   989→                              fill="#10b981"
+   990→                              filter="url(#glow)"
+   991→                              initial={{ cx: source.x, cy: source.y, opacity: 0 }}
+   992→                              animate={{
+   993→                                cx: [source.x, target.x],
+   994→                                cy: [source.y, target.y],
+   995→                                opacity: [0, 1, 1, 0],
+   996→                              }}
+   997→                              transition={{
+   998→                                duration: 1.5,
+   999→                                repeat: Infinity,
+  1000→                                ease: 'linear',
+  1001→                                delay: Math.random() * 0.5,
+  1002→                              }}
+  1003→                            />
+  1004→                          )
+  1005→                        })}
+  1006→
+  1007→                        {/* Nodes */}
+  1008→                        {nodes.map((n, i) => {
+  1009→                          const colors = ENTITY_COLORS[n.type]
+  1010→                          const isSelected = n.id === selectedNodeId
+  1011→                          const isConnected = connectedNodeIds.has(n.id)
+  1012→                          const isFaded = selectedNodeId && !isSelected && !isConnected
+  1013→                          const nodeRadius = n.type === 'firm' || n.type === 'organization' ? 24
+  1014→                            : n.type === 'client' ? 18
+  1015→                            : n.type === 'invoice' ? 12
+  1016→                            : 14
+  1017→
+  1018→                          return (
+  1019→                            <g
+  1020→                              key={n.id}
+  1021→                              className="cursor-pointer"
+  1022→                              onClick={() => setSelectedNodeId(isSelected ? null : n.id)}
+  1023→                            >
+  1024→                              {/* Pulse ring for selected */}
+  1025→                              {isSelected && (
+  1026→                                <motion.circle
+  1027→                                  cx={n.x} cy={n.y}
+  1028→                                  r={nodeRadius + 8}
+  1029→                                  fill="none"
+  1030→                                  stroke={colors.hex}
+  1031→                                  strokeWidth={2}
+  1032→                                  initial={{ r: nodeRadius, opacity: 0.8 }}
+  1033→                                  animate={{ r: nodeRadius + 16, opacity: 0 }}
+  1034→                                  transition={{ duration: 1.5, repeat: Infinity }}
+  1035→                                />
+  1036→                              )}
+  1037→                              {/* Outer glow for connected */}
+  1038→                              {isConnected && (
+  1039→                                <motion.circle
+  1040→                                  cx={n.x} cy={n.y}
+  1041→                                  r={nodeRadius + 4}
+  1042→                                  fill={colors.hex}
+  1043→                                  fillOpacity={0.15}
+  1044→                                  initial={{ scale: 0.8 }}
+  1045→                                  animate={{ scale: 1 }}
+  1046→                                />
+  1047→                              )}
+  1048→                              {/* Node circle */}
+  1049→                              <motion.circle
+  1050→                                cx={n.x} cy={n.y}
+  1051→                                r={nodeRadius}
+  1052→                                fill={isFaded ? '#f1f5f9' : colors.hex}
+  1053→                                fillOpacity={isFaded ? 0.5 : 0.15}
+  1054→                                stroke={isFaded ? '#e2e8f0' : colors.hex}
+  1055→                                strokeWidth={isSelected ? 3 : isConnected ? 2 : 1.5}
+  1056→                                initial={{ scale: 0, opacity: 0 }}
+  1057→                                animate={{ scale: 1, opacity: 1 }}
+  1058→                                transition={{ delay: i * 0.01, duration: 0.4, ease: 'backOut' }}
+  1059→                                whileHover={{ scale: 1.15 }}
+  1060→                              />
+  1061→                              {/* Node icon/label */}
+  1062→                              <text
+  1063→                                x={n.x} y={n.y + 1}
+  1064→                                textAnchor="middle"
+  1065→                                dominantBaseline="middle"
+  1066→                                fill={isFaded ? '#94a3b8' : colors.hex}
+  1067→                                fontSize={nodeRadius > 16 ? 9 : 7}
+  1068→                                fontWeight="600"
+  1069→                                className="pointer-events-none"
+  1070→                              >
+  1071→                                {n.label.slice(0, nodeRadius > 16 ? 10 : 6)}
+  1072→                              </text>
+  1073→                              {/* Sub-label for larger nodes */}
+  1074→                              {(n.type === 'firm' || n.type === 'organization') && (
+  1075→                                <text
+  1076→                                  x={n.x} y={n.y + nodeRadius + 14}
+  1077→                                  textAnchor="middle"
+  1078→                                  fill={isFaded ? '#94a3b8' : '#64748b'}
+  1079→                                  fontSize={8}
+  1080→                                  className="pointer-events-none"
+  1081→                                >
+  1082→                                  {n.subtitle}
+  1083→                                </text>
+  1084→                              )}
+  1085→                              {/* Connection count badge */}
+  1086→                              {n.connections > 2 && (
+  1087→                                <>
+  1088→                                  <circle
+  1089→                                    cx={n.x + nodeRadius - 2} cy={n.y - nodeRadius + 2}
+  1090→                                    r={7}
+  1091→                                    fill={isFaded ? '#e2e8f0' : '#10b981'}
+  1092→                                  />
+  1093→                                  <text
+  1094→                                    x={n.x + nodeRadius - 2} y={n.y - nodeRadius + 3}
+  1095→                                    textAnchor="middle"
+  1096→                                    dominantBaseline="middle"
+  1097→                                    fill="white"
+  1098→                                    fontSize={7}
+  1099→                                    fontWeight="700"
+  1100→                                    className="pointer-events-none"
+  1101→                                  >
+  1102→                                    {n.connections}
+  1103→                                  </text>
+  1104→                                </>
+  1105→                              )}
+  1106→                            </g>
+  1107→                          )
+  1108→                        })}
+  1109→                      </g>
+  1110→                    </svg>
+  1111→
+  1112→                    {/* Legend */}
+  1113→                    <div className="absolute bottom-3 left-3 bg-white/95 backdrop-blur-sm rounded-lg border shadow-sm p-3 max-w-[280px]">
+  1114→                      <p className="text-[10px] font-semibold text-slate-500 mb-2 uppercase tracking-wider">Entity Types</p>
+  1115→                      <div className="grid grid-cols-2 gap-x-3 gap-y-1">
+  1116→                        {(Object.entries(ENTITY_COLORS) as [EntityType, EntityColor][]).map(([type, colors]) => {
+  1117→                          const count = stats.typeCounts[type] || 0
+  1118→                          if (count === 0) return null
+  1119→                          return (
+  1120→                            <div key={type} className="flex items-center gap-1.5">
+  1121→                              <div className="h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: colors.hex }} />
+  1122→                              <span className="text-[9px] text-slate-600 truncate">{ENTITY_LABELS[type]}</span>
+  1123→                              <span className="text-[8px] text-slate-400 ml-auto">{count}</span>
+  1124→                            </div>
+  1125→                          )
+  1126→                        })}
+  1127→                      </div>
+  1128→                    </div>
+  1129→
+  1130→                    {/* Controls hint */}
+  1131→                    <div className="absolute top-3 right-3 bg-white/95 backdrop-blur-sm rounded-lg border shadow-sm px-3 py-2">
+  1132→                      <p className="text-[9px] text-slate-400">Click node to inspect · Drag to pan · Scroll to zoom</p>
+  1133→                    </div>
+  1134→                  </div>
+  1135→                </CardContent>
+  1136→              </Card>
+  1137→
+  1138→              {/* Detail Panel */}
+  1139→              <div className="space-y-4">
+  1140→                <AnimatePresence mode="wait">
+  1141→                  {selectedNode ? (
+  1142→                    <motion.div
+  1143→                      key={selectedNode.id}
+  1144→                      initial={{ opacity: 0, x: 20 }}
+  1145→                      animate={{ opacity: 1, x: 0 }}
+  1146→                      exit={{ opacity: 0, x: -20 }}
+  1147→                    >
+  1148→                      <Card className="border-0 shadow-sm">
+  1149→                        <CardHeader className="pb-2">
+  1150→                          <div className="flex items-center justify-between">
+  1151→                            <Badge className={`${ENTITY_COLORS[selectedNode.type].bg} ${ENTITY_COLORS[selectedNode.type].text} border-0 text-[10px]`}>
+  1152→                              {ENTITY_LABELS[selectedNode.type]}
+  1153→                            </Badge>
+  1154→                            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setSelectedNodeId(null)}>
+  1155→                              <X className="h-3 w-3" />
+  1156→                            </Button>
+  1157→                          </div>
+  1158→                          <CardTitle className="text-sm font-bold text-slate-800 mt-1">{selectedNode.label}</CardTitle>
+  1159→                          <p className="text-[11px] text-slate-500">{selectedNode.subtitle}</p>
+  1160→                        </CardHeader>
+  1161→                        <CardContent className="space-y-3">
+  1162→                          <div className="grid grid-cols-2 gap-2">
+  1163→                            <div className="bg-slate-50 rounded-lg p-2.5">
+  1164→                              <p className="text-[9px] text-slate-400 uppercase font-medium">Status</p>
+  1165→                              <Badge variant="outline" className="mt-0.5 text-[10px]">{selectedNode.status}</Badge>
+  1166→                            </div>
+  1167→                            <div className="bg-slate-50 rounded-lg p-2.5">
+  1168→                              <p className="text-[9px] text-slate-400 uppercase font-medium">Connections</p>
+  1169→                              <p className="text-sm font-bold text-slate-700">{selectedNode.connections}</p>
+  1170→                            </div>
+  1171→                            <div className="bg-slate-50 rounded-lg p-2.5 col-span-2">
+  1172→                              <p className="text-[9px] text-slate-400 uppercase font-medium">Last Updated</p>
+  1173→                              <p className="text-xs font-medium text-slate-700">{formatDate(selectedNode.lastUpdated)}</p>
+  1174→                            </div>
+  1175→                          </div>
+  1176→
+  1177→                          <Separator />
+  1178→
+  1179→                          <div>
+  1180→                            <p className="text-[10px] font-semibold text-slate-500 mb-2 uppercase tracking-wider">
+  1181→                              Connections ({selectedNodeEdges.length})
+  1182→                            </p>
+  1183→                            <ScrollArea className="max-h-52">
+  1184→                              <div className="space-y-1.5">
+  1185→                                {selectedNodeEdges.map(e => {
+  1186→                                  const otherNodeId = e.source === selectedNodeId ? e.target : e.source
+  1187→                                  const otherNode = nodes.find(n => n.id === otherNodeId)
+  1188→                                  if (!otherNode) return null
+  1189→                                  const otherColor = ENTITY_COLORS[otherNode.type]
+  1190→                                  const Icon = ENTITY_ICONS[otherNode.type]
+  1191→                                  const direction = e.source === selectedNodeId ? '→' : '←'
+  1192→                                  return (
+  1193→                                    <motion.div
+  1194→                                      key={e.id}
+  1195→                                      className="flex items-center gap-2 p-2 rounded-lg bg-white border hover:border-emerald-200 cursor-pointer transition-colors"
+  1196→                                      whileHover={{ x: 3 }}
+  1197→                                      onClick={() => setSelectedNodeId(otherNodeId)}
+  1198→                                    >
+  1199→                                      <div className={`h-6 w-6 rounded flex items-center justify-center ${otherColor.bg}`}>
+  1200→                                        <Icon className="h-3 w-3" style={{ color: otherColor.hex }} />
+  1201→                                      </div>
+  1202→                                      <div className="flex-1 min-w-0">
+  1203→                                        <p className="text-[11px] font-medium text-slate-700 truncate">{otherNode.label}</p>
+  1204→                                        <p className="text-[9px] text-slate-400">{direction} {e.label}</p>
+  1205→                                      </div>
+  1206→                                      <ChevronRight className="h-3 w-3 text-slate-300" />
+  1207→                                    </motion.div>
+  1208→                                  )
+  1209→                                })}
+  1210→                              </div>
+  1211→                            </ScrollArea>
+  1212→                          </div>
+  1213→                        </CardContent>
+  1214→                      </Card>
+  1215→                    </motion.div>
+  1216→                  ) : (
+  1217→                    <motion.div
+  1218→                      key="empty"
+  1219→                      initial={{ opacity: 0 }}
+  1220→                      animate={{ opacity: 1 }}
+  1221→                    >
+  1222→                      <Card className="border-0 shadow-sm">
+  1223→                        <CardContent className="p-6 flex flex-col items-center text-center gap-3">
+  1224→                          <div className="h-12 w-12 rounded-xl bg-emerald-50 flex items-center justify-center">
+  1225→                            <CircleDot className="h-6 w-6 text-emerald-500" />
+  1226→                          </div>
+  1227→                          <div>
+  1228→                            <p className="text-sm font-semibold text-slate-700">Select a Node</p>
+  1229→                            <p className="text-[11px] text-slate-400 mt-0.5">Click any entity on the graph to inspect its connections and details</p>
+  1230→                          </div>
+  1231→                        </CardContent>
+  1232→                      </Card>
+  1233→
+  1234→                      {/* Quick Stats */}
+  1235→                      <Card className="border-0 shadow-sm mt-4">
+  1236→                        <CardHeader className="pb-2">
+  1237→                          <CardTitle className="text-xs font-semibold text-slate-600">Graph Summary</CardTitle>
+  1238→                        </CardHeader>
+  1239→                        <CardContent className="space-y-3">
+  1240→                          {Object.entries(stats.typeCounts)
+  1241→                            .sort(([, a], [, b]) => b - a)
+  1242→                            .slice(0, 6)
+  1243→                            .map(([type, count]) => {
+  1244→                              const et = type as EntityType
+  1245→                              const colors = ENTITY_COLORS[et]
+  1246→                              const maxCount = Math.max(...Object.values(stats.typeCounts))
+  1247→                              return (
+  1248→                                <div key={type} className="flex items-center gap-2">
+  1249→                                  <div className="h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: colors.hex }} />
+  1250→                                  <span className="text-[11px] text-slate-600 w-24 truncate">{ENTITY_LABELS[et]}</span>
+  1251→                                  <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+  1252→                                    <motion.div
+  1253→                                      className="h-full rounded-full"
+  1254→                                      style={{ backgroundColor: colors.hex }}
+  1255→                                      initial={{ width: 0 }}
+  1256→                                      animate={{ width: `${(count / maxCount) * 100}%` }}
+  1257→                                      transition={{ duration: 0.8, delay: 0.2 }}
+  1258→                                    />
+  1259→                                  </div>
+  1260→                                  <span className="text-[10px] font-semibold text-slate-500 w-6 text-right">{count}</span>
+  1261→                                </div>
+  1262→                              )
+  1263→                            })}
+  1264→                        </CardContent>
+  1265→                      </Card>
+  1266→                    </motion.div>
+  1267→                  )}
+  1268→                </AnimatePresence>
+  1269→              </div>
+  1270→            </div>
+  1271→          </TabsContent>
+  1272→
+  1273→          {/* ════════════════════════════════════════════════════════════════════
+  1274→              TAB 2: ENTITY EXPLORER
+  1275→              ════════════════════════════════════════════════════════════════════ */}
+  1276→          <TabsContent value="explorer" className="mt-4">
+  1277→            <Card className="border-0 shadow-sm">
+  1278→              <CardHeader className="pb-3">
+  1279→                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+  1280→                  <CardTitle className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+  1281→                    <Search className="h-4 w-4 text-emerald-500" />
+  1282→                    Entity Explorer
+  1283→                  </CardTitle>
+  1284→                  <div className="flex-1" />
+  1285→                  <div className="flex items-center gap-2 w-full sm:w-auto">
+  1286→                    <div className="relative flex-1 sm:flex-initial">
+  1287→                      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+  1288→                      <Input
+  1289→                        placeholder="Search entities..."
+  1290→                        value={searchQuery}
+  1291→                        onChange={e => setSearchQuery(e.target.value)}
+  1292→                        className="h-8 text-xs pl-8 w-full sm:w-56"
+  1293→                      />
+  1294→                    </div>
+  1295→                    <select
+  1296→                      value={filterType}
+  1297→                      onChange={e => setFilterType(e.target.value as EntityType | 'all')}
+  1298→                      className="h-8 text-xs border rounded-md px-2 bg-white text-slate-600"
+  1299→                    >
+  1300→                      <option value="all">All Types</option>
+  1301→                      {(Object.keys(ENTITY_LABELS) as EntityType[]).map(type => (
+  1302→                        <option key={type} value={type}>{ENTITY_LABELS[type]}</option>
+  1303→                      ))}
+  1304→                    </select>
+  1305→                  </div>
+  1306→                </div>
+  1307→              </CardHeader>
+  1308→              <CardContent>
+  1309→                <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-2 mb-4">
+  1310→                  {(Object.entries(stats.typeCounts) as [EntityType, number][])
+  1311→                    .sort(([, a], [, b]) => b - a)
+  1312→                    .map(([type, count]) => {
+  1313→                      const colors = ENTITY_COLORS[type]
+  1314→                      return (
+  1315→                        <motion.button
+  1316→                          key={type}
+  1317→                          className={`flex items-center gap-2 p-2.5 rounded-lg border transition-all ${
+  1318→                            filterType === type ? 'border-emerald-300 bg-emerald-50 shadow-sm' : 'border-slate-100 bg-white hover:border-slate-200'
+  1319→                          }`}
+  1320→                          onClick={() => setFilterType(filterType === type ? 'all' : type)}
+  1321→                          whileHover={{ scale: 1.02 }}
+  1322→                          whileTap={{ scale: 0.98 }}
+  1323→                        >
+  1324→                          <div className="h-3 w-3 rounded-full shrink-0" style={{ backgroundColor: colors.hex }} />
+  1325→                          <div className="text-left min-w-0">
+  1326→                            <p className="text-[10px] text-slate-500 truncate">{ENTITY_LABELS[type]}</p>
+  1327→                            <p className="text-sm font-bold text-slate-700">{count}</p>
+  1328→                          </div>
+  1329→                        </motion.button>
+  1330→                      )
+  1331→                    })}
+  1332→                </div>
+  1333→
+  1334→                <p className="text-[11px] text-slate-400 mb-2">{filteredEntities.length} entities found</p>
+  1335→
+  1336→                <ScrollArea className="max-h-[500px]">
+  1337→                  <div className="space-y-1.5">
+  1338→                    {filteredEntities.map((n, i) => {
+  1339→                      const colors = ENTITY_COLORS[n.type]
+  1340→                      const Icon = ENTITY_ICONS[n.type]
+  1341→                      const nodeEdges = edges.filter(e => e.source === n.id || e.target === n.id)
+  1342→                      return (
+  1343→                        <motion.div
+  1344→                          key={n.id}
+  1345→                          className="flex items-center gap-3 p-3 rounded-lg bg-white border hover:border-emerald-200 hover:shadow-sm transition-all cursor-pointer"
+  1346→                          initial={{ opacity: 0, y: 4 }}
+  1347→                          animate={{ opacity: 1, y: 0 }}
+  1348→                          transition={{ delay: i * 0.02 }}
+  1349→                          onClick={() => {
+  1350→                            setSelectedNodeId(n.id)
+  1351→                            setActiveTab('graph')
+  1352→                          }}
+  1353→                          whileHover={{ x: 2 }}
+  1354→                        >
+  1355→                          <div className={`h-9 w-9 rounded-lg flex items-center justify-center ${colors.bg}`}>
+  1356→                            <Icon className="h-4 w-4" style={{ color: colors.hex }} />
+  1357→                          </div>
+  1358→                          <div className="flex-1 min-w-0">
+  1359→                            <p className="text-xs font-semibold text-slate-700 truncate">{n.label}</p>
+  1360→                            <p className="text-[10px] text-slate-400 truncate">{n.subtitle}</p>
+  1361→                          </div>
+  1362→                          <Badge variant="outline" className="text-[9px] shrink-0">{ENTITY_LABELS[n.type]}</Badge>
+  1363→                          <div className="text-right shrink-0">
+  1364→                            <p className="text-[10px] font-semibold text-slate-600">{n.connections} links</p>
+  1365→                            <p className="text-[9px] text-slate-400">{formatDate(n.lastUpdated)}</p>
+  1366→                          </div>
+  1367→                          <ChevronRight className="h-3.5 w-3.5 text-slate-300" />
+  1368→                        </motion.div>
+  1369→                      )
+  1370→                    })}
+  1371→                  </div>
+  1372→                </ScrollArea>
+  1373→
+  1374→                {/* Relationship Cards */}
+  1375→                {selectedNodeId && (
+  1376→                  <div className="mt-6 pt-4 border-t">
+  1377→                    <p className="text-xs font-semibold text-slate-600 mb-3 flex items-center gap-2">
+  1378→                      <ArrowRightLeft className="h-3.5 w-3.5 text-emerald-500" />
+  1379→                      Relationships for {selectedNode?.label || selectedNodeId}
+  1380→                    </p>
+  1381→                    <div className="space-y-2">
+  1382→                      {selectedNodeEdges.map(e => {
+  1383→                        const source = nodes.find(n => n.id === e.source)
+  1384→                        const target = nodes.find(n => n.id === e.target)
+  1385→                        if (!source || !target) return null
+  1386→                        const srcColor = ENTITY_COLORS[source.type]
+  1387→                        const tgtColor = ENTITY_COLORS[target.type]
+  1388→                        return (
+  1389→                          <motion.div
+  1390→                            key={e.id}
+  1391→                            className="flex items-center gap-2 p-2.5 rounded-lg bg-slate-50 border"
+  1392→                            initial={{ opacity: 0, x: -8 }}
+  1393→                            animate={{ opacity: 1, x: 0 }}
+  1394→                          >
+  1395→                            <Badge className={`${srcColor.bg} ${srcColor.text} border-0 text-[9px]`}>
+  1396→                              {ENTITY_LABELS[source.type]}
+  1397→                            </Badge>
+  1398→                            <span className="text-[10px] font-medium text-slate-600 truncate max-w-[120px]">{source.label}</span>
+  1399→                            <ArrowRightLeft className="h-3 w-3 text-slate-400 shrink-0" />
+  1400→                            <span className="text-[9px] text-emerald-600 font-medium">{e.label}</span>
+  1401→                            <ArrowRightLeft className="h-3 w-3 text-slate-400 shrink-0" />
+  1402→                            <Badge className={`${tgtColor.bg} ${tgtColor.text} border-0 text-[9px]`}>
+  1403→                              {ENTITY_LABELS[target.type]}
+  1404→                            </Badge>
+  1405→                            <span className="text-[10px] font-medium text-slate-600 truncate max-w-[120px]">{target.label}</span>
+  1406→                          </motion.div>
+  1407→                        )
+  1408→                      })}
+  1409→                    </div>
+  1410→                  </div>
+  1411→                )}
+  1412→              </CardContent>
+  1413→            </Card>
+  1414→          </TabsContent>
+  1415→
+  1416→          {/* ════════════════════════════════════════════════════════════════════
+  1417→              TAB 3: RELATIONSHIP MAP
+  1418→              ════════════════════════════════════════════════════════════════════ */}
+  1419→          <TabsContent value="relations" className="mt-4">
+  1420→            <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-4">
+  1421→              <Card className="border-0 shadow-sm">
+  1422→                <CardHeader className="pb-2">
+  1423→                  <CardTitle className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+  1424→                    <GitBranch className="h-4 w-4 text-emerald-500" />
+  1425→                    Relationship Map
+  1426→                    {selectedNodeId && <span className="text-slate-400 font-normal">— {selectedNode?.label}</span>}
+  1427→                  </CardTitle>
+  1428→                </CardHeader>
+  1429→                <CardContent className="p-0">
+  1430→                  <div className="relative w-full bg-slate-50/50 border-t" style={{ minHeight: 500 }}>
+  1431→                    <svg width="100%" height="500" viewBox="0 0 800 500">
+  1432→                      <defs>
+  1433→                        <marker id="arrowR" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+  1434→                          <polygon points="0 0, 8 3, 0 6" fill="#10b981" />
+  1435→                        </marker>
+  1436→                      </defs>
+  1437→
+  1438→                      {(() => {
+  1439→                        if (!selectedNodeId || !selectedNode) {
+  1440→                          return (
+  1441→                                            <text x="400" y="250" textAnchor="middle" fill="#94a3b8" fontSize="14" fontWeight="500">
+  1442→                          Select an entity to see connections
+  1443→                        </text>
+  1444→                          )
+  1445→                        }
+  1446→
+  1447→                        // Build relationship sub-graph
+  1448→                        const firstDegree = new Set<string>()
+  1449→                        const secondDegree = new Set<string>()
+  1450→                        firstDegree.add(selectedNodeId)
+  1451→
+  1452→                        edges.forEach(e => {
+  1453→                          if (e.source === selectedNodeId) { firstDegree.add(e.target); secondDegree.add(e.target) }
+  1454→                          if (e.target === selectedNodeId) { firstDegree.add(e.source); secondDegree.add(e.source) }
+  1455→                        })
+  1456→
+  1457→                        // Second degree
+  1458→                        const firstDegreeArr = Array.from(firstDegree)
+  1459→                        firstDegreeArr.forEach(nId => {
+  1460→                          edges.forEach(e => {
+  1461→                            if (e.source === nId) secondDegree.add(e.target)
+  1462→                            if (e.target === nId) secondDegree.add(e.source)
+  1463→                          })
+  1464→                        })
+  1465→
+  1466→                        const subNodes = nodes.filter(n => secondDegree.has(n.id))
+  1467→                        const centerX = 400
+  1468→                        const centerY = 250
+  1469→
+  1470→                        // Position: center node in middle, 1st degree around it, 2nd degree further out
+  1471→                        const positioned: Record<string, { x: number; y: number }> = {}
+  1472→                        positioned[selectedNodeId] = { x: centerX, y: centerY }
+  1473→
+  1474→                        const firstRing = subNodes.filter(n => n.id !== selectedNodeId && firstDegree.has(n.id))
+  1475→                        const secondRing = subNodes.filter(n => !firstDegree.has(n.id))
+  1476→
+  1477→                        firstRing.forEach((n, i) => {
+  1478→                          const angle = (2 * Math.PI * i) / Math.max(firstRing.length, 1) - Math.PI / 2
+  1479→                          positioned[n.id] = { x: centerX + 160 * Math.cos(angle), y: centerY + 160 * Math.sin(angle) }
+  1480→                        })
+  1481→
+  1482→                        secondRing.forEach((n, i) => {
+  1483→                          const angle = (2 * Math.PI * i) / Math.max(secondRing.length, 1)
+  1484→                          positioned[n.id] = { x: centerX + 300 * Math.cos(angle), y: centerY + 300 * Math.sin(angle) }
+  1485→                        })
+  1486→
+  1487→                        const relEdges = edges.filter(e => secondDegree.has(e.source) && secondDegree.has(e.target))
+  1488→
+  1489→                        return (
+  1490→                          <>
+  1491→                            {/* Edges */}
+  1492→                            {relEdges.map(e => {
+  1493→                              const s = positioned[e.source]
+  1494→                              const t = positioned[e.target]
+  1495→                              if (!s || !t) return null
+  1496→                              const isPrimary = e.source === selectedNodeId || e.target === selectedNodeId
+  1497→                              return (
+  1498→                                <g key={e.id}>
+  1499→                                  <motion.line
+  1500→                                    x1={s.x} y1={s.y} x2={t.x} y2={t.y}
+  1501→                                    stroke={isPrimary ? '#10b981' : '#d1d5db'}
+  1502→                                    strokeWidth={isPrimary ? 2.5 : 1}
+  1503→                                    markerEnd={isPrimary ? 'url(#arrowR)' : undefined}
+  1504→                                    initial={{ pathLength: 0, opacity: 0 }}
+  1505→                                    animate={{ pathLength: 1, opacity: 1 }}
+  1506→                                    transition={{ duration: 0.8 }}
+  1507→                                  />
+  1508→                                  <text
+  1509→                                    x={(s.x + t.x) / 2}
+  1510→                                    y={(s.y + t.y) / 2 - 6}
+  1511→                                    textAnchor="middle"
+  1512→                                    fill={isPrimary ? '#059669' : '#94a3b8'}
+  1513→                                    fontSize="8"
+  1514→                                    fontWeight="500"
+  1515→                                  >
+  1516→                                    {e.label}
+  1517→                                  </text>
+  1518→                                </g>
+  1519→                              )
+  1520→                            })}
+  1521→
+  1522→                            {/* Nodes */}
+  1523→                            {subNodes.map(n => {
+  1524→                              const pos = positioned[n.id]
+  1525→                              if (!pos) return null
+  1526→                              const colors = ENTITY_COLORS[n.type]
+  1527→                              const isCenter = n.id === selectedNodeId
+  1528→                              const is1st = firstDegree.has(n.id) && !isCenter
+  1529→                              const r = isCenter ? 28 : is1st ? 18 : 12
+  1530→
+  1531→                              return (
+  1532→                                <g key={n.id} className="cursor-pointer" onClick={() => setSelectedNodeId(n.id)}>
+  1533→                                  {isCenter && (
+  1534→                                    <motion.circle
+  1535→                                      cx={pos.x} cy={pos.y}
+  1536→                                      r={r + 6}
+  1537→                                      fill="none"
+  1538→                                      stroke="#10b981"
+  1539→                                      strokeWidth={2}
+  1540→                                      initial={{ r: r, opacity: 0.6 }}
+  1541→                                      animate={{ r: r + 14, opacity: 0 }}
+  1542→                                      transition={{ duration: 2, repeat: Infinity }}
+  1543→                                    />
+  1544→                                  )}
+  1545→                                  <motion.circle
+  1546→                                    cx={pos.x} cy={pos.y}
+  1547→                                    r={r}
+  1548→                                    fill={colors.hex}
+  1549→                                    fillOpacity={isCenter ? 0.2 : 0.12}
+  1550→                                    stroke={colors.hex}
+  1551→                                    strokeWidth={isCenter ? 3 : is1st ? 2 : 1}
+  1552→                                    initial={{ scale: 0 }}
+  1553→                                    animate={{ scale: 1 }}
+  1554→                                    transition={{ duration: 0.4, ease: 'backOut' }}
+  1555→                                  />
+  1556→                                  <text
+  1557→                                    x={pos.x} y={pos.y + 1}
+  1558→                                    textAnchor="middle"
+  1559→                                    dominantBaseline="middle"
+  1560→                                    fill={colors.hex}
+  1561→                                    fontSize={r > 16 ? 9 : 7}
+  1562→                                    fontWeight="600"
+  1563→                                  >
+  1564→                                    {n.label.slice(0, r > 16 ? 12 : 8)}
+  1565→                                  </text>
+  1566→                                  {/* Degree label */}
+  1567→                                  <text
+  1568→                                    x={pos.x} y={pos.y + r + 12}
+  1569→                                    textAnchor="middle"
+  1570→                                    fill="#94a3b8"
+  1571→                                    fontSize="7"
+  1572→                                  >
+  1573→                                    {isCenter ? 'SELECTED' : is1st ? '1st Degree' : '2nd Degree'}
+  1574→                                  </text>
+  1575→                                </g>
+  1576→                              )
+  1577→                            })}
+  1578→                          </>
+  1579→                        )
+  1580→                      })()}
+  1581→                    </svg>
+  1582→                  </div>
+  1583→                </CardContent>
+  1584→              </Card>
+  1585→
+  1586→              {/* Side Panel */}
+  1587→              <div className="space-y-4">
+  1588→                {/* Entity Selector */}
+  1589→                <Card className="border-0 shadow-sm">
+  1590→                  <CardHeader className="pb-2">
+  1591→                    <CardTitle className="text-xs font-semibold text-slate-600">Select Entity</CardTitle>
+  1592→                  </CardHeader>
+  1593→                  <CardContent>
+  1594→                    <select
+  1595→                      value={selectedNodeId || ''}
+  1596→                      onChange={e => setSelectedNodeId(e.target.value || null)}
+  1597→                      className="w-full h-8 text-xs border rounded-md px-2 bg-white text-slate-600"
+  1598→                    >
+  1599→                      <option value="">Choose an entity...</option>
+  1600→                      {nodes.sort((a, b) => b.connections - a.connections).map(n => (
+  1601→                        <option key={n.id} value={n.id}>{n.label} ({n.connections} links)</option>
+  1602→                      ))}
+  1603→                    </select>
+  1604→                  </CardContent>
+  1605→                </Card>
+  1606→
+  1607→                {/* Stats */}
+  1608→                <Card className="border-0 shadow-sm">
+  1609→                  <CardHeader className="pb-2">
+  1610→                    <CardTitle className="text-xs font-semibold text-slate-600">Graph Statistics</CardTitle>
+  1611→                  </CardHeader>
+  1612→                  <CardContent className="space-y-3">
+  1613→                    {[
+  1614→                      { label: 'Total Entities', value: stats.totalEntities, icon: Database },
+  1615→                      { label: 'Total Connections', value: stats.totalConnections, icon: Link2 },
+  1616→                      { label: 'Most Connected', value: stats.mostConnected?.label || '—', icon: Target },
+  1617→                      { label: 'Orphan Entities', value: stats.orphanCount, icon: Unlink },
+  1618→                    ].map(s => (
+  1619→                      <div key={s.label} className="flex items-center gap-2">
+  1620→                        <div className="h-7 w-7 rounded-lg bg-slate-50 flex items-center justify-center">
+  1621→                          <s.icon className="h-3.5 w-3.5 text-slate-500" />
+  1622→                        </div>
+  1623→                        <div className="flex-1 min-w-0">
+  1624→                          <p className="text-[10px] text-slate-400">{s.label}</p>
+  1625→                          <p className="text-xs font-semibold text-slate-700 truncate">{s.value}</p>
+  1626→                        </div>
+  1627→                      </div>
+  1628→                    ))}
+  1629→                  </CardContent>
+  1630→                </Card>
+  1631→
+  1632→                {/* Degree info */}
+  1633→                {selectedNodeId && (
+  1634→                  <Card className="border-0 shadow-sm">
+  1635→                    <CardHeader className="pb-2">
+  1636→                      <CardTitle className="text-xs font-semibold text-slate-600">Connection Degrees</CardTitle>
+  1637→                    </CardHeader>
+  1638→                    <CardContent className="space-y-2">
+  1639→                      <div className="flex items-center justify-between">
+  1640→                        <span className="text-[11px] text-slate-500">1st Degree</span>
+  1641→                        <Badge variant="outline" className="text-[10px]">{selectedNodeEdges.length}</Badge>
+  1642→                      </div>
+  1643→                      <Progress value={Math.min(100, selectedNodeEdges.length * 10)} className="h-1.5" />
+  1644→                      <div className="flex items-center justify-between mt-2">
+  1645→                        <span className="text-[11px] text-slate-500">2nd Degree</span>
+  1646→                        <Badge variant="outline" className="text-[10px]">{connectedNodeIds.size}</Badge>
+  1647→                      </div>
+  1648→                      <Progress value={Math.min(100, connectedNodeIds.size * 5)} className="h-1.5" />
+  1649→                    </CardContent>
+  1650→                  </Card>
+  1651→                )}
+  1652→              </div>
+  1653→            </div>
+  1654→          </TabsContent>
+  1655→
+  1656→          {/* ════════════════════════════════════════════════════════════════════
+  1657→              TAB 4: GRAPH INTELLIGENCE
+  1658→              ════════════════════════════════════════════════════════════════════ */}
+  1659→          <TabsContent value="intelligence" className="mt-4">
+  1660→            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+  1661→              {/* Graph Health Score */}
+  1662→              <Card className="border-0 shadow-sm md:col-span-2 lg:col-span-3">
+  1663→                <CardContent className="p-6">
+  1664→                  <div className="flex flex-col md:flex-row items-center gap-6">
+  1665→                    <div className="relative">
+  1666→                      <svg width="160" height="160">
+  1667→                        <circle cx="80" cy="80" r="65" fill="none" stroke="#f1f5f9" strokeWidth="12" />
+  1668→                        <motion.circle
+  1669→                          cx="80" cy="80" r="65" fill="none"
+  1670→                          stroke={stats.qualityScore > 70 ? '#10b981' : stats.qualityScore > 40 ? '#f59e0b' : '#ef4444'}
+  1671→                          strokeWidth="12"
+  1672→                          strokeLinecap="round"
+  1673→                          strokeDasharray={2 * Math.PI * 65}
+  1674→                          strokeDashoffset={2 * Math.PI * 65}
+  1675→                          animate={{ strokeDashoffset: 2 * Math.PI * 65 * (1 - stats.qualityScore / 100) }}
+  1676→                          transition={{ duration: 1.5, ease: 'easeOut' }}
+  1677→                          className="-rotate-90 origin-center"
+  1678→                          style={{ transformOrigin: '80px 80px' }}
+  1679→                        />
+  1680→                      </svg>
+  1681→                      <div className="absolute inset-0 flex flex-col items-center justify-center">
+  1682→                        <span className="text-3xl font-bold text-slate-800">{stats.qualityScore}</span>
+  1683→                        <span className="text-[10px] font-medium text-slate-400">/ 100</span>
+  1684→                      </div>
+  1685→                    </div>
+  1686→                    <div className="flex-1 space-y-3">
+  1687→                      <div>
+  1688→                        <h3 className="text-base font-bold text-slate-800">Graph Health Score</h3>
+  1689→                        <p className="text-xs text-slate-500 mt-0.5">
+  1690→                          {stats.qualityScore > 80
+  1691→                            ? 'Excellent data connectivity. Most entities are well-linked.'
+  1692→                            : stats.qualityScore > 60
+  1693→                              ? 'Good connectivity but some entities need linking.'
+  1694→                              : 'Significant gaps detected. Connect orphan entities to improve.'}
+  1695→                        </p>
+  1696→                      </div>
+  1697→                      <div className="grid grid-cols-3 gap-3">
+  1698→                        <div className="bg-emerald-50 rounded-lg p-3 text-center">
+  1699→                          <p className="text-lg font-bold text-emerald-600">{stats.totalEntities}</p>
+  1700→                          <p className="text-[9px] text-emerald-500 font-medium">Entities</p>
+  1701→                        </div>
+  1702→                        <div className="bg-amber-50 rounded-lg p-3 text-center">
+  1703→                          <p className="text-lg font-bold text-amber-600">{stats.totalConnections}</p>
+  1704→                          <p className="text-[9px] text-amber-500 font-medium">Links</p>
+  1705→                        </div>
+  1706→                        <div className="bg-red-50 rounded-lg p-3 text-center">
+  1707→                          <p className="text-lg font-bold text-red-600">{stats.orphanCount}</p>
+  1708→                          <p className="text-[9px] text-red-500 font-medium">Orphans</p>
+  1709→                        </div>
+  1710→                      </div>
+  1711→                    </div>
+  1712→                  </div>
+  1713→                </CardContent>
+  1714→              </Card>
+  1715→
+  1716→              {/* Clusters */}
+  1717→              <Card className="border-0 shadow-sm">
+  1718→                <CardHeader className="pb-2">
+  1719→                  <CardTitle className="text-xs font-semibold text-slate-700 flex items-center gap-2">
+  1720→                    <Layers className="h-4 w-4 text-emerald-500" />
+  1721→                    Auto-Detected Clusters
+  1722→                  </CardTitle>
+  1723→                </CardHeader>
+  1724→                <CardContent>
+  1725→                  <ScrollArea className="max-h-72">
+  1726→                    <div className="space-y-2">
+  1727→                      {intelligence.clusters.map((cluster, i) => (
+  1728→                        <motion.div
+  1729→                          key={cluster.name}
+  1730→                          className="p-3 rounded-lg border hover:border-emerald-200 transition-colors"
+  1731→                          initial={{ opacity: 0, y: 8 }}
+  1732→                          animate={{ opacity: 1, y: 0 }}
+  1733→                          transition={{ delay: i * 0.08 }}
+  1734→                        >
+  1735→                          <div className="flex items-center gap-2 mb-2">
+  1736→                            <div className="h-3 w-3 rounded-full" style={{ backgroundColor: cluster.color }} />
+  1737→                            <span className="text-xs font-semibold text-slate-700">{cluster.name}</span>
+  1738→                          </div>
+  1739→                          <p className="text-[10px] text-slate-400 mb-1.5">{cluster.entities.length} entities</p>
+  1740→                          <div className="flex flex-wrap gap-1">
+  1741→                            {cluster.entities.slice(0, 5).map(e => (
+  1742→                              <Badge key={e.id} variant="outline" className="text-[8px] px-1.5 py-0">
+  1743→                                {e.label.slice(0, 15)}
+  1744→                              </Badge>
+  1745→                            ))}
+  1746→                            {cluster.entities.length > 5 && (
+  1747→                              <Badge variant="outline" className="text-[8px] px-1.5 py-0">
+  1748→                                +{cluster.entities.length - 5} more
+  1749→                              </Badge>
+  1750→                            )}
+  1751→                          </div>
+  1752→                        </motion.div>
+  1753→                      ))}
+  1754→                    </div>
+  1755→                  </ScrollArea>
+  1756→                </CardContent>
+  1757→              </Card>
+  1758→
+  1759→              {/* Anomalies */}
+  1760→              <Card className="border-0 shadow-sm">
+  1761→                <CardHeader className="pb-2">
+  1762→                  <CardTitle className="text-xs font-semibold text-slate-700 flex items-center gap-2">
+  1763→                    <AlertTriangle className="h-4 w-4 text-amber-500" />
+  1764→                    Anomalies Detected
+  1765→                    <Badge variant="outline" className="text-[9px] ml-auto">{intelligence.anomalies.length}</Badge>
+  1766→                  </CardTitle>
+  1767→                </CardHeader>
+  1768→                <CardContent>
+  1769→                  <ScrollArea className="max-h-72">
+  1770→                    <div className="space-y-2">
+  1771→                      {intelligence.anomalies.length === 0 ? (
+  1772→                        <div className="text-center py-6">
+  1773→                          <CheckCircle className="h-8 w-8 text-emerald-400 mx-auto mb-2" />
+  1774→                          <p className="text-xs text-slate-500">No anomalies detected</p>
+  1775→                        </div>
+  1776→                      ) : (
+  1777→                        intelligence.anomalies.map((a, i) => (
+  1778→                          <motion.div
+  1779→                            key={i}
+  1780→                            className="p-3 rounded-lg border cursor-pointer hover:border-amber-200 transition-colors"
+  1781→                            initial={{ opacity: 0, y: 8 }}
+  1782→                            animate={{ opacity: 1, y: 0 }}
+  1783→                            transition={{ delay: i * 0.06 }}
+  1784→                            onClick={() => {
+  1785→                              if (a.entityId) {
+  1786→                                setSelectedNodeId(a.entityId)
+  1787→                                setActiveTab('graph')
+  1788→                              }
+  1789→                            }}
+  1790→                          >
+  1791→                            <div className="flex items-center gap-2 mb-1">
+  1792→                              {a.type === 'error' ? (
+  1793→                                <AlertOctagon className="h-3.5 w-3.5 text-red-500" />
+  1794→                              ) : a.type === 'warning' ? (
+  1795→                                <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
+  1796→                              ) : (
+  1797→                                <Info className="h-3.5 w-3.5 text-blue-500" />
+  1798→                              )}
+  1799→                              <span className="text-[11px] font-semibold text-slate-700">{a.title}</span>
+  1800→                            </div>
+  1801→                            <p className="text-[10px] text-slate-400 leading-relaxed">{a.description}</p>
+  1802→                          </motion.div>
+  1803→                        ))
+  1804→                      )}
+  1805→                    </div>
+  1806→                  </ScrollArea>
+  1807→                </CardContent>
+  1808→              </Card>
+  1809→
+  1810→              {/* Recommendations */}
+  1811→              <Card className="border-0 shadow-sm">
+  1812→                <CardHeader className="pb-2">
+  1813→                  <CardTitle className="text-xs font-semibold text-slate-700 flex items-center gap-2">
+  1814→                    <Lightbulb className="h-4 w-4 text-emerald-500" />
+  1815→                    AI Recommendations
+  1816→                  </CardTitle>
+  1817→                </CardHeader>
+  1818→                <CardContent>
+  1819→                  <ScrollArea className="max-h-72">
+  1820→                    <div className="space-y-2">
+  1821→                      {intelligence.recommendations.map((rec, i) => (
+  1822→                        <motion.div
+  1823→                          key={i}
+  1824→                          className="p-3 rounded-lg border hover:border-emerald-200 transition-colors"
+  1825→                          initial={{ opacity: 0, y: 8 }}
+  1826→                          animate={{ opacity: 1, y: 0 }}
+  1827→                          transition={{ delay: i * 0.08 }}
+  1828→                        >
+  1829→                          <div className="flex items-start gap-2">
+  1830→                            <div className="h-6 w-6 rounded-full bg-emerald-50 flex items-center justify-center shrink-0 mt-0.5">
+  1831→                              <Sparkles className="h-3 w-3 text-emerald-500" />
+  1832→                            </div>
+  1833→                            <div className="flex-1 min-w-0">
+  1834→                              <p className="text-[11px] font-semibold text-slate-700">{rec.title}</p>
+  1835→                              <p className="text-[10px] text-slate-400 mt-0.5 leading-relaxed">{rec.description}</p>
+  1836→                              <div className="flex items-center gap-2 mt-2">
+  1837→                                <Badge variant="outline" className="text-[8px]">
+  1838→                                  {rec.confidence}% confidence
+  1839→                                </Badge>
+  1840→                                <Button size="sm" className="h-6 text-[9px] bg-emerald-600 hover:bg-emerald-700 text-white px-2">
+  1841→                                  {rec.action}
+  1842→                                </Button>
+  1843→                              </div>
+  1844→                            </div>
+  1845→                          </div>
+  1846→                        </motion.div>
+  1847→                      ))}
+  1848→                    </div>
+  1849→                  </ScrollArea>
+  1850→                </CardContent>
+  1851→              </Card>
+  1852→            </div>
+  1853→          </TabsContent>
+  1854→        </Tabs>
+  1855→      </motion.div>
+  1856→    </div>
+  1857→  )
+  1858→}
+  1859→

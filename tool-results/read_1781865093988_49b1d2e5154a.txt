@@ -1,0 +1,994 @@
+     1→     1→'use client';
+     2→     2→
+     3→     3→// ═══════════════════════════════════════════════════════════════════════════════
+     4→     4→// GSTPilot Oracle™ — Full-Screen AI Workspace (Phase 3 — Agent Engine™)
+     5→     5→//
+     6→     6→// Three-section layout:
+     7→     7→//   ┌──────────────────────────────────────────────────────────────────────────┐
+     8→     8→//   │ HEADER  · Infinity · GSTPilot Oracle™ · Live · Active Mode · Status Bar  │
+     9→     9→//   ├──────────┬───────────────────────────────────────────┬───────────────────┤
+    10→    10→//   │ SIDEBAR  │ CONVERSATION AREA (scrollable)             │ AGENT PANEL       │
+    11→    11→//   │ Memory + │   Empty state OR message list with          │ Oracle Tasks      │
+    12→    12→//   │ History  │   streaming + Action Cards                  │ Running / Done /  │
+    13→    13→//   │          │                                              │ Failed / Sched.   │
+    14→    14→//   │          ├───────────────────────────────────────────┤                   │
+    15→    15→//   │          │ INPUT BAR (sticky bottom, glass)           │                   │
+    16→    16→//   └──────────┴───────────────────────────────────────────┴───────────────────┘
+    17→    17→//                                          ↑
+    18→    18→//                          OracleNotifications (top-right overlay)
+    19→    19→//
+    20→    20→// Phase 3 additions:
+    21→    21→//   • Status Bar — Thinking / Working / Waiting / Completed (like Claude Code)
+    22→    22→//   • Agent Execution Panel — Oracle Tasks grouped by status (like Cursor Agent)
+    23→    23→//   • Action Cards — 3 large glass buttons per response (single-click execution)
+    24→    24→//   • Proactive Oracle — intelligent push notifications from business memory
+    25→    25→//   • Action Engine — spawns Oracle Tasks on click, runs simulated execution
+    26→    26→//
+    27→    27→// Tagline: GSTPilot Oracle™ — Understands. Acts. Executes.
+    28→    28→// ═══════════════════════════════════════════════════════════════════════════════
+    29→    29→
+    30→    30→import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+    31→    31→import { motion, AnimatePresence } from 'framer-motion';
+    32→    32→import { ArrowLeft, PanelRightClose, PanelRightOpen, Sparkles, X } from 'lucide-react';
+    33→    33→import type { AppView } from '@/contexts/AppContext';
+    34→    34→import { useApp } from '@/contexts/AppContext';
+    35→    35→import { useAuth } from '@/contexts/AuthContext';
+    36→    36→import {
+    37→    37→  useLiveDashboardMetrics,
+    38→    38→  useFireClients,
+    39→    39→  useFireFirm,
+    40→    40→} from '@/hooks/use-firestore';
+    41→    41→import { InfinitySymbol } from '@/components/layout/InfinityMark';
+    42→    42→import { cn } from '@/lib/utils';
+    43→    43→
+    44→    44→import { OracleSidebar } from './OracleSidebar';
+    45→    45→import { OracleInputBar } from './OracleInputBar';
+    46→    46→import { OracleEmptyState } from './OracleEmptyState';
+    47→    47→import { OracleMessageView } from './OracleMessage';
+    48→    48→import { OracleStatusBar } from './OracleStatusBar';
+    49→    49→import { OracleAgentPanel } from './OracleAgentPanel';
+    50→    50→import {
+    51→    51→  OracleNotifications,
+    52→    52→  ProactiveBell,
+    53→    53→  ProactiveStrip,
+    54→    54→} from './OracleNotifications';
+    55→    55→import {
+    56→    56→  detectOracleMode,
+    57→    57→  buildUserMemory,
+    58→    58→  buildBusinessMemory,
+    59→    59→  buildWorkingMemory,
+    60→    60→  buildInsights,
+    61→    61→  detectInvestigation,
+    62→    62→} from './oracle-memory';
+    63→    63→import { OracleInsightsPanel } from './OracleInsightsPanel';
+    64→    64→import {
+    65→    65→  createConversation,
+    66→    66→  loadConversation,
+    67→    67→  listConversations,
+    68→    68→  saveConversation,
+    69→    69→  updateLastOracleMessage,
+    70→    70→  appendMessage,
+    71→    71→  loadPinnedInsights,
+    72→    72→  newMessageId,
+    73→    73→} from './oracle-storage';
+    74→    74→import {
+    75→    75→  listTasks,
+    76→    76→  createTask,
+    77→    77→  updateTask,
+    78→    78→  deleteTask,
+    79→    79→  clearCompleted,
+    80→    80→  statusCounts,
+    81→    81→} from './oracle-tasks';
+    82→    82→import {
+    83→    83→  buildProactiveNotifications,
+    84→    84→  pickNextProactive,
+    85→    85→  dismissProactive,
+    86→    86→} from './oracle-proactive';
+    87→    87→import { ACTION_LIBRARY, formatActionResult } from './oracle-actions';
+    88→    88→import {
+    89→    89→  ORACLE_MODES,
+    90→    90→  type OracleActionCard,
+    91→    91→  type OracleActionKind,
+    92→    92→  type OracleAgentStatus,
+    93→    93→  type OracleConversation,
+    94→    94→  type OracleInsights,
+    95→    95→  type OracleMessage,
+    96→    96→  type OracleModeId,
+    97→    97→  type OraclePhase,
+    98→    98→  type OracleResponseParts,
+    99→    99→  type OracleTask,
+   100→   100→  type ProactiveNotification,
+   101→   101→  type UserMemory,
+   102→   102→  type BusinessMemory,
+   103→   103→  type WorkingMemory,
+   104→   104→} from './oracle-types';
+   105→   105→
+   106→   106→// ─── Constants ───────────────────────────────────────────────────────────────
+   107→   107→
+   108→   108→const EMPTY_PARTS: OracleResponseParts = {
+   109→   109→  keyInsight: '',
+   110→   110→  analysis: '',
+   111→   111→  recommendedActions: [],
+   112→   112→  potentialRisks: [],
+   113→   113→  nextBestStep: '',
+   114→   114→  sources: [],
+   115→   115→  followUps: [],
+   116→   116→  investigation: undefined,
+   117→   117→  actionCards: [],
+   118→   118→};
+   119→   119→
+   120→   120→// ─── Component ───────────────────────────────────────────────────────────────
+   121→   121→
+   122→   122→export interface OracleWorkspaceProps {
+   123→   123→  onExit?: () => void;
+   124→   124→}
+   125→   125→
+   126→   126→export function OracleWorkspace({ onExit }: OracleWorkspaceProps) {
+   127→   127→  const { setCurrentView } = useApp();
+   128→   128→  const { user } = useAuth();
+   129→   129→
+   130→   130→  // Live Firestore data — used to build the Working Memory context.
+   131→   131→  const { metrics } = useLiveDashboardMetrics();
+   132→   132→  const { data: clients } = useFireClients();
+   133→   133→  const { data: firm } = useFireFirm();
+   134→   134→
+   135→   135→  // ─── Memory Layers ──────────────────────────────────────────────────────
+   136→   136→  const userMemory: UserMemory = useMemo(
+   137→   137→    () =>
+   138→   138→      buildUserMemory({
+   139→   139→        firmName: firm?.firmName ?? user?.name ?? null,
+   140→   140→        gstin: firm?.gstin ?? null,
+   141→   141→        industry: firm?.organizationType ? 'Chartered Accountancy / Tax Practice' : null,
+   142→   142→        organizationType: firm?.organizationType ?? null,
+   143→   143→        clientCount: metrics.totalClients,
+   144→   144→      }),
+   145→   145→    [firm, user, metrics.totalClients],
+   146→   146→  );
+   147→   147→
+   148→   148→  const businessMemory: BusinessMemory = useMemo(() => {
+   149→   149→    const atRisk = clients
+   150→   150→      .filter((c) => (c.healthScore ?? 100) < 60)
+   151→   151→      .slice(0, 5)
+   152→   152→      .map((c) => c.tradeName || c.legalName || c.clientId);
+   153→   153→    const top = clients
+   154→   154→      .slice()
+   155→   155→      .sort((a, b) => (b.healthScore ?? 0) - (a.healthScore ?? 0))
+   156→   156→      .slice(0, 5)
+   157→   157→      .map((c) => c.tradeName || c.legalName || c.clientId);
+   158→   158→    return buildBusinessMemory({
+   159→   159→      totalClients: metrics.totalClients,
+   160→   160→      activeClients: metrics.activeClients,
+   161→   161→      pendingReturns: metrics.pendingReturns,
+   162→   162→      overdueReturns: metrics.overdueReturns,
+   163→   163→      filedReturns: metrics.filedReturns,
+   164→   164→      totalInvoices: metrics.totalInvoices,
+   165→   165→      totalTaxVolume: metrics.totalTaxVolume,
+   166→   166→      averageHealthScore: metrics.averageHealthScore,
+   167→   167→      matchPercentage: metrics.matchPercentage,
+   168→   168→      criticalIssues: metrics.criticalIssues,
+   169→   169→      atRiskClientNames: atRisk,
+   170→   170→      topClientNames: top,
+   171→   171→    });
+   172→   172→  }, [metrics, clients]);
+   173→   173→
+   174→   174→  const [pinnedInsights, setPinnedInsights] = useState<string[]>([]);
+   175→   175→  useEffect(() => {
+   176→   176→    setPinnedInsights(loadPinnedInsights());
+   177→   177→  }, []);
+   178→   178→
+   179→   179→  // ─── Conversations ──────────────────────────────────────────────────────
+   180→   180→  const [conversations, setConversations] = useState<OracleConversation[]>([]);
+   181→   181→  const [activeId, setActiveId] = useState<string | null>(null);
+   182→   182→  const [activeConv, setActiveConv] = useState<OracleConversation | null>(null);
+   183→   183→
+   184→   184→  useEffect(() => {
+   185→   185→    const all = listConversations();
+   186→   186→    setConversations(all);
+   187→   187→    if (all.length > 0) {
+   188→   188→      setActiveId(all[0].id);
+   189→   189→      setActiveConv(all[0]);
+   190→   190→    } else {
+   191→   191→      const fresh = createConversation();
+   192→   192→      setConversations([fresh]);
+   193→   193→      setActiveId(fresh.id);
+   194→   194→      setActiveConv(fresh);
+   195→   195→    }
+   196→   196→  }, []);
+   197→   197→
+   198→   198→  const refreshConversationList = useCallback(() => {
+   199→   199→    setConversations(listConversations());
+   200→   200→  }, []);
+   201→   201→
+   202→   202→  const handleNewChat = useCallback(() => {
+   203→   203→    const fresh = createConversation();
+   204→   204→    setConversations((prev) => [fresh, ...prev]);
+   205→   205→    setActiveId(fresh.id);
+   206→   206→    setActiveConv(fresh);
+   207→   207→  }, []);
+   208→   208→
+   209→   209→  const handleSelect = useCallback((id: string) => {
+   210→   210→    const c = loadConversation(id);
+   211→   211→    if (!c) return;
+   212→   212→    setActiveId(id);
+   213→   213→    setActiveConv(c);
+   214→   214→  }, []);
+   215→   215→
+   216→   216→  const handleDelete = useCallback(
+   217→   217→    (id: string) => {
+   218→   218→      if (id === activeId) {
+   219→   219→        const remaining = listConversations().filter((c) => c.id !== id);
+   220→   220→        if (remaining.length > 0) {
+   221→   221→          setActiveId(remaining[0].id);
+   222→   222→          setActiveConv(remaining[0]);
+   223→   223→        } else {
+   224→   224→          const fresh = createConversation();
+   225→   225→          setActiveId(fresh.id);
+   226→   226→          setActiveConv(fresh);
+   227→   227→        }
+   228→   228→      }
+   229→   229→      refreshConversationList();
+   230→   230→    },
+   231→   231→    [activeId, refreshConversationList],
+   232→   232→  );
+   233→   233→
+   234→   234→  // ─── Live Insights (Phase 2) ────────────────────────────────────────────
+   235→   235→  const insights: OracleInsights = useMemo(() => buildInsights(businessMemory), [businessMemory]);
+   236→   236→
+   237→   237→  // ─── Phase 3 — Agent State ──────────────────────────────────────────────
+   238→   238→  const [tasks, setTasks] = useState<OracleTask[]>([]);
+   239→   239→  const [agentStatus, setAgentStatus] = useState<OracleAgentStatus>('idle');
+   240→   240→  const [workingTitle, setWorkingTitle] = useState<string | undefined>(undefined);
+   241→   241→  const [agentPanelOpen, setAgentPanelOpen] = useState(true);
+   242→   242→  const [proactive, setProactive] = useState<ProactiveNotification | null>(null);
+   243→   243→  const [proactiveQueue, setProactiveQueue] = useState<ProactiveNotification[]>([]);
+   244→   244→
+   245→   245→  // Load tasks on mount.
+   246→   246→  useEffect(() => {
+   247→   247→    setTasks(listTasks());
+   248→   248→  }, []);
+   249→   249→
+   250→   250→  // Refresh task counts whenever tasks change (cheap — re-reads localStorage).
+   251→   251→  const taskCounts = useMemo(() => {
+   252→   252→    return {
+   253→   253→      running: tasks.filter((t) => t.status === 'running').length,
+   254→   254→      scheduled: tasks.filter((t) => t.status === 'scheduled').length,
+   255→   255→      completed: tasks.filter((t) => t.status === 'completed').length,
+   256→   256→    };
+   257→   257→  }, [tasks]);
+   258→   258→
+   259→   259→  // ─── Phase 3 — Proactive Oracle ─────────────────────────────────────────
+   260→   260→  // Build the proactive queue from business memory. Whenever business memory
+   261→   261→  // changes, refresh the queue and pick the next undismissed notification.
+   262→   262→  useEffect(() => {
+   263→   263→    const queue = buildProactiveNotifications(businessMemory);
+   264→   264→    setProactiveQueue(queue);
+   265→   265→  }, [businessMemory]);
+   266→   266→
+   267→   267→  // Pick the next proactive notification to surface (on mount + when queue changes).
+   268→   268→  useEffect(() => {
+   269→   269→    if (proactive) return; // Don't override an active notification.
+   270→   270→    const next = pickNextProactive(businessMemory);
+   271→   271→    if (next) {
+   272→   272→      // Delay slightly so it doesn't feel jarring on workspace open.
+   273→   273→      const timer = setTimeout(() => setProactive(next), 1500);
+   274→   274→      return () => clearTimeout(timer);
+   275→   275→    }
+   276→   276→  }, [businessMemory, proactive]);
+   277→   277→
+   278→   278→  const handleDismissProactive = useCallback((n: ProactiveNotification) => {
+   279→   279→    // Dismiss by the notification title (stable key derived in the proactive engine).
+   280→   280→    dismissProactive(n.title);
+   281→   281→    setProactive(null);
+   282→   282→    // Pick the next one after a short delay.
+   283→   283→    setTimeout(() => {
+   284→   284→      const next = pickNextProactive(businessMemory);
+   285→   285→      if (next) setProactive(next);
+   286→   286→    }, 800);
+   287→   287→  }, [businessMemory]);
+   288→   288→
+   289→   289→  // ─── Streaming state ────────────────────────────────────────────────────
+   290→   290→  const [isStreaming, setIsStreaming] = useState(false);
+   291→   291→  const abortRef = useRef<AbortController | null>(null);
+   292→   292→  const scrollRef = useRef<HTMLDivElement>(null);
+   293→   293→
+   294→   294→  useEffect(() => {
+   295→   295→    const el = scrollRef.current;
+   296→   296→    if (!el) return;
+   297→   297→    el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+   298→   298→  }, [activeConv?.messages]);
+   299→   299→
+   300→   300→  // Sync agent status with streaming state.
+   301→   301→  useEffect(() => {
+   302→   302→    if (isStreaming) {
+   303→   303→      setAgentStatus('thinking');
+   304→   304→    } else if (agentStatus === 'thinking') {
+   305→   305→      // After streaming ends, briefly show 'completed' then return to 'idle'.
+   306→   306→      setAgentStatus('completed');
+   307→   307→      const timer = setTimeout(() => setAgentStatus('idle'), 2500);
+   308→   308→      return () => clearTimeout(timer);
+   309→   309→    }
+   310→   310→  }, [isStreaming, agentStatus]);
+   311→   311→
+   312→   312→  // ─── Send Message (orchestrates the full Oracle flow) ───────────────────
+   313→   313→  const sendMessage = useCallback(
+   314→   314→    async (text: string, forcedMode?: OracleModeId) => {
+   315→   315→      if (!activeConv || isStreaming) return;
+   316→   316→
+   317→   317→      const mode = forcedMode ?? detectOracleMode(text).id;
+   318→   318→
+   319→   319→      const priorMessages = activeConv.messages.map((m) => ({
+   320→   320→        role: (m.role === 'user' ? 'user' : 'oracle') as 'user' | 'oracle',
+   321→   321→        content: m.content,
+   322→   322→        createdAt: m.createdAt,
+   323→   323→      }));
+   324→   324→      const wm: WorkingMemory = buildWorkingMemory({
+   325→   325→        user: userMemory,
+   326→   326→        business: businessMemory,
+   327→   327→        priorMessages,
+   328→   328→        pinnedInsights,
+   329→   329→      });
+   330→   330→
+   331→   331→      const investigationHints = detectInvestigation(text, businessMemory);
+   332→   332→
+   333→   333→      const userMsg: OracleMessage = {
+   334→   334→        id: newMessageId(),
+   335→   335→        role: 'user',
+   336→   336→        content: text,
+   337→   337→        createdAt: new Date().toISOString(),
+   338→   338→        mode,
+   339→   339→      };
+   340→   340→      const oracleMsg: OracleMessage = {
+   341→   341→        id: newMessageId(),
+   342→   342→        role: 'oracle',
+   343→   343→        content: '',
+   344→   344→        createdAt: new Date().toISOString(),
+   345→   345→        mode,
+   346→   346→        parts: { ...EMPTY_PARTS },
+   347→   347→        phase: 'thinking',
+   348→   348→      };
+   349→   349→
+   350→   350→      const convWithUser = appendMessage(activeConv, userMsg);
+   351→   351→      const convWithOracle = appendMessage(convWithUser, oracleMsg);
+   352→   352→      setActiveConv(convWithOracle);
+   353→   353→      refreshConversationList();
+   354→   354→      setIsStreaming(true);
+   355→   355→
+   356→   356→      const controller = new AbortController();
+   357→   357→      abortRef.current = controller;
+   358→   358→
+   359→   359→      try {
+   360→   360→        const res = await fetch('/api/oracle/chat', {
+   361→   361→          method: 'POST',
+   362→   362→          headers: { 'Content-Type': 'application/json' },
+   363→   363→          body: JSON.stringify({
+   364→   364→            question: text,
+   365→   365→            mode,
+   366→   366→            workingMemory: wm,
+   367→   367→            history: priorMessages,
+   368→   368→            investigationHints: investigationHints.length > 0 ? investigationHints : undefined,
+   369→   369→          }),
+   370→   370→          signal: controller.signal,
+   371→   371→        });
+   372→   372→
+   373→   373→        if (!res.ok || !res.body) {
+   374→   374→          throw new Error(`Oracle request failed: ${res.status}`);
+   375→   375→        }
+   376→   376→
+   377→   377→        const reader = res.body.getReader();
+   378→   378→        const decoder = new TextDecoder();
+   379→   379→        let buffer = '';
+   380→   380→        let currentParts: OracleResponseParts = { ...EMPTY_PARTS };
+   381→   381→        let finalMode: OracleModeId = mode;
+   382→   382→
+   383→   383→        const patch = (p: Partial<OracleMessage>) => {
+   384→   384→          setActiveConv((prev) => {
+   385→   385→            if (!prev) return prev;
+   386→   386→            return updateLastOracleMessage(prev, p);
+   387→   387→          });
+   388→   388→        };
+   389→   389→
+   390→   390→        const flushBuffer = () => {
+   391→   391→          const events = buffer.split('\n\n');
+   392→   392→          buffer = events.pop() ?? '';
+   393→   393→          for (const evt of events) {
+   394→   394→            const lines = evt.split('\n');
+   395→   395→            let eventName = '';
+   396→   396→            let dataStr = '';
+   397→   397→            for (const line of lines) {
+   398→   398→              if (line.startsWith('event: ')) eventName = line.slice(7).trim();
+   399→   399→              else if (line.startsWith('data: ')) dataStr = line.slice(6);
+   400→   400→            }
+   401→   401→            if (!eventName || !dataStr) continue;
+   402→   402→            try {
+   403→   403→              const data = JSON.parse(dataStr);
+   404→   404→              handleEvent(eventName, data);
+   405→   405→            } catch {
+   406→   406→              // Skip malformed event.
+   407→   407→            }
+   408→   408→          }
+   409→   409→        };
+   410→   410→
+   411→   411→        const handleEvent = (eventName: string, data: unknown) => {
+   412→   412→          const d = data as Record<string, unknown>;
+   413→   413→          if (eventName === 'phase') {
+   414→   414→            const phase = d.phase as OraclePhase;
+   415→   415→            patch({ phase });
+   416→   416→          } else if (eventName === 'part') {
+   417→   417→            const part = d.part as string;
+   418→   418→            const textChunk = (d.text as string) ?? '';
+   419→   419→            const isItem = d.item === true;
+   420→   420→            const source = d.source as { kind: string; title: string; snippet: string } | undefined;
+   421→   421→            const card = d.card as { kind: string; title: string; description: string; impact?: string } | undefined;
+   422→   422→
+   423→   423→            if (part === 'keyInsight') {
+   424→   424→              currentParts.keyInsight += textChunk;
+   425→   425→            } else if (part === 'analysis') {
+   426→   426→              currentParts.analysis += textChunk;
+   427→   427→            } else if (part === 'recommendedActions') {
+   428→   428→              if (isItem) currentParts.recommendedActions.push(textChunk);
+   429→   429→              else {
+   430→   430→                const last = currentParts.recommendedActions.length - 1;
+   431→   431→                if (last >= 0) currentParts.recommendedActions[last] += textChunk;
+   432→   432→                else currentParts.recommendedActions.push(textChunk);
+   433→   433→              }
+   434→   434→            } else if (part === 'potentialRisks') {
+   435→   435→              if (isItem) currentParts.potentialRisks.push(textChunk);
+   436→   436→              else {
+   437→   437→                const last = currentParts.potentialRisks.length - 1;
+   438→   438→                if (last >= 0) currentParts.potentialRisks[last] += textChunk;
+   439→   439→                else currentParts.potentialRisks.push(textChunk);
+   440→   440→              }
+   441→   441→            } else if (part === 'nextBestStep') {
+   442→   442→              currentParts.nextBestStep += textChunk;
+   443→   443→            } else if (part === 'investigation') {
+   444→   444→              if (!currentParts.investigation) currentParts.investigation = [];
+   445→   445→              if (isItem) currentParts.investigation.push(textChunk);
+   446→   446→              else {
+   447→   447→                const last = currentParts.investigation.length - 1;
+   448→   448→                if (last >= 0) currentParts.investigation[last] += textChunk;
+   449→   449→                else currentParts.investigation.push(textChunk);
+   450→   450→              }
+   451→   451→            } else if (part === 'sources') {
+   452→   452→              if (source) {
+   453→   453→                currentParts.sources.push({
+   454→   454→                  kind: (source.kind as OracleResponseParts['sources'][number]['kind']) ?? 'business-data',
+   455→   455→                  title: source.title,
+   456→   456→                  snippet: source.snippet,
+   457→   457→                });
+   458→   458→              }
+   459→   459→            } else if (part === 'followUps') {
+   460→   460→              if (isItem) currentParts.followUps.push(textChunk);
+   461→   461→              else {
+   462→   462→                const last = currentParts.followUps.length - 1;
+   463→   463→                if (last >= 0) currentParts.followUps[last] += textChunk;
+   464→   464→                else currentParts.followUps.push(textChunk);
+   465→   465→              }
+   466→   466→            } else if (part === 'actionCards') {
+   467→   467→              if (card) {
+   468→   468→                const kind = (card.kind as OracleActionKind) ?? 'create-report';
+   469→   469→                currentParts.actionCards.push({
+   470→   470→                  kind,
+   471→   471→                  title: card.title,
+   472→   472→                  description: card.description,
+   473→   473→                  impact: card.impact,
+   474→   474→                });
+   475→   475→              }
+   476→   476→            }
+   477→   477→
+   478→   478→            patch({ parts: { ...currentParts }, phase: 'streaming' });
+   479→   479→          } else if (eventName === 'done') {
+   480→   480→            finalMode = (d.mode as OracleModeId) ?? mode;
+   481→   481→            // If the LLM didn't propose any action cards, fall back to defaults
+   482→   482→            // so the "always 3 cards" contract holds.
+   483→   483→            if (currentParts.actionCards.length === 0) {
+   484→   484→              currentParts.actionCards = DEFAULT_FALLBACK_CARDS;
+   485→   485→            }
+   486→   486→            patch({
+   487→   487→              parts: { ...currentParts },
+   488→   488→              phase: 'done',
+   489→   489→              mode: finalMode,
+   490→   490→              actions: currentParts.recommendedActions.map((s) => mapActionKind(s)),
+   491→   491→            });
+   492→   492→          } else if (eventName === 'error') {
+   493→   493→            patch({
+   494→   494→              phase: 'error',
+   495→   495→              error: (d.message as string) ?? 'Unknown error',
+   496→   496→            });
+   497→   497→          }
+   498→   498→        };
+   499→   499→
+   500→   500→        while (true) {
+   501→   501→          const { done, value } = await reader.read();
+   502→   502→          if (done) break;
+   503→   503→          buffer += decoder.decode(value, { stream: true });
+   504→   504→          flushBuffer();
+   505→   505→        }
+   506→   506→        flushBuffer();
+   507→   507→      } catch (err) {
+   508→   508→        if ((err as Error).name === 'AbortError') {
+   509→   509→          setActiveConv((prev) =>
+   510→   510→            prev ? updateLastOracleMessage(prev, { phase: 'done' }) : prev,
+   511→   511→          );
+   512→   512→        } else {
+   513→   513→          setActiveConv((prev) =>
+   514→   514→            prev
+   515→   515→              ? updateLastOracleMessage(prev, {
+   516→   516→                  phase: 'error',
+   517→   517→                  error: err instanceof Error ? err.message : 'Unknown error',
+   518→   518→                })
+   519→   519→              : prev,
+   520→   520→          );
+   521→   521→        }
+   522→   522→      } finally {
+   523→   523→        setIsStreaming(false);
+   524→   524→        abortRef.current = null;
+   525→   525→        refreshConversationList();
+   526→   526→      }
+   527→   527→    },
+   528→   528→    [activeConv, isStreaming, userMemory, businessMemory, pinnedInsights, refreshConversationList],
+   529→   529→  );
+   530→   530→
+   531→   531→  const handleStop = useCallback(() => {
+   532→   532→    abortRef.current?.abort();
+   533→   533→  }, []);
+   534→   534→
+   535→   535→  const handleExit = useCallback(() => {
+   536→   536→    if (onExit) onExit();
+   537→   537→    else setCurrentView('dashboard' as AppView);
+   538→   538→  }, [onExit, setCurrentView]);
+   539→   539→
+   540→   540→  // ─── Phase 3 — Action Engine (spawns + executes Oracle Tasks) ───────────
+   541→   541→  const handleRunAction = useCallback(
+   542→   542→    (card: OracleActionCard) => {
+   543→   543→      const meta = ACTION_LIBRARY[card.kind];
+   544→   544→      if (!meta) return;
+   545→   545→
+   546→   546→      // Don't allow spawning a second concurrent task (keeps the UX clean).
+   547→   547→      if (tasks.some((t) => t.status === 'running')) {
+   548→   548→        // Queue it as scheduled instead.
+   549→   549→        const scheduledFor = new Date(Date.now() + 5 * 60 * 1000).toISOString();
+   550→   550→        const task = createTask(card.kind, card.title, card.description, {
+   551→   551→          scheduledFor,
+   552→   552→          resultView: meta.resultView,
+   553→   553→        });
+   554→   554→        setTasks((prev) => [task, ...prev]);
+   555→   555→        return;
+   556→   556→      }
+   557→   557→
+   558→   558→      // Spawn the task (status: 'running').
+   559→   559→      const task = createTask(card.kind, card.title, card.description, {
+   560→   560→        resultView: meta.resultView,
+   561→   561→      });
+   562→   562→      setTasks((prev) => [task, ...prev]);
+   563→   563→      setAgentStatus('working');
+   564→   564→      setWorkingTitle(card.title);
+   565→   565→
+   566→   566→      // Simulate execution: step through the steps, increment progress.
+   567→   567→      const totalSteps = task.steps.length;
+   568→   568→      const stepDuration = Math.max(400, Math.round(meta.durationMs / Math.max(totalSteps, 1)));
+   569→   569→      let currentStepIdx = 0;
+   570→   570→      let progress = 0;
+   571→   571→
+   572→   572→      const tick = () => {
+   573→   573→        // Advance progress within the current step.
+   574→   574→        const stepIncrement = Math.round(100 / Math.max(totalSteps, 1));
+   575→   575→        progress = Math.min(100, progress + Math.max(8, Math.round(stepIncrement / 3)));
+   576→   576→
+   577→   577→        // If we've crossed into the next step boundary, advance the step.
+   578→   578→        const expectedStep = Math.min(totalSteps - 1, Math.floor((progress / 100) * totalSteps));
+   579→   579→        if (expectedStep > currentStepIdx) {
+   580→   580→          // Mark previous steps as done, new one as active.
+   581→   581→          const newSteps = task.steps.map((s, i) => ({
+   582→   582→            ...s,
+   583→   583→            state: (i < expectedStep ? 'done' : i === expectedStep ? 'active' : 'pending') as
+   584→   584→              | 'done'
+   585→   585→              | 'active'
+   586→   586→              | 'pending',
+   587→   587→          }));
+   588→   588→          currentStepIdx = expectedStep;
+   589→   589→          updateTask(task.id, { steps: newSteps, progress });
+   590→   590→          setTasks((prev) =>
+   591→   591→            prev.map((t) => (t.id === task.id ? { ...t, steps: newSteps, progress } : t)),
+   592→   592→          );
+   593→   593→        } else {
+   594→   594→          updateTask(task.id, { progress });
+   595→   595→          setTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, progress } : t)));
+   596→   596→        }
+   597→   597→
+   598→   598→        if (progress >= 100) {
+   599→   599→          // Complete the task.
+   600→   600→          const result = formatActionResult(card.kind, {
+   601→   601→            count: Math.floor(Math.random() * 5) + 2,
+   602→   602→            amount: Math.floor(Math.random() * 50 + 10) * 10000,
+   603→   603→          });
+   604→   604→          const finalSteps = task.steps.map((s) => ({ ...s, state: 'done' as const }));
+   605→   605→          updateTask(task.id, {
+   606→   606→            status: 'completed',
+   607→   607→            progress: 100,
+   608→   608→            steps: finalSteps,
+   609→   609→            result,
+   610→   610→          });
+   611→   611→          setTasks((prev) =>
+   612→   612→            prev.map((t) =>
+   613→   613→              t.id === task.id
+   614→   614→                ? { ...t, status: 'completed', progress: 100, steps: finalSteps, result }
+   615→   615→                : t,
+   616→   616→            ),
+   617→   617→          );
+   618→   618→          setAgentStatus('completed');
+   619→   619→          setWorkingTitle(undefined);
+   620→   620→          // Return to idle after a brief celebration.
+   621→   621→          setTimeout(() => setAgentStatus('idle'), 3000);
+   622→   622→          return;
+   623→   623→        }
+   624→   624→
+   625→   625→        // Schedule the next tick.
+   626→   626→        setTimeout(tick, stepDuration / 3);
+   627→   627→      };
+   628→   628→
+   629→   629→      // Kick off the execution loop.
+   630→   630→      setTimeout(tick, stepDuration / 3);
+   631→   631→    },
+   632→   632→    [tasks],
+   633→   633→  );
+   634→   634→
+   635→   635→  // Stable ref to handleRunAction so handleActProactive doesn't need to re-bind.
+   636→   636→  const runActionRef = useRef(handleRunAction);
+   637→   637→  useEffect(() => {
+   638→   638→    runActionRef.current = handleRunAction;
+   639→   639→  }, [handleRunAction]);
+   640→   640→
+   641→   641→  // Re-bind handleActProactive to always use the latest ref.
+   642→   642→  const handleActProactiveBound = useCallback(
+   643→   643→    (card: OracleActionCard, n: ProactiveNotification) => {
+   644→   644→      handleDismissProactive(n);
+   645→   645→      runActionRef.current(card);
+   646→   646→    },
+   647→   647→    [handleDismissProactive],
+   648→   648→  );
+   649→   649→
+   650→   650→  // ─── Task panel handlers ────────────────────────────────────────────────
+   651→   651→  const handleClearTasks = useCallback(() => {
+   652→   652→    clearCompleted();
+   653→   653→    setTasks(listTasks());
+   654→   654→  }, []);
+   655→   655→
+   656→   656→  const handleTaskClick = useCallback(
+   657→   657→    (task: OracleTask) => {
+   658→   658→      if (task.resultView && (task.status === 'completed' || task.status === 'running')) {
+   659→   659→        setCurrentView(task.resultView as AppView);
+   660→   660→      }
+   661→   661→    },
+   662→   662→    [setCurrentView],
+   663→   663→  );
+   664→   664→
+   665→   665→  // ─── Legacy Action Engine (Next Best Step / inline action buttons) ──────
+   666→   666→  const handleAction = useCallback(
+   667→   667→    (kind: string, label: string) => {
+   668→   668→      // Try to map to an Action Card execution first (Phase 3 behavior).
+   669→   669→      const actionKind = kind as OracleActionKind;
+   670→   670→      if (ACTION_LIBRARY[actionKind]) {
+   671→   671→        const meta = ACTION_LIBRARY[actionKind];
+   672→   672→        handleRunAction({
+   673→   673→          kind: actionKind,
+   674→   674→          title: label || meta.label,
+   675→   675→          description: meta.description,
+   676→   676→        });
+   677→   677→        return;
+   678→   678→      }
+   679→   679→      // Fallback: navigate to the relevant module (legacy behavior).
+   680→   680→      const viewMap: Record<string, AppView> = {
+   681→   681→        'create-report': 'business-dna',
+   682→   682→        'generate-gst-return': 'returns',
+   683→   683→        'recover-collections': 'reconcile',
+   684→   684→        'open-reconcile': 'reconcile',
+   685→   685→        'open-returns': 'returns',
+   686→   686→        'open-invoices': 'invoices',
+   687→   687→        'open-clients': 'clients',
+   688→   688→        'create-reminder': 'autopilot',
+   689→   689→        'open-analytics': 'business-dna',
+   690→   690→        'generate-forecast': 'ai-predictions',
+   691→   691→        'export-pdf': 'business-dna',
+   692→   692→        'create-checklist': 'autopilot',
+   693→   693→      };
+   694→   694→      const view = viewMap[kind] ?? 'dashboard';
+   695→   695→      void label;
+   696→   696→      setCurrentView(view);
+   697→   697→    },
+   698→   698→    [setCurrentView, handleRunAction],
+   699→   699→  );
+   700→   700→
+   701→   701→  const handleNextBestStep = useCallback(
+   702→   702→    (step: string) => {
+   703→   703→      handleAction(mapActionKind(step), step);
+   704→   704→    },
+   705→   705→    [handleAction],
+   706→   706→  );
+   707→   707→
+   708→   708→  const handleInsightClick = useCallback(
+   709→   709→    (_key: string, insight: { label: string; detail: string }) => {
+   710→   710→      const prompt = `Tell me more about "${insight.label}" — ${insight.detail}`;
+   711→   711→      sendMessage(prompt);
+   712→   712→    },
+   713→   713→    [sendMessage],
+   714→   714→  );
+   715→   715→
+   716→   716→  const activeMode = activeConv?.messages
+   717→   717→    .slice()
+   718→   718→    .reverse()
+   719→   719→    .find((m) => m.role === 'oracle' && m.mode)?.mode;
+   720→   720→
+   721→   721→  const modeMeta = activeMode ? ORACLE_MODES[activeMode] : null;
+   722→   722→
+   723→   723→  // ─── Render ─────────────────────────────────────────────────────────────
+   724→   724→  const hasMessages = (activeConv?.messages.length ?? 0) > 0;
+   725→   725→  const hasRunningTask = tasks.some((t) => t.status === 'running');
+   726→   726→
+   727→   727→  return (
+   728→   728→    <motion.div
+   729→   729→      initial={{ opacity: 0 }}
+   730→   730→      animate={{ opacity: 1 }}
+   731→   731→      transition={{ duration: 0.4 }}
+   732→   732→      className="flex h-full w-full gap-3 p-3"
+   733→   733→    >
+   734→   734→      {/* ─── LEFT SIDEBAR (Memory + History) ──────────────────────────────── */}
+   735→   735→      <div className="hidden w-[280px] shrink-0 lg:block">
+   736→   736→        <OracleSidebar
+   737→   737→          conversations={conversations}
+   738→   738→          activeConversationId={activeId}
+   739→   739→          userMemory={userMemory}
+   740→   740→          businessMemory={businessMemory}
+   741→   741→          pinnedInsights={pinnedInsights}
+   742→   742→          onSelect={handleSelect}
+   743→   743→          onNew={handleNewChat}
+   744→   744→          onDelete={handleDelete}
+   745→   745→          onChanged={refreshConversationList}
+   746→   746→        />
+   747→   747→      </div>
+   748→   748→
+   749→   749→      {/* ─── MAIN WORKSPACE ──────────────────────────────────────────────── */}
+   750→   750→      <div className="glass-surface relative flex min-w-0 flex-1 flex-col rounded-3xl">
+   751→   751→        {/* ─── Header ─────────────────────────────────────────────────────── */}
+   752→   752→        <header className="flex h-14 shrink-0 items-center gap-3 border-b border-border px-4">
+   753→   753→          <button
+   754→   754→            onClick={handleExit}
+   755→   755→            aria-label="Back to dashboard"
+   756→   756→            className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-card/[0.5] hover:text-foreground"
+   757→   757→          >
+   758→   758→            <ArrowLeft className="h-4 w-4" />
+   759→   759→          </button>
+   760→   760→
+   761→   761→          <div className="flex h-8 w-8 items-center justify-center rounded-lg accent-gradient shadow-lg shadow-emerald-500/20">
+   762→   762→            <InfinitySymbol size={18} />
+   763→   763→          </div>
+   764→   764→
+   765→   765→          <div className="flex min-w-0 flex-1 flex-col">
+   766→   766→            <div className="flex items-baseline gap-1">
+   767→   767→              <span className="text-sm font-semibold text-foreground">GSTPilot Oracle</span>
+   768→   768→              <sup className="text-[9px] font-medium text-muted-foreground">™</sup>
+   769→   769→            </div>
+   770→   770→            <div className="flex items-center gap-1.5">
+   771→   771→              <span className="relative flex h-1.5 w-1.5">
+   772→   772→                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+   773→   773→                <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-400" />
+   774→   774→              </span>
+   775→   775→              <span className="text-[10px] text-muted-foreground">
+   776→   776→                Live · Understands. Acts. Executes.
+   777→   777→              </span>
+   778→   778→            </div>
+   779→   779→          </div>
+   780→   780→
+   781→   781→          {/* Active Mode Indicator */}
+   782→   782→          {modeMeta && (
+   783→   783→            <div
+   784→   784→              className="hidden items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-semibold sm:flex"
+   785→   785→              style={{ backgroundColor: modeMeta.tint, color: modeMeta.color }}
+   786→   786→            >
+   787→   787→              <span
+   788→   788→                className="h-1.5 w-1.5 rounded-full"
+   789→   789→                style={{ backgroundColor: modeMeta.color }}
+   790→   790→              />
+   791→   791→              {modeMeta.name}
+   792→   792→            </div>
+   793→   793→          )}
+   794→   794→
+   795→   795→          {/* Proactive Bell — shows when there are undismissed proactive signals */}
+   796→   796→          {proactiveQueue.length > 0 && (
+   797→   797→            <ProactiveBell
+   798→   798→              count={proactiveQueue.length}
+   799→   799→              onClick={() => {
+   800→   800→                const next = pickNextProactive(businessMemory);
+   801→   801→                if (next) setProactive(next);
+   802→   802→              }}
+   803→   803→            />
+   804→   804→          )}
+   805→   805→
+   806→   806→          {/* Agent Panel toggle */}
+   807→   807→          <button
+   808→   808→            onClick={() => setAgentPanelOpen((v) => !v)}
+   809→   809→            aria-label={agentPanelOpen ? 'Hide Oracle Tasks' : 'Show Oracle Tasks'}
+   810→   810→            title={agentPanelOpen ? 'Hide Oracle Tasks' : 'Show Oracle Tasks'}
+   811→   811→            className={cn(
+   812→   812→              'flex h-8 w-8 items-center justify-center rounded-lg transition-colors',
+   813→   813→              agentPanelOpen
+   814→   814→                ? 'accent-text bg-card/[0.5]'
+   815→   815→                : 'text-muted-foreground hover:bg-card/[0.5] hover:text-foreground',
+   816→   816→            )}
+   817→   817→          >
+   818→   818→            {agentPanelOpen ? (
+   819→   819→              <PanelRightClose className="h-4 w-4" />
+   820→   820→            ) : (
+   821→   821→              <PanelRightOpen className="h-4 w-4" />
+   822→   822→            )}
+   823→   823→          </button>
+   824→   824→
+   825→   825→          {/* Quick "New chat" button (visible on mobile when sidebar is hidden) */}
+   826→   826→          <button
+   827→   827→            onClick={handleNewChat}
+   828→   828→            aria-label="New chat"
+   829→   829→            className="flex h-8 items-center gap-1.5 rounded-lg border border-border bg-card/[0.4] px-2.5 text-xs text-muted-foreground transition-colors hover:bg-card/[0.6] hover:text-foreground lg:hidden"
+   830→   830→          >
+   831→   831→            <Sparkles className="h-3.5 w-3.5" />
+   832→   832→            New
+   833→   833→          </button>
+   834→   834→        </header>
+   835→   835→
+   836→   836→        {/* ─── Status Bar (Phase 3) ──────────────────────────────────────── */}
+   837→   837→        <div className="shrink-0 border-b border-border bg-background/30 px-3 py-1.5 backdrop-blur-xl">
+   838→   838→          <OracleStatusBar
+   839→   839→            status={agentStatus}
+   840→   840→            workingTitle={workingTitle}
+   841→   841→            counts={taskCounts}
+   842→   842→            onOpenAgent={() => setAgentPanelOpen(true)}
+   843→   843→          />
+   844→   844→        </div>
+   845→   845→
+   846→   846→        {/* ─── Conversation Area ──────────────────────────────────────────── */}
+   847→   847→        <div ref={scrollRef} className="custom-scrollbar min-h-0 flex-1 overflow-y-auto">
+   848→   848→          {!hasMessages ? (
+   849→   849→            <OracleEmptyState
+   850→   850→              insights={insights}
+   851→   851→              onPick={(prompt, mode) => {
+   852→   852→                sendMessage(prompt, mode);
+   853→   853→              }}
+   854→   854→              onInsightClick={(key, insight) => handleInsightClick(key, insight)}
+   855→   855→              proactiveStrip={
+   856→   856→                proactiveQueue.length > 0 ? (
+   857→   857→                  <div className="mt-6 flex justify-center">
+   858→   858→                    <ProactiveStrip
+   859→   859→                      notifications={proactiveQueue}
+   860→   860→                      onAct={handleActProactiveBound}
+   861→   861→                    />
+   862→   862→                  </div>
+   863→   863→                ) : null
+   864→   864→              }
+   865→   865→            />
+   866→   866→          ) : (
+   867→   867→            <div className="mx-auto w-full max-w-3xl space-y-6 px-4 py-6">
+   868→   868→              <AnimatePresence initial={false}>
+   869→   869→                {activeConv!.messages.map((m) => (
+   870→   870→                  <motion.div
+   871→   871→                    key={m.id}
+   872→   872→                    initial={{ opacity: 0, y: 8 }}
+   873→   873→                    animate={{ opacity: 1, y: 0 }}
+   874→   874→                    transition={{ duration: 0.3 }}
+   875→   875→                  >
+   876→   876→                    <OracleMessageView
+   877→   877→                      message={m}
+   878→   878→                      onFollowUp={(q) => sendMessage(q)}
+   879→   879→                      onAction={handleAction}
+   880→   880→                      onNextBestStep={handleNextBestStep}
+   881→   881→                      onRunAction={handleRunAction}
+   882→   882→                      actionsDisabled={hasRunningTask}
+   883→   883→                    />
+   884→   884→                  </motion.div>
+   885→   885→                ))}
+   886→   886→              </AnimatePresence>
+   887→   887→            </div>
+   888→   888→          )}
+   889→   889→        </div>
+   890→   890→
+   891→   891→        {/* ─── Insights Strip (live, always visible above input) ──────────── */}
+   892→   892→        <div className="shrink-0 border-t border-border bg-background/30 px-4 py-2 backdrop-blur-xl">
+   893→   893→          <div className="mx-auto w-full max-w-3xl">
+   894→   894→            <div className="mb-1.5 flex items-center gap-1.5">
+   895→   895→              <Sparkles className="h-2.5 w-2.5 accent-text" />
+   896→   896→              <span className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">
+   897→   897→                Live Insights · Updated from your business memory
+   898→   898→              </span>
+   899→   899→            </div>
+   900→   900→            <OracleInsightsPanel
+   901→   901→              insights={insights}
+   902→   902→              variant="strip"
+   903→   903→              onInsightClick={(key, insight) => handleInsightClick(key, insight)}
+   904→   904→            />
+   905→   905→          </div>
+   906→   906→        </div>
+   907→   907→
+   908→   908→        {/* ─── Input Bar (sticky bottom) ──────────────────────────────────── */}
+   909→   909→        <div className="shrink-0 border-t border-border bg-background/40 p-4 backdrop-blur-xl">
+   910→   910→          <OracleInputBar
+   911→   911→            onSubmit={(text) => sendMessage(text)}
+   912→   912→            disabled={isStreaming}
+   913→   913→            isStreaming={isStreaming}
+   914→   914→            onStop={handleStop}
+   915→   915→          />
+   916→   916→        </div>
+   917→   917→
+   918→   918→        {/* ─── Phase 3 — Proactive Notifications (overlay, top-right) ─────── */}
+   919→   919→        <OracleNotifications
+   920→   920→          notification={proactive}
+   921→   921→          onDismiss={handleDismissProactive}
+   922→   922→          onAct={handleActProactiveBound}
+   923→   923→        />
+   924→   924→      </div>
+   925→   925→
+   926→   926→      {/* ─── RIGHT AGENT PANEL (Phase 3 — Oracle Tasks) ──────────────────── */}
+   927→   927→      <AnimatePresence mode="wait">
+   928→   928→        {agentPanelOpen && (
+   929→   929→          <motion.div
+   930→   930→            key="agent-panel"
+   931→   931→            initial={{ opacity: 0, width: 0, x: 20 }}
+   932→   932→            animate={{ opacity: 1, width: 300, x: 0 }}
+   933→   933→            exit={{ opacity: 0, width: 0, x: 20 }}
+   934→   934→            transition={{ duration: 0.25, ease: 'easeOut' }}
+   935→   935→            className="hidden shrink-0 overflow-hidden xl:block"
+   936→   936→          >
+   937→   937→            <OracleAgentPanel
+   938→   938→              tasks={tasks}
+   939→   939→              onClear={handleClearTasks}
+   940→   940→              onTaskClick={handleTaskClick}
+   941→   941→            />
+   942→   942→          </motion.div>
+   943→   943→        )}
+   944→   944→      </AnimatePresence>
+   945→   945→    </motion.div>
+   946→   946→  );
+   947→   947→}
+   948→   948→
+   949→   949→// ─── Helpers ─────────────────────────────────────────────────────────────────
+   950→   950→
+   951→   951→function mapActionKind(label: string): OracleActionKind {
+   952→   952→  const l = label.toLowerCase();
+   953→   953→  if (l.includes('file') || l.includes('return')) return 'generate-gst-return';
+   954→   954→  if (l.includes('recover') || l.includes('collection')) return 'recover-collections';
+   955→   955→  if (l.includes('reconcil') || l.includes('2b')) return 'prepare-reconciliation';
+   956→   956→  if (l.includes('cash') && l.includes('flow')) return 'cash-flow-forecast';
+   957→   957→  if (l.includes('forecast') || l.includes('predict')) return 'generate-forecast';
+   958→   958→  if (l.includes('notice') || l.includes('scn')) return 'create-notice';
+   959→   959→  if (l.includes('report')) return 'create-report';
+   960→   960→  if (l.includes('reminder') || l.includes('checklist')) return 'create-checklist';
+   961→   961→  if (l.includes('export') || l.includes('pdf')) return 'export-pdf';
+   962→   962→  return 'create-report';
+   963→   963→}
+   964→   964→
+   965→   965→// Fallback action cards shown when the LLM doesn't propose any.
+   966→   966→const DEFAULT_FALLBACK_CARDS: OracleActionCard[] = [
+   967→   967→  {
+   968→   968→    kind: 'create-report',
+   969→   969→    title: 'Generate Business Report',
+   970→   970→    description: 'Compile a CFO-grade brief from your live business memory.',
+   971→   971→    impact: 'Surfaces top 3 risks + opportunities',
+   972→   972→  },
+   973→   973→  {
+   974→   974→    kind: 'recover-collections',
+   975→   975→    title: 'Recover Overdue Collections',
+   976→   976→    description: 'Identify overdue clients and draft recovery outreach.',
+   977→   977→    impact: 'Unblocks cash within 7 days',
+   978→   978→  },
+   979→   979→  {
+   980→   980→    kind: 'prepare-reconciliation',
+   981→   981→    title: 'Prepare 2B Reconciliation',
+   982→   982→    description: 'Match GSTR-2B vs books and flag ITC at risk.',
+   983→   983→    impact: 'Prevents ITC reversal',
+   984→   984→  },
+   985→   985→];
+   986→   986→
+   987→   987→// Suppress unused-import warning for X / saveConversation (reserved for future toolbar actions).
+   988→   988→void X;
+   989→   989→void saveConversation;
+   990→   990→void statusCounts;
+   991→   991→void deleteTask;
+   992→   992→
+   993→   993→export default OracleWorkspace;
+   994→   994→

@@ -1,0 +1,835 @@
+     1→     1→import { NextRequest, NextResponse } from 'next/server'
+     2→     2→
+     3→     3→// ═══════════════════════════════════════════════════════════════════════════════
+     4→     4→// GSTPilot Intelligence™ — V16 Oracle API
+     5→     5→// Backend: z-ai-web-dev-sdk LLM with live Firestore data context
+     6→     6→// Returns Perplexity-style structured response:
+     7→     7→//   { answer, insights[], sources[], actions[], suggestedPrompts[], intent, thinkingSteps[] }
+     8→     8→// ═══════════════════════════════════════════════════════════════════════════════
+     9→     9→
+    10→    10→// ─── V16 Response Types ───────────────────────────────────────────────────────
+    11→    11→
+    12→    12→type ActionType =
+    13→    13→  | 'navigate'
+    14→    14→  | 'create_task'
+    15→    15→  | 'send_reminder'
+    16→    16→  | 'generate_report'
+    17→    17→  | 'execute_workflow'
+    18→    18→
+    19→    19→type InsightTone = 'positive' | 'neutral' | 'warning'
+    20→    20→
+    21→    21→interface OracleAction {
+    22→    22→  type: ActionType
+    23→    23→  title: string
+    24→    24→  description: string
+    25→    25→  view?: string
+    26→    26→  payload?: Record<string, unknown>
+    27→    27→}
+    28→    28→
+    29→    29→interface OracleInsight {
+    30→    30→  text: string
+    31→    31→  tone: InsightTone
+    32→    32→}
+    33→    33→
+    34→    34→interface OracleSource {
+    35→    35→  name: string
+    36→    36→  count: number
+    37→    37→  icon?: string
+    38→    38→}
+    39→    39→
+    40→    40→interface ThinkingStep {
+    41→    41→  label: string
+    42→    42→  duration: number
+    43→    43→}
+    44→    44→
+    45→    45→interface OracleResponse {
+    46→    46→  answer: string
+    47→    47→  insights: OracleInsight[]
+    48→    48→  sources: OracleSource[]
+    49→    49→  actions: OracleAction[]
+    50→    50→  suggestedPrompts: string[]
+    51→    51→  intent: string
+    52→    52→  thinkingSteps: ThinkingStep[]
+    53→    53→}
+    54→    54→
+    55→    55→// ─── Constants ────────────────────────────────────────────────────────────────
+    56→    56→
+    57→    57→const EMPTY_CONTEXT_ANSWER =
+    58→    58→  "I don't have enough live data right now. Connect your business data to unlock insights."
+    59→    59→
+    60→    60→const EMPTY_CONTEXT_SOURCES: OracleSource[] = [
+    61→    61→  { name: 'Business Data', count: 0, icon: 'database' },
+    62→    62→]
+    63→    63→
+    64→    64→// ─── POST Handler ─────────────────────────────────────────────────────────────
+    65→    65→
+    66→    66→export async function POST(req: NextRequest) {
+    67→    67→  let question = ''
+    68→    68→  let context = ''
+    69→    69→  try {
+    70→    70→    const body = await req.json()
+    71→    71→    question = (body.question || '').trim()
+    72→    72→    context = (body.context || '').trim()
+    73→    73→    const conversationHistory: Array<{ role: string; content: string }> =
+    74→    74→      body.conversationHistory || []
+    75→    75→
+    76→    76→    if (!question) {
+    77→    77→      return NextResponse.json({ error: 'Question is required' }, { status: 400 })
+    78→    78→    }
+    79→    79→
+    80→    80→    // 1) Deterministic, fast intent + actions + thinking steps
+    81→    81→    const intent = detectIntent(question)
+    82→    82→    const thinkingSteps = generateThinkingSteps(intent)
+    83→    83→    const detectedActions = detectActions(question, intent)
+    84→    84→
+    85→    85→    // 2) Determine whether real data is available in context.
+    86→    86→    //    The frontend builds context as a structured string starting with
+    87→    87→    //    "LIVE DATA SNAPSHOT" and a list of "- key: value" lines.
+    88→    88→    const hasLiveData = contextHasLiveData(context)
+    89→    89→
+    90→    90→    // 3) Build sources from ACTUAL context content (no fabrication)
+    91→    91→    const sources = hasLiveData ? buildSources(context) : EMPTY_CONTEXT_SOURCES
+    92→    92→
+    93→    93→    // 4) Generate the answer via LLM (or fallback)
+    94→    94→    let answer: string
+    95→    95→    if (!hasLiveData) {
+    96→    96→      // Skip LLM call entirely when no live data — guarantees no fabrication
+    97→    97→      answer = EMPTY_CONTEXT_ANSWER
+    98→    98→    } else {
+    99→    99→      try {
+   100→   100→        answer = await generateLLMAnswer(question, context, conversationHistory)
+   101→   101→      } catch (llmError) {
+   102→   102→        console.error(
+   103→   103→          '[Oracle] LLM error:',
+   104→   104→          llmError instanceof Error ? llmError.message : llmError,
+   105→   105→        )
+   106→   106→        answer = generateContextualFallback(question, context, intent)
+   107→   107→      }
+   108→   108→      if (!answer || !answer.trim()) {
+   109→   109→        answer = generateContextualFallback(question, context, intent)
+   110→   110→      }
+   111→   111→    }
+   112→   112→
+   113→   113→    // 5) Extract structured insights from the LLM answer (or derive from context)
+   114→   114→    const insights = hasLiveData
+   115→   115→      ? extractInsights(answer, context, intent)
+   116→   116→      : [
+   117→   117→          {
+   118→   118→            text: 'Connect your business data to unlock AI insights.',
+   119→   119→            tone: 'neutral' as InsightTone,
+   120→   120→          },
+   121→   121→        ]
+   122→   122→
+   123→   123→    // 6) Suggested follow-ups based on intent (and data availability)
+   124→   124→    const suggestedPrompts = hasLiveData
+   125→   125→      ? suggestFollowUps(intent, question)
+   126→   126→      : [
+   127→   127→          'Show pending returns',
+   128→   128→          'Which clients are risky?',
+   129→   129→          'What revenue will I make next month?',
+   130→   130→        ]
+   131→   131→
+   132→   132→    const responseBody: OracleResponse = {
+   133→   133→      answer,
+   134→   134→      insights,
+   135→   135→      sources,
+   136→   136→      actions: detectedActions,
+   137→   137→      suggestedPrompts,
+   138→   138→      intent,
+   139→   139→      thinkingSteps,
+   140→   140→    }
+   141→   141→
+   142→   142→    return NextResponse.json(responseBody)
+   143→   143→  } catch (error: unknown) {
+   144→   144→    console.error(
+   145→   145→      '[Oracle] Fatal:',
+   146→   146→      error instanceof Error ? error.message : error,
+   147→   147→    )
+   148→   148→    // Always return the structured shape — frontend never has to guard
+   149→   149→    const fallbackResponse: OracleResponse = {
+   150→   150→      answer: EMPTY_CONTEXT_ANSWER,
+   151→   151→      insights: [
+   152→   152→        {
+   153→   153→          text: 'I had trouble reaching my reasoning engine. Please try again.',
+   154→   154→          tone: 'warning',
+   155→   155→        },
+   156→   156→      ],
+   157→   157→      sources: EMPTY_CONTEXT_SOURCES,
+   158→   158→      actions: [],
+   159→   159→      suggestedPrompts: [
+   160→   160→        'Show pending returns',
+   161→   161→        'Which clients are risky?',
+   162→   162→        'What revenue will I make next month?',
+   163→   163→      ],
+   164→   164→      intent: 'fallback',
+   165→   165→      thinkingSteps: [
+   166→   166→        { label: 'Thinking...', duration: 400 },
+   167→   167→        { label: 'Generating answer...', duration: 500 },
+   168→   168→      ],
+   169→   169→    }
+   170→   170→    return NextResponse.json(fallbackResponse)
+   171→   171→  }
+   172→   172→}
+   173→   173→
+   174→   174→// ─── LLM Call ─────────────────────────────────────────────────────────────────
+   175→   175→
+   176→   176→async function generateLLMAnswer(
+   177→   177→  question: string,
+   178→   178→  context: string,
+   179→   179→  conversationHistory: Array<{ role: string; content: string }>,
+   180→   180→): Promise<string> {
+   181→   181→  const ZAI = (await import('z-ai-web-dev-sdk')).default
+   182→   182→  const zai = await ZAI.create()
+   183→   183→
+   184→   184→  const systemPrompt = `You are GSTPilot Intelligence™ — the AI Brain of the user's Indian CA firm / business.
+   185→   185→
+   186→   186→You have LIVE access to the firm's Firestore data (clients, invoices, returns, payments, notifications, activities). The current data snapshot is provided below as "Live Business Context".
+   187→   187→
+   188→   188→## Your job
+   189→   189→1. Answer the user's question accurately using ONLY the live data below.
+   190→   190→2. Reference SPECIFIC NUMBERS, CLIENT NAMES, AMOUNTS, and DATES from the context.
+   191→   191→3. Use Indian number formatting (₹1,23,456 — lakhs/crores, no millions) and DD/MM/YYYY dates.
+   192→   192→4. Structure your answer as:
+   193→   193→   • A concise 2-3 sentence direct answer FIRST (no header, no preamble).
+   194→   194→   • Then 2-4 bullet points (use "• " prefix) with the most important insights,
+   195→   195→     numbers, or breakdowns supporting your answer.
+   196→   196→   • Then an optional "Recommended Actions:" line if there is a clear next step.
+   197→   197→5. Match the user's tone — professional but warm, like a senior CA partner.
+   198→   198→6. If the user asks about running automation ("run my firm", "run my business"),
+   199→   199→   describe what would happen step-by-step in 5-7 numbered steps.
+   200→   200→7. NEVER invent data. If the context does not contain what you need, say so
+   201→   201→   explicitly: "I don't have enough live data right now" and suggest what to
+   202→   202→   connect or check.
+   203→   203→8. Do NOT use markdown headers (#), do NOT use emojis, do NOT use tables.
+   204→   204→9. Keep total response under 200 words.
+   205→   205→
+   206→   206→Live Business Context:
+   207→   207→${context}
+   208→   208→
+   209→   209→Conversation history (most recent last):
+   210→   210→${conversationHistory
+   211→   211→  .slice(-4)
+   212→   212→  .map((m) => `${m.role}: ${m.content}`)
+   213→   213→  .join('\n') || '[No prior conversation]'}`
+   214→   214→
+   215→   215→  const response = await zai.chat.completions.create({
+   216→   216→    messages: [
+   217→   217→      { role: 'system', content: systemPrompt },
+   218→   218→      { role: 'user', content: question },
+   219→   219→    ],
+   220→   220→  })
+   221→   221→
+   222→   222→  return response.choices[0]?.message?.content || ''
+   223→   223→}
+   224→   224→
+   225→   225→// ─── Intent Detection (preserved from previous version) ───────────────────────
+   226→   226→
+   227→   227→function detectIntent(question: string): string {
+   228→   228→  const q = question.toLowerCase()
+   229→   229→  if (
+   230→   230→    /\b(run|execute|start|launch|automate)\b.*\b(firm|business|company|pipeline|workflow)\b/.test(
+   231→   231→      q,
+   232→   232→    ) ||
+   233→   233→    q.includes('run my firm') ||
+   234→   234→    q.includes('run my business') ||
+   235→   235→    q.includes('run my company')
+   236→   236→  )
+   237→   237→    return 'run_automation'
+   238→   238→  if (
+   239→   239→    q.includes('overload') ||
+   240→   240→    q.includes('overloaded') ||
+   241→   241→    q.includes('workload') ||
+   242→   242→    q.includes('capacity') ||
+   243→   243→    q.includes('bandwidth')
+   244→   244→  )
+   245→   245→    return 'workload'
+   246→   246→  if (
+   247→   247→    q.includes('revenue') ||
+   248→   248→    q.includes('income') ||
+   249→   249→    q.includes('earn') ||
+   250→   250→    q.includes('next month') ||
+   251→   251→    q.includes('forecast') ||
+   252→   252→    q.includes('predict')
+   253→   253→  )
+   254→   254→    return 'revenue_forecast'
+   255→   255→  if (
+   256→   256→    q.includes('collection') ||
+   257→   257→    q.includes('drop') ||
+   258→   258→    q.includes('decline') ||
+   259→   259→    q.includes('fell') ||
+   260→   260→    q.includes('why did')
+   261→   261→  )
+   262→   262→    return 'collection_analysis'
+   263→   263→  if (q.includes('risk') || q.includes('risky') || q.includes('health') || q.includes('at risk'))
+   264→   264→    return 'risk_analysis'
+   265→   265→  if (
+   266→   266→    q.includes('pending') ||
+   267→   267→    q.includes('overdue') ||
+   268→   268→    q.includes('filing') ||
+   269→   269→    q.includes('gstr') ||
+   270→   270→    q.includes('return')
+   271→   271→  )
+   272→   272→    return 'pending_returns'
+   273→   273→  if (
+   274→   274→    q.includes('invoice') ||
+   275→   275→    q.includes('payment') ||
+   276→   276→    q.includes('outstanding') ||
+   277→   277→    q.includes('collect')
+   278→   278→  )
+   279→   279→    return 'invoice_collection'
+   280→   280→  if (q.includes('cash') || q.includes('flow') || q.includes('liquidity')) return 'cash_flow'
+   281→   281→  if (q.includes('compliance') || q.includes('score') || q.includes('deadline')) return 'compliance'
+   282→   282→  if (q.includes('client') || q.includes('customer')) return 'client_overview'
+   283→   283→  if (q.includes('today') || q.includes('priority') || q.includes('should i') || q.includes('to do'))
+   284→   284→    return 'daily_priority'
+   285→   285→  if (q.includes('compare') || q.includes('last month') || q.includes('vs') || q.includes('trend'))
+   286→   286→    return 'comparison'
+   287→   287→  if (q.includes('task') || q.includes('reminder') || q.includes('notify')) return 'task_management'
+   288→   288→  if (q.includes('report') || q.includes('summary') || q.includes('statement')) return 'report'
+   289→   289→  return 'general'
+   290→   290→}
+   291→   291→
+   292→   292→// ─── Thinking Steps Generator (V16 — Perplexity-style animation) ──────────────
+   293→   293→
+   294→   294→const STEP_DURATIONS: Record<string, number> = {
+   295→   295→  'Thinking...': 400,
+   296→   296→  'Searching invoices...': 600,
+   297→   297→  'Reading GST data...': 500,
+   298→   298→  'Checking bank transactions...': 550,
+   299→   299→  'Analyzing client data...': 600,
+   300→   300→  'Generating answer...': 500,
+   301→   301→}
+   302→   302→
+   303→   303→function step(label: string): ThinkingStep {
+   304→   304→  return { label, duration: STEP_DURATIONS[label] ?? 450 }
+   305→   305→}
+   306→   306→
+   307→   307→function generateThinkingSteps(intent: string): ThinkingStep[] {
+   308→   308→  // Each intent yields a deterministic, semantically-relevant sequence.
+   309→   309→  // Always starts with "Thinking..." and ends with "Generating answer...".
+   310→   310→  switch (intent) {
+   311→   311→    case 'run_automation':
+   312→   312→      return [
+   313→   313→        step('Thinking...'),
+   314→   314→        step('Searching invoices...'),
+   315→   315→        step('Reading GST data...'),
+   316→   316→        step('Checking bank transactions...'),
+   317→   317→        step('Analyzing client data...'),
+   318→   318→        step('Generating answer...'),
+   319→   319→      ]
+   320→   320→    case 'workload':
+   321→   321→      return [
+   322→   322→        step('Thinking...'),
+   323→   323→        step('Analyzing client data...'),
+   324→   324→        step('Reading GST data...'),
+   325→   325→        step('Generating answer...'),
+   326→   326→      ]
+   327→   327→    case 'revenue_forecast':
+   328→   328→      return [
+   329→   329→        step('Thinking...'),
+   330→   330→        step('Searching invoices...'),
+   331→   331→        step('Checking bank transactions...'),
+   332→   332→        step('Generating answer...'),
+   333→   333→      ]
+   334→   334→    case 'collection_analysis':
+   335→   335→      return [
+   336→   336→        step('Thinking...'),
+   337→   337→        step('Searching invoices...'),
+   338→   338→        step('Checking bank transactions...'),
+   339→   339→        step('Reading GST data...'),
+   340→   340→        step('Generating answer...'),
+   341→   341→      ]
+   342→   342→    case 'risk_analysis':
+   343→   343→      return [
+   344→   344→        step('Thinking...'),
+   345→   345→        step('Analyzing client data...'),
+   346→   346→        step('Reading GST data...'),
+   347→   347→        step('Searching invoices...'),
+   348→   348→        step('Generating answer...'),
+   349→   349→      ]
+   350→   350→    case 'pending_returns':
+   351→   351→    case 'compliance':
+   352→   352→      return [
+   353→   353→        step('Thinking...'),
+   354→   354→        step('Reading GST data...'),
+   355→   355→        step('Generating answer...'),
+   356→   356→      ]
+   357→   357→    case 'invoice_collection':
+   358→   358→      return [
+   359→   359→        step('Thinking...'),
+   360→   360→        step('Searching invoices...'),
+   361→   361→        step('Checking bank transactions...'),
+   362→   362→        step('Generating answer...'),
+   363→   363→      ]
+   364→   364→    case 'cash_flow':
+   365→   365→      return [
+   366→   366→        step('Thinking...'),
+   367→   367→        step('Checking bank transactions...'),
+   368→   368→        step('Searching invoices...'),
+   369→   369→        step('Generating answer...'),
+   370→   370→      ]
+   371→   371→    case 'client_overview':
+   372→   372→      return [
+   373→   373→        step('Thinking...'),
+   374→   374→        step('Analyzing client data...'),
+   375→   375→        step('Generating answer...'),
+   376→   376→      ]
+   377→   377→    case 'daily_priority':
+   378→   378→      return [
+   379→   379→        step('Thinking...'),
+   380→   380→        step('Reading GST data...'),
+   381→   381→        step('Searching invoices...'),
+   382→   382→        step('Analyzing client data...'),
+   383→   383→        step('Generating answer...'),
+   384→   384→      ]
+   385→   385→    case 'comparison':
+   386→   386→      return [
+   387→   387→        step('Thinking...'),
+   388→   388→        step('Searching invoices...'),
+   389→   389→        step('Reading GST data...'),
+   390→   390→        step('Generating answer...'),
+   391→   391→      ]
+   392→   392→    case 'task_management':
+   393→   393→      return [
+   394→   394→        step('Thinking...'),
+   395→   395→        step('Analyzing client data...'),
+   396→   396→        step('Generating answer...'),
+   397→   397→      ]
+   398→   398→    case 'report':
+   399→   399→      return [
+   400→   400→        step('Thinking...'),
+   401→   401→        step('Searching invoices...'),
+   402→   402→        step('Reading GST data...'),
+   403→   403→        step('Generating answer...'),
+   404→   404→      ]
+   405→   405→    case 'general':
+   406→   406→    default:
+   407→   407→      return [step('Thinking...'), step('Generating answer...')]
+   408→   408→  }
+   409→   409→}
+   410→   410→
+   411→   411→// ─── Action Detection (V16 — now emits view + payload for compat) ─────────────
+   412→   412→
+   413→   413→function detectActions(question: string, intent: string): OracleAction[] {
+   414→   414→  const actions: OracleAction[] = []
+   415→   415→  const q = question.toLowerCase()
+   416→   416→
+   417→   417→  if (intent === 'run_automation') {
+   418→   418→    actions.push({
+   419→   419→      type: 'execute_workflow',
+   420→   420→      title: 'Run Autonomous Pipeline',
+   421→   421→      description:
+   422→   422→        'Execute the full autonomous pipeline: read data → reconcile → predict cash flow → file returns → notify teams → generate reports.',
+   423→   423→      payload: {
+   424→   424→        workflow: q.includes('company')
+   425→   425→          ? 'run_my_company'
+   426→   426→          : q.includes('india')
+   427→   427→            ? 'run_india_business'
+   428→   428→            : 'run_my_firm',
+   429→   429→      },
+   430→   430→    })
+   431→   431→  }
+   432→   432→
+   433→   433→  if (intent === 'pending_returns' || q.includes('file') || q.includes('filing')) {
+   434→   434→    actions.push({
+   435→   435→      type: 'navigate',
+   436→   436→      title: 'Open GST Returns',
+   437→   437→      description: 'Navigate to the GST Returns workspace to file pending returns.',
+   438→   438→      view: 'returns',
+   439→   439→      payload: { view: 'returns' },
+   440→   440→    })
+   441→   441→  }
+   442→   442→
+   443→   443→  if (intent === 'invoice_collection' || q.includes('remind') || q.includes('collection')) {
+   444→   444→    actions.push({
+   445→   445→      type: 'send_reminder',
+   446→   446→      title: 'Send Payment Reminders',
+   447→   447→      description:
+   448→   448→        'Send automated payment reminders to clients with overdue invoices via WhatsApp + Email.',
+   449→   449→      payload: { channel: 'all' },
+   450→   450→    })
+   451→   451→    actions.push({
+   452→   452→      type: 'navigate',
+   453→   453→      title: 'Open Invoices',
+   454→   454→      description: 'Open the Invoice workspace to review outstanding balances.',
+   455→   455→      view: 'invoices',
+   456→   456→      payload: { view: 'invoices' },
+   457→   457→    })
+   458→   458→  }
+   459→   459→
+   460→   460→  if (intent === 'task_management' || q.includes('create task') || q.includes('add task')) {
+   461→   461→    actions.push({
+   462→   462→      type: 'create_task',
+   463→   463→      title: 'Create Follow-up Task',
+   464→   464→      description: 'Create a task in the workflow tracker for the items mentioned.',
+   465→   465→      payload: { source: 'intelligence' },
+   466→   466→    })
+   467→   467→  }
+   468→   468→
+   469→   469→  if (intent === 'report' || q.includes('generate report') || q.includes('summary')) {
+   470→   470→    actions.push({
+   471→   471→      type: 'generate_report',
+   472→   472→      title: 'Generate Executive Report',
+   473→   473→      description: 'Compile a PDF executive summary with the key metrics discussed.',
+   474→   474→      payload: { format: 'pdf' },
+   475→   475→    })
+   476→   476→  }
+   477→   477→
+   478→   478→  if (intent === 'risk_analysis') {
+   479→   479→    actions.push({
+   480→   480→      type: 'navigate',
+   481→   481→      title: 'Open War Room',
+   482→   482→      description: 'Open the Executive War Room to see live risk monitoring.',
+   483→   483→      view: 'executive-war-room',
+   484→   484→      payload: { view: 'executive-war-room' },
+   485→   485→    })
+   486→   486→  }
+   487→   487→
+   488→   488→  if (intent === 'revenue_forecast') {
+   489→   489→    actions.push({
+   490→   490→      type: 'navigate',
+   491→   491→      title: 'Open AI Predictions',
+   492→   492→      description: 'Open AI Predictions dashboard for detailed revenue forecasts.',
+   493→   493→      view: 'ai-predictions',
+   494→   494→      payload: { view: 'ai-predictions' },
+   495→   495→    })
+   496→   496→  }
+   497→   497→
+   498→   498→  if (intent === 'cash_flow') {
+   499→   499→    actions.push({
+   500→   500→      type: 'navigate',
+   501→   501→      title: 'Open Cash Flow',
+   502→   502→      description: 'Open the cash flow workspace to see inflow/outflow projections.',
+   503→   503→      view: 'cash-flow',
+   504→   504→      payload: { view: 'cash-flow' },
+   505→   505→    })
+   506→   506→  }
+   507→   507→
+   508→   508→  if (intent === 'client_overview' || intent === 'risk_analysis') {
+   509→   509→    actions.push({
+   510→   510→      type: 'navigate',
+   511→   511→      title: 'Open Clients',
+   512→   512→      description: 'Open the Client Registry to drill into individual client records.',
+   513→   513→      view: 'clients',
+   514→   514→      payload: { view: 'clients' },
+   515→   515→    })
+   516→   516→  }
+   517→   517→
+   518→   518→  // Cap at 3 actions per V16 spec
+   519→   519→  return actions.slice(0, 3)
+   520→   520→}
+   521→   521→
+   522→   522→// ─── Sources Builder (parses LIVE context string for real counts) ─────────────
+   523→   523→
+   524→   524→/**
+   525→   525→ * The frontend composes a context string starting with "LIVE DATA SNAPSHOT"
+   526→   526→ * followed by "- key: value" lines. We parse those lines to surface the
+   527→   527→ * real sources + record counts the LLM consulted. NO fabrication — if a
+   528→   528→ * section is missing or zero, the source is omitted.
+   529→   529→ */
+   530→   530→function buildSources(context: string): OracleSource[] {
+   531→   531→  const sources: OracleSource[] = []
+   532→   532→
+   533→   533→  const clients = parseCount(context, /-?\s*Total clients:\s*(\d+)/i)
+   534→   534→  if (clients > 0) {
+   535→   535→    sources.push({ name: 'Clients', count: clients, icon: 'users' })
+   536→   536→  }
+   537→   537→
+   538→   538→  const invoices = parseCount(context, /-?\s*Active invoices:\s*(\d+)/i)
+   539→   539→  if (invoices > 0) {
+   540→   540→    sources.push({ name: 'Invoices', count: invoices, icon: 'file-text' })
+   541→   541→  }
+   542→   542→
+   543→   543→  const filed = parseCount(context, /-?\s*Filed returns:\s*(\d+)/i)
+   544→   544→  // Frontend emits "- Pending returns: 3 GSTR-1, 2 GSTR-3B"
+   545→   545→  // The count comes BEFORE the return-type label, so capture the leading digit.
+   546→   546→  const gstr1Pending = parseCount(context, /-?\s*Pending returns:\s*(\d+)\s*GSTR-1/i)
+   547→   547→  const gstr3bPending = parseCount(context, /GSTR-1,?\s*(\d+)\s*GSTR-3B/i)
+   548→   548→  const totalReturns = filed + gstr1Pending + gstr3bPending
+   549→   549→  if (totalReturns > 0) {
+   550→   550→    sources.push({ name: 'GST Returns', count: totalReturns, icon: 'receipt' })
+   551→   551→  }
+   552→   552→
+   553→   553→  const unread = parseCount(context, /-?\s*Unread notifications:\s*(\d+)/i)
+   554→   554→  if (unread > 0) {
+   555→   555→    sources.push({ name: 'Notifications', count: unread, icon: 'bell' })
+   556→   556→  }
+   557→   557→
+   558→   558→  const activities = parseCount(context, /-?\s*Recent activities:\s*(\d+)/i)
+   559→   559→  if (activities > 0) {
+   560→   560→    sources.push({ name: 'Activities', count: activities, icon: 'activity' })
+   561→   561→  }
+   562→   562→
+   563→   563→  // If we somehow couldn't parse anything but the context clearly has live data,
+   564→   564→  // return a single generic source so the UI has something to show.
+   565→   565→  if (sources.length === 0 && contextHasLiveData(context)) {
+   566→   566→    sources.push({ name: 'Business Data', count: 0, icon: 'database' })
+   567→   567→  }
+   568→   568→
+   569→   569→  return sources
+   570→   570→}
+   571→   571→
+   572→   572→function parseCount(context: string, pattern: RegExp): number {
+   573→   573→  const match = context.match(pattern)
+   574→   574→  if (!match || !match[1]) return 0
+   575→   575→  const n = parseInt(match[1], 10)
+   576→   576→  return Number.isFinite(n) ? n : 0
+   577→   577→}
+   578→   578→
+   579→   579→function contextHasLiveData(context: string): boolean {
+   580→   580→  if (!context || context.length < 60) return false
+   581→   581→  // The frontend always emits this header when live data is available
+   582→   582→  if (!/LIVE DATA SNAPSHOT/i.test(context)) return false
+   583→   583→  // If the snapshot explicitly says data unavailable, treat as empty
+   584→   584→  if (/Data currently unavailable/i.test(context)) return false
+   585→   585→  // Must have at least one "- key: value" data line beyond the header
+   586→   586→  const dataLines = context
+   587→   587→    .split('\n')
+   588→   588→    .filter((l) => /^\s*-\s+\w/.test(l))
+   589→   589→  return dataLines.length >= 2
+   590→   590→}
+   591→   591→
+   592→   592→// ─── Insight Extractor (parses LLM answer for 2-4 bullets) ────────────────────
+   593→   593→
+   594→   594→/**
+   595→   595→ * Extracts 2-4 insight bullets from the LLM answer. Falls back to
+   596→   596→ * context-derived insights when the answer has no parseable bullets.
+   597→   597→ */
+   598→   598→function extractInsights(
+   599→   599→  answer: string,
+   600→   600→  context: string,
+   601→   601→  intent: string,
+   602→   602→): OracleInsight[] {
+   603→   603→  // Parse bullet/numbered lines from the answer body
+   604→   604→  const rawLines = answer
+   605→   605→    .split('\n')
+   606→   606→    .map((l) => l.trim())
+   607→   607→    .filter(Boolean)
+   608→   608→
+   609→   609→  const bullets: string[] = []
+   610→   610→  for (const line of rawLines) {
+   611→   611→    let text: string | null = null
+   612→   612→    if (line.startsWith('• ') || line.startsWith('•')) {
+   613→   613→      text = line.replace(/^•\s*/, '').trim()
+   614→   614→    } else if (line.startsWith('- ')) {
+   615→   615→      text = line.replace(/^-\s*/, '').trim()
+   616→   616→    } else if (/^\d+\.\s/.test(line)) {
+   617→   617→      text = line.replace(/^\d+\.\s*/, '').trim()
+   618→   618→    }
+   619→   619→    if (text && text.length >= 12 && text.length <= 240) {
+   620→   620→      // Strip markdown bold/italic markers for cleaner insight text
+   621→   621→      const cleaned = text.replace(/\*\*/g, '').replace(/__/g, '').trim()
+   622→   622→      if (cleaned.length >= 12) bullets.push(cleaned)
+   623→   623→    }
+   624→   624→    if (bullets.length >= 4) break
+   625→   625→  }
+   626→   626→
+   627→   627→  if (bullets.length >= 2) {
+   628→   628→    return bullets.slice(0, 4).map((text) => ({ text, tone: detectTone(text) }))
+   629→   629→  }
+   630→   630→
+   631→   631→  // Fallback: derive insights from real context numbers
+   632→   632→  const derived = deriveInsightsFromContext(context, intent)
+   633→   633→  if (derived.length >= 1) {
+   634→   634→    // If we got 1 bullet from the answer, combine with 1 derived for 2 total
+   635→   635→    const combined: OracleInsight[] = []
+   636→   636→    if (bullets.length === 1) {
+   637→   637→      combined.push({ text: bullets[0], tone: detectTone(bullets[0]) })
+   638→   638→    }
+   639→   639→    for (const d of derived) {
+   640→   640→      if (combined.length >= 2) break
+   641→   641→      if (!combined.some((c) => c.text === d.text)) combined.push(d)
+   642→   642→    }
+   643→   643→    if (combined.length >= 1) return combined.slice(0, 4)
+   644→   644→  }
+   645→   645→
+   646→   646→  // Last-resort fallback: synthesize a single neutral insight from the answer
+   647→   647→  const firstSentence = answer
+   648→   648→    .split(/(?<=[.!?])\s+/)[0]
+   649→   649→    ?.replace(/[*#]/g, '')
+   650→   650→    .trim()
+   651→   651→  if (firstSentence && firstSentence.length >= 12) {
+   652→   652→    return [{ text: firstSentence.slice(0, 240), tone: 'neutral' }]
+   653→   653→  }
+   654→   654→  return [{ text: 'Insights will appear here once live data is connected.', tone: 'neutral' }]
+   655→   655→}
+   656→   656→
+   657→   657→function detectTone(text: string): InsightTone {
+   658→   658→  const t = text.toLowerCase()
+   659→   659→  // Warning signals — risk/decline/overdue keywords
+   660→   660→  if (
+   661→   661→    /\b(overdue|drop|decline|declined|fell|missed|urgent|risk|risky|late|below|fail|failed|exposed|shortfall|delay|delayed|warning|alert|critical|breach|non-compliant|mismatch|gap)\b/.test(
+   662→   662→      t,
+   663→   663→    )
+   664→   664→  ) {
+   665→   665→    return 'warning'
+   666→   666→  }
+   667→   667→  // Positive signals — growth/improvement keywords
+   668→   668→  if (
+   669→   669→    /\b(growth|grew|increase|increased|up|healthy|profit|saved|completed|filed|recovered|improved|improvement|surplus|above|strong|stable|on track|on-time)\b/.test(
+   670→   670→      t,
+   671→   671→    )
+   672→   672→  ) {
+   673→   673→    return 'positive'
+   674→   674→  }
+   675→   675→  return 'neutral'
+   676→   676→}
+   677→   677→
+   678→   678→function deriveInsightsFromContext(context: string, intent: string): OracleInsight[] {
+   679→   679→  const insights: OracleInsight[] = []
+   680→   680→
+   681→   681→  const clients = parseCount(context, /-?\s*Total clients:\s*(\d+)/i)
+   682→   682→  const activeClients = parseCount(context, /-?\s*Active clients:\s*(\d+)/i)
+   683→   683→  const invoices = parseCount(context, /-?\s*Active invoices:\s*(\d+)/i)
+   684→   684→  const overdueInvoices = parseCount(context, /-?\s*Overdue invoices:\s*(\d+)/i)
+   685→   685→  const filed = parseCount(context, /-?\s*Filed returns:\s*(\d+)/i)
+   686→   686→  const gstr1Pending = parseCount(context, /-?\s*Pending returns:\s*(\d+)\s*GSTR-1/i)
+   687→   687→
+   688→   688→  // High-risk clients line (text after the colon)
+   689→   689→  const riskMatch = context.match(/-?\s*High-risk clients:\s*(.+)/i)
+   690→   690→  const riskLine = riskMatch?.[1]?.trim()
+   691→   691→  const highRiskCount = riskLine
+   692→   692→    ? (riskLine.match(/,/g)?.length ?? 0) + (riskLine.length > 0 ? 1 : 0)
+   693→   693→    : 0
+   694→   694→
+   695→   695→  // Top client line
+   696→   696→  const topMatch = context.match(/-?\s*Top 5 clients by revenue:\s*(.+)/i)
+   697→   697→  const topLine = topMatch?.[1]?.trim()
+   698→   698→
+   699→   699→  if (intent === 'risk_analysis' && highRiskCount > 0 && riskLine) {
+   700→   700→    insights.push({
+   701→   701→      text: `${highRiskCount} client${highRiskCount > 1 ? 's' : ''} flagged high-risk — ${riskLine.slice(0, 140)}.`,
+   702→   702→      tone: 'warning',
+   703→   703→    })
+   704→   704→  }
+   705→   705→
+   706→   706→  if (intent === 'pending_returns' && (gstr1Pending > 0 || filed > 0)) {
+   707→   707→    insights.push({
+   708→   708→      text: `${gstr1Pending} GSTR-1 ${gstr1Pending === 1 ? 'return' : 'returns'} pending, ${filed} already filed.`,
+   709→   709→      tone: gstr1Pending > 0 ? 'warning' : 'positive',
+   710→   710→    })
+   711→   711→  }
+   712→   712→
+   713→   713→  if (
+   714→   714→    (intent === 'invoice_collection' || intent === 'collection_analysis') &&
+   715→   715→    (overdueInvoices > 0 || invoices > 0)
+   716→   716→  ) {
+   717→   717→    insights.push({
+   718→   718→      text: `${overdueInvoices} overdue invoice${overdueInvoices === 1 ? '' : 's'} out of ${invoices} active.`,
+   719→   719→      tone: overdueInvoices > 0 ? 'warning' : 'positive',
+   720→   720→    })
+   721→   721→  }
+   722→   722→
+   723→   723→  if (intent === 'client_overview' && clients > 0) {
+   724→   724→    insights.push({
+   725→   725→      text: `${clients} total client${clients === 1 ? '' : 's'} (${activeClients} active).`,
+   726→   726→      tone: 'neutral',
+   727→   727→    })
+   728→   728→  }
+   729→   729→
+   730→   730→  if (intent === 'revenue_forecast' && topLine) {
+   731→   731→    insights.push({
+   732→   732→      text: `Top revenue clients: ${topLine.slice(0, 140)}.`,
+   733→   733→      tone: 'positive',
+   734→   734→    })
+   735→   735→  }
+   736→   736→
+   737→   737→  if (intent === 'compliance' && filed > 0) {
+   738→   738→    insights.push({
+   739→   739→      text: `${filed} return${filed === 1 ? '' : 's'} filed so far this period.`,
+   740→   740→      tone: 'positive',
+   741→   741→    })
+   742→   742→  }
+   743→   743→
+   744→   744→  return insights
+   745→   745→}
+   746→   746→
+   747→   747→// ─── Suggested Follow-up Prompts (preserved from previous version) ────────────
+   748→   748→
+   749→   749→function suggestFollowUps(intent: string, _question: string): string[] {
+   750→   750→  const map: Record<string, string[]> = {
+   751→   751→    run_automation: ["Show today's priorities", 'What risks should I monitor?', 'Generate compliance report'],
+   752→   752→    workload: ['Who is at risk of missing deadlines?', 'Show pending returns', 'Rebalance workload'],
+   753→   753→    revenue_forecast: ['Why might revenue change?', 'Show top revenue clients', 'Optimize cash flow'],
+   754→   754→    collection_analysis: ['Send payment reminders', 'Which clients are slow payers?', 'Forecast next month'],
+   755→   755→    risk_analysis: ['Show high-risk clients', 'Run my business', 'Generate risk report'],
+   756→   756→    pending_returns: ['File all returns', 'Show overdue fees', 'Send deadline reminders'],
+   757→   757→    invoice_collection: ['Send reminders now', 'Show overdue invoices', 'Forecast cash flow'],
+   758→   758→    cash_flow: ['When is the next shortfall?', 'Recommend financing', 'Show working capital'],
+   759→   759→    compliance: ['Show compliance score', 'File overdue returns', 'Generate compliance report'],
+   760→   760→    client_overview: ['Show risky clients', 'Show top clients', 'Send client updates'],
+   761→   761→    daily_priority: ['Run my firm', 'Show overdue tasks', 'Generate daily brief'],
+   762→   762→    comparison: ['Why did metrics change?', 'Show trends', 'Forecast next month'],
+   763→   763→    task_management: ['Show my tasks', 'Create follow-up task', 'Assign to team member'],
+   764→   764→    report: ['Generate executive brief', 'Send report to partners', 'Schedule weekly report'],
+   765→   765→    general: ['Show pending returns', 'Which clients are risky?', 'Run my firm'],
+   766→   766→  }
+   767→   767→  return map[intent] || map.general
+   768→   768→}
+   769→   769→
+   770→   770→// ─── Contextual Fallback (used when LLM fails — only with live data) ──────────
+   771→   771→
+   772→   772→function generateContextualFallback(
+   773→   773→  question: string,
+   774→   774→  context: string,
+   775→   775→  intent: string,
+   776→   776→): string {
+   777→   777→  const q = question.toLowerCase()
+   778→   778→  const hasData = contextHasLiveData(context)
+   779→   779→
+   780→   780→  if (!hasData) {
+   781→   781→    return EMPTY_CONTEXT_ANSWER
+   782→   782→  }
+   783→   783→
+   784→   784→  // Re-parse the same context the LLM would have used — no fabricated numbers.
+   785→   785→  const clients = parseCount(context, /-?\s*Total clients:\s*(\d+)/i)
+   786→   786→  const invoices = parseCount(context, /-?\s*Active invoices:\s*(\d+)/i)
+   787→   787→  const overdue = parseCount(context, /-?\s*Overdue invoices:\s*(\d+)/i)
+   788→   788→  const filed = parseCount(context, /-?\s*Filed returns:\s*(\d+)/i)
+   789→   789→  const gstr1Pending = parseCount(context, /-?\s*Pending returns:\s*(\d+)\s*GSTR-1/i)
+   790→   790→
+   791→   791→  if (
+   792→   792→    q.includes('run my firm') ||
+   793→   793→    q.includes('run my business') ||
+   794→   794→    q.includes('run my company') ||
+   795→   795→    intent === 'run_automation'
+   796→   796→  ) {
+   797→   797→    return `Based on your live data (${clients} clients, ${invoices} invoices, ${filed} filed returns), I can run the full autonomous pipeline now: read data → reconcile → predict cash flow → file pending returns → send reminders → notify team → generate reports. Tap **Run Autonomous Pipeline** below to launch.`
+   798→   798→  }
+   799→   799→
+   800→   800→  if (
+   801→   801→    q.includes('revenue') ||
+   802→   802→    q.includes('next month') ||
+   803→   803→    q.includes('forecast') ||
+   804→   804→    intent === 'revenue_forecast'
+   805→   805→  ) {
+   806→   806→    return `Based on your live pipeline (${invoices} active invoices, ${clients} clients), I can project next-month revenue. For a detailed forecast, open the AI Predictions dashboard.`
+   807→   807→  }
+   808→   808→
+   809→   809→  if (intent === 'collection_analysis' || (q.includes('collection') && q.includes('drop'))) {
+   810→   810→    if (overdue > 0) {
+   811→   811→      return `Collections look soft: ${overdue} overdue invoice${overdue === 1 ? '' : 's'} out of ${invoices} active. Recommend sending tiered reminders (gentle → firm → escalation) and offering 2% early-pay discount to the top overdue clients. Tap **Send Payment Reminders** to launch.`
+   812→   812→    }
+   813→   813→    return `Collections look healthy right now — 0 overdue invoices out of ${invoices} active. Want me to forecast next month's cash flow?`
+   814→   814→  }
+   815→   815→
+   816→   816→  if (intent === 'pending_returns' || q.includes('pending') || q.includes('gstr')) {
+   817→   817→    if (gstr1Pending > 0) {
+   818→   818→      return `You have ${gstr1Pending} GSTR-1 ${gstr1Pending === 1 ? 'return' : 'returns'} pending and ${filed} already filed. Late fee exposure is ₹200/day per filing if missed. Tap **Open GST Returns** to start filing.`
+   819→   819→    }
+   820→   820→    return `All GSTR-1 returns are filed (${filed} on record). Nothing pending right now.`
+   821→   821→  }
+   822→   822→
+   823→   823→  if (q.includes('risk') || q.includes('risky') || intent === 'risk_analysis') {
+   824→   824→    const riskMatch = context.match(/-?\s*High-risk clients:\s*(.+)/i)
+   825→   825→    const riskLine = riskMatch?.[1]?.trim()
+   826→   826→    if (riskLine) {
+   827→   827→      return `High-risk watchlist from live data: ${riskLine.slice(0, 180)}. Schedule compliance reviews and set auto-alerts. Tap **Open War Room** for live monitoring.`
+   828→   828→    }
+   829→   829→    return `No high-risk clients detected in your live data. All client health scores are above the risk threshold.`
+   830→   830→  }
+   831→   831→
+   832→   832→  // Generic live-data fallback
+   833→   833→  return `I'm connected to your live data (${clients} clients, ${invoices} invoices, ${filed} filed returns) but I'm having trouble reasoning right now. Try one of the suggested prompts below, or rephrase your question.`
+   834→   834→}
+   835→   835→

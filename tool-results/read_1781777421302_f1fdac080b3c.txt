@@ -1,0 +1,766 @@
+     1→// ═══════════════════════════════════════════════════════════════════════════════
+     2→// GSTPilot Oracle™ — Intelligence Layer
+     3→//
+     4→// Three roles: CFO · Chartered Accountant (CA) · Operations Manager
+     5→// Six functions:
+     6→//   1. answer            — general GST / finance / compliance Q&A
+     7→//   2. analyze_invoices  — pull real invoices, compute totals, tax, risk
+     8→//   3. detect_overdue    — pull invoices + payments, flag overdue
+     9→//   4. report            — comprehensive business report across all data
+    10→//   5. cashflow          — 30/60/90-day cash flow forecast
+    11→//   6. actions           — concrete prioritized action list
+    12→//
+    13→// Every response is structured as exactly four sections:
+    14→//   ## Summary
+    15→//   ## Analysis
+    16→//   ## Recommendations
+    17→//   ## Actions
+    18→//
+    19→// Hard rules:
+    20→//   • NO placeholder text ("I don't have enough data", "connect your data", etc.)
+    21→//   • Real DB numbers via Prisma — never invent statistics
+    22→//   • Empty DB → honest empty-state answer explaining what the data is + how to start
+    23→//   • Currency ₹ with Indian comma grouping (₹1,23,456)
+    24→//   • Dates DD/MM/YYYY
+    25→// ═══════════════════════════════════════════════════════════════════════════════
+    26→
+    27→import { db } from '@/lib/db'
+    28→
+    29→// ─── Types ────────────────────────────────────────────────────────────────────
+    30→
+    31→export type OracleRole = 'cfo' | 'ca' | 'ops'
+    32→
+    33→export type OracleFunction =
+    34→  | 'answer'
+    35→  | 'analyze_invoices'
+    36→  | 'detect_overdue'
+    37→  | 'report'
+    38→  | 'cashflow'
+    39→  | 'actions'
+    40→
+    41→export interface OracleContext {
+    42→  role: OracleRole
+    43→  fn: OracleFunction
+    44→  /** Human-readable label for the detected function */
+    45→  fnLabel: string
+    46→  /** Live DB snapshot relevant to the function */
+    47→  data: OracleDataSnapshot
+    48→  /** Whether any real business data exists */
+    49→  hasData: boolean
+    50→  /** Business Memory™ context block (what Oracle remembers about this user). Empty string for new users. */
+    51→  memoryContext?: string
+    52→}
+    53→
+    54→export interface OracleDataSnapshot {
+    55→  clients: Array<{
+    56→    id: string
+    57→    gstin: string
+    58→    tradeName: string
+    59→    status: string
+    60→    entityType: string
+    61→    returnPeriod: string | null
+    62→    healthScore: number
+    63→  }>
+    64→  invoices: Array<{
+    65→    id: string
+    66→    invoiceNumber: string
+    67→    invoiceDate: string
+    68→    sellerGstin: string
+    69→    buyerName: string | null
+    70→    invoiceType: string
+    71→    taxableValue: number
+    72→    cgst: number
+    73→    sgst: number
+    74→    igst: number
+    75→    cess: number
+    76→    totalAmount: number
+    77→    status: string
+    78→    matchStatus: string
+    79→    riskLevel: string
+    80→    hsnCode: string | null
+    81→    source: string
+    82→    client: { tradeName: string; gstin: string } | null
+    83→  }>
+    84→  payments: Array<{
+    85→    id: string
+    86→    direction: 'in' | 'out'
+    87→    amount: number
+    88→    method: string | null
+    89→    status: string
+    90→    source: string
+    91→    referenceNo: string | null
+    92→    description: string | null
+    93→    paidAt: string | null
+    94→    postedAt: string
+    95→    reconciliationStatus: string
+    96→    client: { tradeName: string; gstin: string } | null
+    97→  }>
+    98→  returns: Array<{
+    99→    id: string
+   100→    returnType: string
+   101→    period: string
+   102→    financialYear: string | null
+   103→    status: string
+   104→    filedDate: string | null
+   105→    acknowledgmentNumber: string | null
+   106→    totalInvoices: number
+   107→    totalTaxableValue: number
+   108→    totalTax: number
+   109→    source: string
+   110→    client: { tradeName: string; gstin: string } | null
+   111→  }>
+   112→  notices: Array<{
+   113→    id: string
+   114→    noticeType: string
+   115→    noticeNumber: string | null
+   116→    noticeDate: string | null
+   117→    subject: string
+   118→    status: string
+   119→    priority: string
+   120→    dueDate: string | null
+   121→    source: string
+   122→    client: { tradeName: string; gstin: string } | null
+   123→  }>
+   124→  reconciliations: Array<{
+   125→    id: string
+   126→    period: string
+   127→    sources: string
+   128→    totalRecords: number
+   129→    matched: number
+   130→    unmatched: number
+   131→    partialMatches: number
+   132→    highRisk: number
+   133→    gstDifference: number
+   134→    status: string
+   135→    source: string
+   136→    client: { tradeName: string; gstin: string } | null
+   137→  }>
+   138→}
+   139→
+   140→// ─── Role & function detection ────────────────────────────────────────────────
+   141→
+   142→const CFO_KEYWORDS = [
+   143→  'cash flow', 'cashflow', 'cash-flow', 'p&l', 'profit', 'loss', 'revenue',
+   144→  'expense', 'burn rate', 'runway', 'ebitda', 'margin', 'forecast', 'budget',
+   145→  'working capital', 'ratio', 'liquidity', 'solvent', 'insolvent', 'cfo',
+   146→  'financial', 'finance', 'unit economics', 'breakeven', 'break-even',
+   147→  'return on', 'roi', 'irr', 'npv', 'capex', 'opex',
+   148→]
+   149→
+   150→const CA_KEYWORDS = [
+   151→  'gst', 'gstr', 'gstr-1', 'gstr-3b', 'gstr-2b', 'gstr-9', 'itc', 'input tax',
+   152→  'tax credit', 'tds', 'tds return', '26q', '24q', '27q', 'roc', 'mgt-7', 'aoc-4',
+   153→  'income tax', 'itr', '44ab', 'tax audit', 'e-invoicing', 'e-way bill', 'irn',
+   154→  'qrmp', 'reverse charge', 'place of supply', 'late fee', 'interest on gst',
+   155→  'notice', 'scn', 'show cause', 'assessment', 'audit', 'ca', 'chartered accountant',
+   156→  'compliance', 'filing', 'return', 'differential', 'cess', 'hsn', 'sac',
+   157→  'gstin', 'registration', 'deregistration', 'lut', 'refund', 'export',
+   158→]
+   159→
+   160→const OPS_KEYWORDS = [
+   161→  'operations', 'workflow', 'process', 'team', 'staff', 'assign', 'follow up',
+   162→  'followup', 'follow-up', 'deadline', 'overdue', 'pending', 'status', 'track',
+   163→  'client status', 'task', 'tasks', 'todo', 'to-do', 'action item', 'priority',
+   164→  'pipeline', 'queue', 'backlog', 'operations manager', 'ops', 'who is',
+   165→  'who should', 'when is', 'when should', 'next step', 'next steps',
+   166→]
+   167→
+   168→const FN_KEYWORDS: Record<Exclude<OracleFunction, 'answer'>, string[]> = {
+   169→  analyze_invoices: [
+   170→    'analyze invoice', 'analyse invoice', 'invoice analysis', 'analyze bills',
+   171→    'invoice summary', 'invoice breakdown', 'tax breakdown', 'gst breakdown',
+   172→    'invoice report', 'show invoices', 'list invoices', 'my invoices',
+   173→    'invoice status', 'invoice risk',
+   174→  ],
+   175→  detect_overdue: [
+   176→    'overdue', 'late payment', 'unpaid', 'not paid', 'pending payment',
+   177→    'outstanding', 'receivable', 'payable', 'due date', 'past due',
+   178→    'collection', 'follow up on payment', 'payment follow', 'aged',
+   179→    'ar aging', 'ap aging', 'debtors', 'creditors',
+   180→  ],
+   181→  report: [
+   182→    'report', 'summary report', 'monthly report', 'weekly report',
+   183→    'business report', 'compliance report', 'gst report', 'finance report',
+   184→    'executive summary', 'board report', 'md report', 'overview',
+   185→    'state of', 'health of', 'comprehensive',
+   186→  ],
+   187→  cashflow: [
+   188→    'cash flow', 'cashflow', 'cash-flow', 'forecast', 'project cash',
+   189→    'liquidity', 'runway', 'burn rate', 'working capital forecast',
+   190→    'next 30 days', 'next 60 days', 'next 90 days', 'projected',
+   191→    'inflow', 'outflow', 'net cash',
+   192→  ],
+   193→  actions: [
+   194→    'what should i do', 'what to do', 'next step', 'next steps', 'action',
+   195→    'actions', 'action item', 'action items', 'recommend', 'recommendation',
+   196→    'recommendations', 'suggest', 'suggestion', 'priorities', 'prioritize',
+   197→    'to do', 'todo', 'task list', 'this week', 'this month',
+   198→  ],
+   199→}
+   200→
+   201→/**
+   202→ * Detect the most appropriate role for the message.
+   203→ * Falls back to 'ca' (most GSTPilot questions are GST/compliance) when no signal.
+   204→ */
+   205→export function detectRole(message: string): OracleRole {
+   206→  const lower = message.toLowerCase()
+   207→  const score = (keywords: string[]): number =>
+   208→    keywords.reduce((acc, kw) => (lower.includes(kw) ? acc + 1 : acc), 0)
+   209→
+   210→  const cfo = score(CFO_KEYWORDS)
+   211→  const ca = score(CA_KEYWORDS)
+   212→  const ops = score(OPS_KEYWORDS)
+   213→
+   214→  if (cfo >= ca && cfo >= ops && cfo > 0) return 'cfo'
+   215→  if (ops >= ca && ops > 0) return 'ops'
+   216→  if (ca > 0) return 'ca'
+   217→  // Default — GSTPilot's primary domain is GST/CA work
+   218→  return 'ca'
+   219→}
+   220→
+   221→/**
+   222→ * Detect the user's intent (which of the 6 functions).
+   223→ * Falls back to 'answer' (general Q&A).
+   224→ */
+   225→export function detectFunction(message: string): OracleFunction {
+   226→  const lower = message.toLowerCase()
+   227→  let best: { fn: OracleFunction; score: number } = { fn: 'answer', score: 0 }
+   228→
+   229→  for (const [fn, keywords] of Object.entries(FN_KEYWORDS) as Array<
+   230→    [Exclude<OracleFunction, 'answer'>, string[]]
+   231→  >) {
+   232→    const score = keywords.reduce((acc, kw) => (lower.includes(kw) ? acc + 1 : acc), 0)
+   233→    if (score > best.score) best = { fn, score }
+   234→  }
+   235→
+   236→  return best.fn
+   237→}
+   238→
+   239→const FN_LABELS: Record<OracleFunction, string> = {
+   240→  answer: 'General Q&A',
+   241→  analyze_invoices: 'Invoice Analysis',
+   242→  detect_overdue: 'Overdue Detection',
+   243→  report: 'Business Report',
+   244→  cashflow: 'Cash Flow Forecast',
+   245→  actions: 'Action Recommendations',
+   246→}
+   247→
+   248→// ─── DB context gathering ─────────────────────────────────────────────────────
+   249→
+   250→const MAX_ROWS = 50
+   251→
+   252→/**
+   253→ * Pull a focused snapshot of business data from the DB.
+   254→ * All queries are bounded (MAX_ROWS) and include the client relation for joins.
+   255→ * Returns empty arrays (never null) when tables are empty — the prompt builder
+   256→ * handles the empty state explicitly.
+   257→ */
+   258→export async function gatherContext(fn: OracleFunction): Promise<OracleDataSnapshot> {
+   259→  // For pure Q&A we still pull a minimal context (clients + counts) so the
+   260→  // Oracle can reference the user's actual business even on general questions.
+   261→  const needInvoices = fn === 'analyze_invoices' || fn === 'detect_overdue' || fn === 'report' || fn === 'cashflow' || fn === 'actions'
+   262→  const needPayments = fn === 'detect_overdue' || fn === 'report' || fn === 'cashflow' || fn === 'actions'
+   263→  const needReturns = fn === 'report' || fn === 'actions' || fn === 'answer'
+   264→  const needNotices = fn === 'report' || fn === 'actions' || fn === 'answer'
+   265→  const needRecon = fn === 'report' || fn === 'actions'
+   266→
+   267→  const [clients, invoices, payments, returns, notices, reconciliations] =
+   268→    await Promise.all([
+   269→      db.client.findMany({
+   270→        take: MAX_ROWS,
+   271→        orderBy: { createdAt: 'desc' },
+   272→        select: {
+   273→          id: true, gstin: true, tradeName: true, status: true,
+   274→          entityType: true, returnPeriod: true, healthScore: true,
+   275→        },
+   276→      }),
+   277→      needInvoices
+   278→        ? db.invoice.findMany({
+   279→            take: MAX_ROWS,
+   280→            orderBy: { createdAt: 'desc' },
+   281→            include: { client: { select: { tradeName: true, gstin: true } } },
+   282→          })
+   283→        : Promise.resolve([]),
+   284→      // NOTE: Payment has no relation to Client (clientId is a plain String FK).
+   285→      // We hydrate client names in a second pass below.
+   286→      needPayments
+   287→        ? db.payment.findMany({
+   288→            take: MAX_ROWS,
+   289→            orderBy: { paidAt: 'desc' },
+   290→          })
+   291→        : Promise.resolve([]),
+   292→      needReturns
+   293→        ? db.gSTRFiling.findMany({
+   294→            take: MAX_ROWS,
+   295→            orderBy: { createdAt: 'desc' },
+   296→            include: { client: { select: { tradeName: true, gstin: true } } },
+   297→          })
+   298→        : Promise.resolve([]),
+   299→      needNotices
+   300→        ? db.notice.findMany({
+   301→            take: MAX_ROWS,
+   302→            orderBy: { createdAt: 'desc' },
+   303→            include: { client: { select: { tradeName: true, gstin: true } } },
+   304→          })
+   305→        : Promise.resolve([]),
+   306→      needRecon
+   307→        ? db.reconciliationRun.findMany({
+   308→            take: MAX_ROWS,
+   309→            orderBy: { createdAt: 'desc' },
+   310→          })
+   311→        : Promise.resolve([]),
+   312→    ])
+   313→
+   314→  // Hydrate client names for payments (Payment has no Client relation).
+   315→  const paymentsWithClients = await Promise.all(
+   316→    payments.map(async (p) => {
+   317→      const client = p.clientId
+   318→        ? await db.client.findUnique({
+   319→            where: { id: p.clientId },
+   320→            select: { tradeName: true, gstin: true },
+   321→          })
+   322→        : null
+   323→      return { ...p, client }
+   324→    })
+   325→  )
+   326→
+   327→  // Hydrate client names for reconciliation runs (clientId is a plain string FK).
+   328→  const reconWithClients = await Promise.all(
+   329→    reconciliations.map(async (r) => {
+   330→      const client = r.clientId
+   331→        ? await db.client.findUnique({
+   332→            where: { id: r.clientId },
+   333→            select: { tradeName: true, gstin: true },
+   334→          })
+   335→        : null
+   336→      return { ...r, client }
+   337→    })
+   338→  )
+   339→
+   340→  const snapshot: OracleDataSnapshot = {
+   341→    clients: clients.map((c) => ({
+   342→      id: c.id, gstin: c.gstin, tradeName: c.tradeName,
+   343→      status: c.status, entityType: c.entityType,
+   344→      returnPeriod: c.returnPeriod, healthScore: c.healthScore,
+   345→    })),
+   346→    invoices: invoices.map((i) => ({
+   347→      id: i.id, invoiceNumber: i.invoiceNumber, invoiceDate: i.invoiceDate,
+   348→      sellerGstin: i.sellerGstin, buyerName: i.buyerName,
+   349→      invoiceType: i.invoiceType, taxableValue: i.taxableValue,
+   350→      cgst: i.cgst, sgst: i.sgst, igst: i.igst, cess: i.cess,
+   351→      totalAmount: i.totalAmount, status: i.status,
+   352→      matchStatus: i.matchStatus, riskLevel: i.riskLevel,
+   353→      hsnCode: i.hsnCode, source: i.source,
+   354→      client: i.client ? { tradeName: i.client.tradeName, gstin: i.client.gstin } : null,
+   355→    })),
+   356→    payments: paymentsWithClients.map((p) => ({
+   357→      id: p.id, direction: p.direction as 'in' | 'out',
+   358→      amount: p.amount, method: p.method, status: p.status,
+   359→      source: p.source, referenceNo: p.referenceNo, description: p.description,
+   360→      paidAt: p.paidAt ? p.paidAt.toISOString() : null,
+   361→      postedAt: p.postedAt.toISOString(),
+   362→      reconciliationStatus: p.reconciliationStatus,
+   363→      client: p.client ? { tradeName: p.client.tradeName, gstin: p.client.gstin } : null,
+   364→    })),
+   365→    returns: returns.map((r) => ({
+   366→      id: r.id, returnType: r.returnType, period: r.period,
+   367→      financialYear: r.financialYear, status: r.status,
+   368→      filedDate: r.filedDate, acknowledgmentNumber: r.acknowledgmentNumber,
+   369→      totalInvoices: r.totalInvoices, totalTaxableValue: r.totalTaxableValue,
+   370→      totalTax: r.totalTax, source: r.source,
+   371→      client: r.client ? { tradeName: r.client.tradeName, gstin: r.client.gstin } : null,
+   372→    })),
+   373→    notices: notices.map((n) => ({
+   374→      id: n.id, noticeType: n.noticeType, noticeNumber: n.noticeNumber,
+   375→      noticeDate: n.noticeDate, subject: n.subject, status: n.status,
+   376→      priority: n.priority, dueDate: n.dueDate, source: n.source,
+   377→      client: n.client ? { tradeName: n.client.tradeName, gstin: n.client.gstin } : null,
+   378→    })),
+   379→    reconciliations: reconWithClients.map((r) => ({
+   380→      id: r.id, period: r.period, sources: r.sources,
+   381→      totalRecords: r.totalRecords, matched: r.matched,
+   382→      unmatched: r.unmatched, partialMatches: r.partialMatches,
+   383→      highRisk: r.highRisk, gstDifference: r.gstDifference,
+   384→      status: r.status, source: r.source,
+   385→      client: r.client ? { tradeName: r.client.tradeName, gstin: r.client.gstin } : null,
+   386→    })),
+   387→  }
+   388→
+   389→  return snapshot
+   390→}
+   391→
+   392→/**
+   393→ * Compute whether ANY real business data exists in the snapshot.
+   394→ * Used to choose between data-grounded response vs honest-empty-state response.
+   395→ */
+   396→export function hasAnyData(snap: OracleDataSnapshot): boolean {
+   397→  return (
+   398→    snap.invoices.length > 0 ||
+   399→    snap.payments.length > 0 ||
+   400→    snap.returns.length > 0 ||
+   401→    snap.notices.length > 0 ||
+   402→    snap.reconciliations.length > 0
+   403→  )
+   404→  // Note: clients alone don't count as "business data" — a client with no
+   405→  // invoices/payments/returns is just a registry entry. The Oracle should
+   406→  // still honestly say "no invoices recorded" even if clients exist.
+   407→}
+   408→
+   409→// ─── Number / date formatting (Indian style) ──────────────────────────────────
+   410→
+   411→export function formatINR(n: number): string {
+   412→  const rounded = Math.round(n)
+   413→  const abs = Math.abs(rounded)
+   414→  const sign = rounded < 0 ? '-' : ''
+   415→  // Indian comma grouping: last 3 digits, then groups of 2
+   416→  const str = abs.toString()
+   417→  let lastThree = str.slice(-3)
+   418→  const otherNumbers = str.slice(0, -3)
+   419→  if (otherNumbers.length > 0) {
+   420→    lastThree = ',' + lastThree
+   421→  }
+   422→  const formatted =
+   423→    otherNumbers.replace(/\B(?=(\d{2})+(?!\d))/g, ',') + lastThree
+   424→  return `${sign}₹${formatted}`
+   425→}
+   426→
+   427→export function formatDate(iso: string | null): string {
+   428→  if (!iso) return '—'
+   429→  try {
+   430→    const d = new Date(iso)
+   431→    if (isNaN(d.getTime())) return iso // already a string like "2024-04-15"
+   432→    const dd = String(d.getDate()).padStart(2, '0')
+   433→    const mm = String(d.getMonth() + 1).padStart(2, '0')
+   434→    const yyyy = d.getFullYear()
+   435→    return `${dd}/${mm}/${yyyy}`
+   436→  } catch {
+   437→    return iso
+   438→  }
+   439→}
+   440→
+   441→/** Days between two dates (positive = future, negative = past). */
+   442→export function daysBetween(from: Date, to: Date): number {
+   443→  const ms = to.getTime() - from.getTime()
+   444→  return Math.round(ms / (1000 * 60 * 60 * 24))
+   445→}
+   446→
+   447→// ─── Context block builder (injected into the LLM prompt) ─────────────────────
+   448→
+   449→/**
+   450→ * Build a structured text snapshot of the live DB data, formatted for the LLM.
+   451→ * This is the ONLY source of numbers the LLM is allowed to cite.
+   452→ */
+   453→function buildDataContext(snap: OracleDataSnapshot, fn: OracleFunction): string {
+   454→  const lines: string[] = []
+   455→  lines.push('# LIVE BUSINESS DATA (queried from your database at ' + new Date().toISOString() + ')')
+   456→  lines.push('')
+   457→  lines.push(`## Clients (${snap.clients.length})`)
+   458→  if (snap.clients.length === 0) {
+   459→    lines.push('- No clients registered yet.')
+   460→  } else {
+   461→    for (const c of snap.clients.slice(0, 10)) {
+   462→      lines.push(`- ${c.tradeName} — GSTIN ${c.gstin} — ${c.entityType} — ${c.returnPeriod || 'no period'} — status: ${c.status} — health: ${c.healthScore}/100`)
+   463→    }
+   464→    if (snap.clients.length > 10) lines.push(`- ...and ${snap.clients.length - 10} more`)
+   465→  }
+   466→  lines.push('')
+   467→
+   468→  if (fn === 'analyze_invoices' || fn === 'report' || fn === 'detect_overdue') {
+   469→    lines.push(`## Invoices (${snap.invoices.length})`)
+   470→    if (snap.invoices.length === 0) {
+   471→      lines.push('- No invoices recorded yet.')
+   472→    } else {
+   473→      const total = snap.invoices.reduce((s, i) => s + i.totalAmount, 0)
+   474→      const taxable = snap.invoices.reduce((s, i) => s + i.taxableValue, 0)
+   475→      const totalTax = snap.invoices.reduce((s, i) => s + i.cgst + i.sgst + i.igst + i.cess, 0)
+   476→      lines.push(`- Aggregate: ${snap.invoices.length} invoices — taxable value ${formatINR(taxable)} — total tax ${formatINR(totalTax)} — grand total ${formatINR(total)}`)
+   477→      const byStatus: Record<string, number> = {}
+   478→      for (const i of snap.invoices) byStatus[i.status] = (byStatus[i.status] || 0) + 1
+   479→      lines.push(`- By status: ${Object.entries(byStatus).map(([k, v]) => `${k}=${v}`).join(', ')}`)
+   480→      const byRisk: Record<string, number> = {}
+   481→      for (const i of snap.invoices) byRisk[i.riskLevel] = (byRisk[i.riskLevel] || 0) + 1
+   482→      lines.push(`- By risk: ${Object.entries(byRisk).map(([k, v]) => `${k}=${v}`).join(', ')}`)
+   483→      lines.push('- Sample (most recent 10):')
+   484→      for (const i of snap.invoices.slice(0, 10)) {
+   485→        lines.push(`  • ${i.invoiceNumber} dated ${i.invoiceDate} — ${i.invoiceType} — ${i.buyerName || 'no buyer'} — taxable ${formatINR(i.taxableValue)} — tax ${formatINR(i.cgst + i.sgst + i.igst + i.cess)} — total ${formatINR(i.totalAmount)} — status ${i.status} — risk ${i.riskLevel} — source ${i.source}`)
+   486→      }
+   487→    }
+   488→    lines.push('')
+   489→  }
+   490→
+   491→  if (fn === 'detect_overdue' || fn === 'report' || fn === 'cashflow' || fn === 'actions') {
+   492→    lines.push(`## Payments (${snap.payments.length})`)
+   493→    if (snap.payments.length === 0) {
+   494→      lines.push('- No payments recorded yet.')
+   495→    } else {
+   496→      const inflow = snap.payments.filter((p) => p.direction === 'in').reduce((s, p) => s + p.amount, 0)
+   497→      const outflow = snap.payments.filter((p) => p.direction === 'out').reduce((s, p) => s + p.amount, 0)
+   498→      lines.push(`- Aggregate: ${snap.payments.length} payments — inflow ${formatINR(inflow)} — outflow ${formatINR(outflow)} — net ${formatINR(inflow - outflow)}`)
+   499→      const byStatus: Record<string, number> = {}
+   500→      for (const p of snap.payments) byStatus[p.status] = (byStatus[p.status] || 0) + 1
+   501→      lines.push(`- By status: ${Object.entries(byStatus).map(([k, v]) => `${k}=${v}`).join(', ')}`)
+   502→      lines.push('- Sample (most recent 10):')
+   503→      for (const p of snap.payments.slice(0, 10)) {
+   504→        lines.push(`  • ${p.direction === 'in' ? 'RECEIVED' : 'PAID'} ${formatINR(p.amount)} via ${p.method || 'unknown'} on ${formatDate(p.paidAt)} — status ${p.status} — source ${p.source} — recon ${p.reconciliationStatus} — client ${p.client?.tradeName || 'n/a'}`)
+   505→      }
+   506→    }
+   507→    lines.push('')
+   508→  }
+   509→
+   510→  if (fn === 'report' || fn === 'actions' || fn === 'answer') {
+   511→    lines.push(`## Returns (${snap.returns.length})`)
+   512→    if (snap.returns.length === 0) {
+   513→      lines.push('- No GSTR returns recorded yet.')
+   514→    } else {
+   515→      lines.push('- Recent returns:')
+   516→      for (const r of snap.returns.slice(0, 10)) {
+   517→        lines.push(`  • ${r.returnType} ${r.period} — status ${r.status} — filed ${r.filedDate || 'not filed'} — ARN ${r.acknowledgmentNumber || 'none'} — ${r.totalInvoices} invoices — taxable ${formatINR(r.totalTaxableValue)} — tax ${formatINR(r.totalTax)} — client ${r.client?.tradeName || 'n/a'}`)
+   518→      }
+   519→    }
+   520→    lines.push('')
+   521→  }
+   522→
+   523→  if (fn === 'report' || fn === 'actions' || fn === 'answer') {
+   524→    lines.push(`## Notices (${snap.notices.length})`)
+   525→    if (snap.notices.length === 0) {
+   526→      lines.push('- No notices recorded yet.')
+   527→    } else {
+   528→      lines.push('- Recent notices:')
+   529→      for (const n of snap.notices.slice(0, 10)) {
+   530→        lines.push(`  • ${n.noticeType} ${n.noticeNumber || ''} — ${n.subject} — priority ${n.priority} — status ${n.status} — due ${n.dueDate || 'none'} — client ${n.client?.tradeName || 'n/a'}`)
+   531→      }
+   532→    }
+   533→    lines.push('')
+   534→  }
+   535→
+   536→  if (fn === 'report' || fn === 'actions') {
+   537→    lines.push(`## Reconciliation Runs (${snap.reconciliations.length})`)
+   538→    if (snap.reconciliations.length === 0) {
+   539→      lines.push('- No reconciliation runs recorded yet.')
+   540→    } else {
+   541→      lines.push('- Recent runs:')
+   542→      for (const r of snap.reconciliations.slice(0, 10)) {
+   543→        lines.push(`  • Period ${r.period} — sources ${r.sources} — ${r.totalRecords} records — matched ${r.matched} — unmatched ${r.unmatched} — partial ${r.partialMatches} — high-risk ${r.highRisk} — GST diff ${formatINR(r.gstDifference)} — client ${r.client?.tradeName || 'n/a'}`)
+   544→      }
+   545→    }
+   546→    lines.push('')
+   547→  }
+   548→
+   549→  return lines.join('\n')
+   550→}
+   551→
+   552→// ─── Role-specific persona blocks ─────────────────────────────────────────────
+   553→
+   554→const CFO_PERSONA = `You are GSTPilot Oracle™ operating in **CFO Mode**.
+   555→
+   556→You are a Chief Financial Officer with 20+ years of experience scaling Indian companies. You think in numbers, ratios, and runways. Your vocabulary: cash flow, working capital, burn rate, unit economics, EBITDA, gross margin, net margin, CAGR, WCAP days, DSO, DPO, inventory turns. You always tie advice back to money in the bank and money owed.
+   557→
+   558→Your lens:
+   559→- Cash is king. Every recommendation must consider cash impact.
+   560→- Forecasts are probabilities, not certainties — give ranges and scenarios.
+   561→- Risk-adjusted thinking: a 90% chance of ₹1L and a 50% chance of ₹2L are not the same.
+   562→- Working capital optimization > revenue growth (for SMEs).
+   563→- You speak to founders, CEOs, and boards — concise, confident, no hedging.`
+   564→
+   565→const CA_PERSONA = `You are GSTPilot Oracle™ operating in **CA Mode**.
+   566→
+   567→You are a senior Chartered Accountant with deep Indian tax and compliance expertise. You have filed thousands of GSTR-1/3B/9 returns, handled ITC reconciliation, responded to SCN notices, and guided clients through tax audits. Your vocabulary: GSTIN, GSTR-1/3B/2B/9, ITC, reverse charge, place of supply, Section 17(5), Rule 36(4), e-invoicing, IRN, QRMP, TDS 26Q/24Q/27Q, 44AB tax audit, ROC MGT-7/AOC-4, advance tax.
+   568→
+   569→Your lens:
+   570→- Compliance first. Every deadline is sacred; every late fee is avoidable.
+   571→- ITC is money. Blocked ITC under Section 17(5) is a permanent loss — flag it.
+   572→- Reconciliation is non-negotiable: books vs GSTR-2B vs GSTR-3B must tie out.
+   573→- When citing law, give the section + a one-line plain-English explanation.
+   574→- You speak to business owners and CA firm staff — precise, authoritative, practical.`
+   575→
+   576→const OPS_PERSONA = `You are GSTPilot Oracle™ operating in **Operations Manager Mode**.
+   577→
+   578→You are a senior Operations Manager running the back-office of an Indian CA firm or finance team. You live in deadlines, task lists, follow-ups, and client communications. Your vocabulary: deadline, due date, follow-up, assignment, status, pipeline, queue, priority, SLA, turnaround, owner, blocker, escalation.
+   579→
+   580→Your lens:
+   581→- Deadlines drive everything. GSTR-1 by 11th, GSTR-3B by 20th, TDS by quarter-end.
+   582→- Every open item needs an owner and a date. No orphan tasks.
+   583→- Client communication is proactive: remind before due date, not after.
+   584→- Risk-based prioritization: high-risk + near-due first, low-risk + far-due later.
+   585→- You speak to team leads and managers — concrete, action-oriented, no theory.`
+   586→
+   587→function rolePersona(role: OracleRole): string {
+   588→  if (role === 'cfo') return CFO_PERSONA
+   589→  if (role === 'ca') return CA_PERSONA
+   590→  return OPS_PERSONA
+   591→}
+   592→
+   593→// ─── Function-specific instruction blocks ─────────────────────────────────────
+   594→
+   595→const FN_INSTRUCTIONS: Record<OracleFunction, string> = {
+   596→  answer: `## Your task: Answer the user's question
+   597→- Use your expert knowledge of GST, finance, and compliance.
+   598→- Reference the user's actual business data (from the LIVE BUSINESS DATA block above) where relevant — for example, mention their registered clients by name if asked about a specific client.
+   599→- If the question is purely conceptual (e.g. "What is ITC?"), answer from first principles — no DB reference needed.
+   600→- Cite the relevant section / rule / due date with a one-line plain-English explanation.`,
+   601→
+   602→  analyze_invoices: `## Your task: Analyze the invoices
+   603→- Compute and report: total count, total taxable value, total tax (CGST+SGST+IGST+Cess), grand total.
+   604→- Break down by status (draft/final/paid), by risk level (low/medium/high), by invoice type (B2B/B2C/exports).
+   605→- Flag anomalies: unusually high tax rates, negative values, missing HSN, mismatched GSTINs.
+   606→- Highlight the top 3 invoices by value and the top 3 by risk.
+   607→- If no invoices exist, explain what an invoice is in GST terms (B2B/B2C, taxable value, tax components, HSN) and the 3 ways to start recording them (manual entry, GSTN pull, Excel import).`,
+   608→
+   609→  detect_overdue: `## Your task: Detect overdue payments
+   610→- For each invoice with status "final" or "issued" (i.e. not "draft"), compute the due date as invoice date + 30 days (standard Indian credit terms) UNLESS the invoice date string contains an explicit due date.
+   611→- Compare against today's date. Flag any invoice past due as OVERDUE with days overdue.
+   612→- Cross-reference payments: if a payment with matching amount + client exists and is "cleared", mark the invoice PAID.
+   613→- Produce an aging bucket: 0-30 / 31-60 / 61-90 / 90+ days overdue, with totals.
+   614→- List the top 5 most overdue invoices with client name, amount, days overdue.
+   615→- If no invoices exist, explain the credit cycle (invoice → credit period → due date → overdue → collection) and recommend a 30-day standard credit policy.`,
+   616→
+   617→  report: `## Your task: Generate a comprehensive business report
+   618→- Cover all 6 dimensions: clients, invoices, payments, returns, notices, reconciliations.
+   619→- For each dimension: total count, aggregate value, status breakdown, top 3 items, anomalies.
+   620→- Provide a consolidated financial view: revenue (from invoices), collections (from payments), compliance posture (returns filed vs pending, notices open).
+   621→- Highlight 3 things going well and 3 things needing attention.
+   622→- If the DB is empty (or mostly empty), produce an honest "Initial State Report" explaining what each data category represents, why it matters, and the recommended order to start populating each (clients first → invoices → payments → returns → reconciliation).`,
+   623→
+   624→  cashflow: `## Your task: Predict cash flow for the next 30/60/90 days
+   625→- Inflows = payments with direction "in" + outstanding invoices (status final/issued, not yet paid) expected to be collected within the period.
+   626→- Outflows = payments with direction "out" + GST liability (total tax from invoices for the current period, due by 20th of next month) + estimated operating expenses (if payment history shows recurring outflows).
+   627→- Build 3 scenarios: base (50th percentile), optimistic (75th percentile collection rate), pessimistic (25th percentile).
+   628→- Compute ending cash position for each period under each scenario.
+   629→- Flag any period where pessimistic ending cash < 0 (cash crunch risk).
+   630→- If no payment/invoice data exists, explain the cash flow formula (Inflows - Outflows = Net Cash; beginning cash + net cash = ending cash) and the 3 data sources needed to forecast (bank feed, invoice register, expense ledger).`,
+   631→
+   632→  actions: `## Your task: Suggest concrete prioritized actions
+   633→- Build the action list from real DB state:
+   634→  1. Compliance deadlines: any GSTR returns with status "draft" approaching the 11th/20th of next month → "File GSTR-X for [client] by [date]".
+   635→  2. Overdue invoices (computed as invoice date + 30 days < today) → "Follow up with [client] on invoice [number] — [amount] — [N] days overdue".
+   636→  3. Open notices with priority "high" or due date approaching → "Respond to notice [type] for [client] by [date]".
+   637→  4. Unmatched reconciliation results → "Resolve [N] unmatched invoices in reconciliation run [period]".
+   638→  5. Unreconciled payments → "Match [N] payments to invoices".
+   639→- Each action MUST have: title, owner (you / client / team), deadline (specific date), priority (P0/P1/P2), effort estimate (S/M/L).
+   640→- Order by priority then deadline.
+   641→- If DB is empty, suggest the 5 foundational actions: (1) register first client, (2) record first invoice, (3) connect bank, (4) file first GSTR-1, (5) run first reconciliation — each with the specific step to execute.`,
+   642→}
+   643→
+   644→// ─── Master system prompt builder ─────────────────────────────────────────────
+   645→
+   646→/**
+   647→ * Compose the full Oracle system prompt for a given role + function + live data.
+   648→ * The prompt is strict about the 4-section structure and the no-placeholder rule.
+   649→ */
+   650→export function buildSystemPrompt(ctx: OracleContext): string {
+   651→  const persona = rolePersona(ctx.role)
+   652→  const fnInstr = FN_INSTRUCTIONS[ctx.fn]
+   653→  const dataBlock = buildDataContext(ctx.data, ctx.fn)
+   654→
+   655→  return `${persona}
+   656→
+   657→# YOUR CAPABILITIES
+   658→You operate across six functions:
+   659→1. **Answer questions** — GST, finance, compliance, operations Q&A.
+   660→2. **Analyze invoices** — totals, tax breakdown, risk, anomalies.
+   661→3. **Detect overdue payments** — aging buckets, collection priorities.
+   662→4. **Generate reports** — comprehensive business / compliance reports.
+   663→5. **Predict cash flow** — 30/60/90-day forecasts with scenarios.
+   664→6. **Suggest actions** — prioritized, owner-assigned, deadline-bound task lists.
+   665→
+   666→Right now you are executing: **${FN_LABELS[ctx.fn]}**
+   667→
+   668→# INDIA-FIRST CONTEXT
+   669→- GST rates: 0% / 5% / 12% / 18% / 28%
+   670→- GSTR-1 due: 11th of next month (13th for QRMP)
+   671→- GSTR-3B due: 20th of next month (22nd/24th for QRMP)
+   672→- GST late fee: ₹50/day (₹20/day for nil return), capped per return
+   673→- TDS quarterly returns: 26Q (non-salary), 24Q (salary), 27Q (non-resident)
+   674→- Tax audit threshold (44AB): ₹1 crore turnover (₹10 crore with 95% digital)
+   675→- Standard credit period in India: 30 days from invoice date
+   676→
+   677→# FORMATTING RULES (NON-NEGOTIABLE)
+   678→- Currency: ₹ with Indian comma grouping (₹1,23,456 — NOT ₹123,456).
+   679→- Dates: DD/MM/YYYY.
+   680→- Bold key terms, amounts, dates, and section numbers using **double asterisks**.
+   681→- Use bullet points (-) for lists, numbered list (1. 2. 3.) for sequences.
+   682→- Tables: use markdown pipes (|) when comparing 3+ items.
+   683→
+   684→# RESPONSE STRUCTURE — EXACTLY 4 SECTIONS, ALWAYS
+   685→Every response MUST contain exactly these four sections, in this order, with these exact markdown headers:
+   686→
+   687→## Summary
+   688→A 2-3 sentence overview. State the key finding or direct answer up front. No preamble ("Sure!", "Great question!"). No hedging.
+   689→
+   690→## Analysis
+   691→Detailed breakdown. Use the LIVE BUSINESS DATA below. Use bullets, sub-headings (###), or a markdown table when comparing items. Cite specific numbers, dates, client names from the data block. If data is empty for a category, state the fact ("No invoices recorded yet") and explain what that category means.
+   692→
+   693→## Recommendations
+   694→3-5 specific, prioritized recommendations. Each recommendation is one bullet with a bold lead phrase. Tie each back to the analysis above.
+   695→
+   696→## Actions
+   697→A numbered list of concrete next steps. Each action has: a verb, a specific target (client name / invoice number / return period), an owner (You / Client / CA team / Operations team), and a deadline (specific date in DD/MM/YYYY format or "this week"). Example: "1. File GSTR-3B for TechCorp Solutions by 20/07/2025 — Owner: CA team — Effort: S".
+   698→
+   699→# BUSINESS MEMORY™ — PERSONALIZATION RULES
+   700→${ctx.memoryContext ? `You have stored memory about this user (see the BUSINESS MEMORY block below). Use it to personalize your response:
+   701→- **Greet by name** when natural (e.g. "Welcome back, ${'Prince'}.") — but only if the user's name is in memory.
+   702→- **Reference their goals** when relevant (e.g. "Your revenue goal is ₹5 Crore — this puts you on track.")
+   703→- **Reference past conversations** when the current question relates (e.g. "Last time you asked about cash flow — here's an update.")
+   704→- **Respect their preferences** (communication method, report format, reminder frequency).
+   705→- **Never re-ask** for information that's already in memory.
+   706→- If the user asks "Who am I?" or "What do you know about me?", summarize what's in the BUSINESS MEMORY block.
+   707→- If the user asks "What are my goals?", list the goals from memory.
+   708→- If the user asks "Who is risky?", use client memory + live data to rank clients by risk.
+   709→
+   710→# BUSINESS MEMORY™
+   711→${ctx.memoryContext}
+   712→` : 'No stored memory for this user yet. If the user introduces themselves (name, firm, role), acknowledge it naturally. Do NOT ask them to fill out a form — just answer their question and let memory build organically.'}
+   713→
+   714→# THE ABSOLUTE RULES — NEVER BREAK
+   715→1. **NEVER say "I don't have enough data."** If data is limited, say instead: "I currently have limited data. Based on what I know, here is my recommendation." Then give the best possible answer using whatever data IS available (memory + live DB + expert knowledge).
+   716→2. **NEVER invent numbers.** Use ONLY the numbers in the LIVE BUSINESS DATA block or the BUSINESS MEMORY block. If a category is empty, say so honestly.
+   717→3. **NEVER skip a section.** All 4 sections must appear in every response, even if the DB is empty.
+   718→4. **NEVER use Lorem Ipsum, "TBD", "TODO", "[placeholder]", or sample text.**
+   719→5. **Empty DB is not an excuse for a short answer.** If data is empty, the Analysis section explains what the data category is and why it matters; the Recommendations section suggests how to start populating it; the Actions section lists the concrete first steps.
+   720→6. **ALWAYS remember.** Use stored memory automatically. If the user has told you their name, firm, or goals before, reference them. Never make the user repeat themselves.
+   721→
+   722→# LIVE BUSINESS DATA
+   723→This is the ONLY source of business transaction numbers you may cite (in addition to the BUSINESS MEMORY block above). Do not invent statistics.
+   724→
+   725→${dataBlock}
+   726→
+   727→# DATA INTERPRETATION RULES
+   728→- Use these EXACT numbers in your response. Do not round, estimate, or "approximate".
+   729→- If a category shows 0 or empty, state "No X recorded yet" and explain what X is.
+   730→- Today's date for due-date calculations: ${new Date().toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })}.
+   731→- When computing overdue, use invoice date + 30 days as the due date (standard Indian credit terms).
+   732→- When forecasting cash flow, weight outstanding invoices by a 70% collection probability unless data shows otherwise.
+   733→
+   734→${fnInstr}
+   735→
+   736→Remember: you are GSTPilot Oracle™. You always respond. You always give all 4 sections. You never use placeholder text.`
+   737→}
+   738→
+   739→// ─── Orchestrator: detect + gather + build ────────────────────────────────────
+   740→
+   741→/**
+   742→ * Run the full intelligence pipeline:
+   743→ *  1. Detect role from message
+   744→ *  2. Detect function from message
+   745→ *  3. Gather DB context for that function
+   746→ *  4. Build the role+function-specific system prompt
+   747→ *
+   748→ * Returns the full context object the route handler needs.
+   749→ */
+   750→export async function prepareOracleContext(
+   751→  message: string
+   752→): Promise<OracleContext> {
+   753→  const role = detectRole(message)
+   754→  const fn = detectFunction(message)
+   755→  const data = await gatherContext(fn)
+   756→  const hasData = hasAnyData(data)
+   757→
+   758→  return {
+   759→    role,
+   760→    fn,
+   761→    fnLabel: FN_LABELS[fn],
+   762→    data,
+   763→    hasData,
+   764→  }
+   765→}
+   766→

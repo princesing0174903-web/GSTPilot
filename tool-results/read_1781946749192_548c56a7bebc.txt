@@ -1,0 +1,917 @@
+     1→generator client {
+     2→  provider = "prisma-client-js"
+     3→}
+     4→
+     5→datasource db {
+     6→  provider = "sqlite"
+     7→  url      = env("DATABASE_URL")
+     8→}
+     9→
+    10→model User {
+    11→  id            String   @id @default(cuid())
+    12→  email         String   @unique
+    13→  name          String?
+    14→  role          String   @default("staff")
+    15→  firmId        String?
+    16→  avatar        String?
+    17→  isActive      Boolean  @default(true)
+    18→  lastLoginAt   DateTime?
+    19→  createdAt     DateTime @default(now())
+    20→  updatedAt     DateTime @updatedAt
+    21→
+    22→  firm           Firm?           @relation(fields: [firmId], references: [id])
+    23→  notifications  Notification[]
+    24→  uploadedFiles  UploadedFile[]
+    25→  auditLogs      AuditLog[]
+    26→}
+    27→
+    28→model Client {
+    29→  id             String   @id @default(cuid())
+    30→  gstin          String   @unique
+    31→  tradeName      String
+    32→  legalName      String?
+    33→  address        String?
+    34→  state          String?
+    35→  stateCode      String?
+    36→  contactEmail   String?
+    37→  contactPhone   String?
+    38→  entityType     String   @default("regular")
+    39→  returnPeriod   String?
+    40→  lastFilingDate String?
+    41→  status         String   @default("active")
+    42→  healthScore    Int      @default(0)
+    43→  createdAt      DateTime @default(now())
+    44→  updatedAt      DateTime @updatedAt
+    45→
+    46→  firm                Firm?               @relation(fields: [firmId], references: [id])
+    47→  firmId              String?
+    48→  invoices            Invoice[]
+    49→  gstrFilings         GSTRFiling[]
+    50→  healthScores        HealthScore[]
+    51→  issues              Issue[]
+    52→  auditLogs           AuditLog[]
+    53→  notices             Notice[]
+    54→  documents           Document[]
+    55→  riskScores          RiskScore[]
+    56→  complianceForecasts ComplianceForecast[]
+    57→  clientInsights      ClientInsight[]
+    58→  benchmarks          ClientBenchmark[]
+    59→  uploadedFiles       UploadedFile[]
+    60→  notifications       Notification[]
+    61→  filingHistories     FilingHistory[]
+    62→}
+    63→
+    64→model Invoice {
+    65→  id            String   @id @default(cuid())
+    66→  clientId      String
+    67→  invoiceNumber String
+    68→  invoiceDate   String
+    69→  sellerGstin   String
+    70→  buyerGstin    String?
+    71→  buyerName     String?
+    72→  invoiceType   String   @default("B2B")
+    73→  gstr1Section  String   @default("b2b")
+    74→  taxableValue  Float    @default(0)
+    75→  cgst          Float    @default(0)
+    76→  sgst          Float    @default(0)
+    77→  igst          Float    @default(0)
+    78→  cess          Float    @default(0)
+    79→  totalAmount   Float    @default(0)
+    80→  hsnCode       String?
+    81→  reverseCharge Boolean  @default(false)
+    82→  status        String   @default("draft")
+    83→  matchStatus   String   @default("unmatched")
+    84→  riskLevel     String   @default("low")
+    85→  riskScore     Int      @default(0)
+    86→  aiExplanation String?
+    87→  notes         String?
+    88→  period        String?
+    89→  assignedTo    String?
+    90→  createdAt     DateTime @default(now())
+    91→  updatedAt     DateTime @updatedAt
+    92→
+    93→  client          Client                 @relation(fields: [clientId], references: [id])
+    94→  reconciliations ReconciliationResult[]
+    95→  issues          Issue[]
+    96→  items           InvoiceItem[]
+    97→}
+    98→
+    99→model GSTRFiling {
+   100→  id                   String   @id @default(cuid())
+   101→  clientId             String
+   102→  returnType           String   @default("GSTR-1")
+   103→  period               String
+   104→  financialYear        String?
+   105→  status               String   @default("draft")
+   106→  filedDate            String?
+   107→  acknowledgmentNumber String?
+   108→  totalInvoices        Int      @default(0)
+   109→  readyForFiling       Int      @default(0)
+   110→  issuesFound          Int      @default(0)
+   111→  criticalErrors       Int      @default(0)
+   112→  warnings             Int      @default(0)
+   113→  totalTaxableValue    Float    @default(0)
+   114→  totalTax             Float    @default(0)
+   115→  jsonPayload          String?
+   116→  createdAt            DateTime @default(now())
+   117→  updatedAt            DateTime @updatedAt
+   118→
+   119→  client Client        @relation(fields: [clientId], references: [id])
+   120→  events FilingEvent[]
+   121→  issues Issue[]
+   122→}
+   123→
+   124→model ReconciliationResult {
+   125→  id               String   @id @default(cuid())
+   126→  clientId         String
+   127→  invoiceId        String
+   128→  sourceType       String   @default("books")
+   129→  sourceA          String?  @default("Purchase Register")
+   130→  sourceB          String?  @default("GSTR-2B")
+   131→  sourceGstin      String?
+   132→  matchedGstin     String?
+   133→  matchStatus      String   @default("unmatched")
+   134→  matchScore       Float    @default(0)
+   135→  mismatches       String?
+   136→  aiExplanation    String?
+   137→  aiRecommendation String?
+   138→  confidenceScore  Float    @default(0)
+   139→  workflowStatus   String   @default("pending")
+   140→  resolved         Boolean  @default(false)
+   141→  resolvedBy       String?
+   142→  resolvedAt       String?
+   143→  riskLevel        String   @default("low")
+   144→  runId            String?
+   145→  createdAt        DateTime @default(now())
+   146→  updatedAt        DateTime @updatedAt
+   147→
+   148→  invoice Invoice            @relation(fields: [invoiceId], references: [id])
+   149→  run     ReconciliationRun? @relation(fields: [runId], references: [id])
+   150→}
+   151→
+   152→model ReconciliationRun {
+   153→  id             String   @id @default(cuid())
+   154→  clientId       String
+   155→  period         String
+   156→  sources        String   @default("Purchase Register,GSTR-2B")
+   157→  totalRecords   Int      @default(0)
+   158→  matched        Int      @default(0)
+   159→  unmatched      Int      @default(0)
+   160→  partialMatches Int      @default(0)
+   161→  highRisk       Int      @default(0)
+   162→  gstDifference  Float    @default(0)
+   163→  status         String   @default("completed")
+   164→  runBy          String?
+   165→  createdAt      DateTime @default(now())
+   166→
+   167→  results ReconciliationResult[]
+   168→}
+   169→
+   170→model FilingEvent {
+   171→  id          String   @id @default(cuid())
+   172→  filingId    String
+   173→  clientId    String
+   174→  eventType   String
+   175→  description String?
+   176→  userId      String?
+   177→  timestamp   DateTime @default(now())
+   178→
+   179→  filing GSTRFiling @relation(fields: [filingId], references: [id])
+   180→}
+   181→
+   182→model Issue {
+   183→  id          String   @id @default(cuid())
+   184→  clientId    String
+   185→  invoiceId   String?
+   186→  filingId    String?
+   187→  severity    String   @default("info")
+   188→  category    String
+   189→  title       String
+   190→  description String?
+   191→  status      String   @default("open")
+   192→  assignedTo  String?
+   193→  notes       String?
+   194→  resolvedAt  String?
+   195→  createdAt   DateTime @default(now())
+   196→  updatedAt   DateTime @updatedAt
+   197→
+   198→  client  Client      @relation(fields: [clientId], references: [id])
+   199→  invoice Invoice?    @relation(fields: [invoiceId], references: [id])
+   200→  filing  GSTRFiling? @relation(fields: [filingId], references: [id])
+   201→}
+   202→
+   203→model HealthScore {
+   204→  id                String   @id @default(cuid())
+   205→  clientId          String
+   206→  score             Int      @default(0)
+   207→  missingGstin      Int      @default(0)
+   208→  invalidGstin      Int      @default(0)
+   209→  duplicateInvoices Int      @default(0)
+   210→  filingDelays      Int      @default(0)
+   211→  validationErrors  Int      @default(0)
+   212→  period            String?
+   213→  createdAt         DateTime @default(now())
+   214→
+   215→  client Client @relation(fields: [clientId], references: [id])
+   216→}
+   217→
+   218→model AuditLog {
+   219→  id        String   @id @default(cuid())
+   220→  clientId  String?
+   221→  userId    String?
+   222→  action    String
+   223→  entity    String?
+   224→  entityId  String?
+   225→  oldValue  String?
+   226→  newValue  String?
+   227→  details   String?
+   228→  timestamp DateTime @default(now())
+   229→
+   230→  client Client? @relation(fields: [clientId], references: [id])
+   231→  user   User?   @relation(fields: [userId], references: [id])
+   232→}
+   233→
+   234→// ─── CA Firm Operations Layer ───
+   235→
+   236→model TeamMember {
+   237→  id         String   @id @default(cuid())
+   238→  userId     String?  @unique
+   239→  name       String
+   240→  email      String   @unique
+   241→  role       String   @default("staff")
+   242→  department String?  @default("general")
+   243→  avatar     String?
+   244→  isActive   Boolean  @default(true)
+   245→  joinedAt   DateTime @default(now())
+   246→  createdAt  DateTime @default(now())
+   247→  updatedAt  DateTime @updatedAt
+   248→
+   249→  performances TeamPerformance[]
+   250→  assignments  WorkloadAssignment[]
+   251→  notices      Notice[]
+   252→}
+   253→
+   254→model TeamPerformance {
+   255→  id                 String   @id @default(cuid())
+   256→  teamMemberId       String
+   257→  period             String
+   258→  invoicesProcessed  Int      @default(0)
+   259→  reviewsCompleted   Int      @default(0)
+   260→  approvalsCompleted Int      @default(0)
+   261→  averageAccuracy    Float    @default(0)
+   262→  averageTurnaround  Float    @default(0)
+   263→  totalActions       Int      @default(0)
+   264→  score              Float    @default(0)
+   265→  createdAt          DateTime @default(now())
+   266→  updatedAt          DateTime @updatedAt
+   267→
+   268→  teamMember TeamMember @relation(fields: [teamMemberId], references: [id])
+   269→}
+   270→
+   271→model WorkloadAssignment {
+   272→  id           String    @id @default(cuid())
+   273→  teamMemberId String
+   274→  entityType   String    @default("invoice")
+   275→  entityId     String?
+   276→  clientId     String?
+   277→  title        String
+   278→  description  String?
+   279→  status       String    @default("pending")
+   280→  priority     String    @default("medium")
+   281→  dueDate      String?
+   282→  assignedBy   String?
+   283→  assignedAt   DateTime  @default(now())
+   284→  completedAt  DateTime?
+   285→  notes        String?
+   286→
+   287→  teamMember TeamMember @relation(fields: [teamMemberId], references: [id])
+   288→}
+   289→
+   290→model Notice {
+   291→  id           String   @id @default(cuid())
+   292→  clientId     String
+   293→  noticeType   String   @default("gst_notice")
+   294→  noticeNumber String?
+   295→  noticeDate   String?
+   296→  subject      String
+   297→  description  String?
+   298→  status       String   @default("open")
+   299→  assignedTo   String?
+   300→  priority     String   @default("medium")
+   301→  dueDate      String?
+   302→  responseDate String?
+   303→  resolution   String?
+   304→  attachments  String?
+   305→  createdAt    DateTime @default(now())
+   306→  updatedAt    DateTime @updatedAt
+   307→
+   308→  client   Client      @relation(fields: [clientId], references: [id])
+   309→  assignee TeamMember? @relation(fields: [assignedTo], references: [id])
+   310→}
+   311→
+   312→model Document {
+   313→  id          String   @id @default(cuid())
+   314→  clientId    String?
+   315→  folder      String   @default("general")
+   316→  name        String
+   317→  fileType    String   @default("pdf")
+   318→  size        Int      @default(0)
+   319→  path        String?
+   320→  tags        String?
+   321→  description String?
+   322→  uploadedBy  String?
+   323→  version     Int      @default(1)
+   324→  isLatest    Boolean  @default(true)
+   325→  parentId    String?
+   326→  createdAt   DateTime @default(now())
+   327→  updatedAt   DateTime @updatedAt
+   328→
+   329→  client   Client?    @relation(fields: [clientId], references: [id])
+   330→  parent   Document?  @relation("DocumentVersion", fields: [parentId], references: [id])
+   331→  versions Document[] @relation("DocumentVersion")
+   332→}
+   333→
+   334→model AutomationRule {
+   335→  id          String    @id @default(cuid())
+   336→  name        String
+   337→  description String?
+   338→  trigger     String
+   339→  conditions  String?
+   340→  actions     String
+   341→  isActive    Boolean   @default(true)
+   342→  lastRunAt   DateTime?
+   343→  runCount    Int       @default(0)
+   344→  createdBy   String?
+   345→  createdAt   DateTime  @default(now())
+   346→  updatedAt   DateTime  @updatedAt
+   347→
+   348→  logs AutomationLog[]
+   349→}
+   350→
+   351→model AutomationLog {
+   352→  id         String   @id @default(cuid())
+   353→  ruleId     String
+   354→  trigger    String
+   355→  status     String   @default("success")
+   356→  details    String?
+   357→  executedAt DateTime @default(now())
+   358→
+   359→  rule AutomationRule @relation(fields: [ruleId], references: [id])
+   360→}
+   361→
+   362→model FirmSettings {
+   363→  id            String   @id @default(cuid())
+   364→  firmId        String?
+   365→  firmName      String   @default("GSTPilot Firm")
+   366→  logoUrl       String?
+   367→  primaryColor  String   @default("#059669")
+   368→  accentColor   String   @default("#7c3aed")
+   369→  customDomain  String?
+   370→  emailFromName String?
+   371→  emailTemplate String?
+   372→  createdAt     DateTime @default(now())
+   373→  updatedAt     DateTime @updatedAt
+   374→
+   375→  firm Firm? @relation(fields: [firmId], references: [id])
+   376→}
+   377→
+   378→model FirmMetrics {
+   379→  id                String   @id @default(cuid())
+   380→  period            String   @unique
+   381→  totalRevenue      Float    @default(0)
+   382→  mrr               Float    @default(0)
+   383→  arr               Float    @default(0)
+   384→  clientsOnboarded  Int      @default(0)
+   385→  activeClients     Int      @default(0)
+   386→  inactiveClients   Int      @default(0)
+   387→  teamUtilization   Float    @default(0)
+   388→  avgProcessingTime Float    @default(0)
+   389→  avgFilingTime     Float    @default(0)
+   390→  gstProcessed      Float    @default(0)
+   391→  profitability     Float    @default(0)
+   392→  clientGrowth      Float    @default(0)
+   393→  createdAt         DateTime @default(now())
+   394→  updatedAt         DateTime @updatedAt
+   395→}
+   396→
+   397→// ─── AI Tax Intelligence Layer ───
+   398→
+   399→model AIPrediction {
+   400→  id             String   @id @default(cuid())
+   401→  category       String   @default("revenue")
+   402→  period         String
+   403→  predictedValue Float    @default(0)
+   404→  confidence     Float    @default(0)
+   405→  lowerBound     Float    @default(0)
+   406→  upperBound     Float    @default(0)
+   407→  trend          String   @default("stable")
+   408→  modelVersion   String   @default("v1")
+   409→  factors        String?
+   410→  createdAt      DateTime @default(now())
+   411→  updatedAt      DateTime @updatedAt
+   412→}
+   413→
+   414→model RiskScore {
+   415→  id              String   @id @default(cuid())
+   416→  clientId        String
+   417→  overallScore    Int      @default(0)
+   418→  category        String   @default("overall")
+   419→  lateFilings     Int      @default(0)
+   420→  noticeFrequency Int      @default(0)
+   421→  gstMismatches   Int      @default(0)
+   422→  vendorRisk      Float    @default(0)
+   423→  itcRisk         Float    @default(0)
+   424→  riskLevel       String   @default("low")
+   425→  period          String
+   426→  factors         String?
+   427→  recommendations String?
+   428→  createdAt       DateTime @default(now())
+   429→  updatedAt       DateTime @updatedAt
+   430→
+   431→  client Client @relation(fields: [clientId], references: [id])
+   432→}
+   433→
+   434→model ComplianceForecast {
+   435→  id                String   @id @default(cuid())
+   436→  clientId          String?
+   437→  forecastType      String   @default("notice")
+   438→  predictedEvent    String
+   439→  probability       Float    @default(0)
+   440→  confidence        Float    @default(0)
+   441→  expectedDate      String?
+   442→  impact            String   @default("medium")
+   443→  mitigatingActions String?
+   444→  period            String
+   445→  createdAt         DateTime @default(now())
+   446→  updatedAt         DateTime @updatedAt
+   447→
+   448→  client Client? @relation(fields: [clientId], references: [id])
+   449→}
+   450→
+   451→model ClientInsight {
+   452→  id          String   @id @default(cuid())
+   453→  clientId    String
+   454→  category    String   @default("compliance")
+   455→  trend       String   @default("stable")
+   456→  observation String
+   457→  confidence  Float    @default(0)
+   458→  dataPoints  String?
+   459→  period      String
+   460→  createdAt   DateTime @default(now())
+   461→  updatedAt   DateTime @updatedAt
+   462→
+   463→  client Client @relation(fields: [clientId], references: [id])
+   464→}
+   465→
+   466→model AITask {
+   467→  id           String    @id @default(cuid())
+   468→  clientId     String?
+   469→  source       String    @default("ai")
+   470→  sourceType   String    @default("notice")
+   471→  sourceId     String?
+   472→  title        String
+   473→  description  String?
+   474→  priority     String    @default("medium")
+   475→  status       String    @default("pending")
+   476→  assignedTo   String?
+   477→  dueDate      String?
+   478→  autoAssigned Boolean   @default(false)
+   479→  completedAt  DateTime?
+   480→  createdAt    DateTime  @default(now())
+   481→  updatedAt    DateTime  @updatedAt
+   482→}
+   483→
+   484→model KnowledgeEntry {
+   485→  id              String   @id @default(cuid())
+   486→  title           String
+   487→  category        String   @default("rule")
+   488→  content         String
+   489→  summary         String?
+   490→  tags            String?
+   491→  source          String?
+   492→  effectiveDate   String?
+   493→  referenceNumber String?
+   494→  relevanceScore  Float    @default(0)
+   495→  createdAt       DateTime @default(now())
+   496→  updatedAt       DateTime @updatedAt
+   497→}
+   498→
+   499→model DocumentChatSession {
+   500→  id         String   @id @default(cuid())
+   501→  documentId String?
+   502→  fileName   String?
+   503→  fileType   String?
+   504→  messages   String   @default("[]")
+   505→  summary    String?
+   506→  createdAt  DateTime @default(now())
+   507→  updatedAt  DateTime @updatedAt
+   508→}
+   509→
+   510→model ExecutiveReport {
+   511→  id          String   @id @default(cuid())
+   512→  reportType  String   @default("client_health")
+   513→  title       String
+   514→  description String?
+   515→  period      String
+   516→  data        String?
+   517→  format      String   @default("pdf")
+   518→  status      String   @default("generated")
+   519→  generatedBy String?
+   520→  createdAt   DateTime @default(now())
+   521→  updatedAt   DateTime @updatedAt
+   522→}
+   523→
+   524→model ClientBenchmark {
+   525→  id                 String   @id @default(cuid())
+   526→  clientId           String
+   527→  metric             String
+   528→  clientValue        Float    @default(0)
+   529→  industryAverage    Float    @default(0)
+   530→  stateAverage       Float    @default(0)
+   531→  firmAverage        Float    @default(0)
+   532→  industryPercentile Float    @default(0)
+   533→  statePercentile    Float    @default(0)
+   534→  firmPercentile     Float    @default(0)
+   535→  period             String
+   536→  createdAt          DateTime @default(now())
+   537→  updatedAt          DateTime @updatedAt
+   538→
+   539→  client Client @relation(fields: [clientId], references: [id])
+   540→}
+   541→
+   542→// ═══════════════════════════════════════════════════════════════════════════════
+   543→// PRODUCTION MODELS — Real Data Architecture
+   544→// ═══════════════════════════════════════════════════════════════════════════════
+   545→
+   546→// ─── CA Firm ────────────────────────────────────────────────────────────────────
+   547→model Firm {
+   548→  id              String   @id @default(cuid())
+   549→  name            String
+   550→  gstin           String?  @unique
+   551→  pan             String?
+   552→  address         String?
+   553→  state           String?
+   554→  stateCode       String?
+   555→  contactEmail    String?
+   556→  contactPhone    String?
+   557→  website         String?
+   558→  logoUrl         String?
+   559→  subscriptionPlan String  @default("free")
+   560→  maxClients      Int      @default(50)
+   561→  isActive        Boolean  @default(true)
+   562→  createdAt       DateTime @default(now())
+   563→  updatedAt       DateTime @updatedAt
+   564→
+   565→  users          User[]
+   566→  clients        Client[]
+   567→  firmSettings   FirmSettings[]
+   568→}
+   569→
+   570→// ─── Invoice Line Items ─────────────────────────────────────────────────────────
+   571→model InvoiceItem {
+   572→  id          String   @id @default(cuid())
+   573→  invoiceId   String
+   574→  lineNumber  Int      @default(1)
+   575→  description String?
+   576→  hsnCode     String?
+   577→  quantity    Float    @default(1)
+   578→  unit        String?  @default("NOS")
+   579→  unitPrice   Float    @default(0)
+   580→  taxableValue Float   @default(0)
+   581→  cgstRate    Float    @default(0)
+   582→  sgstRate    Float    @default(0)
+   583→  igstRate    Float    @default(0)
+   584→  cessRate    Float    @default(0)
+   585→  cgst        Float    @default(0)
+   586→  sgst        Float    @default(0)
+   587→  igst        Float    @default(0)
+   588→  cess        Float    @default(0)
+   589→  totalAmount Float    @default(0)
+   590→  createdAt   DateTime @default(now())
+   591→  updatedAt   DateTime @updatedAt
+   592→
+   593→  invoice Invoice @relation(fields: [invoiceId], references: [id])
+   594→}
+   595→
+   596→// ─── Uploaded Files (Processing Pipeline) ────────────────────────────────────────
+   597→model UploadedFile {
+   598→  id              String   @id @default(cuid())
+   599→  clientId        String?
+   600→  uploadedBy      String?
+   601→  originalName    String
+   602→  storedName      String?
+   603→  fileType        String   @default("pdf")
+   604→  fileSize        Int      @default(0)
+   605→  mimeType        String?
+   606→  filePath        String?
+   607→  status          String   @default("uploaded")
+   608→  processingStep  String   @default("upload")
+   609→  progress        Int      @default(0)
+   610→  extractedData   String?
+   611→  errorMessage    String?
+   612→  invoicesCreated Int      @default(0)
+   613→  errorsCount     Int      @default(0)
+   614→  warningsCount   Int      @default(0)
+   615→  period          String?
+   616→  tags            String?
+   617→  metadata        String?
+   618→  createdAt       DateTime @default(now())
+   619→  updatedAt       DateTime @updatedAt
+   620→
+   621→  client   Client?  @relation(fields: [clientId], references: [id])
+   622→  uploader User?    @relation(fields: [uploadedBy], references: [id])
+   623→}
+   624→
+   625→// ─── Notifications (Database-driven) ─────────────────────────────────────────────
+   626→model Notification {
+   627→  id          String    @id @default(cuid())
+   628→  userId      String?
+   629→  clientId    String?
+   630→  type        String    @default("info")
+   631→  category    String    @default("general")
+   632→  title       String
+   633→  message     String
+   634→  actionUrl   String?
+   635→  isRead      Boolean   @default(false)
+   636→  priority    String    @default("medium")
+   637→  dismissed   Boolean   @default(false)
+   638→  scheduledAt DateTime?
+   639→  sentAt      DateTime?
+   640→  readAt      DateTime?
+   641→  createdAt   DateTime  @default(now())
+   642→  updatedAt   DateTime  @updatedAt
+   643→
+   644→  user   User?   @relation(fields: [userId], references: [id])
+   645→  client Client? @relation(fields: [clientId], references: [id])
+   646→}
+   647→
+   648→// ─── Filing History (Status Change Tracking) ─────────────────────────────────────
+   649→model FilingHistory {
+   650→  id                 String   @id @default(cuid())
+   651→  filingId           String
+   652→  clientId           String
+   653→  previousStatus     String?
+   654→  newStatus          String
+   655→  changedBy          String?
+   656→  reason             String?
+   657→  acknowledgmentNumber String?
+   658→  notes              String?
+   659→  createdAt          DateTime @default(now())
+   660→
+   661→  client Client @relation(fields: [clientId], references: [id])
+   662→}
+   663→
+   664→// ─── AI Jobs (Background Processing) ─────────────────────────────────────────────
+   665→model AIJob {
+   666→  id            String    @id @default(cuid())
+   667→  clientId      String?
+   668→  type          String    @default("ocr")
+   669→  status        String    @default("pending")
+   670→  progress      Int       @default(0)
+   671→  inputPayload  String?
+   672→  outputPayload String?
+   673→  errorMessage  String?
+   674→  startedAt     DateTime?
+   675→  completedAt   DateTime?
+   676→  createdBy     String?
+   677→  createdAt     DateTime  @default(now())
+   678→  updatedAt     DateTime  @updatedAt
+   679→}
+   680→
+   681→// ═══════════════════════════════════════════════════════════════════════════════
+   682→// REAL DATA ACTIVATION LAYER — GSTPilot Infinity™
+   683→// Live GSTN + Bank connections, real financial data, Business Health Score
+   684→// ═══════════════════════════════════════════════════════════════════════════════
+   685→
+   686→// ─── Business Connections (GSTN + Banks) ────────────────────────────────────────
+   687→// One row per live integration. type: 'gstn' | 'bank'.
+   688→// For GSTN: provider='GSTN', gstin holds the verified GSTIN, metadata holds legal/trade name.
+   689→// For Bank: provider='HDFC'|'ICICI'|'SBI'|'AXIS'|'KOTAK'|'YES', metadata holds masked account.
+   690→model BusinessConnection {
+   691→  id           String   @id @default(cuid())
+   692→  type         String   // 'gstn' | 'bank'
+   693→  provider     String   // 'GSTN' | 'HDFC' | 'ICICI' | 'SBI' | 'AXIS' | 'KOTAK' | 'YES'
+   694→  gstin        String?  // For gstn connections
+   695→  legalName    String?
+   696→  tradeName    String?
+   697→  status       String   @default("active") // 'active' | 'disconnected' | 'error'
+   698→  // PHASE 2A — Real-Time Sync Center statuses: 'connected' | 'syncing' | 'partial' | 'failed' | 'disconnected'
+   699→  syncStatus   String   @default("connected")
+   700→  maskedRef    String?  // masked account no (bank) or GSTIN (gstn)
+   701→  metadata     String?  // JSON blob: { state, stateCode, businessType, accountType, ... }
+   702→  lastSyncedAt DateTime?
+   703→  lastSyncRecords Int   @default(0)
+   704→  lastSyncErrors  Int   @default(0)
+   705→  lastSyncMessage String?
+   706→  connectedBy  String?
+   707→  createdAt    DateTime @default(now())
+   708→  updatedAt    DateTime @updatedAt
+   709→
+   710→  syncLogs SyncLog[]
+   711→
+   712→  @@index([type, status])
+   713→  @@index([syncStatus])
+   714→}
+   715→
+   716→// ─── Sync Logs (Import History + Error Logs) ────────────────────────────────────
+   717→// PHASE 2A — Real-Time Sync Center. One row per sync attempt.
+   718→// status: 'syncing' | 'success' | 'partial' | 'failed'
+   719→model SyncLog {
+   720→  id              String   @id @default(cuid())
+   721→  connectionId    String
+   722→  status          String   @default("syncing")
+   723→  recordsImported Int      @default(0)
+   724→  errorsCount     Int      @default(0)
+   725→  message         String?
+   726→  errorDetail     String?  // JSON array of error strings
+   727→  startedAt       DateTime @default(now())
+   728→  completedAt     DateTime?
+   729→
+   730→  connection BusinessConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+   731→
+   732→  @@index([connectionId, startedAt])
+   733→}
+   734→
+   735→// ─── Bank Transactions ──────────────────────────────────────────────────────────
+   736→// Real-ish bank statement rows. type: 'credit' | 'debit'.
+   737→model BankTransaction {
+   738→  id              String   @id @default(cuid())
+   739→  connectionId    String
+   740→  bankProvider    String   // 'HDFC' | 'ICICI' | 'SBI' | 'AXIS' | 'KOTAK' | 'YES'
+   741→  txnDate         DateTime
+   742→  description     String
+   743→  amount          Float    @default(0) // signed: + for credit, - for debit
+   744→  type            String   // 'credit' | 'debit'
+   745→  category        String?  // 'sales' | 'expense' | 'tax_payment' | 'salary' | 'vendor' | 'loan' | 'refund' | 'other'
+   746→  counterparty    String?  // payer/payee name
+   747→  referenceNo     String?
+   748→  balanceAfter    Float?
+   749→  reconciled      Boolean  @default(false)
+   750→  invoiceId       String?
+   751→  createdAt       DateTime @default(now())
+   752→
+   753→  @@index([connectionId, txnDate])
+   754→  @@index([type, category])
+   755→}
+   756→
+   757→// ─── E-Invoices (IRN-registered) ────────────────────────────────────────────────
+   758→// Separate from `Invoice` because e-invoices carry IRN/AckNo/QR from NIC.
+   759→model EInvoice {
+   760→  id              String   @id @default(cuid())
+   761→  connectionId    String
+   762→  irn             String   @unique
+   763→  ackNo           String?
+   764→  ackDate         DateTime?
+   765→  invoiceNumber   String
+   766→  invoiceDate     DateTime
+   767→  sellerGstin     String
+   768→  buyerGstin      String?
+   769→  buyerName       String?
+   770→  taxableValue    Float    @default(0)
+   771→  cgst            Float    @default(0)
+   772→  sgst            Float    @default(0)
+   773→  igst            Float    @default(0)
+   774→  cess            Float    @default(0)
+   775→  totalAmount     Float    @default(0)
+   776→  status          String   @default("active") // 'active' | 'cancelled'
+   777→  qrCode          String?
+   778→  createdAt       DateTime @default(now())
+   779→
+   780→  @@index([connectionId, invoiceDate])
+   781→}
+   782→
+   783→// ─── E-Way Bills ────────────────────────────────────────────────────────────────
+   784→model EWayBill {
+   785→  id              String   @id @default(cuid())
+   786→  connectionId    String
+   787→  ewayBillNo      String   @unique
+   788→  generatedDate   DateTime
+   789→  validUntil      DateTime
+   790→  docNumber       String?
+   791→  docDate         DateTime?
+   792→  sellerGstin     String
+   793→  buyerGstin      String?
+   794→  buyerName       String?
+   795→  supplyType      String?  // 'outward' | 'inward'
+   796→  subsupplyType   String?
+   797→  taxableValue    Float    @default(0)
+   798→  cgst            Float    @default(0)
+   799→  sgst            Float    @default(0)
+   800→  igst            Float    @default(0)
+   801→  totalTax        Float    @default(0)
+   802→  totalAmount     Float    @default(0)
+   803→  transporterId   String?
+   804→  vehicleNo       String?
+   805→  fromPlace       String?
+   806→  toPlace         String?
+   807→  distanceKm      Int      @default(0)
+   808→  status          String   @default("active") // 'active' | 'expired' | 'cancelled'
+   809→  createdAt       DateTime @default(now())
+   810→
+   811→  @@index([connectionId, generatedDate])
+   812→}
+   813→
+   814→// ─── Business Health Snapshot ───────────────────────────────────────────────────
+   815→// One row per computation. Stores the 6 sub-scores + overall + components.
+   816→model BusinessHealthSnapshot {
+   817→  id                 String   @id @default(cuid())
+   818→  overall            Int      @default(0) // 0-100
+   819→  complianceScore    Int      @default(0)
+   820→  cashFlowScore      Int      @default(0)
+   821→  collectionScore    Int      @default(0)
+   822→  growthScore        Int      @default(0)
+   823→  profitabilityScore Int      @default(0)
+   824→  riskScore          Int      @default(0)
+   825→  // Component signals driving the scores (JSON string)
+   826→  components         String?
+   827→  // Human-readable signals (JSON array of {text, tone, score})
+   828→  signals            String?
+   829→  period             String?  // YYYY-MM
+   830→  computedAt         DateTime @default(now())
+   831→
+   832→  @@index([period])
+   833→}
+   834→
+   835→// ═══════════════════════════════════════════════════════════════════════════════
+   836→// GSTPILOT ORACLE FINALIZATION™ — Long-Term Memory, Sources, Actions
+   837→// ═══════════════════════════════════════════════════════════════════════════════
+   838→
+   839→// ─── Oracle Long-Term Memory ───────────────────────────────────────────────────
+   840→// Permanent facts Oracle remembers across sessions: firm profile, GSTIN, industry,
+   841→// user preferences, reports generated, connected services, business history.
+   842→// category: 'firm' | 'gst' | 'industry' | 'preference' | 'report' | 'connection' | 'history' | 'fact'
+   843→// key: stable identifier within a category (e.g. 'gstin', 'industry', 'preferredLanguage')
+   844→// value: the remembered value (string)
+   845→model OracleMemory {
+   846→  id        String   @id @default(cuid())
+   847→  category  String   @default("fact")
+   848→  key       String
+   849→  value     String
+   850→  source    String?  // 'user' | 'oracle_inferred' | 'system'
+   851→  confidence Float   @default(1)
+   852→  createdAt DateTime @default(now())
+   853→  updatedAt DateTime @updatedAt
+   854→
+   855→  @@unique([category, key])
+   856→  @@index([category])
+   857→}
+   858→
+   859→// ─── Oracle Source Engine (GST Law / CBIC Circulars / GSTN Docs) ────────────────
+   860→// Knowledge base of citable sources. category: 'law' | 'circular' | 'notification' | 'gstn_doc' | 'rule'
+   861→model OracleSource {
+   862→  id              String   @id @default(cuid())
+   863→  category        String   @default("law")
+   864→  title           String
+   865→  citation        String   // e.g. "Section 16 of CGST Act, 2017"
+   866→  referenceNumber String?  // e.g. "CGST Act S16", "CBIC Circular 170/2022-CGST"
+   867→  content         String   // the substantive rule/extract
+   868→  summary         String?
+   869→  tags            String?  // comma-separated: 'itc,claim,sec16'
+   870→  effectiveDate   String?
+   871→  url             String?
+   872→  createdAt       DateTime @default(now())
+   873→  updatedAt       DateTime @updatedAt
+   874→
+   875→  @@index([category])
+   876→  @@index([referenceNumber])
+   877→}
+   878→
+   879→// ─── Oracle Action Log (Autopilot Actions executed from chat) ───────────────────
+   880→// type: 'reminder' | 'report' | 'return_draft' | 'collection_recovery' | 'forecast' | 'checklist' | 'task'
+   881→model OracleAction {
+   882→  id          String   @id @default(cuid())
+   883→  type        String   @default("task")
+   884→  title       String
+   885→  description String?
+   886→  status      String   @default("created") // 'created' | 'executed' | 'failed'
+   887→  payload     String?  // JSON: action-specific details
+   888→  messageId   String?  // links to the Oracle message that triggered it
+   889→  createdAt   DateTime @default(now())
+   890→  updatedAt   DateTime @updatedAt
+   891→
+   892→  @@index([type, status])
+   893→  @@index([createdAt])
+   894→}
+   895→
+   896→// ─── Oracle Document Intelligence ───────────────────────────────────────────────
+   897→// Uploaded documents analyzed by Oracle. Extracted text/summary stored for context.
+   898→// docType: 'pdf' | 'excel' | 'invoice' | 'gst_notice' | 'bank_statement' | 'image' | 'text' | 'other'
+   899→model OracleDocument {
+   900→  id            String   @id @default(cuid())
+   901→  fileName      String
+   902→  fileType      String   @default("pdf")   // extension
+   903→  mimeType      String?
+   904→  fileSize      Int      @default(0)
+   905→  docType       String   @default("other") // semantic type
+   906→  status        String   @default("uploaded") // 'uploaded' | 'extracting' | 'ready' | 'failed'
+   907→  extractedText String?  // plain-text extraction (truncated for context)
+   908→  summary       String?  // AI-generated summary
+   909→  metadata      String?  // JSON: { pages, parties, amounts, gstins, dates, ... }
+   910→  dataUri       String?  // base64 data URI for re-analysis (images/small PDFs only)
+   911→  createdAt     DateTime @default(now())
+   912→  updatedAt     DateTime @updatedAt
+   913→
+   914→  @@index([docType, status])
+   915→  @@index([createdAt])
+   916→}
+   917→

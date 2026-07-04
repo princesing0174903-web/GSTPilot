@@ -1,0 +1,1869 @@
+     1→'use client';
+     2→
+     3→// ═══════════════════════════════════════════════════════════════════════════════
+     4→// GSTPilot Oracle™ — The Financial Brain of India
+     5→// A calm floating orb + Perplexity-style command palette for Indian CAs.
+     6→//
+     7→// v10.0 — Trillion Dollar Design System
+     8→//   • Calm 56px draggable orb (single 8s breathing, soft glow, no pulse rings,
+     9→//     no orbiting particles). Apple-Siri / Linear-dot quietness.
+    10→//   • Command palette (560px docked above orb, or 90vw×85vh fullscreen).
+    11→//   • Input is the hero (Perplexity layout): input pinned at top, scrollable
+    12→//     Q&A history below, follow-up prompts at the bottom.
+    13→//   • Quick-action grid + module chips when empty.
+    14→//   • Streaming chat with faster typing animation (2 chars / 10ms).
+    15→//   • Voice input (SpeechRecognition, en-IN) + Voice output (SpeechSynthesis).
+    16→//   • Live Firestore data context builder.
+    17→//   • Ctrl+K / Cmd+K to toggle, Escape to close, mobile auto-fullscreen.
+    18→// ═══════════════════════════════════════════════════════════════════════════════
+    19→
+    20→import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+    21→import { motion, AnimatePresence, useMotionValue } from 'framer-motion';
+    22→import { useTheme } from 'next-themes';
+    23→import { toast } from 'sonner';
+    24→import {
+    25→  Sparkles, X, Maximize2, Minimize2,
+    26→  ArrowUp, Mic, MicOff, Volume2, VolumeX,
+    27→  Send, ArrowRight, Play, Plus, FileText,
+    28→  Wallet, BookOpen, Briefcase, Landmark, Receipt, Package,
+    29→  ShieldCheck, Network, TrendingUp, Zap, Users,
+    30→} from 'lucide-react';
+    31→import { Button } from '@/components/ui/button';
+    32→import { ScrollArea } from '@/components/ui/scroll-area';
+    33→import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
+    34→import { InfinitySymbol } from '@/components/layout/InfinityMark';
+    35→import { cn } from '@/lib/utils';
+    36→import { useAuth } from '@/contexts/AuthContext';
+    37→import { useApp, type AppView } from '@/contexts/AppContext';
+    38→import {
+    39→  useFireClients,
+    40→  useFireInvoices,
+    41→  useFireReturns,
+    42→  useFireNotifications,
+    43→  useFireActivities,
+    44→} from '@/hooks/use-firestore';
+    45→
+    46→// ─── Types ────────────────────────────────────────────────────────────────────
+    47→
+    48→type ActionType =
+    49→  | 'navigate'
+    50→  | 'execute_workflow'
+    51→  | 'send_reminder'
+    52→  | 'create_task'
+    53→  | 'generate_report';
+    54→
+    55→interface AIAction {
+    56→  type: ActionType | string;
+    57→  title: string;
+    58→  description: string;
+    59→  payload?: Record<string, unknown>;
+    60→}
+    61→
+    62→interface ChatMessage {
+    63→  id: string;
+    64→  role: 'user' | 'assistant';
+    65→  content: string;
+    66→  timestamp: number;
+    67→  actions?: AIAction[];
+    68→  suggestedPrompts?: string[];
+    69→  sources?: Array<{ name: string; count?: number }>;
+    70→}
+    71→
+    72→interface IntelligenceApiResponse {
+    73→  answer: string;
+    74→  actions: AIAction[];
+    75→  suggestedPrompts: string[];
+    76→  intent: string;
+    77→}
+    78→
+    79→interface SpeechRecognitionLike {
+    80→  continuous: boolean;
+    81→  interimResults: boolean;
+    82→  lang: string;
+    83→  start: () => void;
+    84→  stop: () => void;
+    85→  abort: () => void;
+    86→  onresult: ((event: SpeechRecognitionEventLike) => void) | null;
+    87→  onerror: ((event: SpeechRecognitionErrorLike) => void) | null;
+    88→  onend: (() => void) | null;
+    89→  onstart: (() => void) | null;
+    90→}
+    91→
+    92→// Constructor signature for the browser SpeechRecognition API
+    93→type SpeechRecognitionConstructor = new () => SpeechRecognitionLike;
+    94→
+    95→interface SpeechRecognitionEventLike {
+    96→  results: ArrayLike<{
+    97→    0: { transcript: string };
+    98→    isFinal: boolean;
+    99→    length: number;
+   100→  }>;
+   101→  resultIndex: number;
+   102→}
+   103→
+   104→interface SpeechRecognitionErrorLike {
+   105→  error: string;
+   106→  message?: string;
+   107→}
+   108→
+   109→// ─── Constants ────────────────────────────────────────────────────────────────
+   110→
+   111→interface QuickModule {
+   112→  label: string;
+   113→  view: AppView;
+   114→  icon: typeof FileText;
+   115→}
+   116→
+   117→const QUICK_MODULES: QuickModule[] = [
+   118→  { label: 'Returns', view: 'returns', icon: FileText },
+   119→  { label: 'Accounting', view: 'accounting', icon: BookOpen },
+   120→  { label: 'Payroll', view: 'payroll', icon: Wallet },
+   121→  { label: 'CRM', view: 'crm', icon: Briefcase },
+   122→  { label: 'Banking', view: 'banking', icon: Landmark },
+   123→  { label: 'Payments', view: 'payments', icon: Receipt },
+   124→  { label: 'Inventory', view: 'inventory', icon: Package },
+   125→  { label: 'Compliance', view: 'reconcile', icon: ShieldCheck },
+   126→  { label: 'Graph', view: 'business-graph', icon: Network },
+   127→  { label: 'Predict', view: 'ai-predictions', icon: TrendingUp },
+   128→];
+   129→
+   130→type QuickActionKind = 'navigate' | 'execute_workflow' | 'ask';
+   131→
+   132→interface QuickAction {
+   133→  label: string;
+   134→  kind: QuickActionKind;
+   135→  icon: typeof FileText;
+   136→  // navigate
+   137→  view?: AppView;
+   138→  // execute_workflow
+   139→  workflow?: string;
+   140→  // ask
+   141→  question?: string;
+   142→}
+   143→
+   144→const QUICK_ACTIONS: QuickAction[] = [
+   145→  { label: 'Run my firm', kind: 'execute_workflow', workflow: 'run_my_firm', icon: Zap },
+   146→  { label: 'Pending returns', kind: 'navigate', view: 'returns', icon: FileText },
+   147→  { label: 'Show risky clients', kind: 'navigate', view: 'clients', icon: Users },
+   148→  {
+   149→    label: 'What revenue next month?',
+   150→    kind: 'ask',
+   151→    question: 'What revenue will I make next month?',
+   152→    icon: TrendingUp,
+   153→  },
+   154→  { label: 'Who is overloaded?', kind: 'ask', question: 'Who is overloaded?', icon: Briefcase },
+   155→  {
+   156→    label: 'Run my business',
+   157→    kind: 'execute_workflow',
+   158→    workflow: 'run_my_business',
+   159→    icon: Play,
+   160→  },
+   161→];
+   162→
+   163→// Fallback follow-up prompts (used when an answer ships with no API suggestions)
+   164→const FALLBACK_FOLLOWUPS: string[] = [
+   165→  'Show pending returns',
+   166→  'Which clients are risky?',
+   167→  "Show today's priorities",
+   168→];
+   169→
+   170→const WORKFLOW_VIEWS: Record<string, AppView> = {
+   171→  run_my_firm: 'autopilot',
+   172→  run_my_business: 'run-my-business',
+   173→  run_india_business: 'run-india-business',
+   174→  run_my_company: 'run-my-company',
+   175→};
+   176→
+   177→const MOBILE_BREAKPOINT = 640;
+   178→
+   179→// ─── Helpers ──────────────────────────────────────────────────────────────────
+   180→
+   181→function formatINR(amount: number): string {
+   182→  if (!isFinite(amount) || isNaN(amount)) return '₹0';
+   183→  return '₹' + Math.round(amount).toLocaleString('en-IN');
+   184→}
+   185→
+   186→function formatDate(ts: number | string | undefined): string {
+   187→  try {
+   188→    const d = typeof ts === 'number' ? new Date(ts) : new Date(ts as string);
+   189→    if (isNaN(d.getTime())) return '—';
+   190→    const dd = String(d.getDate()).padStart(2, '0');
+   191→    const mm = String(d.getMonth() + 1).padStart(2, '0');
+   192→    const yyyy = d.getFullYear();
+   193→    return `${dd}/${mm}/${yyyy}`;
+   194→  } catch {
+   195→    return '—';
+   196→  }
+   197→}
+   198→
+   199→function formatTime(ts: number): string {
+   200→  const d = new Date(ts);
+   201→  let h = d.getHours();
+   202→  const m = String(d.getMinutes()).padStart(2, '0');
+   203→  const ampm = h >= 12 ? 'PM' : 'AM';
+   204→  h = h % 12 || 12;
+   205→  return `${h}:${m} ${ampm}`;
+   206→}
+   207→
+   208→function genId(): string {
+   209→  return `msg_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+   210→}
+   211→
+   212→// ─── Live Data Context Builder ────────────────────────────────────────────────
+   213→// Safely composes a context string from live Firestore hooks. Never throws.
+   214→
+   215→function buildLiveDataContext(opts: {
+   216→  clients: Array<Record<string, unknown>>;
+   217→  invoices: Array<Record<string, unknown>>;
+   218→  returns: Array<Record<string, unknown>>;
+   219→  notifications: Array<Record<string, unknown>>;
+   220→  activities: Array<Record<string, unknown>>;
+   221→}): string {
+   222→  try {
+   223→    const { clients, invoices, returns, notifications, activities } = opts;
+   224→    const now = new Date();
+   225→    const dd = String(now.getDate()).padStart(2, '0');
+   226→    const mm = String(now.getMonth() + 1).padStart(2, '0');
+   227→    const yyyy = now.getFullYear();
+   228→    const hh = String(now.getHours()).padStart(2, '0');
+   229→    const min = String(now.getMinutes()).padStart(2, '0');
+   230→    const stamp = `${dd}/${mm}/${yyyy} ${hh}:${min}`;
+   231→
+   232→    const lines: string[] = [`LIVE DATA SNAPSHOT (${stamp}):`];
+   233→
+   234→    // Clients
+   235→    const totalClients = clients.length;
+   236→    const activeClients = clients.filter((c) => c.status === 'active').length;
+   237→    lines.push(`- Total clients: ${totalClients}`);
+   238→    lines.push(`- Active clients: ${activeClients}`);
+   239→
+   240→    // Invoices
+   241→    const activeInvoices = invoices.filter(
+   242→      (i) => i.status !== 'cancelled' && i.status !== 'draft',
+   243→    );
+   244→    const totalInvoiceValue = activeInvoices.reduce((s, i) => {
+   245→      const v =
+   246→        (i.totalAmount as number) ||
+   247→        (i.grandTotal as number) ||
+   248→        (i.total as number) ||
+   249→        ((i.subTotal as number) || 0) + ((i.totalTax as number) || 0);
+   250→      return s + (typeof v === 'number' ? v : 0);
+   251→    }, 0);
+   252→    const overdueInvoices = activeInvoices.filter((i) => {
+   253→      const status = i.status as string;
+   254→      return status === 'overdue' || status === 'unpaid';
+   255→    });
+   256→    const overdueValue = overdueInvoices.reduce((s, i) => {
+   257→      const v =
+   258→        (i.totalAmount as number) ||
+   259→        (i.grandTotal as number) ||
+   260→        (i.total as number) ||
+   261→        0;
+   262→      return s + (typeof v === 'number' ? v : 0);
+   263→    }, 0);
+   264→    lines.push(
+   265→      `- Active invoices: ${activeInvoices.length} (${formatINR(totalInvoiceValue)} total)`,
+   266→    );
+   267→    lines.push(
+   268→      `- Overdue invoices: ${overdueInvoices.length} (${formatINR(overdueValue)})`,
+   269→    );
+   270→
+   271→    // Returns
+   272→    const gstr1Pending = returns.filter(
+   273→      (r) => (r.returnType as string) === 'GSTR-1' && (r.status as string) !== 'filed',
+   274→    ).length;
+   275→    const gstr3bPending = returns.filter(
+   276→      (r) => (r.returnType as string) === 'GSTR-3B' && (r.status as string) !== 'filed',
+   277→    ).length;
+   278→    const filedReturns = returns.filter((r) => r.status === 'filed').length;
+   279→    lines.push(
+   280→      `- Pending returns: ${gstr1Pending} GSTR-1, ${gstr3bPending} GSTR-3B`,
+   281→    );
+   282→    lines.push(`- Filed returns: ${filedReturns}`);
+   283→
+   284→    // Notifications + Activities
+   285→    const unread = notifications.filter((n) => n.read === false).length;
+   286→    lines.push(`- Unread notifications: ${unread}`);
+   287→    lines.push(`- Recent activities: ${activities.length} in last 24h`);
+   288→
+   289→    // Top 5 clients by revenue
+   290→    const clientRevenue = new Map<string, number>();
+   291→    invoices.forEach((inv) => {
+   292→      const cid = (inv.clientId as string) || (inv.clientName as string) || 'unknown';
+   293→      const v =
+   294→        (inv.totalAmount as number) ||
+   295→        (inv.grandTotal as number) ||
+   296→        (inv.total as number) ||
+   297→        0;
+   298→      clientRevenue.set(cid, (clientRevenue.get(cid) || 0) + (typeof v === 'number' ? v : 0));
+   299→    });
+   300→    const top5 = [...clientRevenue.entries()]
+   301→      .sort((a, b) => b[1] - a[1])
+   302→      .slice(0, 5);
+   303→    if (top5.length > 0) {
+   304→      const top5Str = top5
+   305→        .map(([name, rev]) => {
+   306→          const client = clients.find(
+   307→            (c) => c.id === name || (c.tradeName as string) === name,
+   308→          );
+   309→          const label = (client?.tradeName as string) || name;
+   310→          return `${label} (${formatINR(rev)})`;
+   311→        })
+   312→        .join(', ');
+   313→      lines.push(`- Top 5 clients by revenue: ${top5Str}`);
+   314→    }
+   315→
+   316→    // High-risk clients (health score < 60)
+   317→    const highRisk = clients.filter((c) => {
+   318→      const score = (c.healthScore as number) ?? 100;
+   319→      return typeof score === 'number' && score < 60;
+   320→    });
+   321→    if (highRisk.length > 0) {
+   322→      const riskStr = highRisk
+   323→        .slice(0, 5)
+   324→        .map(
+   325→          (c) =>
+   326→            `${(c.tradeName as string) || (c.name as string) || 'Unknown'} (health ${c.healthScore ?? '?'})`,
+   327→        )
+   328→        .join(', ');
+   329→      lines.push(`- High-risk clients: ${riskStr}`);
+   330→    }
+   331→
+   332→    return lines.join('\n');
+   333→  } catch {
+   334→    return 'LIVE DATA SNAPSHOT: Data currently unavailable.';
+   335→  }
+   336→}
+   337→
+   338→// ─── Sub-component: Thinking Dots ─────────────────────────────────────────────
+   339→
+   340→function ThinkingDots() {
+   341→  return (
+   342→    <span className="inline-flex items-center gap-1 accent-text">
+   343→      {[0, 0.15, 0.3].map((delay, i) => (
+   344→        <motion.span
+   345→          key={i}
+   346→          className="h-1.5 w-1.5 rounded-full bg-current"
+   347→          animate={{ y: [0, -4, 0], opacity: [0.5, 1, 0.5] }}
+   348→          transition={{
+   349→            duration: 0.7,
+   350→            repeat: Infinity,
+   351→            ease: 'easeInOut',
+   352→            delay,
+   353→          }}
+   354→        />
+   355→      ))}
+   356→    </span>
+   357→  );
+   358→}
+   359→
+   360→// ─── Sub-component: Message Content (mini-markdown) ───────────────────────────
+   361→// Renders **bold**, line breaks, bullet points (•), and numbered lists.
+   362→
+   363→function MessageContent({ text }: { text: string }) {
+   364→  const blocks = useMemo(() => {
+   365→    const paragraphs = text.split('\n');
+   366→    return paragraphs.map((line) => {
+   367→      const trimmed = line.trim();
+   368→      if (trimmed.startsWith('• ') || trimmed.startsWith('- ')) {
+   369→        return { type: 'bullet' as const, content: trimmed.slice(2) };
+   370→      }
+   371→      if (/^\d+\.\s/.test(trimmed)) {
+   372→        return { type: 'numbered' as const, content: trimmed.replace(/^\d+\.\s/, '') };
+   373→      }
+   374→      return { type: 'text' as const, content: trimmed };
+   375→    });
+   376→  }, [text]);
+   377→
+   378→  const renderInline = (s: string, keyBase: string) => {
+   379→    // Split on **bold** markers
+   380→    const parts = s.split(/(\*\*[^*]+\*\*)/g);
+   381→    return parts.map((part, i) => {
+   382→      if (part.startsWith('**') && part.endsWith('**')) {
+   383→        return (
+   384→          <strong key={`${keyBase}-${i}`} className="font-semibold text-foreground">
+   385→            {part.slice(2, -2)}
+   386→          </strong>
+   387→        );
+   388→      }
+   389→      return <span key={`${keyBase}-${i}`}>{part}</span>;
+   390→    });
+   391→  };
+   392→
+   393→  return (
+   394→    <div className="space-y-1.5">
+   395→      {blocks.map((b, idx) => {
+   396→        if (b.type === 'bullet') {
+   397→          return (
+   398→            <div key={idx} className="flex gap-2">
+   399→              <span className="mt-0.5 text-emerald-400">•</span>
+   400→              <span className="text-foreground/90">{renderInline(b.content, `b${idx}`)}</span>
+   401→            </div>
+   402→          );
+   403→        }
+   404→        if (b.type === 'numbered') {
+   405→          return (
+   406→            <div key={idx} className="flex gap-2">
+   407→              <span className="font-medium accent-text">{idx + 1}.</span>
+   408→              <span className="text-foreground/90">{renderInline(b.content, `n${idx}`)}</span>
+   409→            </div>
+   410→          );
+   411→        }
+   412→        if (!b.content) return <div key={idx} className="h-1" />;
+   413→        return (
+   414→          <p key={idx} className="text-foreground/90">
+   415→            {renderInline(b.content, `t${idx}`)}
+   416→          </p>
+   417→        );
+   418→      })}
+   419→    </div>
+   420→  );
+   421→}
+   422→
+   423→// ─── Sub-component: Action Chip (restyled with accent-gradient-soft) ──────────
+   424→
+   425→function ActionChip({
+   426→  action,
+   427→  onActivate,
+   428→}: {
+   429→  action: AIAction;
+   430→  onActivate: (a: AIAction) => void;
+   431→}) {
+   432→  const icon = useMemo(() => {
+   433→    switch (action.type) {
+   434→      case 'navigate':
+   435→        return ArrowRight;
+   436→      case 'execute_workflow':
+   437→        return Play;
+   438→      case 'send_reminder':
+   439→        return Send;
+   440→      case 'create_task':
+   441→        return Plus;
+   442→      case 'generate_report':
+   443→        return FileText;
+   444→      default:
+   445→        return Zap;
+   446→    }
+   447→  }, [action.type]);
+   448→
+   449→  const Icon = icon;
+   450→
+   451→  return (
+   452→    <motion.button
+   453→      whileHover={{ scale: 1.03 }}
+   454→      whileTap={{ scale: 0.97 }}
+   455→      onClick={() => onActivate(action)}
+   456→      className="inline-flex items-center gap-1.5 rounded-full accent-gradient-soft border border-emerald-400/20 px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:border-emerald-400/40"
+   457→      aria-label={action.title}
+   458→    >
+   459→      <Icon className="h-3 w-3 accent-text" />
+   460→      <span>{action.title}</span>
+   461→    </motion.button>
+   462→  );
+   463→}
+   464→
+   465→// ─── Hook: Typing Effect ──────────────────────────────────────────────────────
+   466→// Reveals text progressively in small chunks for a "typing" feel.
+   467→// v10: 2 chars / 10ms (faster than the old 3 chars / 16ms).
+   468→
+   469→function useTypingEffect(fullText: string, active: boolean, speed = 10, chunkSize = 2) {
+   470→  // revealLength is only mutated inside the interval callback (never
+   471→  // synchronously in the effect body), which keeps React's
+   472→  // set-state-in-effect lint rule happy and avoids cascading renders.
+   473→  const [revealLength, setRevealLength] = useState(0);
+   474→
+   475→  useEffect(() => {
+   476→    if (!active) return;
+   477→    let i = 0;
+   478→    const interval = setInterval(() => {
+   479→      i += chunkSize;
+   480→      setRevealLength(i);
+   481→      if (i >= fullText.length) {
+   482→        clearInterval(interval);
+   483→      }
+   484→    }, speed);
+   485→    return () => clearInterval(interval);
+   486→  }, [fullText, active, speed, chunkSize]);
+   487→
+   488→  // When not active (e.g. older messages), show the full text instantly
+   489→  // via a derived value — no state mutation required.
+   490→  const displayed = active ? fullText.slice(0, revealLength) : fullText;
+   491→  const completed = displayed.length >= fullText.length;
+   492→
+   493→  return { displayed, completed };
+   494→}
+   495→
+   496→// ─── Typing Message Wrapper ───────────────────────────────────────────────────
+   497→// Renders an AI message with a progressive typing reveal.
+   498→
+   499→function TypingMessage({
+   500→  message,
+   501→  isLatest,
+   502→  onTypingComplete,
+   503→}: {
+   504→  message: ChatMessage;
+   505→  isLatest: boolean;
+   506→  onTypingComplete: () => void;
+   507→}) {
+   508→  const { displayed, completed } = useTypingEffect(
+   509→    message.content,
+   510→    isLatest,
+   511→    10,
+   512→    2,
+   513→  );
+   514→
+   515→  useEffect(() => {
+   516→    if (completed && isLatest) {
+   517→      onTypingComplete();
+   518→    }
+   519→  }, [completed, isLatest, onTypingComplete]);
+   520→
+   521→  return (
+   522→    <div className="space-y-1">
+   523→      <MessageContent text={displayed} />
+   524→      {!completed && (
+   525→        <motion.span
+   526→          className="inline-block h-3.5 w-1.5 rounded-sm bg-emerald-400 align-middle"
+   527→          animate={{ opacity: [1, 0, 1] }}
+   528→          transition={{ duration: 0.8, repeat: Infinity }}
+   529→        />
+   530→      )}
+   531→    </div>
+   532→  );
+   533→}
+   534→
+   535→// ═══════════════════════════════════════════════════════════════════════════════
+   536→// MAIN COMPONENT
+   537→// ═══════════════════════════════════════════════════════════════════════════════
+   538→
+   539→export default function GSTPilotIntelligence() {
+   540→  const { user } = useAuth();
+   541→  const { currentScreen, currentView, setCurrentView } = useApp();
+   542→  const { theme, systemTheme } = useTheme();
+   543→
+   544→  // ── Firestore live data hooks (always called — rules of hooks) ──
+   545→  // These hooks internally handle null user / Firebase errors gracefully.
+   546→  const clientsHook = useFireClients();
+   547→  const invoicesHook = useFireInvoices();
+   548→  const returnsHook = useFireReturns();
+   549→  const notificationsHook = useFireNotifications();
+   550→  const activitiesHook = useFireActivities();
+   551→
+   552→  // ── State ──
+   553→  const [isOpen, setIsOpen] = useState(false);
+   554→  const [isFullscreen, setIsFullscreen] = useState(false);
+   555→  const [isListening, setIsListening] = useState(false);
+   556→  const [speechEnabled, setSpeechEnabled] = useState(false);
+   557→  const [isThinking, setIsThinking] = useState(false);
+   558→  const [messages, setMessages] = useState<ChatMessage[]>([]);
+   559→  const [input, setInput] = useState('');
+   560→  const [isMobile, setIsMobile] = useState(false);
+   561→  const [typedMessageId, setTypedMessageId] = useState<string | null>(null);
+   562→
+   563→  // ── Refs ──
+   564→  const orbX = useMotionValue(0);
+   565→  const orbY = useMotionValue(0);
+   566→  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
+   567→  const messagesEndRef = useRef<HTMLDivElement | null>(null);
+   568→  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+   569→  const speechSupportedRef = useRef<boolean>(false);
+   570→
+   571→  // ── Derived theme ──
+   572→  // App is dark-first in v10; isDark is reserved for subtle light-mode polish.
+   573→  const isDark =
+   574→    theme === 'dark' || (theme === 'system' && systemTheme === 'dark');
+   575→
+   576→  // ── Build live data context (memoized, never throws) ──
+   577→  const liveContext = useMemo(
+   578→    () =>
+   579→      buildLiveDataContext({
+   580→        clients: (clientsHook.data || []) as unknown as Array<Record<string, unknown>>,
+   581→        invoices: (invoicesHook.data || []) as unknown as Array<Record<string, unknown>>,
+   582→        returns: (returnsHook.data || []) as unknown as Array<Record<string, unknown>>,
+   583→        notifications: (notificationsHook.data || []) as unknown as Array<Record<string, unknown>>,
+   584→        activities: (activitiesHook.data || []) as unknown as Array<Record<string, unknown>>,
+   585→      }),
+   586→    [
+   587→      clientsHook.data,
+   588→      invoicesHook.data,
+   589→      returnsHook.data,
+   590→      notificationsHook.data,
+   591→      activitiesHook.data,
+   592→    ],
+   593→  );
+   594→
+   595→  // ── Mobile detection ──
+   596→  useEffect(() => {
+   597→    const check = () =>
+   598→      setIsMobile(window.innerWidth < MOBILE_BREAKPOINT);
+   599→    check();
+   600→    window.addEventListener('resize', check);
+   601→    return () => window.removeEventListener('resize', check);
+   602→  }, []);
+   603→
+   604→  // ── Auto-scroll to bottom on new messages ──
+   605→  useEffect(() => {
+   606→    if (messagesEndRef.current) {
+   607→      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+   608→    }
+   609→  }, [messages, isThinking]);
+   610→
+   611→  // ── Speech recognition support check ──
+   612→  useEffect(() => {
+   613→    if (typeof window === 'undefined') return;
+   614→    const SR =
+   615→      (window as unknown as { SpeechRecognition?: unknown }).SpeechRecognition ||
+   616→      (window as unknown as { webkitSpeechRecognition?: unknown })
+   617→        .webkitSpeechRecognition;
+   618→    speechSupportedRef.current = !!SR;
+   619→  }, []);
+   620→
+   621→  // ── Keyboard shortcuts: Ctrl/Cmd+K to toggle, Escape to close ──
+   622→  // V18: Ctrl+K opens the FULL-SCREEN workspace (Perplexity/Claude-style).
+   623→  useEffect(() => {
+   624→    const handler = (e: KeyboardEvent) => {
+   625→      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+   626→        e.preventDefault();
+   627→        setIsOpen((prev) => {
+   628→          const next = !prev;
+   629→          if (next) setIsFullscreen(true);
+   630→          return next;
+   631→        });
+   632→        return;
+   633→      }
+   634→      if (e.key === 'Escape' && isOpen) {
+   635→        setIsOpen(false);
+   636→        setIsFullscreen(false);
+   637→      }
+   638→    };
+   639→    window.addEventListener('keydown', handler);
+   640→    return () => window.removeEventListener('keydown', handler);
+   641→  }, [isOpen]);
+   642→
+   643→  // ── Stop speech when panel closes ──
+   644→  useEffect(() => {
+   645→    if (!isOpen && typeof window !== 'undefined' && window.speechSynthesis) {
+   646→      window.speechSynthesis.cancel();
+   647→    }
+   648→  }, [isOpen]);
+   649→
+   650→  // ── Cleanup speech recognition on unmount ──
+   651→  useEffect(() => {
+   652→    return () => {
+   653→      if (recognitionRef.current) {
+   654→        try {
+   655→          recognitionRef.current.abort();
+   656→        } catch {
+   657→          /* noop */
+   658→        }
+   659→      }
+   660→      if (typeof window !== 'undefined' && window.speechSynthesis) {
+   661→        window.speechSynthesis.cancel();
+   662→      }
+   663→    };
+   664→  }, []);
+   665→
+   666→  // ── Auto-grow textarea ──
+   667→  useEffect(() => {
+   668→    const ta = textareaRef.current;
+   669→    if (!ta) return;
+   670→    ta.style.height = 'auto';
+   671→    ta.style.height = Math.min(ta.scrollHeight, 120) + 'px';
+   672→  }, [input]);
+   673→
+   674→  // ── Auto-focus the input whenever the panel opens or toggles fullscreen ──
+   675→  useEffect(() => {
+   676→    if (isOpen && textareaRef.current) {
+   677→      // Defer to next frame so the panel has mounted
+   678→      const id = requestAnimationFrame(() => {
+   679→        textareaRef.current?.focus();
+   680→      });
+   681→      return () => cancelAnimationFrame(id);
+   682→    }
+   683→  }, [isOpen, isFullscreen]);
+   684→
+   685→  // ── Send message to API ──
+   686→  const sendMessage = useCallback(
+   687→    async (question: string) => {
+   688→      const trimmed = question.trim();
+   689→      if (!trimmed || isThinking) return;
+   690→
+   691→      // Stop any ongoing speech
+   692→      if (typeof window !== 'undefined' && window.speechSynthesis) {
+   693→        window.speechSynthesis.cancel();
+   694→      }
+   695→
+   696→      const userMsg: ChatMessage = {
+   697→        id: genId(),
+   698→        role: 'user',
+   699→        content: trimmed,
+   700→        timestamp: Date.now(),
+   701→      };
+   702→      setMessages((prev) => [...prev, userMsg]);
+   703→      setInput('');
+   704→      setIsThinking(true);
+   705→
+   706→      // Build conversation history including the new message
+   707→      const history = [...messages.slice(-7), { role: 'user' as const, content: trimmed }];
+   708→
+   709→      try {
+   710→        const res = await fetch('/api/intelligence', {
+   711→          method: 'POST',
+   712→          headers: { 'Content-Type': 'application/json' },
+   713→          body: JSON.stringify({
+   714→            question: trimmed,
+   715→            context: liveContext,
+   716→            conversationHistory: history,
+   717→          }),
+   718→        });
+   719→
+   720→        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+   721→
+   722→        const data: IntelligenceApiResponse = await res.json();
+   723→
+   724→        const aiMsg: ChatMessage = {
+   725→          id: genId(),
+   726→          role: 'assistant',
+   727→          content: data.answer || "I couldn't process that right now.",
+   728→          timestamp: Date.now(),
+   729→          actions: data.actions || [],
+   730→          suggestedPrompts: data.suggestedPrompts || [],
+   731→        };
+   732→        setMessages((prev) => [...prev, aiMsg]);
+   733→        setTypedMessageId(aiMsg.id);
+   734→
+   735→        // Voice output
+   736→        if (speechEnabled && typeof window !== 'undefined' && window.speechSynthesis) {
+   737→          speakText(data.answer || '');
+   738→        }
+   739→      } catch (err) {
+   740→        const aiMsg: ChatMessage = {
+   741→          id: genId(),
+   742→          role: 'assistant',
+   743→          content:
+   744→            "I'm having trouble connecting to my brain right now. Please try again in a moment.",
+   745→          timestamp: Date.now(),
+   746→          suggestedPrompts: FALLBACK_FOLLOWUPS,
+   747→        };
+   748→        setMessages((prev) => [...prev, aiMsg]);
+   749→        setTypedMessageId(aiMsg.id);
+   750→        console.error('[GSTPilotIntelligence] send error:', err);
+   751→      } finally {
+   752→        setIsThinking(false);
+   753→      }
+   754→    },
+   755→    [isThinking, liveContext, messages, speechEnabled],
+   756→  );
+   757→
+   758→  // ── Listen for "gstpilot-ask" custom events ──
+   759→  // The Mission Control home search box + suggestion chips dispatch this event to
+   760→  // open the FULL-SCREEN AI workspace and immediately ask a question.
+   761→  // V18: always opens in fullscreen (Perplexity/Claude-style), never a small modal.
+   762→  useEffect(() => {
+   763→    const handler = (e: Event) => {
+   764→      const question = (e as CustomEvent<string>).detail;
+   765→      if (typeof question !== 'string' || !question.trim()) return;
+   766→      setIsOpen(true);
+   767→      setIsFullscreen(true);
+   768→      // Defer to next frame so the workspace mounts + input focuses first
+   769→      requestAnimationFrame(() => {
+   770→        sendMessage(question);
+   771→      });
+   772→    };
+   773→    window.addEventListener('gstpilot-ask', handler as EventListener);
+   774→    return () => window.removeEventListener('gstpilot-ask', handler as EventListener);
+   775→  }, [sendMessage]);
+   776→
+   777→  // ── Listen for "gstpilot-open" custom events ──
+   778→  // The Mission Control home [ Activate Oracle ] button dispatches this event to
+   779→  // open the FULL-SCREEN AI workspace without pre-filling a question.
+   780→  useEffect(() => {
+   781→    const handler = () => {
+   782→      setIsOpen(true);
+   783→      setIsFullscreen(true);
+   784→    };
+   785→    window.addEventListener('gstpilot-open', handler);
+   786→    return () => window.removeEventListener('gstpilot-open', handler);
+   787→  }, []);
+   788→
+   789→  // ── Text-to-Speech ──
+   790→  const speakText = useCallback((text: string) => {
+   791→    if (typeof window === 'undefined' || !window.speechSynthesis) return;
+   792→    try {
+   793→      window.speechSynthesis.cancel();
+   794→      const utterance = new SpeechSynthesisUtterance(text);
+   795→      utterance.lang = 'en-IN';
+   796→      utterance.rate = 1.0;
+   797→      utterance.pitch = 1.0;
+   798→      const voices = window.speechSynthesis.getVoices();
+   799→      const indianVoice =
+   800→        voices.find((v) => v.lang === 'en-IN') ||
+   801→        voices.find((v) => v.lang.startsWith('en'));
+   802→      if (indianVoice) utterance.voice = indianVoice;
+   803→      window.speechSynthesis.speak(utterance);
+   804→    } catch {
+   805→      /* noop */
+   806→    }
+   807→  }, []);
+   808→
+   809→  // ── Voice input toggle ──
+   810→  const toggleListening = useCallback(() => {
+   811→    if (!speechSupportedRef.current) {
+   812→      toast.error('Voice input unavailable', {
+   813→        description: 'Your browser does not support speech recognition.',
+   814→      });
+   815→      return;
+   816→    }
+   817→
+   818→    if (isListening) {
+   819→      try {
+   820→        recognitionRef.current?.stop();
+   821→      } catch {
+   822→        /* noop */
+   823→      }
+   824→      setIsListening(false);
+   825→      return;
+   826→    }
+   827→
+   828→    try {
+   829→      const SR =
+   830→        (window as unknown as { SpeechRecognition?: SpeechRecognitionConstructor })
+   831→          .SpeechRecognition ||
+   832→        (window as unknown as { webkitSpeechRecognition?: SpeechRecognitionConstructor })
+   833→          .webkitSpeechRecognition;
+   834→      if (!SR) throw new Error('not supported');
+   835→      const recognition: SpeechRecognitionLike = new SR();
+   836→      recognition.continuous = false;
+   837→      recognition.interimResults = false;
+   838→      recognition.lang = 'en-IN';
+   839→
+   840→      recognition.onstart = () => setIsListening(true);
+   841→      recognition.onend = () => setIsListening(false);
+   842→      recognition.onerror = (e) => {
+   843→        setIsListening(false);
+   844→        if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
+   845→          toast.error('Voice input unavailable', {
+   846→            description: 'Microphone permission denied.',
+   847→          });
+   848→        } else {
+   849→          toast.error('Voice input unavailable');
+   850→        }
+   851→      };
+   852→      recognition.onresult = (event) => {
+   853→        let transcript = '';
+   854→        for (let i = event.resultIndex; i < event.results.length; i++) {
+   855→          if (event.results[i].length > 0) {
+   856→            transcript += event.results[i][0].transcript;
+   857→          }
+   858→        }
+   859→        if (transcript) {
+   860→          setInput((prev) => (prev ? prev + ' ' + transcript : transcript));
+   861→        }
+   862→      };
+   863→
+   864→      recognitionRef.current = recognition;
+   865→      recognition.start();
+   866→    } catch {
+   867→      setIsListening(false);
+   868→      toast.error('Voice input unavailable');
+   869→    }
+   870→  }, [isListening]);
+   871→
+   872→  // ── Toggle speech output ──
+   873→  const toggleSpeech = useCallback(() => {
+   874→    setSpeechEnabled((prev) => {
+   875→      const next = !prev;
+   876→      if (!next && typeof window !== 'undefined' && window.speechSynthesis) {
+   877→        window.speechSynthesis.cancel();
+   878→      }
+   879→      return next;
+   880→    });
+   881→  }, []);
+   882→
+   883→  // ── Handle action chip activation ──
+   884→  const handleAction = useCallback(
+   885→    (action: AIAction) => {
+   886→      switch (action.type) {
+   887→        case 'navigate': {
+   888→          const view = (action.payload?.view as AppView) || 'dashboard';
+   889→          setCurrentView(view);
+   890→          toast.success('Navigating', { description: action.title });
+   891→          break;
+   892→        }
+   893→        case 'execute_workflow': {
+   894→          const workflowKey =
+   895→            (action.payload?.workflow as string) || 'run_my_firm';
+   896→          const view = WORKFLOW_VIEWS[workflowKey] || 'autopilot';
+   897→          setCurrentView(view);
+   898→          toast.success('Launching workflow', {
+   899→            description: action.title,
+   900→          });
+   901→          break;
+   902→        }
+   903→        case 'send_reminder':
+   904→          toast.success('Reminders queued', {
+   905→            description: 'Payment reminders queued for affected clients.',
+   906→          });
+   907→          break;
+   908→        case 'create_task':
+   909→          toast.success('Task created', {
+   910→            description: action.description,
+   911→          });
+   912→          break;
+   913→        case 'generate_report':
+   914→          toast.success('Report generation started', {
+   915→            description: 'Your executive report is being compiled.',
+   916→          });
+   917→          break;
+   918→        default:
+   919→          toast.info(action.title);
+   920→      }
+   921→    },
+   922→    [setCurrentView],
+   923→  );
+   924→
+   925→  // ── Open panel (V18: always opens FULL-SCREEN workspace) ──
+   926→  const openPanel = useCallback(() => {
+   927→    setIsOpen(true);
+   928→    setIsFullscreen(true);
+   929→  }, []);
+   930→
+   931→  // ── Close panel ──
+   932→  const closePanel = useCallback(() => {
+   933→    setIsOpen(false);
+   934→    setIsFullscreen(false);
+   935→    if (typeof window !== 'undefined' && window.speechSynthesis) {
+   936→      window.speechSynthesis.cancel();
+   937→    }
+   938→  }, []);
+   939→
+   940→  // ── Activate a quick action (navigate / execute_workflow / ask) ──
+   941→  const handleQuickAction = useCallback(
+   942→    (action: QuickAction) => {
+   943→      switch (action.kind) {
+   944→        case 'navigate': {
+   945→          const view = action.view || 'dashboard';
+   946→          setCurrentView(view);
+   947→          toast.success('Opening module', { description: action.label });
+   948→          closePanel();
+   949→          break;
+   950→        }
+   951→        case 'execute_workflow': {
+   952→          const workflowKey = action.workflow || 'run_my_firm';
+   953→          const view = WORKFLOW_VIEWS[workflowKey] || 'autopilot';
+   954→          setCurrentView(view);
+   955→          toast.success('Launching workflow', { description: action.label });
+   956→          closePanel();
+   957→          break;
+   958→        }
+   959→        case 'ask': {
+   960→          const q = action.question || action.label;
+   961→          sendMessage(q);
+   962→          break;
+   963→        }
+   964→      }
+   965→    },
+   966→    [setCurrentView, sendMessage, closePanel],
+   967→  );
+   968→
+   969→  // ── Render null if not authenticated or on landing/login ──
+   970→  if (!user || currentScreen === 'landing' || currentScreen === 'login') {
+   971→    return null;
+   972→  }
+   973→
+   974→  // ── Handle Enter to send (Shift+Enter for newline) ──
+   975→  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+   976→    if (e.key === 'Enter' && !e.shiftKey) {
+   977→      e.preventDefault();
+   978→      sendMessage(input);
+   979→    }
+   980→  };
+   981→
+   982→  const hasMessages = messages.length > 0;
+   983→  // Inner-highlight opacity is slightly stronger in light mode so the
+   984→  // 3D glassy orb feel survives the brighter background.
+   985→  const orbHighlightOpacity = isDark ? 'rgba(255,255,255,0.35)' : 'rgba(255,255,255,0.5)';
+   986→
+   987→  // ── Panel content (shared between docked + fullscreen) ────────────────────
+   988→  const renderPanel = () => (
+   989→    <div className="flex h-full w-full flex-col">
+   990→      {/* ── Header (minimal) ── */}
+   991→      <div className="flex items-center justify-between gap-2 border-b border-white/[0.08] px-4 py-2.5">
+   992→        <div className="flex min-w-0 items-center gap-2.5">
+   993→          <span className="h-2 w-2 shrink-0 rounded-full accent-gradient shadow-[0_0_8px_rgba(16,185,129,0.6)]" />
+   994→          <div className="min-w-0">
+   995→            <h2 className="truncate text-sm font-semibold text-foreground">
+   996→              GSTPilot Oracle<span className="align-super text-[8px]">™</span>
+   997→            </h2>
+   998→            <p className="truncate text-[10px] text-muted-foreground">
+   999→              The Financial Brain of India
+  1000→            </p>
+  1001→          </div>
+  1002→        </div>
+  1003→
+  1004→        <div className="flex items-center gap-0.5">
+  1005→          {/* Voice input toggle */}
+  1006→          <Button
+  1007→            variant="ghost"
+  1008→            size="icon"
+  1009→            className={cn(
+  1010→              'h-7 w-7 rounded-md text-muted-foreground hover:bg-white/[0.05] hover:text-foreground',
+  1011→              isListening && 'text-red-400 hover:text-red-400',
+  1012→            )}
+  1013→            onClick={toggleListening}
+  1014→            aria-label={isListening ? 'Stop voice input' : 'Start voice input'}
+  1015→          >
+  1016→            {isListening ? <MicOff className="h-3.5 w-3.5" /> : <Mic className="h-3.5 w-3.5" />}
+  1017→          </Button>
+  1018→
+  1019→          {/* Fullscreen toggle */}
+  1020→          <Button
+  1021→            variant="ghost"
+  1022→            size="icon"
+  1023→            className="h-7 w-7 rounded-md text-muted-foreground hover:bg-white/[0.05] hover:text-foreground"
+  1024→            onClick={() => setIsFullscreen((f) => !f)}
+  1025→            aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+  1026→          >
+  1027→            {isFullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
+  1028→          </Button>
+  1029→
+  1030→          {/* Close */}
+  1031→          <Button
+  1032→            variant="ghost"
+  1033→            size="icon"
+  1034→            className="h-7 w-7 rounded-md text-muted-foreground hover:bg-white/[0.05] hover:text-foreground"
+  1035→            onClick={closePanel}
+  1036→            aria-label="Close"
+  1037→          >
+  1038→            <X className="h-3.5 w-3.5" />
+  1039→          </Button>
+  1040→        </div>
+  1041→      </div>
+  1042→
+  1043→      {/* ── Input hero (Perplexity-style, pinned at top) ── */}
+  1044→      <div className="border-b border-white/[0.08] p-3">
+  1045→        <div className="relative">
+  1046→          <textarea
+  1047→            ref={textareaRef}
+  1048→            value={input}
+  1049→            onChange={(e) => setInput(e.target.value)}
+  1050→            onKeyDown={handleKeyDown}
+  1051→            rows={1}
+  1052→            placeholder={
+  1053→              isListening
+  1054→                ? 'Listening…'
+  1055→                : 'Ask anything — Run my firm, pending returns, risky clients...'
+  1056→            }
+  1057→            className="w-full resize-none rounded-xl border border-white/[0.08] bg-white/[0.04] px-4 py-3.5 pr-12 text-base text-foreground placeholder:text-muted-foreground focus:border-emerald-400/40 focus:outline-none focus:ring-1 focus:ring-emerald-400/20"
+  1058→            style={{ maxHeight: 120 }}
+  1059→            aria-label="Message input"
+  1060→          />
+  1061→          <motion.button
+  1062→            type="button"
+  1063→            whileHover={{ scale: 1.06 }}
+  1064→            whileTap={{ scale: 0.94 }}
+  1065→            onClick={() => sendMessage(input)}
+  1066→            disabled={!input.trim() || isThinking}
+  1067→            className="absolute bottom-2.5 right-2.5 flex h-8 w-8 items-center justify-center rounded-lg accent-gradient text-white shadow-md transition-opacity disabled:cursor-not-allowed disabled:opacity-40"
+  1068→            aria-label="Send message"
+  1069→          >
+  1070→            <ArrowUp className="h-4 w-4" />
+  1071→          </motion.button>
+  1072→        </div>
+  1073→
+  1074→        {/* Status row */}
+  1075→        <div className="mt-2 flex h-4 items-center justify-between text-[11px]">
+  1076→          <AnimatePresence mode="wait">
+  1077→            {isListening ? (
+  1078→              <motion.span
+  1079→                key="listening"
+  1080→                initial={{ opacity: 0, y: -2 }}
+  1081→                animate={{ opacity: 1, y: 0 }}
+  1082→                exit={{ opacity: 0, y: -2 }}
+  1083→                className="flex items-center gap-1.5 text-red-400"
+  1084→              >
+  1085→                <span className="relative flex h-1.5 w-1.5">
+  1086→                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75" />
+  1087→                  <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-red-500" />
+  1088→                </span>
+  1089→                Listening… speak now
+  1090→              </motion.span>
+  1091→            ) : (
+  1092→              <motion.span
+  1093→                key="hint"
+  1094→                initial={{ opacity: 0, y: -2 }}
+  1095→                animate={{ opacity: 1, y: 0 }}
+  1096→                exit={{ opacity: 0, y: -2 }}
+  1097→                className="text-muted-foreground"
+  1098→              >
+  1099→                <kbd className="rounded border border-white/10 bg-white/[0.04] px-1 text-[10px]">Enter</kbd>{' '}
+  1100→                to send · <kbd className="rounded border border-white/10 bg-white/[0.04] px-1 text-[10px]">Shift+Enter</kbd> for newline
+  1101→              </motion.span>
+  1102→            )}
+  1103→          </AnimatePresence>
+  1104→          <button
+  1105→            type="button"
+  1106→            onClick={toggleSpeech}
+  1107→            className={cn(
+  1108→              'flex items-center gap-1 transition-colors',
+  1109→              speechEnabled
+  1110→                ? 'text-emerald-400/80 hover:text-emerald-400'
+  1111→                : 'text-muted-foreground/60 hover:text-muted-foreground',
+  1112→            )}
+  1113→            aria-label={speechEnabled ? 'Disable voice output' : 'Enable voice output'}
+  1114→          >
+  1115→            {speechEnabled ? <Volume2 className="h-3 w-3" /> : <VolumeX className="h-3 w-3" />}
+  1116→            {speechEnabled ? 'Voice on' : 'Voice off'}
+  1117→          </button>
+  1118→        </div>
+  1119→      </div>
+  1120→
+  1121→      {/* ── Body: scrollable Q&A history or quick-action empty state ── */}
+  1122→      <ScrollArea className="flex-1 overflow-y-auto">
+  1123→        <div className="px-4 py-4">
+  1124→          {/* Empty state — quick actions + modules */}
+  1125→          {!hasMessages && !isThinking && (
+  1126→            <motion.div
+  1127→              initial={{ opacity: 0, y: 8 }}
+  1128→              animate={{ opacity: 1, y: 0 }}
+  1129→              className="space-y-5"
+  1130→            >
+  1131→              {/* Quick actions */}
+  1132→              <div>
+  1133→                <p className="mb-2 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+  1134→                  Quick actions
+  1135→                </p>
+  1136→                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+  1137→                  {QUICK_ACTIONS.map((action) => {
+  1138→                    const Icon = action.icon;
+  1139→                    return (
+  1140→                      <motion.button
+  1141→                        key={action.label}
+  1142→                        whileHover={{ scale: 1.02 }}
+  1143→                        whileTap={{ scale: 0.98 }}
+  1144→                        onClick={() => handleQuickAction(action)}
+  1145→                        className="flex items-center gap-2.5 rounded-xl border border-white/[0.08] bg-white/[0.02] px-3 py-2.5 text-left text-sm text-foreground transition-colors hover:border-emerald-400/30 hover:bg-white/[0.05]"
+  1146→                      >
+  1147→                        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg accent-gradient-soft">
+  1148→                          <Icon className="h-3.5 w-3.5 accent-text" />
+  1149→                        </span>
+  1150→                        <span className="truncate">{action.label}</span>
+  1151→                      </motion.button>
+  1152→                    );
+  1153→                  })}
+  1154→                </div>
+  1155→              </div>
+  1156→
+  1157→              {/* Module chips */}
+  1158→              <div>
+  1159→                <p className="mb-2 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+  1160→                  Modules
+  1161→                </p>
+  1162→                <div className="flex flex-wrap gap-1.5">
+  1163→                  {QUICK_MODULES.map((mod) => {
+  1164→                    const Icon = mod.icon;
+  1165→                    return (
+  1166→                      <button
+  1167→                        key={mod.label}
+  1168→                        onClick={() => {
+  1169→                          setCurrentView(mod.view);
+  1170→                          toast.success('Module opened', {
+  1171→                            description: mod.label,
+  1172→                          });
+  1173→                          closePanel();
+  1174→                        }}
+  1175→                        className="flex items-center gap-1.5 rounded-full border border-white/[0.08] bg-white/[0.02] px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:border-emerald-400/30 hover:bg-white/[0.05] hover:text-foreground"
+  1176→                        aria-label={`Open ${mod.label}`}
+  1177→                      >
+  1178→                        <Icon className="h-3 w-3" />
+  1179→                        {mod.label}
+  1180→                      </button>
+  1181→                    );
+  1182→                  })}
+  1183→                </div>
+  1184→              </div>
+  1185→            </motion.div>
+  1186→          )}
+  1187→
+  1188→          {/* Q&A history (Perplexity-style stacked turns) */}
+  1189→          <div className="space-y-6">
+  1190→            <AnimatePresence initial={false}>
+  1191→              {messages.map((msg) => {
+  1192→                const isUser = msg.role === 'user';
+  1193→                const isLatest = msg.id === typedMessageId;
+  1194→
+  1195→                if (isUser) {
+  1196→                  // User question — subtle header line
+  1197→                  return (
+  1198→                    <motion.div
+  1199→                      key={msg.id}
+  1200→                      initial={{ opacity: 0, y: 8 }}
+  1201→                      animate={{ opacity: 1, y: 0 }}
+  1202→                      className="flex flex-col gap-1"
+  1203→                    >
+  1204→                      <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+  1205→                        You
+  1206→                      </span>
+  1207→                      <p className="text-sm font-medium leading-relaxed text-foreground">
+  1208→                        {msg.content}
+  1209→                      </p>
+  1210→                    </motion.div>
+  1211→                  );
+  1212→                }
+  1213→
+  1214→                // Assistant answer block
+  1215→                return (
+  1216→                  <motion.div
+  1217→                    key={msg.id}
+  1218→                    initial={{ opacity: 0, y: 8 }}
+  1219→                    animate={{ opacity: 1, y: 0 }}
+  1220→                    className="flex flex-col gap-2"
+  1221→                  >
+  1222→                    {/* Answer header */}
+  1223→                    <div className="flex items-center gap-2">
+  1224→                      <span className="flex h-5 w-5 items-center justify-center rounded-full accent-gradient">
+  1225→                        <Sparkles className="h-3 w-3 text-white" />
+  1226→                      </span>
+  1227→                      <span className="text-xs font-semibold accent-text">
+  1228→                        GSTPilot Oracle
+  1229→                      </span>
+  1230→                    </div>
+  1231→
+  1232→                    {/* Answer body */}
+  1233→                    <div className="text-sm leading-relaxed">
+  1234→                      <TypingMessage
+  1235→                        message={msg}
+  1236→                        isLatest={isLatest}
+  1237→                        onTypingComplete={() => setTypedMessageId(null)}
+  1238→                      />
+  1239→                    </div>
+  1240→
+  1241→                    {/* Action chips */}
+  1242→                    {msg.actions && msg.actions.length > 0 && (
+  1243→                      <div className="flex flex-wrap gap-1.5 pt-1">
+  1244→                        {msg.actions.map((action, ai) => (
+  1245→                          <ActionChip
+  1246→                            key={ai}
+  1247→                            action={action}
+  1248→                            onActivate={handleAction}
+  1249→                          />
+  1250→                        ))}
+  1251→                      </div>
+  1252→                    )}
+  1253→
+  1254→                    {/* Live data / sources line */}
+  1255→                    <div className="flex items-center gap-1.5 pt-0.5 text-[10px] text-muted-foreground">
+  1256→                      <span className="h-1 w-1 rounded-full bg-emerald-400/70" />
+  1257→                      Powered by live Firestore data · {formatTime(msg.timestamp)}
+  1258→                    </div>
+  1259→
+  1260→                    {/* Follow-up prompts (Perplexity "Related") */}
+  1261→                    {msg.suggestedPrompts && msg.suggestedPrompts.length > 0 && (
+  1262→                      <div className="pt-1">
+  1263→                        <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+  1264→                          Follow-ups
+  1265→                        </p>
+  1266→                        <div className="flex flex-wrap gap-1.5">
+  1267→                          {msg.suggestedPrompts.map((prompt, pi) => (
+  1268→                            <motion.button
+  1269→                              key={`${prompt}-${pi}`}
+  1270→                              whileHover={{ scale: 1.03 }}
+  1271→                              whileTap={{ scale: 0.97 }}
+  1272→                              onClick={() => sendMessage(prompt)}
+  1273→                              className="rounded-full border border-white/[0.08] bg-white/[0.02] px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:border-emerald-400/30 hover:bg-white/[0.05] hover:text-foreground"
+  1274→                            >
+  1275→                              {prompt}
+  1276→                            </motion.button>
+  1277→                          ))}
+  1278→                        </div>
+  1279→                      </div>
+  1280→                    )}
+  1281→                  </motion.div>
+  1282→                );
+  1283→              })}
+  1284→            </AnimatePresence>
+  1285→
+  1286→            {/* Thinking indicator */}
+  1287→            <AnimatePresence>
+  1288→              {isThinking && (
+  1289→                <motion.div
+  1290→                  initial={{ opacity: 0, y: 8 }}
+  1291→                  animate={{ opacity: 1, y: 0 }}
+  1292→                  exit={{ opacity: 0, y: -8 }}
+  1293→                  className="flex flex-col gap-2"
+  1294→                >
+  1295→                  <div className="flex items-center gap-2">
+  1296→                    <span className="flex h-5 w-5 items-center justify-center rounded-full accent-gradient">
+  1297→                      <Sparkles className="h-3 w-3 text-white" />
+  1298→                    </span>
+  1299→                    <span className="text-xs font-semibold accent-text">
+  1300→                      GSTPilot Oracle
+  1301→                    </span>
+  1302→                  </div>
+  1303→                  <div className="flex items-center gap-2 pl-1">
+  1304→                    <ThinkingDots />
+  1305→                    <span className="text-xs text-muted-foreground">Thinking…</span>
+  1306→                  </div>
+  1307→                </motion.div>
+  1308→              )}
+  1309→            </AnimatePresence>
+  1310→
+  1311→            <div ref={messagesEndRef} />
+  1312→          </div>
+  1313→        </div>
+  1314→      </ScrollArea>
+  1315→    </div>
+  1316→  );
+  1317→
+  1318→  // ── Full-screen workspace panel (V18 — Perplexity/Claude-style) ────────────
+  1319→  // True full-screen: fixed inset-0 z-50, #050505 background.
+  1320→  // Layout: Header (top) + Conversation (center, scrollable, max-w-3xl) +
+  1321→  //         Input (bottom, fixed, max-w-3xl) + Suggested follow-ups.
+  1322→  // Never overlaps cards. Never a small right-side modal.
+  1323→  const renderFullscreenPanel = () => (
+  1324→    <div
+  1325→      className="flex h-full w-full flex-col"
+  1326→      style={{ backgroundColor: '#050505' }}
+  1327→    >
+  1328→      {/* ── Header ── */}
+  1329→      <div
+  1330→        className="flex shrink-0 items-center justify-between gap-2 px-6 py-4"
+  1331→        style={{ borderBottom: '1px solid rgba(255,255,255,0.07)' }}
+  1332→      >
+  1333→        <div className="flex min-w-0 items-center gap-3">
+  1334→          <InfinitySymbol size={28} />
+  1335→          <div className="min-w-0">
+  1336→            <h2 className="truncate text-base font-semibold text-foreground">
+  1337→              GSTPilot Oracle
+  1338→              <span className="accent-text align-super text-[8px]">™</span>
+  1339→            </h2>
+  1340→            <p className="truncate text-[11px] text-muted-foreground">
+  1341→              Ask anything. Run everything.
+  1342→            </p>
+  1343→          </div>
+  1344→        </div>
+  1345→
+  1346→        <div className="flex items-center gap-1">
+  1347→          {/* Voice input toggle */}
+  1348→          <Button
+  1349→            variant="ghost"
+  1350→            size="icon"
+  1351→            className={cn(
+  1352→              'h-8 w-8 rounded-lg text-muted-foreground hover:bg-white/[0.05] hover:text-foreground',
+  1353→              isListening && 'text-red-400 hover:text-red-400',
+  1354→            )}
+  1355→            onClick={toggleListening}
+  1356→            aria-label={isListening ? 'Stop voice input' : 'Start voice input'}
+  1357→          >
+  1358→            {isListening ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+  1359→          </Button>
+  1360→
+  1361→          {/* Voice output toggle */}
+  1362→          <Button
+  1363→            variant="ghost"
+  1364→            size="icon"
+  1365→            className={cn(
+  1366→              'h-8 w-8 rounded-lg hover:bg-white/[0.05] hover:text-foreground',
+  1367→              speechEnabled
+  1368→                ? 'text-emerald-400/80 hover:text-emerald-400'
+  1369→                : 'text-muted-foreground/60 hover:text-muted-foreground',
+  1370→            )}
+  1371→            onClick={toggleSpeech}
+  1372→            aria-label={speechEnabled ? 'Disable voice output' : 'Enable voice output'}
+  1373→          >
+  1374→            {speechEnabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
+  1375→          </Button>
+  1376→
+  1377→          {/* Exit fullscreen (return to docked orb) */}
+  1378→          <Button
+  1379→            variant="ghost"
+  1380→            size="icon"
+  1381→            className="h-8 w-8 rounded-lg text-muted-foreground hover:bg-white/[0.05] hover:text-foreground"
+  1382→            onClick={() => setIsFullscreen(false)}
+  1383→            aria-label="Exit fullscreen"
+  1384→          >
+  1385→            <Minimize2 className="h-4 w-4" />
+  1386→          </Button>
+  1387→
+  1388→          {/* Close */}
+  1389→          <Button
+  1390→            variant="ghost"
+  1391→            size="icon"
+  1392→            className="h-8 w-8 rounded-lg text-muted-foreground hover:bg-white/[0.05] hover:text-foreground"
+  1393→            onClick={closePanel}
+  1394→            aria-label="Close"
+  1395→          >
+  1396→            <X className="h-4 w-4" />
+  1397→          </Button>
+  1398→        </div>
+  1399→      </div>
+  1400→
+  1401→      {/* ── Conversation area (scrollable, centered max-w-3xl) ── */}
+  1402→      <div className="flex-1 overflow-y-auto custom-scrollbar">
+  1403→        <div className="mx-auto max-w-3xl px-6 py-8">
+  1404→          {/* Empty state — quick actions + modules */}
+  1405→          {!hasMessages && !isThinking && (
+  1406→            <motion.div
+  1407→              initial={{ opacity: 0, y: 8 }}
+  1408→              animate={{ opacity: 1, y: 0 }}
+  1409→              className="space-y-8"
+  1410→            >
+  1411→              <div className="text-center space-y-2">
+  1412→                <h3 className="text-2xl font-bold tracking-tight text-foreground">
+  1413→                  How can I help you today?
+  1414→                </h3>
+  1415→                <p className="text-sm text-muted-foreground">
+  1416→                  Ask about GST, finance, compliance, cash flow, or anything about your business.
+  1417→                </p>
+  1418→              </div>
+  1419→
+  1420→              {/* Quick actions */}
+  1421→              <div>
+  1422→                <p className="mb-3 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+  1423→                  Quick actions
+  1424→                </p>
+  1425→                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+  1426→                  {QUICK_ACTIONS.map((action) => {
+  1427→                    const Icon = action.icon;
+  1428→                    return (
+  1429→                      <motion.button
+  1430→                        key={action.label}
+  1431→                        whileHover={{ scale: 1.02 }}
+  1432→                        whileTap={{ scale: 0.98 }}
+  1433→                        onClick={() => handleQuickAction(action)}
+  1434→                        className="flex items-center gap-3 rounded-xl px-4 py-3 text-left text-sm text-foreground transition-colors hover:bg-white/[0.04]"
+  1435→                        style={{
+  1436→                          backgroundColor: 'rgba(255,255,255,0.04)',
+  1437→                          border: '1px solid rgba(255,255,255,0.07)',
+  1438→                        }}
+  1439→                      >
+  1440→                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg accent-gradient-soft">
+  1441→                          <Icon className="h-4 w-4 accent-text" />
+  1442→                        </span>
+  1443→                        <span className="truncate">{action.label}</span>
+  1444→                      </motion.button>
+  1445→                    );
+  1446→                  })}
+  1447→                </div>
+  1448→              </div>
+  1449→
+  1450→              {/* Module chips */}
+  1451→              <div>
+  1452→                <p className="mb-3 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+  1453→                  Modules
+  1454→                </p>
+  1455→                <div className="flex flex-wrap gap-2">
+  1456→                  {QUICK_MODULES.map((mod) => {
+  1457→                    const Icon = mod.icon;
+  1458→                    return (
+  1459→                      <button
+  1460→                        key={mod.label}
+  1461→                        onClick={() => {
+  1462→                          setCurrentView(mod.view);
+  1463→                          toast.success('Module opened', { description: mod.label });
+  1464→                          closePanel();
+  1465→                        }}
+  1466→                        className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
+  1467→                        style={{
+  1468→                          backgroundColor: 'rgba(255,255,255,0.04)',
+  1469→                          border: '1px solid rgba(255,255,255,0.07)',
+  1470→                        }}
+  1471→                        aria-label={`Open ${mod.label}`}
+  1472→                      >
+  1473→                        <Icon className="h-3 w-3" />
+  1474→                        {mod.label}
+  1475→                      </button>
+  1476→                    );
+  1477→                  })}
+  1478→                </div>
+  1479→              </div>
+  1480→            </motion.div>
+  1481→          )}
+  1482→
+  1483→          {/* Q&A history (Perplexity-style stacked turns) */}
+  1484→          <div className="space-y-8">
+  1485→            <AnimatePresence initial={false}>
+  1486→              {messages.map((msg) => {
+  1487→                const isUser = msg.role === 'user';
+  1488→                const isLatest = msg.id === typedMessageId;
+  1489→
+  1490→                if (isUser) {
+  1491→                  return (
+  1492→                    <motion.div
+  1493→                      key={msg.id}
+  1494→                      initial={{ opacity: 0, y: 8 }}
+  1495→                      animate={{ opacity: 1, y: 0 }}
+  1496→                      className="flex flex-col gap-1.5"
+  1497→                    >
+  1498→                      <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+  1499→                        You
+  1500→                      </span>
+  1501→                      <p className="text-base font-medium leading-relaxed text-foreground">
+  1502→                        {msg.content}
+  1503→                      </p>
+  1504→                    </motion.div>
+  1505→                  );
+  1506→                }
+  1507→
+  1508→                // Assistant answer block
+  1509→                return (
+  1510→                  <motion.div
+  1511→                    key={msg.id}
+  1512→                    initial={{ opacity: 0, y: 8 }}
+  1513→                    animate={{ opacity: 1, y: 0 }}
+  1514→                    className="flex flex-col gap-3"
+  1515→                  >
+  1516→                    {/* Answer header */}
+  1517→                    <div className="flex items-center gap-2">
+  1518→                      <span className="flex h-6 w-6 items-center justify-center rounded-full accent-gradient">
+  1519→                        <Sparkles className="h-3.5 w-3.5 text-white" />
+  1520→                      </span>
+  1521→                      <span className="text-sm font-semibold accent-text">
+  1522→                        GSTPilot Oracle
+  1523→                      </span>
+  1524→                    </div>
+  1525→
+  1526→                    {/* Answer body */}
+  1527→                    <div className="text-base leading-relaxed">
+  1528→                      <TypingMessage
+  1529→                        message={msg}
+  1530→                        isLatest={isLatest}
+  1531→                        onTypingComplete={() => setTypedMessageId(null)}
+  1532→                      />
+  1533→                    </div>
+  1534→
+  1535→                    {/* Action chips */}
+  1536→                    {msg.actions && msg.actions.length > 0 && (
+  1537→                      <div className="flex flex-wrap gap-2 pt-1">
+  1538→                        {msg.actions.map((action, ai) => (
+  1539→                          <ActionChip
+  1540→                            key={ai}
+  1541→                            action={action}
+  1542→                            onActivate={handleAction}
+  1543→                          />
+  1544→                        ))}
+  1545→                      </div>
+  1546→                    )}
+  1547→
+  1548→                    {/* Live data / sources line */}
+  1549→                    {msg.sources && msg.sources.length > 0 ? (
+  1550→                      <div className="flex flex-col gap-1.5 pt-1">
+  1551→                        <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+  1552→                          Sources
+  1553→                        </p>
+  1554→                        <div className="flex flex-wrap gap-1.5">
+  1555→                          {msg.sources.map((src, si) => (
+  1556→                            <span
+  1557→                              key={si}
+  1558→                              className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] text-muted-foreground"
+  1559→                              style={{
+  1560→                                backgroundColor: 'rgba(255,255,255,0.04)',
+  1561→                                border: '1px solid rgba(255,255,255,0.07)',
+  1562→                              }}
+  1563→                            >
+  1564→                              <span className="h-1 w-1 rounded-full bg-emerald-400/70" />
+  1565→                              {src.name}
+  1566→                              {typeof src.count === 'number' && src.count > 0 && (
+  1567→                                <span className="accent-text font-semibold">· {src.count}</span>
+  1568→                              )}
+  1569→                            </span>
+  1570→                          ))}
+  1571→                        </div>
+  1572→                        <p className="flex items-center gap-1.5 pt-0.5 text-[10px] text-muted-foreground">
+  1573→                          <span className="h-1 w-1 rounded-full bg-emerald-400/70" />
+  1574→                          Powered by live Firestore data · {formatTime(msg.timestamp)}
+  1575→                        </p>
+  1576→                      </div>
+  1577→                    ) : (
+  1578→                      <div className="flex items-center gap-1.5 pt-0.5 text-[10px] text-muted-foreground">
+  1579→                        <span className="h-1 w-1 rounded-full bg-emerald-400/70" />
+  1580→                        Powered by live Firestore data · {formatTime(msg.timestamp)}
+  1581→                      </div>
+  1582→                    )}
+  1583→
+  1584→                    {/* Follow-up prompts (Perplexity "Related") */}
+  1585→                    {msg.suggestedPrompts && msg.suggestedPrompts.length > 0 && (
+  1586→                      <div className="pt-2">
+  1587→                        <p className="mb-2 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+  1588→                          Follow-ups
+  1589→                        </p>
+  1590→                        <div className="flex flex-wrap gap-2">
+  1591→                          {msg.suggestedPrompts.map((prompt, pi) => (
+  1592→                            <motion.button
+  1593→                              key={`${prompt}-${pi}`}
+  1594→                              whileHover={{ scale: 1.03 }}
+  1595→                              whileTap={{ scale: 0.97 }}
+  1596→                              onClick={() => sendMessage(prompt)}
+  1597→                              className="rounded-full px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
+  1598→                              style={{
+  1599→                                backgroundColor: 'rgba(255,255,255,0.04)',
+  1600→                                border: '1px solid rgba(255,255,255,0.07)',
+  1601→                              }}
+  1602→                            >
+  1603→                              {prompt}
+  1604→                            </motion.button>
+  1605→                          ))}
+  1606→                        </div>
+  1607→                      </div>
+  1608→                    )}
+  1609→                  </motion.div>
+  1610→                );
+  1611→              })}
+  1612→            </AnimatePresence>
+  1613→
+  1614→            {/* Thinking indicator */}
+  1615→            <AnimatePresence>
+  1616→              {isThinking && (
+  1617→                <motion.div
+  1618→                  initial={{ opacity: 0, y: 8 }}
+  1619→                  animate={{ opacity: 1, y: 0 }}
+  1620→                  exit={{ opacity: 0, y: -8 }}
+  1621→                  className="flex flex-col gap-3"
+  1622→                >
+  1623→                  <div className="flex items-center gap-2">
+  1624→                    <span className="flex h-6 w-6 items-center justify-center rounded-full accent-gradient">
+  1625→                      <Sparkles className="h-3.5 w-3.5 text-white" />
+  1626→                    </span>
+  1627→                    <span className="text-sm font-semibold accent-text">
+  1628→                      GSTPilot Oracle
+  1629→                    </span>
+  1630→                  </div>
+  1631→                  <div className="flex items-center gap-2 pl-1">
+  1632→                    <ThinkingDots />
+  1633→                    <span className="text-sm text-muted-foreground">Thinking…</span>
+  1634→                  </div>
+  1635→                </motion.div>
+  1636→              )}
+  1637→            </AnimatePresence>
+  1638→
+  1639→            <div ref={messagesEndRef} />
+  1640→          </div>
+  1641→        </div>
+  1642→      </div>
+  1643→
+  1644→      {/* ── Input fixed at bottom (centered max-w-3xl) ── */}
+  1645→      <div
+  1646→        className="shrink-0 px-6 py-4"
+  1647→        style={{ borderTop: '1px solid rgba(255,255,255,0.07)' }}
+  1648→      >
+  1649→        <div className="mx-auto max-w-3xl">
+  1650→          <div className="relative">
+  1651→            <textarea
+  1652→              ref={textareaRef}
+  1653→              value={input}
+  1654→              onChange={(e) => setInput(e.target.value)}
+  1655→              onKeyDown={handleKeyDown}
+  1656→              rows={1}
+  1657→              placeholder={
+  1658→                isListening
+  1659→                  ? 'Listening…'
+  1660→                  : 'Ask Oracle anything — GST, finance, compliance, cash flow…'
+  1661→              }
+  1662→              className="w-full resize-none rounded-2xl px-5 py-4 pr-14 text-base text-foreground placeholder:text-muted-foreground focus:outline-none"
+  1663→              style={{
+  1664→                maxHeight: 140,
+  1665→                backgroundColor: 'rgba(255,255,255,0.04)',
+  1666→                border: '1px solid rgba(255,255,255,0.07)',
+  1667→              }}
+  1668→              aria-label="Message input"
+  1669→            />
+  1670→            <motion.button
+  1671→              type="button"
+  1672→              whileHover={{ scale: 1.06 }}
+  1673→              whileTap={{ scale: 0.94 }}
+  1674→              onClick={() => sendMessage(input)}
+  1675→              disabled={!input.trim() || isThinking}
+  1676→              className="absolute bottom-3.5 right-3.5 flex h-10 w-10 items-center justify-center rounded-xl accent-gradient text-white shadow-md transition-opacity disabled:cursor-not-allowed disabled:opacity-40"
+  1677→              aria-label="Send message"
+  1678→            >
+  1679→              <ArrowUp className="h-5 w-5" />
+  1680→            </motion.button>
+  1681→          </div>
+  1682→
+  1683→          {/* Status row */}
+  1684→          <div className="mt-2 flex h-5 items-center justify-between text-[11px]">
+  1685→            <AnimatePresence mode="wait">
+  1686→              {isListening ? (
+  1687→                <motion.span
+  1688→                  key="listening"
+  1689→                  initial={{ opacity: 0, y: -2 }}
+  1690→                  animate={{ opacity: 1, y: 0 }}
+  1691→                  exit={{ opacity: 0, y: -2 }}
+  1692→                  className="flex items-center gap-1.5 text-red-400"
+  1693→                >
+  1694→                  <span className="relative flex h-1.5 w-1.5">
+  1695→                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75" />
+  1696→                    <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-red-500" />
+  1697→                  </span>
+  1698→                  Listening… speak now
+  1699→                </motion.span>
+  1700→              ) : (
+  1701→                <motion.span
+  1702→                  key="hint"
+  1703→                  initial={{ opacity: 0, y: -2 }}
+  1704→                  animate={{ opacity: 1, y: 0 }}
+  1705→                  exit={{ opacity: 0, y: -2 }}
+  1706→                  className="text-muted-foreground"
+  1707→                >
+  1708→                  <kbd className="rounded border border-white/10 bg-white/[0.04] px-1 text-[10px]">Enter</kbd>
+  1709→                  {' '}to send ·{' '}
+  1710→                  <kbd className="rounded border border-white/10 bg-white/[0.04] px-1 text-[10px]">Shift+Enter</kbd>
+  1711→                  {' '}for newline
+  1712→                </motion.span>
+  1713→              )}
+  1714→            </AnimatePresence>
+  1715→            <button
+  1716→              type="button"
+  1717→              onClick={toggleSpeech}
+  1718→              className={cn(
+  1719→                'flex items-center gap-1 transition-colors',
+  1720→                speechEnabled
+  1721→                  ? 'text-emerald-400/80 hover:text-emerald-400'
+  1722→                  : 'text-muted-foreground/60 hover:text-muted-foreground',
+  1723→              )}
+  1724→              aria-label={speechEnabled ? 'Disable voice output' : 'Enable voice output'}
+  1725→            >
+  1726→              {speechEnabled ? <Volume2 className="h-3 w-3" /> : <VolumeX className="h-3 w-3" />}
+  1727→              {speechEnabled ? 'Voice on' : 'Voice off'}
+  1728→            </button>
+  1729→          </div>
+  1730→        </div>
+  1731→      </div>
+  1732→    </div>
+  1733→  );
+  1734→
+  1735→  return (
+  1736→    <>
+  1737→      {/* ═══ V18 FULL-SCREEN AI WORKSPACE (Perplexity/Claude-style) ═══ */}
+  1738→      {/* True full-screen: fixed inset-0 z-50, #050505 background. No backdrop. */}
+  1739→      <AnimatePresence>
+  1740→        {isOpen && isFullscreen && (
+  1741→          <motion.div
+  1742→            key="fs-workspace"
+  1743→            role="dialog"
+  1744→            aria-label="GSTPilot Oracle full-screen workspace"
+  1745→            initial={{ opacity: 0 }}
+  1746→            animate={{ opacity: 1 }}
+  1747→            exit={{ opacity: 0 }}
+  1748→            transition={{ duration: 0.25, ease: 'easeOut' }}
+  1749→            className="fixed inset-0 z-50 flex flex-col overflow-hidden"
+  1750→            style={{ backgroundColor: '#050505' }}
+  1751→          >
+  1752→            {renderFullscreenPanel()}
+  1753→          </motion.div>
+  1754→        )}
+  1755→      </AnimatePresence>
+  1756→
+  1757→      {/* ═══ V18 Orb + docked panel (bottom-right) ═══ */}
+  1758→      {/* V18: orb is HIDDEN when fullscreen workspace is open (no overlap). */}
+  1759→      {/* V18: orb is HIDDEN on dashboard — the home page IS the Oracle entry point
+  1760→            (search box + Activate button). No redundant Oracle surfaces on home. */}
+  1761→      {/* V18: orb click always opens FULL-SCREEN workspace (fullscreen-first). */}
+  1762→      {!isFullscreen && currentView !== 'dashboard' && (
+  1763→        <div className="fixed bottom-6 right-6 z-50">
+  1764→          {/* Docked small panel (only when isOpen && !isFullscreen) */}
+  1765→          <AnimatePresence>
+  1766→            {isOpen && (
+  1767→              <motion.div
+  1768→                key="panel"
+  1769→                role="dialog"
+  1770→                aria-label="GSTPilot Oracle command palette"
+  1771→                initial={{ opacity: 0, scale: 0.96, y: 12 }}
+  1772→                animate={{ opacity: 1, scale: 1, y: 0 }}
+  1773→                exit={{ opacity: 0, scale: 0.96, y: 12 }}
+  1774→                transition={{ type: 'spring', stiffness: 320, damping: 28 }}
+  1775→                className="glass-surface-strong absolute bottom-[72px] right-0 z-50 flex max-h-[calc(100vh-12rem)] w-[560px] max-w-[calc(100vw-3rem)] flex-col overflow-hidden rounded-2xl shadow-2xl"
+  1776→                style={{ x: orbX, y: orbY }}
+  1777→              >
+  1778→                {renderPanel()}
+  1779→              </motion.div>
+  1780→            )}
+  1781→          </AnimatePresence>
+  1782→
+  1783→          {/* ── Calm 56px orb ── */}
+  1784→          <Tooltip>
+  1785→            <TooltipTrigger asChild>
+  1786→              <motion.button
+  1787→                drag
+  1788→                dragMomentum={false}
+  1789→                dragElastic={0}
+  1790→                style={{ x: orbX, y: orbY }}
+  1791→                whileHover={{ scale: 1.08 }}
+  1792→                whileTap={{ scale: 0.96 }}
+  1793→                onClick={() => {
+  1794→                  if (isOpen) {
+  1795→                    closePanel();
+  1796→                  } else {
+  1797→                    // V18: orb click opens FULL-SCREEN workspace (not docked)
+  1798→                    openPanel();
+  1799→                  }
+  1800→                }}
+  1801→                aria-label="Open GSTPilot Oracle full-screen workspace"
+  1802→                className={cn(
+  1803→                  'accent-gradient relative flex h-14 w-14 cursor-pointer items-center justify-center rounded-full shadow-lg',
+  1804→                  isListening && 'ring-2 ring-red-400/50 ring-offset-2 ring-offset-transparent',
+  1805→                )}
+  1806→              >
+  1807→                {/* Slow 8s breathing glow (the ONLY continuous animation) */}
+  1808→                <motion.span
+  1809→                  className="absolute inset-0 rounded-full"
+  1810→                  animate={{
+  1811→                    scale: [1, 1.04, 1],
+  1812→                    boxShadow: [
+  1813→                      '0 0 24px 4px rgba(16,185,129,0.25)',
+  1814→                      '0 0 36px 6px rgba(6,182,212,0.35)',
+  1815→                      '0 0 24px 4px rgba(16,185,129,0.25)',
+  1816→                    ],
+  1817→                  }}
+  1818→                  transition={{
+  1819→                    duration: 8,
+  1820→                    repeat: Infinity,
+  1821→                    ease: 'easeInOut',
+  1822→                  }}
+  1823→                />
+  1824→
+  1825→                {/* Hover-only expanding halo (no infinite pulse) */}
+  1826→                <motion.span
+  1827→                  className="pointer-events-none absolute inset-0 rounded-full border border-white/40"
+  1828→                  initial={{ opacity: 0, scale: 1 }}
+  1829→                  whileHover={{ opacity: 0.6, scale: 1.5 }}
+  1830→                  transition={{ duration: 0.4, ease: 'easeOut' }}
+  1831→                />
+  1832→
+  1833→                {/* Inner top-left highlight for the 3D glassy orb feel */}
+  1834→                <span
+  1835→                  className="pointer-events-none absolute inset-0 rounded-full"
+  1836→                  style={{
+  1837→                    background: `radial-gradient(circle at 30% 25%, ${orbHighlightOpacity} 0%, rgba(255,255,255,0) 55%)`,
+  1838→                  }}
+  1839→                />
+  1840→
+  1841→                {/* Center icon — always Sparkles */}
+  1842→                <Sparkles className="relative z-10 h-6 w-6 text-white drop-shadow" />
+  1843→
+  1844→                {/* Tiny X overlay badge when panel is open */}
+  1845→                <AnimatePresence>
+  1846→                  {isOpen && (
+  1847→                    <motion.span
+  1848→                      initial={{ scale: 0, opacity: 0 }}
+  1849→                      animate={{ scale: 1, opacity: 1 }}
+  1850→                      exit={{ scale: 0, opacity: 0 }}
+  1851→                      transition={{ type: 'spring', stiffness: 500, damping: 28 }}
+  1852→                      className="absolute -right-1 -top-1 z-20 flex h-4 w-4 items-center justify-center rounded-full border border-white/20 bg-zinc-950"
+  1853→                    >
+  1854→                      <X className="h-2.5 w-2.5 text-white" />
+  1855→                    </motion.span>
+  1856→                  )}
+  1857→                </AnimatePresence>
+  1858→              </motion.button>
+  1859→            </TooltipTrigger>
+  1860→            <TooltipContent side="top" sideOffset={8}>
+  1861→              GSTPilot Oracle™ — Ctrl+K
+  1862→            </TooltipContent>
+  1863→          </Tooltip>
+  1864→        </div>
+  1865→      )}
+  1866→    </>
+  1867→  );
+  1868→}
+  1869→

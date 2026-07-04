@@ -1,0 +1,18 @@
+/** GSTPilot Enterprise Cloud™ — service layer barrel. */
+export * from './types'
+export * from './tenant'
+export * from './seed'
+export * from './hierarchy'
+export * from './rbac'
+export * from './subscription'
+export * from './audit'
+export * from './search'
+export * from './observability'
+export * from './admin'
+// Phase 9 — Enterprise Multi-Tenant Cloud™ (Global Scale)
+export * from './policy-engine'
+export * from './feature-flags'
+export * from './workspace'
+export * from './org-marketplace'
+export * from './identity'
+export * from './governance'

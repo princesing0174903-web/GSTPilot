@@ -44,6 +44,7 @@ import {
 } from '@/hooks/use-firestore';
 import { useInvoices } from '@/hooks/useInvoices';
 import { useGSTTransactions } from '@/hooks/useGSTTransactions';
+import { useBanking } from '@/hooks/useBanking';
 import type {
   FirestoreClient,
   LiveDashboardMetrics,
@@ -583,6 +584,36 @@ export default function DashboardPage() {
   const gstSalesCount = gstSummary?.salesCount ?? 0;
   const gstPurchaseCount = gstSummary?.purchaseCount ?? 0;
 
+  // ── Real Banking Foundation™ — org-scoped, real-time, server-calculated ──
+  // Surfaces REAL bank-account data (total balance, available balance, incoming
+  // /outgoing payments, pending reconciliation, transaction counts) computed
+  // from the bank_connections + bank_transactions collections via the banking
+  // provider architecture. Used to AUGMENT the existing KPI / ScoreCard
+  // subtitles with real banking context — same pattern as the GST augmentation
+  // above. The Cash Position KPI still derives its primary value from invoice
+  // `balanceDue` (per the task constraint) — only the subtitle is enriched.
+  const {
+    summary: bankingSummary,
+    loading: bankingLoading,
+    isConnected: bankConnected,
+  } = useBanking();
+
+  // Banking-derived values (real data from the Banking Foundation).
+  // All gracefully fall back to 0 when there's no banking data yet (summary
+  // fields default to 0) — matching the same pattern the invoice / GST KPIs
+  // use for missing data. `bankConnected` is also tracked so future
+  // affordances (e.g. a "Bank not connected" hint) can gate on actual
+  // connectivity. `bankAvailable` and `outgoingPayments` are wired in and
+  // available for future subtitle expansion (mirrors the GST pattern where
+  // inputTax / CGST / SGST / IGST were pre-computed for the same reason).
+  const bankBalance = bankingSummary?.totalBalance ?? 0;
+  const bankAvailable = bankingSummary?.availableBalance ?? 0;
+  const incomingPayments = bankingSummary?.incomingPayments ?? 0;
+  const outgoingPayments = bankingSummary?.outgoingPayments ?? 0;
+  const pendingReconciliation = bankingSummary?.pendingReconciliation ?? 0;
+  const bankTxnCount =
+    (bankingSummary?.incomingCount ?? 0) + (bankingSummary?.outgoingCount ?? 0);
+
   // ── Filing state ──────────────────────────────────────────────────────
   const [filingInProgress, setFilingInProgress] = useState<Set<string>>(new Set());
 
@@ -874,12 +905,15 @@ export default function DashboardPage() {
   // ═══════════════════════════════════════════════════════════════════════════
 
   // ── Loading ───────────────────────────────────────────────────────────
-  // Wait for the live dashboard metrics, the real invoice engine, AND the
-  // GST Return Engine initial subscriptions to settle before rendering —
-  // otherwise the Revenue / Cash Position KPIs would briefly show "—"
-  // (invoice engine) and the Business Health Score / subtitles would miss
-  // the real GST signals before the gst_transactions snapshot arrives.
-  if (loading || invoicesLoading || gstLoading) return <DashboardSkeleton />;
+  // Wait for the live dashboard metrics, the real invoice engine, the
+  // GST Return Engine, AND the Banking Foundation initial subscriptions to
+  // settle before rendering — otherwise the Revenue / Cash Position KPIs
+  // would briefly show "—" (invoice engine), the Business Health Score /
+  // subtitles would miss the real GST signals before the gst_transactions
+  // snapshot arrives, and the Cash Position / Risk subtitles would miss
+  // the real bank balance before the bank_transactions snapshot arrives.
+  if (loading || invoicesLoading || gstLoading || bankingLoading)
+    return <DashboardSkeleton />;
 
   // ── Error ─────────────────────────────────────────────────────────────
   if (error) {
@@ -926,32 +960,36 @@ export default function DashboardPage() {
   const cashValue =
     invoiceStats.totalOutstanding > 0 ? `₹${formatINR(invoiceStats.totalOutstanding)}` : '—';
 
-  // ── KPI subtitles — augmented with REAL GST engine data ───────────────
+  // ── KPI subtitles — augmented with REAL GST + Banking data ────────────
   // The 3 KPI cards (Revenue / Pending Compliance / Cash Position) keep
   // their original layout, colors, and structure — only the subtitle text
-  // is enriched with real GST-derived values when the GST Return Engine has
-  // data for the current period.
-  const revenueSubtitle = `Total revenue · ${invoiceStats.count} invoice${invoiceStats.count === 1 ? '' : 's'}${gstSalesCount > 0 || gstPurchaseCount > 0 ? ` · ${gstSalesCount} sale${gstSalesCount === 1 ? '' : 's'}/${gstPurchaseCount} purch.` : ''}`;
-  const complianceSubtitle = `${pendingComplianceCount === 1 ? 'Return to file' : 'Returns to file'}${gstTotalTransactions > 0 ? ` · ${gstTotalTransactions} GST txn${gstTotalTransactions === 1 ? '' : 's'}` : ''}`;
+  // is enriched with real GST-derived and bank-derived values when the
+  // respective engines have data for the current period. All banking
+  // augmentations are conditional on the value being > 0 so the original
+  // subtitle text is preserved verbatim when there's no banking data yet
+  // (mirrors the GST augmentation pattern).
+  const revenueSubtitle = `Total revenue · ${invoiceStats.count} invoice${invoiceStats.count === 1 ? '' : 's'}${gstSalesCount > 0 || gstPurchaseCount > 0 ? ` · ${gstSalesCount} sale${gstSalesCount === 1 ? '' : 's'}/${gstPurchaseCount} purch.` : ''}${incomingPayments > 0 ? ` · ₹${formatINR(incomingPayments)} incoming` : ''}`;
+  const complianceSubtitle = `${pendingComplianceCount === 1 ? 'Return to file' : 'Returns to file'}${gstTotalTransactions > 0 ? ` · ${gstTotalTransactions} GST txn${gstTotalTransactions === 1 ? '' : 's'}` : ''}${bankTxnCount > 0 ? ` · ${bankTxnCount} bank txn${bankTxnCount === 1 ? '' : 's'}` : ''}`;
   const cashSubtitle =
     pendingInvoices.length > 0
-      ? `${pendingInvoices.length} invoice${pendingInvoices.length === 1 ? '' : 's'} · Pending collection${gstLiability > 0 ? ` · ₹${formatINR(gstLiability)} GST due` : ''}`
-      : `${gstLiability > 0 ? `₹${formatINR(gstLiability)} GST due` : 'Pending collection'}`;
+      ? `${pendingInvoices.length} invoice${pendingInvoices.length === 1 ? '' : 's'} · Pending collection${gstLiability > 0 ? ` · ₹${formatINR(gstLiability)} GST due` : ''}${bankBalance > 0 ? ` · ₹${formatINR(bankBalance)} bank balance` : ''}`
+      : `${gstLiability > 0 ? `₹${formatINR(gstLiability)} GST due` : 'Pending collection'}${bankBalance > 0 ? ` · ₹${formatINR(bankBalance)} bank balance` : ''}`;
 
-  // ── Score card subtitles — augmented with REAL GST engine data ────────
+  // ── Score card subtitles — augmented with REAL GST + Banking data ─────
   // Compliance / Collection / Risk score cards keep their original layout
   // and tone — only the subtitle text is enriched with real GST context
   // (output tax + CGST/SGST/IGST breakdown, available ITC + input tax,
-  // GST liability) when available.
+  // GST liability) and real banking context (pending reconciliation count,
+  // real bank balance for liquidity) when available.
   const complianceScoreSubtitle = metrics.filedReturns > 0
     ? `${metrics.filedReturns} filed · ${metrics.pendingReturns + metrics.overdueReturns} pending${outputTax > 0 ? ` · ₹${formatINR(outputTax)} output tax` : ''}`
     : `${outputTax > 0 ? `₹${formatINR(outputTax)} output tax · ${gstSalesCount} sale${gstSalesCount === 1 ? '' : 's'} (C ₹${formatINR(cgstCollected)}/S ₹${formatINR(sgstCollected)}/I ₹${formatINR(igstCollected)})` : 'Based on filed vs pending returns'}`;
   const collectionScoreSubtitle = pendingCollection > 0
-    ? `₹${formatINR(pendingCollection)} pending collection${availableITC > 0 || inputTax > 0 ? ` · ₹${formatINR(availableITC)} ITC avail` : ''}${inputTax > 0 ? ` · ₹${formatINR(inputTax)} input tax` : ''}`
-    : `${metrics.matchPercentage.toFixed(0)}% invoice match rate${availableITC > 0 || inputTax > 0 ? ` · ₹${formatINR(availableITC)} ITC avail` : ''}${inputTax > 0 ? ` · ₹${formatINR(inputTax)} input tax` : ''}`;
+    ? `₹${formatINR(pendingCollection)} pending collection${availableITC > 0 || inputTax > 0 ? ` · ₹${formatINR(availableITC)} ITC avail` : ''}${inputTax > 0 ? ` · ₹${formatINR(inputTax)} input tax` : ''}${pendingReconciliation > 0 ? ` · ${pendingReconciliation} pending reconcile` : ''}`
+    : `${metrics.matchPercentage.toFixed(0)}% invoice match rate${availableITC > 0 || inputTax > 0 ? ` · ₹${formatINR(availableITC)} ITC avail` : ''}${inputTax > 0 ? ` · ₹${formatINR(inputTax)} input tax` : ''}${pendingReconciliation > 0 ? ` · ${pendingReconciliation} pending reconcile` : ''}`;
   const riskScoreSubtitle = metrics.criticalIssues > 0
-    ? `${metrics.criticalIssues} critical · ${metrics.overdueReturns} overdue`
-    : `${gstLiability > 0 ? `₹${formatINR(gstLiability)} GST liability` : 'Risk posture — higher is safer'}`;
+    ? `${metrics.criticalIssues} critical · ${metrics.overdueReturns} overdue${bankBalance > 0 ? ` · ₹${formatINR(bankBalance)} bank` : ''}`
+    : `${gstLiability > 0 ? `₹${formatINR(gstLiability)} GST liability` : 'Risk posture — higher is safer'}${bankBalance > 0 ? ` · ₹${formatINR(bankBalance)} bank` : ''}`;
 
   const firstName = getFirstName(user?.name);
 

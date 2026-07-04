@@ -44,6 +44,9 @@ import {
 } from '@/hooks/use-firestore';
 import { useInvoices } from '@/hooks/useInvoices';
 import { useGSTTransactions } from '@/hooks/useGSTTransactions';
+import { useBanking } from '@/hooks/useBanking';
+import { ALL_CATEGORIES, CATEGORY_LABELS } from '@/lib/banking';
+import type { TransactionCategory } from '@/lib/banking-provider';
 import { createReport, deleteReport } from '@/lib/firestore-service';
 import type {
   FirestoreReturn,
@@ -376,6 +379,31 @@ export default function ReportsPage() {
     loading: gstLoading,
   } = useGSTTransactions({ period: currentPeriod });
 
+  // ─── Real Banking Foundation™ — live bank connections + transactions ─────
+  // The Banking Foundation provides real bank-account balances, incoming /
+  // outgoing payment volumes, reconciliation counts, and category breakdowns
+  // from the org-scoped `bank_connections` + `bank_transactions` collections.
+  // Banking values are surfaced alongside invoice + GST values in the Cash
+  // Flow / Financial PDF generators. All reads are null-safe (`?? 0`) so the
+  // page renders IDENTICALLY when no bank is connected yet.
+  const {
+    summary: bankingSummary,
+    transactions: bankTransactions,
+    loading: bankingLoading,
+  } = useBanking();
+
+  // Banking-derived values — all null-safe. Used by the Cash Flow + Financial
+  // memos and the enhanced PDF generators (Banking Summary, Bank
+  // Reconciliation, Banking Cash Flow Breakdown sections).
+  const bankBalance = bankingSummary?.totalBalance ?? 0;
+  const bankAvailable = bankingSummary?.availableBalance ?? 0;
+  const bankIncoming = bankingSummary?.incomingPayments ?? 0;
+  const bankOutgoing = bankingSummary?.outgoingPayments ?? 0;
+  const pendingReconciliation = bankingSummary?.pendingReconciliation ?? 0;
+  const matchedCount = bankingSummary?.matchedCount ?? 0;
+  const partiallyMatchedCount = bankingSummary?.partiallyMatchedCount ?? 0;
+  const netCashFlow = bankIncoming - bankOutgoing;
+
   // ─── Persist Report History to localStorage ──────────────────────────────
   useEffect(() => {
     saveHistory(recentExports);
@@ -546,6 +574,10 @@ export default function ReportsPage() {
   // math). Total revenue still comes from engineInvoices.grandTotal (which
   // includes round-off — the GST engine summary doesn't carry that). Drafts
   // and cancelled invoices are excluded from the revenue figure.
+  // Real Banking Foundation™ — cashPosition / bankAvailable flow into the
+  // Financial PDF (Banking Summary section). They are NOT rendered as new
+  // cards on the page (no UI change); the existing 4 revenue + 4 tax cards
+  // stay exactly the same. The banking fields are consumed only by the PDF.
   const financialSummary = useMemo(() => {
     const active = engineInvoices.filter((i) => i.status !== 'draft' && i.status !== 'cancelled');
     const totalRevenue = active.reduce((s, i) => s + i.grandTotal, 0);
@@ -569,6 +601,10 @@ export default function ReportsPage() {
         tax: secInvoices.reduce((s, i) => s + i.cgst + i.sgst + i.igst, 0),
       };
     });
+    // Real Banking Foundation™ — cash position derived from connected bank
+    // accounts. Augments (does NOT replace) the existing invoice-derived
+    // revenue/tax fields. Surfaced in the Financial PDF's Banking Summary
+    // section; no rendered UI card is added or modified.
     return {
       totalRevenue,
       totalTaxVolume,
@@ -579,14 +615,29 @@ export default function ReportsPage() {
       cessTotal,
       bySection,
       invoiceCount: gstSummary?.salesCount ?? active.length,
+      // Banking-derived (all null-safe — 0 when no bank connected)
+      cashPosition: bankBalance,
+      bankAvailable,
+      bankIncoming,
+      bankOutgoing,
+      netCashFlow,
+      pendingReconciliation,
+      bankMatchedCount: matchedCount,
     };
-  }, [engineInvoices, gstSummary]);
+  }, [engineInvoices, gstSummary, bankBalance, bankAvailable, bankIncoming, bankOutgoing, netCashFlow, pendingReconciliation, matchedCount]);
 
   // Cash Flow Reports: reconciliation-based analysis + Real Invoice Engine™ cash flow.
   // Inflow = total collected (paid amounts), Outstanding = unpaid balance, Overdue = past-due.
   // The reconciliation-derived metrics (totalRecords / matched / unmatched / etc.) are
   // preserved so the on-page cards stay exactly the same; the invoice-derived metrics
   // (inflow / outstanding / overdue / invoiceCount) flow into the Cash Flow PDF report.
+  //
+  // Real Banking Foundation™ — banking cash flow values (bankIncoming /
+  // bankOutgoing / netCashFlow / bankBalance) AUGMENT the invoice-derived
+  // `inflow` field. They are NOT rendered as new cards on the page (no UI
+  // change); the existing 7 reconciliation cards stay exactly the same. The
+  // banking fields surface only in the Cash Flow PDF's Banking Cash Flow
+  // Breakdown section + by-category table.
   const cashFlowSummary = useMemo(() => {
     const totalRecords = fireRecons.reduce((s, r) => s + (r.totalRecords || 0), 0);
     const matched = fireRecons.reduce((s, r) => s + (r.matched || 0), 0);
@@ -608,6 +659,9 @@ export default function ReportsPage() {
     const outstanding = invoiceStats.totalOutstanding;
     const overdue = invoiceStats.totalOverdue;
     const invoiceCount = invoiceStats.count;
+    // Real Banking Foundation™ — banking cash flow metrics. The invoice-based
+    // `inflow` above is preserved (AUGMENT, not replace). Banking values are
+    // null-safe (0 when no bank connected).
     return {
       totalRecords,
       matched,
@@ -621,8 +675,19 @@ export default function ReportsPage() {
       outstanding,
       overdue,
       invoiceCount,
+      // Banking-derived (all null-safe — 0 when no bank connected)
+      bankIncoming,
+      bankOutgoing,
+      netCashFlow,
+      bankBalance,
+      bankAvailable,
+      pendingReconciliation,
+      bankMatchedCount: matchedCount,
+      bankPartiallyMatchedCount: partiallyMatchedCount,
+      inflowByCategory: bankingSummary?.inflowByCategory,
+      outflowByCategory: bankingSummary?.outflowByCategory,
     };
-  }, [fireRecons, invoiceStats]);
+  }, [fireRecons, invoiceStats, bankIncoming, bankOutgoing, netCashFlow, bankBalance, bankAvailable, pendingReconciliation, matchedCount, partiallyMatchedCount, bankingSummary]);
 
   // ─── Handlers ────────────────────────────────────────────────────────────
   const toggleSection = (section: GSTR1Section) => {
@@ -1163,6 +1228,27 @@ export default function ReportsPage() {
               { label: 'Remaining ITC', value: formatCurrency(itcSummary?.remainingITC ?? 0) },
             ],
           },
+          {
+            heading: 'Bank Reconciliation (Banking Foundation)',
+            rows: [
+              { label: 'Pending Reconciliation', value: formatNumber(bankingSummary?.pendingReconciliation ?? 0) },
+              { label: 'Matched Transactions', value: formatNumber(bankingSummary?.matchedCount ?? 0) },
+              { label: 'Partially Matched', value: formatNumber(bankingSummary?.partiallyMatchedCount ?? 0) },
+              {
+                label: 'Unmatched',
+                value: formatNumber(
+                  Math.max(
+                    0,
+                    (bankingSummary?.incomingCount ?? 0) +
+                      (bankingSummary?.outgoingCount ?? 0) -
+                      (bankingSummary?.matchedCount ?? 0) -
+                      (bankingSummary?.partiallyMatchedCount ?? 0),
+                  ),
+                ),
+              },
+              { label: 'Connected Accounts', value: formatNumber(bankingSummary?.connectedAccounts ?? 0) },
+            ],
+          },
         ],
       });
       const ok = openPrintWindow(html);
@@ -1225,6 +1311,24 @@ export default function ReportsPage() {
               { label: 'GST Health Score', value: formatNumber(gstSummary?.healthScore ?? 0) },
             ],
           },
+          {
+            heading: 'Banking Summary (Banking Foundation)',
+            rows: [
+              { label: 'Total Balance', value: formatCurrency(bankingSummary?.totalBalance ?? 0) },
+              { label: 'Available Balance', value: formatCurrency(bankingSummary?.availableBalance ?? 0) },
+              { label: 'Incoming Payments', value: formatCurrency(bankingSummary?.incomingPayments ?? 0) },
+              { label: 'Outgoing Payments', value: formatCurrency(bankingSummary?.outgoingPayments ?? 0) },
+              {
+                label: 'Net Cash Flow',
+                value: formatCurrency(
+                  (bankingSummary?.incomingPayments ?? 0) - (bankingSummary?.outgoingPayments ?? 0),
+                ),
+              },
+              { label: 'Pending Reconciliation', value: formatNumber(bankingSummary?.pendingReconciliation ?? 0) },
+              { label: 'Matched Transactions', value: formatNumber(bankingSummary?.matchedCount ?? 0) },
+              { label: 'Connected Accounts', value: formatNumber(bankingSummary?.connectedAccounts ?? 0) },
+            ],
+          },
         ],
         tables: [
           {
@@ -1262,6 +1366,18 @@ export default function ReportsPage() {
     setGenerating('cashflow-pdf');
     try {
       const generatedAt = new Date().toLocaleString('en-IN');
+      // Real Banking Foundation™ — banking cash flow values for the PDF.
+      // All null-safe (0 when no bank connected) so the PDF renders cleanly
+      // even before any bank is connected.
+      const bankInflow = bankingSummary?.incomingPayments ?? 0;
+      const bankOutflow = bankingSummary?.outgoingPayments ?? 0;
+      const bankNet = bankInflow - bankOutflow;
+      const bankTotalBalance = bankingSummary?.totalBalance ?? 0;
+      const bankAvailBalance = bankingSummary?.availableBalance ?? 0;
+      const bankPendingRecon = bankingSummary?.pendingReconciliation ?? 0;
+      const bankMatched = bankingSummary?.matchedCount ?? 0;
+      const inflowByCat = bankingSummary?.inflowByCategory;
+      const outflowByCat = bankingSummary?.outflowByCategory;
       const html = buildPdfHtml({
         title: 'Cash Flow Report',
         subtitle: 'ITC Reconciliation & Cash Flow Analysis',
@@ -1279,13 +1395,25 @@ export default function ReportsPage() {
             ],
           },
           {
-            heading: 'Cash Flow Impact',
+            heading: 'Cash Flow Impact (Invoice Engine)',
             rows: [
               { label: 'Cash Inflow (Collected)', value: formatCurrency(cashFlowSummary.inflow) },
               { label: 'Outstanding', value: formatCurrency(cashFlowSummary.outstanding) },
               { label: 'Overdue', value: formatCurrency(cashFlowSummary.overdue) },
               { label: 'Invoice Count', value: formatNumber(cashFlowSummary.invoiceCount) },
               { label: 'ITC Difference', value: formatCurrency(cashFlowSummary.itcDifference) },
+            ],
+          },
+          {
+            heading: 'Banking Cash Flow (Banking Foundation)',
+            rows: [
+              { label: 'Bank Incoming Payments', value: formatCurrency(bankInflow) },
+              { label: 'Bank Outgoing Payments', value: formatCurrency(bankOutflow) },
+              { label: 'Net Bank Cash Flow', value: formatCurrency(bankNet) },
+              { label: 'Total Bank Balance', value: formatCurrency(bankTotalBalance) },
+              { label: 'Available Balance', value: formatCurrency(bankAvailBalance) },
+              { label: 'Pending Reconciliation', value: formatNumber(bankPendingRecon) },
+              { label: 'Matched Transactions', value: formatNumber(bankMatched) },
             ],
           },
         ],
@@ -1301,6 +1429,20 @@ export default function ReportsPage() {
               formatNumber(r.matched),
               formatCurrency(r.itcDiff),
             ]),
+          },
+          {
+            heading: 'Banking Inflow / Outflow by Category',
+            columns: ['Category', 'Inflow (Credit)', 'Outflow (Debit)', 'Net'],
+            rows: ALL_CATEGORIES.map((cat: TransactionCategory) => {
+              const inflowAmt = inflowByCat?.[cat] ?? 0;
+              const outflowAmt = outflowByCat?.[cat] ?? 0;
+              return [
+                CATEGORY_LABELS[cat] ?? cat,
+                formatCurrency(inflowAmt),
+                formatCurrency(outflowAmt),
+                formatCurrency(inflowAmt - outflowAmt),
+              ];
+            }),
           },
         ],
       });
@@ -1398,9 +1540,10 @@ export default function ReportsPage() {
 
   // ─── Loading Skeleton ────────────────────────────────────────────────────
   // Wait for the legacy /api/invoices fetch (client dropdown), the real-time
-  // invoice engine subscription, AND the GST Return Engine™ subscription so
-  // the page never renders with stale engine or GST data.
-  if (loading || engineLoading || gstLoading) {
+  // invoice engine subscription, the GST Return Engine™ subscription, AND the
+  // Real Banking Foundation™ subscription so the page never renders with
+  // stale engine, GST, or banking data.
+  if (loading || engineLoading || gstLoading || bankingLoading) {
     return (
       <div className="space-y-6 p-6">
         <div className="flex items-center gap-3">

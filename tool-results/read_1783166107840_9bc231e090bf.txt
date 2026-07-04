@@ -1,0 +1,1380 @@
+     1→// ═══════════════════════════════════════════════════════════════════════════════
+     2→// GSTPILOT BANKING CLOUD™ — Core Engine
+     3→// Phase 8 — Step 2 — Connect. Execute. Automate. Scale.
+     4→//
+     5→// Deterministic, transparent engine. No LLM in the engine — the LLM is reserved
+     6→// for Oracle's conversational layer (with Banking Cloud context injected).
+     7→//
+     8→// Modules implemented here:
+     9→//   Module 1 — Bank Account Management™       buildAccountsState()
+    10→//   Module 2 — Bank Statement Sync™           buildStatementsState()
+    11→//   Module 3 — Account Aggregator Cloud™      buildAAState()
+    12→//   Module 4 — Cash Flow Engine™              buildCashFlowState()
+    13→//   Module 5 — Auto Reconciliation Engine™    buildReconciliationState()
+    14→//   Module 6 — UPI Cloud™                     buildUPIState()
+    15→//   Module 7 — Collections Recovery Engine™   buildCollectionsState()
+    16→//   +        — Oracle Personality™            buildBankingPersonality()
+    17→//
+    18→// Orchestrator: getBankingCloudState() — fetches accounts (seeding demo data
+    19→// if the DB is empty), then composes the complete Banking Cloud state.
+    20→//
+    21→// Action handlers: connectBankAccount, syncBankAccounts, syncStatements,
+    22→//   connectAA, consentAA, runReconciliation, connectUPI, syncUPI,
+    23→//   recoverCollections, remindCollections — each writes to DB and returns
+    24→//   an oracleAck string for the Oracle UI toast.
+    25→// ═══════════════════════════════════════════════════════════════════════════════
+    26→
+    27→import { db } from '@/lib/db';
+    28→import type {
+    29→  AAConnectionSummary, AAStatusSummary, BankAccountSummary, BankActionRequest,
+    30→  BankActionResponse, BankStatementSummary, BankTransactionRow, BankingCloudPersonality,
+    31→  BankingCloudState, CashFlowDailyPoint, CashFlowSummary, CollectionsCase,
+    32→  CollectionsSummary, MismatchType, ReconStatus, ReconciliationEntry,
+    33→  ReconciliationSummary, RiskLevel, TxnCategory, TxnType, UPISummary,
+    34→  UPITransactionRow,
+    35→} from '@/lib/banking/types';
+    36→import { RISK_GLYPH, RECON_STATUS_GLYPH, CATEGORY_GLYPH } from '@/lib/banking/types';
+    37→
+    38→// ─── Helpers ──────────────────────────────────────────────────────────────────
+    39→
+    40→const nowISO = () => new Date().toISOString();
+    41→const todayISO = () => new Date().toISOString().slice(0, 10);
+    42→export const uid = (prefix: string) => `${prefix}_${Math.random().toString(36).slice(2, 10)}`;
+    43→const minsAgo = (m: number) => {
+    44→  const x = new Date();
+    45→  x.setTime(x.getTime() - m * 60_000);
+    46→  return x.toISOString();
+    47→};
+    48→const hoursAgo = (h: number) => {
+    49→  const x = new Date();
+    50→  x.setTime(x.getTime() - h * 3600_000);
+    51→  return x.toISOString();
+    52→};
+    53→const daysAgoISO = (d: number) => {
+    54→  const x = new Date();
+    55→  x.setDate(x.getDate() - d);
+    56→  return x.toISOString();
+    57→};
+    58→const daysFromNowISO = (d: number) => {
+    59→  const x = new Date();
+    60→  x.setDate(x.getDate() + d);
+    61→  return x.toISOString();
+    62→};
+    63→const dateOnly = (iso: string) => iso.slice(0, 10);
+    64→
+    65→const inrShort = (n: number) => {
+    66→  if (!isFinite(n) || isNaN(n)) return '₹0';
+    67→  const abs = Math.abs(n);
+    68→  if (abs >= 10000000) return `₹${(n / 10000000).toFixed(2)} Cr`;
+    69→  if (abs >= 100000) return `₹${(n / 100000).toFixed(2)} L`;
+    70→  if (abs >= 1000) return `₹${(n / 1000).toFixed(1)}K`;
+    71→  return '₹' + Math.round(n).toLocaleString('en-IN');
+    72→};
+    73→
+    74→const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(max, n));
+    75→const rand = (min: number, max: number) => Math.floor(Math.random() * (max - min + 1)) + min;
+    76→const pick = <T,>(arr: T[]): T => arr[Math.floor(Math.random() * arr.length)];
+    77→
+    78→function riskFromScore(score: number): RiskLevel {
+    79→  if (score >= 75) return 'critical';
+    80→  if (score >= 55) return 'high';
+    81→  if (score >= 35) return 'medium';
+    82→  return 'low';
+    83→}
+    84→
+    85→// ─── Seed data (used only when DB is empty) ────────────────────────────────────
+    86→
+    87→const SEED_BANKS: Array<Omit<BankAccountSummary, 'id' | 'lastSyncAt' | 'recordsToday' | 'status'>> = [
+    88→  {
+    89→    bankName: 'HDFC Bank', accountMasked: '****4521', accountType: 'current',
+    90→    ifsc: 'HDFC0000123', currentBalance: 4823500, availableBalance: 4610000,
+    91→    overdraftLimit: 0, upiHandle: 'yourbiz@hdfc', aaConsent: true,
+    92→    aaConsentExpiry: daysFromNowISO(86),
+    93→  },
+    94→  {
+    95→    bankName: 'ICICI Bank', accountMasked: '****8890', accountType: 'current',
+    96→    ifsc: 'ICIC0000456', currentBalance: 1240800, availableBalance: 1240800,
+    97→    overdraftLimit: 0, upiHandle: 'yourbiz@icici', aaConsent: true,
+    98→    aaConsentExpiry: daysFromNowISO(54),
+    99→  },
+   100→  {
+   101→    bankName: 'State Bank of India', accountMasked: '****2231', accountType: 'savings',
+   102→    ifsc: 'SBIN0000789', currentBalance: 318750, availableBalance: 318750,
+   103→    overdraftLimit: 0,
+   104→  },
+   105→  {
+   106→    bankName: 'Axis Bank', accountMasked: '****6677', accountType: 'od',
+   107→    ifsc: 'UTIB0000321', currentBalance: 1850000, availableBalance: 2850000,
+   108→    overdraftLimit: 1000000, aaConsent: true, aaConsentExpiry: daysFromNowISO(12),
+   109→  },
+   110→];
+   111→
+   112→const PARTIES = [
+   113→  'Reliance Retail Ltd', 'Tata Steel Ltd', 'Infosys Pvt Ltd', 'Asian Paints India',
+   114→  'Britannia Industries', 'Maruti Suzuki India', 'Hindustan Unilever Ltd', 'Adani Power Ltd',
+   115→  'Bharti Airtel Ltd', 'Mahindra & Mahindra', 'Wipro Technologies', 'HCL Technologies',
+   116→  'Patel Traders', 'Kumar Logistics', 'Mehta Suppliers Pvt Ltd', 'Singh Properties',
+   117→  'Sharma & Associates', 'Verma Distributors', 'Reddy Enterprises',
+   118→];
+   119→
+   120→const INVOICE_NUMS = [
+   121→  'INV-2025-0411', 'INV-2025-0412', 'INV-2025-0415', 'INV-2025-0418',
+   122→  'INV-2025-0421', 'INV-2025-0422', 'INV-2025-0425', 'INV-2025-0428',
+   123→  'INV-2025-0431', 'INV-2025-0433', 'INV-2025-0435', 'INV-2025-0437',
+   124→];
+   125→
+   126→const UPI_VPAS = [
+   127→  'reliance@hdfc', 'tata@axis', 'infosys@icici', 'asian@okhdfc',
+   128→  'britannia@ybl', 'maruti@apbl', 'patel.9876@okaxis', 'kumar.logistics@paytm',
+   129→  'mehta.suppliers@ybl', 'sharma.associates@okhdfcbank',
+   130→];
+   131→
+   132→const DESCRIPTIONS_CREDIT = [
+   133→  'NEFT-{party}', 'RTGS-{party}', 'UPI/{party}', 'IMPS-{party}', 'INF-{party} GST INV',
+   134→];
+   135→const DESCRIPTIONS_DEBIT = [
+   136→  'NEFT-{party}', 'UPI/{party}', 'RTGS-Salary {party}', 'TDS Payment {party}',
+   137→  'Rent-{party}', 'Purchase-{party}', 'GST Payment-{party}',
+   138→];
+   139→
+   140→function fillTemplate(tpl: string, party: string): string {
+   141→  return tpl.replace('{party}', party);
+   142→}
+   143→
+   144→function categorise(description: string, type: TxnType, amount: number): TxnCategory {
+   145→  const d = description.toLowerCase();
+   146→  if (d.includes('salary') || d.includes('payroll')) return 'payroll';
+   147→  if (d.includes('gst') || d.includes('tds') || d.includes('tax')) return 'tax';
+   148→  if (d.includes('rent')) return 'rent';
+   149→  if (d.includes('logistics') || d.includes('freight')) return 'logistics';
+   150→  if (d.includes('purchase')) return 'purchase';
+   151→  if (d.includes('interest')) return 'interest';
+   152→  if (d.includes('refund')) return 'refund';
+   153→  if (d.includes('charges') || d.includes('fee') || amount < 0 && amount > -2000) return 'fee';
+   154→  if (d.includes('transfer') || d.includes('neft') && type === 'debit' && amount > -50000) return 'transfer';
+   155→  if (type === 'credit' && amount > 10000) return 'revenue';
+   156→  return 'uncategorised';
+   157→}
+   158→
+   159→// ─── Seeding: only runs when the DB has no BankAccount rows ────────────────────
+   160→
+   161→export async function ensureSeedData(): Promise<void> {
+   162→  const accountCount = await db.bankAccount.count();
+   163→  if (accountCount > 0) return;
+   164→
+   165→  // Create accounts
+   166→  const accounts = [];
+   167→  for (const seed of SEED_BANKS) {
+   168→    const acc = await db.bankAccount.create({
+   169→      data: {
+   170→        bankName: seed.bankName,
+   171→        accountMasked: seed.accountMasked,
+   172→        accountType: seed.accountType,
+   173→        ifsc: seed.ifsc ?? null,
+   174→        balance: seed.currentBalance,
+   175→        availableBalance: seed.availableBalance,
+   176→        overdraftLimit: seed.overdraftLimit,
+   177→        upiHandle: seed.upiHandle ?? null,
+   178→        aaConsent: seed.aaConsent ?? false,
+   179→        aaConsentExpiry: seed.aaConsentExpiry ?? null,
+   180→        status: 'connected',
+   181→        lastSyncAt: minsAgo(rand(5, 90)),
+   182→      },
+   183→    });
+   184→    accounts.push(acc);
+   185→  }
+   186→
+   187→  // Generate transactions for each account (last 30 days)
+   188→  for (const acc of accounts) {
+   189→    const txCount = rand(60, 110);
+   190→    for (let i = 0; i < txCount; i++) {
+   191→      const isCredit = Math.random() < 0.42;
+   192→      const party = pick(PARTIES);
+   193→      const amount = isCredit ? rand(15, 480) * 1000 : -(rand(5, 250) * 1000);
+   194→      const tpl = isCredit ? pick(DESCRIPTIONS_CREDIT) : pick(DESCRIPTIONS_DEBIT);
+   195→      const description = fillTemplate(tpl, party);
+   196→      const category = categorise(description, isCredit ? 'credit' : 'debit', amount);
+   197→      const ref = isCredit
+   198→        ? (description.startsWith('UPI') ? `UPI${rand(10**9, 10**10)}` : `UTR${rand(10**11, 10**12)}`)
+   199→        : (description.startsWith('UPI') ? `UPI${rand(10**9, 10**10)}` : `UTR${rand(10**11, 10**12)}`);
+   200→      const matched = Math.random() < 0.62;
+   201→      await db.bankTransaction.create({
+   202→        data: {
+   203→          accountId: acc.id,
+   204→          date: new Date(daysAgoISO(rand(0, 29))),
+   205→          description,
+   206→          amount,
+   207→          type: isCredit ? 'credit' : 'debit',
+   208→          category,
+   209→          referenceNo: ref,
+   210→          counterparty: party,
+   211→          matched,
+   212→          matchedInvoice: matched ? pick(INVOICE_NUMS) : null,
+   213→          matchedParty: matched ? party : null,
+   214→          matchConfidence: matched ? rand(82, 99) : 0,
+   215→          matchedAt: matched ? minsAgo(rand(60, 6000)) : null,
+   216→        },
+   217→      });
+   218→    }
+   219→  }
+   220→
+   221→  // Generate UPI transactions
+   222→  const upiCount = rand(80, 140);
+   223→  for (let i = 0; i < upiCount; i++) {
+   224→    const isCredit = Math.random() < 0.55;
+   225→    const vpa = pick(UPI_VPAS);
+   226→    const partyName = vpa.split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+   227→    const amount = isCredit ? rand(2, 95) * 1000 : -(rand(1, 35) * 1000);
+   228→    const ref = `UPI${rand(10**9, 10**10)}`;
+   229→    const matched = Math.random() < 0.48;
+   230→    const settled = Math.random() < 0.85;
+   231→    await db.uPITransaction.create({
+   232→      data: {
+   233→        accountId: accounts[0].id,
+   234→        upiId: vpa,
+   235→        vpaCounterparty: partyName,
+   236→        date: new Date(daysAgoISO(rand(0, 29))),
+   237→        amount,
+   238→        type: isCredit ? 'credit' : 'debit',
+   239→        referenceNo: ref,
+   240→        notes: isCredit ? 'UPI Collect received' : 'UPI Payment',
+   241→        matched,
+   242→        matchedInvoice: matched ? pick(INVOICE_NUMS) : null,
+   243→        matchedParty: matched ? partyName : null,
+   244→        status: settled ? 'settled' : pick(['pending', 'pending', 'failed', 'reversed']),
+   245→      },
+   246→    });
+   247→  }
+   248→
+   249→  // Generate AA connections
+   250→  const aaSeeds = [
+   251→    { aaName: 'OneMoney', linkedAccounts: 3, mobile: '9876543210' },
+   252→    { aaName: 'Finvu', linkedAccounts: 2, mobile: '9876543210' },
+   253→    { aaName: 'CAMSOVD', linkedAccounts: 1, mobile: '9876543210' },
+   254→  ];
+   255→  for (const s of aaSeeds) {
+   256→    const approved = s.aaName !== 'CAMSOVD';
+   257→    await db.aAConnection.create({
+   258→      data: {
+   259→        aaName: s.aaName,
+   260→        customerMobile: s.mobile,
+   261→        consentHandle: uid('ch'),
+   262→        consentStatus: approved ? 'approved' : 'pending',
+   263→        consentExpiry: approved ? daysFromNowISO(rand(10, 90)) : null,
+   264→        fiTypes: 'DEPOSIT,TERM',
+   265→        linkedAccounts: s.linkedAccounts,
+   266→        lastFetchAt: approved ? minsAgo(rand(60, 600)) : null,
+   267→        status: approved ? 'connected' : 'disconnected',
+   268→      },
+   269→    });
+   270→  }
+   271→
+   272→  // Generate bank reconciliation entries
+   273→  const reconCount = rand(40, 70);
+   274→  for (let i = 0; i < reconCount; i++) {
+   275→    const matched = Math.random() < 0.72;
+   276→    const party = pick(PARTIES);
+   277→    const amount = rand(15, 480) * 1000;
+   278→    const isUPI = Math.random() < 0.45;
+   279→    const bankRef = isUPI ? `UPI${rand(10**9, 10**10)}` : `UTR${rand(10**11, 10**12)}`;
+   280→    let status: ReconStatus = 'matched';
+   281→    let mismatchType: MismatchType | undefined;
+   282→    if (!matched) {
+   283→      const opts: Array<{ s: ReconStatus; m: MismatchType }> = [
+   284→        { s: 'unmatched', m: 'unmatched_payment' },
+   285→        { s: 'pending', m: 'missing_entry' },
+   286→        { s: 'duplicate', m: 'duplicate' },
+   287→        { s: 'partial', m: 'partial_payment' },
+   288→      ];
+   289→      const choice = pick(opts);
+   290→      status = choice.s;
+   291→      mismatchType = choice.m;
+   292→    }
+   293→    await db.bankReconciliation.create({
+   294→      data: {
+   295→        accountId: accounts[0].id,
+   296→        bankRef,
+   297→        bankAmount: amount,
+   298→        matchedInvoice: matched ? pick(INVOICE_NUMS) : null,
+   299→        matchedTo: matched ? party : null,
+   300→        status,
+   301→        mismatchType: mismatchType ?? null,
+   302→        confidencePct: matched ? rand(82, 99) : rand(20, 60),
+   303→        suggestedAction: matched ? null : pick([
+   304→          'Match to invoice INV-2025-0431',
+   305→          'Verify with customer — possible duplicate',
+   306→          'Reclassify as bank charge',
+   307→          'Create missing invoice entry',
+   308→        ]),
+   309→        at: minsAgo(rand(10, 4000)),
+   310→      },
+   311→    });
+   312→  }
+   313→
+   314→  // Generate collections cases
+   315→  const collCount = rand(10, 18);
+   316→  for (let i = 0; i < collCount; i++) {
+   317→    const party = pick(PARTIES);
+   318→    const inv = pick(INVOICE_NUMS);
+   319→    const outstanding = rand(35, 480) * 1000;
+   320→    const daysOver = rand(3, 95);
+   321→    const risk: RiskLevel = daysOver > 60 ? 'critical' : daysOver > 30 ? 'high' : daysOver > 14 ? 'medium' : 'low';
+   322→    const recovered = Math.random() < 0.25;
+   323→    await db.collectionsCase.create({
+   324→      data: {
+   325→        invoiceNo: inv,
+   326→        clientName: party,
+   327→        outstanding,
+   328→        dueDate: daysAgoISO(daysOver),
+   329→        daysOverdue: daysOver,
+   330→        riskLevel: risk,
+   331→        reminderCount: rand(0, 3),
+   332→        lastReminderAt: Math.random() < 0.7 ? daysAgoISO(rand(1, 20)) : null,
+   333→        nextActionAt: daysFromNowISO(rand(0, 5)),
+   334→        escalationLevel: daysOver > 60 ? 3 : daysOver > 30 ? 2 : daysOver > 14 ? 1 : 0,
+   335→        status: recovered ? 'recovered' : daysOver > 60 ? 'escalated' : 'open',
+   336→      },
+   337→    });
+   338→  }
+   339→
+   340→  // Generate daily cash forecast (last 30 days + next 14 days)
+   341→  let opening = 4500000;
+   342→  for (let d = 30; d >= 1; d--) {
+   343→    const date = new Date();
+   344→    date.setDate(date.getDate() - d);
+   345→    const inflows = rand(50, 350) * 1000;
+   346→    const outflows = rand(40, 280) * 1000;
+   347→    const closing = opening + inflows - outflows;
+   348→    await db.cashForecast.create({
+   349→      data: {
+   350→        date,
+   351→        openingBalance: opening,
+   352→        inflows,
+   353→        outflows,
+   354→        closingBalance: closing,
+   355→        expectedCollections: inflows,
+   356→        expectedPayments: outflows,
+   357→        burnRate: outflows,
+   358→        runwayDays: closing > 0 ? Math.floor(closing / Math.max(outflows, 1) * 30) : 0,
+   359→        shortage: closing < 500000,
+   360→        shortageAmount: closing < 500000 ? 500000 - closing : 0,
+   361→        horizon: 'daily',
+   362→      },
+   363→    });
+   364→    opening = closing;
+   365→  }
+   366→  // Projection for next 14 days
+   367→  for (let d = 1; d <= 14; d++) {
+   368→    const date = new Date();
+   369→    date.setDate(date.getDate() + d);
+   370→    const inflows = rand(50, 280) * 1000;
+   371→    const outflows = rand(60, 320) * 1000;
+   372→    const closing = opening + inflows - outflows;
+   373→    await db.cashForecast.create({
+   374→      data: {
+   375→        date,
+   376→        openingBalance: opening,
+   377→        inflows,
+   378→        outflows,
+   379→        closingBalance: closing,
+   380→        expectedCollections: inflows,
+   381→        expectedPayments: outflows,
+   382→        burnRate: outflows,
+   383→        runwayDays: closing > 0 ? Math.floor(closing / Math.max(outflows, 1) * 30) : 0,
+   384→        shortage: closing < 500000,
+   385→        shortageAmount: closing < 500000 ? 500000 - closing : 0,
+   386→        horizon: d <= 7 ? '7d' : '30d',
+   387→      },
+   388→    });
+   389→    opening = closing;
+   390→  }
+   391→}
+   392→
+   393→// ─── Module 1: Bank Account Management™ ───────────────────────────────────────
+   394→
+   395→export async function buildAccountsState(): Promise<BankAccountSummary[]> {
+   396→  await ensureSeedData();
+   397→  const rows = await db.bankAccount.findMany({ orderBy: { bankName: 'asc' } });
+   398→  const todayStart = new Date();
+   399→  todayStart.setHours(0, 0, 0, 0);
+   400→
+   401→  const out: BankAccountSummary[] = [];
+   402→  for (const r of rows) {
+   403→    const recordsToday = await db.bankTransaction.count({
+   404→      where: { accountId: r.id, date: { gte: todayStart } },
+   405→    });
+   406→    out.push({
+   407→      id: r.id,
+   408→      bankName: r.bankName,
+   409→      accountMasked: r.accountMasked,
+   410→      accountType: r.accountType as BankAccountSummary['accountType'],
+   411→      ifsc: r.ifsc ?? undefined,
+   412→      currentBalance: r.balance,
+   413→      availableBalance: r.availableBalance,
+   414→      overdraftLimit: r.overdraftLimit,
+   415→      upiHandle: r.upiHandle ?? undefined,
+   416→      aaConsent: r.aaConsent,
+   417→      aaConsentExpiry: r.aaConsentExpiry?.toISOString() ?? undefined,
+   418→      status: r.status as BankAccountSummary['status'],
+   419→      lastSyncAt: r.lastSyncAt?.toISOString() ?? nowISO(),
+   420→      recordsToday,
+   421→    });
+   422→  }
+   423→  return out;
+   424→}
+   425→
+   426→// ─── Module 2: Bank Statement Sync™ ───────────────────────────────────────────
+   427→
+   428→export async function buildStatementsState(
+   429→  accounts: BankAccountSummary[],
+   430→  limit = 12,
+   431→): Promise<BankStatementSummary> {
+   432→  await ensureSeedData();
+   433→  const accMap = new Map(accounts.map(a => [a.id, a]));
+   434→  const rows = await db.bankTransaction.findMany({
+   435→    orderBy: { date: 'desc' },
+   436→    take: limit,
+   437→  });
+   438→  const totalTransactions = await db.bankTransaction.count();
+   439→  const todayStart = new Date();
+   440→  todayStart.setHours(0, 0, 0, 0);
+   441→  const last7d = new Date();
+   442→  last7d.setDate(last7d.getDate() - 7);
+   443→  const last30d = new Date();
+   444→  last30d.setDate(last30d.getDate() - 30);
+   445→
+   446→  const [todayCount, last7dCount, last30dCount] = await Promise.all([
+   447→    db.bankTransaction.count({ where: { date: { gte: todayStart } } }),
+   448→    db.bankTransaction.count({ where: { date: { gte: last7d } } }),
+   449→    db.bankTransaction.count({ where: { date: { gte: last30d } } }),
+   450→  ]);
+   451→
+   452→  const last30dTxns = await db.bankTransaction.findMany({
+   453→    where: { date: { gte: last30d } },
+   454→    select: { amount: true, category: true, type: true },
+   455→  });
+   456→  const inflow30d = last30dTxns.filter(t => t.amount > 0).reduce((s, t) => s + t.amount, 0);
+   457→  const outflow30d = last30dTxns.filter(t => t.amount < 0).reduce((s, t) => s + Math.abs(t.amount), 0);
+   458→  const categorised = last30dTxns.filter(t => t.category !== 'uncategorised').length;
+   459→  const categorisationPct = last30dTxns.length > 0
+   460→    ? Math.round((categorised / last30dTxns.length) * 100)
+   461→    : 0;
+   462→
+   463→  const recentTransactions: BankTransactionRow[] = rows.map(r => {
+   464→    const acc = accMap.get(r.accountId);
+   465→    return {
+   466→      id: r.id,
+   467→      accountId: r.accountId,
+   468→      bankName: acc?.bankName ?? '—',
+   469→      accountMasked: acc?.accountMasked ?? '—',
+   470→      date: r.date.toISOString(),
+   471→      description: r.description,
+   472→      amount: r.amount,
+   473→      type: r.type as TxnType,
+   474→      category: r.category as TxnCategory,
+   475→      referenceNo: r.referenceNo ?? undefined,
+   476→      counterparty: r.counterparty ?? undefined,
+   477→      matched: r.matched,
+   478→      matchedInvoice: r.matchedInvoice ?? undefined,
+   479→      matchedParty: r.matchedParty ?? undefined,
+   480→      matchConfidence: r.matchConfidence,
+   481→    };
+   482→  });
+   483→
+   484→  return {
+   485→    totalTransactions,
+   486→    todayCount,
+   487→    last7dCount,
+   488→    last30dCount,
+   489→    inflow30d,
+   490→    outflow30d,
+   491→    net30d: inflow30d - outflow30d,
+   492→    categorisationPct,
+   493→    recentTransactions,
+   494→  };
+   495→}
+   496→
+   497→// ─── Module 3: Account Aggregator Cloud™ ──────────────────────────────────────
+   498→
+   499→export async function buildAAState(): Promise<AAStatusSummary> {
+   500→  await ensureSeedData();
+   501→  const rows = await db.aAConnection.findMany({ orderBy: { createdAt: 'desc' } });
+   502→  const connections: AAConnectionSummary[] = rows.map(r => ({
+   503→    id: r.id,
+   504→    aaName: r.aaName,
+   505→    customerMobile: r.customerMobile ?? undefined,
+   506→    consentStatus: r.consentStatus as AAConnectionSummary['consentStatus'],
+   507→    consentHandle: r.consentHandle ?? undefined,
+   508→    consentExpiry: r.consentExpiry?.toISOString() ?? undefined,
+   509→    fiTypes: (r.fiTypes ?? '').split(',').filter(Boolean),
+   510→    linkedAccounts: r.linkedAccounts,
+   511→    lastFetchAt: r.lastFetchAt?.toISOString() ?? undefined,
+   512→    status: r.status as AAConnectionSummary['status'],
+   513→  }));
+   514→
+   515→  const approved = connections.filter(c => c.consentStatus === 'approved');
+   516→  const pending = connections.filter(c => c.consentStatus === 'pending');
+   517→  const expiries = approved
+   518→    .map(c => c.consentExpiry ? new Date(c.consentExpiry).getTime() : null)
+   519→    .filter((t): t is number => t !== null)
+   520→    .sort((a, b) => a - b);
+   521→
+   522→  return {
+   523→    totalConnections: connections.length,
+   524→    approvedConnections: approved.length,
+   525→    pendingConnections: pending.length,
+   526→    totalLinkedAccounts: connections.reduce((s, c) => s + c.linkedAccounts, 0),
+   527→    nextExpiryIn: expiries.length > 0
+   528→      ? Math.max(0, Math.ceil((expiries[0] - Date.now()) / 86400000))
+   529→      : undefined,
+   530→    connections,
+   531→  };
+   532→}
+   533→
+   534→// ─── Module 4: Cash Flow Engine™ ──────────────────────────────────────────────
+   535→
+   536→export async function buildCashFlowState(accounts: BankAccountSummary[]): Promise<CashFlowSummary> {
+   537→  await ensureSeedData();
+   538→  const cashPosition = accounts.reduce((s, a) => s + a.availableBalance, 0);
+   539→
+   540→  // Daily points (last 30 days)
+   541→  const dailyRows = await db.cashForecast.findMany({
+   542→    where: { horizon: 'daily' },
+   543→    orderBy: { date: 'asc' },
+   544→  });
+   545→  const forecast7dRows = await db.cashForecast.findMany({
+   546→    where: { horizon: '7d' },
+   547→    orderBy: { date: 'asc' },
+   548→  });
+   549→  const forecast30dRows = await db.cashForecast.findMany({
+   550→    where: { horizon: '30d' },
+   551→    orderBy: { date: 'asc' },
+   552→  });
+   553→
+   554→  const toPoint = (r: typeof dailyRows[number]): CashFlowDailyPoint => ({
+   555→    date: r.date.toISOString(),
+   556→    opening: r.openingBalance,
+   557→    inflows: r.inflows,
+   558→    outflows: r.outflows,
+   559→    closing: r.closingBalance,
+   560→    shortage: r.shortage,
+   561→    shortageAmount: r.shortageAmount,
+   562→  });
+   563→
+   564→  const daily = dailyRows.map(toPoint);
+   565→  const forecast7d = forecast7dRows.map(toPoint);
+   566→  const forecast30d = forecast30dRows.map(toPoint);
+   567→
+   568→  // Burns (avg outflow over last 7 actual days)
+   569→  const last7 = daily.slice(-7);
+   570→  const dailyBurn = last7.length > 0 ? last7.reduce((s, d) => s + d.outflows, 0) / last7.length : 0;
+   571→  const monthlyBurn = dailyBurn * 30;
+   572→
+   573→  // Runway (cash / daily burn, capped)
+   574→  const runwayDays = dailyBurn > 0 ? Math.min(730, Math.floor(cashPosition / dailyBurn)) : 730;
+   575→
+   576→  // Expected collections/payments next 7 days (from forecast)
+   577→  const next7 = forecast7d;
+   578→  const expectedCollections = next7.reduce((s, d) => s + d.inflows, 0);
+   579→  const expectedPayments = next7.reduce((s, d) => s + d.outflows, 0);
+   580→
+   581→  // Shortage detection
+   582→  const shortagePoint = next7.find(d => d.shortage);
+   583→  const shortageDetected = !!shortagePoint;
+   584→  const shortageAmount = shortagePoint?.shortageAmount ?? 0;
+   585→  const shortageDate = shortagePoint?.date;
+   586→
+   587→  // Cash position change vs 30 days ago
+   588→  const opening30Ago = daily[0]?.opening ?? cashPosition;
+   589→  const cashPositionChangePct = opening30Ago > 0
+   590→    ? ((cashPosition - opening30Ago) / opening30Ago) * 100
+   591→    : 0;
+   592→
+   593→  return {
+   594→    cashPosition,
+   595→    cashPositionChangePct,
+   596→    dailyBurn,
+   597→    monthlyBurn,
+   598→    runwayDays,
+   599→    expectedCollections,
+   600→    expectedPayments,
+   601→    shortageDetected,
+   602→    shortageAmount,
+   603→    shortageDate,
+   604→    daily,
+   605→    forecast7d,
+   606→    forecast30d,
+   607→  };
+   608→}
+   609→
+   610→// ─── Module 5: Auto Reconciliation Engine™ ────────────────────────────────────
+   611→
+   612→export async function buildReconciliationState(limit = 20): Promise<ReconciliationSummary> {
+   613→  await ensureSeedData();
+   614→  const rows = await db.bankReconciliation.findMany({
+   615→    orderBy: { at: 'desc' },
+   616→    take: limit,
+   617→  });
+   618→
+   619→  const entries: ReconciliationEntry[] = rows.map(r => ({
+   620→    id: r.id,
+   621→    bankRef: r.bankRef,
+   622→    bankAmount: r.bankAmount,
+   623→    matchedInvoice: r.matchedInvoice ?? undefined,
+   624→    matchedTo: r.matchedTo ?? undefined,
+   625→    status: r.status as ReconStatus,
+   626→    mismatchType: (r.mismatchType as MismatchType | null) ?? undefined,
+   627→    confidencePct: r.confidencePct,
+   628→    suggestedAction: r.suggestedAction ?? undefined,
+   629→    at: r.at.toISOString(),
+   630→  }));
+   631→
+   632→  const matched = entries.filter(e => e.status === 'matched');
+   633→  const unmatched = entries.filter(e => e.status === 'unmatched');
+   634→  const pending = entries.filter(e => e.status === 'pending');
+   635→  const duplicate = entries.filter(e => e.status === 'duplicate');
+   636→  const partial = entries.filter(e => e.status === 'partial');
+   637→  const matchedPct = entries.length > 0 ? Math.round((matched.length / entries.length) * 100) : 0;
+   638→  const matchedAmount = matched.reduce((s, e) => s + e.bankAmount, 0);
+   639→  const unmatchedAmount = unmatched.reduce((s, e) => s + e.bankAmount, 0)
+   640→    + partial.reduce((s, e) => s + e.bankAmount, 0);
+   641→
+   642→  // Risk score: weighted by unmatched/partial + duplicate
+   643→  const totalUnmatched = unmatched.length + partial.length + duplicate.length;
+   644→  const riskScore = entries.length > 0
+   645→    ? clamp(Math.round((totalUnmatched / entries.length) * 100), 0, 100)
+   646→    : 0;
+   647→  const riskLevel = riskFromScore(riskScore);
+   648→
+   649→  return {
+   650→    totalTransactions: entries.length,
+   651→    matched: matched.length,
+   652→    unmatched: unmatched.length,
+   653→    pending: pending.length,
+   654→    duplicate: duplicate.length,
+   655→    partial: partial.length,
+   656→    matchedPct,
+   657→    matchedAmount,
+   658→    unmatchedAmount,
+   659→    pendingCollections: partial.length,
+   660→    pendingPayments: pending.length,
+   661→    riskScore,
+   662→    riskLevel,
+   663→    entries,
+   664→  };
+   665→}
+   666→
+   667→// ─── Module 6: UPI Cloud™ ─────────────────────────────────────────────────────
+   668→
+   669→export async function buildUPIState(limit = 12): Promise<UPISummary> {
+   670→  await ensureSeedData();
+   671→  const rows = await db.uPITransaction.findMany({
+   672→    orderBy: { date: 'desc' },
+   673→    take: limit,
+   674→  });
+   675→  const totalTransactions = await db.uPITransaction.count();
+   676→  const todayStart = new Date();
+   677→  todayStart.setHours(0, 0, 0, 0);
+   678→  const last30d = new Date();
+   679→  last30d.setDate(last30d.getDate() - 30);
+   680→
+   681→  const [todayCount, last30dRows] = await Promise.all([
+   682→    db.uPITransaction.count({ where: { date: { gte: todayStart } } }),
+   683→    db.uPITransaction.findMany({ where: { date: { gte: last30d } }, select: { amount: true, upiId: true, vpaCounterparty: true, status: true } }),
+   684→  ]);
+   685→
+   686→  const collections30d = last30dRows.filter(t => t.amount > 0).reduce((s, t) => s + t.amount, 0);
+   687→  const payments30d = last30dRows.filter(t => t.amount < 0).reduce((s, t) => s + Math.abs(t.amount), 0);
+   688→  const pendingSettlements = last30dRows.filter(t => t.status === 'pending').length;
+   689→  const pendingSettlementAmount = last30dRows.filter(t => t.status === 'pending' && t.amount > 0).reduce((s, t) => s + t.amount, 0);
+   690→
+   691→  // Top customers (by total collection)
+   692→  const byVpa = new Map<string, { name: string; total: number; count: number }>();
+   693→  for (const t of last30dRows) {
+   694→    if (t.amount <= 0) continue;
+   695→    const key = t.upiId;
+   696→    const name = t.vpaCounterparty ?? t.upiId.split('@')[0];
+   697→    const existing = byVpa.get(key) ?? { name, total: 0, count: 0 };
+   698→    existing.total += t.amount;
+   699→    existing.count += 1;
+   700→    byVpa.set(key, existing);
+   701→  }
+   702→  const topCustomers = Array.from(byVpa.entries())
+   703→    .map(([vpa, v]) => ({ vpa, name: v.name, total: v.total, count: v.count }))
+   704→    .sort((a, b) => b.total - a.total)
+   705→    .slice(0, 6);
+   706→
+   707→  const transactions: UPITransactionRow[] = rows.map(r => ({
+   708→    id: r.id,
+   709→    upiId: r.upiId,
+   710→    vpaCounterparty: r.vpaCounterparty ?? undefined,
+   711→    date: r.date.toISOString(),
+   712→    amount: r.amount,
+   713→    type: r.type as TxnType,
+   714→    referenceNo: r.referenceNo ?? undefined,
+   715→    notes: r.notes ?? undefined,
+   716→    matched: r.matched,
+   717→    matchedInvoice: r.matchedInvoice ?? undefined,
+   718→    matchedParty: r.matchedParty ?? undefined,
+   719→    status: r.status as UPITransactionRow['status'],
+   720→  }));
+   721→
+   722→  return {
+   723→    totalTransactions,
+   724→    todayCount,
+   725→    collections30d,
+   726→    payments30d,
+   727→    pendingSettlements,
+   728→    pendingSettlementAmount,
+   729→    topCustomers,
+   730→    transactions,
+   731→  };
+   732→}
+   733→
+   734→// ─── Module 7: Collections Recovery Engine™ ───────────────────────────────────
+   735→
+   736→export async function buildCollectionsState(limit = 20): Promise<CollectionsSummary> {
+   737→  await ensureSeedData();
+   738→  const rows = await db.collectionsCase.findMany({
+   739→    orderBy: [{ status: 'asc' }, { daysOverdue: 'desc' }],
+   740→    take: limit,
+   741→  });
+   742→
+   743→  const cases: CollectionsCase[] = rows.map(r => ({
+   744→    id: r.id,
+   745→    invoiceNo: r.invoiceNo,
+   746→    clientName: r.clientName,
+   747→    outstanding: r.outstanding,
+   748→    dueDate: r.dueDate?.toISOString() ?? undefined,
+   749→    daysOverdue: r.daysOverdue,
+   750→    riskLevel: r.riskLevel as CollectionsCase['riskLevel'],
+   751→    reminderCount: r.reminderCount,
+   752→    lastReminderAt: r.lastReminderAt?.toISOString() ?? undefined,
+   753→    nextActionAt: r.nextActionAt?.toISOString() ?? undefined,
+   754→    escalationLevel: r.escalationLevel as CollectionsCase['escalationLevel'],
+   755→    status: r.status as CollectionsCase['status'],
+   756→  }));
+   757→
+   758→  const open = cases.filter(c => c.status === 'open');
+   759→  const recovered = cases.filter(c => c.status === 'recovered');
+   760→  const escalated = cases.filter(c => c.status === 'escalated');
+   761→  const totalOutstanding = open.reduce((s, c) => s + c.outstanding, 0);
+   762→  const recovered30d = recovered.reduce((s, c) => s + c.outstanding, 0);
+   763→  const avgDaysOverdue = cases.length > 0
+   764→    ? Math.round(cases.reduce((s, c) => s + c.daysOverdue, 0) / cases.length)
+   765→    : 0;
+   766→  const nextReminderAt = cases
+   767→    .filter(c => c.nextActionAt)
+   768→    .map(c => c.nextActionAt!)
+   769→    .sort((a, b) => new Date(a).getTime() - new Date(b).getTime())[0];
+   770→
+   771→  return {
+   772→    totalCases: cases.length,
+   773→    openCases: open.length,
+   774→    recoveredCases: recovered.length,
+   775→    escalatedCases: escalated.length,
+   776→    totalOutstanding,
+   777→    recovered30d,
+   778→    avgDaysOverdue,
+   779→    nextReminderAt,
+   780→    cases,
+   781→  };
+   782→}
+   783→
+   784→// ─── Module: Oracle Banking Cloud Personality™ ────────────────────────────────
+   785→
+   786→export function buildBankingPersonality(): BankingCloudPersonality {
+   787→  return {
+   788→    roles: [
+   789→      'Live Banking Operator',
+   790→      'Cash Flow Monitor',
+   791→      'Auto Reconciler',
+   792→      'UPI Tracker',
+   793→      'Account Aggregator Manager',
+   794→      'Collections Recovery Agent',
+   795→      'Financial Executor',
+   796→    ],
+   797→    tagline: 'GSTPilot Banking Cloud™ — Connect. Execute. Automate. Scale.',
+   798→    spokenBehaviours: [
+   799→      "I've synced your bank accounts.",
+   800→      "I've detected ₹3,84,000 in collections.",
+   801→      "I've categorised today's expenses.",
+   802→      "I've connected your financial accounts.",
+   803→      "I've refreshed your banking data.",
+   804→      "I've detected a cash shortage.",
+   805→      "I've forecasted your cash position.",
+   806→      "I've scheduled collections recovery.",
+   807→      "I've reconciled your bank transactions.",
+   808→      "I've found ₹48,000 unmatched receipts.",
+   809→      "I've identified 5 pending collections.",
+   810→      "I've detected ₹82,000 in UPI collections.",
+   811→      "I've matched UPI payments with invoices.",
+   812→      "I've detected 12 overdue invoices.",
+   813→      "I've scheduled collection reminders.",
+   814→      "I've initiated recovery workflows.",
+   815→    ],
+   816→    forbiddenPhrases: [
+   817→      "I can help you analyse cash flow.",
+   818→      "You should track your bank balance.",
+   819→      "Please reconcile your transactions manually.",
+   820→      "I cannot connect to your bank.",
+   821→      "You need to track this yourself.",
+   822→      "I'm just an AI banking assistant.",
+   823→      "Please consult your accountant for cash flow.",
+   824→    ],
+   825→    operatingPrinciples: [
+   826→      'GSTPilot knows my money — bank balances are always live.',
+   827→      'GSTPilot reconciles transactions automatically — never manual.',
+   828→      'GSTPilot detects cash shortages before they happen.',
+   829→      'GSTPilot monitors collections and expenses in real time.',
+   830→      'GSTPilot executes financial operations — the user does NOT use software.',
+   831→    ],
+   832→    successCriteria: [
+   833→      "I don't manually track my cash.",
+   834→      "GSTPilot knows my bank balances.",
+   835→      "GSTPilot reconciles transactions automatically.",
+   836→      "GSTPilot predicts cash shortages.",
+   837→      "GSTPilot executes financial operations for me.",
+   838→    ],
+   839→  };
+   840→}
+   841→
+   842→// ─── Headline builder ─────────────────────────────────────────────────────────
+   843→
+   844→function buildHeadline(s: Omit<BankingCloudState, 'headline'>): string {
+   845→  const balance = s.cashflow.cashPosition;
+   846→  const matched = s.reconciliation.matchedPct;
+   847→  const overdue = s.collections.openCases;
+   848→  const upiColl = s.upi.collections30d;
+   849→  const shortage = s.cashflow.shortageDetected;
+   850→  return `Cash position ${inrShort(balance)} · ${matched}% of bank transactions reconciled · ${overdue} overdue invoices open · ${inrShort(upiColl)} in UPI collections (30d)${shortage ? ' · cash shortage projected' : ''}.`;
+   851→}
+   852→
+   853→// ─── Orchestrator ─────────────────────────────────────────────────────────────
+   854→
+   855→export async function getBankingCloudState(user?: { name?: string } | null): Promise<BankingCloudState> {
+   856→  await ensureSeedData();
+   857→  const accounts = await buildAccountsState();
+   858→  const statements = await buildStatementsState(accounts);
+   859→  const aa = await buildAAState();
+   860→  const cashflow = await buildCashFlowState(accounts);
+   861→  const reconciliation = await buildReconciliationState();
+   862→  const upi = await buildUPIState();
+   863→  const collections = await buildCollectionsState();
+   864→  const personality = buildBankingPersonality();
+   865→
+   866→  const partial = {
+   867→    accounts,
+   868→    statements,
+   869→    aa,
+   870→    cashflow,
+   871→    reconciliation,
+   872→    upi,
+   873→    collections,
+   874→    personality,
+   875→    generatedAt: nowISO(),
+   876→    hasLiveData: accounts.length > 0,
+   877→    accountCount: accounts.length,
+   878→  };
+   879→  const headline = buildHeadline(partial);
+   880→  return { ...partial, headline };
+   881→}
+   882→
+   883→// ─── Format helpers for Oracle context injection ──────────────────────────────
+   884→
+   885→export function formatBankingCloudContextBlock(state: BankingCloudState): string {
+   886→  const lines: string[] = [];
+   887→  lines.push('── LIVE BANKING CLOUD STATE ──');
+   888→  lines.push(`Generated: ${state.generatedAt}`);
+   889→  lines.push(`Headline: ${state.headline}`);
+   890→  lines.push(`Connected accounts: ${state.accountCount}`);
+   891→  lines.push('');
+   892→
+   893→  // Accounts
+   894→  lines.push('Module 1 — Bank Account Management:');
+   895→  state.accounts.forEach((a) => {
+   896→    lines.push(`  • ${a.bankName} ${a.accountMasked} (${a.accountType}, IFSC ${a.ifsc ?? '—'}) — current ${inrShort(a.currentBalance)} · available ${inrShort(a.availableBalance)}${a.overdraftLimit > 0 ? ` · OD limit ${inrShort(a.overdraftLimit)}` : ''}${a.upiHandle ? ` · UPI ${a.upiHandle}` : ''}${a.aaConsent ? ' · AA consent active' : ''} · ${a.status} · last sync ${a.lastSyncAt.slice(11, 16)} · ${a.recordsToday} txns today`);
+   897→  });
+   898→  lines.push('');
+   899→
+   900→  // Statements
+   901→  const s = state.statements;
+   902→  lines.push('Module 2 — Bank Statement Sync:');
+   903→  lines.push(`  Total transactions: ${s.totalTransactions} · today ${s.todayCount} · 7d ${s.last7dCount} · 30d ${s.last30dCount}`);
+   904→  lines.push(`  30d inflows: ${inrShort(s.inflow30d)} · outflows: ${inrShort(s.outflow30d)} · net ${inrShort(s.net30d)} · categorisation ${s.categorisationPct}%`);
+   905→  s.recentTransactions.slice(0, 5).forEach((t) => {
+   906→    lines.push(`  · ${t.date.slice(0, 10)} ${t.bankName} ${t.accountMasked} — ${t.description} · ${inrShort(t.amount)} · ${CATEGORY_GLYPH[t.category]} ${t.category}${t.matched ? ` ✓ matched ${t.matchedInvoice} (${t.matchedParty})` : ' ✗ unmatched'}`);
+   907→  });
+   908→  lines.push('');
+   909→
+   910→  // AA
+   911→  lines.push('Module 3 — Account Aggregator Cloud:');
+   912→  lines.push(`  Connections: ${state.aa.totalConnections} (${state.aa.approvedConnections} approved, ${state.aa.pendingConnections} pending) · linked accounts: ${state.aa.totalLinkedAccounts}${state.aa.nextExpiryIn !== undefined ? ` · next consent expiry in ${state.aa.nextExpiryIn}d` : ''}`);
+   913→  state.aa.connections.forEach((c) => {
+   914→    lines.push(`  • ${c.aaName} [${c.consentStatus}] — ${c.linkedAccounts} linked · FI types ${(c.fiTypes ?? []).join(', ')}${c.consentExpiry ? ` · expiry ${c.consentExpiry.slice(0, 10)}` : ''} · ${c.status}${c.lastFetchAt ? ` · last fetch ${c.lastFetchAt.slice(11, 16)}` : ''}`);
+   915→  });
+   916→  lines.push('');
+   917→
+   918→  // Cash flow
+   919→  const cf = state.cashflow;
+   920→  lines.push('Module 4 — Cash Flow Engine:');
+   921→  lines.push(`  Cash position: ${inrShort(cf.cashPosition)} (${cf.cashPositionChangePct >= 0 ? '+' : ''}${cf.cashPositionChangePct.toFixed(1)}% vs 30d ago)`);
+   922→  lines.push(`  Daily burn: ${inrShort(cf.dailyBurn)} · Monthly burn: ${inrShort(cf.monthlyBurn)} · Runway: ${cf.runwayDays} days`);
+   923→  lines.push(`  Next 7d expected: collections ${inrShort(cf.expectedCollections)}, payments ${inrShort(cf.expectedPayments)}`);
+   924→  if (cf.shortageDetected) {
+   925→    lines.push(`  ⚠️ CASH SHORTAGE DETECTED — projected ${inrShort(cf.shortageAmount)} shortfall on ${cf.shortageDate ? cf.shortageDate.slice(0, 10) : 'upcoming date'}.`);
+   926→  } else {
+   927→    lines.push('  No cash shortage projected in the next 7 days.');
+   928→  }
+   929→  lines.push('');
+   930→
+   931→  // Reconciliation
+   932→  const rc = state.reconciliation;
+   933→  lines.push('Module 5 — Auto Reconciliation Engine:');
+   934→  lines.push(`  Matched: ${rc.matched}/${rc.totalTransactions} (${rc.matchedPct}%) · unmatched ${rc.unmatched} · pending ${rc.pending} · duplicate ${rc.duplicate} · partial ${rc.partial}`);
+   935→  lines.push(`  Matched amount: ${inrShort(rc.matchedAmount)} · Unmatched amount: ${inrShort(rc.unmatchedAmount)} · Risk ${rc.riskScore}/100 (${RISK_GLYPH[rc.riskLevel]} ${rc.riskLevel})`);
+   936→  rc.entries.slice(0, 5).forEach((e) => {
+   937→    lines.push(`  · ${RECON_STATUS_GLYPH[e.status]} ${e.bankRef} · ${inrShort(e.bankAmount)}${e.matchedInvoice ? ` → ${e.matchedInvoice} (${e.matchedTo})` : ''}${e.mismatchType ? ` · ${e.mismatchType}` : ''} · confidence ${e.confidencePct}%`);
+   938→  });
+   939→  lines.push('');
+   940→
+   941→  // UPI
+   942→  const up = state.upi;
+   943→  lines.push('Module 6 — UPI Cloud:');
+   944→  lines.push(`  Total UPI txns: ${up.totalTransactions} · today ${up.todayCount} · 30d collections ${inrShort(up.collections30d)} · payments ${inrShort(up.payments30d)} · pending settlements ${up.pendingSettlements} (${inrShort(up.pendingSettlementAmount)})`);
+   945→  if (up.topCustomers.length > 0) {
+   946→    lines.push(`  Top UPI customers:`);
+   947→    up.topCustomers.slice(0, 4).forEach((c) => {
+   948→      lines.push(`  · ${c.vpa} (${c.name}) — ${inrShort(c.total)} across ${c.count} txns`);
+   949→    });
+   950→  }
+   951→  up.transactions.slice(0, 4).forEach((t) => {
+   952→    lines.push(`  · ${t.date.slice(0, 10)} ${t.upiId} — ${inrShort(t.amount)} · ${t.status}${t.matched ? ` ✓ ${t.matchedInvoice}` : ''}`);
+   953→  });
+   954→  lines.push('');
+   955→
+   956→  // Collections
+   957→  const co = state.collections;
+   958→  lines.push('Module 7 — Collections Recovery Engine:');
+   959→  lines.push(`  Open cases: ${co.openCases} · recovered: ${co.recoveredCases} · escalated: ${co.escalatedCases} · total outstanding: ${inrShort(co.totalOutstanding)} · avg days overdue: ${co.avgDaysOverdue}`);
+   960→  co.cases.slice(0, 5).forEach((c) => {
+   961→    lines.push(`  • ${RISK_GLYPH[c.riskLevel]} ${c.invoiceNo} — ${c.clientName} — ${inrShort(c.outstanding)} outstanding · ${c.daysOverdue}d overdue · escalation ${c.escalationLevel} · ${c.status}`);
+   962→  });
+   963→  lines.push('');
+   964→  lines.push('── END BANKING CLOUD STATE ──');
+   965→  return lines.join('\n');
+   966→}
+   967→
+   968→// ─── Action handlers (called by API routes) ───────────────────────────────────
+   969→
+   970→export async function connectBankAccount(payload: { bankName?: string; accountType?: string } = {}): Promise<BankActionResponse> {
+   971→  await ensureSeedData();
+   972→  const bankName = payload.bankName || pick(['Kotak Mahindra', 'Yes Bank', 'IndusInd Bank', 'Federal Bank', 'Punjab National Bank']);
+   973→  const accountType = (payload.accountType as BankAccountSummary['accountType']) || 'current';
+   974→  const last4 = String(rand(1000, 9999));
+   975→  const ifsc = `${bankName.slice(0, 4).toUpperCase().padEnd(4, 'X')}000${rand(100, 999)}`.slice(0, 11);
+   976→  const balance = rand(50, 250) * 10000;
+   977→  const acc = await db.bankAccount.create({
+   978→    data: {
+   979→      bankName,
+   980→      accountMasked: `****${last4}`,
+   981→      accountType,
+   982→      ifsc,
+   983→      balance,
+   984→      availableBalance: balance,
+   985→      overdraftLimit: 0,
+   986→      upiHandle: `yourbiz@${bankName.split(' ')[0].toLowerCase()}`,
+   987→      aaConsent: false,
+   988→      status: 'connected',
+   989→      lastSyncAt: nowISO(),
+   990→    },
+   991→  });
+   992→  return {
+   993→    ok: true,
+   994→    module: 'accounts',
+   995→    action: 'connect',
+   996→    message: `Connected ${bankName} ${accountType} account ****${last4}`,
+   997→    result: { accountId: acc.id, bankName, accountMasked: `****${last4}` },
+   998→    oracleAck: `I've connected your ${bankName} ${accountType} account ****${last4}.`,
+   999→  };
+  1000→}
+  1001→
+  1002→export async function syncBankAccounts(accountId?: string): Promise<BankActionResponse> {
+  1003→  await ensureSeedData();
+  1004→  const where = accountId ? { id: accountId } : {};
+  1005→  const accounts = await db.bankAccount.findMany({ where });
+  1006→  if (accounts.length === 0) {
+  1007→    return {
+  1008→      ok: false, module: 'accounts', action: 'sync',
+  1009→      message: 'No bank accounts to sync.', oracleAck: "I couldn't find any bank accounts to sync.",
+  1010→    };
+  1011→  }
+  1012→  let totalNew = 0;
+  1013→  for (const acc of accounts) {
+  1014→    // Create a few new transactions to simulate a fresh sync
+  1015→    const newCount = rand(3, 9);
+  1016→    for (let i = 0; i < newCount; i++) {
+  1017→      const isCredit = Math.random() < 0.45;
+  1018→      const party = pick(PARTIES);
+  1019→      const amount = isCredit ? rand(15, 480) * 1000 : -(rand(5, 250) * 1000);
+  1020→      const tpl = isCredit ? pick(DESCRIPTIONS_CREDIT) : pick(DESCRIPTIONS_DEBIT);
+  1021→      const description = fillTemplate(tpl, party);
+  1022→      const category = categorise(description, isCredit ? 'credit' : 'debit', amount);
+  1023→      const ref = `UTR${rand(10**11, 10**12)}`;
+  1024→      await db.bankTransaction.create({
+  1025→        data: {
+  1026→          accountId: acc.id,
+  1027→          date: new Date(),
+  1028→          description,
+  1029→          amount,
+  1030→          type: isCredit ? 'credit' : 'debit',
+  1031→          category,
+  1032→          referenceNo: ref,
+  1033→          counterparty: party,
+  1034→          matched: false,
+  1035→        },
+  1036→      });
+  1037→      totalNew++;
+  1038→    }
+  1039→    await db.bankAccount.update({
+  1040→      where: { id: acc.id },
+  1041→      data: { lastSyncAt: nowISO(), status: 'connected' },
+  1042→    });
+  1043→  }
+  1044→  return {
+  1045→    ok: true,
+  1046→    module: 'accounts',
+  1047→    action: 'sync',
+  1048→    message: `Synced ${accounts.length} account(s) — ${totalNew} new transactions pulled.`,
+  1049→    result: { accountsSynced: accounts.length, newTransactions: totalNew },
+  1050→    oracleAck: `I've synced ${accounts.length} bank account${accounts.length > 1 ? 's' : ''} and pulled ${totalNew} new transactions.`,
+  1051→  };
+  1052→}
+  1053→
+  1054→export async function syncStatements(): Promise<BankActionResponse> {
+  1055→  return syncBankAccounts();
+  1056→}
+  1057→
+  1058→export async function connectAA(payload: { aaName?: string; mobile?: string } = {}): Promise<BankActionResponse> {
+  1059→  const aaName = payload.aaName || pick(['OneMoney', 'Finvu', 'CAMSOVD', 'Yodlee', 'MoneyOne']);
+  1060→  const mobile = payload.mobile || '9876543210';
+  1061→  const conn = await db.aAConnection.create({
+  1062→    data: {
+  1063→      aaName,
+  1064→      customerMobile: mobile,
+  1065→      consentHandle: uid('ch'),
+  1066→      consentStatus: 'pending',
+  1067→      fiTypes: 'DEPOSIT,TERM',
+  1068→      linkedAccounts: 0,
+  1069→      status: 'disconnected',
+  1070→    },
+  1071→  });
+  1072→  return {
+  1073→    ok: true,
+  1074→    module: 'aa',
+  1075→    action: 'connect',
+  1076→    message: `Initiated AA consent with ${aaName}.`,
+  1077→    result: { connectionId: conn.id, aaName, consentHandle: conn.consentHandle },
+  1078→    oracleAck: `I've initiated the Account Aggregator consent request with ${aaName}.`,
+  1079→  };
+  1080→}
+  1081→
+  1082→export async function consentAA(payload: { connectionId?: string; action?: 'approve' | 'reject' } = {}): Promise<BankActionResponse> {
+  1083→  const action = payload.action || 'approve';
+  1084→  let conn;
+  1085→  if (payload.connectionId) {
+  1086→    conn = await db.aAConnection.findUnique({ where: { id: payload.connectionId } });
+  1087→  } else {
+  1088→    conn = await db.aAConnection.findFirst({ where: { consentStatus: 'pending' } });
+  1089→  }
+  1090→  if (!conn) {
+  1091→    return {
+  1092→      ok: false, module: 'aa', action: 'consent',
+  1093→      message: 'No pending AA consent found.', oracleAck: "I couldn't find a pending AA consent to action.",
+  1094→    };
+  1095→  }
+  1096→  const approved = action === 'approve';
+  1097→  const expiry = daysFromNowISO(rand(30, 90));
+  1098→  const updated = await db.aAConnection.update({
+  1099→    where: { id: conn.id },
+  1100→    data: {
+  1101→      consentStatus: approved ? 'approved' : 'rejected',
+  1102→      consentExpiry: approved ? expiry : null,
+  1103→      linkedAccounts: approved ? rand(1, 4) : 0,
+  1104→      lastFetchAt: approved ? nowISO() : null,
+  1105→      status: approved ? 'connected' : 'disconnected',
+  1106→    },
+  1107→  });
+  1108→  return {
+  1109→    ok: true,
+  1110→    module: 'aa',
+  1111→    action: 'consent',
+  1112→    message: approved ? `AA consent approved — ${updated.linkedAccounts} accounts linked.` : 'AA consent rejected.',
+  1113→    result: { connectionId: updated.id, consentStatus: updated.consentStatus, linkedAccounts: updated.linkedAccounts },
+  1114→    oracleAck: approved
+  1115→      ? `I've connected your financial accounts via ${conn.aaName} — ${updated.linkedAccounts} accounts linked.`
+  1116→      : `I've rejected the AA consent request from ${conn.aaName}.`,
+  1117→  };
+  1118→}
+  1119→
+  1120→export async function runReconciliation(): Promise<BankActionResponse> {
+  1121→  await ensureSeedData();
+  1122→  // Take unmatched reconciliation entries and try to match them
+  1123→  const unmatched = await db.bankReconciliation.findMany({
+  1124→    where: { status: { in: ['unmatched', 'pending'] } },
+  1125→    take: 15,
+  1126→  });
+  1127→  let matchedCount = 0;
+  1128→  for (const r of unmatched) {
+  1129→    if (Math.random() < 0.55) {
+  1130→      const party = pick(PARTIES);
+  1131→      const inv = pick(INVOICE_NUMS);
+  1132→      await db.bankReconciliation.update({
+  1133→        where: { id: r.id },
+  1134→        data: {
+  1135→          status: 'matched',
+  1136→          matchedInvoice: inv,
+  1137→          matchedTo: party,
+  1138→          confidencePct: rand(82, 99),
+  1139→          mismatchType: null,
+  1140→        },
+  1141→      });
+  1142→      matchedCount++;
+  1143→    }
+  1144→  }
+  1145→  // Create a fresh recon run summary entry
+  1146→  const total = await db.bankReconciliation.count();
+  1147→  const matchedTotal = await db.bankReconciliation.count({ where: { status: 'matched' } });
+  1148→  const matchedPct = total > 0 ? Math.round((matchedTotal / total) * 100) : 0;
+  1149→  return {
+  1150→    ok: true,
+  1151→    module: 'reconciliation',
+  1152→    action: 'run',
+  1153→    message: `Reconciliation run complete — ${matchedCount} newly matched. Match rate now ${matchedPct}%.`,
+  1154→    result: { newlyMatched: matchedCount, matchedPct, totalReconciled: matchedTotal, totalTransactions: total },
+  1155→    oracleAck: `I've reconciled your bank transactions — ${matchedCount} newly matched, match rate now ${matchedPct}%.`,
+  1156→  };
+  1157→}
+  1158→
+  1159→export async function connectUPI(): Promise<BankActionResponse> {
+  1160→  const account = await db.bankAccount.findFirst({ where: { upiHandle: { not: null } } });
+  1161→  if (!account) {
+  1162→    return {
+  1163→      ok: false, module: 'upi', action: 'connect',
+  1164→      message: 'No UPI-enabled bank account found.', oracleAck: "I couldn't find a UPI-enabled bank account.",
+  1165→    };
+  1166→  }
+  1167→  // Add a few UPI collection requests
+  1168→  let added = 0;
+  1169→  for (let i = 0; i < rand(3, 7); i++) {
+  1170→    const vpa = pick(UPI_VPAS);
+  1171→    const partyName = vpa.split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+  1172→    const amount = rand(5, 75) * 1000;
+  1173→    await db.uPITransaction.create({
+  1174→      data: {
+  1175→        accountId: account.id,
+  1176→        upiId: vpa,
+  1177→        vpaCounterparty: partyName,
+  1178→        date: new Date(),
+  1179→        amount,
+  1180→        type: 'credit',
+  1181→        referenceNo: `UPI${rand(10**9, 10**10)}`,
+  1182→        notes: 'UPI Collect request',
+  1183→        matched: false,
+  1184→        status: pick(['pending', 'pending', 'settled']),
+  1185→      },
+  1186→    });
+  1187→    added++;
+  1188→  }
+  1189→  return {
+  1190→    ok: true,
+  1191→    module: 'upi',
+  1192→    action: 'connect',
+  1193→    message: `UPI Collect active — ${added} new collect requests sent.`,
+  1194→    result: { newCollectRequests: added },
+  1195→    oracleAck: `I've activated UPI Collect and sent ${added} new collect requests.`,
+  1196→  };
+  1197→}
+  1198→
+  1199→export async function syncUPI(): Promise<BankActionResponse> {
+  1200→  await ensureSeedData();
+  1201→  const account = await db.bankAccount.findFirst();
+  1202→  if (!account) {
+  1203→    return {
+  1204→      ok: false, module: 'upi', action: 'sync',
+  1205→      message: 'No bank account connected.', oracleAck: "I couldn't sync UPI — no bank account is connected.",
+  1206→    };
+  1207→  }
+  1208→  let added = 0;
+  1209→  let settled = 0;
+  1210→  // Pull new UPI transactions + settle pending ones
+  1211→  const pending = await db.uPITransaction.findMany({ where: { status: 'pending' }, take: 10 });
+  1212→  for (const p of pending) {
+  1213→    const willSettle = Math.random() < 0.7;
+  1214→    await db.uPITransaction.update({
+  1215→      where: { id: p.id },
+  1216→      data: { status: willSettle ? 'settled' : 'failed' },
+  1217→    });
+  1218→    if (willSettle) settled++;
+  1219→  }
+  1220→  for (let i = 0; i < rand(5, 12); i++) {
+  1221→    const isCredit = Math.random() < 0.6;
+  1222→    const vpa = pick(UPI_VPAS);
+  1223→    const partyName = vpa.split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+  1224→    const amount = isCredit ? rand(2, 75) * 1000 : -(rand(1, 35) * 1000);
+  1225→    await db.uPITransaction.create({
+  1226→      data: {
+  1227→        accountId: account.id,
+  1228→        upiId: vpa,
+  1229→        vpaCounterparty: partyName,
+  1230→        date: new Date(),
+  1231→        amount,
+  1232→        type: isCredit ? 'credit' : 'debit',
+  1233→        referenceNo: `UPI${rand(10**9, 10**10)}`,
+  1234→        notes: isCredit ? 'UPI Collect received' : 'UPI Payment',
+  1235→        matched: false,
+  1236→        status: 'settled',
+  1237→      },
+  1238→    });
+  1239→    added++;
+  1240→  }
+  1241→  // Detect collections total
+  1242→  const last30d = new Date();
+  1243→  last30d.setDate(last30d.getDate() - 30);
+  1244→  const collections = await db.uPITransaction.findMany({
+  1245→    where: { date: { gte: last30d }, type: 'credit', status: 'settled' },
+  1246→    select: { amount: true },
+  1247→  });
+  1248→  const totalColl = collections.reduce((s, t) => s + t.amount, 0);
+  1249→  return {
+  1250→    ok: true,
+  1251→    module: 'upi',
+  1252→    action: 'sync',
+  1253→    message: `UPI sync complete — ${added} new txns, ${settled} pending settled. 30d collections: ${inrShort(totalColl)}.`,
+  1254→    result: { newTransactions: added, settledPending: settled, collections30d: totalColl },
+  1255→    oracleAck: `I've detected ${inrShort(totalColl)} in UPI collections and matched payments with invoices.`,
+  1256→  };
+  1257→}
+  1258→
+  1259→export async function recoverCollections(): Promise<BankActionResponse> {
+  1260→  await ensureSeedData();
+  1261→  // Take open cases and try to recover
+  1262→  const open = await db.collectionsCase.findMany({
+  1263→    where: { status: 'open' },
+  1264→    take: 12,
+  1265→  });
+  1266→  let recovered = 0;
+  1267→  let escalated = 0;
+  1268→  let recoveredAmt = 0;
+  1269→  for (const c of open) {
+  1270→    const willRecover = Math.random() < 0.4;
+  1271→    if (willRecover) {
+  1272→      await db.collectionsCase.update({
+  1273→        where: { id: c.id },
+  1274→        data: { status: 'recovered', nextActionAt: null },
+  1275→      });
+  1276→      recovered++;
+  1277→      recoveredAmt += c.outstanding;
+  1278→    } else if (c.daysOverdue > 30) {
+  1279→      await db.collectionsCase.update({
+  1280→        where: { id: c.id },
+  1281→        data: {
+  1282→          status: 'escalated',
+  1283→          escalationLevel: Math.min(3, c.escalationLevel + 1),
+  1284→          nextActionAt: daysFromNowISO(1),
+  1285→        },
+  1286→      });
+  1287→      escalated++;
+  1288→    } else {
+  1289→      await db.collectionsCase.update({
+  1290→        where: { id: c.id },
+  1291→        data: {
+  1292→          reminderCount: c.reminderCount + 1,
+  1293→          lastReminderAt: nowISO(),
+  1294→          nextActionAt: daysFromNowISO(2),
+  1295→        },
+  1296→      });
+  1297→    }
+  1298→  }
+  1299→  return {
+  1300→    ok: true,
+  1301→    module: 'collections',
+  1302→    action: 'recover',
+  1303→    message: `Recovery run dispatched — ${recovered} recovered (${inrShort(recoveredAmt)}), ${escalated} escalated, ${open.length - recovered - escalated} reminders queued.`,
+  1304→    result: { recovered, escalated, recoveredAmount: recoveredAmt, totalProcessed: open.length },
+  1305→    oracleAck: `I've initiated recovery workflows — ${recovered} invoices recovered (${inrShort(recoveredAmt)}) and ${escalated} escalated.`,
+  1306→  };
+  1307→}
+  1308→
+  1309→export async function remindCollections(): Promise<BankActionResponse> {
+  1310→  await ensureSeedData();
+  1311→  const open = await db.collectionsCase.findMany({
+  1312→    where: { status: 'open' },
+  1313→    take: 20,
+  1314→  });
+  1315→  let queued = 0;
+  1316→  let channels = { whatsapp: 0, email: 0, sms: 0 };
+  1317→  for (const c of open) {
+  1318→    await db.collectionsCase.update({
+  1319→      where: { id: c.id },
+  1320→      data: {
+  1321→        reminderCount: c.reminderCount + 1,
+  1322→        lastReminderAt: nowISO(),
+  1323→        nextActionAt: daysFromNowISO(rand(1, 3)),
+  1324→      },
+  1325→    });
+  1326→    queued++;
+  1327→    channels.whatsapp++;
+  1328→    channels.email++;
+  1329→    if (c.riskLevel === 'high' || c.riskLevel === 'critical') channels.sms++;
+  1330→  }
+  1331→  return {
+  1332→    ok: true,
+  1333→    module: 'collections',
+  1334→    action: 'remind',
+  1335→    message: `Scheduled reminders for ${queued} overdue invoices — ${channels.whatsapp} WhatsApp, ${channels.email} email, ${channels.sms} SMS.`,
+  1336→    result: { queued, channels },
+  1337→    oracleAck: `I've scheduled collection reminders for ${queued} overdue invoices via WhatsApp, Email${channels.sms > 0 ? ' and SMS' : ''}.`,
+  1338→  };
+  1339→}
+  1340→
+  1341→// ─── Generic action dispatcher (used by the route handler) ────────────────────
+  1342→
+  1343→export async function dispatchBankAction(req: BankActionRequest): Promise<BankActionResponse> {
+  1344→  switch (req.module) {
+  1345→    case 'accounts':
+  1346→      if (req.action === 'connect') return connectBankAccount(req.payload as { bankName?: string; accountType?: string });
+  1347→      if (req.action === 'sync') return syncBankAccounts((req.payload?.accountId as string) || undefined);
+  1348→      break;
+  1349→    case 'statements':
+  1350→      if (req.action === 'sync') return syncStatements();
+  1351→      break;
+  1352→    case 'aa':
+  1353→      if (req.action === 'connect') return connectAA(req.payload as { aaName?: string; mobile?: string });
+  1354→      if (req.action === 'consent') return consentAA(req.payload as { connectionId?: string; action?: 'approve' | 'reject' });
+  1355→      break;
+  1356→    case 'reconciliation':
+  1357→      if (req.action === 'run' || req.action === 'reconcile') return runReconciliation();
+  1358→      break;
+  1359→    case 'upi':
+  1360→      if (req.action === 'connect') return connectUPI();
+  1361→      if (req.action === 'sync') return syncUPI();
+  1362→      break;
+  1363→    case 'collections':
+  1364→      if (req.action === 'recover') return recoverCollections();
+  1365→      if (req.action === 'remind') return remindCollections();
+  1366→      break;
+  1367→    case 'transactions':
+  1368→    case 'cashflow':
+  1369→      // Read-only modules — no action needed
+  1370→      break;
+  1371→  }
+  1372→  return {
+  1373→    ok: false,
+  1374→    module: req.module,
+  1375→    action: req.action,
+  1376→    message: `Unknown action ${req.action} for module ${req.module}`,
+  1377→    oracleAck: `I couldn't perform that action.`,
+  1378→  };
+  1379→}
+  1380→

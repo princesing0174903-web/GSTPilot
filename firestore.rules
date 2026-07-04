@@ -182,6 +182,26 @@ service cloud.firestore {
       allow delete: if isSignedIn() && resourceBelongsToUserOrg() && isOwnerOrAdmin(resource.data.organizationId);
     }
 
+    // ─── Bank Connections (Phase 6 — Real Banking Foundation) ─────────────
+    // One per org per provider+account. Carries the AES-256-GCM encrypted
+    // connection blob. Org members can read (the encrypted blob is useless
+    // without the server key); only owner/admin/accountant can
+    // create/update/disconnect.
+    match /bank_connections/{docId} {
+      allow read:   if isSignedIn() && resourceBelongsToUserOrg();
+      allow create: if isSignedIn() && writeScopedToUserOrg() && canMutate(request.resource.data.organizationId);
+      allow update: if isSignedIn() && resourceBelongsToUserOrg() && canMutate(resource.data.organizationId) && orgIdUnchanged();
+      allow delete: if isSignedIn() && resourceBelongsToUserOrg() && isOwnerOrAdmin(resource.data.organizationId);
+    }
+
+    // ─── Bank Sync Jobs (banking sync scheduler observability) ────────────
+    match /bank_sync_jobs/{docId} {
+      allow read:   if isSignedIn() && resourceBelongsToUserOrg();
+      allow create: if isSignedIn() && writeScopedToUserOrg();
+      allow update: if isSignedIn() && resourceBelongsToUserOrg() && canMutate(resource.data.organizationId) && orgIdUnchanged();
+      allow delete: if isSignedIn() && resourceBelongsToUserOrg() && isOwnerOrAdmin(resource.data.organizationId);
+    }
+
     match /gst_profiles/{docId} {
       allow read:   if isSignedIn() && resourceBelongsToUserOrg();
       allow create: if isSignedIn() && writeScopedToUserOrg();

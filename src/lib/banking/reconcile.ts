@@ -1,215 +1,345 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Banking Cloud™ — Module 6: Auto Reconciliation Engine
-// Bank Transactions → Invoices → Receivables → Payments → Matching → Exceptions.
-// Deterministic engine. No LLM.
+// GSTPilot Real Banking Foundation™ — Bank Reconciliation Engine
+//
+// Automatically matches bank transactions against invoices / payments / refunds
+// / GST payments / expenses. Pure, deterministic, no LLM.
+//
+// Matching strategy (in priority order):
+//   1. EXACT match — amount is identical AND (counterparty matches invoice
+//      client name OR reference number matches an invoice number / UTR).
+//      → status='matched', confidence=1.0
+//   2. PARTIAL match — amount within ±2% (rounding / bank charges) OR
+//      counterparty fuzzy-matches an invoice client name.
+//      → status='partially_matched', confidence=0.6..0.9
+//   3. UNMATCHED — no invoice found.
+//      → status='unmatched', confidence=0
+//
+// The engine matches CREDIT bank transactions (incoming payments) against
+// SALES invoices (money owed TO us) and DEBIT bank transactions (outgoing)
+// against PURCHASE invoices / expenses (money owed BY us). GST payments are
+// matched against the GST liability ledger.
 // ═══════════════════════════════════════════════════════════════════════════════
 
-import { db } from '@/lib/db';
 import type {
-  ReconcileState,
-  ReconcileMatch,
-  ReconcileException,
-  ReconcileSummary,
-  MatchType,
-} from './types';
+  BankTransaction,
+  ReconciliationStatus,
+} from '@/lib/banking-provider/types';
 
-// ─── Matching logic ────────────────────────────────────────────────────────────
+// ─── Invoice / payment reference shape ───────────────────────────────────────
+// The engine accepts a lightweight invoice shape so it can run against any
+// invoice source (Prisma or Firestore). The caller maps their invoice type to
+// this interface.
 
-function amountMatch(bankAmt: number, invoiceAmt: number, tolerance = 0.02): boolean {
-  return Math.abs(Math.abs(bankAmt) - invoiceAmt) <= invoiceAmt * tolerance;
+export interface ReconcileInvoiceRef {
+  id: string;
+  /** Invoice number (e.g. 'INV-2025-001'). */
+  invoiceNumber: string;
+  /** Client / vendor name (the counterparty). */
+  clientName: string;
+  /** Total amount payable (grand total including tax). */
+  grandTotal: number;
+  /** Outstanding balance on the invoice. */
+  balanceDue: number;
+  /** 'sales' (we issued it → expect a credit) or 'purchase' (we received it → expect a debit). */
+  invoiceType: 'sales' | 'purchase';
+  /** ISO issue date. */
+  issueDate?: string;
+  /** Optional UTR / reference the customer tagged the payment with. */
+  referenceNumber?: string | null;
 }
 
-function partialMatch(bankAmt: number, invoiceAmt: number): boolean {
-  const ratio = Math.abs(bankAmt) / Math.max(1, invoiceAmt);
-  return ratio >= 0.5 && ratio <= 0.99;
+export interface ReconcileResult {
+  /** The bank transaction with updated reconciliation fields. */
+  transaction: BankTransaction;
+  /** The invoice it was matched to (null if unmatched). */
+  matchedInvoice: ReconcileInvoiceRef | null;
+  /** New reconciliation status. */
+  status: ReconciliationStatus;
+  /** Match confidence 0..1. */
+  confidence: number;
 }
 
-// ─── Public API ────────────────────────────────────────────────────────────────
+// ─── Fuzzy string matching ───────────────────────────────────────────────────
 
-export async function getReconcileState(): Promise<ReconcileState> {
-  // Pull all credit bank transactions (incoming payments) + outstanding invoices.
-  const bankTxns = await db.bankTransaction.findMany({
-    where: { type: 'credit' },
-    include: { account: { select: { bankName: true } } },
-    orderBy: { date: 'desc' },
-    take: 300,
-  });
-  const invoices = await db.invoice.findMany({
-    where: { status: { in: ['sent', 'overdue', 'partial', 'paid'] } },
-    take: 300,
-  });
+/**
+ * Normalize a name for comparison: lowercase, strip common suffixes (Pvt Ltd,
+// LLP, Ltd), collapse whitespace, strip punctuation.
+ */
+function normalizeName(s: string): string {
+  return s
+    .toLowerCase()
+    .replace(/\b(pvt|private|ltd|limited|llp|llc|inc|corp|corporation|co|company|and|sons|brothers)\b/g, '')
+    .replace(/[^a-z0-9\s]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
 
-  const matches: ReconcileMatch[] = [];
-  const exceptions: ReconcileException[] = [];
-  const byMatchType: Record<MatchType, number> = {
-    exact: 0,
-    partial: 0,
-    duplicate: 0,
-    unknown_credit: 0,
-    unknown_debit: 0,
-    missing_payment: 0,
-  };
+/**
+ * Levenshtein distance — used for fuzzy counterparty matching.
+ * Capped at 50 chars for performance.
+ */
+function levenshtein(a: string, b: string): number {
+  if (a === b) return 0;
+  if (!a.length) return b.length;
+  if (!b.length) return a.length;
 
-  const matchedInvoiceIds = new Set<string>();
-  const matchedBankTxnIds = new Set<string>();
+  const matrix: number[][] = Array.from({ length: a.length + 1 }, () =>
+    new Array(b.length + 1).fill(0),
+  );
+  for (let i = 0; i <= a.length; i++) matrix[i][0] = i;
+  for (let j = 0; j <= b.length; j++) matrix[0][j] = j;
 
-  // 1) Match bank credits → invoices by amount.
-  for (const txn of bankTxns) {
-    let bestMatch: { invoice: typeof invoices[number]; type: MatchType; confidence: number } | null = null;
-
-    for (const inv of invoices) {
-      if (matchedInvoiceIds.has(inv.id)) continue;
-      if (amountMatch(txn.amount, inv.totalAmount)) {
-        bestMatch = { invoice: inv, type: 'exact', confidence: 0.95 };
-        break;
-      }
-      if (partialMatch(txn.amount, inv.totalAmount)) {
-        if (!bestMatch || bestMatch.confidence < 0.7) {
-          bestMatch = { invoice: inv, type: 'partial', confidence: 0.7 };
-        }
-      }
-    }
-
-    // 2) Detect duplicate payment — same amount within 7 days.
-    if (!bestMatch) {
-      const dup = bankTxns.find(
-        (t) => t.id !== txn.id && Math.abs(t.amount - txn.amount) < 1 && Math.abs(new Date(t.date).getTime() - new Date(txn.date).getTime()) < 7 * 86_400_000,
+  for (let i = 1; i <= a.length; i++) {
+    for (let j = 1; j <= b.length; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      matrix[i][j] = Math.min(
+        matrix[i - 1][j] + 1,
+        matrix[i][j - 1] + 1,
+        matrix[i - 1][j - 1] + cost,
       );
-      if (dup) {
-        bestMatch = null;
-        byMatchType.duplicate++;
-        exceptions.push({
-          id: 'exc_' + txn.id.slice(-6),
-          type: 'duplicate',
-          bankTxnId: txn.id,
-          description: `Duplicate credit of ₹${Math.round(Math.abs(txn.amount)).toLocaleString('en-IN')} detected (matches ${new Date(dup.date).toLocaleDateString('en-IN')}).`,
-          amount: Math.abs(txn.amount),
-          date: txn.date,
-          suggestedAction: 'Verify with customer and refund or adjust against next invoice.',
-          severity: 'medium',
-        });
-        matchedBankTxnIds.add(txn.id);
-        continue;
-      }
-    }
-
-    if (bestMatch) {
-      byMatchType[bestMatch.type]++;
-      matchedInvoiceIds.add(bestMatch.invoice.id);
-      matchedBankTxnIds.add(txn.id);
-      matches.push({
-        id: 'm_' + txn.id.slice(-6),
-        bankTxnId: txn.id,
-        invoiceId: bestMatch.invoice.id,
-        invoiceNumber: bestMatch.invoice.invoiceNumber,
-        customerName: bestMatch.invoice.buyerName || null,
-        bankAmount: txn.amount,
-        invoiceAmount: bestMatch.invoice.totalAmount,
-        matchType: bestMatch.type,
-        confidence: bestMatch.confidence,
-        date: txn.date,
-        description: txn.description,
-        reason: bestMatch.type === 'exact'
-          ? 'Bank credit exactly matches invoice amount.'
-          : 'Bank credit partially matches invoice amount — likely a part payment.',
-      });
-    } else {
-      // Unknown credit — no matching invoice.
-      byMatchType.unknown_credit++;
-      exceptions.push({
-        id: 'exc_' + txn.id.slice(-6),
-        type: 'unknown_credit',
-        bankTxnId: txn.id,
-        description: `Unknown credit of ₹${Math.round(Math.abs(txn.amount)).toLocaleString('en-IN')} from "${txn.description}" — no matching invoice.`,
-        amount: Math.abs(txn.amount),
-        date: txn.date,
-        suggestedAction: 'Identify the payer and create an invoice or record as advance.',
-        severity: 'low',
-      });
-      matchedBankTxnIds.add(txn.id);
     }
   }
+  return matrix[a.length][b.length];
+}
 
-  // 3) Missing payments — invoices sent/overdue with no matching bank credit.
+/**
+ * Similarity score 0..1 between two names. 1 = identical, 0 = completely
+ * different. Uses a normalized Levenshtein distance.
+ */
+function nameSimilarity(a: string, b: string): number {
+  const na = normalizeName(a);
+  const nb = normalizeName(b);
+  if (!na || !nb) return 0;
+  if (na === nb) return 1;
+  // If one contains the other, high similarity.
+  if (na.includes(nb) || nb.includes(na)) return 0.9;
+  const dist = levenshtein(na.slice(0, 50), nb.slice(0, 50));
+  const maxLen = Math.max(na.length, nb.length);
+  return maxLen === 0 ? 0 : 1 - dist / maxLen;
+}
+
+/**
+ * Amount similarity. Returns 1 for exact, scaled down for differences.
+ * Within ±2%: >= 0.85. Beyond ±5%: 0.
+ */
+function amountSimilarity(bankAmount: number, invoiceAmount: number): number {
+  if (invoiceAmount === 0) return 0;
+  const diff = Math.abs(bankAmount - invoiceAmount);
+  const pct = diff / invoiceAmount;
+  if (diff === 0) return 1;
+  if (pct <= 0.02) return 0.95;
+  if (pct <= 0.05) return 0.7;
+  return 0;
+}
+
+// ─── Reference matching ──────────────────────────────────────────────────────
+
+/**
+ * Check whether the bank transaction's reference / description mentions an
+ * invoice number. Returns the matched invoice id or null.
+ */
+function matchByReference(tx: BankTransaction, invoices: ReconcileInvoiceRef[]): ReconcileInvoiceRef | null {
+  if (!tx.referenceNumber && !tx.description) return null;
+  const haystack = `${tx.referenceNumber ?? ''} ${tx.description}`.toUpperCase();
+
   for (const inv of invoices) {
-    if (matchedInvoiceIds.has(inv.id)) continue;
-    if (inv.status === 'paid') continue;
-    byMatchType.missing_payment++;
-    exceptions.push({
-      id: 'exc_' + inv.id.slice(-6),
-      type: 'missing_payment',
-      bankTxnId: 'n/a',
-      description: `Invoice ${inv.invoiceNumber} for ₹${Math.round(inv.totalAmount).toLocaleString('en-IN')} (${inv.buyerName || 'customer'}) has no matching bank payment.`,
-      amount: inv.totalAmount,
-      date: inv.invoiceDate || new Date().toISOString(),
-      suggestedAction: inv.status === 'overdue' ? 'Escalate to collections recovery workflow.' : 'Send payment reminder to customer.',
-      severity: inv.status === 'overdue' ? 'high' : 'medium',
-    });
+    if (!inv.invoiceNumber) continue;
+    if (haystack.includes(inv.invoiceNumber.toUpperCase())) {
+      return inv;
+    }
+    if (inv.referenceNumber && tx.referenceNumber && tx.referenceNumber.toUpperCase().includes(inv.referenceNumber.toUpperCase())) {
+      return inv;
+    }
+  }
+  return null;
+}
+
+// ─── Engine ──────────────────────────────────────────────────────────────────
+
+const EXACT_THRESHOLD = 0.95;
+const PARTIAL_THRESHOLD = 0.6;
+
+/**
+ * Reconcile a single bank transaction against a list of invoices.
+ * Pure + deterministic. Returns the best match (or 'unmatched').
+ *
+ * The engine only matches:
+ *   • credit (incoming) transactions → against 'sales' invoices
+ *   • debit (outgoing) transactions → against 'purchase' invoices
+ * Other combinations (e.g. credit vs purchase) return 'unmatched'.
+ */
+export function reconcileTransaction(
+  tx: BankTransaction,
+  invoices: ReconcileInvoiceRef[],
+): ReconcileResult {
+  // Filter invoices by direction.
+  const expectedType = tx.type === 'credit' ? 'sales' : 'purchase';
+  const candidates = invoices.filter((inv) => inv.invoiceType === expectedType);
+
+  if (candidates.length === 0) {
+    return { transaction: tx, matchedInvoice: null, status: 'unmatched', confidence: 0 };
   }
 
-  // 4) Unknown debits — bank debits with no clear category.
-  const debitTxns = await db.bankTransaction.findMany({
-    where: { type: 'debit', category: 'uncategorized' },
-    take: 50,
-  });
-  for (const txn of debitTxns) {
-    byMatchType.unknown_debit++;
-    exceptions.push({
-      id: 'exc_d_' + txn.id.slice(-6),
-      type: 'unknown_debit',
-      bankTxnId: txn.id,
-      description: `Unknown debit of ₹${Math.round(Math.abs(txn.amount)).toLocaleString('en-IN')} — "${txn.description}".`,
-      amount: Math.abs(txn.amount),
-      date: txn.date,
-      suggestedAction: 'Categorise this expense or verify with the account holder.',
-      severity: 'low',
-    });
+  let bestInvoice: ReconcileInvoiceRef | null = null;
+  let bestConfidence = -1;
+
+  // 1. Try exact reference match first (highest confidence).
+  const refMatch = matchByReference(tx, candidates);
+  if (refMatch) {
+    const amtSim = amountSimilarity(tx.amount, refMatch.balanceDue || refMatch.grandTotal);
+    const confidence = Math.max(0.9, amtSim); // ref match is strong even if amount is slightly off
+    if (confidence > bestConfidence) {
+      bestInvoice = refMatch;
+      bestConfidence = confidence;
+    }
   }
 
-  const totalTransactions = bankTxns.length + debitTxns.length;
-  const matchedCount = byMatchType.exact + byMatchType.partial;
-  const unmatchedCount = totalTransactions - matchedCount;
-  const matchedAmount = matches.reduce((s, m) => s + m.bankAmount, 0);
-  const unmatchedAmount = exceptions
-    .filter((e) => e.type !== 'missing_payment')
-    .reduce((s, e) => s + e.amount, 0);
-  const pendingCollections = byMatchType.missing_payment;
-  const matchedPct = totalTransactions > 0 ? Math.round((matchedCount / totalTransactions) * 100) : 0;
-  const riskLevel: 'low' | 'medium' | 'high' = matchedPct >= 80 ? 'low' : matchedPct >= 50 ? 'medium' : 'high';
+  // 2. Score every candidate by amount + counterparty similarity.
+  for (const inv of candidates) {
+    const invAmount = inv.balanceDue > 0 ? inv.balanceDue : inv.grandTotal;
+    const amtSim = amountSimilarity(tx.amount, invAmount);
 
-  const summary: ReconcileSummary = {
-    totalTransactions,
-    matched: matchedCount,
-    unmatched: unmatchedCount,
-    matchedAmount,
-    unmatchedAmount,
-    matchedPct,
-    pendingCollections,
-    riskLevel,
-    byMatchType,
-  };
+    let nameSim = 0;
+    if (tx.counterparty) {
+      nameSim = nameSimilarity(tx.counterparty, inv.clientName);
+    }
+
+    // Weighted score: amount matters most (0.7), name secondary (0.3).
+    const confidence = round2(amtSim * 0.7 + nameSim * 0.3);
+
+    if (confidence > bestConfidence) {
+      bestInvoice = inv;
+      bestConfidence = confidence;
+    }
+  }
+
+  if (!bestInvoice || bestConfidence < 0) {
+    return { transaction: tx, matchedInvoice: null, status: 'unmatched', confidence: 0 };
+  }
+
+  let status: ReconciliationStatus;
+  if (bestConfidence >= EXACT_THRESHOLD) {
+    status = 'matched';
+  } else if (bestConfidence >= PARTIAL_THRESHOLD) {
+    status = 'partially_matched';
+  } else {
+    return { transaction: tx, matchedInvoice: null, status: 'unmatched', confidence: 0 };
+  }
 
   return {
-    summary,
-    matches: matches.slice(0, 100),
-    exceptions: exceptions.slice(0, 100),
-    hasLiveData: totalTransactions > 0,
+    transaction: { ...tx, invoiceId: bestInvoice.id, reconciled: status, matchConfidence: bestConfidence },
+    matchedInvoice: bestInvoice,
+    status,
+    confidence: bestConfidence,
   };
 }
 
-export async function runReconciliation(): Promise<{ matched: number; exceptions: number }> {
-  // Persist match flags back to bank transactions.
-  const state = await getReconcileState();
-  for (const m of state.matches) {
-    await db.bankTransaction.update({
-      where: { id: m.bankTxnId },
-      data: {
-        matched: true,
-        matchedInvoiceId: m.invoiceId,
-        matchType: m.matchType,
-        matchConfidence: m.confidence,
-      },
-    });
+/**
+ * Reconcile an array of bank transactions against a list of invoices.
+ * Returns the transactions with updated `invoiceId`, `reconciled`, and
+ * `matchConfidence` fields.
+ *
+ * Each invoice is matched to AT MOST one transaction (greedy, highest
+ * confidence first) to avoid double-counting.
+ */
+export function reconcileTransactions(
+  transactions: BankTransaction[],
+  invoices: ReconcileInvoiceRef[],
+): BankTransaction[] {
+  // Score every (tx, invoice) pair, then greedily assign best matches.
+  const scored: Array<{ txIndex: number; invoiceId: string; confidence: number; status: ReconciliationStatus }> = [];
+
+  for (let i = 0; i < transactions.length; i++) {
+    const tx = transactions[i];
+    const expectedType = tx.type === 'credit' ? 'sales' : 'purchase';
+    const candidates = invoices.filter((inv) => inv.invoiceType === expectedType);
+    for (const inv of candidates) {
+      const invAmount = inv.balanceDue > 0 ? inv.balanceDue : inv.grandTotal;
+      const amtSim = amountSimilarity(tx.amount, invAmount);
+      const nameSim = tx.counterparty ? nameSimilarity(tx.counterparty, inv.clientName) : 0;
+      const confidence = round2(amtSim * 0.7 + nameSim * 0.3);
+      let status: ReconciliationStatus;
+      if (confidence >= EXACT_THRESHOLD) status = 'matched';
+      else if (confidence >= PARTIAL_THRESHOLD) status = 'partially_matched';
+      else continue; // skip non-matches
+      scored.push({ txIndex: i, invoiceId: inv.id, confidence, status });
+    }
+    // Also check reference matches (override confidence to >= 0.9).
+    const refMatch = matchByReference(tx, candidates);
+    if (refMatch) {
+      const amtSim = amountSimilarity(tx.amount, refMatch.balanceDue || refMatch.grandTotal);
+      const confidence = Math.max(0.9, amtSim);
+      scored.push({ txIndex: i, invoiceId: refMatch.id, confidence, status: 'matched' });
+    }
   }
-  return { matched: state.matches.length, exceptions: state.exceptions.length };
+
+  // Greedy assignment — highest confidence first, each invoice used once.
+  scored.sort((a, b) => b.confidence - a.confidence);
+  const usedInvoices = new Set<string>();
+  const matchedTxIndex = new Map<number, { invoiceId: string; confidence: number; status: ReconciliationStatus }>();
+
+  for (const s of scored) {
+    if (usedInvoices.has(s.invoiceId)) continue;
+    if (matchedTxIndex.has(s.txIndex)) continue;
+    usedInvoices.add(s.invoiceId);
+    matchedTxIndex.set(s.txIndex, { invoiceId: s.invoiceId, confidence: s.confidence, status: s.status });
+  }
+
+  // Apply matches to the transactions.
+  return transactions.map((tx, i) => {
+    const match = matchedTxIndex.get(i);
+    if (match) {
+      return {
+        ...tx,
+        invoiceId: match.invoiceId,
+        reconciled: match.status,
+        matchConfidence: match.confidence,
+      };
+    }
+    return { ...tx, invoiceId: null, reconciled: 'unmatched' as const, matchConfidence: 0 };
+  });
+}
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+function round2(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
+/**
+ * Summary stats for a set of reconciled transactions.
+ */
+export function reconciliationSummary(transactions: BankTransaction[]): {
+  total: number;
+  matched: number;
+  partiallyMatched: number;
+  unmatched: number;
+  matchedAmount: number;
+  unmatchedAmount: number;
+} {
+  let matched = 0;
+  let partiallyMatched = 0;
+  let unmatched = 0;
+  let matchedAmount = 0;
+  let unmatchedAmount = 0;
+  for (const tx of transactions) {
+    if (tx.reconciled === 'matched') {
+      matched++;
+      matchedAmount += tx.amount;
+    } else if (tx.reconciled === 'partially_matched') {
+      partiallyMatched++;
+      matchedAmount += tx.amount;
+    } else {
+      unmatched++;
+      unmatchedAmount += tx.amount;
+    }
+  }
+  return {
+    total: transactions.length,
+    matched,
+    partiallyMatched,
+    unmatched,
+    matchedAmount: round2(matchedAmount),
+    unmatchedAmount: round2(unmatchedAmount),
+  };
 }

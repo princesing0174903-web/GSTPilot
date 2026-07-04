@@ -12,6 +12,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { invalidateAutonomousCache } from '@/lib/autonomous/orchestrator';
 import { AUTONOMOUS_TAGLINE } from '@/lib/autonomous/types';
+import { safeAudit } from '@/lib/audit/safe-write';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -65,18 +66,14 @@ export async function POST(req: NextRequest) {
       }
     } catch { /* learning is best-effort */ }
 
-    // Audit log
-    try {
-      await db.auditLog.create({
-        data: {
-          action: 'AUTONOMOUS_REJECT',
-          entity: 'AutonomousDecision',
-          entityId: decisionId,
-          userId: userId ?? null,
-          details: JSON.stringify({ role: role ?? 'executive', note: note ?? null }),
-        },
-      });
-    } catch { /* audit is best-effort */ }
+    // Audit log (safe-write: retries without userId on P2003, never throws).
+    await safeAudit({
+      action: 'AUTONOMOUS_REJECT',
+      entity: 'AutonomousDecision',
+      entityId: decisionId,
+      userId: userId ?? null,
+      details: JSON.stringify({ role: role ?? 'executive', note: note ?? null }),
+    });
 
     invalidateAutonomousCache();
     return NextResponse.json(

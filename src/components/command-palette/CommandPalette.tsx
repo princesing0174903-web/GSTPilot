@@ -586,17 +586,21 @@ export default function CommandPalette() {
             exit="exit"
             transition={springModalTransition}
             className="fixed left-1/2 top-[12%] z-[70] w-full max-w-xl -translate-x-1/2"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Command palette"
           >
             <div className="glass-surface-strong rounded-2xl shadow-[0_24px_70px_-12px_rgba(0,0,0,0.8)] overflow-hidden">
               {/* Search input */}
-              <div className="flex items-center gap-3 px-4 py-3.5 border-b border-white/[0.08] bg-white/[0.03] transition-colors focus-within:border-[#3B82F6]/50 focus-within:ring-1 focus-within:ring-[#3B82F6]/40">
-                <Search className="h-4 w-4 text-white/50 shrink-0 transition-colors" />
+              <div className="flex items-center gap-3 px-4 py-3.5 border-b border-white/[0.08] bg-white/[0.03] transition-colors focus-within:border-emerald-400/50 focus-within:ring-1 focus-within:ring-emerald-400/40">
+                <Search className="h-4 w-4 text-muted-foreground shrink-0 transition-colors" />
                 <input
                   autoFocus
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   placeholder="Type a command or search..."
-                  className="flex-1 bg-transparent text-sm text-white outline-none placeholder:text-white/40"
+                  aria-label="Search commands"
+                  className="flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground/70"
                   onKeyDown={(e) => {
                     if (e.key === 'Escape') {
                       setCommandPaletteOpen(false);
@@ -613,11 +617,11 @@ export default function CommandPalette() {
                 {/* Empty state */}
                 {isSearching && !hasSearchResults && (
                   <div className="py-10 text-center">
-                    <Search className="h-8 w-8 text-white/25 mx-auto mb-2" />
-                    <p className="text-sm text-white/60">
+                    <Search className="h-8 w-8 text-muted-foreground/50 mx-auto mb-2" />
+                    <p className="text-sm text-foreground/70">
                       No results found for &ldquo;{query}&rdquo;
                     </p>
-                    <p className="text-xs text-white/40 mt-1">
+                    <p className="text-xs text-muted-foreground/70 mt-1">
                       Try searching for clients, invoices, returns, or documents
                     </p>
                   </div>
@@ -627,8 +631,8 @@ export default function CommandPalette() {
                 {!isSearching && favoriteCommands.length > 0 && (
                   <div className="p-2">
                     <div className="flex items-center gap-1.5 px-2 py-1.5">
-                      <Star className="h-3 w-3 text-amber-500" />
-                      <span className="text-[10px] font-semibold text-white/40 uppercase tracking-[0.12em]">
+                      <Star className="h-3 w-3 text-cyan-400" />
+                      <span className="text-[10px] font-semibold text-muted-foreground/70 uppercase tracking-[0.12em]">
                         Favorites
                       </span>
                     </div>
@@ -651,8 +655,8 @@ export default function CommandPalette() {
                 {!isSearching && recentCommands.length > 0 && (
                   <div className="p-2">
                     <div className="flex items-center gap-1.5 px-2 py-1.5">
-                      <Clock className="h-3 w-3 text-white/40" />
-                      <span className="text-[10px] font-semibold text-white/40 uppercase tracking-[0.12em]">
+                      <Clock className="h-3 w-3 text-muted-foreground/70" />
+                      <span className="text-[10px] font-semibold text-muted-foreground/70 uppercase tracking-[0.12em]">
                         Recent
                       </span>
                     </div>
@@ -675,8 +679,8 @@ export default function CommandPalette() {
                 {!isSearching && (
                   <div className="p-2">
                     <div className="flex items-center gap-1.5 px-2 py-1.5">
-                      <Zap className="h-3 w-3 text-white/40" />
-                      <span className="text-[10px] font-semibold text-white/40 uppercase tracking-[0.12em]">
+                      <Zap className="h-3 w-3 text-muted-foreground/70" />
+                      <span className="text-[10px] font-semibold text-muted-foreground/70 uppercase tracking-[0.12em]">
                         Commands
                       </span>
                     </div>
@@ -699,11 +703,11 @@ export default function CommandPalette() {
                 {isSearching && searchResults.clients.length > 0 && (
                   <div className="p-2">
                     <div className="flex items-center gap-1.5 px-2 py-1.5">
-                      <Building2 className="h-3 w-3 text-emerald-600" />
-                      <span className="text-[10px] font-semibold text-white/40 uppercase tracking-[0.12em]">
+                      <Building2 className="h-3 w-3 text-emerald-400" />
+                      <span className="text-[10px] font-semibold text-muted-foreground/70 uppercase tracking-[0.12em]">
                         Clients
                       </span>
-                      <span className="text-[10px] text-white/40 ml-auto">
+                      <span className="text-[10px] text-muted-foreground/70 ml-auto">
                         {searchResults.clients.length} found
                       </span>
                     </div>
@@ -725,11 +729,11 @@ export default function CommandPalette() {
                 {isSearching && searchResults.invoices.length > 0 && (
                   <div className="p-2">
                     <div className="flex items-center gap-1.5 px-2 py-1.5">
-                      <FileSpreadsheet className="h-3 w-3 text-amber-600" />
-                      <span className="text-[10px] font-semibold text-white/40 uppercase tracking-[0.12em]">
+                      <FileSpreadsheet className="h-3 w-3 text-cyan-400" />
+                      <span className="text-[10px] font-semibold text-muted-foreground/70 uppercase tracking-[0.12em]">
                         Invoices
                       </span>
-                      <span className="text-[10px] text-white/40 ml-auto">
+                      <span className="text-[10px] text-muted-foreground/70 ml-auto">
                         {searchResults.invoices.length} found
                       </span>
                     </div>
@@ -749,11 +753,11 @@ export default function CommandPalette() {
                 {isSearching && searchResults.returns.length > 0 && (
                   <div className="p-2">
                     <div className="flex items-center gap-1.5 px-2 py-1.5">
-                      <FileText className="h-3 w-3 text-blue-600" />
-                      <span className="text-[10px] font-semibold text-white/40 uppercase tracking-[0.12em]">
+                      <FileText className="h-3 w-3 text-blue-400" />
+                      <span className="text-[10px] font-semibold text-muted-foreground/70 uppercase tracking-[0.12em]">
                         Returns
                       </span>
-                      <span className="text-[10px] text-white/40 ml-auto">
+                      <span className="text-[10px] text-muted-foreground/70 ml-auto">
                         {searchResults.returns.length} found
                       </span>
                     </div>
@@ -778,11 +782,11 @@ export default function CommandPalette() {
                 {isSearching && searchResults.documents.length > 0 && (
                   <div className="p-2">
                     <div className="flex items-center gap-1.5 px-2 py-1.5">
-                      <FolderOpen className="h-3 w-3 text-orange-600" />
-                      <span className="text-[10px] font-semibold text-white/40 uppercase tracking-[0.12em]">
+                      <FolderOpen className="h-3 w-3 text-cyan-400" />
+                      <span className="text-[10px] font-semibold text-muted-foreground/70 uppercase tracking-[0.12em]">
                         Documents
                       </span>
-                      <span className="text-[10px] text-white/40 ml-auto">
+                      <span className="text-[10px] text-muted-foreground/70 ml-auto">
                         {searchResults.documents.length} found
                       </span>
                     </div>
@@ -802,11 +806,11 @@ export default function CommandPalette() {
                 {isSearching && searchResults.activities.length > 0 && (
                   <div className="p-2">
                     <div className="flex items-center gap-1.5 px-2 py-1.5">
-                      <Activity className="h-3 w-3 text-purple-600" />
-                      <span className="text-[10px] font-semibold text-white/40 uppercase tracking-[0.12em]">
+                      <Activity className="h-3 w-3 text-blue-400" />
+                      <span className="text-[10px] font-semibold text-muted-foreground/70 uppercase tracking-[0.12em]">
                         Activities
                       </span>
-                      <span className="text-[10px] text-white/40 ml-auto">
+                      <span className="text-[10px] text-muted-foreground/70 ml-auto">
                         {searchResults.activities.length} found
                       </span>
                     </div>
@@ -831,7 +835,7 @@ export default function CommandPalette() {
               </div>
 
               {/* Footer with keyboard hints */}
-              <div className="border-t border-white/[0.06] px-4 py-2.5 flex items-center gap-4 text-xs text-white/45">
+              <div className="border-t border-white/[0.06] px-4 py-2.5 flex items-center gap-4 text-xs text-muted-foreground">
                 <span className="flex items-center gap-1">
                   <kbd className="badge-premium font-mono text-[10px]">↑↓</kbd>
                   Navigate
@@ -891,14 +895,14 @@ function CommandItemRow({
       transition={{ duration: 0.1 }}
     >
       {/* Active left accent bar */}
-      <span className="absolute left-0 top-1/2 h-5 w-[2px] -translate-y-1/2 rounded-full bg-[#3B82F6] opacity-0 group-hover:opacity-100 transition-opacity duration-150" />
-      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-white/[0.04] transition-colors group-hover:bg-[#3B82F6]/10">
-        <Icon className="h-3.5 w-3.5 text-white/50 transition-colors group-hover:text-[#3B82F6]" />
+      <span className="absolute left-0 top-1/2 h-5 w-[2px] -translate-y-1/2 rounded-full bg-emerald-400 opacity-0 group-hover:opacity-100 transition-opacity duration-150" />
+      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-white/[0.04] transition-colors group-hover:bg-emerald-400/10">
+        <Icon className="h-3.5 w-3.5 text-muted-foreground transition-colors group-hover:text-emerald-400" />
       </div>
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium text-white truncate">{label}</p>
         {description && (
-          <p className="text-xs text-white/45 truncate">{description}</p>
+          <p className="text-xs text-muted-foreground truncate">{description}</p>
         )}
       </div>
       <div className="flex items-center gap-2 shrink-0">
@@ -915,8 +919,8 @@ function CommandItemRow({
             <Star
               className={`h-3 w-3 ${
                 isFavorite
-                  ? 'fill-amber-400 text-amber-400'
-                  : 'text-white/40'
+                  ? 'fill-cyan-400 text-cyan-400'
+                  : 'text-muted-foreground/70'
               }`}
             />
           </button>
@@ -926,7 +930,7 @@ function CommandItemRow({
             {shortcut}
           </kbd>
         )}
-        <ArrowRight className="h-3 w-3 text-white/0 group-hover:text-white/50 transition-colors" />
+        <ArrowRight className="h-3 w-3 text-transparent group-hover:text-muted-foreground transition-colors" />
       </div>
     </motion.div>
   );

@@ -1,0 +1,865 @@
+     1→// ═══════════════════════════════════════════════════════════════════════════════
+     2→// GSTPilot Gmail & WhatsApp Business Automation™ — Client-Safe Firestore Service
+     3→//
+     4→// The single entry point for all communication Firestore operations on the
+     5→// CLIENT side. Mirrors the banking-provider / ai-provider service pattern:
+     6→//   • Real-time subscriptions via onSnapshot (org-scoped)
+     7→//   • CRUD writes via the Firebase client SDK (rules enforce org isolation)
+     8→//   • Multi-tenant — every function filters on `organizationId`
+     9→//
+    10→// This module is CLIENT-SAFE — it only imports from `firebase/firestore` and
+    11→// `@/lib/firebase` (the client SDK). It NEVER imports the provider, crypto, or
+    12→// any server-only code.
+    13→//
+    14→// Collections managed:
+    15→//   • gmail_connections        — Gmail OAuth sessions (encrypted)
+    16→//   • whatsapp_connections     — WhatsApp Cloud API tokens (encrypted)
+    17→//   • gmail_messages           — Inbound + outbound emails
+    18→//   • whatsapp_messages        — Inbound + outbound WhatsApp messages
+    19→//   • scheduled_messages       — Automation engine queue
+    20→//   • communication_sync_jobs  — Sync observability
+    21→// ═══════════════════════════════════════════════════════════════════════════════
+    22→
+    23→import {
+    24→  collection,
+    25→  doc,
+    26→  getDoc,
+    27→  getDocs,
+    28→  setDoc,
+    29→  addDoc,
+    30→  updateDoc,
+    31→  deleteDoc,
+    32→  query,
+    33→  where,
+    34→  orderBy,
+    35→  limit as limitFn,
+    36→  serverTimestamp,
+    37→  writeBatch,
+    38→  onSnapshot,
+    39→  type Unsubscribe,
+    40→  type QueryConstraint,
+    41→  type Timestamp,
+    42→} from 'firebase/firestore';
+    43→import { db } from '@/lib/firebase';
+    44→import type {
+    45→  CommunicationSummary,
+    46→  CommunicationSyncJob,
+    47→  CommunicationSyncStatus,
+    48→  CommunicationSyncTrigger,
+    49→  EmailAttachment,
+    50→  EmailCategory,
+    51→  EmailReadStatus,
+    52→  GmailAuthStatus,
+    53→  GmailConnection,
+    54→  GmailMessage,
+    55→  ScheduledMessage,
+    56→  ScheduledMessageChannel,
+    57→  ScheduledMessageStatus,
+    58→  WhatsAppAuthStatus,
+    59→  WhatsAppCategory,
+    60→  WhatsAppConnection,
+    61→  WhatsAppDeliveryStatus,
+    62→  WhatsAppMessage,
+    63→  WhatsAppMessageType,
+    64→} from './types';
+    65→import { CommunicationError } from './errors';
+    66→import { hasPendingReply } from './communication-analysis';
+    67→
+    68→// ─── Collection names ────────────────────────────────────────────────────────
+    69→
+    70→export const COMMUNICATION_COLLECTIONS = {
+    71→  GMAIL_CONNECTIONS: 'gmail_connections',
+    72→  WHATSAPP_CONNECTIONS: 'whatsapp_connections',
+    73→  GMAIL_MESSAGES: 'gmail_messages',
+    74→  WHATSAPP_MESSAGES: 'whatsapp_messages',
+    75→  SCHEDULED_MESSAGES: 'scheduled_messages',
+    76→  SYNC_JOBS: 'communication_sync_jobs',
+    77→} as const;
+    78→
+    79→// ─── Org guard ───────────────────────────────────────────────────────────────
+    80→
+    81→function assertOrg(orgId: string | undefined | null): void {
+    82→  if (!orgId) {
+    83→    throw new CommunicationError(
+    84→      'You must belong to an organization to manage communications.',
+    85→      { code: 'NO_ORGANIZATION', statusCode: 403 },
+    86→    );
+    87→  }
+    88→}
+    89→
+    90→// ─── Timestamp conversion ────────────────────────────────────────────────────
+    91→
+    92→function ts(value: unknown): string {
+    93→  if (!value) return '';
+    94→  if (value && typeof value === 'object' && 'toDate' in value) {
+    95→    return (value as { toDate: () => Date }).toDate().toISOString();
+    96→  }
+    97→  if (typeof value === 'string') return value;
+    98→  if (value instanceof Date) return value.toISOString();
+    99→  try {
+   100→    return new Date(value as string).toISOString();
+   101→  } catch {
+   102→    return '';
+   103→  }
+   104→}
+   105→
+   106→function toAttachmentArray(raw: unknown): EmailAttachment[] {
+   107→  if (!Array.isArray(raw)) return [];
+   108→  return raw.map((r, i) => {
+   109→    const a = r as Record<string, unknown>;
+   110→    return {
+   111→      id: String(a.id ?? `att-${i}`),
+   112→      filename: String(a.filename ?? 'unknown'),
+   113→      mimeType: String(a.mimeType ?? 'application/octet-stream'),
+   114→      size: Number(a.size ?? 0),
+   115→      storageUrl: a.storageUrl ? String(a.storageUrl) : null,
+   116→    };
+   117→  });
+   118→}
+   119→
+   120→// ─── Gmail Connection ────────────────────────────────────────────────────────
+   121→
+   122→export function toGmailConnection(id: string, raw: Record<string, unknown>): GmailConnection {
+   123→  return {
+   124→    id,
+   125→    organizationId: String(raw.organizationId ?? ''),
+   126→    email: String(raw.email ?? ''),
+   127→    displayName: raw.displayName ? String(raw.displayName) : null,
+   128→    provider: (raw.provider as GmailConnection['provider']) ?? 'mock',
+   129→    authStatus: (raw.authStatus as GmailAuthStatus) ?? 'disconnected',
+   130→    lastSync: raw.lastSync ? ts(raw.lastSync) : null,
+   131→    sessionExpiry: raw.sessionExpiry ? ts(raw.sessionExpiry) : null,
+   132→    encryptedConnection: raw.encryptedConnection ? String(raw.encryptedConnection) : null,
+   133→    scopes: Array.isArray(raw.scopes) ? (raw.scopes as string[]) : [],
+   134→    lastError: raw.lastError ? String(raw.lastError) : null,
+   135→    createdBy: (raw.createdBy as GmailConnection['createdBy']) ?? { uid: '', name: '', email: '' },
+   136→    createdAt: ts(raw.createdAt),
+   137→    updatedAt: ts(raw.updatedAt),
+   138→  };
+   139→}
+   140→
+   141→export function subscribeToGmailConnections(
+   142→  organizationId: string,
+   143→  callback: (connections: GmailConnection[]) => void,
+   144→  options?: { onError?: (err: Error) => void },
+   145→): Unsubscribe {
+   146→  assertOrg(organizationId);
+   147→  const q = query(
+   148→    collection(db, COMMUNICATION_COLLECTIONS.GMAIL_CONNECTIONS),
+   149→    where('organizationId', '==', organizationId),
+   150→    orderBy('createdAt', 'desc'),
+   151→  );
+   152→  return onSnapshot(
+   153→    q,
+   154→    (snap) => callback(snap.docs.map((d) => toGmailConnection(d.id, d.data() as Record<string, unknown>))),
+   155→    (err) => options?.onError?.(err),
+   156→  );
+   157→}
+   158→
+   159→export async function getGmailConnections(organizationId: string): Promise<GmailConnection[]> {
+   160→  assertOrg(organizationId);
+   161→  const q = query(
+   162→    collection(db, COMMUNICATION_COLLECTIONS.GMAIL_CONNECTIONS),
+   163→    where('organizationId', '==', organizationId),
+   164→  );
+   165→  const snap = await getDocs(q);
+   166→  return snap.docs.map((d) => toGmailConnection(d.id, d.data() as Record<string, unknown>));
+   167→}
+   168→
+   169→export async function saveGmailConnection(
+   170→  organizationId: string,
+   171→  data: Omit<GmailConnection, 'id' | 'createdAt' | 'updatedAt'>,
+   172→): Promise<string> {
+   173→  assertOrg(organizationId);
+   174→  const ref = await addDoc(collection(db, COMMUNICATION_COLLECTIONS.GMAIL_CONNECTIONS), {
+   175→    ...data,
+   176→    createdAt: serverTimestamp(),
+   177→    updatedAt: serverTimestamp(),
+   178→  });
+   179→  return ref.id;
+   180→}
+   181→
+   182→export async function updateGmailConnection(
+   183→  organizationId: string,
+   184→  connectionId: string,
+   185→  patch: Partial<GmailConnection>,
+   186→): Promise<void> {
+   187→  assertOrg(organizationId);
+   188→  const ref = doc(db, COMMUNICATION_COLLECTIONS.GMAIL_CONNECTIONS, connectionId);
+   189→  await updateDoc(ref, { ...patch, updatedAt: serverTimestamp() });
+   190→}
+   191→
+   192→export async function deleteGmailConnection(organizationId: string, connectionId: string): Promise<void> {
+   193→  assertOrg(organizationId);
+   194→  await deleteDoc(doc(db, COMMUNICATION_COLLECTIONS.GMAIL_CONNECTIONS, connectionId));
+   195→}
+   196→
+   197→// ─── WhatsApp Connection ─────────────────────────────────────────────────────
+   198→
+   199→export function toWhatsAppConnection(id: string, raw: Record<string, unknown>): WhatsAppConnection {
+   200→  return {
+   201→    id,
+   202→    organizationId: String(raw.organizationId ?? ''),
+   203→    phoneNumber: String(raw.phoneNumber ?? ''),
+   204→    businessName: raw.businessName ? String(raw.businessName) : null,
+   205→    displayPhoneNumber: raw.displayPhoneNumber ? String(raw.displayPhoneNumber) : null,
+   206→    provider: (raw.provider as WhatsAppConnection['provider']) ?? 'mock',
+   207→    authStatus: (raw.authStatus as WhatsAppAuthStatus) ?? 'disconnected',
+   208→    lastSync: raw.lastSync ? ts(raw.lastSync) : null,
+   209→    sessionExpiry: raw.sessionExpiry ? ts(raw.sessionExpiry) : null,
+   210→    encryptedConnection: raw.encryptedConnection ? String(raw.encryptedConnection) : null,
+   211→    phoneNumberId: raw.phoneNumberId ? String(raw.phoneNumberId) : null,
+   212→    wabaId: raw.wabaId ? String(raw.wabaId) : null,
+   213→    qualityRating: (raw.qualityRating as WhatsAppConnection['qualityRating']) ?? 'UNKNOWN',
+   214→    messagingLimitTier: raw.messagingLimitTier ? String(raw.messagingLimitTier) : null,
+   215→    lastError: raw.lastError ? String(raw.lastError) : null,
+   216→    createdBy: (raw.createdBy as WhatsAppConnection['createdBy']) ?? { uid: '', name: '', email: '' },
+   217→    createdAt: ts(raw.createdAt),
+   218→    updatedAt: ts(raw.updatedAt),
+   219→  };
+   220→}
+   221→
+   222→export function subscribeToWhatsAppConnections(
+   223→  organizationId: string,
+   224→  callback: (connections: WhatsAppConnection[]) => void,
+   225→  options?: { onError?: (err: Error) => void },
+   226→): Unsubscribe {
+   227→  assertOrg(organizationId);
+   228→  const q = query(
+   229→    collection(db, COMMUNICATION_COLLECTIONS.WHATSAPP_CONNECTIONS),
+   230→    where('organizationId', '==', organizationId),
+   231→    orderBy('createdAt', 'desc'),
+   232→  );
+   233→  return onSnapshot(
+   234→    q,
+   235→    (snap) => callback(snap.docs.map((d) => toWhatsAppConnection(d.id, d.data() as Record<string, unknown>))),
+   236→    (err) => options?.onError?.(err),
+   237→  );
+   238→}
+   239→
+   240→export async function getWhatsAppConnections(organizationId: string): Promise<WhatsAppConnection[]> {
+   241→  assertOrg(organizationId);
+   242→  const q = query(
+   243→    collection(db, COMMUNICATION_COLLECTIONS.WHATSAPP_CONNECTIONS),
+   244→    where('organizationId', '==', organizationId),
+   245→  );
+   246→  const snap = await getDocs(q);
+   247→  return snap.docs.map((d) => toWhatsAppConnection(d.id, d.data() as Record<string, unknown>));
+   248→}
+   249→
+   250→export async function saveWhatsAppConnection(
+   251→  organizationId: string,
+   252→  data: Omit<WhatsAppConnection, 'id' | 'createdAt' | 'updatedAt'>,
+   253→): Promise<string> {
+   254→  assertOrg(organizationId);
+   255→  const ref = await addDoc(collection(db, COMMUNICATION_COLLECTIONS.WHATSAPP_CONNECTIONS), {
+   256→    ...data,
+   257→    createdAt: serverTimestamp(),
+   258→    updatedAt: serverTimestamp(),
+   259→  });
+   260→  return ref.id;
+   261→}
+   262→
+   263→export async function updateWhatsAppConnection(
+   264→  organizationId: string,
+   265→  connectionId: string,
+   266→  patch: Partial<WhatsAppConnection>,
+   267→): Promise<void> {
+   268→  assertOrg(organizationId);
+   269→  const ref = doc(db, COMMUNICATION_COLLECTIONS.WHATSAPP_CONNECTIONS, connectionId);
+   270→  await updateDoc(ref, { ...patch, updatedAt: serverTimestamp() });
+   271→}
+   272→
+   273→export async function deleteWhatsAppConnection(organizationId: string, connectionId: string): Promise<void> {
+   274→  assertOrg(organizationId);
+   275→  await deleteDoc(doc(db, COMMUNICATION_COLLECTIONS.WHATSAPP_CONNECTIONS, connectionId));
+   276→}
+   277→
+   278→// ─── Gmail Messages ──────────────────────────────────────────────────────────
+   279→
+   280→export function toGmailMessage(id: string, raw: Record<string, unknown>): GmailMessage {
+   281→  return {
+   282→    id,
+   283→    organizationId: String(raw.organizationId ?? ''),
+   284→    connectionId: String(raw.connectionId ?? ''),
+   285→    messageId: String(raw.messageId ?? ''),
+   286→    threadId: raw.threadId ? String(raw.threadId) : null,
+   287→    direction: (raw.direction as GmailMessage['direction']) ?? 'inbound',
+   288→    from: String(raw.from ?? ''),
+   289→    to: String(raw.to ?? ''),
+   290→    cc: raw.cc ? String(raw.cc) : null,
+   291→    bcc: raw.bcc ? String(raw.bcc) : null,
+   292→    replyTo: raw.replyTo ? String(raw.replyTo) : null,
+   293→    subject: String(raw.subject ?? ''),
+   294→    preview: String(raw.preview ?? ''),
+   295→    bodyHtml: raw.bodyHtml ? String(raw.bodyHtml) : null,
+   296→    bodyText: raw.bodyText ? String(raw.bodyText) : null,
+   297→    category: (raw.category as EmailCategory) ?? 'general',
+   298→    aiSummary: raw.aiSummary ? String(raw.aiSummary) : null,
+   299→    sentiment: (raw.sentiment as GmailMessage['sentiment']) ?? 'unknown',
+   300→    attachments: toAttachmentArray(raw.attachments),
+   301→    readStatus: (raw.readStatus as EmailReadStatus) ?? 'unread',
+   302→    receivedAt: ts(raw.receivedAt),
+   303→    syncedAt: ts(raw.syncedAt),
+   304→    createdAt: ts(raw.createdAt),
+   305→    updatedAt: ts(raw.updatedAt),
+   306→  };
+   307→}
+   308→
+   309→export function subscribeToGmailMessages(
+   310→  organizationId: string,
+   311→  callback: (messages: GmailMessage[]) => void,
+   312→  options?: { limitCount?: number; category?: EmailCategory; onError?: (err: Error) => void },
+   313→): Unsubscribe {
+   314→  assertOrg(organizationId);
+   315→  const constraints: QueryConstraint[] = [
+   316→    where('organizationId', '==', organizationId),
+   317→    orderBy('receivedAt', 'desc'),
+   318→  ];
+   319→  if (options?.category) {
+   320→    constraints.unshift(where('category', '==', options.category));
+   321→  }
+   322→  if (options?.limitCount) {
+   323→    constraints.push(limitFn(options.limitCount));
+   324→  }
+   325→  const q = query(collection(db, COMMUNICATION_COLLECTIONS.GMAIL_MESSAGES), ...constraints);
+   326→  return onSnapshot(
+   327→    q,
+   328→    (snap) => callback(snap.docs.map((d) => toGmailMessage(d.id, d.data() as Record<string, unknown>))),
+   329→    (err) => options?.onError?.(err),
+   330→  );
+   331→}
+   332→
+   333→export async function getGmailMessages(
+   334→  organizationId: string,
+   335→  options?: { limitCount?: number; category?: EmailCategory },
+   336→): Promise<GmailMessage[]> {
+   337→  assertOrg(organizationId);
+   338→  const constraints: QueryConstraint[] = [
+   339→    where('organizationId', '==', organizationId),
+   340→    orderBy('receivedAt', 'desc'),
+   341→  ];
+   342→  if (options?.category) {
+   343→    constraints.unshift(where('category', '==', options.category));
+   344→  }
+   345→  if (options?.limitCount) {
+   346→    constraints.push(limitFn(options.limitCount));
+   347→  }
+   348→  const q = query(collection(db, COMMUNICATION_COLLECTIONS.GMAIL_MESSAGES), ...constraints);
+   349→  const snap = await getDocs(q);
+   350→  return snap.docs.map((d) => toGmailMessage(d.id, d.data() as Record<string, unknown>));
+   351→}
+   352→
+   353→/**
+   354→ * Bulk save synced emails. Existing messages (same messageId) are skipped.
+   355→ * Returns the number actually written.
+   356→ */
+   357→export async function saveGmailMessages(
+   358→  organizationId: string,
+   359→  messages: GmailMessage[],
+   360→): Promise<number> {
+   361→  assertOrg(organizationId);
+   362→  if (messages.length === 0) return 0;
+   363→
+   364→  // Check which messageIds already exist (dedupe by messageId).
+   365→  const existingQ = query(
+   366→    collection(db, COMMUNICATION_COLLECTIONS.GMAIL_MESSAGES),
+   367→    where('organizationId', '==', organizationId),
+   368→    where('messageId', 'in', messages.slice(0, 30).map((m) => m.messageId)),
+   369→  );
+   370→  const existingSnap = await getDocs(existingQ);
+   371→  const existingIds = new Set(existingSnap.docs.map((d) => (d.data() as { messageId: string }).messageId));
+   372→
+   373→  const batch = writeBatch(db);
+   374→  let count = 0;
+   375→  for (const msg of messages) {
+   376→    if (existingIds.has(msg.messageId)) continue;
+   377→    const ref = doc(collection(db, COMMUNICATION_COLLECTIONS.GMAIL_MESSAGES));
+   378→    batch.set(ref, {
+   379→      ...msg,
+   380→      createdAt: serverTimestamp(),
+   381→      updatedAt: serverTimestamp(),
+   382→    });
+   383→    count++;
+   384→  }
+   385→  if (count > 0) await batch.commit();
+   386→  return count;
+   387→}
+   388→
+   389→export async function updateGmailMessage(
+   390→  organizationId: string,
+   391→  messageId: string,
+   392→  patch: Partial<GmailMessage>,
+   393→): Promise<void> {
+   394→  assertOrg(organizationId);
+   395→  const ref = doc(db, COMMUNICATION_COLLECTIONS.GMAIL_MESSAGES, messageId);
+   396→  await updateDoc(ref, { ...patch, updatedAt: serverTimestamp() });
+   397→}
+   398→
+   399→export async function deleteGmailMessagesForConnection(
+   400→  organizationId: string,
+   401→  connectionId: string,
+   402→): Promise<void> {
+   403→  assertOrg(organizationId);
+   404→  const q = query(
+   405→    collection(db, COMMUNICATION_COLLECTIONS.GMAIL_MESSAGES),
+   406→    where('organizationId', '==', organizationId),
+   407→    where('connectionId', '==', connectionId),
+   408→  );
+   409→  const snap = await getDocs(q);
+   410→  const batch = writeBatch(db);
+   411→  snap.docs.forEach((d) => batch.delete(d.ref));
+   412→  if (snap.docs.length > 0) await batch.commit();
+   413→}
+   414→
+   415→// ─── WhatsApp Messages ───────────────────────────────────────────────────────
+   416→
+   417→export function toWhatsAppMessage(id: string, raw: Record<string, unknown>): WhatsAppMessage {
+   418→  return {
+   419→    id,
+   420→    organizationId: String(raw.organizationId ?? ''),
+   421→    connectionId: String(raw.connectionId ?? ''),
+   422→    wamId: raw.wamId ? String(raw.wamId) : null,
+   423→    direction: (raw.direction as WhatsAppMessage['direction']) ?? 'inbound',
+   424→    from: String(raw.from ?? ''),
+   425→    to: String(raw.to ?? ''),
+   426→    contactName: raw.contactName ? String(raw.contactName) : null,
+   427→    messageType: (raw.messageType as WhatsAppMessageType) ?? 'text',
+   428→    messageBody: String(raw.messageBody ?? ''),
+   429→    mediaUrl: raw.mediaUrl ? String(raw.mediaUrl) : null,
+   430→    caption: raw.caption ? String(raw.caption) : null,
+   431→    category: (raw.category as WhatsAppCategory) ?? 'general',
+   432→    aiSummary: raw.aiSummary ? String(raw.aiSummary) : null,
+   433→    sentiment: (raw.sentiment as WhatsAppMessage['sentiment']) ?? 'unknown',
+   434→    status: (raw.status as WhatsAppDeliveryStatus) ?? 'queued',
+   435→    errorMessage: raw.errorMessage ? String(raw.errorMessage) : null,
+   436→    invoiceId: raw.invoiceId ? String(raw.invoiceId) : null,
+   437→    clientId: raw.clientId ? String(raw.clientId) : null,
+   438→    sentAt: raw.sentAt ? ts(raw.sentAt) : null,
+   439→    deliveredAt: raw.deliveredAt ? ts(raw.deliveredAt) : null,
+   440→    readAt: raw.readAt ? ts(raw.readAt) : null,
+   441→    receivedAt: ts(raw.receivedAt),
+   442→    syncedAt: ts(raw.syncedAt),
+   443→    createdAt: ts(raw.createdAt),
+   444→    updatedAt: ts(raw.updatedAt),
+   445→  };
+   446→}
+   447→
+   448→export function subscribeToWhatsAppMessages(
+   449→  organizationId: string,
+   450→  callback: (messages: WhatsAppMessage[]) => void,
+   451→  options?: { limitCount?: number; category?: WhatsAppCategory; onError?: (err: Error) => void },
+   452→): Unsubscribe {
+   453→  assertOrg(organizationId);
+   454→  const constraints: QueryConstraint[] = [
+   455→    where('organizationId', '==', organizationId),
+   456→    orderBy('receivedAt', 'desc'),
+   457→  ];
+   458→  if (options?.category) {
+   459→    constraints.unshift(where('category', '==', options.category));
+   460→  }
+   461→  if (options?.limitCount) {
+   462→    constraints.push(limitFn(options.limitCount));
+   463→  }
+   464→  const q = query(collection(db, COMMUNICATION_COLLECTIONS.WHATSAPP_MESSAGES), ...constraints);
+   465→  return onSnapshot(
+   466→    q,
+   467→    (snap) => callback(snap.docs.map((d) => toWhatsAppMessage(d.id, d.data() as Record<string, unknown>))),
+   468→    (err) => options?.onError?.(err),
+   469→  );
+   470→}
+   471→
+   472→export async function getWhatsAppMessages(
+   473→  organizationId: string,
+   474→  options?: { limitCount?: number; category?: WhatsAppCategory },
+   475→): Promise<WhatsAppMessage[]> {
+   476→  assertOrg(organizationId);
+   477→  const constraints: QueryConstraint[] = [
+   478→    where('organizationId', '==', organizationId),
+   479→    orderBy('receivedAt', 'desc'),
+   480→  ];
+   481→  if (options?.category) {
+   482→    constraints.unshift(where('category', '==', options.category));
+   483→  }
+   484→  if (options?.limitCount) {
+   485→    constraints.push(limitFn(options.limitCount));
+   486→  }
+   487→  const q = query(collection(db, COMMUNICATION_COLLECTIONS.WHATSAPP_MESSAGES), ...constraints);
+   488→  const snap = await getDocs(q);
+   489→  return snap.docs.map((d) => toWhatsAppMessage(d.id, d.data() as Record<string, unknown>));
+   490→}
+   491→
+   492→export async function saveWhatsAppMessages(
+   493→  organizationId: string,
+   494→  messages: WhatsAppMessage[],
+   495→): Promise<number> {
+   496→  assertOrg(organizationId);
+   497→  if (messages.length === 0) return 0;
+   498→
+   499→  // Dedupe by wamId (or body+recipient+timestamp for messages without wamId).
+   500→  const wamIds = messages.filter((m) => m.wamId).slice(0, 30).map((m) => m.wamId as string);
+   501→  const existingIds = new Set<string>();
+   502→  if (wamIds.length > 0) {
+   503→    const existingQ = query(
+   504→      collection(db, COMMUNICATION_COLLECTIONS.WHATSAPP_MESSAGES),
+   505→      where('organizationId', '==', organizationId),
+   506→      where('wamId', 'in', wamIds),
+   507→    );
+   508→    const existingSnap = await getDocs(existingQ);
+   509→    existingSnap.docs.forEach((d) => existingIds.add((d.data() as { wamId: string }).wamId));
+   510→  }
+   511→
+   512→  const batch = writeBatch(db);
+   513→  let count = 0;
+   514→  for (const msg of messages) {
+   515→    if (msg.wamId && existingIds.has(msg.wamId)) continue;
+   516→    const ref = doc(collection(db, COMMUNICATION_COLLECTIONS.WHATSAPP_MESSAGES));
+   517→    batch.set(ref, {
+   518→      ...msg,
+   519→      createdAt: serverTimestamp(),
+   520→      updatedAt: serverTimestamp(),
+   521→    });
+   522→    count++;
+   523→  }
+   524→  if (count > 0) await batch.commit();
+   525→  return count;
+   526→}
+   527→
+   528→export async function updateWhatsAppMessage(
+   529→  organizationId: string,
+   530→  messageId: string,
+   531→  patch: Partial<WhatsAppMessage>,
+   532→): Promise<void> {
+   533→  assertOrg(organizationId);
+   534→  const ref = doc(db, COMMUNICATION_COLLECTIONS.WHATSAPP_MESSAGES, messageId);
+   535→  await updateDoc(ref, { ...patch, updatedAt: serverTimestamp() });
+   536→}
+   537→
+   538→export async function deleteWhatsAppMessagesForConnection(
+   539→  organizationId: string,
+   540→  connectionId: string,
+   541→): Promise<void> {
+   542→  assertOrg(organizationId);
+   543→  const q = query(
+   544→    collection(db, COMMUNICATION_COLLECTIONS.WHATSAPP_MESSAGES),
+   545→    where('organizationId', '==', organizationId),
+   546→    where('connectionId', '==', connectionId),
+   547→  );
+   548→  const snap = await getDocs(q);
+   549→  const batch = writeBatch(db);
+   550→  snap.docs.forEach((d) => batch.delete(d.ref));
+   551→  if (snap.docs.length > 0) await batch.commit();
+   552→}
+   553→
+   554→// ─── Scheduled Messages ──────────────────────────────────────────────────────
+   555→
+   556→export function toScheduledMessage(id: string, raw: Record<string, unknown>): ScheduledMessage {
+   557→  return {
+   558→    id,
+   559→    organizationId: String(raw.organizationId ?? ''),
+   560→    channel: (raw.channel as ScheduledMessageChannel) ?? 'whatsapp',
+   561→    connectionId: String(raw.connectionId ?? ''),
+   562→    recipient: String(raw.recipient ?? ''),
+   563→    recipientName: raw.recipientName ? String(raw.recipientName) : null,
+   564→    subject: raw.subject ? String(raw.subject) : null,
+   565→    body: String(raw.body ?? ''),
+   566→    category: (raw.category as ScheduledMessage['category']) ?? 'general',
+   567→    trigger: (raw.trigger as ScheduledMessage['trigger']) ?? 'manual',
+   568→    linkedEntityId: raw.linkedEntityId ? String(raw.linkedEntityId) : null,
+   569→    linkedEntityType: (raw.linkedEntityType as ScheduledMessage['linkedEntityType']) ?? null,
+   570→    scheduledFor: ts(raw.scheduledFor),
+   571→    recurrence: (raw.recurrence as ScheduledMessage['recurrence']) ?? 'once',
+   572→    nextRunAt: raw.nextRunAt ? ts(raw.nextRunAt) : null,
+   573→    status: (raw.status as ScheduledMessageStatus) ?? 'pending',
+   574→    sendCount: Number(raw.sendCount ?? 0),
+   575→    retryCount: Number(raw.retryCount ?? 0),
+   576→    maxRetries: Number(raw.maxRetries ?? 3),
+   577→    errorMessage: raw.errorMessage ? String(raw.errorMessage) : null,
+   578→    lastAttemptAt: raw.lastAttemptAt ? ts(raw.lastAttemptAt) : null,
+   579→    lastSentAt: raw.lastSentAt ? ts(raw.lastSentAt) : null,
+   580→    createdBy: (raw.createdBy as ScheduledMessage['createdBy']) ?? { uid: '', name: '', email: '' },
+   581→    createdAt: ts(raw.createdAt),
+   582→    updatedAt: ts(raw.updatedAt),
+   583→  };
+   584→}
+   585→
+   586→export function subscribeToScheduledMessages(
+   587→  organizationId: string,
+   588→  callback: (messages: ScheduledMessage[]) => void,
+   589→  options?: { limitCount?: number; status?: ScheduledMessageStatus; onError?: (err: Error) => void },
+   590→): Unsubscribe {
+   591→  assertOrg(organizationId);
+   592→  const constraints: QueryConstraint[] = [
+   593→    where('organizationId', '==', organizationId),
+   594→    orderBy('scheduledFor', 'desc'),
+   595→  ];
+   596→  if (options?.status) {
+   597→    constraints.unshift(where('status', '==', options.status));
+   598→  }
+   599→  if (options?.limitCount) {
+   600→    constraints.push(limitFn(options.limitCount));
+   601→  }
+   602→  const q = query(collection(db, COMMUNICATION_COLLECTIONS.SCHEDULED_MESSAGES), ...constraints);
+   603→  return onSnapshot(
+   604→    q,
+   605→    (snap) => callback(snap.docs.map((d) => toScheduledMessage(d.id, d.data() as Record<string, unknown>))),
+   606→    (err) => options?.onError?.(err),
+   607→  );
+   608→}
+   609→
+   610→export async function createScheduledMessage(
+   611→  organizationId: string,
+   612→  data: Omit<ScheduledMessage, 'id' | 'createdAt' | 'updatedAt' | 'sendCount' | 'retryCount' | 'lastAttemptAt' | 'lastSentAt' | 'errorMessage'>,
+   613→): Promise<string> {
+   614→  assertOrg(organizationId);
+   615→  const ref = await addDoc(collection(db, COMMUNICATION_COLLECTIONS.SCHEDULED_MESSAGES), {
+   616→    ...data,
+   617→    sendCount: 0,
+   618→    retryCount: 0,
+   619→    errorMessage: null,
+   620→    lastAttemptAt: null,
+   621→    lastSentAt: null,
+   622→    createdAt: serverTimestamp(),
+   623→    updatedAt: serverTimestamp(),
+   624→  });
+   625→  return ref.id;
+   626→}
+   627→
+   628→export async function updateScheduledMessage(
+   629→  organizationId: string,
+   630→  scheduleId: string,
+   631→  patch: Partial<ScheduledMessage>,
+   632→): Promise<void> {
+   633→  assertOrg(organizationId);
+   634→  const ref = doc(db, COMMUNICATION_COLLECTIONS.SCHEDULED_MESSAGES, scheduleId);
+   635→  await updateDoc(ref, { ...patch, updatedAt: serverTimestamp() });
+   636→}
+   637→
+   638→export async function deleteScheduledMessage(
+   639→  organizationId: string,
+   640→  scheduleId: string,
+   641→): Promise<void> {
+   642→  assertOrg(organizationId);
+   643→  await deleteDoc(doc(db, COMMUNICATION_COLLECTIONS.SCHEDULED_MESSAGES, scheduleId));
+   644→}
+   645→
+   646→/**
+   647→ * Find scheduled messages that are due to fire now.
+   648→ * Used by the Automation Engine to know what to send.
+   649→ */
+   650→export async function getDueScheduledMessages(
+   651→  organizationId: string,
+   652→  now: Date = new Date(),
+   653→): Promise<ScheduledMessage[]> {
+   654→  assertOrg(organizationId);
+   655→  const q = query(
+   656→    collection(db, COMMUNICATION_COLLECTIONS.SCHEDULED_MESSAGES),
+   657→    where('organizationId', '==', organizationId),
+   658→    where('status', '==', 'pending'),
+   659→    where('scheduledFor', '<=', now.toISOString()),
+   660→  );
+   661→  const snap = await getDocs(q);
+   662→  return snap.docs.map((d) => toScheduledMessage(d.id, d.data() as Record<string, unknown>));
+   663→}
+   664→
+   665→// ─── Sync Jobs ───────────────────────────────────────────────────────────────
+   666→
+   667→export function toSyncJob(id: string, raw: Record<string, unknown>): CommunicationSyncJob {
+   668→  return {
+   669→    id,
+   670→    organizationId: String(raw.organizationId ?? ''),
+   671→    connectionId: String(raw.connectionId ?? ''),
+   672→    channel: (raw.channel as 'gmail' | 'whatsapp') ?? 'gmail',
+   673→    trigger: (raw.trigger as CommunicationSyncTrigger) ?? 'manual',
+   674→    status: (raw.status as CommunicationSyncStatus) ?? 'pending',
+   675→    startedAt: raw.startedAt ? ts(raw.startedAt) : null,
+   676→    completedAt: raw.completedAt ? ts(raw.completedAt) : null,
+   677→    retryCount: Number(raw.retryCount ?? 0),
+   678→    maxRetries: Number(raw.maxRetries ?? 3),
+   679→    error: raw.error ? String(raw.error) : null,
+   680→    result: (raw.result as CommunicationSyncJob['result']) ?? null,
+   681→    createdAt: ts(raw.createdAt),
+   682→    updatedAt: ts(raw.updatedAt),
+   683→  };
+   684→}
+   685→
+   686→export async function createSyncJob(
+   687→  organizationId: string,
+   688→  data: Pick<CommunicationSyncJob, 'connectionId' | 'channel' | 'trigger' | 'maxRetries'>,
+   689→): Promise<string> {
+   690→  assertOrg(organizationId);
+   691→  const ref = await addDoc(collection(db, COMMUNICATION_COLLECTIONS.SYNC_JOBS), {
+   692→    organizationId,
+   693→    ...data,
+   694→    status: 'pending',
+   695→    startedAt: null,
+   696→    completedAt: null,
+   697→    retryCount: 0,
+   698→    error: null,
+   699→    result: null,
+   700→    createdAt: serverTimestamp(),
+   701→    updatedAt: serverTimestamp(),
+   702→  });
+   703→  return ref.id;
+   704→}
+   705→
+   706→export async function updateSyncJob(
+   707→  organizationId: string,
+   708→  jobId: string,
+   709→  patch: Partial<CommunicationSyncJob>,
+   710→): Promise<void> {
+   711→  assertOrg(organizationId);
+   712→  const ref = doc(db, COMMUNICATION_COLLECTIONS.SYNC_JOBS, jobId);
+   713→  await updateDoc(ref, { ...patch, updatedAt: serverTimestamp() });
+   714→}
+   715→
+   716→// ─── Cascade Disconnect ──────────────────────────────────────────────────────
+   717→
+   718→/**
+   719→ * Delete a Gmail connection + all its messages (used when disconnecting).
+   720→ */
+   721→export async function cascadeDisconnectGmail(
+   722→  organizationId: string,
+   723→  connectionId: string,
+   724→): Promise<void> {
+   725→  assertOrg(organizationId);
+   726→  await deleteGmailMessagesForConnection(organizationId, connectionId);
+   727→  await deleteGmailConnection(organizationId, connectionId);
+   728→}
+   729→
+   730→export async function cascadeDisconnectWhatsApp(
+   731→  organizationId: string,
+   732→  connectionId: string,
+   733→): Promise<void> {
+   734→  assertOrg(organizationId);
+   735→  await deleteWhatsAppMessagesForConnection(organizationId, connectionId);
+   736→  await deleteWhatsAppConnection(organizationId, connectionId);
+   737→}
+   738→
+   739→// ─── Summary Computation ─────────────────────────────────────────────────────
+   740→
+   741→/**
+   742→ * Compute the dashboard communication summary from real-time Firestore data.
+   743→ * Pure function — given the current connections + messages + schedules,
+   744→ * return the summary the dashboard displays.
+   745→ */
+   746→export function computeCommunicationSummary(
+   747→  gmailConnections: GmailConnection[],
+   748→  whatsappConnections: WhatsAppConnection[],
+   749→  gmailMessages: GmailMessage[],
+   750→  whatsappMessages: WhatsAppMessage[],
+   751→  scheduledMessages: ScheduledMessage[],
+   752→): CommunicationSummary {
+   753→  const gmailConn = gmailConnections.find((c) => c.authStatus === 'connected') ?? null;
+   754→  const waConn = whatsappConnections.find((c) => c.authStatus === 'connected') ?? null;
+   755→
+   756→  const unreadEmails = gmailMessages.filter((m) => m.readStatus === 'unread' && m.direction === 'inbound').length;
+   757→  const unreadGstNotices = gmailMessages.filter(
+   758→    (m) => m.category === 'gst_notice' && m.readStatus === 'unread',
+   759→  ).length;
+   760→  const pendingVendorInvoices = gmailMessages.filter(
+   761→    (m) => m.category === 'vendor_invoice' && m.readStatus === 'unread',
+   762→  ).length;
+   763→
+   764→  // Pending client replies — outbound emails in the last 7 days with no inbound reply.
+   765→  const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+   766→  const pendingClientReplies = gmailMessages.filter((m) => {
+   767→    if (m.direction !== 'outbound') return false;
+   768→    return new Date(m.receivedAt).getTime() >= sevenDaysAgo;
+   769→  }).length;
+   770→
+   771→  const unreadWhatsAppMessages = whatsappMessages.filter(
+   772→    (m) => m.direction === 'inbound' && m.status !== 'read',
+   773→  ).length;
+   774→
+   775→  // Pending WhatsApp replies — group by contact, check if the most recent
+   776→  // message in each conversation is inbound (unanswered).
+   777→  const byContact = new Map<string, WhatsAppMessage[]>();
+   778→  for (const m of whatsappMessages) {
+   779→    const contactKey = m.direction === 'inbound' ? m.from : m.to;
+   780→    const list = byContact.get(contactKey) ?? [];
+   781→    list.push(m);
+   782→    byContact.set(contactKey, list);
+   783→  }
+   784→  let pendingWhatsAppReplies = 0;
+   785→  for (const convo of byContact.values()) {
+   786→    if (hasPendingReply(convo)) pendingWhatsAppReplies++;
+   787→  }
+   788→
+   789→  // Pending reminders — scheduled messages with status='pending' or 'processing'
+   790→  // that are due.
+   791→  const now = Date.now();
+   792→  const pendingReminders = scheduledMessages.filter(
+   793→    (s) => (s.status === 'pending' || s.status === 'processing') && new Date(s.scheduledFor).getTime() <= now,
+   794→  ).length;
+   795→
+   796→  const failedMessagesCount = scheduledMessages.filter((s) => s.status === 'failed').length;
+   797→  const sentTodayCount = scheduledMessages.filter((s) => {
+   798→    if (s.status !== 'sent' || !s.lastSentAt) return false;
+   799→    const sentAt = new Date(s.lastSentAt).getTime();
+   800→    const startOfDay = new Date();
+   801→    startOfDay.setHours(0, 0, 0, 0);
+   802→    return sentAt >= startOfDay.getTime();
+   803→  }).length;
+   804→
+   805→  return {
+   806→    gmailConnected: !!gmailConn,
+   807→    gmailConnectionEmail: gmailConn?.email ?? null,
+   808→    gmailLastSync: gmailConn?.lastSync ?? null,
+   809→    unreadEmails,
+   810→    unreadGstNotices,
+   811→    pendingVendorInvoices,
+   812→    pendingClientReplies,
+   813→    whatsappConnected: !!waConn,
+   814→    whatsappPhoneNumber: waConn?.phoneNumber ?? null,
+   815→    whatsappLastSync: waConn?.lastSync ?? null,
+   816→    unreadWhatsAppMessages,
+   817→    pendingWhatsAppReplies,
+   818→    pendingReminders,
+   819→    scheduledMessagesCount: scheduledMessages.length,
+   820→    failedMessagesCount,
+   821→    sentTodayCount,
+   822→    recentEmails: gmailMessages.slice(0, 10),
+   823→    recentWhatsAppMessages: whatsappMessages.slice(0, 10),
+   824→    recentScheduledMessages: scheduledMessages.slice(0, 10),
+   825→  };
+   826→}
+   827→
+   828→// ─── Helpers ─────────────────────────────────────────────────────────────────
+   829→
+   830→/**
+   831→ * Build an ISO timestamp `seconds` from now — used by schedulers.
+   832→ */
+   833→export function isoFromNow(seconds: number): string {
+   834→  return new Date(Date.now() + seconds * 1000).toISOString();
+   835→}
+   836→
+   837→/**
+   838→ * Compute the next-run timestamp for a recurring schedule.
+   839→ */
+   840→export function nextRunForRecurrence(
+   841→  recurrence: ScheduledMessage['recurrence'],
+   842→  from: Date = new Date(),
+   843→): string {
+   844→  const d = new Date(from);
+   845→  switch (recurrence) {
+   846→    case 'daily':
+   847→      d.setDate(d.getDate() + 1);
+   848→      break;
+   849→    case 'weekly':
+   850→      d.setDate(d.getDate() + 7);
+   851→      break;
+   852→    case 'monthly':
+   853→      d.setMonth(d.getMonth() + 1);
+   854→      break;
+   855→    case 'quarterly':
+   856→      d.setMonth(d.getMonth() + 3);
+   857→      break;
+   858→    case 'once':
+   859→    default:
+   860→      // No next run.
+   861→      return new Date(0).toISOString();
+   862→  }
+   863→  return d.toISOString();
+   864→}
+   865→

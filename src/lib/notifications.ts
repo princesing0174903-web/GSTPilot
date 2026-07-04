@@ -1,20 +1,17 @@
 import { db } from '@/lib/db'
+import { safeAudit } from '@/lib/audit/safe-write'
 
 /**
  * Notification creation helper — can be called from any API route or server-side
  * function to create a notification record in the database.
  *
- * Usage:
- *   import { createNotification } from '@/lib/notifications'
- *   await createNotification({
- *     type: 'warning',
- *     category: 'filing',
- *     title: 'GSTR-1 Due Tomorrow',
- *     message: 'Filing for client ABC Traders is due tomorrow.',
- *     clientId: 'cm3x...',
- *     actionUrl: '/returns?client=cm3x...',
- *     priority: 'high',
- *   })
+ * STABILIZATION NOTE: This helper previously called `db.notification.create` and
+ * `db.auditLog.create` directly with a `userId` FK → User.id. When the caller
+ * passes a Firebase UID (which is NOT present in the Prisma `User` table),
+ * Prisma throws a P2003 foreign-key violation that flooded the server logs and
+ * surfaced as 500s. It now retries without `userId` on P2003 (mirroring the
+ * pattern in `@/lib/audit/safe-write`) and delegates the audit row to `safeAudit`.
+ * It never throws — best-effort notification logging.
  */
 
 export interface CreateNotificationInput {
@@ -36,9 +33,21 @@ export interface CreateNotificationInput {
   priority?: string
 }
 
+const NOTIF_INCLUDE = {
+  client: {
+    select: {
+      id: true,
+      tradeName: true,
+      gstin: true,
+      status: true,
+    },
+  },
+} as const
+
 /**
  * Create a notification record in the database.
- * Returns the created notification with the client relation included.
+ * Returns the created notification with the client relation included, or `null`
+ * if the write failed (e.g. FK violation on both userId and clientId).
  */
 export async function createNotification(input: CreateNotificationInput) {
   const {
@@ -52,44 +61,64 @@ export async function createNotification(input: CreateNotificationInput) {
     priority = 'medium',
   } = input
 
-  const notification = await db.notification.create({
-    data: {
-      type,
-      category,
-      title,
-      message,
-      clientId: clientId ?? null,
-      userId: userId ?? null,
-      actionUrl: actionUrl ?? null,
-      priority,
-      isRead: false,
-      dismissed: false,
-    },
-    include: {
-      client: {
-        select: {
-          id: true,
-          tradeName: true,
-          gstin: true,
-          status: true,
-        },
-      },
-    },
-  })
+  const baseData = {
+    type,
+    category,
+    title,
+    message,
+    actionUrl: actionUrl ?? null,
+    priority,
+    isRead: false,
+    dismissed: false,
+  }
 
-  // Create audit log entry
-  await db.auditLog.create({
-    data: {
-      clientId: clientId ?? null,
-      userId: userId ?? null,
+  // ── Attempt 1: full row with userId + clientId ──
+  if (userId || clientId) {
+    try {
+      const notification = await db.notification.create({
+        data: {
+          ...baseData,
+          userId: userId ?? null,
+          clientId: clientId ?? null,
+        },
+        include: NOTIF_INCLUDE,
+      })
+      await safeAudit({
+        userId: userId ?? null,
+        action: 'Notification Created',
+        entity: 'notification',
+        entityId: notification.id,
+        details: `Notification created: "${title}"`,
+      })
+      return notification
+    } catch (err: unknown) {
+      const code = (err as { code?: string })?.code
+      // P2003 = foreign-key violation (User or Client row missing).
+      if (code !== 'P2003') {
+        console.warn(`[notify] ${title} write failed:`, err)
+      }
+      // fall through to attempt 2
+    }
+  }
+
+  // ── Attempt 2: strip BOTH userId + clientId (the row is still useful) ──
+  try {
+    const notification = await db.notification.create({
+      data: { ...baseData, userId: null, clientId: null },
+      include: NOTIF_INCLUDE,
+    })
+    await safeAudit({
+      userId: null,
       action: 'Notification Created',
       entity: 'notification',
       entityId: notification.id,
       details: `Notification created: "${title}"`,
-    },
-  })
-
-  return notification
+    })
+    return notification
+  } catch (err) {
+    console.warn(`[notify] ${title} write failed (no-fk fallback):`, err)
+    return null
+  }
 }
 
 /**

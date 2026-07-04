@@ -1,5 +1,7 @@
 import { db } from '@/lib/db'
 import { NextResponse } from 'next/server'
+import { createNotification } from '@/lib/notifications'
+import { safeAudit } from '@/lib/audit/safe-write'
 
 // GET /api/notifications — Fetch notifications with filters
 // Query params: userId, clientId, isRead, category, limit(20), offset
@@ -99,42 +101,25 @@ export async function POST(request: Request) {
       )
     }
 
-    const notification = await db.notification.create({
-      data: {
-        userId: userId ?? null,
-        clientId: clientId ?? null,
-        type: type ?? 'info',
-        category: category ?? 'general',
-        title,
-        message,
-        actionUrl: actionUrl ?? null,
-        priority: priority ?? 'medium',
-        isRead: false,
-        dismissed: false,
-      },
-      include: {
-        client: {
-          select: {
-            id: true,
-            tradeName: true,
-            gstin: true,
-            status: true,
-          },
-        },
-      },
+    // Use the safe helper (retries without userId/clientId on P2003 FK violation,
+    // and delegates the audit row to safeAudit). Never throws on FK mismatch.
+    const notification = await createNotification({
+      userId,
+      clientId,
+      type,
+      category,
+      title,
+      message,
+      actionUrl,
+      priority,
     })
 
-    // Create audit log
-    await db.auditLog.create({
-      data: {
-        clientId: clientId ?? null,
-        userId: userId ?? null,
-        action: 'Notification Created',
-        entity: 'notification',
-        entityId: notification.id,
-        details: `Notification created: "${title}"`,
-      },
-    })
+    if (!notification) {
+      return NextResponse.json(
+        { error: 'Failed to create notification' },
+        { status: 500 }
+      )
+    }
 
     return NextResponse.json({ notification }, { status: 201 })
   } catch (error) {
@@ -204,14 +189,12 @@ export async function PATCH(request: Request) {
       },
     })
 
-    // Create audit log
-    await db.auditLog.create({
-      data: {
-        action: 'Notification Updated',
-        entity: 'notification',
-        entityId: id,
-        details: `Notification updated — isRead: ${effectiveIsRead}, dismissed: ${dismissed}`,
-      },
+    // Best-effort audit log (safe-write: retries without userId on P2003).
+    await safeAudit({
+      action: 'Notification Updated',
+      entity: 'notification',
+      entityId: id,
+      details: `Notification updated — isRead: ${effectiveIsRead}, dismissed: ${dismissed}`,
     })
 
     return NextResponse.json({ notification })
@@ -249,14 +232,12 @@ export async function DELETE(request: Request) {
       where: { id },
     })
 
-    // Create audit log
-    await db.auditLog.create({
-      data: {
-        action: 'Notification Deleted',
-        entity: 'notification',
-        entityId: id,
-        details: `Notification deleted: "${notification.title}"`,
-      },
+    // Best-effort audit log (safe-write: retries without userId on P2003).
+    await safeAudit({
+      action: 'Notification Deleted',
+      entity: 'notification',
+      entityId: id,
+      details: `Notification deleted: "${notification.title}"`,
     })
 
     return NextResponse.json({ notification })

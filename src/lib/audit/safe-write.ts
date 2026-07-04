@@ -56,6 +56,73 @@ export async function safeAudit(input: SafeAuditInput): Promise<void> {
   }
 }
 
+/**
+ * Same as `safeAudit` but returns the created AuditLog row (with the client
+ * relation included) so HTTP routes can echo it back to the caller. Returns
+ * `null` if both attempts fail (e.g. P2003 on clientId too).
+ *
+ * Retries without userId on P2003, then without clientId, then with neither.
+ */
+export async function safeAuditWithRow(input: SafeAuditInput & {
+  clientId?: string | null;
+}) {
+  const include = {
+    client: {
+      select: { id: true, tradeName: true, gstin: true },
+    },
+  } as const;
+
+  const buildData = (opts: { userId?: string | null; clientId?: string | null }) => ({
+    action: input.action,
+    entity: input.entity ?? null,
+    entityId: input.entityId ?? null,
+    oldValue: input.oldValue ?? null,
+    newValue: input.newValue ?? null,
+    details: input.details ?? null,
+    userId: opts.userId ?? null,
+    clientId: opts.clientId ?? null,
+  });
+
+  // Attempt 1 — full row.
+  if (input.userId || input.clientId) {
+    try {
+      return await db.auditLog.create({
+        data: buildData({ userId: input.userId, clientId: input.clientId }),
+        include,
+      });
+    } catch (err: unknown) {
+      if ((err as { code?: string })?.code !== 'P2003') {
+        console.warn(`[audit] ${input.action} write failed:`, err);
+      }
+    }
+  }
+
+  // Attempt 2 — strip userId only.
+  if (input.clientId) {
+    try {
+      return await db.auditLog.create({
+        data: buildData({ userId: null, clientId: input.clientId }),
+        include,
+      });
+    } catch (err: unknown) {
+      if ((err as { code?: string })?.code !== 'P2003') {
+        console.warn(`[audit] ${input.action} write failed (no-user):`, err);
+      }
+    }
+  }
+
+  // Attempt 3 — strip both FKs.
+  try {
+    return await db.auditLog.create({
+      data: buildData({ userId: null, clientId: null }),
+      include,
+    });
+  } catch (err) {
+    console.warn(`[audit] ${input.action} write failed (no-fk fallback):`, err);
+    return null;
+  }
+}
+
 interface SafeNotifyInput {
   userId?: string | null;
   type?: string;

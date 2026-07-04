@@ -911,8 +911,8 @@ export default function MissionControlPage() {
         >
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-500/10">
-                <ShieldAlert className="h-4 w-4 text-amber-400" />
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-500/10">
+                <ShieldAlert className="h-4 w-4 text-blue-400" />
               </div>
               <span className="text-sm font-medium text-foreground">Risk Score</span>
             </div>
@@ -928,7 +928,7 @@ export default function MissionControlPage() {
                   className="h-full rounded-full"
                   style={{
                     width: `${riskScore}%`,
-                    background: 'linear-gradient(90deg, #f59e0b 0%, #d97706 100%)',
+                    background: 'linear-gradient(90deg, #3b82f6 0%, #1d4ed8 100%)',
                   }}
                 />
               </div>
@@ -954,18 +954,16 @@ export default function MissionControlPage() {
                 return (
                   <div
                     key={p.id}
-                    onClick={() => setCurrentView(p.view)}
-                    className="group flex items-center gap-3 rounded-xl px-3 py-2.5 hover:bg-white/[0.03] transition-colors cursor-pointer"
+                    className="group flex items-center gap-3 rounded-xl px-3 py-2.5 hover:bg-white/[0.03] transition-colors"
                   >
                     <button
                       type="button"
                       aria-label={`Mark ${p.label} as ${isDone ? 'incomplete' : 'complete'}`}
                       aria-pressed={isDone}
-                      onClick={(e) => {
-                        e.stopPropagation();
+                      onClick={() => {
                         setDone((d) => ({ ...d, [p.id]: !d[p.id] }));
                       }}
-                      className={`flex h-5 w-5 items-center justify-center rounded-full border shrink-0 transition-colors ${
+                      className={`flex h-5 w-5 items-center justify-center rounded-full border shrink-0 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/60 ${
                         isDone
                           ? 'accent-gradient border-transparent'
                           : 'border-white/[0.15] hover:border-emerald-400/40'
@@ -973,10 +971,17 @@ export default function MissionControlPage() {
                     >
                       {isDone && <CheckCircle2 className="h-3 w-3 text-white" />}
                     </button>
-                    <span className={`text-sm flex-1 ${isDone ? 'text-muted-foreground line-through' : 'text-foreground'}`}>
-                      {p.label}
-                    </span>
-                    <ArrowRight className="h-3.5 w-3.5 text-muted-foreground/40 group-hover:text-emerald-400/70 transition-colors shrink-0" />
+                    <button
+                      type="button"
+                      onClick={() => setCurrentView(p.view)}
+                      className="flex flex-1 items-center gap-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/60 rounded-md"
+                      aria-label={`Open ${p.label}`}
+                    >
+                      <span className={`text-sm flex-1 ${isDone ? 'text-muted-foreground line-through' : 'text-foreground'}`}>
+                        {p.label}
+                      </span>
+                      <ArrowRight className="h-3.5 w-3.5 text-muted-foreground/40 group-hover:text-emerald-400/70 transition-colors shrink-0" />
+                    </button>
                   </div>
                 );
               })}
@@ -1012,7 +1017,7 @@ export default function MissionControlPage() {
                         aria-hidden
                       />
                     )}
-                    <span className="relative z-10 flex h-[18px] w-[18px] items-center justify-center rounded-full border border-emerald-400/30 bg-[#050505] shrink-0 mt-0.5">
+                    <span className="relative z-10 flex h-[18px] w-[18px] items-center justify-center rounded-full border border-emerald-400/30 bg-background shrink-0 mt-0.5">
                       <span className="h-1.5 w-1.5 rounded-full accent-gradient" />
                     </span>
                     <div className="flex-1 min-w-0 pt-0.5">

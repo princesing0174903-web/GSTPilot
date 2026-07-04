@@ -1,5 +1,6 @@
 import { db } from '@/lib/db'
 import { NextResponse } from 'next/server'
+import { safeAuditWithRow } from '@/lib/audit/safe-write'
 
 // GET /api/audit-logs — Fetch audit logs with filters and pagination
 export async function GET(request: Request) {
@@ -67,25 +68,21 @@ export async function POST(request: Request) {
       )
     }
 
-    const log = await db.auditLog.create({
-      data: {
-        clientId: clientId ?? null,
-        userId: userId ?? null,
-        action,
-        entity: entity ?? null,
-        entityId: entityId ?? null,
-        details: details ?? null,
-      },
-      include: {
-        client: {
-          select: {
-            id: true,
-            tradeName: true,
-            gstin: true,
-          },
-        },
-      },
+    const log = await safeAuditWithRow({
+      clientId: clientId ?? null,
+      userId: userId ?? null,
+      action,
+      entity: entity ?? null,
+      entityId: entityId ?? null,
+      details: details ?? null,
     })
+
+    if (!log) {
+      return NextResponse.json(
+        { error: 'Failed to create audit log' },
+        { status: 500 }
+      )
+    }
 
     return NextResponse.json({ log }, { status: 201 })
   } catch (error) {

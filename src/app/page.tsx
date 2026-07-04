@@ -26,6 +26,7 @@ import { Zap, LogOut, User, Settings, MailCheck, Search, Bell, Sun, Moon } from 
 import { useTheme } from 'next-themes'
 import { LeftNav } from '@/components/layout/LeftNav'
 import { FloatingDock } from '@/components/layout/FloatingDock'
+import { NotificationsSheet } from '@/components/layout/NotificationsSheet'
 import { OraclePanel } from '@/components/oracle/OraclePanel'
 import { OracleDockSidebar, readInitialOracleState } from '@/components/oracle/OracleDockSidebar'
 import { InfinitySymbol } from '@/components/layout/InfinityMark'
@@ -496,7 +497,7 @@ function DashboardContent() {
         <div className="ml-auto flex items-center gap-1.5">
           <button
             onClick={() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true }))}
-            className="flex h-8 items-center gap-2 rounded-lg border border-white/[0.08] bg-white/[0.03] px-2.5 text-xs text-muted-foreground transition-colors hover:bg-white/[0.07] hover:text-foreground"
+            className="flex h-8 items-center gap-2 rounded-lg border border-white/[0.08] bg-white/[0.03] px-2.5 text-xs text-muted-foreground transition-colors hover:bg-white/[0.07] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/60"
             aria-label="Search"
           >
             <Search className="h-3.5 w-3.5" />
@@ -504,11 +505,12 @@ function DashboardContent() {
             <kbd className="hidden rounded bg-white/[0.06] px-1 py-0.5 text-[9px] font-semibold sm:inline">⌘K</kbd>
           </button>
           <button
-            className="relative flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-white/[0.05] hover:text-foreground"
+            onClick={() => { setNotificationsOpen(true); setOracleOpen(false) }}
+            className="relative flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-white/[0.05] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/60"
             aria-label="Notifications"
           >
             <Bell className="h-4 w-4" />
-            <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-emerald-400" />
+            <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-cyan-400" />
           </button>
           <ThemeToggle />
           <DropdownMenu>
@@ -537,7 +539,7 @@ function DashboardContent() {
                 </div>
               </div>
               <DropdownMenuSeparator />
-              <DropdownMenuItem className="gap-2">
+              <DropdownMenuItem className="gap-2" onClick={() => setCurrentView('settings')}>
                 <User className="h-4 w-4" />
                 Profile
               </DropdownMenuItem>
@@ -590,6 +592,13 @@ function DashboardContent() {
         <OraclePanel onNavigate={(view) => { setCurrentView(view); setOracleOpen(false) }} />
       </OracleDockSidebar>
 
+      {/* ═══ NOTIFICATIONS SHEET (wired to /api/notifications) ═══ */}
+      <NotificationsSheet
+        open={notificationsOpen}
+        onOpenChange={setNotificationsOpen}
+        userId={user?.id}
+      />
+
       {/* ═══ COMMAND PALETTE (⌘K) ═══ */}
       <CommandPalette />
     </div>
@@ -603,7 +612,7 @@ function ThemeToggle() {
   return (
     <button
       onClick={() => setTheme(isDark ? 'light' : 'dark')}
-      className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-white/[0.05] hover:text-foreground"
+      className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-white/[0.05] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/60"
       aria-label="Toggle theme"
     >
       {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
@@ -630,11 +639,11 @@ function EmailVerificationBanner() {
   }
 
   return (
-    <div className="bg-amber-500/10 border-b border-amber-500/25 px-4 py-3">
+    <div className="bg-cyan-500/10 border-b border-cyan-500/25 px-4 py-3">
       <div className="flex items-center justify-between gap-3 max-w-7xl mx-auto">
         <div className="flex items-center gap-2.5">
-          <MailCheck className="h-5 w-5 text-amber-300 shrink-0" />
-          <p className="text-sm text-amber-200">
+          <MailCheck className="h-5 w-5 text-cyan-300 shrink-0" />
+          <p className="text-sm text-cyan-100">
             {sent
               ? 'Verification email sent! Check your inbox.'
               : 'Please verify your email address to access all features.'}
@@ -645,14 +654,14 @@ function EmailVerificationBanner() {
             <button
               onClick={handleResend}
               disabled={sending}
-              className="text-xs font-semibold text-amber-200 hover:text-amber-100 underline disabled:opacity-50"
+              className="text-xs font-semibold text-cyan-200 hover:text-cyan-100 underline disabled:opacity-50"
             >
               {sending ? 'Sending...' : 'Resend email'}
             </button>
           )}
           <button
             onClick={logout}
-            className="text-xs text-amber-300 hover:text-amber-100 font-medium"
+            className="text-xs text-cyan-300 hover:text-cyan-100 font-medium"
           >
             Sign out
           </button>

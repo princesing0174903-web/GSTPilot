@@ -1,0 +1,937 @@
+     1→'use client';
+     2→
+     3→// ═══════════════════════════════════════════════════════════════════════════════
+     4→// GSTPilot Gmail & WhatsApp Business Automation™ — useCommunications() Hook
+     5→//
+     6→// The SINGLE hook every GSTPilot component uses to interact with communication
+     7→// data. Mirrors the useBanking() pattern:
+     8→//
+     9→//   • READ — real-time subscriptions to connections + messages + schedules
+    10→//     (org-scoped via onSnapshot)
+    11→//   • CONNECT_GMAIL — connect → complete → persist encrypted connection
+    12→//   • CONNECT_WHATSAPP — connect → complete → persist encrypted connection
+    13→//   • DISCONNECT — invalidate connection + cascade-delete all messages
+    14→//   • SYNC — pull latest emails / WhatsApp messages from the provider
+    15→//   • SEND — send an email or WhatsApp message
+    16→//   • REPLY — reply to an existing message
+    17→//   • SCHEDULE — schedule a new automated message
+    18→//   • CANCEL — cancel a scheduled message
+    19→//   • RUN_AUTOMATION — dispatch due scheduled messages (cron-style)
+    20→//
+    21→// All tenant scoping is automatic — components never touch `organizationId`.
+    22→//
+    23→// Architecture:
+    24→//   1. Mutations call /api/communication/{gmail,whatsapp,automation}/* routes
+    25→//      for provider work. The API returns plain data + encrypted sessions.
+    26→//   2. The hook persists the result to Firestore via the service layer.
+    27→//   3. Real-time onSnapshot subscriptions surface changes instantly.
+    28→//
+    29→// Security: encrypted sessions are stored in Firestore but can ONLY be decrypted
+    30→// by the server. The client passes them opaquely to API routes.
+    31→// ═══════════════════════════════════════════════════════════════════════════════
+    32→
+    33→import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+    34→import { useOrg } from '@/contexts/OrgContext';
+    35→import { useAuth } from '@/contexts/AuthContext';
+    36→import {
+    37→  subscribeToGmailConnections,
+    38→  subscribeToWhatsAppConnections,
+    39→  subscribeToGmailMessages,
+    40→  subscribeToWhatsAppMessages,
+    41→  subscribeToScheduledMessages,
+    42→  saveGmailConnection,
+    43→  updateGmailConnection,
+    44→  cascadeDisconnectGmail,
+    45→  saveGmailMessages,
+    46→  updateGmailMessage,
+    47→  saveWhatsAppConnection,
+    48→  updateWhatsAppConnection,
+    49→  cascadeDisconnectWhatsApp,
+    50→  saveWhatsAppMessages,
+    51→  updateWhatsAppMessage,
+    52→  updateScheduledMessage,
+    53→  deleteScheduledMessage,
+    54→  createSyncJob,
+    55→  updateSyncJob,
+    56→  computeCommunicationSummary,
+    57→  type GmailConnection,
+    58→  type GmailProviderName,
+    59→  type GmailMessage,
+    60→  type WhatsAppConnection,
+    61→  type WhatsAppProviderName,
+    62→  type WhatsAppMessage,
+    63→  type ScheduledMessage,
+    64→  type ScheduledMessageChannel,
+    65→  type ScheduledMessageStatus,
+    66→  type ScheduleRecurrence,
+    67→  type CommunicationSummary,
+    68→  type WhatsAppCategory,
+    69→  type EmailCategory,
+    70→} from '@/lib/communication-provider';
+    71→
+    72→// ─── Hook return type ────────────────────────────────────────────────────────
+    73→
+    74→export interface UseCommunicationsResult {
+    75→  // Real-time state
+    76→  gmailConnections: GmailConnection[];
+    77→  whatsappConnections: WhatsAppConnection[];
+    78→  gmailMessages: GmailMessage[];
+    79→  whatsappMessages: WhatsAppMessage[];
+    80→  scheduledMessages: ScheduledMessage[];
+    81→
+    82→  // Memoized summary for dashboard consumption
+    83→  summary: CommunicationSummary;
+    84→
+    85→  // Convenience flags
+    86→  gmailConnected: boolean;
+    87→  whatsappConnected: boolean;
+    88→
+    89→  loading: boolean;
+    90→  error: string | null;
+    91→  saving: boolean;
+    92→
+    93→  // ─── Gmail mutations ────────────────────────────────────────────────────
+    94→  connectGmail: (input: {
+    95→    provider?: GmailProviderName;
+    96→    email: string;
+    97→    displayName?: string;
+    98→  }) => Promise<boolean>;
+    99→  disconnectGmail: (connectionId: string) => Promise<boolean>;
+   100→  syncGmail: (connectionId: string, options?: { from?: string; to?: string }) => Promise<boolean>;
+   101→  sendEmail: (input: {
+   102→    connectionId: string;
+   103→    to: string;
+   104→    subject: string;
+   105→    bodyHtml: string;
+   106→    bodyText?: string;
+   107→    cc?: string;
+   108→    bcc?: string;
+   109→    replyToMessageId?: string;
+   110→  }) => Promise<boolean>;
+   111→  markEmailRead: (messageId: string, read: boolean) => Promise<boolean>;
+   112→
+   113→  // ─── WhatsApp mutations ─────────────────────────────────────────────────
+   114→  connectWhatsApp: (input: {
+   115→    provider?: WhatsAppProviderName;
+   116→    phoneNumber: string;
+   117→    businessName?: string;
+   118→  }) => Promise<boolean>;
+   119→  disconnectWhatsApp: (connectionId: string) => Promise<boolean>;
+   120→  syncWhatsApp: (connectionId: string, options?: { from?: string; to?: string }) => Promise<boolean>;
+   121→  sendWhatsApp: (input: {
+   122→    connectionId: string;
+   123→    to: string;
+   124→    body: string;
+   125→    messageType?: 'text' | 'template' | 'document' | 'image';
+   126→    category?: WhatsAppCategory;
+   127→    clientId?: string | null;
+   128→    invoiceId?: string | null;
+   129→  }) => Promise<boolean>;
+   130→  markWhatsAppRead: (messageId: string) => Promise<boolean>;
+   131→
+   132→  // ─── Automation mutations ───────────────────────────────────────────────
+   133→  scheduleMessage: (input: {
+   134→    channel: ScheduledMessageChannel;
+   135→    connectionId: string;
+   136→    recipient: string;
+   137→    recipientName?: string | null;
+   138→    subject?: string | null;
+   139→    body: string;
+   140→    category?: WhatsAppCategory | EmailCategory;
+   141→    trigger?: 'invoice_reminder' | 'gst_filing' | 'payment_followup' | 'recurring' | 'manual';
+   142→    linkedEntityId?: string | null;
+   143→    linkedEntityType?: 'invoice' | 'return' | 'client' | 'payment' | null;
+   144→    scheduledFor: string;
+   145→    recurrence?: ScheduleRecurrence;
+   146→  }) => Promise<string | null>;
+   147→  cancelScheduledMessage: (scheduleId: string) => Promise<boolean>;
+   148→  runAutomation: () => Promise<boolean>;
+   149→  generateReminders: () => Promise<boolean>;
+   150→  retryFailed: () => Promise<boolean>;
+   151→
+   152→  retry: () => void;
+   153→}
+   154→
+   155→// ─── Hook ────────────────────────────────────────────────────────────────────
+   156→
+   157→export function useCommunications(): UseCommunicationsResult {
+   158→  const { organization } = useOrg();
+   159→  const { user } = useAuth();
+   160→  const orgId = organization?.id ?? null;
+   161→
+   162→  const [gmailConnections, setGmailConnections] = useState<GmailConnection[]>([]);
+   163→  const [whatsappConnections, setWhatsappConnections] = useState<WhatsAppConnection[]>([]);
+   164→  const [gmailMessages, setGmailMessages] = useState<GmailMessage[]>([]);
+   165→  const [whatsappMessages, setWhatsAppMessages] = useState<WhatsAppMessage[]>([]);
+   166→  const [scheduledMessages, setScheduledMessages] = useState<ScheduledMessage[]>([]);
+   167→
+   168→  const [loading, setLoading] = useState(true);
+   169→  const [error, setError] = useState<string | null>(null);
+   170→  const [saving, setSaving] = useState(false);
+   171→  const [retryTick, setRetryTick] = useState(0);
+   172→
+   173→  const unsubRefs = useRef<Array<(() => void) | null>>([null, null, null, null, null]);
+   174→
+   175→  useEffect(() => {
+   176→    unsubRefs.current.forEach((unsub) => unsub?.());
+   177→    unsubRefs.current = [null, null, null, null, null];
+   178→
+   179→    if (!orgId) {
+   180→      setGmailConnections([]);
+   181→      setWhatsappConnections([]);
+   182→      setGmailMessages([]);
+   183→      setWhatsAppMessages([]);
+   184→      setScheduledMessages([]);
+   185→      setLoading(false);
+   186→      return;
+   187→    }
+   188→
+   189→    setLoading(true);
+   190→
+   191→    const onSubError = (err: Error) => {
+   192→      console.warn('[useCommunications] subscription error:', err.message);
+   193→      setError(err.message);
+   194→      setLoading(false);
+   195→    };
+   196→
+   197→    unsubRefs.current[0] = subscribeToGmailConnections(
+   198→      orgId,
+   199→      (conns) => {
+   200→        setGmailConnections(conns);
+   201→        setLoading(false);
+   202→        setError(null);
+   203→      },
+   204→      { onError: onSubError },
+   205→    );
+   206→
+   207→    unsubRefs.current[1] = subscribeToWhatsAppConnections(
+   208→      orgId,
+   209→      (conns) => {
+   210→        setWhatsappConnections(conns);
+   211→        setError(null);
+   212→      },
+   213→      { onError: onSubError },
+   214→    );
+   215→
+   216→    unsubRefs.current[2] = subscribeToGmailMessages(
+   217→      orgId,
+   218→      (msgs) => {
+   219→        setGmailMessages(msgs);
+   220→        setError(null);
+   221→      },
+   222→      { onError: onSubError, limitCount: 200 },
+   223→    );
+   224→
+   225→    unsubRefs.current[3] = subscribeToWhatsAppMessages(
+   226→      orgId,
+   227→      (msgs) => {
+   228→        setWhatsAppMessages(msgs);
+   229→        setError(null);
+   230→      },
+   231→      { onError: onSubError, limitCount: 200 },
+   232→    );
+   233→
+   234→    unsubRefs.current[4] = subscribeToScheduledMessages(
+   235→      orgId,
+   236→      (schedules) => {
+   237→        setScheduledMessages(schedules);
+   238→        setError(null);
+   239→      },
+   240→      { onError: onSubError, limitCount: 100 },
+   241→    );
+   242→
+   243→    return () => {
+   244→      unsubRefs.current.forEach((unsub) => unsub?.());
+   245→    };
+   246→  }, [orgId, retryTick]);
+   247→
+   248→  // ─── Helpers ──────────────────────────────────────────────────────────────
+   249→
+   250→  const createdBy = {
+   251→    uid: user?.id ?? '',
+   252→    name: user?.name ?? 'Unknown',
+   253→    email: user?.email ?? '',
+   254→  };
+   255→
+   256→  const gmailConn = gmailConnections.find((c) => c.authStatus === 'connected') ?? null;
+   257→  const waConn = whatsappConnections.find((c) => c.authStatus === 'connected') ?? null;
+   258→
+   259→  // ─── Mutation: connectGmail ───────────────────────────────────────────────
+   260→
+   261→  const connectGmail = useCallback(
+   262→    async (input: {
+   263→      provider?: GmailProviderName;
+   264→      email: string;
+   265→      displayName?: string;
+   266→    }): Promise<boolean> => {
+   267→      if (!orgId) return false;
+   268→      setSaving(true);
+   269→      setError(null);
+   270→      try {
+   271→        const res = await fetch('/api/communication/gmail/connect', {
+   272→          method: 'POST',
+   273→          headers: { 'Content-Type': 'application/json' },
+   274→          body: JSON.stringify({
+   275→            organizationId: orgId,
+   276→            provider: input.provider ?? 'mock',
+   277→            email: input.email,
+   278→            displayName: input.displayName,
+   279→            createdBy,
+   280→          }),
+   281→        });
+   282→        const data = await res.json();
+   283→        if (!res.ok || !data.ok) {
+   284→          throw new Error(data.error ?? 'Failed to connect Gmail.');
+   285→        }
+   286→        const { result, complete } = data;
+   287→        if (!complete) {
+   288→          throw new Error('Gmail connection could not be completed. Please try again.');
+   289→        }
+   290→        await saveGmailConnection(orgId, {
+   291→          organizationId: orgId,
+   292→          email: result.email,
+   293→          displayName: complete.profile.displayName ?? input.displayName ?? null,
+   294→          provider: input.provider ?? 'mock',
+   295→          authStatus: 'connected',
+   296→          lastSync: new Date().toISOString(),
+   297→          sessionExpiry: complete.sessionExpiry,
+   298→          encryptedConnection: complete.encryptedConnection,
+   299→          scopes: complete.scopes,
+   300→          lastError: null,
+   301→          createdBy,
+   302→        });
+   303→        return true;
+   304→      } catch (err) {
+   305→        const msg = err instanceof Error ? err.message : 'Unknown error';
+   306→        setError(msg);
+   307→        return false;
+   308→      } finally {
+   309→        setSaving(false);
+   310→      }
+   311→    },
+   312→    [orgId, createdBy],
+   313→  );
+   314→
+   315→  // ─── Mutation: disconnectGmail ────────────────────────────────────────────
+   316→
+   317→  const disconnectGmail = useCallback(
+   318→    async (connectionId: string): Promise<boolean> => {
+   319→      if (!orgId) return false;
+   320→      const conn = gmailConnections.find((c) => c.id === connectionId);
+   321→      if (!conn) return false;
+   322→      setSaving(true);
+   323→      setError(null);
+   324→      try {
+   325→        await fetch('/api/communication/gmail/disconnect', {
+   326→          method: 'POST',
+   327→          headers: { 'Content-Type': 'application/json' },
+   328→          body: JSON.stringify({ encryptedConnection: conn.encryptedConnection }),
+   329→        });
+   330→        await cascadeDisconnectGmail(orgId, connectionId);
+   331→        return true;
+   332→      } catch (err) {
+   333→        const msg = err instanceof Error ? err.message : 'Unknown error';
+   334→        setError(msg);
+   335→        return false;
+   336→      } finally {
+   337→        setSaving(false);
+   338→      }
+   339→    },
+   340→    [orgId, gmailConnections],
+   341→  );
+   342→
+   343→  // ─── Mutation: syncGmail ──────────────────────────────────────────────────
+   344→
+   345→  const syncGmail = useCallback(
+   346→    async (connectionId: string, options?: { from?: string; to?: string }): Promise<boolean> => {
+   347→      if (!orgId) return false;
+   348→      const conn = gmailConnections.find((c) => c.id === connectionId);
+   349→      if (!conn?.encryptedConnection) return false;
+   350→      setSaving(true);
+   351→      setError(null);
+   352→
+   353→      const jobId = await createSyncJob(orgId, {
+   354→        connectionId,
+   355→        channel: 'gmail',
+   356→        trigger: 'manual',
+   357→        maxRetries: 3,
+   358→      }).catch(() => null);
+   359→
+   360→      try {
+   361→        const res = await fetch('/api/communication/gmail/sync', {
+   362→          method: 'POST',
+   363→          headers: { 'Content-Type': 'application/json' },
+   364→          body: JSON.stringify({
+   365→            organizationId: orgId,
+   366→            connectionId,
+   367→            encryptedConnection: conn.encryptedConnection,
+   368→            from: options?.from,
+   369→            to: options?.to,
+   370→          }),
+   371→        });
+   372→        const data = await res.json();
+   373→        if (!res.ok || !data.ok) {
+   374→          throw new Error(data.error ?? 'Gmail sync failed.');
+   375→        }
+   376→        const { messages } = data.result;
+   377→        if (Array.isArray(messages)) {
+   378→          await saveGmailMessages(orgId, messages);
+   379→        }
+   380→        await updateGmailConnection(orgId, connectionId, {
+   381→          authStatus: 'connected',
+   382→          lastSync: new Date().toISOString(),
+   383→          lastError: null,
+   384→        });
+   385→        if (jobId) {
+   386→          await updateSyncJob(orgId, jobId, {
+   387→            status: 'completed',
+   388→            completedAt: new Date().toISOString(),
+   389→            result: { newCount: messages?.length ?? 0, totalCount: messages?.length ?? 0 },
+   390→          }).catch(() => {});
+   391→        }
+   392→        return true;
+   393→      } catch (err) {
+   394→        const msg = err instanceof Error ? err.message : 'Unknown error';
+   395→        setError(msg);
+   396→        if (jobId) {
+   397→          await updateSyncJob(orgId, jobId, {
+   398→            status: 'failed',
+   399→            completedAt: new Date().toISOString(),
+   400→            error: msg,
+   401→          }).catch(() => {});
+   402→        }
+   403→        return false;
+   404→      } finally {
+   405→        setSaving(false);
+   406→      }
+   407→    },
+   408→    [orgId, gmailConnections],
+   409→  );
+   410→
+   411→  // ─── Mutation: sendEmail ──────────────────────────────────────────────────
+   412→
+   413→  const sendEmail = useCallback(
+   414→    async (input: {
+   415→      connectionId: string;
+   416→      to: string;
+   417→      subject: string;
+   418→      bodyHtml: string;
+   419→      bodyText?: string;
+   420→      cc?: string;
+   421→      bcc?: string;
+   422→      replyToMessageId?: string;
+   423→    }): Promise<boolean> => {
+   424→      if (!orgId) return false;
+   425→      const conn = gmailConnections.find((c) => c.id === input.connectionId);
+   426→      if (!conn?.encryptedConnection) return false;
+   427→      setSaving(true);
+   428→      setError(null);
+   429→      try {
+   430→        const res = await fetch('/api/communication/gmail/send', {
+   431→          method: 'POST',
+   432→          headers: { 'Content-Type': 'application/json' },
+   433→          body: JSON.stringify({
+   434→            organizationId: orgId,
+   435→            connectionId: input.connectionId,
+   436→            encryptedConnection: conn.encryptedConnection,
+   437→            to: input.to,
+   438→            cc: input.cc,
+   439→            bcc: input.bcc,
+   440→            subject: input.subject,
+   441→            bodyHtml: input.bodyHtml,
+   442→            bodyText: input.bodyText,
+   443→            replyToMessageId: input.replyToMessageId,
+   444→          }),
+   445→        });
+   446→        const data = await res.json();
+   447→        if (!res.ok || !data.ok) {
+   448→          throw new Error(data.error ?? 'Failed to send email.');
+   449→        }
+   450→        return true;
+   451→      } catch (err) {
+   452→        const msg = err instanceof Error ? err.message : 'Unknown error';
+   453→        setError(msg);
+   454→        return false;
+   455→      } finally {
+   456→        setSaving(false);
+   457→      }
+   458→    },
+   459→    [orgId, gmailConnections],
+   460→  );
+   461→
+   462→  // ─── Mutation: markEmailRead ──────────────────────────────────────────────
+   463→
+   464→  const markEmailRead = useCallback(
+   465→    async (messageId: string, read: boolean): Promise<boolean> => {
+   466→      if (!orgId) return false;
+   467→      try {
+   468→        await updateGmailMessage(orgId, messageId, {
+   469→          readStatus: read ? 'read' : 'unread',
+   470→        });
+   471→        return true;
+   472→      } catch {
+   473→        return false;
+   474→      }
+   475→    },
+   476→    [orgId],
+   477→  );
+   478→
+   479→  // ─── Mutation: connectWhatsApp ────────────────────────────────────────────
+   480→
+   481→  const connectWhatsApp = useCallback(
+   482→    async (input: {
+   483→      provider?: WhatsAppProviderName;
+   484→      phoneNumber: string;
+   485→      businessName?: string;
+   486→    }): Promise<boolean> => {
+   487→      if (!orgId) return false;
+   488→      setSaving(true);
+   489→      setError(null);
+   490→      try {
+   491→        const res = await fetch('/api/communication/whatsapp/connect', {
+   492→          method: 'POST',
+   493→          headers: { 'Content-Type': 'application/json' },
+   494→          body: JSON.stringify({
+   495→            organizationId: orgId,
+   496→            provider: input.provider ?? 'mock',
+   497→            phoneNumber: input.phoneNumber,
+   498→            businessName: input.businessName,
+   499→            createdBy,
+   500→          }),
+   501→        });
+   502→        const data = await res.json();
+   503→        if (!res.ok || !data.ok) {
+   504→          throw new Error(data.error ?? 'Failed to connect WhatsApp.');
+   505→        }
+   506→        const { result, complete } = data;
+   507→        if (!complete) {
+   508→          throw new Error('WhatsApp connection could not be completed.');
+   509→        }
+   510→        await saveWhatsAppConnection(orgId, {
+   511→          organizationId: orgId,
+   512→          phoneNumber: result.phoneNumber,
+   513→          businessName: complete.profile.businessName ?? input.businessName ?? null,
+   514→          displayPhoneNumber: complete.profile.displayPhoneNumber,
+   515→          provider: input.provider ?? 'mock',
+   516→          authStatus: 'connected',
+   517→          lastSync: new Date().toISOString(),
+   518→          sessionExpiry: complete.sessionExpiry,
+   519→          encryptedConnection: complete.encryptedConnection,
+   520→          phoneNumberId: result.phoneNumberId,
+   521→          wabaId: result.wabaId,
+   522→          qualityRating: complete.profile.qualityRating,
+   523→          messagingLimitTier: complete.profile.messagingLimitTier,
+   524→          lastError: null,
+   525→          createdBy,
+   526→        });
+   527→        return true;
+   528→      } catch (err) {
+   529→        const msg = err instanceof Error ? err.message : 'Unknown error';
+   530→        setError(msg);
+   531→        return false;
+   532→      } finally {
+   533→        setSaving(false);
+   534→      }
+   535→    },
+   536→    [orgId, createdBy],
+   537→  );
+   538→
+   539→  // ─── Mutation: disconnectWhatsApp ─────────────────────────────────────────
+   540→
+   541→  const disconnectWhatsApp = useCallback(
+   542→    async (connectionId: string): Promise<boolean> => {
+   543→      if (!orgId) return false;
+   544→      const conn = whatsappConnections.find((c) => c.id === connectionId);
+   545→      if (!conn) return false;
+   546→      setSaving(true);
+   547→      setError(null);
+   548→      try {
+   549→        await fetch('/api/communication/whatsapp/disconnect', {
+   550→          method: 'POST',
+   551→          headers: { 'Content-Type': 'application/json' },
+   552→          body: JSON.stringify({ encryptedConnection: conn.encryptedConnection }),
+   553→        });
+   554→        await cascadeDisconnectWhatsApp(orgId, connectionId);
+   555→        return true;
+   556→      } catch (err) {
+   557→        const msg = err instanceof Error ? err.message : 'Unknown error';
+   558→        setError(msg);
+   559→        return false;
+   560→      } finally {
+   561→        setSaving(false);
+   562→      }
+   563→    },
+   564→    [orgId, whatsappConnections],
+   565→  );
+   566→
+   567→  // ─── Mutation: syncWhatsApp ───────────────────────────────────────────────
+   568→
+   569→  const syncWhatsApp = useCallback(
+   570→    async (connectionId: string, options?: { from?: string; to?: string }): Promise<boolean> => {
+   571→      if (!orgId) return false;
+   572→      const conn = whatsappConnections.find((c) => c.id === connectionId);
+   573→      if (!conn?.encryptedConnection) return false;
+   574→      setSaving(true);
+   575→      setError(null);
+   576→
+   577→      const jobId = await createSyncJob(orgId, {
+   578→        connectionId,
+   579→        channel: 'whatsapp',
+   580→        trigger: 'manual',
+   581→        maxRetries: 3,
+   582→      }).catch(() => null);
+   583→
+   584→      try {
+   585→        const res = await fetch('/api/communication/whatsapp/sync', {
+   586→          method: 'POST',
+   587→          headers: { 'Content-Type': 'application/json' },
+   588→          body: JSON.stringify({
+   589→            organizationId: orgId,
+   590→            connectionId,
+   591→            encryptedConnection: conn.encryptedConnection,
+   592→            from: options?.from,
+   593→            to: options?.to,
+   594→          }),
+   595→        });
+   596→        const data = await res.json();
+   597→        if (!res.ok || !data.ok) {
+   598→          throw new Error(data.error ?? 'WhatsApp sync failed.');
+   599→        }
+   600→        const { messages } = data.result;
+   601→        if (Array.isArray(messages)) {
+   602→          await saveWhatsAppMessages(orgId, messages);
+   603→        }
+   604→        await updateWhatsAppConnection(orgId, connectionId, {
+   605→          authStatus: 'connected',
+   606→          lastSync: new Date().toISOString(),
+   607→          lastError: null,
+   608→        });
+   609→        if (jobId) {
+   610→          await updateSyncJob(orgId, jobId, {
+   611→            status: 'completed',
+   612→            completedAt: new Date().toISOString(),
+   613→            result: { newCount: messages?.length ?? 0, totalCount: messages?.length ?? 0 },
+   614→          }).catch(() => {});
+   615→        }
+   616→        return true;
+   617→      } catch (err) {
+   618→        const msg = err instanceof Error ? err.message : 'Unknown error';
+   619→        setError(msg);
+   620→        if (jobId) {
+   621→          await updateSyncJob(orgId, jobId, {
+   622→            status: 'failed',
+   623→            completedAt: new Date().toISOString(),
+   624→            error: msg,
+   625→          }).catch(() => {});
+   626→        }
+   627→        return false;
+   628→      } finally {
+   629→        setSaving(false);
+   630→      }
+   631→    },
+   632→    [orgId, whatsappConnections],
+   633→  );
+   634→
+   635→  // ─── Mutation: sendWhatsApp ───────────────────────────────────────────────
+   636→
+   637→  const sendWhatsApp = useCallback(
+   638→    async (input: {
+   639→      connectionId: string;
+   640→      to: string;
+   641→      body: string;
+   642→      messageType?: 'text' | 'template' | 'document' | 'image';
+   643→      category?: WhatsAppCategory;
+   644→      clientId?: string | null;
+   645→      invoiceId?: string | null;
+   646→    }): Promise<boolean> => {
+   647→      if (!orgId) return false;
+   648→      const conn = whatsappConnections.find((c) => c.id === input.connectionId);
+   649→      if (!conn?.encryptedConnection) return false;
+   650→      setSaving(true);
+   651→      setError(null);
+   652→      try {
+   653→        const res = await fetch('/api/communication/whatsapp/send', {
+   654→          method: 'POST',
+   655→          headers: { 'Content-Type': 'application/json' },
+   656→          body: JSON.stringify({
+   657→            organizationId: orgId,
+   658→            connectionId: input.connectionId,
+   659→            encryptedConnection: conn.encryptedConnection,
+   660→            to: input.to,
+   661→            body: input.body,
+   662→            messageType: input.messageType ?? 'text',
+   663→            category: input.category,
+   664→            clientId: input.clientId ?? null,
+   665→            invoiceId: input.invoiceId ?? null,
+   666→          }),
+   667→        });
+   668→        const data = await res.json();
+   669→        if (!res.ok || !data.ok) {
+   670→          throw new Error(data.error ?? 'Failed to send WhatsApp message.');
+   671→        }
+   672→        return true;
+   673→      } catch (err) {
+   674→        const msg = err instanceof Error ? err.message : 'Unknown error';
+   675→        setError(msg);
+   676→        return false;
+   677→      } finally {
+   678→        setSaving(false);
+   679→      }
+   680→    },
+   681→    [orgId, whatsappConnections],
+   682→  );
+   683→
+   684→  // ─── Mutation: markWhatsAppRead ───────────────────────────────────────────
+   685→
+   686→  const markWhatsAppRead = useCallback(
+   687→    async (messageId: string): Promise<boolean> => {
+   688→      if (!orgId) return false;
+   689→      try {
+   690→        await updateWhatsAppMessage(orgId, messageId, { status: 'read' });
+   691→        return true;
+   692→      } catch {
+   693→        return false;
+   694→      }
+   695→    },
+   696→    [orgId],
+   697→  );
+   698→
+   699→  // ─── Mutation: scheduleMessage ────────────────────────────────────────────
+   700→
+   701→  const scheduleMessage = useCallback(
+   702→    async (input: {
+   703→      channel: ScheduledMessageChannel;
+   704→      connectionId: string;
+   705→      recipient: string;
+   706→      recipientName?: string | null;
+   707→      subject?: string | null;
+   708→      body: string;
+   709→      category?: WhatsAppCategory | EmailCategory;
+   710→      trigger?: 'invoice_reminder' | 'gst_filing' | 'payment_followup' | 'recurring' | 'manual';
+   711→      linkedEntityId?: string | null;
+   712→      linkedEntityType?: 'invoice' | 'return' | 'client' | 'payment' | null;
+   713→      scheduledFor: string;
+   714→      recurrence?: ScheduleRecurrence;
+   715→    }): Promise<string | null> => {
+   716→      if (!orgId) return null;
+   717→      setSaving(true);
+   718→      setError(null);
+   719→      try {
+   720→        const res = await fetch('/api/communication/automation/schedule', {
+   721→          method: 'POST',
+   722→          headers: { 'Content-Type': 'application/json' },
+   723→          body: JSON.stringify({
+   724→            organizationId: orgId,
+   725→            channel: input.channel,
+   726→            connectionId: input.connectionId,
+   727→            recipient: input.recipient,
+   728→            recipientName: input.recipientName ?? null,
+   729→            subject: input.subject ?? null,
+   730→            body: input.body,
+   731→            category: input.category ?? 'general',
+   732→            trigger: input.trigger ?? 'manual',
+   733→            linkedEntityId: input.linkedEntityId ?? null,
+   734→            linkedEntityType: input.linkedEntityType ?? null,
+   735→            scheduledFor: input.scheduledFor,
+   736→            recurrence: input.recurrence,
+   737→            createdBy,
+   738→          }),
+   739→        });
+   740→        const data = await res.json();
+   741→        if (!res.ok || !data.ok) {
+   742→          throw new Error(data.error ?? 'Failed to schedule message.');
+   743→        }
+   744→        return data.scheduleId as string;
+   745→      } catch (err) {
+   746→        const msg = err instanceof Error ? err.message : 'Unknown error';
+   747→        setError(msg);
+   748→        return null;
+   749→      } finally {
+   750→        setSaving(false);
+   751→      }
+   752→    },
+   753→    [orgId, createdBy],
+   754→  );
+   755→
+   756→  // ─── Mutation: cancelScheduledMessage ─────────────────────────────────────
+   757→
+   758→  const cancelScheduledMessage = useCallback(
+   759→    async (scheduleId: string): Promise<boolean> => {
+   760→      if (!orgId) return false;
+   761→      setSaving(true);
+   762→      setError(null);
+   763→      try {
+   764→        const res = await fetch('/api/communication/automation/cancel', {
+   765→          method: 'POST',
+   766→          headers: { 'Content-Type': 'application/json' },
+   767→          body: JSON.stringify({ organizationId: orgId, scheduleId }),
+   768→        });
+   769→        const data = await res.json();
+   770→        if (!res.ok || !data.ok) {
+   771→          throw new Error(data.error ?? 'Failed to cancel scheduled message.');
+   772→        }
+   773→        return true;
+   774→      } catch (err) {
+   775→        const msg = err instanceof Error ? err.message : 'Unknown error';
+   776→        setError(msg);
+   777→        return false;
+   778→      } finally {
+   779→        setSaving(false);
+   780→      }
+   781→    },
+   782→    [orgId],
+   783→  );
+   784→
+   785→  // ─── Mutation: runAutomation ──────────────────────────────────────────────
+   786→
+   787→  const runAutomation = useCallback(async (): Promise<boolean> => {
+   788→    if (!orgId) return false;
+   789→    setSaving(true);
+   790→    setError(null);
+   791→    try {
+   792→      const res = await fetch('/api/communication/automation/run', {
+   793→        method: 'POST',
+   794→        headers: { 'Content-Type': 'application/json' },
+   795→        body: JSON.stringify({ organizationId: orgId }),
+   796→      });
+   797→      const data = await res.json();
+   798→      if (!res.ok || !data.ok) {
+   799→        throw new Error(data.error ?? 'Failed to run automation.');
+   800→      }
+   801→      return true;
+   802→    } catch (err) {
+   803→      const msg = err instanceof Error ? err.message : 'Unknown error';
+   804→      setError(msg);
+   805→      return false;
+   806→    } finally {
+   807→      setSaving(false);
+   808→    }
+   809→  }, [orgId]);
+   810→
+   811→  // ─── Mutation: generateReminders ──────────────────────────────────────────
+   812→
+   813→  const generateReminders = useCallback(async (): Promise<boolean> => {
+   814→    if (!orgId) return false;
+   815→    setSaving(true);
+   816→    setError(null);
+   817→    try {
+   818→      const res = await fetch('/api/communication/automation/generate', {
+   819→        method: 'POST',
+   820→        headers: { 'Content-Type': 'application/json' },
+   821→        body: JSON.stringify({
+   822→          organizationId: orgId,
+   823→          gmailConnectionId: gmailConn?.id ?? null,
+   824→          whatsappConnectionId: waConn?.id ?? null,
+   825→          businessName: organization?.name ?? 'Your Business',
+   826→          preferredChannel: waConn ? 'whatsapp' : 'gmail',
+   827→          createdBy,
+   828→        }),
+   829→      });
+   830→      const data = await res.json();
+   831→      if (!res.ok || !data.ok) {
+   832→        throw new Error(data.error ?? 'Failed to generate reminders.');
+   833→      }
+   834→      return true;
+   835→    } catch (err) {
+   836→      const msg = err instanceof Error ? err.message : 'Unknown error';
+   837→      setError(msg);
+   838→      return false;
+   839→    } finally {
+   840→      setSaving(false);
+   841→    }
+   842→  }, [orgId, gmailConn, waConn, organization?.name, createdBy]);
+   843→
+   844→  // ─── Mutation: retryFailed ─────────────────────────────────────────────────
+   845→
+   846→  const retryFailed = useCallback(async (): Promise<boolean> => {
+   847→    if (!orgId) return false;
+   848→    setSaving(true);
+   849→    setError(null);
+   850→    try {
+   851→      const res = await fetch('/api/communication/automation/retry', {
+   852→        method: 'POST',
+   853→        headers: { 'Content-Type': 'application/json' },
+   854→        body: JSON.stringify({ organizationId: orgId }),
+   855→      });
+   856→      const data = await res.json();
+   857→      if (!res.ok || !data.ok) {
+   858→        throw new Error(data.error ?? 'Failed to retry failed messages.');
+   859→      }
+   860→      return true;
+   861→    } catch (err) {
+   862→      const msg = err instanceof Error ? err.message : 'Unknown error';
+   863→      setError(msg);
+   864→      return false;
+   865→    } finally {
+   866→      setSaving(false);
+   867→    }
+   868→  }, [orgId]);
+   869→
+   870→  // ─── Mutation: retry (subscription) ────────────────────────────────────────
+   871→
+   872→  const retry = useCallback(() => {
+   873→    setRetryTick((t) => t + 1);
+   874→  }, []);
+   875→
+   876→  // ─── Derived state ────────────────────────────────────────────────────────
+   877→
+   878→  const gmailConnected = gmailConnections.some((c) => c.authStatus === 'connected');
+   879→  const whatsappConnected = whatsappConnections.some((c) => c.authStatus === 'connected');
+   880→
+   881→  const summary = useMemo(
+   882→    () =>
+   883→      computeCommunicationSummary(
+   884→        gmailConnections,
+   885→        whatsappConnections,
+   886→        gmailMessages,
+   887→        whatsappMessages,
+   888→        scheduledMessages,
+   889→      ),
+   890→    [gmailConnections, whatsappConnections, gmailMessages, whatsappMessages, scheduledMessages],
+   891→  );
+   892→
+   893→  return {
+   894→    gmailConnections,
+   895→    whatsappConnections,
+   896→    gmailMessages,
+   897→    whatsappMessages,
+   898→    scheduledMessages,
+   899→    summary,
+   900→    gmailConnected,
+   901→    whatsappConnected,
+   902→    loading,
+   903→    error,
+   904→    saving,
+   905→    connectGmail,
+   906→    disconnectGmail,
+   907→    syncGmail,
+   908→    sendEmail,
+   909→    markEmailRead,
+   910→    connectWhatsApp,
+   911→    disconnectWhatsApp,
+   912→    syncWhatsApp,
+   913→    sendWhatsApp,
+   914→    markWhatsAppRead,
+   915→    scheduleMessage,
+   916→    cancelScheduledMessage,
+   917→    runAutomation,
+   918→    generateReminders,
+   919→    retryFailed,
+   920→    retry,
+   921→  };
+   922→}
+   923→
+   924→// ─── Convenience re-exports ───────────────────────────────────────────────────
+   925→
+   926→export type {
+   927→  GmailConnection,
+   928→  GmailMessage,
+   929→  WhatsAppConnection,
+   930→  WhatsAppMessage,
+   931→  ScheduledMessage,
+   932→  CommunicationSummary,
+   933→  ScheduledMessageChannel,
+   934→  ScheduledMessageStatus,
+   935→  ScheduleRecurrence,
+   936→} from '@/lib/communication-provider';
+   937→

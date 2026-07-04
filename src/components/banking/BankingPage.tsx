@@ -391,11 +391,15 @@ export default function BankingPage() {
   const handleSyncAccount = useCallback(async (acc: BankAccount) => {
     setBusyId(acc.id)
     try {
+      // NOTE: This page uses the legacy Firestore bank-accounts collection (a
+      // manual ledger). Real automated sync from a live bank requires the
+      // Phase 6 Banking provider (encrypted sessions + provider sync). Here
+      // we only refresh the last-sync marker so the UI reflects a manual review.
       await updateBankAccount(acc.id, {
         status: 'connected',
         lastSyncAt: new Date().toISOString(),
       })
-      toast.success(`${acc.bank} synced`)
+      toast.success(`${acc.bank} — last-sync updated`)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to sync account')
     } finally {
@@ -430,17 +434,14 @@ export default function BankingPage() {
       toast.success('All payments are already reconciled')
       return
     }
-    setBusyId('auto-reconcile')
-    try {
-      await Promise.all(
-        unmatched.map((r) => updatePayment(r.id, { reconciled: true })),
-      )
-      toast.success(`Reconciled ${unmatched.length} payment${unmatched.length === 1 ? '' : 's'}`)
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to auto-reconcile')
-    } finally {
-      setBusyId(null)
-    }
+    // SAFETY: Do NOT blindly mark every unmatched payment as reconciled — that
+    // would fabricate reconciliation without matching any bank transaction.
+    // Real auto-reconciliation requires the Banking provider's matching engine
+    // (amount + name + reference + confidence). Direct the user to match rows
+    // manually instead.
+    toast.info(
+      `${unmatched.length} payment${unmatched.length === 1 ? '' : 's'} need matching. Auto-reconciliation runs automatically when a bank connection is active. Use “Match” on each row to reconcile manually.`,
+    )
   }, [reconciliationData])
 
   const handleMatchRow = useCallback(async (id: string) => {

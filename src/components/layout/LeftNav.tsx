@@ -10,22 +10,21 @@ import { motion } from 'framer-motion';
 import { Home, Brain, Zap, Wallet, Network, Settings, type LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useApp, type AppView } from '@/contexts/AppContext';
-import { SidebarBrand } from '@/components/brand/BrandLogo';
+import { InfinitySymbol } from './InfinityMark';
 
 interface NavItem {
   id: AppView;
   label: string;
   icon: LucideIcon;
-  emoji: string;
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { id: 'dashboard', label: 'Home', icon: Home, emoji: '🏠' },
-  { id: 'ai-cfo', label: 'AI CFO', icon: Brain, emoji: '🧠' },
-  { id: 'run-my-business', label: 'Run Business', icon: Zap, emoji: '⚡' },
-  { id: 'reconcile', label: 'Finance', icon: Wallet, emoji: '💰' },
-  { id: 'business-graph', label: 'Network', icon: Network, emoji: '🌐' },
-  { id: 'settings', label: 'Settings', icon: Settings, emoji: '⚙️' },
+  { id: 'dashboard', label: 'Home', icon: Home },
+  { id: 'ai-cfo', label: 'AI CFO', icon: Brain },
+  { id: 'run-my-business', label: 'Run Business', icon: Zap },
+  { id: 'reconcile', label: 'Finance', icon: Wallet },
+  { id: 'business-graph', label: 'Network', icon: Network },
+  { id: 'settings', label: 'Settings', icon: Settings },
 ];
 
 // Views that belong to each nav group — used to keep the active state correct
@@ -61,10 +60,14 @@ export function LeftNav() {
       aria-label="Primary"
       className="glass-surface flex h-full w-[68px] flex-col items-center gap-1.5 rounded-3xl p-2.5 xl:w-[200px] xl:items-stretch xl:gap-1 xl:p-3"
     >
-      {/* Brand mark at top — Official GSTPilot™ logo (collapse-aware, hover glow) */}
-      <div className="mb-2 px-1 py-2 xl:mb-3">
-        <SidebarBrand collapsed={false} size={32} onClick={() => setCurrentView('dashboard')} />
-      </div>
+      {/* Brand mark at top — V16 InfinitySymbol (consistent with the top bar) */}
+      <button
+        onClick={() => setCurrentView('dashboard')}
+        className="mb-2 flex h-10 items-center justify-center rounded-xl px-1 py-2 outline-none transition-opacity hover:opacity-80 focus-visible:ring-2 focus-visible:ring-emerald-400/60 xl:mb-3"
+        aria-label="GSTPilot Infinity — Home"
+      >
+        <InfinitySymbol size={30} />
+      </button>
 
       {/* Nav items */}
       <div className="flex flex-1 flex-col gap-1">
@@ -82,7 +85,7 @@ export function LeftNav() {
               onClick={() => setCurrentView(item.id)}
               aria-current={isActive ? 'page' : undefined}
               className={cn(
-                'group relative flex items-center justify-center gap-3 rounded-2xl px-2.5 py-2.5 text-sm font-medium transition-all duration-200 xl:justify-start xl:px-3',
+                'group relative flex items-center justify-center gap-3 rounded-2xl px-2.5 py-2.5 text-sm font-medium transition-all duration-200 outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/60 xl:justify-start xl:px-3',
                 isActive
                   ? 'accent-gradient-soft text-foreground'
                   : 'text-muted-foreground hover:bg-white/[0.05] hover:text-foreground'
@@ -110,11 +113,8 @@ export function LeftNav() {
 
       {/* Footer mini-brand */}
       <div className="mt-auto hidden px-2 py-1 xl:block">
-        <p className="text-[9px] font-medium uppercase tracking-wider text-muted-foreground/50">
-          The Financial Brain
-        </p>
-        <p className="text-[9px] font-medium uppercase tracking-wider text-muted-foreground/50">
-          of India
+        <p className="text-[9px] font-medium uppercase leading-tight tracking-wider text-muted-foreground/50">
+          The Financial Brain<br />of India
         </p>
       </div>
     </nav>

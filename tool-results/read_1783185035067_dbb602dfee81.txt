@@ -1,0 +1,707 @@
+     1→'use client';
+     2→
+     3→// ═══════════════════════════════════════════════════════════════════════════════
+     4→// GSTPilot Oracle™ — Message Renderer (Phase 2 — Oracle Intelligence™)
+     5→//
+     6→// Renders a single Oracle message as a CFO-grade strategic brief:
+     7→//   1. Key Insight          (top, bold, accent bar — the headline)
+     8→//   2. Analysis             (paragraphs + bullet sub-points)
+     9→//   3. Recommended Actions  (numbered list, action icons)
+    10→//   4. Potential Risks      (warning cards, amber/red accents)
+    11→//   5. Next Best Step       (highlighted CTA card with arrow, clickable)
+    12→//   6. Sources              (Perplexity-style source cards)
+    13→//   7. Follow-up Questions  (chips, clickable to send)
+    14→//   + Investigation Mode    (when present, asks clarifying questions)
+    15→//
+    16→// During streaming, parts appear progressively with a typing cursor. When the
+    17→// message is still in a pre-stream phase (thinking / reading / analyzing /
+    18→// preparing), a phase indicator reflecting the 5-step reasoning process is
+    19→// shown instead of the structured body.
+    20→// ═══════════════════════════════════════════════════════════════════════════════
+    21→
+    22→import { motion, AnimatePresence } from 'framer-motion';
+    23→import {
+    24→  AlertTriangle,
+    25→  ArrowRight,
+    26→  BookOpen,
+    27→  Building2,
+    28→  CheckCircle2,
+    29→  Compass,
+    30→  Copy,
+    31→  FileText,
+    32→  HelpCircle,
+    33→  Lightbulb,
+    34→  ListChecks,
+    35→  Network,
+    36→  Quote,
+    37→  RefreshCw,
+    38→  ShieldAlert,
+    39→  Sparkles,
+    40→  Target,
+    41→  Volume2,
+    42→  type LucideIcon,
+    43→} from 'lucide-react';
+    44→import { ORACLE_MODES, ORACLE_LANGUAGES, ORACLE_EMOTIONS } from './oracle-types';
+    45→import type {
+    46→  OracleActionCard,
+    47→  OracleMessage,
+    48→  OracleModeId,
+    49→  OraclePhase,
+    50→  OracleSource,
+    51→  OracleSourceKind,
+    52→  OracleLanguageId,
+    53→  OracleEmotionId,
+    54→} from './oracle-types';
+    55→import { OracleActionCards } from './OracleActionCards';
+    56→import { OracleAvatar } from './OracleAvatar';
+    57→import { deriveAvatarState } from './oracle-human';
+    58→import { cn } from '@/lib/utils';
+    59→
+    60→// ─── Source Card ─────────────────────────────────────────────────────────────
+    61→
+    62→const SOURCE_ICON: Record<OracleSourceKind, LucideIcon> = {
+    63→  'gst-law': BookOpen,
+    64→  gstn: Network,
+    65→  circular: FileText,
+    66→  'business-data': Building2,
+    67→  'uploaded-file': FileText,
+    68→  'conversation-memory': Quote,
+    69→};
+    70→
+    71→const SOURCE_LABEL: Record<OracleSourceKind, string> = {
+    72→  'gst-law': 'GST Law',
+    73→  gstn: 'GSTN',
+    74→  circular: 'CBIC Circular',
+    75→  'business-data': 'Business Data',
+    76→  'uploaded-file': 'Uploaded File',
+    77→  'conversation-memory': 'Conversation Memory',
+    78→};
+    79→
+    80→function SourceCard({ source, index }: { source: OracleSource; index: number }) {
+    81→  const Icon = SOURCE_ICON[source.kind] ?? FileText;
+    82→  return (
+    83→    <motion.a
+    84→      initial={{ opacity: 0, y: 6 }}
+    85→      animate={{ opacity: 1, y: 0 }}
+    86→      transition={{ duration: 0.3, delay: index * 0.05 }}
+    87→      href={source.url ?? '#'}
+    88→      onClick={(e) => {
+    89→        if (!source.url) e.preventDefault();
+    90→      }}
+    91→      className="group flex min-w-0 flex-1 flex-col gap-1.5 rounded-xl border border-border bg-card/[0.3] p-3 transition-all hover:border-[color-mix(in_srgb,var(--accent-start)_40%,transparent)] hover:bg-card/[0.5]"
+    92→    >
+    93→      <div className="flex items-center gap-2">
+    94→        <div className="flex h-6 w-6 items-center justify-center rounded-md accent-gradient-soft">
+    95→          <Icon className="h-3 w-3 accent-text" />
+    96→        </div>
+    97→        <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+    98→          {SOURCE_LABEL[source.kind]}
+    99→        </span>
+   100→      </div>
+   101→      <p className="line-clamp-2 text-xs font-medium text-foreground">{source.title}</p>
+   102→      <p className="line-clamp-2 text-[11px] text-muted-foreground">{source.snippet}</p>
+   103→    </motion.a>
+   104→  );
+   105→}
+   106→
+   107→// ─── Phase Indicator (Ultra Response Engine — "Oracle is responding…") ───────
+   108→// Replaces the old 5-stage fake-thinking indicator with a single, premium
+   109→// "Oracle is responding…" line + a small pulsing dot. No fake phase labels,
+   110→// no progress bar, no "Reading…", "Analyzing…", "Preparing…" messages.
+   111→
+   112→function PhaseIndicator({ phase }: { phase: OraclePhase }) {
+   113→  // The Ultra Engine only ever shows this indicator during the brief moment
+   114→  // between message creation and the first streamed token. Once streaming
+   115→  // begins, the structured parts render inline with a typing cursor.
+   116→  void phase;
+   117→  return (
+   118→    <motion.div
+   119→      initial={{ opacity: 0 }}
+   120→      animate={{ opacity: 1 }}
+   121→      exit={{ opacity: 0 }}
+   122→      transition={{ duration: 0.2 }}
+   123→      className="flex items-center gap-2 py-1"
+   124→    >
+   125→      {/* Small pulsing dot — emerald, like Claude/ChatGPT */}
+   126→      <span className="relative flex h-2 w-2">
+   127→        <motion.span
+   128→          className="absolute inline-flex h-full w-full rounded-full bg-emerald-400"
+   129→          animate={{ opacity: [0.2, 0.6, 0.2], scale: [0.85, 1.1, 0.85] }}
+   130→          transition={{ duration: 1.4, repeat: Infinity, ease: 'easeInOut' }}
+   131→        />
+   132→        <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+   133→      </span>
+   134→      <span className="text-sm font-medium text-muted-foreground">
+   135→        Oracle is responding
+   136→      </span>
+   137→      {/* Blinking cursor ▋ */}
+   138→      <motion.span
+   139→        className="inline-block h-3.5 w-[2px] rounded-full bg-accent-start"
+   140→        animate={{ opacity: [1, 0, 1] }}
+   141→        transition={{ duration: 1, repeat: Infinity, ease: 'easeInOut' }}
+   142→        aria-hidden
+   143→      />
+   144→    </motion.div>
+   145→  );
+   146→}
+   147→
+   148→// ─── Mode Badge ──────────────────────────────────────────────────────────────
+   149→
+   150→function ModeBadge({ mode }: { mode: OracleModeId }) {
+   151→  const m = ORACLE_MODES[mode];
+   152→  if (!m) return null;
+   153→  return (
+   154→    <div
+   155→      className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-semibold"
+   156→      style={{ backgroundColor: m.tint, color: m.color }}
+   157→    >
+   158→      <span
+   159→        className="h-1.5 w-1.5 rounded-full"
+   160→        style={{ backgroundColor: m.color }}
+   161→      />
+   162→      {m.name}
+   163→    </div>
+   164→  );
+   165→}
+   166→
+   167→// ─── Section Wrapper ─────────────────────────────────────────────────────────
+   168→
+   169→function Section({
+   170→  icon: Icon,
+   171→  title,
+   172→  children,
+   173→  delay = 0,
+   174→}: {
+   175→  icon: LucideIcon;
+   176→  title: string;
+   177→  children: React.ReactNode;
+   178→  delay?: number;
+   179→}) {
+   180→  return (
+   181→    <motion.div
+   182→      initial={{ opacity: 0, y: 8 }}
+   183→      animate={{ opacity: 1, y: 0 }}
+   184→      transition={{ duration: 0.35, delay }}
+   185→      className="space-y-2"
+   186→    >
+   187→      <div className="flex items-center gap-2">
+   188→        <Icon className="h-3.5 w-3.5 accent-text" />
+   189→        <h4 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+   190→          {title}
+   191→        </h4>
+   192→      </div>
+   193→      {children}
+   194→    </motion.div>
+   195→  );
+   196→}
+   197→
+   198→// ─── User Message ────────────────────────────────────────────────────────────
+   199→
+   200→function UserMessage({
+   201→  content,
+   202→  mode,
+   203→  language,
+   204→  emotion,
+   205→}: {
+   206→  content: string;
+   207→  mode?: OracleModeId;
+   208→  language?: OracleLanguageId;
+   209→  emotion?: OracleEmotionId;
+   210→}) {
+   211→  const langMeta = language ? ORACLE_LANGUAGES[language] : null;
+   212→  const emotionMeta = emotion && emotion !== 'neutral' ? ORACLE_EMOTIONS[emotion] : null;
+   213→  return (
+   214→    <div className="flex justify-end">
+   215→      <div className="flex max-w-[80%] flex-col items-end gap-1.5">
+   216→        <div className="flex items-center gap-1.5">
+   217→          {mode && <ModeBadge mode={mode} />}
+   218→          {emotionMeta && (
+   219→            <span
+   220→              className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium"
+   221→              style={{ backgroundColor: `color-mix(in srgb, ${emotionMeta.color} 14%, transparent)`, color: emotionMeta.color }}
+   222→              title={emotionMeta.descriptor}
+   223→            >
+   224→              <span>{emotionMeta.emoji}</span>
+   225→              {emotionMeta.label}
+   226→            </span>
+   227→          )}
+   228→          {langMeta && langMeta.id !== 'english' && (
+   229→            <span className="inline-flex items-center gap-1 rounded-full border border-border bg-card/[0.4] px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+   230→              <span>{langMeta.glyph}</span>
+   231→              {langMeta.nativeName}
+   232→            </span>
+   233→          )}
+   234→        </div>
+   235→        <div className="rounded-2xl rounded-tr-md border border-border bg-card/[0.5] px-4 py-2.5 text-sm text-foreground whitespace-pre-wrap break-words">
+   236→          {content}
+   237→        </div>
+   238→      </div>
+   239→    </div>
+   240→  );
+   241→}
+   242→
+   243→// ─── Analysis Renderer (paragraphs + bullet sub-points) ──────────────────────
+   244→
+   245→function AnalysisBody({ text, isStreaming }: { text: string; isStreaming: boolean }) {
+   246→  // Split into paragraphs by \n\n, then within each paragraph detect bullet lines.
+   247→  const paragraphs = text.split('\n\n').filter((p) => p.trim().length > 0);
+   248→
+   249→  return (
+   250→    <div
+   251→      className={cn(
+   252→        'space-y-3 text-sm leading-relaxed text-foreground/90',
+   253→        isStreaming && 'typing-cursor',
+   254→      )}
+   255→    >
+   256→      {paragraphs.map((para, pi) => {
+   257→        const lines = para.split('\n');
+   258→        const bulletLines: string[] = [];
+   259→        const proseLines: string[] = [];
+   260→        let currentMode: 'prose' | 'bullet' | null = null;
+   261→
+   262→        for (const line of lines) {
+   263→          const trimmed = line.trim();
+   264→          const isBullet =
+   265→            trimmed.startsWith('• ') ||
+   266→            trimmed.startsWith('- ') ||
+   267→            trimmed.startsWith('* ');
+   268→          if (isBullet) {
+   269→            if (currentMode === 'prose' && proseLines.length > 0) {
+   270→              // Flush prose before bullets.
+   271→            }
+   272→            bulletLines.push(trimmed.replace(/^[•\-*]\s+/, ''));
+   273→            currentMode = 'bullet';
+   274→          } else if (trimmed.length > 0) {
+   275→            proseLines.push(line);
+   276→            currentMode = 'prose';
+   277→          }
+   278→        }
+   279→
+   280→        return (
+   281→          <div key={pi} className="space-y-1.5">
+   282→            {proseLines.length > 0 && (
+   283→              <p>{proseLines.join(' ')}</p>
+   284→            )}
+   285→            {bulletLines.length > 0 && (
+   286→              <ul className="ml-1 space-y-1">
+   287→                {bulletLines.map((b, bi) => (
+   288→                  <motion.li
+   289→                    key={bi}
+   290→                    initial={{ opacity: 0, x: -4 }}
+   291→                    animate={{ opacity: 1, x: 0 }}
+   292→                    transition={{ duration: 0.25, delay: bi * 0.04 }}
+   293→                    className="flex items-start gap-2 text-foreground/85"
+   294→                  >
+   295→                    <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-accent-start" />
+   296→                    <span>{b}</span>
+   297→                  </motion.li>
+   298→                ))}
+   299→              </ul>
+   300→            )}
+   301→          </div>
+   302→        );
+   303→      })}
+   304→    </div>
+   305→  );
+   306→}
+   307→
+   308→// ─── Oracle Message (the strategic brief) ────────────────────────────────────
+   309→
+   310→export interface OracleMessageProps {
+   311→  message: OracleMessage;
+   312→  onFollowUp?: (question: string) => void;
+   313→  onAction?: (kind: string, label: string) => void;
+   314→  /** When provided, clicking Next Best Step calls this with the step text. */
+   315→  onNextBestStep?: (step: string) => void;
+   316→  /** Phase 3 — when provided, clicking an Action Card spawns an Oracle Task. */
+   317→  onRunAction?: (card: OracleActionCard) => void;
+   318→  /** Phase 3 — disable action cards (e.g. while a task is already running). */
+   319→  actionsDisabled?: boolean;
+   320→  /** Phase 2 — regenerate the last user-question → Oracle response. */
+   321→  onRegenerate?: () => void;
+   322→  /** Phase 2 — speak this Oracle response aloud (TTS). */
+   323→  onSpeak?: (message: OracleMessage) => void;
+   324→  /** Phase 2 — whether TTS playback is currently active for this message. */
+   325→  isSpeaking?: boolean;
+   326→}
+   327→
+   328→export function OracleMessageView({
+   329→  message,
+   330→  onFollowUp,
+   331→  onAction,
+   332→  onNextBestStep,
+   333→  onRunAction,
+   334→  actionsDisabled,
+   335→  onRegenerate,
+   336→  onSpeak,
+   337→  isSpeaking,
+   338→}: OracleMessageProps) {
+   339→  if (message.role === 'user') {
+   340→    return (
+   341→      <UserMessage
+   342→        content={message.content}
+   343→        mode={message.mode}
+   344→        language={message.language}
+   345→        emotion={message.emotion}
+   346→      />
+   347→    );
+   348→  }
+   349→
+   350→  const phase = message.phase ?? 'done';
+   351→  const isPreStream =
+   352→    phase === 'thinking' ||
+   353→    phase === 'reading' ||
+   354→    phase === 'analyzing' ||
+   355→    phase === 'preparing';
+   356→  const isError = phase === 'error';
+   357→  const parts = message.parts;
+   358→  const mode = message.mode ? ORACLE_MODES[message.mode] : undefined;
+   359→  const isStreaming = phase === 'streaming';
+   360→  const isDone = phase === 'done';
+   361→
+   362→  // Build a plain-text version for copy / export / speak.
+   363→  const plainText = parts
+   364→    ? [
+   365→        parts.keyInsight ? `KEY INSIGHT\n${parts.keyInsight}` : '',
+   366→        parts.analysis ? `\nANALYSIS\n${parts.analysis}` : '',
+   367→        parts.recommendedActions.length > 0
+   368→          ? `\nRECOMMENDED ACTIONS\n${parts.recommendedActions.map((a, i) => `${i + 1}. ${a}`).join('\n')}`
+   369→          : '',
+   370→        parts.potentialRisks.length > 0
+   371→          ? `\nPOTENTIAL RISKS\n${parts.potentialRisks.map((r) => `• ${r}`).join('\n')}`
+   372→          : '',
+   373→        parts.nextBestStep ? `\nNEXT BEST STEP\n${parts.nextBestStep}` : '',
+   374→      ]
+   375→        .filter(Boolean)
+   376→        .join('\n')
+   377→    : message.content;
+   378→
+   379→  const handleCopy = () => {
+   380→    if (!plainText) return;
+   381→    navigator.clipboard?.writeText(plainText).catch(() => {});
+   382→  };
+   383→
+   384→  const handleExport = () => {
+   385→    if (!plainText) return;
+   386→    const blob = new Blob([plainText], { type: 'text/plain;charset=utf-8' });
+   387→    const url = URL.createObjectURL(blob);
+   388→    const a = document.createElement('a');
+   389→    a.href = url;
+   390→    a.download = `oracle-response-${new Date(message.createdAt).getTime()}.txt`;
+   391→    document.body.appendChild(a);
+   392→    a.click();
+   393→    document.body.removeChild(a);
+   394→    URL.revokeObjectURL(url);
+   395→  };
+   396→
+   397→  return (
+   398→    <div className="flex gap-3">
+   399→      {/* Oracle avatar — dynamic facial expressions */}
+   400→      <div className="shrink-0">
+   401→        <OracleAvatar
+   402→          state={deriveAvatarState(phase, message.emotion)}
+   403→          size={40}
+   404→        />
+   405→      </div>
+   406→
+   407→      {/* Body */}
+   408→      <div className="min-w-0 flex-1 space-y-4">
+   409→        {/* Mode badge + status row */}
+   410→        <div className="flex items-center gap-2">
+   411→          {mode && <ModeBadge mode={mode.id} />}
+   412→          {isStreaming && (
+   413→            <span className="flex items-center gap-1.5 text-[10px] font-medium text-muted-foreground">
+   414→              <span className="relative flex h-1.5 w-1.5">
+   415→                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+   416→                <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-400" />
+   417→              </span>
+   418→              Oracle is responding
+   419→            </span>
+   420→          )}
+   421→        </div>
+   422→
+   423→        {/* Error state */}
+   424→        {isError && (
+   425→          <div className="rounded-2xl border border-red-500/30 bg-red-500/5 p-4 text-sm text-red-600 dark:text-red-400">
+   426→            <p className="font-medium">Oracle hit a snag.</p>
+   427→            <p className="mt-1 text-xs opacity-80">{message.error ?? 'Unknown error'}</p>
+   428→          </div>
+   429→        )}
+   430→
+   431→        {/* Pre-stream phase indicator */}
+   432→        {isPreStream && <PhaseIndicator phase={phase} />}
+   433→
+   434→        {/* Structured parts — rendered progressively during streaming */}
+   435→        {!isError && !isPreStream && parts && (
+   436→          <div className="space-y-5">
+   437→            {/* 1. Key Insight — the headline */}
+   438→            {parts.keyInsight && (
+   439→              <Section icon={Lightbulb} title="Key Insight" delay={0}>
+   440→                <div
+   441→                  className={cn(
+   442→                    'rounded-2xl border-l-[3px] border-[color-mix(in_srgb,var(--accent-start)_70%,transparent)] bg-gradient-to-r from-[color-mix(in_srgb,var(--accent-start)_8%,transparent)] to-transparent px-4 py-3 text-[15px] font-semibold leading-snug text-foreground',
+   443→                    isStreaming && 'typing-cursor',
+   444→                  )}
+   445→                >
+   446→                  {parts.keyInsight}
+   447→                </div>
+   448→              </Section>
+   449→            )}
+   450→
+   451→            {/* 2. Analysis — the strategic reasoning */}
+   452→            {parts.analysis && (
+   453→              <Section icon={Compass} title="Analysis" delay={0.05}>
+   454→                <AnalysisBody text={parts.analysis} isStreaming={isStreaming} />
+   455→              </Section>
+   456→            )}
+   457→
+   458→            {/* 3. Recommended Actions */}
+   459→            {parts.recommendedActions.length > 0 && (
+   460→              <Section icon={ListChecks} title="Recommended Actions" delay={0.1}>
+   461→                <ol className="space-y-2">
+   462→                  {parts.recommendedActions.map((rec, i) => (
+   463→                    <motion.li
+   464→                      key={i}
+   465→                      initial={{ opacity: 0, x: -6 }}
+   466→                      animate={{ opacity: 1, x: 0 }}
+   467→                      transition={{ duration: 0.3, delay: i * 0.04 }}
+   468→                      className="flex items-start gap-2.5 rounded-xl border border-border bg-card/[0.3] p-3"
+   469→                    >
+   470→                      <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md accent-gradient-soft text-[10px] font-bold accent-text">
+   471→                        {i + 1}
+   472→                      </div>
+   473→                      <span className="text-sm text-foreground/90">{rec}</span>
+   474→                    </motion.li>
+   475→                  ))}
+   476→                </ol>
+   477→              </Section>
+   478→            )}
+   479→
+   480→            {/* 4. Potential Risks — warning cards */}
+   481→            {parts.potentialRisks.length > 0 && (
+   482→              <Section icon={ShieldAlert} title="Potential Risks" delay={0.15}>
+   483→                <div className="space-y-2">
+   484→                  {parts.potentialRisks.map((risk, i) => (
+   485→                    <motion.div
+   486→                      key={i}
+   487→                      initial={{ opacity: 0, x: -6 }}
+   488→                      animate={{ opacity: 1, x: 0 }}
+   489→                      transition={{ duration: 0.3, delay: i * 0.04 }}
+   490→                      className="flex items-start gap-2.5 rounded-xl border border-amber-500/20 bg-amber-500/[0.06] p-3"
+   491→                    >
+   492→                      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
+   493→                      <span className="text-sm text-foreground/90">{risk}</span>
+   494→                    </motion.div>
+   495→                  ))}
+   496→                </div>
+   497→              </Section>
+   498→            )}
+   499→
+   500→            {/* 5. Next Best Step — highlighted CTA */}
+   501→            {parts.nextBestStep && (
+   502→              <Section icon={Target} title="Next Best Step" delay={0.2}>
+   503→                <motion.button
+   504→                  initial={{ opacity: 0, scale: 0.98 }}
+   505→                  animate={{ opacity: 1, scale: 1 }}
+   506→                  transition={{ duration: 0.3, delay: 0.2 }}
+   507→                  whileHover={{ scale: 1.01, y: -1 }}
+   508→                  whileTap={{ scale: 0.99 }}
+   509→                  onClick={() => {
+   510→                    if (onNextBestStep) {
+   511→                      onNextBestStep(parts.nextBestStep);
+   512→                    } else {
+   513→                      onAction?.('create-report', parts.nextBestStep);
+   514→                    }
+   515→                  }}
+   516→                  className="group flex w-full items-center gap-3 rounded-2xl border border-[color-mix(in_srgb,var(--accent-start)_40%,transparent)] bg-gradient-to-r from-[color-mix(in_srgb,var(--accent-start)_12%,transparent)] to-[color-mix(in_srgb,var(--accent-end)_8%,transparent)] px-4 py-3 text-left transition-all hover:border-[color-mix(in_srgb,var(--accent-start)_60%,transparent)] hover:shadow-[0_4px_24px_-8px_rgba(0,229,255,0.2)]"
+   517→                >
+   518→                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl accent-gradient text-white shadow-lg shadow-emerald-500/20">
+   519→                    <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+   520→                  </div>
+   521→                  <span className="flex-1 text-sm font-semibold text-foreground">
+   522→                    {parts.nextBestStep}
+   523→                  </span>
+   524→                  <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100">
+   525→                    Open
+   526→                  </span>
+   527→                </motion.button>
+   528→              </Section>
+   529→            )}
+   530→
+   531→            {/* Investigation Mode — clarifying questions */}
+   532→            {parts.investigation && parts.investigation.length > 0 && (
+   533→              <motion.div
+   534→                initial={{ opacity: 0, y: 8 }}
+   535→                animate={{ opacity: 1, y: 0 }}
+   536→                transition={{ duration: 0.35, delay: 0.25 }}
+   537→                className="rounded-2xl border border-[color-mix(in_srgb,var(--accent-start)_30%,transparent)] bg-[color-mix(in_srgb,var(--accent-start)_6%,transparent)] p-4"
+   538→              >
+   539→                <div className="mb-2 flex items-center gap-2">
+   540→                  <HelpCircle className="h-3.5 w-3.5 accent-text" />
+   541→                  <h4 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+   542→                    Investigation Mode
+   543→                  </h4>
+   544→                </div>
+   545→                <p className="mb-3 text-[11px] text-muted-foreground">
+   546→                  Before Oracle commits to a full answer, a quick clarification will make this sharper:
+   547→                </p>
+   548→                <div className="flex flex-col gap-1.5">
+   549→                  {parts.investigation.map((q, i) => (
+   550→                    <motion.button
+   551→                      key={i}
+   552→                      initial={{ opacity: 0, y: 4 }}
+   553→                      animate={{ opacity: 1, y: 0 }}
+   554→                      transition={{ duration: 0.25, delay: i * 0.05 }}
+   555→                      whileHover={{ x: 2 }}
+   556→                      onClick={() => onFollowUp?.(q)}
+   557→                      disabled={!isDone}
+   558→                      className="group flex items-center gap-2 rounded-xl border border-border bg-card/[0.4] px-3.5 py-2 text-left text-sm text-foreground/90 transition-colors hover:border-[color-mix(in_srgb,var(--accent-start)_40%,transparent)] hover:bg-card/[0.7] disabled:cursor-not-allowed disabled:opacity-50"
+   559→                    >
+   560→                      <Sparkles className="h-3 w-3 accent-text" />
+   561→                      {q}
+   562→                    </motion.button>
+   563→                  ))}
+   564→                </div>
+   565→              </motion.div>
+   566→            )}
+   567→
+   568→            {/* 6. Sources */}
+   569→            {parts.sources.length > 0 && (
+   570→              <Section icon={Quote} title="Sources" delay={0.25}>
+   571→                <div className="flex flex-wrap gap-2">
+   572→                  {parts.sources.map((s, i) => (
+   573→                    <SourceCard key={i} source={s} index={i} />
+   574→                  ))}
+   575→                </div>
+   576→              </Section>
+   577→            )}
+   578→
+   579→            {/* 7. Follow-up Questions */}
+   580→            {parts.followUps.length > 0 && (
+   581→              <Section icon={Sparkles} title="Follow-up Questions" delay={0.3}>
+   582→                <div className="flex flex-col gap-1.5">
+   583→                  {parts.followUps.map((q, i) => (
+   584→                    <motion.button
+   585→                      key={i}
+   586→                      initial={{ opacity: 0, y: 4 }}
+   587→                      animate={{ opacity: 1, y: 0 }}
+   588→                      transition={{ duration: 0.25, delay: i * 0.04 }}
+   589→                      whileHover={{ x: 2 }}
+   590→                      onClick={() => onFollowUp?.(q)}
+   591→                      disabled={!isDone}
+   592→                      className="group flex items-center gap-2 rounded-xl border border-border bg-card/[0.3] px-3.5 py-2 text-left text-sm text-foreground/90 transition-colors hover:border-[color-mix(in_srgb,var(--accent-start)_40%,transparent)] hover:bg-card/[0.6] disabled:cursor-not-allowed disabled:opacity-50"
+   593→                    >
+   594→                      <ArrowRight className="h-3 w-3 text-muted-foreground transition-colors group-hover:accent-text" />
+   595→                      {q}
+   596→                    </motion.button>
+   597→                  ))}
+   598→                </div>
+   599→              </Section>
+   600→            )}
+   601→
+   602→            {/* 8. Phase 3 — Action Cards (3 large glass buttons, single-click execution) */}
+   603→            {parts.actionCards && parts.actionCards.length > 0 && (
+   604→              <motion.div
+   605→                initial={{ opacity: 0, y: 8 }}
+   606→                animate={{ opacity: 1, y: 0 }}
+   607→                transition={{ duration: 0.35, delay: 0.35 }}
+   608→              >
+   609→                <OracleActionCards
+   610→                  cards={parts.actionCards}
+   611→                  onRun={onRunAction}
+   612→                  disabled={!isDone || actionsDisabled}
+   613→                />
+   614→              </motion.div>
+   615→            )}
+   616→          </div>
+   617→        )}
+   618→
+   619→        {/* Done checkmark + action row */}
+   620→        {isDone && parts && (
+   621→          <motion.div
+   622→            initial={{ opacity: 0 }}
+   623→            animate={{ opacity: 1 }}
+   624→            transition={{ delay: 0.2 }}
+   625→            className="flex flex-wrap items-center gap-1.5"
+   626→          >
+   627→            <span className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+   628→              <CheckCircle2 className="h-3 w-3 text-emerald-500" />
+   629→              <span>Oracle · {new Date(message.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</span>
+   630→            </span>
+   631→
+   632→            {/* Action row — copy / speak / regenerate / export */}
+   633→            <div className="ml-auto flex items-center gap-0.5">
+   634→              <MsgActionButton
+   635→                icon={Copy}
+   636→                label="Copy"
+   637→                onClick={handleCopy}
+   638→              />
+   639→              {onSpeak && (
+   640→                <MsgActionButton
+   641→                  icon={Volume2}
+   642→                  label={isSpeaking ? 'Speaking…' : 'Listen'}
+   643→                  onClick={() => onSpeak(message)}
+   644→                  active={isSpeaking}
+   645→                  disabled={isSpeaking}
+   646→                />
+   647→              )}
+   648→              {onRegenerate && (
+   649→                <MsgActionButton
+   650→                  icon={RefreshCw}
+   651→                  label="Regenerate"
+   652→                  onClick={onRegenerate}
+   653→                />
+   654→              )}
+   655→              <MsgActionButton
+   656→                icon={FileText}
+   657→                label="Export"
+   658→                onClick={handleExport}
+   659→              />
+   660→            </div>
+   661→          </motion.div>
+   662→        )}
+   663→      </div>
+   664→    </div>
+   665→  );
+   666→}
+   667→
+   668→// ─── Message Action Button (small inline icon button) ────────────────────────
+   669→
+   670→function MsgActionButton({
+   671→  icon: Icon,
+   672→  label,
+   673→  onClick,
+   674→  active = false,
+   675→  disabled = false,
+   676→}: {
+   677→  icon: LucideIcon;
+   678→  label: string;
+   679→  onClick: () => void;
+   680→  active?: boolean;
+   681→  disabled?: boolean;
+   682→}) {
+   683→  return (
+   684→    <button
+   685→      type="button"
+   686→      onClick={onClick}
+   687→      disabled={disabled}
+   688→      aria-label={label}
+   689→      title={label}
+   690→      className={cn(
+   691→        'flex h-7 items-center gap-1 rounded-lg px-2 text-[10px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50',
+   692→        active
+   693→          ? 'accent-text bg-card/[0.6]'
+   694→          : 'text-muted-foreground hover:bg-card/[0.5] hover:text-foreground',
+   695→      )}
+   696→    >
+   697→      <Icon className={cn('h-3 w-3', active && 'animate-pulse')} />
+   698→      <span className="hidden sm:inline">{label}</span>
+   699→    </button>
+   700→  );
+   701→}
+   702→
+   703→export default OracleMessageView;
+   704→
+   705→// Suppress unused-import warning for AnimatePresence (reserved for future transitions).
+   706→void AnimatePresence;
+   707→

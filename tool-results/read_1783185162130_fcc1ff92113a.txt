@@ -1,0 +1,1025 @@
+     1→'use client'
+     2→
+     3→import React, { useState, useMemo, useCallback } from 'react'
+     4→import { motion } from 'framer-motion'
+     5→import {
+     6→  Landmark, ArrowUpRight, ArrowDownRight, TrendingUp,
+     7→  IndianRupee, FileText, CheckCircle2, Clock,
+     8→  AlertCircle, Download, Plus, Search, Filter,
+     9→  ChevronRight, Building2, RefreshCw, ArrowRightLeft,
+    10→  CreditCard, Wallet, BadgeCheck, CircleDot,
+    11→  BarChart3, Calendar, Shield, CircleCheck,
+    12→  CircleX, Banknote, Loader2,
+    13→} from 'lucide-react'
+    14→import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+    15→import { Badge } from '@/components/ui/badge'
+    16→import { Button } from '@/components/ui/button'
+    17→import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
+    18→import { ScrollArea } from '@/components/ui/scroll-area'
+    19→import { Separator } from '@/components/ui/separator'
+    20→import { Input } from '@/components/ui/input'
+    21→import { EmptyState } from '@/components/shared'
+    22→import { useApp } from '@/contexts/AppContext'
+    23→import { useAuth } from '@/contexts/AuthContext'
+    24→import { toast } from 'sonner'
+    25→import {
+    26→  useFireBankAccounts,
+    27→  useFireBankTransactions,
+    28→  useFirePayments,
+    29→  useFireExpenses,
+    30→} from '@/hooks/use-firestore'
+    31→import {
+    32→  createBankAccount,
+    33→  updateBankAccount,
+    34→  updatePayment,
+    35→} from '@/lib/firestore-service'
+    36→import type {
+    37→  FirestoreBankAccount,
+    38→  FirestoreBankTransaction,
+    39→  FirestorePayment,
+    40→  FirestoreExpense,
+    41→} from '@/lib/firestore-schema'
+    42→
+    43→// ═══════════════════════════════════════════════════════════════════════════════
+    44→// FORMATTERS
+    45→// ═══════════════════════════════════════════════════════════════════════════════
+    46→
+    47→const fmtINR = (n: number) => '₹' + n.toLocaleString('en-IN')
+    48→const fmtPct = (n: number) => (n >= 0 ? '+' : '') + n.toFixed(1) + '%'
+    49→
+    50→// ═══════════════════════════════════════════════════════════════════════════════
+    51→// SVG CHARTS
+    52→// ═══════════════════════════════════════════════════════════════════════════════
+    53→
+    54→function BalanceTrendChart({ data }: { data: { day: string; balance: number }[] }) {
+    55→  const max = Math.max(...data.map(d => d.balance))
+    56→  const min = Math.min(...data.map(d => d.balance))
+    57→  const range = max - min || 1
+    58→  const w = 280
+    59→  const h = 60
+    60→  const pts = data.map((d, i) => `${(i / (data.length - 1)) * w},${h - ((d.balance - min) / range) * (h - 8) - 4}`)
+    61→  return (
+    62→    <svg width={w} height={h + 16} className="overflow-visible">
+    63→      <defs>
+    64→        <linearGradient id="balGrad" x1="0" y1="0" x2="0" y2="1">
+    65→          <stop offset="0%" stopColor="#10b981" stopOpacity="0.2" />
+    66→          <stop offset="100%" stopColor="#10b981" stopOpacity="0.02" />
+    67→        </linearGradient>
+    68→      </defs>
+    69→      <polygon points={`0,${h} ${pts.join(' ')} ${w},${h}`} fill="url(#balGrad)" />
+    70→      <polyline points={pts.join(' ')} fill="none" stroke="#10b981" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    71→      {data.filter((_, i) => i % 2 === 0).map((d, i) => {
+    72→        const x = (data.indexOf(d) / (data.length - 1)) * w
+    73→        return <text key={i} x={x} y={h + 12} textAnchor="middle" className="text-[8px] fill-muted-foreground">{d.day}</text>
+    74→      })}
+    75→    </svg>
+    76→  )
+    77→}
+    78→
+    79→function ReconcileDonut({ reconciled, unreconciled }: { reconciled: number; unreconciled: number }) {
+    80→  const total = reconciled + unreconciled
+    81→  const r = 36
+    82→  const c = 2 * Math.PI * r
+    83→  const reconcilePct = (reconciled / total) * 100
+    84→  const dashOffset = c - (reconcilePct / 100) * c
+    85→  return (
+    86→    <svg width="90" height="90" className="overflow-visible">
+    87→      <circle cx="45" cy="45" r={r} fill="none" stroke="currentColor" strokeWidth="8" className="text-slate-100 dark:text-slate-800" />
+    88→      <circle cx="45" cy="45" r={r} fill="none" stroke="#10b981" strokeWidth="8" strokeLinecap="round" strokeDasharray={c} strokeDashoffset={dashOffset} transform="rotate(-90 45 45)" />
+    89→      <text x="45" y="42" textAnchor="middle" className="text-sm font-bold fill-emerald-600 dark:fill-emerald-400">{reconcilePct.toFixed(0)}%</text>
+    90→      <text x="45" y="54" textAnchor="middle" className="text-[7px] fill-muted-foreground">Reconciled</text>
+    91→    </svg>
+    92→  )
+    93→}
+    94→
+    95→// ═══════════════════════════════════════════════════════════════════════════════
+    96→// TYPES — derived from real API responses
+    97→// ═══════════════════════════════════════════════════════════════════════════════
+    98→
+    99→interface BankAccount {
+   100→  id: string
+   101→  bank: string
+   102→  account: string
+   103→  type: string
+   104→  balance: number
+   105→  lastSync: string
+   106→  status: string
+   107→}
+   108→
+   109→interface BankTransaction {
+   110→  id: string
+   111→  date: string
+   112→  description: string
+   113→  amount: number
+   114→  type: 'credit' | 'debit'
+   115→  balance: number | null
+   116→  account: string
+   117→  category: string
+   118→}
+   119→
+   120→interface ReconciliationEntry {
+   121→  id: string
+   122→  date: string
+   123→  bankTxn: string
+   124→  bookEntry: string | null
+   125→  amount: number
+   126→  status: 'matched' | 'unmatched' | 'disputed'
+   127→  account: string
+   128→}
+   129→
+   130→interface StatementEntry {
+   131→  id: string
+   132→  account: string
+   133→  period: string
+   134→  generated: string
+   135→  transactions: number
+   136→  status: string
+   137→}
+   138→
+   139→// ═══════════════════════════════════════════════════════════════════════════════
+   140→// DATA — color maps (UI styling only, no fake data)
+   141→// ═══════════════════════════════════════════════════════════════════════════════
+   142→
+   143→const statusColors: Record<string, string> = {
+   144→  connected: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
+   145→  syncing: 'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400',
+   146→  matched: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
+   147→  unmatched: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
+   148→  disputed: 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400',
+   149→  downloaded: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
+   150→  pending: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
+   151→}
+   152→
+   153→const categoryColors: Record<string, string> = {
+   154→  Revenue: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
+   155→  Payroll: 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400',
+   156→  Tax: 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400',
+   157→  Purchase: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
+   158→  Rent: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400',
+   159→  Logistics: 'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400',
+   160→  Utilities: 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400',
+   161→}
+   162→
+   163→const container = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { staggerChildren: 0.06 } } }
+   164→const item = { hidden: { opacity: 0, y: 16 }, show: { opacity: 1, y: 0 } }
+   165→
+   166→// ═══════════════════════════════════════════════════════════════════════════════
+   167→// COMPONENT
+   168→// ═══════════════════════════════════════════════════════════════════════════════
+   169→
+   170→// ── Helpers: derive display strings from raw Firestore rows ─────────────────
+   171→
+   172→function formatSyncDate(iso: string | null): string {
+   173→  if (!iso) return '—'
+   174→  const d = new Date(iso)
+   175→  if (Number.isNaN(d.getTime())) return '—'
+   176→  const dd = String(d.getDate()).padStart(2, '0')
+   177→  const mm = String(d.getMonth() + 1).padStart(2, '0')
+   178→  const yyyy = d.getFullYear()
+   179→  const hh = String(d.getHours()).padStart(2, '0')
+   180→  const min = String(d.getMinutes()).padStart(2, '0')
+   181→  return `${dd}/${mm}/${yyyy} ${hh}:${min}`
+   182→}
+   183→
+   184→function formatTxnDate(iso: string): string {
+   185→  if (!iso) return '—'
+   186→  const d = new Date(iso)
+   187→  if (Number.isNaN(d.getTime())) return iso
+   188→  const dd = String(d.getDate()).padStart(2, '0')
+   189→  const mm = String(d.getMonth() + 1).padStart(2, '0')
+   190→  const yyyy = d.getFullYear()
+   191→  return `${dd}/${mm}/${yyyy}`
+   192→}
+   193→
+   194→function upperMode(mode: string): string {
+   195→  return (mode || 'bank').toUpperCase()
+   196→}
+   197→
+   198→// Map Firestore BankAccount → BankAccount shape used by this page.
+   199→function mapBankAccount(acc: FirestoreBankAccount & { id: string }): BankAccount {
+   200→  const accountType = (acc.accountType || 'current') as string
+   201→  return {
+   202→    id: acc.id,
+   203→    bank: acc.bankName || 'Bank Account',
+   204→    account: acc.accountNumberMasked || '****',
+   205→    type: accountType.charAt(0).toUpperCase() + accountType.slice(1),
+   206→    balance: Number(acc.currentBalance ?? acc.availableBalance ?? 0) || 0,
+   207→    lastSync: formatSyncDate((acc.lastSyncAt as string | null) ?? null),
+   208→    status: (acc.status as string) || 'connected',
+   209→  }
+   210→}
+   211→
+   212→// Map Firestore BankTransaction → BankTransaction shape used by this page.
+   213→function mapBankTxnToTxn(t: FirestoreBankTransaction & { id: string }): BankTransaction {
+   214→  const type = t.type === 'credit' ? 'credit' : 'debit'
+   215→  return {
+   216→    id: t.id,
+   217→    date: formatTxnDate(t.date || ''),
+   218→    description: t.description || 'Bank Transaction',
+   219→    amount: Math.abs(Number(t.amount) || 0),
+   220→    type,
+   221→    balance: t.balanceAfter == null ? null : Number(t.balanceAfter),
+   222→    account: t.referenceNo ? t.referenceNo.toUpperCase() : 'BANK',
+   223→    category: (t.category as string) || (type === 'credit' ? 'Revenue' : 'Purchase'),
+   224→  }
+   225→}
+   226→
+   227→// Map Firestore Payment row → BankTransaction shape used by this page.
+   228→function mapPaymentToTxn(p: FirestorePayment & { id: string }): BankTransaction {
+   229→  const isVendor = (p.partyType || 'customer') === 'vendor'
+   230→  return {
+   231→    id: p.id,
+   232→    date: formatTxnDate(p.paymentDate || ''),
+   233→    description: `${upperMode(p.paymentMode || 'bank')} - ${p.partyName || 'Unknown'}`,
+   234→    amount: Number(p.amount) || 0,
+   235→    type: isVendor ? 'debit' : 'credit',
+   236→    balance: null,
+   237→    account: upperMode(p.paymentMode || 'bank'),
+   238→    category: isVendor ? 'Purchase' : 'Revenue',
+   239→  }
+   240→}
+   241→
+   242→// Map Firestore Payment row → ReconciliationEntry shape used by this page.
+   243→function mapPaymentToRecon(p: FirestorePayment & { id: string }): ReconciliationEntry {
+   244→  let status: ReconciliationEntry['status'] = 'unmatched'
+   245→  if (p.reconciled) status = 'matched'
+   246→  else if (p.status === 'failed') status = 'disputed'
+   247→  return {
+   248→    id: p.id,
+   249→    date: formatTxnDate(p.paymentDate || ''),
+   250→    bankTxn: p.referenceNo || `${upperMode(p.paymentMode || 'bank')}-${p.id.slice(-6)}`,
+   251→    bookEntry: p.invoiceId || null,
+   252→    amount: Number(p.amount) || 0,
+   253→    status,
+   254→    account: upperMode(p.paymentMode || 'bank'),
+   255→  }
+   256→}
+   257→
+   258→// Map Firestore Expense → BankTransaction (always a debit) shape used by this page.
+   259→function mapExpenseToTxn(e: FirestoreExpense & { id: string }): BankTransaction {
+   260→  const mode = (e.paymentMode || 'bank') as string
+   261→  return {
+   262→    id: e.id,
+   263→    date: formatTxnDate(e.date || ''),
+   264→    description: `${upperMode(mode)} - ${e.vendor || e.description || 'Expense'}`,
+   265→    amount: Number(e.amount) || 0,
+   266→    type: 'debit',
+   267→    balance: null,
+   268→    account: upperMode(mode),
+   269→    category: (e.category as string) || 'Purchase',
+   270→  }
+   271→}
+   272→
+   273→export default function BankingPage() {
+   274→  const { setCurrentView } = useApp()
+   275→  const { user } = useAuth()
+   276→  const [activeTab, setActiveTab] = useState('overview')
+   277→  const [searchQ, setSearchQ] = useState('')
+   278→  // Retry key — increments to force re-mount of the data layer when the user clicks Retry.
+   279→  const [retryKey, setRetryKey] = useState(0)
+   280→  const [busyId, setBusyId] = useState<string | null>(null)
+   281→
+   282→  // ── Firestore hooks (real-time, firm-scoped) ───────────────────────────────
+   283→  const bankAcctsHook = useFireBankAccounts()
+   284→  const bankTxnsHook = useFireBankTransactions()
+   285→  const paymentsHook = useFirePayments()
+   286→  const expensesHook = useFireExpenses()
+   287→
+   288→  const loading =
+   289→    bankAcctsHook.loading ||
+   290→    bankTxnsHook.loading ||
+   291→    paymentsHook.loading ||
+   292→    expensesHook.loading
+   293→  const error =
+   294→    bankAcctsHook.error ||
+   295→    bankTxnsHook.error ||
+   296→    paymentsHook.error ||
+   297→    expensesHook.error
+   298→
+   299→  // ── Derived arrays (memoized) — feed existing UI unchanged ─────────────────
+   300→  const bankAccounts = useMemo(
+   301→    () => (bankAcctsHook.data || []).map(mapBankAccount),
+   302→    [bankAcctsHook.data],
+   303→  )
+   304→
+   305→  const transactions = useMemo<BankTransaction[]>(() => {
+   306→    const bankTxns = (bankTxnsHook.data || []).map(mapBankTxnToTxn)
+   307→    const paymentTxns = (paymentsHook.data || []).map(mapPaymentToTxn)
+   308→    const expenseTxns = (expensesHook.data || []).map(mapExpenseToTxn)
+   309→    return [...bankTxns, ...paymentTxns, ...expenseTxns].sort((a, b) =>
+   310→      b.date.localeCompare(a.date),
+   311→    )
+   312→  }, [bankTxnsHook.data, paymentsHook.data, expensesHook.data])
+   313→
+   314→  const reconciliationData = useMemo<ReconciliationEntry[]>(
+   315→    () => (paymentsHook.data || []).map(mapPaymentToRecon),
+   316→    [paymentsHook.data],
+   317→  )
+   318→
+   319→  // ── Balance trend: derive last 7 days from bank_transactions.balanceAfter ──
+   320→  const balanceTrendData = useMemo<{ day: string; balance: number }[]>(() => {
+   321→    const txns = bankTxnsHook.data || []
+   322→    if (txns.length === 0) return []
+   323→    const byDay = new Map<string, number>()
+   324→    for (const t of txns) {
+   325→      if (t.balanceAfter == null) continue
+   326→      const dayKey = (t.date || '').slice(0, 10) // YYYY-MM-DD
+   327→      if (!dayKey) continue
+   328→      byDay.set(dayKey, Number(t.balanceAfter))
+   329→    }
+   330→    const sorted = Array.from(byDay.entries()).sort((a, b) =>
+   331→      a[0].localeCompare(b[0]),
+   332→    )
+   333→    return sorted.slice(-7).map(([dayKey, balance]) => ({
+   334→      day: dayKey.slice(5), // MM-DD
+   335→      balance,
+   336→    }))
+   337→  }, [bankTxnsHook.data])
+   338→
+   339→  const statements: StatementEntry[] = []
+   340→
+   341→  // ── Derived stats (existing computations, fed by Firestore data) ───────────
+   342→  const totalBalance = bankAccounts.reduce((s, a) => s + a.balance, 0)
+   343→  const matchedCount = reconciliationData.filter(r => r.status === 'matched').length
+   344→  const unmatchedCount = reconciliationData.filter(r => r.status !== 'matched').length
+   345→  const disputedCount = reconciliationData.filter(r => r.status === 'disputed').length
+   346→  const unmatchedOnlyCount = reconciliationData.filter(r => r.status === 'unmatched').length
+   347→  const inTransitAmount = transactions
+   348→    .filter((t) => t.category === 'Purchase' && t.balance === null)
+   349→    .reduce((s, t) => s + t.amount, 0)
+   350→
+   351→  const statCards = [
+   352→    { label: 'Total Balance', value: bankAccounts.length > 0 ? totalBalance : null, change: 0, icon: Landmark, color: 'emerald' as const },
+   353→    { label: 'In Transit', value: transactions.length > 0 ? inTransitAmount : null, change: 0, icon: Clock, color: 'amber' as const },
+   354→    { label: 'Reconciled', value: reconciliationData.length > 0 ? matchedCount : null, change: 0, icon: CircleCheck, color: 'emerald' as const },
+   355→    { label: 'Unreconciled', value: reconciliationData.length > 0 ? unmatchedCount : null, change: 0, icon: CircleX, color: 'rose' as const },
+   356→  ]
+   357→
+   358→  // ── Write handlers (Firestore service functions) ───────────────────────────
+   359→
+   360→  const handleAddAccount = useCallback(async () => {
+   361→    const bankName = window.prompt('Bank name (e.g. HDFC Bank):')
+   362→    if (!bankName?.trim()) return
+   363→    const balanceStr = window.prompt('Current balance (₹):', '0')
+   364→    if (balanceStr === null) return
+   365→    const balance = Number(balanceStr) || 0
+   366→    const last4 = window.prompt('Last 4 digits of account number (optional):', '') || ''
+   367→    const masked = last4.trim() ? `XXXX${last4.trim().padStart(4, '0').slice(-4)}` : 'XXXX0000'
+   368→    setBusyId('new-account')
+   369→    try {
+   370→      await createBankAccount({
+   371→        userId: user?.id || '',
+   372→        bankName: bankName.trim(),
+   373→        accountNumberMasked: masked,
+   374→        accountType: 'current',
+   375→        ifsc: null,
+   376→        currentBalance: balance,
+   377→        availableBalance: balance,
+   378→        currency: 'INR',
+   379→        status: 'connected',
+   380→        lastSyncAt: new Date().toISOString(),
+   381→        connectionId: null,
+   382→      })
+   383→      toast.success('Bank account connected')
+   384→    } catch (err) {
+   385→      toast.error(err instanceof Error ? err.message : 'Failed to connect bank account')
+   386→    } finally {
+   387→      setBusyId(null)
+   388→    }
+   389→  }, [user?.id])
+   390→
+   391→  const handleSyncAccount = useCallback(async (acc: BankAccount) => {
+   392→    setBusyId(acc.id)
+   393→    try {
+   394→      await updateBankAccount(acc.id, {
+   395→        status: 'connected',
+   396→        lastSyncAt: new Date().toISOString(),
+   397→      })
+   398→      toast.success(`${acc.bank} synced`)
+   399→    } catch (err) {
+   400→      toast.error(err instanceof Error ? err.message : 'Failed to sync account')
+   401→    } finally {
+   402→      setBusyId(null)
+   403→    }
+   404→  }, [])
+   405→
+   406→  const handleSyncAll = useCallback(async () => {
+   407→    if (bankAccounts.length === 0) {
+   408→      toast.error('No bank accounts to sync')
+   409→      return
+   410→    }
+   411→    setBusyId('sync-all')
+   412→    try {
+   413→      const now = new Date().toISOString()
+   414→      await Promise.all(
+   415→        bankAccounts.map((acc) =>
+   416→          updateBankAccount(acc.id, { status: 'connected', lastSyncAt: now }),
+   417→        ),
+   418→      )
+   419→      toast.success(`Synced ${bankAccounts.length} account${bankAccounts.length === 1 ? '' : 's'}`)
+   420→    } catch (err) {
+   421→      toast.error(err instanceof Error ? err.message : 'Failed to sync accounts')
+   422→    } finally {
+   423→      setBusyId(null)
+   424→    }
+   425→  }, [bankAccounts])
+   426→
+   427→  const handleAutoReconcile = useCallback(async () => {
+   428→    const unmatched = reconciliationData.filter((r) => r.status !== 'matched')
+   429→    if (unmatched.length === 0) {
+   430→      toast.success('All payments are already reconciled')
+   431→      return
+   432→    }
+   433→    setBusyId('auto-reconcile')
+   434→    try {
+   435→      await Promise.all(
+   436→        unmatched.map((r) => updatePayment(r.id, { reconciled: true })),
+   437→      )
+   438→      toast.success(`Reconciled ${unmatched.length} payment${unmatched.length === 1 ? '' : 's'}`)
+   439→    } catch (err) {
+   440→      toast.error(err instanceof Error ? err.message : 'Failed to auto-reconcile')
+   441→    } finally {
+   442→      setBusyId(null)
+   443→    }
+   444→  }, [reconciliationData])
+   445→
+   446→  const handleMatchRow = useCallback(async (id: string) => {
+   447→    setBusyId(id)
+   448→    try {
+   449→      await updatePayment(id, { reconciled: true })
+   450→      toast.success('Payment marked as reconciled')
+   451→    } catch (err) {
+   452→      toast.error(err instanceof Error ? err.message : 'Failed to match payment')
+   453→    } finally {
+   454→      setBusyId(null)
+   455→    }
+   456→  }, [])
+   457→
+   458→  return (
+   459→    <div
+   460→      key={retryKey}
+   461→      className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-emerald-50/30 dark:from-slate-950 dark:via-slate-900 dark:to-emerald-950/20"
+   462→    >
+   463→      {/* Sticky Header */}
+   464→      <div className="sticky top-0 z-20 bg-white/80 backdrop-blur-md border-b dark:bg-slate-900/80">
+   465→        <div className="px-4 sm:px-6 py-4 flex items-center justify-between">
+   466→          <div className="flex items-center gap-3">
+   467→            <div className="h-9 w-9 rounded-lg bg-emerald-600 flex items-center justify-center shadow-md shadow-emerald-600/20">
+   468→              <Landmark className="h-5 w-5 text-white" />
+   469→            </div>
+   470→            <div>
+   471→              <h1 className="text-lg font-bold text-slate-900 dark:text-white">Banking</h1>
+   472→              <p className="text-xs text-muted-foreground">Accounts & Reconciliation &middot; FY 2025-26</p>
+   473→            </div>
+   474→          </div>
+   475→          <div className="flex items-center gap-2">
+   476→            <Button
+   477→              variant="outline"
+   478→              size="sm"
+   479→              className="gap-1.5"
+   480→              onClick={handleSyncAll}
+   481→              disabled={busyId === 'sync-all' || bankAccounts.length === 0}
+   482→            >
+   483→              {(busyId === 'sync-all') ? (
+   484→                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+   485→              ) : (
+   486→                <RefreshCw className="h-3.5 w-3.5" />
+   487→              )}
+   488→              Sync All
+   489→            </Button>
+   490→            <Button
+   491→              size="sm"
+   492→              className="gap-1.5 bg-emerald-600 hover:bg-emerald-700"
+   493→              onClick={handleAddAccount}
+   494→              disabled={busyId === 'new-account'}
+   495→            >
+   496→              {busyId === 'new-account' ? (
+   497→                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+   498→              ) : (
+   499→                <Plus className="h-3.5 w-3.5" />
+   500→              )}
+   501→              Add Account
+   502→            </Button>
+   503→          </div>
+   504→        </div>
+   505→        <Tabs value={activeTab} onValueChange={setActiveTab} className="px-4 sm:px-6">
+   506→          <TabsList className="bg-transparent h-9 p-0 gap-1 border-b-0">
+   507→            {['overview', 'accounts', 'transactions', 'reconciliation', 'statements'].map(t => (
+   508→              <TabsTrigger key={t} value={t} className="rounded-t-lg rounded-b-none data-[state=active]:bg-emerald-50 data-[state=active]:text-emerald-700 dark:data-[state=active]:bg-emerald-900/20 dark:data-[state=active]:text-emerald-400 text-xs px-3 h-8 capitalize">
+   509→                {t}
+   510→              </TabsTrigger>
+   511→            ))}
+   512→          </TabsList>
+   513→        </Tabs>
+   514→      </div>
+   515→
+   516→      <div className="px-4 sm:px-6 py-6 max-w-[1400px] mx-auto">
+   517→        {/* ── Error banner ── */}
+   518→        {error && !loading && (
+   519→          <Card className="mb-6 border-rose-200 dark:border-rose-900/60">
+   520→            <CardContent className="p-4 flex items-center justify-between gap-3">
+   521→              <div className="flex items-center gap-3">
+   522→                <div className="h-9 w-9 rounded-lg bg-rose-100 dark:bg-rose-900/30 flex items-center justify-center">
+   523→                  <AlertCircle className="h-4.5 w-4.5 text-rose-600 dark:text-rose-400" />
+   524→                </div>
+   525→                <div>
+   526→                  <p className="text-sm font-semibold text-slate-900 dark:text-white">Failed to load banking data</p>
+   527→                  <p className="text-xs text-muted-foreground">{error}</p>
+   528→                </div>
+   529→              </div>
+   530→              <Button
+   531→                variant="outline"
+   532→                size="sm"
+   533→                className="gap-1.5"
+   534→                onClick={() => setRetryKey((k) => k + 1)}
+   535→              >
+   536→                <RefreshCw className="h-3.5 w-3.5" /> Retry
+   537→              </Button>
+   538→            </CardContent>
+   539→          </Card>
+   540→        )}
+   541→
+   542→        <Tabs value={activeTab} onValueChange={setActiveTab}>
+   543→          {/* ─── OVERVIEW TAB ─── */}
+   544→          <TabsContent value="overview" className="mt-0 space-y-6">
+   545→            {/* Stat Cards */}
+   546→            {loading ? (
+   547→              <div className="flex items-center justify-center py-12">
+   548→                <Loader2 className="h-5 w-5 animate-spin text-emerald-600" />
+   549→              </div>
+   550→            ) : (
+   551→              <motion.div variants={container} initial="hidden" animate="show" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+   552→                {statCards.map((s) => {
+   553→                  const Icon = s.icon
+   554→                  const hasValue = s.value !== null && s.value !== undefined
+   555→                  return (
+   556→                    <motion.div key={s.label} variants={item}>
+   557→                      <Card className="hover:shadow-md transition-shadow border-slate-200/60 dark:border-slate-800/60">
+   558→                        <CardContent className="p-4">
+   559→                          <div className="flex items-center justify-between mb-3">
+   560→                            <div className={`h-9 w-9 rounded-lg flex items-center justify-center ${s.color === 'emerald' ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400' : s.color === 'amber' ? 'bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400' : 'bg-rose-100 text-rose-600 dark:bg-rose-900/30 dark:text-rose-400'}`}>
+   561→                              <Icon className="h-4.5 w-4.5" />
+   562→                            </div>
+   563→                          </div>
+   564→                          <p className="text-xl font-bold text-slate-900 dark:text-white">
+   565→                            {hasValue ? (typeof s.value === 'number' && s.value > 100 ? fmtINR(s.value) : s.value) : '—'}
+   566→                          </p>
+   567→                          <p className="text-xs text-muted-foreground mt-0.5">{s.label}</p>
+   568→                        </CardContent>
+   569→                      </Card>
+   570→                    </motion.div>
+   571→                  )
+   572→                })}
+   573→              </motion.div>
+   574→            )}
+   575→
+   576→            {/* Balance Trend + Account Summary */}
+   577→            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+   578→              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}>
+   579→                <Card className="border-slate-200/60 dark:border-slate-800/60">
+   580→                  <CardHeader className="pb-3">
+   581→                    <CardTitle className="text-sm font-semibold flex items-center gap-2">
+   582→                      <TrendingUp className="h-4 w-4 text-emerald-600" /> Balance Trend (7 Days)
+   583→                    </CardTitle>
+   584→                  </CardHeader>
+   585→                  <CardContent>
+   586→                    {balanceTrendData.length === 0 ? (
+   587→                      <EmptyState
+   588→                        icon={TrendingUp}
+   589→                        title="No balance history yet"
+   590→                        description="Bank balance trends will appear here once your bank connection syncs historical data."
+   591→                        compact
+   592→                      />
+   593→                    ) : (
+   594→                      <>
+   595→                        <div className="flex justify-center pb-2">
+   596→                          <BalanceTrendChart data={balanceTrendData} />
+   597→                        </div>
+   598→                        <Separator className="my-3" />
+   599→                        <div className="grid grid-cols-3 gap-3 text-center">
+   600→                          <div>
+   601→                            <p className="text-sm font-bold text-slate-900 dark:text-white">{bankAccounts.length > 0 ? fmtINR(totalBalance) : '—'}</p>
+   602→                            <p className="text-[10px] text-muted-foreground">Current</p>
+   603→                          </div>
+   604→                          <div>
+   605→                            <p className="text-sm font-bold text-emerald-600 dark:text-emerald-400">—</p>
+   606→                            <p className="text-[10px] text-muted-foreground">7-Day Change</p>
+   607→                          </div>
+   608→                          <div>
+   609→                            <p className="text-sm font-bold text-slate-900 dark:text-white">{transactions.length > 0 ? fmtINR(inTransitAmount) : '—'}</p>
+   610→                            <p className="text-[10px] text-muted-foreground">In Transit</p>
+   611→                          </div>
+   612→                        </div>
+   613→                      </>
+   614→                    )}
+   615→                  </CardContent>
+   616→                </Card>
+   617→              </motion.div>
+   618→
+   619→              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
+   620→                <Card className="border-slate-200/60 dark:border-slate-800/60">
+   621→                  <CardHeader className="pb-3">
+   622→                    <CardTitle className="text-sm font-semibold flex items-center gap-2">
+   623→                      <Building2 className="h-4 w-4 text-emerald-600" /> Account Overview
+   624→                    </CardTitle>
+   625→                  </CardHeader>
+   626→                  <CardContent className="space-y-2">
+   627→                    {bankAccounts.length === 0 ? (
+   628→                      <EmptyState
+   629→                        icon={Landmark}
+   630→                        title="No bank connected"
+   631→                        description="Connect your bank account to view balances and transactions."
+   632→                        action={{ label: 'Connect Bank', onClick: () => setCurrentView('connections') }}
+   633→                        compact
+   634→                      />
+   635→                    ) : (
+   636→                      bankAccounts.map(acc => (
+   637→                        <div key={acc.id} className="flex items-center justify-between p-2.5 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors cursor-pointer">
+   638→                          <div className="flex items-center gap-3">
+   639→                            <div className="h-8 w-8 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center">
+   640→                              <Landmark className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+   641→                            </div>
+   642→                            <div>
+   643→                              <p className="text-xs font-medium text-slate-900 dark:text-white">{acc.bank}</p>
+   644→                              <p className="text-[10px] text-muted-foreground">{acc.type} &middot; ****{acc.account.slice(-4)}</p>
+   645→                            </div>
+   646→                          </div>
+   647→                          <div className="text-right">
+   648→                            <p className="text-xs font-bold text-slate-900 dark:text-white">{fmtINR(acc.balance)}</p>
+   649→                            <Badge variant="secondary" className={`text-[9px] ${statusColors[acc.status]}`}>{acc.status}</Badge>
+   650→                          </div>
+   651→                        </div>
+   652→                      ))
+   653→                    )}
+   654→                  </CardContent>
+   655→                </Card>
+   656→              </motion.div>
+   657→            </div>
+   658→
+   659→            {/* Reconciliation Summary + Latest Transactions */}
+   660→            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+   661→              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.35 }}>
+   662→                <Card className="border-slate-200/60 dark:border-slate-800/60">
+   663→                  <CardHeader className="pb-3">
+   664→                    <CardTitle className="text-sm font-semibold flex items-center gap-2">
+   665→                      <Shield className="h-4 w-4 text-emerald-600" /> Auto-Reconciliation Progress
+   666→                    </CardTitle>
+   667→                  </CardHeader>
+   668→                  <CardContent>
+   669→                    {reconciliationData.length === 0 ? (
+   670→                      <EmptyState
+   671→                        icon={Shield}
+   672→                        title="No reconciliations yet"
+   673→                        description="Bank-to-book matches will appear here once payments are reconciled."
+   674→                        compact
+   675→                      />
+   676→                    ) : (
+   677→                      <>
+   678→                        <div className="flex items-center justify-around">
+   679→                          <ReconcileDonut reconciled={matchedCount} unreconciled={unmatchedCount} />
+   680→                          <div className="space-y-3">
+   681→                            <div className="flex items-center gap-2">
+   682→                              <CircleCheck className="h-4 w-4 text-emerald-500" />
+   683→                              <div>
+   684→                                <p className="text-xs font-semibold text-slate-900 dark:text-white">{matchedCount} Matched</p>
+   685→                                <p className="text-[10px] text-muted-foreground">Auto-reconciled</p>
+   686→                              </div>
+   687→                            </div>
+   688→                            <div className="flex items-center gap-2">
+   689→                              <CircleDot className="h-4 w-4 text-amber-500" />
+   690→                              <div>
+   691→                                <p className="text-xs font-semibold text-slate-900 dark:text-white">{unmatchedOnlyCount} Unmatched</p>
+   692→                                <p className="text-[10px] text-muted-foreground">Needs review</p>
+   693→                              </div>
+   694→                            </div>
+   695→                            <div className="flex items-center gap-2">
+   696→                              <CircleX className="h-4 w-4 text-rose-500" />
+   697→                              <div>
+   698→                                <p className="text-xs font-semibold text-slate-900 dark:text-white">{disputedCount} Disputed</p>
+   699→                                <p className="text-[10px] text-muted-foreground">Amount mismatch</p>
+   700→                              </div>
+   701→                            </div>
+   702→                          </div>
+   703→                        </div>
+   704→                        <Separator className="my-3" />
+   705→                        <div className="flex justify-between items-center">
+   706→                          <span className="text-xs text-muted-foreground">Last auto-reconcile: {reconciliationData.length > 0 ? reconciliationData[0].date : '—'}</span>
+   707→                          <Button
+   708→                            variant="outline"
+   709→                            size="sm"
+   710→                            className="h-7 text-[10px] gap-1"
+   711→                            onClick={handleAutoReconcile}
+   712→                            disabled={busyId === 'auto-reconcile'}
+   713→                          >
+   714→                            {busyId === 'auto-reconcile' ? (
+   715→                              <Loader2 className="h-3 w-3 animate-spin" />
+   716→                            ) : (
+   717→                              <RefreshCw className="h-3 w-3" />
+   718→                            )}
+   719→                            Run Now
+   720→                          </Button>
+   721→                        </div>
+   722→                      </>
+   723→                    )}
+   724→                  </CardContent>
+   725→                </Card>
+   726→              </motion.div>
+   727→
+   728→              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }}>
+   729→                <Card className="border-slate-200/60 dark:border-slate-800/60">
+   730→                  <CardHeader className="pb-3">
+   731→                    <CardTitle className="text-sm font-semibold flex items-center gap-2">
+   732→                      <FileText className="h-4 w-4 text-emerald-600" /> Latest Transactions
+   733→                    </CardTitle>
+   734→                  </CardHeader>
+   735→                  <CardContent className="p-0">
+   736→                    {transactions.length === 0 ? (
+   737→                      <EmptyState
+   738→                        icon={FileText}
+   739→                        title="No transactions"
+   740→                        description="Bank transactions will appear here once you connect and sync a bank account."
+   741→                        compact
+   742→                      />
+   743→                    ) : (
+   744→                      <ScrollArea className="max-h-64">
+   745→                        <div className="px-4 pb-4 space-y-1">
+   746→                          {transactions.slice(0, 6).map(txn => (
+   747→                            <div key={txn.id} className="flex items-center justify-between py-2 border-b last:border-b-0 dark:border-slate-800/60 hover:bg-slate-50 dark:hover:bg-slate-800/40 rounded px-2 transition-colors">
+   748→                              <div className="flex items-center gap-2">
+   749→                                <div className={`h-6 w-6 rounded-full flex items-center justify-center ${txn.type === 'credit' ? 'bg-emerald-100 dark:bg-emerald-900/30' : 'bg-rose-100 dark:bg-rose-900/30'}`}>
+   750→                                  {txn.type === 'credit' ? <ArrowDownRight className="h-3 w-3 text-emerald-600 dark:text-emerald-400" /> : <ArrowUpRight className="h-3 w-3 text-rose-500 dark:text-rose-400" />}
+   751→                                </div>
+   752→                                <div className="min-w-0">
+   753→                                  <p className="text-xs text-slate-700 dark:text-slate-300 truncate">{txn.description}</p>
+   754→                                  <p className="text-[10px] text-muted-foreground">{txn.date} &middot; {txn.account}</p>
+   755→                                </div>
+   756→                              </div>
+   757→                              <div className="text-right ml-2">
+   758→                                <p className={`text-xs font-bold ${txn.type === 'credit' ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500 dark:text-rose-400'}`}>
+   759→                                  {txn.type === 'credit' ? '+' : '-'}{fmtINR(txn.amount)}
+   760→                                </p>
+   761→                                <Badge variant="secondary" className={`text-[8px] h-4 ${categoryColors[txn.category] || ''}`}>{txn.category}</Badge>
+   762→                              </div>
+   763→                            </div>
+   764→                          ))}
+   765→                        </div>
+   766→                      </ScrollArea>
+   767→                    )}
+   768→                  </CardContent>
+   769→                </Card>
+   770→              </motion.div>
+   771→            </div>
+   772→          </TabsContent>
+   773→
+   774→          {/* ─── ACCOUNTS TAB ─── */}
+   775→          <TabsContent value="accounts" className="mt-0 space-y-4">
+   776→            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+   777→              {bankAccounts.length === 0 ? (
+   778→                <Card className="border-slate-200/60 dark:border-slate-800/60">
+   779→                  <CardContent>
+   780→                    <EmptyState
+   781→                      icon={Landmark}
+   782→                      title="No bank connected"
+   783→                      description="Connect your bank account to view balances and transactions."
+   784→                      action={{ label: 'Connect Bank', onClick: () => setCurrentView('connections') }}
+   785→                    />
+   786→                  </CardContent>
+   787→                </Card>
+   788→              ) : (
+   789→                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+   790→                  {bankAccounts.map((acc, i) => (
+   791→                    <motion.div key={acc.id} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.08 }}>
+   792→                      <Card className="hover:shadow-md transition-all border-slate-200/60 dark:border-slate-800/60 cursor-pointer group">
+   793→                        <CardContent className="p-4">
+   794→                          <div className="flex items-center justify-between mb-3">
+   795→                            <div className="flex items-center gap-2">
+   796→                              <div className="h-8 w-8 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center">
+   797→                                <Landmark className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+   798→                              </div>
+   799→                              <div>
+   800→                                <p className="text-xs font-semibold text-slate-900 dark:text-white">{acc.bank}</p>
+   801→                                <p className="text-[10px] text-muted-foreground">{acc.type}</p>
+   802→                              </div>
+   803→                            </div>
+   804→                            <Badge variant="secondary" className={`text-[9px] ${statusColors[acc.status]}`}>{acc.status}</Badge>
+   805→                          </div>
+   806→                          <p className="text-lg font-bold text-slate-900 dark:text-white">{fmtINR(acc.balance)}</p>
+   807→                          <p className="text-[10px] text-muted-foreground mt-1">A/C: ****{acc.account.slice(-4)}</p>
+   808→                          <Separator className="my-2" />
+   809→                          <div className="flex justify-between items-center">
+   810→                            <span className="text-[10px] text-muted-foreground">Synced: {acc.lastSync}</span>
+   811→                            <Button
+   812→                              variant="ghost"
+   813→                              size="sm"
+   814→                              className="h-6 text-[10px] gap-1"
+   815→                              onClick={() => handleSyncAccount(acc)}
+   816→                              disabled={busyId === acc.id}
+   817→                            >
+   818→                              {busyId === acc.id ? (
+   819→                                <Loader2 className="h-3 w-3 animate-spin" />
+   820→                              ) : (
+   821→                                <RefreshCw className="h-3 w-3" />
+   822→                              )}
+   823→                              Sync
+   824→                            </Button>
+   825→                          </div>
+   826→                        </CardContent>
+   827→                      </Card>
+   828→                    </motion.div>
+   829→                  ))}
+   830→                </div>
+   831→              )}
+   832→            </motion.div>
+   833→          </TabsContent>
+   834→
+   835→          {/* ─── TRANSACTIONS TAB ─── */}
+   836→          <TabsContent value="transactions" className="mt-0 space-y-4">
+   837→            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+   838→              <div className="flex items-center justify-between mb-4">
+   839→                <div className="flex items-center gap-2">
+   840→                  <Input placeholder="Search transactions..." className="w-64 h-8 text-xs" value={searchQ} onChange={e => setSearchQ(e.target.value)} />
+   841→                  <Button variant="outline" size="sm" className="gap-1.5 h-8"><Filter className="h-3 w-3" />Filter</Button>
+   842→                </div>
+   843→                <Button variant="outline" size="sm" className="gap-1.5 h-8"><Download className="h-3.5 w-3.5" />Download</Button>
+   844→              </div>
+   845→              <Card className="border-slate-200/60 dark:border-slate-800/60">
+   846→                <CardContent className="p-0">
+   847→                  {transactions.length === 0 ? (
+   848→                    <EmptyState
+   849→                      icon={FileText}
+   850→                      title="No transactions"
+   851→                      description="Bank transactions will appear here once you connect and sync a bank account."
+   852→                    />
+   853→                  ) : (
+   854→                    <ScrollArea className="max-h-[600px]">
+   855→                      <div className="divide-y dark:divide-slate-800/60">
+   856→                        {transactions.map((txn, i) => (
+   857→                          <motion.div key={txn.id} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.03 }} className="flex items-center justify-between px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
+   858→                            <div className="flex items-center gap-3">
+   859→                              <div className={`h-9 w-9 rounded-lg flex items-center justify-center ${txn.type === 'credit' ? 'bg-emerald-100 dark:bg-emerald-900/30' : 'bg-rose-100 dark:bg-rose-900/30'}`}>
+   860→                                {txn.type === 'credit' ? <ArrowDownRight className="h-4 w-4 text-emerald-600 dark:text-emerald-400" /> : <ArrowUpRight className="h-4 w-4 text-rose-500 dark:text-rose-400" />}
+   861→                              </div>
+   862→                              <div>
+   863→                                <p className="text-xs font-medium text-slate-900 dark:text-white">{txn.description}</p>
+   864→                                <div className="flex items-center gap-2 mt-0.5">
+   865→                                  <span className="text-[10px] text-muted-foreground">{txn.date}</span>
+   866→                                  <Badge variant="secondary" className={`text-[9px] h-4 ${categoryColors[txn.category] || ''}`}>{txn.category}</Badge>
+   867→                                  <span className="text-[10px] text-muted-foreground">{txn.account}</span>
+   868→                                </div>
+   869→                              </div>
+   870→                            </div>
+   871→                            <div className="flex items-center gap-3">
+   872→                              <div className="text-right">
+   873→                                <p className={`text-sm font-bold ${txn.type === 'credit' ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500 dark:text-rose-400'}`}>
+   874→                                  {txn.type === 'credit' ? '+' : '-'}{fmtINR(txn.amount)}
+   875→                                </p>
+   876→                                <p className="text-[10px] text-muted-foreground">Bal: {txn.balance === null ? '—' : fmtINR(txn.balance)}</p>
+   877→                              </div>
+   878→                              <ChevronRight className="h-4 w-4 text-muted-foreground" />
+   879→                            </div>
+   880→                          </motion.div>
+   881→                        ))}
+   882→                      </div>
+   883→                    </ScrollArea>
+   884→                  )}
+   885→                </CardContent>
+   886→              </Card>
+   887→            </motion.div>
+   888→          </TabsContent>
+   889→
+   890→          {/* ─── RECONCILIATION TAB ─── */}
+   891→          <TabsContent value="reconciliation" className="mt-0 space-y-4">
+   892→            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+   893→              <div className="flex items-center justify-between mb-4">
+   894→                <div className="flex gap-2 text-xs">
+   895→                  <span className="flex items-center gap-1"><CircleDot className="h-3 w-3 text-emerald-500" />Matched: {matchedCount}</span>
+   896→                  <span className="flex items-center gap-1"><CircleDot className="h-3 w-3 text-amber-500" />Unmatched: {reconciliationData.filter(r => r.status === 'unmatched').length}</span>
+   897→                  <span className="flex items-center gap-1"><CircleDot className="h-3 w-3 text-rose-500" />Disputed: {reconciliationData.filter(r => r.status === 'disputed').length}</span>
+   898→                </div>
+   899→                <Button
+   900→                  size="sm"
+   901→                  variant="outline"
+   902→                  className="gap-1.5"
+   903→                  onClick={handleAutoReconcile}
+   904→                  disabled={busyId === 'auto-reconcile'}
+   905→                >
+   906→                  {busyId === 'auto-reconcile' ? (
+   907→                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+   908→                  ) : (
+   909→                    <RefreshCw className="h-3.5 w-3.5" />
+   910→                  )}
+   911→                  Auto-Reconcile
+   912→                </Button>
+   913→              </div>
+   914→              <Card className="border-slate-200/60 dark:border-slate-800/60">
+   915→                <CardContent className="p-0">
+   916→                  {reconciliationData.length === 0 ? (
+   917→                    <EmptyState
+   918→                      icon={ArrowRightLeft}
+   919→                      title="No reconciliations yet"
+   920→                      description="Bank-to-book matches will appear here once payments are reconciled."
+   921→                    />
+   922→                  ) : (
+   923→                    <div className="divide-y dark:divide-slate-800/60">
+   924→                      {reconciliationData.map((rc, i) => (
+   925→                        <motion.div key={rc.id} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.04 }} className="flex items-center justify-between px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
+   926→                          <div className="flex items-center gap-3">
+   927→                            <div className={`h-9 w-9 rounded-lg flex items-center justify-center ${rc.status === 'matched' ? 'bg-emerald-100 dark:bg-emerald-900/30' : rc.status === 'disputed' ? 'bg-rose-100 dark:bg-rose-900/30' : 'bg-amber-100 dark:bg-amber-900/30'}`}>
+   928→                              <ArrowRightLeft className={`h-4 w-4 ${rc.status === 'matched' ? 'text-emerald-600 dark:text-emerald-400' : rc.status === 'disputed' ? 'text-rose-500 dark:text-rose-400' : 'text-amber-600 dark:text-amber-400'}`} />
+   929→                            </div>
+   930→                            <div>
+   931→                              <div className="flex items-center gap-2">
+   932→                                <span className="text-xs font-mono text-muted-foreground">{rc.bankTxn}</span>
+   933→                                <Badge variant="secondary" className={`text-[9px] ${statusColors[rc.status]}`}>{rc.status}</Badge>
+   934→                              </div>
+   935→                              <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
+   936→                                {rc.bookEntry ? `Book: ${rc.bookEntry}` : 'No book entry found'}
+   937→                              </p>
+   938→                              <p className="text-[10px] text-muted-foreground">{rc.date} &middot; {rc.account}</p>
+   939→                            </div>
+   940→                          </div>
+   941→                          <div className="flex items-center gap-3">
+   942→                            <span className="text-sm font-bold text-slate-900 dark:text-white">{fmtINR(rc.amount)}</span>
+   943→                            {rc.status === 'unmatched' && (
+   944→                              <Button
+   945→                                variant="outline"
+   946→                                size="sm"
+   947→                                className="h-7 text-[10px]"
+   948→                                onClick={() => handleMatchRow(rc.id)}
+   949→                                disabled={busyId === rc.id}
+   950→                              >
+   951→                                {busyId === rc.id ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Match'}
+   952→                              </Button>
+   953→                            )}
+   954→                            {rc.status === 'disputed' && (
+   955→                              <Button
+   956→                                variant="outline"
+   957→                                size="sm"
+   958→                                className="h-7 text-[10px]"
+   959→                                onClick={() => handleMatchRow(rc.id)}
+   960→                                disabled={busyId === rc.id}
+   961→                              >
+   962→                                {busyId === rc.id ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Resolve'}
+   963→                              </Button>
+   964→                            )}
+   965→                          </div>
+   966→                        </motion.div>
+   967→                      ))}
+   968→                    </div>
+   969→                  )}
+   970→                </CardContent>
+   971→              </Card>
+   972→            </motion.div>
+   973→          </TabsContent>
+   974→
+   975→          {/* ─── STATEMENTS TAB ─── */}
+   976→          <TabsContent value="statements" className="mt-0 space-y-4">
+   977→            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+   978→              <div className="flex items-center justify-between mb-4">
+   979→                <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Bank Statements</h3>
+   980→                <Button size="sm" className="gap-1.5 bg-emerald-600 hover:bg-emerald-700"><Download className="h-3.5 w-3.5" />Import Statement</Button>
+   981→              </div>
+   982→              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+   983→                {statements.length === 0 ? (
+   984→                  <div className="col-span-full">
+   985→                    <Card className="border-slate-200/60 dark:border-slate-800/60">
+   986→                      <CardContent>
+   987→                        <EmptyState
+   988→                          icon={FileText}
+   989→                          title="No statements"
+   990→                          description="Imported bank statements will appear here for download and review."
+   991→                          action={{ label: 'Import Statement', onClick: () => setCurrentView('connections') }}
+   992→                        />
+   993→                      </CardContent>
+   994→                    </Card>
+   995→                  </div>
+   996→                ) : (
+   997→                  statements.map((st, i) => (
+   998→                    <motion.div key={st.id} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.06 }}>
+   999→                      <Card className="hover:shadow-md transition-shadow border-slate-200/60 dark:border-slate-800/60">
+  1000→                        <CardContent className="p-4">
+  1001→                          <div className="flex items-center justify-between mb-2">
+  1002→                            <span className="text-xs font-mono text-muted-foreground">{st.id}</span>
+  1003→                            <Badge variant="secondary" className={`text-[9px] ${statusColors[st.status]}`}>{st.status}</Badge>
+  1004→                          </div>
+  1005→                          <h3 className="text-sm font-semibold text-slate-900 dark:text-white">{st.account}</h3>
+  1006→                          <p className="text-xs text-muted-foreground mt-1">Period: {st.period}</p>
+  1007→                          <p className="text-[10px] text-muted-foreground">{st.transactions} transactions &middot; Generated: {st.generated}</p>
+  1008→                          <Separator className="my-2" />
+  1009→                          <div className="flex justify-end">
+  1010→                            <Button variant="outline" size="sm" className="h-7 text-[10px] gap-1"><Download className="h-3 w-3" />Download</Button>
+  1011→                          </div>
+  1012→                        </CardContent>
+  1013→                      </Card>
+  1014→                    </motion.div>
+  1015→                  ))
+  1016→                )}
+  1017→              </div>
+  1018→            </motion.div>
+  1019→          </TabsContent>
+  1020→        </Tabs>
+  1021→      </div>
+  1022→    </div>
+  1023→  )
+  1024→}
+  1025→

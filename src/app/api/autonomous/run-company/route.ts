@@ -24,6 +24,7 @@ import { runHealthChecks } from '@/lib/autonomous/self-healing';
 import { invalidateAutonomousCache } from '@/lib/autonomous/orchestrator';
 import { db } from '@/lib/db';
 import { AUTONOMOUS_TAGLINE } from '@/lib/autonomous/types';
+import { safeAudit } from '@/lib/audit/safe-write';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -52,25 +53,21 @@ export async function POST(req: NextRequest) {
     // 6. Run system health checks
     const systemHealth = await runHealthChecks();
 
-    // 7. Audit log the run-company invocation
-    try {
-      await db.auditLog.create({
-        data: {
-          action: 'AUTONOMOUS_RUN_COMPANY',
-          entity: 'AutonomousEnterprise',
-          entityId: meeting.id,
-          userId: userId ?? null,
-          details: JSON.stringify({
-            dryRun: Boolean(dryRun),
-            healthScore: commandCenter.companyHealthScore,
-            decisionsCount: decisions.length,
-            alertsCount: alerts.length,
-            meetingConsensus: meeting.consensus,
-            dataSources,
-          }),
-        },
-      });
-    } catch { /* audit is best-effort */ }
+    // 7. Audit log the run-company invocation (safe-write: never throws).
+    await safeAudit({
+      action: 'AUTONOMOUS_RUN_COMPANY',
+      entity: 'AutonomousEnterprise',
+      entityId: meeting.id,
+      userId: userId ?? null,
+      details: JSON.stringify({
+        dryRun: Boolean(dryRun),
+        healthScore: commandCenter.companyHealthScore,
+        decisionsCount: decisions.length,
+        alertsCount: alerts.length,
+        meetingConsensus: meeting.consensus,
+        dataSources,
+      }),
+    });
 
     invalidateAutonomousCache();
 

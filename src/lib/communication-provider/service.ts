@@ -117,6 +117,56 @@ function toAttachmentArray(raw: unknown): EmailAttachment[] {
   });
 }
 
+// ─── Firestore timeout guard ─────────────────────────────────────────────────
+// When the Firebase project has the Firestore API disabled (or the network is
+// unreachable), the Firestore SDK retries PERMISSION_DENIED with exponential
+// backoff for ~120s before rejecting. Every `addDoc` / `getDocs` / etc. would
+// therefore stall the request for two full minutes.
+//
+// `withTimeout` races any Firestore operation against a 6s deadline. On timeout
+// it rejects with a `CommunicationError` (FIRESTORE_TIMEOUT / 503) so the
+// orchestrator + API routes can surface a fast, friendly error instead of a
+// hang. The original promise is `.catch(()=>{})`-swallowed so its eventual
+// rejection never becomes an unhandled rejection.
+const FIRESTORE_TIMEOUT_MS = 6000;
+
+function withTimeout<T>(promise: Promise<T>, label: string): Promise<T> {
+  // Swallow the eventual rejection of the underlying op (Firestore keeps
+  // retrying for ~120s; by then we've already returned a fast error).
+  promise.catch(() => { /* timed-out op — ignore late rejection */ });
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(
+        () =>
+          reject(
+            new CommunicationError(
+              `${label} timed out — Firestore may be unreachable. Enable the Firestore API for your Firebase project or check your network.`,
+              { code: 'FIRESTORE_TIMEOUT', statusCode: 503 },
+            ),
+          ),
+        FIRESTORE_TIMEOUT_MS,
+      ),
+    ),
+  ]);
+}
+
+// Thin wrappers so every call site gets the timeout for free.
+const safeAddDoc = <T>(ref: ReturnType<typeof collection>, data: T) =>
+  withTimeout(addDoc(ref, data as Record<string, unknown>), 'Firestore addDoc');
+const safeSetDoc = (ref: ReturnType<typeof doc>, data: unknown, opts?: { merge?: boolean }) =>
+  withTimeout(setDoc(ref, data as Record<string, unknown>, opts), 'Firestore setDoc');
+const safeUpdateDoc = (ref: ReturnType<typeof doc>, data: unknown) =>
+  withTimeout(updateDoc(ref, data as Record<string, unknown>), 'Firestore updateDoc');
+const safeDeleteDoc = (ref: ReturnType<typeof doc>) =>
+  withTimeout(deleteDoc(ref), 'Firestore deleteDoc');
+const safeGetDoc = (ref: ReturnType<typeof doc>) =>
+  withTimeout(getDoc(ref), 'Firestore getDoc');
+const safeGetDocs = (q: ReturnType<typeof query>) =>
+  withTimeout(getDocs(q), 'Firestore getDocs');
+const safeCommit = (batch: ReturnType<typeof writeBatch>) =>
+  withTimeout(batch.commit(), 'Firestore writeBatch.commit');
+
 // ─── Gmail Connection ────────────────────────────────────────────────────────
 
 export function toGmailConnection(id: string, raw: Record<string, unknown>): GmailConnection {
@@ -162,7 +212,7 @@ export async function getGmailConnections(organizationId: string): Promise<Gmail
     collection(db, COMMUNICATION_COLLECTIONS.GMAIL_CONNECTIONS),
     where('organizationId', '==', organizationId),
   );
-  const snap = await getDocs(q);
+  const snap = await safeGetDocs(q);
   return snap.docs.map((d) => toGmailConnection(d.id, d.data() as Record<string, unknown>));
 }
 
@@ -171,7 +221,7 @@ export async function saveGmailConnection(
   data: Omit<GmailConnection, 'id' | 'createdAt' | 'updatedAt'>,
 ): Promise<string> {
   assertOrg(organizationId);
-  const ref = await addDoc(collection(db, COMMUNICATION_COLLECTIONS.GMAIL_CONNECTIONS), {
+  const ref = await safeAddDoc(collection(db, COMMUNICATION_COLLECTIONS.GMAIL_CONNECTIONS), {
     ...data,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
@@ -186,12 +236,12 @@ export async function updateGmailConnection(
 ): Promise<void> {
   assertOrg(organizationId);
   const ref = doc(db, COMMUNICATION_COLLECTIONS.GMAIL_CONNECTIONS, connectionId);
-  await updateDoc(ref, { ...patch, updatedAt: serverTimestamp() });
+  await safeUpdateDoc(ref, { ...patch, updatedAt: serverTimestamp() });
 }
 
 export async function deleteGmailConnection(organizationId: string, connectionId: string): Promise<void> {
   assertOrg(organizationId);
-  await deleteDoc(doc(db, COMMUNICATION_COLLECTIONS.GMAIL_CONNECTIONS, connectionId));
+  await safeDeleteDoc(doc(db, COMMUNICATION_COLLECTIONS.GMAIL_CONNECTIONS, connectionId));
 }
 
 // ─── WhatsApp Connection ─────────────────────────────────────────────────────
@@ -243,7 +293,7 @@ export async function getWhatsAppConnections(organizationId: string): Promise<Wh
     collection(db, COMMUNICATION_COLLECTIONS.WHATSAPP_CONNECTIONS),
     where('organizationId', '==', organizationId),
   );
-  const snap = await getDocs(q);
+  const snap = await safeGetDocs(q);
   return snap.docs.map((d) => toWhatsAppConnection(d.id, d.data() as Record<string, unknown>));
 }
 
@@ -252,7 +302,7 @@ export async function saveWhatsAppConnection(
   data: Omit<WhatsAppConnection, 'id' | 'createdAt' | 'updatedAt'>,
 ): Promise<string> {
   assertOrg(organizationId);
-  const ref = await addDoc(collection(db, COMMUNICATION_COLLECTIONS.WHATSAPP_CONNECTIONS), {
+  const ref = await safeAddDoc(collection(db, COMMUNICATION_COLLECTIONS.WHATSAPP_CONNECTIONS), {
     ...data,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
@@ -267,12 +317,12 @@ export async function updateWhatsAppConnection(
 ): Promise<void> {
   assertOrg(organizationId);
   const ref = doc(db, COMMUNICATION_COLLECTIONS.WHATSAPP_CONNECTIONS, connectionId);
-  await updateDoc(ref, { ...patch, updatedAt: serverTimestamp() });
+  await safeUpdateDoc(ref, { ...patch, updatedAt: serverTimestamp() });
 }
 
 export async function deleteWhatsAppConnection(organizationId: string, connectionId: string): Promise<void> {
   assertOrg(organizationId);
-  await deleteDoc(doc(db, COMMUNICATION_COLLECTIONS.WHATSAPP_CONNECTIONS, connectionId));
+  await safeDeleteDoc(doc(db, COMMUNICATION_COLLECTIONS.WHATSAPP_CONNECTIONS, connectionId));
 }
 
 // ─── Gmail Messages ──────────────────────────────────────────────────────────
@@ -346,7 +396,7 @@ export async function getGmailMessages(
     constraints.push(limitFn(options.limitCount));
   }
   const q = query(collection(db, COMMUNICATION_COLLECTIONS.GMAIL_MESSAGES), ...constraints);
-  const snap = await getDocs(q);
+  const snap = await safeGetDocs(q);
   return snap.docs.map((d) => toGmailMessage(d.id, d.data() as Record<string, unknown>));
 }
 
@@ -367,7 +417,7 @@ export async function saveGmailMessages(
     where('organizationId', '==', organizationId),
     where('messageId', 'in', messages.slice(0, 30).map((m) => m.messageId)),
   );
-  const existingSnap = await getDocs(existingQ);
+  const existingSnap = await safeGetDocs(existingQ);
   const existingIds = new Set(existingSnap.docs.map((d) => (d.data() as { messageId: string }).messageId));
 
   const batch = writeBatch(db);
@@ -382,7 +432,7 @@ export async function saveGmailMessages(
     });
     count++;
   }
-  if (count > 0) await batch.commit();
+  if (count > 0) await safeCommit(batch);
   return count;
 }
 
@@ -393,7 +443,7 @@ export async function updateGmailMessage(
 ): Promise<void> {
   assertOrg(organizationId);
   const ref = doc(db, COMMUNICATION_COLLECTIONS.GMAIL_MESSAGES, messageId);
-  await updateDoc(ref, { ...patch, updatedAt: serverTimestamp() });
+  await safeUpdateDoc(ref, { ...patch, updatedAt: serverTimestamp() });
 }
 
 export async function deleteGmailMessagesForConnection(
@@ -406,10 +456,10 @@ export async function deleteGmailMessagesForConnection(
     where('organizationId', '==', organizationId),
     where('connectionId', '==', connectionId),
   );
-  const snap = await getDocs(q);
+  const snap = await safeGetDocs(q);
   const batch = writeBatch(db);
   snap.docs.forEach((d) => batch.delete(d.ref));
-  if (snap.docs.length > 0) await batch.commit();
+  if (snap.docs.length > 0) await safeCommit(batch);
 }
 
 // ─── WhatsApp Messages ───────────────────────────────────────────────────────
@@ -485,7 +535,7 @@ export async function getWhatsAppMessages(
     constraints.push(limitFn(options.limitCount));
   }
   const q = query(collection(db, COMMUNICATION_COLLECTIONS.WHATSAPP_MESSAGES), ...constraints);
-  const snap = await getDocs(q);
+  const snap = await safeGetDocs(q);
   return snap.docs.map((d) => toWhatsAppMessage(d.id, d.data() as Record<string, unknown>));
 }
 
@@ -505,7 +555,7 @@ export async function saveWhatsAppMessages(
       where('organizationId', '==', organizationId),
       where('wamId', 'in', wamIds),
     );
-    const existingSnap = await getDocs(existingQ);
+    const existingSnap = await safeGetDocs(existingQ);
     existingSnap.docs.forEach((d) => existingIds.add((d.data() as { wamId: string }).wamId));
   }
 
@@ -521,7 +571,7 @@ export async function saveWhatsAppMessages(
     });
     count++;
   }
-  if (count > 0) await batch.commit();
+  if (count > 0) await safeCommit(batch);
   return count;
 }
 
@@ -532,7 +582,7 @@ export async function updateWhatsAppMessage(
 ): Promise<void> {
   assertOrg(organizationId);
   const ref = doc(db, COMMUNICATION_COLLECTIONS.WHATSAPP_MESSAGES, messageId);
-  await updateDoc(ref, { ...patch, updatedAt: serverTimestamp() });
+  await safeUpdateDoc(ref, { ...patch, updatedAt: serverTimestamp() });
 }
 
 export async function deleteWhatsAppMessagesForConnection(
@@ -545,10 +595,10 @@ export async function deleteWhatsAppMessagesForConnection(
     where('organizationId', '==', organizationId),
     where('connectionId', '==', connectionId),
   );
-  const snap = await getDocs(q);
+  const snap = await safeGetDocs(q);
   const batch = writeBatch(db);
   snap.docs.forEach((d) => batch.delete(d.ref));
-  if (snap.docs.length > 0) await batch.commit();
+  if (snap.docs.length > 0) await safeCommit(batch);
 }
 
 // ─── Scheduled Messages ──────────────────────────────────────────────────────
@@ -612,7 +662,7 @@ export async function createScheduledMessage(
   data: Omit<ScheduledMessage, 'id' | 'createdAt' | 'updatedAt' | 'sendCount' | 'retryCount' | 'lastAttemptAt' | 'lastSentAt' | 'errorMessage'>,
 ): Promise<string> {
   assertOrg(organizationId);
-  const ref = await addDoc(collection(db, COMMUNICATION_COLLECTIONS.SCHEDULED_MESSAGES), {
+  const ref = await safeAddDoc(collection(db, COMMUNICATION_COLLECTIONS.SCHEDULED_MESSAGES), {
     ...data,
     sendCount: 0,
     retryCount: 0,
@@ -632,7 +682,7 @@ export async function updateScheduledMessage(
 ): Promise<void> {
   assertOrg(organizationId);
   const ref = doc(db, COMMUNICATION_COLLECTIONS.SCHEDULED_MESSAGES, scheduleId);
-  await updateDoc(ref, { ...patch, updatedAt: serverTimestamp() });
+  await safeUpdateDoc(ref, { ...patch, updatedAt: serverTimestamp() });
 }
 
 export async function deleteScheduledMessage(
@@ -640,7 +690,7 @@ export async function deleteScheduledMessage(
   scheduleId: string,
 ): Promise<void> {
   assertOrg(organizationId);
-  await deleteDoc(doc(db, COMMUNICATION_COLLECTIONS.SCHEDULED_MESSAGES, scheduleId));
+  await safeDeleteDoc(doc(db, COMMUNICATION_COLLECTIONS.SCHEDULED_MESSAGES, scheduleId));
 }
 
 /**
@@ -658,7 +708,7 @@ export async function getDueScheduledMessages(
     where('status', '==', 'pending'),
     where('scheduledFor', '<=', now.toISOString()),
   );
-  const snap = await getDocs(q);
+  const snap = await safeGetDocs(q);
   return snap.docs.map((d) => toScheduledMessage(d.id, d.data() as Record<string, unknown>));
 }
 
@@ -688,7 +738,7 @@ export async function createSyncJob(
   data: Pick<CommunicationSyncJob, 'connectionId' | 'channel' | 'trigger' | 'maxRetries'>,
 ): Promise<string> {
   assertOrg(organizationId);
-  const ref = await addDoc(collection(db, COMMUNICATION_COLLECTIONS.SYNC_JOBS), {
+  const ref = await safeAddDoc(collection(db, COMMUNICATION_COLLECTIONS.SYNC_JOBS), {
     organizationId,
     ...data,
     status: 'pending',
@@ -710,7 +760,7 @@ export async function updateSyncJob(
 ): Promise<void> {
   assertOrg(organizationId);
   const ref = doc(db, COMMUNICATION_COLLECTIONS.SYNC_JOBS, jobId);
-  await updateDoc(ref, { ...patch, updatedAt: serverTimestamp() });
+  await safeUpdateDoc(ref, { ...patch, updatedAt: serverTimestamp() });
 }
 
 // ─── Cascade Disconnect ──────────────────────────────────────────────────────

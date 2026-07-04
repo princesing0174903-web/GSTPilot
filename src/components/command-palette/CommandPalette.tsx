@@ -341,6 +341,17 @@ export default function CommandPalette() {
         group: 'Commands',
       },
       {
+        id: 'cmd-open-generate',
+        label: 'Open AI Generation Workbench',
+        description: 'Production AI pipeline — queue, generate, retry, cancel, version history',
+        icon: Zap,
+        action: () => {
+          setCurrentView('generate');
+          addToRecent('cmd-open-generate', 'Open AI Generation Workbench', 'command');
+        },
+        group: 'Commands',
+      },
+      {
         id: 'cmd-run-autopilot',
         label: 'Run Autopilot',
         description: 'Launch automated workflow execution',

@@ -73,6 +73,7 @@ import AICFODashboardPage from '@/components/ai-cfo/AICFODashboardPage'
 import InvoiceCloudPage from '@/components/invoice-cloud/InvoiceCloudPage'
 import ExecutionEnginePage from '@/components/execution-engine/ExecutionEnginePage'
 import CommandPalette from '@/components/command-palette/CommandPalette'
+import GenerateWorkbench from '@/components/generate/GenerateWorkbench'
 
 // ═══ Recovered modules — previously disconnected from the router ═══
 import ReportsPage from '@/components/reports/ReportsPage'
@@ -456,6 +457,8 @@ function DashboardContent() {
         return <EnterpriseAIPlatformPage />
       case 'global-enterprise-network':
         return <GlobalEnterpriseNetworkPage />
+      case 'generate':
+        return <GenerateWorkbench />
       default:
         return <MissionControlPage />
     }

@@ -153,7 +153,9 @@ export type AppView =
   // Enterprise AI Platform™ — Ecosystem Edition (Developer Platform)
   | 'enterprise-ai-platform'
   // Global Enterprise Network™ — World Business Network
-  | 'global-enterprise-network';
+  | 'global-enterprise-network'
+  // Phase 4 — AI Production Pipeline™ (Creator's Muse)
+  | 'generate';
 
 export interface ReturnPrepContext {
   clientId: string | null;

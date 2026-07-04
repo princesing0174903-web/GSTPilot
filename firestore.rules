@@ -346,6 +346,33 @@ service cloud.firestore {
       allow delete: if isSignedIn() && resourceBelongsToUserOrg() && isOwnerOrAdmin(resource.data.organizationId);
     }
 
+    // ─── AI Production Pipeline™ (Phase 4) ─────────────────────────────────
+    // Three collections: ai_jobs, ai_versions, ai_drafts. All org-scoped.
+    //   • ai_jobs     — the generation queue + lifecycle (queued → processing → completed/failed/cancelled)
+    //   • ai_versions — immutable snapshots of every completed job's output (version history)
+    //   • ai_drafts   — autosaved input state (resume half-finished prompts)
+    // Org members can create/read/update; only owner/admin can delete.
+    match /ai_jobs/{docId} {
+      allow read:   if isSignedIn() && resourceBelongsToUserOrg();
+      allow create: if isSignedIn() && writeScopedToUserOrg();
+      allow update: if isSignedIn() && resourceBelongsToUserOrg() && canMutate(resource.data.organizationId) && orgIdUnchanged();
+      allow delete: if isSignedIn() && resourceBelongsToUserOrg() && isOwnerOrAdmin(resource.data.organizationId);
+    }
+
+    match /ai_versions/{docId} {
+      allow read:   if isSignedIn() && resourceBelongsToUserOrg();
+      allow create: if isSignedIn() && writeScopedToUserOrg();
+      allow update: if isSignedIn() && resourceBelongsToUserOrg() && canMutate(resource.data.organizationId) && orgIdUnchanged();
+      allow delete: if isSignedIn() && resourceBelongsToUserOrg() && isOwnerOrAdmin(resource.data.organizationId);
+    }
+
+    match /ai_drafts/{docId} {
+      allow read:   if isSignedIn() && resourceBelongsToUserOrg();
+      allow create: if isSignedIn() && writeScopedToUserOrg();
+      allow update: if isSignedIn() && resourceBelongsToUserOrg() && canMutate(resource.data.organizationId) && orgIdUnchanged();
+      allow delete: if isSignedIn() && resourceBelongsToUserOrg() && isOwnerOrAdmin(resource.data.organizationId);
+    }
+
     // ─── Default Deny ─────────────────────────────────────────────────────
     // Any collection not explicitly matched above is denied by default.
     match /{document=**} {

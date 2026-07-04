@@ -130,12 +130,13 @@ function toJob(id: string, raw: Record<string, unknown>): GenJob {
  */
 export async function queueJob(
   organizationId: string,
-  jobData: Omit<GenJob, 'id' | 'status' | 'statusReason' | 'progress' | 'progressMessage' | 'output' | 'error' | 'errorCode' | 'retryCount' | 'previousAttemptIds' | 'versionIds' | 'queuedAt' | 'startedAt' | 'completedAt' | 'durationMs' | 'createdAt' | 'updatedAt'>,
+  jobData: Omit<GenJob, 'id' | 'organizationId' | 'status' | 'statusReason' | 'progress' | 'progressMessage' | 'output' | 'error' | 'errorCode' | 'retryCount' | 'versionIds' | 'queuedAt' | 'startedAt' | 'completedAt' | 'durationMs' | 'createdAt' | 'updatedAt' | 'previousAttemptIds'> & { previousAttemptIds?: string[] },
 ): Promise<string> {
   assertOrg(organizationId);
   const { addDoc } = await import('firebase/firestore');
+  const { previousAttemptIds = [], ...rest } = jobData;
   const ref = await addDoc(collection(db, JOBS), {
-    ...jobData,
+    ...rest,
     organizationId,
     status: 'queued',
     statusReason: 'created',
@@ -145,7 +146,7 @@ export async function queueJob(
     error: null,
     errorCode: null,
     retryCount: 0,
-    previousAttemptIds: [],
+    previousAttemptIds,
     versionIds: [],
     queuedAt: serverTimestamp(),
     startedAt: null,

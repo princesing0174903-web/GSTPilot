@@ -1,0 +1,846 @@
+     1→'use client'
+     2→
+     3→import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react'
+     4→import { motion, AnimatePresence } from 'framer-motion'
+     5→import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+     6→import { Badge } from '@/components/ui/badge'
+     7→import { Button } from '@/components/ui/button'
+     8→import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
+     9→import { ScrollArea } from '@/components/ui/scroll-area'
+    10→import { Separator } from '@/components/ui/separator'
+    11→import { Textarea } from '@/components/ui/textarea'
+    12→import {
+    13→  MessageSquare,
+    14→  Send,
+    15→  Brain,
+    16→  Sparkles,
+    17→  BarChart3,
+    18→  TrendingUp,
+    19→  Users,
+    20→  IndianRupee,
+    21→  Zap,
+    22→  AlertTriangle,
+    23→  CheckCircle,
+    24→  Clock,
+    25→  Search,
+    26→  Lightbulb,
+    27→  ArrowRight,
+    28→  Bot,
+    29→  User,
+    30→  Activity,
+    31→  FileText,
+    32→} from 'lucide-react'
+    33→import {
+    34→  useFireClients,
+    35→  useFireInvoices,
+    36→  useFireReturns,
+    37→  useFireDocuments,
+    38→  useFireReconciliations,
+    39→  useFireActivities,
+    40→} from '@/hooks/use-firestore'
+    41→
+    42→// ─── Types ──────────────────────────────────────────────────────────────────────
+    43→
+    44→interface Message {
+    45→  id: string
+    46→  role: 'user' | 'assistant'
+    47→  content: string
+    48→  timestamp: Date
+    49→  dataRefs?: string[]
+    50→}
+    51→
+    52→interface ConversationSummary {
+    53→  id: string
+    54→  title: string
+    55→  preview: string
+    56→  timestamp: Date
+    57→  messageCount: number
+    58→}
+    59→
+    60→// ─── Suggested Questions ─────────────────────────────────────────────────────────
+    61→
+    62→const SUGGESTED_QUESTIONS = [
+    63→  { text: 'Why did revenue fall?', icon: TrendingUp },
+    64→  { text: 'Which clients are risky?', icon: AlertTriangle },
+    65→  { text: 'How much cash will I have next month?', icon: IndianRupee },
+    66→  { text: 'Which invoices may not be collected?', icon: FileText },
+    67→  { text: 'What should I do today?', icon: Zap },
+    68→  { text: 'Show me pending GSTR-1 filings', icon: FileText },
+    69→  { text: "What's my compliance score?", icon: CheckCircle },
+    70→  { text: 'Compare this month vs last month', icon: BarChart3 },
+    71→]
+    72→
+    73→// ─── Utility: Indian Number Formatting ──────────────────────────────────────────
+    74→
+    75→function formatINR(amount: number): string {
+    76→  const str = amount.toFixed(0)
+    77→  const parts = str.split('.')
+    78→  let intPart = parts[0]
+    79→  const decPart = parts[1]
+    80→  const isNegative = intPart.startsWith('-')
+    81→  if (isNegative) intPart = intPart.slice(1)
+    82→
+    83→  if (intPart.length > 3) {
+    84→    const lastThree = intPart.slice(-3)
+    85→    const rest = intPart.slice(0, -3)
+    86→    intPart = rest.replace(/\B(?=(\d{2})+(?!\d))/g, ',') + ',' + lastThree
+    87→  }
+    88→
+    89→  const formatted = isNegative ? '-' + intPart : intPart
+    90→  return '₹' + formatted + (decPart ? '.' + decPart : '')
+    91→}
+    92→
+    93→function formatDate(date: Date): string {
+    94→  const d = new Date(date)
+    95→  const day = String(d.getDate()).padStart(2, '0')
+    96→  const month = String(d.getMonth() + 1).padStart(2, '0')
+    97→  const year = d.getFullYear()
+    98→  return `${day}/${month}/${year}`
+    99→}
+   100→
+   101→// ─── Message Formatting ─────────────────────────────────────────────────────────
+   102→
+   103→function formatMessageContent(content: string) {
+   104→  const lines = content.split('\n')
+   105→  return lines.map((line, i) => {
+   106→    // Process bold markers
+   107→    let formatted = line.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+   108→
+   109→    // Process bullet points
+   110→    if (formatted.startsWith('•') || formatted.startsWith('- ') || formatted.startsWith('* ')) {
+   111→      const cleaned = formatted.replace(/^[•\-\*]\s*/, '')
+   112→      return (
+   113→        <div key={i} className="ml-3 flex items-start gap-1.5">
+   114→          <span className="text-emerald-500 mt-0.5 shrink-0">•</span>
+   115→          <span dangerouslySetInnerHTML={{ __html: cleaned }} />
+   116→        </div>
+   117→      )
+   118→    }
+   119→
+   120→    // Numbered list
+   121→    if (/^\d+\./.test(formatted)) {
+   122→      return (
+   123→        <div key={i} className="ml-2" dangerouslySetInnerHTML={{ __html: formatted }} />
+   124→      )
+   125→    }
+   126→
+   127→    // Empty line
+   128→    if (formatted.trim() === '') {
+   129→      return <div key={i} className="h-2" />
+   130→    }
+   131→
+   132→    return (
+   133→      <React.Fragment key={i}>
+   134→        <span dangerouslySetInnerHTML={{ __html: formatted }} />
+   135→        {i < lines.length - 1 && <br />}
+   136→      </React.Fragment>
+   137→    )
+   138→  })
+   139→}
+   140→
+   141→// ─── Typing Indicator ───────────────────────────────────────────────────────────
+   142→
+   143→function TypingIndicator() {
+   144→  return (
+   145→    <motion.div
+   146→      initial={{ opacity: 0, y: 10 }}
+   147→      animate={{ opacity: 1, y: 0 }}
+   148→      exit={{ opacity: 0, y: 10 }}
+   149→      className="flex justify-start"
+   150→    >
+   151→      <div className="bg-slate-100 dark:bg-slate-800 rounded-2xl rounded-bl-md px-5 py-3.5 flex items-center gap-1.5">
+   152→        <div className="h-2 w-2 rounded-full bg-emerald-500 animate-bounce" style={{ animationDelay: '0ms' }} />
+   153→        <div className="h-2 w-2 rounded-full bg-emerald-500 animate-bounce" style={{ animationDelay: '150ms' }} />
+   154→        <div className="h-2 w-2 rounded-full bg-emerald-500 animate-bounce" style={{ animationDelay: '300ms' }} />
+   155→      </div>
+   156→    </motion.div>
+   157→  )
+   158→}
+   159→
+   160→// ─── Main Component ─────────────────────────────────────────────────────────────
+   161→
+   162→export default function AIBusinessCopilotPage() {
+   163→  // Firestore live data
+   164→  const { data: clients, loading: clientsLoading } = useFireClients()
+   165→  const { data: invoices, loading: invoicesLoading } = useFireInvoices()
+   166→  const { data: returns, loading: returnsLoading } = useFireReturns()
+   167→  const { data: documents, loading: documentsLoading } = useFireDocuments()
+   168→  const { data: reconciliations, loading: reconciliationsLoading } = useFireReconciliations()
+   169→  const { data: activities, loading: activitiesLoading } = useFireActivities()
+   170→
+   171→  // Chat state
+   172→  const [messages, setMessages] = useState<Message[]>([])
+   173→  const [input, setInput] = useState('')
+   174→  const [isLoading, setIsLoading] = useState(false)
+   175→  const [conversations, setConversations] = useState<ConversationSummary[]>([])
+   176→  const [showSuggestions, setShowSuggestions] = useState(true)
+   177→
+   178→  const scrollRef = useRef<HTMLDivElement>(null)
+   179→  const inputRef = useRef<HTMLTextAreaElement>(null)
+   180→  const messagesEndRef = useRef<HTMLDivElement>(null)
+   181→  const hasInitialized = useRef(false)
+   182→
+   183→  // ─── Computed Stats ─────────────────────────────────────────────────────
+   184→
+   185→  const stats = useMemo(() => {
+   186→    const totalClients = clients.length
+   187→    const activeClients = clients.filter(c => c.status === 'active').length
+   188→    const totalInvoices = invoices.length
+   189→    const pendingReturns = returns.filter(r => r.status !== 'filed').length
+   190→    const filedReturns = returns.filter(r => r.status === 'filed').length
+   191→    const totalRevenue = invoices.reduce((sum, inv) => sum + (inv.totalAmount || 0) + (inv.cgst || 0) + (inv.sgst || 0) + (inv.igst || 0), 0)
+   192→    const avgHealthScore = activeClients > 0
+   193→      ? Math.round(clients.filter(c => c.status === 'active').reduce((sum, c) => sum + (c.healthScore || 0), 0) / activeClients)
+   194→      : 0
+   195→    const overdueInvoices = invoices.filter(inv => inv.matchStatus === 'mismatch' || inv.riskLevel === 'high').length
+   196→    const complianceRate = returns.length > 0 ? Math.round((filedReturns / returns.length) * 100) : 0
+   197→
+   198→    return {
+   199→      totalClients,
+   200→      activeClients,
+   201→      totalInvoices,
+   202→      pendingReturns,
+   203→      filedReturns,
+   204→      totalRevenue,
+   205→      avgHealthScore,
+   206→      overdueInvoices,
+   207→      complianceRate,
+   208→      totalDocuments: documents.length,
+   209→      totalReconciliations: reconciliations.length,
+   210→    }
+   211→  }, [clients, invoices, returns, documents, reconciliations])
+   212→
+   213→  // ─── Auto-generated Insights ────────────────────────────────────────────
+   214→
+   215→  const insights = useMemo(() => {
+   216→    const result: Array<{ text: string; type: 'positive' | 'warning' | 'negative' | 'neutral'; icon: React.ElementType }> = []
+   217→
+   218→    if (stats.complianceRate >= 90) {
+   219→      result.push({ text: `Compliance rate at ${stats.complianceRate}% — excellent`, type: 'positive', icon: CheckCircle })
+   220→    } else if (stats.complianceRate >= 70) {
+   221→      result.push({ text: `Compliance rate at ${stats.complianceRate}% — needs attention`, type: 'warning', icon: AlertTriangle })
+   222→    }
+   223→
+   224→    if (stats.pendingReturns > 0) {
+   225→      result.push({ text: `${stats.pendingReturns} returns pending filing`, type: 'warning', icon: Clock })
+   226→    }
+   227→
+   228→    if (stats.overdueInvoices > 0) {
+   229→      result.push({ text: `${stats.overdueInvoices} invoices flagged as high risk`, type: 'negative', icon: AlertTriangle })
+   230→    }
+   231→
+   232→    if (stats.avgHealthScore >= 75) {
+   233→      result.push({ text: `Client health average: ${stats.avgHealthScore}/100`, type: 'positive', icon: Activity })
+   234→    } else if (stats.avgHealthScore > 0) {
+   235→      result.push({ text: `Client health below target: ${stats.avgHealthScore}/100`, type: 'warning', icon: Activity })
+   236→    }
+   237→
+   238→    if (stats.totalRevenue > 0) {
+   239→      result.push({ text: `Monthly tax volume: ${formatINR(stats.totalRevenue)}`, type: 'neutral', icon: IndianRupee })
+   240→    }
+   241→
+   242→    if (stats.totalClients > 0) {
+   243→      result.push({ text: `Managing ${stats.activeClients} active clients`, type: 'neutral', icon: Users })
+   244→    }
+   245→
+   246→    // Collection rate insight
+   247→    const matchedInvoices = invoices.filter(i => i.matchStatus === 'matched').length
+   248→    const collectionRate = invoices.length > 0 ? Math.round((matchedInvoices / invoices.length) * 100) : 0
+   249→    if (collectionRate > 0) {
+   250→      result.push({ text: `Cash collection rate: ${collectionRate}%`, type: collectionRate >= 80 ? 'positive' : 'warning', icon: TrendingUp })
+   251→    }
+   252→
+   253→    return result.slice(0, 6)
+   254→  }, [stats, invoices])
+   255→
+   256→  // ─── Build Context for AI ───────────────────────────────────────────────
+   257→
+   258→  const buildContext = useCallback(() => {
+   259→    const clientSummary = clients.slice(0, 20).map(c => ({
+   260→      name: c.tradeName,
+   261→      gstin: c.gstin,
+   262→      status: c.status,
+   263→      healthScore: c.healthScore,
+   264→      pendingReturns: c.pendingReturnCount,
+   265→      totalTaxPaid: c.totalTaxPaid,
+   266→    }))
+   267→
+   268→    const invoiceSummary = {
+   269→      total: invoices.length,
+   270→      totalAmount: invoices.reduce((s, i) => s + (i.totalAmount || 0), 0),
+   271→      totalTax: invoices.reduce((s, i) => s + (i.cgst || 0) + (i.sgst || 0) + (i.igst || 0), 0),
+   272→      highRisk: invoices.filter(i => i.riskLevel === 'high').length,
+   273→      mismatched: invoices.filter(i => i.matchStatus === 'mismatch').length,
+   274→    }
+   275→
+   276→    const returnSummary = {
+   277→      total: returns.length,
+   278→      filed: returns.filter(r => r.status === 'filed').length,
+   279→      pending: returns.filter(r => r.status !== 'filed').length,
+   280→      draft: returns.filter(r => r.status === 'draft').length,
+   281→      ready: returns.filter(r => r.status === 'validated' || r.status === 'reviewed').length,
+   282→    }
+   283→
+   284→    const reconSummary = {
+   285→      total: reconciliations.length,
+   286→      avgMatchRate: reconciliations.length > 0
+   287→        ? Math.round(reconciliations.reduce((s, r) => s + (r.totalRecords > 0 ? (r.matched / r.totalRecords) * 100 : 0), 0) / reconciliations.length)
+   288→        : 0,
+   289→    }
+   290→
+   291→    return JSON.stringify({
+   292→      firm: {
+   293→        totalClients: stats.totalClients,
+   294→        activeClients: stats.activeClients,
+   295→        avgHealthScore: stats.avgHealthScore,
+   296→        complianceRate: stats.complianceRate,
+   297→      },
+   298→      clients: clientSummary,
+   299→      invoices: invoiceSummary,
+   300→      returns: returnSummary,
+   301→      reconciliations: reconSummary,
+   302→      recentActivities: activities.slice(0, 10).map(a => ({ type: a.type, description: a.description })),
+   303→    }, null, 2)
+   304→  }, [clients, invoices, returns, reconciliations, activities, stats])
+   305→
+   306→  // ─── Initialize Welcome Message ─────────────────────────────────────────
+   307→
+   308→  useEffect(() => {
+   309→    if (hasInitialized.current) return
+   310→    hasInitialized.current = true
+   311→    setMessages([{
+   312→      id: 'welcome',
+   313→      role: 'assistant',
+   314→      content: 'Welcome to GSTPilot AI Business Copilot. I can answer questions about your clients, invoices, compliance, cash flow, and more.\n\nI have access to your live firm data — just ask me anything and I\'ll give you data-driven, actionable insights. What would you like to know?',
+   315→      timestamp: new Date(),
+   316→      dataRefs: ['clients', 'invoices', 'returns'],
+   317→    }])
+   318→  }, [])
+   319→
+   320→  // ─── Auto-scroll ────────────────────────────────────────────────────────
+   321→
+   322→  useEffect(() => {
+   323→    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+   324→  }, [messages, isLoading])
+   325→
+   326→  // ─── Send Message ───────────────────────────────────────────────────────
+   327→
+   328→  const handleSend = useCallback(async (text?: string) => {
+   329→    const messageText = text || input.trim()
+   330→    if (!messageText || isLoading) return
+   331→
+   332→    const userMsg: Message = {
+   333→      id: `user-${Date.now()}`,
+   334→      role: 'user',
+   335→      content: messageText,
+   336→      timestamp: new Date(),
+   337→    }
+   338→
+   339→    setMessages(prev => [...prev, userMsg])
+   340→    setInput('')
+   341→    setIsLoading(true)
+   342→    setShowSuggestions(false)
+   343→
+   344→    try {
+   345→      const context = buildContext()
+   346→      const res = await fetch('/api/business-copilot', {
+   347→        method: 'POST',
+   348→        headers: { 'Content-Type': 'application/json' },
+   349→        body: JSON.stringify({ question: messageText, context }),
+   350→      })
+   351→
+   352→      const data = await res.json()
+   353→      const assistantMsg: Message = {
+   354→        id: `assistant-${Date.now()}`,
+   355→        role: 'assistant',
+   356→        content: data.answer || 'I\'m having trouble processing your request. Please try again.',
+   357→        timestamp: new Date(),
+   358→        dataRefs: ['clients', 'invoices', 'returns'],
+   359→      }
+   360→      setMessages(prev => [...prev, assistantMsg])
+   361→
+   362→      // Save conversation summary
+   363→      setConversations(prev => [{
+   364→        id: `conv-${Date.now()}`,
+   365→        title: messageText.slice(0, 40) + (messageText.length > 40 ? '...' : ''),
+   366→        preview: data.answer?.slice(0, 60) + '...',
+   367→        timestamp: new Date(),
+   368→        messageCount: 2,
+   369→      }, ...prev].slice(0, 5))
+   370→    } catch (error) {
+   371→      const errorMsg: Message = {
+   372→        id: `error-${Date.now()}`,
+   373→        role: 'assistant',
+   374→        content: 'I encountered an issue processing your question. Let me try a simpler approach — could you rephrase your question or ask about a specific topic like compliance, revenue, or pending filings?',
+   375→        timestamp: new Date(),
+   376→      }
+   377→      setMessages(prev => [...prev, errorMsg])
+   378→    } finally {
+   379→      setIsLoading(false)
+   380→    }
+   381→  }, [input, isLoading, buildContext])
+   382→
+   383→  // ─── Key Handler ────────────────────────────────────────────────────────
+   384→
+   385→  const handleKeyDown = (e: React.KeyboardEvent) => {
+   386→    if (e.key === 'Enter' && !e.shiftKey) {
+   387→      e.preventDefault()
+   388→      handleSend()
+   389→    }
+   390→  }
+   391→
+   392→  // ─── Quick Action Handler ───────────────────────────────────────────────
+   393→
+   394→  const handleQuickAction = (action: string) => {
+   395→    switch (action) {
+   396→      case 'at-risk':
+   397→        handleSend('Which clients are risky?')
+   398→        break
+   399→      case 'pending-returns':
+   400→        handleSend('Show me pending GSTR-1 filings')
+   401→        break
+   402→      case 'generate-report':
+   403→        handleSend('Compare this month vs last month')
+   404→        break
+   405→    }
+   406→  }
+   407→
+   408→  // ─── Loading State ──────────────────────────────────────────────────────
+   409→
+   410→  const dataLoading = clientsLoading && invoicesLoading && returnsLoading
+   411→
+   412→  if (dataLoading && clients.length === 0) {
+   413→    return (
+   414→      <div className="flex items-center justify-center h-full min-h-[600px]">
+   415→        <div className="flex flex-col items-center gap-3">
+   416→          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-100 dark:bg-emerald-900/30">
+   417→            <Brain className="h-6 w-6 text-emerald-600 dark:text-emerald-400 animate-pulse" />
+   418→          </div>
+   419→          <span className="text-sm text-slate-500 font-medium">Loading your business data...</span>
+   420→        </div>
+   421→      </div>
+   422→    )
+   423→  }
+   424→
+   425→  // ─── Render ─────────────────────────────────────────────────────────────
+   426→
+   427→  return (
+   428→    <div className="flex h-full min-h-[calc(100vh-8rem)]">
+   429→      {/* ─── Left Panel: Conversation Interface (60%) ─── */}
+   430→      <div className="flex flex-col w-full lg:w-[60%] border-r border-border/40">
+   431→        {/* Chat Header */}
+   432→        <div className="px-6 py-4 border-b border-border/40 bg-white dark:bg-slate-950">
+   433→          <div className="flex items-center gap-3">
+   434→            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-600 shadow-md shadow-emerald-500/20">
+   435→              <Brain className="h-5 w-5 text-white" />
+   436→            </div>
+   437→            <div className="flex-1">
+   438→              <div className="flex items-center gap-2">
+   439→                <h2 className="text-base font-bold text-foreground">AI Business Copilot</h2>
+   440→                <Badge className="h-5 px-1.5 text-[9px] font-bold bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-900/40 dark:text-emerald-300 dark:border-emerald-800">
+   441→                  LIVE DATA
+   442→                </Badge>
+   443→              </div>
+   444→              <p className="text-xs text-muted-foreground mt-0.5">
+   445→                Ask anything about your firm — powered by your live Firestore data
+   446→              </p>
+   447→            </div>
+   448→            <div className="flex items-center gap-1.5">
+   449→              <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+   450→              <span className="text-[10px] font-medium text-emerald-600 dark:text-emerald-400">Online</span>
+   451→            </div>
+   452→          </div>
+   453→        </div>
+   454→
+   455→        {/* Messages Area */}
+   456→        <div
+   457→          ref={scrollRef}
+   458→          className="flex-1 overflow-y-auto px-6 py-4 space-y-4"
+   459→          style={{ scrollbarWidth: 'thin' }}
+   460→        >
+   461→          <AnimatePresence mode="popLayout">
+   462→            {messages.map((msg) => (
+   463→              <motion.div
+   464→                key={msg.id}
+   465→                initial={{ opacity: 0, y: 12 }}
+   466→                animate={{ opacity: 1, y: 0 }}
+   467→                transition={{ duration: 0.25, ease: 'easeOut' }}
+   468→                className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+   469→              >
+   470→                <div className={`flex items-start gap-2.5 max-w-[88%] ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
+   471→                  {/* Avatar */}
+   472→                  <div className={`shrink-0 flex h-7 w-7 items-center justify-center rounded-full mt-0.5 ${
+   473→                    msg.role === 'user'
+   474→                      ? 'bg-emerald-600'
+   475→                      : 'bg-slate-200 dark:bg-slate-700'
+   476→                  }`}>
+   477→                    {msg.role === 'user'
+   478→                      ? <User className="h-3.5 w-3.5 text-white" />
+   479→                      : <Bot className="h-3.5 w-3.5 text-slate-600 dark:text-slate-300" />
+   480→                    }
+   481→                  </div>
+   482→
+   483→                  {/* Message Bubble */}
+   484→                  <div className={`rounded-2xl px-4 py-3 text-sm leading-relaxed ${
+   485→                    msg.role === 'user'
+   486→                      ? 'bg-emerald-600 text-white rounded-br-md'
+   487→                      : 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-200 rounded-bl-md'
+   488→                  }`}>
+   489→                    {msg.role === 'assistant' && msg.id !== 'welcome' && (
+   490→                      <div className="flex items-center gap-1.5 mb-2">
+   491→                        <Badge className="h-4 px-1.5 text-[8px] font-bold bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-900/40 dark:text-emerald-300 dark:border-emerald-800">
+   492→                          AI
+   493→                        </Badge>
+   494→                        {msg.dataRefs && (
+   495→                          <span className="text-[9px] text-slate-400 dark:text-slate-500">
+   496→                            Sources: {msg.dataRefs.join(', ')}
+   497→                          </span>
+   498→                        )}
+   499→                      </div>
+   500→                    )}
+   501→                    <div>{formatMessageContent(msg.content)}</div>
+   502→                    <div className={`text-[9px] mt-1.5 ${
+   503→                      msg.role === 'user' ? 'text-emerald-200' : 'text-slate-400 dark:text-slate-500'
+   504→                    }`}>
+   505→                      {formatDate(msg.timestamp)}
+   506→                    </div>
+   507→                  </div>
+   508→                </div>
+   509→              </motion.div>
+   510→            ))}
+   511→          </AnimatePresence>
+   512→
+   513→          {/* Typing Indicator */}
+   514→          {isLoading && <TypingIndicator />}
+   515→
+   516→          <div ref={messagesEndRef} />
+   517→        </div>
+   518→
+   519→        {/* Suggested Questions */}
+   520→        <AnimatePresence>
+   521→          {showSuggestions && messages.length <= 1 && (
+   522→            <motion.div
+   523→              initial={{ opacity: 0, height: 0 }}
+   524→              animate={{ opacity: 1, height: 'auto' }}
+   525→              exit={{ opacity: 0, height: 0 }}
+   526→              className="px-6 pb-2 overflow-hidden"
+   527→            >
+   528→              <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-2">
+   529→                Suggested Questions
+   530→              </p>
+   531→              <div className="flex flex-wrap gap-1.5">
+   532→                {SUGGESTED_QUESTIONS.map((q) => (
+   533→                  <button
+   534→                    key={q.text}
+   535→                    onClick={() => handleSend(q.text)}
+   536→                    className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-[11px] font-medium text-emerald-700 hover:bg-emerald-100 hover:border-emerald-300 transition-colors dark:border-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300 dark:hover:bg-emerald-900/50"
+   537→                  >
+   538→                    <q.icon className="h-3 w-3" />
+   539→                    {q.text}
+   540→                  </button>
+   541→                ))}
+   542→              </div>
+   543→            </motion.div>
+   544→          )}
+   545→        </AnimatePresence>
+   546→
+   547→        {/* Input Area */}
+   548→        <div className="px-6 py-4 border-t border-border/40 bg-white dark:bg-slate-950">
+   549→          <div className="flex items-end gap-3">
+   550→            <div className="flex-1 relative">
+   551→              <Textarea
+   552→                ref={inputRef}
+   553→                value={input}
+   554→                onChange={(e) => setInput(e.target.value)}
+   555→                onKeyDown={handleKeyDown}
+   556→                placeholder="Ask about your business — revenue, clients, compliance, cash flow..."
+   557→                className="min-h-[44px] max-h-[120px] resize-none text-sm border-emerald-200 focus:border-emerald-500 focus:ring-emerald-500/20 pr-10 dark:border-emerald-800 dark:bg-slate-900"
+   558→                disabled={isLoading}
+   559→                rows={1}
+   560→              />
+   561→              <Button
+   562→                onClick={() => handleSend()}
+   563→                disabled={!input.trim() || isLoading}
+   564→                size="sm"
+   565→                className="absolute right-2 bottom-2 h-7 w-7 p-0 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white shrink-0 disabled:opacity-40"
+   566→              >
+   567→                <Send className="h-3.5 w-3.5" />
+   568→              </Button>
+   569→            </div>
+   570→          </div>
+   571→          <div className="flex items-center justify-between mt-2">
+   572→            <div className="flex items-center gap-1.5">
+   573→              <Sparkles className="h-3 w-3 text-emerald-500" />
+   574→              <span className="text-[9px] text-muted-foreground">
+   575→                Powered by live Firestore data + AI
+   576→              </span>
+   577→            </div>
+   578→            <span className="text-[9px] text-muted-foreground">
+   579→              Press Enter to send, Shift+Enter for new line
+   580→            </span>
+   581→          </div>
+   582→        </div>
+   583→      </div>
+   584→
+   585→      {/* ─── Right Panel: Context & Insights (40%) ─── */}
+   586→      <div className="hidden lg:flex flex-col w-[40%] bg-slate-50/50 dark:bg-slate-950/50 overflow-y-auto">
+   587→        <div className="p-6 space-y-5">
+   588→          {/* Live Data Summary */}
+   589→          <div>
+   590→            <div className="flex items-center gap-2 mb-3">
+   591→              <Activity className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+   592→              <h3 className="text-sm font-bold text-foreground">Live Data Summary</h3>
+   593→              <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse ml-auto" />
+   594→            </div>
+   595→            <div className="grid grid-cols-2 gap-3">
+   596→              <motion.div
+   597→                initial={{ opacity: 0, y: 8 }}
+   598→                animate={{ opacity: 1, y: 0 }}
+   599→                transition={{ delay: 0.05 }}
+   600→              >
+   601→                <Card className="border-emerald-200/50 dark:border-emerald-800/30 bg-white dark:bg-slate-900">
+   602→                  <CardContent className="p-3.5">
+   603→                    <div className="flex items-center gap-2 mb-1">
+   604→                      <Users className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+   605→                      <span className="text-[10px] font-medium text-muted-foreground">Total Clients</span>
+   606→                    </div>
+   607→                    <p className="text-2xl font-bold text-foreground">{stats.totalClients}</p>
+   608→                    <p className="text-[10px] text-emerald-600 dark:text-emerald-400">{stats.activeClients} active</p>
+   609→                  </CardContent>
+   610→                </Card>
+   611→              </motion.div>
+   612→
+   613→              <motion.div
+   614→                initial={{ opacity: 0, y: 8 }}
+   615→                animate={{ opacity: 1, y: 0 }}
+   616→                transition={{ delay: 0.1 }}
+   617→              >
+   618→                <Card className="border-emerald-200/50 dark:border-emerald-800/30 bg-white dark:bg-slate-900">
+   619→                  <CardContent className="p-3.5">
+   620→                    <div className="flex items-center gap-2 mb-1">
+   621→                      <FileText className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+   622→                      <span className="text-[10px] font-medium text-muted-foreground">Total Invoices</span>
+   623→                    </div>
+   624→                    <p className="text-2xl font-bold text-foreground">{stats.totalInvoices}</p>
+   625→                    <p className="text-[10px] text-amber-600 dark:text-amber-400">{stats.overdueInvoices} at risk</p>
+   626→                  </CardContent>
+   627→                </Card>
+   628→              </motion.div>
+   629→
+   630→              <motion.div
+   631→                initial={{ opacity: 0, y: 8 }}
+   632→                animate={{ opacity: 1, y: 0 }}
+   633→                transition={{ delay: 0.15 }}
+   634→              >
+   635→                <Card className="border-emerald-200/50 dark:border-emerald-800/30 bg-white dark:bg-slate-900">
+   636→                  <CardContent className="p-3.5">
+   637→                    <div className="flex items-center gap-2 mb-1">
+   638→                      <Clock className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+   639→                      <span className="text-[10px] font-medium text-muted-foreground">Pending Returns</span>
+   640→                    </div>
+   641→                    <p className="text-2xl font-bold text-foreground">{stats.pendingReturns}</p>
+   642→                    <p className="text-[10px] text-emerald-600 dark:text-emerald-400">{stats.filedReturns} filed</p>
+   643→                  </CardContent>
+   644→                </Card>
+   645→              </motion.div>
+   646→
+   647→              <motion.div
+   648→                initial={{ opacity: 0, y: 8 }}
+   649→                animate={{ opacity: 1, y: 0 }}
+   650→                transition={{ delay: 0.2 }}
+   651→              >
+   652→                <Card className="border-emerald-200/50 dark:border-emerald-800/30 bg-white dark:bg-slate-900">
+   653→                  <CardContent className="p-3.5">
+   654→                    <div className="flex items-center gap-2 mb-1">
+   655→                      <IndianRupee className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+   656→                      <span className="text-[10px] font-medium text-muted-foreground">Revenue</span>
+   657→                    </div>
+   658→                    <p className="text-xl font-bold text-foreground">{stats.totalRevenue > 0 ? formatINR(stats.totalRevenue) : '₹0'}</p>
+   659→                    <p className="text-[10px] text-emerald-600 dark:text-emerald-400">Tax volume</p>
+   660→                  </CardContent>
+   661→                </Card>
+   662→              </motion.div>
+   663→            </div>
+   664→          </div>
+   665→
+   666→          <Separator className="bg-border/40" />
+   667→
+   668→          {/* Recent Insights */}
+   669→          <div>
+   670→            <div className="flex items-center gap-2 mb-3">
+   671→              <Lightbulb className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+   672→              <h3 className="text-sm font-bold text-foreground">Recent Insights</h3>
+   673→              <Badge className="h-4 px-1 text-[8px] font-bold bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-900/40 dark:text-amber-300 dark:border-amber-800">
+   674→                AUTO
+   675→              </Badge>
+   676→            </div>
+   677→            <div className="space-y-2">
+   678→              {insights.length > 0 ? insights.map((insight, i) => (
+   679→                <motion.div
+   680→                  key={i}
+   681→                  initial={{ opacity: 0, x: 8 }}
+   682→                  animate={{ opacity: 1, x: 0 }}
+   683→                  transition={{ delay: 0.05 * i }}
+   684→                  className={`flex items-center gap-2.5 rounded-lg border px-3 py-2.5 text-xs ${
+   685→                    insight.type === 'positive'
+   686→                      ? 'border-emerald-200 bg-emerald-50/50 text-emerald-800 dark:border-emerald-800/40 dark:bg-emerald-900/20 dark:text-emerald-300'
+   687→                      : insight.type === 'warning'
+   688→                      ? 'border-amber-200 bg-amber-50/50 text-amber-800 dark:border-amber-800/40 dark:bg-amber-900/20 dark:text-amber-300'
+   689→                      : insight.type === 'negative'
+   690→                      ? 'border-red-200 bg-red-50/50 text-red-800 dark:border-red-800/40 dark:bg-red-900/20 dark:text-red-300'
+   691→                      : 'border-slate-200 bg-white text-slate-700 dark:border-slate-700 dark:bg-slate-800/50 dark:text-slate-300'
+   692→                  }`}
+   693→                >
+   694→                  <insight.icon className="h-3.5 w-3.5 shrink-0" />
+   695→                  <span className="font-medium">{insight.text}</span>
+   696→                </motion.div>
+   697→              )) : (
+   698→                <div className="text-xs text-muted-foreground text-center py-4">
+   699→                  Insights will appear as your data grows
+   700→                </div>
+   701→              )}
+   702→            </div>
+   703→          </div>
+   704→
+   705→          <Separator className="bg-border/40" />
+   706→
+   707→          {/* Quick Actions */}
+   708→          <div>
+   709→            <div className="flex items-center gap-2 mb-3">
+   710→              <Zap className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+   711→              <h3 className="text-sm font-bold text-foreground">Quick Actions</h3>
+   712→            </div>
+   713→            <div className="space-y-2">
+   714→              <Button
+   715→                variant="outline"
+   716→                className="w-full justify-between h-9 text-xs border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-300 dark:border-emerald-800 dark:hover:bg-emerald-900/30 dark:hover:text-emerald-300"
+   717→                onClick={() => handleQuickAction('at-risk')}
+   718→              >
+   719→                <span className="flex items-center gap-2">
+   720→                  <AlertTriangle className="h-3.5 w-3.5" />
+   721→                  View at-risk clients
+   722→                </span>
+   723→                <ArrowRight className="h-3 w-3" />
+   724→              </Button>
+   725→              <Button
+   726→                variant="outline"
+   727→                className="w-full justify-between h-9 text-xs border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-300 dark:border-emerald-800 dark:hover:bg-emerald-900/30 dark:hover:text-emerald-300"
+   728→                onClick={() => handleQuickAction('pending-returns')}
+   729→              >
+   730→                <span className="flex items-center gap-2">
+   731→                  <Clock className="h-3.5 w-3.5" />
+   732→                  Check pending returns
+   733→                </span>
+   734→                <ArrowRight className="h-3 w-3" />
+   735→              </Button>
+   736→              <Button
+   737→                variant="outline"
+   738→                className="w-full justify-between h-9 text-xs border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-300 dark:border-emerald-800 dark:hover:bg-emerald-900/30 dark:hover:text-emerald-300"
+   739→                onClick={() => handleQuickAction('generate-report')}
+   740→              >
+   741→                <span className="flex items-center gap-2">
+   742→                  <BarChart3 className="h-3.5 w-3.5" />
+   743→                  Generate comparison report
+   744→                </span>
+   745→                <ArrowRight className="h-3 w-3" />
+   746→              </Button>
+   747→            </div>
+   748→          </div>
+   749→
+   750→          <Separator className="bg-border/40" />
+   751→
+   752→          {/* Compliance Score */}
+   753→          <div>
+   754→            <div className="flex items-center gap-2 mb-3">
+   755→              <CheckCircle className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+   756→              <h3 className="text-sm font-bold text-foreground">Compliance Score</h3>
+   757→            </div>
+   758→            <Card className="border-emerald-200/50 dark:border-emerald-800/30 bg-white dark:bg-slate-900">
+   759→              <CardContent className="p-4">
+   760→                <div className="flex items-center justify-between mb-2">
+   761→                  <span className="text-3xl font-bold text-emerald-600 dark:text-emerald-400">
+   762→                    {stats.complianceRate}
+   763→                  </span>
+   764→                  <span className="text-xs text-muted-foreground">/100</span>
+   765→                </div>
+   766→                <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2">
+   767→                  <motion.div
+   768→                    initial={{ width: 0 }}
+   769→                    animate={{ width: `${stats.complianceRate}%` }}
+   770→                    transition={{ duration: 1, ease: 'easeOut' }}
+   771→                    className={`h-2 rounded-full ${
+   772→                      stats.complianceRate >= 90
+   773→                        ? 'bg-emerald-500'
+   774→                        : stats.complianceRate >= 70
+   775→                        ? 'bg-amber-500'
+   776→                        : 'bg-red-500'
+   777→                    }`}
+   778→                  />
+   779→                </div>
+   780→                <div className="flex items-center justify-between mt-2 text-[10px] text-muted-foreground">
+   781→                  <span>{stats.filedReturns} returns filed</span>
+   782→                  <span>{stats.pendingReturns} pending</span>
+   783→                </div>
+   784→              </CardContent>
+   785→            </Card>
+   786→          </div>
+   787→
+   788→          <Separator className="bg-border/40" />
+   789→
+   790→          {/* Conversation History */}
+   791→          <div>
+   792→            <div className="flex items-center gap-2 mb-3">
+   793→              <MessageSquare className="h-4 w-4 text-slate-500" />
+   794→              <h3 className="text-sm font-bold text-foreground">Recent Conversations</h3>
+   795→            </div>
+   796→            <div className="space-y-2">
+   797→              {conversations.length > 0 ? conversations.map((conv) => (
+   798→                <div
+   799→                  key={conv.id}
+   800→                  className="rounded-lg border border-border/40 px-3 py-2.5 hover:bg-white dark:hover:bg-slate-900 transition-colors cursor-pointer"
+   801→                >
+   802→                  <p className="text-xs font-medium text-foreground truncate">{conv.title}</p>
+   803→                  <p className="text-[10px] text-muted-foreground truncate mt-0.5">{conv.preview}</p>
+   804→                  <p className="text-[9px] text-muted-foreground mt-1">{formatDate(conv.timestamp)}</p>
+   805→                </div>
+   806→              )) : (
+   807→                <div className="text-center py-4">
+   808→                  <MessageSquare className="h-6 w-6 text-slate-300 dark:text-slate-600 mx-auto mb-2" />
+   809→                  <p className="text-xs text-muted-foreground">No conversations yet</p>
+   810→                  <p className="text-[10px] text-muted-foreground mt-0.5">Start by asking a question</p>
+   811→                </div>
+   812→              )}
+   813→            </div>
+   814→          </div>
+   815→
+   816→          {/* Data Sources */}
+   817→          <div>
+   818→            <div className="flex items-center gap-2 mb-3">
+   819→              <Search className="h-4 w-4 text-slate-500" />
+   820→              <h3 className="text-sm font-bold text-foreground">Connected Data Sources</h3>
+   821→            </div>
+   822→            <div className="flex flex-wrap gap-1.5">
+   823→              {[
+   824→                { name: 'Clients', count: stats.totalClients, icon: Users },
+   825→                { name: 'Invoices', count: stats.totalInvoices, icon: FileText },
+   826→                { name: 'Returns', count: returns.length, icon: Clock },
+   827→                { name: 'Documents', count: stats.totalDocuments, icon: FileText },
+   828→                { name: 'Reconciliations', count: stats.totalReconciliations, icon: BarChart3 },
+   829→              ].map((source) => (
+   830→                <Badge
+   831→                  key={source.name}
+   832→                  variant="outline"
+   833→                  className="h-6 px-2 text-[10px] font-medium border-slate-200 dark:border-slate-700"
+   834→                >
+   835→                  <source.icon className="h-3 w-3 mr-1 text-slate-400" />
+   836→                  {source.name} ({source.count})
+   837→                </Badge>
+   838→              ))}
+   839→            </div>
+   840→          </div>
+   841→        </div>
+   842→      </div>
+   843→    </div>
+   844→  )
+   845→}
+   846→

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -45,6 +45,9 @@ import {
 import { useInvoices } from '@/hooks/useInvoices';
 import { useGSTTransactions } from '@/hooks/useGSTTransactions';
 import { useBanking } from '@/hooks/useBanking';
+import { useAIRecommendations } from '@/hooks/useAIRecommendations';
+import { useOrg } from '@/contexts/OrgContext';
+import type { Recommendation as AIRecommendation } from '@/lib/ai-provider';
 import type {
   FirestoreClient,
   LiveDashboardMetrics,
@@ -537,6 +540,8 @@ interface Recommendation {
 export default function DashboardPage() {
   const { setCurrentView, setSelectedClientId, setReturnPrepCtx } = useApp();
   const { user } = useAuth();
+  const { organization } = useOrg();
+  const orgId = organization?.id ?? null;
 
   // ── Firebase Firestore hooks ──────────────────────────────────────────
   const { metrics, loading, error } = useLiveDashboardMetrics();
@@ -546,6 +551,18 @@ export default function DashboardPage() {
   const { scores: execScores } = useFirmExecutiveScores();
   const { data: memberships } = useFireMemberships(null);
   const { data: priorityQueue } = useFirePriorities('pending');
+
+  // ── AI Oracle™ — real AI-generated recommendations (Phase 7) ──────────
+  // Replaces the locally-computed heuristic recommendations with real
+  // AI-sourced recommendations persisted in the ai_memory collection. The
+  // hook subscribes to ai_memory (type='recommendation') in real-time and
+  // exposes a refresh() to regenerate. Falls back to the local heuristic
+  // computation below when no AI recommendations are available yet (so the
+  // UI never breaks and looks identical either way).
+  const {
+    recommendations: aiRecommendations,
+    loading: aiRecsLoading,
+  } = useAIRecommendations();
 
   // ── Real Invoice Engine™ — org-scoped, real-time, server-calculated ──
   // Replaces the old firmId-scoped useFireInvoices() for revenue / outstanding
@@ -788,8 +805,12 @@ export default function DashboardPage() {
       .slice(0, 5);
   }, [returns]);
 
-  // ── AI Recommendations ────────────────────────────────────────────────
-  const recommendations = useMemo<Recommendation[]>(() => {
+  // ── AI Recommendations (local heuristic fallback) ────────────────────────
+  // These locally-computed recommendations are used as a FALLBACK when the
+  // real AI Oracle (ai_memory) has no recommendations yet. The primary source
+  // is the useAIRecommendations() hook above (Phase 7). See the merged
+  // `recommendations` memo below for the priority logic.
+  const localRecommendations = useMemo<Recommendation[]>(() => {
     const recs: Recommendation[] = [];
 
     // Overdue returns → file now
@@ -899,6 +920,129 @@ export default function DashboardPage() {
       });
     }
   };
+
+  // ── AI Oracle™ — map real AI recommendations to the card shape ─────────
+  // Each AI recommendation (from ai_memory via useAIRecommendations) is mapped
+  // to the local Recommendation shape with an icon + navigation handler derived
+  // from its actionType. This keeps the rendered card IDENTICAL to before —
+  // only the data source changed (heuristic → real AI).
+  const iconForAIRec = (type: AIRecommendation['type']): React.ReactNode => {
+    switch (type) {
+      case 'file_gstr3b':
+      case 'file_gstr1':
+      case 'pay_gst':
+        return <FileText className="h-3.5 w-3.5 accent-text" />;
+      case 'follow_up_customer':
+      case 'send_invoice_reminder':
+        return <Users className="h-3.5 w-3.5 accent-text" />;
+      case 'connect_bank':
+        return <IndianRupee className="h-3.5 w-3.5 accent-text" />;
+      case 'connect_gstn':
+        return <ShieldCheck className="h-3.5 w-3.5 accent-text" />;
+      case 'reconcile_bank':
+      case 'review_overdue':
+        return <AlertTriangle className="h-3.5 w-3.5 accent-text" />;
+      case 'reduce_expenses':
+        return <TrendingUp className="h-3.5 w-3.5 accent-text" />;
+      case 'improve_cash_flow':
+        return <Activity className="h-3.5 w-3.5 accent-text" />;
+      default:
+        return <Sparkles className="h-3.5 w-3.5 accent-text" />;
+    }
+  };
+
+  const handleAIRecAction = (rec: AIRecommendation) => {
+    switch (rec.actionType) {
+      case 'client-workspace':
+        if (rec.relatedEntityId) {
+          handleOpenClient(rec.relatedEntityId);
+        } else {
+          setCurrentView('clients');
+        }
+        break;
+      case 'return-prep':
+        if (rec.relatedEntityId && rec.relatedEntityType === 'period') {
+          // Navigate to return-prep with the period context if available.
+          setReturnPrepCtx({
+            clientId: rec.relatedEntityId,
+            returnType: rec.type === 'file_gstr3b' ? 'GSTR-3B' : 'GSTR-1',
+            period: rec.relatedEntityId,
+          });
+        }
+        setCurrentView('return-prep');
+        break;
+      case 'invoices':
+        setCurrentView('invoices');
+        break;
+      case 'expenses':
+        setCurrentView('invoices');
+        break;
+      case 'reconcile':
+        setCurrentView('reconcile');
+        break;
+      case 'banking':
+        setCurrentView('banking');
+        break;
+      case 'gstn':
+        setCurrentView('returns');
+        break;
+      case 'reports':
+        setCurrentView('reports');
+        break;
+      case 'tasks':
+        setCurrentView('tasks');
+        break;
+      default:
+        setCurrentView('dashboard');
+        break;
+    }
+  };
+
+  const mappedAIRecommendations = useMemo<Recommendation[]>(() => {
+    return aiRecommendations.slice(0, 5).map((rec) => ({
+      id: rec.id,
+      icon: iconForAIRec(rec.type),
+      title: rec.title,
+      actionLabel: rec.actionLabel,
+      onAction: () => handleAIRecAction(rec),
+    }));
+  }, [aiRecommendations]);
+
+  // ── Merged recommendations — prefer real AI, fall back to local ────────
+  // When the AI Oracle has generated recommendations (ai_memory populated),
+  // those take priority. Otherwise the local heuristic recommendations keep
+  // the card populated so the UI is never empty. The card renders identically
+  // in both cases — same icon, title, action label, and click behavior.
+  const recommendations = useMemo<Recommendation[]>(() => {
+    if (mappedAIRecommendations.length > 0) return mappedAIRecommendations;
+    return localRecommendations;
+  }, [mappedAIRecommendations, localRecommendations]);
+
+  // ── Background AI analysis trigger (Phase 7) ───────────────────────────
+  // On mount, if the AI Oracle has no recommendations yet (ai_memory empty),
+  // trigger a background analysis run to populate it. This is the "auto
+  // analyse every invoice / payment / GST sync / bank sync" behavior — it
+  // runs once per mount, guarded by a ref, and is non-blocking (fire-and-
+  // forget). The real-time subscription in useAIRecommendations will surface
+  // the generated recommendations as soon as they're persisted.
+  const bgAnalysisTriggered = useRef(false);
+  useEffect(() => {
+    if (bgAnalysisTriggered.current) return;
+    if (!orgId) return;
+    if (aiRecsLoading) return;
+    if (aiRecommendations.length > 0) {
+      bgAnalysisTriggered.current = true;
+      return;
+    }
+    bgAnalysisTriggered.current = true;
+    void fetch('/api/ai/analyze/background', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ organizationId: orgId }),
+    }).catch(() => {
+      // Non-fatal — the local heuristic recommendations still render.
+    });
+  }, [orgId, aiRecsLoading, aiRecommendations.length]);
 
   // ═══════════════════════════════════════════════════════════════════════════
   // RENDER

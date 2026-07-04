@@ -511,6 +511,7 @@ export async function runBackgroundAnalysis(organizationId: string): Promise<{
   insightsCount: number;
   recommendationsCount: number;
   brief: string;
+  communicationFacts?: number;
 }> {
   assertOrg(organizationId);
 
@@ -567,10 +568,27 @@ export async function runBackgroundAnalysis(organizationId: string): Promise<{
     },
   }).catch(() => null);
 
+  // Phase 8 — also analyze communications (Gmail / WhatsApp) and persist
+  // communication-derived facts to ai_memory so Oracle can answer questions
+  // about GST notices, client replies, vendor invoices, etc.
+  let communicationFacts = 0;
+  try {
+    const { gatherCommunicationContext, persistCommunicationInsightsToMemory } = await import(
+      '@/lib/communication-provider/server/ai-bridge'
+    );
+    const commSnapshot = await gatherCommunicationContext(organizationId);
+    if (commSnapshot) {
+      communicationFacts = await persistCommunicationInsightsToMemory(organizationId, commSnapshot);
+    }
+  } catch (err) {
+    console.warn('[ai-provider/orchestrator] communication analysis skipped:', err);
+  }
+
   return {
     insightsCount: allInsights.length,
     recommendationsCount: recommendations.length,
     brief,
+    communicationFacts,
   };
 }
 

@@ -417,6 +417,7 @@ export type AIMemorySource =
   | 'reports'
   | 'tasks'
   | 'conversation'
+  | 'communication'  // Phase 8 — Gmail / WhatsApp messages
   | 'analysis'
   | 'system';
 

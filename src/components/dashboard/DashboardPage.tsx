@@ -46,6 +46,7 @@ import { useInvoices } from '@/hooks/useInvoices';
 import { useGSTTransactions } from '@/hooks/useGSTTransactions';
 import { useBanking } from '@/hooks/useBanking';
 import { useAIRecommendations } from '@/hooks/useAIRecommendations';
+import { useCommunications } from '@/hooks/useCommunications';
 import { useOrg } from '@/contexts/OrgContext';
 import type { Recommendation as AIRecommendation } from '@/lib/ai-provider';
 import type {
@@ -615,6 +616,22 @@ export default function DashboardPage() {
     isConnected: bankConnected,
   } = useBanking();
 
+  // ── Phase 8 — Gmail & WhatsApp Business Automation ──────────────────────
+  // The communications hook provides real-time data on Gmail / WhatsApp
+  // connections + messages + scheduled reminders. The dashboard only USES the
+  // summary (counts) — no new UI components, no redesign. Counts are
+  // conditionally appended to existing subtitles when > 0 (mirrors the GST +
+  // banking augmentation pattern).
+  const {
+    summary: communicationSummary,
+    gmailConnected: gmailConnReal,
+    whatsappConnected: whatsappConnReal,
+  } = useCommunications();
+  const unreadGstNotices = communicationSummary?.unreadGstNotices ?? 0;
+  const unreadWhatsAppMessages = communicationSummary?.unreadWhatsAppMessages ?? 0;
+  const pendingReminders = communicationSummary?.pendingReminders ?? 0;
+  const pendingClientReplies = communicationSummary?.pendingClientReplies ?? 0;
+
   // Banking-derived values (real data from the Banking Foundation).
   // All gracefully fall back to 0 when there's no banking data yet (summary
   // fields default to 0) — matching the same pattern the invoice / GST KPIs
@@ -768,17 +785,21 @@ export default function DashboardPage() {
     return list.slice(0, 5);
   }, [priorityQueue, metrics, pendingCollection]);
 
-  // ── Connected services (static catalog — honest "Not connected" by default) ──
+  // ── Connected services (catalog — reflect real Gmail/WhatsApp/Bank state) ──
+  // Phase 8: Gmail + WhatsApp reflect real connection state from
+  // useCommunications(). Bank APIs reflects real state from useBanking().
+  // The other entries (E-Invoice, GSTR-2B) remain "not connected" by default
+  // until their Phase 9 ERP integrations ship.
   const connectedServices = useMemo(
     () => [
       { id: 'gstn', name: 'GSTN', initial: 'G', connected: metrics.totalClients > 0 },
       { id: 'einvoice', name: 'E-Invoice', initial: 'E', connected: false },
       { id: 'gstr2b', name: 'GSTR-2B', initial: '2', connected: false },
-      { id: 'bank', name: 'Bank APIs', initial: 'B', connected: false },
-      { id: 'whatsapp', name: 'WhatsApp', initial: 'W', connected: false },
-      { id: 'gmail', name: 'Gmail', initial: 'M', connected: false },
+      { id: 'bank', name: 'Bank APIs', initial: 'B', connected: bankConnected },
+      { id: 'whatsapp', name: 'WhatsApp', initial: 'W', connected: whatsappConnReal },
+      { id: 'gmail', name: 'Gmail', initial: 'M', connected: gmailConnReal },
     ],
-    [metrics.totalClients],
+    [metrics.totalClients, bankConnected, whatsappConnReal, gmailConnReal],
   );
 
   // ── Team members from memberships hook ──
@@ -1113,11 +1134,11 @@ export default function DashboardPage() {
   // subtitle text is preserved verbatim when there's no banking data yet
   // (mirrors the GST augmentation pattern).
   const revenueSubtitle = `Total revenue · ${invoiceStats.count} invoice${invoiceStats.count === 1 ? '' : 's'}${gstSalesCount > 0 || gstPurchaseCount > 0 ? ` · ${gstSalesCount} sale${gstSalesCount === 1 ? '' : 's'}/${gstPurchaseCount} purch.` : ''}${incomingPayments > 0 ? ` · ₹${formatINR(incomingPayments)} incoming` : ''}`;
-  const complianceSubtitle = `${pendingComplianceCount === 1 ? 'Return to file' : 'Returns to file'}${gstTotalTransactions > 0 ? ` · ${gstTotalTransactions} GST txn${gstTotalTransactions === 1 ? '' : 's'}` : ''}${bankTxnCount > 0 ? ` · ${bankTxnCount} bank txn${bankTxnCount === 1 ? '' : 's'}` : ''}`;
+  const complianceSubtitle = `${pendingComplianceCount === 1 ? 'Return to file' : 'Returns to file'}${gstTotalTransactions > 0 ? ` · ${gstTotalTransactions} GST txn${gstTotalTransactions === 1 ? '' : 's'}` : ''}${bankTxnCount > 0 ? ` · ${bankTxnCount} bank txn${bankTxnCount === 1 ? '' : 's'}` : ''}${unreadGstNotices > 0 ? ` · ${unreadGstNotices} unread notice${unreadGstNotices === 1 ? '' : 's'}` : ''}`;
   const cashSubtitle =
     pendingInvoices.length > 0
-      ? `${pendingInvoices.length} invoice${pendingInvoices.length === 1 ? '' : 's'} · Pending collection${gstLiability > 0 ? ` · ₹${formatINR(gstLiability)} GST due` : ''}${bankBalance > 0 ? ` · ₹${formatINR(bankBalance)} bank balance` : ''}`
-      : `${gstLiability > 0 ? `₹${formatINR(gstLiability)} GST due` : 'Pending collection'}${bankBalance > 0 ? ` · ₹${formatINR(bankBalance)} bank balance` : ''}`;
+      ? `${pendingInvoices.length} invoice${pendingInvoices.length === 1 ? '' : 's'} · Pending collection${gstLiability > 0 ? ` · ₹${formatINR(gstLiability)} GST due` : ''}${bankBalance > 0 ? ` · ₹${formatINR(bankBalance)} bank balance` : ''}${pendingReminders > 0 ? ` · ${pendingReminders} reminder${pendingReminders === 1 ? '' : 's'} queued` : ''}`
+      : `${gstLiability > 0 ? `₹${formatINR(gstLiability)} GST due` : 'Pending collection'}${bankBalance > 0 ? ` · ₹${formatINR(bankBalance)} bank balance` : ''}${pendingReminders > 0 ? ` · ${pendingReminders} reminder${pendingReminders === 1 ? '' : 's'} queued` : ''}`;
 
   // ── Score card subtitles — augmented with REAL GST + Banking data ─────
   // Compliance / Collection / Risk score cards keep their original layout
@@ -1129,11 +1150,11 @@ export default function DashboardPage() {
     ? `${metrics.filedReturns} filed · ${metrics.pendingReturns + metrics.overdueReturns} pending${outputTax > 0 ? ` · ₹${formatINR(outputTax)} output tax` : ''}`
     : `${outputTax > 0 ? `₹${formatINR(outputTax)} output tax · ${gstSalesCount} sale${gstSalesCount === 1 ? '' : 's'} (C ₹${formatINR(cgstCollected)}/S ₹${formatINR(sgstCollected)}/I ₹${formatINR(igstCollected)})` : 'Based on filed vs pending returns'}`;
   const collectionScoreSubtitle = pendingCollection > 0
-    ? `₹${formatINR(pendingCollection)} pending collection${availableITC > 0 || inputTax > 0 ? ` · ₹${formatINR(availableITC)} ITC avail` : ''}${inputTax > 0 ? ` · ₹${formatINR(inputTax)} input tax` : ''}${pendingReconciliation > 0 ? ` · ${pendingReconciliation} pending reconcile` : ''}`
-    : `${metrics.matchPercentage.toFixed(0)}% invoice match rate${availableITC > 0 || inputTax > 0 ? ` · ₹${formatINR(availableITC)} ITC avail` : ''}${inputTax > 0 ? ` · ₹${formatINR(inputTax)} input tax` : ''}${pendingReconciliation > 0 ? ` · ${pendingReconciliation} pending reconcile` : ''}`;
+    ? `₹${formatINR(pendingCollection)} pending collection${availableITC > 0 || inputTax > 0 ? ` · ₹${formatINR(availableITC)} ITC avail` : ''}${inputTax > 0 ? ` · ₹${formatINR(inputTax)} input tax` : ''}${pendingReconciliation > 0 ? ` · ${pendingReconciliation} pending reconcile` : ''}${pendingClientReplies > 0 ? ` · ${pendingClientReplies} client repl${pendingClientReplies === 1 ? 'y' : 'ies'} pending` : ''}`
+    : `${metrics.matchPercentage.toFixed(0)}% invoice match rate${availableITC > 0 || inputTax > 0 ? ` · ₹${formatINR(availableITC)} ITC avail` : ''}${inputTax > 0 ? ` · ₹${formatINR(inputTax)} input tax` : ''}${pendingReconciliation > 0 ? ` · ${pendingReconciliation} pending reconcile` : ''}${pendingClientReplies > 0 ? ` · ${pendingClientReplies} client repl${pendingClientReplies === 1 ? 'y' : 'ies'} pending` : ''}`;
   const riskScoreSubtitle = metrics.criticalIssues > 0
-    ? `${metrics.criticalIssues} critical · ${metrics.overdueReturns} overdue${bankBalance > 0 ? ` · ₹${formatINR(bankBalance)} bank` : ''}`
-    : `${gstLiability > 0 ? `₹${formatINR(gstLiability)} GST liability` : 'Risk posture — higher is safer'}${bankBalance > 0 ? ` · ₹${formatINR(bankBalance)} bank` : ''}`;
+    ? `${metrics.criticalIssues} critical · ${metrics.overdueReturns} overdue${bankBalance > 0 ? ` · ₹${formatINR(bankBalance)} bank` : ''}${unreadWhatsAppMessages > 0 ? ` · ${unreadWhatsAppMessages} WA msg${unreadWhatsAppMessages === 1 ? '' : 's'}` : ''}`
+    : `${gstLiability > 0 ? `₹${formatINR(gstLiability)} GST liability` : 'Risk posture — higher is safer'}${bankBalance > 0 ? ` · ₹${formatINR(bankBalance)} bank` : ''}${unreadWhatsAppMessages > 0 ? ` · ${unreadWhatsAppMessages} WA msg${unreadWhatsAppMessages === 1 ? '' : 's'}` : ''}`;
 
   const firstName = getFirstName(user?.name);
 

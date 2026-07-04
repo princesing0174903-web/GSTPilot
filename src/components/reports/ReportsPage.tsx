@@ -43,6 +43,7 @@ import {
   useFireReports,
 } from '@/hooks/use-firestore';
 import { useInvoices } from '@/hooks/useInvoices';
+import { useGSTTransactions } from '@/hooks/useGSTTransactions';
 import { createReport, deleteReport } from '@/lib/firestore-service';
 import type {
   FirestoreReturn,
@@ -360,6 +361,21 @@ export default function ReportsPage() {
   const fireReturns = (fireReturnsQ.data ?? []) as Array<FirestoreReturn & { id?: string }>;
   const fireRecons = (fireReconsQ.data ?? []) as Array<FirestoreReconciliation & { id?: string }>;
 
+  // ─── GST Return Engine™ — live GST summary, ITC, GSTR-1/3B drafts ────────
+  // The GST Return Engine produces authoritative GSTSummary (output/input tax,
+  // net liability, by-rate/by-type breakdowns), ITCSummary (eligible/blocked/
+  // remaining), and GSTR-1/3B draft structures from the real org-scoped
+  // `gst_transactions` collection. fireReturns is kept ONLY for filing STATUS
+  // (filed/pending counts); all tax math flows through the engine.
+  const currentPeriod = new Date().toISOString().slice(0, 7);
+  const {
+    summary: gstSummary,
+    itcSummary,
+    gstr1Draft,
+    gstr3bDraft,
+    loading: gstLoading,
+  } = useGSTTransactions({ period: currentPeriod });
+
   // ─── Persist Report History to localStorage ──────────────────────────────
   useEffect(() => {
     saveHistory(recentExports);
@@ -473,20 +489,15 @@ export default function ReportsPage() {
 
   // ─── Firestore-derived category summaries ─────────────────────────────────
 
-  // GST Reports: GSTR-1 + GSTR-3B summaries.
-  // Output tax liability is derived from the Real Invoice Engine™ (org-scoped).
-  // Drafts and cancelled invoices are excluded — they don't represent real output tax.
-  const gstSummary = useMemo(() => {
+  // GST Reports: GSTR-1 + GSTR-3B FILING STATUS (filed/pending counts only).
+  // The actual tax math (output tax, taxable sales, ITC, net liability) flows
+  // through the GST Return Engine™ via the `gstSummary` (engine) bound above —
+  // see `useGSTTransactions`. This memo is kept ONLY for the filing-status
+  // badges and the returns table that show how many GSTR-1/GSTR-3B returns
+  // exist (filed vs pending) from the Firestore `returns` collection.
+  const gstFilingSummary = useMemo(() => {
     const gstr1Returns = fireReturns.filter((r) => r.returnType === 'GSTR-1');
     const gstr3bReturns = fireReturns.filter((r) => r.returnType === 'GSTR-3B');
-    const activeInvoices = engineInvoices.filter(
-      (i) => i.status !== 'draft' && i.status !== 'cancelled',
-    );
-    const outputTax = activeInvoices.reduce(
-      (s, i) => s + i.cgst + i.sgst + i.igst + i.cess,
-      0,
-    );
-    const outputTaxable = activeInvoices.reduce((s, i) => s + i.taxableValue, 0);
     const gstr1Filed = gstr1Returns.filter((r) => r.status === 'filed').length;
     const gstr3bFiled = gstr3bReturns.filter((r) => r.status === 'filed').length;
     return {
@@ -496,10 +507,8 @@ export default function ReportsPage() {
       gstr3bTotal: gstr3bReturns.length,
       gstr3bFiled,
       gstr3bPending: gstr3bReturns.length - gstr3bFiled,
-      outputTaxable,
-      outputTax,
     };
-  }, [fireReturns, engineInvoices]);
+  }, [fireReturns]);
 
   // Compliance Reports: filing compliance + match rates + issues
   const complianceSummary = useMemo(() => {
@@ -531,17 +540,25 @@ export default function ReportsPage() {
     };
   }, [fireReturns, fireRecons, liveMetrics]);
 
-  // Financial Reports: revenue + tax volumes from the Real Invoice Engine™.
-  // Drafts and cancelled invoices are excluded from financial totals.
+  // Financial Reports: revenue + tax volumes.
+  // Tax components (CGST/SGST/IGST/Cess), taxable sales, output tax, and the
+  // sales-count now flow from the GST Return Engine™ (authoritative for GST
+  // math). Total revenue still comes from engineInvoices.grandTotal (which
+  // includes round-off — the GST engine summary doesn't carry that). Drafts
+  // and cancelled invoices are excluded from the revenue figure.
   const financialSummary = useMemo(() => {
     const active = engineInvoices.filter((i) => i.status !== 'draft' && i.status !== 'cancelled');
     const totalRevenue = active.reduce((s, i) => s + i.grandTotal, 0);
-    const totalTaxVolume = active.reduce((s, i) => s + i.cgst + i.sgst + i.igst + i.cess, 0);
-    const totalTaxable = active.reduce((s, i) => s + i.taxableValue, 0);
-    const igstTotal = active.reduce((s, i) => s + i.igst, 0);
-    const cgstTotal = active.reduce((s, i) => s + i.cgst, 0);
-    const sgstTotal = active.reduce((s, i) => s + i.sgst, 0);
-    const cessTotal = active.reduce((s, i) => s + i.cess, 0);
+    // GST Return Engine™ — authoritative tax math for the current period.
+    const totalTaxVolume = gstSummary?.totalOutputTax ?? 0;
+    const totalTaxable = gstSummary?.taxableSales ?? 0;
+    const igstTotal = gstSummary?.igstCollected ?? 0;
+    const cgstTotal = gstSummary?.cgstCollected ?? 0;
+    const sgstTotal = gstSummary?.sgstCollected ?? 0;
+    const cessTotal = gstSummary?.cessCollected ?? 0;
+    // Section breakdown stays from engine invoices — the existing UI uses
+    // GSTR-1 section labels (b2b/b2cl/b2cs/cdnr/cdnur/exp) which differ from
+    // the GST engine's invoiceType enum (b2b/b2c_large/b2c_small/exports/nil).
     const bySection = SECTION_KEYS.map((sec) => {
       // Real engine invoices are all B2B (inter-state → IGST, intra-state → CGST+SGST).
       const secInvoices = sec === 'b2b' ? active : [];
@@ -561,9 +578,9 @@ export default function ReportsPage() {
       sgstTotal,
       cessTotal,
       bySection,
-      invoiceCount: active.length,
+      invoiceCount: gstSummary?.salesCount ?? active.length,
     };
-  }, [engineInvoices]);
+  }, [engineInvoices, gstSummary]);
 
   // Cash Flow Reports: reconciliation-based analysis + Real Invoice Engine™ cash flow.
   // Inflow = total collected (paid amounts), Outstanding = unpaid balance, Overdue = past-due.
@@ -972,33 +989,99 @@ export default function ReportsPage() {
     setGenerating('gst-pdf');
     try {
       const generatedAt = new Date().toLocaleString('en-IN');
+      // GST Return Engine™ — authoritative tax math for the current period.
+      const engineTaxableSales = gstSummary?.taxableSales ?? 0;
+      const engineOutputTax = gstSummary?.totalOutputTax ?? 0;
+      const engineTaxablePurchases = gstSummary?.taxablePurchases ?? 0;
+      const engineInputTax = gstSummary?.totalInputTax ?? 0;
+      const engineNetLiability = gstSummary?.netLiability ?? 0;
+      const engineOutstandingGST = gstSummary?.outstandingGST ?? 0;
+      const engineHealthScore = gstSummary?.healthScore ?? 0;
       const html = buildPdfHtml({
         title: 'GST Summary Report',
-        subtitle: 'GSTR-1 & GSTR-3B Filing Status',
+        subtitle: 'GSTR-1 & GSTR-3B Filing Status + GST Engine Totals',
         generatedAt,
         sections: [
           {
-            heading: 'GSTR-1 Filings',
+            heading: 'GSTR-1 Filings (Status)',
             rows: [
-              { label: 'Total GSTR-1 Returns', value: formatNumber(gstSummary.gstr1Total) },
-              { label: 'Filed', value: formatNumber(gstSummary.gstr1Filed) },
-              { label: 'Pending', value: formatNumber(gstSummary.gstr1Pending) },
+              { label: 'Total GSTR-1 Returns', value: formatNumber(gstFilingSummary.gstr1Total) },
+              { label: 'Filed', value: formatNumber(gstFilingSummary.gstr1Filed) },
+              { label: 'Pending', value: formatNumber(gstFilingSummary.gstr1Pending) },
             ],
           },
           {
-            heading: 'GSTR-3B Filings',
+            heading: 'GSTR-3B Filings (Status)',
             rows: [
-              { label: 'Total GSTR-3B Returns', value: formatNumber(gstSummary.gstr3bTotal) },
-              { label: 'Filed', value: formatNumber(gstSummary.gstr3bFiled) },
-              { label: 'Pending', value: formatNumber(gstSummary.gstr3bPending) },
+              { label: 'Total GSTR-3B Returns', value: formatNumber(gstFilingSummary.gstr3bTotal) },
+              { label: 'Filed', value: formatNumber(gstFilingSummary.gstr3bFiled) },
+              { label: 'Pending', value: formatNumber(gstFilingSummary.gstr3bPending) },
             ],
           },
           {
-            heading: 'Output Tax Liability',
+            heading: 'GST Engine — Output Tax Liability',
             rows: [
-              { label: 'Total Taxable Value', value: formatCurrency(gstSummary.outputTaxable) },
-              { label: 'Total Output Tax', value: formatCurrency(gstSummary.outputTax) },
+              { label: 'Taxable Sales', value: formatCurrency(engineTaxableSales) },
+              { label: 'Total Output Tax', value: formatCurrency(engineOutputTax) },
+              { label: 'CGST Collected', value: formatCurrency(gstSummary?.cgstCollected ?? 0) },
+              { label: 'SGST Collected', value: formatCurrency(gstSummary?.sgstCollected ?? 0) },
+              { label: 'IGST Collected', value: formatCurrency(gstSummary?.igstCollected ?? 0) },
+              { label: 'CESS Collected', value: formatCurrency(gstSummary?.cessCollected ?? 0) },
             ],
+          },
+          {
+            heading: 'GST Engine — Input Tax Credit',
+            rows: [
+              { label: 'Taxable Purchases', value: formatCurrency(engineTaxablePurchases) },
+              { label: 'Total Input Tax', value: formatCurrency(engineInputTax) },
+              { label: 'Eligible ITC', value: formatCurrency(itcSummary?.eligibleITC ?? 0) },
+              { label: 'Blocked ITC (Sec 17(5))', value: formatCurrency(itcSummary?.blockedITC ?? 0) },
+              { label: 'Remaining ITC', value: formatCurrency(itcSummary?.remainingITC ?? 0) },
+            ],
+          },
+          {
+            heading: 'GST Engine — Net Liability',
+            rows: [
+              { label: 'Net GST Liability', value: formatCurrency(engineNetLiability) },
+              { label: 'Outstanding GST', value: formatCurrency(engineOutstandingGST) },
+              { label: 'GST Health Score', value: formatNumber(engineHealthScore) },
+            ],
+          },
+          {
+            heading: 'GSTR-1 Draft Totals (Engine)',
+            rows: gstr1Draft
+              ? [
+                  { label: 'Invoice Count', value: formatNumber(gstr1Draft.totals.invoiceCount) },
+                  { label: 'Total Taxable Value', value: formatCurrency(gstr1Draft.totals.taxableValue) },
+                  { label: 'CGST', value: formatCurrency(gstr1Draft.totals.cgst) },
+                  { label: 'SGST', value: formatCurrency(gstr1Draft.totals.sgst) },
+                  { label: 'IGST', value: formatCurrency(gstr1Draft.totals.igst) },
+                  { label: 'CESS', value: formatCurrency(gstr1Draft.totals.cess) },
+                  { label: 'Total Tax', value: formatCurrency(gstr1Draft.totals.totalTax) },
+                ]
+              : [{ label: 'GSTR-1 Draft', value: 'No data for current period' }],
+          },
+          {
+            heading: 'GSTR-3B Draft (Engine)',
+            rows: gstr3bDraft
+              ? [
+                  { label: 'Outward Taxable Value', value: formatCurrency(gstr3bDraft.outwardSupplies.taxableValue) },
+                  { label: 'Outward CGST', value: formatCurrency(gstr3bDraft.outwardSupplies.cgst) },
+                  { label: 'Outward SGST', value: formatCurrency(gstr3bDraft.outwardSupplies.sgst) },
+                  { label: 'Outward IGST', value: formatCurrency(gstr3bDraft.outwardSupplies.igst) },
+                  { label: 'Eligible ITC (Total)', value: formatCurrency(gstr3bDraft.itc.totalITC) },
+                  { label: 'Ineligible ITC', value: formatCurrency(gstr3bDraft.itc.ineligibleITC) },
+                  {
+                    label: 'Net Liability (CGST+SGST+IGST+CESS)',
+                    value: formatCurrency(
+                      gstr3bDraft.netLiability.cgst +
+                        gstr3bDraft.netLiability.sgst +
+                        gstr3bDraft.netLiability.igst +
+                        gstr3bDraft.netLiability.cess,
+                    ),
+                  },
+                ]
+              : [{ label: 'GSTR-3B Draft', value: 'No data for current period' }],
           },
         ],
         tables: [
@@ -1069,6 +1152,17 @@ export default function ReportsPage() {
               { label: 'Warnings', value: formatNumber(complianceSummary.warnings) },
             ],
           },
+          {
+            heading: 'ITC Summary (GST Engine)',
+            rows: [
+              { label: 'Eligible ITC', value: formatCurrency(itcSummary?.eligibleITC ?? 0) },
+              { label: 'Blocked ITC (Sec 17(5))', value: formatCurrency(itcSummary?.blockedITC ?? 0) },
+              { label: 'Reverse-Charge ITC', value: formatCurrency(itcSummary?.reverseChargeITC ?? 0) },
+              { label: 'Pending ITC', value: formatCurrency(itcSummary?.pendingITC ?? 0) },
+              { label: 'Used ITC', value: formatCurrency(itcSummary?.usedITC ?? 0) },
+              { label: 'Remaining ITC', value: formatCurrency(itcSummary?.remainingITC ?? 0) },
+            ],
+          },
         ],
       });
       const ok = openPrintWindow(html);
@@ -1115,6 +1209,20 @@ export default function ReportsPage() {
               { label: 'SGST', value: formatCurrency(financialSummary.sgstTotal) },
               { label: 'IGST', value: formatCurrency(financialSummary.igstTotal) },
               { label: 'Cess', value: formatCurrency(financialSummary.cessTotal) },
+            ],
+          },
+          {
+            heading: 'GST Engine — Period Totals',
+            rows: [
+              { label: 'Taxable Sales', value: formatCurrency(gstSummary?.taxableSales ?? 0) },
+              { label: 'Total Output Tax', value: formatCurrency(gstSummary?.totalOutputTax ?? 0) },
+              { label: 'Taxable Purchases', value: formatCurrency(gstSummary?.taxablePurchases ?? 0) },
+              { label: 'Total Input Tax', value: formatCurrency(gstSummary?.totalInputTax ?? 0) },
+              { label: 'Net GST Liability', value: formatCurrency(gstSummary?.netLiability ?? 0) },
+              { label: 'Outstanding GST', value: formatCurrency(gstSummary?.outstandingGST ?? 0) },
+              { label: 'Sales Count', value: formatNumber(gstSummary?.salesCount ?? 0) },
+              { label: 'Purchase Count', value: formatNumber(gstSummary?.purchaseCount ?? 0) },
+              { label: 'GST Health Score', value: formatNumber(gstSummary?.healthScore ?? 0) },
             ],
           },
         ],
@@ -1289,10 +1397,10 @@ export default function ReportsPage() {
   };
 
   // ─── Loading Skeleton ────────────────────────────────────────────────────
-  // Wait for BOTH the legacy /api/invoices fetch (for the client dropdown) AND
-  // the real-time invoice engine subscription so the page never renders with
-  // stale engine data.
-  if (loading || engineLoading) {
+  // Wait for the legacy /api/invoices fetch (client dropdown), the real-time
+  // invoice engine subscription, AND the GST Return Engine™ subscription so
+  // the page never renders with stale engine or GST data.
+  if (loading || engineLoading || gstLoading) {
     return (
       <div className="space-y-6 p-6">
         <div className="flex items-center gap-3">
@@ -1723,17 +1831,17 @@ export default function ReportsPage() {
                   <div className="mb-3 flex items-center justify-between">
                     <h3 className="text-sm font-semibold text-emerald-900">GSTR-1 Summary</h3>
                     <Badge variant="outline" className="border-emerald-300 bg-white text-emerald-700">
-                      {gstSummary.gstr1Total} total
+                      {gstFilingSummary.gstr1Total} total
                     </Badge>
                   </div>
                   <div className="space-y-2 text-sm">
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Filed</span>
-                      <span className="font-semibold text-emerald-700">{formatNumber(gstSummary.gstr1Filed)}</span>
+                      <span className="font-semibold text-emerald-700">{formatNumber(gstFilingSummary.gstr1Filed)}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Pending</span>
-                      <span className="font-semibold text-amber-700">{formatNumber(gstSummary.gstr1Pending)}</span>
+                      <span className="font-semibold text-amber-700">{formatNumber(gstFilingSummary.gstr1Pending)}</span>
                     </div>
                   </div>
                 </div>
@@ -1743,17 +1851,17 @@ export default function ReportsPage() {
                   <div className="mb-3 flex items-center justify-between">
                     <h3 className="text-sm font-semibold text-teal-900">GSTR-3B Summary</h3>
                     <Badge variant="outline" className="border-teal-300 bg-white text-teal-700">
-                      {gstSummary.gstr3bTotal} total
+                      {gstFilingSummary.gstr3bTotal} total
                     </Badge>
                   </div>
                   <div className="space-y-2 text-sm">
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Filed</span>
-                      <span className="font-semibold text-teal-700">{formatNumber(gstSummary.gstr3bFiled)}</span>
+                      <span className="font-semibold text-teal-700">{formatNumber(gstFilingSummary.gstr3bFiled)}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Pending</span>
-                      <span className="font-semibold text-amber-700">{formatNumber(gstSummary.gstr3bPending)}</span>
+                      <span className="font-semibold text-amber-700">{formatNumber(gstFilingSummary.gstr3bPending)}</span>
                     </div>
                   </div>
                 </div>
@@ -1765,11 +1873,11 @@ export default function ReportsPage() {
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="rounded-lg border bg-white p-4">
                   <p className="text-xs text-muted-foreground">Total Taxable Value</p>
-                  <p className="text-xl font-bold text-foreground">{formatCurrency(gstSummary.outputTaxable)}</p>
+                  <p className="text-xl font-bold text-foreground">{formatCurrency(gstSummary?.taxableSales ?? 0)}</p>
                 </div>
                 <div className="rounded-lg border bg-white p-4">
                   <p className="text-xs text-muted-foreground">Total Output Tax</p>
-                  <p className="text-xl font-bold text-foreground">{formatCurrency(gstSummary.outputTax)}</p>
+                  <p className="text-xl font-bold text-foreground">{formatCurrency(gstSummary?.totalOutputTax ?? 0)}</p>
                 </div>
               </div>
 

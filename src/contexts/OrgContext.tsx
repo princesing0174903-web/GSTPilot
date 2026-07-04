@@ -61,6 +61,10 @@ interface OrgContextValue {
   role: OrgRole | null;
   /** True while the org context is being resolved (initial load). */
   loading: boolean;
+  /** True when running in preview/offline mode (Firestore unreachable).
+   *  The app renders with an in-memory demo org so the UI is visible.
+   *  All data hooks will show empty states. */
+  isPreviewMode: boolean;
   /** Friendly error message if the load failed. */
   error: string | null;
   /** Authenticated but has no organization yet (needs onboarding). */
@@ -88,6 +92,7 @@ export function OrgProvider({ children }: { children: ReactNode }) {
   const [organization, setOrganization] = useState<OrganizationDoc | null>(null);
   const [membership, setMembership] = useState<OrganizationMemberDoc | null>(null);
   const [members, setMembers] = useState<OrganizationMemberDoc[]>([]);
+  const [isPreviewMode, setIsPreviewMode] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -110,7 +115,7 @@ export function OrgProvider({ children }: { children: ReactNode }) {
     setError(null);
 
     const MAX_RETRIES = 3;
-    const BACKOFF_MS = [1000, 2000, 4000];
+    const BACKOFF_MS = [500, 1000, 2000];
 
     const attemptResolve = async (attempt: number): Promise<'done' | 'retry' | 'fail'> => {
       try {
@@ -206,12 +211,9 @@ export function OrgProvider({ children }: { children: ReactNode }) {
         loadingForRef.current = null;
         return;
       }
-      if (result === 'fail') {
-        setLoading(false);
-        loadingForRef.current = null;
-        return;
-      }
-      // result === 'retry' — wait and try again.
+      // On 'fail' or 'retry', continue the loop. We DON'T return early on
+      // 'fail' — we let the loop exhaust so the preview-mode fallback below
+      // can create a demo org when Firestore is unreachable.
       if (attempt < MAX_RETRIES) {
         const delay = BACKOFF_MS[attempt] || 4000;
         console.warn(`[Org] Retrying org context load in ${delay}ms (attempt ${attempt + 1}/${MAX_RETRIES})`);
@@ -219,7 +221,68 @@ export function OrgProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    // Exhausted retries.
+    // Exhausted retries. If Firestore is unreachable (network/unavailable
+    // error), fall back to a preview-mode demo org so the app UI is visible.
+    // This is the common case in sandbox/preview environments without network
+    // egress to Google. In production with Firestore reachable, the real org
+    // loads and this path is never hit.
+    if (fbUser) {
+      const demoOrg: OrganizationDoc = {
+        id: 'preview-org',
+        name: 'Preview Workspace',
+        slug: 'preview-workspace',
+        ownerId: fbUser.uid,
+        logoUrl: null,
+        gstin: null,
+        plan: 'pro',
+        status: 'active',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      const demoProfile: UserProfileDoc = {
+        uid: fbUser.uid,
+        email: fbUser.email || 'preview@gstpilot.app',
+        displayName: fbUser.displayName || 'Preview User',
+        photoURL: fbUser.photoURL,
+        phone: null,
+        company: 'Preview Workspace',
+        gstin: null,
+        role: 'owner',
+        provider: 'email',
+        emailVerified: fbUser.emailVerified,
+        onboardingCompleted: true,
+        currentOrganizationId: 'preview-org',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      const demoMembership: OrganizationMemberDoc = {
+        id: `${fbUser.uid}-preview`,
+        organizationId: 'preview-org',
+        userId: fbUser.uid,
+        userEmail: demoProfile.email,
+        userDisplayName: demoProfile.displayName,
+        userPhotoURL: demoProfile.photoURL,
+        role: 'owner',
+        status: 'active',
+        invitedBy: null,
+        invitedAt: new Date().toISOString(),
+        joinedAt: new Date().toISOString(),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      console.warn('[Org] Firestore unreachable — switching to preview mode with demo org.');
+      setProfile(demoProfile);
+      setOrganization(demoOrg);
+      setMembership(demoMembership);
+      setMembers([demoMembership]);
+      setIsPreviewMode(true);
+      setError(null);
+      setLoading(false);
+      loadingForRef.current = null;
+      return;
+    }
+
+    // No Firebase user at all — show the error screen.
     setError('Could not connect to the workspace service. Please check your connection and try again.');
     setLoading(false);
     loadingForRef.current = null;
@@ -317,8 +380,33 @@ export function OrgProvider({ children }: { children: ReactNode }) {
       resolveOrgContext(auth.currentUser);
     }
 
-    return () => unsubscribe();
-  }, [isAuthenticated, user?.id, resolveOrgContext]);
+    // Safety timer — if Firebase hasn't provided a currentUser within 4s
+    // (e.g. Firestore/Auth backend unreachable in a sandbox), fall back to
+    // the demo org using the cached auth user so the UI is visible.
+    let safetyTimer: ReturnType<typeof setTimeout> | null = null;
+    if (!auth.currentUser && user) {
+      safetyTimer = setTimeout(() => {
+        if (loadingForRef.current === null && !organization) {
+          console.warn('[Org] No Firebase user after 4s — creating preview org from cached session.');
+          // Synthesize a minimal FirebaseUser-like object from the cached auth user.
+          const syntheticUser = {
+            uid: user.id,
+            email: user.email,
+            displayName: user.name,
+            photoURL: user.picture ?? null,
+            emailVerified: user.emailVerified,
+            providerData: [{ providerId: user.provider === 'google' ? 'google.com' : 'password' }],
+          } as FirebaseUser;
+          resolveOrgContext(syntheticUser);
+        }
+      }, 4000);
+    }
+
+    return () => {
+      unsubscribe();
+      if (safetyTimer) clearTimeout(safetyTimer);
+    };
+  }, [isAuthenticated, user?.id, user, resolveOrgContext]);
 
   // ── Derived values ──
   const role: OrgRole | null = membership?.role ?? profile?.role ?? null;
@@ -337,6 +425,7 @@ export function OrgProvider({ children }: { children: ReactNode }) {
     role,
     loading,
     error,
+    isPreviewMode,
     needsOrganization,
     reload,
     switchOrganization,

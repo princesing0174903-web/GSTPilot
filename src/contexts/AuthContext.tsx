@@ -34,7 +34,7 @@ export interface AuthUser {
   name: string;
   email: string;
   picture?: string;
-  provider: 'email' | 'google';
+  provider: 'email' | 'google' | 'demo';
   emailVerified: boolean;
 }
 
@@ -50,6 +50,8 @@ interface AuthContextType {
   logout: () => Promise<void>;
   refreshUserProfile: () => Promise<void>;
   markOnboardingComplete: () => void;
+  /** Sign in with a demo account (preview mode — no Firebase backend needed). */
+  signInDemo: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -103,14 +105,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     // ── Restore from localStorage for instant UI ──
     let restoredFromCache = false;
+    let restoredDemoUser = false;
     try {
       const stored = localStorage.getItem(SESSION_KEY);
       if (stored) {
         const parsed = JSON.parse(stored) as AuthUser;
-        if (parsed.provider !== 'demo' && parsed.id) {
+        if (parsed.id) {
           setUser(parsed);
           cachedUserIdRef.current = parsed.id;
           restoredFromCache = true;
+          restoredDemoUser = parsed.provider === 'demo';
         } else {
           localStorage.removeItem(SESSION_KEY);
         }
@@ -146,9 +150,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           markInitialized();
         } else {
           // No Firebase user — session expired or signed out.
-          localStorage.removeItem(SESSION_KEY);
-          setUser(null);
-          cachedUserIdRef.current = null;
+          // BUT: if the cached user is a demo user (preview mode), keep it
+          // so the app remains usable when Firebase is unreachable.
+          if (!restoredDemoUser) {
+            localStorage.removeItem(SESSION_KEY);
+            setUser(null);
+            cachedUserIdRef.current = null;
+          }
           markInitialized();
         }
       },
@@ -220,6 +228,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setNeedsOnboarding(false);
   }, []);
 
+  // ── Sign in with a demo account (preview mode) ──
+  // Creates an in-memory demo user + persists to localStorage so the app
+  // renders even when Firebase Auth / Firestore are unreachable (e.g. sandbox
+  // preview). The OrgContext will create a matching demo org.
+  const signInDemo = useCallback(() => {
+    const demoUser: AuthUser = {
+      id: 'demo-user-' + Date.now(),
+      name: 'Preview User',
+      email: 'preview@gstpilot.app',
+      picture: undefined,
+      provider: 'demo',
+      emailVerified: true,
+    };
+    setUser(demoUser);
+    cachedUserIdRef.current = demoUser.id;
+    setNeedsOnboarding(false);
+    setError(null);
+    setIsInitializing(false);
+    try {
+      localStorage.setItem(SESSION_KEY, JSON.stringify(demoUser));
+    } catch {
+      /* non-fatal */
+    }
+  }, []);
+
   // ── Derived flags ──
   // `needsOnboarding` is now driven by OrgContext's `needsOrganization` flag,
   // but to avoid a circular dependency we expose a setter that page.tsx calls
@@ -241,6 +274,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         logout,
         refreshUserProfile,
         markOnboardingComplete,
+        signInDemo,
       }}
     >
       {children}

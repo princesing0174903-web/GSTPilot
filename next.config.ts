@@ -7,9 +7,11 @@ const nextConfig: NextConfig = {
   },
   reactStrictMode: false,
   allowedDevOrigins: [
-    // Sandbox preview domains
-    ".space-z.ai",
+    // Sandbox preview domains — wildcard matches all subdomains
+    "*.space-z.ai",
     "localhost",
+    "127.0.0.1",
+    "0.0.0.0",
   ],
 };
 

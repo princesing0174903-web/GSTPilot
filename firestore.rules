@@ -346,6 +346,16 @@ service cloud.firestore {
       allow delete: if isSignedIn() && resourceBelongsToUserOrg() && isOwnerOrAdmin(resource.data.organizationId);
     }
 
+    // ─── GST Transactions (GST Return Engine — one per invoice/CDN) ────────
+    // Auto-created when an invoice is created/updated. Drives GST summaries,
+    // ITC calculation, and GSTR-1 / GSTR-3B / GSTR-9 draft preparation.
+    match /gst_transactions/{docId} {
+      allow read:   if isSignedIn() && isOrgMember(resource.data.organizationId);
+      allow create: if isSignedIn() && writeScopedToUserOrg();
+      allow update: if isSignedIn() && resourceBelongsToUserOrg() && canMutate(resource.data.organizationId) && orgIdUnchanged();
+      allow delete: if isSignedIn() && resourceBelongsToUserOrg() && isOwnerOrAdmin(resource.data.organizationId);
+    }
+
     // ─── AI Production Pipeline™ (Phase 4) ─────────────────────────────────
     // Three collections: ai_jobs, ai_versions, ai_drafts. All org-scoped.
     //   • ai_jobs     — the generation queue + lifecycle (queued → processing → completed/failed/cancelled)

@@ -43,6 +43,7 @@ import {
   useFirePriorities,
 } from '@/hooks/use-firestore';
 import { useInvoices } from '@/hooks/useInvoices';
+import { useGSTTransactions } from '@/hooks/useGSTTransactions';
 import type {
   FirestoreClient,
   LiveDashboardMetrics,
@@ -555,6 +556,33 @@ export default function DashboardPage() {
     loading: invoicesLoading,
   } = useInvoices();
 
+  // ── Real GST Return Engine™ — org-scoped, real-time, server-calculated ──
+  // Replaces fallback / heuristic GST values with real GSTSummary (output tax,
+  // input tax, net liability, health score, transaction counts) and ITCSummary
+  // (eligible / blocked / used / remaining ITC) computed from the
+  // gst_transactions collection via the GST Return Engine.
+  const currentPeriod = new Date().toISOString().slice(0, 7); // YYYY-MM
+  const {
+    summary: gstSummary,
+    itcSummary,
+    loading: gstLoading,
+  } = useGSTTransactions({ period: currentPeriod });
+
+  // GST-derived values (real data from the GST Return Engine).
+  // All gracefully fall back to 0 when there's no GST data yet (summary is
+  // null) — matching the same pattern the invoice KPIs use for missing data.
+  const gstLiability = gstSummary?.netLiability ?? 0;
+  const availableITC = itcSummary?.remainingITC ?? 0;
+  const outputTax = gstSummary?.totalOutputTax ?? 0;
+  const inputTax = gstSummary?.totalInputTax ?? 0;
+  const cgstCollected = gstSummary?.cgstCollected ?? 0;
+  const sgstCollected = gstSummary?.sgstCollected ?? 0;
+  const igstCollected = gstSummary?.igstCollected ?? 0;
+  const gstHealthScore = gstSummary?.healthScore ?? 0;
+  const gstTotalTransactions = gstSummary?.totalTransactions ?? 0;
+  const gstSalesCount = gstSummary?.salesCount ?? 0;
+  const gstPurchaseCount = gstSummary?.purchaseCount ?? 0;
+
   // ── Filing state ──────────────────────────────────────────────────────
   const [filingInProgress, setFilingInProgress] = useState<Set<string>>(new Set());
 
@@ -590,7 +618,11 @@ export default function DashboardPage() {
   );
 
   // ── Business Health Score (firmHealth from executive scores, fallback to metrics) ──
+  // Prefers the GST Return Engine's real `healthScore` (computed from actual
+  // gst_transactions: output tax vs input tax, ITC utilisation, liability
+  // status) when available — it is the most accurate GST-specific signal.
   const businessHealthScore = useMemo<number>(() => {
+    if (gstHealthScore > 0) return gstHealthScore;
     if (execScores && typeof execScores.firmHealth === 'number' && execScores.firmHealth > 0) {
       return execScores.firmHealth;
     }
@@ -602,7 +634,7 @@ export default function DashboardPage() {
     score -= metrics.overdueReturns * 8;
     score -= metrics.pendingReturns * 2;
     return Math.max(0, Math.min(100, Math.round(score)));
-  }, [execScores, metrics]);
+  }, [execScores, metrics, gstHealthScore]);
 
   // ── Compliance Score (0-100): filed vs total returns, blended with exec score ──
   const complianceScore = useMemo<number>(() => {
@@ -842,11 +874,12 @@ export default function DashboardPage() {
   // ═══════════════════════════════════════════════════════════════════════════
 
   // ── Loading ───────────────────────────────────────────────────────────
-  // Wait for both the live dashboard metrics AND the real invoice engine
-  // initial subscription to settle before rendering — otherwise the Revenue
-  // and Cash Position KPIs would briefly show "—" before the engine data
-  // arrives.
-  if (loading || invoicesLoading) return <DashboardSkeleton />;
+  // Wait for the live dashboard metrics, the real invoice engine, AND the
+  // GST Return Engine initial subscriptions to settle before rendering —
+  // otherwise the Revenue / Cash Position KPIs would briefly show "—"
+  // (invoice engine) and the Business Health Score / subtitles would miss
+  // the real GST signals before the gst_transactions snapshot arrives.
+  if (loading || invoicesLoading || gstLoading) return <DashboardSkeleton />;
 
   // ── Error ─────────────────────────────────────────────────────────────
   if (error) {
@@ -892,6 +925,33 @@ export default function DashboardPage() {
   // of non-draft, non-cancelled invoices.
   const cashValue =
     invoiceStats.totalOutstanding > 0 ? `₹${formatINR(invoiceStats.totalOutstanding)}` : '—';
+
+  // ── KPI subtitles — augmented with REAL GST engine data ───────────────
+  // The 3 KPI cards (Revenue / Pending Compliance / Cash Position) keep
+  // their original layout, colors, and structure — only the subtitle text
+  // is enriched with real GST-derived values when the GST Return Engine has
+  // data for the current period.
+  const revenueSubtitle = `Total revenue · ${invoiceStats.count} invoice${invoiceStats.count === 1 ? '' : 's'}${gstSalesCount > 0 || gstPurchaseCount > 0 ? ` · ${gstSalesCount} sale${gstSalesCount === 1 ? '' : 's'}/${gstPurchaseCount} purch.` : ''}`;
+  const complianceSubtitle = `${pendingComplianceCount === 1 ? 'Return to file' : 'Returns to file'}${gstTotalTransactions > 0 ? ` · ${gstTotalTransactions} GST txn${gstTotalTransactions === 1 ? '' : 's'}` : ''}`;
+  const cashSubtitle =
+    pendingInvoices.length > 0
+      ? `${pendingInvoices.length} invoice${pendingInvoices.length === 1 ? '' : 's'} · Pending collection${gstLiability > 0 ? ` · ₹${formatINR(gstLiability)} GST due` : ''}`
+      : `${gstLiability > 0 ? `₹${formatINR(gstLiability)} GST due` : 'Pending collection'}`;
+
+  // ── Score card subtitles — augmented with REAL GST engine data ────────
+  // Compliance / Collection / Risk score cards keep their original layout
+  // and tone — only the subtitle text is enriched with real GST context
+  // (output tax + CGST/SGST/IGST breakdown, available ITC + input tax,
+  // GST liability) when available.
+  const complianceScoreSubtitle = metrics.filedReturns > 0
+    ? `${metrics.filedReturns} filed · ${metrics.pendingReturns + metrics.overdueReturns} pending${outputTax > 0 ? ` · ₹${formatINR(outputTax)} output tax` : ''}`
+    : `${outputTax > 0 ? `₹${formatINR(outputTax)} output tax · ${gstSalesCount} sale${gstSalesCount === 1 ? '' : 's'} (C ₹${formatINR(cgstCollected)}/S ₹${formatINR(sgstCollected)}/I ₹${formatINR(igstCollected)})` : 'Based on filed vs pending returns'}`;
+  const collectionScoreSubtitle = pendingCollection > 0
+    ? `₹${formatINR(pendingCollection)} pending collection${availableITC > 0 || inputTax > 0 ? ` · ₹${formatINR(availableITC)} ITC avail` : ''}${inputTax > 0 ? ` · ₹${formatINR(inputTax)} input tax` : ''}`
+    : `${metrics.matchPercentage.toFixed(0)}% invoice match rate${availableITC > 0 || inputTax > 0 ? ` · ₹${formatINR(availableITC)} ITC avail` : ''}${inputTax > 0 ? ` · ₹${formatINR(inputTax)} input tax` : ''}`;
+  const riskScoreSubtitle = metrics.criticalIssues > 0
+    ? `${metrics.criticalIssues} critical · ${metrics.overdueReturns} overdue`
+    : `${gstLiability > 0 ? `₹${formatINR(gstLiability)} GST liability` : 'Risk posture — higher is safer'}`;
 
   const firstName = getFirstName(user?.name);
 
@@ -944,29 +1004,21 @@ export default function DashboardPage() {
             index={0}
             label="Revenue"
             value={revenueValue}
-            subtitle={`Total revenue · ${invoiceStats.count} invoice${invoiceStats.count === 1 ? '' : 's'}`}
+            subtitle={revenueSubtitle}
             icon={<IndianRupee className="h-4 w-4 accent-text" />}
           />
           <KpiCard
             index={1}
             label="Pending Compliance"
             value={complianceValue}
-            subtitle={
-              pendingComplianceCount === 1
-                ? 'Return to file'
-                : 'Returns to file'
-            }
+            subtitle={complianceSubtitle}
             icon={<ShieldCheck className="h-4 w-4 accent-text" />}
           />
           <KpiCard
             index={2}
             label="Cash Position"
             value={cashValue}
-            subtitle={
-              pendingInvoices.length > 0
-                ? `${pendingInvoices.length} invoice${pendingInvoices.length === 1 ? '' : 's'} · Pending collection`
-                : 'Pending collection'
-            }
+            subtitle={cashSubtitle}
             icon={<IndianRupee className="h-4 w-4 accent-text" />}
           />
         </div>
@@ -977,11 +1029,7 @@ export default function DashboardPage() {
             index={0}
             label="Compliance Score"
             score={complianceScore}
-            subtitle={
-              metrics.filedReturns > 0
-                ? `${metrics.filedReturns} filed · ${metrics.pendingReturns + metrics.overdueReturns} pending`
-                : 'Based on filed vs pending returns'
-            }
+            subtitle={complianceScoreSubtitle}
             icon={<ShieldCheck className="h-4 w-4 accent-text" />}
             tone="emerald"
           />
@@ -989,11 +1037,7 @@ export default function DashboardPage() {
             index={1}
             label="Collection Score"
             score={collectionScore}
-            subtitle={
-              pendingCollection > 0
-                ? `₹${formatINR(pendingCollection)} pending collection`
-                : `${metrics.matchPercentage.toFixed(0)}% invoice match rate`
-            }
+            subtitle={collectionScoreSubtitle}
             icon={<TrendingUp className="h-4 w-4 accent-text" />}
             tone="cyan"
           />
@@ -1001,11 +1045,7 @@ export default function DashboardPage() {
             index={2}
             label="Risk Score"
             score={riskScore}
-            subtitle={
-              metrics.criticalIssues > 0
-                ? `${metrics.criticalIssues} critical · ${metrics.overdueReturns} overdue`
-                : 'Risk posture — higher is safer'
-            }
+            subtitle={riskScoreSubtitle}
             icon={<ShieldAlert className="h-4 w-4 accent-text" />}
             tone="amber"
           />

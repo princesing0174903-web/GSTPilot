@@ -1,0 +1,1472 @@
+     1→'use client';
+     2→
+     3→import React, { useState, useMemo } from 'react';
+     4→import { Badge } from '@/components/ui/badge';
+     5→import { Button } from '@/components/ui/button';
+     6→import { ScrollArea } from '@/components/ui/scroll-area';
+     7→import { Card, CardContent } from '@/components/ui/card';
+     8→import { ProSkeleton } from '@/components/ui-pro';
+     9→import {
+    10→  Upload,
+    11→  CheckCircle2,
+    12→  AlertTriangle,
+    13→  Clock,
+    14→  Sparkles,
+    15→  FileText,
+    16→  ShieldCheck,
+    17→  ClipboardCheck,
+    18→  Users,
+    19→  IndianRupee,
+    20→  Plus,
+    21→  ArrowRight,
+    22→  Loader2,
+    23→  Rocket,
+    24→  Activity,
+    25→  CheckSquare,
+    26→  Brain,
+    27→  Plug,
+    28→  MessageSquare,
+    29→  Zap,
+    30→  TrendingUp,
+    31→  ShieldAlert,
+    32→} from 'lucide-react';
+    33→import { motion } from 'framer-motion';
+    34→import { useApp, type AppView } from '@/contexts/AppContext';
+    35→import { useAuth } from '@/contexts/AuthContext';
+    36→import {
+    37→  useLiveDashboardMetrics,
+    38→  useFireClients,
+    39→  useFireReturns,
+    40→  useFireRecentActivities,
+    41→  useFirmExecutiveScores,
+    42→  useFireMemberships,
+    43→  useFirePriorities,
+    44→} from '@/hooks/use-firestore';
+    45→import { useInvoices } from '@/hooks/useInvoices';
+    46→import type {
+    47→  FirestoreClient,
+    48→  LiveDashboardMetrics,
+    49→} from '@/lib/firestore-schema';
+    50→import { fileReturn } from '@/lib/firestore-service';
+    51→import { periodToLabel, isOverdue, getFilingDueDate } from '@/lib/gst-utils';
+    52→import { toast } from 'sonner';
+    53→
+    54→// ═══════════════════════════════════════════════════════════════════════════════
+    55→// HELPERS
+    56→// ═══════════════════════════════════════════════════════════════════════════════
+    57→
+    58→function getDaysRemaining(dueDateStr: string): number {
+    59→  const dueDate = new Date(dueDateStr);
+    60→  const today = new Date();
+    61→  today.setHours(0, 0, 0, 0);
+    62→  dueDate.setHours(0, 0, 0, 0);
+    63→  return Math.ceil((dueDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+    64→}
+    65→
+    66→function formatDaysRemaining(days: number): string {
+    67→  if (days < 0) return `${Math.abs(days)}d overdue`;
+    68→  if (days === 0) return 'Due today';
+    69→  if (days === 1) return 'Tomorrow';
+    70→  return `${days}d left`;
+    71→}
+    72→
+    73→function formatINR(amount: number): string {
+    74→  return amount.toLocaleString('en-IN');
+    75→}
+    76→
+    77→function formatDateIN(dateStr: string): string {
+    78→  const d = new Date(dateStr);
+    79→  if (Number.isNaN(d.getTime())) return '—';
+    80→  const dd = String(d.getDate()).padStart(2, '0');
+    81→  const mm = String(d.getMonth() + 1).padStart(2, '0');
+    82→  const yyyy = d.getFullYear();
+    83→  return `${dd}/${mm}/${yyyy}`;
+    84→}
+    85→
+    86→function timeAgo(dateStr: string): string {
+    87→  const now = new Date();
+    88→  const date = new Date(dateStr);
+    89→  const seconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+    90→  if (seconds < 60) return 'just now';
+    91→  const minutes = Math.floor(seconds / 60);
+    92→  if (minutes < 60) return `${minutes}m ago`;
+    93→  const hours = Math.floor(minutes / 60);
+    94→  if (hours < 24) return `${hours}h ago`;
+    95→  const days = Math.floor(hours / 24);
+    96→  if (days < 7) return `${days}d ago`;
+    97→  return date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+    98→}
+    99→
+   100→function getGreeting(): string {
+   101→  const h = new Date().getHours();
+   102→  if (h < 12) return 'Good Morning';
+   103→  if (h < 17) return 'Good Afternoon';
+   104→  return 'Good Evening';
+   105→}
+   106→
+   107→function getFirstName(name: string | undefined | null): string {
+   108→  if (!name) return 'Prince';
+   109→  const first = name.trim().split(/\s+/)[0];
+   110→  return first || 'Prince';
+   111→}
+   112→
+   113→// One-sentence AI insight derived from live metrics.
+   114→function buildInsightSentence(
+   115→  metrics: LiveDashboardMetrics,
+   116→  pendingCollection: number,
+   117→): string {
+   118→  const parts: string[] = [];
+   119→  if (metrics.overdueReturns > 0) {
+   120→    parts.push(
+   121→      `${metrics.overdueReturns} overdue return${metrics.overdueReturns > 1 ? 's' : ''}`,
+   122→    );
+   123→  } else if (metrics.pendingReturns > 0) {
+   124→    parts.push(
+   125→      `${metrics.pendingReturns} return${metrics.pendingReturns > 1 ? 's' : ''} to file`,
+   126→    );
+   127→  }
+   128→  if (pendingCollection > 0) {
+   129→    parts.push(`₹${formatINR(pendingCollection)} pending collection`);
+   130→  }
+   131→  if (metrics.criticalIssues > 0) {
+   132→    parts.push(
+   133→      `${metrics.criticalIssues} critical issue${metrics.criticalIssues > 1 ? 's' : ''}`,
+   134→    );
+   135→  }
+   136→  if (parts.length === 0) {
+   137→    return `All clear — ${metrics.filedReturns} returns filed and ${metrics.totalClients} clients in good standing.`;
+   138→  }
+   139→  if (parts.length === 1) return `${parts[0]}.`;
+   140→  const last = parts.pop();
+   141→  return `${parts.join(', ')} and ${last}.`;
+   142→}
+   143→
+   144→// ═══════════════════════════════════════════════════════════════════════════════
+   145→// ACTIVITY ICON — returns just the icon shape; color is applied via accent-text
+   146→// ═══════════════════════════════════════════════════════════════════════════════
+   147→
+   148→function activityIcon(type: string): React.ReactNode {
+   149→  if (type.includes('filed')) return <CheckCircle2 className="h-3.5 w-3.5 accent-text" />;
+   150→  if (type.includes('upload') || type.includes('document'))
+   151→    return <Upload className="h-3.5 w-3.5 accent-text" />;
+   152→  if (type.includes('review')) return <ClipboardCheck className="h-3.5 w-3.5 accent-text" />;
+   153→  if (type.includes('client')) return <Users className="h-3.5 w-3.5 accent-text" />;
+   154→  if (type.includes('reconcil') || type.includes('mismatch'))
+   155→    return <AlertTriangle className="h-3.5 w-3.5 accent-text" />;
+   156→  if (type.includes('invoice') || type.includes('extract'))
+   157→    return <FileText className="h-3.5 w-3.5 accent-text" />;
+   158→  return <Activity className="h-3.5 w-3.5 accent-text" />;
+   159→}
+   160→
+   161→// ═══════════════════════════════════════════════════════════════════════════════
+   162→// KPI CARD
+   163→// ═══════════════════════════════════════════════════════════════════════════════
+   164→
+   165→interface KpiCardProps {
+   166→  label: string;
+   167→  value: string;
+   168→  subtitle: string;
+   169→  icon: React.ReactNode;
+   170→  index: number;
+   171→}
+   172→
+   173→function KpiCard({ label, value, subtitle, icon, index }: KpiCardProps) {
+   174→  return (
+   175→    <motion.div
+   176→      initial={{ opacity: 0, y: 16 }}
+   177→      animate={{ opacity: 1, y: 0 }}
+   178→      transition={{ duration: 0.5, delay: index * 0.08, ease: 'easeOut' }}
+   179→      className="h-full"
+   180→    >
+   181→      <div className="glass-surface rounded-2xl p-6 h-full transition-shadow hover-lift hover:shadow-[0_0_32px_-8px_rgba(59,130,246,0.25)]">
+   182→        <div className="flex items-start justify-between gap-4">
+   183→          <div className="space-y-1.5 min-w-0">
+   184→            <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
+   185→              {label}
+   186→            </p>
+   187→            <p className="text-3xl font-bold text-foreground tracking-tight truncate">
+   188→              {value}
+   189→            </p>
+   190→            <p className="text-xs text-muted-foreground">{subtitle}</p>
+   191→          </div>
+   192→          <div className="flex items-center justify-center h-10 w-10 rounded-xl accent-gradient-soft shrink-0">
+   193→            {icon}
+   194→          </div>
+   195→        </div>
+   196→      </div>
+   197→    </motion.div>
+   198→  );
+   199→}
+   200→
+   201→// ═══════════════════════════════════════════════════════════════════════════════
+   202→// SECTION CARD — glass wrapper with header (icon chip + title + optional action)
+   203→// ═══════════════════════════════════════════════════════════════════════════════
+   204→
+   205→interface SectionCardProps {
+   206→  title: string;
+   207→  icon: React.ReactNode;
+   208→  index: number;
+   209→  actionLabel?: string;
+   210→  onAction?: () => void;
+   211→  children: React.ReactNode;
+   212→}
+   213→
+   214→function SectionCard({
+   215→  title,
+   216→  icon,
+   217→  index,
+   218→  actionLabel,
+   219→  onAction,
+   220→  children,
+   221→}: SectionCardProps) {
+   222→  return (
+   223→    <motion.div
+   224→      initial={{ opacity: 0, y: 16 }}
+   225→      animate={{ opacity: 1, y: 0 }}
+   226→      transition={{ duration: 0.5, delay: 0.24 + index * 0.08, ease: 'easeOut' }}
+   227→      className="h-full"
+   228→    >
+   229→      <div className="glass-surface rounded-2xl h-full flex flex-col hover-lift">
+   230→        <div className="flex items-center justify-between gap-3 p-6 pb-3">
+   231→          <div className="flex items-center gap-2.5 min-w-0">
+   232→            <div className="flex items-center justify-center h-8 w-8 rounded-lg accent-gradient-soft shrink-0">
+   233→              {icon}
+   234→            </div>
+   235→            <h3 className="text-sm font-semibold text-foreground tracking-tight truncate">
+   236→              {title}
+   237→            </h3>
+   238→          </div>
+   239→          {actionLabel && onAction && (
+   240→            <Button
+   241→              variant="ghost"
+   242→              size="sm"
+   243→              onClick={onAction}
+   244→              className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+   245→            >
+   246→              {actionLabel}
+   247→              <ArrowRight className="h-3 w-3 ml-1" />
+   248→            </Button>
+   249→          )}
+   250→        </div>
+   251→        <div className="px-6 pb-6 flex-1 min-h-0">{children}</div>
+   252→      </div>
+   253→    </motion.div>
+   254→  );
+   255→}
+   256→
+   257→// ═══════════════════════════════════════════════════════════════════════════════
+   258→// BUSINESS HEALTH SCORE — prominent SVG gauge (0-100)
+   259→// ═══════════════════════════════════════════════════════════════════════════════
+   260→
+   261→function healthTier(score: number): { label: string; tone: string } {
+   262→  if (score >= 85) return { label: 'Excellent', tone: 'text-emerald-400' };
+   263→  if (score >= 70) return { label: 'Healthy', tone: 'text-emerald-400' };
+   264→  if (score >= 50) return { label: 'At Risk', tone: 'text-amber-400' };
+   265→  return { label: 'Critical', tone: 'text-amber-400' };
+   266→}
+   267→
+   268→function BusinessHealthGauge({
+   269→  score,
+   270→  insight,
+   271→}: {
+   272→  score: number;
+   273→  insight: string;
+   274→}) {
+   275→  const size = 180;
+   276→  const stroke = 12;
+   277→  const r = (size - stroke) / 2;
+   278→  const c = 2 * Math.PI * r;
+   279→  const pct = Math.max(0, Math.min(100, score)) / 100;
+   280→  const offset = c * (1 - pct);
+   281→  const tier = healthTier(score);
+   282→
+   283→  return (
+   284→    <motion.div
+   285→      initial={{ opacity: 0, y: 16 }}
+   286→      animate={{ opacity: 1, y: 0 }}
+   287→      transition={{ duration: 0.5, delay: 0.12, ease: 'easeOut' }}
+   288→      className="h-full"
+   289→    >
+   290→      <div className="glass-surface rounded-2xl p-6 md:p-8 flex flex-col sm:flex-row items-center gap-6 md:gap-10 h-full">
+   291→        <div className="relative shrink-0" style={{ width: size, height: size }}>
+   292→          <svg width={size} height={size} className="-rotate-90">
+   293→            <defs>
+   294→              <linearGradient id="bhsGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+   295→                <stop offset="0%" stopColor="#10b981" />
+   296→                <stop offset="60%" stopColor="#06b6d4" />
+   297→                <stop offset="100%" stopColor="#f59e0b" />
+   298→              </linearGradient>
+   299→            </defs>
+   300→            <circle
+   301→              cx={size / 2}
+   302→              cy={size / 2}
+   303→              r={r}
+   304→              fill="none"
+   305→              stroke="rgba(255,255,255,0.06)"
+   306→              strokeWidth={stroke}
+   307→            />
+   308→            <motion.circle
+   309→              cx={size / 2}
+   310→              cy={size / 2}
+   311→              r={r}
+   312→              fill="none"
+   313→              stroke="url(#bhsGradient)"
+   314→              strokeWidth={stroke}
+   315→              strokeLinecap="round"
+   316→              strokeDasharray={c}
+   317→              initial={{ strokeDashoffset: c }}
+   318→              animate={{ strokeDashoffset: offset }}
+   319→              transition={{ duration: 1.2, ease: 'easeOut', delay: 0.3 }}
+   320→            />
+   321→          </svg>
+   322→          <div className="absolute inset-0 flex flex-col items-center justify-center">
+   323→            <motion.span
+   324→              initial={{ opacity: 0, scale: 0.8 }}
+   325→              animate={{ opacity: 1, scale: 1 }}
+   326→              transition={{ duration: 0.5, delay: 0.7 }}
+   327→              className={`text-5xl font-bold tracking-tight ${tier.tone}`}
+   328→            >
+   329→              {Math.round(score)}
+   330→            </motion.span>
+   331→            <span className="text-[10px] text-muted-foreground tracking-wider uppercase mt-1">
+   332→              / 100
+   333→            </span>
+   334→          </div>
+   335→        </div>
+   336→        <div className="flex-1 min-w-0 space-y-2 text-center sm:text-left">
+   337→          <div className="flex items-center justify-center sm:justify-start gap-2">
+   338→            <div className="flex items-center justify-center h-8 w-8 rounded-lg accent-gradient-soft">
+   339→              <Brain className="h-4 w-4 accent-text" />
+   340→            </div>
+   341→            <h3 className="text-sm font-semibold text-foreground tracking-tight">
+   342→              Business Health Score
+   343→            </h3>
+   344→          </div>
+   345→          <p className={`text-lg font-semibold ${tier.tone}`}>{tier.label}</p>
+   346→          <p className="text-xs text-muted-foreground leading-relaxed line-clamp-3">
+   347→            {insight}
+   348→          </p>
+   349→          <div className="flex items-center justify-center sm:justify-start gap-2 pt-1">
+   350→            <span className="text-[10px] text-muted-foreground uppercase tracking-wider">
+   351→              Updated just now
+   352→            </span>
+   353→          </div>
+   354→        </div>
+   355→      </div>
+   356→    </motion.div>
+   357→  );
+   358→}
+   359→
+   360→// ═══════════════════════════════════════════════════════════════════════════════
+   361→// SCORE CARD — small 0-100 score with progress bar
+   362→// ═══════════════════════════════════════════════════════════════════════════════
+   363→
+   364→interface ScoreCardProps {
+   365→  label: string;
+   366→  score: number; // 0-100
+   367→  subtitle: string;
+   368→  icon: React.ReactNode;
+   369→  index: number;
+   370→  tone?: 'emerald' | 'amber' | 'cyan';
+   371→}
+   372→
+   373→function ScoreCard({
+   374→  label,
+   375→  score,
+   376→  subtitle,
+   377→  icon,
+   378→  index,
+   379→  tone = 'emerald',
+   380→}: ScoreCardProps) {
+   381→  const clamped = Math.max(0, Math.min(100, score));
+   382→  const barColor =
+   383→    tone === 'amber'
+   384→      ? 'from-amber-500 to-amber-400'
+   385→      : tone === 'cyan'
+   386→        ? 'from-cyan-500 to-cyan-400'
+   387→        : 'from-emerald-500 to-emerald-400';
+   388→  const textColor =
+   389→    tone === 'amber'
+   390→      ? 'text-amber-400'
+   391→      : tone === 'cyan'
+   392→        ? 'text-cyan-400'
+   393→        : 'text-emerald-400';
+   394→  return (
+   395→    <motion.div
+   396→      initial={{ opacity: 0, y: 16 }}
+   397→      animate={{ opacity: 1, y: 0 }}
+   398→      transition={{ duration: 0.5, delay: index * 0.08, ease: 'easeOut' }}
+   399→      className="h-full"
+   400→    >
+   401→      <div className="glass-surface rounded-2xl p-5 h-full hover-lift">
+   402→        <div className="flex items-start justify-between gap-3 mb-3">
+   403→          <div className="space-y-1 min-w-0">
+   404→            <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
+   405→              {label}
+   406→            </p>
+   407→            <p className={`text-2xl font-bold tracking-tight ${textColor}`}>
+   408→              {Math.round(clamped)}
+   409→              <span className="text-sm text-muted-foreground ml-0.5">/100</span>
+   410→            </p>
+   411→          </div>
+   412→          <div className="flex items-center justify-center h-9 w-9 rounded-lg accent-gradient-soft shrink-0">
+   413→            {icon}
+   414→          </div>
+   415→        </div>
+   416→        <div className="h-1.5 rounded-full bg-white/[0.05] overflow-hidden">
+   417→          <motion.div
+   418→            initial={{ width: 0 }}
+   419→            animate={{ width: `${clamped}%` }}
+   420→            transition={{ duration: 0.8, delay: 0.3 + index * 0.05, ease: 'easeOut' }}
+   421→            className={`h-full rounded-full bg-gradient-to-r ${barColor}`}
+   422→          />
+   423→        </div>
+   424→        <p className="text-[11px] text-muted-foreground mt-2">{subtitle}</p>
+   425→      </div>
+   426→    </motion.div>
+   427→  );
+   428→}
+   429→
+   430→// ═══════════════════════════════════════════════════════════════════════════════
+   431→// LOADING SKELETON — matches new layout (3 KPI + 3 sections)
+   432→// ═══════════════════════════════════════════════════════════════════════════════
+   433→
+   434→function DashboardSkeleton() {
+   435→  return (
+   436→    <div className="max-w-6xl mx-auto px-4 md:px-6 py-8 md:py-10 space-y-8">
+   437→      <div className="space-y-3">
+   438→        <ProSkeleton className="h-9 w-64" />
+   439→        <ProSkeleton className="h-4 w-80" />
+   440→      </div>
+   441→      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+   442→        {Array.from({ length: 3 }).map((_, i) => (
+   443→          <ProSkeleton key={i} className="h-32 rounded-2xl" />
+   444→        ))}
+   445→      </div>
+   446→      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+   447→        {Array.from({ length: 3 }).map((_, i) => (
+   448→          <ProSkeleton key={i} className="h-72 rounded-2xl" />
+   449→        ))}
+   450→      </div>
+   451→    </div>
+   452→  );
+   453→}
+   454→
+   455→// ═══════════════════════════════════════════════════════════════════════════════
+   456→// EMPTY STATE — Fresh onboarding (re-styled with accent gradient logo)
+   457→// ═══════════════════════════════════════════════════════════════════════════════
+   458→
+   459→function WelcomeEmptyState({
+   460→  onAddClient,
+   461→  onUploadDoc,
+   462→}: {
+   463→  onAddClient: () => void;
+   464→  onUploadDoc: () => void;
+   465→}) {
+   466→  return (
+   467→    <motion.div
+   468→      initial={{ opacity: 0, y: 24 }}
+   469→      animate={{ opacity: 1, y: 0 }}
+   470→      transition={{ duration: 0.5, ease: 'easeOut' }}
+   471→      className="flex flex-col items-center justify-center text-center py-20 px-4"
+   472→    >
+   473→      <div className="relative mb-6">
+   474→        <div className="flex items-center justify-center h-20 w-20 rounded-2xl accent-gradient accent-ring">
+   475→          <Rocket className="h-10 w-10 text-white" />
+   476→        </div>
+   477→        <div className="absolute -top-1 -right-1 h-5 w-5 rounded-full accent-gradient flex items-center justify-center">
+   478→          <Sparkles className="h-3 w-3 text-white" />
+   479→        </div>
+   480→      </div>
+   481→      <h2 className="text-2xl font-bold text-foreground tracking-tight">
+   482→        Welcome to GSTPilot
+   483→      </h2>
+   484→      <p className="text-sm text-muted-foreground mt-2 max-w-md">
+   485→        Start by adding your first client to unlock the full workflow —
+   486→        from document upload to automated GST filing.
+   487→      </p>
+   488→      <div className="flex items-center gap-3 mt-6">
+   489→        <Button
+   490→          onClick={onAddClient}
+   491→          className="accent-gradient text-white hover:opacity-90 gap-1.5"
+   492→        >
+   493→          <Plus className="h-4 w-4" />
+   494→          Add Client
+   495→        </Button>
+   496→        <Button
+   497→          variant="outline"
+   498→          onClick={onUploadDoc}
+   499→          className="gap-1.5 border-border"
+   500→        >
+   501→          <Upload className="h-4 w-4" />
+   502→          Upload Document
+   503→        </Button>
+   504→      </div>
+   505→      <div className="grid grid-cols-3 gap-6 mt-10 text-center max-w-sm">
+   506→        {[
+   507→          { icon: <Users className="h-5 w-5 accent-text" />, label: 'Add Clients' },
+   508→          { icon: <FileText className="h-5 w-5 accent-text" />, label: 'Upload Docs' },
+   509→          { icon: <CheckCircle2 className="h-5 w-5 accent-text" />, label: 'File Returns' },
+   510→        ].map((step, i) => (
+   511→          <div key={i} className="flex flex-col items-center gap-1.5">
+   512→            <div className="flex items-center justify-center h-10 w-10 rounded-lg accent-gradient-soft">
+   513→              {step.icon}
+   514→            </div>
+   515→            <span className="text-[11px] text-muted-foreground">{step.label}</span>
+   516→          </div>
+   517→        ))}
+   518→      </div>
+   519→    </motion.div>
+   520→  );
+   521→}
+   522→
+   523→// ═══════════════════════════════════════════════════════════════════════════════
+   524→// MAIN COMPONENT
+   525→// ═══════════════════════════════════════════════════════════════════════════════
+   526→
+   527→interface Recommendation {
+   528→  id: string;
+   529→  icon: React.ReactNode;
+   530→  title: string;
+   531→  actionLabel: string;
+   532→  onAction: () => void;
+   533→}
+   534→
+   535→export default function DashboardPage() {
+   536→  const { setCurrentView, setSelectedClientId, setReturnPrepCtx } = useApp();
+   537→  const { user } = useAuth();
+   538→
+   539→  // ── Firebase Firestore hooks ──────────────────────────────────────────
+   540→  const { metrics, loading, error } = useLiveDashboardMetrics();
+   541→  const { data: clients } = useFireClients();
+   542→  const { data: returns } = useFireReturns();
+   543→  const { data: recentActivities } = useFireRecentActivities(10);
+   544→  const { scores: execScores } = useFirmExecutiveScores();
+   545→  const { data: memberships } = useFireMemberships(null);
+   546→  const { data: priorityQueue } = useFirePriorities('pending');
+   547→
+   548→  // ── Real Invoice Engine™ — org-scoped, real-time, server-calculated ──
+   549→  // Replaces the old firmId-scoped useFireInvoices() for revenue / outstanding
+   550→  // KPIs. The engine computes totals server-side (subtotal, taxes, grandTotal,
+   551→  // paidAmount, balanceDue) and exposes a stats aggregate via computeInvoiceStats.
+   552→  const {
+   553→    invoices: engineInvoices,
+   554→    stats: invoiceStats,
+   555→    loading: invoicesLoading,
+   556→  } = useInvoices();
+   557→
+   558→  // ── Filing state ──────────────────────────────────────────────────────
+   559→  const [filingInProgress, setFilingInProgress] = useState<Set<string>>(new Set());
+   560→
+   561→  // ── Client lookup map ─────────────────────────────────────────────────
+   562→  const clientMap = useMemo(() => {
+   563→    const map = new Map<string, FirestoreClient & { id: string }>();
+   564→    for (const c of clients) map.set(c.clientId, c);
+   565→    return map;
+   566→  }, [clients]);
+   567→
+   568→  // ── KPI derivations ───────────────────────────────────────────────────
+   569→  const pendingComplianceCount = useMemo(
+   570→    () => returns.filter((r) => r.status !== 'filed').length,
+   571→    [returns],
+   572→  );
+   573→
+   574→  const pendingInvoices = useMemo(
+   575→    () =>
+   576→      engineInvoices.filter(
+   577→        (i) =>
+   578→          i.balanceDue > 0 && i.status !== 'cancelled' && i.status !== 'draft',
+   579→      ),
+   580→    [engineInvoices],
+   581→  );
+   582→
+   583→  // Real outstanding from the invoice engine — Σ balanceDue of non-draft,
+   584→  // non-cancelled invoices (server-calculated per invoice).
+   585→  const pendingCollection = invoiceStats.totalOutstanding;
+   586→
+   587→  const insight = useMemo(
+   588→    () => buildInsightSentence(metrics, pendingCollection),
+   589→    [metrics, pendingCollection],
+   590→  );
+   591→
+   592→  // ── Business Health Score (firmHealth from executive scores, fallback to metrics) ──
+   593→  const businessHealthScore = useMemo<number>(() => {
+   594→    if (execScores && typeof execScores.firmHealth === 'number' && execScores.firmHealth > 0) {
+   595→      return execScores.firmHealth;
+   596→    }
+   597→    if (metrics.averageHealthScore > 0) return metrics.averageHealthScore;
+   598→    // Fallback computation — start at 100, subtract weighted penalties
+   599→    let score = 100;
+   600→    score -= metrics.criticalIssues * 6;
+   601→    score -= metrics.warnings * 2;
+   602→    score -= metrics.overdueReturns * 8;
+   603→    score -= metrics.pendingReturns * 2;
+   604→    return Math.max(0, Math.min(100, Math.round(score)));
+   605→  }, [execScores, metrics]);
+   606→
+   607→  // ── Compliance Score (0-100): filed vs total returns, blended with exec score ──
+   608→  const complianceScore = useMemo<number>(() => {
+   609→    if (execScores && typeof execScores.compliance === 'number' && execScores.compliance > 0) {
+   610→      return execScores.compliance;
+   611→    }
+   612→    const totalReturns = returns.length;
+   613→    if (totalReturns === 0) return 100;
+   614→    const filed = returns.filter((r) => r.status === 'filed').length;
+   615→    return Math.round((filed / totalReturns) * 100);
+   616→  }, [execScores, returns]);
+   617→
+   618→  // ── Collection Score (0-100): match percentage from reconciliation ──
+   619→  const collectionScore = useMemo<number>(() => {
+   620→    if (execScores && typeof execScores.cashFlow === 'number' && execScores.cashFlow > 0) {
+   621→      // Use a blend: cashFlow score and match percentage
+   622→      return Math.round((execScores.cashFlow + metrics.matchPercentage) / 2);
+   623→    }
+   624→    return Math.round(metrics.matchPercentage);
+   625→  }, [execScores, metrics.matchPercentage]);
+   626→
+   627→  // ── Risk Score (0-100): inverse of risk percentage, with critical issues penalty ──
+   628→  const riskScore = useMemo<number>(() => {
+   629→    // riskScore represents risk POSTURE (higher = safer), not raw risk
+   630→    const baseRisk = Math.max(0, Math.min(100, 100 - metrics.riskPercentage));
+   631→    const criticalPenalty = Math.min(50, metrics.criticalIssues * 8);
+   632→    const overduePenalty = Math.min(30, metrics.overdueReturns * 6);
+   633→    return Math.max(0, Math.min(100, Math.round(baseRisk - criticalPenalty - overduePenalty)));
+   634→  }, [metrics]);
+   635→
+   636→  // ── Today's Priorities: from priority queue hook, fallback to derived priorities ──
+   637→  const todaysPriorities = useMemo<
+   638→    Array<{ id: string; label: string; category: string; urgency: number; view: AppView }>
+   639→  >(() => {
+   640→    // 1. Use real priority queue data if available
+   641→    if (priorityQueue && priorityQueue.length > 0) {
+   642→      return priorityQueue.slice(0, 5).map((p) => ({
+   643→        id: p.priorityId || p.id,
+   644→        label: p.title || 'Untitled priority',
+   645→        category: p.category || 'general',
+   646→        urgency: p.urgency || 5,
+   647→        view: 'tasks' as AppView,
+   648→      }));
+   649→    }
+   650→    // 2. Fallback: derive from live metrics
+   651→    const list: Array<{ id: string; label: string; category: string; urgency: number; view: AppView }> = [];
+   652→    if (metrics.overdueReturns > 0) {
+   653→      list.push({
+   654→        id: 'fb-overdue',
+   655→        label: `File ${metrics.overdueReturns} overdue return${metrics.overdueReturns > 1 ? 's' : ''}`,
+   656→        category: 'filing',
+   657→        urgency: 10,
+   658→        view: 'returns',
+   659→      });
+   660→    }
+   661→    if (metrics.criticalIssues > 0) {
+   662→      list.push({
+   663→        id: 'fb-critical',
+   664→        label: `Resolve ${metrics.criticalIssues} critical issue${metrics.criticalIssues > 1 ? 's' : ''}`,
+   665→        category: 'reconciliation',
+   666→        urgency: 9,
+   667→        view: 'reconcile',
+   668→      });
+   669→    }
+   670→    if (pendingCollection > 0) {
+   671→      list.push({
+   672→        id: 'fb-collections',
+   673→        label: `Collect ₹${formatINR(pendingCollection)} pending`,
+   674→        category: 'payment',
+   675→        urgency: 7,
+   676→        view: 'invoices',
+   677→      });
+   678→    }
+   679→    if (metrics.extractionsPending > 0) {
+   680→      list.push({
+   681→        id: 'fb-extractions',
+   682→        label: `Review ${metrics.extractionsPending} pending extraction${metrics.extractionsPending > 1 ? 's' : ''}`,
+   683→        category: 'upload',
+   684→        urgency: 5,
+   685→        view: 'invoices',
+   686→      });
+   687→    }
+   688→    return list.slice(0, 5);
+   689→  }, [priorityQueue, metrics, pendingCollection]);
+   690→
+   691→  // ── Connected services (static catalog — honest "Not connected" by default) ──
+   692→  const connectedServices = useMemo(
+   693→    () => [
+   694→      { id: 'gstn', name: 'GSTN', initial: 'G', connected: metrics.totalClients > 0 },
+   695→      { id: 'einvoice', name: 'E-Invoice', initial: 'E', connected: false },
+   696→      { id: 'gstr2b', name: 'GSTR-2B', initial: '2', connected: false },
+   697→      { id: 'bank', name: 'Bank APIs', initial: 'B', connected: false },
+   698→      { id: 'whatsapp', name: 'WhatsApp', initial: 'W', connected: false },
+   699→      { id: 'gmail', name: 'Gmail', initial: 'M', connected: false },
+   700→    ],
+   701→    [metrics.totalClients],
+   702→  );
+   703→
+   704→  // ── Team members from memberships hook ──
+   705→  const teamMembers = useMemo(
+   706→    () => memberships.slice(0, 6).map((m) => ({
+   707→      id: m.membershipId || m.id,
+   708→      name: m.userId?.split('@')[0] || 'Team member',
+   709→      role: m.role || 'staff',
+   710→      status: m.status || 'invited',
+   711→    })),
+   712→    [memberships],
+   713→  );
+   714→
+   715→  // ── Upcoming filings (non-filed, sorted by urgency) ───────────────────
+   716→  const upcomingFilings = useMemo(() => {
+   717→    return returns
+   718→      .filter((r) => r.status !== 'filed')
+   719→      .sort((a, b) => {
+   720→        const aOverdue = isOverdue(a.period) ? 0 : 1;
+   721→        const bOverdue = isOverdue(b.period) ? 0 : 1;
+   722→        if (aOverdue !== bOverdue) return aOverdue - bOverdue;
+   723→        return a.period.localeCompare(b.period);
+   724→      })
+   725→      .slice(0, 5);
+   726→  }, [returns]);
+   727→
+   728→  // ── AI Recommendations ────────────────────────────────────────────────
+   729→  const recommendations = useMemo<Recommendation[]>(() => {
+   730→    const recs: Recommendation[] = [];
+   731→
+   732→    // Overdue returns → file now
+   733→    for (const r of returns) {
+   734→      if (recs.length >= 5) break;
+   735→      if (r.status === 'filed' || !isOverdue(r.period)) continue;
+   736→      const client = clientMap.get(r.clientId);
+   737→      const name = client?.tradeName ?? 'Unknown client';
+   738→      recs.push({
+   739→        id: `rec-overdue-${r.id}`,
+   740→        icon: <AlertTriangle className="h-3.5 w-3.5 accent-text" />,
+   741→        title: `File ${r.returnType} for ${name} — overdue`,
+   742→        actionLabel: 'File now',
+   743→        onAction: () => handleFileReturn(r.clientId, r.returnType, r.period),
+   744→      });
+   745→    }
+   746→
+   747→    // Returns due soon (≤ 7 days)
+   748→    for (const r of returns) {
+   749→      if (recs.length >= 5) break;
+   750→      if (r.status === 'filed' || isOverdue(r.period)) continue;
+   751→      const dueDate = getFilingDueDate(r.returnType, r.period);
+   752→      const days = getDaysRemaining(dueDate);
+   753→      if (days > 7) continue;
+   754→      const client = clientMap.get(r.clientId);
+   755→      const name = client?.tradeName ?? 'Unknown client';
+   756→      recs.push({
+   757→        id: `rec-soon-${r.id}`,
+   758→        icon: <Clock className="h-3.5 w-3.5 accent-text" />,
+   759→        title: `File ${r.returnType} for ${name} — due in ${days} day${days === 1 ? '' : 's'}`,
+   760→        actionLabel: 'Prepare',
+   761→        onAction: () => handleFileReturn(r.clientId, r.returnType, r.period),
+   762→      });
+   763→    }
+   764→
+   765→    // Low health score clients
+   766→    for (const c of clients) {
+   767→      if (recs.length >= 5) break;
+   768→      if (c.healthScore >= 60) continue;
+   769→      recs.push({
+   770→        id: `rec-health-${c.clientId}`,
+   771→        icon: <ShieldCheck className="h-3.5 w-3.5 accent-text" />,
+   772→        title: `${c.tradeName} — health score ${Math.round(c.healthScore)}% needs attention`,
+   773→        actionLabel: 'Open',
+   774→        onAction: () => handleOpenClient(c.clientId),
+   775→      });
+   776→    }
+   777→
+   778→    // Pending collection
+   779→    if (recs.length < 5 && pendingCollection > 0) {
+   780→      recs.push({
+   781→        id: 'rec-collection',
+   782→        icon: <IndianRupee className="h-3.5 w-3.5 accent-text" />,
+   783→        title: `₹${formatINR(pendingCollection)} pending collection across ${pendingInvoices.length} invoice${pendingInvoices.length === 1 ? '' : 's'}`,
+   784→        actionLabel: 'Review',
+   785→        onAction: () => setCurrentView('invoices'),
+   786→      });
+   787→    }
+   788→
+   789→    // Critical issues
+   790→    if (recs.length < 5 && metrics.criticalIssues > 0) {
+   791→      recs.push({
+   792→        id: 'rec-critical',
+   793→        icon: <AlertTriangle className="h-3.5 w-3.5 accent-text" />,
+   794→        title: `${metrics.criticalIssues} critical compliance issue${metrics.criticalIssues === 1 ? '' : 's'} need${metrics.criticalIssues === 1 ? 's' : ''} review`,
+   795→        actionLabel: 'Review',
+   796→        onAction: () => setCurrentView('reconcile'),
+   797→      });
+   798→    }
+   799→
+   800→    return recs;
+   801→  }, [returns, clients, clientMap, pendingCollection, pendingInvoices.length, metrics.criticalIssues]);
+   802→
+   803→  // ── Handlers ──────────────────────────────────────────────────────────
+   804→  const handleOpenClient = (clientId: string) => {
+   805→    setSelectedClientId(clientId);
+   806→    setCurrentView('client-workspace');
+   807→  };
+   808→
+   809→  const handleFileReturn = (clientId: string, returnType: string, period: string) => {
+   810→    setSelectedClientId(clientId);
+   811→    setReturnPrepCtx({
+   812→      clientId,
+   813→      returnType: (returnType === 'GSTR-3B' ? 'GSTR-3B' : 'GSTR-1') as 'GSTR-1' | 'GSTR-3B',
+   814→      period,
+   815→    });
+   816→    setCurrentView('return-prep');
+   817→  };
+   818→
+   819→  const handleQuickFile = async (returnId: string, clientName: string, returnType: string) => {
+   820→    if (filingInProgress.has(returnId)) return;
+   821→    setFilingInProgress((prev) => new Set(prev).add(returnId));
+   822→    try {
+   823→      const arn = await fileReturn(returnId);
+   824→      toast.success(`${returnType} Filed Successfully`, {
+   825→        description: `${clientName} — ARN: ${arn}`,
+   826→      });
+   827→    } catch (err) {
+   828→      toast.error('Filing Failed', {
+   829→        description: err instanceof Error ? err.message : 'Unknown error',
+   830→      });
+   831→    } finally {
+   832→      setFilingInProgress((prev) => {
+   833→        const next = new Set(prev);
+   834→        next.delete(returnId);
+   835→        return next;
+   836→      });
+   837→    }
+   838→  };
+   839→
+   840→  // ═══════════════════════════════════════════════════════════════════════════
+   841→  // RENDER
+   842→  // ═══════════════════════════════════════════════════════════════════════════
+   843→
+   844→  // ── Loading ───────────────────────────────────────────────────────────
+   845→  // Wait for both the live dashboard metrics AND the real invoice engine
+   846→  // initial subscription to settle before rendering — otherwise the Revenue
+   847→  // and Cash Position KPIs would briefly show "—" before the engine data
+   848→  // arrives.
+   849→  if (loading || invoicesLoading) return <DashboardSkeleton />;
+   850→
+   851→  // ── Error ─────────────────────────────────────────────────────────────
+   852→  if (error) {
+   853→    return (
+   854→      <div className="relative max-w-6xl mx-auto px-4 md:px-6 py-8 md:py-10">
+   855→        <Card className="glass-surface border-red-500/20">
+   856→          <CardContent className="p-6 text-center">
+   857→            <AlertTriangle className="h-8 w-8 text-red-500 mx-auto mb-2" />
+   858→            <h3 className="font-semibold text-foreground">Failed to load dashboard</h3>
+   859→            <p className="text-sm text-muted-foreground mt-1">{error}</p>
+   860→            <Button
+   861→              variant="outline"
+   862→              className="mt-4 border-border"
+   863→              onClick={() => window.location.reload()}
+   864→            >
+   865→              Retry
+   866→            </Button>
+   867→          </CardContent>
+   868→        </Card>
+   869→      </div>
+   870→    );
+   871→  }
+   872→
+   873→  // ── Empty state — no clients at all ───────────────────────────────────
+   874→  if (metrics.totalClients === 0) {
+   875→    return (
+   876→      <div className="relative max-w-6xl mx-auto px-4 md:px-6 py-8 md:py-10">
+   877→        <WelcomeEmptyState
+   878→          onAddClient={() => setCurrentView('clients')}
+   879→          onUploadDoc={() => setCurrentView('invoices')}
+   880→        />
+   881→      </div>
+   882→    );
+   883→  }
+   884→
+   885→  // ── KPI values ────────────────────────────────────────────────────────
+   886→  // Revenue KPI: REAL revenue from the invoice engine — Σ grandTotal of
+   887→  // non-draft, non-cancelled invoices (server-calculated per invoice).
+   888→  const revenueValue =
+   889→    invoiceStats.totalRevenue > 0 ? `₹${formatINR(invoiceStats.totalRevenue)}` : '—';
+   890→  const complianceValue = String(pendingComplianceCount);
+   891→  // Cash Position KPI: REAL outstanding from the invoice engine — Σ balanceDue
+   892→  // of non-draft, non-cancelled invoices.
+   893→  const cashValue =
+   894→    invoiceStats.totalOutstanding > 0 ? `₹${formatINR(invoiceStats.totalOutstanding)}` : '—';
+   895→
+   896→  const firstName = getFirstName(user?.name);
+   897→
+   898→  return (
+   899→    <div className="relative max-w-6xl mx-auto px-4 md:px-6 py-8 md:py-10">
+   900→      {/* ── Ambient radial glow at top ── */}
+   901→      <div
+   902→        aria-hidden
+   903→        className="pointer-events-none absolute inset-x-0 top-0 h-[420px] bg-[radial-gradient(ellipse_at_top,_rgba(16,185,129,0.08),_transparent_60%)]"
+   904→      />
+   905→
+   906→      {/* ── Content ── */}
+   907→      <div className="relative space-y-8">
+   908→        {/* ═══ GREETING + AI INSIGHT ═══ */}
+   909→        <motion.div
+   910→          initial={{ opacity: 0, y: -8 }}
+   911→          animate={{ opacity: 1, y: 0 }}
+   912→          transition={{ duration: 0.5, ease: 'easeOut' }}
+   913→          className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4"
+   914→        >
+   915→          <div className="space-y-2 min-w-0">
+   916→            <h1 className="text-3xl md:text-4xl font-bold text-foreground tracking-tight">
+   917→              {getGreeting()}, {firstName} <span className="inline-block">👋</span>
+   918→            </h1>
+   919→            <div className="flex items-start gap-2 text-sm text-muted-foreground">
+   920→              <Sparkles className="h-4 w-4 mt-0.5 shrink-0 accent-text" />
+   921→              <span className="leading-relaxed">{insight}</span>
+   922→            </div>
+   923→          </div>
+   924→          <Button
+   925→            variant="ghost"
+   926→            size="sm"
+   927→            onClick={() => setCurrentView('clients')}
+   928→            className="shrink-0 gap-1.5 text-muted-foreground hover:text-foreground"
+   929→          >
+   930→            <Plus className="h-3.5 w-3.5" />
+   931→            Add Client
+   932→          </Button>
+   933→        </motion.div>
+   934→
+   935→        {/* ═══ BUSINESS HEALTH SCORE — prominent gauge ═══ */}
+   936→        <BusinessHealthGauge
+   937→          score={businessHealthScore}
+   938→          insight={insight}
+   939→        />
+   940→
+   941→        {/* ═══ KPI CARDS — exactly 3 ═══ */}
+   942→        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+   943→          <KpiCard
+   944→            index={0}
+   945→            label="Revenue"
+   946→            value={revenueValue}
+   947→            subtitle={`Total revenue · ${invoiceStats.count} invoice${invoiceStats.count === 1 ? '' : 's'}`}
+   948→            icon={<IndianRupee className="h-4 w-4 accent-text" />}
+   949→          />
+   950→          <KpiCard
+   951→            index={1}
+   952→            label="Pending Compliance"
+   953→            value={complianceValue}
+   954→            subtitle={
+   955→              pendingComplianceCount === 1
+   956→                ? 'Return to file'
+   957→                : 'Returns to file'
+   958→            }
+   959→            icon={<ShieldCheck className="h-4 w-4 accent-text" />}
+   960→          />
+   961→          <KpiCard
+   962→            index={2}
+   963→            label="Cash Position"
+   964→            value={cashValue}
+   965→            subtitle={
+   966→              pendingInvoices.length > 0
+   967→                ? `${pendingInvoices.length} invoice${pendingInvoices.length === 1 ? '' : 's'} · Pending collection`
+   968→                : 'Pending collection'
+   969→            }
+   970→            icon={<IndianRupee className="h-4 w-4 accent-text" />}
+   971→          />
+   972→        </div>
+   973→
+   974→        {/* ═══ SCORE CARDS — Compliance / Collection / Risk (0-100) ═══ */}
+   975→        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+   976→          <ScoreCard
+   977→            index={0}
+   978→            label="Compliance Score"
+   979→            score={complianceScore}
+   980→            subtitle={
+   981→              metrics.filedReturns > 0
+   982→                ? `${metrics.filedReturns} filed · ${metrics.pendingReturns + metrics.overdueReturns} pending`
+   983→                : 'Based on filed vs pending returns'
+   984→            }
+   985→            icon={<ShieldCheck className="h-4 w-4 accent-text" />}
+   986→            tone="emerald"
+   987→          />
+   988→          <ScoreCard
+   989→            index={1}
+   990→            label="Collection Score"
+   991→            score={collectionScore}
+   992→            subtitle={
+   993→              pendingCollection > 0
+   994→                ? `₹${formatINR(pendingCollection)} pending collection`
+   995→                : `${metrics.matchPercentage.toFixed(0)}% invoice match rate`
+   996→            }
+   997→            icon={<TrendingUp className="h-4 w-4 accent-text" />}
+   998→            tone="cyan"
+   999→          />
+  1000→          <ScoreCard
+  1001→            index={2}
+  1002→            label="Risk Score"
+  1003→            score={riskScore}
+  1004→            subtitle={
+  1005→              metrics.criticalIssues > 0
+  1006→                ? `${metrics.criticalIssues} critical · ${metrics.overdueReturns} overdue`
+  1007→                : 'Risk posture — higher is safer'
+  1008→            }
+  1009→            icon={<ShieldAlert className="h-4 w-4 accent-text" />}
+  1010→            tone="amber"
+  1011→          />
+  1012→        </div>
+  1013→
+  1014→        {/* ═══ BOTTOM SECTIONS — 3 in a row ═══ */}
+  1015→        <div className="section-gap grid grid-cols-1 lg:grid-cols-3 gap-6">
+  1016→          {/* ── AI Recommendations ─────────────────────────────────────── */}
+  1017→          <SectionCard
+  1018→            index={0}
+  1019→            title="AI Recommendations"
+  1020→            icon={<Sparkles className="h-4 w-4 accent-text" />}
+  1021→          >
+  1022→            {recommendations.length === 0 ? (
+  1023→              <div className="flex flex-col items-center justify-center py-8 text-center">
+  1024→                <CheckCircle2 className="h-7 w-7 text-emerald-500/70 mb-2" />
+  1025→                <p className="text-xs text-muted-foreground max-w-[220px]">
+  1026→                  You&apos;re all caught up. Nothing needs your attention right now.
+  1027→                </p>
+  1028→              </div>
+  1029→            ) : (
+  1030→              <ul className="space-y-1">
+  1031→                {recommendations.map((rec) => (
+  1032→                  <li key={rec.id}>
+  1033→                    <div className="group flex items-start gap-3 py-2.5">
+  1034→                      <div className="flex items-center justify-center h-6 w-6 rounded-md accent-gradient-soft shrink-0 mt-0.5">
+  1035→                        {rec.icon}
+  1036→                      </div>
+  1037→                      <div className="min-w-0 flex-1">
+  1038→                        <p className="text-[13px] text-foreground leading-snug">
+  1039→                          {rec.title}
+  1040→                        </p>
+  1041→                        <button
+  1042→                          type="button"
+  1043→                          onClick={rec.onAction}
+  1044→                          className="mt-1 inline-flex items-center gap-1 text-[11px] font-medium accent-text hover:opacity-80 transition-opacity"
+  1045→                        >
+  1046→                          {rec.actionLabel}
+  1047→                          <ArrowRight className="h-3 w-3" />
+  1048→                        </button>
+  1049→                      </div>
+  1050→                    </div>
+  1051→                  </li>
+  1052→                ))}
+  1053→              </ul>
+  1054→            )}
+  1055→          </SectionCard>
+  1056→
+  1057→          {/* ── Today's Priorities ───────────────────────────────────── */}
+  1058→          <SectionCard
+  1059→            index={1}
+  1060→            title="Today's Priorities"
+  1061→            icon={<Zap className="h-4 w-4 accent-text" />}
+  1062→            actionLabel="View all"
+  1063→            onAction={() => setCurrentView('tasks')}
+  1064→          >
+  1065→            {todaysPriorities.length === 0 ? (
+  1066→              <div className="flex flex-col items-center justify-center py-8 text-center">
+  1067→                <CheckCircle2 className="h-7 w-7 text-emerald-500/70 mb-2" />
+  1068→                <p className="text-xs text-muted-foreground max-w-[220px]">
+  1069→                  No priorities today — you&apos;re ahead of schedule!
+  1070→                </p>
+  1071→              </div>
+  1072→            ) : (
+  1073→              <ScrollArea className="max-h-[280px] -mx-1 px-1">
+  1074→                <ul className="space-y-1">
+  1075→                  {todaysPriorities.map((p) => {
+  1076→                    const urgencyHigh = p.urgency >= 8;
+  1077→                    const urgencyMed = p.urgency >= 5 && p.urgency < 8;
+  1078→                    return (
+  1079→                      <li key={p.id}>
+  1080→                        <button
+  1081→                          type="button"
+  1082→                          onClick={() => setCurrentView(p.view)}
+  1083→                          className="w-full text-left p-2.5 rounded-lg hover:bg-white/5 transition-colors group"
+  1084→                        >
+  1085→                          <div className="flex items-center justify-between gap-2">
+  1086→                            <div className="min-w-0 flex-1">
+  1087→                              <p className="text-[13px] font-medium text-foreground truncate">
+  1088→                                {p.label}
+  1089→                              </p>
+  1090→                              <p className="text-[11px] text-muted-foreground mt-0.5 capitalize">
+  1091→                                {p.category} · urgency {p.urgency}/10
+  1092→                              </p>
+  1093→                            </div>
+  1094→                            <Badge
+  1095→                              variant="outline"
+  1096→                              className={`text-[10px] px-1.5 py-0 h-5 shrink-0 ${
+  1097→                                urgencyHigh
+  1098→                                  ? 'border-amber-500/30 text-amber-400'
+  1099→                                  : urgencyMed
+  1100→                                    ? 'border-cyan-500/30 text-cyan-400'
+  1101→                                    : 'border-border text-muted-foreground'
+  1102→                              }`}
+  1103→                            >
+  1104→                              {urgencyHigh ? 'High' : urgencyMed ? 'Med' : 'Low'}
+  1105→                            </Badge>
+  1106→                          </div>
+  1107→                        </button>
+  1108→                      </li>
+  1109→                    );
+  1110→                  })}
+  1111→                </ul>
+  1112→              </ScrollArea>
+  1113→            )}
+  1114→          </SectionCard>
+  1115→
+  1116→          {/* ── Tasks (upcoming filings) ─────────────────────────────── */}
+  1117→          <SectionCard
+  1118→            index={2}
+  1119→            title="Tasks"
+  1120→            icon={<CheckSquare className="h-4 w-4 accent-text" />}
+  1121→            actionLabel="View all"
+  1122→            onAction={() => setCurrentView('returns')}
+  1123→          >
+  1124→            {upcomingFilings.length === 0 ? (
+  1125→              <div className="flex flex-col items-center justify-center py-8 text-center">
+  1126→                <CheckCircle2 className="h-7 w-7 text-emerald-500/70 mb-2" />
+  1127→                <p className="text-xs text-muted-foreground max-w-[220px]">
+  1128→                  All returns filed — you&apos;re all caught up!
+  1129→                </p>
+  1130→              </div>
+  1131→            ) : (
+  1132→              <ScrollArea className="max-h-[280px] -mx-1 px-1">
+  1133→                <ul className="space-y-1">
+  1134→                  {upcomingFilings.map((r) => {
+  1135→                    const client = clientMap.get(r.clientId);
+  1136→                    const name = client?.tradeName ?? 'Unknown client';
+  1137→                    const dueDateStr = getFilingDueDate(r.returnType, r.period);
+  1138→                    const days = getDaysRemaining(dueDateStr);
+  1139→                    const overdue = days < 0;
+  1140→                    const dueSoon = days >= 0 && days <= 5;
+  1141→                    return (
+  1142→                      <li key={r.id}>
+  1143→                        <button
+  1144→                          type="button"
+  1145→                          onClick={() =>
+  1146→                            handleFileReturn(r.clientId, r.returnType, r.period)
+  1147→                          }
+  1148→                          className="w-full text-left p-2.5 rounded-lg hover:bg-white/5 transition-colors group"
+  1149→                        >
+  1150→                          <div className="flex items-center justify-between gap-2">
+  1151→                            <div className="min-w-0 flex-1">
+  1152→                              <p className="text-[13px] font-medium text-foreground truncate">
+  1153→                                {name}
+  1154→                              </p>
+  1155→                              <p className="text-[11px] text-muted-foreground mt-0.5">
+  1156→                                {r.returnType} · {periodToLabel(r.period)} ·{' '}
+  1157→                                {formatDateIN(dueDateStr)}
+  1158→                              </p>
+  1159→                            </div>
+  1160→                            <div className="flex items-center gap-2 shrink-0">
+  1161→                              <span
+  1162→                                className={`text-[11px] font-medium ${
+  1163→                                  overdue
+  1164→                                    ? 'text-red-400'
+  1165→                                    : dueSoon
+  1166→                                      ? 'text-amber-400'
+  1167→                                      : 'text-muted-foreground'
+  1168→                                }`}
+  1169→                              >
+  1170→                                {formatDaysRemaining(days)}
+  1171→                              </span>
+  1172→                              <Badge
+  1173→                                variant="outline"
+  1174→                                className={`text-[10px] px-1.5 py-0 h-5 ${
+  1175→                                  overdue
+  1176→                                    ? 'border-red-500/30 text-red-400'
+  1177→                                    : dueSoon
+  1178→                                      ? 'border-amber-500/30 text-amber-400'
+  1179→                                      : 'border-border text-muted-foreground'
+  1180→                                }`}
+  1181→                              >
+  1182→                                {r.status}
+  1183→                              </Badge>
+  1184→                            </div>
+  1185→                          </div>
+  1186→                        </button>
+  1187→                      </li>
+  1188→                    );
+  1189→                  })}
+  1190→                </ul>
+  1191→              </ScrollArea>
+  1192→            )}
+  1193→          </SectionCard>
+  1194→        </div>
+  1195→
+  1196→        {/* ═══ ADDITIONAL WIDGETS — Activity / Services / Team ═══ */}
+  1197→        <div className="section-gap grid grid-cols-1 lg:grid-cols-3 gap-6">
+  1198→          {/* ── Business Timeline (Recent Activity) ──────────────────── */}
+  1199→          <SectionCard
+  1200→            index={0}
+  1201→            title="Business Timeline"
+  1202→            icon={<Clock className="h-4 w-4 accent-text" />}
+  1203→            actionLabel="View all"
+  1204→            onAction={() => setCurrentView('timeline')}
+  1205→          >
+  1206→            {recentActivities.length === 0 ? (
+  1207→              <div className="flex flex-col items-center justify-center py-8 text-center">
+  1208→                <Activity className="h-7 w-7 text-muted-foreground/60 mb-2" />
+  1209→                <p className="text-xs text-muted-foreground max-w-[220px]">
+  1210→                  No activity yet — actions you take will appear here.
+  1211→                </p>
+  1212→              </div>
+  1213→            ) : (
+  1214→              <ScrollArea className="max-h-[280px] -mx-1 px-1">
+  1215→                <div className="relative">
+  1216→                  <ul className="space-y-0">
+  1217→                    {recentActivities.slice(0, 6).map((a, i) => {
+  1218→                      const isLast = i === Math.min(recentActivities.length, 6) - 1;
+  1219→                      return (
+  1220→                        <li key={a.id} className="relative flex gap-3 pb-3 last:pb-0">
+  1221→                          {!isLast && (
+  1222→                            <span
+  1223→                              className="absolute left-[9px] top-7 bottom-0 w-px bg-white/[0.08]"
+  1224→                              aria-hidden
+  1225→                            />
+  1226→                          )}
+  1227→                          <span className="relative z-10 flex h-[18px] w-[18px] items-center justify-center rounded-full border border-emerald-400/30 bg-[#050505] shrink-0 mt-1">
+  1228→                            <span className="h-1.5 w-1.5 rounded-full accent-gradient" />
+  1229→                          </span>
+  1230→                          <div className="min-w-0 flex-1 pt-0.5">
+  1231→                            <p className="text-[13px] font-medium text-foreground leading-snug">
+  1232→                              {a.title}
+  1233→                            </p>
+  1234→                            {a.description && (
+  1235→                              <p className="text-[11px] text-muted-foreground mt-0.5 line-clamp-2">
+  1236→                                {a.description}
+  1237→                              </p>
+  1238→                            )}
+  1239→                            <p className="text-[10px] text-muted-foreground/60 mt-0.5">
+  1240→                              {a.createdAt ? timeAgo(a.createdAt as string) : ''}
+  1241→                            </p>
+  1242→                          </div>
+  1243→                        </li>
+  1244→                      );
+  1245→                    })}
+  1246→                  </ul>
+  1247→                </div>
+  1248→              </ScrollArea>
+  1249→            )}
+  1250→          </SectionCard>
+  1251→
+  1252→          {/* ── Connected Services ───────────────────────────────────── */}
+  1253→          <SectionCard
+  1254→            index={1}
+  1255→            title="Connected Services"
+  1256→            icon={<Plug className="h-4 w-4 accent-text" />}
+  1257→            actionLabel="Manage"
+  1258→            onAction={() => setCurrentView('connections')}
+  1259→          >
+  1260→            <div className="grid grid-cols-2 gap-2">
+  1261→              {connectedServices.map((s) => (
+  1262→                <div
+  1263→                  key={s.id}
+  1264→                  className="flex flex-col gap-2 rounded-xl border border-white/[0.06] bg-white/[0.02] px-3 py-3"
+  1265→                >
+  1266→                  <div className="flex items-center gap-2">
+  1267→                    <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-white/[0.04] text-[11px] font-bold text-muted-foreground shrink-0">
+  1268→                      {s.initial}
+  1269→                    </div>
+  1270→                    <div className="flex-1 min-w-0">
+  1271→                      <p className="text-xs font-medium text-foreground truncate">
+  1272→                        {s.name}
+  1273→                      </p>
+  1274→                      <div className="flex items-center gap-1 mt-0.5">
+  1275→                        <span
+  1276→                          className={`h-1.5 w-1.5 rounded-full ${
+  1277→                            s.connected ? 'bg-emerald-400' : 'bg-muted-foreground/40'
+  1278→                          }`}
+  1279→                        />
+  1280→                        <span className="text-[10px] text-muted-foreground">
+  1281→                          {s.connected ? 'Connected' : 'Not connected'}
+  1282→                        </span>
+  1283→                      </div>
+  1284→                    </div>
+  1285→                  </div>
+  1286→                </div>
+  1287→              ))}
+  1288→            </div>
+  1289→            <p className="text-[11px] text-muted-foreground text-center pt-3">
+  1290→              Connect services to sync automatically.
+  1291→            </p>
+  1292→          </SectionCard>
+  1293→
+  1294→          {/* ── Team Status ──────────────────────────────────────────── */}
+  1295→          <SectionCard
+  1296→            index={2}
+  1297→            title="Team Status"
+  1298→            icon={<Users className="h-4 w-4 accent-text" />}
+  1299→            actionLabel="Manage"
+  1300→            onAction={() => setCurrentView('team')}
+  1301→          >
+  1302→            {teamMembers.length === 0 ? (
+  1303→              <div className="flex flex-col items-center justify-center py-6 text-center">
+  1304→                <div className="flex items-center justify-center h-10 w-10 rounded-xl accent-gradient-soft mb-2">
+  1305→                  <Users className="h-4 w-4 accent-text" />
+  1306→                </div>
+  1307→                <p className="text-xs text-muted-foreground max-w-[220px]">
+  1308→                  No team members yet — invite your team to collaborate.
+  1309→                </p>
+  1310→                <button
+  1311→                  type="button"
+  1312→                  onClick={() => setCurrentView('team')}
+  1313→                  className="mt-3 inline-flex items-center gap-1 text-[11px] font-medium accent-text hover:opacity-80 transition-opacity"
+  1314→                >
+  1315→                  [ Invite your team ]
+  1316→                  <ArrowRight className="h-3 w-3" />
+  1317→                </button>
+  1318→              </div>
+  1319→            ) : (
+  1320→              <ScrollArea className="max-h-[280px] -mx-1 px-1">
+  1321→                <ul className="space-y-1">
+  1322→                  {teamMembers.map((m) => {
+  1323→                    const initials = m.name.slice(0, 2).toUpperCase();
+  1324→                    const isActive = m.status === 'active';
+  1325→                    return (
+  1326→                      <li key={m.id}>
+  1327→                        <div className="flex items-center gap-3 p-2 rounded-lg hover:bg-white/5 transition-colors">
+  1328→                          <div className="flex h-8 w-8 items-center justify-center rounded-full accent-gradient text-[11px] font-bold text-white shrink-0">
+  1329→                            {initials}
+  1330→                          </div>
+  1331→                          <div className="min-w-0 flex-1">
+  1332→                            <p className="text-[13px] font-medium text-foreground truncate capitalize">
+  1333→                              {m.name}
+  1334→                            </p>
+  1335→                            <p className="text-[11px] text-muted-foreground capitalize">
+  1336→                              {m.role}
+  1337→                            </p>
+  1338→                          </div>
+  1339→                          <div className="flex items-center gap-1.5 shrink-0">
+  1340→                            <span
+  1341→                              className={`h-1.5 w-1.5 rounded-full ${
+  1342→                                isActive ? 'bg-emerald-400' : 'bg-amber-400'
+  1343→                              }`}
+  1344→                            />
+  1345→                            <span
+  1346→                              className={`text-[10px] capitalize ${
+  1347→                                isActive ? 'text-emerald-400' : 'text-amber-400'
+  1348→                              }`}
+  1349→                            >
+  1350→                              {m.status}
+  1351→                            </span>
+  1352→                          </div>
+  1353→                        </div>
+  1354→                      </li>
+  1355→                    );
+  1356→                  })}
+  1357→                </ul>
+  1358→              </ScrollArea>
+  1359→            )}
+  1360→          </SectionCard>
+  1361→        </div>
+  1362→
+  1363→        {/* ═══ ORACLE QUICK-ASK — AI assistant entry ═══ */}
+  1364→        <motion.div
+  1365→          initial={{ opacity: 0, y: 16 }}
+  1366→          animate={{ opacity: 1, y: 0 }}
+  1367→          transition={{ duration: 0.5, delay: 0.56, ease: 'easeOut' }}
+  1368→          className="h-full"
+  1369→        >
+  1370→          <div className="glass-surface rounded-2xl p-6 hover-lift">
+  1371→            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+  1372→              <div className="flex items-start gap-3 min-w-0">
+  1373→                <div className="flex items-center justify-center h-10 w-10 rounded-xl accent-gradient shrink-0">
+  1374→                  <Brain className="h-5 w-5 text-white" />
+  1375→                </div>
+  1376→                <div className="min-w-0">
+  1377→                  <div className="flex items-center gap-2">
+  1378→                    <h3 className="text-sm font-semibold text-foreground tracking-tight">
+  1379→                      Ask Oracle
+  1380→                    </h3>
+  1381→                    <Badge
+  1382→                      variant="outline"
+  1383→                      className="text-[10px] px-1.5 py-0 h-5 border-emerald-500/30 text-emerald-400"
+  1384→                    >
+  1385→                      AI
+  1386→                    </Badge>
+  1387→                  </div>
+  1388→                  <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+  1389→                    Ask any question about your clients, returns, or compliance — Oracle turns live firm data into instant answers and actions.
+  1390→                  </p>
+  1391→                  <div className="flex flex-wrap items-center gap-1.5 mt-3">
+  1392→                    {[
+  1393→                      'What should I prioritize today?',
+  1394→                      'Show overdue returns',
+  1395→                      'Which clients are at risk?',
+  1396→                    ].map((q) => (
+  1397→                      <button
+  1398→                        key={q}
+  1399→                        type="button"
+  1400→                        onClick={() => setCurrentView('ai-business-copilot')}
+  1401→                        className="text-[11px] rounded-full border border-white/[0.08] bg-white/[0.02] px-2.5 py-1 text-muted-foreground hover:border-emerald-400/30 hover:text-foreground transition-colors"
+  1402→                      >
+  1403→                        {q}
+  1404→                      </button>
+  1405→                    ))}
+  1406→                  </div>
+  1407→                </div>
+  1408→              </div>
+  1409→              <Button
+  1410→                size="sm"
+  1411→                className="accent-gradient text-white hover:opacity-90 gap-1.5 shrink-0"
+  1412→                onClick={() => setCurrentView('ai-business-copilot')}
+  1413→              >
+  1414→                <MessageSquare className="h-3.5 w-3.5" />
+  1415→                Ask Oracle
+  1416→                <ArrowRight className="h-3 w-3" />
+  1417→              </Button>
+  1418→            </div>
+  1419→          </div>
+  1420→        </motion.div>
+  1421→
+  1422→        {/* ── Ready-to-file quick action footer (subtle, optional) ── */}
+  1423→        {(() => {
+  1424→          const ready = returns.filter((r) =>
+  1425→            ['validated', 'reviewed', 'generated'].includes(r.status),
+  1426→          );
+  1427→          if (ready.length === 0) return null;
+  1428→          const first = ready[0];
+  1429→          const client = clientMap.get(first.clientId);
+  1430→          const name = client?.tradeName ?? 'Unknown client';
+  1431→          return (
+  1432→            <motion.div
+  1433→              initial={{ opacity: 0, y: 12 }}
+  1434→              animate={{ opacity: 1, y: 0 }}
+  1435→              transition={{ duration: 0.5, delay: 0.56, ease: 'easeOut' }}
+  1436→            >
+  1437→              <div className="glass-surface rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+  1438→                <div className="flex items-center gap-3 min-w-0">
+  1439→                  <div className="flex items-center justify-center h-9 w-9 rounded-lg accent-gradient-soft shrink-0">
+  1440→                    <CheckCircle2 className="h-4 w-4 accent-text" />
+  1441→                  </div>
+  1442→                  <div className="min-w-0">
+  1443→                    <p className="text-sm font-medium text-foreground truncate">
+  1444→                      {ready.length} return{ready.length === 1 ? '' : 's'} ready to file
+  1445→                    </p>
+  1446→                    <p className="text-[11px] text-muted-foreground truncate">
+  1447→                      Next up: {first.returnType} · {name} · {periodToLabel(first.period)}
+  1448→                    </p>
+  1449→                  </div>
+  1450→                </div>
+  1451→                <Button
+  1452→                  size="sm"
+  1453→                  className="accent-gradient text-white hover:opacity-90 gap-1.5 shrink-0"
+  1454→                  onClick={() => handleQuickFile(first.id, name, first.returnType)}
+  1455→                  disabled={filingInProgress.has(first.id)}
+  1456→                >
+  1457→                  {filingInProgress.has(first.id) ? (
+  1458→                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+  1459→                  ) : (
+  1460→                    <CheckCircle2 className="h-3.5 w-3.5" />
+  1461→                  )}
+  1462→                  Quick File
+  1463→                </Button>
+  1464→              </div>
+  1465→            </motion.div>
+  1466→          );
+  1467→        })()}
+  1468→      </div>
+  1469→    </div>
+  1470→  );
+  1471→}
+  1472→

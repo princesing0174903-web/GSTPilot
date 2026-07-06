@@ -126,6 +126,21 @@ const EnterpriseCloudPlatformPage = dynamic(() => import('@/components/enterpris
 const EnterpriseAIPlatformPage = dynamic(() => import('@/components/enterprise-ai-platform/EnterpriseAIPlatformPage'), { loading: PageLoader, ssr: false })
 const GlobalEnterpriseNetworkPage = dynamic(() => import('@/components/global-enterprise-network/GlobalEnterpriseNetworkPage'), { loading: PageLoader, ssr: false })
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// Phase 13 — Enterprise Collaboration, Multi-Company & Command Network™
+// ═══════════════════════════════════════════════════════════════════════════════
+const EnterpriseCommandCenterPage = dynamic(() => import('@/components/enterprise-network/EnterpriseCommandCenter'), { loading: PageLoader, ssr: false })
+const MultiCompanyWorkspacePage = dynamic(() => import('@/components/enterprise-network/MultiCompanyWorkspace'), { loading: PageLoader, ssr: false })
+const TeamCollaborationPage = dynamic(() => import('@/components/enterprise-network/TeamCollaboration'), { loading: PageLoader, ssr: false })
+const WorkflowEnginePage = dynamic(() => import('@/components/enterprise-network/WorkflowEngine'), { loading: PageLoader, ssr: false })
+const EnterpriseDocumentsPage = dynamic(() => import('@/components/enterprise-network/EnterpriseDocuments'), { loading: PageLoader, ssr: false })
+const ExecutiveCalendarPage = dynamic(() => import('@/components/enterprise-network/ExecutiveCalendar'), { loading: PageLoader, ssr: false })
+const EnterpriseSearchPage = dynamic(() => import('@/components/enterprise-network/EnterpriseSearch'), { loading: PageLoader, ssr: false })
+const EnterpriseNotificationsPage = dynamic(() => import('@/components/enterprise-network/EnterpriseNotifications'), { loading: PageLoader, ssr: false })
+const AdvancedRBACPage = dynamic(() => import('@/components/enterprise-network/AdvancedRBAC'), { loading: PageLoader, ssr: false })
+const CrossCompanyAnalyticsPage = dynamic(() => import('@/components/enterprise-network/CrossCompanyAnalytics'), { loading: PageLoader, ssr: false })
+const EnterpriseAuditPage = dynamic(() => import('@/components/enterprise-network/EnterpriseAudit'), { loading: PageLoader, ssr: false })
+
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import {
   DropdownMenu,
@@ -475,6 +490,29 @@ function DashboardContent() {
         return <GlobalEnterpriseNetworkPage />
       case 'generate':
         return <GenerateWorkbench />
+      // Phase 13 — Enterprise Collaboration, Multi-Company & Command Network™
+      case 'enterprise-command-center':
+        return <EnterpriseCommandCenterPage />
+      case 'multi-company-workspace':
+        return <MultiCompanyWorkspacePage />
+      case 'team-collaboration':
+        return <TeamCollaborationPage />
+      case 'workflow-engine':
+        return <WorkflowEnginePage />
+      case 'enterprise-documents':
+        return <EnterpriseDocumentsPage />
+      case 'executive-calendar':
+        return <ExecutiveCalendarPage />
+      case 'enterprise-search':
+        return <EnterpriseSearchPage />
+      case 'enterprise-notifications':
+        return <EnterpriseNotificationsPage />
+      case 'advanced-rbac':
+        return <AdvancedRBACPage />
+      case 'cross-company-analytics':
+        return <CrossCompanyAnalyticsPage />
+      case 'enterprise-audit':
+        return <EnterpriseAuditPage />
       default:
         return <MissionControlPage />
     }

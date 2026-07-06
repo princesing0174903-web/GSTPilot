@@ -80,6 +80,15 @@ import {
   ArrowLeftRight,
   GitBranch,
   Radar,
+  CalendarDays,
+  Search as SearchIcon,
+  Bell as BellIcon,
+  Shield,
+  MessageSquare,
+  FileStack,
+  ScrollText,
+  BarChart,
+  Command,
 } from 'lucide-react'
 import { BrandLogo } from '@/components/brand'
 import { useApp, type AppView } from '@/contexts/AppContext'
@@ -200,6 +209,21 @@ const platformItems: NavItem[] = [
   { title: 'Settings', view: 'settings', icon: Settings, subtitle: 'Workspace' },
 ]
 
+// Phase 13 — Enterprise Collaboration, Multi-Company & Command Network™
+const enterpriseNetworkItems: NavItem[] = [
+  { title: 'Command Center™', view: 'enterprise-command-center', icon: Command, subtitle: 'Global Enterprise Dashboard', isNew: true },
+  { title: 'Multi-Company', view: 'multi-company-workspace', icon: Building2, subtitle: 'Unlimited Companies & GSTINs', isNew: true },
+  { title: 'Team Collaboration', view: 'team-collaboration', icon: MessageSquare, subtitle: 'Tasks · Chat · Approvals', isNew: true },
+  { title: 'Workflow Engine', view: 'workflow-engine', icon: Workflow, subtitle: 'Multi-Level Approvals', isNew: true },
+  { title: 'Enterprise Docs', view: 'enterprise-documents', icon: FileStack, subtitle: 'Versioned · OCR · Shared', isNew: true },
+  { title: 'Executive Calendar', view: 'executive-calendar', icon: CalendarDays, subtitle: 'Unified Deadline Hub', isNew: true },
+  { title: 'Universal Search', view: 'enterprise-search', icon: SearchIcon, subtitle: 'Search Everything', isNew: true },
+  { title: 'Notifications', view: 'enterprise-notifications', icon: BellIcon, subtitle: 'Central Alert Hub', isNew: true },
+  { title: 'Advanced RBAC', view: 'advanced-rbac', icon: Shield, subtitle: '9 Enterprise Roles', isNew: true },
+  { title: 'Cross-Company Analytics', view: 'cross-company-analytics', icon: BarChart, subtitle: 'Compare All Entities', isNew: true },
+  { title: 'Enterprise Audit', view: 'enterprise-audit', icon: ScrollText, subtitle: 'Track Every Action', isNew: true },
+]
+
 interface AppSidebarProps {
   onSearchOpen?: () => void
 }
@@ -317,6 +341,7 @@ function SidebarNav({ onSearchOpen }: AppSidebarProps) {
         {renderGroup('Finance', financeItems)}
         {renderGroup('Business', businessNavItems)}
         {renderGroup('Platform', platformItems)}
+        {renderGroup('Enterprise Network™', enterpriseNetworkItems, true)}
       </SidebarContent>
 
       <SidebarFooter className="border-t border-sidebar-border/50 p-3">

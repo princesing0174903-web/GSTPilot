@@ -29,6 +29,13 @@ import {
   Crown,
   Cloud,
   Globe,
+  ShieldCheck,
+  Calendar,
+  Network,
+  GitBranch,
+  ScrollText,
+  Layers,
+  LayoutDashboard,
 } from 'lucide-react';
 import { useApp } from '@/contexts/AppContext';
 import {
@@ -416,6 +423,128 @@ export default function CommandPalette() {
           addToRecent('cmd-open-global-enterprise-network', 'Open Global Enterprise Network™', 'command');
         },
         group: 'Commands',
+      },
+      // ─── Phase 13 — Enterprise Collaboration, Multi-Company & Command Network™ ───
+      {
+        id: 'cmd-open-enterprise-command-center',
+        label: 'Open Enterprise Command Center™',
+        description: 'Global command center — every company, financial health, GST, AI alerts, cash flow, risks, growth',
+        icon: LayoutDashboard,
+        action: () => {
+          setCurrentView('enterprise-command-center');
+          addToRecent('cmd-open-enterprise-command-center', 'Open Enterprise Command Center™', 'command');
+        },
+        group: 'Phase 13 — Enterprise',
+      },
+      {
+        id: 'cmd-open-multi-company-workspace',
+        label: 'Open Multi-Company Workspace™',
+        description: 'Unlimited companies, GSTINs & branches — instant switching with complete data isolation',
+        icon: Layers,
+        action: () => {
+          setCurrentView('multi-company-workspace');
+          addToRecent('cmd-open-multi-company-workspace', 'Open Multi-Company Workspace™', 'command');
+        },
+        group: 'Phase 13 — Enterprise',
+      },
+      {
+        id: 'cmd-open-team-collaboration',
+        label: 'Open Team Collaboration™',
+        description: 'Tasks, assignments, approvals, comments, mentions, internal chat & real-time activity feed',
+        icon: Users,
+        action: () => {
+          setCurrentView('team-collaboration');
+          addToRecent('cmd-open-team-collaboration', 'Open Team Collaboration™', 'command');
+        },
+        group: 'Phase 13 — Enterprise',
+      },
+      {
+        id: 'cmd-open-workflow-engine',
+        label: 'Open Enterprise Workflow Engine™',
+        description: 'Multi-level approval workflows — invoices, expenses, payments, GST filings, vendors, POs, salary',
+        icon: GitBranch,
+        action: () => {
+          setCurrentView('workflow-engine');
+          addToRecent('cmd-open-workflow-engine', 'Open Enterprise Workflow Engine™', 'command');
+        },
+        group: 'Phase 13 — Enterprise',
+      },
+      {
+        id: 'cmd-open-enterprise-documents',
+        label: 'Open Enterprise Documents™',
+        description: 'Shared document workspace — version history, access permissions, folders, approvals, OCR',
+        icon: FolderOpen,
+        action: () => {
+          setCurrentView('enterprise-documents');
+          addToRecent('cmd-open-enterprise-documents', 'Open Enterprise Documents™', 'command');
+        },
+        group: 'Phase 13 — Enterprise',
+      },
+      {
+        id: 'cmd-open-executive-calendar',
+        label: 'Open Executive Calendar™',
+        description: 'Unified calendar — GST deadlines, meetings, approvals, tasks, payments, compliance, AI reminders',
+        icon: Calendar,
+        action: () => {
+          setCurrentView('executive-calendar');
+          addToRecent('cmd-open-executive-calendar', 'Open Executive Calendar™', 'command');
+        },
+        group: 'Phase 13 — Enterprise',
+      },
+      {
+        id: 'cmd-open-enterprise-search',
+        label: 'Open Enterprise Search™',
+        description: 'Universal search across invoices, customers, vendors, companies, GST, reports, docs, tasks',
+        icon: Search,
+        action: () => {
+          setCurrentView('enterprise-search');
+          addToRecent('cmd-open-enterprise-search', 'Open Enterprise Search™', 'command');
+        },
+        group: 'Phase 13 — Enterprise',
+      },
+      {
+        id: 'cmd-open-enterprise-notifications',
+        label: 'Open Enterprise Notifications™',
+        description: 'Central hub — assignments, approvals, AI alerts, GST deadlines, payments, risk & compliance',
+        icon: Bell,
+        action: () => {
+          setCurrentView('enterprise-notifications');
+          addToRecent('cmd-open-enterprise-notifications', 'Open Enterprise Notifications™', 'command');
+        },
+        group: 'Phase 13 — Enterprise',
+      },
+      {
+        id: 'cmd-open-advanced-rbac',
+        label: 'Open Advanced RBAC™',
+        description: 'Enterprise permissions — CEO, CFO, Finance Manager, CA, Accountant, GST Executive, HR, Auditor',
+        icon: ShieldCheck,
+        action: () => {
+          setCurrentView('advanced-rbac');
+          addToRecent('cmd-open-advanced-rbac', 'Open Advanced RBAC™', 'command');
+        },
+        group: 'Phase 13 — Enterprise',
+      },
+      {
+        id: 'cmd-open-cross-company-analytics',
+        label: 'Open Cross-Company Analytics™',
+        description: 'Compare revenue, expenses, profit, GST, compliance, growth, cash flow, risk & AI score',
+        icon: BarChart3,
+        action: () => {
+          setCurrentView('cross-company-analytics');
+          addToRecent('cmd-open-cross-company-analytics', 'Open Cross-Company Analytics™', 'command');
+        },
+        group: 'Phase 13 — Enterprise',
+      },
+      {
+        id: 'cmd-open-enterprise-audit',
+        label: 'Open Enterprise Audit™',
+        description: 'Track every action — user & org activity, approvals, changes, AI actions, compliance logs',
+        icon: ScrollText,
+        action: () => {
+          setCurrentView('enterprise-audit');
+          addToRecent('cmd-open-enterprise-audit', 'Open Enterprise Audit™', 'command');
+        },
+        group: 'Phase 13 — Enterprise',
       },
     ],
     [setCurrentView, setCommandPaletteOpen, addToRecent]

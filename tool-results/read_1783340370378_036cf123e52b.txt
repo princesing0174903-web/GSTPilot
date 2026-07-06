@@ -1,0 +1,552 @@
+     1→// ═══════════════════════════════════════════════════════════════════════════════
+     2→// GSTPilot Infinity™ — Phase 13: Enterprise Collaboration & Multi-Company
+     3→// Data Layer — companies, org tree, workflows, roles, notifications, documents
+     4→// ═══════════════════════════════════════════════════════════════════════════════
+     5→
+     6→export const fmtINR = (n: number) => '₹' + Math.abs(n).toLocaleString('en-IN')
+     7→
+     8→// ─── Company ───────────────────────────────────────────────────────────────────
+     9→export interface Company {
+    10→  id: string
+    11→  name: string
+    12→  legalName: string
+    13→  gstin: string
+    14→  pan: string
+    15→  type: 'Holding' | 'Subsidiary' | 'Branch' | 'Division' | 'Independent'
+    16→  parentId: string | null
+    17→  industry: string
+    18→  state: string
+    19→  revenue: number
+    20→  expenses: number
+    21→  gstLiability: number
+    22→  outstandingInvoices: number
+    23→  complianceScore: number
+    24→  growthScore: number
+    25→  riskScore: number
+    26→  aiScore: number
+    27→  cashFlow: number
+    28→  status: 'Healthy' | 'Watch' | 'Critical'
+    29→  gstStatus: 'Filed' | 'Pending' | 'Overdue'
+    30→  employees: number
+    31→  branches: number
+    32→  color: string
+    33→}
+    34→
+    35→export const COMPANIES: Company[] = [
+    36→  {
+    37→    id: 'c1', name: 'Aurora Holdings', legalName: 'Aurora Holdings Pvt Ltd',
+    38→    gstin: '27AABCA1234F1Z5', pan: 'AABCA1234F', type: 'Holding', parentId: null,
+    39→    industry: 'Conglomerate', state: 'Maharashtra', revenue: 482000000, expenses: 318000000,
+    40→    gstLiability: 24800000, outstandingInvoices: 18700000, complianceScore: 96, growthScore: 88,
+    41→    riskScore: 12, aiScore: 94, cashFlow: 164000000, status: 'Healthy', gstStatus: 'Filed',
+    42→    employees: 1240, branches: 18, color: '#10b981',
+    43→  },
+    44→  {
+    45→    id: 'c2', name: 'Aurora Tech', legalName: 'Aurora Technologies Pvt Ltd',
+    46→    gstin: '27AABCA1234F2Z3', pan: 'AABCA1234F', type: 'Subsidiary', parentId: 'c1',
+    47→    industry: 'Technology', state: 'Maharashtra', revenue: 187000000, expenses: 112000000,
+    48→    gstLiability: 9400000, outstandingInvoices: 6200000, complianceScore: 98, growthScore: 92,
+    49→    riskScore: 8, aiScore: 97, cashFlow: 75000000, status: 'Healthy', gstStatus: 'Filed',
+    50→    employees: 420, branches: 4, color: '#06b6d4',
+    51→  },
+    52→  {
+    53→    id: 'c3', name: 'Aurora Retail', legalName: 'Aurora Retail Ventures Pvt Ltd',
+    54→    gstin: '29AABCA1234F3Z1', pan: 'AABCA1234F', type: 'Subsidiary', parentId: 'c1',
+    55→    industry: 'Retail', state: 'Karnataka', revenue: 142000000, expenses: 98000000,
+    56→    gstLiability: 12800000, outstandingInvoices: 9400000, complianceScore: 84, growthScore: 76,
+    57→    riskScore: 24, aiScore: 78, cashFlow: 44000000, status: 'Watch', gstStatus: 'Pending',
+    58→    employees: 380, branches: 12, color: '#f59e0b',
+    59→  },
+    60→  {
+    61→    id: 'c4', name: 'Aurora Manufacturing', legalName: 'Aurora Industries Pvt Ltd',
+    62→    gstin: '07AABCA1234F4Z9', pan: 'AABCA1234F', type: 'Subsidiary', parentId: 'c1',
+    63→    industry: 'Manufacturing', state: 'Delhi', revenue: 96000000, expenses: 71000000,
+    64→    gstLiability: 7200000, outstandingInvoices: 4800000, complianceScore: 91, growthScore: 82,
+    65→    riskScore: 16, aiScore: 85, cashFlow: 25000000, status: 'Healthy', gstStatus: 'Filed',
+    66→    employees: 290, branches: 2, color: '#8b5cf6',
+    67→  },
+    68→  {
+    69→    id: 'c5', name: 'Aurora Finance', legalName: 'Aurora Financial Services Pvt Ltd',
+    70→    gstin: '33AABCA1234F5Z7', pan: 'AABCA1234F', type: 'Subsidiary', parentId: 'c1',
+    71→    industry: 'Financial Services', state: 'Tamil Nadu', revenue: 57000000, expenses: 37000000,
+    72→    gstLiability: 0, outstandingInvoices: 2100000, complianceScore: 99, growthScore: 85,
+    73→    riskScore: 6, aiScore: 96, cashFlow: 20000000, status: 'Healthy', gstStatus: 'Filed',
+    74→    employees: 150, branches: 1, color: '#ec4899',
+    75→  },
+    76→  {
+    77→    id: 'c6', name: 'Standalone Traders', legalName: 'Standalone Traders LLP',
+    78→    gstin: '27AALCS5678H1Z2', pan: 'AALCS5678H', type: 'Independent', parentId: null,
+    79→    industry: 'Trading', state: 'Maharashtra', revenue: 38000000, expenses: 31000000,
+    80→    gstLiability: 3400000, outstandingInvoices: 5200000, complianceScore: 72, growthScore: 54,
+    81→    riskScore: 38, aiScore: 61, cashFlow: 7000000, status: 'Critical', gstStatus: 'Overdue',
+    82→    employees: 85, branches: 1, color: '#ef4444',
+    83→  },
+    84→]
+    85→
+    86→// ─── Workflow / Approvals ──────────────────────────────────────────────────────
+    87→export type ApprovalStatus = 'pending' | 'approved' | 'rejected' | 'in-review'
+    88→
+    89→export interface WorkflowApproval {
+    90→  id: string
+    91→  type: 'Invoice' | 'Expense' | 'Payment' | 'GST Filing' | 'Vendor' | 'Purchase Order' | 'Salary' | 'Document'
+    92→  title: string
+    93→  amount: number
+    94→  company: string
+    95→  submittedBy: string
+    96→  submittedByAvatar: string
+    97→  submittedAt: string
+    98→  currentLevel: number
+    99→  totalLevels: number
+   100→  approvers: { name: string; role: string; status: ApprovalStatus; avatar: string; actedAt?: string }[]
+   101→  priority: 'low' | 'medium' | 'high' | 'critical'
+   102→  status: ApprovalStatus
+   103→  description: string
+   104→}
+   105→
+   106→export const WORKFLOW_APPROVALS: WorkflowApproval[] = [
+   107→  {
+   108→    id: 'wf-001', type: 'Invoice', title: 'INV-2024-0892 — Raw Materials Procurement',
+   109→    amount: 4800000, company: 'Aurora Manufacturing', submittedBy: 'Priya Sharma',
+   110→    submittedByAvatar: 'PS', submittedAt: '2h ago', currentLevel: 2, totalLevels: 3,
+   111→    approvers: [
+   112→      { name: 'Rajesh Kumar', role: 'Accountant', status: 'approved', avatar: 'RK', actedAt: '1h ago' },
+   113→      { name: 'Anita Desai', role: 'Finance Manager', status: 'in-review', avatar: 'AD' },
+   114→      { name: 'Vikram Mehta', role: 'CFO', status: 'pending', avatar: 'VM' },
+   115→    ],
+   116→    priority: 'high', status: 'in-review',
+   117→    description: 'Procurement of steel coils from Tata Steel — Q3 production batch. PO matched, GRN verified.',
+   118→  },
+   119→  {
+   120→    id: 'wf-002', type: 'GST Filing', title: 'GSTR-3B — August 2024 — Aurora Retail',
+   121→    amount: 12800000, company: 'Aurora Retail', submittedBy: 'Suresh Iyer',
+   122→    submittedByAvatar: 'SI', submittedAt: '4h ago', currentLevel: 1, totalLevels: 2,
+   123→    approvers: [
+   124→      { name: 'Meena Krishnan', role: 'GST Executive', status: 'in-review', avatar: 'MK' },
+   125→      { name: 'Anita Desai', role: 'Finance Manager', status: 'pending', avatar: 'AD' },
+   126→    ],
+   127→    priority: 'critical', status: 'in-review',
+   128→    description: 'Monthly GSTR-3B return. Due in 3 days. ITC reconciliation 94% matched.',
+   129→  },
+   130→  {
+   131→    id: 'wf-003', type: 'Payment', title: 'Vendor Payment — Cloud Infrastructure',
+   132→    amount: 2200000, company: 'Aurora Tech', submittedBy: 'Karthik Nair',
+   133→    submittedByAvatar: 'KN', submittedAt: '6h ago', currentLevel: 1, totalLevels: 2,
+   134→    approvers: [
+   135→      { name: 'Rajesh Kumar', role: 'Accountant', status: 'approved', avatar: 'RK', actedAt: '5h ago' },
+   136→      { name: 'Vikram Mehta', role: 'CFO', status: 'in-review', avatar: 'VM' },
+   137→    ],
+   138→    priority: 'medium', status: 'in-review',
+   139→    description: 'AWS cloud infrastructure invoice — monthly recurring. Auto-flagged for CFO approval (amount > ₹20L).',
+   140→  },
+   141→  {
+   142→    id: 'wf-004', type: 'Expense', title: 'Travel & Conference — Leadership Summit',
+   143→    amount: 385000, company: 'Aurora Holdings', submittedBy: 'Deepika Rao',
+   144→    submittedByAvatar: 'DR', submittedAt: '1d ago', currentLevel: 2, totalLevels: 2,
+   145→    approvers: [
+   146→      { name: 'Suresh Iyer', role: 'Department Head', status: 'approved', avatar: 'SI', actedAt: '20h ago' },
+   147→      { name: 'Anita Desai', role: 'Finance Manager', status: 'approved', avatar: 'AD', actedAt: '2h ago' },
+   148→    ],
+   149→    priority: 'low', status: 'approved',
+   150→    description: 'Leadership team travel to Mumbai Tech Summit — 4 attendees, 3 days.',
+   151→  },
+   152→  {
+   153→    id: 'wf-005', type: 'Purchase Order', title: 'PO-2024-0341 — Office Equipment',
+   154→    amount: 1450000, company: 'Aurora Finance', submittedBy: 'Priya Sharma',
+   155→    submittedByAvatar: 'PS', submittedAt: '1d ago', currentLevel: 1, totalLevels: 3,
+   156→    approvers: [
+   157→      { name: 'Rajesh Kumar', role: 'Accountant', status: 'pending', avatar: 'RK' },
+   158→      { name: 'Meena Krishnan', role: 'GST Executive', status: 'pending', avatar: 'MK' },
+   159→      { name: 'Vikram Mehta', role: 'CFO', status: 'pending', avatar: 'VM' },
+   160→    ],
+   161→    priority: 'medium', status: 'pending',
+   162→    description: 'Workstations and monitors for new Chennai office — 25 units.',
+   163→  },
+   164→  {
+   165→    id: 'wf-006', type: 'Salary', title: 'Payroll — September 2024 — Aurora Tech',
+   166→    amount: 8400000, company: 'Aurora Tech', submittedBy: 'HR Bot',
+   167→    submittedByAvatar: 'HR', submittedAt: '2d ago', currentLevel: 1, totalLevels: 2,
+   168→    approvers: [
+   169→      { name: 'Deepika Rao', role: 'HR', status: 'approved', avatar: 'DR', actedAt: '1d ago' },
+   170→      { name: 'Vikram Mehta', role: 'CFO', status: 'pending', avatar: 'VM' },
+   171→    ],
+   172→    priority: 'high', status: 'in-review',
+   173→    description: 'Monthly payroll for 420 employees. TDS deducted, PF deposited, PT filed.',
+   174→  },
+   175→  {
+   176→    id: 'wf-007', type: 'Vendor', title: 'New Vendor Onboarding — GlobalLogix',
+   177→    amount: 0, company: 'Aurora Manufacturing', submittedBy: 'Karthik Nair',
+   178→    submittedByAvatar: 'KN', submittedAt: '3d ago', currentLevel: 2, totalLevels: 3,
+   179→    approvers: [
+   180→      { name: 'Rajesh Kumar', role: 'Accountant', status: 'approved', avatar: 'RK', actedAt: '2d ago' },
+   181→      { name: 'Suresh Iyer', role: 'Department Head', status: 'in-review', avatar: 'SI' },
+   182→      { name: 'Anita Desai', role: 'Finance Manager', status: 'pending', avatar: 'AD' },
+   183→    ],
+   184→    priority: 'medium', status: 'in-review',
+   185→    description: 'Logistics vendor onboarding. GSTIN verified, PAN verified, bank verified.',
+   186→  },
+   187→  {
+   188→    id: 'wf-008', type: 'Document', title: 'Board Resolution — Q3 Dividend Declaration',
+   189→    amount: 0, company: 'Aurora Holdings', submittedBy: 'Legal Bot',
+   190→    submittedByAvatar: 'LB', submittedAt: '3d ago', currentLevel: 1, totalLevels: 2,
+   191→    approvers: [
+   192→      { name: 'Deepika Rao', role: 'Auditor', status: 'in-review', avatar: 'DR' },
+   193→      { name: 'Vikram Mehta', role: 'CFO', status: 'pending', avatar: 'VM' },
+   194→    ],
+   195→    priority: 'high', status: 'in-review',
+   196→    description: 'Board resolution for Q3 interim dividend. Drafted by legal, requires audit + CFO sign-off.',
+   197→  },
+   198→]
+   199→
+   200→// ─── Team Members & Presence ───────────────────────────────────────────────────
+   201→export interface TeamMember {
+   202→  id: string
+   203→  name: string
+   204→  role: string
+   205→  avatar: string
+   206→  company: string
+   207→  status: 'online' | 'away' | 'busy' | 'offline'
+   208→  currentActivity?: string
+   209→  color: string
+   210→}
+   211→
+   212→export const TEAM_MEMBERS: TeamMember[] = [
+   213→  { id: 'u1', name: 'Vikram Mehta', role: 'CFO', avatar: 'VM', company: 'Aurora Holdings', status: 'online', currentActivity: 'Reviewing GSTR-3B filings', color: '#10b981' },
+   214→  { id: 'u2', name: 'Anita Desai', role: 'Finance Manager', avatar: 'AD', company: 'Aurora Holdings', status: 'online', currentActivity: 'Approving invoices', color: '#06b6d4' },
+   215→  { id: 'u3', name: 'Rajesh Kumar', role: 'Accountant', avatar: 'RK', company: 'Aurora Tech', status: 'busy', currentActivity: 'In a meeting — Q3 review', color: '#f59e0b' },
+   216→  { id: 'u4', name: 'Priya Sharma', role: 'GST Executive', avatar: 'PS', company: 'Aurora Retail', status: 'online', currentActivity: 'Filing GSTR-1', color: '#8b5cf6' },
+   217→  { id: 'u5', name: 'Suresh Iyer', role: 'Department Head', avatar: 'SI', company: 'Aurora Manufacturing', status: 'away', currentActivity: 'Lunch break', color: '#ec4899' },
+   218→  { id: 'u6', name: 'Meena Krishnan', role: 'CA', avatar: 'MK', company: 'Aurora Holdings', status: 'online', currentActivity: 'Reconciling ITC', color: '#14b8a6' },
+   219→  { id: 'u7', name: 'Karthik Nair', role: 'Accountant', avatar: 'KN', company: 'Aurora Tech', status: 'busy', currentActivity: 'Vendor onboarding', color: '#f97316' },
+   220→  { id: 'u8', name: 'Deepika Rao', role: 'HR', avatar: 'DR', company: 'Aurora Holdings', status: 'online', currentActivity: 'Processing payroll', color: '#a855f7' },
+   221→  { id: 'u9', name: 'Arjun Gupta', role: 'Auditor', avatar: 'AG', company: 'Aurora Holdings', status: 'offline', color: '#64748b' },
+   222→  { id: 'u10', name: 'Neha Singh', role: 'GST Executive', avatar: 'NS', company: 'Aurora Retail', status: 'offline', color: '#64748b' },
+   223→]
+   224→
+   225→// ─── Tasks ─────────────────────────────────────────────────────────────────────
+   226→export interface EnterpriseTask {
+   227→  id: string
+   228→  title: string
+   229→  description: string
+   230→  company: string
+   231→  assignee: string
+   232→  assigneeAvatar: string
+   233→  dueDate: string
+   234→  priority: 'low' | 'medium' | 'high' | 'critical'
+   235→  status: 'todo' | 'in-progress' | 'review' | 'done'
+   236→  comments: number
+   237→  mentions: number
+   238→  tags: string[]
+   239→}
+   240→
+   241→export const ENTERPRISE_TASKS: EnterpriseTask[] = [
+   242→  { id: 't1', title: 'File GSTR-3B for Aurora Retail', description: 'Complete and file August GSTR-3B before deadline', company: 'Aurora Retail', assignee: 'Priya Sharma', assigneeAvatar: 'PS', dueDate: 'In 3 days', priority: 'critical', status: 'in-progress', comments: 4, mentions: 2, tags: ['GST', 'Filing', 'Urgent'] },
+   243→  { id: 't2', title: 'Reconcile ITC — Q2', description: 'Match 2A/2B with purchase register for Q2', company: 'Aurora Holdings', assignee: 'Meena Krishnan', assigneeAvatar: 'MK', dueDate: 'In 5 days', priority: 'high', status: 'in-progress', comments: 2, mentions: 1, tags: ['ITC', 'Reconciliation'] },
+   244→  { id: 't3', title: 'Approve vendor onboarding', description: 'Review GlobalLogix documents and approve', company: 'Aurora Manufacturing', assignee: 'Suresh Iyer', assigneeAvatar: 'SI', dueDate: 'In 2 days', priority: 'medium', status: 'review', comments: 6, mentions: 3, tags: ['Vendor', 'Approval'] },
+   245→  { id: 't4', title: 'Q3 board report preparation', description: 'Compile financials for all subsidiaries', company: 'Aurora Holdings', assignee: 'Vikram Mehta', assigneeAvatar: 'VM', dueDate: 'In 7 days', priority: 'high', status: 'todo', comments: 0, mentions: 0, tags: ['Reporting', 'Board'] },
+   246→  { id: 't5', title: 'Payroll processing — September', description: 'Process payroll for all 420 employees', company: 'Aurora Tech', assignee: 'Deepika Rao', assigneeAvatar: 'DR', dueDate: 'In 1 day', priority: 'critical', status: 'in-progress', comments: 1, mentions: 1, tags: ['Payroll', 'HR'] },
+   247→  { id: 't6', title: 'Audit compliance — Delhi branch', description: 'Internal audit for compliance gaps', company: 'Aurora Manufacturing', assignee: 'Arjun Gupta', assigneeAvatar: 'AG', dueDate: 'In 10 days', priority: 'medium', status: 'todo', comments: 0, mentions: 0, tags: ['Audit', 'Compliance'] },
+   248→  { id: 't7', title: 'TDS payment — Q2', description: 'Pay TDS for Q2 and file Form 26Q', company: 'Aurora Finance', assignee: 'Karthik Nair', assigneeAvatar: 'KN', dueDate: 'In 4 days', priority: 'high', status: 'review', comments: 3, mentions: 1, tags: ['TDS', 'Payment'] },
+   249→  { id: 't8', title: 'Overdue GST — Standalone Traders', description: 'Resolve overdue GSTR-3B filing immediately', company: 'Standalone Traders', assignee: 'Neha Singh', assigneeAvatar: 'NS', dueDate: 'Overdue', priority: 'critical', status: 'todo', comments: 8, mentions: 4, tags: ['GST', 'Overdue', 'Critical'] },
+   250→]
+   251→
+   252→// ─── Activity Feed ─────────────────────────────────────────────────────────────
+   253→export interface ActivityItem {
+   254→  id: string
+   255→  user: string
+   256→  avatar: string
+   257→  action: string
+   258→  target: string
+   259→  company: string
+   260→  timestamp: string
+   261→  type: 'approval' | 'comment' | 'mention' | 'filing' | 'payment' | 'document' | 'ai-alert'
+   262→}
+   263→
+   264→export const ACTIVITY_FEED: ActivityItem[] = [
+   265→  { id: 'a1', user: 'Vikram Mehta', avatar: 'VM', action: 'approved', target: 'Payment — Cloud Infrastructure', company: 'Aurora Tech', timestamp: '5m ago', type: 'approval' },
+   266→  { id: 'a2', user: 'AI Copilot', avatar: 'AI', action: 'flagged risk on', target: 'GSTR-3B — Aurora Retail', company: 'Aurora Retail', timestamp: '12m ago', type: 'ai-alert' },
+   267→  { id: 'a3', user: 'Priya Sharma', avatar: 'PS', action: 'commented on', target: 'ITC Reconciliation Task', company: 'Aurora Holdings', timestamp: '23m ago', type: 'comment' },
+   268→  { id: 'a4', user: 'Meena Krishnan', avatar: 'MK', action: 'filed', target: 'GSTR-1 — August 2024', company: 'Aurora Manufacturing', timestamp: '1h ago', type: 'filing' },
+   269→  { id: 'a5', user: 'Anita Desai', avatar: 'AD', action: 'mentioned you in', target: 'Q3 Board Report', company: 'Aurora Holdings', timestamp: '1h ago', type: 'mention' },
+   270→  { id: 'a6', user: 'Karthik Nair', avatar: 'KN', action: 'uploaded', target: 'Audit Report Q2.pdf', company: 'Aurora Finance', timestamp: '2h ago', type: 'document' },
+   271→  { id: 'a7', user: 'Deepika Rao', avatar: 'DR', action: 'processed', target: 'Payroll — September', company: 'Aurora Tech', timestamp: '2h ago', type: 'payment' },
+   272→  { id: 'a8', user: 'Suresh Iyer', avatar: 'SI', action: 'requested approval on', target: 'Vendor Onboarding — GlobalLogix', company: 'Aurora Manufacturing', timestamp: '3h ago', type: 'approval' },
+   273→  { id: 'a9', user: 'AI Risk Engine', avatar: 'AI', action: 'detected anomaly in', target: 'Cash Flow — Standalone Traders', company: 'Standalone Traders', timestamp: '3h ago', type: 'ai-alert' },
+   274→  { id: 'a10', user: 'Rajesh Kumar', avatar: 'RK', action: 'completed', target: 'Bank Reconciliation — August', company: 'Aurora Tech', timestamp: '4h ago', type: 'document' },
+   275→]
+   276→
+   277→// ─── Chat Messages ─────────────────────────────────────────────────────────────
+   278→export interface ChatMessage {
+   279→  id: string
+   280→  user: string
+   281→  avatar: string
+   282→  message: string
+   283→  timestamp: string
+   284→  channel: string
+   285→  reactions?: { emoji: string; count: number }[]
+   286→}
+   287→
+   288→export const CHAT_CHANNELS = [
+   289→  { id: 'general', name: 'general', members: 10, unread: 2, lastActivity: '5m ago' },
+   290→  { id: 'gst-filings', name: 'gst-filings', members: 6, unread: 5, lastActivity: '12m ago' },
+   291→  { id: 'approvals', name: 'approvals', members: 4, unread: 0, lastActivity: '1h ago' },
+   292→  { id: 'aurora-tech', name: 'aurora-tech', members: 5, unread: 1, lastActivity: '23m ago' },
+   293→  { id: 'aurora-retail', name: 'aurora-retail', members: 4, unread: 0, lastActivity: '2h ago' },
+   294→  { id: 'audit-team', name: 'audit-team', members: 3, unread: 0, lastActivity: '3h ago' },
+   295→]
+   296→
+   297→export const CHAT_MESSAGES: ChatMessage[] = [
+   298→  { id: 'm1', user: 'Vikram Mehta', avatar: 'VM', message: '@Priya can you prioritize the Aurora Retail GSTR-3B? It\'s due in 3 days and ITC match is only 94%.', timestamp: '10:32 AM', channel: 'gst-filings', reactions: [{ emoji: '👍', count: 2 }] },
+   299→  { id: 'm2', user: 'Priya Sharma', avatar: 'PS', message: 'On it! I found 12 unmatched entries — mostly from July carry-over. Cleaning up now.', timestamp: '10:35 AM', channel: 'gst-filings' },
+   300→  { id: 'm3', user: 'Meena Krishnan', avatar: 'MK', message: 'I can help reconcile after my 2B download finishes. ETA 10 mins.', timestamp: '10:36 AM', channel: 'gst-filings', reactions: [{ emoji: '🙏', count: 3 }] },
+   301→  { id: 'm4', user: 'AI Copilot', avatar: 'AI', message: '⚠️ I detected a potential ITC reversal of ₹4.2L in Aurora Retail. 3 vendors have cancelled their invoices. Please verify before filing.', timestamp: '10:38 AM', channel: 'gst-filings', reactions: [{ emoji: '⚠️', count: 4 }, { emoji: '🎯', count: 1 }] },
+   302→  { id: 'm5', user: 'Anita Desai', avatar: 'AD', message: 'Good catch AI. @Priya add those to the reversal list and adjust the liability.', timestamp: '10:40 AM', channel: 'gst-filings' },
+   303→  { id: 'm6', user: 'Karthik Nair', avatar: 'KN', message: 'Anyone reviewed the GlobalLogix vendor docs? @Suresh waiting on your sign-off.', timestamp: '9:15 AM', channel: 'approvals' },
+   304→  { id: 'm7', user: 'Suresh Iyer', avatar: 'SI', message: 'Reviewing now. GSTIN and PAN verified. Bank details pending — asked them to resend.', timestamp: '9:42 AM', channel: 'approvals' },
+   305→]
+   306→
+   307→// ─── Roles & Permissions (RBAC) ────────────────────────────────────────────────
+   308→export interface Role {
+   309→  id: string
+   310→  name: string
+   311→  level: number
+   312→  users: number
+   313→  color: string
+   314→  permissions: { module: string; access: 'full' | 'view' | 'limited' | 'none' }[]
+   315→}
+   316→
+   317→export const ENTERPRISE_ROLES: Role[] = [
+   318→  {
+   319→    id: 'r1', name: 'CEO', level: 10, users: 1, color: '#f59e0b',
+   320→    permissions: [
+   321→      { module: 'Financials', access: 'full' }, { module: 'GST', access: 'full' },
+   322→      { module: 'HR', access: 'full' }, { module: 'Approvals', access: 'full' },
+   323→      { module: 'Audit', access: 'full' }, { module: 'Settings', access: 'full' },
+   324→      { module: 'Documents', access: 'full' }, { module: 'Reports', access: 'full' },
+   325→    ],
+   326→  },
+   327→  {
+   328→    id: 'r2', name: 'CFO', level: 9, users: 1, color: '#8b5cf6',
+   329→    permissions: [
+   330→      { module: 'Financials', access: 'full' }, { module: 'GST', access: 'full' },
+   331→      { module: 'HR', access: 'view' }, { module: 'Approvals', access: 'full' },
+   332→      { module: 'Audit', access: 'full' }, { module: 'Settings', access: 'limited' },
+   333→      { module: 'Documents', access: 'full' }, { module: 'Reports', access: 'full' },
+   334→    ],
+   335→  },
+   336→  {
+   337→    id: 'r3', name: 'Finance Manager', level: 7, users: 2, color: '#06b6d4',
+   338→    permissions: [
+   339→      { module: 'Financials', access: 'full' }, { module: 'GST', access: 'full' },
+   340→      { module: 'HR', access: 'view' }, { module: 'Approvals', access: 'full' },
+   341→      { module: 'Audit', access: 'view' }, { module: 'Settings', access: 'limited' },
+   342→      { module: 'Documents', access: 'full' }, { module: 'Reports', access: 'full' },
+   343→    ],
+   344→  },
+   345→  {
+   346→    id: 'r4', name: 'CA', level: 7, users: 1, color: '#14b8a6',
+   347→    permissions: [
+   348→      { module: 'Financials', access: 'full' }, { module: 'GST', access: 'full' },
+   349→      { module: 'HR', access: 'none' }, { module: 'Approvals', access: 'full' },
+   350→      { module: 'Audit', access: 'full' }, { module: 'Settings', access: 'limited' },
+   351→      { module: 'Documents', access: 'full' }, { module: 'Reports', access: 'full' },
+   352→    ],
+   353→  },
+   354→  {
+   355→    id: 'r5', name: 'Accountant', level: 5, users: 3, color: '#10b981',
+   356→    permissions: [
+   357→      { module: 'Financials', access: 'full' }, { module: 'GST', access: 'view' },
+   358→      { module: 'HR', access: 'none' }, { module: 'Approvals', access: 'limited' },
+   359→      { module: 'Audit', access: 'none' }, { module: 'Settings', access: 'none' },
+   360→      { module: 'Documents', access: 'full' }, { module: 'Reports', access: 'view' },
+   361→    ],
+   362→  },
+   363→  {
+   364→    id: 'r6', name: 'GST Executive', level: 4, users: 2, color: '#ec4899',
+   365→    permissions: [
+   366→      { module: 'Financials', access: 'view' }, { module: 'GST', access: 'full' },
+   367→      { module: 'HR', access: 'none' }, { module: 'Approvals', access: 'limited' },
+   368→      { module: 'Audit', access: 'none' }, { module: 'Settings', access: 'none' },
+   369→      { module: 'Documents', access: 'limited' }, { module: 'Reports', access: 'view' },
+   370→    ],
+   371→  },
+   372→  {
+   373→    id: 'r7', name: 'HR', level: 5, users: 1, color: '#a855f7',
+   374→    permissions: [
+   375→      { module: 'Financials', access: 'view' }, { module: 'GST', access: 'none' },
+   376→      { module: 'HR', access: 'full' }, { module: 'Approvals', access: 'limited' },
+   377→      { module: 'Audit', access: 'view' }, { module: 'Settings', access: 'limited' },
+   378→      { module: 'Documents', access: 'limited' }, { module: 'Reports', access: 'view' },
+   379→    ],
+   380→  },
+   381→  {
+   382→    id: 'r8', name: 'Auditor', level: 6, users: 1, color: '#f97316',
+   383→    permissions: [
+   384→      { module: 'Financials', access: 'view' }, { module: 'GST', access: 'view' },
+   385→      { module: 'HR', access: 'view' }, { module: 'Approvals', access: 'view' },
+   386→      { module: 'Audit', access: 'full' }, { module: 'Settings', access: 'none' },
+   387→      { module: 'Documents', access: 'view' }, { module: 'Reports', access: 'full' },
+   388→    ],
+   389→  },
+   390→  {
+   391→    id: 'r9', name: 'Department Head', level: 6, users: 1, color: '#3b82f6',
+   392→    permissions: [
+   393→      { module: 'Financials', access: 'view' }, { module: 'GST', access: 'view' },
+   394→      { module: 'HR', access: 'limited' }, { module: 'Approvals', access: 'full' },
+   395→      { module: 'Audit', access: 'view' }, { module: 'Settings', access: 'limited' },
+   396→      { module: 'Documents', access: 'full' }, { module: 'Reports', access: 'view' },
+   397→    ],
+   398→  },
+   399→]
+   400→
+   401→// ─── Notifications ─────────────────────────────────────────────────────────────
+   402→export interface Notification {
+   403→  id: string
+   404→  type: 'assignment' | 'approval' | 'ai-alert' | 'gst-deadline' | 'payment' | 'document' | 'risk' | 'compliance'
+   405→  title: string
+   406→  message: string
+   407→  company: string
+   408→  timestamp: string
+   409→  priority: 'low' | 'medium' | 'high' | 'critical'
+   410→  read: boolean
+   411→}
+   412→
+   413→export const NOTIFICATIONS: Notification[] = [
+   414→  { id: 'n1', type: 'gst-deadline', title: 'GSTR-3B Due in 3 Days', message: 'Aurora Retail — August 2024 return filing deadline approaching', company: 'Aurora Retail', timestamp: '5m ago', priority: 'critical', read: false },
+   415→  { id: 'n2', type: 'ai-alert', title: 'ITC Reversal Detected', message: 'AI flagged ₹4.2L potential ITC reversal — 3 cancelled vendor invoices', company: 'Aurora Retail', timestamp: '12m ago', priority: 'high', read: false },
+   416→  { id: 'n3', type: 'approval', title: 'Approval Required', message: 'Cloud Infrastructure payment ₹22L awaiting your sign-off', company: 'Aurora Tech', timestamp: '30m ago', priority: 'high', read: false },
+   417→  { id: 'n4', type: 'assignment', title: 'New Task Assigned', message: 'Q3 Board Report compilation assigned to you', company: 'Aurora Holdings', timestamp: '1h ago', priority: 'medium', read: false },
+   418→  { id: 'n5', type: 'risk', title: 'Critical Risk — Cash Flow', message: 'Standalone Traders cash flow dropped 34% this month', company: 'Standalone Traders', timestamp: '2h ago', priority: 'critical', read: false },
+   419→  { id: 'n6', type: 'payment', title: 'Payment Received', message: '₹18.7L received from Reliance Industries — INV-2024-0892', company: 'Aurora Manufacturing', timestamp: '3h ago', priority: 'medium', read: true },
+   420→  { id: 'n7', type: 'compliance', title: 'Compliance Gap', message: 'TDS payment for Q2 due in 4 days — Aurora Finance', company: 'Aurora Finance', timestamp: '4h ago', priority: 'high', read: true },
+   421→  { id: 'n8', type: 'document', title: 'Document Shared', message: 'Karthik shared "Audit Report Q2.pdf" with you', company: 'Aurora Finance', timestamp: '5h ago', priority: 'low', read: true },
+   422→  { id: 'n9', type: 'ai-alert', title: 'Anomaly Detected', message: 'Unusual expense pattern in Aurora Retail — 28% above average', company: 'Aurora Retail', timestamp: '6h ago', priority: 'medium', read: true },
+   423→  { id: 'n10', type: 'gst-deadline', title: 'GSTR-1 Filed', message: 'Aurora Manufacturing — August GSTR-1 filed successfully', company: 'Aurora Manufacturing', timestamp: '8h ago', priority: 'low', read: true },
+   424→]
+   425→
+   426→// ─── Documents ─────────────────────────────────────────────────────────────────
+   427→export interface EnterpriseDocument {
+   428→  id: string
+   429→  name: string
+   430→  type: 'pdf' | 'xlsx' | 'docx' | 'img' | 'folder'
+   431→  folder: string
+   432→  company: string
+   433→  size: string
+   434→  modifiedBy: string
+   435→  modifiedAt: string
+   436→  version: string
+   437→  sharedWith: number
+   438→  status: 'draft' | 'in-review' | 'approved' | 'archived'
+   439→  ocrProcessed: boolean
+   440→}
+   441→
+   442→export const ENTERPRISE_DOCUMENTS: EnterpriseDocument[] = [
+   443→  { id: 'd1', name: 'Q3 Board Report.docx', type: 'docx', folder: 'Board / Q3 2024', company: 'Aurora Holdings', size: '2.4 MB', modifiedBy: 'Vikram Mehta', modifiedAt: '1h ago', version: 'v4', sharedWith: 6, status: 'in-review', ocrProcessed: false },
+   444→  { id: 'd2', name: 'GSTR-3B August.pdf', type: 'pdf', folder: 'GST / August 2024', company: 'Aurora Retail', size: '1.1 MB', modifiedBy: 'Priya Sharma', modifiedAt: '2h ago', version: 'v2', sharedWith: 4, status: 'in-review', ocrProcessed: true },
+   445→  { id: 'd3', name: 'ITC Reconciliation.xlsx', type: 'xlsx', folder: 'GST / Q2 2024', company: 'Aurora Holdings', size: '890 KB', modifiedBy: 'Meena Krishnan', modifiedAt: '3h ago', version: 'v7', sharedWith: 5, status: 'approved', ocrProcessed: false },
+   446→  { id: 'd4', name: 'Audit Report Q2.pdf', type: 'pdf', folder: 'Audit / Q2 2024', company: 'Aurora Finance', size: '4.2 MB', modifiedBy: 'Karthik Nair', modifiedAt: '5h ago', version: 'v1', sharedWith: 3, status: 'approved', ocrProcessed: true },
+   447→  { id: 'd5', name: 'Vendor KYC GlobalLogix.pdf', type: 'pdf', folder: 'Vendors / GlobalLogix', company: 'Aurora Manufacturing', size: '1.8 MB', modifiedBy: 'Karthik Nair', modifiedAt: '1d ago', version: 'v3', sharedWith: 4, status: 'in-review', ocrProcessed: true },
+   448→  { id: 'd6', name: 'Payroll September.xlsx', type: 'xlsx', folder: 'HR / Payroll', company: 'Aurora Tech', size: '1.5 MB', modifiedBy: 'Deepika Rao', modifiedAt: '1d ago', version: 'v2', sharedWith: 3, status: 'approved', ocrProcessed: false },
+   449→  { id: 'd7', name: 'Board Resolution.pdf', type: 'pdf', folder: 'Board / Resolutions', company: 'Aurora Holdings', size: '320 KB', modifiedBy: 'Legal Bot', modifiedAt: '2d ago', version: 'v1', sharedWith: 8, status: 'draft', ocrProcessed: true },
+   450→  { id: 'd8', name: 'TDS Form 26Q.pdf', type: 'pdf', folder: 'TDS / Q2 2024', company: 'Aurora Finance', size: '680 KB', modifiedBy: 'Karthik Nair', modifiedAt: '2d ago', version: 'v1', sharedWith: 2, status: 'approved', ocrProcessed: true },
+   451→  { id: 'd9', name: 'Invoice INV-2024-0892.pdf', type: 'pdf', folder: 'Invoices / August', company: 'Aurora Manufacturing', size: '140 KB', modifiedBy: 'Priya Sharma', modifiedAt: '3d ago', version: 'v1', sharedWith: 3, status: 'approved', ocrProcessed: true },
+   452→  { id: 'd10', name: 'Bank Statements.zip', type: 'folder', folder: 'Banking / Statements', company: 'Aurora Tech', size: '12.4 MB', modifiedBy: 'Rajesh Kumar', modifiedAt: '3d ago', version: '—', sharedWith: 2, status: 'archived', ocrProcessed: false },
+   453→]
+   454→
+   455→export const DOCUMENT_FOLDERS = [
+   456→  { id: 'f1', name: 'Board', documents: 8, color: '#f59e0b' },
+   457→  { id: 'f2', name: 'GST', documents: 24, color: '#10b981' },
+   458→  { id: 'f3', name: 'Audit', documents: 12, color: '#8b5cf6' },
+   459→  { id: 'f4', name: 'HR', documents: 18, color: '#ec4899' },
+   460→  { id: 'f5', name: 'Vendors', documents: 31, color: '#06b6d4' },
+   461→  { id: 'f6', name: 'TDS', documents: 9, color: '#f97316' },
+   462→  { id: 'f7', name: 'Invoices', documents: 142, color: '#14b8a6' },
+   463→  { id: 'f8', name: 'Banking', documents: 6, color: '#3b82f6' },
+   464→]
+   465→
+   466→// ─── Calendar Events ───────────────────────────────────────────────────────────
+   467→export interface CalendarEvent {
+   468→  id: string
+   469→  title: string
+   470→  type: 'gst-deadline' | 'meeting' | 'approval' | 'task' | 'payment' | 'compliance' | 'ai-reminder'
+   471→  company: string
+   472→  date: number
+   473→  time: string
+   474→  priority: 'low' | 'medium' | 'high' | 'critical'
+   475→  assignee?: string
+   476→}
+   477→
+   478→export const CALENDAR_EVENTS: CalendarEvent[] = [
+   479→  { id: 'e1', title: 'GSTR-3B Filing Deadline', type: 'gst-deadline', company: 'Aurora Retail', date: 20, time: '11:59 PM', priority: 'critical', assignee: 'Priya Sharma' },
+   480→  { id: 'e2', title: 'Q3 Board Meeting', type: 'meeting', company: 'Aurora Holdings', date: 20, time: '10:00 AM', priority: 'high' },
+   481→  { id: 'e3', title: 'CFO Approval — Cloud Payment', type: 'approval', company: 'Aurora Tech', date: 19, time: '2:00 PM', priority: 'high', assignee: 'Vikram Mehta' },
+   482→  { id: 'e4', title: 'TDS Payment Due', type: 'compliance', company: 'Aurora Finance', date: 22, time: '11:59 PM', priority: 'high', assignee: 'Karthik Nair' },
+   483→  { id: 'e5', title: 'Payroll Processing', type: 'task', company: 'Aurora Tech', date: 19, time: '9:00 AM', priority: 'critical', assignee: 'Deepika Rao' },
+   484→  { id: 'e6', title: 'AI Reminder — ITC Review', type: 'ai-reminder', company: 'Aurora Holdings', date: 21, time: '9:00 AM', priority: 'medium' },
+   485→  { id: 'e7', title: 'Vendor Payment Run', type: 'payment', company: 'Aurora Manufacturing', date: 23, time: '3:00 PM', priority: 'medium' },
+   486→  { id: 'e8', title: 'GSTR-1 Filing Deadline', type: 'gst-deadline', company: 'All Companies', date: 11, time: '11:59 PM', priority: 'critical' },
+   487→  { id: 'e9', title: 'Internal Audit — Delhi', type: 'task', company: 'Aurora Manufacturing', date: 25, time: '10:00 AM', priority: 'medium', assignee: 'Arjun Gupta' },
+   488→  { id: 'e10', title: 'Compliance Review', type: 'compliance', company: 'Standalone Traders', date: 19, time: '4:00 PM', priority: 'critical' },
+   489→]
+   490→
+   491→// ─── Audit Log ─────────────────────────────────────────────────────────────────
+   492→export interface AuditEntry {
+   493→  id: string
+   494→  user: string
+   495→  avatar: string
+   496→  action: string
+   497→  entity: string
+   498→  company: string
+   499→  timestamp: string
+   500→  ipAddress: string
+   501→  category: 'user' | 'organization' | 'approval' | 'change' | 'ai' | 'compliance'
+   502→  severity: 'info' | 'warning' | 'critical'
+   503→}
+   504→
+   505→export const AUDIT_LOG: AuditEntry[] = [
+   506→  { id: 'al1', user: 'Vikram Mehta', avatar: 'VM', action: 'approved payment', entity: 'PAY-2024-0341 ₹22L', company: 'Aurora Tech', timestamp: '2024-09-19 10:32:14', ipAddress: '103.21.x.x', category: 'approval', severity: 'info' },
+   507→  { id: 'al2', user: 'AI Risk Engine', avatar: 'AI', action: 'flagged anomaly', entity: 'Cash Flow — Standalone Traders', company: 'Standalone Traders', timestamp: '2024-09-19 09:18:42', ipAddress: 'system', category: 'ai', severity: 'critical' },
+   508→  { id: 'al3', user: 'Priya Sharma', avatar: 'PS', action: 'modified GSTR-3B', entity: 'Aurora Retail — August', company: 'Aurora Retail', timestamp: '2024-09-19 09:05:21', ipAddress: '49.36.x.x', category: 'change', severity: 'warning' },
+   509→  { id: 'al4', user: 'Karthik Nair', avatar: 'KN', action: 'downloaded document', entity: 'Audit Report Q2.pdf', company: 'Aurora Finance', timestamp: '2024-09-19 08:47:09', ipAddress: '49.36.x.x', category: 'user', severity: 'info' },
+   510→  { id: 'al5', user: 'System', avatar: 'SY', action: 'auto-filed GSTR-1', entity: 'Aurora Manufacturing — August', company: 'Aurora Manufacturing', timestamp: '2024-09-19 06:00:00', ipAddress: 'system', category: 'compliance', severity: 'info' },
+   511→  { id: 'al6', user: 'Anita Desai', avatar: 'AD', action: 'created workflow rule', entity: 'Auto-approve < ₹50K expenses', company: 'Aurora Holdings', timestamp: '2024-09-18 17:22:33', ipAddress: '103.21.x.x', category: 'organization', severity: 'info' },
+   512→  { id: 'al7', user: 'Deepika Rao', avatar: 'DR', action: 'updated role permissions', entity: 'GST Executive → limited approvals', company: 'Aurora Holdings', timestamp: '2024-09-18 15:10:55', ipAddress: '103.21.x.x', category: 'organization', severity: 'warning' },
+   513→  { id: 'al8', user: 'AI Copilot', avatar: 'AI', action: 'detected ITC reversal', entity: '₹4.2L — 3 cancelled invoices', company: 'Aurora Retail', timestamp: '2024-09-18 14:33:12', ipAddress: 'system', category: 'ai', severity: 'warning' },
+   514→  { id: 'al9', user: 'Suresh Iyer', avatar: 'SI', action: 'logged in', entity: 'Session started', company: 'Aurora Manufacturing', timestamp: '2024-09-18 09:00:01', ipAddress: '157.32.x.x', category: 'user', severity: 'info' },
+   515→  { id: 'al10', user: 'System', avatar: 'SY', action: 'failed login attempt', entity: '3 attempts — blocked', company: '—', timestamp: '2024-09-18 02:14:08', ipAddress: '45.113.x.x', category: 'user', severity: 'critical' },
+   516→]
+   517→
+   518→// ─── Enterprise KPIs (aggregated) ──────────────────────────────────────────────
+   519→export const ENTERPRISE_KPIS = {
+   520→  totalCompanies: 6,
+   521→  totalGstins: 6,
+   522→  totalBranches: 38,
+   523→  totalUsers: 1240,
+   524→  totalRevenue: 1202000000,
+   525→  totalExpenses: 867000000,
+   526→  totalGstLiability: 56600000,
+   527→  totalOutstanding: 46400000,
+   528→  avgCompliance: 90,
+   529→  avgGrowth: 79.5,
+   530→  avgRisk: 17.3,
+   531→  avgAiScore: 85.2,
+   532→  netCashFlow: 335000000,
+   533→  pendingApprovals: 6,
+   534→  overdueFilings: 1,
+   535→  criticalAlerts: 2,
+   536→  tasksInProgress: 14,
+   537→}
+   538→
+   539→// ─── Cross-Company Analytics ───────────────────────────────────────────────────
+   540→export const CROSS_COMPANY_METRICS = COMPANIES.map(c => ({
+   541→  company: c.name,
+   542→  revenue: c.revenue,
+   543→  expenses: c.expenses,
+   544→  profit: c.revenue - c.expenses,
+   545→  gst: c.gstLiability,
+   546→  compliance: c.complianceScore,
+   547→  growth: c.growthScore,
+   548→  cashFlow: c.cashFlow,
+   549→  risk: c.riskScore,
+   550→  aiScore: c.aiScore,
+   551→}))
+   552→

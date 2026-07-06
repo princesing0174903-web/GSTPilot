@@ -155,7 +155,19 @@ export type AppView =
   // Global Enterprise Network™ — World Business Network
   | 'global-enterprise-network'
   // Phase 4 — AI Production Pipeline™ (Creator's Muse)
-  | 'generate';
+  | 'generate'
+  // Phase 13 — Enterprise Collaboration, Multi-Company & Command Network™
+  | 'enterprise-command-center'
+  | 'multi-company-workspace'
+  | 'team-collaboration'
+  | 'workflow-engine'
+  | 'enterprise-documents'
+  | 'executive-calendar'
+  | 'enterprise-search'
+  | 'enterprise-notifications'
+  | 'advanced-rbac'
+  | 'cross-company-analytics'
+  | 'enterprise-audit';
 
 export interface ReturnPrepContext {
   clientId: string | null;
